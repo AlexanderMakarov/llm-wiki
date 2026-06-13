@@ -34,7 +34,7 @@ REGISTRY_ALIASES: dict[str, str] = {}
 # Contrib adapters that can be loaded on demand.
 CONTRIB_ADAPTERS = {
     "chatgpt", "copilot_chat", "copilot_cli",
-    "cursor", "gemini_cli", "obsidian", "opencode",
+    "cursor", "cursor_cli", "gemini_cli", "obsidian", "opencode", "openclaw",
 }
 
 

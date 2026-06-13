@@ -722,6 +722,11 @@ def _close_open_fence(text: str) -> str:
 
 
 def truncate_chars(text: str, max_chars: int) -> str:
+    # max_chars <= 0 means "no limit" — used for verbatim capture (e.g.
+    # setting truncation.user_prompt_chars: 0 keeps user prompts byte-exact;
+    # redaction still applies). Without this, max_chars=0 truncated to "".
+    if max_chars <= 0:
+        return text
     if not text or len(text) <= max_chars:
         return text
     kept = _close_open_fence(text[:max_chars])
@@ -1532,13 +1537,17 @@ def convert_all(
             # failures through the quarantine + 'errored' bucket the same
             # way write failures do. Previously the helper swallowed them
             # and the file silently became 'filtered' (zero records).
+            # #adapter-load-records: adapters whose store is not line-delimited
+            # JSON (e.g. Cursor CLI's SQLite store.db) override load_records();
+            # the default delegates to parse_jsonl, so JSONL adapters are
+            # unchanged. Keeps non-JSONL session stores out of the main loop.
             try:
-                records = parse_jsonl(path)
+                records = adapter.load_records(path)
             except OSError as e:
                 print(f"  error: {path.name}: {e}", file=sys.stderr)
                 errors += 1
                 _bump(cls.name, "errored")
-                _quarantine_add(cls.name, str(path), f"parse_jsonl I/O failed: {e}")
+                _quarantine_add(cls.name, str(path), f"load_records I/O failed: {e}")
                 continue
             # v0.5 (#109): normalize agent-specific records into the shared
             # Claude-style format before filtering/rendering. This lets each

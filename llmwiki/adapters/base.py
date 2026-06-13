@@ -171,6 +171,27 @@ class BaseAdapter:
         """
         return False
 
+    def load_records(self, path: Path) -> list[dict[str, Any]]:
+        """Load raw records from one discovered session path.
+
+        Default: parse the path as line-delimited JSON (``parse_jsonl``) — the
+        format every built-in coding-agent store uses. Adapters whose store is
+        NOT line-delimited JSON (e.g. an SQLite content-addressed blob store
+        like the Cursor CLI's ``store.db``) override this to return records in
+        the same raw shape ``parse_jsonl`` would, *before* ``normalize_records``
+        translates them into the shared Claude-style schema.
+
+        Called by ``convert.convert_all`` instead of calling ``parse_jsonl``
+        directly, so non-JSONL session stores plug in without the renderer or
+        the main loop knowing about their on-disk format.
+
+        The import is local to avoid a circular import (``convert`` imports the
+        adapter registry at module load).
+        """
+        from llmwiki.convert import parse_jsonl
+
+        return parse_jsonl(path)
+
     def normalize_records(self, records: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Normalize agent-specific JSONL records into the shared Claude-style
         format that ``llmwiki.convert`` expects.
