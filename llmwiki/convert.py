@@ -1040,6 +1040,17 @@ _UUID_LIKE = re.compile(
     re.IGNORECASE,
 )
 
+# A UUID anchored at the *end* of a stem. Codex CLI names every
+# transcript ``rollout-<ISO-timestamp>-<uuid>.jsonl``, so the stem
+# starts with ``rollout-2026`` for every session and ``stem[:12]``
+# collapses an entire project/day of Codex sessions onto one slug.
+# Detecting the trailing UUID lets those stems take the same stable
+# source-hash fallback that bare-UUID stems already use (#424).
+_UUID_TRAILING = re.compile(
+    r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+    re.IGNORECASE,
+)
+
 
 def derive_session_slug(records: list[dict[str, Any]], jsonl_path: Path) -> str:
     """Derive a slug from session records or fall back to the filename.
@@ -1073,6 +1084,13 @@ def derive_session_slug(records: list[dict[str, Any]], jsonl_path: Path) -> str:
         return _source_hash8(jsonl_path)
     if not stem:
         # Empty stem (rare — would require a literal ``.jsonl`` filename).
+        return _source_hash8(jsonl_path)
+    # Codex CLI stems carry a UUID at the *end* (``rollout-<ts>-<uuid>``)
+    # but a fixed ``rollout-2026`` prefix; the 12-char prefix would
+    # collapse every Codex session per project/day onto one slug. Treat
+    # a trailing UUID like a bare UUID — stable source hash, unique per
+    # source file — instead of leaning on the disambig pass.
+    if _UUID_TRAILING.search(stem):
         return _source_hash8(jsonl_path)
     return stem[:12]
 

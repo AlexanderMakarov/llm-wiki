@@ -148,3 +148,41 @@ def test_hash_is_stable_across_calls():
     first = derive_session_slug([], p)
     second = derive_session_slug([], p)
     assert first == second
+
+
+def test_codex_rollout_stem_uses_hash_not_rollout_prefix():
+    """Codex CLI names every transcript ``rollout-<ts>-<uuid>.jsonl``.
+
+    The stem starts ``rollout-2026`` for every session, so the 12-char
+    prefix collapsed an entire project/day of Codex sessions onto the
+    single slug ``rollout-2026``. The trailing UUID must be detected so
+    these take the stable source-hash fallback instead.
+    """
+    p = Path(
+        "/c/2026/05/29/rollout-2026-05-29T09-43-52-"
+        "019e72e7-7672-79d1-a0d8-13d93cf93cd8.jsonl"
+    )
+    out = derive_session_slug([], p)
+    assert out == _source_hash8(p)
+    assert out != "rollout-2026"
+
+
+def test_two_codex_rollouts_same_day_produce_distinct_slugs():
+    """The point of the fix: two Codex sessions on the same project/day
+    no longer collide on ``rollout-2026``."""
+    a = Path(
+        "/c/2026/05/26/rollout-2026-05-26T13-03-44-"
+        "019e642b-5ddd-7762-85d2-b7c68a2a5835.jsonl"
+    )
+    b = Path(
+        "/c/2026/05/26/rollout-2026-05-26T14-11-34-"
+        "019e6469-7ad9-7460-aaaa-bbbbbbbbbbbb.jsonl"
+    )
+    assert derive_session_slug([], a) != derive_session_slug([], b)
+
+
+def test_trailing_uuid_only_matches_full_uuid_shape():
+    """A stem ending in a hyphenated-but-not-UUID token keeps the
+    12-char prefix — the trailing-UUID rule requires 8-4-4-4-12 hex."""
+    p = Path("/tmp/notes-2026-05-01-final-draft.jsonl")
+    assert derive_session_slug([], p) == "notes-2026-0"
