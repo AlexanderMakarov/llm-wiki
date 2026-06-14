@@ -1390,11 +1390,14 @@ def convert_all(
     discover_adapters()
     selected: list[type] = []
     if adapters:
-        # #v1378-review: aliases now live in REGISTRY_ALIASES, not
-        # REGISTRY itself, so resolve through resolve_adapter_name to
-        # support both canonical names and historical kebab-case
-        # aliases (e.g. `--adapter copilot-chat`).
-        from llmwiki.adapters import resolve_adapter_name
+        # Contrib adapters (cursor_cli, openclaw, gemini_cli, …) register
+        # lazily, so an explicit ``--adapter <contrib>`` must import them
+        # before we resolve names — otherwise the lookup fails with
+        # "unknown adapter" even though the adapter ships. Default-fire (the
+        # ``else`` branch) intentionally stays core-only to keep contrib
+        # adapters opt-in.
+        from llmwiki.adapters import resolve_adapter_name, discover_contrib
+        discover_contrib()
         for name in adapters:
             canonical = resolve_adapter_name(name)
             if canonical is None:
