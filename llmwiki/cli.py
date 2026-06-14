@@ -179,10 +179,16 @@ def cmd_sync(args: argparse.Namespace) -> int:
         site_root = (vault.root / "site") if vault_path else (REPO_ROOT / "site")
         if args.auto_build and _should_run_after_sync(schedule.get("build", "on-sync")):
             print("  auto-build: regenerating site/...")
-            from llmwiki.build import build_site
+            from llmwiki.build import build_site, RAW_SESSIONS, RAW_DIR
+            # #54 vault-overlay: read the freshly-synced sessions from the
+            # vault, not the repo's empty raw/ (which makes auto-build fail
+            # with "RAW_SESSIONS does not exist" right after a vault sync).
+            raw_sessions = (vault.root / "raw" / "sessions") if vault_path else RAW_SESSIONS
+            raw_dir = (vault.root / "raw") if vault_path else RAW_DIR
             # #414: sync has explicit user opt-in to mutate wiki/, so it's
             # the right place to seed project stubs.
-            build_site(out_dir=site_root, seed_project_stubs=True)
+            build_site(out_dir=site_root, seed_project_stubs=True,
+                       raw_sessions=raw_sessions, raw_dir=raw_dir)
         if args.auto_lint and _should_run_after_sync(schedule.get("lint", "manual")):
             print("  auto-lint: running wiki lint...")
             from llmwiki.lint import load_pages, run_all, summarize
@@ -208,6 +214,8 @@ def cmd_build(args: argparse.Namespace) -> int:
 
     # v1.2 (#54): vault-overlay mode. Validate the path up front so a
     # typo fails fast before the build walks raw/.
+    from llmwiki.build import RAW_SESSIONS, RAW_DIR
+    raw_sessions, raw_dir, out_dir = RAW_SESSIONS, RAW_DIR, args.out
     if getattr(args, "vault", None):
         from llmwiki.vault import describe_vault, resolve_vault
         try:
@@ -216,13 +224,22 @@ def cmd_build(args: argparse.Namespace) -> int:
             print(f"error: {exc}", file=sys.stderr)
             return 2
         print(f"==> {describe_vault(vault)}")
+        # Read sessions from the vault, and (unless --out was overridden)
+        # write the site under the vault so a vault build doesn't silently
+        # populate the repo's site/.
+        raw_dir = vault.root / "raw"
+        raw_sessions = raw_dir / "sessions"
+        if args.out == REPO_ROOT / "site":
+            out_dir = vault.root / "site"
 
     return build_site(
-        out_dir=args.out,
+        out_dir=out_dir,
         synthesize=args.synthesize,
         claude_path=args.claude,
         search_mode=args.search_mode,
         seed_project_stubs=getattr(args, "seed_project_stubs", False),
+        raw_sessions=raw_sessions,
+        raw_dir=raw_dir,
     )
 
 

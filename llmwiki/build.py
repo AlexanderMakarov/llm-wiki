@@ -2338,16 +2338,22 @@ def build_site(
     claude_path: str = "",
     search_mode: str = "auto",
     seed_project_stubs: bool = False,
+    raw_sessions: Path = RAW_SESSIONS,
+    raw_dir: Path = RAW_DIR,
 ) -> int:
-    if not RAW_SESSIONS.exists():
+    # #54 vault-overlay: ``raw_sessions``/``raw_dir`` default to the repo
+    # constants so repo-mode builds are unchanged, but ``build --vault``
+    # passes the vault's raw/ so the site is built from vault sessions
+    # rather than the (often empty) repo checkout.
+    if not raw_sessions.exists():
         print(
-            f"error: {RAW_SESSIONS} does not exist. Run `llmwiki init` + `llmwiki sync` first.",
+            f"error: {raw_sessions} does not exist. Run `llmwiki init` + `llmwiki sync` first.",
             file=sys.stderr,
         )
         return 2
 
-    print(f"==> scanning {RAW_SESSIONS}")
-    sources = discover_sources(RAW_SESSIONS)
+    print(f"==> scanning {raw_sessions}")
+    sources = discover_sources(raw_sessions)
     if not sources:
         print("  no sources found.", file=sys.stderr)
         return 2
@@ -2406,11 +2412,11 @@ def build_site(
     sources_out = out_dir / "sources"
     if sources_out.exists():
         shutil.rmtree(sources_out)
-    shutil.copytree(RAW_SESSIONS, sources_out)
+    shutil.copytree(raw_sessions, sources_out)
     print(f"  copied raw .md sources to sources/")
 
     # v0.7 (#96): copy downloaded image assets into site/assets/
-    raw_assets = RAW_DIR / "assets"
+    raw_assets = raw_dir / "assets"
     if raw_assets.exists() and any(raw_assets.iterdir()):
         site_assets = out_dir / "assets"
         if site_assets.exists():

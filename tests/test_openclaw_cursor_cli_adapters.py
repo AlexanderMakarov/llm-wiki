@@ -103,3 +103,16 @@ def test_cursor_cli_loads_orders_and_normalizes(tmp_path: Path):
     assert norm[0]["message"]["content"] == "<user_query>what is 2+2</user_query>"
     kinds = [b["type"] for b in norm[1]["message"]["content"]]
     assert kinds == ["thinking", "text"]
+
+
+def test_build_site_honors_raw_sessions_param(tmp_path: Path):
+    # Regression (#54 vault build): build_site used the module-level
+    # RAW_SESSIONS constant, so `build --vault` silently read the repo's
+    # raw/ instead of the vault's. It must read the path it's given.
+    from llmwiki.build import build_site
+
+    missing = tmp_path / "vault" / "raw" / "sessions"
+    rc = build_site(out_dir=tmp_path / "site", raw_sessions=missing, raw_dir=missing.parent)
+    # Honors the passed path: reports it missing and bails (rc 2) rather
+    # than scanning the module constant.
+    assert rc == 2
