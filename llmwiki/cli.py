@@ -185,10 +185,13 @@ def cmd_sync(args: argparse.Namespace) -> int:
             # with "RAW_SESSIONS does not exist" right after a vault sync).
             raw_sessions = (vault.root / "raw" / "sessions") if vault_path else RAW_SESSIONS
             raw_dir = (vault.root / "raw") if vault_path else RAW_DIR
+            # #54: graph the vault's wiki/ (not the repo's demo wiki).
+            wiki_dir = (vault.root / "wiki") if vault_path else (REPO_ROOT / "wiki")
             # #414: sync has explicit user opt-in to mutate wiki/, so it's
             # the right place to seed project stubs.
             build_site(out_dir=site_root, seed_project_stubs=True,
-                       raw_sessions=raw_sessions, raw_dir=raw_dir)
+                       raw_sessions=raw_sessions, raw_dir=raw_dir,
+                       wiki_dir=wiki_dir)
         if args.auto_lint and _should_run_after_sync(schedule.get("lint", "manual")):
             print("  auto-lint: running wiki lint...")
             from llmwiki.lint import load_pages, run_all, summarize
@@ -216,6 +219,7 @@ def cmd_build(args: argparse.Namespace) -> int:
     # typo fails fast before the build walks raw/.
     from llmwiki.build import RAW_SESSIONS, RAW_DIR
     raw_sessions, raw_dir, out_dir = RAW_SESSIONS, RAW_DIR, args.out
+    wiki_dir = REPO_ROOT / "wiki"
     if getattr(args, "vault", None):
         from llmwiki.vault import describe_vault, resolve_vault
         try:
@@ -229,6 +233,7 @@ def cmd_build(args: argparse.Namespace) -> int:
         # populate the repo's site/.
         raw_dir = vault.root / "raw"
         raw_sessions = raw_dir / "sessions"
+        wiki_dir = vault.root / "wiki"
         if args.out == REPO_ROOT / "site":
             out_dir = vault.root / "site"
 
@@ -240,6 +245,7 @@ def cmd_build(args: argparse.Namespace) -> int:
         seed_project_stubs=getattr(args, "seed_project_stubs", False),
         raw_sessions=raw_sessions,
         raw_dir=raw_dir,
+        wiki_dir=wiki_dir,
     )
 
 
@@ -701,6 +707,48 @@ def _add_vault_arg(parser: argparse.ArgumentParser, *, role: str) -> None:
     )
 
 
+def cmd_consolidate_topics(args: argparse.Namespace) -> int:
+    """One-time topic consolidation pass (#54).
+
+    Default: render the consolidation prompt (over the auto-derived topic list)
+    to a file for the LLM/agent to run. ``--complete PATH`` ingests the model's
+    JSON reply and writes the topic cache (merge-map + descriptions) the graph
+    and regular-synth prompt then consume.
+    """
+    from llmwiki.topics_consolidate import (
+        render_consolidation_prompt, parse_and_cache, cache_path,
+    )
+    wiki_dir = REPO_ROOT / "wiki"
+    vault = getattr(args, "vault", None)
+    if vault:
+        from llmwiki.vault import resolve_vault
+        try:
+            wiki_dir = resolve_vault(vault).root / "wiki"
+        except (FileNotFoundError, NotADirectoryError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+
+    if args.complete:
+        text = sys.stdin.read() if args.complete == "-" else Path(args.complete).read_text(encoding="utf-8")
+        try:
+            cache = parse_and_cache(text, wiki_dir)
+        except (ValueError, OSError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        print(f"  wrote {cache_path(wiki_dir)} — {len(cache['topics'])} canonical "
+              f"topics, {len(cache['dropped'])} dropped")
+        return 0
+
+    prompt = render_consolidation_prompt(wiki_dir)
+    out = cache_path(wiki_dir).with_name(".llmwiki-topic-consolidation.md")
+    out.write_text(prompt, encoding="utf-8")
+    vault_flag = f" --vault {vault}" if vault else ""
+    print(f"  wrote consolidation prompt → {out}")
+    print("  Run it through your LLM/agent, save the JSON reply, then:")
+    print(f"    llmwiki consolidate-topics --complete <reply.json>{vault_flag}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="llmwiki",
@@ -904,6 +952,20 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_vault_arg(syn, role="synthesize")
     syn.set_defaults(func=cmd_synthesize)
+
+    # consolidate-topics — one-time LLM dedup + description pass (#54)
+    cons = sub.add_parser(
+        "consolidate-topics",
+        help="One-time LLM pass to merge duplicate topics + write descriptions "
+             "(cheap: one call over the topic list, not the sessions)",
+    )
+    cons.add_argument(
+        "--complete", metavar="PATH", default=None,
+        help="Ingest the LLM's JSON reply (file path, or '-' for stdin) and "
+             "write the topic cache; without this, the prompt is emitted.",
+    )
+    _add_vault_arg(cons, role="synthesize")
+    cons.set_defaults(func=cmd_consolidate_topics)
 
     # query — natural-language graph query
     qry = sub.add_parser("query", help="Query the knowledge graph with a question")

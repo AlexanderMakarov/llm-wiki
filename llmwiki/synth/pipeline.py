@@ -49,6 +49,10 @@ def _normalise_slug(raw: str) -> str:
     """
     if not raw:
         return "unknown"
+    # Defensive: callers occasionally pass non-strings (e.g. a YAML-parsed
+    # numeric slug). Never raise from a slug normaliser.
+    if not isinstance(raw, str):
+        raw = str(raw)
     cleaned = _SLUG_UNSAFE.sub("-", raw)
     # Collapse runs of consecutive dashes so "00 - X" doesn't become
     # "00---X" — consecutive hyphens are ugly in URLs and filesystems.
@@ -115,6 +119,66 @@ def _load_prompt_template() -> str:
     if USER_PROMPT_OVERRIDE.is_file():
         return USER_PROMPT_OVERRIDE.read_text(encoding="utf-8")
     return PROMPT_TEMPLATE_PATH.read_text(encoding="utf-8")
+
+
+# How many top topics to surface as the reuse vocabulary in the prompt. Enough
+# to cover the recurring scopes without bloating every request's token budget.
+_VOCAB_LIMIT = 80
+
+
+def _vocab_attr(value: str) -> str:
+    """Sanitize a value for an XML attribute (strip quotes/braces/newlines)."""
+    return value.replace('"', "").replace("{", "").replace("}", "").replace("\n", " ").strip()
+
+
+def _inject_vocabulary(template: str, wiki_dir: Path, *, limit: int = _VOCAB_LIMIT) -> str:
+    """Substitute ``{vocabulary}`` with the canonical topics as lean ``<topic>``
+    entries for the *regular* per-session synth.
+
+    Regular synth needs just enough to pick the RIGHT topic, not to merge
+    spellings (that's the consolidation pass's job) — so each entry carries
+    ``name`` + ``desc`` (a one-line description, present once
+    ``consolidate-topics`` has run) + ``with`` (co-occurring topics, for
+    disambiguation). No ``aka`` noise. All derived from the corpus + cache —
+    no LLM call here.
+
+    No-op (placeholder removed) when the template lacks the marker or the wiki
+    has no topics yet. Attribute values are quote/brace-free so backends'
+    ``{body}``/``{meta}`` rendering downstream is unaffected.
+    """
+    if "{vocabulary}" not in template:
+        return template
+    try:
+        from llmwiki.topics import build_topic_graph
+
+        graph = build_topic_graph(wiki_dir)
+    except Exception:
+        graph = None
+    nodes = (graph or {}).get("nodes") or []
+    if not nodes:
+        return template.replace("{vocabulary}", "  <!-- none yet — this is an early session -->")
+
+    # Top co-occurring topics per node, for the `with` attribute.
+    related: dict[str, list[tuple[int, str]]] = {}
+    for e in (graph.get("edges") or []):
+        related.setdefault(e["source"], []).append((e["weight"], e["target"]))
+        related.setdefault(e["target"], []).append((e["weight"], e["source"]))
+
+    lines = []
+    for n in nodes[:limit]:
+        name = _vocab_attr(str(n["id"]))
+        if not name:
+            continue
+        attrs = f'name="{name}"'
+        desc = _vocab_attr(str(n.get("description", "")))
+        if desc:
+            attrs += f' desc="{desc}"'
+        rel = sorted(related.get(n["id"], []), reverse=True)[:3]
+        rel_names = ", ".join(_vocab_attr(r[1]) for r in rel if _vocab_attr(r[1]))
+        if rel_names:
+            attrs += f' with="{rel_names}"'
+        lines.append(f"  <topic {attrs} />")
+    return template.replace("{vocabulary}", "\n".join(lines))
 
 
 def _resolve_state_file(state_file: Optional[Path] = None) -> Path:
@@ -626,6 +690,10 @@ def synthesize_new_sessions(
 
     sources_out = wiki_sources_dir or WIKI_SOURCES
     prompt_template = _load_prompt_template()
+    # #54: feed the auto-derived topic vocabulary back into the prompt so the
+    # model reuses canonical spellings instead of coining new variants. Filled
+    # once here (corpus-wide); backends only substitute {body}/{meta} after.
+    prompt_template = _inject_vocabulary(prompt_template, sources_out.parent)
     state = {} if force else _load_state(state_file)
     sessions = _discover_raw_sessions(raw_dir)
 
@@ -661,6 +729,13 @@ def synthesize_new_sessions(
 
     for p, meta, body in new_files:
         raw_slug = meta.get("slug", p.stem)
+        # YAML parses numeric-looking session-hash slugs (e.g. "15824711",
+        # "6051e147") as int/float — and the scientific-notation ones lose
+        # their value entirely (6051e147 → inf), so str() would collapse
+        # many distinct sessions onto "inf". Fall back to the filename stem,
+        # which always carries the correct, unique slug.
+        if not isinstance(raw_slug, str):
+            raw_slug = p.stem
         project = meta.get("project", p.parent.name)
         rel = str(p.relative_to(raw_dir or RAW_SESSIONS))
 

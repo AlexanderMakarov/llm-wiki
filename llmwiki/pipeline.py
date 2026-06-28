@@ -72,7 +72,9 @@ def run_pipeline(args: argparse.Namespace) -> int:
             claude="",
             search_mode=args.search_mode or "auto",
             seed_project_stubs=False,
-            vault=None,
+            # #54: propagate --vault so `llmwiki all --vault X` builds the
+            # site (and its graph) from the vault, not the repo's demo wiki.
+            vault=getattr(args, "vault", None),
         ),
     ))
     if not args.skip_graph:

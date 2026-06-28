@@ -62,6 +62,10 @@ def test_source_without_source_file_returns_none():
 
 
 def test_source_with_flat_raw_path():
+    # #54: a flat ``raw/sessions/<stem>.md`` source_file (the layout vault
+    # syncs use) must still resolve to the project-nested compiled page
+    # ``sessions/<project>/<stem>.html``. The project comes from the wiki
+    # sources subdirectory when no ``project:`` frontmatter is present.
     text = (
         "---\ntitle: X\n"
         "source_file: raw/sessions/2026-04-17T12-00-proj-slug.md\n"
@@ -70,7 +74,22 @@ def test_source_with_flat_raw_path():
     url = _compute_site_url(
         text, ("sources", "proj", "slug.md"), "slug", "sources",
     )
-    assert url == "sessions/2026-04-17T12-00-proj-slug.html"
+    assert url == "sessions/proj/2026-04-17T12-00-proj-slug.html"
+
+
+def test_source_flat_raw_path_uses_project_frontmatter():
+    # When present, ``project:`` frontmatter is authoritative for the session
+    # page's directory (it matches what build.py groups sessions by).
+    text = (
+        "---\ntitle: X\nproject: llm-wiki\n"
+        "source_file: raw/sessions/2026-06-14T19-45-llm-wiki-104d9792.md\n"
+        "---\n"
+    )
+    url = _compute_site_url(
+        text, ("sources", "llm-wiki", "2026-06-14-104d9792.md"),
+        "2026-06-14-104d9792", "sources",
+    )
+    assert url == "sessions/llm-wiki/2026-06-14T19-45-llm-wiki-104d9792.html"
 
 
 def test_entity_returns_none():

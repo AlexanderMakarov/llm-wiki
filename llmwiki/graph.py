@@ -72,7 +72,20 @@ def _compute_site_url(text: str, rel_parts: tuple[str, ...],
         except IndexError:
             return None
         rel = rel.removesuffix(".md")
-        return f"sessions/{rel}.html"
+        # Site session pages always live at sessions/<project>/<raw-stem>.html.
+        # A project-nested raw path already carries the project segment; a
+        # flat raw path (raw/sessions/<stem>.md — the layout vault syncs use)
+        # does not, so prepend the page's project from the `project:`
+        # frontmatter (falling back to the wiki sources subdirectory).
+        # Without this, every vault session node loses its click target (#54).
+        if "/" in rel:
+            return f"sessions/{rel}.html"
+        pm = re.search(r"^project:\s*(.+)$", text, re.MULTILINE)
+        project = (pm.group(1).strip().strip("'\"") if pm
+                   else (rel_parts[1] if len(rel_parts) >= 3 else ""))
+        if not project:
+            return None
+        return f"sessions/{project}/{rel}.html"
     if type_ in _NO_SITE_TYPES:
         return None
     if slug in _NO_SITE_BASENAMES:
@@ -80,18 +93,27 @@ def _compute_site_url(text: str, rel_parts: tuple[str, ...],
     return None
 
 
-def scan_pages() -> dict[str, dict[str, Any]]:
-    """Return a dict {slug: {path, type, title, out_links, site_url}}."""
+def scan_pages(wiki_dir: Path | None = None) -> dict[str, dict[str, Any]]:
+    """Return a dict {slug: {path, type, title, out_links, site_url}}.
+
+    ``wiki_dir`` defaults to the module ``WIKI_DIR`` (repo mode). Pass a
+    vault's ``wiki/`` here so ``build --vault`` graphs the vault's pages
+    instead of the repo's demo wiki (#54).
+    """
+    wiki_dir = wiki_dir or WIKI_DIR
+    # `path` is reported relative to the wiki root's parent so vault and
+    # repo builds both yield stable ``wiki/...`` paths.
+    path_root = wiki_dir.parent
     pages: dict[str, dict[str, Any]] = {}
-    if not WIKI_DIR.exists():
+    if not wiki_dir.exists():
         return pages
-    for p in sorted(WIKI_DIR.rglob("*.md")):
+    for p in sorted(wiki_dir.rglob("*.md")):
         slug = p.stem
         if slug in ("README",):
             continue
         # Type = parent directory name when under sources/entities/concepts/etc.
         try:
-            rel = p.relative_to(WIKI_DIR)
+            rel = p.relative_to(wiki_dir)
             type_ = rel.parts[0] if len(rel.parts) > 1 else "root"
         except ValueError:
             type_ = "root"
@@ -108,7 +130,7 @@ def scan_pages() -> dict[str, dict[str, Any]]:
         out_links = set(WIKILINK_RE.findall(text))
         site_url = _compute_site_url(text, rel.parts, slug, type_)
         pages[slug] = {
-            "path": str(p.relative_to(REPO_ROOT)),
+            "path": str(p.relative_to(path_root)),
             "type": type_,
             "title": title,
             "out_links": out_links,
@@ -133,7 +155,8 @@ def _verify_site_url(site_url: str | None, site_dir: Path | None) -> str | None:
     return site_url if (site_dir / site_url).is_file() else None
 
 
-def build_graph(verify_site_dir: Path | None = None) -> dict[str, Any]:
+def build_graph(verify_site_dir: Path | None = None,
+                wiki_dir: Path | None = None) -> dict[str, Any]:
     """Build the knowledge graph.
 
     ``verify_site_dir``: when given and the directory exists, each
@@ -141,8 +164,11 @@ def build_graph(verify_site_dir: Path | None = None) -> dict[str, Any]:
     pointing at non-existent files are nulled so the viewer shows a
     graceful tooltip instead of 404ing.  Defaults to ``site/`` under
     ``REPO_ROOT`` when called from ``copy_to_site`` (see below).
+
+    ``wiki_dir``: the ``wiki/`` to graph; defaults to the repo's. Pass a
+    vault's ``wiki/`` so ``build --vault`` graphs the user's pages (#54).
     """
-    pages = scan_pages()
+    pages = scan_pages(wiki_dir)
     if verify_site_dir is not None:
         for p in pages.values():
             p["site_url"] = _verify_site_url(p.get("site_url"), verify_site_dir)
@@ -242,6 +268,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     --g-node-concepts: #059669;
     --g-node-syntheses: #d97706;
     --g-node-root: #64748b;
+    --g-node-topic: #7c3aed;
     --g-orphan: #ef4444;
     --g-edge: rgba(148, 163, 184, 0.4);
     --g-highlight: #facc15;
@@ -258,6 +285,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     --g-node-concepts: #059669;
     --g-node-syntheses: #d97706;
     --g-node-root: #64748b;
+    --g-node-topic: #7c3aed;
     --g-orphan: #dc2626;
     --g-edge: rgba(100, 116, 139, 0.45);
     --g-highlight: #ca8a04;
@@ -293,8 +321,11 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   .control input::placeholder { color: var(--g-muted); }
 
   /* #456: site nav above the graph subheader takes ~56px; subheader itself
-     ~58px. Subtract both so the canvas fills the remaining viewport. */
-  #network { width: 100%; height: calc(100vh - 56px - 58px); position: relative; }
+     ~58px. Subtract both so the canvas fills the remaining viewport.
+     #328: #graph-stage is the positioning context for the overlays, which
+     are siblings of #network (vis wipes #network's own children on init). */
+  #graph-stage { position: relative; width: 100%; height: calc(100vh - 56px - 58px); }
+  #network { width: 100%; height: 100%; }
 
   /* Orphan highlight: nodes with 0 inbound links get a red stroke.
      This matches the issue's "orphan pages glow red" requirement. */
@@ -317,6 +348,21 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   #stats-overlay .stat b { color: var(--g-text); }
   #stats-overlay .hub-item { font-family: ui-monospace, monospace; font-size: 0.75rem; color: var(--g-muted); }
   #stats-overlay .hub-item b { color: var(--g-accent); }
+  /* #54 topic-mode side panel: per-topic / per-edge content can run long, so
+     cap the height and scroll. */
+  #stats-overlay { max-height: calc(100vh - 160px); overflow-y: auto; }
+  #stats-overlay h3 { position: sticky; top: 0; background: var(--g-panel); }
+  #stats-overlay .panel-open {
+    display: inline-block; margin: 6px 0 2px; font-size: 0.78rem;
+    color: var(--g-accent); text-decoration: none; font-weight: 600;
+  }
+  #stats-overlay .panel-sessions { display: flex; flex-direction: column; gap: 3px; }
+  #stats-overlay .panel-sessions .panel-link {
+    font-size: 0.76rem; color: var(--g-text); text-decoration: none;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  #stats-overlay .panel-sessions .panel-link:hover { color: var(--g-accent); text-decoration: underline; }
+  #stats-overlay .panel-muted { font-size: 0.74rem; color: var(--g-muted); }
 
   #legend {
     position: absolute; top: 16px; right: 16px;
@@ -341,7 +387,9 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   /* G-19 (#305): node context menu — shown on right-click or long-tap.
      Keyboard-accessible; closes on Escape / outside click. */
   #ctx-menu {
-    position: absolute; display: none; z-index: 30;
+    /* position: fixed — placed from clientX/clientY (viewport coords) in
+       showContextMenu, so a fixed box lands exactly under the pointer. */
+    position: fixed; display: none; z-index: 30;
     min-width: 220px;
     background: var(--g-panel); border: 1px solid var(--g-border);
     border-radius: 8px; padding: 4px; font-size: 0.82rem;
@@ -417,7 +465,15 @@ __SITE_NAV__
        in lockstep without needing a duplicate ID here. -->
 </div>
 
-<div id="network">
+<!-- #328: the overlays (legend / stats / context menu / offline notice) are
+     SIBLINGS of #network, not children. vis-network takes over its container
+     and wipes any pre-existing children on init — nesting these inside
+     #network silently destroyed the legend, stats and context menu (and made
+     every click throw on the now-null ctxMenu). #graph-stage is the shared
+     positioning context so the absolutely-positioned overlays still sit over
+     the canvas. -->
+<div id="graph-stage">
+<div id="network"></div>
   <div id="offline-notice">vis-network failed to load — check your connection or host the library locally.</div>
   <div id="legend" aria-label="Node color legend">
     <div class="row"><span class="dot" style="background: var(--g-node-source)"></span>sources</div>
@@ -489,34 +545,75 @@ function main() {
     concepts: () => cssVar('--g-node-concepts'),
     syntheses: () => cssVar('--g-node-syntheses'),
     root: () => cssVar('--g-node-root'),
+    topic: () => cssVar('--g-node-topic'),
   };
   const orphanColor = () => cssVar('--g-orphan');
 
+  // #54: topic-first mode. Nodes are topics (never sessions); edges are
+  // topic↔topic co-occurrences bridged by sessions. Drives sizing, the
+  // contextual side panel, and double-click-to-open below.
+  const TOPIC = GRAPH.mode === 'topic';
+  const SESS = GRAPH.sessions || {};
+
   // ─── Stats overlay ───────────────────────────────────────────────────
   const stats = GRAPH.stats || {};
-  const pages = stats.total_pages ?? GRAPH.nodes.length;
-  const edgeCount = stats.total_edges ?? GRAPH.edges.length;
-  const orphans = stats.orphans ?? [];
-  document.getElementById('s-pages').textContent = pages;
-  document.getElementById('s-edges').textContent = edgeCount;
-  document.getElementById('s-orphans').textContent = orphans.length;
-  document.getElementById('s-avg').textContent =
-    pages > 0 ? (edgeCount / pages).toFixed(2) : '0';
-  document.getElementById('top-crumbs').textContent =
-    pages + ' pages · ' + edgeCount + ' edges · ' + orphans.length + ' orphans';
+  const statsEl = document.getElementById('stats-overlay');
+  if (TOPIC) {
+    document.getElementById('top-crumbs').textContent =
+      (stats.total_topics ?? GRAPH.nodes.length) + ' topics · ' +
+      (stats.total_edges ?? GRAPH.edges.length) + ' connections · ' +
+      (stats.total_sessions ?? 0) + ' sessions';
+    const lg = document.getElementById('legend');
+    if (lg) lg.innerHTML =
+      '<div class="row"><span class="dot" style="background: var(--g-node-topic)"></span>topic</div>' +
+      '<div class="row"><span class="dot" style="background: var(--g-edge)"></span>shared sessions</div>' +
+      '<div class="row" style="color:var(--g-muted)">size = #sessions</div>';
+  } else {
+    const pages = stats.total_pages ?? GRAPH.nodes.length;
+    const edgeCount = stats.total_edges ?? GRAPH.edges.length;
+    const orphans = stats.orphans ?? [];
+    document.getElementById('s-pages').textContent = pages;
+    document.getElementById('s-edges').textContent = edgeCount;
+    document.getElementById('s-orphans').textContent = orphans.length;
+    document.getElementById('s-avg').textContent =
+      pages > 0 ? (edgeCount / pages).toFixed(2) : '0';
+    document.getElementById('top-crumbs').textContent =
+      pages + ' pages · ' + edgeCount + ' edges · ' + orphans.length + ' orphans';
 
-  const hubsEl = document.getElementById('s-hubs');
-  (stats.top_linked || []).slice(0, 5).forEach(n => {
-    if (!n || n.in_degree === 0) return;
-    const row = document.createElement('div');
-    row.className = 'hub-item';
-    row.innerHTML = '<b>' + String(n.in_degree).padStart(3) + '</b> ' +
-      escapeHtml(n.id);
-    hubsEl.appendChild(row);
-  });
+    const hubsEl = document.getElementById('s-hubs');
+    (stats.top_linked || []).slice(0, 5).forEach(n => {
+      if (!n || n.in_degree === 0) return;
+      const row = document.createElement('div');
+      row.className = 'hub-item';
+      row.innerHTML = '<b>' + String(n.in_degree).padStart(3) + '</b> ' +
+        escapeHtml(n.id);
+      hubsEl.appendChild(row);
+    });
+  }
 
   // ─── Build vis DataSets ──────────────────────────────────────────────
   const nodes = new vis.DataSet(GRAPH.nodes.map(n => {
+    if (TOPIC) {
+      return {
+        id: n.id,
+        label: n.label,
+        color: {
+          background: colors.topic(),
+          border: colors.topic(),
+          highlight: { background: cssVar('--g-highlight'), border: cssVar('--g-highlight') },
+        },
+        borderWidth: 1,
+        value: Math.max(n.session_count || 1, 1),
+        group: 'topic',
+        title: n.label + ' · ' + (n.session_count || 0) + ' sessions · ' +
+          (n.degree || 0) + ' connected\nClick to focus · double-click to open',
+        site_url: n.site_url,
+        session_count: n.session_count,
+        degree: n.degree,
+        sessions: n.sessions || [],
+        type: 'topic',
+      };
+    }
     const isOrphan = n.in_degree === 0;
     return {
       id: n.id,
@@ -533,16 +630,34 @@ function main() {
         n.type + ' · ' + n.in_degree + ' inbound, ' + n.out_degree + ' outbound' +
         (n.path ? '\nClick to open ' + n.path : ''),
       path: n.path,
+      site_url: n.site_url,
       type: n.type,
     };
   }));
-  const edges = new vis.DataSet(GRAPH.edges.map(e => ({
-    from: e.source,
-    to: e.target,
-    arrows: 'to',
-    color: { color: cssVar('--g-edge') },
-    title: e.source + ' → ' + e.target,
-  })));
+  // Topic edges carry their bridging-session list; index them by a stable id
+  // so an edge click can show "how these two topics connect".
+  const edgeData = {};
+  const edges = new vis.DataSet(GRAPH.edges.map((e, i) => {
+    if (TOPIC) {
+      const id = 'e' + i;
+      edgeData[id] = e;
+      return {
+        id: id,
+        from: e.source,
+        to: e.target,
+        width: Math.min(1 + (e.weight || 1) * 0.6, 8),
+        color: { color: cssVar('--g-edge'), highlight: cssVar('--g-highlight') },
+        title: e.source + ' ↔ ' + e.target + ' · ' + (e.weight || 0) + ' shared sessions',
+      };
+    }
+    return {
+      from: e.source,
+      to: e.target,
+      arrows: 'to',
+      color: { color: cssVar('--g-edge') },
+      title: e.source + ' → ' + e.target,
+    };
+  }));
 
   // ─── Render network ──────────────────────────────────────────────────
   const container = document.getElementById('network');
@@ -560,21 +675,112 @@ function main() {
     interaction: { hover: true, tooltipDelay: 120 },
   });
 
-  // ─── Click-to-navigate (#328) ────────────────────────────────────────
-  // Use the precomputed `site_url` on each node instead of rewriting
-  // paths client-side. Nodes without a compiled site page (entities,
-  // concepts, nav files) have site_url === null — click shows a
-  // transient tooltip instead of opening a broken link.
+  // ─── Click: focus neighbourhood + navigate (#328) ─────────────────────
+  // A left-click ALWAYS highlights the node's 1-hop neighbourhood — the
+  // Obsidian-style "show me what links here" view — so clicking is never a
+  // silent no-op. This matters because only sources, projects and sessions
+  // are compiled to standalone pages (build.py); entity / concept /
+  // synthesis nodes have site_url === null, and the connected core of the
+  // graph is made entirely of those. Nodes that DO have a compiled page
+  // additionally open it. Clicking empty canvas clears the focus.
   network.on('click', params => {
+    if (params.nodes && params.nodes.length) {
+      const node = nodes.get(params.nodes[0]);
+      if (!node) return;
+      highlightNeighbours(node.id);
+      if (TOPIC) {
+        showTopicPanel(node);              // single click = focus + per-topic panel
+      } else if (node.site_url) {
+        window.open(node.site_url, '_blank', 'noopener');
+      } else {
+        _flashNoSiteTooltip(node, params.event);
+      }
+      return;
+    }
+    // Empty space — or, in topic mode, an edge (its bridging sessions).
+    if (TOPIC && params.edges && params.edges.length) {
+      const e = edgeData[params.edges[0]];
+      if (e) { try { network.selectEdges([params.edges[0]]); } catch (_) {} showEdgePanel(e); return; }
+    }
+    resetHighlight();
+    if (TOPIC) renderGlobalStats();
+  });
+
+  // Double-click opens the node's page (the topic page in topic mode), so a
+  // single click stays reserved for focus + the side panel.
+  network.on('doubleClick', params => {
     if (!params.nodes || !params.nodes.length) return;
     const node = nodes.get(params.nodes[0]);
-    if (!node) return;
-    if (node.site_url) {
-      window.open(node.site_url, '_blank', 'noopener');
-    } else {
-      _flashNoSiteTooltip(node, params.event);
-    }
+    if (node && node.site_url) window.open(node.site_url, '_blank', 'noopener');
   });
+
+  // ─── Topic-mode side panel (#54) ──────────────────────────────────────
+  // Replaces the whole-wiki Stats widget with per-topic / per-edge info.
+  function topicNeighbors(id) {
+    const out = [];
+    (GRAPH.edges || []).forEach(e => {
+      if (e.source === id) out.push([e.target, e.weight]);
+      else if (e.target === id) out.push([e.source, e.weight]);
+    });
+    out.sort((a, b) => b[1] - a[1]);
+    return out;
+  }
+  function topicSessionLinks(slugs, limit) {
+    const rows = (slugs || []).slice(0, limit).map(s => {
+      const m = SESS[s] || {};
+      const t = escapeHtml(m.title || s);
+      return m.url
+        ? '<a class="panel-link" href="' + escapeHtml(m.url) + '" target="_blank" rel="noopener">' + t + '</a>'
+        : '<span class="panel-muted">' + t + '</span>';
+    });
+    const extra = (slugs || []).length - rows.length;
+    return rows.join('') + (extra > 0 ? '<span class="panel-muted">+' + extra + ' more…</span>' : '');
+  }
+  function showTopicPanel(node) {
+    const neigh = topicNeighbors(node.id);
+    let h = '<h3>' + escapeHtml(node.label) + '</h3>';
+    h += '<div class="stat"><span>Sessions</span><b>' + (node.session_count || 0) + '</b></div>';
+    h += '<div class="stat"><span>Connected topics</span><b>' + (node.degree || 0) + '</b></div>';
+    if (node.site_url) h += '<a class="panel-open" href="' + escapeHtml(node.site_url) + '" target="_blank" rel="noopener">Open page →</a>';
+    if (neigh.length) {
+      h += '<h3 style="margin-top:10px">Top connections</h3>';
+      h += neigh.slice(0, 6).map(p =>
+        '<div class="hub-item"><b>' + String(p[1]).padStart(2) + '</b> ' + escapeHtml(p[0]) + '</div>').join('');
+    }
+    h += '<h3 style="margin-top:10px">Sessions</h3>';
+    h += '<div class="panel-sessions">' + topicSessionLinks(node.sessions, 25) + '</div>';
+    statsEl.innerHTML = h;
+  }
+  function showEdgePanel(e) {
+    let h = '<h3>' + escapeHtml(e.source) + ' ↔ ' + escapeHtml(e.target) + '</h3>';
+    h += '<div class="stat"><span>Shared sessions</span><b>' + (e.weight || 0) + '</b></div>';
+    h += '<p class="panel-muted" style="margin:6px 0">Sessions mentioning both:</p>';
+    h += '<div class="panel-sessions">' + topicSessionLinks(e.sessions, 30) + '</div>';
+    statsEl.innerHTML = h;
+  }
+  function renderGlobalStats() {
+    const s = GRAPH.stats || {};
+    let h = '<h3>Stats</h3>';
+    h += '<div class="stat"><span>Topics</span><b>' + (s.total_topics ?? GRAPH.nodes.length) + '</b></div>';
+    h += '<div class="stat"><span>Connections</span><b>' + (s.total_edges ?? GRAPH.edges.length) + '</b></div>';
+    h += '<div class="stat"><span>Sessions</span><b>' + (s.total_sessions ?? 0) + '</b></div>';
+    h += '<h3 style="margin-top:10px">Top hubs</h3>';
+    (s.top_topics || []).forEach(t => {
+      h += '<div class="hub-item"><b>' + String(t.count).padStart(3) + '</b> ' + escapeHtml(t.id) + '</div>';
+    });
+    h += '<p class="panel-muted" style="margin-top:8px">Click a topic to focus · double-click to open · click an edge for shared sessions</p>';
+    statsEl.innerHTML = h;
+  }
+  if (TOPIC) renderGlobalStats();
+
+  // Restore every node to its base colour — clears a neighbourhood focus
+  // (or a search dim). Defined here, called only at interaction time, so
+  // `baseColors` is already populated by then.
+  function resetHighlight() {
+    const update = [];
+    nodes.forEach(n => { update.push({ id: n.id, color: baseColors[n.id] }); });
+    nodes.update(update);
+  }
 
   // Transient "no page" hint for entity / concept / nav nodes.
   function _flashNoSiteTooltip(node, ev) {
@@ -815,7 +1021,8 @@ def write_html(graph: dict[str, Any], out_path: Path) -> None:
     out_path.write_text(html, encoding="utf-8")
 
 
-def copy_to_site(site_dir: Path, *, graph: Optional[dict[str, Any]] = None) -> Optional[Path]:
+def copy_to_site(site_dir: Path, *, graph: Optional[dict[str, Any]] = None,
+                 wiki_dir: Path | None = None) -> Optional[Path]:
     """Emit ``site/graph.html`` so the interactive viewer is reachable
     from the static site (v1.1.0 · #118).
 
@@ -823,11 +1030,14 @@ def copy_to_site(site_dir: Path, *, graph: Optional[dict[str, Any]] = None) -> O
     callers can wire this into ``build_site()`` without having to run
     ``llmwiki graph`` first.
 
+    ``wiki_dir`` selects which ``wiki/`` to graph (default: repo). A
+    ``build --vault`` build passes the vault's ``wiki/`` (#54).
+
     Returns the path written, or ``None`` when the wiki has no pages.
     """
     # #328: verify site_urls against the actual compiled site so dead
     # links get nulled to the graceful "no page" tooltip.
-    g = graph or build_graph(verify_site_dir=site_dir)
+    g = graph or build_graph(verify_site_dir=site_dir, wiki_dir=wiki_dir)
     if not g.get("nodes"):
         return None
     out = site_dir / "graph.html"

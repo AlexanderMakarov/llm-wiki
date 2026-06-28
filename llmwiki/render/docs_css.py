@@ -378,17 +378,26 @@ DOCS_SHELL_CSS = """
   text-decoration: underline;
 }
 
-/* #387 U9: on the docs hub specifically, make the TOC sticky on desktop
-   so a user scrolling through 80+ enumerated editorial pages always has
-   in-page navigation in view. Falls back to the inline TOC at narrow
-   viewports. */
-@media (min-width: 1024px) {
+/* #387 U9: on the docs hub, keep in-page navigation visible while scrolling
+   80+ enumerated editorial pages. The earlier `position: sticky` made the
+   full-width TOC paint over the prose beneath it (a stuck full-width box in
+   a single column overlaps the content that scrolls under it). Instead, on
+   wide screens we lift the TOC out of the 760px reading column entirely and
+   pin it in the right-hand gutter, anchored to the column's right edge so it
+   stays attached to the content at any viewport width. Below 1280px (gutter
+   too narrow) it falls back to the inline boxed TOC defined above. */
+@media (min-width: 1280px) {
   .docs-shell.docs-hub .tutorial-toc {
-    position: sticky;
-    top: 80px;
-    max-height: calc(100vh - 100px);
+    position: fixed;
+    top: 96px;
+    /* right edge of the centred 760px column is at `50% + 380px`; add a
+       20px gap, then a 220px panel — fits within the gutter from 1280px up. */
+    left: calc(50% + 400px);
+    width: 220px;
+    max-height: calc(100vh - 140px);
     overflow-y: auto;
-    margin: 0 0 24px 0;
+    margin: 0;
+    z-index: 5;
   }
   .docs-shell.docs-hub .tutorial-toc summary {
     /* On the hub, the TOC is the primary nav — surface it open by default

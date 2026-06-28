@@ -2340,6 +2340,7 @@ def build_site(
     seed_project_stubs: bool = False,
     raw_sessions: Path = RAW_SESSIONS,
     raw_dir: Path = RAW_DIR,
+    wiki_dir: Path = REPO_ROOT / "wiki",
 ) -> int:
     # #54 vault-overlay: ``raw_sessions``/``raw_dir`` default to the repo
     # constants so repo-mode builds are unchanged, but ``build --vault``
@@ -2548,10 +2549,27 @@ def build_site(
     # v1.1 (#118): copy the interactive knowledge graph into the site
     # so the "Graph" nav link works without a separate `llmwiki graph` step.
     try:
-        from llmwiki.graph import copy_to_site as copy_graph_to_site
-        graph_path = copy_graph_to_site(out_dir)
-        if graph_path:
-            print(f"  wrote {graph_path.relative_to(out_dir.parent)} (interactive graph viewer)")
+        from llmwiki.graph import copy_to_site as copy_graph_to_site, write_html as write_graph_html
+        # #54: prefer the topic-first graph (topics as nodes, sessions as the
+        # edges/backlinks between them) when the wiki has topics; fall back to
+        # the page graph otherwise (repo mode, empty wikis). All local CPU.
+        topic_graph = None
+        try:
+            from llmwiki.topics import build_topic_graph
+            topic_graph = build_topic_graph(wiki_dir)
+        except Exception as e:  # noqa: BLE001 — never fail the build over the graph
+            print(f"  warning: topic graph build failed: {e}", file=sys.stderr)
+        if topic_graph and topic_graph.get("nodes"):
+            from llmwiki.topics_page import build_topic_pages
+            write_graph_html(topic_graph, out_dir / "graph.html")
+            tpages = build_topic_pages(topic_graph, out_dir)
+            print(f"  wrote graph.html (topic graph: {len(topic_graph['nodes'])} topics, "
+                  f"{len(topic_graph['edges'])} connections) + {len(tpages)} topic pages")
+        else:
+            # #54: graph the same wiki we built the site from (vault or repo).
+            graph_path = copy_graph_to_site(out_dir, wiki_dir=wiki_dir)
+            if graph_path:
+                print(f"  wrote {graph_path.relative_to(out_dir.parent)} (interactive graph viewer)")
     except (OSError, ValueError, RuntimeError) as e:
         print(f"  warning: graph viewer copy failed: {e}", file=sys.stderr)
 

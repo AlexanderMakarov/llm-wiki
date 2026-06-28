@@ -308,11 +308,13 @@ def test_html_template_escapes_user_html():
 
 
 def test_html_template_size_budget():
-    # Guardrail — the template shouldn't balloon. 25 kB is plenty for
-    # the interactive features we ship.
-    assert len(HTML_TEMPLATE) < 25_000, (
+    # Guardrail — the template shouldn't balloon. Raised to 36 kB for the
+    # #54 topic-first viewer (dual-mode node/edge build, contextual side
+    # panel, double-click + edge-click handlers). If it grows much past
+    # this, split the <script> into an external .js asset instead.
+    assert len(HTML_TEMPLATE) < 36_000, (
         f"HTML template is {len(HTML_TEMPLATE)} bytes — "
-        "keep it under 25 kB or split into an external .html asset"
+        "keep it under 36 kB or split into an external .js asset"
     )
 
 
