@@ -28,6 +28,9 @@ WIKI_DIR = REPO_ROOT / "wiki"
 GRAPH_DIR = REPO_ROOT / "graph"
 
 WIKILINK_RE = re.compile(r"\[\[([^\]|]+)(?:\|[^\]]*)?\]\]")
+# Wiki sources often use ``YYYY-MM-DD-<raw-stem>`` filenames while raw/
+# sessions/ and site/sessions/ use ``<raw-stem>`` (wiki-add, #54).
+_DATE_WIKI_STEM = re.compile(r"^\d{4}-\d{2}-\d{2}-(.+)$")
 
 # #328: wiki-layer pages that have no corresponding site HTML page.
 # Graph clicks on these used to 404 — the viewer now disables the click
@@ -39,6 +42,30 @@ _NO_SITE_TYPES = {"entities", "concepts", "syntheses", "questions",
 # Graph wants the slug form (already stripped of `.md`); lint wants the
 # filename form. Same set, different shape.
 from llmwiki._system_pages import SYSTEM_PAGE_SLUGS as _NO_SITE_BASENAMES  # noqa: E402
+
+
+def _source_raw_stem(text: str, wiki_slug: str) -> str:
+    """Derive the raw/session stem when ``source_file`` frontmatter is absent.
+
+    Prefers an explicit ``slug:`` field, then strips a leading ISO date from
+    the wiki filename (``2026-06-25-evrika-1-09`` → ``evrika-1-09``).
+    """
+    sm = re.search(r"^slug:\s*(.+)$", text, re.MULTILINE)
+    if sm:
+        s = sm.group(1).strip().strip("'\"")
+        if s:
+            return s
+    dm = _DATE_WIKI_STEM.match(wiki_slug)
+    if dm:
+        return dm.group(1)
+    return wiki_slug
+
+
+def _source_project(text: str, rel_parts: tuple[str, ...]) -> str:
+    pm = re.search(r"^project:\s*(.+)$", text, re.MULTILINE)
+    if pm:
+        return pm.group(1).strip().strip("'\"")
+    return rel_parts[1] if len(rel_parts) >= 3 else ""
 
 
 def _compute_site_url(text: str, rel_parts: tuple[str, ...],
@@ -61,31 +88,27 @@ def _compute_site_url(text: str, rel_parts: tuple[str, ...],
     if len(rel_parts) >= 2 and rel_parts[0] == "projects":
         return f"projects/{slug}.html"
     if len(rel_parts) >= 2 and rel_parts[0] == "sources":
-        # Find the matching site/sessions/ path via the source_file frontmatter.
-        m = re.search(r"^source_file:\s*(.+)$", text, re.MULTILINE)
-        if not m:
-            return None
-        sf = m.group(1).strip().strip("'\"")
-        # sf looks like ``raw/sessions/<proj>/<stem>.md`` or ``raw/sessions/<stem>.md``
-        try:
-            rel = sf.split("raw/sessions/", 1)[1]
-        except IndexError:
-            return None
-        rel = rel.removesuffix(".md")
-        # Site session pages always live at sessions/<project>/<raw-stem>.html.
-        # A project-nested raw path already carries the project segment; a
-        # flat raw path (raw/sessions/<stem>.md — the layout vault syncs use)
-        # does not, so prepend the page's project from the `project:`
-        # frontmatter (falling back to the wiki sources subdirectory).
-        # Without this, every vault session node loses its click target (#54).
-        if "/" in rel:
-            return f"sessions/{rel}.html"
-        pm = re.search(r"^project:\s*(.+)$", text, re.MULTILINE)
-        project = (pm.group(1).strip().strip("'\"") if pm
-                   else (rel_parts[1] if len(rel_parts) >= 3 else ""))
-        if not project:
-            return None
-        return f"sessions/{project}/{rel}.html"
+        project = _source_project(text, rel_parts)
+        # Primary: ``source_file`` frontmatter (CC-converted sessions).
+        m = re.search(r"^source_file:[ \t]*([^\n\r]*)", text, re.MULTILINE)
+        sf = m.group(1).strip().strip("'\"") if m else ""
+        if sf:
+            try:
+                rel = sf.split("raw/sessions/", 1)[1]
+            except IndexError:
+                return None
+            rel = rel.removesuffix(".md")
+            if "/" in rel:
+                return f"sessions/{rel}.html"
+            if not project:
+                return None
+            return f"sessions/{project}/{rel}.html"
+        # Fallback: wiki-add / raw-doc pages with empty source_file but a
+        # compiled session page at sessions/<project>/<raw-stem>.html.
+        raw_stem = _source_raw_stem(text, slug)
+        if project and raw_stem:
+            return f"sessions/{project}/{raw_stem}.html"
+        return None
     if type_ in _NO_SITE_TYPES:
         return None
     if slug in _NO_SITE_BASENAMES:

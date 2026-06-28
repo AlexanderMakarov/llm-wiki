@@ -107,6 +107,19 @@ def test_gitignore_excludes_graphify_out():
     assert "graphify-out/" in gitignore
 
 
+def test_gitignore_excludes_generated_runtime_artifacts():
+    from llmwiki import REPO_ROOT
+
+    gitignore = (REPO_ROOT / ".gitignore").read_text(encoding="utf-8")
+    for needle in (
+        ".llmwiki-pending-prompts/",
+        ".llmwiki-topics.json",
+        ".llmwiki-synth-state.json",
+        ".playwright-mcp/",
+    ):
+        assert needle in gitignore, f"missing {needle!r} in .gitignore"
+
+
 # ─── query_graph returns string ──────────────────────────────────────
 
 

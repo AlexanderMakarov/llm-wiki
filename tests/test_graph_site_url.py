@@ -53,12 +53,25 @@ def test_source_uses_source_file_frontmatter():
     assert url == "sessions/research/2026-04-06-jiggly-coalescing-bee.html"
 
 
-def test_source_without_source_file_returns_none():
-    text = "---\ntitle: X\n---\nbody\n"
-    url = _compute_site_url(
-        text, ("sources", "research", "foo.md"), "foo", "sources",
+def test_source_without_source_file_falls_back_to_date_stem():
+    # wiki-add pages leave source_file empty but still compile from raw/.
+    text = (
+        "---\ntitle: Evrika part 9\nproject: evrika-1\nsource_file: \n---\n"
     )
-    assert url is None
+    url = _compute_site_url(
+        text, ("sources", "evrika-1", "2026-06-25-evrika-1-09.md"),
+        "2026-06-25-evrika-1-09", "sources",
+    )
+    assert url == "sessions/evrika-1/evrika-1-09.html"
+
+
+def test_source_without_source_file_uses_slug_frontmatter():
+    text = "---\ntitle: X\nproject: evrika-1\nslug: custom-stem\n---\n"
+    url = _compute_site_url(
+        text, ("sources", "evrika-1", "2026-06-25-evrika-1-09.md"),
+        "2026-06-25-evrika-1-09", "sources",
+    )
+    assert url == "sessions/evrika-1/custom-stem.html"
 
 
 def test_source_with_flat_raw_path():

@@ -40,6 +40,107 @@ llmwiki sync
 llmwiki all --with-synth --graph-engine builtin   # synthesize → build → graph → export → lint
 ```
 
+## Personal fork: keep data outside the repo
+
+The git clone is the **framework** (code, docs, demo seeds). Your sessions, wiki pages, and built site should live on disk **outside** the repo so nothing personal is ever committed by mistake.
+
+Recommended layout on an external vault (Obsidian, or any directory):
+
+```text
+/mnt/innerhdd/openclaw-obsidian/     ← vault root (NOT …/wiki)
+  raw/sessions/                      ← converted transcripts (gitignored if copied into repo)
+  wiki/                              ← LLM-maintained pages (sources/, index.md, …)
+  site/                              ← built static HTML
+  .llmwiki-state.json                ← sync idempotency (local only)
+  .llmwiki-synth-state.json
+  .llmwiki-topics.json
+```
+
+The repo’s own `wiki/` folder ships **demo seeds** for the public GitHub Pages build. With the setup below, day-to-day `sync` / `build` / `synthesize` commands target your vault — not the in-repo demo wiki.
+
+### 1. Local `config.json` (gitignored)
+
+Copy nothing — create `config.json` at the repo root:
+
+```json
+{
+  "vault": {
+    "default_path": "/mnt/innerhdd/openclaw-obsidian"
+  }
+}
+```
+
+When `vault.default_path` is set, these subcommands use the vault automatically (no `--vault` flag needed):
+
+- `llmwiki sync` → writes `raw/sessions/` under the vault
+- `llmwiki build` → reads vault `raw/` + `wiki/`, writes vault `site/`
+- `llmwiki synthesize`, `llmwiki consolidate-topics`, `llmwiki all`
+
+Override per run with `--vault /other/path` when needed.
+
+Put synthesis backend, redaction, and other personal overrides in the same `config.json` — they merge over `examples/sessions_config.json` without editing tracked files.
+
+### 2. `LLMWIKI_ROOT` for MCP and agents
+
+Point reads at the **vault root** (the directory that contains `raw/` and `wiki/`), not `…/wiki`:
+
+```bash
+export LLMWIKI_ROOT=/mnt/innerhdd/openclaw-obsidian
+```
+
+**Cursor** (`~/.cursor/mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "llmwiki": {
+      "command": "/path/to/llm-wiki/.venv/bin/python",
+      "args": ["-m", "llmwiki.mcp"],
+      "env": {
+        "LLMWIKI_ROOT": "/mnt/innerhdd/openclaw-obsidian",
+        "PYTHONPATH": "/path/to/llm-wiki"
+      }
+    }
+  }
+}
+```
+
+**Claude Code** (repo-local, gitignored): `.claude/settings.local.json`
+
+```json
+{
+  "env": {
+    "LLMWIKI_ROOT": "/mnt/innerhdd/openclaw-obsidian"
+  }
+}
+```
+
+With `LLMWIKI_ROOT` set, MCP tools (`wiki_query`, `wiki_search`, `wiki_read_page`, …) read vault `wiki/` and `raw/sessions/` instead of the repo’s demo content.
+
+### 3. Serve the vault site
+
+```bash
+python3 -m llmwiki build          # uses config.json vault default
+python3 -m llmwiki serve --vault /mnt/innerhdd/openclaw-obsidian
+# → http://127.0.0.1:8765
+```
+
+Or open `file:///mnt/innerhdd/openclaw-obsidian/site/index.html` directly.
+
+### What stays gitignored
+
+| Path | Why |
+|---|---|
+| `raw/` | Session transcripts — PII even after redaction |
+| `wiki/sources/`, `wiki/entities/`, … | Your LLM-generated pages |
+| `wiki/projects/*` (except demo `demo-*.md`) | Per-project topic profiles |
+| `site/` | Generated HTML |
+| `config.json` | Machine-specific vault path + secrets |
+| `.llmwiki-*` state files | Local pipeline state |
+| `.llmwiki-pending-prompts/` | Agent-delegate synthesis scratch files |
+
+See [docs/guides/existing-vault.md](docs/guides/existing-vault.md) for Obsidian/Logseq layout options.
+
 ![llmwiki — 70-second demo](docs/demo.gif)
 
 
@@ -476,14 +577,18 @@ Twelve production tools (7 core + 5 added in v1.0 `#159`):
 | `wiki_entity_search(name, entity_type)` | Search entities by name substring or type (v1.0) |
 | `wiki_category_browse(tag)` | Browse tags with counts, drill into specific tag (v1.0) |
 
-Register in your MCP client's config — e.g. for Claude Desktop, add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
+Register in your MCP client's config. When your data lives outside the repo, set `LLMWIKI_ROOT` to the vault root (see [Personal fork: keep data outside the repo](#personal-fork-keep-data-outside-the-repo)):
 
 ```json
 {
   "mcpServers": {
     "llmwiki": {
       "command": "python3",
-      "args": ["-m", "llmwiki.mcp"]
+      "args": ["-m", "llmwiki.mcp"],
+      "env": {
+        "LLMWIKI_ROOT": "/path/to/your-vault",
+        "PYTHONPATH": "/path/to/llm-wiki"
+      }
     }
   }
 }
@@ -491,7 +596,41 @@ Register in your MCP client's config — e.g. for Claude Desktop, add to `~/Libr
 
 ## Configuration
 
-Single JSON config at `examples/sessions_config.json`. Copy to `config.json` and edit:
+Shipped defaults live in `examples/sessions_config.json`. For personal overrides, create **`config.json`** at the repo root (gitignored) — values merge on top of the shipped file:
+
+```json
+{
+  "vault": {
+    "default_path": "/path/to/your-vault"
+  },
+  "filters": {
+    "live_session_minutes": 60,
+    "exclude_projects": []
+  },
+  "redaction": {
+    "real_username": "YOUR_USERNAME",
+    "replacement_username": "USER",
+    "extra_patterns": [
+      "(?i)(api[_-]?key|secret|token|bearer|password)...",
+      "sk-[A-Za-z0-9]{20,}"
+    ]
+  },
+  "truncation": {
+    "tool_result_chars": 500,
+    "bash_stdout_lines": 5
+  },
+  "synthesis": {
+    "backend": "agent_delegate"
+  },
+  "adapters": {
+    "obsidian": {
+      "vault_paths": ["~/Documents/Obsidian Vault"]
+    }
+  }
+}
+```
+
+Legacy single-file example (same fields, no vault default):
 
 ```json
 {

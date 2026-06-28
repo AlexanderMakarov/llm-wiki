@@ -50,12 +50,12 @@ wiki/categories/*
 # v0.7 (#58): second seed model entity so the auto-gen vs-comparison
 # pipeline has a real pair to render on the demo build.
 !wiki/entities/GPT5.md
-# Project topics (v0.9): `wiki/projects/<slug>.md` is hand-curated
-# per-project metadata (topics, description, homepage). Small, stable,
-# user-curated — committed so the demo build ships with topic chips
-# on every project card. Users can add their own project profiles
-# and they'll be picked up automatically.
-!wiki/projects/
+# Project topics (v0.9): demo profiles ship with the repo so the public
+# build has topic chips on project cards. User profiles stay local —
+# same ignore-then-un-ignore pattern as wiki/sources/.
+wiki/projects/*
+!wiki/projects/demo-*.md
+!wiki/projects/llm-wiki.md
 
 # Graphify output (AI-powered knowledge graph).
 graphify-out/
@@ -66,7 +66,8 @@ site-html/
 dist-site/
 !site/.gitkeep
 
-# Converter state — tracks mtimes to avoid re-processing unchanged files.
+# Converter / synthesis state — tracks mtimes, pending work, topic cache.
+# All local-only; never commit.
 .ingestion-state.json
 .llmwiki-state.json
 .llmwiki-synth-state.json
@@ -74,6 +75,11 @@ dist-site/
 .llmwiki-dream-state.json
 .llmwiki-batch-state.json
 .llmwiki-quarantine.json
+.llmwiki-topics.json
+# Agent-delegate synthesis scratch prompts (#316). Created by
+# `llmwiki synthesize` with synthesis.backend=agent; deleted on
+# `--complete`. Stale files here are safe to delete.
+.llmwiki-pending-prompts/
 
 # v1.0 (#160): multi-agent skill mirrors are derived from .claude/skills/
 # by `llmwiki install-skills`. The canonical source ships with the repo;
@@ -207,4 +213,5 @@ node_modules/
 playwright-report/
 test-results/
 .playwright/
+.playwright-mcp/
 

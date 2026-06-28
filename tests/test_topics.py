@@ -149,3 +149,53 @@ def test_consolidation_cache_drives_merge_and_descriptions(tmp_path: Path):
     # Regular synth vocab now carries the cached description.
     out = _inject_vocabulary("{vocabulary}\n{body}\n{meta}", wiki)
     assert 'name="kbbuilder" desc="Doc-ingest CLI."' in out
+
+
+def test_consolidation_dropped_excluded_from_graph(tmp_path: Path):
+    from llmwiki.topics_consolidate import parse_and_cache
+
+    wiki = _make_wiki(tmp_path, {
+        "s1": ["OpenClaw", "Bash"],
+        "s2": ["OpenClaw", "Bash"],
+    })
+    reply = (
+        '{"topics": [{"canonical": "OpenClaw", "description": "Agent platform.",'
+        ' "aliases": []}], "dropped": ["Bash"]}'
+    )
+    parse_and_cache(reply, wiki)
+    g = build_topic_graph(wiki, min_sessions=1)
+    assert {n["id"] for n in g["nodes"]} == {"OpenClaw"}
+
+
+def test_display_aliases_collapse_spelling_variants():
+    from llmwiki.topics_page import _display_aliases
+
+    out = _display_aliases(
+        "Evrika",
+        ["Evrika", "Armenian Language", "ArmenianLanguage", "Bilingual-Education",
+         "Bilingual Education"],
+    )
+    assert out == ["Armenian Language", "Bilingual Education"]
+
+
+def test_topic_page_alias_note_uses_hover_not_inline_explanation(tmp_path: Path):
+    g = {
+        "mode": "topic",
+        "nodes": [{
+            "id": "Evrika",
+            "aliases": ["Evrika", "Armenian Language", "ArmenianLanguage"],
+            "sessions": ["s1"],
+            "session_count": 1,
+            "degree": 0,
+        }],
+        "edges": [],
+        "sessions": {"s1": {"title": "s1", "url": "sessions/proj/s1.html"}},
+        "stats": {"total_sessions": 1},
+    }
+    out = tmp_path / "site"
+    build_topic_pages(g, out)
+    page = (out / "topics" / "evrika.html").read_text(encoding="utf-8")
+    assert 'class="topic-aliases-label" title="' in page
+    assert "Also tagged as</strong></span>:" in page
+    assert "before consolidation merged them under this topic." in page
+    assert "[[wikilinks]]</code> before consolidation" not in page

@@ -38,6 +38,8 @@ from llmwiki.synth.estimate import synthesize_estimate_report  # noqa: F401
 # cli.py keeps thin re-export wrappers for back-compat with anyone
 # doing `from llmwiki.cli import cmd_all, cmd_sync_status, ...`.
 from llmwiki.config_schedule import (  # noqa: F401
+    apply_default_vault as _apply_default_vault,
+    load_default_vault_path as _load_default_vault_path,
     load_schedule_config as _load_schedule_config,
     should_run_after_sync as _should_run_after_sync,
 )
@@ -62,6 +64,7 @@ def cmd_all(args: argparse.Namespace) -> int:
 
     Thin shim — the implementation lives in ``llmwiki.pipeline`` (#691).
     """
+    _apply_default_vault(args)
     return _run_pipeline(args)
 
 
@@ -129,6 +132,8 @@ def cmd_sync(args: argparse.Namespace) -> int:
     # G-03 (#289): `sync --status` short-circuits into the status reporter.
     if getattr(args, "status", False):
         return cmd_sync_status(args)
+
+    _apply_default_vault(args)
 
     from llmwiki.convert import convert_all, DEFAULT_OUT_DIR, DEFAULT_STATE_FILE
 
@@ -213,6 +218,7 @@ def cmd_sync(args: argparse.Namespace) -> int:
 
 def cmd_build(args: argparse.Namespace) -> int:
     """Build the static HTML site."""
+    _apply_default_vault(args)
     from llmwiki.build import build_site
 
     # v1.2 (#54): vault-overlay mode. Validate the path up front so a
@@ -501,16 +507,11 @@ def cmd_synthesize(args: argparse.Namespace) -> int:
     connectivity before a long sync. ``--estimate`` prints a cached-vs-fresh
     token + dollar breakdown before spending money (#50).
     """
-    import json as _json
+    _apply_default_vault(args)
+    from llmwiki.config_schedule import _load_sessions_config
     from llmwiki.synth.pipeline import resolve_backend, synthesize_new_sessions
 
-    config: dict = {}
-    config_path = REPO_ROOT / "examples" / "sessions_config.json"
-    if config_path.is_file():
-        try:
-            config = _json.loads(config_path.read_text(encoding="utf-8"))
-        except (_json.JSONDecodeError, OSError):
-            config = {}
+    config: dict = _load_sessions_config()
 
     if args.estimate:
         return _synthesize_estimate()
@@ -715,6 +716,7 @@ def cmd_consolidate_topics(args: argparse.Namespace) -> int:
     JSON reply and writes the topic cache (merge-map + descriptions) the graph
     and regular-synth prompt then consume.
     """
+    _apply_default_vault(args)
     from llmwiki.topics_consolidate import (
         render_consolidation_prompt, parse_and_cache, cache_path,
     )

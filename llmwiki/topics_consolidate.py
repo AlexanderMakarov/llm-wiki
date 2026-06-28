@@ -139,7 +139,8 @@ def load_cache(wiki_dir: Path | None = None) -> Optional[dict[str, Any]]:
     """Load the consolidation cache, or ``None`` when absent/unreadable.
 
     Returns ``{"topics": [...], "alias_map": {lower_spelling: canonical},
-    "descriptions": {canonical: text}}`` for easy consumption.
+    "descriptions": {canonical: text}, "dropped": [noise, ...]}`` for easy
+    consumption.
     """
     p = cache_path(wiki_dir)
     if not p.is_file():
@@ -159,4 +160,9 @@ def load_cache(wiki_dir: Path | None = None) -> Optional[dict[str, Any]]:
         alias_map[canon.lower()] = canon
         for a in t.get("aliases", []):
             alias_map[str(a).lower()] = canon
-    return {"topics": topics, "alias_map": alias_map, "descriptions": descriptions}
+    return {
+        "topics": topics,
+        "alias_map": alias_map,
+        "descriptions": descriptions,
+        "dropped": raw.get("dropped") or [],
+    }

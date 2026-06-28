@@ -11,20 +11,61 @@ import json as _json
 from pathlib import Path
 from typing import Any
 
-from llmwiki import REPO_ROOT
+from llmwiki import PACKAGE_ROOT
 
-_SESSIONS_CONFIG = REPO_ROOT / "examples" / "sessions_config.json"
+# Config files always live in the git clone, even when ``LLMWIKI_ROOT``
+# points content reads/writes at an external vault.
+_CLONE_ROOT = PACKAGE_ROOT.parent
+_SESSIONS_CONFIG = _CLONE_ROOT / "examples" / "sessions_config.json"
+_USER_CONFIG = _CLONE_ROOT / "config.json"
 
 
 def _load_sessions_config(config_path: Path | None = None) -> dict[str, Any]:
-    path = config_path or _SESSIONS_CONFIG
-    if not path.is_file():
-        return {}
-    try:
-        data = _json.loads(path.read_text(encoding="utf-8"))
-    except (ValueError, OSError):
-        return {}
-    return data if isinstance(data, dict) else {}
+    if config_path is not None:
+        path = config_path
+        if not path.is_file():
+            return {}
+        try:
+            data = _json.loads(path.read_text(encoding="utf-8"))
+        except (ValueError, OSError):
+            return {}
+        return data if isinstance(data, dict) else {}
+
+    merged: dict[str, Any] = {}
+    for path in (_SESSIONS_CONFIG, _USER_CONFIG):
+        if not path.is_file():
+            continue
+        try:
+            data = _json.loads(path.read_text(encoding="utf-8"))
+        except (ValueError, OSError):
+            continue
+        if not isinstance(data, dict):
+            continue
+        for section, value in data.items():
+            if isinstance(value, dict) and isinstance(merged.get(section), dict):
+                merged[section].update(value)
+            else:
+                merged[section] = value
+    return merged
+
+
+def load_default_vault_path() -> Path | None:
+    """Return ``vault.default_path`` from config.json / sessions_config.json."""
+    vault = _load_sessions_config().get("vault", {})
+    if not isinstance(vault, dict):
+        return None
+    raw = str(vault.get("default_path", "")).strip()
+    if not raw:
+        return None
+    return Path(raw).expanduser()
+
+
+def apply_default_vault(args: Any) -> None:
+    """Fill ``args.vault`` from config when the CLI flag was omitted."""
+    if getattr(args, "vault", None) is None:
+        default = load_default_vault_path()
+        if default is not None:
+            args.vault = default
 
 
 def load_schedule_config() -> dict[str, str]:

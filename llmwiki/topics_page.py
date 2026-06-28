@@ -13,8 +13,39 @@ avoid a circular import — ``build`` calls this module).
 from __future__ import annotations
 
 import html
+import re
 from pathlib import Path
 from typing import Any
+
+_ALIAS_NORM = re.compile(r"[\s\-_]+")
+_ALIAS_TOOLTIP = (
+    "Alternate spellings or related names sessions used in [[wikilinks]] "
+    "before consolidation merged them under this topic."
+)
+
+
+def _display_aliases(canonical: str, aliases: list[str]) -> list[str]:
+    """Collapse near-duplicate spellings for the topic-page alias note.
+
+    Sessions tag the same scope with different casing/spacing (``Armenian
+    Language`` vs ``ArmenianLanguage``). The graph keeps every raw spelling
+    internally; the static page shows one readable form per cluster.
+    """
+    best: dict[str, str] = {}
+    for a in aliases:
+        if not a or a == canonical:
+            continue
+        key = _ALIAS_NORM.sub("", a.lower())
+        prev = best.get(key)
+        if prev is None:
+            best[key] = a
+            continue
+        # Prefer spaced Title Case over camelCase / hyphenated when tied.
+        score = ((" " in a), -len(a))
+        prev_score = ((" " in prev), -len(prev))
+        if score > prev_score:
+            best[key] = a
+    return sorted(best.values(), key=str.lower)
 
 
 def _neighbors(topic_id: str, edges: list[dict[str, Any]]) -> list[tuple[str, int]]:
@@ -83,12 +114,17 @@ def build_topic_pages(graph: dict[str, Any], out_dir: Path) -> list[Path]:
         name = node["id"]
         neighbors = _neighbors(name, edges)
         subtitle = f"{node['session_count']} sessions · {len(neighbors)} connected topics"
-        aliases = [a for a in node.get("aliases", []) if a != name]
-        alias_note = (
-            f'<p class="muted topic-aliases">Also written: '
-            + ", ".join(html.escape(a) for a in aliases) + "</p>"
-            if aliases else ""
-        )
+        aliases = _display_aliases(name, node.get("aliases", []))
+        alias_note = ""
+        if aliases:
+            tip = html.escape(_ALIAS_TOOLTIP, quote=True)
+            alias_note = (
+                '<p class="muted topic-aliases">'
+                f'<span class="topic-aliases-label" title="{tip}">'
+                "<strong>Also tagged as</strong></span>: "
+                + ", ".join(html.escape(a) for a in aliases)
+                + "</p>"
+            )
         body = (
             page_head(name, f"Sessions and connections for {name}", css_prefix="../")
             + nav_bar(active="graph", link_prefix="../")
