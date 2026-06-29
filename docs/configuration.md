@@ -101,7 +101,7 @@ Minimal config:
 
 | Variable | What it does |
 |---|---|
-| `LLMWIKI_HOME` | Override the repo root. Defaults to auto-detection from the script location. |
+| `LLMWIKI_ROOT` | Override the repo root that content reads (`wiki/`, `raw/`) resolve against — e.g. point the MCP server at an external vault. Defaults to auto-detection from the package location. |
 | `LLMWIKI_CONFIG` | Override the config file path. Defaults to `./config.json` then `examples/sessions_config.json`. |
 
 ## CLI flags

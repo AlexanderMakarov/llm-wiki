@@ -45,7 +45,7 @@ Do NOT invoke when:
    - `./` (if cwd contains `llmwiki/` package)
    - `~/Desktop/2026/production-draft/llmwiki/`
    - `~/llmwiki/`
-   - `$LLMWIKI_HOME` environment variable
+   - `$LLMWIKI_ROOT` environment variable
 
    If you can't find it, tell the user and stop.
 
