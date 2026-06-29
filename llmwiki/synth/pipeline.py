@@ -102,9 +102,18 @@ def resolve_backend(
     return DummySynthesizer()
 
 RAW_SESSIONS = REPO_ROOT / "raw" / "sessions"
+# #1: manually-added documents (kbbuilder `wikiAddDocument`) land here.
+# Synthesis distils these alongside session transcripts.
+RAW_DOCS = REPO_ROOT / "raw" / "docs"
 WIKI_SOURCES = REPO_ROOT / "wiki" / "sources"
 WIKI_LOG = REPO_ROOT / "wiki" / "log.md"
 STATE_FILE = REPO_ROOT / ".llmwiki-synth-state.json"
+
+# #1: ceiling on the body size handed to a single synthesis backend call.
+# Oversized docs (e.g. a multi-MB concatenated `llms-full.txt`) are split
+# on heading boundaries into part-pages before synthesis. Sessions are
+# never chunked — they are bounded by the converter's truncation config.
+_DOC_CHUNK_MAX_CHARS = 200_000
 PROMPT_TEMPLATE_PATH = Path(__file__).parent / "prompts" / "source_page.md"
 
 # Allow user override of the prompt template: if
@@ -411,6 +420,85 @@ def _discover_raw_sessions(
     return out
 
 
+def _discover_raw_docs(
+    docs_dir: Optional[Path] = None,
+) -> list[tuple[Path, dict[str, Any], str]]:
+    """Walk raw/docs/ and return (path, meta, body) for each .md file.
+
+    #1: documents added through the manual path (kbbuilder
+    ``wikiAddDocument`` → ``raw/docs/<slug>.md``) used to have no synthesis
+    consumer. This mirrors :func:`_discover_raw_sessions` so added docs get
+    distilled into wiki source pages too. Frontmatter is optional — a bare
+    markdown file parses to ``({}, text)``.
+    """
+    root = docs_dir or RAW_DOCS
+    if not root.is_dir():
+        return []
+    out: list[tuple[Path, dict[str, Any], str]] = []
+    for p in sorted(root.rglob("*.md")):
+        if p.name.startswith("_"):
+            continue
+        try:
+            text = p.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        meta, body = parse_frontmatter(text)
+        out.append((p, meta, body))
+    return out
+
+
+# #1: top-level markdown heading (``#`` or ``##``) at the start of a line.
+_MD_TOP_HEADING = re.compile(r"#{1,2} ")
+
+
+def _chunk_markdown(text: str, max_chars: int) -> list[str]:
+    """Split markdown into chunks no larger than ``max_chars``, breaking on
+    top-level (``#``/``##``) heading boundaries where possible.
+
+    Used to make oversized manually-added docs (e.g. a multi-MB
+    ``llms-full.txt``) fit a single synthesis backend call. Returns
+    ``[text]`` unchanged when the input already fits. Content is preserved:
+    concatenating the chunks reproduces the input exactly — heading-aligned
+    where sections fit the cap, hard character-split for a heading-less
+    blob bigger than the cap.
+    """
+    if len(text) <= max_chars:
+        return [text]
+
+    # Group lines into sections, each starting at a top-level heading.
+    sections: list[str] = []
+    cur: list[str] = []
+    for ln in text.splitlines(keepends=True):
+        if cur and _MD_TOP_HEADING.match(ln):
+            sections.append("".join(cur))
+            cur = [ln]
+        else:
+            cur.append(ln)
+    if cur:
+        sections.append("".join(cur))
+
+    # Greedily pack sections under the cap. A single section larger than
+    # the cap is hard-split on character count so no chunk ever exceeds it.
+    chunks: list[str] = []
+    buf = ""
+    for sec in sections:
+        if len(sec) > max_chars:
+            if buf:
+                chunks.append(buf)
+                buf = ""
+            for i in range(0, len(sec), max_chars):
+                chunks.append(sec[i:i + max_chars])
+            continue
+        if buf and len(buf) + len(sec) > max_chars:
+            chunks.append(buf)
+            buf = sec
+        else:
+            buf += sec
+    if buf:
+        chunks.append(buf)
+    return chunks
+
+
 # ─── #351: AI-suggested tags ──────────────────────────────────────────
 
 # Emitted by the LLM as the first line of its response — we strip it
@@ -663,6 +751,8 @@ def synthesize_new_sessions(
     force: bool = False,
     log_path: Optional[Path] = None,
     state_file: Optional[Path] = None,
+    docs_dir: Optional[Path] = None,
+    doc_chunk_max_chars: Optional[int] = None,
 ) -> dict[str, Any]:
     """Main entry point. Returns a summary dict:
 
@@ -695,22 +785,51 @@ def synthesize_new_sessions(
     # once here (corpus-wide); backends only substitute {body}/{meta} after.
     prompt_template = _inject_vocabulary(prompt_template, sources_out.parent)
     state = {} if force else _load_state(state_file)
-    sessions = _discover_raw_sessions(raw_dir)
+    chunk_max = doc_chunk_max_chars or _DOC_CHUNK_MAX_CHARS
 
-    new_files: list[tuple[Path, dict[str, Any], str]] = []
-    for p, meta, body in sessions:
-        rel = str(p.relative_to(raw_dir or RAW_SESSIONS))
+    # #1: synthesize BOTH session transcripts and manually-added docs.
+    # Sessions keep their existing rel state-keys (relative to the sessions
+    # root) so pre-existing .llmwiki-synth-state.json files stay valid.
+    # Docs are namespaced with a ``docs::`` rel prefix and grouped under a
+    # ``docs`` pseudo-project. The docs root defaults to the sibling
+    # ``raw/docs`` of whatever sessions root was given.
+    session_base = raw_dir or RAW_SESSIONS
+    docs_base = docs_dir or (raw_dir.parent / "docs" if raw_dir else RAW_DOCS)
+
+    items: list[dict[str, Any]] = []
+    for p, meta, body in _discover_raw_sessions(raw_dir):
+        items.append({
+            "path": p, "meta": meta, "body": body,
+            "rel": str(p.relative_to(session_base)),
+            "project": meta.get("project", p.parent.name),
+            "is_doc": False,
+        })
+    for p, meta, body in _discover_raw_docs(docs_base):
+        # Group under the doc's own project if it declares one, else the
+        # ``docs`` pseudo-project. Inject it into meta too so the built
+        # page's `project:` frontmatter matches where the page lives —
+        # otherwise the index/graph mis-group it as ``unknown``.
+        doc_project = meta.get("project") or "docs"
+        items.append({
+            "path": p, "meta": {**meta, "project": doc_project}, "body": body,
+            "rel": "docs::" + str(p.relative_to(docs_base)),
+            "project": doc_project,
+            "is_doc": True,
+        })
+
+    new_items: list[dict[str, Any]] = []
+    for it in items:
         try:
-            mtime = p.stat().st_mtime
+            mtime = it["path"].stat().st_mtime
         except OSError:
             continue
-        if rel in state and state[rel] >= mtime and not force:
+        if it["rel"] in state and state[it["rel"]] >= mtime and not force:
             continue
-        new_files.append((p, meta, body))
+        new_items.append(it)
 
     summary: dict[str, Any] = {
-        "total_scanned": len(sessions),
-        "new_files": len(new_files),
+        "total_scanned": len(items),
+        "new_files": len(new_items),
         "synthesized": 0,
         "skipped": 0,
         "errors": [],
@@ -718,16 +837,18 @@ def synthesize_new_sessions(
     }
 
     if dry_run:
-        summary["skipped"] = len(new_files)
+        summary["skipped"] = len(new_items)
         print(
-            f"[dry-run] Would synthesize {len(new_files)} new sessions "
+            f"[dry-run] Would synthesize {len(new_items)} new sources "
             f"using {backend.name}"
         )
-        for p, meta, _ in new_files:
-            print(f"  {meta.get('slug', p.stem)}")
+        for it in new_items:
+            print(f"  {it['meta'].get('slug', it['path'].stem)}")
         return summary
 
-    for p, meta, body in new_files:
+    for it in new_items:
+        p, meta, body = it["path"], it["meta"], it["body"]
+        project, rel = it["project"], it["rel"]
         raw_slug = meta.get("slug", p.stem)
         # YAML parses numeric-looking session-hash slugs (e.g. "15824711",
         # "6051e147") as int/float — and the scientific-notation ones lose
@@ -736,8 +857,6 @@ def synthesize_new_sessions(
         # which always carries the correct, unique slug.
         if not isinstance(raw_slug, str):
             raw_slug = p.stem
-        project = meta.get("project", p.parent.name)
-        rel = str(p.relative_to(raw_dir or RAW_SESSIONS))
 
         # G-21 (#307): normalise slug — spaces → hyphens, strip filesystem-
         # unsafe chars so the output filename is URL-safe + shell-safe.
@@ -751,40 +870,38 @@ def synthesize_new_sessions(
         date = str(meta.get("date", "")).strip()
         filename = f"{date}-{slug}" if date else slug
 
-        try:
-            # #py-h7 (#585): pass the raw template — backends own rendering.
-            # The pre-render here used to interpolate {body} and {meta}
-            # before handing the result to backends, but that fought with
-            # the BaseSynthesizer contract ("prompt_template is the
-            # contents of prompts/source_page.md with {body} and {meta}
-            # placeholders"). Worse, the pipeline pre-render formatted
-            # meta as `key: value\n` lines while OllamaSynthesizer's own
-            # _render_prompt formats meta as JSON — so Ollama users
-            # silently got the pipeline's textual format instead of the
-            # JSON its prompts were tuned for. Now: pipeline hands over
-            # the unrendered template; each backend renders it with the
-            # format it was designed against.
-            synthesized = backend.synthesize_source_page(body, meta, prompt_template)
+        # #1: oversized docs are split on headings into part-pages so each
+        # chunk fits one backend call. Sessions are never chunked.
+        chunks = _chunk_markdown(body, chunk_max) if it["is_doc"] else [body]
+        multi = len(chunks) > 1
 
-            # Build the full wiki source page.
-            # #351: pass the existing path so maintainer-curated tags
-            # are preserved on re-synthesize.
+        try:
             out_dir = sources_out / project
             out_dir.mkdir(parents=True, exist_ok=True)
-            out_path = out_dir / f"{filename}.md"
-            page_content = _build_source_page(
-                meta, synthesized, existing_page_path=out_path
-            )
-            out_path.write_text(page_content, encoding="utf-8")
+            for idx, chunk in enumerate(chunks, start=1):
+                # #py-h7 (#585): pass the raw template — backends own
+                # rendering. The pipeline hands over the unrendered
+                # template; each backend renders it with the format it was
+                # designed against (textual vs JSON meta).
+                synthesized = backend.synthesize_source_page(
+                    chunk, meta, prompt_template
+                )
+                name = f"{filename}--part-{idx:02d}" if multi else filename
+                # #351: pass the existing path so maintainer-curated tags
+                # are preserved on re-synthesize.
+                out_path = out_dir / f"{name}.md"
+                page_content = _build_source_page(
+                    meta, synthesized, existing_page_path=out_path
+                )
+                out_path.write_text(page_content, encoding="utf-8")
+                # G-08 (#294): clean separator so slugs with spaces don't
+                # break awk/sed parsing. See G-20/#306 for the batched
+                # summary emitted after the loop.
+                print(f"  synthesized: {project} → {name}")
 
-            # Update state
+            # Update state once per source (after all parts succeed).
             state[rel] = p.stat().st_mtime
             summary["synthesized"] += 1
-
-            # G-08 (#294): log uses a clean separator so slugs with
-            # spaces don't break awk/sed parsing. See also G-20/#306
-            # for the batched summary emitted after the loop.
-            print(f"  synthesized: {project} → {filename}")
 
         except Exception as e:
             summary["errors"].append(f"{slug}: {e}")
@@ -796,9 +913,8 @@ def synthesize_new_sessions(
     # entries flooded wiki/log.md (60+ lines per run).
     if summary["synthesized"] > 0 or summary["errors"]:
         projects_touched: dict[str, int] = {}
-        for p, meta, _ in new_files:
-            project = meta.get("project", p.parent.name)
-            projects_touched[project] = projects_touched.get(project, 0) + 1
+        for it in new_items:
+            projects_touched[it["project"]] = projects_touched.get(it["project"], 0) + 1
         _append_log(
             f"{summary['synthesized']} sessions across {len(projects_touched)} projects",
             log_path=log_path,
