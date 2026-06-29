@@ -292,4 +292,4 @@ for name, cls in sorted(REGISTRY.items()):
 - No function requires network access (except `image_pipeline.process_markdown_images` with `--download-images`).
 - `convert_all` is idempotent -- state is tracked in `.llmwiki-state.json`.
 - `build_site` is deterministic -- the same inputs produce the same outputs.
-- All functions use the repo root auto-detected from the package location. Override with `LLMWIKI_HOME`.
+- All functions use the repo root auto-detected from the package location. Override with `LLMWIKI_ROOT`.

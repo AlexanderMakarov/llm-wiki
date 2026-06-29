@@ -227,7 +227,7 @@ cp examples/sessions_config.json config.json
 
 | Variable | Description | Default |
 |---|---|---|
-| `LLMWIKI_HOME` | Override the repo root directory | Auto-detected from script location |
+| `LLMWIKI_ROOT` | Override the repo root that content reads (`wiki/`, `raw/`) resolve against — e.g. point the MCP server at an external vault | Auto-detected from package location |
 | `LLMWIKI_CONFIG` | Override the config file path | `./config.json`, then `examples/sessions_config.json` |
 | `COPILOT_HOME` | Override the Copilot CLI base directory | `~/.copilot` |
 
