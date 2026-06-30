@@ -471,12 +471,15 @@ def filter_records(records: list[dict[str, Any]], drop_types: list[str]) -> list
 
 
 # #8: headless / temp-cwd session discriminators. Claude Code tags every
-# record with `entrypoint` + `promptSource`; a headless `claude -p` / SDK
-# run shows `entrypoint == "sdk-cli"` and/or `promptSource == "sdk"`, an
-# interactive session shows `cli` / `typed|queued|system`. Generalizes
-# beyond Claude Code: anyone whose automation shells out to a logged agent
-# CLI hits the same feedback loop.
-_HEADLESS_ENTRYPOINTS = frozenset({"sdk-cli"})
+# record with `entrypoint` + `promptSource`; a headless run shows an
+# `sdk-*` entrypoint (sdk-cli for `claude -p`, sdk-py for the Python SDK —
+# both seen in real corpora) and/or `promptSource == "sdk"`, while an
+# interactive session shows `cli` / `typed|queued|system`. We match the
+# `sdk-` entrypoint *prefix* so a future SDK runtime (sdk-go, …) is caught
+# without a code change; promptSource is the belt-and-suspenders signal.
+# Generalizes beyond Claude Code: anyone whose automation shells out to a
+# logged agent CLI hits the same feedback loop.
+_HEADLESS_ENTRYPOINT_PREFIX = "sdk-"
 _HEADLESS_PROMPT_SOURCES = frozenset({"sdk"})
 
 # Throwaway temp roots. e2e test runs, scratch git-worktrees, and /tmp
@@ -490,7 +493,8 @@ _TEMP_CWD_EXACT = frozenset({"/tmp", "/private/tmp"})
 def is_headless_session(records: list[dict[str, Any]]) -> bool:
     """True if any record marks this as a headless `claude -p` / SDK run."""
     for r in records:
-        if r.get("entrypoint") in _HEADLESS_ENTRYPOINTS:
+        entrypoint = r.get("entrypoint")
+        if isinstance(entrypoint, str) and entrypoint.startswith(_HEADLESS_ENTRYPOINT_PREFIX):
             return True
         if r.get("promptSource") in _HEADLESS_PROMPT_SOURCES:
             return True

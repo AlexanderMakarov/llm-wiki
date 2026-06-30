@@ -32,6 +32,13 @@ def test_headless_true_for_sdk_cli_entrypoint():
     assert is_headless_session(records) is True
 
 
+def test_headless_true_for_sdk_py_entrypoint_alone():
+    # The Python SDK reports entrypoint=sdk-py. Even if promptSource were
+    # absent on every record, the entrypoint prefix must flag it headless.
+    records = [{"type": "user", "entrypoint": "sdk-py"}]
+    assert is_headless_session(records) is True
+
+
 def test_headless_true_for_sdk_prompt_source():
     # Only promptSource flags it; entrypoint absent.
     records = [{"type": "user", "promptSource": "sdk"}]
