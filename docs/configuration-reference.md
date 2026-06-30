@@ -143,7 +143,9 @@ cp examples/sessions_config.json config.json
     "live_session_minutes": 60,
     "include_projects": [],
     "exclude_projects": [],
-    "drop_record_types": ["queue-operation", "file-history-snapshot", "progress"]
+    "drop_record_types": ["queue-operation", "file-history-snapshot", "progress"],
+    "exclude_headless": true,
+    "exclude_temp_cwd": true
   },
 
   "redaction": {
@@ -190,6 +192,8 @@ cp examples/sessions_config.json config.json
 | `filters` | `include_projects` | list | [] | If non-empty, only sync matching project slugs |
 | `filters` | `exclude_projects` | list | [] | Skip projects containing these substrings |
 | `filters` | `drop_record_types` | list | [3 types] | JSONL record types to discard |
+| `filters` | `exclude_headless` | bool | true | Skip headless `claude -p` / Agent-SDK sessions (`entrypoint=sdk-cli` or `promptSource=sdk`). Prevents the synthesis feedback loop |
+| `filters` | `exclude_temp_cwd` | bool | true | Skip sessions whose `cwd` is a throwaway temp dir (`/tmp`, `/var/folders`, …) |
 | `redaction` | `real_username` | string | `$USER` | Your OS username (auto-detected if empty) |
 | `redaction` | `replacement_username` | string | `USER` | Replacement in path redaction |
 | `redaction` | `extra_patterns` | list | [3 regexes] | Additional Python regex patterns to redact |

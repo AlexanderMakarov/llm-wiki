@@ -30,7 +30,10 @@ def _write_jsonl(path: Path, session_id: str, iso_ts: str,
             "sessionId": session_id,
             "slug": slug,
             "timestamp": iso_ts,
-            "cwd": "/tmp",
+            # A realistic, non-temp cwd: the #8 temp-cwd ingest filter is
+            # default-on, so a `/tmp` cwd here would be dropped before the
+            # collision-retry path this test exercises ever runs.
+            "cwd": "/home/user/my-proj",
             "gitBranch": "main",
             "message": {"role": "user", "content": "hi"},
         }) + "\n"

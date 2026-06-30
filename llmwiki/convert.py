@@ -32,6 +32,13 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "include_projects": [],
         "exclude_projects": [],
         "drop_record_types": ["queue-operation", "file-history-snapshot", "progress"],
+        # #8: drop headless `claude -p` / Agent-SDK sessions and sessions
+        # run from throwaway temp cwds. Default-on — they are not coding
+        # sessions worth a wiki page, and headless ingestion creates a
+        # synthesis feedback loop when the synthesizer shells out to
+        # `claude -p` (each synth run is logged as a new session).
+        "exclude_headless": True,
+        "exclude_temp_cwd": True,
     },
     "redaction": {
         "real_username": "",
@@ -461,6 +468,41 @@ def parse_jsonl(path: Path) -> list[dict[str, Any]]:
 def filter_records(records: list[dict[str, Any]], drop_types: list[str]) -> list[dict[str, Any]]:
     drop = set(drop_types)
     return [r for r in records if r.get("type") not in drop]
+
+
+# #8: headless / temp-cwd session discriminators. Claude Code tags every
+# record with `entrypoint` + `promptSource`; a headless `claude -p` / SDK
+# run shows `entrypoint == "sdk-cli"` and/or `promptSource == "sdk"`, an
+# interactive session shows `cli` / `typed|queued|system`. Generalizes
+# beyond Claude Code: anyone whose automation shells out to a logged agent
+# CLI hits the same feedback loop.
+_HEADLESS_ENTRYPOINTS = frozenset({"sdk-cli"})
+_HEADLESS_PROMPT_SOURCES = frozenset({"sdk"})
+
+# Throwaway temp roots. e2e test runs, scratch git-worktrees, and /tmp
+# experiments each spawn a one-off ephemeral "project" that floods the
+# projects index. Cover both the bare macOS/Linux temp roots and their
+# /private/* aliases (macOS resolves /tmp → /private/tmp).
+_TEMP_CWD_PREFIXES = ("/tmp/", "/private/tmp/", "/var/folders/", "/private/var/folders/")
+_TEMP_CWD_EXACT = frozenset({"/tmp", "/private/tmp"})
+
+
+def is_headless_session(records: list[dict[str, Any]]) -> bool:
+    """True if any record marks this as a headless `claude -p` / SDK run."""
+    for r in records:
+        if r.get("entrypoint") in _HEADLESS_ENTRYPOINTS:
+            return True
+        if r.get("promptSource") in _HEADLESS_PROMPT_SOURCES:
+            return True
+    return False
+
+
+def is_temp_cwd_session(records: list[dict[str, Any]]) -> bool:
+    """True if the session's cwd lives under a throwaway temp root."""
+    cwd = first_field(records, "cwd")
+    if not cwd:
+        return False
+    return cwd in _TEMP_CWD_EXACT or cwd.startswith(_TEMP_CWD_PREFIXES)
 
 
 def parse_iso(ts: Optional[str]) -> Optional[datetime]:
@@ -1378,6 +1420,8 @@ def convert_all(
     drop_types = config.get("filters", {}).get("drop_record_types", [])
     live_minutes = config.get("filters", {}).get("live_session_minutes", 60)
     live_cutoff = datetime.now(timezone.utc) - timedelta(minutes=live_minutes)
+    exclude_headless = config.get("filters", {}).get("exclude_headless", True)
+    exclude_temp_cwd = config.get("filters", {}).get("exclude_temp_cwd", True)
 
     since_dt: Optional[datetime] = None
     if since:
@@ -1559,6 +1603,18 @@ def convert_all(
             records = adapter.normalize_records(records)
             records = filter_records(records, drop_types)
             if not records:
+                filtered += 1
+                _bump(cls.name, "filtered")
+                continue
+            # #8: drop headless `claude -p` / SDK runs and throwaway
+            # temp-cwd sessions before they ever become a wiki page. The
+            # headless filter is what breaks the synthesis feedback loop
+            # (each synth `claude -p` is itself logged as a new session).
+            if exclude_headless and is_headless_session(records):
+                filtered += 1
+                _bump(cls.name, "filtered")
+                continue
+            if exclude_temp_cwd and is_temp_cwd_session(records):
                 filtered += 1
                 _bump(cls.name, "filtered")
                 continue
