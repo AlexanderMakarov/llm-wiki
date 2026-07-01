@@ -230,3 +230,35 @@ def test_summary_omits_breakdown_when_nothing_excluded(tmp_path, monkeypatch, ca
     c.convert_all(adapters=["claude_code"], out_dir=out_dir, state_file=state,
                   config_file=tmp_path / "nonexistent.json", include_current=True)
     assert "filtered breakdown" not in capsys.readouterr().out
+
+
+def test_filtered_session_persists_mtime(tmp_path, monkeypatch):
+    # #8 review finding #5: a filtered session must record its mtime in the
+    # state ledger so subsequent no-op syncs skip it via the mtime check
+    # instead of re-parsing it every time (865-of-915 on a real corpus).
+    home, proj, out_dir, state = _seed(tmp_path)
+    _write_session(proj / "headless.jsonl", entrypoint="sdk-cli", prompt_source="sdk")
+    _patch(monkeypatch, home, state)
+    c.discover_adapters()
+    c.convert_all(adapters=["claude_code"], out_dir=out_dir, state_file=state,
+                  config_file=tmp_path / "nonexistent.json", include_current=True)
+    saved = json.loads(state.read_text(encoding="utf-8"))
+    keys = [k for k in saved if not k.startswith("_")]
+    assert any(k.endswith("headless.jsonl") for k in keys), keys
+
+
+def test_resync_skips_filtered_session_as_unchanged(tmp_path, monkeypatch, capsys):
+    home, proj, out_dir, state = _seed(tmp_path)
+    _write_session(proj / "headless.jsonl", entrypoint="sdk-cli", prompt_source="sdk")
+    _patch(monkeypatch, home, state)
+    c.discover_adapters()
+    kw = dict(adapters=["claude_code"], out_dir=out_dir, state_file=state,
+              config_file=tmp_path / "nonexistent.json", include_current=True)
+    c.convert_all(**kw)
+    capsys.readouterr()  # drop first-run output
+    c.convert_all(**kw)
+    out = capsys.readouterr().out
+    assert "1 unchanged" in out
+    # Second sync short-circuits at the mtime check, so it never re-enters
+    # the filter path — no breakdown line this time.
+    assert "filtered breakdown" not in out

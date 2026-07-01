@@ -1621,15 +1621,26 @@ def convert_all(
             # temp-cwd sessions before they ever become a wiki page. The
             # headless filter is what breaks the synthesis feedback loop
             # (each synth `claude -p` is itself logged as a new session).
+            # Persist the mtime on exclusion so a no-op re-sync short-
+            # circuits at the mtime check instead of re-opening + re-parsing
+            # every filtered file. On a synth-heavy corpus that's ~94% of
+            # sessions, so without this each sync re-reads hundreds of files
+            # only to drop them again. Trade-off: re-enabling a filter later
+            # requires `sync --force` to reconsider files already recorded
+            # here (they otherwise register as "unchanged").
             if exclude_headless and is_headless_session(records):
                 filtered += 1
                 excluded_headless += 1
                 _bump(cls.name, "filtered")
+                if not dry_run:
+                    state[key] = mtime
                 continue
             if exclude_temp_cwd and is_temp_cwd_session(records):
                 filtered += 1
                 excluded_temp += 1
                 _bump(cls.name, "filtered")
+                if not dry_run:
+                    state[key] = mtime
                 continue
             last_t = latest_record_time(records)
             if last_t and last_t > live_cutoff and not include_current:
