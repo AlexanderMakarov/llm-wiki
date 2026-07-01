@@ -45,7 +45,19 @@ Minimal config:
       "queue-operation",
       "file-history-snapshot",
       "progress"
-    ]
+    ],
+
+    // Skip headless `claude -p` / Agent-SDK sessions (entrypoint=sdk-cli
+    // or promptSource=sdk). These are not coding sessions worth a wiki
+    // page, and ingesting them creates a synthesis feedback loop when the
+    // synthesizer itself shells out to `claude -p`.
+    "exclude_headless": true,
+
+    // Skip sessions whose cwd is a throwaway temp dir (/tmp, /var/folders,
+    // …). Default OFF: a git worktree under /tmp is often real work, so we
+    // don't silently drop it. Turn on only if your temp dirs hold nothing
+    // but e2e/scratch junk.
+    "exclude_temp_cwd": false
   },
 
   "redaction": {

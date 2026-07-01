@@ -32,6 +32,16 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "include_projects": [],
         "exclude_projects": [],
         "drop_record_types": ["queue-operation", "file-history-snapshot", "progress"],
+        # #8: drop headless `claude -p` / Agent-SDK sessions. Default-on —
+        # they are not coding sessions worth a wiki page, and headless
+        # ingestion creates a synthesis feedback loop when the synthesizer
+        # shells out to `claude -p` (each synth run is logged as a session).
+        "exclude_headless": True,
+        # #8: optionally drop sessions run from a throwaway temp cwd (/tmp,
+        # /var/folders). Default-OFF: a git worktree under /tmp is often
+        # real work, so we don't silently drop it. Opt in if your temp dirs
+        # only ever hold e2e/scratch junk.
+        "exclude_temp_cwd": False,
     },
     "redaction": {
         "real_username": "",
@@ -461,6 +471,45 @@ def parse_jsonl(path: Path) -> list[dict[str, Any]]:
 def filter_records(records: list[dict[str, Any]], drop_types: list[str]) -> list[dict[str, Any]]:
     drop = set(drop_types)
     return [r for r in records if r.get("type") not in drop]
+
+
+# #8: headless / temp-cwd session discriminators. Claude Code tags every
+# record with `entrypoint` + `promptSource`; a headless run shows an
+# `sdk-*` entrypoint (sdk-cli for `claude -p`, sdk-py for the Python SDK —
+# both seen in real corpora) and/or `promptSource == "sdk"`, while an
+# interactive session shows `cli` / `typed|queued|system`. We match the
+# `sdk-` entrypoint *prefix* so a future SDK runtime (sdk-go, …) is caught
+# without a code change; promptSource is the belt-and-suspenders signal.
+# Generalizes beyond Claude Code: anyone whose automation shells out to a
+# logged agent CLI hits the same feedback loop.
+_HEADLESS_ENTRYPOINT_PREFIX = "sdk-"
+_HEADLESS_PROMPT_SOURCES = frozenset({"sdk"})
+
+# Throwaway temp roots. e2e test runs, scratch git-worktrees, and /tmp
+# experiments each spawn a one-off ephemeral "project" that floods the
+# projects index. Cover both the bare macOS/Linux temp roots and their
+# /private/* aliases (macOS resolves /tmp → /private/tmp).
+_TEMP_CWD_PREFIXES = ("/tmp/", "/private/tmp/", "/var/folders/", "/private/var/folders/")
+_TEMP_CWD_EXACT = frozenset({"/tmp", "/private/tmp"})
+
+
+def is_headless_session(records: list[dict[str, Any]]) -> bool:
+    """True if any record marks this as a headless `claude -p` / SDK run."""
+    for r in records:
+        entrypoint = r.get("entrypoint")
+        if isinstance(entrypoint, str) and entrypoint.startswith(_HEADLESS_ENTRYPOINT_PREFIX):
+            return True
+        if r.get("promptSource") in _HEADLESS_PROMPT_SOURCES:
+            return True
+    return False
+
+
+def is_temp_cwd_session(records: list[dict[str, Any]]) -> bool:
+    """True if the session's cwd lives under a throwaway temp root."""
+    cwd = first_field(records, "cwd")
+    if not cwd:
+        return False
+    return cwd in _TEMP_CWD_EXACT or cwd.startswith(_TEMP_CWD_PREFIXES)
 
 
 def parse_iso(ts: Optional[str]) -> Optional[datetime]:
@@ -1378,6 +1427,8 @@ def convert_all(
     drop_types = config.get("filters", {}).get("drop_record_types", [])
     live_minutes = config.get("filters", {}).get("live_session_minutes", 60)
     live_cutoff = datetime.now(timezone.utc) - timedelta(minutes=live_minutes)
+    exclude_headless = config.get("filters", {}).get("exclude_headless", True)
+    exclude_temp_cwd = config.get("filters", {}).get("exclude_temp_cwd", False)
 
     since_dt: Optional[datetime] = None
     if since:
@@ -1426,6 +1477,13 @@ def convert_all(
         return 1
 
     converted = unchanged = live = filtered = ignored_count = errors = 0
+    # #8: track the two default-on content filters separately from the
+    # generic `filtered` bucket. Excluding headless/temp sessions can drop
+    # the large majority of a corpus (a synth-heavy corpus is ~94% headless
+    # `claude -p` runs), so surface the count instead of silently folding
+    # it into `filtered` — otherwise the user has no idea why their session
+    # history didn't land in the wiki, nor which toggle to flip to get it.
+    excluded_headless = excluded_temp = 0
 
     # G-03 (#289): per-adapter counters so `llmwiki sync --status` can
     # report which adapter saw what. Written under ``_counters`` in the
@@ -1562,6 +1620,31 @@ def convert_all(
                 filtered += 1
                 _bump(cls.name, "filtered")
                 continue
+            # #8: drop headless `claude -p` / SDK runs and throwaway
+            # temp-cwd sessions before they ever become a wiki page. The
+            # headless filter is what breaks the synthesis feedback loop
+            # (each synth `claude -p` is itself logged as a new session).
+            # Persist the mtime on exclusion so a no-op re-sync short-
+            # circuits at the mtime check instead of re-opening + re-parsing
+            # every filtered file. On a synth-heavy corpus that's ~94% of
+            # sessions, so without this each sync re-reads hundreds of files
+            # only to drop them again. Trade-off: re-enabling a filter later
+            # requires `sync --force` to reconsider files already recorded
+            # here (they otherwise register as "unchanged").
+            if exclude_headless and is_headless_session(records):
+                filtered += 1
+                excluded_headless += 1
+                _bump(cls.name, "filtered")
+                if not dry_run:
+                    state[key] = mtime
+                continue
+            if exclude_temp_cwd and is_temp_cwd_session(records):
+                filtered += 1
+                excluded_temp += 1
+                _bump(cls.name, "filtered")
+                if not dry_run:
+                    state[key] = mtime
+                continue
             last_t = latest_record_time(records)
             if last_t and last_t > live_cutoff and not include_current:
                 live += 1
@@ -1673,4 +1756,11 @@ def convert_all(
         f"summary: {converted} converted, {unchanged} unchanged, "
         f"{live} live, {filtered} filtered, {ignored_count} ignored, {errors} errors"
     )
+    # #8: break out the two content filters so a large silent drop is
+    # visible and the user knows which toggle re-enables ingestion.
+    if excluded_headless or excluded_temp:
+        print(
+            f"  filtered breakdown: {excluded_headless} headless "
+            f"(exclude_headless), {excluded_temp} temp-cwd (exclude_temp_cwd)"
+        )
     return 0 if errors == 0 else 1
