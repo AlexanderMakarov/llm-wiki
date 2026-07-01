@@ -204,3 +204,29 @@ def test_exclude_temp_cwd_can_be_disabled(tmp_path, monkeypatch):
     c.convert_all(adapters=["claude_code"], out_dir=out_dir, state_file=state,
                   config_file=cfg, include_current=True)
     assert len(sorted(out_dir.rglob("*.md"))) == 1
+
+
+def test_summary_reports_exclusion_breakdown(tmp_path, monkeypatch, capsys):
+    # A silent 94%-corpus drop is the review's dominant complaint: the
+    # summary must break out headless vs temp-cwd so the drop is visible.
+    home, proj, out_dir, state = _seed(tmp_path)
+    _write_session(proj / "headless.jsonl", entrypoint="sdk-cli", prompt_source="sdk")
+    _write_session(proj / "scratch.jsonl", cwd="/tmp/awos-e2e-99")
+    _write_session(proj / "good.jsonl")
+    _patch(monkeypatch, home, state)
+    c.discover_adapters()
+    c.convert_all(adapters=["claude_code"], out_dir=out_dir, state_file=state,
+                  config_file=tmp_path / "nonexistent.json", include_current=True)
+    out = capsys.readouterr().out
+    assert "1 headless" in out
+    assert "1 temp-cwd" in out
+
+
+def test_summary_omits_breakdown_when_nothing_excluded(tmp_path, monkeypatch, capsys):
+    home, proj, out_dir, state = _seed(tmp_path)
+    _write_session(proj / "good.jsonl")
+    _patch(monkeypatch, home, state)
+    c.discover_adapters()
+    c.convert_all(adapters=["claude_code"], out_dir=out_dir, state_file=state,
+                  config_file=tmp_path / "nonexistent.json", include_current=True)
+    assert "filtered breakdown" not in capsys.readouterr().out

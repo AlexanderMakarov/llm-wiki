@@ -1474,6 +1474,13 @@ def convert_all(
         return 1
 
     converted = unchanged = live = filtered = ignored_count = errors = 0
+    # #8: track the two default-on content filters separately from the
+    # generic `filtered` bucket. Excluding headless/temp sessions can drop
+    # the large majority of a corpus (a synth-heavy corpus is ~94% headless
+    # `claude -p` runs), so surface the count instead of silently folding
+    # it into `filtered` — otherwise the user has no idea why their session
+    # history didn't land in the wiki, nor which toggle to flip to get it.
+    excluded_headless = excluded_temp = 0
 
     # G-03 (#289): per-adapter counters so `llmwiki sync --status` can
     # report which adapter saw what. Written under ``_counters`` in the
@@ -1616,10 +1623,12 @@ def convert_all(
             # (each synth `claude -p` is itself logged as a new session).
             if exclude_headless and is_headless_session(records):
                 filtered += 1
+                excluded_headless += 1
                 _bump(cls.name, "filtered")
                 continue
             if exclude_temp_cwd and is_temp_cwd_session(records):
                 filtered += 1
+                excluded_temp += 1
                 _bump(cls.name, "filtered")
                 continue
             last_t = latest_record_time(records)
@@ -1733,4 +1742,11 @@ def convert_all(
         f"summary: {converted} converted, {unchanged} unchanged, "
         f"{live} live, {filtered} filtered, {ignored_count} ignored, {errors} errors"
     )
+    # #8: break out the two content filters so a large silent drop is
+    # visible and the user knows which toggle re-enables ingestion.
+    if excluded_headless or excluded_temp:
+        print(
+            f"  filtered breakdown: {excluded_headless} headless "
+            f"(exclude_headless), {excluded_temp} temp-cwd (exclude_temp_cwd)"
+        )
     return 0 if errors == 0 else 1
