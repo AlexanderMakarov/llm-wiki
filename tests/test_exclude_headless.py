@@ -96,9 +96,14 @@ def test_temp_cwd_false_when_cwd_absent():
 # ─── config defaults ─────────────────────────────────────────────────────
 
 
-def test_filters_default_on():
+def test_headless_filter_default_on():
     assert DEFAULT_CONFIG["filters"]["exclude_headless"] is True
-    assert DEFAULT_CONFIG["filters"]["exclude_temp_cwd"] is True
+
+
+def test_temp_cwd_filter_default_off():
+    # A git worktree under /tmp is often real work, not junk — so temp-cwd
+    # exclusion is opt-in, not default-on.
+    assert DEFAULT_CONFIG["filters"]["exclude_temp_cwd"] is False
 
 
 # ─── integration: convert_all ────────────────────────────────────────────
@@ -164,13 +169,26 @@ def test_convert_all_skips_headless_by_default(tmp_path, monkeypatch):
     assert sorted(out_dir.rglob("*.md")) == []
 
 
-def test_convert_all_skips_temp_cwd_by_default(tmp_path, monkeypatch):
+def test_convert_all_keeps_temp_cwd_by_default(tmp_path, monkeypatch):
+    # Default-off: a /tmp session (e.g. a git worktree) is kept, not dropped.
     home, proj, out_dir, state = _seed(tmp_path)
-    _write_session(proj / "scratch.jsonl", cwd="/tmp/awos-e2e-99")
+    _write_session(proj / "scratch.jsonl", cwd="/tmp/feature-worktree")
     _patch(monkeypatch, home, state)
     c.discover_adapters()
     c.convert_all(adapters=["claude_code"], out_dir=out_dir, state_file=state,
                   config_file=tmp_path / "nonexistent.json", include_current=True)
+    assert len(sorted(out_dir.rglob("*.md"))) == 1
+
+
+def test_exclude_temp_cwd_opt_in_drops_temp(tmp_path, monkeypatch):
+    # Opt-in: explicitly enabling the filter drops the /tmp session.
+    home, proj, out_dir, state = _seed(tmp_path)
+    _write_session(proj / "scratch.jsonl", cwd="/tmp/awos-e2e-99")
+    _patch(monkeypatch, home, state)
+    cfg = _write_config(tmp_path, {"exclude_temp_cwd": True})
+    c.discover_adapters()
+    c.convert_all(adapters=["claude_code"], out_dir=out_dir, state_file=state,
+                  config_file=cfg, include_current=True)
     assert sorted(out_dir.rglob("*.md")) == []
 
 
@@ -214,9 +232,11 @@ def test_summary_reports_exclusion_breakdown(tmp_path, monkeypatch, capsys):
     _write_session(proj / "scratch.jsonl", cwd="/tmp/awos-e2e-99")
     _write_session(proj / "good.jsonl")
     _patch(monkeypatch, home, state)
+    # temp-cwd is opt-in, so enable it to exercise both counters.
+    cfg = _write_config(tmp_path, {"exclude_temp_cwd": True})
     c.discover_adapters()
     c.convert_all(adapters=["claude_code"], out_dir=out_dir, state_file=state,
-                  config_file=tmp_path / "nonexistent.json", include_current=True)
+                  config_file=cfg, include_current=True)
     out = capsys.readouterr().out
     assert "1 headless" in out
     assert "1 temp-cwd" in out

@@ -10,10 +10,10 @@
       "file-history-snapshot",
       "progress"
     ],
-    "_headless_comment": "#8: skip headless `claude -p` / Agent-SDK sessions (entrypoint=sdk-cli or promptSource=sdk). Prevents the synthesis feedback loop when the synthesizer shells out to `claude -p`.",
+    "_headless_comment": "#8: skip headless `claude -p` / Agent-SDK sessions (entrypoint=sdk-* or promptSource=sdk). Prevents the synthesis feedback loop when the synthesizer shells out to `claude -p`.",
     "exclude_headless": true,
-    "_temp_cwd_comment": "#8: skip sessions whose cwd is a throwaway temp dir (/tmp, /var/folders, ...) — e2e runs, scratch worktrees, one-off experiments.",
-    "exclude_temp_cwd": true
+    "_temp_cwd_comment": "#8: skip sessions whose cwd is a throwaway temp dir (/tmp, /var/folders, ...). Default OFF — a git worktree under /tmp is often real work. Set true only if your temp dirs hold e2e/scratch junk.",
+    "exclude_temp_cwd": false
   },
 
   "redaction": {

@@ -54,8 +54,10 @@ Minimal config:
     "exclude_headless": true,
 
     // Skip sessions whose cwd is a throwaway temp dir (/tmp, /var/folders,
-    // …) — e2e runs, scratch worktrees, one-off experiments.
-    "exclude_temp_cwd": true
+    // …). Default OFF: a git worktree under /tmp is often real work, so we
+    // don't silently drop it. Turn on only if your temp dirs hold nothing
+    // but e2e/scratch junk.
+    "exclude_temp_cwd": false
   },
 
   "redaction": {

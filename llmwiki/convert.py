@@ -32,13 +32,16 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "include_projects": [],
         "exclude_projects": [],
         "drop_record_types": ["queue-operation", "file-history-snapshot", "progress"],
-        # #8: drop headless `claude -p` / Agent-SDK sessions and sessions
-        # run from throwaway temp cwds. Default-on — they are not coding
-        # sessions worth a wiki page, and headless ingestion creates a
-        # synthesis feedback loop when the synthesizer shells out to
-        # `claude -p` (each synth run is logged as a new session).
+        # #8: drop headless `claude -p` / Agent-SDK sessions. Default-on —
+        # they are not coding sessions worth a wiki page, and headless
+        # ingestion creates a synthesis feedback loop when the synthesizer
+        # shells out to `claude -p` (each synth run is logged as a session).
         "exclude_headless": True,
-        "exclude_temp_cwd": True,
+        # #8: optionally drop sessions run from a throwaway temp cwd (/tmp,
+        # /var/folders). Default-OFF: a git worktree under /tmp is often
+        # real work, so we don't silently drop it. Opt in if your temp dirs
+        # only ever hold e2e/scratch junk.
+        "exclude_temp_cwd": False,
     },
     "redaction": {
         "real_username": "",
@@ -1425,7 +1428,7 @@ def convert_all(
     live_minutes = config.get("filters", {}).get("live_session_minutes", 60)
     live_cutoff = datetime.now(timezone.utc) - timedelta(minutes=live_minutes)
     exclude_headless = config.get("filters", {}).get("exclude_headless", True)
-    exclude_temp_cwd = config.get("filters", {}).get("exclude_temp_cwd", True)
+    exclude_temp_cwd = config.get("filters", {}).get("exclude_temp_cwd", False)
 
     since_dt: Optional[datetime] = None
     if since:
