@@ -1,10 +1,10 @@
 """#460: mobile-viewport top-nav items were unreachable.
 
 Below 1024px the desktop `.nav-links` row is hidden by an existing
-media query, so Graph / Docs / Changelog had no path on phones. The
-mobile bottom nav only carries Home / Projects / Sessions / Search /
-Theme. The fix adds a hamburger button (visible <1024px) that toggles
-a drawer mirroring the same 6 nav links vertically.
+media query, so Recent / Graph / Analytics / Docs had no path on
+phones. The mobile bottom nav only carries Home / Projects / Sessions /
+Search / Theme. The fix adds a hamburger button (visible <1024px) that
+toggles a drawer mirroring the same nav links vertically.
 
 These tests pin the markup, CSS, and JS contracts.
 """
@@ -26,19 +26,20 @@ def test_nav_emits_hamburger_button() -> None:
     assert 'aria-label="Open navigation menu"' in html_text
 
 
-def test_nav_emits_drawer_with_six_links() -> None:
+def test_nav_emits_drawer_with_all_links() -> None:
     html_text = nav_bar(active="home")
     assert 'id="nav-drawer"' in html_text
     # Drawer starts hidden so the user doesn't see it on desktop.
     assert "<div id=\"nav-drawer\" class=\"nav-drawer\" hidden" in html_text
-    # All six top-level nav targets reachable from the drawer.
+    # All seven top-level nav targets reachable from the drawer.
     for target in (
         'href="index.html"',
+        'href="recent.html"',
+        'href="graph.html"',
         'href="projects/index.html"',
         'href="sessions/index.html"',
-        'href="graph.html"',
+        'href="analytics.html"',
         'href="docs/index.html"',
-        'href="changelog.html"',
     ):
         assert html_text.count(target) >= 2, (
             f"{target} should appear in both .nav-links AND .nav-drawer "

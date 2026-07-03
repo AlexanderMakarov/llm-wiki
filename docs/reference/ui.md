@@ -19,15 +19,16 @@ opens the command palette from any page.
 
 | # | Label | URL | Surfaces |
 |---|---|---|---|
-| 1 | **Home** | `/index.html` | project grid, activity heatmap, token stats, recently updated |
-| 2 | **Projects** | `/projects/index.html` | filterable card grid of every project + freshness badge |
-| 3 | **Sessions** | `/sessions/index.html` | sortable table of every session, agent badge, project, model, tool-call count |
-| 4 | **Models** | `/models/index.html` | structured model-profile cards (provider, pricing, benchmarks) |
-| 5 | **Compare** | `/vs/index.html` | auto-generated vs-pages between AI models |
-| 6 | **Graph** | `/graph.html` | interactive force-directed knowledge graph (vis-network) |
-| 7 | **Docs** | `/docs/index.html` | editorial docs hub — tutorials, references, deployment guides |
-| 8 | **Prototypes** | `/prototypes/index.html` | review-ready UI states (page-shell, article-anatomy, …) for UX iteration |
-| 9 | **Changelog** | `/changelog.html` | Keep-a-Changelog view of `CHANGELOG.md` |
+| 1 | **Home** | `/index.html` | file tree of raw documents (wiki-add layer) + intro pane |
+| 2 | **Recent** | `/recent.html` | newest raw documents, one row per document |
+| 3 | **Graph** | `/graph.html` | interactive force-directed knowledge graph (vis-network) |
+| 4 | **Projects** | `/projects/index.html` | filterable card grid of every project + freshness badge |
+| 5 | **Sessions** | `/sessions/index.html` | sortable table of every session, agent badge, project, model, tool-call count |
+| 6 | **Analytics** | `/analytics.html` | activity heatmap, token stats, recently updated, project grid |
+| 7 | **Models** | `/models/index.html` | structured model-profile cards (provider, pricing, benchmarks) |
+| 8 | **Compare** | `/vs/index.html` | auto-generated vs-pages between AI models |
+| 9 | **Docs** | `/docs/index.html` | editorial docs hub — tutorials, references, deployment guides |
+| 10 | **Prototypes** | `/prototypes/index.html` | review-ready UI states (page-shell, article-anatomy, …) for UX iteration |
 | — | **Search** | `⌘K` | fuzzy-match command palette over the whole corpus |
 | — | **Theme toggle** | button on the right | light / dark (persists via `localStorage.theme`) |
 
@@ -40,21 +41,19 @@ Search + Theme stay in the top bar.
 
 URL: `/index.html`
 
-Sections top-to-bottom:
+The raw-documents browser. Two-column layout:
 
-1. **Hero** — "LLM Wiki" wordmark + one-line tagline.
-2. **365-day activity heatmap** — GitHub-style cells. Each cell = one
-   day; darker green = more sessions. Hover for date + count.
-3. **Stats strip** — `N main sessions · N sub-agent runs · N projects`
-   and token totals (`sum` + `avg per session`).
-4. **Project highlights** — cards for best-cache-hit and
-   heaviest-token project.
-5. **Projects grid** — one card per project with a freshness badge
-   (green / yellow / red) based on last-touched date.
-6. **Recently updated** — last 30 days.
+1. **File tree sidebar** — every document under `raw/docs/**` as a
+   collapsible folder tree (`<details>`, no JS). Chunked documents
+   appear as children of their folder.
+2. **Intro pane** — document count, the five newest documents, and a
+   link to the Recent page.
 
-**What's clickable:** every project card, every heatmap cell (filters
-the sessions index to that date), every link in the stats strip.
+Clicking a file opens `/documents/<path>.html` — the rendered document
+with the same tree sidebar (current file highlighted) and breadcrumbs.
+
+The session-analytics content (heatmap, stats, project grid) lives on
+[Analytics](#analytics).
 
 ---
 
@@ -190,13 +189,24 @@ them with real pages.
 
 ---
 
-## Changelog
+## Recent
 
-URL: `/changelog.html`
+URL: `/recent.html`
 
-Compiled view of `CHANGELOG.md`. Keep-a-Changelog format with colored
-headings for `Added` / `Changed` / `Fixed` / `Deprecated` / `Removed` /
-`Security`. Auto-linked PR references (`#265` → GitHub PR link).
+Newest raw documents first, one row per logical document — chunked
+docs (`<slug>-01.md` … `<slug>-NN.md` in one folder) collapse into a
+single row with a part count. Each row shows title, date, and origin
+source, and links into the Home tree browser.
+
+---
+
+## Analytics
+
+URL: `/analytics.html`
+
+Session analytics: hero stats (main sessions / sub-agent runs /
+projects), 365-day activity heatmap, site-wide token stats, recently
+updated wiki pages, and the project card grid.
 
 ---
 

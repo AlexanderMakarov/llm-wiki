@@ -1,0 +1,157 @@
+"""Tests for the raw-documents site section: Home file tree,
+``documents/`` pages, and the Recent page.
+
+``llmwiki.raw_docs_site`` models ``raw/docs/**`` (the wiki-add layer);
+``llmwiki.build`` renders it as ``index.html`` (tree browser),
+``recent.html`` (newest documents), and one page per document file.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from llmwiki.build import render_index, render_recent, nav_bar
+from llmwiki.raw_docs_site import (
+    build_tree,
+    clean_chunk_title,
+    group_documents,
+    render_document_pages,
+    render_sidebar,
+    scan_raw_docs,
+)
+
+
+def _write_doc(root: Path, rel: str, title: str, date: str,
+               source: str = "https://example.com") -> Path:
+    p = root / rel
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(
+        f'---\ntitle: "{title}"\ntype: source\ntags: [wiki-add, raw-doc]\n'
+        f'date: {date}\nsource: "{source}"\n---\n\n# {title}\n\nBody text.\n',
+        encoding="utf-8",
+    )
+    return p
+
+
+@pytest.fixture
+def docs_dir(tmp_path: Path) -> Path:
+    """raw/docs with one root doc + one 3-chunk doc folder."""
+    d = tmp_path / "raw" / "docs"
+    _write_doc(d, "standalone.md", "Standalone Doc", "2026-07-01")
+    for i in (1, 2, 3):
+        _write_doc(
+            d, f"runbook/runbook-0{i}.md",
+            f"VPS Runbook (part {i}/3: Section {i})", "2026-06-24",
+        )
+    return d
+
+
+def test_scan_finds_all_files_sorted(docs_dir: Path):
+    files = scan_raw_docs(docs_dir)
+    assert [f.rel.as_posix() for f in files] == [
+        "runbook/runbook-01.md",
+        "runbook/runbook-02.md",
+        "runbook/runbook-03.md",
+        "standalone.md",
+    ]
+
+
+def test_scan_skips_context_and_unsafe_files(docs_dir: Path):
+    (docs_dir / "_context.md").write_text("folder meta", encoding="utf-8")
+    evil = docs_dir / "a b"
+    evil.mkdir()
+    (evil / "x.md").write_text("unsafe dir name", encoding="utf-8")
+    rels = {f.rel.as_posix() for f in scan_raw_docs(docs_dir)}
+    assert "_context.md" not in rels
+    assert not any(r.startswith("a b/") for r in rels)
+
+
+def test_scan_missing_dir_is_empty(tmp_path: Path):
+    assert scan_raw_docs(tmp_path / "nope") == []
+
+
+def test_clean_chunk_title_strips_part_suffix():
+    assert clean_chunk_title("VPS Runbook (part 1/11: Intro)") == "VPS Runbook"
+    assert clean_chunk_title("Plain Title") == "Plain Title"
+
+
+def test_group_documents_collapses_chunks_newest_first(docs_dir: Path):
+    entries = group_documents(scan_raw_docs(docs_dir))
+    assert [e.title for e in entries] == ["Standalone Doc", "VPS Runbook"]
+    runbook = entries[1]
+    assert runbook.parts == 3
+    assert runbook.date == "2026-06-24"
+    assert runbook.url == "documents/runbook/runbook-01.html"
+
+
+def test_sidebar_marks_active_and_opens_folder(docs_dir: Path):
+    files = scan_raw_docs(docs_dir)
+    root = build_tree(files)
+    active = files[1]  # runbook-02
+    html_text = render_sidebar(root, active_rel=active.rel, link_prefix="../../")
+    assert "<details open>" in html_text
+    assert 'class="active"' in html_text
+    assert 'href="../../documents/runbook/runbook-02.html"' in html_text
+
+
+def test_document_pages_written_with_tree_and_content(docs_dir: Path, tmp_path: Path):
+    from llmwiki.build import (
+        breadcrumbs_bar, md_to_html, page_foot, page_head,
+    )
+    out = tmp_path / "site"
+    files = scan_raw_docs(docs_dir)
+    root = build_tree(files)
+    written = render_document_pages(
+        files, root, out,
+        md_to_html=md_to_html,
+        page_head=page_head,
+        nav_builder=lambda prefix: nav_bar("home", link_prefix=prefix),
+        page_foot=lambda prefix: page_foot(js_prefix=prefix),
+        breadcrumbs_bar=breadcrumbs_bar,
+    )
+    assert len(written) == 4
+    page = (out / "documents" / "runbook" / "runbook-01.html").read_text(encoding="utf-8")
+    assert "doctree-sidebar" in page
+    assert "Body text." in page
+    # css/nav prefixed for depth 2
+    assert 'href="../../style.css"' in page
+
+
+def test_render_index_is_tree_browser(docs_dir: Path, tmp_path: Path):
+    out = tmp_path / "site"
+    out.mkdir()
+    files = scan_raw_docs(docs_dir)
+    render_index(build_tree(files), group_documents(files), len(files), out)
+    html_text = (out / "index.html").read_text(encoding="utf-8")
+    assert "doctree-sidebar" in html_text
+    assert "Standalone Doc" in html_text
+    assert 'href="recent.html"' in html_text
+
+
+def test_render_index_empty_state(tmp_path: Path):
+    out = tmp_path / "site"
+    out.mkdir()
+    render_index(build_tree([]), [], 0, out)
+    html_text = (out / "index.html").read_text(encoding="utf-8")
+    assert "No raw documents yet" in html_text
+
+
+def test_render_recent_lists_docs_with_meta(docs_dir: Path, tmp_path: Path):
+    out = tmp_path / "site"
+    out.mkdir()
+    files = scan_raw_docs(docs_dir)
+    render_recent(group_documents(files), out)
+    html_text = (out / "recent.html").read_text(encoding="utf-8")
+    assert html_text.index("Standalone Doc") < html_text.index("VPS Runbook")
+    assert "3 parts" in html_text
+    assert "2026-07-01" in html_text
+
+
+def test_nav_order_and_no_changelog():
+    html_text = nav_bar(active="home")
+    links = ["Home", "Recent", "Graph", "Projects", "Sessions", "Analytics", "Docs"]
+    positions = [html_text.index(f">{label}</a>") for label in links]
+    assert positions == sorted(positions)
+    assert "changelog" not in html_text.lower()

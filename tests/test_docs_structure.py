@@ -175,8 +175,9 @@ def _strip_code_blocks(text: str) -> str:
 # Paths that exist only as build output (`llmwiki build` writes them
 # into site/). The test can't find them in the source tree, so allow-list.
 _GENERATED_HTML_ALLOWLIST = frozenset({
-    "changelog.html",   # compiled from CHANGELOG.md at the repo root
-    "index.html",       # site/index.html (home)
+    "index.html",       # site/index.html (home — raw documents tree)
+    "recent.html",      # newest raw documents
+    "analytics.html",   # activity heatmap + token stats
 })
 
 

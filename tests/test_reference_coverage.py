@@ -141,8 +141,8 @@ def test_slash_reference_counts_correctly():
 # Nav entries we declared in build.py. Adding a `{link(…)}` that isn't
 # listed here will fail — update the list AND the UI reference.
 EXPECTED_NAV_KEYS = {
-    "home", "projects", "sessions",
-    "graph", "docs", "changelog",
+    "home", "recent", "graph", "projects",
+    "sessions", "analytics", "docs",
 }
 
 
@@ -169,8 +169,8 @@ def test_build_py_nav_keys_match_expected_set():
 def test_ui_reference_lists_every_nav_item():
     ui_text = UI_REF.read_text(encoding="utf-8")
     for label in (
-        "Home", "Projects", "Sessions", "Models", "Compare",
-        "Graph", "Docs", "Prototypes", "Changelog",
+        "Home", "Recent", "Graph", "Projects", "Sessions", "Analytics",
+        "Models", "Compare", "Docs", "Prototypes",
     ):
         assert f"**{label}**" in ui_text, (
             f"docs/reference/ui.md missing nav entry for `{label}`"

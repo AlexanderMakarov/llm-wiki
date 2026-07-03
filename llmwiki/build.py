@@ -59,6 +59,7 @@ from llmwiki.project_topics import (
     load_project_profile,
     render_topic_chips,
 )
+from llmwiki import raw_docs_site
 from llmwiki.viz_heatmap import collect_session_counts, render_heatmap
 from llmwiki.viz_tokens import (
     render_project_token_card,
@@ -792,10 +793,11 @@ def nav_bar(active: str, link_prefix: str = "") -> str:
 
     # #460: hamburger pattern for tablet/mobile (≤1023px). The desktop
     # nav-links row is hidden below 1024 (CSS rule), so without this
-    # button the Graph / Docs / Changelog entries would be unreachable
-    # on mobile (the bottom nav only carries Home / Projects / Sessions).
-    # The drawer below mirrors the same 6 links vertically. JS in
-    # render/js.py wires aria-expanded, ESC-to-close, and focus return.
+    # button the Recent / Graph / Analytics / Docs entries would be
+    # unreachable on mobile (the bottom nav only carries
+    # Home / Projects / Sessions). The drawer below mirrors the same
+    # links vertically. JS in render/js.py wires aria-expanded,
+    # ESC-to-close, and focus return.
     drawer_link = lambda href, label, key: (
         f'  <a href="{link_prefix}{href}" class="nav-drawer-link'
         + (' active' if key == active else '') + '">'
@@ -809,11 +811,12 @@ def nav_bar(active: str, link_prefix: str = "") -> str:
     # on the container.
     nav_drawer_html = f"""<div id="nav-drawer" class="nav-drawer" hidden aria-label="Main navigation">
 {drawer_link("index.html", "Home", "home")}
+{drawer_link("recent.html", "Recent", "recent")}
+{drawer_link("graph.html", "Graph", "graph")}
 {drawer_link("projects/index.html", "Projects", "projects")}
 {drawer_link("sessions/index.html", "Sessions", "sessions")}
-{drawer_link("graph.html", "Graph", "graph")}
+{drawer_link("analytics.html", "Analytics", "analytics")}
 {drawer_link("docs/index.html", "Docs", "docs")}
-{drawer_link("changelog.html", "Changelog", "changelog")}
 </div>"""
     return f"""<header class="nav">
   <div class="nav-inner">
@@ -828,11 +831,12 @@ def nav_bar(active: str, link_prefix: str = "") -> str:
     </button>
     <nav class="nav-links">
       {link("index.html", "Home", "home")}
+      {link("recent.html", "Recent", "recent")}
+      {link("graph.html", "Graph", "graph")}
       {link("projects/index.html", "Projects", "projects")}
       {link("sessions/index.html", "Sessions", "sessions")}
-      {link("graph.html", "Graph", "graph")}
+      {link("analytics.html", "Analytics", "analytics")}
       {link("docs/index.html", "Docs", "docs")}
-      {link("changelog.html", "Changelog", "changelog")}
       <button class="nav-search-btn" id="open-palette"
               aria-label="Open command palette"
               aria-haspopup="dialog" aria-expanded="false" aria-controls="palette">
@@ -1484,12 +1488,14 @@ def render_sessions_index(
     return out_path
 
 
-def render_index(
+def render_analytics(
     groups: dict[str, list[tuple[Path, dict[str, Any], str]]],
     all_sources: list[tuple[Path, dict[str, Any], str]],
     out_dir: Path,
     synthesis: Optional[str] = None,
 ) -> Path:
+    """Render ``analytics.html`` — hero stats, activity heatmap, token
+    stats, recently-updated, projects grid."""
     total = len(all_sources)
     mains = sum(1 for p, m, _ in all_sources if not _is_subagent(m, p))
     subs = total - mains
@@ -1597,10 +1603,10 @@ def render_index(
 """
 
     page = (
-        page_head("LLM Wiki", "Karpathy-style knowledge base from Claude Code sessions", css_prefix="")
-        + nav_bar("home", link_prefix="")
+        page_head("Analytics — LLM Wiki", "Session activity, token stats, and project analytics", css_prefix="")
+        + nav_bar("analytics", link_prefix="")
         + hero(
-            "LLM Wiki",
+            "Analytics",
             f"{_pluralize(mains, 'main session')} · {_pluralize(subs, 'sub-agent run')} · {_pluralize(len(groups), 'project')}",
         )
         + synth_block
@@ -1608,7 +1614,51 @@ def render_index(
         + page_foot(js_prefix="")
     )
 
+    out_path = out_dir / "analytics.html"
+    out_path.write_text(page, encoding="utf-8")
+    return out_path
+
+
+def render_index(
+    docs_root: "raw_docs_site.DocFolder",
+    doc_entries: list["raw_docs_site.DocEntry"],
+    doc_file_count: int,
+    out_dir: Path,
+) -> Path:
+    """Render ``index.html`` — the raw-documents file-tree browser."""
+    body = raw_docs_site.render_home_body(docs_root, doc_entries, doc_file_count)
+    page = (
+        page_head("LLM Wiki", "Karpathy-style knowledge base from Claude Code sessions", css_prefix="")
+        + nav_bar("home", link_prefix="")
+        + hero(
+            "LLM Wiki",
+            f"{_pluralize(len(doc_entries), 'document')} · browse the raw knowledge base",
+        )
+        + body
+        + page_foot(js_prefix="")
+    )
     out_path = out_dir / "index.html"
+    out_path.write_text(page, encoding="utf-8")
+    return out_path
+
+
+def render_recent(
+    doc_entries: list["raw_docs_site.DocEntry"],
+    out_dir: Path,
+) -> Path:
+    """Render ``recent.html`` — newest raw documents first."""
+    body = raw_docs_site.render_recent_body(doc_entries)
+    page = (
+        page_head("Recent — LLM Wiki", "Recently added raw documents", css_prefix="")
+        + nav_bar("recent", link_prefix="")
+        + hero(
+            "Recent documents",
+            f"{_pluralize(len(doc_entries), 'document')}, newest first",
+        )
+        + body
+        + page_foot(js_prefix="")
+    )
+    out_path = out_dir / "recent.html"
     out_path.write_text(page, encoding="utf-8")
     return out_path
 
@@ -1696,10 +1746,11 @@ def render_404(out_dir: Path) -> Path:
   <div class="container">
     <p>Try one of these:</p>
     <ul class="not-found-links">
-      <li><a href="index.html">Home</a> — overview and recent activity</li>
+      <li><a href="index.html">Home</a> — browse the raw documents</li>
+      <li><a href="recent.html">Recent</a> — newest documents first</li>
       <li><a href="projects/index.html">Projects</a> — every project with sessions</li>
       <li><a href="sessions/index.html">Sessions</a> — every session, sortable + filterable</li>
-      <li><a href="changelog.html">Changelog</a> — what's shipped recently</li>
+      <li><a href="analytics.html">Analytics</a> — activity heatmap and token stats</li>
     </ul>
     <p class="muted">Or press <kbd>⌘K</kbd> / <kbd>Ctrl+K</kbd> to open the command palette and search.</p>
   </div>
@@ -1732,61 +1783,6 @@ def render_contributing_page(out_dir: Path) -> Optional[Path]:
         meta_description="Contribution rules, PR checklist, and review bar for llmwiki.",
         out_dir=out_dir,
     )
-
-
-# ─── changelog page ────────────────────────────────────────────────────────
-
-def render_changelog(out_dir: Path) -> Optional[Path]:
-    """Render ``CHANGELOG.md`` (repo root) to ``site/changelog.html``.
-
-    Returns None if CHANGELOG.md is missing. Shown as its own top-level page
-    so visitors can see what's new / what shipped without clicking through to
-    GitHub. Keep-a-changelog headings become an in-page TOC via the existing
-    `toc` markdown extension.
-    """
-    src = REPO_ROOT / "CHANGELOG.md"
-    if not src.exists():
-        return None
-    raw = src.read_text(encoding="utf-8")
-
-    # Pull the top H1 ("Changelog") and use it as the hero title; render
-    # everything else as the body. Strip the leading H1 line to avoid a
-    # duplicate title.
-    body_md = raw
-    lines = raw.splitlines()
-    if lines and lines[0].lstrip().startswith("# "):
-        body_md = "\n".join(lines[1:]).lstrip("\n")
-
-    content_html = md_to_html(body_md)
-
-    body = f"""<section class="section changelog-body">
-  <div class="container narrow">
-    <article class="article">
-      {content_html}
-    </article>
-  </div>
-</section>
-</main>
-"""
-
-    page = (
-        page_head(
-            "Changelog — LLM Wiki",
-            "Release notes for llmwiki — features, fixes, and version history.",
-            css_prefix="",
-        )
-        + nav_bar("changelog", link_prefix="")
-        + hero(
-            "Changelog",
-            "Every release, every fix. Keep-a-changelog format, semver.",
-        )
-        + body
-        + page_foot(js_prefix="")
-    )
-
-    out_path = out_dir / "changelog.html"
-    out_path.write_text(page, encoding="utf-8")
-    return out_path
 
 
 # ─── v0.7 (#55) models section ─────────────────────────────────────────────
@@ -2002,6 +1998,7 @@ def build_search_index(
     out_dir: Path,
     *,
     search_mode: str = "auto",
+    doc_files: Optional[list["raw_docs_site.RawDocFile"]] = None,
 ) -> Path:
     """Build a chunked search index for lazy loading (#47).
 
@@ -2073,7 +2070,16 @@ def build_search_index(
 
     meta_entries.append(
         {"id": "home", "url": "index.html", "title": "Home", "type": "page",
-         "project": "", "date": "", "model": "", "body": "overview index"}
+         "project": "", "date": "", "model": "", "body": "raw documents file tree"}
+    )
+    meta_entries.append(
+        {"id": "recent", "url": "recent.html", "title": "Recent documents",
+         "type": "page", "project": "", "date": "", "model": "", "body": "newest raw documents"}
+    )
+    meta_entries.append(
+        {"id": "analytics", "url": "analytics.html", "title": "Analytics",
+         "type": "page", "project": "", "date": "", "model": "",
+         "body": "activity heatmap token stats projects overview"}
     )
     meta_entries.append(
         {"id": "projects-index", "url": "projects/index.html", "title": "Projects",
@@ -2083,6 +2089,20 @@ def build_search_index(
         {"id": "sessions-index", "url": "sessions/index.html", "title": "All sessions",
          "type": "page", "project": "", "date": "", "model": "", "body": "sortable sessions table"}
     )
+
+    # Raw documents (wiki-add layer) — one palette entry per file so a
+    # chunked doc is findable by any of its section titles.
+    for doc in (doc_files or []):
+        meta_entries.append({
+            "id": f"document:{doc.rel.as_posix()}",
+            "url": doc.out_rel,
+            "title": doc.title,
+            "type": "document",
+            "project": "",
+            "date": doc.date,
+            "model": "",
+            "body": md_to_plain_text(doc.body)[:300],
+        })
 
     # #277: index every docs/ page + every slash command so the palette
     # becomes a universal quick-find (not just sessions + projects).
@@ -2514,8 +2534,30 @@ def build_site(
 
     render_projects_index(groups, out_dir)
     render_sessions_index(sources, groups, out_dir)
-    render_index(groups, sources, out_dir, synthesis=synthesis)
-    cl_path = render_changelog(out_dir)
+
+    # Home (index.html) is the raw-documents tree browser; recent.html
+    # lists the newest documents; analytics.html carries the heatmap,
+    # token stats, and projects grid.
+    raw_docs_dir = raw_dir / "docs"
+    doc_files = raw_docs_site.scan_raw_docs(raw_docs_dir)
+    docs_root = raw_docs_site.build_tree(doc_files)
+    doc_entries = raw_docs_site.group_documents(doc_files)
+    render_index(docs_root, doc_entries, len(doc_files), out_dir)
+    render_recent(doc_entries, out_dir)
+    render_analytics(groups, sources, out_dir, synthesis=synthesis)
+    doc_pages = raw_docs_site.render_document_pages(
+        doc_files,
+        docs_root,
+        out_dir,
+        md_to_html=md_to_html,
+        page_head=page_head,
+        nav_builder=lambda prefix: nav_bar("home", link_prefix=prefix),
+        page_foot=lambda prefix: page_foot(js_prefix=prefix),
+        breadcrumbs_bar=breadcrumbs_bar,
+    )
+    if doc_pages:
+        print(f"  wrote {len(doc_pages)} document pages under documents/")
+
     # #387 U8: branded 404 page that serve.py returns as the body of any
     # 404 response, instead of the stdlib http.server default.
     not_found_path = render_404(out_dir)
@@ -2525,12 +2567,14 @@ def build_site(
     readme_path = render_readme_page(out_dir)
     contributing_path = render_contributing_page(out_dir)
     print(
-        "  wrote index.html, projects/index.html, sessions/index.html, 404.html"
-        + (", changelog.html" if cl_path else "")
+        "  wrote index.html, recent.html, analytics.html, "
+        "projects/index.html, sessions/index.html, 404.html"
     )
 
     # Search index (chunked — #47) + tree/flat auto-routing (#53)
-    idx_path = build_search_index(sources, groups, out_dir, search_mode=search_mode)
+    idx_path = build_search_index(
+        sources, groups, out_dir, search_mode=search_mode, doc_files=doc_files
+    )
 
     # v0.4: AI-consumable exports (llms.txt, llms-full.txt, graph.jsonld,
     # sitemap.xml, rss.xml, robots.txt, ai-readme.md)
@@ -2541,7 +2585,13 @@ def build_site(
     # No module named ..." and ship a half-built site.
     try:
         from llmwiki.exporters import export_all
-        ai_paths = export_all(out_dir, groups, sources)
+        extra_pages: list[tuple[str, Optional[str], str]] = [
+            ("recent.html", None, "0.9"),
+            ("analytics.html", None, "0.8"),
+        ] + [
+            (doc.out_rel, doc.date or None, "0.7") for doc in doc_files
+        ]
+        ai_paths = export_all(out_dir, groups, sources, extra_pages=extra_pages)
         print(f"  wrote {len(ai_paths)} AI-consumable exports: {', '.join(sorted(ai_paths.keys()))}")
     except (OSError, ValueError, RuntimeError) as e:
         print(f"  warning: AI exports failed: {e}", file=sys.stderr)
