@@ -295,6 +295,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     --g-orphan: #ef4444;
     --g-edge: rgba(148, 163, 184, 0.4);
     --g-highlight: #facc15;
+    --g-search-match: #ef4444;
   }
   :root[data-theme="light"] {
     --g-bg: #f8fafc;
@@ -312,6 +313,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     --g-orphan: #dc2626;
     --g-edge: rgba(100, 116, 139, 0.45);
     --g-highlight: #ca8a04;
+    --g-search-match: #dc2626;
   }
 
   html, body {
@@ -690,12 +692,21 @@ function main() {
       font: { color: cssVar('--g-text'), size: 12, face: 'system-ui' },
       scaling: { min: 8, max: 32, label: { enabled: true, min: 10, max: 18 } },
     },
-    edges: { smooth: { enabled: true, type: 'dynamic' } },
+    edges: { smooth: { enabled: true, type: 'continuous' } },
     physics: {
       barnesHut: { gravitationalConstant: -4000, springLength: 120, springConstant: 0.03 },
       stabilization: { iterations: 200 },
     },
     interaction: { hover: true, tooltipDelay: 120 },
+  });
+
+  // #9: freeze the layout once the initial simulation settles. Physics
+  // left running keeps perturbing node positions live ("shaking" on every
+  // open). `once`, not `on`: clustering can restabilize later, and a
+  // repeated fit() would yank the camera away from the user.
+  network.once('stabilizationIterationsDone', () => {
+    network.setOptions({ physics: false });
+    network.fit();
   });
 
   // ─── Click: focus neighbourhood + navigate (#328) ─────────────────────
@@ -967,6 +978,13 @@ function main() {
 
   function applyFilter(q) {
     q = (q || '').trim().toLowerCase();
+    // #9: matches get a dedicated red — base palette colors are too dim
+    // against the blue-ish background to read as "found". Resolved per
+    // call so a theme flip mid-search picks up the right shade.
+    const matchColor = {
+      background: cssVar('--g-search-match'),
+      border: cssVar('--g-search-match'),
+    };
     const update = [];
     nodes.forEach(n => {
       const label = (n.label || '').toString().toLowerCase();
@@ -974,7 +992,7 @@ function main() {
       update.push({
         id: n.id,
         color: dim ? { background: 'rgba(100,100,100,0.15)', border: 'rgba(100,100,100,0.3)' }
-                   : baseColors[n.id],
+                   : (q ? matchColor : baseColors[n.id]),
       });
     });
     nodes.update(update);
