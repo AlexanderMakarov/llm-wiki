@@ -356,10 +356,14 @@ def write_sitemap(
     groups: dict[str, Any],
     sources: list[tuple[Path, dict[str, Any], str]],
     site_base_url: str = "",
+    extra_pages: list[tuple[str, str | None, str]] | None = None,
 ) -> Path:
     """Write a minimal sitemap.xml.
 
     `site_base_url` is prefixed to every loc — leave empty for relative URLs.
+    `extra_pages` is a list of (rel_url, lastmod_or_None, priority) tuples
+    for pages the builder knows about but this module doesn't (recent,
+    analytics, raw document pages).
     """
     lines = [
         '<?xml version="1.0" encoding="UTF-8"?>',
@@ -377,6 +381,8 @@ def write_sitemap(
     lines.append(url("index.html", priority="1.0"))
     lines.append(url("projects/index.html", priority="0.9"))
     lines.append(url("sessions/index.html", priority="0.9"))
+    for rel, lastmod, priority in (extra_pages or []):
+        lines.append(url(rel, lastmod=lastmod, priority=priority))
     for project in sorted(groups.keys()):
         lines.append(url(f"projects/{project}.html", priority="0.8"))
     for p, meta, _ in sources:
@@ -661,6 +667,7 @@ def export_all(
     groups: dict[str, Any],
     sources: list[tuple[Path, dict[str, Any], str]],
     site_base_url: str = "",
+    extra_pages: list[tuple[str, str | None, str]] | None = None,
 ) -> dict[str, Path]:
     """Write every AI-consumable export format into `out_dir`.
 
@@ -673,7 +680,9 @@ def export_all(
     paths["llms.txt"] = write_llms_txt(out_dir, groups, total_sessions)
     paths["llms-full.txt"] = write_llms_full_txt(out_dir, sources)
     paths["graph.jsonld"] = write_graph_jsonld(out_dir, groups, sources)
-    paths["sitemap.xml"] = write_sitemap(out_dir, groups, sources, site_base_url)
+    paths["sitemap.xml"] = write_sitemap(
+        out_dir, groups, sources, site_base_url, extra_pages=extra_pages
+    )
     paths["rss.xml"] = write_rss(out_dir, sources, site_base_url)
     paths["robots.txt"] = write_robots_txt(out_dir)
     paths["ai-readme.md"] = write_ai_readme(out_dir, groups, total_sessions)

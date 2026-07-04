@@ -109,6 +109,53 @@ Minimal config:
 }
 ```
 
+## Synthesis backend
+
+`llmwiki synthesize` turns each raw session/document into a
+`wiki/sources/` page. Which LLM (if any) writes those pages is picked by
+`synthesis.backend` in `config.json`:
+
+```jsonc
+{
+  "synthesis": {
+    // "dummy" (default) | "ollama" | "agent"
+    "backend": "agent"
+  }
+}
+```
+
+| Backend | What it does | Needs |
+|---|---|---|
+| `dummy` | Canned stub page: metadata summary, one `[[ProjectEntity]]` link, plain-text `## Raw Mentions`. For previews/tests. | nothing |
+| `ollama` | Local LLM over the Ollama HTTP API. Configure `synthesis.ollama.{model,base_url,timeout,max_retries}`. | running `ollama serve` |
+| `agent` | Agent-delegate (#316): writes each rendered prompt to `.llmwiki-pending-prompts/<uuid>.md` and a sentinel page; your running Claude Code / Codex CLI agent completes them (`synthesize --list-pending` → generate → `synthesize --complete <uuid>`). No API key, no HTTP — rides your agent subscription. | an agent session |
+
+Sanity-check what's active and what a run would cost:
+
+```bash
+llmwiki synthesize --check      # prints the resolved backend + availability
+llmwiki synthesize --estimate   # cached-vs-fresh token + dollar estimate
+```
+
+**Synthesis is incremental.** `.llmwiki-synth-state.json` records an
+mtime per raw file; a nightly `sync`/`synthesize` only processes files
+that are new or changed since the last run — the daily LLM bill is
+proportional to new content, not to corpus size. `--force` re-runs
+everything (use after switching backends, e.g. to replace dummy-stub
+pages with real ones — pages with only stub links produce a topic
+graph with no edges).
+
+**Downgrade protection:** `dummy` is the resolved default when
+`synthesis.backend` is unset (or a typo — unknown values warn and fall
+back), so a `--force` run in that state used to overwrite every real
+page with link-free stubs and silently empty the knowledge graph. The
+pipeline now refuses that downgrade: stub output (dummy body or
+agent-delegate pending sentinel) is never written over a real page,
+even under `--force` — such pages are reported as `protected` in the
+run summary. To deliberately re-synthesize a real page, delete it
+first. (An unavailable backend does *not* fall back — the run aborts
+with an error.)
+
 ## Environment variables
 
 | Variable | What it does |

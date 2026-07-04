@@ -80,12 +80,13 @@ chain three requests before showing anything.
   },
   "nav": [
     { "id": "home",          "label": "Home",      "href": "/" },
+    { "id": "recent",        "label": "Recent",    "href": "/recent.html" },
+    { "id": "graph",         "label": "Graph",     "href": "/graph.html" },
     { "id": "projects",      "label": "Projects",  "href": "/projects/" },
     { "id": "sessions",      "label": "Sessions",  "href": "/sessions/" },
+    { "id": "analytics",     "label": "Analytics", "href": "/analytics.html" },
     { "id": "models",        "label": "Models",    "href": "/models/" },
-    { "id": "vs",            "label": "Compare",   "href": "/vs/" },
-    { "id": "graph",         "label": "Graph",     "href": "/graph.html" },
-    { "id": "changelog",     "label": "Changelog", "href": "/changelog.html" }
+    { "id": "vs",            "label": "Compare",   "href": "/vs/" }
   ],
   "theme": {
     "accent":  "#7C3AED",

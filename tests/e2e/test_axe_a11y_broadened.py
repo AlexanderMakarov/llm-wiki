@@ -26,12 +26,11 @@ from tests.e2e.test_axe_a11y import (  # type: ignore[import-not-found]
     _scan,
 )
 
-# #646: changelog headerlinks fixed by dropping `permalink: True` from
-# the TOC extension config in build.py — re-add /changelog.html.
 PAGES_TO_AUDIT = [
     "/sessions/index.html",
     "/docs/index.html",
-    "/changelog.html",
+    "/recent.html",
+    "/analytics.html",
 ]
 
 

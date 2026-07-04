@@ -1,7 +1,7 @@
 """#632: regenerate `docs/images/*.png` from a live llmwiki build.
 
-The README + docs reference six canonical screenshots (home, sessions
-index, session detail, changelog, projects index, model card). They're
+The README + docs reference the canonical screenshots (home, recent,
+sessions index, session detail, analytics, projects index). They're
 hand-maintained which means they drift out of sync with the actual
 emitted UI on every theme/CSS change.
 
@@ -46,9 +46,10 @@ DOCS_IMAGES = REPO_ROOT / "docs" / "images"
 # the single source of truth for what canonical screenshots ship.
 ROUTES = [
     ("home.png", "/index.html", None),
+    ("recent.png", "/recent.html", None),
     ("projects.png", "/projects/index.html", None),
     ("sessions.png", "/sessions/index.html", None),
-    ("changelog.png", "/changelog.html", None),
+    ("analytics.png", "/analytics.html", None),
 ]
 
 

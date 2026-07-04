@@ -100,7 +100,10 @@ Pages rendered (v0.9 surface):
 - `site/models/<slug>.html` — per-model info card + changelog timeline + pricing sparkline (v0.7, #56)
 - `site/vs/index.html` — auto-generated vs-comparison index (v0.7, #58)
 - `site/vs/<a>-vs-<b>.html` — side-by-side info table + benchmark chart + price delta
-- `site/changelog.html` — `CHANGELOG.md` rendered as a first-class page (v0.4.2, #72)
+- `site/index.html` — file-tree browser over `raw/docs/**` (wiki-add documents)
+- `site/documents/<path>.html` — one page per raw document file, shared tree sidebar
+- `site/recent.html` — newest raw documents, one row per logical document
+- `site/analytics.html` — activity heatmap, token stats, project grid
 - `site/search-index.json` — pre-built client-side search index
 - `site/sources/<project>/<slug>.md` — copies of raw source for download
 - Plus AI-consumable exports: `llms.txt`, `llms-full.txt`, `graph.jsonld`, `sitemap.xml`, `rss.xml`, per-page `.txt` + `.json` siblings

@@ -19,9 +19,10 @@ from playwright.sync_api import Page
 
 PAGES_TO_AUDIT = [
     ("/index.html", "home"),
+    ("/recent.html", "recent documents"),
     ("/projects/index.html", "projects index"),
     ("/sessions/index.html", "sessions index"),
-    ("/changelog.html", "changelog"),
+    ("/analytics.html", "analytics"),
     ("/docs/index.html", "docs hub"),
 ]
 

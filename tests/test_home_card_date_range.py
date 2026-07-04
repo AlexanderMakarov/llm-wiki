@@ -1,8 +1,8 @@
-"""#455: home project cards show a small muted activity date range
-under the meta line. These tests pin the rendering contract so the
-date-range div doesn't drift back to bare meta-only cards.
+"""#455: analytics-page project cards show a small muted activity date
+range under the meta line. These tests pin the rendering contract so
+the date-range div doesn't drift back to bare meta-only cards.
 
-The render_index() emitter computes the range from each session's
+The render_analytics() emitter computes the range from each session's
 `date:` frontmatter field (string YYYY-MM-DD). Five cases exercised:
 
 1. Multi-day project shows `first → last` arrow form.
@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from llmwiki.build import render_index
+from llmwiki.build import render_analytics
 from llmwiki.render.css import CSS
 
 
@@ -33,14 +33,14 @@ def _meta(date: str, project: str = "demo", model: str = "claude-sonnet-4-6") ->
 
 
 def _session(date: str, project: str = "demo", filename: str | None = None):
-    """Build a (path, meta, body) tuple matching render_index() input shape."""
+    """Build a (path, meta, body) tuple matching render_analytics() input shape."""
     fname = filename or f"2026-01-01T00-00-{project}-{date}.md"
     return (Path("raw/sessions") / fname, _meta(date, project=project), "body")
 
 
 def _render(groups, tmp_path: Path) -> str:
     all_sources = [s for sessions in groups.values() for s in sessions]
-    out_path = render_index(groups=groups, all_sources=all_sources, out_dir=tmp_path)
+    out_path = render_analytics(groups=groups, all_sources=all_sources, out_dir=tmp_path)
     return out_path.read_text(encoding="utf-8")
 
 

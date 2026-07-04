@@ -206,7 +206,7 @@ cp examples/sessions_config.json config.json
 | `adapters` | per-adapter | object | varies | Override adapter-specific settings |
 | `schedule` | `build` | enum | `"on-sync"` | When `/wiki-build` runs. `on-sync` / `daily` / `weekly` / `manual` / `never`. |
 | `schedule` | `lint` | enum | `"manual"` | When `/wiki-lint` runs. Same enum. |
-| `synthesis` | `backend` | enum | `"dummy"` | Which synthesizer: `"dummy"` / `"ollama"`. The Claude API backend ships with #315. |
+| `synthesis` | `backend` | enum | `"dummy"` | Which synthesizer: `"dummy"` / `"ollama"` / `"agent"` (agent-delegate #316 — pending prompts completed by the running Claude Code / Codex CLI session, no API key). Unknown values warn and fall back to `"dummy"`. See [configuration.md § Synthesis backend](configuration.md#synthesis-backend). |
 | `synthesis.ollama` | `model` | string | `"llama3.1:8b"` | Ollama model name (pull via `ollama pull`) |
 | `synthesis.ollama` | `base_url` | string | `"http://127.0.0.1:11434"` | Ollama HTTP endpoint |
 | `synthesis.ollama` | `timeout` | int (s) | 60 | Per-request timeout |

@@ -60,6 +60,17 @@ def _normalise_slug(raw: str) -> str:
     return cleaned or "unknown"
 
 
+# Machine-generated filler pages: the dummy backend's canned body and the
+# agent-delegate pending sentinel. Real synthesized pages contain neither.
+_STUB_MARKERS = ("<!-- llmwiki-pending:", "Auto-synthesized from session")
+
+
+def _is_stub_page(text: str) -> bool:
+    """True when a page body is machine-generated filler (dummy stub or
+    pending sentinel) rather than real synthesis output."""
+    return any(marker in text for marker in _STUB_MARKERS)
+
+
 def resolve_backend(
     cfg: Optional[dict[str, Any]] = None,
 ) -> BaseSynthesizer:
@@ -832,6 +843,7 @@ def synthesize_new_sessions(
         "new_files": len(new_items),
         "synthesized": 0,
         "skipped": 0,
+        "protected": 0,
         "errors": [],
         "backend": backend.name,
     }
@@ -893,6 +905,22 @@ def synthesize_new_sessions(
                 page_content = _build_source_page(
                     meta, synthesized, existing_page_path=out_path
                 )
+                # Stub output (dummy backend, agent-delegate pending
+                # sentinel) must never replace a real synthesized page —
+                # not even under --force. A stub carries no link data,
+                # so the swap silently destroys the knowledge graph.
+                if _is_stub_page(page_content) and out_path.exists():
+                    try:
+                        existing = out_path.read_text(encoding="utf-8")
+                    except OSError:
+                        existing = ""
+                    if existing and not _is_stub_page(existing):
+                        summary["protected"] += 1
+                        print(
+                            f"  protected: {project} → {name} "
+                            "(kept real page; stub not written)"
+                        )
+                        continue
                 out_path.write_text(page_content, encoding="utf-8")
                 # G-08 (#294): clean separator so slugs with spaces don't
                 # break awk/sed parsing. See G-20/#306 for the batched

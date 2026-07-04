@@ -403,21 +403,37 @@ kbd { display: inline-block; padding: 2px 6px; font-family: var(--mono); font-si
 .footer p { font-size: 0.85rem; color: var(--text-muted); text-align: center; }
 .footer a { text-decoration: underline; text-underline-offset: 2px; }
 
-/* Changelog page — narrow reading column + keep-a-changelog typography */
 .container.narrow { max-width: 860px; }
-.changelog-body { padding: 40px 0 64px; }
-.changelog-body .article h2 { margin-top: 48px; padding-bottom: 8px; border-bottom: 1px solid var(--border); font-size: 1.5rem; }
-.changelog-body .article h2:first-child { margin-top: 0; }
-.changelog-body .article h3 { margin-top: 28px; font-size: 1.1rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.04em; }
-.changelog-body .article h4 { margin-top: 20px; font-size: 0.98rem; }
-.changelog-body .article ul { margin: 12px 0 20px; padding-left: 22px; }
-.changelog-body .article li { margin: 6px 0; line-height: 1.6; }
-.changelog-body .article li > code,
-.changelog-body .article p > code { font-size: 0.86rem; padding: 1px 6px; background: var(--bg-code); border-radius: 4px; }
-.changelog-body .article p { line-height: 1.7; }
-.changelog-body .article a { color: var(--accent); }
-.changelog-body .article hr { margin: 36px 0; border: 0; border-top: 1px solid var(--border); }
-.changelog-body .article blockquote { margin: 16px 0; padding: 8px 16px; border-left: 3px solid var(--accent); color: var(--text-secondary); background: var(--bg-alt); border-radius: 0 4px 4px 0; }
+
+/* Documents tree browser (Home + documents/ pages) */
+.doctree-section { padding: 32px 0 64px; }
+.doctree-layout { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 32px; align-items: start; }
+.doctree-sidebar { position: sticky; top: 88px; max-height: calc(100vh - 120px); overflow-y: auto; padding: 14px 16px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); font-size: 0.88rem; }
+.doctree-title { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); font-weight: 600; margin-bottom: 8px; }
+.doctree-sidebar ul { list-style: none; margin: 0; padding: 0; }
+.doctree-sidebar ul ul { padding-left: 14px; }
+.doctree-sidebar li { margin: 1px 0; }
+.doctree-sidebar summary { cursor: pointer; padding: 3px 6px; border-radius: 4px; font-weight: 600; color: var(--text-secondary); }
+.doctree-sidebar summary:hover { background: var(--bg-alt); color: var(--text); }
+.doctree-sidebar a { display: block; padding: 3px 6px; border-radius: 4px; color: var(--text-secondary); text-decoration: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.doctree-sidebar a:hover { background: var(--bg-alt); color: var(--text); text-decoration: none; }
+.doctree-sidebar a.active { color: var(--accent); background: var(--bg-alt); font-weight: 500; }
+.doctree-main h2 { margin-bottom: 12px; }
+.doctree-main .recent-docs-mini { list-style: none; margin: 12px 0; padding: 0; }
+.doctree-main .recent-docs-mini li { padding: 5px 0; border-bottom: 1px solid var(--border); }
+.doctree-main .recent-docs-mini li:last-child { border-bottom: none; }
+.doc-article { min-width: 0; }
+@media (max-width: 860px) {
+  .doctree-layout { grid-template-columns: 1fr; }
+  .doctree-sidebar { position: static; max-height: none; }
+}
+
+/* Recent documents page */
+.recent-docs { list-style: none; margin: 0; padding: 0; counter-reset: none; }
+.recent-doc { padding: 14px 0; border-bottom: 1px solid var(--border); }
+.recent-doc:last-child { border-bottom: none; }
+.recent-doc > a { font-weight: 600; font-size: 1.02rem; }
+.recent-doc-meta { margin-top: 4px; font-size: 0.85rem; overflow-wrap: anywhere; }
 
 /* v0.4: Related pages panel */
 .related-pages { margin-top: 48px; padding-top: 24px; border-top: 1px solid var(--border); }
