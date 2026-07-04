@@ -40,7 +40,13 @@ from typing import Any, Optional
 import markdown
 from markdown.preprocessors import Preprocessor
 
-from llmwiki import REPO_ROOT
+from llmwiki import PACKAGE_ROOT, REPO_ROOT
+
+# Repo-authored content (editorial docs/, README.md, CONTRIBUTING.md,
+# .claude/commands) ships with the tool's source checkout. Resolve it
+# from the package location, NOT REPO_ROOT — with LLMWIKI_ROOT set,
+# REPO_ROOT points at the user's vault, which has none of these files.
+SOURCE_ROOT = PACKAGE_ROOT.parent
 from llmwiki.changelog_timeline import (
     extract_price_points,
     find_recently_updated,
@@ -1678,7 +1684,7 @@ def _render_root_md_page(
     Used for ``README.md`` and ``CONTRIBUTING.md`` so visitors don't get
     bounced out to GitHub for content we're already shipping as HTML.
     """
-    src = REPO_ROOT / src_name
+    src = SOURCE_ROOT / src_name
     if not src.is_file():
         return None
     raw = src.read_text(encoding="utf-8")
@@ -2107,7 +2113,7 @@ def build_search_index(
     # #277: index every docs/ page + every slash command so the palette
     # becomes a universal quick-find (not just sessions + projects).
     from llmwiki.docs_pages import iter_docs_pages, _first_paragraph
-    docs_dir = REPO_ROOT / "docs"
+    docs_dir = SOURCE_ROOT / "docs"
     if docs_dir.is_dir():
         for page in iter_docs_pages(docs_dir):
             meta_entries.append({
@@ -2123,7 +2129,7 @@ def build_search_index(
 
     # Slash commands — read the first non-empty line of each .md as
     # the description so the palette shows what each /wiki-* does.
-    slash_dir = REPO_ROOT / ".claude" / "commands"
+    slash_dir = SOURCE_ROOT / ".claude" / "commands"
     if slash_dir.is_dir():
         for p in sorted(slash_dir.glob("*.md")):
             try:
@@ -2629,7 +2635,7 @@ def build_site(
     # touched.
     try:
         from llmwiki.docs_pages import compile_docs_site
-        docs_dir = REPO_ROOT / "docs"
+        docs_dir = SOURCE_ROOT / "docs"
 
         # nav_builder gets called per-page with the right link_prefix so
         # the nav bar's hrefs resolve from whatever depth the page sits at.
