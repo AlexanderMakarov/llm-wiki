@@ -201,3 +201,10 @@ Operations: `sync`, `ingest`, `query`, `lint`, `build`.
 3. **Cross-link everything.** Every page should have a `## Connections` section with at least one `[[wikilink]]`.
 4. **Frontmatter is authoritative.** Always fill `title`, `type`, `tags`, `sources` (where applicable), and `last_updated`.
 5. **One commit per page group** when publishing to git — match the PR rules in the open-source framework.
+6. **Always rebuild static site** after relevant to it change impolemented.
+
+## Upgrading between versions
+
+After upgrading to a new `llmwiki` release (e.g., via `pip install -U llm-notebook` or `brew upgrade llmwiki`), **read `docs/UPGRADING.md` before running the first `sync` or `build`**. The guide documents schema migrations, config changes, and behaviour flips that might affect your wiki. Per-release detail is in `CHANGELOG.md`.
+
+Most releases are drop-in upgrades. When migrations are needed, the upgrade guide lists them between your old and new version — apply any migrations listed before syncing, or your next run may fail or silently produce incorrect output.
