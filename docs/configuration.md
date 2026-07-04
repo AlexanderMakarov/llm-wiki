@@ -145,14 +145,16 @@ everything (use after switching backends, e.g. to replace dummy-stub
 pages with real ones — pages with only stub links produce a topic
 graph with no edges).
 
-**Quality warning:** `dummy` is the resolved default when
+**Downgrade protection:** `dummy` is the resolved default when
 `synthesis.backend` is unset (or a typo — unknown values warn and fall
-back). A `--force` run in that state overwrites every real page with
-stubs. If your knowledge graph suddenly loses its edges, check
-`wiki/sources/` for `Auto-synthesized` bodies, run
-`llmwiki synthesize --check`, and re-synthesize with a real backend.
-(An unavailable backend does *not* fall back — the run aborts with an
-error.)
+back), so a `--force` run in that state used to overwrite every real
+page with link-free stubs and silently empty the knowledge graph. The
+pipeline now refuses that downgrade: stub output (dummy body or
+agent-delegate pending sentinel) is never written over a real page,
+even under `--force` — such pages are reported as `protected` in the
+run summary. To deliberately re-synthesize a real page, delete it
+first. (An unavailable backend does *not* fall back — the run aborts
+with an error.)
 
 ## Environment variables
 
