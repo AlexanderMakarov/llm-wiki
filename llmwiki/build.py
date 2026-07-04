@@ -889,9 +889,12 @@ def hero(title: str, subtitle: str, size: str = "", subtitle_is_html: bool = Fal
 
 
 def page_foot(js_prefix: str = "") -> str:
+    built = (
+        f" · built {_BUILD_NOW.strftime('%Y-%m-%d %H:%M')} UTC" if _BUILD_NOW else ""
+    )
     return f"""<footer class="footer">
   <div class="container">
-    <p class="muted">llmwiki · <a href="{js_prefix}index.html">home</a> · press <kbd>?</kbd> for shortcuts</p>
+    <p class="muted">llmwiki · <a href="{js_prefix}index.html">home</a> · press <kbd>?</kbd> for shortcuts{built}</p>
   </div>
 </footer>
 <nav class="mobile-bottom-nav" aria-label="Mobile navigation">
