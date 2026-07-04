@@ -20,6 +20,7 @@ from typing import Any, Iterable, Optional
 from llmwiki import REPO_ROOT
 from llmwiki.adapters import REGISTRY, discover_adapters
 from llmwiki.quarantine import add_entry as _quarantine_add
+from llmwiki.quarantine import clear_entry as _quarantine_clear
 
 DEFAULT_STATE_FILE = REPO_ROOT / ".llmwiki-state.json"
 DEFAULT_CONFIG_FILE = REPO_ROOT / "examples" / "sessions_config.json"
@@ -134,6 +135,7 @@ def _raw_write_guard(
     force: bool,
     source: str,
     adapter_name: str,
+    owned: bool = False,
 ) -> None:
     """Hard-guard raw/ immutability (#326).
 
@@ -143,9 +145,13 @@ def _raw_write_guard(
     False, raise ``FileExistsError`` so the caller can quarantine +
     skip instead of silently overwriting.
 
-    Bypass only via the existing ``llmwiki sync --force`` flag.
+    Bypass via ``llmwiki sync --force``, or ``owned=True`` when the
+    caller has verified (by frontmatter ``sessionId``) that the
+    existing file is this same source's own prior output — updating a
+    session's own page in place is a re-conversion, not a violation
+    of another source's data.
     """
-    if not out_path.exists() or force:
+    if not out_path.exists() or force or owned:
         return
     raise FileExistsError(
         f"refusing to overwrite existing raw file {out_path} "
@@ -1185,6 +1191,38 @@ def _source_hash8(source_path: Path) -> str:
     return _hl.sha256(str(source_path).encode("utf-8")).hexdigest()[:8]
 
 
+_SESSION_ID_LINE = re.compile(r"^sessionId:\s*(\S+)\s*$", re.MULTILINE)
+
+
+def _frontmatter_session_id(text: str) -> str:
+    """Extract the ``sessionId:`` frontmatter value from rendered markdown.
+
+    Only the head of the document is inspected so a transcript body that
+    happens to contain the literal string can't spoof the check.
+    """
+    match = _SESSION_ID_LINE.search(text[:4096])
+    return match.group(1) if match else ""
+
+
+def _same_session_output(out_path: Path, own_session_id: str) -> bool:
+    """True when the existing raw file was rendered from the same session.
+
+    Ownership is decided by comparing frontmatter ``sessionId`` values —
+    a stable per-source identifier every adapter-rendered page carries.
+    Any doubt (missing id, unreadable file) returns False so the caller
+    falls back to the conservative collision path.
+    """
+    if not own_session_id:
+        return False
+    try:
+        with open(out_path, encoding="utf-8", errors="replace") as fh:
+            head = fh.read(4096)
+    except OSError:
+        return False
+    existing_id = _frontmatter_session_id(head)
+    return bool(existing_id) and existing_id == own_session_id
+
+
 def _adapter_tag(adapter_name: str) -> str:
     """Normalise an adapter registry name for the frontmatter ``tags``
     field.  Matches the convention used across the codebase:
@@ -1415,8 +1453,18 @@ def convert_all(
     include_current: bool = False,
     force: bool = False,
     dry_run: bool = False,
+    fail_on_errors: bool = False,
 ) -> int:
-    """Main entry: convert new sessions across all enabled adapters."""
+    """Main entry: convert new sessions across all enabled adapters.
+
+    Returns 0 when the run completes, 1 when no adapters are available,
+    2 on bad arguments.
+    Per-file conversion errors do NOT fail the run by default — each one
+    is counted in the summary, recorded in the quarantine, and visible
+    via ``sync --status``, and the rest of the corpus still converts.
+    Pass ``fail_on_errors=True`` (CLI: ``--fail-on-errors``) to exit 1
+    when any file errored — for CI-style callers that want a hard gate.
+    """
     config = load_config(config_file)
     state = {} if force else load_state(state_file, adapter_names=list(REGISTRY.keys()))
     redact = Redactor(config)
@@ -1670,21 +1718,36 @@ def convert_all(
             out_name = flat_output_name(started, project_slug, slug)
             out_path = out_dir / out_name
             # #339: disambiguate when the canonical name would collide with
-            # a different source. Two cases, both must trigger the retry:
+            # a DIFFERENT source. Two cases, both must trigger the retry:
             #   (a) Another source in THIS sync run already claimed the
             #       canonical name. Independent of --force — otherwise
             #       `sync --force` silently overwrites sibling sessions
             #       whose project+date+slug happen to collide (~200
             #       dropped sessions on a real claude-code corpus).
-            #   (b) Canonical exists on disk from a prior run AND the
-            #       state file does not record us as its writer. Only
+            #   (b) Canonical exists on disk and belongs to a different
+            #       session (frontmatter ``sessionId`` mismatch). Only
             #       consulted when --force is off; under --force the user
             #       has explicitly asked to overwrite their own prior
             #       outputs.
-            needs_disambig = not dry_run and (
-                out_name in names_written_this_run
-                or (not force and out_path.exists() and state.get(key) != mtime)
-            )
+            # Ownership matters: a mtime/state-based test for (b) is also
+            # true for a file WE wrote whose source has since changed
+            # (resumed session) — and for the whole corpus when the state
+            # file is lost. Both misfire as "foreign collision" and
+            # duplicate each affected session into a ``--<hash>``
+            # (double-slug) sibling. A matching sessionId means the
+            # existing file is this source's own prior output, so
+            # re-converting updates it in place.
+            own_session_id = _frontmatter_session_id(md)
+            overwrite_own = False
+            needs_disambig = False
+            if not dry_run:
+                if out_name in names_written_this_run:
+                    needs_disambig = True
+                elif not force and out_path.exists():
+                    if _same_session_output(out_path, own_session_id):
+                        overwrite_own = True
+                    else:
+                        needs_disambig = True
             if needs_disambig:
                 out_name = flat_output_name(
                     started, project_slug, slug,
@@ -1703,6 +1766,20 @@ def convert_all(
                     count=1,
                     flags=re.MULTILINE,
                 )
+                # The disambiguated name is a stable hash of THIS source
+                # path, so a file already sitting there can only be a
+                # prior run's output for the same source (or an
+                # astronomically unlikely hash collision — which the
+                # sessionId comparison rules out). Overwriting it is the
+                # same in-place update as the canonical case; without
+                # this, a source that changes twice after a collision
+                # errors on every sync forever.
+                if (
+                    not force
+                    and out_path.exists()
+                    and _same_session_output(out_path, own_session_id)
+                ):
+                    overwrite_own = True
             if not dry_run:
                 names_written_this_run.add(out_name)
             if dry_run:
@@ -1719,7 +1796,7 @@ def convert_all(
                 out_path.parent.mkdir(parents=True, exist_ok=True)
                 try:
                     _raw_write_guard(out_path, force=force, source=str(path),
-                                     adapter_name=cls.name)
+                                     adapter_name=cls.name, owned=overwrite_own)
                 except FileExistsError as e:
                     errors += 1
                     _bump(cls.name, "errored")
@@ -1727,6 +1804,11 @@ def convert_all(
                     continue
                 out_path.write_text(md, encoding="utf-8")
                 state[key] = mtime
+                # Self-heal: a source that converts cleanly no longer
+                # belongs in the quarantine, whatever it was stuck on
+                # before. Without this, fixed sources linger in
+                # `sync --status` until someone runs `quarantine clear`.
+                _quarantine_clear(str(path), adapter=cls.name)
             converted += 1
             _bump(cls.name, "converted")
 
@@ -1763,4 +1845,4 @@ def convert_all(
             f"  filtered breakdown: {excluded_headless} headless "
             f"(exclude_headless), {excluded_temp} temp-cwd (exclude_temp_cwd)"
         )
-    return 0 if errors == 0 else 1
+    return 1 if (errors and fail_on_errors) else 0

@@ -31,6 +31,7 @@ python3 -m llmwiki sync [options]
 | `--force` | flag | off | Ignore state file, reconvert everything |
 | `--dry-run` | flag | off | Preview what would be written |
 | `--download-images` | flag | off | Download remote images in `.md` files to `raw/assets/` |
+| `--fail-on-errors` | flag | off | Exit 1 if any file fails to convert; by default per-file errors are quarantined and the run exits 0 |
 
 ### `llmwiki build`
 
