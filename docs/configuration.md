@@ -176,7 +176,14 @@ python3 -m llmwiki sync [options]
 --include-current         Don't skip live (<60 min) sessions
 --force                   Ignore the state file; reconvert everything
 --dry-run                 Preview what would be written, don't touch disk
+--fail-on-errors          Exit 1 if any file fails to convert
 ```
+
+Per-file conversion errors do not fail the run by default: each one is
+counted in the summary, recorded in `.llmwiki-quarantine.json`, and
+visible via `llmwiki sync --status`, while the rest of the corpus still
+converts. Pass `--fail-on-errors` for a hard gate (CI, scripted
+pipelines that must not proceed past a partial sync).
 
 ### `llmwiki build`
 

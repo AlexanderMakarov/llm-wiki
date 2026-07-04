@@ -172,6 +172,7 @@ def cmd_sync(args: argparse.Namespace) -> int:
         project=args.project,
         include_current=args.include_current,
         force=args.force,
+        fail_on_errors=getattr(args, "fail_on_errors", False),
     )
 
     # v1.0 (#157): auto-build and auto-lint after sync.
@@ -771,6 +772,11 @@ def build_parser() -> argparse.ArgumentParser:
     sync.add_argument("--project", type=str, help="Substring filter on project slug")
     sync.add_argument("--include-current", action="store_true", help="Don't skip live sessions (<60 min)")
     sync.add_argument("--force", action="store_true", help="Ignore state file, reconvert everything")
+    sync.add_argument(
+        "--fail-on-errors", action="store_true",
+        help="Exit 1 if any file fails to convert (default: per-file "
+             "errors are quarantined and the run exits 0)",
+    )
     sync.add_argument(
         "--auto-build", action=argparse.BooleanOptionalAction, default=True,
         help="After sync, rebuild the site when sessions_config.json's "
