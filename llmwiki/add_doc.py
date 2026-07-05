@@ -19,6 +19,7 @@ import socket
 import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
+from pathlib import Path
 from urllib.parse import urljoin, urlparse
 
 __all__ = [
@@ -29,6 +30,9 @@ __all__ = [
     "DEFAULT_CHUNK_MAX_CHARS",
     "MarkdownChunk",
     "chunk_markdown_by_sections",
+    "ConvertedDoc",
+    "assert_readable_path",
+    "convert_path",
 ]
 
 
@@ -264,3 +268,138 @@ def chunk_markdown_by_sections(
         return [MarkdownChunk(1, 1, _first_heading_line(body), body + "\n")]
     total = len(bodies)
     return [MarkdownChunk(i + 1, total, _first_heading_line(b), b) for i, b in enumerate(bodies)]
+
+
+# ── local file / folder conversion ───────────────────────────────────
+
+TEXTUAL_EXT = {
+    ".md", ".markdown", ".txt", ".rst", ".org",
+    ".ts", ".tsx", ".js", ".jsx", ".py", ".go", ".rs", ".java", ".c", ".h", ".cpp",
+    ".json", ".yaml", ".yml", ".toml", ".sh", ".sql", ".html", ".css",
+}
+
+# Extensions markitdown converts that are worth supporting; anything
+# else binary is refused with a clear message.
+_MARKITDOWN_EXT = {".pdf", ".docx", ".pptx", ".xlsx", ".epub"}
+
+# Paths that almost always hold secrets — never ingest, ever.
+# Port of kbbuilder SENSITIVE_PATH_PATTERNS (wiki-convert.ts).
+_SENSITIVE_RES = [
+    _re.compile(r"(^|[\\/])\.env(\.[^\\/]*)?$", _re.I),
+    _re.compile(r"(^|[\\/])\.ssh([\\/]|$)", _re.I),
+    _re.compile(r"(^|[\\/])\.aws([\\/]|$)", _re.I),
+    _re.compile(r"(^|[\\/])\.gnupg([\\/]|$)", _re.I),
+    _re.compile(r"(^|[\\/])\.netrc$", _re.I),
+    _re.compile(r"(^|[\\/])id_(rsa|dsa|ecdsa|ed25519)(\.pub)?$", _re.I),
+    _re.compile(r"\.(pem|key|p12|pfx|keystore|jks)$", _re.I),
+    _re.compile(r"(^|[\\/])(credentials|secret|secrets)(\.[^\\/]*)?$", _re.I),
+    _re.compile(r"(^|[\\/])shadow$", _re.I),
+]
+
+
+def _is_sensitive(path: str) -> bool:
+    return any(rx.search(path) for rx in _SENSITIVE_RES)
+
+
+try:  # optional [add] extra — used for PDF/docx/pptx/xlsx/epub
+    from markitdown import MarkItDown as _MarkItDown
+
+    def _markitdown_convert(path: Path) -> str:
+        return _MarkItDown().convert(str(path)).text_content
+except ImportError:  # pragma: no cover — exercised via monkeypatch in tests
+    _markitdown_convert = None
+
+
+@dataclass
+class ConvertedDoc:
+    """One source converted to markdown, before slug/title finalization."""
+    title: str                       # provisional (filename/URL); finalized by the writer
+    markdown: str
+    source_label: str                # original URL or absolute path, for frontmatter
+    html_title: str | None = None  # <title> when the source was an HTML page
+    url: str | None = None
+    path_name: str | None = None   # filename/dirname for title fallback
+    warnings: list[str] = field(default_factory=list)
+
+
+def assert_readable_path(value: str) -> Path:
+    """Path-traversal / secret-read guard. Rejects literal '..' segments,
+    resolves symlinks, and refuses known-sensitive paths. Returns the
+    resolved path. (No allowlist roots: the CLI runs as the user who
+    typed the path — unlike kbbuilder's queue-driven worker.)"""
+    if ".." in _re.split(r"[\\/]", value):
+        raise AddError(f'path must not contain ".." segments: {value}')
+    try:
+        real = Path(value).resolve(strict=True)
+    except (OSError, RuntimeError) as exc:
+        raise AddError(f"cannot resolve path: {value}") from exc
+    if _is_sensitive(str(real)) or _is_sensitive(value):
+        raise AddError(f"refusing to read sensitive path: {value}")
+    return real
+
+
+def _fence_code(text: str, ext: str) -> str:
+    lang = ext.lstrip(".")
+    return f"```{lang}\n" + text.replace("```", "`​``").rstrip() + "\n```"
+
+
+def _note_header(note: str | None) -> str:
+    return f"> {note.strip()}\n\n" if note and note.strip() else ""
+
+
+def _walk_folder(dir_path: Path, depth: int = 0) -> str:
+    """Concatenate a folder's textual files as '## name' sections.
+    Depth-capped, sorted, dotfiles/node_modules skipped, symlinks never
+    followed (they can escape the directory), sensitive paths skipped."""
+    if depth > 6:
+        return ""
+    out: list[str] = []
+    for entry in sorted(dir_path.iterdir(), key=lambda p: p.name):
+        if entry.name.startswith(".") or entry.name == "node_modules":
+            continue
+        if entry.is_symlink():
+            continue
+        if _is_sensitive(str(entry)):
+            continue
+        if entry.is_dir():
+            nested = _walk_folder(entry, depth + 1)
+            if nested:
+                out.append(nested)
+        elif entry.is_file() and entry.suffix.lower() in TEXTUAL_EXT:
+            text = entry.read_text(encoding="utf-8", errors="replace")
+            ext = entry.suffix.lower()
+            body = text.strip() if ext in (".md", ".markdown") else _fence_code(text, ext)
+            out.append(f"## {entry.name}\n\n{body}\n")
+    return "\n".join(p for p in out if p)
+
+
+def convert_path(value: str, note: str | None = None) -> ConvertedDoc:
+    """Convert a local file or folder to one markdown document."""
+    real = assert_readable_path(value)
+    label = str(real)
+    if real.is_dir():
+        title = real.name
+        body = _walk_folder(real)
+        markdown = _note_header(note) + f"# {title}\n\n" + body
+        return ConvertedDoc(title=title, markdown=markdown, source_label=label,
+                            path_name=real.name)
+    ext = real.suffix.lower()
+    if ext in (".md", ".markdown"):
+        text = real.read_text(encoding="utf-8", errors="replace")
+        return ConvertedDoc(title=real.stem, markdown=_note_header(note) + text.strip() + "\n",
+                            source_label=label, path_name=real.name)
+    if ext in _MARKITDOWN_EXT:
+        if _markitdown_convert is None:
+            raise AddError(
+                f"converting {ext} needs markitdown — install the optional extra: "
+                "pip install 'llm-notebook[add]'"
+            )
+        text = _markitdown_convert(real)
+        return ConvertedDoc(title=real.stem, markdown=_note_header(note) + text.strip() + "\n",
+                            source_label=label, path_name=real.name)
+    # Any other extension: treat as text, fenced as code.
+    text = real.read_text(encoding="utf-8", errors="replace")
+    body = _fence_code(text, ext or ".txt")
+    markdown = _note_header(note) + f"# {real.name}\n\n" + body + "\n"
+    return ConvertedDoc(title=real.stem, markdown=markdown, source_label=label,
+                        path_name=real.name)

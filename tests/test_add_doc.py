@@ -102,3 +102,88 @@ def test_default_cap_is_7000():
     # 7000 keeps each chunk inside the agent-delegate synthesizer's
     # raw_body[:8000] prompt embed with frontmatter+breadcrumb headroom.
     assert DEFAULT_CHUNK_MAX_CHARS == 7000
+
+
+# ── file/folder conversion + path safety ─────────────────────────────
+
+from llmwiki.add_doc import ConvertedDoc, assert_readable_path, convert_path
+
+
+def test_reject_dotdot_segments(tmp_path):
+    with pytest.raises(AddError, match=r"\.\."):
+        assert_readable_path(str(tmp_path / ".." / "x"))
+
+
+def test_reject_missing_path(tmp_path):
+    with pytest.raises(AddError, match="resolve|exist"):
+        assert_readable_path(str(tmp_path / "nope.md"))
+
+
+@pytest.mark.parametrize("name", [".env", ".env.local", "id_rsa", "server.pem", "credentials.json"])
+def test_reject_sensitive_paths(tmp_path, name):
+    p = tmp_path / name
+    p.write_text("secret")
+    with pytest.raises(AddError, match="sensitive"):
+        assert_readable_path(str(p))
+
+
+def test_md_file_passthrough(tmp_path):
+    p = tmp_path / "notes.md"
+    p.write_text("# My Notes\n\ncontent here\n")
+    doc = convert_path(str(p))
+    assert isinstance(doc, ConvertedDoc)
+    assert doc.markdown.strip().startswith("# My Notes")
+    assert doc.source_label == str(p.resolve())
+    assert doc.path_name == "notes.md"
+
+
+def test_text_file_fenced(tmp_path):
+    p = tmp_path / "script.py"
+    p.write_text("print('hi')\n")
+    doc = convert_path(str(p))
+    assert "```py" in doc.markdown
+    assert "print('hi')" in doc.markdown
+
+
+def test_note_prepended(tmp_path):
+    p = tmp_path / "n.md"
+    p.write_text("body\n")
+    doc = convert_path(str(p), note="check this later")
+    assert doc.markdown.startswith("> check this later\n\n")
+
+
+def test_pdf_without_markitdown_errors(tmp_path, monkeypatch):
+    import llmwiki.add_doc as m
+    monkeypatch.setattr(m, "_markitdown_convert", None)
+    p = tmp_path / "doc.pdf"
+    p.write_bytes(b"%PDF-1.4 fake")
+    with pytest.raises(AddError, match=r"llm-notebook\[add\]"):
+        convert_path(str(p))
+
+
+def test_folder_walk(tmp_path):
+    (tmp_path / "a.md").write_text("# A\n\nalpha\n")
+    (tmp_path / "b.py").write_text("x = 1\n")
+    (tmp_path / ".hidden.md").write_text("nope")
+    (tmp_path / "sub").mkdir()
+    (tmp_path / "sub" / "c.txt").write_text("gamma\n")
+    (tmp_path / "sub" / "binary.bin").write_bytes(b"\x00\x01")
+    doc = convert_path(str(tmp_path))
+    assert "## a.md" in doc.markdown
+    assert "## b.py" in doc.markdown
+    assert "## c.txt" in doc.markdown
+    assert "nope" not in doc.markdown          # dotfile skipped
+    assert "binary.bin" not in doc.markdown    # non-textual skipped
+    assert doc.path_name == tmp_path.name
+
+
+def test_folder_skips_symlinks(tmp_path):
+    outside = tmp_path.parent / f"{tmp_path.name}-outside.md"
+    outside.write_text("# escaped\n")
+    inner = tmp_path / "docs"
+    inner.mkdir()
+    (inner / "real.md").write_text("# real\n")
+    (inner / "link.md").symlink_to(outside)
+    doc = convert_path(str(inner))
+    assert "real" in doc.markdown
+    assert "escaped" not in doc.markdown
