@@ -41,6 +41,7 @@ class _MdBuilder(HTMLParser):
         super().__init__()
         self.content_root = content_root
         self.in_content = content_root is None
+        self._entered_root = False
         self._content_depth = 0
         self.out: list[str] = []
         self.title = ""
@@ -50,6 +51,17 @@ class _MdBuilder(HTMLParser):
         self._list_stack: list[int | None] = []  # None=ul, int=next ol number
         self._href: str | None = None
         self._link_text: list[str] = []
+
+    # ── output helpers ─────────────────────────────────────────────
+    def _emit(self, marker: str) -> None:
+        """Write an inline formatting marker (**, *, `) to whichever buffer
+        is currently active — the link-text buffer while inside an <a>,
+        otherwise the main output. Keeps `<a><strong>text</strong></a>`
+        from splitting the markers away from the link they belong to."""
+        if self._href is not None:
+            self._link_text.append(marker)
+        else:
+            self.out.append(marker)
 
     # ── tag handling ────────────────────────────────────────────────
     def handle_starttag(self, tag, attrs):
@@ -63,6 +75,7 @@ class _MdBuilder(HTMLParser):
             return
         if self.content_root and tag == self.content_root:
             self.in_content = True
+            self._entered_root = True
             self._content_depth += 1
             return
         if not self.in_content:
@@ -74,7 +87,7 @@ class _MdBuilder(HTMLParser):
             self.out.append("\n\n```\n")
         elif tag == "code":
             if not self._pre_depth:
-                self.out.append("`")
+                self._emit("`")
         elif tag in ("ul", "ol"):
             self._list_stack.append(1 if tag == "ol" else None)
             self.out.append("\n")
@@ -88,9 +101,9 @@ class _MdBuilder(HTMLParser):
             self._href = dict(attrs).get("href")
             self._link_text = []
         elif tag in ("strong", "b"):
-            self.out.append("**")
+            self._emit("**")
         elif tag in ("em", "i"):
-            self.out.append("*")
+            self._emit("*")
         elif tag == "br":
             self.out.append("\n")
         elif tag in _PARA_BREAK:
@@ -119,7 +132,7 @@ class _MdBuilder(HTMLParser):
             self.out.append("\n```\n\n")
         elif tag == "code":
             if not self._pre_depth:
-                self.out.append("`")
+                self._emit("`")
         elif tag in ("ul", "ol"):
             if self._list_stack:
                 self._list_stack.pop()
@@ -133,9 +146,9 @@ class _MdBuilder(HTMLParser):
             self._href = None
             self._link_text = []
         elif tag in ("strong", "b"):
-            self.out.append("**")
+            self._emit("**")
         elif tag in ("em", "i"):
-            self.out.append("*")
+            self._emit("*")
 
     # ── text ────────────────────────────────────────────────────────
     def handle_data(self, data):
@@ -175,6 +188,12 @@ def html_to_markdown(html: str) -> tuple[str, str]:
     root = next((r for r in _CONTENT_ROOTS if f"<{r}" in lower), None)
     builder = _MdBuilder(root)
     builder.feed(html)
+    if root is not None and not builder._entered_root:
+        # The assumed content root was a false positive (e.g. "<article>"
+        # only appeared inside a comment or string, never as a real start
+        # tag) — re-parse the whole document instead of losing everything.
+        builder = _MdBuilder(None)
+        builder.feed(html)
     raw = "".join(builder.out)
     lines = [ln.rstrip() for ln in raw.split("\n")]
     text = "\n".join(lines)

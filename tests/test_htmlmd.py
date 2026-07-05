@@ -63,3 +63,18 @@ def test_whitespace_collapsed():
     _, md = html_to_markdown(PAGE)
     assert "\n\n\n" not in md
     assert not md.startswith("\n")
+
+
+def test_article_mention_in_comment_does_not_drop_content():
+    html = ("<html><head><title>Blog</title></head><body>"
+            "<!-- Tip: use the <article> tag for semantic markup -->"
+            "<p>This is the real content of the page.</p></body></html>")
+    _, md = html_to_markdown(html)
+    assert "real content" in md
+
+
+def test_bold_inside_link():
+    html = ('<article><p>See <a href="https://x.com"><strong>Bold Link</strong></a> here.</p></article>')
+    _, md = html_to_markdown(html)
+    assert "[**Bold Link**](https://x.com)" in md
+    assert "****" not in md
