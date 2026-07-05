@@ -14,16 +14,19 @@ and a sensitive-path denylist for local reads.
 from __future__ import annotations
 
 import ipaddress
+import json
 import re as _re  # aliased: `re` is shadowed by hot loop locals in later sections
 import socket
 import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
+from datetime import date
 from pathlib import Path
 from urllib.parse import urljoin, urlparse
 
 from llmwiki import __version__
 from llmwiki.htmlmd import html_to_markdown
+from llmwiki.slugs import derive_title, slugify
 
 __all__ = [
     "AddError",
@@ -40,6 +43,8 @@ __all__ = [
     "BROWSER_UA",
     "CHALLENGE_MARKERS",
     "convert_url",
+    "write_raw_doc",
+    "add_sources",
 ]
 
 
@@ -559,3 +564,136 @@ def convert_url(
     return ConvertedDoc(title="", markdown=_note_header(note) + header + md.strip() + "\n",
                         source_label=url, url=url, html_title=title or None,
                         warnings=warnings)
+
+
+# ── raw-doc writer (byte-compatible with kbbuilder makeRawDocWriter) ─
+
+def _dedupe(base: str, exists) -> str:
+    """First of base, base-2, base-3, … for which exists() is False."""
+    if not exists(base):
+        return base
+    n = 2
+    while exists(f"{base}-{n}"):
+        n += 1
+    return f"{base}-{n}"
+
+
+def _frontmatter(title: str, slug: str, project: str, tags: tuple[str, ...],
+                 today: str, source: str) -> str:
+    tag_list = ", ".join(("wiki-add", "raw-doc") + tags)
+    return (
+        "---\n"
+        f"title: {json.dumps(title, ensure_ascii=False)}\n"
+        f"slug: {slug}\n"
+        f"project: {project}\n"
+        "type: source\n"
+        f"tags: [{tag_list}]\n"
+        f"date: {today}\n"
+        f"source: {json.dumps(source, ensure_ascii=False)}\n"
+        "---\n\n"
+    )
+
+
+def write_raw_doc(
+    doc: ConvertedDoc,
+    docs_dir: Path,
+    *,
+    explicit_title: str | None = None,
+    project: str | None = None,
+    extra_tags: tuple[str, ...] = (),
+    today: str | None = None,
+    chunk_max_chars: int = DEFAULT_CHUNK_MAX_CHARS,
+) -> list[Path]:
+    """Write one converted doc under raw/docs/<project>/, chunked by
+    section when large. Never overwrites (raw/ immutability): the doc
+    slug is suffixed -2, -3, … on collision. Returns written paths."""
+    title = derive_title(explicit=explicit_title, markdown=doc.markdown,
+                         html_title=doc.html_title, url=doc.url,
+                         path_name=doc.path_name)
+    base_slug = slugify(title) or "untitled"
+    day = today or date.today().isoformat()
+    chunks = chunk_markdown_by_sections(doc.markdown, max_chars=chunk_max_chars)
+    if not chunks:
+        raise AddError(f"nothing to write for {doc.source_label} (empty document)")
+    multi = len(chunks) > 1
+
+    def file_names(slug: str) -> list[str]:
+        if not multi:
+            return [f"{slug}.md"]
+        return [f"{slug}-{c.index:02d}.md" for c in chunks]
+
+    if project:
+        proj = slugify(project) or project
+        target = docs_dir / proj
+        slug = _dedupe(base_slug,
+                       lambda s: any((target / n).exists() for n in file_names(s)))
+    else:
+        slug = _dedupe(base_slug, lambda s: (docs_dir / s).exists())
+        proj = slug
+        target = docs_dir / proj
+
+    target.mkdir(parents=True, exist_ok=True)
+    written: list[Path] = []
+    for c in chunks:
+        chunk_slug = f"{slug}-{c.index:02d}" if multi else slug
+        sub = c.heading if (c.heading and c.heading != title) else ""
+        if multi:
+            chunk_title = f"{title} (part {c.index}/{c.total}" + (f": {sub}" if sub else "") + ")"
+            breadcrumb = f"> Part {c.index} of {c.total} of **{title}**" + (f" — {sub}" if sub else "") + ".\n\n"
+        else:
+            chunk_title, breadcrumb = title, ""
+        fm = _frontmatter(chunk_title, chunk_slug, proj, extra_tags, day, doc.source_label)
+        path = target / f"{chunk_slug}.md"
+        if path.exists():  # belt-and-braces: raw/ is immutable
+            raise AddError(f"refusing to overwrite existing raw file {path}")
+        path.write_text(fm + breadcrumb + c.body, encoding="utf-8")
+        written.append(path)
+    return written
+
+
+def add_sources(
+    sources: list[str],
+    docs_dir: Path,
+    *,
+    title: str | None = None,
+    project: str | None = None,
+    tags: tuple[str, ...] = (),
+    note: str | None = None,
+    render: str = "auto",
+    dry_run: bool = False,
+    fetch=None,
+    renderer=None,
+    today: str | None = None,
+) -> dict:
+    """Convert + write a batch of sources. Post-steps (synthesize/build)
+    are the CLI's job — this function only lands raw docs. Per-source
+    failures are collected, not fatal: the rest of the batch lands."""
+    written: list[Path] = []
+    titles: list[str] = []
+    warnings: list[str] = []
+    errors: list[str] = []
+    for src in sources:
+        try:
+            if _re.match(r"^https?://", src):
+                doc = convert_url(src, note, fetch=fetch, renderer=renderer, render=render)
+            else:
+                doc = convert_path(src, note)
+            final_title = derive_title(explicit=title, markdown=doc.markdown,
+                                       html_title=doc.html_title, url=doc.url,
+                                       path_name=doc.path_name)
+            titles.append(final_title)
+            warnings.extend(f"{src}: {w}" for w in doc.warnings)
+            if dry_run:
+                chunks = chunk_markdown_by_sections(doc.markdown)
+                slug = slugify(final_title) or "untitled"
+                proj = slugify(project) if project else slug
+                names = ([f"{slug}.md"] if len(chunks) <= 1
+                         else [f"{slug}-{c.index:02d}.md" for c in chunks])
+                warnings.append(f"{src}: dry-run — would write "
+                                f"{', '.join(str(docs_dir / proj / n) for n in names)}")
+                continue
+            written.extend(write_raw_doc(doc, docs_dir, explicit_title=title,
+                                         project=project, extra_tags=tags, today=today))
+        except AddError as exc:
+            errors.append(f"{src}: {exc}")
+    return {"written": written, "titles": titles, "warnings": warnings, "errors": errors}

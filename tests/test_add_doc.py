@@ -338,3 +338,131 @@ def test_plain_text_response_passthrough():
                                   body="just plain text content, long enough to pass the gate. " * 10)])
     doc = convert_url("https://ex.com/h", fetch=fetch)
     assert "just plain text content" in doc.markdown
+
+
+# ── raw-doc writer + orchestrator ────────────────────────────────────
+
+from llmwiki.add_doc import add_sources, write_raw_doc
+
+
+def _doc(markdown="# Doc Title\n\nbody\n", **kw):
+    defaults = dict(title="", source_label="/tmp/x.md", path_name="x.md")
+    defaults.update(kw)
+    return ConvertedDoc(markdown=markdown, **defaults)
+
+
+def test_write_single_chunk_layout_and_frontmatter(tmp_path):
+    paths = write_raw_doc(_doc(), tmp_path, today="2026-07-04")
+    assert paths == [tmp_path / "doc-title" / "doc-title.md"]
+    text = paths[0].read_text()
+    # Byte-compatible with kbbuilder makeRawDocWriter (wiki-worker.ts:91-100).
+    assert text.startswith(
+        '---\n'
+        'title: "Doc Title"\n'
+        'slug: doc-title\n'
+        'project: doc-title\n'
+        'type: source\n'
+        'tags: [wiki-add, raw-doc]\n'
+        'date: 2026-07-04\n'
+        'source: "/tmp/x.md"\n'
+        '---\n\n'
+    )
+    assert text.rstrip().endswith("body")
+
+
+def test_write_multi_chunk_names_titles_breadcrumbs(tmp_path):
+    md = "".join(f"## Sec{i}\n\n" + "x" * 900 + "\n\n" for i in range(4))
+    paths = write_raw_doc(_doc(markdown="# Big Doc\n\n" + md), tmp_path,
+                          today="2026-07-04", chunk_max_chars=1000)
+    assert len(paths) > 1
+    assert paths[0].name == "big-doc-01.md"
+    first = paths[0].read_text()
+    assert 'title: "Big Doc (part 1/' in first
+    assert "> Part 1 of" in first
+    assert "slug: big-doc-01" in first
+    assert "project: big-doc" in first
+
+
+def test_write_never_overwrites_suffixes_slug(tmp_path):
+    p1 = write_raw_doc(_doc(), tmp_path, today="2026-07-04")
+    p2 = write_raw_doc(_doc(), tmp_path, today="2026-07-04")
+    assert p1 != p2
+    assert p2 == [tmp_path / "doc-title-2" / "doc-title-2.md"]
+    p3 = write_raw_doc(_doc(), tmp_path, today="2026-07-04")
+    assert p3 == [tmp_path / "doc-title-3" / "doc-title-3.md"]
+    assert p1[0].read_text() == p2[0].read_text().replace("doc-title-2", "doc-title")
+
+
+def test_write_explicit_project_collides_on_file_level(tmp_path):
+    write_raw_doc(_doc(), tmp_path, project="shared", today="2026-07-04")
+    p2 = write_raw_doc(_doc(), tmp_path, project="shared", today="2026-07-04")
+    assert p2 == [tmp_path / "shared" / "doc-title-2.md"]
+
+
+def test_write_extra_tags(tmp_path):
+    paths = write_raw_doc(_doc(), tmp_path, extra_tags=("research",), today="2026-07-04")
+    assert "tags: [wiki-add, raw-doc, research]" in paths[0].read_text()
+
+
+def test_write_explicit_title_wins(tmp_path):
+    paths = write_raw_doc(_doc(), tmp_path, explicit_title="Custom Name", today="2026-07-04")
+    assert paths[0].parent.name == "custom-name"
+    assert 'title: "Custom Name"' in paths[0].read_text()
+
+
+def test_add_sources_batch_mixed_success_and_failure(tmp_path):
+    src = tmp_path / "in.md"
+    src.write_text("# In File\n\ncontent\n")
+    docs = tmp_path / "docs"
+    result = add_sources([str(src), str(tmp_path / "missing.md")], docs,
+                         today="2026-07-04")
+    assert len(result["written"]) == 1
+    assert result["titles"] == ["In File"]
+    assert len(result["errors"]) == 1
+    assert "missing.md" in result["errors"][0]
+    assert (docs / "in-file" / "in-file.md").exists()
+
+
+def test_add_sources_dry_run_writes_nothing(tmp_path):
+    src = tmp_path / "in.md"
+    src.write_text("# In File\n\ncontent\n")
+    docs = tmp_path / "docs"
+    result = add_sources([str(src)], docs, dry_run=True, today="2026-07-04")
+    assert result["titles"] == ["In File"]
+    assert not docs.exists()
+
+
+def test_add_sources_url_routed_to_convert_url(tmp_path):
+    fetch = _fetcher([FetchResult(url="https://ex.com/p", status=200,
+                                  content_type="text/html", body=HTML_DOC)])
+    docs = tmp_path / "docs"
+    result = add_sources(["https://ex.com/p"], docs, fetch=fetch, today="2026-07-04")
+    assert result["titles"] == ["Doc Title"]
+    written = result["written"][0].read_text()
+    assert 'source: "https://ex.com/p"' in written
+
+
+def test_written_doc_flows_through_synth_pipeline(tmp_path):
+    """End-to-end with the EXISTING synthesis pipeline (DummySynthesizer):
+    the written raw doc must produce a wiki/sources page."""
+    from llmwiki.synth.base import DummySynthesizer
+    from llmwiki.synth.pipeline import synthesize_new_sessions
+
+    docs = tmp_path / "raw" / "docs"
+    src = tmp_path / "in.md"
+    src.write_text("# Flow Doc\n\nSome real content to summarize.\n")
+    add_sources([str(src)], docs, today="2026-07-04")
+
+    summary = synthesize_new_sessions(
+        backend=DummySynthesizer(),
+        raw_dir=tmp_path / "raw" / "sessions",       # empty — docs only
+        docs_dir=docs,
+        wiki_sources_dir=tmp_path / "wiki" / "sources",
+        state_file=tmp_path / "state.json",
+        log_path=tmp_path / "log.md",
+    )
+    assert summary["errors"] == []
+    assert summary["synthesized"] == 1
+    pages = list((tmp_path / "wiki" / "sources").rglob("*.md"))
+    assert len(pages) == 1
+    assert "flow-doc" in pages[0].name
