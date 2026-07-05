@@ -399,6 +399,23 @@ def test_write_explicit_project_collides_on_file_level(tmp_path):
     assert p2 == [tmp_path / "shared" / "doc-title-2.md"]
 
 
+def test_write_explicit_project_dedupe_across_chunk_shapes(tmp_path):
+    # Same title, same explicit project, DIFFERENT chunk shapes: the
+    # collision probe must see what's on disk, not assume the new doc's
+    # own single/multi layout.
+    big = "# Doc Title\n\n" + "".join(f"## S{i}\n\n" + "x" * 900 + "\n\n" for i in range(4))
+    # single first, then multi
+    write_raw_doc(_doc(), tmp_path, project="shared", today="2026-07-04")
+    p2 = write_raw_doc(_doc(markdown=big), tmp_path, project="shared",
+                       today="2026-07-04", chunk_max_chars=1000)
+    assert all(p.name.startswith("doc-title-2-") for p in p2)
+    # multi first, then single (fresh project dir)
+    write_raw_doc(_doc(markdown=big), tmp_path, project="other",
+                  today="2026-07-04", chunk_max_chars=1000)
+    p4 = write_raw_doc(_doc(), tmp_path, project="other", today="2026-07-04")
+    assert p4 == [tmp_path / "other" / "doc-title-2.md"]
+
+
 def test_write_extra_tags(tmp_path):
     paths = write_raw_doc(_doc(), tmp_path, extra_tags=("research",), today="2026-07-04")
     assert "tags: [wiki-add, raw-doc, research]" in paths[0].read_text()

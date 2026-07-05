@@ -617,16 +617,18 @@ def write_raw_doc(
         raise AddError(f"nothing to write for {doc.source_label} (empty document)")
     multi = len(chunks) > 1
 
-    def file_names(slug: str) -> list[str]:
-        if not multi:
-            return [f"{slug}.md"]
-        return [f"{slug}-{c.index:02d}.md" for c in chunks]
+    def slug_taken(target_dir: Path, s: str) -> bool:
+        # Shape-independent probe: an earlier doc with the same slug may be a
+        # single file (<s>.md) or chunked (<s>-NN.md) — the new doc's own
+        # chunk count says nothing about what's already on disk.
+        if (target_dir / f"{s}.md").exists():
+            return True
+        return any(target_dir.glob(f"{s}-[0-9][0-9].md"))
 
     if project:
         proj = slugify(project) or project
         target = docs_dir / proj
-        slug = _dedupe(base_slug,
-                       lambda s: any((target / n).exists() for n in file_names(s)))
+        slug = _dedupe(base_slug, lambda s: slug_taken(target, s))
     else:
         slug = _dedupe(base_slug, lambda s: (docs_dir / s).exists())
         proj = slug
