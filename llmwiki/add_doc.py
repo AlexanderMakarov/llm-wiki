@@ -101,7 +101,7 @@ class FetchResult:
     url: str  # final URL after redirects
     status: int
     content_type: str
-    headers: dict[str, str] = field(default_factory=dict)
+    headers: dict[str, str] = field(default_factory=dict)  # keys lowercased
     body: str = ""
 
 
@@ -135,7 +135,7 @@ def guarded_fetch(url: str, headers: dict[str, str], timeout: int = 30) -> Fetch
                 url=current,
                 status=err.code,
                 content_type=err.headers.get("Content-Type", ""),
-                headers=dict(err.headers.items()),
+                headers={k.lower(): v for k, v in err.headers.items()},
                 body=body,
             )
         except (urllib.error.URLError, OSError, TimeoutError) as exc:
@@ -147,7 +147,7 @@ def guarded_fetch(url: str, headers: dict[str, str], timeout: int = 30) -> Fetch
             url=current,
             status=resp.status,
             content_type=ctype,
-            headers=dict(resp.headers.items()),
+            headers={k.lower(): v for k, v in resp.headers.items()},
             body=raw.decode(charset, errors="replace"),
         )
     raise AddError(f"too many redirects fetching {url}")

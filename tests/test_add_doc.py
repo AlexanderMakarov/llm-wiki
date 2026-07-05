@@ -222,6 +222,40 @@ def test_layer1_markdown_negotiation_short_circuits():
     assert accept.startswith("text/markdown")
 
 
+def test_layer1_token_savings_reported_lowercase_headers():
+    # guarded_fetch lowercases header keys; real servers send Title-Case
+    # (X-Markdown-Tokens), so convert_url's lowercase lookup relies on that
+    # normalization — this test pins the contract end to end.
+    import email.message
+    import io
+    import urllib.response
+
+    msg = email.message.Message()
+    msg["Content-Type"] = "text/markdown; charset=utf-8"
+    msg["X-Markdown-Tokens"] = "3150"
+    msg["X-Original-Tokens"] = "16180"
+    raw = urllib.response.addinfourl(io.BytesIO(b"# MD\n\nbody\n"), msg,
+                                     "https://ex.com/t", 200)
+
+    from llmwiki import add_doc as m
+
+    class _Opener:
+        def open(self, req, timeout=0):
+            return raw
+
+    real_opener = m._OPENER
+    m._OPENER = _Opener()
+    try:
+        result = m.guarded_fetch("https://1.1.1.1/t", {})
+    finally:
+        m._OPENER = real_opener
+    assert result.headers["x-markdown-tokens"] == "3150"
+
+    fetch = _fetcher([result])
+    doc = convert_url("https://1.1.1.1/t", fetch=fetch)
+    assert any("3150" in w for w in doc.warnings)
+
+
 def test_layer2_html_converted():
     fetch = _fetcher([FetchResult(url="https://ex.com/b", status=200,
                                   content_type="text/html", body=HTML_DOC)])
