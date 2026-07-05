@@ -187,3 +187,120 @@ def test_folder_skips_symlinks(tmp_path):
     doc = convert_path(str(inner))
     assert "real" in doc.markdown
     assert "escaped" not in doc.markdown
+
+
+# ── layered URL pipeline ─────────────────────────────────────────────
+
+from llmwiki.add_doc import FetchResult, convert_url
+
+HTML_DOC = ("<html><head><title>Doc - Site</title></head><body><article>"
+            "<h1>Doc Title</h1>" + "<p>real paragraph content here.</p>" * 30
+            + "</article></body></html>")
+
+
+def _fetcher(responses):
+    """Stub fetch: pops canned FetchResults; records requested headers."""
+    calls = []
+
+    def fetch(url, headers):
+        calls.append({"url": url, "headers": dict(headers)})
+        return responses.pop(0)
+
+    fetch.calls = calls
+    return fetch
+
+
+def test_layer1_markdown_negotiation_short_circuits():
+    fetch = _fetcher([FetchResult(url="https://ex.com/a", status=200,
+                                  content_type="text/markdown; charset=utf-8",
+                                  body="# Served MD\n\nbody\n")])
+    doc = convert_url("https://ex.com/a", fetch=fetch)
+    assert doc.markdown.rstrip().endswith("body")
+    assert "# Served MD" in doc.markdown
+    # The first request must ask for markdown (Cloudflare Markdown for Agents).
+    accept = fetch.calls[0]["headers"]["Accept"]
+    assert accept.startswith("text/markdown")
+
+
+def test_layer2_html_converted():
+    fetch = _fetcher([FetchResult(url="https://ex.com/b", status=200,
+                                  content_type="text/html", body=HTML_DOC)])
+    doc = convert_url("https://ex.com/b", fetch=fetch)
+    assert "Doc Title" in doc.markdown
+    assert doc.html_title == "Doc - Site"
+    assert doc.url == "https://ex.com/b"
+    assert doc.source_label == "https://ex.com/b"
+
+
+def test_403_retries_with_browser_ua():
+    fetch = _fetcher([
+        FetchResult(url="https://ex.com/c", status=403, content_type="text/html", body="denied"),
+        FetchResult(url="https://ex.com/c", status=200, content_type="text/html", body=HTML_DOC),
+    ])
+    doc = convert_url("https://ex.com/c", fetch=fetch)
+    assert "Doc Title" in doc.markdown
+    ua1 = fetch.calls[0]["headers"]["User-Agent"]
+    ua2 = fetch.calls[1]["headers"]["User-Agent"]
+    assert "llmwiki" in ua1
+    assert "Mozilla" in ua2
+
+
+def test_challenge_page_escalates_to_renderer():
+    challenge = "<html><body>Just a moment... Enable JavaScript</body></html>"
+    fetch = _fetcher([
+        FetchResult(url="https://ex.com/d", status=200, content_type="text/html", body=challenge),
+        FetchResult(url="https://ex.com/d", status=200, content_type="text/html", body=challenge),
+    ])
+    rendered = {}
+
+    def renderer(url):
+        rendered["url"] = url
+        return HTML_DOC
+
+    doc = convert_url("https://ex.com/d", fetch=fetch, renderer=renderer)
+    assert rendered["url"] == "https://ex.com/d"
+    assert "Doc Title" in doc.markdown
+
+
+def test_thin_page_without_renderer_warns():
+    # A real SPA shell: all the bytes are script, the body has no text.
+    thin = ("<html><head><title>SPA</title><script>" + "x" * 30000
+            + "</script></head><body><div id=root></div></body></html>")
+    fetch = _fetcher([
+        FetchResult(url="https://ex.com/e", status=200, content_type="text/html", body=thin),
+        FetchResult(url="https://ex.com/e", status=200, content_type="text/html", body=thin),
+    ])
+    doc = convert_url("https://ex.com/e", fetch=fetch, renderer=None)
+    assert doc.warnings, "expected a shell-capture warning"
+    assert any("render" in w.lower() or "javascript" in w.lower() for w in doc.warnings)
+
+
+def test_render_never_skips_renderer():
+    challenge = "<html><body>Enable JavaScript to continue</body></html>"
+    fetch = _fetcher([
+        FetchResult(url="https://ex.com/f", status=200, content_type="text/html", body=challenge),
+        FetchResult(url="https://ex.com/f", status=200, content_type="text/html", body=challenge),
+    ])
+
+    def renderer(url):  # pragma: no cover — must not be called
+        raise AssertionError("renderer must not run with render='never'")
+
+    doc = convert_url("https://ex.com/f", fetch=fetch, renderer=renderer, render="never")
+    assert doc.warnings
+
+
+def test_http_error_raises():
+    fetch = _fetcher([FetchResult(url="https://ex.com/g", status=404,
+                                  content_type="text/html", body="nope"),
+                      FetchResult(url="https://ex.com/g", status=404,
+                                  content_type="text/html", body="nope")])
+    with pytest.raises(AddError, match="404"):
+        convert_url("https://ex.com/g", fetch=fetch)
+
+
+def test_plain_text_response_passthrough():
+    fetch = _fetcher([FetchResult(url="https://ex.com/h", status=200,
+                                  content_type="text/plain",
+                                  body="just plain text content, long enough to pass the gate. " * 10)])
+    doc = convert_url("https://ex.com/h", fetch=fetch)
+    assert "just plain text content" in doc.markdown

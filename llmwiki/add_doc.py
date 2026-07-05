@@ -22,6 +22,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urljoin, urlparse
 
+from llmwiki import __version__
+from llmwiki.htmlmd import html_to_markdown
+
 __all__ = [
     "AddError",
     "FetchResult",
@@ -33,6 +36,10 @@ __all__ = [
     "ConvertedDoc",
     "assert_readable_path",
     "convert_path",
+    "AGENT_UA",
+    "BROWSER_UA",
+    "CHALLENGE_MARKERS",
+    "convert_url",
 ]
 
 
@@ -403,3 +410,152 @@ def convert_path(value: str, note: str | None = None) -> ConvertedDoc:
     markdown = _note_header(note) + f"# {real.name}\n\n" + body + "\n"
     return ConvertedDoc(title=real.stem, markdown=markdown, source_label=label,
                         path_name=real.name)
+
+
+# ── layered URL pipeline ─────────────────────────────────────────────
+# Layer 1: content negotiation — Accept: text/markdown unlocks
+#   Cloudflare "Markdown for Agents" / Read the Docs served markdown.
+# Layer 2: static HTML extraction — trafilatura when installed (pullmd's
+#   base extraction library; [add] extra), stdlib htmlmd otherwise.
+# Quality gate: thin/challenge output ⇒ the page is JS-rendered or
+#   bot-walled ⇒ Layer 3.
+# Layer 3: headless render via playwright when importable ([e2e] extra).
+
+AGENT_UA = f"llmwiki-add/{__version__} (+https://github.com/AlexanderMakarov/llm-wiki)"
+BROWSER_UA = ("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+              "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36")
+CHALLENGE_MARKERS = ("just a moment", "enable javascript", "checking your browser",
+                     "attention required", "verify you are human")
+
+_MIN_TEXT_CHARS = 200
+
+
+def _looks_challenged(text: str) -> bool:
+    low = text.lower()
+    return any(m in low for m in CHALLENGE_MARKERS)
+
+
+def _quality_ok(text: str, html: str) -> bool:
+    if _looks_challenged(text):
+        return False
+    stripped = text.strip()
+    if len(stripped) < _MIN_TEXT_CHARS:
+        return False
+    if len(html) > 20_000 and len(stripped) < len(html) // 100:
+        return False
+    return True
+
+
+def _extract_html(html: str) -> tuple[str, str]:
+    """(title, markdown) via trafilatura when available, stdlib otherwise."""
+    try:
+        import trafilatura
+    except ImportError:
+        return html_to_markdown(html)
+    md = trafilatura.extract(html, output_format="markdown",
+                             include_links=True, include_formatting=True)
+    title = ""
+    try:
+        meta = trafilatura.extract_metadata(html)
+        title = (meta.title or "") if meta else ""
+    except Exception:  # noqa: BLE001 — metadata is best-effort
+        pass
+    if not md:
+        return html_to_markdown(html)
+    return title, md
+
+
+def _default_renderer() -> object | None:
+    """Playwright-backed renderer, or None when playwright is absent."""
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        return None
+
+    def render(url: str) -> str:
+        with sync_playwright() as p:
+            browser = p.chromium.launch()
+            try:
+                page = browser.new_page(user_agent=BROWSER_UA)
+                page.goto(url, wait_until="networkidle", timeout=60_000)
+                return page.content()
+            finally:
+                browser.close()
+
+    return render
+
+
+_RENDER_HINT = ("content may be a JS shell — install the render layer: "
+                "pip install 'llm-notebook[e2e]' && playwright install chromium, "
+                "or re-run with --render")
+
+
+def convert_url(
+    url: str,
+    note: str | None = None,
+    *,
+    fetch=None,
+    renderer=None,
+    render: str = "auto",
+) -> ConvertedDoc:
+    """Convert a URL to one markdown document via the layered pipeline."""
+    do_fetch = fetch or guarded_fetch
+    headers = {"Accept": "text/markdown, text/html;q=0.9, */*;q=0.5",
+               "User-Agent": AGENT_UA}
+    resp = do_fetch(url, headers)
+
+    # Anti-bot posture: honest agent headers first (unlocks markdown
+    # negotiation); one retry with a browser UA on 403 / challenge body.
+    if resp.status == 403 or (resp.status == 200 and _looks_challenged(resp.body)):
+        headers = dict(headers)
+        headers["User-Agent"] = BROWSER_UA
+        resp = do_fetch(url, headers)
+
+    if resp.status != 200:
+        raise AddError(f"fetch {url} failed: HTTP {resp.status}")
+
+    ctype = resp.content_type.lower()
+    header = f"> Source: <{url}>\n\n"
+    warnings: list[str] = []
+
+    if ctype.startswith("text/markdown"):
+        saved = resp.headers.get("x-markdown-tokens")
+        if saved:
+            warnings.append(f"server-side markdown: ~{saved} tokens "
+                            f"(original ~{resp.headers.get('x-original-tokens', '?')})")
+        body = resp.body.strip()
+        return ConvertedDoc(title="", markdown=_note_header(note) + header + body + "\n",
+                            source_label=url, url=url,
+                            warnings=warnings)
+
+    is_html = "html" in ctype or _re.match(r"^\s*<(!doctype|html)", resp.body, _re.I)
+    if not is_html:
+        body = resp.body.strip()
+        return ConvertedDoc(title="", markdown=_note_header(note) + header + body + "\n",
+                            source_label=url, url=url)
+
+    html = resp.body
+    title, md = _extract_html(html)
+
+    needs_render = render == "force" or (render == "auto" and not _quality_ok(md, html))
+    if needs_render and render != "never":
+        active_renderer = renderer if renderer is not None else _default_renderer()
+        if active_renderer is not None:
+            try:
+                rendered_html = active_renderer(url)
+            except Exception:  # noqa: BLE001 — a broken renderer degrades to a warning, not a crash
+                active_renderer = None
+            else:
+                r_title, r_md = _extract_html(rendered_html)
+                if len(r_md.strip()) > len(md.strip()):
+                    title, md = (r_title or title), r_md
+                if not _quality_ok(md, rendered_html):
+                    warnings.append(_RENDER_HINT)
+        if active_renderer is None:
+            warnings.append(_RENDER_HINT)
+    elif not _quality_ok(md, html):
+        warnings.append(_RENDER_HINT)
+
+    return ConvertedDoc(title="", markdown=_note_header(note) + header + md.strip() + "\n",
+                        source_label=url, url=url, html_title=title or None,
+                        warnings=warnings)
