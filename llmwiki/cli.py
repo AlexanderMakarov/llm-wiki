@@ -6,6 +6,7 @@ Usage:
 Subcommands:
     init              Scaffold raw/, wiki/, site/ directories
     sync              Convert new .jsonl sessions to markdown
+    add               Add documents: URL, file, or folder → raw/docs/ + synthesize + build
     build             Compile static HTML site from raw/ + wiki/
     serve             Start local HTTP server
     adapters          List available session-store adapters
@@ -575,6 +576,111 @@ def cmd_synthesize(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_add(args: argparse.Namespace) -> int:
+    """Add documents to the wiki: convert to Markdown, land under
+    raw/docs/ (kbbuilder-compatible layout), then batch synthesize +
+    rebuild the site (issue #16).
+
+    Sources may be URLs, files, or folders, freely mixed. Conversion
+    and writing happen per source; synthesis and build run ONCE for
+    the whole batch. --no-synthesize / --no-build opt out.
+    """
+    _apply_default_vault(args)
+    from llmwiki.add_doc import add_sources
+
+    if args.title and len(args.sources) > 1:
+        print("error: --title needs a single source (got "
+              f"{len(args.sources)})", file=sys.stderr)
+        return 2
+
+    docs_dir = REPO_ROOT / "raw" / "docs"
+    vault_root = None
+    if getattr(args, "vault", None):
+        from llmwiki.vault import resolve_vault
+        try:
+            vault = resolve_vault(args.vault)
+        except (FileNotFoundError, NotADirectoryError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        vault_root = vault.root
+        docs_dir = vault_root / "raw" / "docs"
+
+    render = "auto"
+    if args.render:
+        render = "force"
+    elif args.no_render:
+        render = "never"
+
+    result = add_sources(
+        list(args.sources), docs_dir,
+        title=args.title, project=args.project, tags=tuple(args.tag or ()),
+        note=args.note, render=render, dry_run=args.dry_run,
+    )
+
+    for title in result["titles"]:
+        print(f"  + {title}")
+    for w in result["warnings"]:
+        print(f"  ~ {w}")
+    for e in result["errors"]:
+        print(f"  ! {e}", file=sys.stderr)
+    if args.dry_run:
+        return 2 if result["errors"] else 0
+    print(f"  wrote {len(result['written'])} file(s) under {docs_dir}")
+
+    failed = bool(result["errors"])
+    if not result["written"]:
+        return 2 if failed else 0
+
+    # Post-steps run once for the whole batch. Failures here never
+    # un-land written docs (kbbuilder add-doc precedent): the next
+    # sync/build picks them up.
+    if not args.no_synthesize:
+        from llmwiki.config_schedule import _load_sessions_config
+        from llmwiki.synth.pipeline import resolve_backend, synthesize_new_sessions
+        backend = resolve_backend(_load_sessions_config())
+        print(f"Synthesizing with backend: {backend.name}")
+        raw_dir = wiki_sources_dir = state_file = None
+        if vault_root:
+            raw_dir = vault_root / "raw" / "sessions"
+            wiki_sources_dir = vault_root / "wiki" / "sources"
+            state_file = vault_root / ".llmwiki-synth-state.json"
+        summary = synthesize_new_sessions(
+            backend=backend, raw_dir=raw_dir,
+            wiki_sources_dir=wiki_sources_dir, state_file=state_file,
+        )
+        print(f"  synthesized {summary['synthesized']}, skipped {summary['skipped']}")
+        if summary["errors"]:
+            for err in summary["errors"]:
+                print(f"  ! {err}", file=sys.stderr)
+            failed = True
+
+    if not args.no_build:
+        from llmwiki.build import build_site, RAW_SESSIONS, RAW_DIR
+        raw_sessions, raw_dir_b = RAW_SESSIONS, RAW_DIR
+        wiki_dir = REPO_ROOT / "wiki"
+        out_dir = REPO_ROOT / "site"
+        if vault_root:
+            raw_dir_b = vault_root / "raw"
+            raw_sessions = raw_dir_b / "sessions"
+            wiki_dir = vault_root / "wiki"
+            out_dir = vault_root / "site"
+        code = build_site(out_dir=out_dir, raw_sessions=raw_sessions,
+                          raw_dir=raw_dir_b, wiki_dir=wiki_dir)
+        if code:
+            failed = True
+
+    # Observability: same grep-parseable format as sync/synthesize.
+    from datetime import date as _date
+    log_path = (vault_root or REPO_ROOT) / "wiki" / "log.md"
+    if log_path.parent.is_dir():
+        day = _date.today().isoformat()
+        with log_path.open("a", encoding="utf-8") as fh:
+            for t in result["titles"]:
+                fh.write(f"\n## [{day}] add | {t}\n")
+
+    return 2 if failed else 0
+
+
 # ─── #316 agent-delegate CLI helpers ─────────────────────────────────
 # _synthesize_list_pending + _synthesize_complete moved to
 # llmwiki/synth/cli_helpers.py and re-exported at top of file (#691).
@@ -705,6 +811,9 @@ def _add_vault_arg(parser: argparse.ArgumentParser, *, role: str) -> None:
             "all": "(#383) With --with-synth: run synthesize against the "
                    "vault's raw/ + wiki/sources/ (same semantics as "
                    "`llmwiki synthesize --vault`).",
+            "add": "(#16) Vault-overlay mode: write the converted document "
+                   "under the vault's raw/docs/ and run synthesize/build "
+                   "against the vault.",
         }[role],
     )
 
@@ -961,6 +1070,35 @@ def build_parser() -> argparse.ArgumentParser:
     _add_vault_arg(syn, role="synthesize")
     syn.set_defaults(func=cmd_synthesize)
 
+    # add — ingest a document into the wiki (#16)
+    add_p = sub.add_parser(
+        "add",
+        help="Add documents to the wiki: URL, file, or folder → raw/docs/ + synthesize + build (#16)",
+    )
+    add_p.add_argument("sources", nargs="+", metavar="SOURCE",
+                       help="URL (http/https), file, or folder. Repeatable.")
+    add_p.add_argument("--title", default=None,
+                       help="Override title derivation (single source only)")
+    add_p.add_argument("--project", default=None,
+                       help="Group under raw/docs/<PROJECT>/ instead of the doc's own slug")
+    add_p.add_argument("--tag", action="append", default=None, metavar="TAG",
+                       help="Extra frontmatter tag (repeatable)")
+    add_p.add_argument("--note", default=None,
+                       help="Blockquote note prepended to the document body")
+    add_p.add_argument("--no-synthesize", action="store_true",
+                       help="Skip the post-add synthesis pass")
+    add_p.add_argument("--no-build", action="store_true",
+                       help="Skip the post-add site rebuild")
+    render_group = add_p.add_mutually_exclusive_group()
+    render_group.add_argument("--render", action="store_true",
+                              help="Force the headless-browser layer for URLs (needs playwright)")
+    render_group.add_argument("--no-render", action="store_true",
+                              help="Never use the headless-browser layer")
+    add_p.add_argument("--dry-run", action="store_true",
+                       help="Convert and report, write nothing, run nothing")
+    _add_vault_arg(add_p, role="add")
+    add_p.set_defaults(func=cmd_add)
+
     # consolidate-topics — one-time LLM dedup + description pass (#54)
     cons = sub.add_parser(
         "consolidate-topics",
@@ -1038,6 +1176,12 @@ def main(argv: list[str] | None = None) -> int:
         parser.print_help()
         return 0
     return args.func(args)
+
+
+def main_add(argv: list[str] | None = None) -> int:
+    """Console entry for `llm-wiki-add` — `llmwiki add` with less typing."""
+    import sys as _sys
+    return main(["add", *(_sys.argv[1:] if argv is None else argv)])
 
 
 if __name__ == "__main__":

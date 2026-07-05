@@ -238,6 +238,7 @@ Agent workflows (`/wiki-sync`, `/wiki-ingest`, `/wiki-query`) are defined in [CL
 ```bash
 llmwiki init
 llmwiki sync [--adapter NAME] [--vault PATH]
+llmwiki add <url|file|folder>... [--vault PATH] [--no-synthesize] [--no-build]
 llmwiki build [--vault PATH]
 llmwiki serve [--vault PATH]
 llmwiki synthesize [--vault PATH]

@@ -58,6 +58,15 @@ highlight = []
 # Simplification sweep removed the PDF adapter; the [pdf] extra is
 # dropped here too. Don't reintroduce — the user pruned it deliberately.
 graph = ["graphifyy>=0.4.20"]
+# `llmwiki add` quality upgrades (#16): trafilatura is pullmd's base
+# extraction library (static HTML → markdown); markitdown converts
+# PDF/docx/pptx/xlsx/epub. The stdlib fallback keeps a bare install
+# working without either. (This is NOT the old [pdf] extra — that one
+# stays removed.)
+add = [
+    "trafilatura>=2.0.0",
+    "markitdown>=0.1.2",
+]
 dev = [
     "pytest>=8.4.2",
     "ruff>=0.15.11",
@@ -91,6 +100,7 @@ Releases = "https://github.com/Pratiyush/llm-wiki/releases"
 
 [project.scripts]
 llmwiki = "llmwiki.cli:main"
+llm-wiki-add = "llmwiki.cli:main_add"
 
 [tool.setuptools.packages.find]
 include = ["llmwiki*"]
