@@ -15,7 +15,13 @@ Versions below 1.0 are pre-production — API and file formats may change.
   trafilatura/stdlib extraction → optional playwright render), writes
   `raw/docs/<slug>/<slug>[-NN].md` in the kbbuilder-compatible chunked layout,
   then batch-synthesizes and rebuilds the site. New `llm-wiki-add` console script
-  and `[add]` optional extra (`trafilatura`, `markitdown`).
+  and `[add]` optional extra (`trafilatura`, `markitdown[pdf,docx,pptx,xlsx]`).
+- **Vault pipeline lock** (#16 field report): `sync`, `build`, `add`, and `all`
+  now serialize on `.llmwiki-pipeline.lock` at the vault (or repo) root, so a
+  hook-triggered sync/build can no longer race a concurrent `llmwiki add` into
+  a "could not reset site dir" crash. Stale locks (dead pid or >30 min) are
+  broken automatically; an unavailable agent-delegate backend during
+  `llmwiki add` now prints "synthesis deferred" instead of a false error.
 - **`llmwiki all --with-synth`** (#383) — opt-in chain that runs `synthesize` before `build → graph → export → lint`, so CLI users can fill `wiki/sources/` from `raw/` in one command without relying on agent slash skills. Companion flags: `--synth-force` (pass `--force` to synthesize), `--vault` (vault-overlay synthesize when using `--with-synth`).
 - **`llmwiki sync --status` synthesis hint** (#383) — reports the configured `synthesis.backend` and points to `llmwiki synthesize` / `llmwiki all --with-synth` when `wiki/sources/` may stay empty after sync.
 

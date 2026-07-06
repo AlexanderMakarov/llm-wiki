@@ -66,7 +66,17 @@ def cmd_all(args: argparse.Namespace) -> int:
     Thin shim — the implementation lives in ``llmwiki.pipeline`` (#691).
     """
     _apply_default_vault(args)
-    return _run_pipeline(args)
+    from llmwiki.pipeline_lock import pipeline_lock
+    lock_root = REPO_ROOT
+    if getattr(args, "vault", None):
+        from llmwiki.vault import resolve_vault
+        try:
+            lock_root = resolve_vault(args.vault).root
+        except (FileNotFoundError, NotADirectoryError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+    with pipeline_lock(lock_root):
+        return _run_pipeline(args)
 
 
 def cmd_init(args: argparse.Namespace) -> int:
@@ -165,52 +175,57 @@ def cmd_sync(args: argparse.Namespace) -> int:
         out_dir = vault.root / "raw" / "sessions"
         state_file = vault.root / ".llmwiki-state.json"
 
-    rc = convert_all(
-        adapters=args.adapter,
-        out_dir=out_dir,
-        state_file=state_file,
-        since=args.since,
-        project=args.project,
-        include_current=args.include_current,
-        force=args.force,
-        fail_on_errors=getattr(args, "fail_on_errors", False),
-    )
+    # PR #19 field report: two llmwiki processes on one vault corrupt each
+    # other's site resets — serialize the mutating pipeline on a vault lock.
+    from llmwiki.pipeline_lock import pipeline_lock
+    lock_root = vault.root if vault_path else REPO_ROOT
+    with pipeline_lock(lock_root):
+        rc = convert_all(
+            adapters=args.adapter,
+            out_dir=out_dir,
+            state_file=state_file,
+            since=args.since,
+            project=args.project,
+            include_current=args.include_current,
+            force=args.force,
+            fail_on_errors=getattr(args, "fail_on_errors", False),
+        )
 
-    # v1.0 (#157): auto-build and auto-lint after sync.
-    # --no-build and --no-lint let users opt out.
-    # #470: when --vault was given, point the auto-build at the vault's
-    # site/ tree too — otherwise the build silently writes to the
-    # repo's site/ and the user's vault stays empty.
-    if rc == 0:
-        schedule = _load_schedule_config()
-        site_root = (vault.root / "site") if vault_path else (REPO_ROOT / "site")
-        if args.auto_build and _should_run_after_sync(schedule.get("build", "on-sync")):
-            print("  auto-build: regenerating site/...")
-            from llmwiki.build import build_site, RAW_SESSIONS, RAW_DIR
-            # #54 vault-overlay: read the freshly-synced sessions from the
-            # vault, not the repo's empty raw/ (which makes auto-build fail
-            # with "RAW_SESSIONS does not exist" right after a vault sync).
-            raw_sessions = (vault.root / "raw" / "sessions") if vault_path else RAW_SESSIONS
-            raw_dir = (vault.root / "raw") if vault_path else RAW_DIR
-            # #54: graph the vault's wiki/ (not the repo's demo wiki).
-            wiki_dir = (vault.root / "wiki") if vault_path else (REPO_ROOT / "wiki")
-            # #414: sync has explicit user opt-in to mutate wiki/, so it's
-            # the right place to seed project stubs.
-            build_site(out_dir=site_root, seed_project_stubs=True,
-                       raw_sessions=raw_sessions, raw_dir=raw_dir,
-                       wiki_dir=wiki_dir)
-        if args.auto_lint and _should_run_after_sync(schedule.get("lint", "manual")):
-            print("  auto-lint: running wiki lint...")
-            from llmwiki.lint import load_pages, run_all, summarize
-            # #470: lint the vault's wiki/, not the repo's, when in
-            # vault-overlay mode.
-            wiki_dir = (vault.root / "wiki") if vault_path else None
-            pages = load_pages(wiki_dir) if wiki_dir else load_pages()
-            issues = run_all(pages)
-            summary = summarize(issues)
-            print(f"  lint: {sum(summary.values())} issues "
-                  f"({summary.get('error', 0)} errors, "
-                  f"{summary.get('warning', 0)} warnings)")
+        # v1.0 (#157): auto-build and auto-lint after sync.
+        # --no-build and --no-lint let users opt out.
+        # #470: when --vault was given, point the auto-build at the vault's
+        # site/ tree too — otherwise the build silently writes to the
+        # repo's site/ and the user's vault stays empty.
+        if rc == 0:
+            schedule = _load_schedule_config()
+            site_root = (vault.root / "site") if vault_path else (REPO_ROOT / "site")
+            if args.auto_build and _should_run_after_sync(schedule.get("build", "on-sync")):
+                print("  auto-build: regenerating site/...")
+                from llmwiki.build import build_site, RAW_SESSIONS, RAW_DIR
+                # #54 vault-overlay: read the freshly-synced sessions from the
+                # vault, not the repo's empty raw/ (which makes auto-build fail
+                # with "RAW_SESSIONS does not exist" right after a vault sync).
+                raw_sessions = (vault.root / "raw" / "sessions") if vault_path else RAW_SESSIONS
+                raw_dir = (vault.root / "raw") if vault_path else RAW_DIR
+                # #54: graph the vault's wiki/ (not the repo's demo wiki).
+                wiki_dir = (vault.root / "wiki") if vault_path else (REPO_ROOT / "wiki")
+                # #414: sync has explicit user opt-in to mutate wiki/, so it's
+                # the right place to seed project stubs.
+                build_site(out_dir=site_root, seed_project_stubs=True,
+                           raw_sessions=raw_sessions, raw_dir=raw_dir,
+                           wiki_dir=wiki_dir)
+            if args.auto_lint and _should_run_after_sync(schedule.get("lint", "manual")):
+                print("  auto-lint: running wiki lint...")
+                from llmwiki.lint import load_pages, run_all, summarize
+                # #470: lint the vault's wiki/, not the repo's, when in
+                # vault-overlay mode.
+                wiki_dir = (vault.root / "wiki") if vault_path else None
+                pages = load_pages(wiki_dir) if wiki_dir else load_pages()
+                issues = run_all(pages)
+                summary = summarize(issues)
+                print(f"  lint: {sum(summary.values())} issues "
+                      f"({summary.get('error', 0)} errors, "
+                      f"{summary.get('warning', 0)} warnings)")
     return rc
 
 
@@ -228,6 +243,7 @@ def cmd_build(args: argparse.Namespace) -> int:
     from llmwiki.build import RAW_SESSIONS, RAW_DIR
     raw_sessions, raw_dir, out_dir = RAW_SESSIONS, RAW_DIR, args.out
     wiki_dir = REPO_ROOT / "wiki"
+    lock_root = REPO_ROOT
     if getattr(args, "vault", None):
         from llmwiki.vault import describe_vault, resolve_vault
         try:
@@ -242,19 +258,22 @@ def cmd_build(args: argparse.Namespace) -> int:
         raw_dir = vault.root / "raw"
         raw_sessions = raw_dir / "sessions"
         wiki_dir = vault.root / "wiki"
+        lock_root = vault.root
         if args.out == REPO_ROOT / "site":
             out_dir = vault.root / "site"
 
-    return build_site(
-        out_dir=out_dir,
-        synthesize=args.synthesize,
-        claude_path=args.claude,
-        search_mode=args.search_mode,
-        seed_project_stubs=getattr(args, "seed_project_stubs", False),
-        raw_sessions=raw_sessions,
-        raw_dir=raw_dir,
-        wiki_dir=wiki_dir,
-    )
+    from llmwiki.pipeline_lock import pipeline_lock
+    with pipeline_lock(lock_root):
+        return build_site(
+            out_dir=out_dir,
+            synthesize=args.synthesize,
+            claude_path=args.claude,
+            search_mode=args.search_mode,
+            seed_project_stubs=getattr(args, "seed_project_stubs", False),
+            raw_sessions=raw_sessions,
+            raw_dir=raw_dir,
+            wiki_dir=wiki_dir,
+        )
 
 
 def cmd_serve(args: argparse.Namespace) -> int:
@@ -586,7 +605,6 @@ def cmd_add(args: argparse.Namespace) -> int:
     the whole batch. --no-synthesize / --no-build opt out.
     """
     _apply_default_vault(args)
-    from llmwiki.add_doc import add_sources
 
     if args.title and len(args.sources) > 1:
         print("error: --title needs a single source (got "
@@ -610,6 +628,25 @@ def cmd_add(args: argparse.Namespace) -> int:
         render = "force"
     elif args.no_render:
         render = "never"
+
+    # PR #19 field report: a concurrent sync/build on the same vault raced
+    # this command's post-add build and died mid-site-reset. Serialize all
+    # mutating pipeline entry points on the vault lock; dry-run writes
+    # nothing, so it stays lock-free.
+    from contextlib import ExitStack
+
+    from llmwiki.pipeline_lock import pipeline_lock
+
+    with ExitStack() as stack:
+        if not args.dry_run:
+            stack.enter_context(pipeline_lock(vault_root or REPO_ROOT))
+        return _cmd_add_locked(args, docs_dir, vault_root, render)
+
+
+def _cmd_add_locked(args: argparse.Namespace, docs_dir: Path,
+                    vault_root: Path | None, render: str) -> int:
+    """Body of cmd_add that runs under the pipeline lock (except dry-run)."""
+    from llmwiki.add_doc import add_sources
 
     result = add_sources(
         list(args.sources), docs_dir,
@@ -636,23 +673,31 @@ def cmd_add(args: argparse.Namespace) -> int:
     # sync/build picks them up.
     if not args.no_synthesize:
         from llmwiki.config_schedule import _load_sessions_config
+        from llmwiki.synth.agent_delegate import AgentDelegateSynthesizer
         from llmwiki.synth.pipeline import resolve_backend, synthesize_new_sessions
         backend = resolve_backend(_load_sessions_config())
-        print(f"Synthesizing with backend: {backend.name}")
-        raw_dir = wiki_sources_dir = state_file = None
-        if vault_root:
-            raw_dir = vault_root / "raw" / "sessions"
-            wiki_sources_dir = vault_root / "wiki" / "sources"
-            state_file = vault_root / ".llmwiki-synth-state.json"
-        summary = synthesize_new_sessions(
-            backend=backend, raw_dir=raw_dir,
-            wiki_sources_dir=wiki_sources_dir, state_file=state_file,
-        )
-        print(f"  synthesized {summary['synthesized']}, skipped {summary['skipped']}")
-        if summary["errors"]:
-            for err in summary["errors"]:
-                print(f"  ! {err}", file=sys.stderr)
-            failed = True
+        if isinstance(backend, AgentDelegateSynthesizer) and not backend.is_available():
+            # Expected outside an agent runtime — the delegate defers to the
+            # next in-session synthesize pass. Not a failure (PR #19 field
+            # report: the old "! Backend ... not available" read as an error).
+            print("  synthesis deferred — no agent runtime detected; "
+                  "docs will be synthesized on the next agent-mode run")
+        else:
+            print(f"Synthesizing with backend: {backend.name}")
+            raw_dir = wiki_sources_dir = state_file = None
+            if vault_root:
+                raw_dir = vault_root / "raw" / "sessions"
+                wiki_sources_dir = vault_root / "wiki" / "sources"
+                state_file = vault_root / ".llmwiki-synth-state.json"
+            summary = synthesize_new_sessions(
+                backend=backend, raw_dir=raw_dir,
+                wiki_sources_dir=wiki_sources_dir, state_file=state_file,
+            )
+            print(f"  synthesized {summary['synthesized']}, skipped {summary['skipped']}")
+            if summary["errors"]:
+                for err in summary["errors"]:
+                    print(f"  ! {err}", file=sys.stderr)
+                failed = True
 
     if not args.no_build:
         from llmwiki.build import RAW_DIR, RAW_SESSIONS, build_site

@@ -60,12 +60,15 @@ highlight = []
 graph = ["graphifyy>=0.4.20"]
 # `llmwiki add` quality upgrades (#16): trafilatura is pullmd's base
 # extraction library (static HTML → markdown); markitdown converts
-# PDF/docx/pptx/xlsx/epub. The stdlib fallback keeps a bare install
+# PDF/docx/pptx/xlsx/epub. markitdown gates each format converter behind
+# its own extra, so a bare `markitdown` cannot read the formats this
+# extra advertises — keep the bracket list in sync with _MARKITDOWN_EXT
+# in llmwiki/add_doc.py. The stdlib fallback keeps a bare install
 # working without either. (This is NOT the old [pdf] extra — that one
 # stays removed.)
 add = [
     "trafilatura>=2.0.0",
-    "markitdown>=0.1.2",
+    "markitdown[pdf,docx,pptx,xlsx]>=0.1.2",
 ]
 dev = [
     "pytest>=8.4.2",
