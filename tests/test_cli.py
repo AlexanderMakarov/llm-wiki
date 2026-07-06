@@ -69,7 +69,8 @@ def test_add_requires_source():
 
 def test_add_title_with_multiple_sources_rejected(tmp_path):
     a, b = tmp_path / "a.md", tmp_path / "b.md"
-    a.write_text("# A\n"); b.write_text("# B\n")
+    a.write_text("# A\n")
+    b.write_text("# B\n")
     r = subprocess.run(
         [sys.executable, "-m", "llmwiki", "add", "--title", "T", "--dry-run",
          str(a), str(b)],

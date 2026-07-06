@@ -655,7 +655,7 @@ def cmd_add(args: argparse.Namespace) -> int:
             failed = True
 
     if not args.no_build:
-        from llmwiki.build import build_site, RAW_SESSIONS, RAW_DIR
+        from llmwiki.build import RAW_DIR, RAW_SESSIONS, build_site
         raw_sessions, raw_dir_b = RAW_SESSIONS, RAW_DIR
         wiki_dir = REPO_ROOT / "wiki"
         out_dir = REPO_ROOT / "site"
