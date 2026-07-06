@@ -309,6 +309,20 @@ def test_thin_page_without_renderer_warns():
     assert any("render" in w.lower() or "javascript" in w.lower() for w in doc.warnings)
 
 
+def test_renderer_exception_text_surfaces_in_warning():
+    challenge = "<html><body>Just a moment... Enable JavaScript</body></html>"
+    fetch = _fetcher([
+        FetchResult(url="https://ex.com/z", status=200, content_type="text/html", body=challenge),
+        FetchResult(url="https://ex.com/z", status=200, content_type="text/html", body=challenge),
+    ])
+
+    def renderer(url):
+        raise RuntimeError("boom: no chromium binary")
+
+    doc = convert_url("https://ex.com/z", fetch=fetch, renderer=renderer)
+    assert any("renderer failed" in w and "boom: no chromium binary" in w for w in doc.warnings)
+
+
 def test_render_never_skips_renderer():
     challenge = "<html><body>Enable JavaScript to continue</body></html>"
     fetch = _fetcher([
@@ -414,6 +428,75 @@ def test_write_explicit_project_dedupe_across_chunk_shapes(tmp_path):
                   today="2026-07-04", chunk_max_chars=1000)
     p4 = write_raw_doc(_doc(), tmp_path, project="other", today="2026-07-04")
     assert p4 == [tmp_path / "other" / "doc-title-2.md"]
+
+
+@pytest.mark.parametrize("bad_project", ["../..", "†", "...", "///"])
+def test_write_raw_doc_rejects_unslugifiable_project(tmp_path, bad_project):
+    # A --project that slugifies to '' must never fall back to the raw
+    # string as a directory name: that can escape docs_dir ("../..") or
+    # write a non-ASCII dirname the site's _SAFE_SEG_RE can't route to.
+    docs_dir = tmp_path / "docs"
+    parent_before = set(tmp_path.parent.iterdir())
+    with pytest.raises(AddError, match=r"--project"):
+        write_raw_doc(_doc(), docs_dir, project=bad_project, today="2026-07-04")
+    # Nothing landed inside docs_dir, and nothing escaped above tmp_path either.
+    assert not docs_dir.exists()
+    assert set(tmp_path.parent.iterdir()) == parent_before
+
+
+def test_add_sources_rejects_unslugifiable_project_real(tmp_path):
+    src = tmp_path / "in.md"
+    src.write_text("# In File\n\ncontent\n")
+    docs = tmp_path / "docs"
+    parent_before = set(tmp_path.parent.iterdir())
+    result = add_sources([str(src)], docs, project="../..", today="2026-07-04")
+    assert result["written"] == []
+    assert result["titles"] == []
+    assert len(result["errors"]) == 1
+    assert "--project" in result["errors"][0]
+    # Nothing written inside docs_dir, and nothing escaped above tmp_path.
+    assert not docs.exists()
+    assert set(tmp_path.parent.iterdir()) == parent_before
+
+
+def test_add_sources_rejects_unslugifiable_project_dry_run(tmp_path):
+    src = tmp_path / "in.md"
+    src.write_text("# In File\n\ncontent\n")
+    docs = tmp_path / "docs"
+    result = add_sources([str(src)], docs, project="../..", dry_run=True, today="2026-07-04")
+    assert result["titles"] == []
+    assert len(result["errors"]) == 1
+    assert "--project" in result["errors"][0]
+    assert not docs.exists()
+
+
+def test_dry_run_path_prediction_matches_real_write_collision(tmp_path):
+    docs = tmp_path / "docs"
+    # Seed docs_dir with an existing doc-title dir, as a prior real write would.
+    write_raw_doc(_doc(), docs, today="2026-07-04")
+    assert (docs / "doc-title" / "doc-title.md").exists()
+
+    src = tmp_path / "in.md"
+    src.write_text("# Doc Title\n\nbody\n")
+    result = add_sources([str(src)], docs, dry_run=True, today="2026-07-04")
+    assert result["errors"] == []
+    assert any("doc-title-2" in w for w in result["warnings"])
+    # No further collision must be silently mispredicted as doc-title.
+    assert not any(w.endswith("doc-title/doc-title.md") for w in result["warnings"])
+
+
+def test_add_sources_titles_recorded_only_after_successful_write(tmp_path):
+    # A whitespace-only .md converts fine but fails at write time
+    # ("nothing to write" — empty document). titles must stay empty:
+    # it must not be recorded before the write that actually failed.
+    src = tmp_path / "blank.md"
+    src.write_text("   \n\n  \n")
+    docs = tmp_path / "docs"
+    result = add_sources([str(src)], docs, today="2026-07-04")
+    assert result["titles"] == []
+    assert result["written"] == []
+    assert len(result["errors"]) == 1
+    assert "empty document" in result["errors"][0]
 
 
 def test_write_extra_tags(tmp_path):

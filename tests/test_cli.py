@@ -47,11 +47,28 @@ def test_no_args_prints_help():
     assert "usage" in r.stdout.lower() or "llmwiki" in r.stdout
 
 
+def _scratch_vault(tmp_path):
+    """Minimal existing directory to pass as --vault.
+
+    These tests run `llmwiki add` in a subprocess, so monkeypatching
+    can't stop `_apply_default_vault` from reading this machine's
+    (gitignored) dev config.json — which may set `vault.default_path`
+    to something that doesn't resolve here (or resolves to a real vault
+    we don't want to touch). Passing an explicit --vault short-circuits
+    that lookup (`_apply_default_vault` only fills `args.vault` when it
+    is still None) and keeps the test hermetic on any machine.
+    """
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    return vault
+
+
 def test_add_dry_run_local_md(tmp_path):
     src = tmp_path / "sample.md"
     src.write_text("# Sample Doc\n\nsome content\n")
     r = subprocess.run(
-        [sys.executable, "-m", "llmwiki", "add", "--dry-run", str(src)],
+        [sys.executable, "-m", "llmwiki", "add", "--dry-run",
+         "--vault", str(_scratch_vault(tmp_path)), str(src)],
         capture_output=True, text=True,
     )
     assert r.returncode == 0, r.stderr
@@ -73,7 +90,7 @@ def test_add_title_with_multiple_sources_rejected(tmp_path):
     b.write_text("# B\n")
     r = subprocess.run(
         [sys.executable, "-m", "llmwiki", "add", "--title", "T", "--dry-run",
-         str(a), str(b)],
+         "--vault", str(_scratch_vault(tmp_path)), str(a), str(b)],
         capture_output=True, text=True,
     )
     assert r.returncode == 2
@@ -86,7 +103,7 @@ def test_llm_wiki_add_entry_point(tmp_path):
     r = subprocess.run(
         [sys.executable, "-c",
          "import sys; from llmwiki.cli import main_add; sys.exit(main_add())",
-         "--dry-run", str(src)],
+         "--dry-run", "--vault", str(_scratch_vault(tmp_path)), str(src)],
         capture_output=True, text=True,
     )
     assert r.returncode == 0, r.stderr

@@ -43,6 +43,7 @@ __all__ = [
     "BROWSER_UA",
     "CHALLENGE_MARKERS",
     "convert_url",
+    "resolve_write_target",
     "write_raw_doc",
     "add_sources",
 ]
@@ -545,19 +546,21 @@ def convert_url(
     needs_render = render == "force" or (render == "auto" and not _quality_ok(md, html))
     if needs_render and render != "never":
         active_renderer = renderer if renderer is not None else _default_renderer()
+        render_hint = _RENDER_HINT
         if active_renderer is not None:
             try:
                 rendered_html = active_renderer(url)
-            except Exception:  # noqa: BLE001 — a broken renderer degrades to a warning, not a crash
+            except Exception as exc:  # noqa: BLE001 — a broken renderer degrades to a warning, not a crash
                 active_renderer = None
+                render_hint = f"renderer failed: {exc} — {_RENDER_HINT}"
             else:
                 r_title, r_md = _extract_html(rendered_html)
                 if len(r_md.strip()) > len(md.strip()):
                     title, md = (r_title or title), r_md
                 if not _quality_ok(md, rendered_html):
-                    warnings.append(_RENDER_HINT)
+                    warnings.append(render_hint)
         if active_renderer is None:
-            warnings.append(_RENDER_HINT)
+            warnings.append(render_hint)
     elif not _quality_ok(md, html):
         warnings.append(_RENDER_HINT)
 
@@ -594,6 +597,49 @@ def _frontmatter(title: str, slug: str, project: str, tags: tuple[str, ...],
     )
 
 
+def _slug_taken(target_dir: Path, s: str) -> bool:
+    # Shape-independent probe: an earlier doc with the same slug may be a
+    # single file (<s>.md) or chunked (<s>-NN.md) — the new doc's own
+    # chunk count says nothing about what's already on disk.
+    if (target_dir / f"{s}.md").exists():
+        return True
+    return any(target_dir.glob(f"{s}-[0-9][0-9].md"))
+
+
+def resolve_write_target(
+    title: str,
+    markdown: str,
+    docs_dir: Path,
+    *,
+    project: str | None = None,
+    chunk_max_chars: int = DEFAULT_CHUNK_MAX_CHARS,
+) -> tuple[str, str, Path, list[MarkdownChunk]]:
+    """Compute (proj, slug, target_dir, chunks) for a doc about to be
+    written under docs_dir. Shared by write_raw_doc and add_sources'
+    dry-run preview so the predicted path can never diverge from what a
+    real write lands (collision probe included) — see #16 final review.
+
+    Raises AddError when an explicit --project slugifies to nothing
+    usable (e.g. "../.." or "†"): falling back to the raw string would
+    let a caller escape docs_dir or write a non-ASCII dirname the site
+    can't route to (_SAFE_SEG_RE)."""
+    base_slug = slugify(title) or "untitled"
+    chunks = chunk_markdown_by_sections(markdown, max_chars=chunk_max_chars)
+
+    if project:
+        proj = slugify(project)
+        if not proj:
+            raise AddError(f"--project {project!r} contains no usable slug characters")
+        target = docs_dir / proj
+        slug = _dedupe(base_slug, lambda s: _slug_taken(target, s))
+    else:
+        slug = _dedupe(base_slug, lambda s: (docs_dir / s).exists())
+        proj = slug
+        target = docs_dir / proj
+
+    return proj, slug, target, chunks
+
+
 def write_raw_doc(
     doc: ConvertedDoc,
     docs_dir: Path,
@@ -610,29 +656,13 @@ def write_raw_doc(
     title = derive_title(explicit=explicit_title, markdown=doc.markdown,
                          html_title=doc.html_title, url=doc.url,
                          path_name=doc.path_name)
-    base_slug = slugify(title) or "untitled"
     day = today or date.today().isoformat()
-    chunks = chunk_markdown_by_sections(doc.markdown, max_chars=chunk_max_chars)
+    proj, slug, target, chunks = resolve_write_target(
+        title, doc.markdown, docs_dir, project=project, chunk_max_chars=chunk_max_chars,
+    )
     if not chunks:
         raise AddError(f"nothing to write for {doc.source_label} (empty document)")
     multi = len(chunks) > 1
-
-    def slug_taken(target_dir: Path, s: str) -> bool:
-        # Shape-independent probe: an earlier doc with the same slug may be a
-        # single file (<s>.md) or chunked (<s>-NN.md) — the new doc's own
-        # chunk count says nothing about what's already on disk.
-        if (target_dir / f"{s}.md").exists():
-            return True
-        return any(target_dir.glob(f"{s}-[0-9][0-9].md"))
-
-    if project:
-        proj = slugify(project) or project
-        target = docs_dir / proj
-        slug = _dedupe(base_slug, lambda s: slug_taken(target, s))
-    else:
-        slug = _dedupe(base_slug, lambda s: (docs_dir / s).exists())
-        proj = slug
-        target = docs_dir / proj
 
     target.mkdir(parents=True, exist_ok=True)
     written: list[Path] = []
@@ -683,19 +713,20 @@ def add_sources(
             final_title = derive_title(explicit=title, markdown=doc.markdown,
                                        html_title=doc.html_title, url=doc.url,
                                        path_name=doc.path_name)
-            titles.append(final_title)
             warnings.extend(f"{src}: {w}" for w in doc.warnings)
             if dry_run:
-                chunks = chunk_markdown_by_sections(doc.markdown)
-                slug = slugify(final_title) or "untitled"
-                proj = slugify(project) if project else slug
+                _proj, slug, target, chunks = resolve_write_target(
+                    final_title, doc.markdown, docs_dir, project=project,
+                )
                 names = ([f"{slug}.md"] if len(chunks) <= 1
                          else [f"{slug}-{c.index:02d}.md" for c in chunks])
                 warnings.append(f"{src}: dry-run — would write "
-                                f"{', '.join(str(docs_dir / proj / n) for n in names)}")
+                                f"{', '.join(str(target / n) for n in names)}")
+                titles.append(final_title)
                 continue
             written.extend(write_raw_doc(doc, docs_dir, explicit_title=title,
                                          project=project, extra_tags=tags, today=today))
+            titles.append(final_title)
         except AddError as exc:
             errors.append(f"{src}: {exc}")
     return {"written": written, "titles": titles, "warnings": warnings, "errors": errors}
