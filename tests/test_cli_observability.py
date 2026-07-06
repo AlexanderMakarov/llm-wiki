@@ -188,8 +188,15 @@ def test_cli_log_end_to_end():
 def test_sync_status_empty_state(tmp_path, monkeypatch, capsys):
     import llmwiki.cli as cli_mod
     import llmwiki.convert as convert_mod
+    from llmwiki import quarantine as quarantine_mod
     monkeypatch.setattr(convert_mod, "DEFAULT_STATE_FILE", tmp_path / "state.json")
-    monkeypatch.setattr(cli_mod, "REPO_ROOT", tmp_path); import llmwiki.sync.status as sync_status_mod; monkeypatch.setattr(sync_status_mod, "REPO_ROOT", tmp_path)
+    # Isolate from this machine's real .llmwiki-quarantine.json (a dev
+    # checkout can have hundreds of stale entries), same as
+    # test_sync_status_surfaces_quarantine does below.
+    monkeypatch.setattr(quarantine_mod, "DEFAULT_QUARANTINE_FILE", tmp_path / "quar.json")
+    monkeypatch.setattr(cli_mod, "REPO_ROOT", tmp_path)
+    import llmwiki.sync.status as sync_status_mod
+    monkeypatch.setattr(sync_status_mod, "REPO_ROOT", tmp_path)
     args = _mk_sync_status_args()
     rc = cli_mod.cmd_sync_status(args)
     assert rc == 0

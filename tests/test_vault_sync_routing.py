@@ -19,6 +19,20 @@ from unittest.mock import patch
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def _no_personal_vault_config(monkeypatch):
+    """Isolate from the developer machine's gitignored config.json.
+
+    ``apply_default_vault`` reads ``vault.default_path`` from
+    config.json, so on a machine that has one configured (a normal
+    dev setup), these tests would silently pick up a real vault path
+    instead of exercising the "no --vault flag" default behaviour.
+    """
+    import llmwiki.config_schedule as config_schedule_mod
+
+    monkeypatch.setattr(config_schedule_mod, "load_default_vault_path", lambda: None)
+
+
 def _make_args(**overrides):
     """Build an argparse Namespace with cmd_sync's expected fields."""
     base = {
