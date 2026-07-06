@@ -2362,19 +2362,21 @@ def synthesize_overview(
 # ─── main ──────────────────────────────────────────────────────────────────
 
 def build_site(
-    out_dir: Path = DEFAULT_OUT_DIR,
+    out_dir: Path | None = None,
     synthesize: bool = False,
     claude_path: str = "",
     search_mode: str = "auto",
     seed_project_stubs: bool = False,
-    raw_sessions: Path = RAW_SESSIONS,
-    raw_dir: Path = RAW_DIR,
-    wiki_dir: Path = REPO_ROOT / "wiki",
+    raw_sessions: Path | None = None,
+    raw_dir: Path | None = None,
+    wiki_dir: Path | None = None,
 ) -> int:
-    # #54 vault-overlay: ``raw_sessions``/``raw_dir`` default to the repo
-    # constants so repo-mode builds are unchanged, but ``build --vault``
-    # passes the vault's raw/ so the site is built from vault sessions
-    # rather than the (often empty) repo checkout.
+    # #54 vault-overlay: resolved here (not as param defaults, which are
+    # captured at def time) so monkeypatched module constants take effect.
+    out_dir = DEFAULT_OUT_DIR if out_dir is None else out_dir
+    raw_sessions = RAW_SESSIONS if raw_sessions is None else raw_sessions
+    raw_dir = RAW_DIR if raw_dir is None else raw_dir
+    wiki_dir = (REPO_ROOT / "wiki") if wiki_dir is None else wiki_dir
     if not raw_sessions.exists():
         print(
             f"error: {raw_sessions} does not exist. Run `llmwiki init` + `llmwiki sync` first.",
