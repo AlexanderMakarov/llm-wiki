@@ -106,6 +106,40 @@ python3 -m llmwiki sync --force
 
 ---
 
+## `add` — add a document to the wiki (#16)
+
+Converts a URL, file, or folder into a raw Markdown document under
+`raw/docs/`, then (by default) batch-synthesizes and rebuilds the site
+once for the whole run. Sources may be freely mixed and repeated.
+
+```bash
+python3 -m llmwiki add https://example.com/some-article
+python3 -m llmwiki add ./notes.pdf ./research-folder/
+python3 -m llmwiki add https://example.com/post --title "Custom Title" --tag research
+python3 -m llmwiki add ./doc.md --project my-project --note "Imported from Slack"
+python3 -m llmwiki add https://example.com/post --dry-run
+```
+
+### Flags
+
+| Flag | What |
+|---|---|
+| `--title TEXT` | Override title derivation (single source only). |
+| `--project NAME` | Group under `raw/docs/<NAME>/` instead of the doc's own slug. |
+| `--tag TAG` | Extra frontmatter tag (repeatable). |
+| `--note TEXT` | Blockquote note prepended to the document body. |
+| `--no-synthesize` | Skip the post-add synthesis pass. |
+| `--no-build` | Skip the post-add site rebuild. |
+| `--render` | Force the headless-browser layer for URLs (needs playwright). |
+| `--no-render` | Never use the headless-browser layer. |
+| `--dry-run` | Convert and report, write nothing, run nothing. |
+| `--vault PATH` | Write under the given vault's `raw/docs/` instead of the repo. |
+
+URL sources go through a layered pipeline (markdown negotiation →
+extraction → render escalation) before landing as Markdown.
+
+---
+
 ## `build` — compile the static HTML site
 
 Turns `wiki/` markdown into `site/` HTML.
@@ -377,6 +411,31 @@ No extra API round-trip — rides the existing synthesis call, so cost
 estimates from `--estimate` are unchanged.  If the backend returns no
 suggested-tags block (dummy backend, malformed output), the page still
 ships with baseline tags.
+
+---
+
+## `consolidate-topics` — dedupe + describe topics (#54)
+
+One-time LLM pass over the topic list (not the sessions) that merges
+duplicate topic spellings (`LLM-Wiki` / `LLMWiki` / `llm wiki`) into
+one canonical node and writes short descriptions, caching the result
+in `.llmwiki-topics.json` for `llmwiki graph` / `llmwiki build`.
+
+```bash
+python3 -m llmwiki consolidate-topics                # emit the LLM prompt
+python3 -m llmwiki consolidate-topics --complete reply.json
+python3 -m llmwiki consolidate-topics --complete -    # read the reply from stdin
+```
+
+### Flags
+
+| Flag | What |
+|---|---|
+| `--complete PATH` | Ingest the LLM's JSON reply (file path, or `-` for stdin) and write the topic cache. Without this flag, the prompt is printed instead. |
+| `--vault PATH` | Read/write the topic cache inside the given vault instead of the repo. |
+
+Re-run after large ingest batches so near-duplicate topic spellings
+don't fragment the knowledge graph.
 
 ---
 
