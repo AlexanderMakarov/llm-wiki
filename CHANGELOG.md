@@ -10,6 +10,12 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Added
 
+- **`llmwiki add <url|file|folder>...`** (#16): synchronous local document intake.
+  Converts sources to Markdown (Cloudflare `Accept: text/markdown` negotiation →
+  trafilatura/stdlib extraction → optional playwright render), writes
+  `raw/docs/<slug>/<slug>[-NN].md` in the kbbuilder-compatible chunked layout,
+  then batch-synthesizes and rebuilds the site. New `llm-wiki-add` console script
+  and `[add]` optional extra (`trafilatura`, `markitdown`).
 - **`llmwiki all --with-synth`** (#383) — opt-in chain that runs `synthesize` before `build → graph → export → lint`, so CLI users can fill `wiki/sources/` from `raw/` in one command without relying on agent slash skills. Companion flags: `--synth-force` (pass `--force` to synthesize), `--vault` (vault-overlay synthesize when using `--with-synth`).
 - **`llmwiki sync --status` synthesis hint** (#383) — reports the configured `synthesis.backend` and points to `llmwiki synthesize` / `llmwiki all --with-synth` when `wiki/sources/` may stay empty after sync.
 

@@ -201,7 +201,7 @@ Operations: `sync`, `ingest`, `query`, `lint`, `build`.
 3. **Cross-link everything.** Every page should have a `## Connections` section with at least one `[[wikilink]]`.
 4. **Frontmatter is authoritative.** Always fill `title`, `type`, `tags`, `sources` (where applicable), and `last_updated`.
 5. **One commit per page group** when publishing to git — match the PR rules in the open-source framework.
-6. **Always rebuild static site** after relevant to it change impolemented.
+6. **Always rebuild static site** after relevant to it change implemented.
 
 ## Upgrading between versions
 

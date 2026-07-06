@@ -258,6 +258,32 @@ llmwiki version
 
 Shell shortcuts: `./sync.sh`, `./build.sh`, `./serve.sh`.
 
+## Adding documents
+
+`llmwiki add` drops any URL, file, or folder into the wiki:
+
+```bash
+llmwiki add https://blog.example.com/post ./notes.md ./research-folder
+llm-wiki-add https://docs.example.com/guide   # same thing, shorter
+```
+
+URLs are fetched with `Accept: text/markdown` first — sites behind Cloudflare's
+[Markdown for Agents](https://developers.cloudflare.com/fundamentals/reference/markdown-for-agents/)
+return ready-made Markdown. HTML pages are extracted with
+[trafilatura](https://trafilatura.readthedocs.io/) when installed
+(`pip install 'llm-notebook[add]'`, which also enables PDF/docx via markitdown)
+and a stdlib converter otherwise. JavaScript-rendered pages escalate to a headless
+browser when playwright is available (`pip install 'llm-notebook[e2e]'`).
+
+Documents land under `raw/docs/<slug>/`, split at section boundaries into
+~7k-char chunks. The separation is deliberate: each chunk becomes one synthesis
+input that fits the model's context window, so one huge page can't overload or
+OOM a synthesis pass — splits happen at `#`/`##` headings (never mid-sentence,
+not a hard 7000-char slice). After writing, one synthesis pass and one site
+build run for the whole batch (`--no-synthesize` / `--no-build` to skip).
+`raw/` stays immutable: re-adding a document never overwrites — the slug gets
+a `-2`, `-3`, … suffix.
+
 ---
 
 ## Configuration

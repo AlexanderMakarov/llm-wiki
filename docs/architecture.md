@@ -100,6 +100,10 @@ Pages rendered (v0.9 surface):
 - `site/models/<slug>.html` — per-model info card + changelog timeline + pricing sparkline (v0.7, #56)
 - `site/vs/index.html` — auto-generated vs-comparison index (v0.7, #58)
 - `site/vs/<a>-vs-<b>.html` — side-by-side info table + benchmark chart + price delta
+Documents enter `raw/docs/` either via kbbuilder's async `wiki-add` worker or
+synchronously via `llmwiki add` (`llmwiki/add_doc.py`, #16) — both produce the
+same dir-per-doc, section-chunked layout.
+
 - `site/index.html` — file-tree browser over `raw/docs/**` (wiki-add documents)
 - `site/documents/<path>.html` — one page per raw document file, shared tree sidebar
 - `site/recent.html` — newest raw documents, one row per logical document
