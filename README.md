@@ -267,13 +267,33 @@ llmwiki add https://blog.example.com/post ./notes.md ./research-folder
 llm-wiki-add https://docs.example.com/guide   # same thing, shorter
 ```
 
+**Install (from the clone root)** — an editable install generates the `llmwiki`
+and `llm-wiki-add` console scripts and pulls the conversion extras
+(trafilatura + markitdown with its PDF/DOCX/PPTX/XLSX backends):
+
+```bash
+python3 -m venv .venv
+.venv/bin/pip install -e '.[add]'
+```
+
+To call them from **any terminal and any folder**, put the scripts on PATH —
+either add `.venv/bin` to PATH, or drop two-line wrappers into `~/.local/bin`:
+
+```bash
+printf '#!/usr/bin/env bash\nexec %s "$@"\n' "$PWD/.venv/bin/llm-wiki-add" \
+  > ~/.local/bin/llm-wiki-add && chmod +x ~/.local/bin/llm-wiki-add
+```
+
+With `vault.default_path` set in `config.json`, documents land in your vault no
+matter where you run the command from.
+
 URLs are fetched with `Accept: text/markdown` first — sites behind Cloudflare's
 [Markdown for Agents](https://developers.cloudflare.com/fundamentals/reference/markdown-for-agents/)
 return ready-made Markdown. HTML pages are extracted with
-[trafilatura](https://trafilatura.readthedocs.io/) when installed
-(`pip install 'llm-notebook[add]'`, which also enables PDF/docx via markitdown)
-and a stdlib converter otherwise. JavaScript-rendered pages escalate to a headless
-browser when playwright is available (`pip install 'llm-notebook[e2e]'`).
+[trafilatura](https://trafilatura.readthedocs.io/) when installed (the `[add]`
+extra above) and a stdlib converter otherwise. JavaScript-rendered pages
+escalate to a headless browser when playwright is available
+(`.venv/bin/pip install -e '.[e2e]' && .venv/bin/playwright install chromium`).
 
 Documents land under `raw/docs/<slug>/`, split at section boundaries into
 ~7k-char chunks. The separation is deliberate: each chunk becomes one synthesis
