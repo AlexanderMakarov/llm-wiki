@@ -8,6 +8,11 @@ This repo is a **personal fork** ([AlexanderMakarov/llm-wiki](https://github.com
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/)
 [![Version](https://img.shields.io/badge/version-v1.3.82-10B981.svg)](CHANGELOG.md)
+[![Tests](https://img.shields.io/badge/tests-2850%20passing-10B981.svg)](tests/)
+[![CI](https://github.com/AlexanderMakarov/llm-wiki/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/AlexanderMakarov/llm-wiki/actions/workflows/ci.yml)
+[![Link check](https://github.com/AlexanderMakarov/llm-wiki/actions/workflows/link-check.yml/badge.svg?branch=main)](https://github.com/AlexanderMakarov/llm-wiki/actions/workflows/link-check.yml)
+[![Wiki checks](https://github.com/AlexanderMakarov/llm-wiki/actions/workflows/wiki-checks.yml/badge.svg?branch=main)](https://github.com/AlexanderMakarov/llm-wiki/actions/workflows/wiki-checks.yml)
+[![Docker](https://github.com/AlexanderMakarov/llm-wiki/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/AlexanderMakarov/llm-wiki/pkgs/container/llm-wiki)
 
 **Upstream demo site** (synthetic data only): [pratiyush.github.io/llm-wiki](https://pratiyush.github.io/llm-wiki/)
 
@@ -274,7 +279,9 @@ confidential-client/
 
 | Topic | Link |
 |---|---|
-| Install + first build | [docs/getting-started.md](docs/getting-started.md) |
+| Documentation hub | [docs/index.md](docs/index.md) |
+| End-to-end setup guide | [docs/tutorials/setup-guide.md](docs/tutorials/setup-guide.md) |
+| Install + first build | [docs/getting-started.md](docs/getting-started.md), [docs/tutorials/01-installation.md](docs/tutorials/01-installation.md) |
 | External vault setup | [docs/guides/existing-vault.md](docs/guides/existing-vault.md) |
 | Claude Code workflow | [docs/tutorials/03-use-with-claude-code.md](docs/tutorials/03-use-with-claude-code.md) |
 | Architecture | [docs/architecture.md](docs/architecture.md) |
