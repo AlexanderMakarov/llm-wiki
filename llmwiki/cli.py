@@ -668,36 +668,51 @@ def _cmd_add_locked(args: argparse.Namespace, docs_dir: Path,
     if not result["written"]:
         return 2 if failed else 0
 
-    # Post-steps run once for the whole batch. Failures here never
-    # un-land written docs (kbbuilder add-doc precedent): the next
-    # sync/build picks them up.
+    # Post-steps run once for the whole batch. `add` is synchronous by
+    # contract: the docs must come out the other end as real wiki pages
+    # in THIS invocation, using the one backend configured for the whole
+    # repository (config.json `synthesis.backend`). When synthesis can't
+    # deliver, the just-added raw docs are ROLLED BACK — a raw doc with
+    # no wiki page is a half-added state nothing else on the machine may
+    # ever repair. --no-synthesize is the only way to opt out.
     if not args.no_synthesize:
+        from llmwiki.add_doc import expected_source_page, remove_raw_docs
         from llmwiki.config_schedule import _load_sessions_config
-        from llmwiki.synth.agent_delegate import AgentDelegateSynthesizer
         from llmwiki.synth.pipeline import resolve_backend, synthesize_new_sessions
         backend = resolve_backend(_load_sessions_config())
-        if isinstance(backend, AgentDelegateSynthesizer) and not backend.is_available():
-            # Expected outside an agent runtime — the delegate defers to the
-            # next in-session synthesize pass. Not a failure (PR #19 field
-            # report: the old "! Backend ... not available" read as an error).
-            print("  synthesis deferred — no agent runtime detected; "
-                  "docs will be synthesized on the next agent-mode run")
-        else:
-            print(f"Synthesizing with backend: {backend.name}")
-            raw_dir = wiki_sources_dir = state_file = None
-            if vault_root:
-                raw_dir = vault_root / "raw" / "sessions"
-                wiki_sources_dir = vault_root / "wiki" / "sources"
-                state_file = vault_root / ".llmwiki-synth-state.json"
-            summary = synthesize_new_sessions(
-                backend=backend, raw_dir=raw_dir,
-                wiki_sources_dir=wiki_sources_dir, state_file=state_file,
-            )
-            print(f"  synthesized {summary['synthesized']}, skipped {summary['skipped']}")
-            if summary["errors"]:
-                for err in summary["errors"]:
-                    print(f"  ! {err}", file=sys.stderr)
-                failed = True
+        raw_dir = wiki_sources_dir = state_file = None
+        sources_dir = REPO_ROOT / "wiki" / "sources"
+        if vault_root:
+            raw_dir = vault_root / "raw" / "sessions"
+            wiki_sources_dir = vault_root / "wiki" / "sources"
+            state_file = vault_root / ".llmwiki-synth-state.json"
+            sources_dir = wiki_sources_dir
+        if not backend.is_available():
+            removed = remove_raw_docs(result["written"])
+            print(f"  ! backend {backend.name} is not available — cannot "
+                  f"synthesize. Rolled back {len(removed)} just-added raw "
+                  "doc file(s). Set synthesis.backend in config.json "
+                  "(claude / ollama / dummy), or re-run with --no-synthesize.",
+                  file=sys.stderr)
+            return 2
+        print(f"Synthesizing with backend: {backend.name}")
+        summary = synthesize_new_sessions(
+            backend=backend, raw_dir=raw_dir,
+            wiki_sources_dir=wiki_sources_dir, state_file=state_file,
+        )
+        print(f"  synthesized {summary['synthesized']}, skipped {summary['skipped']}")
+        for err in summary["errors"]:
+            print(f"  ! {err}", file=sys.stderr)
+        # No half-added docs: every raw doc this run wrote must now have
+        # its wiki page. (Pipeline errors about OTHER pending sources are
+        # reported above but don't fail the add or touch its docs.)
+        missing = [p for p in result["written"]
+                   if not expected_source_page(p, sources_dir).exists()]
+        if missing:
+            removed = remove_raw_docs(missing)
+            print(f"  ! rolled back {len(removed)} raw doc file(s) whose "
+                  "synthesis produced no wiki page", file=sys.stderr)
+            failed = True
 
     if not args.no_build:
         from llmwiki.build import RAW_DIR, RAW_SESSIONS, build_site
@@ -715,13 +730,15 @@ def _cmd_add_locked(args: argparse.Namespace, docs_dir: Path,
             failed = True
 
     # Observability: same grep-parseable format as sync/synthesize.
+    # Rolled-back docs are not logged — they are no longer in the wiki.
     from datetime import date as _date
     log_path = (vault_root or REPO_ROOT) / "wiki" / "log.md"
     if log_path.parent.is_dir():
         day = _date.today().isoformat()
         with log_path.open("a", encoding="utf-8") as fh:
-            for t in result["titles"]:
-                fh.write(f"\n## [{day}] add | {t}\n")
+            for rec in result["docs"]:
+                if any(p.exists() for p in rec["paths"]):
+                    fh.write(f"\n## [{day}] add | {rec['title']}\n")
 
     return 2 if failed else 0
 

@@ -110,67 +110,124 @@ def test_llm_wiki_add_entry_point(tmp_path):
     assert "Entry Point Doc" in r.stdout
 
 
-def test_add_agent_delegate_unavailable_defers_not_fails(tmp_path, monkeypatch, capsys):
-    """PR #19 field report: an unavailable agent-delegate backend is the
-    EXPECTED state outside an agent runtime — cmd_add must print a
-    friendly deferral note and exit 0, not an error."""
+def _fake_claude(tmp_path, body="## Summary\\nSynthesized synchronously."):
+    """Executable stub standing in for the `claude` CLI: swallows the
+    stdin prompt, prints a canned page."""
+    script = tmp_path / "claude-stub"
+    script.write_text(f'#!/bin/sh\ncat > /dev/null\nprintf "{body}\\n"\n')
+    script.chmod(0o755)
+    return script
+
+
+def _add_vault(tmp_path):
+    vault = tmp_path / "vault"
+    (vault / "raw" / "docs").mkdir(parents=True)
+    (vault / "wiki").mkdir()
+    return vault
+
+
+def _run_add(cli_mod, vault, *argv):
+    args = cli_mod.build_parser().parse_args(["add", "--vault", str(vault), *argv])
+    return args.func(args)
+
+
+def test_add_configured_claude_backend_synthesizes_synchronously(tmp_path, monkeypatch, capsys):
+    """`add` uses THE backend configured once for the whole repository
+    (config.json synthesis.backend) and produces a real page in the same
+    invocation — from a plain terminal or inside an agent session."""
     import llmwiki.cli as cli_mod
-    import llmwiki.synth.pipeline as pipeline_mod
-    from llmwiki.synth.agent_delegate import AgentDelegateSynthesizer
+    import llmwiki.config_schedule as config_mod
+
+    vault = _add_vault(tmp_path)
+    src = tmp_path / "doc.md"
+    src.write_text("# Sync Doc\n\nbody\n")
+
+    claude = _fake_claude(tmp_path)
+    monkeypatch.setattr(config_mod, "_load_sessions_config", lambda: {
+        "synthesis": {"backend": "claude", "claude_path": str(claude)},
+    })
+    import llmwiki.build as build_mod
+    monkeypatch.setattr(build_mod, "build_site", lambda **kw: 0)
+
+    rc = _run_add(cli_mod, vault, str(src))
+    out = capsys.readouterr()
+    assert rc == 0, out.err
+    assert "claude-cli" in out.out
+    pages = list((vault / "wiki" / "sources").rglob("*.md"))
+    assert pages, "expected a synthesized wiki/sources page in the same run"
+    assert "Synthesized synchronously" in pages[0].read_text()
+    assert (vault / "raw" / "docs" / "sync-doc" / "sync-doc.md").exists()
+
+
+def test_add_unavailable_backend_rolls_back_raw_docs(tmp_path, monkeypatch, capsys):
+    """No half-added docs: when the configured backend can't synthesize
+    (agent_delegate outside an agent runtime), the just-added raw docs
+    are removed and add fails — only --no-synthesize skips synthesis."""
+    import llmwiki.cli as cli_mod
+    import llmwiki.config_schedule as config_mod
 
     for var in ("LLMWIKI_AGENT_MODE", "CLAUDE_CODE", "CLAUDECODE", "CODEX_CLI", "CURSOR_AGENT"):
         monkeypatch.delenv(var, raising=False)
 
-    vault = tmp_path / "vault"
-    (vault / "raw" / "docs").mkdir(parents=True)
-    (vault / "wiki").mkdir()
+    vault = _add_vault(tmp_path)
     src = tmp_path / "doc.md"
-    src.write_text("# Deferred Doc\n\nbody\n")
+    src.write_text("# Orphan Doc\n\nbody\n")
 
-    monkeypatch.setattr(pipeline_mod, "resolve_backend",
-                        lambda cfg: AgentDelegateSynthesizer())
+    monkeypatch.setattr(config_mod, "_load_sessions_config", lambda: {
+        "synthesis": {"backend": "agent_delegate"},
+    })
     import llmwiki.build as build_mod
     monkeypatch.setattr(build_mod, "build_site", lambda **kw: 0)
 
-    args = cli_mod.build_parser().parse_args(["add", "--vault", str(vault), str(src)])
-    rc = args.func(args)
-    out = capsys.readouterr()
-    assert rc == 0, out.err
-    assert "synthesis deferred" in out.out
-    assert "not available" not in out.err
-    assert (vault / "raw" / "docs" / "deferred-doc" / "deferred-doc.md").exists()
-
-
-def test_add_other_unavailable_backend_still_fails(tmp_path, monkeypatch, capsys):
-    """A genuinely-down backend (e.g. ollama) keeps the error path."""
-    import llmwiki.cli as cli_mod
-    import llmwiki.synth.pipeline as pipeline_mod
-    from llmwiki.synth.base import BaseSynthesizer
-
-    class _DownBackend(BaseSynthesizer):
-        name = "ollama"
-
-        def is_available(self):
-            return False
-
-        def synthesize_source_page(self, raw_body, meta, prompt_template):  # pragma: no cover
-            return ""
-
-    vault = tmp_path / "vault"
-    (vault / "raw" / "docs").mkdir(parents=True)
-    (vault / "wiki").mkdir()
-    src = tmp_path / "doc.md"
-    src.write_text("# Down Backend Doc\n\nbody\n")
-
-    monkeypatch.setattr(pipeline_mod, "resolve_backend", lambda cfg: _DownBackend())
-    import llmwiki.build as build_mod
-    monkeypatch.setattr(build_mod, "build_site", lambda **kw: 0)
-
-    args = cli_mod.build_parser().parse_args(["add", "--vault", str(vault), str(src)])
-    rc = args.func(args)
+    rc = _run_add(cli_mod, vault, str(src))
     out = capsys.readouterr()
     assert rc == 2
-    assert "not available" in (out.out + out.err)
+    assert "--no-synthesize" in out.err
+    assert "olled back" in out.err
+    assert not (vault / "raw" / "docs" / "orphan-doc").exists()
+    log = vault / "wiki" / "log.md"
+    assert not log.exists() or "Orphan Doc" not in log.read_text()
+
+
+def test_add_failed_synthesis_rolls_back_raw_docs(tmp_path, monkeypatch, capsys):
+    """A backend that errors per page (claude CLI exiting 1) leaves no
+    wiki page — the raw doc must be rolled back, not left half-added."""
+    import llmwiki.cli as cli_mod
+    import llmwiki.config_schedule as config_mod
+
+    vault = _add_vault(tmp_path)
+    src = tmp_path / "doc.md"
+    src.write_text("# Broken Doc\n\nbody\n")
+
+    broken = tmp_path / "claude-broken"
+    broken.write_text("#!/bin/sh\ncat > /dev/null\necho boom >&2\nexit 1\n")
+    broken.chmod(0o755)
+    monkeypatch.setattr(config_mod, "_load_sessions_config", lambda: {
+        "synthesis": {"backend": "claude", "claude_path": str(broken)},
+    })
+    import llmwiki.build as build_mod
+    monkeypatch.setattr(build_mod, "build_site", lambda **kw: 0)
+
+    rc = _run_add(cli_mod, vault, str(src))
+    out = capsys.readouterr()
+    assert rc == 2
+    assert "olled back" in out.err
+    assert not (vault / "raw" / "docs" / "broken-doc").exists()
+
+
+def test_add_no_synthesize_keeps_docs(tmp_path, monkeypatch, capsys):
+    """--no-synthesize is the explicit opt-out: docs stay raw-only."""
+    import llmwiki.cli as cli_mod
+
+    vault = _add_vault(tmp_path)
+    src = tmp_path / "doc.md"
+    src.write_text("# Raw Only Doc\n\nbody\n")
+    import llmwiki.build as build_mod
+    monkeypatch.setattr(build_mod, "build_site", lambda **kw: 0)
+
+    rc = _run_add(cli_mod, vault, "--no-synthesize", str(src))
+    assert rc == 0
+    assert (vault / "raw" / "docs" / "raw-only-doc" / "raw-only-doc.md").exists()
 
 
 def test_pyproject_add_extra_includes_markitdown_backends():

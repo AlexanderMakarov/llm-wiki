@@ -46,6 +46,8 @@ __all__ = [
     "resolve_write_target",
     "write_raw_doc",
     "add_sources",
+    "expected_source_page",
+    "remove_raw_docs",
 ]
 
 
@@ -702,6 +704,7 @@ def add_sources(
     failures are collected, not fatal: the rest of the batch lands."""
     written: list[Path] = []
     titles: list[str] = []
+    docs: list[dict] = []
     warnings: list[str] = []
     errors: list[str] = []
     for src in sources:
@@ -724,9 +727,52 @@ def add_sources(
                                 f"{', '.join(str(target / n) for n in names)}")
                 titles.append(final_title)
                 continue
-            written.extend(write_raw_doc(doc, docs_dir, explicit_title=title,
-                                         project=project, extra_tags=tags, today=today))
+            paths = write_raw_doc(doc, docs_dir, explicit_title=title,
+                                  project=project, extra_tags=tags, today=today)
+            written.extend(paths)
             titles.append(final_title)
+            docs.append({"title": final_title, "paths": paths})
         except AddError as exc:
             errors.append(f"{src}: {exc}")
-    return {"written": written, "titles": titles, "warnings": warnings, "errors": errors}
+    return {"written": written, "titles": titles, "docs": docs,
+            "warnings": warnings, "errors": errors}
+
+
+def expected_source_page(raw_doc: Path, wiki_sources_dir: Path) -> Path:
+    """Where ``synthesize_new_sessions`` writes this raw doc's wiki page:
+    ``wiki/sources/<project>/<date>-<slug>.md`` (G-06 date prefix). Used
+    by the add CLI to verify synthesis actually produced a page."""
+    from llmwiki._frontmatter import parse_frontmatter
+    from llmwiki.synth.pipeline import _normalise_slug
+
+    try:
+        meta, _body = parse_frontmatter(raw_doc.read_text(encoding="utf-8"))
+    except OSError:
+        meta = {}
+    project = str(meta.get("project") or "docs")
+    raw_slug = meta.get("slug")
+    slug = _normalise_slug(raw_slug if isinstance(raw_slug, str) else raw_doc.stem)
+    date = str(meta.get("date", "")).strip()
+    name = f"{date}-{slug}" if date else slug
+    return wiki_sources_dir / project / f"{name}.md"
+
+
+def remove_raw_docs(paths: list[Path]) -> list[Path]:
+    """Rollback helper: unlink raw doc files, pruning parent dirs they
+    empty. A raw doc whose synthesis failed is a half-added state that
+    nothing else on the machine may ever repair (kbbuilder might not be
+    installed), so `add` removes it and reports failure instead."""
+    removed: list[Path] = []
+    for p in paths:
+        try:
+            p.unlink()
+        except OSError:
+            continue
+        removed.append(p)
+        parent = p.parent
+        try:
+            if parent.is_dir() and not any(parent.iterdir()):
+                parent.rmdir()
+        except OSError:
+            pass
+    return removed

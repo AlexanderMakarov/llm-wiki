@@ -86,7 +86,7 @@
     "auto_queue": true
   },
 
-  "_synthesis_comment": "LLM backend for auto-synthesizing wiki source pages. backend=dummy (default, offline) | ollama (local HTTP). Run `llmwiki synthesize --check` to probe the server.",
+  "_synthesis_comment": "LLM backend for auto-synthesizing wiki source pages. backend=dummy (default, offline) | ollama (local HTTP) | claude (synchronous `claude -p` CLI; optional claude_path/claude_model) | agent (defer to the running agent session). One backend serves every command (sync/synthesize/add). Run `llmwiki synthesize --check` to probe availability.",
   "synthesis": {
     "backend": "dummy",
     "model": "llama3.1:8b",

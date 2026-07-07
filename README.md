@@ -304,6 +304,14 @@ build run for the whole batch (`--no-synthesize` / `--no-build` to skip).
 `raw/` stays immutable: re-adding a document never overwrites — the slug gets
 a `-2`, `-3`, … suffix.
 
+**Synthesis is synchronous and uses the one backend configured for the whole
+repository** (`synthesis.backend` in `config.json`: `claude` for `claude -p`
+CLI calls, `ollama` for a local server, `dummy` offline — change it there any
+time). If the backend can't produce the wiki page in the same run, `add`
+**rolls the raw doc back** and exits non-zero — no half-added documents that
+nothing on the machine would ever synthesize later. `--no-synthesize` is the
+explicit opt-out that keeps raw-only docs.
+
 ---
 
 ## Configuration

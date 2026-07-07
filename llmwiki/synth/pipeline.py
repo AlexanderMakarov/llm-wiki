@@ -83,6 +83,8 @@ def resolve_backend(
         agent (#316). Writes pending prompts to
         ``.llmwiki-pending-prompts/`` for the slash-command layer to
         pick up on the next agent turn.  No HTTP, no API key.
+      - ``"claude"`` — synchronous ``claude -p`` CLI calls (#16).
+        Optional keys: ``claude_path``, ``claude_model``, ``timeout``.
 
     Unknown values fall back to the dummy backend with a warning so a
     typo in config.json doesn't crash sync.
@@ -96,6 +98,15 @@ def resolve_backend(
         from llmwiki.synth.ollama import OllamaSynthesizer, load_ollama_config
 
         return OllamaSynthesizer(config=load_ollama_config(cfg))
+
+    if name == "claude":
+        from llmwiki.synth.claude_cli import ClaudeCLISynthesizer
+
+        return ClaudeCLISynthesizer(
+            claude_path=synth_cfg.get("claude_path"),
+            model=synth_cfg.get("claude_model"),
+            timeout=int(synth_cfg.get("timeout") or 180),
+        )
 
     if name in {"agent", "agent_delegate", "agent-delegate"}:
         # Imported lazily — the agent backend is a thin file-I/O layer
