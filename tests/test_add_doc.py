@@ -177,6 +177,49 @@ def test_folder_walk(tmp_path):
     assert doc.path_name == tmp_path.name
 
 
+JPEG_MAGIC = b"\xff\xd8\xff\xe0" + b"\x00\x10JFIF\x00" + bytes(range(256)) * 40
+
+
+def test_image_goes_through_ocr(tmp_path, monkeypatch):
+    """Images are vision-OCR'd, never treated as text (the .JPG-as-text
+    incident produced 351 mojibake chunk files)."""
+    import llmwiki.add_doc as m
+    p = tmp_path / "Справка о параметрах.JPG"
+    p.write_bytes(JPEG_MAGIC)
+    monkeypatch.setattr(m, "_ocr_image",
+                        lambda path, timeout=300: "# Справка\n\nOCR text here.\n\n## Summary (EN)\nA certificate.")
+    doc = convert_path(str(p))
+    assert "OCR text here" in doc.markdown
+    assert "```" not in doc.markdown          # not fenced as code
+    assert doc.path_name == p.name
+
+
+def test_image_without_claude_cli_fails_immediately(tmp_path, monkeypatch):
+    import llmwiki.add_doc as m
+    import llmwiki.build as build_mod
+    p = tmp_path / "photo.png"
+    p.write_bytes(JPEG_MAGIC)
+    monkeypatch.setattr(build_mod, "_resolve_claude_path", lambda cp: None)
+    with pytest.raises(AddError, match="OCR|vision"):
+        convert_path(str(p))
+    assert m is not None  # keep import used
+
+
+def test_unknown_binary_fails_immediately(tmp_path):
+    p = tmp_path / "blob.dat"
+    p.write_bytes(b"\x00\x01\x02" * 1000)
+    with pytest.raises(AddError, match="unsupported binary"):
+        convert_path(str(p))
+
+
+def test_unknown_extension_with_text_content_still_fences(tmp_path):
+    p = tmp_path / "data.csv"
+    p.write_text("a,b,c\n1,2,3\n")
+    doc = convert_path(str(p))
+    assert "a,b,c" in doc.markdown
+    assert "```" in doc.markdown
+
+
 def test_folder_skips_symlinks(tmp_path):
     outside = tmp_path.parent / f"{tmp_path.name}-outside.md"
     outside.write_text("# escaped\n")

@@ -297,6 +297,77 @@ TEXTUAL_EXT = {
 # else binary is refused with a clear message.
 _MARKITDOWN_EXT = {".pdf", ".docx", ".pptx", ".xlsx", ".epub"}
 
+# Images go through claude-CLI vision OCR (photographed documents in
+# Russian/Armenian read far better than tesseract — kbbuilder#8).
+_IMAGE_EXT = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic", ".heif",
+              ".tif", ".tiff", ".bmp"}
+
+_SUPPORTED_FORMATS_HINT = (
+    "supported: markdown/plain-text/code files, "
+    "PDF/DOCX/PPTX/XLSX/EPUB via markitdown (pip install 'llm-notebook[add]'), "
+    "and images via claude-CLI vision OCR"
+)
+
+_OCR_PROMPT = (
+    "Read the image file at {path} using your Read tool and transcribe its "
+    "full text content as markdown. Preserve the document structure "
+    "(headings, tables, lists). Transcribe text in its original language "
+    "(it may be Russian or Armenian); if the text is not in English, add a "
+    "short English summary at the end under a '## Summary (EN)' heading. "
+    "If the image contains no text, describe what it shows in 2-3 sentences. "
+    "Output ONLY the markdown — no preamble, no code fences around the whole "
+    "answer."
+)
+
+
+def _ocr_image(path: Path, timeout: int = 300) -> str:
+    """Vision-OCR an image via the claude CLI. Raises AddError when the
+    CLI is missing or the call fails — image adds fail immediately
+    rather than landing garbage in raw/ (the .JPG-as-text incident
+    wrote 351 mojibake chunk files)."""
+    import subprocess
+
+    from llmwiki.build import _resolve_claude_path
+
+    claude = _resolve_claude_path(None)
+    if claude is None:
+        raise AddError(
+            f"cannot OCR {path.name!r}: claude CLI not found on PATH — "
+            f"images need it for vision OCR; {_SUPPORTED_FORMATS_HINT}"
+        )
+    prompt = _OCR_PROMPT.format(path=str(path))
+    try:
+        result = subprocess.run(
+            [str(claude), "-p", prompt, "--allowedTools", "Read"],
+            capture_output=True, text=True, timeout=timeout,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise AddError(f"image OCR timed out after {timeout}s for {path.name}") from exc
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise AddError(f"image OCR failed for {path.name}: {exc}") from exc
+    if result.returncode != 0:
+        tail = (result.stderr or result.stdout or "").strip().splitlines()
+        raise AddError(
+            f"image OCR failed for {path.name} (claude exited "
+            f"{result.returncode}: {tail[-1] if tail else 'no output'})"
+        )
+    text = result.stdout.strip()
+    if not text:
+        raise AddError(f"image OCR returned nothing for {path.name}")
+    return text
+
+
+def _looks_binary(head: bytes) -> bool:
+    """Cheap binary sniff for the treat-as-text fallback: NUL bytes or a
+    high non-decodable ratio mean this is not text, whatever the
+    extension says."""
+    if not head:
+        return False
+    if b"\x00" in head:
+        return True
+    bad = sum(1 for b in head if b < 9 or (13 < b < 32))
+    return bad / len(head) > 0.05
+
 # Paths that almost always hold secrets — never ingest, ever.
 # Port of kbbuilder SENSITIVE_PATH_PATTERNS (wiki-convert.ts).
 _SENSITIVE_RES = [
@@ -412,7 +483,20 @@ def convert_path(value: str, note: str | None = None) -> ConvertedDoc:
         text = _markitdown_convert(real)
         return ConvertedDoc(title=real.stem, markdown=_note_header(note) + text.strip() + "\n",
                             source_label=label, path_name=real.name)
-    # Any other extension: treat as text, fenced as code.
+    if ext in _IMAGE_EXT:
+        text = _ocr_image(real)
+        markdown = _note_header(note) + f"# {real.stem}\n\n" + text.strip() + "\n"
+        return ConvertedDoc(title=real.stem, markdown=markdown, source_label=label,
+                            path_name=real.name)
+    # Any other extension: treat as text, fenced as code — but fail
+    # immediately on binary content instead of fencing megabytes of
+    # mojibake (a .JPG once became 351 garbage chunk files this way).
+    with real.open("rb") as fh:
+        head = fh.read(65536)
+    if _looks_binary(head):
+        raise AddError(
+            f"unsupported binary file {real.name!r} — {_SUPPORTED_FORMATS_HINT}"
+        )
     text = real.read_text(encoding="utf-8", errors="replace")
     body = _fence_code(text, ext or ".txt")
     markdown = _note_header(note) + f"# {real.name}\n\n" + body + "\n"
