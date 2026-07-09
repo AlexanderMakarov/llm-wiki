@@ -125,9 +125,11 @@ def test_render_index_is_tree_browser(docs_dir: Path, tmp_path: Path):
     files = scan_raw_docs(docs_dir)
     render_index(build_tree(files), group_documents(files), len(files), out)
     html_text = (out / "index.html").read_text(encoding="utf-8")
-    assert "doctree-sidebar" in html_text
+    assert "Queue dashboard" in html_text
+    assert "Recent raw documents" in html_text
     assert "Standalone Doc" in html_text
-    assert 'href="recent.html"' in html_text
+    assert "<summary><h3 style=\"display:inline\">Commands</h3></summary>" in html_text
+    assert "Open Raw browser" not in html_text
 
 
 def test_render_index_empty_state(tmp_path: Path):
@@ -135,7 +137,7 @@ def test_render_index_empty_state(tmp_path: Path):
     out.mkdir()
     render_index(build_tree([]), [], 0, out)
     html_text = (out / "index.html").read_text(encoding="utf-8")
-    assert "No raw documents yet" in html_text
+    assert "No recent raw documents yet" in html_text
 
 
 def test_render_recent_lists_docs_with_meta(docs_dir: Path, tmp_path: Path):
@@ -151,7 +153,7 @@ def test_render_recent_lists_docs_with_meta(docs_dir: Path, tmp_path: Path):
 
 def test_nav_order_and_no_changelog():
     html_text = nav_bar(active="home")
-    links = ["Home", "Recent", "Graph", "Projects", "Sessions", "Analytics", "Docs"]
+    links = ["Home", "Raw", "Graph", "Projects", "Sessions", "Analytics", "Docs"]
     positions = [html_text.index(f">{label}</a>") for label in links]
     assert positions == sorted(positions)
     assert "changelog" not in html_text.lower()

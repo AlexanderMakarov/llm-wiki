@@ -64,7 +64,7 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
     var unsynthEstimate = Math.max(totalConverted - synthCount, 0);
     var pendingList = Array.isArray(synthState.pending) ? synthState.pending : [];
     var estimate = (synthState && synthState.estimate) ? synthState.estimate : {};
-    var previewLimit = 12;
+    var previewLimit = 3;
     var pendingSessions = pendingList.filter(function (it) { return !(it && it.is_doc); }).length;
     var pendingDocs = pendingList.length - pendingSessions;
     var pendingPreview = pendingList.slice(0, previewLimit).map(function (it) {
@@ -77,36 +77,30 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
     if (pendingList.length > previewLimit) {
       pendingPreview += "<li class=\"muted\">... and " + (pendingList.length - previewLimit) + " more</li>";
     }
-    if (!pendingPreview) pendingPreview = "<li>none</li>";
+    var pendingCount = Number(synthState.pending_total || pendingList.length || 0);
 
     var ops = snapshot.ops || {};
     var lastSync = ((snapshot.sync || {}).meta || {}).last_sync || "";
     var typeRows = Object.keys(taskTypeCounts).sort().map(function (name) {
       return "<li><code>" + name + "</code>: " + taskTypeCounts[name] + "</li>";
     }).join("");
-    if (!typeRows) typeRows = "<li>none</li>";
+    var typeCount = Object.keys(taskTypeCounts).length;
 
     var estimateHtml = "";
     if (estimate && (typeof estimate === "object") && (estimate.updated_at || estimate.corpus_total || estimate.new_total || estimate.incremental_usd || estimate.full_force_usd)) {
       var execModel = estimate.execution_model ? String(estimate.execution_model) : "default";
       var pricingModel = estimate.pricing_model ? String(estimate.pricing_model) : "default";
       var estWarnings = Array.isArray(estimate.warnings) ? estimate.warnings : [];
-      var warningHtml = estWarnings.map(function (w) {
-        return "<li>" + String(w) + "</li>";
-      }).join("");
-      if (!warningHtml) warningHtml = "<li>none</li>";
+      var warningText = estWarnings.map(function (w) { return String(w); }).join(" | ");
       estimateHtml =
         '<div><strong>Cost estimate</strong> <span class="muted">(updated: ' + formatTs(estimate.updated_at || "") + ')</span>' +
-        '<ul class="queue-type-list">' +
-        '<li><strong>Execution model:</strong> <code>' + execModel + '</code></li>' +
-        '<li><strong>Pricing model:</strong> <code>' + pricingModel + '</code></li>' +
-        '<li><strong>Corpus:</strong> ' + Number(estimate.corpus_total || 0) + ' total (' + Number(estimate.corpus_sessions || 0) + ' sessions, ' + Number(estimate.corpus_docs || 0) + ' docs)</li>' +
-        '<li><strong>New:</strong> ' + Number(estimate.new_total || 0) + ' total (' + Number(estimate.new_sessions || 0) + ' sessions, ' + Number(estimate.new_docs || 0) + ' docs)</li>' +
-        '<li><strong>Prefix tokens:</strong> ' + Number(estimate.prefix_tokens || 0).toLocaleString() + '</li>' +
-        '<li><strong>Incremental sync:</strong> $' + Number(estimate.incremental_usd || 0).toFixed(4) + '</li>' +
-        '<li><strong>Full re-synth:</strong> $' + Number(estimate.full_force_usd || 0).toFixed(4) + '</li>' +
-        '</ul>' +
-        '<details><summary>Estimate warnings</summary><ul class="queue-type-list">' + warningHtml + '</ul></details>' +
+        '<div class="muted">Incremental sync: $' + Number(estimate.incremental_usd || 0).toFixed(4) +
+        ' (' + Number(estimate.new_total || 0) + ' new: ' + Number(estimate.new_sessions || 0) + ' sessions, ' + Number(estimate.new_docs || 0) + ' docs)' +
+        ' · Prefix: ' + Number(estimate.prefix_tokens || 0).toLocaleString() +
+        ' tok · Exec: <code>' + execModel + '</code> · Pricing: <code>' + pricingModel + '</code></div>' +
+        '<div class="muted"><strong>Estimate warnings (' + estWarnings.length + ')</strong>' +
+        (estWarnings.length ? ': ' + warningText : '') +
+        '</div>' +
         '</div>';
     }
 
@@ -125,8 +119,8 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
       '<div><strong>Last lint run:</strong> ' + formatTs(ops.last_lint_run_at) + '</div>' +
       '<div><strong>Last reflect run:</strong> ' + formatTs(ops.last_reflect_run_at) + '</div>' +
       '</div>' +
-      '<div><strong>Queue task types</strong><ul class="queue-type-list">' + typeRows + '</ul></div>' +
-      '<div><strong>Not synthesized</strong> <span class="muted">(' + Number(synthState.pending_total || pendingList.length) + ' total; sessions=' + pendingSessions + ', docs=' + pendingDocs + ')</span><ul class="queue-type-list">' + pendingPreview + '</ul></div>' +
+      '<div><strong>Queue task types (' + typeCount + ')</strong>' + (typeCount ? '<ul class="queue-type-list">' + typeRows + '</ul>' : '') + '</div>' +
+      '<div><strong>Not synthesized (' + pendingCount + ' total; sessions=' + pendingSessions + ', docs=' + pendingDocs + ')</strong>' + (pendingCount ? '<ul class="queue-type-list">' + pendingPreview + '</ul>' : '') + '</div>' +
       estimateHtml;
 
     if (home) home.innerHTML = html;

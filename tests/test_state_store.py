@@ -59,3 +59,6 @@ def test_queue_trace_js_renders_estimate_block():
 
     assert "Cost estimate" in js.JS
     assert "estimate.incremental_usd" in js.JS
+    assert "Estimate warnings (" in js.JS
+    assert "previewLimit = 3" in js.JS
+    assert "<li>none</li>" not in js.JS
