@@ -247,8 +247,7 @@ def test_count_by_adapter(tmp_path):
     q.add_entry("a", "/p1", "e", path=f)
     q.add_entry("a", "/p2", "e", path=f)
     q.add_entry("b", "/p3", "e", path=f)
-    with patch.object(q, "DEFAULT_QUARANTINE_FILE", f):
-        counts = q.count_by_adapter(path=f)
+    counts = q.count_by_adapter(path=f)
     assert counts == {"a": 2, "b": 1}
 
 

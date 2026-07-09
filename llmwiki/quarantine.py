@@ -33,7 +33,6 @@ from typing import Any, Iterable, Optional
 
 from llmwiki.state_store import read_state, resolve_state_file, update_state
 
-DEFAULT_QUARANTINE_FILE = resolve_state_file()
 SCHEMA_VERSION = 1
 
 
@@ -79,7 +78,7 @@ def load(path: Optional[Path] = None) -> list[QuarantineEntry]:
     default still pointed at the original constant. Resolve at call
     time instead.
     """
-    target = path or DEFAULT_QUARANTINE_FILE
+    target = resolve_state_file(path)
     raw_entries: list[Any] = []
     if target.exists():
         try:
@@ -126,7 +125,7 @@ def save(
     #py-m7 (#593): default resolved at call time so tests that
     monkeypatch DEFAULT_QUARANTINE_FILE see the override.
     """
-    target = path or DEFAULT_QUARANTINE_FILE
+    target = resolve_state_file(path)
     items = sorted(set(entries), key=lambda e: (e.adapter, e.source))
     rows = [asdict(e) for e in items]
     def _mut(state: dict) -> dict:
@@ -199,7 +198,7 @@ def clear_entry(
 
     #py-m7 (#593): default resolved at call time.
     """
-    target = path or DEFAULT_QUARANTINE_FILE
+    target = resolve_state_file(path)
     entries = load(target)
     keep: list[QuarantineEntry] = []
     removed = 0
@@ -216,7 +215,7 @@ def clear_entry(
 
 def clear_all(path: Optional[Path] = None) -> int:
     """Drop every entry. Returns count removed."""
-    target = path or DEFAULT_QUARANTINE_FILE
+    target = resolve_state_file(path)
     entries = load(target)
     n = len(entries)
     if n:
@@ -230,7 +229,7 @@ def list_entries(
     adapter: Optional[str] = None,
 ) -> list[QuarantineEntry]:
     """Return entries filtered by adapter (stable ordering)."""
-    out = load(path or DEFAULT_QUARANTINE_FILE)
+    out = load(resolve_state_file(path))
     if adapter:
         out = [e for e in out if e.adapter == adapter]
     return sorted(out, key=lambda e: (e.adapter, e.last_seen), reverse=False)
@@ -269,6 +268,6 @@ def count_by_adapter(
 ) -> dict[str, int]:
     """Aggregate helper for ``llmwiki sync --status``."""
     out: dict[str, int] = {}
-    for e in load(path or DEFAULT_QUARANTINE_FILE):
+    for e in load(resolve_state_file(path)):
         out[e.adapter] = out.get(e.adapter, 0) + 1
     return out

@@ -94,15 +94,16 @@ def test_vault_sync_routes_state_file_into_vault(tmp_path: Path):
 
 def test_default_no_vault_behaviour_unchanged(tmp_path: Path):
     """Without --vault, default paths must be honoured unchanged."""
+    from llmwiki import REPO_ROOT
     from llmwiki.cli import cmd_sync
-    from llmwiki.convert import DEFAULT_OUT_DIR, DEFAULT_STATE_FILE
+    from llmwiki.convert import DEFAULT_OUT_DIR
 
     captured, fake_convert_all = _capture_convert_all_kwargs()
     with patch("llmwiki.convert.convert_all", side_effect=fake_convert_all):
         cmd_sync(_make_args())
 
     assert captured.get("out_dir") == DEFAULT_OUT_DIR
-    assert captured.get("state_file") == DEFAULT_STATE_FILE
+    assert captured.get("state_file") == REPO_ROOT / "llmwiki-state.json"
 
 
 def test_force_with_vault_uses_vault_state_file(tmp_path: Path):
@@ -180,8 +181,9 @@ def test_nonexistent_vault_path_returns_error(tmp_path: Path):
 
 def test_vault_sync_does_not_pollute_repo_paths(tmp_path: Path):
     """End-to-end: convert_all gets vault paths, NOT repo defaults."""
+    from llmwiki import REPO_ROOT
     from llmwiki.cli import cmd_sync
-    from llmwiki.convert import DEFAULT_OUT_DIR, DEFAULT_STATE_FILE
+    from llmwiki.convert import DEFAULT_OUT_DIR
 
     vault = tmp_path / "v"
     vault.mkdir()
@@ -191,4 +193,4 @@ def test_vault_sync_does_not_pollute_repo_paths(tmp_path: Path):
         cmd_sync(_make_args(vault=vault))
 
     assert captured["out_dir"] != DEFAULT_OUT_DIR
-    assert captured["state_file"] != DEFAULT_STATE_FILE
+    assert captured["state_file"] != REPO_ROOT / "llmwiki-state.json"

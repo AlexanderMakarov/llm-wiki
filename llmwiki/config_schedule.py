@@ -73,11 +73,25 @@ def resolve_content_root() -> Path:
 
 
 def apply_default_vault(args: Any) -> None:
-    """Fill ``args.vault`` from config when the CLI flag was omitted."""
+    """Fill ``args.vault`` from config and configure the active state file.
+
+    State path is resolved once at the CLI border — library modules must
+    not re-read ``config.json`` for ``llmwiki-state.json``.
+    """
+    from llmwiki import REPO_ROOT
+    from llmwiki.state_store import configure_state_file
+
     if getattr(args, "vault", None) is None:
         default = load_default_vault_path()
         if default is not None:
             args.vault = default
+    explicit_state = getattr(args, "state_file", None)
+    if explicit_state is not None:
+        configure_state_file(explicit_state)
+    elif getattr(args, "vault", None) is not None:
+        configure_state_file(args.vault)
+    else:
+        configure_state_file(REPO_ROOT)
 
 
 def load_schedule_config() -> dict[str, str]:

@@ -149,7 +149,6 @@ def _patch(monkeypatch, home, state):
     store = home / ".claude" / "projects"
     monkeypatch.setattr(ClaudeCodeAdapter, "session_store_path", store, raising=False)
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
-    monkeypatch.setattr(c, "DEFAULT_STATE_FILE", state)
     monkeypatch.setattr(c, "REPO_ROOT", home.parent / "repo")
 
 

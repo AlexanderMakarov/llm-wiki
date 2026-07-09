@@ -6,6 +6,8 @@ import json
 from pathlib import Path
 
 from llmwiki.state_store import (
+    configure_state_file,
+    get_state_file,
     read_state,
     resolve_sidecar_file,
     resolve_state_file,
@@ -14,20 +16,24 @@ from llmwiki.state_store import (
 )
 
 
+def test_configure_state_file_sets_active(tmp_path: Path):
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    configure_state_file(vault)
+    assert get_state_file() == vault / "llmwiki-state.json"
+    assert resolve_state_file() == vault / "llmwiki-state.json"
+
+
 def test_resolve_state_file_from_vault_dir(tmp_path: Path):
     vault = tmp_path / "vault"
     vault.mkdir()
     assert resolve_state_file(vault) == vault / "llmwiki-state.json"
 
 
-def test_write_state_emits_js_sidecar(tmp_path: Path, monkeypatch):
+def test_write_state_emits_js_sidecar(tmp_path: Path):
     vault = tmp_path / "vault"
     vault.mkdir()
     state_file = vault / "llmwiki-state.json"
-    monkeypatch.setattr(
-        "llmwiki.state_store.load_default_vault_path",
-        lambda: None,
-    )
     write_state({"queue": {"items": [{"id": "t1", "status": "pending"}]}}, state_file)
     assert state_file.is_file()
     sidecar = resolve_sidecar_file(state_file)

@@ -121,7 +121,6 @@ RAW_SESSIONS = REPO_ROOT / "raw" / "sessions"
 RAW_DOCS = REPO_ROOT / "raw" / "docs"
 WIKI_SOURCES = REPO_ROOT / "wiki" / "sources"
 WIKI_LOG = REPO_ROOT / "wiki" / "log.md"
-STATE_FILE = _resolve_state_file()
 
 # #1: ceiling on the body size handed to a single synthesis backend call.
 # Oversized docs (e.g. a multi-MB concatenated `llms-full.txt`) are split
@@ -204,19 +203,6 @@ def _inject_vocabulary(template: str, wiki_dir: Path, *, limit: int = _VOCAB_LIM
     return template.replace("{vocabulary}", "\n".join(lines))
 
 
-def _resolve_state_file(state_file: Optional[Path] = None) -> Path:
-    """Return the synth state-file path.
-
-    #420: when running in vault-overlay mode, the state file must live
-    *under the vault root*, not the repo root — otherwise two different
-    vaults synthesised against the same repo silently share idempotency
-    state and one vault's run marks the other vault's files unchanged.
-    Callers pass ``state_file`` explicitly when in vault mode; default
-    falls back to the repo-root location for the no-vault case.
-    """
-    return state_file if state_file is not None else STATE_FILE
-
-
 def _load_state(state_file: Optional[Path] = None) -> dict[str, float]:
     """Load the mtime state file. Returns {relative_path: mtime}.
 
@@ -243,10 +229,22 @@ def _load_state(state_file: Optional[Path] = None) -> dict[str, float]:
 
 
 def _save_state(state: dict[str, float], state_file: Optional[Path] = None) -> None:
+    """Persist synth mtimes into unified state.
+
+    ``state`` is the full in-memory map for this run (loaded then updated).
+    Values are written as ISO-8601 strings. Keys present in ``state`` are
+    upserted; keys absent from ``state`` are left untouched so a partial
+    accidental write cannot wipe the rest of the vault's synth map.
+    """
     target = _resolve_state_file(state_file)
     def _mut(s: dict[str, Any]) -> dict[str, Any]:
         synth = s.setdefault("synth", {})
-        synth["files"] = {k: mtime_to_iso(v) for k, v in state.items()}
+        files = dict(synth.get("files") or {}) if isinstance(synth.get("files"), dict) else {}
+        for k, v in state.items():
+            if not isinstance(k, str):
+                continue
+            files[k] = mtime_to_iso(v)
+        synth["files"] = files
         return s
     _update_unified_state(_mut, target)
 
@@ -913,6 +911,7 @@ def synthesize_new_sessions(
     # model reuses canonical spellings instead of coining new variants. Filled
     # once here (corpus-wide); backends only substitute {body}/{meta} after.
     prompt_template = _inject_vocabulary(prompt_template, sources_out.parent)
+    state_file = _resolve_state_file(state_file)
     state = {} if force else _load_state(state_file)
     chunk_max = doc_chunk_max_chars or _DOC_CHUNK_MAX_CHARS
     only_resolved: set[Path] | None = None

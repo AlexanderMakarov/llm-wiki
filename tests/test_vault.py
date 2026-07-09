@@ -502,8 +502,12 @@ def test_existing_vault_doc_exists():
 
 def test_synth_state_file_default_at_repo_root(tmp_path: Path, monkeypatch):
     """Default mode (no vault): state file lives at repo root."""
-    from llmwiki.synth.pipeline import _resolve_state_file, STATE_FILE
-    assert _resolve_state_file(None) == STATE_FILE
+    from llmwiki import REPO_ROOT
+    from llmwiki.state_store import configure_state_file, get_state_file, resolve_state_file
+
+    configure_state_file(REPO_ROOT)
+    assert resolve_state_file() == get_state_file()
+    assert resolve_state_file() == REPO_ROOT / "llmwiki-state.json"
 
 
 def test_synth_state_file_per_vault(tmp_path: Path):
@@ -512,18 +516,18 @@ def test_synth_state_file_per_vault(tmp_path: Path):
     Regression for #420 — without per-vault isolation, two vaults
     synthesised against the same repo silently share idempotency state.
     """
-    from llmwiki.synth.pipeline import _resolve_state_file
-    vault_a = tmp_path / "vault-a" / ".llmwiki-synth-state.json"
-    vault_b = tmp_path / "vault-b" / ".llmwiki-synth-state.json"
-    assert _resolve_state_file(vault_a) == vault_a
-    assert _resolve_state_file(vault_b) == vault_b
-    assert _resolve_state_file(vault_a) != _resolve_state_file(vault_b)
+    from llmwiki.state_store import resolve_state_file
+    vault_a = tmp_path / "vault-a" / "llmwiki-state.json"
+    vault_b = tmp_path / "vault-b" / "llmwiki-state.json"
+    assert resolve_state_file(vault_a) == vault_a
+    assert resolve_state_file(vault_b) == vault_b
+    assert resolve_state_file(vault_a) != resolve_state_file(vault_b)
 
 
 def test_synth_load_save_roundtrip_with_explicit_state_file(tmp_path: Path):
     """Writing then reading state via an explicit path round-trips."""
     from llmwiki.synth.pipeline import _load_state, _save_state
-    state_file = tmp_path / "vault-x" / ".llmwiki-synth-state.json"
+    state_file = tmp_path / "vault-x" / "llmwiki-state.json"
     state_file.parent.mkdir(parents=True)
     sample = {"sources/foo.md": 1234567890.0, "sources/bar.md": 1234567891.5}
     _save_state(sample, state_file)

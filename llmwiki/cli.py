@@ -142,7 +142,8 @@ def cmd_sync(args: argparse.Namespace) -> int:
 
     _apply_default_vault(args)
 
-    from llmwiki.convert import convert_all, DEFAULT_OUT_DIR, DEFAULT_STATE_FILE
+    from llmwiki.convert import convert_all, DEFAULT_OUT_DIR
+    from llmwiki.state_store import resolve_state_file
 
     # v1.2 (#54): vault-overlay mode — resolve the vault early so bad
     # paths fail before we spend time converting sessions.
@@ -153,7 +154,7 @@ def cmd_sync(args: argparse.Namespace) -> int:
     # "507 converted" but the vault directory was empty.
     vault_path = getattr(args, "vault", None)
     out_dir = DEFAULT_OUT_DIR
-    state_file = DEFAULT_STATE_FILE
+    state_file = resolve_state_file()
     if vault_path:
         from llmwiki.vault import describe_vault, resolve_vault
         try:
@@ -165,11 +166,9 @@ def cmd_sync(args: argparse.Namespace) -> int:
         if args.allow_overwrite:
             print("  --allow-overwrite: existing vault pages may be clobbered")
         # Route writes into the vault so a vault-mode sync actually
-        # populates the vault. State file co-located with the vault so
-        # two different vaults don't share idempotency state (same
-        # principle as #420 for synth state).
+        # populates the vault. State file is configured at the CLI border
+        # via ``apply_default_vault`` → ``configure_state_file``.
         out_dir = vault.root / "raw" / "sessions"
-        state_file = vault.root / "llmwiki-state.json"
 
     # PR #19 field report: two llmwiki processes on one vault corrupt each
     # other's site resets — serialize the mutating pipeline on a vault lock.
@@ -519,13 +518,13 @@ def cmd_lint(args: argparse.Namespace) -> int:
 
     if args.fail_on_errors and summary.get("error", 0) > 0:
         return 1
+    _apply_default_vault(args)
     from llmwiki.state_store import resolve_state_file, update_state
     from datetime import datetime, timezone
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    vault = getattr(args, "vault", None)
     update_state(
         lambda s: (s.setdefault("ops", {}).__setitem__("last_lint_run_at", now) or s),
-        resolve_state_file(vault),
+        resolve_state_file(),
     )
     return 0
 
@@ -536,9 +535,7 @@ def cmd_queue(args: argparse.Namespace) -> int:
 
     _apply_default_vault(args)
     vault = getattr(args, "vault", None)
-    target = resolve_state_file(
-        getattr(args, "state_file", None) or vault
-    )
+    target = resolve_state_file()
     if args.queue_action == "status":
         stat = queue_status(target)
         state = read_state(target)
@@ -644,9 +641,9 @@ def cmd_synthesize(args: argparse.Namespace) -> int:
         )
         return 1
 
-    # #420: vault-overlay mode isolates raw/wiki/state to the vault root.
+    # #420: vault-overlay mode isolates raw/wiki to the vault root.
     vault_path = getattr(args, "vault", None)
-    raw_dir = wiki_sources_dir = state_file = None
+    raw_dir = wiki_sources_dir = None
     if vault_path:
         from llmwiki.vault import resolve_vault
         try:
@@ -660,14 +657,12 @@ def cmd_synthesize(args: argparse.Namespace) -> int:
         # the missed copy. Caught by the multi-agent code review.
         raw_dir = vault.root / "raw" / "sessions"
         wiki_sources_dir = vault.root / "wiki" / "sources"
-        state_file = vault.root / "llmwiki-state.json"
 
     summary = synthesize_new_sessions(
         backend=backend,
         force=args.force,
         raw_dir=raw_dir,
         wiki_sources_dir=wiki_sources_dir,
-        state_file=state_file,
     )
     print(
         f"Scanned {summary['total_scanned']}, new {summary['new_files']}, "
@@ -735,7 +730,7 @@ def _cmd_add_locked(args: argparse.Namespace, docs_dir: Path,
     from llmwiki.state_store import resolve_state_file, update_state
     from datetime import datetime, timezone
 
-    state_target = resolve_state_file(vault_root)
+    state_target = resolve_state_file()
     now_ts = datetime.now(timezone.utc)
     task_id = f"add-sync-{int(now_ts.timestamp() * 1000)}"
 
@@ -800,12 +795,11 @@ def _cmd_add_locked(args: argparse.Namespace, docs_dir: Path,
         from llmwiki.config_schedule import _load_sessions_config
         from llmwiki.synth.pipeline import resolve_backend, synthesize_new_sessions
         backend = resolve_backend(_load_sessions_config())
-        raw_dir = wiki_sources_dir = state_file = None
+        raw_dir = wiki_sources_dir = None
         sources_dir = REPO_ROOT / "wiki" / "sources"
         if vault_root:
             raw_dir = vault_root / "raw" / "sessions"
             wiki_sources_dir = vault_root / "wiki" / "sources"
-            state_file = vault_root / "llmwiki-state.json"
             sources_dir = wiki_sources_dir
         if not backend.is_available():
             removed = remove_raw_docs(result["written"])
@@ -820,7 +814,7 @@ def _cmd_add_locked(args: argparse.Namespace, docs_dir: Path,
         # the whole unsynthesized backlog from an add invocation.
         summary = synthesize_new_sessions(
             backend=backend, raw_dir=raw_dir,
-            wiki_sources_dir=wiki_sources_dir, state_file=state_file,
+            wiki_sources_dir=wiki_sources_dir,
             only_paths=set(result["written"]),
         )
         print(f"  synthesized {summary['synthesized']}, skipped {summary['skipped']}")
@@ -888,6 +882,7 @@ def _synthesize_estimate(args: argparse.Namespace | None = None) -> int:
     or just the delta.
     """
     args = args or argparse.Namespace(vault=None)
+    _apply_default_vault(args)
     raw_sessions = None
     state_keys = None
     prefix_tokens = None
@@ -931,7 +926,7 @@ def _synthesize_estimate(args: argparse.Namespace | None = None) -> int:
     from llmwiki.state_store import resolve_state_file, update_state
     from llmwiki.synth.pipeline import _discover_raw_sessions, _load_state, discover_synth_source_keys
 
-    state_target = resolve_state_file(getattr(args, "vault", None))
+    state_target = resolve_state_file()
     vault_root = state_target.parent
     raw_root = vault_root / "raw" / "sessions"
     docs_root = vault_root / "raw" / "docs"

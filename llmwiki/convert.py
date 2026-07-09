@@ -26,7 +26,6 @@ from llmwiki.state_store import resolve_state_file as _resolve_state_file
 from llmwiki.state_store import update_state as _update_unified_state
 from llmwiki.state_store import mtime_from_state, mtime_to_iso
 
-DEFAULT_STATE_FILE = _resolve_state_file()
 DEFAULT_CONFIG_FILE = REPO_ROOT / "examples" / "sessions_config.json"
 DEFAULT_OUT_DIR = REPO_ROOT / "raw" / "sessions"
 DEFAULT_IGNORE_FILE = REPO_ROOT / ".llmwikiignore"
@@ -1484,7 +1483,7 @@ def render_session_markdown(
 def convert_all(
     adapters: list[str] | None = None,
     out_dir: Path = DEFAULT_OUT_DIR,
-    state_file: Path = DEFAULT_STATE_FILE,
+    state_file: Optional[Path] = None,
     config_file: Path = DEFAULT_CONFIG_FILE,
     ignore_file: Path = DEFAULT_IGNORE_FILE,
     since: Optional[str] = None,
@@ -1504,6 +1503,7 @@ def convert_all(
     Pass ``fail_on_errors=True`` (CLI: ``--fail-on-errors``) to exit 1
     when any file errored — for CI-style callers that want a hard gate.
     """
+    state_file = _resolve_state_file(state_file)
     config = load_config(config_file)
     state = {} if force else load_state(state_file, adapter_names=list(REGISTRY.keys()))
     redact = Redactor(config)

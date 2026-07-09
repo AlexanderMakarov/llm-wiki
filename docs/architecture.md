@@ -72,10 +72,12 @@ Reads .jsonl from the agent's session store (via an adapter), filters out noise 
 
 Key properties:
 
-- **Idempotent** — mtime tracked in `.llmwiki-state.json`
+- **Idempotent** — mtime tracked in `<vault>/llmwiki-state.json` (unified queue + sync + synth + quarantine state)
 - **Privacy-first** — username + API keys + tokens + emails redacted by default
 - **Live-session safe** — skips files with a record younger than 60 minutes
 - **Agent-agnostic** — delegates discovery to the adapter registry
+
+**Vault state (v1.4+):** one active `llmwiki-state.json` per process, configured at the CLI border (`apply_default_vault` → `configure_state_file`). Library modules call `resolve_state_file()` — they never re-read `config.json` for the state path. Import-time constants like `DEFAULT_STATE_FILE` were removed so tests and library callers cannot accidentally write into a developer's configured vault.
 
 ### L1 — Wiki
 

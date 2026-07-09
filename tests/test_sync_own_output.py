@@ -72,11 +72,7 @@ def env(tmp_path, monkeypatch):
         ClaudeCodeAdapter, "session_store_path", store, raising=False,
     )
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
-    monkeypatch.setattr(c, "DEFAULT_STATE_FILE", state)
     monkeypatch.setattr(c, "REPO_ROOT", home.parent / "repo")
-    monkeypatch.setattr(
-        quarantine, "DEFAULT_QUARANTINE_FILE", tmp_path / "quarantine.json",
-    )
     c.discover_adapters()
     return {"proj": proj, "out_dir": out_dir, "state": state}
 

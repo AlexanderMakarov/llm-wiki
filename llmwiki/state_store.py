@@ -9,11 +9,11 @@ from pathlib import Path
 from typing import Any, Iterator
 
 from llmwiki import REPO_ROOT
-from llmwiki.config_schedule import load_default_vault_path
 
 
 SCHEMA_VERSION = 1
 DEFAULT_BOUNDED_COMPLETED = 500
+_ACTIVE_STATE_FILE: Path | None = None
 
 
 def _utc_now() -> str:
@@ -82,20 +82,46 @@ def default_state() -> dict[str, Any]:
     }
 
 
+def _normalize_state_path(explicit: Path) -> Path:
+    """Map a vault root or state file path to ``…/llmwiki-state.json``."""
+    p = Path(explicit).expanduser().resolve()
+    if p.is_dir():
+        return p / "llmwiki-state.json"
+    return p
+
+
+def configure_state_file(explicit: Path | None) -> Path:
+    """Set the process-wide active state file (CLI border only).
+
+    ``explicit`` may be a vault root directory or the state file itself.
+    Library code should not call this — use ``resolve_state_file`` with an
+    explicit path for one-off overrides.
+    """
+    global _ACTIVE_STATE_FILE
+    if explicit is None:
+        _ACTIVE_STATE_FILE = REPO_ROOT / "llmwiki-state.json"
+    else:
+        _ACTIVE_STATE_FILE = _normalize_state_path(explicit)
+    return _ACTIVE_STATE_FILE
+
+
+def get_state_file() -> Path:
+    """Return the active state file for this process."""
+    if _ACTIVE_STATE_FILE is not None:
+        return _ACTIVE_STATE_FILE
+    return REPO_ROOT / "llmwiki-state.json"
+
+
 def resolve_state_file(explicit: Path | None = None) -> Path:
     """Return canonical ``<vault>/llmwiki-state.json``.
 
-    ``explicit`` may be a vault root directory or the state file itself.
+  ``explicit`` overrides the active default for this call only.
+  When omitted, returns the process-wide active file from
+  ``configure_state_file`` (or ``REPO_ROOT/llmwiki-state.json``).
     """
     if explicit is not None:
-        p = Path(explicit).expanduser().resolve()
-        if p.is_dir():
-            return p / "llmwiki-state.json"
-        return p
-    vault = load_default_vault_path()
-    if vault:
-        return Path(vault).expanduser().resolve() / "llmwiki-state.json"
-    return REPO_ROOT / "llmwiki-state.json"
+        return _normalize_state_path(explicit)
+    return get_state_file()
 
 
 def resolve_sidecar_file(state_file: Path) -> Path:

@@ -51,6 +51,19 @@ llmwiki queue run --limit 20
 
 Rebuild the site after upgrading so the Home page loads `../llmwiki-state.js`.
 
+### State path isolation (v1.4.0+)
+
+The active state file is **process-scoped**: `llmwiki` CLI entry points call `configure_state_file` once from `--vault` / `--state-file` / `config.json` `vault.default_path`. Library code and tests must pass an explicit `state_file=` override or rely on that configured path — there are no import-time vault bindings.
+
+If `llmwiki-state.json` looks truncated (e.g. only a handful of `synth.files` keys after a test run), re-run the migration against your vault:
+
+```bash
+PYTHONPATH=/path/to/llm-wiki python3 scripts/migrate_state_v1_4_0.py \
+  --state-file /path/to/vault/llmwiki-state.json
+```
+
+Legacy dotfiles (`.llmwiki-state.json`, `.llmwiki-synth-state.json`, …) are merged in; verify `sync.files` / `synth.files` counts before deleting them.
+
 ## v1.3.83+ — unified queue preview (superseded by v1.4.0)
 
 Same migration as v1.4.0; use `scripts/migrate_state_v1_4_0.py`.

@@ -31,12 +31,10 @@ from typing import Optional
 
 from llmwiki.state_store import read_state, resolve_state_file, update_state
 
-DEFAULT_QUEUE_FILE = resolve_state_file()
-
 
 def _load(queue_file: Optional[Path] = None) -> list[str]:
     """Load legacy ingest-pending paths from unified state (or flat JSON array)."""
-    qf = queue_file or DEFAULT_QUEUE_FILE
+    qf = resolve_state_file(queue_file)
     if not qf.exists():
         return []
     try:
@@ -59,7 +57,7 @@ def _load(queue_file: Optional[Path] = None) -> list[str]:
 
 def _save(items: list[str], queue_file: Optional[Path] = None) -> None:
     """Save legacy ingest-pending paths into unified state."""
-    qf = queue_file or DEFAULT_QUEUE_FILE
+    qf = resolve_state_file(queue_file)
     deduped = sorted(set(items))
     def _mut(state: dict) -> dict:
         state.setdefault("queue", {})["legacy_pending_paths"] = deduped
@@ -89,7 +87,7 @@ def dequeue(*, queue_file: Optional[Path] = None) -> list[str]:
     is empty. Process the returned paths, then they're done.
     """
     items = _load(queue_file)
-    _save([], queue_file or DEFAULT_QUEUE_FILE)
+    _save([], resolve_state_file(queue_file))
     return items
 
 
@@ -100,7 +98,7 @@ def peek(*, queue_file: Optional[Path] = None) -> list[str]:
 
 def clear(*, queue_file: Optional[Path] = None) -> None:
     """Clear the queue without reading."""
-    _save([], queue_file or DEFAULT_QUEUE_FILE)
+    _save([], resolve_state_file(queue_file))
 
 
 def queue_size(*, queue_file: Optional[Path] = None) -> int:

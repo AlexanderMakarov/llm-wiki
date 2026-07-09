@@ -8,6 +8,14 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ## [Unreleased]
 
+### Changed
+
+- **Single CLI-bound active state file** — `configure_state_file` / `get_state_file` in `state_store.py`; `apply_default_vault` configures the path once at CLI entry. Removed import-time `DEFAULT_STATE_FILE`, `STATE_FILE`, `DEFAULT_QUEUE_FILE`, and `DEFAULT_QUARANTINE_FILE` so tests and library callers cannot leak into `config.json`'s `vault.default_path`. `_save_state` merges synth keys instead of replacing the whole map.
+
+### Fixed
+
+- **Test isolation** — autouse `conftest` fixture calls `configure_state_file(tmp)`; estimate CLI tests require `--vault` for subprocess runs.
+
 ## [1.4.0] — 2026-07-09
 
 ### Added
