@@ -106,8 +106,9 @@ mark_completed(state, "batch_abc")
 save_batch_state(repo, state)
 ```
 
-The state file (`.llmwiki-batch-state.json`) is small JSON — safe to
-grep, diff, and commit if you want to audit what's been submitted.
+The batch-state helpers and `.llmwiki-batch-state.json` path were
+**removed in v1.4.0**. Cost estimates still use `model_pricing.csv` via
+`llmwiki synthesize --estimate`; there is no `sync --batch` command.
 
 ## Rate card
 
@@ -123,15 +124,10 @@ v1.1.0):
 These are the rates `estimate_cost()` uses. Update them in one place
 (`MODEL_PRICING`) when Anthropic publishes new ones.
 
-## What's still to do (v1.2)
+## What's still historical (pre-1.4)
 
-- The actual Anthropic backend that wires `CachedPrompt` into
-  `client.messages.create(...)`.
-- `llmwiki sync --batch` that submits through `message_batches` and
-  polls for completion.
-- Write-through updating of `MODEL_PRICING` from Anthropic's pricing
-  JSON.
-- Gemini / OpenAI cache header mapping (separate PR — different
-  semantics).
+- Anthropic HTTP batch / `sync --batch` was never shipped as a CLI
+  command; use `synthesis.backend: claude` or `ollama` instead.
+- Write-through updating of rates now lives in `model_pricing.csv`.
 
-See #50 for the tracking issue.
+See #50 for the original tracking issue.

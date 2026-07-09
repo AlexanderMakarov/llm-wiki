@@ -44,7 +44,7 @@ site/      Generated static HTML
 
 All three directories are gitignored by default. They never enter version control unless you explicitly un-ignore them.
 
-The converter state file (`.llmwiki-state.json`) tracks which sessions have been processed and is also gitignored.
+The converter state file (`llmwiki-state.json` at the vault root — or repo root when no vault is configured) tracks which sessions have been processed and is gitignored.
 
 ## Can I deploy to GitLab Pages?
 
@@ -85,7 +85,7 @@ Use the `/wiki-update` command inside your coding agent session. It performs a s
 
 ## What Python version do I need?
 
-Python 3.9 or later. The only runtime dependency is the `markdown` package. Everything else uses the standard library.
+Python 3.12 or later. The only runtime dependency is the `markdown` package. Everything else uses the standard library.
 
 ## Can I export to other formats?
 

@@ -11,6 +11,7 @@ Versions below 1.0 are pre-production — API and file formats may change.
 ### Changed
 
 - **Single CLI-bound active state file** — `configure_state_file` / `get_state_file` in `state_store.py`; `apply_default_vault` configures the path once at CLI entry. Removed import-time `DEFAULT_STATE_FILE`, `STATE_FILE`, `DEFAULT_QUEUE_FILE`, and `DEFAULT_QUARANTINE_FILE` so tests and library callers cannot leak into `config.json`'s `vault.default_path`. `_save_state` merges synth keys instead of replacing the whole map.
+- **Docs refreshed for v1.4.0 CLI surface** — README / configuration / modes / tutorials no longer document removed flags (`serve --vault`, `sync --dry-run`, `synthesize --list-pending` / `--complete`) or the agent-delegate backend; synthesis backends are `dummy` / `ollama` / `claude`; state file is `llmwiki-state.json`; minimum Python is 3.12+.
 
 ### Fixed
 

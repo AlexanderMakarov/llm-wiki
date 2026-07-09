@@ -290,6 +290,6 @@ for name, cls in sorted(REGISTRY.items()):
 
 - All public functions are importable from their module paths.
 - No function requires network access (except `image_pipeline.process_markdown_images` with `--download-images`).
-- `convert_all` is idempotent -- state is tracked in `.llmwiki-state.json`.
+- `convert_all` is idempotent -- state is tracked in `llmwiki-state.json` (active path from `configure_state_file` / `resolve_state_file`).
 - `build_site` is deterministic -- the same inputs produce the same outputs.
-- All functions use the repo root auto-detected from the package location. Override with `LLMWIKI_ROOT`.
+- Content root comes from `vault.default_path` in `config.json` (CLI) or an explicit `state_file=` / vault path. The removed `LLMWIKI_ROOT` env var is no longer read.

@@ -118,8 +118,9 @@ Minimal config:
 ```jsonc
 {
   "synthesis": {
-    // "dummy" (default) | "ollama" | "agent"
-    "backend": "agent"
+    // "dummy" (default) | "ollama" | "claude"
+    "backend": "claude",
+    "claude_model": "sonnet"
   }
 }
 ```
@@ -128,7 +129,9 @@ Minimal config:
 |---|---|---|
 | `dummy` | Canned stub page: metadata summary, one `[[ProjectEntity]]` link, plain-text `## Raw Mentions`. For previews/tests. | nothing |
 | `ollama` | Local LLM over the Ollama HTTP API. Configure `synthesis.ollama.{model,base_url,timeout,max_retries}`. | running `ollama serve` |
-| `agent` | Agent-delegate (#316): writes each rendered prompt to `.llmwiki-pending-prompts/<uuid>.md` and a sentinel page; your running Claude Code / Codex CLI agent completes them (`synthesize --list-pending` → generate → `synthesize --complete <uuid>`). No API key, no HTTP — rides your agent subscription. | an agent session |
+| `claude` | Synchronous `claude -p` CLI calls (#16). Optional `claude_path` / `claude_model` (default `sonnet`) / `timeout`. Works from a plain terminal and nested inside agent sessions. | `claude` on `$PATH` (or `claude_path`) |
+
+The old `agent` / `agent_delegate` backend (pending-prompt files + `--list-pending` / `--complete`) was removed in v1.4.0 — use `claude` instead.
 
 Sanity-check what's active and what a run would cost:
 
@@ -137,9 +140,9 @@ llmwiki synthesize --check      # prints the resolved backend + availability
 llmwiki synthesize --estimate   # cached-vs-fresh token + dollar estimate
 ```
 
-**Synthesis is incremental.** `.llmwiki-synth-state.json` records an
-mtime per raw file; a nightly `sync`/`synthesize` only processes files
-that are new or changed since the last run — the daily LLM bill is
+**Synthesis is incremental.** `<vault>/llmwiki-state.json` (`synth.files`)
+records an mtime per raw file; a nightly `sync`/`synthesize` only processes
+files that are new or changed since the last run — the daily LLM bill is
 proportional to new content, not to corpus size. `--force` re-runs
 everything (use after switching backends, e.g. to replace dummy-stub
 pages with real ones — pages with only stub links produce a topic
@@ -149,19 +152,19 @@ graph with no edges).
 `synthesis.backend` is unset (or a typo — unknown values warn and fall
 back), so a `--force` run in that state used to overwrite every real
 page with link-free stubs and silently empty the knowledge graph. The
-pipeline now refuses that downgrade: stub output (dummy body or
-agent-delegate pending sentinel) is never written over a real page,
-even under `--force` — such pages are reported as `protected` in the
-run summary. To deliberately re-synthesize a real page, delete it
-first. (An unavailable backend does *not* fall back — the run aborts
-with an error.)
+pipeline now refuses that downgrade: stub output is never written over
+a real page, even under `--force` — such pages are reported as
+`protected` in the run summary. To deliberately re-synthesize a real
+page, delete it first. (An unavailable backend does *not* fall back —
+the run aborts with an error.)
 
 ## Environment variables
 
 | Variable | What it does |
 |---|---|
-| `LLMWIKI_ROOT` | Override the repo root that content reads (`wiki/`, `raw/`) resolve against — e.g. point the MCP server at an external vault. Defaults to auto-detection from the package location. |
 | `LLMWIKI_CONFIG` | Override the config file path. Defaults to `./config.json` then `examples/sessions_config.json`. |
+
+Vault content root is **`vault.default_path` in `config.json`** (not an env var). The removed `LLMWIKI_ROOT` env var is no longer read.
 
 ## CLI flags
 
@@ -175,15 +178,19 @@ python3 -m llmwiki sync [options]
 --project <substring>     Only sync projects whose slug contains this substring
 --include-current         Don't skip live (<60 min) sessions
 --force                   Ignore the state file; reconvert everything
---dry-run                 Preview what would be written, don't touch disk
 --fail-on-errors          Exit 1 if any file fails to convert
+--vault PATH              Write into an external vault (also sets active state file)
+--status                  Show last-sync + counters + quarantine (no sync)
 ```
 
 Per-file conversion errors do not fail the run by default: each one is
-counted in the summary, recorded in `.llmwiki-quarantine.json`, and
-visible via `llmwiki sync --status`, while the rest of the corpus still
-converts. Pass `--fail-on-errors` for a hard gate (CI, scripted
-pipelines that must not proceed past a partial sync).
+counted in the summary, recorded in `llmwiki-state.json` quarantine
+entries, and visible via `llmwiki sync --status`, while the rest of the
+corpus still converts. Pass `--fail-on-errors` for a hard gate (CI,
+scripted pipelines that must not proceed past a partial sync).
+
+There is **no** `sync --dry-run` — use `add --dry-run` for document intake
+previews, or inspect with `sync --status` / `synthesize --estimate`.
 
 ### `llmwiki build`
 

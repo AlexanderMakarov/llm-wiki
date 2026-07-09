@@ -8,7 +8,7 @@ and deployed to GitHub Pages. By the end you'll have:
 - (Optional) A public GitHub Pages deploy at `https://<user>.github.io/llm-wiki/`
 - Your own project topics, model entities, and Obsidian view of the wiki
 
-**Prerequisites:** Python 3.9+, git. That's it. No Node, no Docker, no database.
+**Prerequisites:** Python 3.12+, git. That's it. No Node, no Docker, no database.
 
 ---
 

@@ -6,7 +6,7 @@
 This repo is a **personal fork** ([AlexanderMakarov/llm-wiki](https://github.com/AlexanderMakarov/llm-wiki)) of [Pratiyush/llm-wiki](https://github.com/Pratiyush/llm-wiki). It adds **OpenClaw** and **Cursor CLI** adapters, a **topic-first knowledge graph**, and a **vault-outside-the-repo** workflow so your sessions never land in git.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/)
 [![Version](https://img.shields.io/badge/version-v1.4.0-10B981.svg)](CHANGELOG.md)
 [![Tests](https://img.shields.io/badge/tests-2850%20passing-10B981.svg)](tests/)
 [![CI](https://github.com/AlexanderMakarov/llm-wiki/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/AlexanderMakarov/llm-wiki/actions/workflows/ci.yml)
@@ -25,7 +25,7 @@ git clone git@github.com:AlexanderMakarov/llm-wiki.git
 cd llm-wiki
 ./setup.sh
 # create config.json (see below), then:
-llmwiki sync && llmwiki build && llmwiki serve --vault /path/to/your-vault
+llmwiki sync && llmwiki build && llmwiki serve --dir /path/to/your-vault/site
 ```
 
 ---
@@ -39,10 +39,12 @@ The git clone holds **code + demo seeds only**. Your transcripts, wiki pages, an
   raw/sessions/               ← converted transcripts
   wiki/                       ← LLM-maintained pages (sources/, index.md, …)
   site/                       ← built static HTML
-  llmwiki-state.json          ← unified queue + sync + synth state
+  llmwiki-state.json          ← unified queue + sync + synth + quarantine state
   llmwiki-state.js            ← UI sidecar for Home queue panel (file:// safe)
   .llmwiki-topics.json        ← topic consolidation cache
 ```
+
+State is **one active file per process**, configured at CLI entry from `--vault` / `--state-file` / `vault.default_path` (see [docs/architecture.md](docs/architecture.md)). Library callers never re-read `config.json` for the state path.
 
 ### 1. `config.json` at the repo root (gitignored)
 
@@ -192,7 +194,7 @@ llmwiki sync                    # convert new sessions → vault raw/sessions/
 llmwiki synthesize              # LLM summaries → vault wiki/sources/
 llmwiki consolidate-topics      # optional: dedupe topic vocabulary
 llmwiki build                   # vault raw/ + wiki/ → vault site/
-llmwiki serve --vault /path/to/your-vault
+llmwiki serve --dir /path/to/your-vault/site
 ```
 
 One-shot:
@@ -203,9 +205,10 @@ llmwiki all --with-synth --graph-engine builtin
 
 Useful flags:
 
-- `--vault PATH` — override `config.json` default for one run
+- `--vault PATH` — override `config.json` default for one run (`sync` / `build` / `synthesize` / `add` / `queue` / `all`)
 - `--adapter <name>` — limit sync to one source
-- `--force` — re-convert sessions even if unchanged
+- `--force` — re-convert / re-synthesize even if unchanged
+- `llmwiki serve --dir PATH` — serve a built `site/` (no `--vault` on serve)
 - `llmwiki lint` — broken wikilinks, orphans, stale pages
 
 ---
@@ -244,21 +247,23 @@ Agent workflows (`/wiki-sync`, `/wiki-ingest`, `/wiki-query`) are defined in [CL
 
 ```bash
 llmwiki init
-llmwiki sync [--adapter NAME] [--vault PATH]
+llmwiki sync [--adapter NAME] [--vault PATH] [--force] [--status]
 llmwiki add <url|file|folder>... [--vault PATH] [--no-synthesize] [--no-build]
-llmwiki build [--vault PATH]
-llmwiki serve [--vault PATH]
-llmwiki synthesize [--vault PATH]
-llmwiki consolidate-topics [--complete reply.json]
-llmwiki graph
+llmwiki build [--vault PATH] [--out PATH]
+llmwiki serve [--dir PATH] [--port N]          # serve a built site/; no --vault
+llmwiki synthesize [--vault PATH] [--check] [--estimate] [--force]
+llmwiki consolidate-topics [--complete reply.json] [--vault PATH]
+llmwiki queue {status|enqueue|run} [--vault PATH] [--state-file PATH]
+llmwiki migrate-state [--state-file PATH]
+llmwiki graph [--engine builtin|graphify]
 llmwiki lint [--wiki-dir PATH]
 llmwiki export all
-llmwiki all [--with-synth]
+llmwiki all [--with-synth] [--vault PATH]
 llmwiki adapters [--wide]
 llmwiki version
 ```
 
-Shell shortcuts: `./sync.sh`, `./build.sh`, `./serve.sh`.
+Shell shortcuts: `./sync.sh`, `./build.sh`, `./serve.sh`. Full flag tables: [docs/reference/cli.md](docs/reference/cli.md).
 
 ## Adding documents
 
@@ -319,7 +324,7 @@ confidential-client/
 | Claude Code workflow | [docs/tutorials/03-use-with-claude-code.md](docs/tutorials/03-use-with-claude-code.md) |
 | Architecture | [docs/architecture.md](docs/architecture.md) |
 | Full CLI | [docs/reference/cli.md](docs/reference/cli.md) |
-| Agent-delegate synthesis | [docs/modes/agent/index.md](docs/modes/agent/index.md) |
+| Upgrade / state migration | [docs/UPGRADING.md](docs/UPGRADING.md) |
 | Upstream changelog | [CHANGELOG.md](CHANGELOG.md) |
 
 Per-adapter docs: [Claude Code](docs/adapters/claude-code.md) · [Codex CLI](docs/adapters/codex-cli.md) · [Cursor](docs/adapters/cursor.md) · [Obsidian](docs/adapters/obsidian.md)

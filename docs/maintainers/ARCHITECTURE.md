@@ -69,7 +69,7 @@ TL;DR:
 - One concern per PR (don't mix a fix with a feature)
 - Conventional-commit prefix in title (`feat:` / `fix:` / `docs:` /
   `chore:` / `test:`)
-- Tests added or updated — CI matrix (Python 3.9 + 3.12) must pass
+- Tests added or updated — CI matrix (Python 3.12 + 3.13) must pass
 - CHANGELOG.md entry under `## [Unreleased]`
 - Works offline — no new network calls from the build or converter
 

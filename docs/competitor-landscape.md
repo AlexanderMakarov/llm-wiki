@@ -24,7 +24,7 @@ philosophy.
 | **Cloud required** | No | Optional (managed API available) | Yes (for sync + search) | Yes (for AI features) | No |
 | **Open source** | MIT | Apache 2.0 | No | No | N/A |
 | **API keys required** | No | Yes (for managed) | No (subscription) | No (freemium) | No |
-| **Runtime dependencies** | Python 3.9+ stdlib only | Python + vector DB | macOS native | Electron | N/A |
+| **Runtime dependencies** | Python 3.12+ stdlib only | Python + vector DB | macOS native | Electron | N/A |
 | **Multi-agent support** | 6 agents | Agent-agnostic (API-level) | Agent-agnostic (screen-level) | Agent-agnostic (manual) | N/A |
 | **Searchable** | Yes (client-side fuzzy search) | Yes (semantic search) | Yes (OCR + NLP) | Yes (AI-powered) | Depends on your tool |
 | **Knowledge graph** | Yes (wikilinks + vis.js) | No | No | Contextual links | No |

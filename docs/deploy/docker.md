@@ -43,7 +43,7 @@ Any `llmwiki` subcommand works inside the container via `docker compose run`:
 docker compose run --rm llmwiki build
 
 # Sync session transcripts (needs host agent stores bind-mounted)
-docker compose run --rm llmwiki sync --dry-run
+docker compose run --rm llmwiki sync --status
 
 # Run every registered lint rule (15 at last count — see `llmwiki lint --help`)
 docker compose run --rm llmwiki lint --fail-on-errors

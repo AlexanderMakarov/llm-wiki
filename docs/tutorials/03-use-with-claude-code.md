@@ -155,7 +155,7 @@ That's it. Run `/wiki-lint` on demand when you want a health check.
 
 ```bash
 python3 -m llmwiki --version            # → llmwiki <version>
-python3 -m llmwiki sync --dry-run       # shows what the next /wiki-sync would do
+python3 -m llmwiki sync --status        # last sync + counters (no write)
 cat wiki/log.md | tail -20              # every operation is appended here
 ```
 
@@ -174,8 +174,9 @@ working directory, or Claude Code was opened before `.claude/commands/`
 existed. Restart Claude Code from inside the repo.
 
 **`/wiki-sync` keeps re-processing old sessions** — the converter state file
-got lost. Check `.llmwiki-state.json` at the repo root; if missing, pass
-`--force` once and let it rebuild.
+got lost. Check `llmwiki-state.json` at the vault (or repo) root; if missing,
+pass `--force` once and let it rebuild, or re-run
+`scripts/migrate_state_v1_4_0.py` if legacy `.llmwiki-*.json` files still exist.
 
 **`/wiki-query` returns "I couldn't find anything"** — the wiki is under
 `wiki/sources/<project>/` by default; confirm `ls wiki/sources | wc -l`

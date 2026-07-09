@@ -104,7 +104,6 @@ llmwiki candidates discard --slug X --reason "hallucinated"
 llmwiki synthesize                     # synthesize source pages
 llmwiki synthesize --check             # probe backend (exit 0 if ok)
 llmwiki synthesize --estimate          # cost preview, no API calls
-llmwiki synthesize --dry-run           # list what would be processed
 llmwiki synthesize --force             # re-synth everything
 ```
 
@@ -157,7 +156,8 @@ llmwiki sync --adapter obsidian
 | `--project <slug>` | `sync` | Restrict to one project |
 | `--force` | `sync`, `synthesize` | Ignore state file, reconvert everything |
 | `--fail-on-errors` | `lint` | Non-zero exit on error-severity issues |
-| `--vault <path>` | `sync`, `build` | Operate on an Obsidian / Logseq vault |
+| `--vault <path>` | `sync`, `build`, `synthesize`, `add`, `queue`, `all` | Operate on an external vault (also sets the active state file) |
+| `--dir <path>` | `serve` | Directory to serve (usually `<vault>/site`) |
 | `--engine graphify` | `graph` | AI-powered knowledge graph |
 | `--host 0.0.0.0` | `serve` | Bind LAN-accessible (default: loopback-only) |
 | `--status` | `sync` | Show last sync + per-adapter counters |
@@ -166,11 +166,11 @@ llmwiki sync --adapter obsidian
 
 | File | Purpose |
 |---|---|
-| `sessions_config.json` | All settings (see below) |
+| `config.json` / `examples/sessions_config.json` | All settings (see below) |
 | `.llmwikiignore` | Exclude patterns (git-ignore format) |
-| `.llmwiki-state.json` | Per-source mtime cache (auto; gitignored) |
-| `.llmwiki-quarantine.json` | Convert failures (auto; gitignored) |
-| `.env` | `ANTHROPIC_API_KEY` for API-mode synth |
+| `llmwiki-state.json` | Unified queue + sync + synth + quarantine state (auto; gitignored) |
+| `llmwiki-state.js` | UI sidecar for the Home queue panel |
+| `.env` | Optional secrets for adapters that need them |
 
 ## All configurable settings (sessions_config.json)
 

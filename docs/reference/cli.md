@@ -87,6 +87,13 @@ python3 -m llmwiki sync --force
 | `--auto-lint` / `--no-auto-lint` | Run `lint` after sync (default: on). |
 | `--vault PATH` | Vault-overlay mode — write new pages inside the given Obsidian / Logseq vault instead of `wiki/`. See [`guides/existing-vault.md`](../guides/existing-vault.md). |
 | `--allow-overwrite` | With `--vault`: allow clobbering existing vault pages (default: refuse, append under `## Connections` instead). |
+| `--status` | Show last-sync time + per-adapter counters + quarantine (does not run a sync). |
+| `--recent N` | With `--status`: also show last N sync/synthesize log entries. |
+
+> **Note:** There is no `sync --dry-run`. Use `sync --status` for observability
+> or `add --dry-run` for document-intake previews. State lives in
+> `llmwiki-state.json` (configured once at CLI entry via `--vault` /
+> `vault.default_path`).
 
 ### Expected output (typical)
 
@@ -381,10 +388,15 @@ python3 -m llmwiki synthesize                    # real run
 | `--check` | Probe backend availability + exit (0 if reachable). |
 | `--force` | Ignore state, re-synth every source. |
 | `--estimate` | Print cached-vs-fresh token + dollar estimate (#50). |
+| `--vault PATH` | Read/write under the vault root; configures the active `llmwiki-state.json`. |
 
-Backend is picked from `synthesis.backend` in `sessions_config.json`
-(`dummy` by default, `ollama` for local, future `anthropic`). See
-[`reference/prompt-caching.md`](prompt-caching.md).
+Backend is picked from `synthesis.backend` in `config.json` /
+`sessions_config.json` (`dummy` by default, `ollama` for local,
+`claude` for synchronous `claude -p`). See
+[`configuration.md`](../configuration.md#synthesis-backend).
+
+> **Removed in v1.4.0:** `--list-pending` and `--complete` (agent-delegate
+> pending prompts). Use `synthesis.backend: claude` instead.
 
 ### Auto-tagging (#351)
 

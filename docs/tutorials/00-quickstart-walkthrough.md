@@ -8,7 +8,7 @@ docs_shell: true
 
 **Time:** 15 minutes
 
-**You'll need:** Python 3.9+, pip, Claude Code installed.
+**You'll need:** Python 3.12+, pip, Claude Code installed.
 
 **Result:** A working wiki with knowledge graph, HTML site, Obsidian export, and AI-consumable outputs.
 
