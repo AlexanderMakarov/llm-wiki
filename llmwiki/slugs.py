@@ -1,9 +1,7 @@
 """Shared slug + title derivation for added documents (issue #16).
 
-Canonical implementation of the slug rules that kbbuilder's async
-add-doc worker (kbbuilder#7) converges on: prefer real content headings,
-strip site-name suffixes, transliterate Cyrillic instead of collapsing
-to a junk fallback, and emit only site-safe ASCII
+Canonical slug rules for document ingestion: prefer real content headings, strip site-name suffixes,
+transliterate Cyrillic instead of collapsing to a junk fallback, and emit only site-safe ASCII
 (subset of raw_docs_site._SAFE_SEG_RE).
 """
 
@@ -13,7 +11,7 @@ import re
 import unicodedata
 from urllib.parse import urlparse
 
-# Russian → Latin. Enough for the observed failure case (kbbuilder#7:
+# Russian → Latin. Enough for the observed failure case where
 # Russian document titles slugging to ''); other scripts fall through
 # NFKD folding and, if nothing survives, the caller's next candidate.
 _CYRILLIC = {

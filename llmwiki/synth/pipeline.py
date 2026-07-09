@@ -30,6 +30,9 @@ from llmwiki import REPO_ROOT
 # imports; the parser sits cleanly in _frontmatter.py with no deps.
 from llmwiki._frontmatter import parse_frontmatter
 from llmwiki.synth.base import BaseSynthesizer, DummySynthesizer
+from llmwiki.state_store import read_state as _read_unified_state
+from llmwiki.state_store import resolve_state_file as _resolve_state_file
+from llmwiki.state_store import update_state as _update_unified_state
 
 
 # G-21 (#307): shell- and URL-unsafe chars we scrub from slugs at
@@ -79,10 +82,6 @@ def resolve_backend(
     Supported values:
       - ``"dummy"`` (default) — canned offline backend for previews/tests
       - ``"ollama"`` — local Ollama HTTP backend (#35)
-      - ``"agent"`` — defer to the running Claude Code / Codex CLI
-        agent (#316). Writes pending prompts to
-        ``.llmwiki-pending-prompts/`` for the slash-command layer to
-        pick up on the next agent turn.  No HTTP, no API key.
       - ``"claude"`` — synchronous ``claude -p`` CLI calls (#16).
         Optional keys: ``claude_path``, ``claude_model``, ``timeout``.
 
@@ -108,14 +107,6 @@ def resolve_backend(
             timeout=int(synth_cfg.get("timeout") or 180),
         )
 
-    if name in {"agent", "agent_delegate", "agent-delegate"}:
-        # Imported lazily — the agent backend is a thin file-I/O layer
-        # but we keep symmetry with the other backends' lazy import
-        # pattern so ``import llmwiki.synth.pipeline`` stays cheap.
-        from llmwiki.synth.agent_delegate import AgentDelegateSynthesizer
-
-        return AgentDelegateSynthesizer()
-
     if name != "dummy":
         import logging
         logging.getLogger(__name__).warning(
@@ -129,7 +120,7 @@ RAW_SESSIONS = REPO_ROOT / "raw" / "sessions"
 RAW_DOCS = REPO_ROOT / "raw" / "docs"
 WIKI_SOURCES = REPO_ROOT / "wiki" / "sources"
 WIKI_LOG = REPO_ROOT / "wiki" / "log.md"
-STATE_FILE = REPO_ROOT / ".llmwiki-synth-state.json"
+STATE_FILE = _resolve_state_file()
 
 # #1: ceiling on the body size handed to a single synthesis backend call.
 # Oversized docs (e.g. a multi-MB concatenated `llms-full.txt`) are split
@@ -236,12 +227,7 @@ def _load_state(state_file: Optional[Path] = None) -> dict[str, float]:
     re-runs from scratch (worst case: extra work, never wrong work).
     """
     target = _resolve_state_file(state_file)
-    if not target.is_file():
-        return {}
-    try:
-        raw = json.loads(target.read_text(encoding="utf-8"))
-    except ValueError:
-        return {}
+    raw = _read_unified_state(target).get("synth", {}).get("files", {})
     if not isinstance(raw, dict):
         return {}
     out: dict[str, float] = {}
@@ -256,9 +242,11 @@ def _load_state(state_file: Optional[Path] = None) -> dict[str, float]:
 
 def _save_state(state: dict[str, float], state_file: Optional[Path] = None) -> None:
     target = _resolve_state_file(state_file)
-    target.write_text(
-        json.dumps(state, indent=2, sort_keys=True), encoding="utf-8"
-    )
+    def _mut(s: dict[str, Any]) -> dict[str, Any]:
+        synth = s.setdefault("synth", {})
+        synth["files"] = state
+        return s
+    _update_unified_state(_mut, target)
 
 
 def _append_log(

@@ -49,10 +49,6 @@ from llmwiki.sync.status import (  # noqa: F401
     cmd_sync_status,
     resolve_key_exists as _resolve_key_exists,
 )
-from llmwiki.synth.cli_helpers import (  # noqa: F401
-    complete as _synthesize_complete,
-    list_pending as _synthesize_list_pending,
-)
 
 
 def cmd_version(args: argparse.Namespace) -> int:
@@ -173,7 +169,7 @@ def cmd_sync(args: argparse.Namespace) -> int:
         # two different vaults don't share idempotency state (same
         # principle as #420 for synth state).
         out_dir = vault.root / "raw" / "sessions"
-        state_file = vault.root / ".llmwiki-state.json"
+        state_file = vault.root / "llmwiki-state.json"
 
     # PR #19 field report: two llmwiki processes on one vault corrupt each
     # other's site resets — serialize the mutating pipeline on a vault lock.
@@ -516,6 +512,66 @@ def cmd_lint(args: argparse.Namespace) -> int:
 
     if args.fail_on_errors and summary.get("error", 0) > 0:
         return 1
+    from llmwiki.state_store import resolve_state_file, update_state
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    vault = getattr(args, "vault", None)
+    update_state(
+        lambda s: (s.setdefault("ops", {}).__setitem__("last_lint_run_at", now) or s),
+        resolve_state_file(vault),
+    )
+    return 0
+
+
+def cmd_queue(args: argparse.Namespace) -> int:
+    from llmwiki.queue_ops import enqueue_task, queue_status, run_queue
+    from llmwiki.state_store import resolve_state_file
+
+    _apply_default_vault(args)
+    vault = getattr(args, "vault", None)
+    target = resolve_state_file(
+        getattr(args, "state_file", None) or vault
+    )
+    if args.queue_action == "status":
+        stat = queue_status(target)
+        print(
+            f"queue: total={stat['total']} pending={stat['counts'].get('pending',0)} "
+            f"running={stat['counts'].get('running',0)} done={stat['counts'].get('done',0)} "
+            f"error={stat['counts'].get('error',0)}"
+        )
+        if stat["oldest_pending"]:
+            print(f"oldest_pending: {stat['oldest_pending']}")
+        return 0
+    if args.queue_action == "enqueue":
+        payload: dict[str, Any] = {}
+        if args.source:
+            payload["source"] = args.source
+        task = enqueue_task(args.task_type, payload, target)
+        print(f"enqueued {task['id']} ({args.task_type})")
+        return 0
+    if not vault:
+        print("error: queue run requires --vault <path>", file=sys.stderr)
+        return 2
+    summary = run_queue(limit=args.limit, vault=vault, state_file=target)
+    print(f"processed={summary['processed']} errors={len(summary['errors'])}")
+    for err in summary["errors"]:
+        print(f"  ! {err}", file=sys.stderr)
+    return 1 if summary["errors"] else 0
+
+
+def cmd_migrate_state(args: argparse.Namespace) -> int:
+    from llmwiki.migrate_state import run_migration
+
+    report = run_migration(args.state_file)
+    print(f"state file: {report['state_file']}")
+    if report["migrated"]:
+        print("migrated:")
+        for p in report["migrated"]:
+            print(f"  - {p}")
+    if report["orphan_cleanup_suggestions"]:
+        print("cleanup suggestions:")
+        for cmd in report["orphan_cleanup_suggestions"]:
+            print(f"  {cmd}")
     return 0
 
 
@@ -536,12 +592,6 @@ def cmd_synthesize(args: argparse.Namespace) -> int:
 
     if args.estimate:
         return _synthesize_estimate()
-
-    # #316: agent-delegate operations that don't need a backend.
-    if args.list_pending:
-        return _synthesize_list_pending()
-    if args.complete:
-        return _synthesize_complete(args)
 
     backend = resolve_backend(config)
     print(f"Backend: {backend.name}")
@@ -575,7 +625,7 @@ def cmd_synthesize(args: argparse.Namespace) -> int:
         # the missed copy. Caught by the multi-agent code review.
         raw_dir = vault.root / "raw" / "sessions"
         wiki_sources_dir = vault.root / "wiki" / "sources"
-        state_file = vault.root / ".llmwiki-synth-state.json"
+        state_file = vault.root / "llmwiki-state.json"
 
     summary = synthesize_new_sessions(
         backend=backend,
@@ -685,7 +735,7 @@ def _cmd_add_locked(args: argparse.Namespace, docs_dir: Path,
         if vault_root:
             raw_dir = vault_root / "raw" / "sessions"
             wiki_sources_dir = vault_root / "wiki" / "sources"
-            state_file = vault_root / ".llmwiki-synth-state.json"
+            state_file = vault_root / "llmwiki-state.json"
             sources_dir = wiki_sources_dir
         if not backend.is_available():
             removed = remove_raw_docs(result["written"])
@@ -741,11 +791,6 @@ def _cmd_add_locked(args: argparse.Namespace, docs_dir: Path,
                     fh.write(f"\n## [{day}] add | {rec['title']}\n")
 
     return 2 if failed else 0
-
-
-# ─── #316 agent-delegate CLI helpers ─────────────────────────────────
-# _synthesize_list_pending + _synthesize_complete moved to
-# llmwiki/synth/cli_helpers.py and re-exported at top of file (#691).
 
 
 def _synthesize_estimate() -> int:
@@ -1055,7 +1100,21 @@ def build_parser() -> argparse.ArgumentParser:
     lint.add_argument("--json", action="store_true", help="JSON output")
     lint.add_argument("--fail-on-errors", action="store_true",
                       help="Exit non-zero if any error-severity issues found")
+    _add_vault_arg(lint, role="synthesize")
     lint.set_defaults(func=cmd_lint)
+
+    queue_p = sub.add_parser("queue", help="Manage unified llmwiki queue")
+    queue_p.add_argument("queue_action", choices=["status", "run", "enqueue"])
+    queue_p.add_argument("--limit", type=int, default=20, help="Max tasks to process in one run")
+    queue_p.add_argument("--task-type", default="add_doc", choices=["add_doc", "session_sync", "synthesize", "build"])
+    queue_p.add_argument("--source", default="", help="Source value for add_doc enqueue")
+    queue_p.add_argument("--state-file", type=Path, default=None, help="Override state file path")
+    _add_vault_arg(queue_p, role="synthesize")
+    queue_p.set_defaults(func=cmd_queue)
+
+    migrate = sub.add_parser("migrate-state", help="One-time migration into unified state")
+    migrate.add_argument("--state-file", type=Path, default=None, help="Target unified state file")
+    migrate.set_defaults(func=cmd_migrate_state)
 
     # candidates (v1.1, #51) — approval workflow
     cand = sub.add_parser(
@@ -1089,7 +1148,7 @@ def build_parser() -> argparse.ArgumentParser:
         "synthesize",
         help="Synthesize wiki source pages from raw sessions via LLM backend",
     )
-    # #arch-h7 (#610): the four "what should this invocation do?" flags
+    # #arch-h7 (#610): mutually-exclusive synth mode flags
     # used to be independently set-able. argparse silently honoured the
     # first one in `cmd_synthesize`'s if/elif chain, so e.g.
     # `synthesize --check --estimate` ran --check and silently dropped
@@ -1104,30 +1163,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--estimate", action="store_true",
         help="Print cached-vs-fresh token + dollar estimate without calling a backend (#50)",
     )
-    # #316 — agent-delegate backend helpers (mutually-exclusive with the
-    # default synthesize-all flow + with --check / --estimate above).
-    syn_mode.add_argument(
-        "--list-pending", action="store_true",
-        help="List pending prompts awaiting agent synthesis (agent-delegate backend, #316)",
-    )
-    syn_mode.add_argument(
-        "--complete", metavar="UUID", default=None,
-        help="Complete a pending synthesis: read body from --body or stdin, rewrite --page in place (#316)",
-    )
     # --force is orthogonal (modifies the default re-synthesize-all flow)
     # and stays outside the exclusion group so callers can pass
     # `synthesize --force` for a forced full re-run.
     syn.add_argument(
         "--force", action="store_true",
         help="Ignore state file, re-synthesize all sessions",
-    )
-    syn.add_argument(
-        "--page", metavar="PATH", default=None,
-        help="Target wiki source page for --complete (path relative to repo root or absolute)",
-    )
-    syn.add_argument(
-        "--body", metavar="PATH", default=None,
-        help="Read synthesized body from this file for --complete (default: stdin)",
     )
     _add_vault_arg(syn, role="synthesize")
     syn.set_defaults(func=cmd_synthesize)

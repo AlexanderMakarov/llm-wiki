@@ -30,7 +30,12 @@ import time
 from pathlib import Path
 from typing import Any
 
-from llmwiki import REPO_ROOT, __version__
+from llmwiki import __version__, REPO_ROOT as SOURCE_ROOT
+from llmwiki.config_schedule import resolve_content_root
+
+CONTENT_ROOT = resolve_content_root()
+# Back-compat test seam: many MCP tests monkeypatch llmwiki.mcp.server.REPO_ROOT.
+REPO_ROOT = CONTENT_ROOT
 
 
 SERVER_INFO = {
@@ -310,9 +315,11 @@ def _safe_path(rel: str) -> Path | None:
     escapes the repo (path traversal guard)."""
     if not rel:
         return None
-    p = (REPO_ROOT / rel).resolve()
+    head = Path(rel).parts[0] if Path(rel).parts else ""
+    base = REPO_ROOT if head in {"wiki", "raw"} else SOURCE_ROOT
+    p = (base / rel).resolve()
     try:
-        p.relative_to(REPO_ROOT.resolve())
+        p.relative_to(base.resolve())
     except ValueError:
         return None
     return p
@@ -328,9 +335,12 @@ def _is_read_page_allowed(p: Path) -> bool:
     content. Anything else is silently a "not found".
     """
     try:
-        rel_parts = p.resolve().relative_to(REPO_ROOT.resolve()).parts
+        rel_parts = p.resolve().relative_to(SOURCE_ROOT.resolve()).parts
     except ValueError:
-        return False
+        try:
+            rel_parts = p.resolve().relative_to(REPO_ROOT.resolve()).parts
+        except ValueError:
+            return False
     if not rel_parts:
         return False
     head = rel_parts[0]
@@ -693,7 +703,7 @@ def tool_wiki_sync(args: dict[str, Any]) -> dict[str, Any]:
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
-            cwd=str(REPO_ROOT),
+            cwd=str(SOURCE_ROOT),
         )
         # Read line-by-line so a hung child doesn't block forever — the
         # outer try wraps a 120s timeout via proc.wait below.

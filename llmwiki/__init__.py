@@ -19,23 +19,12 @@ __version__ = "1.3.82"
 __author__ = "Pratiyush"
 __license__ = "MIT"
 
-import os
 from pathlib import Path
 
 # Repo root (llmwiki/ clone), resolved from this file's location.
-# Override with the LLMWIKI_ROOT env var to point content reads (the MCP
-# server's wiki_query / wiki_search / wiki_read_page, etc.) at an external
-# vault that holds the real wiki/ + raw/ instead of the repo's own example
-# data. PACKAGE_ROOT stays pinned to the installed package so bundled
-# templates/assets still resolve. The build pipeline (cli.py/build.py) does
-# not set this var, so it keeps writing relative to the clone as before.
-_REPO_ROOT_DEFAULT = Path(__file__).resolve().parent.parent
-_LLMWIKI_ROOT_ENV = os.environ.get("LLMWIKI_ROOT")
-REPO_ROOT = (
-    Path(_LLMWIKI_ROOT_ENV).expanduser().resolve()
-    if _LLMWIKI_ROOT_ENV
-    else _REPO_ROOT_DEFAULT
-)
+# Runtime vault/workspace routing is config-driven (see config_schedule +
+# state_store); REPO_ROOT remains the codebase root for bundled assets.
+REPO_ROOT = Path(__file__).resolve().parent.parent
 PACKAGE_ROOT = Path(__file__).resolve().parent
 
 # #arch-m4 (#617): the docstring above promised a "public API" but

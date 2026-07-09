@@ -24,6 +24,41 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
 
 // ─── Theme toggle ─────────────────────────────────────────────────────────
 (function () {
+  function formatTs(ts) {
+    if (!ts) return "never";
+    return ts;
+  }
+  function renderQueueTrace() {
+    var target = document.getElementById("queue-trace-content");
+    if (!target) return;
+    var snapshot = window.LLMWIKI_STATE_SNAPSHOT;
+    if (!snapshot || !snapshot.queue) {
+      target.textContent = "No queue state available.";
+      return;
+    }
+    var items = Array.isArray(snapshot.queue.items) ? snapshot.queue.items : [];
+    var counts = { pending: 0, running: 0, done: 0, error: 0 };
+    var oldest = "";
+    items.forEach(function (it) {
+      var st = (it && it.status) ? String(it.status) : "pending";
+      counts[st] = (counts[st] || 0) + 1;
+      if (st === "pending" && it.created_at && (!oldest || it.created_at < oldest)) oldest = it.created_at;
+    });
+    var ops = snapshot.ops || {};
+    target.innerHTML =
+      "pending=" + (counts.pending || 0) +
+      " · running=" + (counts.running || 0) +
+      " · done=" + (counts.done || 0) +
+      " · error=" + (counts.error || 0) +
+      "<br>oldest pending: " + (oldest || "none") +
+      "<br>last queue run: " + formatTs(ops.last_queue_run_at) +
+      "<br>last lint run: " + formatTs(ops.last_lint_run_at) +
+      "<br>last reflect run: " + formatTs(ops.last_reflect_run_at);
+  }
+  document.addEventListener("DOMContentLoaded", renderQueueTrace);
+})();
+
+(function () {
   const root = document.documentElement;
   // v0.5: Keep the highlight.js theme in sync with the page theme by
   // swapping which stylesheet is "disabled". Runs on page load and on every

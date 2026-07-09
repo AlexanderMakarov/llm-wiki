@@ -108,9 +108,8 @@ Pages rendered (v0.9 surface):
 - `site/sources/<project>/<slug>.md` — copies of raw source for download
 - Plus AI-consumable exports: `llms.txt`, `llms-full.txt`, `graph.jsonld`, `sitemap.xml`, `rss.xml`, per-page `.txt` + `.json` siblings
 
-Documents enter `raw/docs/` either via kbbuilder's async `wiki-add` worker or
-synchronously via `llmwiki add` (`llmwiki/add_doc.py`, #16) — both produce the
-same dir-per-doc, section-chunked layout.
+Documents enter `raw/docs/` either via the asynchronous producer queue path or synchronously via
+`llmwiki add` (`llmwiki/add_doc.py`, #16) — both produce the same dir-per-doc, section-chunked layout.
 
 ### L3 — Viewer (browser JS)
 

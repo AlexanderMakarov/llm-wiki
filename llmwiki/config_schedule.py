@@ -60,6 +60,18 @@ def load_default_vault_path() -> Path | None:
     return Path(raw).expanduser()
 
 
+def resolve_content_root() -> Path:
+    """Return the directory containing ``raw/`` and ``wiki/`` for reads/writes.
+
+  Uses ``vault.default_path`` from config when set; otherwise the repo root.
+  Replaces the removed ``LLMWIKI_ROOT`` environment variable.
+    """
+    vault = load_default_vault_path()
+    if vault is not None:
+        return vault.expanduser().resolve()
+    return _CLONE_ROOT
+
+
 def apply_default_vault(args: Any) -> None:
     """Fill ``args.vault`` from config when the CLI flag was omitted."""
     if getattr(args, "vault", None) is None:

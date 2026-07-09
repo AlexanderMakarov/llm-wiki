@@ -1,4 +1,4 @@
-"""Tests for llmwiki.slugs — shared slug/title derivation (issue #16, kbbuilder#7)."""
+"""Tests for llmwiki.slugs — shared slug/title derivation (issue #16)."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ def test_slugify_accents_folded():
 
 
 def test_slugify_cyrillic_transliterated():
-    # kbbuilder#7: "Получение или замена биометрического загранпаспорта"
+    # Regression: a Cyrillic title must not collapse to ''.
     # must NOT collapse to '' (the old literal-'document' failure).
     s = slugify("Получение загранпаспорта РФ в Армении")
     assert s == "poluchenie-zagranpasporta-rf-v-armenii"
@@ -61,7 +61,7 @@ def test_strip_site_suffix_emdash():
 
 
 def test_strip_site_suffix_repeated_word_collapses():
-    # kbbuilder#7: docs.openclaw.ai titles itself "OpenClaw - OpenClaw".
+    # Regression: docs.openclaw.ai titles itself "OpenClaw - OpenClaw".
     assert strip_site_suffix("OpenClaw - OpenClaw") == "OpenClaw"
 
 
@@ -124,7 +124,7 @@ def test_derive_title_html_title_suffix_stripped():
 
 
 def test_derive_title_boilerplate_heading_falls_to_url():
-    # kbbuilder#7: 'Source: External' boilerplate must not win over URL segments.
+    # Regression: 'Source: External' boilerplate must not win over URL segments.
     t = derive_title(explicit=None, markdown="# Source: External\n\nbody",
                      html_title=None, url="https://ex.com/real-doc-name", path_name=None)
     assert t == "real doc name"

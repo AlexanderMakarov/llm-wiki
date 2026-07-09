@@ -21,8 +21,11 @@ from llmwiki import REPO_ROOT
 from llmwiki.adapters import REGISTRY, discover_adapters
 from llmwiki.quarantine import add_entry as _quarantine_add
 from llmwiki.quarantine import clear_entry as _quarantine_clear
+from llmwiki.state_store import read_state as _read_unified_state
+from llmwiki.state_store import resolve_state_file as _resolve_state_file
+from llmwiki.state_store import update_state as _update_unified_state
 
-DEFAULT_STATE_FILE = REPO_ROOT / ".llmwiki-state.json"
+DEFAULT_STATE_FILE = _resolve_state_file()
 DEFAULT_CONFIG_FILE = REPO_ROOT / "examples" / "sessions_config.json"
 DEFAULT_OUT_DIR = REPO_ROOT / "raw" / "sessions"
 DEFAULT_IGNORE_FILE = REPO_ROOT / ".llmwikiignore"
@@ -262,16 +265,23 @@ def load_state(
     machines.  Keys we can't confidently re-map are kept verbatim so no
     session is accidentally re-processed.
     """
-    if not path.exists():
-        return {}
+    raw_from_disk: dict[str, Any] = {}
     try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
-        return {}
-    if not isinstance(raw, dict):
+        payload = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+    except (OSError, json.JSONDecodeError):
+        payload = {}
+    if isinstance(payload, dict):
+        if isinstance(payload.get("sync"), dict):
+            raw_from_disk = payload.get("sync", {}).get("files", {}) or {}
+        else:
+            # Legacy flat state file (_meta/_counters + per-file keys).
+            raw_from_disk = payload
+    if not raw_from_disk:
+        raw_from_disk = _read_unified_state(path).get("sync", {}).get("files", {})
+    if not isinstance(raw_from_disk, dict):
         return {}
     names = list(adapter_names or REGISTRY.keys())
-    migrated, count = _migrate_legacy_state(raw, names)
+    migrated, count = _migrate_legacy_state(raw_from_disk, names)
     if count:
         # Persist the migration so the next load is a pure pass-through.
         try:
@@ -287,8 +297,20 @@ def save_state(path: Path, state: dict[str, Any]) -> None:
     # `_meta` (dict) and `_counters` (dict) sentinel keys. The old
     # `dict[str, float]` annotation lied to type-checkers and to the
     # multi-agent review that flagged it.
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(state, indent=2, sort_keys=True), encoding="utf-8")
+    def _mut(s: dict[str, Any]) -> dict[str, Any]:
+        sync = s.setdefault("sync", {})
+        sync["files"] = state
+        return s
+    _update_unified_state(_mut, path)
+
+
+def save_sync_meta(path: Path, *, meta: dict[str, Any], counters: dict[str, Any]) -> None:
+    def _mut(s: dict[str, Any]) -> dict[str, Any]:
+        sync = s.setdefault("sync", {})
+        sync["meta"] = meta
+        sync["counters"] = counters
+        return s
+    _update_unified_state(_mut, path)
 
 
 # ─── .llmwikiignore ───────────────────────────────────────────────────────
@@ -1826,12 +1848,12 @@ def convert_all(
         # `sync --status` after a `--force` re-sync would silently show
         # the *previous* run's `last_sync` timestamp, and the next
         # non-force sync would re-process every file all over again.
-        state["_meta"] = {
+        meta = {
             "last_sync": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "version": 1,
         }
-        state["_counters"] = counters
         save_state(state_file, state)
+        save_sync_meta(state_file, meta=meta, counters=counters)
 
     print()
     print(

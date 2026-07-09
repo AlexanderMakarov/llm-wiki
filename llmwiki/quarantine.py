@@ -31,10 +31,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Optional
 
-from llmwiki import REPO_ROOT
+from llmwiki.state_store import read_state, resolve_state_file, update_state
 
-
-DEFAULT_QUARANTINE_FILE = REPO_ROOT / ".llmwiki-quarantine.json"
+DEFAULT_QUARANTINE_FILE = resolve_state_file()
 SCHEMA_VERSION = 1
 
 
@@ -80,17 +79,21 @@ def load(path: Optional[Path] = None) -> list[QuarantineEntry]:
     default still pointed at the original constant. Resolve at call
     time instead.
     """
-    if path is None:
-        path = DEFAULT_QUARANTINE_FILE
-    if not path.is_file():
-        return []
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return []
-    if not isinstance(data, dict):
-        return []
-    raw_entries = data.get("entries", [])
+    target = path or DEFAULT_QUARANTINE_FILE
+    raw_entries: list[Any] = []
+    if target.exists():
+        try:
+            raw = json.loads(target.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            raw = None
+        if isinstance(raw, dict):
+            if "queue" in raw or "sync" in raw:
+                raw_entries = raw.get("quarantine", {}).get("entries", [])
+            elif "entries" in raw:
+                raw_entries = raw.get("entries", [])
+    if not raw_entries:
+        data = read_state(target).get("quarantine", {})
+        raw_entries = data.get("entries", []) if isinstance(data, dict) else []
     if not isinstance(raw_entries, list):
         return []
     out: list[QuarantineEntry] = []
@@ -123,19 +126,17 @@ def save(
     #py-m7 (#593): default resolved at call time so tests that
     monkeypatch DEFAULT_QUARANTINE_FILE see the override.
     """
-    if path is None:
-        path = DEFAULT_QUARANTINE_FILE
+    target = path or DEFAULT_QUARANTINE_FILE
     items = sorted(set(entries), key=lambda e: (e.adapter, e.source))
-    payload = {
-        "version": SCHEMA_VERSION,
-        "updated": _now_utc_iso(),
-        "entries": [asdict(e) for e in items],
-    }
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-    )
-    return path
+    rows = [asdict(e) for e in items]
+    def _mut(state: dict) -> dict:
+        q = state.setdefault("quarantine", {})
+        q["version"] = SCHEMA_VERSION
+        q["updated"] = _now_utc_iso()
+        q["entries"] = rows
+        return state
+    update_state(_mut, target)
+    return target
 
 
 def add_entry(
@@ -198,9 +199,8 @@ def clear_entry(
 
     #py-m7 (#593): default resolved at call time.
     """
-    if path is None:
-        path = DEFAULT_QUARANTINE_FILE
-    entries = load(path)
+    target = path or DEFAULT_QUARANTINE_FILE
+    entries = load(target)
     keep: list[QuarantineEntry] = []
     removed = 0
     for e in entries:
@@ -210,26 +210,27 @@ def clear_entry(
             continue
         keep.append(e)
     if removed:
-        save(keep, path)
+        save(keep, target)
     return removed
 
 
-def clear_all(path: Path = DEFAULT_QUARANTINE_FILE) -> int:
+def clear_all(path: Optional[Path] = None) -> int:
     """Drop every entry. Returns count removed."""
-    entries = load(path)
+    target = path or DEFAULT_QUARANTINE_FILE
+    entries = load(target)
     n = len(entries)
     if n:
-        save([], path)
+        save([], target)
     return n
 
 
 def list_entries(
-    path: Path = DEFAULT_QUARANTINE_FILE,
+    path: Optional[Path] = None,
     *,
     adapter: Optional[str] = None,
 ) -> list[QuarantineEntry]:
     """Return entries filtered by adapter (stable ordering)."""
-    out = load(path)
+    out = load(path or DEFAULT_QUARANTINE_FILE)
     if adapter:
         out = [e for e in out if e.adapter == adapter]
     return sorted(out, key=lambda e: (e.adapter, e.last_seen), reverse=False)
@@ -264,10 +265,10 @@ def format_table(entries: list[QuarantineEntry]) -> str:
 
 
 def count_by_adapter(
-    path: Path = DEFAULT_QUARANTINE_FILE,
+    path: Optional[Path] = None,
 ) -> dict[str, int]:
     """Aggregate helper for ``llmwiki sync --status``."""
     out: dict[str, int] = {}
-    for e in load(path):
+    for e in load(path or DEFAULT_QUARANTINE_FILE):
         out[e.adapter] = out.get(e.adapter, 0) + 1
     return out

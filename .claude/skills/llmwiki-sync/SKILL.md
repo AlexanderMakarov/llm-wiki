@@ -45,7 +45,7 @@ Do NOT invoke when:
    - `./` (if cwd contains `llmwiki/` package)
    - `~/Desktop/2026/production-draft/llmwiki/`
    - `~/llmwiki/`
-   - `$LLMWIKI_ROOT` environment variable
+   - `config.json` → `vault.default_path` at the llm-wiki repo root
 
    If you can't find it, tell the user and stop.
 

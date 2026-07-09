@@ -160,22 +160,26 @@ def test_add_configured_claude_backend_synthesizes_synchronously(tmp_path, monke
 
 
 def test_add_unavailable_backend_rolls_back_raw_docs(tmp_path, monkeypatch, capsys):
-    """No half-added docs: when the configured backend can't synthesize
-    (agent_delegate outside an agent runtime), the just-added raw docs
-    are removed and add fails — only --no-synthesize skips synthesis."""
+    """No half-added docs: when the configured backend can't synthesize,
+    the just-added raw docs are removed and add fails — only
+    --no-synthesize skips synthesis."""
     import llmwiki.cli as cli_mod
     import llmwiki.config_schedule as config_mod
-
-    for var in ("LLMWIKI_AGENT_MODE", "CLAUDE_CODE", "CLAUDECODE", "CODEX_CLI", "CURSOR_AGENT"):
-        monkeypatch.delenv(var, raising=False)
 
     vault = _add_vault(tmp_path)
     src = tmp_path / "doc.md"
     src.write_text("# Orphan Doc\n\nbody\n")
 
+    class _Unavailable:
+        name = "offline"
+        def is_available(self):
+            return False
+
     monkeypatch.setattr(config_mod, "_load_sessions_config", lambda: {
-        "synthesis": {"backend": "agent_delegate"},
+        "synthesis": {"backend": "dummy"},
     })
+    import llmwiki.synth.pipeline as pipeline_mod
+    monkeypatch.setattr(pipeline_mod, "resolve_backend", lambda _cfg: _Unavailable())
     import llmwiki.build as build_mod
     monkeypatch.setattr(build_mod, "build_site", lambda **kw: 0)
 

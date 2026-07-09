@@ -32,6 +32,23 @@ from llmwiki import convert as convert_mod
 from llmwiki.convert import convert_all, load_state, save_state
 
 
+def _sync_state(path: Path) -> dict:
+    payload = json.loads(path.read_text())
+    return payload.get("sync", {})
+
+
+def _sync_files(path: Path) -> dict:
+    return _sync_state(path).get("files", {})
+
+
+def _sync_meta(path: Path) -> dict:
+    return _sync_state(path).get("meta", {})
+
+
+def _sync_counters(path: Path) -> dict:
+    return _sync_state(path).get("counters", {})
+
+
 # ─── Fixtures ────────────────────────────────────────────────────────────
 
 
@@ -124,19 +141,15 @@ def _run(fake_repo, **kw):
 def test_default_sync_writes_meta_and_counters(fake_repo):
     rc = _run(fake_repo)
     assert rc == 0
-    state = json.loads(fake_repo["state_file"].read_text())
-    assert "_meta" in state, "default sync must persist _meta"
-    assert "last_sync" in state["_meta"]
-    assert "_counters" in state, "default sync must persist _counters"
-    assert "claude_code" in state["_counters"]
+    assert "last_sync" in _sync_meta(fake_repo["state_file"])
+    assert "claude_code" in _sync_counters(fake_repo["state_file"])
 
 
 def test_default_sync_persists_per_key_state(fake_repo):
     """The mtime keys for each processed file land on disk."""
     _run(fake_repo)
-    state = json.loads(fake_repo["state_file"].read_text())
-    file_keys = [k for k in state if not k.startswith("_")]
-    assert file_keys, f"expected portable adapter::path keys, got {list(state)}"
+    file_keys = list(_sync_files(fake_repo["state_file"]).keys())
+    assert file_keys, f"expected portable adapter::path keys, got {file_keys}"
     assert any(k.startswith("claude_code::") for k in file_keys)
 
 
@@ -147,7 +160,7 @@ def test_force_sync_writes_meta(fake_repo):
     """Regression for #426. Before the fix, this assertion failed —
     --force discarded every state-file write."""
     _run(fake_repo)  # seed first run
-    pre_meta = json.loads(fake_repo["state_file"].read_text())["_meta"]["last_sync"]
+    pre_meta = _sync_meta(fake_repo["state_file"])["last_sync"]
 
     # Touch the source so the second run has work to do.
     src = fake_repo["root"] / ".claude" / "projects" / "demo-proj" / "session-one.jsonl"
@@ -155,14 +168,12 @@ def test_force_sync_writes_meta(fake_repo):
 
     rc = _run(fake_repo, force=True)
     assert rc == 0
-    state = json.loads(fake_repo["state_file"].read_text())
-    assert "_meta" in state, (
-        "--force discarded _meta — #426 regression"
-    )
+    state_meta = _sync_meta(fake_repo["state_file"])
+    assert state_meta, "--force discarded sync.meta — #426 regression"
     # Either same timestamp (sub-second resolution) or strictly newer; both prove
     # the write happened. The original bug left _meta == pre_meta exactly because
     # the forced run never wrote at all.
-    post_meta = state["_meta"]["last_sync"]
+    post_meta = state_meta["last_sync"]
     assert post_meta >= pre_meta
 
 
@@ -170,11 +181,11 @@ def test_force_sync_writes_counters(fake_repo):
     _run(fake_repo)  # seed
     rc = _run(fake_repo, force=True)
     assert rc == 0
-    state = json.loads(fake_repo["state_file"].read_text())
-    assert "_counters" in state
-    assert "claude_code" in state["_counters"]
+    counters = _sync_counters(fake_repo["state_file"])
+    assert counters
+    assert "claude_code" in counters
     # Force re-processes the file, so converted should be >= 1.
-    assert state["_counters"]["claude_code"].get("converted", 0) >= 1
+    assert counters["claude_code"].get("converted", 0) >= 1
 
 
 def test_force_sync_persists_per_key_state(fake_repo):
@@ -182,8 +193,7 @@ def test_force_sync_persists_per_key_state(fake_repo):
     can correctly identify the file as unchanged."""
     rc = _run(fake_repo, force=True)
     assert rc == 0
-    state = json.loads(fake_repo["state_file"].read_text())
-    file_keys = [k for k in state if not k.startswith("_")]
+    file_keys = list(_sync_files(fake_repo["state_file"]).keys())
     assert file_keys, "force sync must persist per-key state"
 
 
@@ -192,17 +202,14 @@ def test_force_then_plain_sync_identifies_unchanged(fake_repo):
     a plain follow-up sync should treat the same file as unchanged."""
     rc1 = _run(fake_repo, force=True)
     assert rc1 == 0
-    counters_after_force = json.loads(
-        fake_repo["state_file"].read_text()
-    )["_counters"]["claude_code"]
+    counters_after_force = _sync_counters(fake_repo["state_file"])["claude_code"]
     assert counters_after_force.get("converted", 0) >= 1
 
     # Second plain run — file mtime is the same, state is recorded, so
     # the adapter should mark this as 'unchanged' not 'converted'.
     rc2 = _run(fake_repo)
     assert rc2 == 0
-    state = json.loads(fake_repo["state_file"].read_text())
-    counters = state["_counters"]["claude_code"]
+    counters = _sync_counters(fake_repo["state_file"])["claude_code"]
     assert counters.get("unchanged", 0) >= 1, (
         f"plain sync after --force re-processed instead of skipping: {counters}"
     )
@@ -238,9 +245,8 @@ def test_force_recreates_meta_on_corrupt_state(fake_repo):
     fake_repo["state_file"].write_text("{not valid json", encoding="utf-8")
     rc = _run(fake_repo, force=True)
     assert rc == 0
-    state = json.loads(fake_repo["state_file"].read_text())
-    assert "_meta" in state and "last_sync" in state["_meta"]
-    assert "_counters" in state
+    assert "last_sync" in _sync_meta(fake_repo["state_file"])
+    assert _sync_counters(fake_repo["state_file"])
 
 
 # ─── First-ever sync populates _meta + _counters ─────────────────────────
@@ -252,9 +258,8 @@ def test_first_sync_populates_meta(fake_repo):
     assert not fake_repo["state_file"].exists()
     rc = _run(fake_repo)
     assert rc == 0
-    state = json.loads(fake_repo["state_file"].read_text())
-    assert state["_meta"]["version"] == 1
-    assert state["_counters"]["claude_code"]["converted"] >= 1
+    assert _sync_meta(fake_repo["state_file"])["version"] == 1
+    assert _sync_counters(fake_repo["state_file"])["claude_code"]["converted"] >= 1
 
 
 # ─── Counters aggregate the adapter buckets seen this run ────────────────
@@ -265,8 +270,7 @@ def test_counters_include_all_status_buckets(fake_repo):
     even when most are zero — downstream `sync --status` rendering
     relies on every key being present."""
     _run(fake_repo, force=True)
-    state = json.loads(fake_repo["state_file"].read_text())
-    bucket = state["_counters"]["claude_code"]
+    bucket = _sync_counters(fake_repo["state_file"])["claude_code"]
     for key in ("discovered", "converted", "unchanged", "live",
                 "filtered", "ignored", "errored"):
         assert key in bucket, f"missing bucket {key} in counters"
@@ -279,13 +283,17 @@ def test_force_overwrites_prior_meta(fake_repo):
     """The new run's _meta replaces the prior one — _meta is a
     snapshot, not an append-only log."""
     fake_repo["state_file"].write_text(
-        json.dumps({
-            "_meta": {"last_sync": "2020-01-01T00:00:00Z", "version": 1},
-            "_counters": {"claude_code": {"discovered": 0}},
-        }),
+        json.dumps(
+            {
+                "sync": {
+                    "files": {},
+                    "meta": {"last_sync": "2020-01-01T00:00:00Z", "version": 1},
+                    "counters": {"claude_code": {"discovered": 0}},
+                }
+            }
+        ),
         encoding="utf-8",
     )
     rc = _run(fake_repo, force=True)
     assert rc == 0
-    state = json.loads(fake_repo["state_file"].read_text())
-    assert state["_meta"]["last_sync"] != "2020-01-01T00:00:00Z"
+    assert _sync_meta(fake_repo["state_file"])["last_sync"] != "2020-01-01T00:00:00Z"

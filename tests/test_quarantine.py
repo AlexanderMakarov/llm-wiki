@@ -138,9 +138,9 @@ def test_save_writes_version_metadata(tmp_path):
     f = tmp_path / "quar.json"
     q.save([], f)
     payload = json.loads(f.read_text(encoding="utf-8"))
-    assert payload["version"] == q.SCHEMA_VERSION
-    assert "updated" in payload
-    assert payload["entries"] == []
+    assert payload["quarantine"]["version"] == q.SCHEMA_VERSION
+    assert "updated" in payload["quarantine"]
+    assert payload["quarantine"]["entries"] == []
 
 
 def test_save_creates_parent_dirs(tmp_path):

@@ -966,6 +966,7 @@ def page_foot(js_prefix: str = "") -> str:
 </div>
 <script src="{js_prefix}search-index.json" type="application/json" id="search-index-hint"></script>
 <script>window.LLMWIKI_INDEX_URL = "{js_prefix}search-index.json";</script>
+<script src="{js_prefix}../llmwiki-state.js"></script>
 <script src="{HLJS_SCRIPT}" defer></script>
 <script>
   // v0.5: Run highlight.js once the CDN script lands. Defer keeps it out of

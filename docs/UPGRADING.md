@@ -15,6 +15,36 @@ The canonical per-release detail is
 [CHANGELOG.md](https://github.com/Pratiyush/llm-wiki/blob/master/CHANGELOG.md)
 — this guide focuses on "what might break".
 
+## v1.3.83+ — unified queue + vault state (hard cutover)
+
+**One-time migration required** if your vault still has legacy dotfiles:
+
+```bash
+llmwiki migrate-state --state-file /path/to/vault/llmwiki-state.json
+# optional cleanup after verifying:
+# rm -rf /path/to/vault/.llmwiki-state.json ...
+```
+
+### What changed
+
+| Before | After |
+|---|---|
+| `.llmwiki-state.json`, `.llmwiki-synth-state.json`, `.llmwiki-queue.json`, `.llmwiki-pending-prompts/` | `<vault>/llmwiki-state.json` (+ `llmwiki-state.js` sidecar) |
+| `LLMWIKI_ROOT` env var | `vault.default_path` in `config.json` |
+| SessionStart auto-sync hook | Manual `llmwiki queue run` |
+| `synthesis.backend: agent_delegate` | Removed — use `dummy`, `ollama`, or `claude` |
+| external `wiki_tasks` queue ownership | `llmwiki queue enqueue` into vault state |
+
+### New commands
+
+```bash
+llmwiki queue status
+llmwiki queue enqueue --task-type add_doc --source https://example.com
+llmwiki queue run --limit 20
+```
+
+Rebuild the site after upgrading so the Home page loads `../llmwiki-state.js`.
+
 ## v1.3.0 — consolidated 1.2.x patch roll-up
 
 **Released: 2026-04-26.**

@@ -39,8 +39,8 @@ The git clone holds **code + demo seeds only**. Your transcripts, wiki pages, an
   raw/sessions/               ← converted transcripts
   wiki/                       ← LLM-maintained pages (sources/, index.md, …)
   site/                       ← built static HTML
-  .llmwiki-state.json         ← local pipeline state (gitignored everywhere)
-  .llmwiki-synth-state.json
+  llmwiki-state.json          ← unified queue + sync + synth state
+  llmwiki-state.js            ← UI sidecar for Home queue panel (file:// safe)
   .llmwiki-topics.json        ← topic consolidation cache
 ```
 
@@ -52,20 +52,16 @@ The git clone holds **code + demo seeds only**. Your transcripts, wiki pages, an
     "default_path": "/mnt/innerhdd/openclaw-obsidian"
   },
   "synthesis": {
-    "backend": "agent_delegate"
+    "backend": "dummy"
   }
 }
 ```
 
-With `vault.default_path` set, **`sync` / `build` / `synthesize` / `consolidate-topics` / `all`** target the vault automatically — no `--vault` flag needed. Personal overrides merge over `examples/sessions_config.json` without editing tracked files.
+With `vault.default_path` set, **`sync` / `build` / `synthesize` / `queue` / `lint`** target the vault automatically — no `--vault` flag needed. Personal overrides merge over `examples/sessions_config.json` without editing tracked files.
 
-### 2. `LLMWIKI_ROOT` for MCP and agents
+### 2. MCP and agents read the vault via `config.json`
 
-Point at the **vault root** (the directory that contains `raw/` and `wiki/`):
-
-```bash
-export LLMWIKI_ROOT=/mnt/innerhdd/openclaw-obsidian
-```
+Set `vault.default_path` in `config.json` (repo root). The MCP server and CLI resolve content reads/writes from that path — no `LLMWIKI_ROOT` environment variable.
 
 **Cursor** (`~/.cursor/mcp.json`):
 
@@ -76,7 +72,6 @@ export LLMWIKI_ROOT=/mnt/innerhdd/openclaw-obsidian
       "command": "/path/to/llm-wiki/.venv/bin/python",
       "args": ["-m", "llmwiki.mcp"],
       "env": {
-        "LLMWIKI_ROOT": "/mnt/innerhdd/openclaw-obsidian",
         "PYTHONPATH": "/path/to/llm-wiki"
       }
     }
@@ -84,10 +79,14 @@ export LLMWIKI_ROOT=/mnt/innerhdd/openclaw-obsidian
 }
 ```
 
-**Claude Code** (gitignored `.claude/settings.local.json`):
+Ensure `/path/to/llm-wiki/config.json` contains your `vault.default_path`.
 
-```json
-{ "env": { "LLMWIKI_ROOT": "/mnt/innerhdd/openclaw-obsidian" } }
+### Manual queue (no SessionStart auto-sync)
+
+```bash
+llmwiki queue status
+llmwiki queue run --limit 20
+llmwiki migrate-state   # one-time: merge legacy .llmwiki-* files
 ```
 
 ### What stays gitignored
@@ -99,7 +98,7 @@ export LLMWIKI_ROOT=/mnt/innerhdd/openclaw-obsidian
 | `wiki/projects/*` (except `demo-*.md`) | Per-project topic profiles |
 | `site/` | Built HTML |
 | `config.json` | Vault path + personal settings |
-| `.llmwiki-*`, `.llmwiki-pending-prompts/` | Pipeline / agent-delegate scratch state |
+| `.llmwiki-*` (legacy) | Pre-migration pipeline scratch — run `llmwiki migrate-state` |
 
 See [docs/guides/existing-vault.md](docs/guides/existing-vault.md) for Obsidian/Logseq vault layouts.
 
@@ -141,7 +140,7 @@ Twelve tools — query, grep, read page, lint, sync, export, confidence, lifecyc
 python3 -m llmwiki.mcp
 ```
 
-Set `LLMWIKI_ROOT` so tools read your vault, not the repo's demo wiki.
+Set `vault.default_path` in `config.json` so tools read your vault, not the repo's demo wiki.
 
 ---
 

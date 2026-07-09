@@ -14,12 +14,12 @@ logic, not argparse glue. ``cli.py`` re-exports ``cmd_sync_status``
 from __future__ import annotations
 
 import argparse
-import json as _json
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
 from llmwiki import REPO_ROOT
+from llmwiki.state_store import read_state
 
 
 def resolve_key_exists(key: str) -> bool:
@@ -40,15 +40,31 @@ def cmd_sync_status(args: argparse.Namespace) -> int:
     from llmwiki import quarantine as _q
     from llmwiki.convert import DEFAULT_STATE_FILE
 
+    sync_state: dict = {}
     state: dict = {}
-    if DEFAULT_STATE_FILE.is_file():
-        try:
-            state = _json.loads(DEFAULT_STATE_FILE.read_text(encoding="utf-8"))
-        except (ValueError, OSError):
-            state = {}
-
-    meta = state.pop("_meta", {}) if isinstance(state, dict) else {}
-    counters = state.pop("_counters", {}) if isinstance(state, dict) else {}
+    meta: dict = {}
+    counters: dict = {}
+    try:
+        import json as _json
+        payload = _json.loads(DEFAULT_STATE_FILE.read_text(encoding="utf-8")) if DEFAULT_STATE_FILE.exists() else {}
+    except (OSError, _json.JSONDecodeError):
+        payload = {}
+    if isinstance(payload, dict) and isinstance(payload.get("sync"), dict):
+        sync_state = payload.get("sync", {})
+        state = sync_state.get("files", {}) if isinstance(sync_state, dict) else {}
+        meta = sync_state.get("meta", {}) if isinstance(sync_state, dict) else {}
+        counters = sync_state.get("counters", {}) if isinstance(sync_state, dict) else {}
+    elif isinstance(payload, dict):
+        # Back-compat with legacy flat state schema.
+        state = {k: v for k, v in payload.items() if isinstance(k, str) and not k.startswith("_")}
+        meta = payload.get("_meta", {}) if isinstance(payload.get("_meta"), dict) else {}
+        counters = payload.get("_counters", {}) if isinstance(payload.get("_counters"), dict) else {}
+    else:
+        unified = read_state(DEFAULT_STATE_FILE)
+        sync_state = unified.get("sync", {}) if isinstance(unified, dict) else {}
+        state = sync_state.get("files", {}) if isinstance(sync_state, dict) else {}
+        meta = sync_state.get("meta", {}) if isinstance(sync_state, dict) else {}
+        counters = sync_state.get("counters", {}) if isinstance(sync_state, dict) else {}
 
     last_sync = meta.get("last_sync")
     if last_sync:

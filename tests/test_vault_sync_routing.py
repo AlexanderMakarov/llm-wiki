@@ -89,7 +89,7 @@ def test_vault_sync_routes_state_file_into_vault(tmp_path: Path):
     with patch("llmwiki.convert.convert_all", side_effect=fake_convert_all):
         cmd_sync(_make_args(vault=vault))
 
-    assert captured.get("state_file") == vault.resolve() / ".llmwiki-state.json"
+    assert captured.get("state_file") == vault.resolve() / "llmwiki-state.json"
 
 
 def test_default_no_vault_behaviour_unchanged(tmp_path: Path):
@@ -119,7 +119,7 @@ def test_force_with_vault_uses_vault_state_file(tmp_path: Path):
         cmd_sync(_make_args(vault=vault, force=True))
 
     assert captured.get("force") is True
-    assert captured.get("state_file") == vault.resolve() / ".llmwiki-state.json"
+    assert captured.get("state_file") == vault.resolve() / "llmwiki-state.json"
 
 
 def test_vault_auto_build_writes_site_to_vault(tmp_path: Path):

@@ -252,6 +252,19 @@ def render_home_body(
       <div class="doctree-main">
         <h2>Browse documents</h2>
         {intro}
+        <section id="queue-trace-panel" class="queue-trace-panel">
+          <h3>Queue traceability</h3>
+          <p class="muted">
+            Source: <code>../llmwiki-state.js</code> (loaded via script tag for
+            <code>file://</code> compatibility).
+          </p>
+          <div id="queue-trace-content" class="muted">No state snapshot loaded.</div>
+          <p class="muted">
+            Commands: <code>llmwiki queue status</code>,
+            <code>llmwiki queue run --vault &lt;vault&gt; --limit 20</code>,
+            <code>llmwiki lint --vault &lt;vault&gt;</code>
+          </p>
+        </section>
       </div>
     </div>
   </div>

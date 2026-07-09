@@ -13,9 +13,9 @@ Versions below 1.0 are pre-production — API and file formats may change.
 - **`llmwiki add <url|file|folder>...`** (#16): synchronous local document intake.
   Converts sources to Markdown (Cloudflare `Accept: text/markdown` negotiation →
   trafilatura/stdlib extraction → optional playwright render), writes
-  `raw/docs/<slug>/<slug>[-NN].md` in the kbbuilder-compatible chunked layout,
-  then batch-synthesizes and rebuilds the site. New `llm-wiki-add` console script
-  and `[add]` optional extra (`trafilatura`, `markitdown[pdf,docx,pptx,xlsx]`).
+  `raw/docs/<slug>/<slug>[-NN].md` in the section-chunked layout, then
+  batch-synthesizes and rebuilds the site. New `llm-wiki-add` console script and
+  `[add]` optional extra (`trafilatura`, `markitdown[pdf,docx,pptx,xlsx]`).
 - **Vault pipeline lock** (#16 field report): `sync`, `build`, `add`, and `all`
   now serialize on `.llmwiki-pipeline.lock` at the vault (or repo) root, so a
   hook-triggered sync/build can no longer race a concurrent `llmwiki add` into

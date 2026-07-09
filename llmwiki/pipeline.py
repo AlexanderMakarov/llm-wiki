@@ -55,11 +55,7 @@ def run_pipeline(args: argparse.Namespace) -> int:
             _ns(
                 check=False,
                 estimate=False,
-                list_pending=False,
-                complete=None,
                 force=getattr(args, "synth_force", False),
-                page=None,
-                body=None,
                 vault=getattr(args, "vault", None),
             ),
         ))

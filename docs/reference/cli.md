@@ -414,6 +414,55 @@ ships with baseline tags.
 
 ---
 
+## `queue` — inspect and run unified queue
+
+Manage the unified vault queue in `llmwiki-state.json`.
+
+```bash
+python3 -m llmwiki queue status
+python3 -m llmwiki queue enqueue --task-type add_doc --source https://example.com
+python3 -m llmwiki queue run --vault /path/to/vault --limit 20
+```
+
+### Positional
+
+| Value | What |
+|---|---|
+| `status` | Print queue counts and oldest pending task timestamp. |
+| `enqueue` | Add one task (`add_doc`, `session_sync`, `synthesize`, `build`). |
+| `run` | Execute pending tasks serially (up to `--limit`). |
+
+### Flags
+
+| Flag | What |
+|---|---|
+| `--task-type {add_doc,session_sync,synthesize,build}` | Task kind for `enqueue`. |
+| `--source TEXT` | Source payload for `add_doc` enqueue. |
+| `--limit N` | Max tasks to process in one `run` call. Default: `20`. |
+| `--vault PATH` | Vault root used for task execution and state lookup. |
+| `--state-file PATH` | Override direct state file path. |
+
+---
+
+## `migrate-state` — one-time legacy state migration
+
+Migrates legacy dotfiles (`.llmwiki-state.json`, `.llmwiki-synth-state.json`, `.llmwiki-queue.json`, `.llmwiki-quarantine.json`, `.llmwiki-pending-prompts/`) into the unified `llmwiki-state.json`.
+
+```bash
+python3 -m llmwiki migrate-state
+python3 -m llmwiki migrate-state --state-file /path/to/vault/llmwiki-state.json
+```
+
+### Flags
+
+| Flag | What |
+|---|---|
+| `--state-file PATH` | Explicit target state file (defaults to configured vault path). |
+
+The command is idempotent and prints cleanup suggestions for migrated legacy files.
+
+---
+
 ## `consolidate-topics` — dedupe + describe topics (#54)
 
 One-time LLM pass over the topic list (not the sessions) that merges
