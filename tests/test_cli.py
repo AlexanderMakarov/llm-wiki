@@ -216,6 +216,38 @@ def test_add_synthesizes_only_written_docs(tmp_path, monkeypatch, capsys):
     assert any("brand-new" in p for p in only)
     assert not any("old-backlog" in p for p in only)
 
+def test_add_readd_unchanged_skips_without_synth(tmp_path, monkeypatch, capsys):
+    """Re-adding identical content exits 0 and does not synthesize/build (#22)."""
+    import llmwiki.cli as cli_mod
+
+    vault = _add_vault(tmp_path)
+    src = tmp_path / "doc.md"
+    src.write_text("# Repeat Doc\n\nsame body\n")
+
+    synth_called = {"n": 0}
+    build_called = {"n": 0}
+
+    import llmwiki.synth.pipeline as pipeline_mod
+    monkeypatch.setattr(pipeline_mod, "synthesize_new_sessions",
+                        lambda **kw: (synth_called.__setitem__("n", synth_called["n"] + 1) or {}))
+    import llmwiki.build as build_mod
+    monkeypatch.setattr(build_mod, "build_site",
+                        lambda **kw: (build_called.__setitem__("n", build_called["n"] + 1) or 0))
+
+    rc1 = _run_add(cli_mod, vault, "--no-synthesize", "--no-build", str(src))
+    assert rc1 == 0
+    assert synth_called["n"] == 0
+    assert build_called["n"] == 0
+
+    rc2 = _run_add(cli_mod, vault, str(src))
+    out = capsys.readouterr()
+    assert rc2 == 0, out.err
+    assert synth_called["n"] == 0, "re-add must not trigger synthesis"
+    assert build_called["n"] == 0, "re-add must not trigger build"
+    assert "already present as repeat-doc" in out.out
+    assert len(list((vault / "raw" / "docs").rglob("*.md"))) == 1
+
+
 def test_add_unavailable_backend_rolls_back_raw_docs(tmp_path, monkeypatch, capsys):
     """No half-added docs: when the configured backend can't synthesize,
     the just-added raw docs are removed and add fails — only

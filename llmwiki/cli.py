@@ -766,6 +766,7 @@ def _cmd_add_locked(args: argparse.Namespace, docs_dir: Path,
         list(args.sources), docs_dir,
         title=args.title, project=args.project, tags=tuple(args.tag or ()),
         note=args.note, render=render, dry_run=args.dry_run,
+        force_new=args.force_new,
     )
 
     for title in result["titles"]:
@@ -1401,6 +1402,8 @@ def build_parser() -> argparse.ArgumentParser:
                               help="Never use the headless-browser layer")
     add_p.add_argument("--dry-run", action="store_true",
                        help="Convert and report, write nothing, run nothing")
+    add_p.add_argument("--force-new", action="store_true",
+                       help="Always land a new snapshot even when body matches an existing doc (#22)")
     _add_vault_arg(add_p, role="add")
     add_p.set_defaults(func=cmd_add)
 

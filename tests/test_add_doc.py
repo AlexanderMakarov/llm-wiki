@@ -456,7 +456,7 @@ def test_write_single_chunk_layout_and_frontmatter(tmp_path):
         'tags: [wiki-add, raw-doc]\n'
         'date: 2026-07-04\n'
         'source: "/tmp/x.md"\n'
-        '---\n\n'
+        'content_sha256: '
     )
     assert text.rstrip().endswith("body")
 
@@ -476,17 +476,38 @@ def test_write_multi_chunk_names_titles_breadcrumbs(tmp_path):
 
 def test_write_never_overwrites_suffixes_slug(tmp_path):
     p1 = write_raw_doc(_doc(), tmp_path, today="2026-07-04")
-    p2 = write_raw_doc(_doc(), tmp_path, today="2026-07-04")
+    p2 = write_raw_doc(_doc(), tmp_path, today="2026-07-04", force_new=True)
     assert p1 != p2
     assert p2 == [tmp_path / "doc-title-2" / "doc-title-2.md"]
-    p3 = write_raw_doc(_doc(), tmp_path, today="2026-07-04")
+    p3 = write_raw_doc(_doc(), tmp_path, today="2026-07-04", force_new=True)
     assert p3 == [tmp_path / "doc-title-3" / "doc-title-3.md"]
     assert p1[0].read_text() == p2[0].read_text().replace("doc-title-2", "doc-title")
 
 
+def test_write_identical_content_skipped_by_hash(tmp_path):
+    write_raw_doc(_doc(), tmp_path, today="2026-07-04")
+    from llmwiki.add_doc import DuplicateContentError
+    with pytest.raises(DuplicateContentError, match="already present as doc-title"):
+        write_raw_doc(_doc(), tmp_path, today="2026-07-04")
+
+
+def test_write_changed_content_lands_snapshot_suffix(tmp_path):
+    write_raw_doc(_doc(), tmp_path, today="2026-07-04")
+    p2 = write_raw_doc(_doc(markdown="# Doc Title\n\nchanged body\n"),
+                       tmp_path, today="2026-07-04")
+    assert p2 == [tmp_path / "doc-title-2" / "doc-title-2.md"]
+
+
+def test_force_new_bypasses_content_dedup(tmp_path):
+    write_raw_doc(_doc(), tmp_path, today="2026-07-04")
+    p2 = write_raw_doc(_doc(), tmp_path, today="2026-07-04", force_new=True)
+    assert p2 == [tmp_path / "doc-title-2" / "doc-title-2.md"]
+
+
 def test_write_explicit_project_collides_on_file_level(tmp_path):
     write_raw_doc(_doc(), tmp_path, project="shared", today="2026-07-04")
-    p2 = write_raw_doc(_doc(), tmp_path, project="shared", today="2026-07-04")
+    p2 = write_raw_doc(_doc(markdown="# Doc Title\n\nchanged body\n"),
+                       tmp_path, project="shared", today="2026-07-04")
     assert p2 == [tmp_path / "shared" / "doc-title-2.md"]
 
 
@@ -500,10 +521,15 @@ def test_write_explicit_project_dedupe_across_chunk_shapes(tmp_path):
     p2 = write_raw_doc(_doc(markdown=big), tmp_path, project="shared",
                        today="2026-07-04", chunk_max_chars=1000)
     assert all(p.name.startswith("doc-title-2-") for p in p2)
-    # multi first, then single (fresh project dir)
-    write_raw_doc(_doc(markdown=big), tmp_path, project="other",
+    # multi first, then single (fresh project dir) — distinct body so hash dedup
+    # does not collide with the shared/doc-title-2 chunks above.
+    big_other = "# Doc Title\n\n" + "".join(
+        f"## T{i}\n\n" + "y" * 900 + "\n\n" for i in range(4)
+    )
+    write_raw_doc(_doc(markdown=big_other), tmp_path, project="other",
                   today="2026-07-04", chunk_max_chars=1000)
-    p4 = write_raw_doc(_doc(), tmp_path, project="other", today="2026-07-04")
+    p4 = write_raw_doc(_doc(markdown="# Doc Title\n\nother project body\n"),
+                       tmp_path, project="other", today="2026-07-04")
     assert p4 == [tmp_path / "other" / "doc-title-2.md"]
 
 
@@ -557,9 +583,14 @@ def test_dry_run_path_prediction_matches_real_write_collision(tmp_path):
     src.write_text("# Doc Title\n\nbody\n")
     result = add_sources([str(src)], docs, dry_run=True, today="2026-07-04")
     assert result["errors"] == []
-    assert any("doc-title-2" in w for w in result["warnings"])
-    # No further collision must be silently mispredicted as doc-title.
-    assert not any(w.endswith("doc-title/doc-title.md") for w in result["warnings"])
+    assert result["skipped"]
+    assert any("already present as doc-title" in w for w in result["warnings"])
+
+    changed = tmp_path / "changed.md"
+    changed.write_text("# Doc Title\n\nchanged body\n")
+    result2 = add_sources([str(changed)], docs, dry_run=True, today="2026-07-04")
+    assert result2["errors"] == []
+    assert any("doc-title-2" in w for w in result2["warnings"])
 
 
 def test_add_sources_titles_recorded_only_after_successful_write(tmp_path):
@@ -585,6 +616,50 @@ def test_write_explicit_title_wins(tmp_path):
     paths = write_raw_doc(_doc(), tmp_path, explicit_title="Custom Name", today="2026-07-04")
     assert paths[0].parent.name == "custom-name"
     assert 'title: "Custom Name"' in paths[0].read_text()
+
+
+def test_add_sources_readd_unchanged_skips(tmp_path):
+    src = tmp_path / "in.md"
+    src.write_text("# In File\n\ncontent\n")
+    docs = tmp_path / "docs"
+    first = add_sources([str(src)], docs, today="2026-07-04")
+    assert len(first["written"]) == 1
+    second = add_sources([str(src)], docs, today="2026-07-04")
+    assert second["written"] == []
+    assert second["skipped"]
+    assert "already present as in-file" in second["warnings"][0]
+    assert len(list(docs.rglob("*.md"))) == 1
+
+
+def test_add_sources_readd_modified_creates_snapshot(tmp_path):
+    src = tmp_path / "in.md"
+    src.write_text("# In File\n\ncontent\n")
+    docs = tmp_path / "docs"
+    add_sources([str(src)], docs, today="2026-07-04")
+    src.write_text("# In File\n\nupdated content\n")
+    second = add_sources([str(src)], docs, today="2026-07-04")
+    assert len(second["written"]) == 1
+    assert (docs / "in-file-2" / "in-file-2.md").exists()
+
+
+def test_add_sources_force_new_always_writes(tmp_path):
+    src = tmp_path / "in.md"
+    src.write_text("# In File\n\ncontent\n")
+    docs = tmp_path / "docs"
+    add_sources([str(src)], docs, today="2026-07-04")
+    second = add_sources([str(src)], docs, today="2026-07-04", force_new=True)
+    assert len(second["written"]) == 1
+    assert (docs / "in-file-2" / "in-file-2.md").exists()
+
+
+def test_content_hash_shared_across_chunks(tmp_path):
+    md = "# Big Doc\n\n" + "".join(f"## Sec{i}\n\n" + "x" * 900 + "\n\n" for i in range(4))
+    paths = write_raw_doc(_doc(markdown=md), tmp_path, today="2026-07-04", chunk_max_chars=1000)
+    assert len(paths) > 1
+    from llmwiki._frontmatter import parse_frontmatter
+    hashes = {parse_frontmatter(p.read_text())[0].get("content_sha256") for p in paths}
+    assert len(hashes) == 1
+    assert hashes.pop() is not None
 
 
 def test_add_sources_batch_mixed_success_and_failure(tmp_path):

@@ -138,6 +138,7 @@ python3 -m llmwiki add https://example.com/post --dry-run
 | `--render` | Force the headless-browser layer for URLs (needs playwright). |
 | `--no-render` | Never use the headless-browser layer. |
 | `--dry-run` | Convert and report, write nothing, run nothing. |
+| `--force-new` | Always land a new snapshot even when the converted body matches an existing doc (#22). |
 | `--vault PATH` | Write under the given vault's `raw/docs/` instead of the repo. |
 
 URL sources go through a layered pipeline (markdown negotiation → extraction → render escalation) before landing as Markdown.

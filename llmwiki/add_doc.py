@@ -13,6 +13,7 @@ and a sensitive-path denylist for local reads.
 
 from __future__ import annotations
 
+import hashlib
 import ipaddress
 import json
 import re as _re  # aliased: `re` is shadowed by hot loop locals in later sections
@@ -43,6 +44,9 @@ __all__ = [
     "BROWSER_UA",
     "CHALLENGE_MARKERS",
     "convert_url",
+    "compute_content_hash",
+    "find_existing_by_hash",
+    "DuplicateContentError",
     "resolve_write_target",
     "write_raw_doc",
     "add_sources",
@@ -54,6 +58,16 @@ __all__ = [
 class AddError(Exception):
     """User-facing failure adding one source (bad URL, blocked address,
     unreadable path, missing optional converter)."""
+
+
+class DuplicateContentError(AddError):
+    """Converted body matches an existing raw/docs entry (#22)."""
+
+    def __init__(self, existing_ref: str) -> None:
+        self.existing_ref = existing_ref
+        super().__init__(
+            f"already present as {existing_ref} — use --force-new to land a new snapshot anyway"
+        )
 
 
 # ── SSRF egress guard ────────────────────────────────────────────────
@@ -693,8 +707,39 @@ def _dedupe(base: str, exists) -> str:
     return f"{base}-{n}"
 
 
+def compute_content_hash(markdown: str) -> str:
+    """SHA-256 of the pre-chunk converted body (#22)."""
+    return hashlib.sha256(markdown.encode("utf-8")).hexdigest()
+
+
+def _doc_ref(project: str, slug: str) -> str:
+    """Human-facing pointer to an existing raw doc (project/base-slug)."""
+    base = _re.sub(r"-\d{2}$", "", slug) if _re.search(r"-\d{2}$", slug) else slug
+    return f"{project}/{base}" if project != base else base
+
+
+def find_existing_by_hash(docs_dir: Path, content_hash: str) -> str | None:
+    """Return ``project/slug`` for a raw/docs file with this hash, or None."""
+    if not docs_dir.is_dir():
+        return None
+    from llmwiki._frontmatter import parse_frontmatter
+
+    for path in sorted(docs_dir.rglob("*.md")):
+        try:
+            meta, _body = parse_frontmatter(path.read_text(encoding="utf-8"))
+        except OSError:
+            continue
+        if meta.get("content_sha256") != content_hash:
+            continue
+        project = str(meta.get("project") or path.parent.name)
+        raw_slug = meta.get("slug")
+        slug = raw_slug if isinstance(raw_slug, str) else path.stem
+        return _doc_ref(project, slug)
+    return None
+
+
 def _frontmatter(title: str, slug: str, project: str, tags: tuple[str, ...],
-                 today: str, source: str) -> str:
+                 today: str, source: str, *, content_sha256: str) -> str:
     tag_list = ", ".join(("wiki-add", "raw-doc") + tags)
     return (
         "---\n"
@@ -705,6 +750,7 @@ def _frontmatter(title: str, slug: str, project: str, tags: tuple[str, ...],
         f"tags: [{tag_list}]\n"
         f"date: {today}\n"
         f"source: {json.dumps(source, ensure_ascii=False)}\n"
+        f"content_sha256: {content_sha256}\n"
         "---\n\n"
     )
 
@@ -761,10 +807,18 @@ def write_raw_doc(
     extra_tags: tuple[str, ...] = (),
     today: str | None = None,
     chunk_max_chars: int = DEFAULT_CHUNK_MAX_CHARS,
+    force_new: bool = False,
 ) -> list[Path]:
     """Write one converted doc under raw/docs/<project>/, chunked by
     section when large. Never overwrites (raw/ immutability): the doc
-    slug is suffixed -2, -3, … on collision. Returns written paths."""
+    slug is suffixed -2, -3, … on collision. Identical converted bodies
+    are skipped unless ``force_new`` (#22). Returns written paths."""
+    content_hash = compute_content_hash(doc.markdown)
+    if not force_new:
+        existing = find_existing_by_hash(docs_dir, content_hash)
+        if existing is not None:
+            raise DuplicateContentError(existing)
+
     title = derive_title(explicit=explicit_title, markdown=doc.markdown,
                          html_title=doc.html_title, url=doc.url,
                          path_name=doc.path_name)
@@ -786,7 +840,8 @@ def write_raw_doc(
             breadcrumb = f"> Part {c.index} of {c.total} of **{title}**" + (f" — {sub}" if sub else "") + ".\n\n"
         else:
             chunk_title, breadcrumb = title, ""
-        fm = _frontmatter(chunk_title, chunk_slug, proj, extra_tags, day, doc.source_label)
+        fm = _frontmatter(chunk_title, chunk_slug, proj, extra_tags, day, doc.source_label,
+                          content_sha256=content_hash)
         path = target / f"{chunk_slug}.md"
         if path.exists():  # belt-and-braces: raw/ is immutable
             raise AddError(f"refusing to overwrite existing raw file {path}")
@@ -808,6 +863,7 @@ def add_sources(
     fetch=None,
     renderer=None,
     today: str | None = None,
+    force_new: bool = False,
 ) -> dict:
     """Convert + write a batch of sources. Post-steps (synthesize/build)
     are the CLI's job — this function only lands raw docs. Per-source
@@ -817,6 +873,7 @@ def add_sources(
     docs: list[dict] = []
     warnings: list[str] = []
     errors: list[str] = []
+    skipped: list[dict[str, str]] = []
     for src in sources:
         try:
             if _re.match(r"^https?://", src):
@@ -827,6 +884,17 @@ def add_sources(
                                        html_title=doc.html_title, url=doc.url,
                                        path_name=doc.path_name)
             warnings.extend(f"{src}: {w}" for w in doc.warnings)
+            if not force_new:
+                existing = find_existing_by_hash(docs_dir, compute_content_hash(doc.markdown))
+                if existing is not None:
+                    msg = (f"already present as {existing} — use --force-new to "
+                           "land a new snapshot anyway")
+                    if dry_run:
+                        warnings.append(f"{src}: dry-run — {msg}")
+                    else:
+                        warnings.append(f"{src}: {msg}")
+                    skipped.append({"source": src, "existing": existing})
+                    continue
             if dry_run:
                 _proj, slug, target, chunks = resolve_write_target(
                     final_title, doc.markdown, docs_dir, project=project,
@@ -838,14 +906,18 @@ def add_sources(
                 titles.append(final_title)
                 continue
             paths = write_raw_doc(doc, docs_dir, explicit_title=title,
-                                  project=project, extra_tags=tags, today=today)
+                                  project=project, extra_tags=tags, today=today,
+                                  force_new=force_new)
             written.extend(paths)
             titles.append(final_title)
             docs.append({"title": final_title, "paths": paths})
+        except DuplicateContentError as exc:
+            warnings.append(f"{src}: {exc}")
+            skipped.append({"source": src, "existing": exc.existing_ref})
         except AddError as exc:
             errors.append(f"{src}: {exc}")
     return {"written": written, "titles": titles, "docs": docs,
-            "warnings": warnings, "errors": errors}
+            "warnings": warnings, "errors": errors, "skipped": skipped}
 
 
 def expected_source_page(raw_doc: Path, wiki_sources_dir: Path) -> Path:
