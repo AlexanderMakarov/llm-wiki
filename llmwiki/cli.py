@@ -965,6 +965,21 @@ def _synthesize_estimate(args: argparse.Namespace | None = None) -> int:
         synth["pending"] = pending_rows
         synth["pending_total"] = len(pending_rows)
         synth["pending_updated_at"] = stamp
+        synth["estimate"] = {
+            "updated_at": stamp,
+            "execution_model": execution_model or "",
+            "pricing_model": str(report.get("model", "")),
+            "prefix_tokens": int(report.get("prefix_tokens", 0) or 0),
+            "corpus_total": int(report.get("corpus", 0) or 0),
+            "corpus_sessions": int(report.get("corpus_sessions", 0) or 0),
+            "corpus_docs": int(report.get("corpus_docs", 0) or 0),
+            "new_total": int(report.get("new", 0) or 0),
+            "new_sessions": int(report.get("new_sessions", 0) or 0),
+            "new_docs": int(report.get("new_docs", 0) or 0),
+            "incremental_usd": float(report.get("incremental_usd", 0.0) or 0.0),
+            "full_force_usd": float(report.get("full_force_usd", 0.0) or 0.0),
+            "warnings": [str(w) for w in report.get("warnings", []) if str(w).strip()],
+        }
         return s
 
     update_state(_mut, state_target)

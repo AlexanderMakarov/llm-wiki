@@ -413,3 +413,8 @@ def test_estimate_persists_unsynth_backlog_for_vault(tmp_path, capsys):
     pending = synth.get("pending", [])
     assert isinstance(pending, list) and pending
     assert pending[0].get("is_doc") is True
+    estimate = synth.get("estimate", {})
+    assert isinstance(estimate, dict)
+    assert estimate.get("execution_model") == "sonnet"
+    assert estimate.get("pricing_model") == "sonnet-5"
+    assert int(estimate.get("new_total", 0)) == 1

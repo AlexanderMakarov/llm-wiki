@@ -54,6 +54,7 @@ def default_state() -> dict[str, Any]:
             "pending": [],
             "pending_total": 0,
             "pending_updated_at": "",
+            "estimate": {},
         },
         "quarantine": {"entries": []},
         "ops": {
@@ -137,6 +138,8 @@ def _ensure_shape(raw: dict[str, Any]) -> dict[str, Any]:
         out["synth"]["pending_total"] = 0
     if not isinstance(out["synth"].get("pending_updated_at"), str):
         out["synth"]["pending_updated_at"] = ""
+    if not isinstance(out["synth"].get("estimate"), dict):
+        out["synth"]["estimate"] = {}
     if not isinstance(out["quarantine"].get("entries"), list):
         out["quarantine"]["entries"] = []
     out["meta"]["schema_version"] = SCHEMA_VERSION

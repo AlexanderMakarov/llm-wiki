@@ -52,3 +52,10 @@ def test_queue_trace_js_has_no_fetch():
     idx = js.JS.index("renderQueueTrace")
     chunk = js.JS[idx : idx + 900]
     assert "fetch(" not in chunk
+
+
+def test_queue_trace_js_renders_estimate_block():
+    from llmwiki.render import js
+
+    assert "Cost estimate" in js.JS
+    assert "estimate.incremental_usd" in js.JS
