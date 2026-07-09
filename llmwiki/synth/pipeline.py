@@ -33,6 +33,7 @@ from llmwiki.synth.base import BaseSynthesizer, DummySynthesizer
 from llmwiki.state_store import read_state as _read_unified_state
 from llmwiki.state_store import resolve_state_file as _resolve_state_file
 from llmwiki.state_store import update_state as _update_unified_state
+from llmwiki.state_store import mtime_from_state, mtime_to_iso
 
 
 # G-21 (#307): shell- and URL-unsafe chars we scrub from slugs at
@@ -103,7 +104,7 @@ def resolve_backend(
 
         return ClaudeCLISynthesizer(
             claude_path=synth_cfg.get("claude_path"),
-            model=synth_cfg.get("claude_model"),
+            model=synth_cfg.get("claude_model") or "sonnet",
             timeout=int(synth_cfg.get("timeout") or 180),
         )
 
@@ -234,8 +235,9 @@ def _load_state(state_file: Optional[Path] = None) -> dict[str, float]:
     for k, v in raw.items():
         if not isinstance(k, str):
             continue
-        if isinstance(v, (int, float)):
-            out[k] = float(v)
+        parsed = mtime_from_state(v)
+        if parsed is not None:
+            out[k] = parsed
         # Other shapes silently dropped — caller treats as "needs synth"
     return out
 
@@ -244,9 +246,120 @@ def _save_state(state: dict[str, float], state_file: Optional[Path] = None) -> N
     target = _resolve_state_file(state_file)
     def _mut(s: dict[str, Any]) -> dict[str, Any]:
         synth = s.setdefault("synth", {})
-        synth["files"] = state
+        synth["files"] = {k: mtime_to_iso(v) for k, v in state.items()}
         return s
     _update_unified_state(_mut, target)
+
+
+def discover_synth_source_keys(wiki_sources_dir: Optional[Path] = None) -> set[str]:
+    """Return ``source_file`` keys already represented in wiki/sources pages."""
+    roots = wiki_sources_dir or WIKI_SOURCES
+    out: set[str] = set()
+    if not roots.is_dir():
+        return out
+    for p in roots.rglob("*.md"):
+        if p.name.startswith("_"):
+            continue
+        try:
+            text = p.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        meta, _body = parse_frontmatter(text)
+        src = str(meta.get("source_file", "")).strip()
+        if src:
+            out.add(src)
+    return out
+
+
+def discover_unsynth_session_rels(
+    *,
+    raw_dir: Optional[Path] = None,
+    wiki_sources_dir: Optional[Path] = None,
+    state_file: Optional[Path] = None,
+) -> set[str]:
+    """Session rel-paths that the shared estimate logic considers unsynth."""
+    from llmwiki.synth.estimate import synthesize_estimate_report
+
+    sessions = _discover_raw_sessions(raw_dir)
+    state_keys: set[str]
+    if state_file is None and raw_dir is not None:
+        try:
+            provided = Path(raw_dir).resolve()
+            default = RAW_SESSIONS.resolve()
+            if provided != default:
+                state_keys = set()
+            else:
+                state_keys = set(_load_state(state_file).keys())
+        except OSError:
+            state_keys = set(_load_state(state_file).keys())
+    else:
+        state_keys = set(_load_state(state_file).keys())
+    report = synthesize_estimate_report(
+        raw_sessions=sessions,
+        state_keys=state_keys,
+        synthesized_source_keys=discover_synth_source_keys(wiki_sources_dir),
+        wiki_sources_dir=wiki_sources_dir,
+        raw_root=raw_dir or RAW_SESSIONS,
+        docs_root=(raw_dir.parent / "docs") if raw_dir is not None else RAW_DOCS,
+    )
+    out: set[str] = set()
+    for it in report.get("unsynth_items", []):
+        rel = str(it.get("rel", "")).strip()
+        if rel:
+            out.add(rel)
+    return out
+
+
+def refresh_synth_pending(
+    *,
+    raw_dir: Optional[Path] = None,
+    docs_dir: Optional[Path] = None,
+    wiki_sources_dir: Optional[Path] = None,
+    state_file: Optional[Path] = None,
+) -> dict[str, Any]:
+    """Compute unsynth backlog and persist it in unified state.
+
+    Stores a lightweight pending list under ``synth.pending`` so users can
+    inspect backlog risk before running `llmwiki synthesize`/`llm-wiki-add`.
+    """
+    sources_out = wiki_sources_dir or WIKI_SOURCES
+    from llmwiki.synth.estimate import synthesize_estimate_report
+    raw_sessions = _discover_raw_sessions(raw_dir)
+    state = _load_state(state_file)
+    report = synthesize_estimate_report(
+        raw_sessions=raw_sessions,
+        state_keys=set(state.keys()),
+        synthesized_source_keys=discover_synth_source_keys(sources_out),
+        wiki_sources_dir=sources_out,
+        raw_root=raw_dir or RAW_SESSIONS,
+        docs_root=docs_dir or ((raw_dir.parent / "docs") if raw_dir is not None else RAW_DOCS),
+    )
+    pending: list[dict[str, Any]] = []
+    for it in report.get("unsynth_items", []):
+        rel = str(it.get("rel", "")).strip()
+        if not rel:
+            continue
+        pending.append(
+            {
+                "rel": rel,
+                "source": str(it.get("source_file", "")),
+                "project": str(it.get("project", "unknown")),
+                "is_doc": bool(it.get("is_doc", False)),
+                "mtime": str(it.get("mtime", "")),
+            }
+        )
+
+    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    def _mut(s: dict[str, Any]) -> dict[str, Any]:
+        synth = s.setdefault("synth", {})
+        synth["pending"] = pending
+        synth["pending_total"] = len(pending)
+        synth["pending_updated_at"] = stamp
+        return s
+
+    _update_unified_state(_mut, _resolve_state_file(state_file))
+    return {"pending_total": len(pending), "pending": pending, "updated_at": stamp}
 
 
 def _append_log(
@@ -763,6 +876,7 @@ def synthesize_new_sessions(
     state_file: Optional[Path] = None,
     docs_dir: Optional[Path] = None,
     doc_chunk_max_chars: Optional[int] = None,
+    include_docs: bool = True,
 ) -> dict[str, Any]:
     """Main entry point. Returns a summary dict:
 
@@ -805,27 +919,36 @@ def synthesize_new_sessions(
     # ``raw/docs`` of whatever sessions root was given.
     session_base = raw_dir or RAW_SESSIONS
     docs_base = docs_dir or (raw_dir.parent / "docs" if raw_dir else RAW_DOCS)
+    unsynth_session_rels = discover_unsynth_session_rels(
+        raw_dir=raw_dir,
+        wiki_sources_dir=wiki_sources_dir,
+        state_file=state_file,
+    )
 
     items: list[dict[str, Any]] = []
     for p, meta, body in _discover_raw_sessions(raw_dir):
+        rel = str(p.relative_to(session_base))
+        if rel not in unsynth_session_rels and not force:
+            continue
         items.append({
             "path": p, "meta": meta, "body": body,
-            "rel": str(p.relative_to(session_base)),
+            "rel": rel,
             "project": meta.get("project", p.parent.name),
             "is_doc": False,
         })
-    for p, meta, body in _discover_raw_docs(docs_base):
-        # Group under the doc's own project if it declares one, else the
-        # ``docs`` pseudo-project. Inject it into meta too so the built
-        # page's `project:` frontmatter matches where the page lives —
-        # otherwise the index/graph mis-group it as ``unknown``.
-        doc_project = meta.get("project") or "docs"
-        items.append({
-            "path": p, "meta": {**meta, "project": doc_project}, "body": body,
-            "rel": "docs::" + str(p.relative_to(docs_base)),
-            "project": doc_project,
-            "is_doc": True,
-        })
+    if include_docs:
+        for p, meta, body in _discover_raw_docs(docs_base):
+            # Group under the doc's own project if it declares one, else the
+            # ``docs`` pseudo-project. Inject it into meta too so the built
+            # page's `project:` frontmatter matches where the page lives —
+            # otherwise the index/graph mis-group it as ``unknown``.
+            doc_project = meta.get("project") or "docs"
+            items.append({
+                "path": p, "meta": {**meta, "project": doc_project}, "body": body,
+                "rel": "docs::" + str(p.relative_to(docs_base)),
+                "project": doc_project,
+                "is_doc": True,
+            })
 
     new_items: list[dict[str, Any]] = []
     for it in items:
@@ -833,7 +956,7 @@ def synthesize_new_sessions(
             mtime = it["path"].stat().st_mtime
         except OSError:
             continue
-        if it["rel"] in state and state[it["rel"]] >= mtime and not force:
+        if it["rel"] in state and (state[it["rel"]] + 1e-6) >= mtime and not force:
             continue
         new_items.append(it)
 
@@ -928,6 +1051,20 @@ def synthesize_new_sessions(
 
             # Update state once per source (after all parts succeed).
             state[rel] = p.stat().st_mtime
+            _save_state(state, state_file)
+            try:
+                target_state = _resolve_state_file(state_file)
+                def _drop_pending(s: dict[str, Any]) -> dict[str, Any]:
+                    synth = s.setdefault("synth", {})
+                    rows = synth.setdefault("pending", [])
+                    if isinstance(rows, list):
+                        rows = [r for r in rows if not (isinstance(r, dict) and str(r.get("rel", "")) == rel)]
+                        synth["pending"] = rows
+                        synth["pending_total"] = len(rows)
+                    return s
+                _update_unified_state(_drop_pending, target_state)
+            except Exception:
+                pass
             summary["synthesized"] += 1
 
         except Exception as e:
@@ -954,6 +1091,12 @@ def synthesize_new_sessions(
         )
 
     _save_state(state, state_file)
+    refresh_synth_pending(
+        raw_dir=raw_dir,
+        docs_dir=docs_dir,
+        wiki_sources_dir=wiki_sources_dir,
+        state_file=state_file,
+    )
 
     # G-09 (#295): rebuild wiki/index.md so lint's index_sync rule
     # passes on fresh synthesized corpora. Synthesize is authoritative

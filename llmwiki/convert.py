@@ -24,6 +24,7 @@ from llmwiki.quarantine import clear_entry as _quarantine_clear
 from llmwiki.state_store import read_state as _read_unified_state
 from llmwiki.state_store import resolve_state_file as _resolve_state_file
 from llmwiki.state_store import update_state as _update_unified_state
+from llmwiki.state_store import mtime_from_state, mtime_to_iso
 
 DEFAULT_STATE_FILE = _resolve_state_file()
 DEFAULT_CONFIG_FILE = REPO_ROOT / "examples" / "sessions_config.json"
@@ -190,7 +191,7 @@ def _portable_state_key(adapter_name: str, path: Path) -> str:
 
 def _migrate_legacy_state(
     raw: dict[str, Any], adapter_names: Iterable[str]
-) -> tuple[dict[str, float], int]:
+) -> tuple[dict[str, Any], int]:
     """One-shot migration from the old absolute-path schema.
 
     Returns ``(migrated_state, migrated_count)`` so the caller can log
@@ -200,7 +201,7 @@ def _migrate_legacy_state(
     new shape by matching adapter sub-strings (``"/.claude/projects/"``
     → ``claude_code``, ``"/.codex/sessions/"`` → ``codex_cli``, etc.).
     """
-    out: dict[str, float] = {}
+    out: dict[str, Any] = {}
     migrated = 0
     # Rough per-adapter path signature — good enough for a one-off fix-up.
     hints: list[tuple[str, str]] = [
@@ -228,11 +229,12 @@ def _migrate_legacy_state(
         if k.startswith("_"):
             out[k] = v  # type: ignore[assignment]
             continue
-        if not isinstance(v, (int, float)) or isinstance(v, bool):
+        parsed_v = mtime_from_state(v)
+        if parsed_v is None:
             continue
         if "::" in k:
             # Already portable — keep.
-            out[k] = float(v)
+            out[k] = mtime_to_iso(parsed_v)
             continue
         # Legacy absolute-path key. Try to infer the adapter from the path.
         inferred: Optional[str] = None
@@ -243,13 +245,13 @@ def _migrate_legacy_state(
         if inferred is None:
             # Preserve the raw key rather than dropping the entry — the
             # next sync will either pass-through or re-migrate it.
-            out[k] = float(v)
+            out[k] = mtime_to_iso(parsed_v)
             continue
         try:
             rel = Path(k).relative_to(Path.home()).as_posix()
         except (ValueError, OSError):
             rel = k
-        out[f"{inferred}::{rel}"] = float(v)
+        out[f"{inferred}::{rel}"] = mtime_to_iso(parsed_v)
         migrated += 1
     return out, migrated
 
@@ -1601,7 +1603,8 @@ def convert_all(
                 _quarantine_add(cls.name, str(path), f"stat failed: {e}")
                 continue
             key = _portable_state_key(cls.name, path)
-            if state.get(key) == mtime:
+            stored_mtime = mtime_from_state(state.get(key))
+            if stored_mtime is not None and abs(stored_mtime - mtime) <= 1e-6:
                 unchanged += 1
                 _bump(cls.name, "unchanged")
                 continue
@@ -1649,7 +1652,7 @@ def convert_all(
                         _quarantine_add(cls.name, str(path), str(e))
                         continue
                     out_path.write_text(redact(text), encoding="utf-8")
-                    state[key] = mtime
+                    state[key] = mtime_to_iso(mtime)
                 converted += 1
                 _bump(cls.name, "converted")
                 continue
@@ -1706,14 +1709,14 @@ def convert_all(
                 excluded_headless += 1
                 _bump(cls.name, "filtered")
                 if not dry_run:
-                    state[key] = mtime
+                    state[key] = mtime_to_iso(mtime)
                 continue
             if exclude_temp_cwd and is_temp_cwd_session(records):
                 filtered += 1
                 excluded_temp += 1
                 _bump(cls.name, "filtered")
                 if not dry_run:
-                    state[key] = mtime
+                    state[key] = mtime_to_iso(mtime)
                 continue
             last_t = latest_record_time(records)
             if last_t and last_t > live_cutoff and not include_current:
@@ -1825,7 +1828,7 @@ def convert_all(
                     _quarantine_add(cls.name, str(path), str(e))
                     continue
                 out_path.write_text(md, encoding="utf-8")
-                state[key] = mtime
+                state[key] = mtime_to_iso(mtime)
                 # Self-heal: a source that converts cleanly no longer
                 # belongs in the quarantine, whatever it was stuck on
                 # before. Without this, fixed sources linger in

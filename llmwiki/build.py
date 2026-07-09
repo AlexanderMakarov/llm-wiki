@@ -817,7 +817,7 @@ def nav_bar(active: str, link_prefix: str = "") -> str:
     # on the container.
     nav_drawer_html = f"""<div id="nav-drawer" class="nav-drawer" hidden aria-label="Main navigation">
 {drawer_link("index.html", "Home", "home")}
-{drawer_link("recent.html", "Recent", "recent")}
+{drawer_link("raw.html", "Raw", "raw")}
 {drawer_link("graph.html", "Graph", "graph")}
 {drawer_link("projects/index.html", "Projects", "projects")}
 {drawer_link("sessions/index.html", "Sessions", "sessions")}
@@ -837,7 +837,7 @@ def nav_bar(active: str, link_prefix: str = "") -> str:
     </button>
     <nav class="nav-links">
       {link("index.html", "Home", "home")}
-      {link("recent.html", "Recent", "recent")}
+      {link("raw.html", "Raw", "raw")}
       {link("graph.html", "Graph", "graph")}
       {link("projects/index.html", "Projects", "projects")}
       {link("sessions/index.html", "Sessions", "sessions")}
@@ -1635,19 +1635,42 @@ def render_index(
     doc_file_count: int,
     out_dir: Path,
 ) -> Path:
-    """Render ``index.html`` — the raw-documents file-tree browser."""
-    body = raw_docs_site.render_home_body(docs_root, doc_entries, doc_file_count)
+    """Render ``index.html`` — queue/dashboard landing page."""
+    body = raw_docs_site.render_dashboard_body(doc_entries, doc_file_count)
     page = (
         page_head("LLM Wiki", "Karpathy-style knowledge base from Claude Code sessions", css_prefix="")
         + nav_bar("home", link_prefix="")
         + hero(
             "LLM Wiki",
-            f"{_pluralize(len(doc_entries), 'document')} · browse the raw knowledge base",
+            "Queue-first view for sync and synthesis workflow",
         )
         + body
         + page_foot(js_prefix="")
     )
     out_path = out_dir / "index.html"
+    out_path.write_text(page, encoding="utf-8")
+    return out_path
+
+
+def render_raw(
+    docs_root: "raw_docs_site.DocFolder",
+    doc_entries: list["raw_docs_site.DocEntry"],
+    doc_file_count: int,
+    out_dir: Path,
+) -> Path:
+    """Render ``raw.html`` — the raw-documents file-tree browser."""
+    body = raw_docs_site.render_raw_body(docs_root, doc_entries, doc_file_count)
+    page = (
+        page_head("Raw — LLM Wiki", "Browse raw documents and synthesis backlog context", css_prefix="")
+        + nav_bar("raw", link_prefix="")
+        + hero(
+            "Raw documents",
+            f"{_pluralize(len(doc_entries), 'document')} · browse the raw knowledge base",
+        )
+        + body
+        + page_foot(js_prefix="")
+    )
+    out_path = out_dir / "raw.html"
     out_path.write_text(page, encoding="utf-8")
     return out_path
 
@@ -1756,8 +1779,8 @@ def render_404(out_dir: Path) -> Path:
   <div class="container">
     <p>Try one of these:</p>
     <ul class="not-found-links">
-      <li><a href="index.html">Home</a> — browse the raw documents</li>
-      <li><a href="recent.html">Recent</a> — newest documents first</li>
+      <li><a href="index.html">Home</a> — queue and synthesis dashboard</li>
+      <li><a href="raw.html">Raw</a> — browse the raw documents</li>
       <li><a href="projects/index.html">Projects</a> — every project with sessions</li>
       <li><a href="sessions/index.html">Sessions</a> — every session, sortable + filterable</li>
       <li><a href="analytics.html">Analytics</a> — activity heatmap and token stats</li>
@@ -2547,14 +2570,16 @@ def build_site(
     render_projects_index(groups, out_dir)
     render_sessions_index(sources, groups, out_dir)
 
-    # Home (index.html) is the raw-documents tree browser; recent.html
-    # lists the newest documents; analytics.html carries the heatmap,
+    # Home (index.html) is the queue dashboard; raw.html is the raw-docs
+    # tree browser; recent.html lists newest documents; analytics.html
+    # carries the heatmap,
     # token stats, and projects grid.
     raw_docs_dir = raw_dir / "docs"
     doc_files = raw_docs_site.scan_raw_docs(raw_docs_dir)
     docs_root = raw_docs_site.build_tree(doc_files)
     doc_entries = raw_docs_site.group_documents(doc_files)
     render_index(docs_root, doc_entries, len(doc_files), out_dir)
+    render_raw(docs_root, doc_entries, len(doc_files), out_dir)
     render_recent(doc_entries, out_dir)
     render_analytics(groups, sources, out_dir, synthesis=synthesis)
     doc_pages = raw_docs_site.render_document_pages(
@@ -2563,7 +2588,7 @@ def build_site(
         out_dir,
         md_to_html=md_to_html,
         page_head=page_head,
-        nav_builder=lambda prefix: nav_bar("home", link_prefix=prefix),
+        nav_builder=lambda prefix: nav_bar("raw", link_prefix=prefix),
         page_foot=lambda prefix: page_foot(js_prefix=prefix),
         breadcrumbs_bar=breadcrumbs_bar,
     )
@@ -2579,7 +2604,7 @@ def build_site(
     readme_path = render_readme_page(out_dir)
     contributing_path = render_contributing_page(out_dir)
     print(
-        "  wrote index.html, recent.html, analytics.html, "
+        "  wrote index.html, raw.html, recent.html, analytics.html, "
         "projects/index.html, sessions/index.html, 404.html"
     )
 
@@ -2598,6 +2623,7 @@ def build_site(
     try:
         from llmwiki.exporters import export_all
         extra_pages: list[tuple[str, Optional[str], str]] = [
+            ("raw.html", None, "0.9"),
             ("recent.html", None, "0.9"),
             ("analytics.html", None, "0.8"),
         ] + [

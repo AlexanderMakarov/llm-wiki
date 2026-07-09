@@ -5,7 +5,8 @@ from pathlib import Path
 from typing import Any
 
 from llmwiki import REPO_ROOT
-from llmwiki.state_store import read_state, resolve_state_file, write_state
+from llmwiki.state_store import read_state, resolve_state_file, write_state, mtime_to_iso
+from llmwiki.synth.pipeline import refresh_synth_pending
 
 
 LEGACY_FILES = (
@@ -24,6 +25,18 @@ def _read_json(path: Path) -> Any:
         return None
 
 
+def _legacy_mtime_map(data: dict[str, Any]) -> dict[str, str]:
+    out: dict[str, str] = {}
+    for k, v in data.items():
+        if not isinstance(k, str):
+            continue
+        if isinstance(v, bool):
+            continue
+        if isinstance(v, (int, float)):
+            out[k] = mtime_to_iso(float(v))
+    return out
+
+
 def run_migration(state_file: Path | None = None) -> dict[str, Any]:
     target = resolve_state_file(state_file)
     root = target.parent
@@ -38,10 +51,7 @@ def run_migration(state_file: Path | None = None) -> dict[str, Any]:
     if legacy_sync.exists():
         data = _read_json(legacy_sync)
         if isinstance(data, dict):
-            legacy_files = {
-                k: v for k, v in data.items()
-                if isinstance(k, str) and isinstance(v, (int, float))
-            }
+            legacy_files = _legacy_mtime_map(data)
             merged = dict(state.get("sync", {}).get("files", {}))
             merged.update(legacy_files)
             state["sync"]["files"] = merged
@@ -55,10 +65,7 @@ def run_migration(state_file: Path | None = None) -> dict[str, Any]:
     if legacy_synth.exists():
         data = _read_json(legacy_synth)
         if isinstance(data, dict):
-            legacy_files = {
-                k: v for k, v in data.items()
-                if isinstance(k, str) and isinstance(v, (int, float))
-            }
+            legacy_files = _legacy_mtime_map(data)
             merged = dict(state.get("synth", {}).get("files", {}))
             merged.update(legacy_files)
             state["synth"]["files"] = merged
@@ -116,6 +123,12 @@ def run_migration(state_file: Path | None = None) -> dict[str, Any]:
         backup.write_bytes(target.read_bytes())
 
     write_state(state, target)
+    refresh_synth_pending(
+        raw_dir=root / "raw" / "sessions",
+        docs_dir=root / "raw" / "docs",
+        wiki_sources_dir=root / "wiki" / "sources",
+        state_file=target,
+    )
 
     for rel in (*LEGACY_FILES, LEGACY_PENDING_DIR):
         candidate = root / rel

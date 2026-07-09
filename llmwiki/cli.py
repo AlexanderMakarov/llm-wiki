@@ -186,6 +186,13 @@ def cmd_sync(args: argparse.Namespace) -> int:
             force=args.force,
             fail_on_errors=getattr(args, "fail_on_errors", False),
         )
+        from llmwiki.synth.pipeline import refresh_synth_pending
+        refresh_synth_pending(
+            raw_dir=(vault.root / "raw" / "sessions") if vault_path else None,
+            docs_dir=(vault.root / "raw" / "docs") if vault_path else None,
+            wiki_sources_dir=(vault.root / "wiki" / "sources") if vault_path else None,
+            state_file=state_file,
+        )
 
         # v1.0 (#157): auto-build and auto-lint after sync.
         # --no-build and --no-lint let users opt out.
@@ -525,7 +532,7 @@ def cmd_lint(args: argparse.Namespace) -> int:
 
 def cmd_queue(args: argparse.Namespace) -> int:
     from llmwiki.queue_ops import enqueue_task, queue_status, run_queue
-    from llmwiki.state_store import resolve_state_file
+    from llmwiki.state_store import resolve_state_file, read_state
 
     _apply_default_vault(args)
     vault = getattr(args, "vault", None)
@@ -534,13 +541,34 @@ def cmd_queue(args: argparse.Namespace) -> int:
     )
     if args.queue_action == "status":
         stat = queue_status(target)
+        state = read_state(target)
+        items = state.get("queue", {}).get("items", [])
+        by_type: dict[str, int] = {}
+        for row in items:
+            if not isinstance(row, dict):
+                continue
+            t = str(row.get("task_type") or "unknown")
+            by_type[t] = by_type.get(t, 0) + 1
+        sync_meta = state.get("sync", {}).get("meta", {})
         print(
             f"queue: total={stat['total']} pending={stat['counts'].get('pending',0)} "
             f"running={stat['counts'].get('running',0)} done={stat['counts'].get('done',0)} "
             f"error={stat['counts'].get('error',0)}"
         )
+        print(f"state_file: {target}")
+        if vault:
+            print(f"vault: {vault}")
         if stat["oldest_pending"]:
             print(f"oldest_pending: {stat['oldest_pending']}")
+        if isinstance(sync_meta, dict) and sync_meta.get("last_sync"):
+            print(f"last_sync: {sync_meta.get('last_sync')}")
+        synth = state.get("synth", {})
+        if isinstance(synth, dict):
+            print(f"unsynth_total: {int(synth.get('pending_total', 0))}")
+        if by_type:
+            print("by_type:")
+            for name, count in sorted(by_type.items()):
+                print(f"  {name}: {count}")
         return 0
     if args.queue_action == "enqueue":
         payload: dict[str, Any] = {}
@@ -591,7 +619,7 @@ def cmd_synthesize(args: argparse.Namespace) -> int:
     config: dict = _load_sessions_config()
 
     if args.estimate:
-        return _synthesize_estimate()
+        return _synthesize_estimate(args)
 
     backend = resolve_backend(config)
     print(f"Backend: {backend.name}")
@@ -697,6 +725,40 @@ def _cmd_add_locked(args: argparse.Namespace, docs_dir: Path,
                     vault_root: Path | None, render: str) -> int:
     """Body of cmd_add that runs under the pipeline lock (except dry-run)."""
     from llmwiki.add_doc import add_sources
+    from llmwiki.state_store import resolve_state_file, update_state
+    from datetime import datetime, timezone
+
+    state_target = resolve_state_file(vault_root)
+    now_ts = datetime.now(timezone.utc)
+    task_id = f"add-sync-{int(now_ts.timestamp() * 1000)}"
+
+    def _track(status: str, *, result_msg: str = "", error_msg: str = "") -> None:
+        stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        def _mut(s: dict[str, Any]) -> dict[str, Any]:
+            items = s.setdefault("queue", {}).setdefault("items", [])
+            row = None
+            for it in items:
+                if isinstance(it, dict) and it.get("id") == task_id:
+                    row = it
+                    break
+            if row is None:
+                row = {
+                    "id": task_id,
+                    "task_type": "add_doc_sync",
+                    "payload": {"sources": list(args.sources)},
+                    "created_at": stamp,
+                    "attempts": 1,
+                }
+                items.append(row)
+            row["status"] = status
+            row["updated_at"] = stamp
+            if result_msg:
+                row["result"] = result_msg
+            if error_msg:
+                row["last_error"] = error_msg
+            s.setdefault("ops", {})["last_queue_run_at"] = stamp
+            return s
+        update_state(_mut, state_target)
 
     result = add_sources(
         list(args.sources), docs_dir,
@@ -713,6 +775,7 @@ def _cmd_add_locked(args: argparse.Namespace, docs_dir: Path,
     if args.dry_run:
         return 2 if result["errors"] else 0
     print(f"  wrote {len(result['written'])} file(s) under {docs_dir}")
+    _track("running", result_msg=f"wrote {len(result['written'])} file(s)")
 
     failed = bool(result["errors"])
     if not result["written"]:
@@ -763,6 +826,7 @@ def _cmd_add_locked(args: argparse.Namespace, docs_dir: Path,
             print(f"  ! rolled back {len(removed)} raw doc file(s) whose "
                   "synthesis produced no wiki page", file=sys.stderr)
             failed = True
+            _track("error", error_msg=f"rolled back {len(removed)} unsynthesized raw doc file(s)")
 
     if not args.no_build:
         from llmwiki.build import RAW_DIR, RAW_SESSIONS, build_site
@@ -790,10 +854,22 @@ def _cmd_add_locked(args: argparse.Namespace, docs_dir: Path,
                 if any(p.exists() for p in rec["paths"]):
                     fh.write(f"\n## [{day}] add | {rec['title']}\n")
 
+    from llmwiki.synth.pipeline import refresh_synth_pending
+    refresh_synth_pending(
+        raw_dir=(vault_root / "raw" / "sessions") if vault_root else None,
+        docs_dir=(vault_root / "raw" / "docs") if vault_root else None,
+        wiki_sources_dir=(vault_root / "wiki" / "sources") if vault_root else None,
+        state_file=state_target,
+    )
+
+    if failed:
+        _track("error", error_msg="add command finished with errors")
+    else:
+        _track("done", result_msg=f"added {len(result['written'])} file(s)")
     return 2 if failed else 0
 
 
-def _synthesize_estimate() -> int:
+def _synthesize_estimate(args: argparse.Namespace | None = None) -> int:
     """Print the G-07 incremental-vs-full-force cost report (v1.1.0 · #50 · #293).
 
     Transparency over one-liner: reads the state file so the user sees
@@ -801,27 +877,133 @@ def _synthesize_estimate() -> int:
     a single number without saying whether it covered the whole corpus
     or just the delta.
     """
-    report = synthesize_estimate_report()
+    args = args or argparse.Namespace(vault=None)
+    raw_sessions = None
+    state_keys = None
+    prefix_tokens = None
+    synthesized_source_keys = None
+    wiki_sources_dir = None
+    docs_root = None
+    execution_model = ""
+    pricing_model = None
+    pricing_fallback_msg = ""
+    from llmwiki.cache import MODEL_PRICING, resolve_pricing_model
+    from llmwiki.config_schedule import _load_sessions_config
+    loaded_cfg = _load_sessions_config()
+    synth_cfg = (loaded_cfg.get("synthesis", {}) if isinstance(loaded_cfg, dict) else {})
+    pricing_table = {k: dict(v) for k, v in MODEL_PRICING.items()}
+    if isinstance(synth_cfg, dict):
+        execution_model = str(synth_cfg.get("claude_model", "")).strip()
+        # Optional user override for rate-card drift:
+        # synthesis.pricing = {"input": ..., "cached_input": ..., "cache_write": ..., "output": ...}
+        pr = synth_cfg.get("pricing")
+        if execution_model and isinstance(pr, dict):
+            need = {"input", "cached_input", "cache_write", "output"}
+            if need.issubset(set(pr.keys())):
+                try:
+                    pricing_table[execution_model] = {
+                        "input": float(pr["input"]),
+                        "cached_input": float(pr["cached_input"]),
+                        "cache_write": float(pr["cache_write"]),
+                        "output": float(pr["output"]),
+                    }
+                except (TypeError, ValueError):
+                    pass
+        if execution_model:
+            try:
+                pricing_model = resolve_pricing_model(execution_model, pricing_table)
+            except ValueError:
+                pricing_fallback_msg = (
+                    f"pricing model fallback: execution model '{execution_model}' has no rate card entry; "
+                    "using default pricing model."
+                )
+    if getattr(args, "vault", None):
+        from llmwiki.cache import estimate_tokens
+        from llmwiki.synth.pipeline import _discover_raw_sessions, _load_state, discover_synth_source_keys
+        vault_root = Path(args.vault)
+        raw_sessions = _discover_raw_sessions(vault_root / "raw" / "sessions")
+        docs_root = vault_root / "raw" / "docs"
+        state_keys = set(_load_state(vault_root / "llmwiki-state.json").keys())
+        wiki_sources_dir = vault_root / "wiki" / "sources"
+        synthesized_source_keys = discover_synth_source_keys(wiki_sources_dir)
+        prefix_parts: list[str] = []
+        for rel in ("CLAUDE.md", "wiki/index.md", "wiki/overview.md"):
+            p = vault_root / rel
+            if p.is_file():
+                prefix_parts.append(p.read_text(encoding="utf-8"))
+        prefix_tokens = estimate_tokens("\n".join(prefix_parts))
+    report = synthesize_estimate_report(
+        raw_sessions=raw_sessions,
+        state_keys=state_keys,
+        prefix_tokens=prefix_tokens,
+        model=pricing_model,
+        pricing_table=pricing_table,
+        synthesized_source_keys=synthesized_source_keys,
+        wiki_sources_dir=wiki_sources_dir,
+        raw_root=(Path(args.vault) / "raw" / "sessions") if getattr(args, "vault", None) else None,
+        docs_root=docs_root,
+    )
+    try:
+        from datetime import datetime, timezone
+        from llmwiki.state_store import resolve_state_file, update_state
+        pending_rows = [
+            {
+                "rel": str(it.get("rel", "")),
+                "source": str(it.get("source_file", "")),
+                "project": str(it.get("project", "unknown")),
+                "is_doc": bool(it.get("is_doc", False)),
+                "mtime": str(it.get("mtime", "")),
+            }
+            for it in report.get("unsynth_items", [])
+            if str(it.get("rel", "")).strip()
+        ]
+        stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        target = resolve_state_file(getattr(args, "vault", None))
+        def _mut(s: dict[str, Any]) -> dict[str, Any]:
+            synth = s.setdefault("synth", {})
+            synth["pending"] = pending_rows
+            synth["pending_total"] = len(pending_rows)
+            synth["pending_updated_at"] = stamp
+            return s
+        update_state(_mut, target)
+    except Exception:
+        pass
 
     for w in report["warnings"]:
         print(f"warning: {w}")
+    print("warning: cost estimate uses a local static rate card and token heuristic; real provider billing may deviate.")
+    if pricing_fallback_msg:
+        print(f"warning: {pricing_fallback_msg}")
 
-    print(f"Corpus:                {report['corpus']:>6} sessions in raw/sessions/")
+    print(f"Corpus:                {report['corpus']:>6} sources (sessions + docs)")
     print(f"Already synthesized:   {report['synthesized']:>6} pages in wiki/sources/")
     print(f"New since last run:    {report['new']:>6}")
+    print(
+        f"Breakdown: sessions {report.get('new_sessions', 0)} new / "
+        f"{report.get('corpus_sessions', 0)} total, docs {report.get('new_docs', 0)} new / "
+        f"{report.get('corpus_docs', 0)} total"
+    )
     print()
-    print(f"Prefix: {report['prefix_tokens']:,} tok  Model: {report['model']}")
+    if execution_model:
+        print(
+            f"Prefix: {report['prefix_tokens']:,} tok  "
+            f"Execution model: {execution_model}  Pricing model: {report['model']}"
+        )
+    else:
+        print(f"Prefix: {report['prefix_tokens']:,} tok  Pricing model: {report['model']}")
     print()
     if report["new"] == 0:
         print(f"Incremental sync:  $0.0000  (nothing new — this is a no-op)")
     else:
         print(
             f"Incremental sync:  ${report['incremental_usd']:.4f}  "
-            f"(synthesize the {report['new']} new session(s))"
+            f"(synthesize the {report['new']} new source(s): "
+            f"{report.get('new_sessions', 0)} session(s), "
+            f"{report.get('new_docs', 0)} doc source(s))"
         )
     print(
         f"Full re-synth:     ${report['full_force_usd']:.4f}  "
-        f"(--force — {report['corpus']} session(s), 1 cache write + {max(report['corpus'] - 1, 0)} hits)"
+        f"(--force — {report['corpus']} source(s), 1 cache write + {max(report['corpus'] - 1, 0)} hits)"
     )
     return 0
 
@@ -1104,7 +1286,7 @@ def build_parser() -> argparse.ArgumentParser:
     lint.set_defaults(func=cmd_lint)
 
     queue_p = sub.add_parser("queue", help="Manage unified llmwiki queue")
-    queue_p.add_argument("queue_action", choices=["status", "run", "enqueue"])
+    queue_p.add_argument("queue_action", nargs="?", default="status", choices=["status", "run", "enqueue"])
     queue_p.add_argument("--limit", type=int, default=20, help="Max tasks to process in one run")
     queue_p.add_argument("--task-type", default="add_doc", choices=["add_doc", "session_sync", "synthesize", "build"])
     queue_p.add_argument("--source", default="", help="Source value for add_doc enqueue")

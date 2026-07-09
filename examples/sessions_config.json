@@ -86,9 +86,12 @@
     "auto_queue": true
   },
 
-  "_synthesis_comment": "LLM backend for auto-synthesizing wiki source pages. backend=dummy (default, offline) | ollama (local HTTP) | claude (synchronous `claude -p` CLI; optional claude_path/claude_model) | agent (defer to the running agent session). One backend serves every command (sync/synthesize/add). Run `llmwiki synthesize --check` to probe availability.",
+  "_synthesis_comment": "LLM backend for auto-synthesizing wiki source pages. backend=dummy (default, offline) | ollama (local HTTP) | claude (synchronous `claude -p` CLI; defaults to claude_model=sonnet, optional claude_path override) | agent (defer to the running agent session). One backend serves every command (sync/synthesize/add). Run `llmwiki synthesize --check` to probe availability.",
   "synthesis": {
     "backend": "dummy",
+    "claude_model": "sonnet",
+    "_pricing_comment": "Optional pricing override (USD per 1M tokens) for `llmwiki synthesize --estimate` when provider prices/models change. If omitted, llmwiki uses the built-in local rate card and prints a warning that estimate may deviate.",
+    "pricing": {},
     "model": "llama3.1:8b",
     "base_url": "http://127.0.0.1:11434",
     "timeout": 60,

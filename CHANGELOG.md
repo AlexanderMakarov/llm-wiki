@@ -10,26 +10,10 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Added
 
-- **`llmwiki add <url|file|folder>...`** (#16): synchronous local document intake.
-  Converts sources to Markdown (Cloudflare `Accept: text/markdown` negotiation →
-  trafilatura/stdlib extraction → optional playwright render), writes
-  `raw/docs/<slug>/<slug>[-NN].md` in the section-chunked layout, then
-  batch-synthesizes and rebuilds the site. New `llm-wiki-add` console script and
-  `[add]` optional extra (`trafilatura`, `markitdown[pdf,docx,pptx,xlsx]`).
-- **Vault pipeline lock** (#16 field report): `sync`, `build`, `add`, and `all`
-  now serialize on `.llmwiki-pipeline.lock` at the vault (or repo) root, so a
-  hook-triggered sync/build can no longer race a concurrent `llmwiki add` into
-  a "could not reset site dir" crash. Stale locks (dead pid or >30 min) are
-  broken automatically.
-- **`synthesis.backend: claude`** (#16): new synchronous backend shelling out
-  to `claude -p` per page (optional `claude_path` / `claude_model` config) —
-  works from a plain terminal and nested inside agent sessions. One configured
-  backend serves every command.
-- **`llmwiki add` is synchronous, with rollback** (#16 field report): `add`
-  synthesizes with the configured backend in the same invocation; if the
-  backend is unavailable or a page fails to synthesize, the just-added raw
-  docs are removed (no half-added documents) and the command exits non-zero.
-  `--no-synthesize` is the explicit opt-out.
+- **`llmwiki add <url|file|folder>...`** (#16): synchronous local document intake. Converts sources to Markdown (Cloudflare `Accept: text/markdown` negotiation → trafilatura/stdlib extraction → optional playwright render), writes `raw/docs/<slug>/<slug>[-NN].md` in the section-chunked layout, then batch-synthesizes and rebuilds the site. New `llm-wiki-add` console script and `[add]` optional extra (`trafilatura`, `markitdown[pdf,docx,pptx,xlsx]`).
+- **Vault pipeline lock** (#16 field report): `sync`, `build`, `add`, and `all` now serialize on `.llmwiki-pipeline.lock` at the vault (or repo) root, so a hook-triggered sync/build can no longer race a concurrent `llmwiki add` into a "could not reset site dir" crash. Stale locks (dead pid or >30 min) are broken automatically.
+- **`synthesis.backend: claude`** (#16): new synchronous backend shelling out to `claude -p` per page (optional `claude_path` / `claude_model` config) — works from a plain terminal and nested inside agent sessions. One configured backend serves every command.
+- **`llmwiki add` is synchronous, with rollback** (#16 field report): `add` synthesizes with the configured backend in the same invocation; if the backend is unavailable or a page fails to synthesize, the just-added raw docs are removed (no half-added documents) and the command exits non-zero. `--no-synthesize` is the explicit opt-out.
 - **`llmwiki all --with-synth`** (#383) — opt-in chain that runs `synthesize` before `build → graph → export → lint`, so CLI users can fill `wiki/sources/` from `raw/` in one command without relying on agent slash skills. Companion flags: `--synth-force` (pass `--force` to synthesize), `--vault` (vault-overlay synthesize when using `--with-synth`).
 - **`llmwiki sync --status` synthesis hint** (#383) — reports the configured `synthesis.backend` and points to `llmwiki synthesize` / `llmwiki all --with-synth` when `wiki/sources/` may stay empty after sync.
 

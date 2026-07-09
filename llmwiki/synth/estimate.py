@@ -11,6 +11,7 @@ working for any test or caller that reached for it.
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 from llmwiki import REPO_ROOT
@@ -23,6 +24,11 @@ def synthesize_estimate_report(
     prefix_tokens: Optional[int] = None,
     output_tokens_per_call: int = 1000,
     model: Optional[str] = None,
+    synthesized_source_keys: Optional[set[str]] = None,
+    wiki_sources_dir: Optional[Any] = None,
+    raw_root: Optional[Any] = None,
+    docs_root: Optional[Any] = None,
+    pricing_table: Optional[dict[str, dict[str, float]]] = None,
 ) -> dict:
     """Compute the incremental vs full-force cost report (G-07 · #293).
 
@@ -40,20 +46,38 @@ def synthesize_estimate_report(
     * ``model`` — model id used for pricing
     * ``warnings`` — list of human-readable warnings (e.g. prefix too
       small to be cached)
+    * ``unsynth_items`` — list of unsynthesized session descriptors
 
     Any of the args can be injected for tests; the default reads from
     disk and is what the CLI invokes.
     """
     from llmwiki.cache import (
+        MODEL_PRICING,
         DEFAULT_MODEL,
-        estimate_cost,
+        resolve_pricing_model,
         estimate_tokens,
         warn_prefix_too_small,
     )
-    from llmwiki.synth.pipeline import RAW_SESSIONS as _RAW
-    from llmwiki.synth.pipeline import _discover_raw_sessions, _load_state
+    from pathlib import Path as _Path
+    from llmwiki.synth.pipeline import (
+        RAW_SESSIONS as _RAW_DEFAULT,
+        RAW_DOCS as _RAW_DOCS_DEFAULT,
+        WIKI_SOURCES as _WIKI_SOURCES,
+        _DOC_CHUNK_MAX_CHARS,
+        _chunk_markdown,
+        _discover_raw_docs,
+        _discover_raw_sessions,
+        _load_state,
+        _normalise_slug,
+        discover_synth_source_keys,
+    )
 
     chosen_model = model or DEFAULT_MODEL
+    rates_table = pricing_table or MODEL_PRICING
+    try:
+        chosen_model = resolve_pricing_model(chosen_model, rates_table)
+    except ValueError:
+        chosen_model = resolve_pricing_model(DEFAULT_MODEL, rates_table)
     warnings: list[str] = []
 
     if prefix_tokens is None:
@@ -69,6 +93,14 @@ def synthesize_estimate_report(
 
     if raw_sessions is None:
         raw_sessions = _discover_raw_sessions()
+    discovered_source_keys = (
+        synthesized_source_keys
+        if synthesized_source_keys is not None
+        else discover_synth_source_keys()
+    )
+    sources_root = _Path(wiki_sources_dir) if wiki_sources_dir is not None else _WIKI_SOURCES
+    raw_root_path = _Path(raw_root) if raw_root is not None else _RAW_DEFAULT
+    docs_root_path = _Path(docs_root) if docs_root is not None else _RAW_DOCS_DEFAULT
     if state_keys is None:
         state_keys = set(_load_state().keys())
 
@@ -88,59 +120,150 @@ def synthesize_estimate_report(
     # The pass below computes per-session tokens once, accumulates
     # both bucket totals incrementally, and never holds more than one
     # body string at a time.
-    synthed = 0
-    new = 0
+    synthed_sessions = 0
+    new_sessions = 0
+    synthed_docs = 0
+    new_docs = 0
     incremental_usd = 0.0
     full_force_usd = 0.0
     incremental_first = True
     full_force_first = True
+    unsynth_items: list[dict[str, Any]] = []
 
     def _add_to_bucket(fresh_tokens: int, first: bool) -> tuple[float, bool]:
         """Return (cost, was_first?). Cost-of-this-call uses cache_hit=
         not first, mirroring the old _bucket_usd semantics."""
-        est = estimate_cost(
-            cached_tokens=prefix_tokens,
-            fresh_tokens=fresh_tokens,
-            output_tokens=output_tokens_per_call,
-            model=chosen_model,
-            cache_hit=not first,
-        )
-        return est.usd, False  # second-and-later calls hit the cache
+        rates = rates_table[chosen_model]
+        prefix_rate = rates["cached_input"] if not first else rates["cache_write"]
+        usd = (
+            prefix_tokens * prefix_rate
+            + fresh_tokens * rates["input"]
+            + output_tokens_per_call * rates["output"]
+        ) / 1_000_000
+        return usd, False  # second-and-later calls hit the cache
 
     for p, _meta, body in raw_sessions:
+        meta = _meta if isinstance(_meta, dict) else {}
         keys_to_try: set[str] = set()
         name = getattr(p, "name", str(p))
         keys_to_try.add(name)
         if hasattr(p, "relative_to"):
             try:
-                keys_to_try.add(str(p.relative_to(_RAW)))
+                keys_to_try.add(str(p.relative_to(raw_root_path)))
             except (ValueError, AttributeError):
                 pass
         keys_to_try.add(str(p))
+        source_rel = ""
+        if hasattr(p, "relative_to"):
+            try:
+                source_rel = str(p.relative_to(raw_root_path))
+            except (ValueError, AttributeError):
+                source_rel = name
+        else:
+            source_rel = name
+        source_key = "raw/sessions/" + source_rel
+
+        raw_slug = meta.get("slug", getattr(p, "stem", name))
+        if not isinstance(raw_slug, str):
+            raw_slug = getattr(p, "stem", name)
+        slug = _normalise_slug(raw_slug)
+        date = str(meta.get("date", "")).strip()
+        filename = f"{date}-{slug}" if date else slug
+        project = str(meta.get("project") or getattr(getattr(p, "parent", None), "name", "unknown"))
+        output_exists = (sources_root / project / f"{filename}.md").is_file()
+
         matched = bool(keys_to_try & state_keys) or any(
             isinstance(k, str) and k.endswith(name) for k in state_keys
-        )
+        ) or source_key in discovered_source_keys or output_exists
         body_tokens = estimate_tokens(body)
         # Full-force bucket: every session contributes regardless of state.
         ff_cost, full_force_first = _add_to_bucket(body_tokens, full_force_first)
         full_force_usd += ff_cost
         # Incremental bucket: only un-synthesised sessions contribute.
         if matched:
-            synthed += 1
+            synthed_sessions += 1
         else:
-            new += 1
+            new_sessions += 1
             inc_cost, incremental_first = _add_to_bucket(
                 body_tokens, incremental_first
             )
             incremental_usd += inc_cost
+            project = str(meta.get("project") or getattr(getattr(p, "parent", None), "name", "unknown"))
+            try:
+                mtime_iso = datetime.fromtimestamp(
+                    _Path(p).stat().st_mtime, tz=timezone.utc
+                ).strftime("%Y-%m-%dT%H:%M:%SZ")
+            except OSError:
+                mtime_iso = ""
+            unsynth_items.append(
+                {
+                    "rel": source_rel,
+                    "project": project,
+                    "source_file": source_key,
+                    "mtime": mtime_iso,
+                    "is_doc": False,
+                }
+            )
+
+    # Docs estimate path — mirrors synth pipeline inclusion rules.
+    for p, meta, body in _discover_raw_docs(docs_root_path):
+        rel = "docs::" + str(p.relative_to(docs_root_path))
+        source_key = "raw/docs/" + str(p.relative_to(docs_root_path))
+        project = str(meta.get("project") or "docs")
+        raw_slug = meta.get("slug", p.stem)
+        if not isinstance(raw_slug, str):
+            raw_slug = p.stem
+        slug = _normalise_slug(raw_slug)
+        date = str(meta.get("date", "")).strip()
+        filename = f"{date}-{slug}" if date else slug
+        chunks = _chunk_markdown(body, _DOC_CHUNK_MAX_CHARS)
+        out_dir = sources_root / project
+        expected = (
+            [out_dir / f"{filename}.md"]
+            if len(chunks) <= 1
+            else [out_dir / f"{filename}--part-{i:02d}.md" for i in range(1, len(chunks) + 1)]
+        )
+        output_exists = all(ep.is_file() for ep in expected)
+        matched = rel in state_keys or source_key in discovered_source_keys or output_exists
+        body_tokens = estimate_tokens(body)
+        ff_cost, full_force_first = _add_to_bucket(body_tokens, full_force_first)
+        full_force_usd += ff_cost
+        if matched:
+            synthed_docs += 1
+        else:
+            new_docs += 1
+            inc_cost, incremental_first = _add_to_bucket(body_tokens, incremental_first)
+            incremental_usd += inc_cost
+            try:
+                mtime_iso = datetime.fromtimestamp(
+                    _Path(p).stat().st_mtime, tz=timezone.utc
+                ).strftime("%Y-%m-%dT%H:%M:%SZ")
+            except OSError:
+                mtime_iso = ""
+            unsynth_items.append(
+                {
+                    "rel": rel,
+                    "project": project,
+                    "source_file": source_key,
+                    "mtime": mtime_iso,
+                    "is_doc": True,
+                }
+            )
 
     return {
-        "corpus": corpus,
-        "synthesized": synthed,
-        "new": new,
+        "corpus": corpus + synthed_docs + new_docs,
+        "corpus_sessions": corpus,
+        "corpus_docs": synthed_docs + new_docs,
+        "synthesized": synthed_sessions + synthed_docs,
+        "synthesized_sessions": synthed_sessions,
+        "synthesized_docs": synthed_docs,
+        "new": new_sessions + new_docs,
+        "new_sessions": new_sessions,
+        "new_docs": new_docs,
         "incremental_usd": incremental_usd,
         "full_force_usd": full_force_usd,
         "prefix_tokens": prefix_tokens,
         "model": chosen_model,
         "warnings": warnings,
+        "unsynth_items": unsynth_items,
     }

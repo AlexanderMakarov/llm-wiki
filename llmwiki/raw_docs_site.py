@@ -1,11 +1,12 @@
-"""Raw-documents site section — Home file tree + Recent page.
+"""Raw-documents site section — Home dashboard + Raw/Recent pages.
 
 Renders the wiki-add document layer (``raw/docs/**``) into the static
 site:
 
 - a shared file-tree sidebar (pure ``<details>`` HTML, no JS required)
 - one HTML page per document file under ``site/documents/…``
-- the Home tree pane (body of ``index.html``)
+- the Home queue dashboard (body of ``index.html``)
+- the Raw tree pane (body of ``raw.html``)
 - the Recent-documents list (body of ``recent.html``)
 
 The module is chrome-agnostic: page shells (head / nav / footer) are
@@ -218,12 +219,55 @@ def render_sidebar(
 # ─── page bodies ───────────────────────────────────────────────────────────
 
 
-def render_home_body(
+def render_dashboard_body(
+    entries: list[DocEntry],
+    doc_file_count: int,
+) -> str:
+    """Body of index.html — queue dashboard + quick links."""
+    if not entries:
+        recent_block = '<p class="muted">No recent raw documents yet.</p>'
+    else:
+        rows = []
+        for e in entries[:20]:
+            bits = [b for b in (e.date, e.source_label, f"{e.parts} parts" if e.parts > 1 else "") if b]
+            rows.append(
+                '<li class="recent-doc">'
+                f'<a href="{html.escape(e.url)}">{html.escape(e.title)}</a>'
+                f'<div class="recent-doc-meta muted">{html.escape(" · ".join(bits))}</div>'
+                "</li>"
+            )
+        recent_block = '<ol class="recent-docs">' + "".join(rows) + "</ol>"
+    return f"""<section class="section doctree-section">
+  <div class="container">
+    <div class="queue-widget">
+      <h2>Queue dashboard</h2>
+      <p class="muted">Sync, synthesis, and queue status at a glance.</p>
+      <div id="queue-home-content" class="queue-widget-content muted">No state snapshot loaded.</div>
+      <h3>Commands</h3>
+      <table class="queue-commands-table">
+        <thead><tr><th>Command</th><th>Purpose</th><th></th></tr></thead>
+        <tbody>
+          <tr><td><code>llmwiki queue</code></td><td>Show queue counts, task types, state file path, and last sync.</td><td><button class="btn queue-copy-btn" data-copy="llmwiki queue">Copy</button></td></tr>
+          <tr><td><code>llmwiki queue run --vault &lt;vault&gt; --limit 20</code></td><td>Process pending tasks from the queue.</td><td><button class="btn queue-copy-btn" data-copy="llmwiki queue run --vault &lt;vault&gt; --limit 20">Copy</button></td></tr>
+          <tr><td><code>llmwiki lint --vault &lt;vault&gt;</code></td><td>Run lint checks against the vault wiki.</td><td><button class="btn queue-copy-btn" data-copy="llmwiki lint --vault &lt;vault&gt;">Copy</button></td></tr>
+        </tbody>
+      </table>
+      <p class="muted"><a href="raw.html">Open Raw browser</a></p>
+      <h3>Recent raw documents</h3>
+      {recent_block}
+    </div>
+  </div>
+</section>
+</main>
+"""
+
+
+def render_raw_body(
     root: DocFolder,
     entries: list[DocEntry],
     doc_file_count: int,
 ) -> str:
-    """Body of index.html — tree sidebar + intro pane."""
+    """Body of raw.html — tree sidebar + intro pane."""
     sidebar = render_sidebar(root, active_rel=None, link_prefix="")
     if doc_file_count == 0:
         intro = (
@@ -243,7 +287,7 @@ def render_home_body(
             f"<p>{len(entries)} documents ({doc_file_count} files). "
             "Pick one from the tree, or start with the newest:</p>"
             f'<ul class="recent-docs-mini">{newest}</ul>'
-            '<p class="muted">Full list on the <a href="recent.html">Recent</a> page.</p>'
+            '<p class="muted">Full recent list is available on the Home dashboard.</p>'
         )
     return f"""<section class="section doctree-section">
   <div class="container">
@@ -252,19 +296,6 @@ def render_home_body(
       <div class="doctree-main">
         <h2>Browse documents</h2>
         {intro}
-        <section id="queue-trace-panel" class="queue-trace-panel">
-          <h3>Queue traceability</h3>
-          <p class="muted">
-            Source: <code>../llmwiki-state.js</code> (loaded via script tag for
-            <code>file://</code> compatibility).
-          </p>
-          <div id="queue-trace-content" class="muted">No state snapshot loaded.</div>
-          <p class="muted">
-            Commands: <code>llmwiki queue status</code>,
-            <code>llmwiki queue run --vault &lt;vault&gt; --limit 20</code>,
-            <code>llmwiki lint --vault &lt;vault&gt;</code>
-          </p>
-        </section>
       </div>
     </div>
   </div>

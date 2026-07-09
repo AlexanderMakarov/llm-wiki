@@ -23,5 +23,5 @@ def test_migrate_legacy_dotfiles(tmp_path: Path):
     report = run_migration(target)
     assert report["migrated"]
     state = json.loads(target.read_text(encoding="utf-8"))
-    assert state["sync"]["files"]["raw/a.md"] == 1.0
+    assert state["sync"]["files"]["raw/a.md"].startswith("1970-01-01T00:00:01")
     assert state["queue"]["legacy_pending_paths"] == ["raw/pending.md"]

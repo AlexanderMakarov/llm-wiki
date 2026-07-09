@@ -20,6 +20,28 @@ def _utc_now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def mtime_to_iso(value: float) -> str:
+    return datetime.fromtimestamp(float(value), tz=timezone.utc).isoformat(
+        timespec="microseconds"
+    ).replace("+00:00", "Z")
+
+
+def mtime_from_state(value: Any) -> float | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, str):
+        raw = value.strip()
+        if not raw:
+            return None
+        try:
+            if raw.endswith("Z"):
+                raw = raw[:-1] + "+00:00"
+            return datetime.fromisoformat(raw).timestamp()
+        except ValueError:
+            return None
+    return None
+
+
 def default_state() -> dict[str, Any]:
     return {
         "queue": {
@@ -27,7 +49,12 @@ def default_state() -> dict[str, Any]:
             "legacy_pending_paths": [],
         },
         "sync": {"files": {}, "meta": {}, "counters": {}},
-        "synth": {"files": {}},
+        "synth": {
+            "files": {},
+            "pending": [],
+            "pending_total": 0,
+            "pending_updated_at": "",
+        },
         "quarantine": {"entries": []},
         "ops": {
             "last_queue_run_at": "",
@@ -78,12 +105,38 @@ def _ensure_shape(raw: dict[str, Any]) -> dict[str, Any]:
         out["queue"]["legacy_pending_paths"] = []
     if not isinstance(out["sync"].get("files"), dict):
         out["sync"]["files"] = {}
+    else:
+        normalized_sync: dict[str, str] = {}
+        for k, v in out["sync"]["files"].items():
+            if not isinstance(k, str):
+                continue
+            parsed = mtime_from_state(v)
+            if parsed is None:
+                continue
+            normalized_sync[k] = mtime_to_iso(parsed)
+        out["sync"]["files"] = normalized_sync
     if not isinstance(out["sync"].get("meta"), dict):
         out["sync"]["meta"] = {}
     if not isinstance(out["sync"].get("counters"), dict):
         out["sync"]["counters"] = {}
     if not isinstance(out["synth"].get("files"), dict):
         out["synth"]["files"] = {}
+    else:
+        normalized_synth: dict[str, str] = {}
+        for k, v in out["synth"]["files"].items():
+            if not isinstance(k, str):
+                continue
+            parsed = mtime_from_state(v)
+            if parsed is None:
+                continue
+            normalized_synth[k] = mtime_to_iso(parsed)
+        out["synth"]["files"] = normalized_synth
+    if not isinstance(out["synth"].get("pending"), list):
+        out["synth"]["pending"] = []
+    if not isinstance(out["synth"].get("pending_total"), int):
+        out["synth"]["pending_total"] = 0
+    if not isinstance(out["synth"].get("pending_updated_at"), str):
+        out["synth"]["pending_updated_at"] = ""
     if not isinstance(out["quarantine"].get("entries"), list):
         out["quarantine"]["entries"] = []
     out["meta"]["schema_version"] = SCHEMA_VERSION

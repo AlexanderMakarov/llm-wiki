@@ -108,9 +108,7 @@ python3 -m llmwiki sync --force
 
 ## `add` — add a document to the wiki (#16)
 
-Converts a URL, file, or folder into a raw Markdown document under
-`raw/docs/`, then (by default) batch-synthesizes and rebuilds the site
-once for the whole run. Sources may be freely mixed and repeated.
+Converts a URL, file, or folder into a raw Markdown document under `raw/docs/`, then (by default) batch-synthesizes and rebuilds the site once for the whole run. Sources may be freely mixed and repeated.
 
 ```bash
 python3 -m llmwiki add https://example.com/some-article
@@ -135,8 +133,7 @@ python3 -m llmwiki add https://example.com/post --dry-run
 | `--dry-run` | Convert and report, write nothing, run nothing. |
 | `--vault PATH` | Write under the given vault's `raw/docs/` instead of the repo. |
 
-URL sources go through a layered pipeline (markdown negotiation →
-extraction → render escalation) before landing as Markdown.
+URL sources go through a layered pipeline (markdown negotiation → extraction → render escalation) before landing as Markdown.
 
 ---
 
@@ -419,7 +416,7 @@ ships with baseline tags.
 Manage the unified vault queue in `llmwiki-state.json`.
 
 ```bash
-python3 -m llmwiki queue status
+python3 -m llmwiki queue
 python3 -m llmwiki queue enqueue --task-type add_doc --source https://example.com
 python3 -m llmwiki queue run --vault /path/to/vault --limit 20
 ```
@@ -428,7 +425,7 @@ python3 -m llmwiki queue run --vault /path/to/vault --limit 20
 
 | Value | What |
 |---|---|
-| `status` | Print queue counts and oldest pending task timestamp. |
+| `status` | Print queue counts, task-type breakdown, state path, and oldest pending timestamp. |
 | `enqueue` | Add one task (`add_doc`, `session_sync`, `synthesize`, `build`). |
 | `run` | Execute pending tasks serially (up to `--limit`). |
 

@@ -9,7 +9,7 @@ substitutes this backend whenever agent-delegate is configured.
 
 Also selectable outright with ``"synthesis": {"backend": "claude"}``.
 Optional config keys: ``claude_path`` (else $PATH lookup),
-``claude_model`` (else the CLI's default model), ``timeout`` (seconds
+``claude_model`` (defaults to ``sonnet``), ``timeout`` (seconds
 per page, default 180).
 
 Reuses build.py's hardened ``_resolve_claude_path`` (#421: shell-metachar

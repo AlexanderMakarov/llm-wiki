@@ -29,33 +29,100 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
     return ts;
   }
   function renderQueueTrace() {
-    var target = document.getElementById("queue-trace-content");
-    if (!target) return;
     var snapshot = window.LLMWIKI_STATE_SNAPSHOT;
+    var home = document.getElementById("queue-home-content");
+    var raw = document.getElementById("queue-raw-content");
+    if (!home && !raw) return;
     if (!snapshot || !snapshot.queue) {
-      target.textContent = "No queue state available.";
+      if (home) home.textContent = "No queue state available.";
+      if (raw) raw.textContent = "No queue state available.";
       return;
     }
+
     var items = Array.isArray(snapshot.queue.items) ? snapshot.queue.items : [];
     var counts = { pending: 0, running: 0, done: 0, error: 0 };
+    var taskTypeCounts = {};
     var oldest = "";
     items.forEach(function (it) {
       var st = (it && it.status) ? String(it.status) : "pending";
       counts[st] = (counts[st] || 0) + 1;
       if (st === "pending" && it.created_at && (!oldest || it.created_at < oldest)) oldest = it.created_at;
+      var tt = (it && it.task_type) ? String(it.task_type) : "unknown";
+      taskTypeCounts[tt] = (taskTypeCounts[tt] || 0) + 1;
     });
+
+    var sync = snapshot.sync || {};
+    var counters = sync.counters || {};
+    var totalConverted = 0;
+    Object.keys(counters).forEach(function (name) {
+      var row = counters[name] || {};
+      totalConverted += Number(row.converted || 0);
+    });
+    var synthState = snapshot.synth || {};
+    var synthFiles = (synthState.files || {});
+    var synthCount = Object.keys(synthFiles).length;
+    var unsynthEstimate = Math.max(totalConverted - synthCount, 0);
+    var pendingList = Array.isArray(synthState.pending) ? synthState.pending : [];
+    var previewLimit = 12;
+    var pendingSessions = pendingList.filter(function (it) { return !(it && it.is_doc); }).length;
+    var pendingDocs = pendingList.length - pendingSessions;
+    var pendingPreview = pendingList.slice(0, previewLimit).map(function (it) {
+      var rel = it && it.rel ? String(it.rel) : "";
+      var project = it && it.project ? String(it.project) : "unknown";
+      var kind = (it && it.is_doc) ? "doc" : "session";
+      var label = kind + " · " + project;
+      return "<li><code>" + rel + "</code> <span class=\"muted\">(" + label + ")</span></li>";
+    }).join("");
+    if (pendingList.length > previewLimit) {
+      pendingPreview += "<li class=\"muted\">... and " + (pendingList.length - previewLimit) + " more</li>";
+    }
+    if (!pendingPreview) pendingPreview = "<li>none</li>";
+
     var ops = snapshot.ops || {};
-    target.innerHTML =
-      "pending=" + (counts.pending || 0) +
-      " · running=" + (counts.running || 0) +
-      " · done=" + (counts.done || 0) +
-      " · error=" + (counts.error || 0) +
-      "<br>oldest pending: " + (oldest || "none") +
-      "<br>last queue run: " + formatTs(ops.last_queue_run_at) +
-      "<br>last lint run: " + formatTs(ops.last_lint_run_at) +
-      "<br>last reflect run: " + formatTs(ops.last_reflect_run_at);
+    var lastSync = ((snapshot.sync || {}).meta || {}).last_sync || "";
+    var typeRows = Object.keys(taskTypeCounts).sort().map(function (name) {
+      return "<li><code>" + name + "</code>: " + taskTypeCounts[name] + "</li>";
+    }).join("");
+    if (!typeRows) typeRows = "<li>none</li>";
+
+    var html =
+      '<div class="queue-stats-grid">' +
+      '<div class="queue-stat"><div class="queue-stat-label">Pending</div><div class="queue-stat-value">' + (counts.pending || 0) + '</div></div>' +
+      '<div class="queue-stat"><div class="queue-stat-label">Running</div><div class="queue-stat-value">' + (counts.running || 0) + '</div></div>' +
+      '<div class="queue-stat"><div class="queue-stat-label">Done</div><div class="queue-stat-value">' + (counts.done || 0) + '</div></div>' +
+      '<div class="queue-stat"><div class="queue-stat-label">Error</div><div class="queue-stat-value">' + (counts.error || 0) + '</div></div>' +
+      '<div class="queue-stat"><div class="queue-stat-label">Unsynth estimate</div><div class="queue-stat-value">' + unsynthEstimate + '</div></div>' +
+      '</div>' +
+      '<div class="queue-meta-grid">' +
+      '<div><strong>Oldest pending:</strong> ' + (oldest || "none") + '</div>' +
+      '<div><strong>Last sync:</strong> ' + formatTs(lastSync) + '</div>' +
+      '<div><strong>Last queue run:</strong> ' + formatTs(ops.last_queue_run_at) + '</div>' +
+      '<div><strong>Last lint run:</strong> ' + formatTs(ops.last_lint_run_at) + '</div>' +
+      '<div><strong>Last reflect run:</strong> ' + formatTs(ops.last_reflect_run_at) + '</div>' +
+      '</div>' +
+      '<div><strong>Queue task types</strong><ul class="queue-type-list">' + typeRows + '</ul></div>' +
+      '<div><strong>Not synthesized</strong> <span class="muted">(' + Number(synthState.pending_total || pendingList.length) + ' total; sessions=' + pendingSessions + ', docs=' + pendingDocs + ')</span><ul class="queue-type-list">' + pendingPreview + '</ul></div>';
+
+    if (home) home.innerHTML = html;
+    if (raw) raw.innerHTML = html;
   }
-  document.addEventListener("DOMContentLoaded", renderQueueTrace);
+
+  function wireQueueCopyButtons() {
+    document.querySelectorAll(".queue-copy-btn").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var txt = btn.getAttribute("data-copy") || "";
+        if (!txt) return;
+        navigator.clipboard.writeText(txt).then(function () {
+          btn.textContent = "Copied";
+          setTimeout(function () { btn.textContent = "Copy"; }, 1200);
+        }).catch(function () {});
+      });
+    });
+  }
+  document.addEventListener("DOMContentLoaded", function () {
+    renderQueueTrace();
+    wireQueueCopyButtons();
+  });
 })();
 
 (function () {
