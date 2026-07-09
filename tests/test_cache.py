@@ -356,9 +356,10 @@ def test_estimate_command_emits_total(tmp_path, monkeypatch, capsys):
         ]
 
     monkeypatch.setattr(pipe, "_discover_raw_sessions", _fake_discover)
-    monkeypatch.setattr(pipe, "_load_state", lambda: {})
+    monkeypatch.setattr(pipe, "_load_state", lambda _p=None: {})
 
-    rc = cli_mod._synthesize_estimate()
+    args = cli_mod.build_parser().parse_args(["synthesize", "--estimate", "--vault", str(tmp_path)])
+    rc = cli_mod._synthesize_estimate(args)
     out = capsys.readouterr().out
     assert rc == 0
     # G-07 (#293): output now has three-bucket breakdown.  Model name
@@ -374,13 +375,41 @@ def test_estimate_command_no_new_sessions(tmp_path, monkeypatch, capsys):
     from llmwiki import cli as cli_mod
     import llmwiki.synth.pipeline as pipe
 
-    monkeypatch.setattr(cli_mod, "REPO_ROOT", tmp_path)
+    (tmp_path / "raw" / "sessions").mkdir(parents=True)
+    (tmp_path / "raw" / "docs").mkdir(parents=True)
+    (tmp_path / "wiki" / "sources").mkdir(parents=True)
+    (tmp_path / "llmwiki-state.json").write_text("{}", encoding="utf-8")
     monkeypatch.setattr(pipe, "_discover_raw_sessions", lambda raw_dir=None: [])
-    monkeypatch.setattr(pipe, "_load_state", lambda: {})
+    monkeypatch.setattr(pipe, "_load_state", lambda _p=None: {})
 
-    rc = cli_mod._synthesize_estimate()
+    args = cli_mod.build_parser().parse_args(["synthesize", "--estimate", "--vault", str(tmp_path)])
+    rc = cli_mod._synthesize_estimate(args)
     out = capsys.readouterr().out
     assert rc == 0
     # G-07: empty corpus now prints "$0.0000 (nothing new — this is a no-op)".
     assert "nothing new" in out
     assert "0.0000" in out
+
+
+def test_estimate_persists_unsynth_backlog_for_vault(tmp_path, capsys):
+    from llmwiki import cli as cli_mod
+    from llmwiki.state_store import read_state
+
+    vault = tmp_path / "vault"
+    (vault / "raw" / "sessions").mkdir(parents=True)
+    (vault / "raw" / "docs").mkdir(parents=True)
+    (vault / "wiki" / "sources").mkdir(parents=True)
+    (vault / "raw" / "docs" / "invoice.md").write_text("# Invoice\n\nbody\n", encoding="utf-8")
+    (vault / "llmwiki-state.json").write_text("{}", encoding="utf-8")
+
+    args = cli_mod.build_parser().parse_args(["synthesize", "--estimate", "--vault", str(vault)])
+    rc = cli_mod._synthesize_estimate(args)
+    assert rc == 0
+    _ = capsys.readouterr()
+
+    state = read_state(vault / "llmwiki-state.json")
+    synth = state.get("synth", {})
+    assert int(synth.get("pending_total", 0)) == 1
+    pending = synth.get("pending", [])
+    assert isinstance(pending, list) and pending
+    assert pending[0].get("is_doc") is True

@@ -917,21 +917,24 @@ def _synthesize_estimate(args: argparse.Namespace | None = None) -> int:
                     f"pricing model fallback: execution model '{execution_model}' has no rate card entry; "
                     "using default pricing model."
                 )
-    if getattr(args, "vault", None):
-        from llmwiki.cache import estimate_tokens
-        from llmwiki.synth.pipeline import _discover_raw_sessions, _load_state, discover_synth_source_keys
-        vault_root = Path(args.vault)
-        raw_sessions = _discover_raw_sessions(vault_root / "raw" / "sessions")
-        docs_root = vault_root / "raw" / "docs"
-        state_keys = set(_load_state(vault_root / "llmwiki-state.json").keys())
-        wiki_sources_dir = vault_root / "wiki" / "sources"
-        synthesized_source_keys = discover_synth_source_keys(wiki_sources_dir)
-        prefix_parts: list[str] = []
-        for rel in ("CLAUDE.md", "wiki/index.md", "wiki/overview.md"):
-            p = vault_root / rel
-            if p.is_file():
-                prefix_parts.append(p.read_text(encoding="utf-8"))
-        prefix_tokens = estimate_tokens("\n".join(prefix_parts))
+    from llmwiki.cache import estimate_tokens
+    from llmwiki.state_store import resolve_state_file, update_state
+    from llmwiki.synth.pipeline import _discover_raw_sessions, _load_state, discover_synth_source_keys
+
+    state_target = resolve_state_file(getattr(args, "vault", None))
+    vault_root = state_target.parent
+    raw_root = vault_root / "raw" / "sessions"
+    docs_root = vault_root / "raw" / "docs"
+    wiki_sources_dir = vault_root / "wiki" / "sources"
+    raw_sessions = _discover_raw_sessions(raw_root)
+    state_keys = set(_load_state(state_target).keys())
+    synthesized_source_keys = discover_synth_source_keys(wiki_sources_dir)
+    prefix_parts: list[str] = []
+    for rel in ("CLAUDE.md", "wiki/index.md", "wiki/overview.md"):
+        p = vault_root / rel
+        if p.is_file():
+            prefix_parts.append(p.read_text(encoding="utf-8"))
+    prefix_tokens = estimate_tokens("\n".join(prefix_parts))
     report = synthesize_estimate_report(
         raw_sessions=raw_sessions,
         state_keys=state_keys,
@@ -940,34 +943,31 @@ def _synthesize_estimate(args: argparse.Namespace | None = None) -> int:
         pricing_table=pricing_table,
         synthesized_source_keys=synthesized_source_keys,
         wiki_sources_dir=wiki_sources_dir,
-        raw_root=(Path(args.vault) / "raw" / "sessions") if getattr(args, "vault", None) else None,
+        raw_root=raw_root,
         docs_root=docs_root,
     )
-    try:
-        from datetime import datetime, timezone
-        from llmwiki.state_store import resolve_state_file, update_state
-        pending_rows = [
-            {
-                "rel": str(it.get("rel", "")),
-                "source": str(it.get("source_file", "")),
-                "project": str(it.get("project", "unknown")),
-                "is_doc": bool(it.get("is_doc", False)),
-                "mtime": str(it.get("mtime", "")),
-            }
-            for it in report.get("unsynth_items", [])
-            if str(it.get("rel", "")).strip()
-        ]
-        stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-        target = resolve_state_file(getattr(args, "vault", None))
-        def _mut(s: dict[str, Any]) -> dict[str, Any]:
-            synth = s.setdefault("synth", {})
-            synth["pending"] = pending_rows
-            synth["pending_total"] = len(pending_rows)
-            synth["pending_updated_at"] = stamp
-            return s
-        update_state(_mut, target)
-    except Exception:
-        pass
+    from datetime import datetime, timezone
+    pending_rows = [
+        {
+            "rel": str(it.get("rel", "")),
+            "source": str(it.get("source_file", "")),
+            "project": str(it.get("project", "unknown")),
+            "is_doc": bool(it.get("is_doc", False)),
+            "mtime": str(it.get("mtime", "")),
+        }
+        for it in report.get("unsynth_items", [])
+        if str(it.get("rel", "")).strip()
+    ]
+    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    def _mut(s: dict[str, Any]) -> dict[str, Any]:
+        synth = s.setdefault("synth", {})
+        synth["pending"] = pending_rows
+        synth["pending_total"] = len(pending_rows)
+        synth["pending_updated_at"] = stamp
+        return s
+
+    update_state(_mut, state_target)
 
     for w in report["warnings"]:
         print(f"warning: {w}")
