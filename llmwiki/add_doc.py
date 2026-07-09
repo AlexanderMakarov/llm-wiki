@@ -304,7 +304,7 @@ _IMAGE_EXT = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic", ".heif",
 
 _SUPPORTED_FORMATS_HINT = (
     "supported: markdown/plain-text/code files, "
-    "PDF/DOCX/PPTX/XLSX/EPUB via markitdown (pip install 'llm-notebook[add]'), "
+    "PDF/DOCX/PPTX/XLSX/EPUB via markitdown (pip install 'llm-wiki[add]'), "
     "and images via claude-CLI vision OCR"
 )
 
@@ -504,7 +504,7 @@ def convert_path(value: str, note: str | None = None) -> ConvertedDoc:
         if _markitdown_convert is None:
             raise AddError(
                 f"converting {ext} needs markitdown — install the optional extra: "
-                "pip install 'llm-notebook[add]'"
+                "pip install 'llm-wiki[add]'"
             )
         text = _markitdown_convert(real)
         return ConvertedDoc(title=real.stem, markdown=_note_header(note) + text.strip() + "\n",

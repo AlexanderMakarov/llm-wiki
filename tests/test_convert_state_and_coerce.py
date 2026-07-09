@@ -195,8 +195,10 @@ def test_load_state_migration_persists_to_disk(tmp_path, monkeypatch):
     files = disk.get("sync", {}).get("files", {})
     assert all(isinstance(k, str) and "::" in k for k in files.keys())
     # Re-loading must be a no-op migration (nothing extra to do).
+    # load_state returns float mtimes in memory; disk stores ISO strings.
     second = load_state(state_file, adapter_names=["claude_code"])
-    assert second == files
+    assert set(second.keys()) == set(files.keys())
+    assert all(isinstance(v, float) for v in second.values())
 
 
 def test_save_state_is_deterministic(tmp_path):

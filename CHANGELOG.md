@@ -8,7 +8,28 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ## [Unreleased]
 
+## [1.4.0] — 2026-07-09
+
 ### Added
+
+- **`llmwiki add` synthesizes only the documents it just wrote** — no longer drains the whole unsynthesized backlog. Passes `only_paths=` into `synthesize_new_sessions`.
+- **CSV-backed model pricing** (`model_pricing.csv`) with `model_name` + `model_family` resolution (`sonnet` → newest family member).
+- **Home queue widget** cost estimate block from `synth.estimate` in `llmwiki-state.json`.
+- **`scripts/migrate_state_v1_4_0.py`** — one-time legacy → unified state migrator (CLI `llmwiki migrate-state` wraps it).
+
+### Changed
+
+- **Minimum Python is 3.12** (`requires-python = ">=3.12"`). CI matrix is 3.12 + 3.13.
+- **Package metadata**: name `llm-wiki`, authors Alexander Makarov + Pratiyush (upstream), URLs point at `AlexanderMakarov/llm-wiki`.
+- **Unified state timestamps** are ISO-8601 strings on disk; convert helpers still accept numeric mtimes in memory so migration/tests do not silently drop keys.
+- Removed obsolete batch-state scaffolding from `llmwiki/cache.py`.
+
+### Removed
+
+- Package module `llmwiki/migrate_state.py` (moved to `scripts/migrate_state_v1_4_0.py`).
+- `tests/test_migrate_state.py` (migration is a one-shot script, not a package API).
+
+### Added (carry-forward from 1.3.x unreleased)
 
 - **`llmwiki add <url|file|folder>...`** (#16): synchronous local document intake. Converts sources to Markdown (Cloudflare `Accept: text/markdown` negotiation → trafilatura/stdlib extraction → optional playwright render), writes `raw/docs/<slug>/<slug>[-NN].md` in the section-chunked layout, then batch-synthesizes and rebuilds the site. New `llm-wiki-add` console script and `[add]` optional extra (`trafilatura`, `markitdown[pdf,docx,pptx,xlsx]`).
 - **Vault pipeline lock** (#16 field report): `sync`, `build`, `add`, and `all` now serialize on `.llmwiki-pipeline.lock` at the vault (or repo) root, so a hook-triggered sync/build can no longer race a concurrent `llmwiki add` into a "could not reset site dir" crash. Stale locks (dead pid or >30 min) are broken automatically.
@@ -17,7 +38,7 @@ Versions below 1.0 are pre-production — API and file formats may change.
 - **`llmwiki all --with-synth`** (#383) — opt-in chain that runs `synthesize` before `build → graph → export → lint`, so CLI users can fill `wiki/sources/` from `raw/` in one command without relying on agent slash skills. Companion flags: `--synth-force` (pass `--force` to synthesize), `--vault` (vault-overlay synthesize when using `--with-synth`).
 - **`llmwiki sync --status` synthesis hint** (#383) — reports the configured `synthesis.backend` and points to `llmwiki synthesize` / `llmwiki all --with-synth` when `wiki/sources/` may stay empty after sync.
 
-### Changed
+### Changed (carry-forward)
 
 - **README quick-start + `/wiki-all`** (#383) — document that `sync` alone only fills `raw/`; semantic wiki pages require `synthesize` or `all --with-synth`.
 

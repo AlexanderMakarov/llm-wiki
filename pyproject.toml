@@ -3,14 +3,15 @@ requires = ["setuptools>=82.0.1", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "llm-notebook"
-version = "1.3.82"
+name = "llm-wiki"
+version = "1.4.0"
 description = "Karpathy-style LLM wiki from your Claude Code, Codex CLI, Cursor, and Obsidian sessions"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.12"
 license = { text = "MIT" }
 authors = [
-    { name = "Pratiyush", email = "pratiyush1@gmail.com" }
+    { name = "Alexander Makarov", email = "4ellendger@gmail.com" },
+    { name = "Pratiyush", email = "pratiyush1@gmail.com" },
 ]
 keywords = [
     "llm-wiki",
@@ -33,9 +34,6 @@ classifiers = [
     "Operating System :: POSIX :: Linux",
     "Operating System :: Microsoft :: Windows",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Topic :: Documentation",
@@ -94,12 +92,12 @@ all = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/Pratiyush/llm-wiki"
-Documentation = "https://github.com/Pratiyush/llm-wiki/tree/master/docs"
-Repository = "https://github.com/Pratiyush/llm-wiki"
-Issues = "https://github.com/Pratiyush/llm-wiki/issues"
-Changelog = "https://github.com/Pratiyush/llm-wiki/blob/master/CHANGELOG.md"
-Releases = "https://github.com/Pratiyush/llm-wiki/releases"
+Homepage = "https://github.com/AlexanderMakarov/llm-wiki"
+Documentation = "https://github.com/AlexanderMakarov/llm-wiki/tree/main/docs"
+Repository = "https://github.com/AlexanderMakarov/llm-wiki"
+Issues = "https://github.com/AlexanderMakarov/llm-wiki/issues"
+Changelog = "https://github.com/AlexanderMakarov/llm-wiki/blob/main/CHANGELOG.md"
+Releases = "https://github.com/AlexanderMakarov/llm-wiki/releases"
 
 [project.scripts]
 llmwiki = "llmwiki.cli:main"
@@ -113,7 +111,7 @@ llmwiki = ["py.typed"]
 
 [tool.ruff]
 line-length = 120
-target-version = "py39"
+target-version = "py312"
 
 [tool.ruff.lint]
 select = [

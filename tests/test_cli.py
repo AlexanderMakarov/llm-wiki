@@ -159,6 +159,63 @@ def test_add_configured_claude_backend_synthesizes_synchronously(tmp_path, monke
     assert (vault / "raw" / "docs" / "sync-doc" / "sync-doc.md").exists()
 
 
+def test_add_synthesizes_only_written_docs(tmp_path, monkeypatch, capsys):
+    """`add` must not drain the unsynthesized backlog — only the docs it wrote."""
+    import llmwiki.cli as cli_mod
+    import llmwiki.config_schedule as config_mod
+    import llmwiki.synth.pipeline as pipeline_mod
+
+    vault = _add_vault(tmp_path)
+    # Pre-existing unsynthesized doc that must NOT be touched by this add.
+    backlog = vault / "raw" / "docs" / "old-backlog" / "old-backlog.md"
+    backlog.parent.mkdir(parents=True)
+    backlog.write_text("---\ntitle: Old\nproject: docs\nslug: old-backlog\n---\n\n# Old\n", encoding="utf-8")
+
+    src = tmp_path / "new.md"
+    src.write_text("# Brand New\n\nbody\n")
+
+    captured: dict = {}
+
+    def _fake_synth(**kwargs):
+        captured.update(kwargs)
+        return {
+            "total_scanned": 1,
+            "new_files": 1,
+            "synthesized": 1,
+            "skipped": 0,
+            "errors": [],
+            "backend": "dummy",
+        }
+
+    class _Ok:
+        name = "dummy"
+        def is_available(self):
+            return True
+
+    monkeypatch.setattr(config_mod, "_load_sessions_config", lambda: {
+        "synthesis": {"backend": "dummy"},
+    })
+    monkeypatch.setattr(pipeline_mod, "resolve_backend", lambda _cfg: _Ok())
+    monkeypatch.setattr(pipeline_mod, "synthesize_new_sessions", _fake_synth)
+    import llmwiki.build as build_mod
+    monkeypatch.setattr(build_mod, "build_site", lambda **kw: 0)
+    # expected_source_page check: create the page so rollback doesn't fire
+    def _expected(raw_path, sources_dir):
+        from pathlib import Path
+        p = Path(sources_dir) / "docs" / "brand-new.md"
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text("# Brand New\n", encoding="utf-8")
+        return p
+    import llmwiki.add_doc as add_doc_mod
+    monkeypatch.setattr(add_doc_mod, "expected_source_page", _expected)
+
+    rc = _run_add(cli_mod, vault, str(src))
+    assert rc == 0
+    assert "only_paths" in captured
+    only = {str(p) for p in captured["only_paths"]}
+    assert any("brand-new" in p for p in only)
+    assert not any("old-backlog" in p for p in only)
+
 def test_add_unavailable_backend_rolls_back_raw_docs(tmp_path, monkeypatch, capsys):
     """No half-added docs: when the configured backend can't synthesize,
     the just-added raw docs are removed and add fails — only

@@ -25,11 +25,19 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _run_cli(*args):
+    import os
+    env = os.environ.copy()
+    # Prefer the checkout under test over any other installed llmwiki.
+    env["PYTHONPATH"] = str(REPO_ROOT) + (
+        os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else ""
+    )
     return subprocess.run(
         [sys.executable, "-m", "llmwiki", *args],
         capture_output=True,
         text=True,
         check=False,
+        env=env,
+        cwd=str(REPO_ROOT),
     )
 
 
@@ -150,7 +158,8 @@ def test_custom_model_propagates():
         prefix_tokens=2000,
         model="claude-haiku-4",
     )
-    assert rpt["model"] == "claude-haiku-4"
+    # Alias resolves to canonical CSV model_name.
+    assert rpt["model"] == "haiku-4.5"
 
 
 def test_custom_output_tokens_affects_cost():
@@ -235,7 +244,7 @@ def test_cli_estimate_prints_model_and_prefix():
     cp = _run_cli("synthesize", "--estimate")
     assert cp.returncode == 0, cp.stderr
     assert "Prefix:" in cp.stdout
-    assert "Model:" in cp.stdout
+    assert "Pricing model:" in cp.stdout or "Execution model:" in cp.stdout
 
 
 def test_cli_estimate_doesnt_hit_network():

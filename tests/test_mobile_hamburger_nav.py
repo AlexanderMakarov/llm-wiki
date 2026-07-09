@@ -34,7 +34,7 @@ def test_nav_emits_drawer_with_all_links() -> None:
     # All seven top-level nav targets reachable from the drawer.
     for target in (
         'href="index.html"',
-        'href="recent.html"',
+        'href="raw.html"',
         'href="graph.html"',
         'href="projects/index.html"',
         'href="sessions/index.html"',

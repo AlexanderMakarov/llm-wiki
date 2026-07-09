@@ -588,9 +588,16 @@ def cmd_queue(args: argparse.Namespace) -> int:
 
 
 def cmd_migrate_state(args: argparse.Namespace) -> int:
-    from llmwiki.migrate_state import run_migration
-
-    report = run_migration(args.state_file)
+    # One-shot v1.4.0 migrator lives under scripts/ (not the package).
+    import importlib.util
+    script = REPO_ROOT / "scripts" / "migrate_state_v1_4_0.py"
+    spec = importlib.util.spec_from_file_location("migrate_state_v1_4_0", script)
+    if spec is None or spec.loader is None:
+        print(f"error: migration script missing: {script}", file=sys.stderr)
+        return 2
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    report = mod.run_migration(args.state_file)
     print(f"state file: {report['state_file']}")
     if report["migrated"]:
         print("migrated:")
@@ -809,9 +816,12 @@ def _cmd_add_locked(args: argparse.Namespace, docs_dir: Path,
                   file=sys.stderr)
             return 2
         print(f"Synthesizing with backend: {backend.name}")
+        # Only synthesize the docs this `add` just wrote — never drain
+        # the whole unsynthesized backlog from an add invocation.
         summary = synthesize_new_sessions(
             backend=backend, raw_dir=raw_dir,
             wiki_sources_dir=wiki_sources_dir, state_file=state_file,
+            only_paths=set(result["written"]),
         )
         print(f"  synthesized {summary['synthesized']}, skipped {summary['skipped']}")
         for err in summary["errors"]:

@@ -56,4 +56,5 @@ echo
 echo "Manual queue (no auto-sync on agent launch):"
 echo "  python3 -m llmwiki queue status"
 echo "  python3 -m llmwiki queue run --limit 20"
-echo "  python3 -m llmwiki migrate-state   # one-time legacy state migration"
+echo "  python3 scripts/migrate_state_v1_4_0.py   # one-time legacy state migration"
+echo "  # or: python3 -m llmwiki migrate-state"

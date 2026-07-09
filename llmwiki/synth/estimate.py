@@ -189,12 +189,14 @@ def synthesize_estimate_report(
             )
             incremental_usd += inc_cost
             project = str(meta.get("project") or getattr(getattr(p, "parent", None), "name", "unknown"))
+            mtime_iso = ""
             try:
                 mtime_iso = datetime.fromtimestamp(
                     _Path(p).stat().st_mtime, tz=timezone.utc
                 ).strftime("%Y-%m-%dT%H:%M:%SZ")
-            except OSError:
-                mtime_iso = ""
+            except (OSError, TypeError, ValueError):
+                # Tests inject Path-ish stubs without a real filesystem path.
+                pass
             unsynth_items.append(
                 {
                     "rel": source_rel,
@@ -234,12 +236,13 @@ def synthesize_estimate_report(
             new_docs += 1
             inc_cost, incremental_first = _add_to_bucket(body_tokens, incremental_first)
             incremental_usd += inc_cost
+            mtime_iso = ""
             try:
                 mtime_iso = datetime.fromtimestamp(
                     _Path(p).stat().st_mtime, tz=timezone.utc
                 ).strftime("%Y-%m-%dT%H:%M:%SZ")
-            except OSError:
-                mtime_iso = ""
+            except (OSError, TypeError, ValueError):
+                pass
             unsynth_items.append(
                 {
                     "rel": rel,

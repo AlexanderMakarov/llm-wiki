@@ -157,7 +157,7 @@ def test_pdf_without_markitdown_errors(tmp_path, monkeypatch):
     monkeypatch.setattr(m, "_markitdown_convert", None)
     p = tmp_path / "doc.pdf"
     p.write_bytes(b"%PDF-1.4 fake")
-    with pytest.raises(AddError, match=r"llm-notebook\[add\]"):
+    with pytest.raises(AddError, match=r"llm-wiki\[add\]"):
         convert_path(str(p))
 
 

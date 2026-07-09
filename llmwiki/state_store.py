@@ -27,8 +27,16 @@ def mtime_to_iso(value: float) -> str:
 
 
 def mtime_from_state(value: Any) -> float | None:
+    """Parse a state mtime.
+
+    On-disk unified state stores ISO-8601 strings only. In-memory convert
+    helpers and one-shot legacy migrations may still pass numeric mtimes;
+    accept those so callers don't silently drop keys before ``mtime_to_iso``.
+    """
     if isinstance(value, bool):
         return None
+    if isinstance(value, (int, float)):
+        return float(value)
     if isinstance(value, str):
         raw = value.strip()
         if not raw:

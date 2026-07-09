@@ -441,11 +441,15 @@ python3 -m llmwiki queue run --vault /path/to/vault --limit 20
 
 ---
 
-## `migrate-state` — one-time legacy state migration
+## `migrate-state` — one-time legacy state migration (v1.4.0)
 
 Migrates legacy dotfiles (`.llmwiki-state.json`, `.llmwiki-synth-state.json`, `.llmwiki-queue.json`, `.llmwiki-quarantine.json`, `.llmwiki-pending-prompts/`) into the unified `llmwiki-state.json`.
 
+Implementation lives at `scripts/migrate_state_v1_4_0.py`; the CLI is a thin wrapper.
+
 ```bash
+python3 scripts/migrate_state_v1_4_0.py
+python3 scripts/migrate_state_v1_4_0.py --state-file /path/to/vault/llmwiki-state.json
 python3 -m llmwiki migrate-state
 python3 -m llmwiki migrate-state --state-file /path/to/vault/llmwiki-state.json
 ```

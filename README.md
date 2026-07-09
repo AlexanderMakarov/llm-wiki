@@ -7,7 +7,7 @@ This repo is a **personal fork** ([AlexanderMakarov/llm-wiki](https://github.com
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/)
-[![Version](https://img.shields.io/badge/version-v1.3.82-10B981.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-v1.4.0-10B981.svg)](CHANGELOG.md)
 [![Tests](https://img.shields.io/badge/tests-2850%20passing-10B981.svg)](tests/)
 [![CI](https://github.com/AlexanderMakarov/llm-wiki/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/AlexanderMakarov/llm-wiki/actions/workflows/ci.yml)
 [![Link check](https://github.com/AlexanderMakarov/llm-wiki/actions/workflows/link-check.yml/badge.svg?branch=main)](https://github.com/AlexanderMakarov/llm-wiki/actions/workflows/link-check.yml)
@@ -86,8 +86,11 @@ Ensure `/path/to/llm-wiki/config.json` contains your `vault.default_path`.
 ```bash
 llmwiki queue status
 llmwiki queue run --limit 20
-llmwiki migrate-state   # one-time: merge legacy .llmwiki-* files
+llmwiki migrate-state   # one-time: merge legacy .llmwiki-* into llmwiki-state.json
+# or: python3 scripts/migrate_state_v1_4_0.py --state-file /path/to/vault
 ```
+
+Requires **Python ≥ 3.12**.
 
 ### What stays gitignored
 
@@ -98,7 +101,7 @@ llmwiki migrate-state   # one-time: merge legacy .llmwiki-* files
 | `wiki/projects/*` (except `demo-*.md`) | Per-project topic profiles |
 | `site/` | Built HTML |
 | `config.json` | Vault path + personal settings |
-| `.llmwiki-*` (legacy) | Pre-migration pipeline scratch — run `llmwiki migrate-state` |
+| `.llmwiki-*` (legacy) | Pre-migration pipeline scratch — run `scripts/migrate_state_v1_4_0.py` |
 
 See [docs/guides/existing-vault.md](docs/guides/existing-vault.md) for Obsidian/Logseq vault layouts.
 
@@ -286,7 +289,7 @@ URLs are fetched with `Accept: text/markdown` first — sites behind Cloudflare'
 
 Documents land under `raw/docs/<slug>/`, split at section boundaries into ~7k-char chunks. The separation is deliberate: each chunk becomes one synthesis input that fits the model's context window, so one huge page can't overload or OOM a synthesis pass — splits happen at `#`/`##` headings (never mid-sentence, not a hard 7000-char slice). After writing, one synthesis pass and one site build run for the whole batch (`--no-synthesize` / `--no-build` to skip). `raw/` stays immutable: re-adding a document never overwrites — the slug gets a `-2`, `-3`, … suffix.
 
-**Synthesis is synchronous and uses the one backend configured for the whole repository** (`synthesis.backend` in `config.json`: `claude` for `claude -p` CLI calls, default `claude_model=sonnet`; `ollama` for a local server; `dummy` offline — change it there any time). If the backend can't produce the wiki page in the same run, `add` **rolls the raw doc back** and exits non-zero — no half-added documents that nothing on the machine would ever synthesize later. `--no-synthesize` is the explicit opt-out that keeps raw-only docs.
+**Synthesis is synchronous and uses the one backend configured for the whole repository** (`synthesis.backend` in `config.json`: `claude` for `claude -p` CLI calls, default `claude_model=sonnet`; `ollama` for a local server; `dummy` offline — change it there any time). `add` synthesizes **only the documents it just wrote** (not the whole unsynthesized backlog). If the backend can't produce the wiki page in the same run, `add` **rolls the raw doc back** and exits non-zero — no half-added documents that nothing on the machine would ever synthesize later. `--no-synthesize` is the explicit opt-out that keeps raw-only docs.
 
 ---
 
@@ -340,4 +343,4 @@ Per-adapter docs: [Claude Code](docs/adapters/claude-code.md) · [Codex CLI](doc
 
 ## License
 
-[MIT](LICENSE) © Pratiyush (upstream); fork modifications © Alexander Makarov
+[MIT](LICENSE) © Alexander Makarov; based on upstream [Pratiyush/llm-wiki](https://github.com/Pratiyush/llm-wiki)

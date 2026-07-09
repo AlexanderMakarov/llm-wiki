@@ -877,6 +877,7 @@ def synthesize_new_sessions(
     docs_dir: Optional[Path] = None,
     doc_chunk_max_chars: Optional[int] = None,
     include_docs: bool = True,
+    only_paths: Optional[set[Path] | set[str]] = None,
 ) -> dict[str, Any]:
     """Main entry point. Returns a summary dict:
 
@@ -888,6 +889,10 @@ def synthesize_new_sessions(
         "errors": list[str],
         "backend": str,
     }
+
+    ``only_paths`` — when set, only synthesize these raw files (resolved
+    paths). Used by ``llmwiki add`` so a single add does not drain the
+    whole unsynthesized backlog.
     """
     if backend is None:
         backend = DummySynthesizer()
@@ -910,6 +915,9 @@ def synthesize_new_sessions(
     prompt_template = _inject_vocabulary(prompt_template, sources_out.parent)
     state = {} if force else _load_state(state_file)
     chunk_max = doc_chunk_max_chars or _DOC_CHUNK_MAX_CHARS
+    only_resolved: set[Path] | None = None
+    if only_paths is not None:
+        only_resolved = {Path(p).expanduser().resolve() for p in only_paths}
 
     # #1: synthesize BOTH session transcripts and manually-added docs.
     # Sessions keep their existing rel state-keys (relative to the sessions
@@ -919,17 +927,29 @@ def synthesize_new_sessions(
     # ``raw/docs`` of whatever sessions root was given.
     session_base = raw_dir or RAW_SESSIONS
     docs_base = docs_dir or (raw_dir.parent / "docs" if raw_dir else RAW_DOCS)
-    unsynth_session_rels = discover_unsynth_session_rels(
-        raw_dir=raw_dir,
-        wiki_sources_dir=wiki_sources_dir,
-        state_file=state_file,
-    )
+    # When only_paths is set (llmwiki add), skip the full unsynth scan —
+    # we only care about the explicit allow-list below.
+    unsynth_session_rels: set[str] = set()
+    if only_resolved is None:
+        unsynth_session_rels = discover_unsynth_session_rels(
+            raw_dir=raw_dir,
+            wiki_sources_dir=wiki_sources_dir,
+            state_file=state_file,
+        )
 
     items: list[dict[str, Any]] = []
     for p, meta, body in _discover_raw_sessions(raw_dir):
+        if only_resolved is not None:
+            try:
+                if p.resolve() not in only_resolved:
+                    continue
+            except OSError:
+                continue
+        else:
+            rel = str(p.relative_to(session_base))
+            if rel not in unsynth_session_rels and not force:
+                continue
         rel = str(p.relative_to(session_base))
-        if rel not in unsynth_session_rels and not force:
-            continue
         items.append({
             "path": p, "meta": meta, "body": body,
             "rel": rel,
@@ -938,6 +958,12 @@ def synthesize_new_sessions(
         })
     if include_docs:
         for p, meta, body in _discover_raw_docs(docs_base):
+            if only_resolved is not None:
+                try:
+                    if p.resolve() not in only_resolved:
+                        continue
+                except OSError:
+                    continue
             # Group under the doc's own project if it declares one, else the
             # ``docs`` pseudo-project. Inject it into meta too so the built
             # page's `project:` frontmatter matches where the page lives —

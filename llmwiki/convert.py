@@ -233,8 +233,8 @@ def _migrate_legacy_state(
         if parsed_v is None:
             continue
         if "::" in k:
-            # Already portable — keep.
-            out[k] = mtime_to_iso(parsed_v)
+            # Already portable — keep (float in memory; ISO on disk via save_state).
+            out[k] = parsed_v
             continue
         # Legacy absolute-path key. Try to infer the adapter from the path.
         inferred: Optional[str] = None
@@ -245,13 +245,13 @@ def _migrate_legacy_state(
         if inferred is None:
             # Preserve the raw key rather than dropping the entry — the
             # next sync will either pass-through or re-migrate it.
-            out[k] = mtime_to_iso(parsed_v)
+            out[k] = parsed_v
             continue
         try:
             rel = Path(k).relative_to(Path.home()).as_posix()
         except (ValueError, OSError):
             rel = k
-        out[f"{inferred}::{rel}"] = mtime_to_iso(parsed_v)
+        out[f"{inferred}::{rel}"] = parsed_v
         migrated += 1
     return out, migrated
 
@@ -295,13 +295,28 @@ def load_state(
 
 def save_state(path: Path, state: dict[str, Any]) -> None:
     # #426 (post-final-review): values are heterogeneous. Per-file
-    # entries are floats (mtime), but the function also persists
-    # `_meta` (dict) and `_counters` (dict) sentinel keys. The old
-    # `dict[str, float]` annotation lied to type-checkers and to the
-    # multi-agent review that flagged it.
+    # entries are floats (mtime) in memory; on disk they are ISO-8601
+    # strings under sync.files. `_meta` / `_counters` go to sync.meta /
+    # sync.counters when present.
     def _mut(s: dict[str, Any]) -> dict[str, Any]:
         sync = s.setdefault("sync", {})
-        sync["files"] = state
+        files: dict[str, str] = {}
+        for k, v in state.items():
+            if not isinstance(k, str):
+                continue
+            if k == "_meta" and isinstance(v, dict):
+                sync["meta"] = v
+                continue
+            if k == "_counters" and isinstance(v, dict):
+                sync["counters"] = v
+                continue
+            if k.startswith("_"):
+                continue
+            parsed = mtime_from_state(v)
+            if parsed is None:
+                continue
+            files[k] = mtime_to_iso(parsed)
+        sync["files"] = files
         return s
     _update_unified_state(_mut, path)
 

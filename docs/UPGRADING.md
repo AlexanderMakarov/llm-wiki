@@ -15,11 +15,15 @@ The canonical per-release detail is
 [CHANGELOG.md](https://github.com/Pratiyush/llm-wiki/blob/master/CHANGELOG.md)
 — this guide focuses on "what might break".
 
-## v1.3.83+ — unified queue + vault state (hard cutover)
+## v1.4.0 — unified queue + vault state (hard cutover)
+
+**Requires Python ≥ 3.12.**
 
 **One-time migration required** if your vault still has legacy dotfiles:
 
 ```bash
+python3 scripts/migrate_state_v1_4_0.py --state-file /path/to/vault/llmwiki-state.json
+# or:
 llmwiki migrate-state --state-file /path/to/vault/llmwiki-state.json
 # optional cleanup after verifying:
 # rm -rf /path/to/vault/.llmwiki-state.json ...
@@ -34,6 +38,8 @@ llmwiki migrate-state --state-file /path/to/vault/llmwiki-state.json
 | SessionStart auto-sync hook | Manual `llmwiki queue run` |
 | `synthesis.backend: agent_delegate` | Removed — use `dummy`, `ollama`, or `claude` |
 | external `wiki_tasks` queue ownership | `llmwiki queue enqueue` into vault state |
+| Python 3.9–3.11 | **Python ≥ 3.12** |
+| `llmwiki add` synthesized whole backlog | `add` synthesizes **only** the docs it just wrote |
 
 ### New commands
 
@@ -44,6 +50,10 @@ llmwiki queue run --limit 20
 ```
 
 Rebuild the site after upgrading so the Home page loads `../llmwiki-state.js`.
+
+## v1.3.83+ — unified queue preview (superseded by v1.4.0)
+
+Same migration as v1.4.0; use `scripts/migrate_state_v1_4_0.py`.
 
 ## v1.3.0 — consolidated 1.2.x patch roll-up
 

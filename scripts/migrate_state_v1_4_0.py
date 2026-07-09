@@ -1,10 +1,20 @@
+#!/usr/bin/env python3
+"""One-time vault state migration for llmwiki v1.4.0.
+
+Migrates legacy dotfiles (``.llmwiki-state.json``, ``.llmwiki-synth-state.json``,
+``.llmwiki-queue.json``, ``.llmwiki-quarantine.json``, ``.llmwiki-pending-prompts/``)
+into unified ``llmwiki-state.json``.
+
+Usage:
+  python3 scripts/migrate_state_v1_4_0.py [--state-file PATH]
+  llmwiki migrate-state [--state-file PATH]   # thin CLI wrapper
+"""
 from __future__ import annotations
 
 import json
 from pathlib import Path
 from typing import Any
 
-from llmwiki import REPO_ROOT
 from llmwiki.state_store import read_state, resolve_state_file, write_state, mtime_to_iso
 from llmwiki.synth.pipeline import refresh_synth_pending
 
@@ -135,3 +145,32 @@ def run_migration(state_file: Path | None = None) -> dict[str, Any]:
         if candidate.exists():
             report["orphan_cleanup_suggestions"].append(f"rm -rf {candidate}")
     return report
+
+
+def main(argv: list[str] | None = None) -> int:
+    import argparse
+    import json
+    import sys
+    p = argparse.ArgumentParser(description=__doc__)
+    p.add_argument("--state-file", type=Path, default=None,
+                   help="Target unified state file or vault root")
+    p.add_argument("--json", action="store_true", help="Print report as JSON")
+    args = p.parse_args(argv)
+    report = run_migration(args.state_file)
+    if args.json:
+        print(json.dumps(report, indent=2))
+    else:
+        print(f"state file: {report['state_file']}")
+        if report["migrated"]:
+            print("migrated:")
+            for path in report["migrated"]:
+                print(f"  - {path}")
+        if report["orphan_cleanup_suggestions"]:
+            print("cleanup suggestions:")
+            for cmd in report["orphan_cleanup_suggestions"]:
+                print(f"  {cmd}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

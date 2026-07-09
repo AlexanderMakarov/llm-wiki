@@ -15,8 +15,8 @@ Public API:
     - llmwiki.mcp.server.main()       — MCP server (stdio)
 """
 
-__version__ = "1.3.82"
-__author__ = "Pratiyush"
+__version__ = "1.4.0"
+__author__ = "Alexander Makarov"
 __license__ = "MIT"
 
 from pathlib import Path
