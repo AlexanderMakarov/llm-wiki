@@ -11,7 +11,7 @@ A minimal Obsidian plugin that syncs your llm-wiki knowledge base into an Obsidi
 ## Prerequisites
 
 - An llm-wiki project on disk (with `wiki/index.md`)
-- Python 3.9+ with `llmwiki` installed
+- Python 3.12+ with `llmwiki` installed
 
 ## Build
 

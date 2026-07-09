@@ -12,7 +12,7 @@ A minimal VS Code extension that integrates with your local llm-wiki instance.
 ## Prerequisites
 
 - An llm-wiki project in your VS Code workspace (must contain `wiki/index.md`)
-- Python 3.9+ with `llmwiki` installed (`pip install -e .` from the repo root)
+- Python 3.12+ with `llmwiki` installed (`pip install -e .` from the repo root)
 
 ## Build & Install
 

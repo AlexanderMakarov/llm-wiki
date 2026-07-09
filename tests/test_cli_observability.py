@@ -187,10 +187,11 @@ def test_cli_log_end_to_end():
 
 def test_sync_status_empty_state(tmp_path, monkeypatch, capsys):
     import llmwiki.cli as cli_mod
-    import llmwiki.convert as convert_mod
-    monkeypatch.setattr(convert_mod, "DEFAULT_STATE_FILE", tmp_path / "state.json")
-    monkeypatch.setattr(cli_mod, "REPO_ROOT", tmp_path); import llmwiki.sync.status as sync_status_mod; monkeypatch.setattr(sync_status_mod, "REPO_ROOT", tmp_path)
-    args = _mk_sync_status_args()
+    state_file = tmp_path / "state.json"
+    monkeypatch.setattr(cli_mod, "REPO_ROOT", tmp_path)
+    import llmwiki.sync.status as sync_status_mod
+    monkeypatch.setattr(sync_status_mod, "REPO_ROOT", tmp_path)
+    args = _mk_sync_status_args(state_file=state_file)
     rc = cli_mod.cmd_sync_status(args)
     assert rc == 0
     out = capsys.readouterr().out
@@ -219,10 +220,8 @@ def test_sync_status_renders_counters_table(tmp_path, monkeypatch, capsys):
         encoding="utf-8",
     )
     import llmwiki.cli as cli_mod
-    import llmwiki.convert as convert_mod
-    monkeypatch.setattr(convert_mod, "DEFAULT_STATE_FILE", state_file)
     monkeypatch.setattr(cli_mod, "REPO_ROOT", tmp_path); import llmwiki.sync.status as sync_status_mod; monkeypatch.setattr(sync_status_mod, "REPO_ROOT", tmp_path)
-    rc = cli_mod.cmd_sync_status(_mk_sync_status_args())
+    rc = cli_mod.cmd_sync_status(_mk_sync_status_args(state_file=state_file))
     assert rc == 0
     out = capsys.readouterr().out
     assert "Last sync: 2026-04-20T04:00:00Z" in out
@@ -236,17 +235,13 @@ def test_sync_status_renders_counters_table(tmp_path, monkeypatch, capsys):
 def test_sync_status_surfaces_quarantine(tmp_path, monkeypatch, capsys):
     state_file = tmp_path / "state.json"
     state_file.write_text(json.dumps({}), encoding="utf-8")
-    quar_file = tmp_path / "quar.json"
     from llmwiki import quarantine as q
-    q.add_entry("claude_code", "/tmp/bad.jsonl", "boom", path=quar_file)
+    q.add_entry("claude_code", "/tmp/bad.jsonl", "boom", path=state_file)
 
     import llmwiki.cli as cli_mod
-    import llmwiki.convert as convert_mod
-    monkeypatch.setattr(convert_mod, "DEFAULT_STATE_FILE", state_file)
-    monkeypatch.setattr(q, "DEFAULT_QUARANTINE_FILE", quar_file)
     monkeypatch.setattr(cli_mod, "REPO_ROOT", tmp_path); import llmwiki.sync.status as sync_status_mod; monkeypatch.setattr(sync_status_mod, "REPO_ROOT", tmp_path)
 
-    rc = cli_mod.cmd_sync_status(_mk_sync_status_args())
+    rc = cli_mod.cmd_sync_status(_mk_sync_status_args(state_file=state_file))
     assert rc == 0
     out = capsys.readouterr().out
     assert "Quarantined sources: 1" in out
@@ -259,10 +254,8 @@ def test_sync_status_with_recent_logs_events(tmp_path, monkeypatch, capsys):
     state_file = tmp_path / "state.json"
     state_file.write_text(json.dumps({}), encoding="utf-8")
     import llmwiki.cli as cli_mod
-    import llmwiki.convert as convert_mod
-    monkeypatch.setattr(convert_mod, "DEFAULT_STATE_FILE", state_file)
     monkeypatch.setattr(cli_mod, "REPO_ROOT", tmp_path); import llmwiki.sync.status as sync_status_mod; monkeypatch.setattr(sync_status_mod, "REPO_ROOT", tmp_path)
-    rc = cli_mod.cmd_sync_status(_mk_sync_status_args(recent=2))
+    rc = cli_mod.cmd_sync_status(_mk_sync_status_args(recent=2, state_file=state_file))
     assert rc == 0
     out = capsys.readouterr().out
     assert "Recent activity" in out
@@ -275,10 +268,8 @@ def test_sync_status_corrupt_state_file_is_tolerated(tmp_path, monkeypatch, caps
     state_file = tmp_path / "state.json"
     state_file.write_text("{ not json", encoding="utf-8")
     import llmwiki.cli as cli_mod
-    import llmwiki.convert as convert_mod
-    monkeypatch.setattr(convert_mod, "DEFAULT_STATE_FILE", state_file)
     monkeypatch.setattr(cli_mod, "REPO_ROOT", tmp_path); import llmwiki.sync.status as sync_status_mod; monkeypatch.setattr(sync_status_mod, "REPO_ROOT", tmp_path)
-    rc = cli_mod.cmd_sync_status(_mk_sync_status_args())
+    rc = cli_mod.cmd_sync_status(_mk_sync_status_args(state_file=state_file))
     assert rc == 0
 
 
@@ -337,9 +328,11 @@ def _mk_log_args(*, limit=10, operation=None, since=None, format="text"):
     return a
 
 
-def _mk_sync_status_args(*, recent=0):
+def _mk_sync_status_args(*, recent=0, vault=None, state_file=None):
     class _A:
         pass
     a = _A()
     a.recent = recent
+    a.vault = vault
+    a.state_file = state_file
     return a

@@ -101,15 +101,17 @@ def test_cmd_all_with_synth_fail_fast_stops_after_synth_failure():
 
 def test_sync_status_prints_synthesis_hint(capsys, tmp_path, monkeypatch):
     from llmwiki import cli as cli_mod
-    from llmwiki.convert import DEFAULT_STATE_FILE
 
     monkeypatch.setattr(
         "llmwiki.config_schedule.load_synthesis_backend",
         lambda *a, **k: "dummy",
     )
-    DEFAULT_STATE_FILE.write_text('{"_meta": {"last_sync": "2026-04-01T00:00:00Z"}}', encoding="utf-8")
+    state_file = tmp_path / "llmwiki-state.json"
+    state_file.write_text('{"_meta": {"last_sync": "2026-04-01T00:00:00Z"}}', encoding="utf-8")
 
-    rc = cli_mod.cmd_sync_status(argparse.Namespace(recent=0))
+    rc = cli_mod.cmd_sync_status(
+        argparse.Namespace(recent=0, vault=None, state_file=state_file)
+    )
     out = capsys.readouterr().out
 
     assert rc == 0

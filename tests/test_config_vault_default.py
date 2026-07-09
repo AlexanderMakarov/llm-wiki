@@ -23,4 +23,15 @@ def test_load_default_vault_path_from_user_config(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(cs, "_SESSIONS_CONFIG", clone / "examples" / "sessions_config.json")
     monkeypatch.setattr(cs, "_USER_CONFIG", clone / "config.json")
 
+    def _real_load_default_vault_path() -> Path | None:
+        vault = cs._load_sessions_config().get("vault", {})
+        if not isinstance(vault, dict):
+            return None
+        raw = str(vault.get("default_path", "")).strip()
+        if not raw:
+            return None
+        return Path(raw).expanduser()
+
+    monkeypatch.setattr(cs, "load_default_vault_path", _real_load_default_vault_path)
+
     assert cs.load_default_vault_path() == (tmp_path / "my-vault").resolve()

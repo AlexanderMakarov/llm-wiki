@@ -29,31 +29,40 @@ import json
 from pathlib import Path
 from typing import Optional
 
-from llmwiki import REPO_ROOT
-
-DEFAULT_QUEUE_FILE = REPO_ROOT / ".llmwiki-queue.json"
+from llmwiki.state_store import read_state, resolve_state_file, update_state
 
 
 def _load(queue_file: Optional[Path] = None) -> list[str]:
-    """Load the queue file. Returns list of relative paths."""
-    qf = queue_file or DEFAULT_QUEUE_FILE
-    if not qf.is_file():
+    """Load legacy ingest-pending paths from unified state (or flat JSON array)."""
+    qf = resolve_state_file(queue_file)
+    if not qf.exists():
         return []
     try:
-        data = json.loads(qf.read_text(encoding="utf-8"))
-        if isinstance(data, list):
-            return [str(p) for p in data if isinstance(p, str)]
-    except (json.JSONDecodeError, OSError):
-        pass
-    return []
+        raw = json.loads(qf.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    if isinstance(raw, list):
+        return sorted({str(p) for p in raw if isinstance(p, str)})
+    if not isinstance(raw, dict):
+        return []
+    rows = raw.get("queue", {}).get("legacy_pending_paths", [])
+    if isinstance(rows, list) and rows:
+        return sorted({str(p) for p in rows if isinstance(p, str)})
+    state = read_state(qf)
+    rows = state.get("queue", {}).get("legacy_pending_paths", [])
+    if not isinstance(rows, list):
+        return []
+    return sorted({str(p) for p in rows if isinstance(p, str)})
 
 
 def _save(items: list[str], queue_file: Optional[Path] = None) -> None:
-    """Save the queue file."""
-    qf = queue_file or DEFAULT_QUEUE_FILE
-    qf.write_text(
-        json.dumps(sorted(set(items)), indent=2), encoding="utf-8"
-    )
+    """Save legacy ingest-pending paths into unified state."""
+    qf = resolve_state_file(queue_file)
+    deduped = sorted(set(items))
+    def _mut(state: dict) -> dict:
+        state.setdefault("queue", {})["legacy_pending_paths"] = deduped
+        return state
+    update_state(_mut, qf)
 
 
 def enqueue(
@@ -78,9 +87,7 @@ def dequeue(*, queue_file: Optional[Path] = None) -> list[str]:
     is empty. Process the returned paths, then they're done.
     """
     items = _load(queue_file)
-    qf = queue_file or DEFAULT_QUEUE_FILE
-    if qf.is_file():
-        qf.write_text("[]", encoding="utf-8")
+    _save([], resolve_state_file(queue_file))
     return items
 
 
@@ -91,9 +98,7 @@ def peek(*, queue_file: Optional[Path] = None) -> list[str]:
 
 def clear(*, queue_file: Optional[Path] = None) -> None:
     """Clear the queue without reading."""
-    qf = queue_file or DEFAULT_QUEUE_FILE
-    if qf.is_file():
-        qf.write_text("[]", encoding="utf-8")
+    _save([], resolve_state_file(queue_file))
 
 
 def queue_size(*, queue_file: Optional[Path] = None) -> int:

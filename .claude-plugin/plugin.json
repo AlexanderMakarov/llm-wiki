@@ -32,9 +32,6 @@
     "skills/llmwiki-ingest/SKILL.md",
     "skills/llmwiki-query/SKILL.md"
   ],
-  "hooks": {
-    "SessionStart": "hooks/session-start.sh"
-  },
   "mcpServers": {
     "llmwiki": {
       "command": "python3",

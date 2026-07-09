@@ -53,12 +53,8 @@ echo "  ./sync.sh                   # convert new sessions to markdown"
 echo "  ./build.sh                  # generate the static HTML site"
 echo "  ./serve.sh                  # browse at http://127.0.0.1:8765/"
 echo
-echo "Optional SessionStart hook — auto-sync on every Claude Code launch:"
-echo "  Add this to ~/.claude/settings.json under 'hooks':"
-echo '    "SessionStart": [ { "hooks": [ { "type": "command",'
-# #sec-11 (#555): wrap the path in JSON-string-escaped quotes so a user
-# whose checkout sits under "/Users/some path/llmwiki" still gets a
-# valid hook entry. Without quotes the shell splits on the space, the
-# python invocation runs against `/Users/some` and the trailing
-# `path/...` becomes a separate argv. Paste-friendly + correct.
-echo "      \"command\": \"(python3 \\\"$SCRIPT_DIR/llmwiki/convert.py\\\" > /tmp/llmwiki-sync.log 2>&1 &) ; exit 0\" } ] } ]"
+echo "Manual queue (no auto-sync on agent launch):"
+echo "  python3 -m llmwiki queue status"
+echo "  python3 -m llmwiki queue run --limit 20"
+echo "  python3 scripts/migrate_state_v1_4_0.py   # one-time legacy state migration"
+echo "  # or: python3 -m llmwiki migrate-state"

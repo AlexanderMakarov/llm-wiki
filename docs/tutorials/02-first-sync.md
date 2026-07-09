@@ -20,23 +20,26 @@ you'd forgotten you ran last month.
 
 ---
 
-## Step 1 — Dry-run first
+## Step 1 — Check status first
 
-A dry-run shows you exactly what will be written without touching disk:
+See what the last sync recorded (and whether anything is quarantined)
+without writing:
 
 ```bash
-python3 -m llmwiki sync --dry-run
+python3 -m llmwiki sync --status
 ```
 
 Expected output (numbers vary):
 
 ```
-==> claude_code: found 647 sessions, 93 sub-agents
-==> codex_cli: found 18 sessions
-[dry-run] Would write 665 markdown files under raw/sessions/
+Last sync: never (or pre-upgrade state file)
+
+No per-adapter counters recorded (run `llmwiki sync` first).
+
+Quarantined sources: 0
 ```
 
-> **Trusted.** Nothing is written. Re-run without `--dry-run` when you're happy.
+> **Trusted.** Nothing is written. When you're ready, run a real sync.
 
 ## Step 2 — Run the real sync
 
@@ -118,7 +121,9 @@ code block is syntax-highlighted, every `[[wikilink]]` resolves.
 
 **`Permission denied` on `~/.claude/projects/`** — the adapter reads; it never writes. Check file permissions: `ls -la ~/.claude/projects/ | head -3`.
 
-**Site loads but is empty** — you ran `sync --dry-run`. Re-run without the flag.
+**Site loads but is empty** — you may have only run `sync --status`, or
+synthesis hasn't filled `wiki/sources/` yet. Run `llmwiki sync` then
+`llmwiki synthesize` (or `llmwiki all --with-synth`).
 
 **Port 8765 already in use** — `python3 -m llmwiki serve --port 9000` picks a different port.
 

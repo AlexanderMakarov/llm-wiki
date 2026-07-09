@@ -69,7 +69,7 @@ Same scoring (/25). llmwiki scored **22/25** on 2026-04-08 (see `_progress.md`).
 
 | Decision | Choice | Rationale |
 |---|---|---|
-| Runtime dep floor | Python 3.9+ stdlib + `markdown` | Matches oldest common macOS system Python |
+| Runtime dep floor | Python 3.12+ stdlib + `markdown` | Matches oldest common macOS system Python |
 | Optional deps | `graphifyy` (advanced graph layout) | Detected, not required. PDF ingestion was removed in the simplification sweep. |
 | No-network by default | True | Privacy + offline-first |
 | Binding default | `127.0.0.1` only | Privacy-first — user must opt-in to LAN |

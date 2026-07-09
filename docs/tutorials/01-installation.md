@@ -7,7 +7,7 @@ docs_shell: true
 # 01 · Installation
 
 **Time:** 5 minutes
-**You'll need:** Python 3.9+, `git`, and at least one AI-coding agent already installed with session history on disk.
+**You'll need:** Python 3.12+, `git`, and at least one AI-coding agent already installed with session history on disk.
 **Result:** A working `llmwiki` CLI on your PATH (or runnable via `python3 -m llmwiki`).
 
 ---

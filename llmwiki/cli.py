@@ -6,6 +6,7 @@ Usage:
 Subcommands:
     init              Scaffold raw/, wiki/, site/ directories
     sync              Convert new .jsonl sessions to markdown
+    add               Add documents: URL, file, or folder → raw/docs/ + synthesize + build
     build             Compile static HTML site from raw/ + wiki/
     serve             Start local HTTP server
     adapters          List available session-store adapters
@@ -48,10 +49,6 @@ from llmwiki.sync.status import (  # noqa: F401
     cmd_sync_status,
     resolve_key_exists as _resolve_key_exists,
 )
-from llmwiki.synth.cli_helpers import (  # noqa: F401
-    complete as _synthesize_complete,
-    list_pending as _synthesize_list_pending,
-)
 
 
 def cmd_version(args: argparse.Namespace) -> int:
@@ -65,7 +62,17 @@ def cmd_all(args: argparse.Namespace) -> int:
     Thin shim — the implementation lives in ``llmwiki.pipeline`` (#691).
     """
     _apply_default_vault(args)
-    return _run_pipeline(args)
+    from llmwiki.pipeline_lock import pipeline_lock
+    lock_root = REPO_ROOT
+    if getattr(args, "vault", None):
+        from llmwiki.vault import resolve_vault
+        try:
+            lock_root = resolve_vault(args.vault).root
+        except (FileNotFoundError, NotADirectoryError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+    with pipeline_lock(lock_root):
+        return _run_pipeline(args)
 
 
 def cmd_init(args: argparse.Namespace) -> int:
@@ -135,7 +142,8 @@ def cmd_sync(args: argparse.Namespace) -> int:
 
     _apply_default_vault(args)
 
-    from llmwiki.convert import convert_all, DEFAULT_OUT_DIR, DEFAULT_STATE_FILE
+    from llmwiki.convert import convert_all, DEFAULT_OUT_DIR
+    from llmwiki.state_store import resolve_state_file
 
     # v1.2 (#54): vault-overlay mode — resolve the vault early so bad
     # paths fail before we spend time converting sessions.
@@ -146,7 +154,7 @@ def cmd_sync(args: argparse.Namespace) -> int:
     # "507 converted" but the vault directory was empty.
     vault_path = getattr(args, "vault", None)
     out_dir = DEFAULT_OUT_DIR
-    state_file = DEFAULT_STATE_FILE
+    state_file = resolve_state_file()
     if vault_path:
         from llmwiki.vault import describe_vault, resolve_vault
         try:
@@ -158,58 +166,68 @@ def cmd_sync(args: argparse.Namespace) -> int:
         if args.allow_overwrite:
             print("  --allow-overwrite: existing vault pages may be clobbered")
         # Route writes into the vault so a vault-mode sync actually
-        # populates the vault. State file co-located with the vault so
-        # two different vaults don't share idempotency state (same
-        # principle as #420 for synth state).
+        # populates the vault. State file is configured at the CLI border
+        # via ``apply_default_vault`` → ``configure_state_file``.
         out_dir = vault.root / "raw" / "sessions"
-        state_file = vault.root / ".llmwiki-state.json"
 
-    rc = convert_all(
-        adapters=args.adapter,
-        out_dir=out_dir,
-        state_file=state_file,
-        since=args.since,
-        project=args.project,
-        include_current=args.include_current,
-        force=args.force,
-        fail_on_errors=getattr(args, "fail_on_errors", False),
-    )
+    # PR #19 field report: two llmwiki processes on one vault corrupt each
+    # other's site resets — serialize the mutating pipeline on a vault lock.
+    from llmwiki.pipeline_lock import pipeline_lock
+    lock_root = vault.root if vault_path else REPO_ROOT
+    with pipeline_lock(lock_root):
+        rc = convert_all(
+            adapters=args.adapter,
+            out_dir=out_dir,
+            state_file=state_file,
+            since=args.since,
+            project=args.project,
+            include_current=args.include_current,
+            force=args.force,
+            fail_on_errors=getattr(args, "fail_on_errors", False),
+        )
+        from llmwiki.synth.pipeline import refresh_synth_pending
+        refresh_synth_pending(
+            raw_dir=(vault.root / "raw" / "sessions") if vault_path else None,
+            docs_dir=(vault.root / "raw" / "docs") if vault_path else None,
+            wiki_sources_dir=(vault.root / "wiki" / "sources") if vault_path else None,
+            state_file=state_file,
+        )
 
-    # v1.0 (#157): auto-build and auto-lint after sync.
-    # --no-build and --no-lint let users opt out.
-    # #470: when --vault was given, point the auto-build at the vault's
-    # site/ tree too — otherwise the build silently writes to the
-    # repo's site/ and the user's vault stays empty.
-    if rc == 0:
-        schedule = _load_schedule_config()
-        site_root = (vault.root / "site") if vault_path else (REPO_ROOT / "site")
-        if args.auto_build and _should_run_after_sync(schedule.get("build", "on-sync")):
-            print("  auto-build: regenerating site/...")
-            from llmwiki.build import build_site, RAW_SESSIONS, RAW_DIR
-            # #54 vault-overlay: read the freshly-synced sessions from the
-            # vault, not the repo's empty raw/ (which makes auto-build fail
-            # with "RAW_SESSIONS does not exist" right after a vault sync).
-            raw_sessions = (vault.root / "raw" / "sessions") if vault_path else RAW_SESSIONS
-            raw_dir = (vault.root / "raw") if vault_path else RAW_DIR
-            # #54: graph the vault's wiki/ (not the repo's demo wiki).
-            wiki_dir = (vault.root / "wiki") if vault_path else (REPO_ROOT / "wiki")
-            # #414: sync has explicit user opt-in to mutate wiki/, so it's
-            # the right place to seed project stubs.
-            build_site(out_dir=site_root, seed_project_stubs=True,
-                       raw_sessions=raw_sessions, raw_dir=raw_dir,
-                       wiki_dir=wiki_dir)
-        if args.auto_lint and _should_run_after_sync(schedule.get("lint", "manual")):
-            print("  auto-lint: running wiki lint...")
-            from llmwiki.lint import load_pages, run_all, summarize
-            # #470: lint the vault's wiki/, not the repo's, when in
-            # vault-overlay mode.
-            wiki_dir = (vault.root / "wiki") if vault_path else None
-            pages = load_pages(wiki_dir) if wiki_dir else load_pages()
-            issues = run_all(pages)
-            summary = summarize(issues)
-            print(f"  lint: {sum(summary.values())} issues "
-                  f"({summary.get('error', 0)} errors, "
-                  f"{summary.get('warning', 0)} warnings)")
+        # v1.0 (#157): auto-build and auto-lint after sync.
+        # --no-build and --no-lint let users opt out.
+        # #470: when --vault was given, point the auto-build at the vault's
+        # site/ tree too — otherwise the build silently writes to the
+        # repo's site/ and the user's vault stays empty.
+        if rc == 0:
+            schedule = _load_schedule_config()
+            site_root = (vault.root / "site") if vault_path else (REPO_ROOT / "site")
+            if args.auto_build and _should_run_after_sync(schedule.get("build", "on-sync")):
+                print("  auto-build: regenerating site/...")
+                from llmwiki.build import build_site, RAW_SESSIONS, RAW_DIR
+                # #54 vault-overlay: read the freshly-synced sessions from the
+                # vault, not the repo's empty raw/ (which makes auto-build fail
+                # with "RAW_SESSIONS does not exist" right after a vault sync).
+                raw_sessions = (vault.root / "raw" / "sessions") if vault_path else RAW_SESSIONS
+                raw_dir = (vault.root / "raw") if vault_path else RAW_DIR
+                # #54: graph the vault's wiki/ (not the repo's demo wiki).
+                wiki_dir = (vault.root / "wiki") if vault_path else (REPO_ROOT / "wiki")
+                # #414: sync has explicit user opt-in to mutate wiki/, so it's
+                # the right place to seed project stubs.
+                build_site(out_dir=site_root, seed_project_stubs=True,
+                           raw_sessions=raw_sessions, raw_dir=raw_dir,
+                           wiki_dir=wiki_dir)
+            if args.auto_lint and _should_run_after_sync(schedule.get("lint", "manual")):
+                print("  auto-lint: running wiki lint...")
+                from llmwiki.lint import load_pages, run_all, summarize
+                # #470: lint the vault's wiki/, not the repo's, when in
+                # vault-overlay mode.
+                wiki_dir = (vault.root / "wiki") if vault_path else None
+                pages = load_pages(wiki_dir) if wiki_dir else load_pages()
+                issues = run_all(pages)
+                summary = summarize(issues)
+                print(f"  lint: {sum(summary.values())} issues "
+                      f"({summary.get('error', 0)} errors, "
+                      f"{summary.get('warning', 0)} warnings)")
     return rc
 
 
@@ -227,6 +245,7 @@ def cmd_build(args: argparse.Namespace) -> int:
     from llmwiki.build import RAW_SESSIONS, RAW_DIR
     raw_sessions, raw_dir, out_dir = RAW_SESSIONS, RAW_DIR, args.out
     wiki_dir = REPO_ROOT / "wiki"
+    lock_root = REPO_ROOT
     if getattr(args, "vault", None):
         from llmwiki.vault import describe_vault, resolve_vault
         try:
@@ -241,19 +260,22 @@ def cmd_build(args: argparse.Namespace) -> int:
         raw_dir = vault.root / "raw"
         raw_sessions = raw_dir / "sessions"
         wiki_dir = vault.root / "wiki"
+        lock_root = vault.root
         if args.out == REPO_ROOT / "site":
             out_dir = vault.root / "site"
 
-    return build_site(
-        out_dir=out_dir,
-        synthesize=args.synthesize,
-        claude_path=args.claude,
-        search_mode=args.search_mode,
-        seed_project_stubs=getattr(args, "seed_project_stubs", False),
-        raw_sessions=raw_sessions,
-        raw_dir=raw_dir,
-        wiki_dir=wiki_dir,
-    )
+    from llmwiki.pipeline_lock import pipeline_lock
+    with pipeline_lock(lock_root):
+        return build_site(
+            out_dir=out_dir,
+            synthesize=args.synthesize,
+            claude_path=args.claude,
+            search_mode=args.search_mode,
+            seed_project_stubs=getattr(args, "seed_project_stubs", False),
+            raw_sessions=raw_sessions,
+            raw_dir=raw_dir,
+            wiki_dir=wiki_dir,
+        )
 
 
 def cmd_serve(args: argparse.Namespace) -> int:
@@ -496,6 +518,92 @@ def cmd_lint(args: argparse.Namespace) -> int:
 
     if args.fail_on_errors and summary.get("error", 0) > 0:
         return 1
+    _apply_default_vault(args)
+    from llmwiki.state_store import resolve_state_file, update_state
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    update_state(
+        lambda s: (s.setdefault("ops", {}).__setitem__("last_lint_run_at", now) or s),
+        resolve_state_file(),
+    )
+    return 0
+
+
+def cmd_queue(args: argparse.Namespace) -> int:
+    from llmwiki.queue_ops import enqueue_task, queue_status, run_queue
+    from llmwiki.state_store import resolve_state_file, read_state
+
+    _apply_default_vault(args)
+    vault = getattr(args, "vault", None)
+    target = resolve_state_file()
+    if args.queue_action == "status":
+        stat = queue_status(target)
+        state = read_state(target)
+        items = state.get("queue", {}).get("items", [])
+        by_type: dict[str, int] = {}
+        for row in items:
+            if not isinstance(row, dict):
+                continue
+            t = str(row.get("task_type") or "unknown")
+            by_type[t] = by_type.get(t, 0) + 1
+        sync_meta = state.get("sync", {}).get("meta", {})
+        print(
+            f"queue: total={stat['total']} pending={stat['counts'].get('pending',0)} "
+            f"running={stat['counts'].get('running',0)} done={stat['counts'].get('done',0)} "
+            f"error={stat['counts'].get('error',0)}"
+        )
+        print(f"state_file: {target}")
+        if vault:
+            print(f"vault: {vault}")
+        if stat["oldest_pending"]:
+            print(f"oldest_pending: {stat['oldest_pending']}")
+        if isinstance(sync_meta, dict) and sync_meta.get("last_sync"):
+            print(f"last_sync: {sync_meta.get('last_sync')}")
+        synth = state.get("synth", {})
+        if isinstance(synth, dict):
+            print(f"unsynth_total: {int(synth.get('pending_total', 0))}")
+        if by_type:
+            print("by_type:")
+            for name, count in sorted(by_type.items()):
+                print(f"  {name}: {count}")
+        return 0
+    if args.queue_action == "enqueue":
+        payload: dict[str, Any] = {}
+        if args.source:
+            payload["source"] = args.source
+        task = enqueue_task(args.task_type, payload, target)
+        print(f"enqueued {task['id']} ({args.task_type})")
+        return 0
+    if not vault:
+        print("error: queue run requires --vault <path>", file=sys.stderr)
+        return 2
+    summary = run_queue(limit=args.limit, vault=vault, state_file=target)
+    print(f"processed={summary['processed']} errors={len(summary['errors'])}")
+    for err in summary["errors"]:
+        print(f"  ! {err}", file=sys.stderr)
+    return 1 if summary["errors"] else 0
+
+
+def cmd_migrate_state(args: argparse.Namespace) -> int:
+    # One-shot v1.4.0 migrator lives under scripts/ (not the package).
+    import importlib.util
+    script = REPO_ROOT / "scripts" / "migrate_state_v1_4_0.py"
+    spec = importlib.util.spec_from_file_location("migrate_state_v1_4_0", script)
+    if spec is None or spec.loader is None:
+        print(f"error: migration script missing: {script}", file=sys.stderr)
+        return 2
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    report = mod.run_migration(args.state_file)
+    print(f"state file: {report['state_file']}")
+    if report["migrated"]:
+        print("migrated:")
+        for p in report["migrated"]:
+            print(f"  - {p}")
+    if report["orphan_cleanup_suggestions"]:
+        print("cleanup suggestions:")
+        for cmd in report["orphan_cleanup_suggestions"]:
+            print(f"  {cmd}")
     return 0
 
 
@@ -515,13 +623,7 @@ def cmd_synthesize(args: argparse.Namespace) -> int:
     config: dict = _load_sessions_config()
 
     if args.estimate:
-        return _synthesize_estimate()
-
-    # #316: agent-delegate operations that don't need a backend.
-    if args.list_pending:
-        return _synthesize_list_pending()
-    if args.complete:
-        return _synthesize_complete(args)
+        return _synthesize_estimate(args)
 
     backend = resolve_backend(config)
     print(f"Backend: {backend.name}")
@@ -539,9 +641,9 @@ def cmd_synthesize(args: argparse.Namespace) -> int:
         )
         return 1
 
-    # #420: vault-overlay mode isolates raw/wiki/state to the vault root.
+    # #420: vault-overlay mode isolates raw/wiki to the vault root.
     vault_path = getattr(args, "vault", None)
-    raw_dir = wiki_sources_dir = state_file = None
+    raw_dir = wiki_sources_dir = None
     if vault_path:
         from llmwiki.vault import resolve_vault
         try:
@@ -555,14 +657,12 @@ def cmd_synthesize(args: argparse.Namespace) -> int:
         # the missed copy. Caught by the multi-agent code review.
         raw_dir = vault.root / "raw" / "sessions"
         wiki_sources_dir = vault.root / "wiki" / "sources"
-        state_file = vault.root / ".llmwiki-synth-state.json"
 
     summary = synthesize_new_sessions(
         backend=backend,
         force=args.force,
         raw_dir=raw_dir,
         wiki_sources_dir=wiki_sources_dir,
-        state_file=state_file,
     )
     print(
         f"Scanned {summary['total_scanned']}, new {summary['new_files']}, "
@@ -575,12 +675,205 @@ def cmd_synthesize(args: argparse.Namespace) -> int:
     return 0
 
 
-# ─── #316 agent-delegate CLI helpers ─────────────────────────────────
-# _synthesize_list_pending + _synthesize_complete moved to
-# llmwiki/synth/cli_helpers.py and re-exported at top of file (#691).
+def cmd_add(args: argparse.Namespace) -> int:
+    """Add documents to the wiki: convert to Markdown, land under
+    raw/docs/ (kbbuilder-compatible layout), then batch synthesize +
+    rebuild the site (issue #16).
+
+    Sources may be URLs, files, or folders, freely mixed. Conversion
+    and writing happen per source; synthesis and build run ONCE for
+    the whole batch. --no-synthesize / --no-build opt out.
+    """
+    _apply_default_vault(args)
+
+    if args.title and len(args.sources) > 1:
+        print("error: --title needs a single source (got "
+              f"{len(args.sources)})", file=sys.stderr)
+        return 2
+
+    docs_dir = REPO_ROOT / "raw" / "docs"
+    vault_root = None
+    if getattr(args, "vault", None):
+        from llmwiki.vault import resolve_vault
+        try:
+            vault = resolve_vault(args.vault)
+        except (FileNotFoundError, NotADirectoryError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        vault_root = vault.root
+        docs_dir = vault_root / "raw" / "docs"
+
+    render = "auto"
+    if args.render:
+        render = "force"
+    elif args.no_render:
+        render = "never"
+
+    # PR #19 field report: a concurrent sync/build on the same vault raced
+    # this command's post-add build and died mid-site-reset. Serialize all
+    # mutating pipeline entry points on the vault lock; dry-run writes
+    # nothing, so it stays lock-free.
+    from contextlib import ExitStack
+
+    from llmwiki.pipeline_lock import pipeline_lock
+
+    with ExitStack() as stack:
+        if not args.dry_run:
+            stack.enter_context(pipeline_lock(vault_root or REPO_ROOT))
+        return _cmd_add_locked(args, docs_dir, vault_root, render)
 
 
-def _synthesize_estimate() -> int:
+def _cmd_add_locked(args: argparse.Namespace, docs_dir: Path,
+                    vault_root: Path | None, render: str) -> int:
+    """Body of cmd_add that runs under the pipeline lock (except dry-run)."""
+    from llmwiki.add_doc import add_sources
+    from llmwiki.state_store import resolve_state_file, update_state
+    from datetime import datetime, timezone
+
+    state_target = resolve_state_file()
+    now_ts = datetime.now(timezone.utc)
+    task_id = f"add-sync-{int(now_ts.timestamp() * 1000)}"
+
+    def _track(status: str, *, result_msg: str = "", error_msg: str = "") -> None:
+        stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        def _mut(s: dict[str, Any]) -> dict[str, Any]:
+            items = s.setdefault("queue", {}).setdefault("items", [])
+            row = None
+            for it in items:
+                if isinstance(it, dict) and it.get("id") == task_id:
+                    row = it
+                    break
+            if row is None:
+                row = {
+                    "id": task_id,
+                    "task_type": "add_doc_sync",
+                    "payload": {"sources": list(args.sources)},
+                    "created_at": stamp,
+                    "attempts": 1,
+                }
+                items.append(row)
+            row["status"] = status
+            row["updated_at"] = stamp
+            if result_msg:
+                row["result"] = result_msg
+            if error_msg:
+                row["last_error"] = error_msg
+            s.setdefault("ops", {})["last_queue_run_at"] = stamp
+            return s
+        update_state(_mut, state_target)
+
+    result = add_sources(
+        list(args.sources), docs_dir,
+        title=args.title, project=args.project, tags=tuple(args.tag or ()),
+        note=args.note, render=render, dry_run=args.dry_run,
+    )
+
+    for title in result["titles"]:
+        print(f"  + {title}")
+    for w in result["warnings"]:
+        print(f"  ~ {w}")
+    for e in result["errors"]:
+        print(f"  ! {e}", file=sys.stderr)
+    if args.dry_run:
+        return 2 if result["errors"] else 0
+    print(f"  wrote {len(result['written'])} file(s) under {docs_dir}")
+    _track("running", result_msg=f"wrote {len(result['written'])} file(s)")
+
+    failed = bool(result["errors"])
+    if not result["written"]:
+        return 2 if failed else 0
+
+    # Post-steps run once for the whole batch. `add` is synchronous by
+    # contract: the docs must come out the other end as real wiki pages
+    # in THIS invocation, using the one backend configured for the whole
+    # repository (config.json `synthesis.backend`). When synthesis can't
+    # deliver, the just-added raw docs are ROLLED BACK — a raw doc with
+    # no wiki page is a half-added state nothing else on the machine may
+    # ever repair. --no-synthesize is the only way to opt out.
+    if not args.no_synthesize:
+        from llmwiki.add_doc import expected_source_page, remove_raw_docs
+        from llmwiki.config_schedule import _load_sessions_config
+        from llmwiki.synth.pipeline import resolve_backend, synthesize_new_sessions
+        backend = resolve_backend(_load_sessions_config())
+        raw_dir = wiki_sources_dir = None
+        sources_dir = REPO_ROOT / "wiki" / "sources"
+        if vault_root:
+            raw_dir = vault_root / "raw" / "sessions"
+            wiki_sources_dir = vault_root / "wiki" / "sources"
+            sources_dir = wiki_sources_dir
+        if not backend.is_available():
+            removed = remove_raw_docs(result["written"])
+            print(f"  ! backend {backend.name} is not available — cannot "
+                  f"synthesize. Rolled back {len(removed)} just-added raw "
+                  "doc file(s). Set synthesis.backend in config.json "
+                  "(claude / ollama / dummy), or re-run with --no-synthesize.",
+                  file=sys.stderr)
+            return 2
+        print(f"Synthesizing with backend: {backend.name}")
+        # Only synthesize the docs this `add` just wrote — never drain
+        # the whole unsynthesized backlog from an add invocation.
+        summary = synthesize_new_sessions(
+            backend=backend, raw_dir=raw_dir,
+            wiki_sources_dir=wiki_sources_dir,
+            only_paths=set(result["written"]),
+        )
+        print(f"  synthesized {summary['synthesized']}, skipped {summary['skipped']}")
+        for err in summary["errors"]:
+            print(f"  ! {err}", file=sys.stderr)
+        # No half-added docs: every raw doc this run wrote must now have
+        # its wiki page. (Pipeline errors about OTHER pending sources are
+        # reported above but don't fail the add or touch its docs.)
+        missing = [p for p in result["written"]
+                   if not expected_source_page(p, sources_dir).exists()]
+        if missing:
+            removed = remove_raw_docs(missing)
+            print(f"  ! rolled back {len(removed)} raw doc file(s) whose "
+                  "synthesis produced no wiki page", file=sys.stderr)
+            failed = True
+            _track("error", error_msg=f"rolled back {len(removed)} unsynthesized raw doc file(s)")
+
+    if not args.no_build:
+        from llmwiki.build import RAW_DIR, RAW_SESSIONS, build_site
+        raw_sessions, raw_dir_b = RAW_SESSIONS, RAW_DIR
+        wiki_dir = REPO_ROOT / "wiki"
+        out_dir = REPO_ROOT / "site"
+        if vault_root:
+            raw_dir_b = vault_root / "raw"
+            raw_sessions = raw_dir_b / "sessions"
+            wiki_dir = vault_root / "wiki"
+            out_dir = vault_root / "site"
+        code = build_site(out_dir=out_dir, raw_sessions=raw_sessions,
+                          raw_dir=raw_dir_b, wiki_dir=wiki_dir)
+        if code:
+            failed = True
+
+    # Observability: same grep-parseable format as sync/synthesize.
+    # Rolled-back docs are not logged — they are no longer in the wiki.
+    from datetime import date as _date
+    log_path = (vault_root or REPO_ROOT) / "wiki" / "log.md"
+    if log_path.parent.is_dir():
+        day = _date.today().isoformat()
+        with log_path.open("a", encoding="utf-8") as fh:
+            for rec in result["docs"]:
+                if any(p.exists() for p in rec["paths"]):
+                    fh.write(f"\n## [{day}] add | {rec['title']}\n")
+
+    from llmwiki.synth.pipeline import refresh_synth_pending
+    refresh_synth_pending(
+        raw_dir=(vault_root / "raw" / "sessions") if vault_root else None,
+        docs_dir=(vault_root / "raw" / "docs") if vault_root else None,
+        wiki_sources_dir=(vault_root / "wiki" / "sources") if vault_root else None,
+        state_file=state_target,
+    )
+
+    if failed:
+        _track("error", error_msg="add command finished with errors")
+    else:
+        _track("done", result_msg=f"added {len(result['written'])} file(s)")
+    return 2 if failed else 0
+
+
+def _synthesize_estimate(args: argparse.Namespace | None = None) -> int:
     """Print the G-07 incremental-vs-full-force cost report (v1.1.0 · #50 · #293).
 
     Transparency over one-liner: reads the state file so the user sees
@@ -588,27 +881,149 @@ def _synthesize_estimate() -> int:
     a single number without saying whether it covered the whole corpus
     or just the delta.
     """
-    report = synthesize_estimate_report()
+    args = args or argparse.Namespace(vault=None)
+    _apply_default_vault(args)
+    raw_sessions = None
+    state_keys = None
+    prefix_tokens = None
+    synthesized_source_keys = None
+    wiki_sources_dir = None
+    docs_root = None
+    execution_model = ""
+    pricing_model = None
+    pricing_fallback_msg = ""
+    from llmwiki.cache import MODEL_PRICING, resolve_pricing_model
+    from llmwiki.config_schedule import _load_sessions_config
+    loaded_cfg = _load_sessions_config()
+    synth_cfg = (loaded_cfg.get("synthesis", {}) if isinstance(loaded_cfg, dict) else {})
+    pricing_table = {k: dict(v) for k, v in MODEL_PRICING.items()}
+    if isinstance(synth_cfg, dict):
+        execution_model = str(synth_cfg.get("claude_model", "")).strip()
+        # Optional user override for rate-card drift:
+        # synthesis.pricing = {"input": ..., "cached_input": ..., "cache_write": ..., "output": ...}
+        pr = synth_cfg.get("pricing")
+        if execution_model and isinstance(pr, dict):
+            need = {"input", "cached_input", "cache_write", "output"}
+            if need.issubset(set(pr.keys())):
+                try:
+                    pricing_table[execution_model] = {
+                        "input": float(pr["input"]),
+                        "cached_input": float(pr["cached_input"]),
+                        "cache_write": float(pr["cache_write"]),
+                        "output": float(pr["output"]),
+                    }
+                except (TypeError, ValueError):
+                    pass
+        if execution_model:
+            try:
+                pricing_model = resolve_pricing_model(execution_model, pricing_table)
+            except ValueError:
+                pricing_fallback_msg = (
+                    f"pricing model fallback: execution model '{execution_model}' has no rate card entry; "
+                    "using default pricing model."
+                )
+    from llmwiki.cache import estimate_tokens
+    from llmwiki.state_store import resolve_state_file, update_state
+    from llmwiki.synth.pipeline import _discover_raw_sessions, _load_state, discover_synth_source_keys
+
+    state_target = resolve_state_file()
+    vault_root = state_target.parent
+    raw_root = vault_root / "raw" / "sessions"
+    docs_root = vault_root / "raw" / "docs"
+    wiki_sources_dir = vault_root / "wiki" / "sources"
+    raw_sessions = _discover_raw_sessions(raw_root)
+    state_keys = set(_load_state(state_target).keys())
+    synthesized_source_keys = discover_synth_source_keys(wiki_sources_dir)
+    prefix_parts: list[str] = []
+    for rel in ("CLAUDE.md", "wiki/index.md", "wiki/overview.md"):
+        p = vault_root / rel
+        if p.is_file():
+            prefix_parts.append(p.read_text(encoding="utf-8"))
+    prefix_tokens = estimate_tokens("\n".join(prefix_parts))
+    report = synthesize_estimate_report(
+        raw_sessions=raw_sessions,
+        state_keys=state_keys,
+        prefix_tokens=prefix_tokens,
+        model=pricing_model,
+        pricing_table=pricing_table,
+        synthesized_source_keys=synthesized_source_keys,
+        wiki_sources_dir=wiki_sources_dir,
+        raw_root=raw_root,
+        docs_root=docs_root,
+    )
+    from datetime import datetime, timezone
+    pending_rows = [
+        {
+            "rel": str(it.get("rel", "")),
+            "source": str(it.get("source_file", "")),
+            "project": str(it.get("project", "unknown")),
+            "is_doc": bool(it.get("is_doc", False)),
+            "mtime": str(it.get("mtime", "")),
+        }
+        for it in report.get("unsynth_items", [])
+        if str(it.get("rel", "")).strip()
+    ]
+    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    def _mut(s: dict[str, Any]) -> dict[str, Any]:
+        synth = s.setdefault("synth", {})
+        synth["pending"] = pending_rows
+        synth["pending_total"] = len(pending_rows)
+        synth["pending_updated_at"] = stamp
+        synth["estimate"] = {
+            "updated_at": stamp,
+            "execution_model": execution_model or "",
+            "pricing_model": str(report.get("model", "")),
+            "prefix_tokens": int(report.get("prefix_tokens", 0) or 0),
+            "corpus_total": int(report.get("corpus", 0) or 0),
+            "corpus_sessions": int(report.get("corpus_sessions", 0) or 0),
+            "corpus_docs": int(report.get("corpus_docs", 0) or 0),
+            "new_total": int(report.get("new", 0) or 0),
+            "new_sessions": int(report.get("new_sessions", 0) or 0),
+            "new_docs": int(report.get("new_docs", 0) or 0),
+            "incremental_usd": float(report.get("incremental_usd", 0.0) or 0.0),
+            "full_force_usd": float(report.get("full_force_usd", 0.0) or 0.0),
+            "warnings": [str(w) for w in report.get("warnings", []) if str(w).strip()],
+        }
+        return s
+
+    update_state(_mut, state_target)
 
     for w in report["warnings"]:
         print(f"warning: {w}")
+    print("warning: cost estimate uses a local static rate card and token heuristic; real provider billing may deviate.")
+    if pricing_fallback_msg:
+        print(f"warning: {pricing_fallback_msg}")
 
-    print(f"Corpus:                {report['corpus']:>6} sessions in raw/sessions/")
+    print(f"Corpus:                {report['corpus']:>6} sources (sessions + docs)")
     print(f"Already synthesized:   {report['synthesized']:>6} pages in wiki/sources/")
     print(f"New since last run:    {report['new']:>6}")
+    print(
+        f"Breakdown: sessions {report.get('new_sessions', 0)} new / "
+        f"{report.get('corpus_sessions', 0)} total, docs {report.get('new_docs', 0)} new / "
+        f"{report.get('corpus_docs', 0)} total"
+    )
     print()
-    print(f"Prefix: {report['prefix_tokens']:,} tok  Model: {report['model']}")
+    if execution_model:
+        print(
+            f"Prefix: {report['prefix_tokens']:,} tok  "
+            f"Execution model: {execution_model}  Pricing model: {report['model']}"
+        )
+    else:
+        print(f"Prefix: {report['prefix_tokens']:,} tok  Pricing model: {report['model']}")
     print()
     if report["new"] == 0:
         print(f"Incremental sync:  $0.0000  (nothing new — this is a no-op)")
     else:
         print(
             f"Incremental sync:  ${report['incremental_usd']:.4f}  "
-            f"(synthesize the {report['new']} new session(s))"
+            f"(synthesize the {report['new']} new source(s): "
+            f"{report.get('new_sessions', 0)} session(s), "
+            f"{report.get('new_docs', 0)} doc source(s))"
         )
     print(
         f"Full re-synth:     ${report['full_force_usd']:.4f}  "
-        f"(--force — {report['corpus']} session(s), 1 cache write + {max(report['corpus'] - 1, 0)} hits)"
+        f"(--force — {report['corpus']} source(s), 1 cache write + {max(report['corpus'] - 1, 0)} hits)"
     )
     return 0
 
@@ -705,6 +1120,9 @@ def _add_vault_arg(parser: argparse.ArgumentParser, *, role: str) -> None:
             "all": "(#383) With --with-synth: run synthesize against the "
                    "vault's raw/ + wiki/sources/ (same semantics as "
                    "`llmwiki synthesize --vault`).",
+            "add": "(#16) Vault-overlay mode: write the converted document "
+                   "under the vault's raw/docs/ and run synthesize/build "
+                   "against the vault.",
         }[role],
     )
 
@@ -884,7 +1302,21 @@ def build_parser() -> argparse.ArgumentParser:
     lint.add_argument("--json", action="store_true", help="JSON output")
     lint.add_argument("--fail-on-errors", action="store_true",
                       help="Exit non-zero if any error-severity issues found")
+    _add_vault_arg(lint, role="synthesize")
     lint.set_defaults(func=cmd_lint)
+
+    queue_p = sub.add_parser("queue", help="Manage unified llmwiki queue")
+    queue_p.add_argument("queue_action", nargs="?", default="status", choices=["status", "run", "enqueue"])
+    queue_p.add_argument("--limit", type=int, default=20, help="Max tasks to process in one run")
+    queue_p.add_argument("--task-type", default="add_doc", choices=["add_doc", "session_sync", "synthesize", "build"])
+    queue_p.add_argument("--source", default="", help="Source value for add_doc enqueue")
+    queue_p.add_argument("--state-file", type=Path, default=None, help="Override state file path")
+    _add_vault_arg(queue_p, role="synthesize")
+    queue_p.set_defaults(func=cmd_queue)
+
+    migrate = sub.add_parser("migrate-state", help="One-time migration into unified state")
+    migrate.add_argument("--state-file", type=Path, default=None, help="Target unified state file")
+    migrate.set_defaults(func=cmd_migrate_state)
 
     # candidates (v1.1, #51) — approval workflow
     cand = sub.add_parser(
@@ -918,7 +1350,7 @@ def build_parser() -> argparse.ArgumentParser:
         "synthesize",
         help="Synthesize wiki source pages from raw sessions via LLM backend",
     )
-    # #arch-h7 (#610): the four "what should this invocation do?" flags
+    # #arch-h7 (#610): mutually-exclusive synth mode flags
     # used to be independently set-able. argparse silently honoured the
     # first one in `cmd_synthesize`'s if/elif chain, so e.g.
     # `synthesize --check --estimate` ran --check and silently dropped
@@ -933,16 +1365,6 @@ def build_parser() -> argparse.ArgumentParser:
         "--estimate", action="store_true",
         help="Print cached-vs-fresh token + dollar estimate without calling a backend (#50)",
     )
-    # #316 — agent-delegate backend helpers (mutually-exclusive with the
-    # default synthesize-all flow + with --check / --estimate above).
-    syn_mode.add_argument(
-        "--list-pending", action="store_true",
-        help="List pending prompts awaiting agent synthesis (agent-delegate backend, #316)",
-    )
-    syn_mode.add_argument(
-        "--complete", metavar="UUID", default=None,
-        help="Complete a pending synthesis: read body from --body or stdin, rewrite --page in place (#316)",
-    )
     # --force is orthogonal (modifies the default re-synthesize-all flow)
     # and stays outside the exclusion group so callers can pass
     # `synthesize --force` for a forced full re-run.
@@ -950,16 +1372,37 @@ def build_parser() -> argparse.ArgumentParser:
         "--force", action="store_true",
         help="Ignore state file, re-synthesize all sessions",
     )
-    syn.add_argument(
-        "--page", metavar="PATH", default=None,
-        help="Target wiki source page for --complete (path relative to repo root or absolute)",
-    )
-    syn.add_argument(
-        "--body", metavar="PATH", default=None,
-        help="Read synthesized body from this file for --complete (default: stdin)",
-    )
     _add_vault_arg(syn, role="synthesize")
     syn.set_defaults(func=cmd_synthesize)
+
+    # add — ingest a document into the wiki (#16)
+    add_p = sub.add_parser(
+        "add",
+        help="Add documents to the wiki: URL, file, or folder → raw/docs/ + synthesize + build (#16)",
+    )
+    add_p.add_argument("sources", nargs="+", metavar="SOURCE",
+                       help="URL (http/https), file, or folder. Repeatable.")
+    add_p.add_argument("--title", default=None,
+                       help="Override title derivation (single source only)")
+    add_p.add_argument("--project", default=None,
+                       help="Group under raw/docs/<PROJECT>/ instead of the doc's own slug")
+    add_p.add_argument("--tag", action="append", default=None, metavar="TAG",
+                       help="Extra frontmatter tag (repeatable)")
+    add_p.add_argument("--note", default=None,
+                       help="Blockquote note prepended to the document body")
+    add_p.add_argument("--no-synthesize", action="store_true",
+                       help="Skip the post-add synthesis pass")
+    add_p.add_argument("--no-build", action="store_true",
+                       help="Skip the post-add site rebuild")
+    render_group = add_p.add_mutually_exclusive_group()
+    render_group.add_argument("--render", action="store_true",
+                              help="Force the headless-browser layer for URLs (needs playwright)")
+    render_group.add_argument("--no-render", action="store_true",
+                              help="Never use the headless-browser layer")
+    add_p.add_argument("--dry-run", action="store_true",
+                       help="Convert and report, write nothing, run nothing")
+    _add_vault_arg(add_p, role="add")
+    add_p.set_defaults(func=cmd_add)
 
     # consolidate-topics — one-time LLM dedup + description pass (#54)
     cons = sub.add_parser(
@@ -1038,6 +1481,12 @@ def main(argv: list[str] | None = None) -> int:
         parser.print_help()
         return 0
     return args.func(args)
+
+
+def main_add(argv: list[str] | None = None) -> int:
+    """Console entry for `llm-wiki-add` — `llmwiki add` with less typing."""
+    import sys as _sys
+    return main(["add", *(_sys.argv[1:] if argv is None else argv)])
 
 
 if __name__ == "__main__":

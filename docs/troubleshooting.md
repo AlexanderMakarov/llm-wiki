@@ -166,7 +166,7 @@ The ignore file must be at the repo root as `.llmwikiignore`.
 
 **Cause:** Re-converting all sessions on every run.
 
-**Fix:** The converter tracks state in `.llmwiki-state.json`. If this file is missing or corrupted, it reconverts everything. Normal behavior is to skip unchanged files (fast no-op). If you used `--force`, the next run without `--force` will be fast again.
+**Fix:** The converter tracks state in `llmwiki-state.json` (at the vault root when `vault.default_path` / `--vault` is set). If this file is missing or corrupted, it reconverts everything. Normal behavior is to skip unchanged files (fast no-op). If you used `--force`, the next run without `--force` will be fast again.
 
 For large session stores (1000+ sessions), the initial sync can take a few minutes. Subsequent syncs only process new or modified files.
 

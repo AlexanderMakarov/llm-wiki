@@ -149,7 +149,6 @@ def _patch(monkeypatch, home, state):
     store = home / ".claude" / "projects"
     monkeypatch.setattr(ClaudeCodeAdapter, "session_store_path", store, raising=False)
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
-    monkeypatch.setattr(c, "DEFAULT_STATE_FILE", state)
     monkeypatch.setattr(c, "REPO_ROOT", home.parent / "repo")
 
 
@@ -263,7 +262,7 @@ def test_filtered_session_persists_mtime(tmp_path, monkeypatch):
     c.convert_all(adapters=["claude_code"], out_dir=out_dir, state_file=state,
                   config_file=tmp_path / "nonexistent.json", include_current=True)
     saved = json.loads(state.read_text(encoding="utf-8"))
-    keys = [k for k in saved if not k.startswith("_")]
+    keys = list(saved.get("sync", {}).get("files", {}).keys())
     assert any(k.endswith("headless.jsonl") for k in keys), keys
 
 

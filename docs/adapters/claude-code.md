@@ -98,7 +98,7 @@ raw/sessions/<project>/<date>-<parent-slug>-subagent-<agent-id-8>.md
 
 ```bash
 python3 -m llmwiki adapters      # should list claude_code as available
-python3 -m llmwiki sync --dry-run --project ai-newsletter
+python3 -m llmwiki sync --project ai-newsletter
 ```
 
 ## Troubleshooting

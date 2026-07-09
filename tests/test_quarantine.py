@@ -138,9 +138,9 @@ def test_save_writes_version_metadata(tmp_path):
     f = tmp_path / "quar.json"
     q.save([], f)
     payload = json.loads(f.read_text(encoding="utf-8"))
-    assert payload["version"] == q.SCHEMA_VERSION
-    assert "updated" in payload
-    assert payload["entries"] == []
+    assert payload["quarantine"]["version"] == q.SCHEMA_VERSION
+    assert "updated" in payload["quarantine"]
+    assert payload["quarantine"]["entries"] == []
 
 
 def test_save_creates_parent_dirs(tmp_path):
@@ -247,8 +247,7 @@ def test_count_by_adapter(tmp_path):
     q.add_entry("a", "/p1", "e", path=f)
     q.add_entry("a", "/p2", "e", path=f)
     q.add_entry("b", "/p3", "e", path=f)
-    with patch.object(q, "DEFAULT_QUARANTINE_FILE", f):
-        counts = q.count_by_adapter(path=f)
+    counts = q.count_by_adapter(path=f)
     assert counts == {"a": 2, "b": 1}
 
 

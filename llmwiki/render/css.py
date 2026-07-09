@@ -423,6 +423,18 @@ kbd { display: inline-block; padding: 2px 6px; font-family: var(--mono); font-si
 .doctree-main .recent-docs-mini li { padding: 5px 0; border-bottom: 1px solid var(--border); }
 .doctree-main .recent-docs-mini li:last-child { border-bottom: none; }
 .doc-article { min-width: 0; }
+.queue-widget { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; box-shadow: var(--shadow-card); }
+.queue-widget-content { margin: 14px 0; }
+.queue-stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-bottom: 12px; }
+.queue-stat { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; background: var(--bg-alt); }
+.queue-stat-label { font-size: 0.74rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.queue-stat-value { font-size: 1.2rem; font-weight: 700; }
+.queue-meta-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 6px 12px; margin-bottom: 10px; font-size: 0.9rem; }
+.queue-type-list { margin: 6px 0 0 18px; }
+.queue-commands-table { width: 100%; border-collapse: collapse; margin: 10px 0 14px; font-size: 0.88rem; }
+.queue-commands-table th, .queue-commands-table td { border: 1px solid var(--border); padding: 8px 10px; vertical-align: top; }
+.queue-commands-table th { background: var(--bg-alt); text-align: left; }
+.queue-copy-btn { white-space: nowrap; }
 @media (max-width: 860px) {
   .doctree-layout { grid-template-columns: 1fr; }
   .doctree-sidebar { position: static; max-height: none; }

@@ -1,16 +1,4 @@
-"""Prompt caching + batch-API scaffolding (v1.1.0 · #50).
-
-Thread-safety
--------------
-**This module is NOT thread-safe.** ``load_batch_state`` /
-``save_batch_state`` read + write a JSON file with no locking;
-concurrent callers can race on the temp-file rename. The pure-functional
-helpers (``make_cached_block``, ``build_messages``, ``estimate_tokens``,
-``estimate_cost``) are reentrant. Batch-state helpers must be called from
-a single thread or under an external lock. Today's only call sites are
-single-process CLI invocations of ``llmwiki synthesize`` so this is fine;
-a future MCP path that queues batches concurrently must serialize via its
-own mutex (#py-l7 / #605).
+"""Prompt caching helpers (v1.1.0 · #50).
 
 Every `/wiki-sync` and `/wiki-ingest` bundles the same stable prefix —
 CLAUDE.md schema, `wiki/index.md`, and `wiki/overview.md` — with every
@@ -19,10 +7,8 @@ prefix is ≈30k tokens per request. sage-wiki reports 50–90% savings by
 marking the prefix as ``cache_control: {type: "ephemeral"}`` so
 Anthropic caches and re-uses it across calls.
 
-This module provides **only the plumbing**: header construction, token
-estimation, batch-state persistence. Actual Anthropic API calls land in
-a follow-up PR (v1.2) once the scaffolding lands and is exercised by
-the existing Ollama / Dummy backends for testing.
+This module provides **only the plumbing**: header construction and token
+estimation. Actual Anthropic API calls land in the synthesizer backend.
 
 Public surface
 --------------
@@ -32,8 +18,6 @@ Public surface
   Anthropic ``messages`` array with ``cache_control`` on the prefix
 - ``estimate_tokens(text)`` — char/4 heuristic (fast, no tokenizer dep)
 - ``estimate_cost(...)`` — dollar estimate using the published rate card
-- ``BatchState`` — pending / completed ``message_batches`` IDs on disk
-- ``load_batch_state`` / ``save_batch_state`` — JSON round-trip helpers
 - ``MODEL_PRICING`` — published USD/MTok rates for the models we ship
 
 Design notes
@@ -43,8 +27,6 @@ Design notes
   re-use this module.
 - **Estimate-first.** ``estimate_cost()`` lets ``llmwiki sync --estimate``
   print a cached-vs-fresh breakdown *before* spending money.
-- **Batch state file.** ``.llmwiki-batch-state.json`` mirrors the shape
-  of ``.llmwiki-synth-state.json``: small, line-oriented, easy to grep.
 - **No implicit cache writes.** Cache-control lives on the block, not
   the request; inserting ``cache_control`` is always opt-in so tests
   can drive pure prefix-vs-suffix logic.
@@ -52,8 +34,8 @@ Design notes
 
 from __future__ import annotations
 
-import json
-from dataclasses import dataclass, field
+import csv
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional, TypedDict
 
@@ -85,41 +67,66 @@ class ModelRates(TypedDict):
     output: float          # model output tokens
 
 
-# Published USD / MTok rates (as of v1.1.0 · 2026-04). Kept inline so
-# nothing requires a network round-trip to estimate cost.
-MODEL_PRICING: dict[str, ModelRates] = {
-    "claude-sonnet-4-6": {
-        "input": 3.00,
-        "cached_input": 0.30,
-        "cache_write": 3.75,
-        "output": 15.00,
-    },
-    "claude-haiku-4": {
-        "input": 0.80,
-        "cached_input": 0.08,
-        "cache_write": 1.00,
-        "output": 4.00,
-    },
-    # #py-m3 (#589): synthesize_overview actually invokes
-    # `claude-haiku-4-5-20251001` (the date-suffixed alias). Without
-    # this entry, cost-estimate code raises `ValueError: unknown model`.
-    # Same rate card as the bare claude-haiku-4 above.
-    "claude-haiku-4-5-20251001": {
-        "input": 0.80,
-        "cached_input": 0.08,
-        "cache_write": 1.00,
-        "output": 4.00,
-    },
-    "claude-opus-4": {
-        "input": 15.00,
-        "cached_input": 1.50,
-        "cache_write": 18.75,
-        "output": 75.00,
-    },
-}
+MODEL_PRICING_CSV = Path(__file__).resolve().parent.parent / "model_pricing.csv"
+MODEL_FAMILY_BY_NAME: dict[str, str] = {}
+MODEL_ALIAS_TO_NAME: dict[str, str] = {}
 
-DEFAULT_MODEL = "claude-sonnet-4-6"
-BATCH_STATE_FILENAME = ".llmwiki-batch-state.json"
+
+def _load_model_pricing() -> dict[str, ModelRates]:
+    """Load pricing rows from CSV (model_name + model_family)."""
+    out: dict[str, ModelRates] = {}
+    if not MODEL_PRICING_CSV.is_file():
+        return out
+    with MODEL_PRICING_CSV.open("r", encoding="utf-8", newline="") as fh:
+        reader = csv.DictReader(fh)
+        for row in reader:
+            model_name = str(row.get("model_name", "")).strip()
+            model_family = str(row.get("model_family", "")).strip()
+            if not model_name or not model_family:
+                continue
+            try:
+                rates: ModelRates = {
+                    "input": float(row["input"]),
+                    "cached_input": float(row["cached_input"]),
+                    "cache_write": float(row["cache_write"]),
+                    "output": float(row["output"]),
+                }
+            except (KeyError, TypeError, ValueError):
+                continue
+            out[model_name] = rates
+            MODEL_FAMILY_BY_NAME[model_name] = model_family
+            aliases = str(row.get("aliases", "")).strip()
+            if aliases:
+                for alias in aliases.split("|"):
+                    a = alias.strip()
+                    if a:
+                        MODEL_ALIAS_TO_NAME[a] = model_name
+    return out
+
+
+def resolve_pricing_model(
+    requested: str,
+    pricing_table: Optional[dict[str, ModelRates]] = None,
+    family_by_name: Optional[dict[str, str]] = None,
+) -> str:
+    """Resolve exact model_name; fallback by model_family newest (desc)."""
+    table = pricing_table or MODEL_PRICING
+    fam_map = family_by_name or MODEL_FAMILY_BY_NAME
+    key = str(requested or "").strip()
+    key = MODEL_ALIAS_TO_NAME.get(key, key)
+    if key in table:
+        return key
+    family_matches = sorted(
+        (name for name, fam in fam_map.items() if fam == key and name in table),
+        reverse=True,
+    )
+    if family_matches:
+        return family_matches[0]
+    raise ValueError(f"unknown model/family {requested!r}")
+
+
+MODEL_PRICING: dict[str, ModelRates] = _load_model_pricing()
+DEFAULT_MODEL = "sonnet"
 
 
 # ─── Cached block / message builders ──────────────────────────────────
@@ -249,7 +256,7 @@ def estimate_cost(
         ``False`` to price the first-write premium.
     """
     if model not in MODEL_PRICING:
-        raise ValueError(f"unknown model {model!r}; see MODEL_PRICING")
+        model = resolve_pricing_model(model)
     if cached_tokens < 0 or fresh_tokens < 0 or output_tokens < 0:
         raise ValueError("token counts must be non-negative")
 
@@ -299,103 +306,3 @@ def warn_prefix_too_small(cached_tokens: int) -> Optional[str]:
     return None
 
 
-# ─── Batch state persistence ──────────────────────────────────────────
-
-
-@dataclass
-class BatchJob:
-    """One Anthropic ``message_batches`` submission in flight."""
-
-    batch_id: str
-    source_slugs: list[str] = field(default_factory=list)
-    submitted_at: str = ""  # ISO-8601
-    status: str = "pending"  # pending | completed | expired | failed
-
-
-@dataclass
-class BatchState:
-    """Persistent state for the batch ingest pipeline.
-
-    Mirrors ``.llmwiki-synth-state.json`` in spirit: small JSON file at
-    the repo root, safe to grep / ``cat`` to see what's in flight.
-    """
-
-    pending: list[BatchJob] = field(default_factory=list)
-    completed: list[BatchJob] = field(default_factory=list)
-
-    def to_json(self) -> dict[str, Any]:
-        return {
-            "pending": [vars(b) for b in self.pending],
-            "completed": [vars(b) for b in self.completed],
-        }
-
-    @classmethod
-    def from_json(cls, data: dict[str, Any]) -> "BatchState":
-        # #py-l4 (#602): wrap the BatchJob(**b) construction so a
-        # corrupt entry (extra/missing keys → TypeError) doesn't leak
-        # past the callers that expect this constructor to either
-        # succeed or return a deterministic fallback. Mirror the
-        # load_batch_state() shape: print a warning, drop the bad
-        # entries, return whatever survived.
-        import sys as _sys
-        def _safe(rows):
-            kept = []
-            for b in rows:
-                try:
-                    kept.append(BatchJob(**b))
-                except TypeError as e:
-                    print(
-                        f"warning: dropping malformed batch entry {b!r}: {e}",
-                        file=_sys.stderr,
-                    )
-            return kept
-        return cls(
-            pending=_safe(data.get("pending", [])),
-            completed=_safe(data.get("completed", [])),
-        )
-
-
-def batch_state_path(repo_root: Path) -> Path:
-    """Return the on-disk path for the batch state file."""
-    return repo_root / BATCH_STATE_FILENAME
-
-
-def load_batch_state(repo_root: Path) -> BatchState:
-    """Load batch state from disk, or an empty state if the file is
-    missing or corrupt (mirrors ``_load_state`` in ``synth/pipeline.py``)."""
-    path = batch_state_path(repo_root)
-    if not path.is_file():
-        return BatchState()
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except ValueError:
-        return BatchState()
-    return BatchState.from_json(data)
-
-
-def save_batch_state(repo_root: Path, state: BatchState) -> Path:
-    """Write batch state to disk and return the path."""
-    path = batch_state_path(repo_root)
-    path.write_text(
-        json.dumps(state.to_json(), indent=2, sort_keys=True),
-        encoding="utf-8",
-    )
-    return path
-
-
-def add_pending(state: BatchState, job: BatchJob) -> None:
-    """Append a new pending job (dedup by batch_id)."""
-    if any(b.batch_id == job.batch_id for b in state.pending):
-        return
-    state.pending.append(job)
-
-
-def mark_completed(state: BatchState, batch_id: str, *, status: str = "completed") -> bool:
-    """Move a pending job into the completed list. Returns True if
-    the job was found and moved, False otherwise."""
-    for i, job in enumerate(state.pending):
-        if job.batch_id == batch_id:
-            job.status = status
-            state.completed.append(state.pending.pop(i))
-            return True
-    return False

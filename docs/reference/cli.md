@@ -87,6 +87,13 @@ python3 -m llmwiki sync --force
 | `--auto-lint` / `--no-auto-lint` | Run `lint` after sync (default: on). |
 | `--vault PATH` | Vault-overlay mode — write new pages inside the given Obsidian / Logseq vault instead of `wiki/`. See [`guides/existing-vault.md`](../guides/existing-vault.md). |
 | `--allow-overwrite` | With `--vault`: allow clobbering existing vault pages (default: refuse, append under `## Connections` instead). |
+| `--status` | Show last-sync time + per-adapter counters + quarantine (does not run a sync). |
+| `--recent N` | With `--status`: also show last N sync/synthesize log entries. |
+
+> **Note:** There is no `sync --dry-run`. Use `sync --status` for observability
+> or `add --dry-run` for document-intake previews. State lives in
+> `llmwiki-state.json` (configured once at CLI entry via `--vault` /
+> `vault.default_path`).
 
 ### Expected output (typical)
 
@@ -103,6 +110,37 @@ python3 -m llmwiki sync --force
 - Nightly cron-style sync of one project only:
   `llmwiki sync --project my-project --no-auto-lint --since $(date -v-1d +%Y-%m-%d)`
 - Vault-overlay round-trip: `llmwiki sync --vault "~/Documents/Obsidian Vault"`
+
+---
+
+## `add` — add a document to the wiki (#16)
+
+Converts a URL, file, or folder into a raw Markdown document under `raw/docs/`, then (by default) batch-synthesizes and rebuilds the site once for the whole run. Sources may be freely mixed and repeated.
+
+```bash
+python3 -m llmwiki add https://example.com/some-article
+python3 -m llmwiki add ./notes.pdf ./research-folder/
+python3 -m llmwiki add https://example.com/post --title "Custom Title" --tag research
+python3 -m llmwiki add ./doc.md --project my-project --note "Imported from Slack"
+python3 -m llmwiki add https://example.com/post --dry-run
+```
+
+### Flags
+
+| Flag | What |
+|---|---|
+| `--title TEXT` | Override title derivation (single source only). |
+| `--project NAME` | Group under `raw/docs/<NAME>/` instead of the doc's own slug. |
+| `--tag TAG` | Extra frontmatter tag (repeatable). |
+| `--note TEXT` | Blockquote note prepended to the document body. |
+| `--no-synthesize` | Skip the post-add synthesis pass. |
+| `--no-build` | Skip the post-add site rebuild. |
+| `--render` | Force the headless-browser layer for URLs (needs playwright). |
+| `--no-render` | Never use the headless-browser layer. |
+| `--dry-run` | Convert and report, write nothing, run nothing. |
+| `--vault PATH` | Write under the given vault's `raw/docs/` instead of the repo. |
+
+URL sources go through a layered pipeline (markdown negotiation → extraction → render escalation) before landing as Markdown.
 
 ---
 
@@ -350,10 +388,15 @@ python3 -m llmwiki synthesize                    # real run
 | `--check` | Probe backend availability + exit (0 if reachable). |
 | `--force` | Ignore state, re-synth every source. |
 | `--estimate` | Print cached-vs-fresh token + dollar estimate (#50). |
+| `--vault PATH` | Read/write under the vault root; configures the active `llmwiki-state.json`. |
 
-Backend is picked from `synthesis.backend` in `sessions_config.json`
-(`dummy` by default, `ollama` for local, future `anthropic`). See
-[`reference/prompt-caching.md`](prompt-caching.md).
+Backend is picked from `synthesis.backend` in `config.json` /
+`sessions_config.json` (`dummy` by default, `ollama` for local,
+`claude` for synchronous `claude -p`). See
+[`configuration.md`](../configuration.md#synthesis-backend).
+
+> **Removed in v1.4.0:** `--list-pending` and `--complete` (agent-delegate
+> pending prompts). Use `synthesis.backend: claude` instead.
 
 ### Auto-tagging (#351)
 
@@ -377,6 +420,84 @@ No extra API round-trip — rides the existing synthesis call, so cost
 estimates from `--estimate` are unchanged.  If the backend returns no
 suggested-tags block (dummy backend, malformed output), the page still
 ships with baseline tags.
+
+---
+
+## `queue` — inspect and run unified queue
+
+Manage the unified vault queue in `llmwiki-state.json`.
+
+```bash
+python3 -m llmwiki queue
+python3 -m llmwiki queue enqueue --task-type add_doc --source https://example.com
+python3 -m llmwiki queue run --vault /path/to/vault --limit 20
+```
+
+### Positional
+
+| Value | What |
+|---|---|
+| `status` | Print queue counts, task-type breakdown, state path, and oldest pending timestamp. |
+| `enqueue` | Add one task (`add_doc`, `session_sync`, `synthesize`, `build`). |
+| `run` | Execute pending tasks serially (up to `--limit`). |
+
+### Flags
+
+| Flag | What |
+|---|---|
+| `--task-type {add_doc,session_sync,synthesize,build}` | Task kind for `enqueue`. |
+| `--source TEXT` | Source payload for `add_doc` enqueue. |
+| `--limit N` | Max tasks to process in one `run` call. Default: `20`. |
+| `--vault PATH` | Vault root used for task execution and state lookup. |
+| `--state-file PATH` | Override direct state file path. |
+
+---
+
+## `migrate-state` — one-time legacy state migration (v1.4.0)
+
+Migrates legacy dotfiles (`.llmwiki-state.json`, `.llmwiki-synth-state.json`, `.llmwiki-queue.json`, `.llmwiki-quarantine.json`, `.llmwiki-pending-prompts/`) into the unified `llmwiki-state.json`.
+
+Implementation lives at `scripts/migrate_state_v1_4_0.py`; the CLI is a thin wrapper.
+
+```bash
+python3 scripts/migrate_state_v1_4_0.py
+python3 scripts/migrate_state_v1_4_0.py --state-file /path/to/vault/llmwiki-state.json
+python3 -m llmwiki migrate-state
+python3 -m llmwiki migrate-state --state-file /path/to/vault/llmwiki-state.json
+```
+
+### Flags
+
+| Flag | What |
+|---|---|
+| `--state-file PATH` | Explicit target state file (defaults to configured vault path). |
+
+The command is idempotent and prints cleanup suggestions for migrated legacy files.
+
+---
+
+## `consolidate-topics` — dedupe + describe topics (#54)
+
+One-time LLM pass over the topic list (not the sessions) that merges
+duplicate topic spellings (`LLM-Wiki` / `LLMWiki` / `llm wiki`) into
+one canonical node and writes short descriptions, caching the result
+in `.llmwiki-topics.json` for `llmwiki graph` / `llmwiki build`.
+
+```bash
+python3 -m llmwiki consolidate-topics                # emit the LLM prompt
+python3 -m llmwiki consolidate-topics --complete reply.json
+python3 -m llmwiki consolidate-topics --complete -    # read the reply from stdin
+```
+
+### Flags
+
+| Flag | What |
+|---|---|
+| `--complete PATH` | Ingest the LLM's JSON reply (file path, or `-` for stdin) and write the topic cache. Without this flag, the prompt is printed instead. |
+| `--vault PATH` | Read/write the topic cache inside the given vault instead of the repo. |
+
+Re-run after large ingest batches so near-duplicate topic spellings
+don't fragment the knowledge graph.
 
 ---
 

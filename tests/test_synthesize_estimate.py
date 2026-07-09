@@ -25,11 +25,19 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _run_cli(*args):
+    import os
+    env = os.environ.copy()
+    # Prefer the checkout under test over any other installed llmwiki.
+    env["PYTHONPATH"] = str(REPO_ROOT) + (
+        os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else ""
+    )
     return subprocess.run(
         [sys.executable, "-m", "llmwiki", *args],
         capture_output=True,
         text=True,
         check=False,
+        env=env,
+        cwd=str(REPO_ROOT),
     )
 
 
@@ -150,7 +158,8 @@ def test_custom_model_propagates():
         prefix_tokens=2000,
         model="claude-haiku-4",
     )
-    assert rpt["model"] == "claude-haiku-4"
+    # Alias resolves to canonical CSV model_name.
+    assert rpt["model"] == "haiku-4.5"
 
 
 def test_custom_output_tokens_affects_cost():
@@ -215,8 +224,20 @@ def test_prefix_tokens_auto_computed_from_real_files(tmp_path, monkeypatch):
 # ─── CLI subprocess smoke tests ──────────────────────────────────────────
 
 
-def test_cli_estimate_prints_three_bucket_header():
-    cp = _run_cli("synthesize", "--estimate")
+@pytest.fixture
+def estimate_vault(tmp_path):
+    """Isolated vault so synthesize --estimate never touches a real vault."""
+    vault = tmp_path / "estimate-vault"
+    (vault / "raw" / "sessions").mkdir(parents=True)
+    (vault / "raw" / "docs").mkdir(parents=True)
+    (vault / "wiki" / "sources").mkdir(parents=True)
+    (vault / "CLAUDE.md").write_text("x" * 5000, encoding="utf-8")
+    return vault
+
+
+
+def test_cli_estimate_prints_three_bucket_header(estimate_vault):
+    cp = _run_cli("synthesize", "--estimate", "--vault", str(estimate_vault))
     assert cp.returncode == 0, cp.stderr
     # #387 U4: the "Synthesized (history)" row label was confusing; renamed to
     # "Already synthesized" for plainer English.
@@ -224,42 +245,42 @@ def test_cli_estimate_prints_three_bucket_header():
         assert line in cp.stdout, f"missing `{line}`"
 
 
-def test_cli_estimate_prints_both_cost_rows():
-    cp = _run_cli("synthesize", "--estimate")
+def test_cli_estimate_prints_both_cost_rows(estimate_vault):
+    cp = _run_cli("synthesize", "--estimate", "--vault", str(estimate_vault))
     assert cp.returncode == 0, cp.stderr
     assert "Incremental sync:" in cp.stdout
     assert "Full re-synth:" in cp.stdout
 
 
-def test_cli_estimate_prints_model_and_prefix():
-    cp = _run_cli("synthesize", "--estimate")
+def test_cli_estimate_prints_model_and_prefix(estimate_vault):
+    cp = _run_cli("synthesize", "--estimate", "--vault", str(estimate_vault))
     assert cp.returncode == 0, cp.stderr
     assert "Prefix:" in cp.stdout
-    assert "Model:" in cp.stdout
+    assert "Pricing model:" in cp.stdout or "Execution model:" in cp.stdout
 
 
-def test_cli_estimate_doesnt_hit_network():
+def test_cli_estimate_doesnt_hit_network(estimate_vault):
     """--estimate is a pure-local calculation; no HTTP libs needed."""
     # Run with DNS poisoned (127.0.0.1 only) via env isn't trivial —
     # instead assert that the CLI returns quickly (sub-5s is plenty).
     import time
     t0 = time.monotonic()
-    cp = _run_cli("synthesize", "--estimate")
+    cp = _run_cli("synthesize", "--estimate", "--vault", str(estimate_vault))
     elapsed = time.monotonic() - t0
     assert cp.returncode == 0
     assert elapsed < 30, f"estimate took {elapsed:.1f}s — too slow"
 
 
-def test_cli_estimate_never_prints_negative_dollar():
-    cp = _run_cli("synthesize", "--estimate")
+def test_cli_estimate_never_prints_negative_dollar(estimate_vault):
+    cp = _run_cli("synthesize", "--estimate", "--vault", str(estimate_vault))
     assert cp.returncode == 0
     assert "$-" not in cp.stdout
 
 
-def test_cli_estimate_full_force_not_less_than_incremental():
+def test_cli_estimate_full_force_not_less_than_incremental(estimate_vault):
     """Invariant: re-synthesizing everything can't cost less than just
     the new bucket. Cheap regression guard against formula bugs."""
-    cp = _run_cli("synthesize", "--estimate")
+    cp = _run_cli("synthesize", "--estimate", "--vault", str(estimate_vault))
     assert cp.returncode == 0
     # Parse the two dollar figures out of stdout.
     import re

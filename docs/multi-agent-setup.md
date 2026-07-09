@@ -87,10 +87,10 @@ python3 -m llmwiki sync
 python3 -m llmwiki sync --adapter claude_code codex_cli
 
 # Dry run to preview
-python3 -m llmwiki sync --dry-run
+python3 -m llmwiki sync --status
 ```
 
-The sync is idempotent. State is tracked in `.llmwiki-state.json` by file mtime, so re-running on unchanged files is a fast no-op.
+The sync is idempotent. State is tracked in `llmwiki-state.json` by file mtime, so re-running on unchanged files is a fast no-op.
 
 ## Agent labels in the UI
 

@@ -72,10 +72,12 @@ Reads .jsonl from the agent's session store (via an adapter), filters out noise 
 
 Key properties:
 
-- **Idempotent** — mtime tracked in `.llmwiki-state.json`
+- **Idempotent** — mtime tracked in `<vault>/llmwiki-state.json` (unified queue + sync + synth + quarantine state)
 - **Privacy-first** — username + API keys + tokens + emails redacted by default
 - **Live-session safe** — skips files with a record younger than 60 minutes
 - **Agent-agnostic** — delegates discovery to the adapter registry
+
+**Vault state (v1.4+):** one active `llmwiki-state.json` per process, configured at the CLI border (`apply_default_vault` → `configure_state_file`). Library modules call `resolve_state_file()` — they never re-read `config.json` for the state path. Import-time constants like `DEFAULT_STATE_FILE` were removed so tests and library callers cannot accidentally write into a developer's configured vault.
 
 ### L1 — Wiki
 
@@ -107,6 +109,8 @@ Pages rendered (v0.9 surface):
 - `site/search-index.json` — pre-built client-side search index
 - `site/sources/<project>/<slug>.md` — copies of raw source for download
 - Plus AI-consumable exports: `llms.txt`, `llms-full.txt`, `graph.jsonld`, `sitemap.xml`, `rss.xml`, per-page `.txt` + `.json` siblings
+
+Documents enter `raw/docs/` either via the asynchronous producer queue path or synchronously via `llmwiki add` (`llmwiki/add_doc.py`, #16) — both produce the same dir-per-doc, section-chunked layout.
 
 ### L3 — Viewer (browser JS)
 
@@ -170,7 +174,7 @@ Everything else (record parsing, filtering, redaction, rendering) is shared in `
 
 Owner: `.github/workflows/` + `tests/`
 
-- `ci.yml` — lint + tests + build smoke on every push + PR (Python 3.9 and 3.12 matrix)
+- `ci.yml` — lint + tests + build smoke on every push + PR (Python 3.12 and 3.13 matrix)
 - `gitleaks.yml` — secret scan
 - `pages.yml` — build + deploy to GitHub Pages on tag push (Phase 6.5 Self-Demo)
 - `tests/fixtures/<agent>/` — synthetic fixtures

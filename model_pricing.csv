@@ -1,0 +1,13 @@
+model_name,model_family,aliases,input,cached_input,cache_write,output,source,notes
+fable-5,fable,claude-fable-5,10.0,1.0,12.5,50.0,anthropic-pricing-2026-07,claude.com/pricing
+mythos-5,mythos,,10.0,1.0,12.5,50.0,anthropic-pricing-2026-07,limited availability
+opus-4.8,opus,claude-opus-4|claude-opus-4-8,5.0,0.5,6.25,25.0,anthropic-pricing-2026-07,current
+opus-4.7,opus,claude-opus-4-7,5.0,0.5,6.25,25.0,anthropic-pricing-2026-07,current
+opus-4.6,opus,claude-opus-4-6,5.0,0.5,6.25,25.0,anthropic-pricing-2026-07,current
+opus-4.5,opus,,5.0,0.5,6.25,25.0,anthropic-pricing-2026-07,current
+opus-4.1,opus,,15.0,1.5,18.75,75.0,anthropic-pricing-2026-07,deprecated
+sonnet-5,sonnet,claude-sonnet-5,2.0,0.2,2.5,10.0,anthropic-pricing-2026-07,intro through 2026-08-31
+sonnet-4.6,sonnet,claude-sonnet-4-6,3.0,0.3,3.75,15.0,anthropic-pricing-2026-07,current
+sonnet-4.5,sonnet,claude-sonnet-4-5,3.0,0.3,3.75,15.0,anthropic-pricing-2026-07,current
+haiku-4.5,haiku,claude-haiku-4|claude-haiku-4-5-20251001,1.0,0.1,1.25,5.0,anthropic-pricing-2026-07,current
+haiku-3.5,haiku,,0.8,0.08,1.0,4.0,anthropic-pricing-2026-07,retired in some platforms

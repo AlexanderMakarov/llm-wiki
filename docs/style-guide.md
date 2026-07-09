@@ -123,7 +123,7 @@ a subtle tinted background. No icons, no colored banners.
   ```
   If it's just the command (no output in the same block), drop the `$`:
   ```bash
-  llmwiki sync --dry-run
+  llmwiki sync --status
   ```
 - **Python** fences with `python` (never `py`).
 - **JSON / YAML / TOML** use their own language tag.

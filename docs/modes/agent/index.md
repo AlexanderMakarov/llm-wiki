@@ -9,34 +9,38 @@ docs_shell: true
 # Mode B · Agent
 
 Runs synthesis + query **inside** the Claude Code or Codex CLI session
-that's already open on your machine — no separate API key, no
-incremental cost beyond your existing agent subscription.
+that's already open on your machine — no separate Anthropic API key.
 
-## Status
+## Status (v1.4.0+)
 
-**Shipping in v1.1.0-rc8 (#316).** Every slash command is prompt-
-driven — `/wiki-sync`, `/wiki-ingest`, `/wiki-query`, `/wiki-reflect`,
-`/wiki-update`, `/wiki-lint`.  The new `agent-delegate` synthesize
-backend closes the last remaining gap: `llmwiki synthesize` now writes
-rendered prompts to `.llmwiki-pending-prompts/<uuid>.md` and returns a
-placeholder page with a `<!-- llmwiki-pending: <uuid> -->` sentinel.
-The running agent picks the pending prompts up on the next turn and
-calls `llmwiki synthesize --complete <uuid>` to rewrite the page with
-the actual synthesis.
+Slash commands (`/wiki-sync`, `/wiki-ingest`, `/wiki-query`, `/wiki-reflect`,
+`/wiki-update`, `/wiki-lint`) still drive the agent workflow.
 
-Zero incremental API cost.  Zero bytes of session content leave your
-laptop.  Works when `ANTHROPIC_API_KEY` is unset.
+For **synthesis**, set `synthesis.backend` to **`claude`** (synchronous
+`claude -p` CLI). The old `agent` / agent-delegate backend (pending-prompt
+files + `synthesize --list-pending` / `--complete`) was **removed in v1.4.0**.
 
-## Setup (no API key)
+```json
+{
+  "synthesis": {
+    "backend": "claude",
+    "claude_model": "sonnet"
+  }
+}
+```
 
-Just copy the slash commands into your global Claude Code commands dir:
+Then run `llmwiki synthesize` (or `llmwiki add` / `llmwiki all --with-synth`).
+One configured backend serves every command.
+
+## Setup
 
 ```bash
 mkdir -p ~/.claude/commands
 cp .claude/commands/wiki-*.md ~/.claude/commands/
 ```
 
-That's it.  Open Claude Code, type `/wiki-sync`, and it runs.
+Open Claude Code, type `/wiki-sync`, and it runs. Ensure `claude` is on
+`$PATH` (or set `synthesis.claude_path`).
 
 ## Daily flow
 
@@ -47,31 +51,11 @@ Claude: (runs python3 -m llmwiki sync, ingests new pages)
 You: /wiki-query when did I last change the convert pipeline?
 Claude: (reads wiki/index.md + the relevant source pages, synthesizes)
 
-You: /wiki-graph
-Claude: (writes graph/ + opens site/graph.html in your browser)
+You: llmwiki synthesize   # or /wiki-all --with-synth
 ```
 
-## When to pick this mode
+## Read next
 
-- You already pay for Claude Code or Codex CLI — no extra bill.
-- Exploratory work where you want the model to narrate what it's
-  doing ("I'm now reading wiki/sources/...").
-- Small-to-medium corpus (< 50 sessions) — serial synthesis isn't a
-  bottleneck.
-- Local-only privacy — no session content leaves your laptop except
-  through the agent's existing plumbing.
-
-## Limitations vs Mode A
-
-- **Serial only** — one turn at a time, no batch.  A 647-session
-  sync takes hours.
-- **Needs the agent to be running** — can't schedule via cron.
-- **Subject to the agent's context window** — long synthesize runs
-  get truncated.
-
-## See also
-
-- [API mode](../api/) — pay per token to unlock batch + headless.
-- [Slash commands reference](../../reference/slash-commands.md) — every
-  `/wiki-*` command in one list.
-- [Cheatsheet](../../cheatsheet.md) — daily-flow commands on one page.
+- [Claude CLI backend notes](backend.md)
+- [Configuration — synthesis backend](../configuration.md#synthesis-backend)
+- [Upgrade guide](../UPGRADING.md)

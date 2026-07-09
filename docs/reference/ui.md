@@ -19,8 +19,8 @@ opens the command palette from any page.
 
 | # | Label | URL | Surfaces |
 |---|---|---|---|
-| 1 | **Home** | `/index.html` | file tree of raw documents (wiki-add layer) + intro pane |
-| 2 | **Recent** | `/recent.html` | newest raw documents, one row per document |
+| 1 | **Home** | `/index.html` | queue dashboard (sync/synth status, cost estimate, commands) + recent raw docs |
+| 2 | **Raw** | `/raw.html` | file tree browser of raw documents (wiki-add layer) |
 | 3 | **Graph** | `/graph.html` | interactive force-directed knowledge graph (vis-network) |
 | 4 | **Projects** | `/projects/index.html` | filterable card grid of every project + freshness badge |
 | 5 | **Sessions** | `/sessions/index.html` | sortable table of every session, agent badge, project, model, tool-call count |

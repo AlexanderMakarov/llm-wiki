@@ -2,33 +2,23 @@
 
 from __future__ import annotations
 
-import json
-from pathlib import Path
-
 import pytest
 
 from llmwiki.cache import (
-    BATCH_STATE_FILENAME,
     CACHE_CONTROL_EPHEMERAL,
     CHARS_PER_TOKEN,
     DEFAULT_MODEL,
     MIN_CACHEABLE_TOKENS,
     MODEL_PRICING,
-    BatchJob,
-    BatchState,
     CachedPrompt,
     CostEstimate,
-    add_pending,
-    batch_state_path,
     build_messages,
     estimate_cost,
     estimate_tokens,
     format_estimate,
-    load_batch_state,
     make_cached_block,
     make_plain_block,
-    mark_completed,
-    save_batch_state,
+    resolve_pricing_model,
     warn_prefix_too_small,
 )
 
@@ -51,7 +41,7 @@ def test_min_cacheable_matches_anthropic_floor():
 
 
 def test_default_model_is_in_pricing_table():
-    assert DEFAULT_MODEL in MODEL_PRICING
+    assert resolve_pricing_model(DEFAULT_MODEL) in MODEL_PRICING
 
 
 def test_all_models_have_complete_rates():
@@ -283,114 +273,6 @@ def test_warn_prefix_too_small_returns_none_above_threshold():
     assert warn_prefix_too_small(MIN_CACHEABLE_TOKENS + 1) is None
 
 
-# ─── BatchJob / BatchState round-trip ────────────────────────────────
-
-
-def test_batch_job_defaults():
-    job = BatchJob(batch_id="batch_abc")
-    assert job.source_slugs == []
-    assert job.submitted_at == ""
-    assert job.status == "pending"
-
-
-def test_batch_state_empty_roundtrip():
-    state = BatchState()
-    assert state.pending == []
-    assert state.completed == []
-    assert BatchState.from_json(state.to_json()) == state
-
-
-def test_batch_state_with_jobs_roundtrip():
-    state = BatchState(
-        pending=[BatchJob(batch_id="b1", source_slugs=["a", "b"])],
-        completed=[BatchJob(batch_id="b0", status="completed")],
-    )
-    data = state.to_json()
-    assert data["pending"][0]["batch_id"] == "b1"
-    assert data["pending"][0]["source_slugs"] == ["a", "b"]
-    assert data["completed"][0]["status"] == "completed"
-
-    restored = BatchState.from_json(data)
-    assert len(restored.pending) == 1
-    assert restored.pending[0].batch_id == "b1"
-
-
-def test_add_pending_deduplicates_by_batch_id():
-    state = BatchState()
-    add_pending(state, BatchJob(batch_id="b1"))
-    add_pending(state, BatchJob(batch_id="b1"))  # duplicate
-    add_pending(state, BatchJob(batch_id="b2"))
-    assert [b.batch_id for b in state.pending] == ["b1", "b2"]
-
-
-def test_mark_completed_moves_job_and_updates_status():
-    state = BatchState()
-    add_pending(state, BatchJob(batch_id="b1"))
-    moved = mark_completed(state, "b1", status="completed")
-    assert moved is True
-    assert state.pending == []
-    assert len(state.completed) == 1
-    assert state.completed[0].status == "completed"
-
-
-def test_mark_completed_false_when_missing():
-    state = BatchState()
-    add_pending(state, BatchJob(batch_id="b1"))
-    assert mark_completed(state, "b_nope") is False
-    assert len(state.pending) == 1
-
-
-def test_mark_completed_allows_custom_status():
-    state = BatchState()
-    add_pending(state, BatchJob(batch_id="b1"))
-    mark_completed(state, "b1", status="expired")
-    assert state.completed[0].status == "expired"
-
-
-# ─── Batch state file I/O ─────────────────────────────────────────────
-
-
-def test_batch_state_path_uses_canonical_filename(tmp_path: Path):
-    assert batch_state_path(tmp_path).name == BATCH_STATE_FILENAME
-    assert batch_state_path(tmp_path).parent == tmp_path
-
-
-def test_load_missing_returns_empty_state(tmp_path: Path):
-    state = load_batch_state(tmp_path)
-    assert state.pending == []
-    assert state.completed == []
-
-
-def test_load_corrupt_returns_empty_state(tmp_path: Path):
-    (tmp_path / BATCH_STATE_FILENAME).write_text("not json", encoding="utf-8")
-    state = load_batch_state(tmp_path)
-    assert state.pending == []
-    assert state.completed == []
-
-
-def test_save_then_load_roundtrip(tmp_path: Path):
-    state = BatchState(
-        pending=[BatchJob(batch_id="b1", source_slugs=["src/a"])]
-    )
-    path = save_batch_state(tmp_path, state)
-    assert path.is_file()
-
-    restored = load_batch_state(tmp_path)
-    assert len(restored.pending) == 1
-    assert restored.pending[0].batch_id == "b1"
-    assert restored.pending[0].source_slugs == ["src/a"]
-
-
-def test_save_writes_sorted_and_indented_json(tmp_path: Path):
-    state = BatchState(pending=[BatchJob(batch_id="b1")])
-    path = save_batch_state(tmp_path, state)
-    text = path.read_text(encoding="utf-8")
-    data = json.loads(text)
-    assert data["pending"][0]["batch_id"] == "b1"
-    # indent=2 makes the file diff-friendly in git
-    assert "  " in text
-
-
 # ─── Edge cases ───────────────────────────────────────────────────────
 
 
@@ -474,15 +356,17 @@ def test_estimate_command_emits_total(tmp_path, monkeypatch, capsys):
         ]
 
     monkeypatch.setattr(pipe, "_discover_raw_sessions", _fake_discover)
-    monkeypatch.setattr(pipe, "_load_state", lambda: {})
+    monkeypatch.setattr(pipe, "_load_state", lambda _p=None: {})
 
-    rc = cli_mod._synthesize_estimate()
+    args = cli_mod.build_parser().parse_args(["synthesize", "--estimate", "--vault", str(tmp_path)])
+    rc = cli_mod._synthesize_estimate(args)
     out = capsys.readouterr().out
     assert rc == 0
     # G-07 (#293): output now has three-bucket breakdown.  Model name
     # still appears; total collapses into the incremental + full-force
     # rows.
-    assert "claude-sonnet-4-6" in out
+    assert "Execution model: sonnet" in out
+    assert "Pricing model: sonnet-5" in out
     assert "Incremental sync:" in out
     assert "Full re-synth:" in out
 
@@ -491,13 +375,46 @@ def test_estimate_command_no_new_sessions(tmp_path, monkeypatch, capsys):
     from llmwiki import cli as cli_mod
     import llmwiki.synth.pipeline as pipe
 
-    monkeypatch.setattr(cli_mod, "REPO_ROOT", tmp_path)
+    (tmp_path / "raw" / "sessions").mkdir(parents=True)
+    (tmp_path / "raw" / "docs").mkdir(parents=True)
+    (tmp_path / "wiki" / "sources").mkdir(parents=True)
+    (tmp_path / "llmwiki-state.json").write_text("{}", encoding="utf-8")
     monkeypatch.setattr(pipe, "_discover_raw_sessions", lambda raw_dir=None: [])
-    monkeypatch.setattr(pipe, "_load_state", lambda: {})
+    monkeypatch.setattr(pipe, "_load_state", lambda _p=None: {})
 
-    rc = cli_mod._synthesize_estimate()
+    args = cli_mod.build_parser().parse_args(["synthesize", "--estimate", "--vault", str(tmp_path)])
+    rc = cli_mod._synthesize_estimate(args)
     out = capsys.readouterr().out
     assert rc == 0
     # G-07: empty corpus now prints "$0.0000 (nothing new — this is a no-op)".
     assert "nothing new" in out
     assert "0.0000" in out
+
+
+def test_estimate_persists_unsynth_backlog_for_vault(tmp_path, capsys):
+    from llmwiki import cli as cli_mod
+    from llmwiki.state_store import read_state
+
+    vault = tmp_path / "vault"
+    (vault / "raw" / "sessions").mkdir(parents=True)
+    (vault / "raw" / "docs").mkdir(parents=True)
+    (vault / "wiki" / "sources").mkdir(parents=True)
+    (vault / "raw" / "docs" / "invoice.md").write_text("# Invoice\n\nbody\n", encoding="utf-8")
+    (vault / "llmwiki-state.json").write_text("{}", encoding="utf-8")
+
+    args = cli_mod.build_parser().parse_args(["synthesize", "--estimate", "--vault", str(vault)])
+    rc = cli_mod._synthesize_estimate(args)
+    assert rc == 0
+    _ = capsys.readouterr()
+
+    state = read_state(vault / "llmwiki-state.json")
+    synth = state.get("synth", {})
+    assert int(synth.get("pending_total", 0)) == 1
+    pending = synth.get("pending", [])
+    assert isinstance(pending, list) and pending
+    assert pending[0].get("is_doc") is True
+    estimate = synth.get("estimate", {})
+    assert isinstance(estimate, dict)
+    assert estimate.get("execution_model") == "sonnet"
+    assert estimate.get("pricing_model") == "sonnet-5"
+    assert int(estimate.get("new_total", 0)) == 1

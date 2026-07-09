@@ -45,7 +45,7 @@ Do NOT invoke when:
    - `./` (if cwd contains `llmwiki/` package)
    - `~/Desktop/2026/production-draft/llmwiki/`
    - `~/llmwiki/`
-   - `$LLMWIKI_ROOT` environment variable
+   - `config.json` → `vault.default_path` at the llm-wiki repo root
 
    If you can't find it, tell the user and stop.
 
@@ -76,7 +76,7 @@ python3 -m llmwiki sync --project <substring>       # only one project
 python3 -m llmwiki sync --since 2026-04-01          # only recent
 python3 -m llmwiki sync --include-current           # include <60min live
 python3 -m llmwiki sync --force                     # ignore state, reconvert all
-python3 -m llmwiki sync --dry-run                   # preview without writing
+python3 -m llmwiki sync --status                    # last sync + counters (no write)
 ```
 
 ## Hook installation (optional, for auto-sync)

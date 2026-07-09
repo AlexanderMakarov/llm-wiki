@@ -21,8 +21,11 @@ from llmwiki import REPO_ROOT
 from llmwiki.adapters import REGISTRY, discover_adapters
 from llmwiki.quarantine import add_entry as _quarantine_add
 from llmwiki.quarantine import clear_entry as _quarantine_clear
+from llmwiki.state_store import read_state as _read_unified_state
+from llmwiki.state_store import resolve_state_file as _resolve_state_file
+from llmwiki.state_store import update_state as _update_unified_state
+from llmwiki.state_store import mtime_from_state, mtime_to_iso
 
-DEFAULT_STATE_FILE = REPO_ROOT / ".llmwiki-state.json"
 DEFAULT_CONFIG_FILE = REPO_ROOT / "examples" / "sessions_config.json"
 DEFAULT_OUT_DIR = REPO_ROOT / "raw" / "sessions"
 DEFAULT_IGNORE_FILE = REPO_ROOT / ".llmwikiignore"
@@ -187,7 +190,7 @@ def _portable_state_key(adapter_name: str, path: Path) -> str:
 
 def _migrate_legacy_state(
     raw: dict[str, Any], adapter_names: Iterable[str]
-) -> tuple[dict[str, float], int]:
+) -> tuple[dict[str, Any], int]:
     """One-shot migration from the old absolute-path schema.
 
     Returns ``(migrated_state, migrated_count)`` so the caller can log
@@ -197,7 +200,7 @@ def _migrate_legacy_state(
     new shape by matching adapter sub-strings (``"/.claude/projects/"``
     → ``claude_code``, ``"/.codex/sessions/"`` → ``codex_cli``, etc.).
     """
-    out: dict[str, float] = {}
+    out: dict[str, Any] = {}
     migrated = 0
     # Rough per-adapter path signature — good enough for a one-off fix-up.
     hints: list[tuple[str, str]] = [
@@ -225,11 +228,12 @@ def _migrate_legacy_state(
         if k.startswith("_"):
             out[k] = v  # type: ignore[assignment]
             continue
-        if not isinstance(v, (int, float)) or isinstance(v, bool):
+        parsed_v = mtime_from_state(v)
+        if parsed_v is None:
             continue
         if "::" in k:
-            # Already portable — keep.
-            out[k] = float(v)
+            # Already portable — keep (float in memory; ISO on disk via save_state).
+            out[k] = parsed_v
             continue
         # Legacy absolute-path key. Try to infer the adapter from the path.
         inferred: Optional[str] = None
@@ -240,13 +244,13 @@ def _migrate_legacy_state(
         if inferred is None:
             # Preserve the raw key rather than dropping the entry — the
             # next sync will either pass-through or re-migrate it.
-            out[k] = float(v)
+            out[k] = parsed_v
             continue
         try:
             rel = Path(k).relative_to(Path.home()).as_posix()
         except (ValueError, OSError):
             rel = k
-        out[f"{inferred}::{rel}"] = float(v)
+        out[f"{inferred}::{rel}"] = parsed_v
         migrated += 1
     return out, migrated
 
@@ -262,16 +266,23 @@ def load_state(
     machines.  Keys we can't confidently re-map are kept verbatim so no
     session is accidentally re-processed.
     """
-    if not path.exists():
-        return {}
+    raw_from_disk: dict[str, Any] = {}
     try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
-        return {}
-    if not isinstance(raw, dict):
+        payload = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+    except (OSError, json.JSONDecodeError):
+        payload = {}
+    if isinstance(payload, dict):
+        if isinstance(payload.get("sync"), dict):
+            raw_from_disk = payload.get("sync", {}).get("files", {}) or {}
+        else:
+            # Legacy flat state file (_meta/_counters + per-file keys).
+            raw_from_disk = payload
+    if not raw_from_disk:
+        raw_from_disk = _read_unified_state(path).get("sync", {}).get("files", {})
+    if not isinstance(raw_from_disk, dict):
         return {}
     names = list(adapter_names or REGISTRY.keys())
-    migrated, count = _migrate_legacy_state(raw, names)
+    migrated, count = _migrate_legacy_state(raw_from_disk, names)
     if count:
         # Persist the migration so the next load is a pure pass-through.
         try:
@@ -283,12 +294,39 @@ def load_state(
 
 def save_state(path: Path, state: dict[str, Any]) -> None:
     # #426 (post-final-review): values are heterogeneous. Per-file
-    # entries are floats (mtime), but the function also persists
-    # `_meta` (dict) and `_counters` (dict) sentinel keys. The old
-    # `dict[str, float]` annotation lied to type-checkers and to the
-    # multi-agent review that flagged it.
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(state, indent=2, sort_keys=True), encoding="utf-8")
+    # entries are floats (mtime) in memory; on disk they are ISO-8601
+    # strings under sync.files. `_meta` / `_counters` go to sync.meta /
+    # sync.counters when present.
+    def _mut(s: dict[str, Any]) -> dict[str, Any]:
+        sync = s.setdefault("sync", {})
+        files: dict[str, str] = {}
+        for k, v in state.items():
+            if not isinstance(k, str):
+                continue
+            if k == "_meta" and isinstance(v, dict):
+                sync["meta"] = v
+                continue
+            if k == "_counters" and isinstance(v, dict):
+                sync["counters"] = v
+                continue
+            if k.startswith("_"):
+                continue
+            parsed = mtime_from_state(v)
+            if parsed is None:
+                continue
+            files[k] = mtime_to_iso(parsed)
+        sync["files"] = files
+        return s
+    _update_unified_state(_mut, path)
+
+
+def save_sync_meta(path: Path, *, meta: dict[str, Any], counters: dict[str, Any]) -> None:
+    def _mut(s: dict[str, Any]) -> dict[str, Any]:
+        sync = s.setdefault("sync", {})
+        sync["meta"] = meta
+        sync["counters"] = counters
+        return s
+    _update_unified_state(_mut, path)
 
 
 # ─── .llmwikiignore ───────────────────────────────────────────────────────
@@ -1445,7 +1483,7 @@ def render_session_markdown(
 def convert_all(
     adapters: list[str] | None = None,
     out_dir: Path = DEFAULT_OUT_DIR,
-    state_file: Path = DEFAULT_STATE_FILE,
+    state_file: Optional[Path] = None,
     config_file: Path = DEFAULT_CONFIG_FILE,
     ignore_file: Path = DEFAULT_IGNORE_FILE,
     since: Optional[str] = None,
@@ -1465,6 +1503,7 @@ def convert_all(
     Pass ``fail_on_errors=True`` (CLI: ``--fail-on-errors``) to exit 1
     when any file errored — for CI-style callers that want a hard gate.
     """
+    state_file = _resolve_state_file(state_file)
     config = load_config(config_file)
     state = {} if force else load_state(state_file, adapter_names=list(REGISTRY.keys()))
     redact = Redactor(config)
@@ -1579,7 +1618,8 @@ def convert_all(
                 _quarantine_add(cls.name, str(path), f"stat failed: {e}")
                 continue
             key = _portable_state_key(cls.name, path)
-            if state.get(key) == mtime:
+            stored_mtime = mtime_from_state(state.get(key))
+            if stored_mtime is not None and abs(stored_mtime - mtime) <= 1e-6:
                 unchanged += 1
                 _bump(cls.name, "unchanged")
                 continue
@@ -1627,7 +1667,7 @@ def convert_all(
                         _quarantine_add(cls.name, str(path), str(e))
                         continue
                     out_path.write_text(redact(text), encoding="utf-8")
-                    state[key] = mtime
+                    state[key] = mtime_to_iso(mtime)
                 converted += 1
                 _bump(cls.name, "converted")
                 continue
@@ -1684,14 +1724,14 @@ def convert_all(
                 excluded_headless += 1
                 _bump(cls.name, "filtered")
                 if not dry_run:
-                    state[key] = mtime
+                    state[key] = mtime_to_iso(mtime)
                 continue
             if exclude_temp_cwd and is_temp_cwd_session(records):
                 filtered += 1
                 excluded_temp += 1
                 _bump(cls.name, "filtered")
                 if not dry_run:
-                    state[key] = mtime
+                    state[key] = mtime_to_iso(mtime)
                 continue
             last_t = latest_record_time(records)
             if last_t and last_t > live_cutoff and not include_current:
@@ -1803,7 +1843,7 @@ def convert_all(
                     _quarantine_add(cls.name, str(path), str(e))
                     continue
                 out_path.write_text(md, encoding="utf-8")
-                state[key] = mtime
+                state[key] = mtime_to_iso(mtime)
                 # Self-heal: a source that converts cleanly no longer
                 # belongs in the quarantine, whatever it was stuck on
                 # before. Without this, fixed sources linger in
@@ -1826,12 +1866,12 @@ def convert_all(
         # `sync --status` after a `--force` re-sync would silently show
         # the *previous* run's `last_sync` timestamp, and the next
         # non-force sync would re-process every file all over again.
-        state["_meta"] = {
+        meta = {
             "last_sync": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "version": 1,
         }
-        state["_counters"] = counters
         save_state(state_file, state)
+        save_sync_meta(state_file, meta=meta, counters=counters)
 
     print()
     print(

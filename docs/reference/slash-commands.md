@@ -224,15 +224,14 @@ structural + 3 LLM-powered + `stale_candidates` (#51) +
 to produce `wiki/sources/<slug>.md`.
 
 **Wraps:** `python3 -m llmwiki synthesize` (respects the
-`synthesis.backend` key in `sessions_config.json` — `dummy` / `ollama`
-and, in-progress on #315, `claude-api`).
+`synthesis.backend` key in `config.json` / `sessions_config.json` —
+`dummy` / `ollama` / `claude`).
 
 **Natural-language flags Claude translates:**
 
 | You say | Runs |
 |---|---|
 | "just show me what it would cost" | `synthesize --estimate` |
-| "preview without writing" | `synthesize --dry-run` |
 | "check the backend is reachable" | `synthesize --check` |
 | "re-synthesize everything" | `synthesize --force` |
 

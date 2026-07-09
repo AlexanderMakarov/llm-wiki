@@ -7,7 +7,7 @@ Live example: [pratiyush.github.io/llm-wiki/](https://pratiyush.github.io/llm-wi
 ## Prerequisites
 
 - A GitHub repository (fork or clone of [Pratiyush/llm-wiki](https://github.com/Pratiyush/llm-wiki))
-- Python 3.9+ (only needed locally for `llmwiki sync`)
+- Python 3.12+ (only needed locally for `llmwiki sync`)
 - Some session data already synced (or demo sessions under `examples/demo-sessions/`)
 
 ## Step 1: Fork or clone the repo

@@ -15,6 +15,59 @@ The canonical per-release detail is
 [CHANGELOG.md](https://github.com/Pratiyush/llm-wiki/blob/master/CHANGELOG.md)
 — this guide focuses on "what might break".
 
+## v1.4.0 — unified queue + vault state (hard cutover)
+
+**Requires Python ≥ 3.12.**
+
+**One-time migration required** if your vault still has legacy dotfiles:
+
+```bash
+python3 scripts/migrate_state_v1_4_0.py --state-file /path/to/vault/llmwiki-state.json
+# or:
+llmwiki migrate-state --state-file /path/to/vault/llmwiki-state.json
+# optional cleanup after verifying:
+# rm -rf /path/to/vault/.llmwiki-state.json ...
+```
+
+### What changed
+
+| Before | After |
+|---|---|
+| `.llmwiki-state.json`, `.llmwiki-synth-state.json`, `.llmwiki-queue.json`, `.llmwiki-pending-prompts/` | `<vault>/llmwiki-state.json` (+ `llmwiki-state.js` sidecar) |
+| `LLMWIKI_ROOT` env var | `vault.default_path` in `config.json` |
+| SessionStart auto-sync hook | Manual `llmwiki queue run` |
+| `synthesis.backend: agent_delegate` | Removed — use `dummy`, `ollama`, or `claude` |
+| external `wiki_tasks` queue ownership | `llmwiki queue enqueue` into vault state |
+| Python 3.9–3.11 | **Python ≥ 3.12** |
+| `llmwiki add` synthesized whole backlog | `add` synthesizes **only** the docs it just wrote |
+
+### New commands
+
+```bash
+llmwiki queue status
+llmwiki queue enqueue --task-type add_doc --source https://example.com
+llmwiki queue run --limit 20
+```
+
+Rebuild the site after upgrading so the Home page loads `../llmwiki-state.js`.
+
+### State path isolation (v1.4.0+)
+
+The active state file is **process-scoped**: `llmwiki` CLI entry points call `configure_state_file` once from `--vault` / `--state-file` / `config.json` `vault.default_path`. Library code and tests must pass an explicit `state_file=` override or rely on that configured path — there are no import-time vault bindings.
+
+If `llmwiki-state.json` looks truncated (e.g. only a handful of `synth.files` keys after a test run), re-run the migration against your vault:
+
+```bash
+PYTHONPATH=/path/to/llm-wiki python3 scripts/migrate_state_v1_4_0.py \
+  --state-file /path/to/vault/llmwiki-state.json
+```
+
+Legacy dotfiles (`.llmwiki-state.json`, `.llmwiki-synth-state.json`, …) are merged in; verify `sync.files` / `synth.files` counts before deleting them.
+
+## v1.3.83+ — unified queue preview (superseded by v1.4.0)
+
+Same migration as v1.4.0; use `scripts/migrate_state_v1_4_0.py`.
+
 ## v1.3.0 — consolidated 1.2.x patch roll-up
 
 **Released: 2026-04-26.**

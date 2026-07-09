@@ -207,7 +207,9 @@ cp examples/sessions_config.json config.json
 | `adapters` | per-adapter | object | varies | Override adapter-specific settings |
 | `schedule` | `build` | enum | `"on-sync"` | When `/wiki-build` runs. `on-sync` / `daily` / `weekly` / `manual` / `never`. |
 | `schedule` | `lint` | enum | `"manual"` | When `/wiki-lint` runs. Same enum. |
-| `synthesis` | `backend` | enum | `"dummy"` | Which synthesizer: `"dummy"` / `"ollama"` / `"agent"` (agent-delegate #316 — pending prompts completed by the running Claude Code / Codex CLI session, no API key). Unknown values warn and fall back to `"dummy"`. See [configuration.md § Synthesis backend](configuration.md#synthesis-backend). |
+| `synthesis` | `backend` | enum | `"dummy"` | Which synthesizer: `"dummy"` / `"ollama"` / `"claude"` (synchronous `claude -p` CLI). Unknown values warn and fall back to `"dummy"`. The old `"agent"` / agent-delegate backend was removed in v1.4.0. See [configuration.md § Synthesis backend](configuration.md#synthesis-backend). |
+| `synthesis` | `claude_model` | string | `"sonnet"` | Model alias for the `claude` backend |
+| `synthesis` | `claude_path` | string | `""` | Optional path to the `claude` binary |
 | `synthesis.ollama` | `model` | string | `"llama3.1:8b"` | Ollama model name (pull via `ollama pull`) |
 | `synthesis.ollama` | `base_url` | string | `"http://127.0.0.1:11434"` | Ollama HTTP endpoint |
 | `synthesis.ollama` | `timeout` | int (s) | 60 | Per-request timeout |
@@ -226,15 +228,16 @@ cp examples/sessions_config.json config.json
 | `web_clipper` | `enabled` | bool | false | Obsidian Web Clipper intake path |
 | `web_clipper` | `watch_dir` | string | `"raw/web"` | Directory to watch |
 | `web_clipper` | `extensions` | list | `[".md"]` | File extensions to pick up |
-| `web_clipper` | `auto_queue` | bool | true | Auto-add to `.llmwiki-queue.json` |
+| `web_clipper` | `auto_queue` | bool | true | Auto-enqueue into unified `llmwiki-state.json` queue |
 
 ## Environment variables
 
 | Variable | Description | Default |
 |---|---|---|
-| `LLMWIKI_ROOT` | Override the repo root that content reads (`wiki/`, `raw/`) resolve against — e.g. point the MCP server at an external vault | Auto-detected from package location |
 | `LLMWIKI_CONFIG` | Override the config file path | `./config.json`, then `examples/sessions_config.json` |
 | `COPILOT_HOME` | Override the Copilot CLI base directory | `~/.copilot` |
+
+Vault content root is **`vault.default_path` in `config.json`**. The removed `LLMWIKI_ROOT` env var is no longer read.
 
 ## `.llmwikiignore`
 
