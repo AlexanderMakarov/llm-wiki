@@ -64,6 +64,27 @@ PYTHONPATH=/path/to/llm-wiki python3 scripts/migrate_state_v1_4_0.py \
 
 Legacy dotfiles (`.llmwiki-state.json`, `.llmwiki-synth-state.json`, …) are merged in; verify `sync.files` / `synth.files` counts before deleting them.
 
+### Re-run `migrate-state` to repair dead `synth_request` items (#23)
+
+Vaults migrated with the first v1.4.0 migrator carry queue items with `task_type: "synth_request"`. The queue runner has no handler for that type, so `llmwiki queue run` marks every one of them `status: error`. Re-run the migration — it purges them, and enqueues a single `synthesize` task if (and only if) real backlog remains:
+
+```bash
+llmwiki migrate-state --state-file /path/to/vault/llmwiki-state.json
+llmwiki queue run --vault /path/to/vault
+```
+
+The migration resolves each legacy `.llmwiki-pending-prompts/<uuid>.md` against the pending sentinel pages left in `wiki/sources/`, so it is safe to `rm -rf .llmwiki-pending-prompts/` afterwards — the prompts themselves are never needed again.
+
+### Check `synthesis.backend` before syncing (#23)
+
+`agent`, `agent-delegate`, and `agent_delegate` were **removed** in v1.4.0. `resolve_backend()` reads them as a typo and silently falls back to `dummy`, which writes stub pages (`Auto-synthesized from session`) into `wiki/sources/`. `migrate-state` prints a `WARNING:` when your `config.json` still names one — set `synthesis.backend` to `claude`, `ollama`, or `dummy`, then re-synthesize:
+
+```bash
+llmwiki synthesize --vault /path/to/vault
+```
+
+Stub pages left behind by the dummy backend count as **unsynthesized** backlog (#24): `llmwiki queue status` reports them under `unsynth_total`, `llmwiki lint` flags them with the `stub_source_pages` rule, and `llmwiki synthesize` refills them with a real backend.
+
 ## v1.3.83+ — unified queue preview (superseded by v1.4.0)
 
 Same migration as v1.4.0; use `scripts/migrate_state_v1_4_0.py`.

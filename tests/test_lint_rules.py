@@ -39,9 +39,10 @@ def test_all_14_rules_registered():
     # + tags_topics_convention (G-16 · #302) + stale_reference_detection (G-17 · #303)
     # + frontmatter_count_consistency (issues.md #2)
     # + tools_consistency (issues.md #4)
+    # + stub_source_pages (#24)
     # cache_tier_consistency removed (cache_tiers module deleted)
     from llmwiki.lint import rules  # noqa: F401
-    assert len(REGISTRY) == 16
+    assert len(REGISTRY) == 17
 
 
 def test_registered_rule_names():
@@ -63,6 +64,7 @@ def test_registered_rule_names():
         "stale_reference_detection",    # G-17 · #303
         "frontmatter_count_consistency", # issues.md #2
         "tools_consistency",             # issues.md #4
+        "stub_source_pages",             # #24
     }
     assert set(REGISTRY.keys()) == expected
 

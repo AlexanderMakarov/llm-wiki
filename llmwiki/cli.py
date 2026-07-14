@@ -595,15 +595,7 @@ def cmd_migrate_state(args: argparse.Namespace) -> int:
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     report = mod.run_migration(args.state_file)
-    print(f"state file: {report['state_file']}")
-    if report["migrated"]:
-        print("migrated:")
-        for p in report["migrated"]:
-            print(f"  - {p}")
-    if report["orphan_cleanup_suggestions"]:
-        print("cleanup suggestions:")
-        for cmd in report["orphan_cleanup_suggestions"]:
-            print(f"  {cmd}")
+    mod.print_report(report)
     return 0
 
 

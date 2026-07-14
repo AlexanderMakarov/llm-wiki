@@ -299,7 +299,7 @@ python3 -m llmwiki export all --out ~/custom-site
 
 ---
 
-## `lint` — run 14 wiki-quality rules
+## `lint` — run 17 wiki-quality rules
 
 ```bash
 python3 -m llmwiki lint
@@ -322,11 +322,19 @@ python3 -m llmwiki lint --wiki-dir ~/another-wiki
 
 ### Rules
 
-8 structural (`frontmatter_completeness`, `frontmatter_validity`,
+14 structural (`frontmatter_completeness`, `frontmatter_validity`,
 `link_integrity`, `orphan_detection`, `content_freshness`,
-`entity_consistency`, `duplicate_detection`, `index_sync`) + 3 LLM-powered
-(`contradiction_detection`, `claim_verification`, `summary_accuracy`) +
-2 v1.1+ (`stale_candidates`, `cache_tier_consistency`).
+`entity_consistency`, `duplicate_detection`, `index_sync`,
+`stale_candidates`, `tags_topics_convention`, `stale_reference_detection`,
+`frontmatter_count_consistency`, `tools_consistency`, `stub_source_pages`)
++ 3 LLM-powered (`contradiction_detection`, `claim_verification`,
+`summary_accuracy`).
+
+`stub_source_pages` (#24) flags pages under `wiki/sources/` whose body is
+machine-generated filler — a pending sentinel (`<!-- llmwiki-pending: … -->`)
+or the dummy backend's `Auto-synthesized from session` body. Those sources
+still count as unsynthesized backlog; refill them with
+`llmwiki synthesize` on a real backend.
 
 ### Expected output
 
@@ -472,8 +480,18 @@ python3 -m llmwiki migrate-state --state-file /path/to/vault/llmwiki-state.json
 | Flag | What |
 |---|---|
 | `--state-file PATH` | Explicit target state file (defaults to configured vault path). |
+| `--json` | Print the migration report as JSON (script entry point only). |
 
 The command is idempotent and prints cleanup suggestions for migrated legacy files.
+
+It also repairs the vault (#23):
+
+- **Legacy pending prompts are resolved, not re-queued.** Each `.llmwiki-pending-prompts/<uuid>.md` is matched against the pending sentinel pages (`<!-- llmwiki-pending: <uuid> -->`) still sitting in `wiki/sources/`. Prompts whose page has since been filled record nothing.
+- **Dead `synth_request` items are purged.** The queue runner has no handler for that task type, so items left by an earlier migrator would fail forever. Re-running `migrate-state` removes them.
+- **One `synthesize` task is enqueued** when — and only when — `synth.pending_total > 0` after the migration *and* no pending `synthesize` task is already queued, so re-running `migrate-state` never stacks duplicates. It drains the whole backlog; run it with `llmwiki queue run --vault <path>`.
+- **Removed synthesis backends are flagged.** `synthesis.backend` values dropped in v1.4.0 (`agent`, `agent-delegate`, `agent_delegate`) silently fall back to `dummy`, which writes stub pages. The report prints a `WARNING:` telling you to set `claude`, `ollama`, or `dummy`.
+
+Report keys: `state_file`, `migrated`, `orphan_cleanup_suggestions`, `warnings`, `pending_prompts_total`, `pending_prompts_unfilled`, `synth_request_items_purged`, `queued_synthesize`.
 
 ---
 

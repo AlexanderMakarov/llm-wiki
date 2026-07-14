@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from llmwiki.synth.base import DummySynthesizer
+from llmwiki.synth.base import BaseSynthesizer, DummySynthesizer
 from llmwiki.synth.pipeline import (
     _chunk_markdown,
     _discover_raw_docs,
@@ -123,11 +123,23 @@ def test_synthesize_docs_and_sessions_together(tmp_path: Path):
     assert (wiki_sources / "docs" / "openclaw-openclaw.md").exists()
 
 
+class RealSynthesizer(BaseSynthesizer):
+    """Backend whose output is a real page body — not a stub (#24)."""
+
+    name = "real"
+
+    def is_available(self) -> bool:
+        return True
+
+    def synthesize_source_page(self, body, meta, prompt_template):
+        return "## Summary\n\nReal synthesis.\n\n## Connections\n\n- [[OpenClaw]]\n"
+
+
 def test_synthesize_docs_idempotent_rerun_is_noop(tmp_path: Path):
     docs = _seed_docs(tmp_path)
     wiki_sources, log_file = _wiki(tmp_path)
     common = dict(
-        backend=DummySynthesizer(),
+        backend=RealSynthesizer(),
         raw_dir=tmp_path / "raw" / "sessions",
         docs_dir=docs,
         wiki_sources_dir=wiki_sources,

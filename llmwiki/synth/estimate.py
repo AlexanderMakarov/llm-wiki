@@ -68,8 +68,10 @@ def synthesize_estimate_report(
         _discover_raw_docs,
         _discover_raw_sessions,
         _load_state,
-        _normalise_slug,
+        discover_stub_source_keys,
         discover_synth_source_keys,
+        page_is_stub,
+        synth_page_filename,
     )
 
     chosen_model = model or DEFAULT_MODEL
@@ -99,6 +101,9 @@ def synthesize_estimate_report(
         else discover_synth_source_keys()
     )
     sources_root = _Path(wiki_sources_dir) if wiki_sources_dir is not None else _WIKI_SOURCES
+    # #24: a source whose page is a stub is backlog. The page names its own
+    # source, so this holds for pages a derived filename would not find.
+    stub_source_keys = discover_stub_source_keys(sources_root)
     raw_root_path = _Path(raw_root) if raw_root is not None else _RAW_DEFAULT
     docs_root_path = _Path(docs_root) if docs_root is not None else _RAW_DOCS_DEFAULT
     if state_keys is None:
@@ -163,18 +168,20 @@ def synthesize_estimate_report(
             source_rel = name
         source_key = "raw/sessions/" + source_rel
 
-        raw_slug = meta.get("slug", getattr(p, "stem", name))
-        if not isinstance(raw_slug, str):
-            raw_slug = getattr(p, "stem", name)
-        slug = _normalise_slug(raw_slug)
-        date = str(meta.get("date", "")).strip()
-        filename = f"{date}-{slug}" if date else slug
+        filename = synth_page_filename(meta, getattr(p, "stem", name))
         project = str(meta.get("project") or getattr(getattr(p, "parent", None), "name", "unknown"))
-        output_exists = (sources_root / project / f"{filename}.md").is_file()
+        out_path = sources_root / project / f"{filename}.md"
+        # #24: a stub page (dummy filler / pending sentinel) is not synthesis —
+        # its source stays in the backlog no matter what the state file says.
+        output_is_stub = source_key in stub_source_keys or page_is_stub(out_path)
+        output_exists = out_path.is_file() and not output_is_stub
 
-        matched = bool(keys_to_try & state_keys) or any(
-            isinstance(k, str) and k.endswith(name) for k in state_keys
-        ) or source_key in discovered_source_keys or output_exists
+        matched = not output_is_stub and (
+            bool(keys_to_try & state_keys)
+            or any(isinstance(k, str) and k.endswith(name) for k in state_keys)
+            or source_key in discovered_source_keys
+            or output_exists
+        )
         body_tokens = estimate_tokens(body)
         # Full-force bucket: every session contributes regardless of state.
         ff_cost, full_force_first = _add_to_bucket(body_tokens, full_force_first)
@@ -212,12 +219,7 @@ def synthesize_estimate_report(
         rel = "docs::" + str(p.relative_to(docs_root_path))
         source_key = "raw/docs/" + str(p.relative_to(docs_root_path))
         project = str(meta.get("project") or "docs")
-        raw_slug = meta.get("slug", p.stem)
-        if not isinstance(raw_slug, str):
-            raw_slug = p.stem
-        slug = _normalise_slug(raw_slug)
-        date = str(meta.get("date", "")).strip()
-        filename = f"{date}-{slug}" if date else slug
+        filename = synth_page_filename(meta, p.stem)
         chunks = _chunk_markdown(body, _DOC_CHUNK_MAX_CHARS)
         out_dir = sources_root / project
         expected = (
@@ -225,8 +227,11 @@ def synthesize_estimate_report(
             if len(chunks) <= 1
             else [out_dir / f"{filename}--part-{i:02d}.md" for i in range(1, len(chunks) + 1)]
         )
-        output_exists = all(ep.is_file() for ep in expected)
-        matched = rel in state_keys or source_key in discovered_source_keys or output_exists
+        output_is_stub = source_key in stub_source_keys or any(page_is_stub(ep) for ep in expected)
+        output_exists = all(ep.is_file() for ep in expected) and not output_is_stub
+        matched = not output_is_stub and (
+            rel in state_keys or source_key in discovered_source_keys or output_exists
+        )
         body_tokens = estimate_tokens(body)
         ff_cost, full_force_first = _add_to_bucket(body_tokens, full_force_first)
         full_force_usd += ff_cost

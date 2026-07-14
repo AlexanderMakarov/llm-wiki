@@ -17,6 +17,7 @@ synthesized. Re-running on an unchanged tree is a sub-second no-op.
 
 from __future__ import annotations
 
+import glob
 import json
 import os
 import re
@@ -73,6 +74,60 @@ def _is_stub_page(text: str) -> bool:
     """True when a page body is machine-generated filler (dummy stub or
     pending sentinel) rather than real synthesis output."""
     return any(marker in text for marker in _STUB_MARKERS)
+
+
+def synth_page_filename(meta: dict[str, Any], fallback_stem: str) -> str:
+    """Filename stem (no extension) of the wiki source page for a raw file.
+
+    Single slug scheme for the whole pipeline: the estimate report, the
+    stub detector and the writer all resolve a raw file to the same
+    ``wiki/sources/<project>/<filename>.md`` target. YAML parses
+    numeric-looking session slugs (``15824711``, ``6051e147``) as
+    int/float, so a non-string slug falls back to the filename stem.
+    """
+    raw_slug = meta.get("slug", fallback_stem)
+    if not isinstance(raw_slug, str):
+        raw_slug = fallback_stem
+    slug = _normalise_slug(raw_slug)
+    date = str(meta.get("date", "")).strip()
+    return f"{date}-{slug}" if date else slug
+
+
+def page_is_stub(page_path: Path) -> bool:
+    """True when ``page_path`` exists and its body is machine-generated filler.
+
+    A stub page holds a slot in ``wiki/sources/`` without carrying any
+    synthesis, so backlog discovery counts its source as UNSYNTHESIZED (#24).
+
+    A page that cannot be read or decoded cannot be shown to be filler, so it
+    is not one — and it must not take down the run that walks past it.
+    """
+    try:
+        text = Path(page_path).read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return False
+    _meta, body = parse_frontmatter(text)
+    return _is_stub_page(body)
+
+
+def source_page_paths(
+    out_dir: Path, filename: str, *, is_doc: bool
+) -> list[Path]:
+    """Every page on disk that ``filename`` synthesizes into, under ``out_dir``.
+
+    An oversized doc is written as ``<filename>--part-NN.md`` chunks rather
+    than one page, and the parts are complementary: each holds a slice of the
+    doc and none stands for the whole. The parts are found by looking at what
+    is on disk, not by re-deriving them from the doc body, so they are found
+    whatever chunk size wrote them (#24). Sessions are never chunked.
+    """
+    paths: list[Path] = []
+    single = out_dir / f"{filename}.md"
+    if single.is_file():
+        paths.append(single)
+    if is_doc:
+        paths.extend(sorted(out_dir.glob(f"{glob.escape(filename)}--part-*.md")))
+    return paths
 
 
 def resolve_backend(
@@ -249,24 +304,54 @@ def _save_state(state: dict[str, float], state_file: Optional[Path] = None) -> N
     _update_unified_state(_mut, target)
 
 
-def discover_synth_source_keys(wiki_sources_dir: Optional[Path] = None) -> set[str]:
-    """Return ``source_file`` keys already represented in wiki/sources pages."""
+def _scan_source_page_keys(wiki_sources_dir: Optional[Path] = None) -> tuple[set[str], set[str]]:
+    """``source_file`` keys claimed by wiki/sources pages, split real vs stub."""
     roots = wiki_sources_dir or WIKI_SOURCES
-    out: set[str] = set()
+    real: set[str] = set()
+    stub: set[str] = set()
     if not roots.is_dir():
-        return out
+        return real, stub
     for p in roots.rglob("*.md"):
         if p.name.startswith("_"):
             continue
         try:
             text = p.read_text(encoding="utf-8")
-        except OSError:
+        except (OSError, UnicodeDecodeError):
             continue
-        meta, _body = parse_frontmatter(text)
+        meta, body = parse_frontmatter(text)
         src = str(meta.get("source_file", "")).strip()
-        if src:
-            out.add(src)
-    return out
+        if not src:
+            continue
+        (stub if _is_stub_page(body) else real).add(src)
+    # Re-synthesis can file the real page under a different name than the stub
+    # it replaces, leaving both on disk claiming the same source. One real page
+    # is enough for that source to be synthesized; the stale stub is the lint
+    # rule's business, not the backlog's.
+    return real, stub - real
+
+
+def discover_synth_source_keys(wiki_sources_dir: Optional[Path] = None) -> set[str]:
+    """Return ``source_file`` keys already synthesized into wiki/sources pages.
+
+    Stub pages (dummy-backend filler, agent-delegate pending sentinels) carry
+    a ``source_file`` key but no synthesis, so they are excluded — their source
+    still counts as backlog (#24).
+    """
+    real, _stub = _scan_source_page_keys(wiki_sources_dir)
+    return real
+
+
+def discover_stub_source_keys(wiki_sources_dir: Optional[Path] = None) -> set[str]:
+    """Return ``source_file`` keys whose wiki/sources page is a stub (#24).
+
+    A page states which raw file it stands for in its ``source_file``
+    frontmatter, so a stub is tied to its source by that claim rather than by
+    re-deriving the page's filename from the raw file. Pages written by an
+    older release — a migrated vault — sit under that release's slug scheme,
+    where a derived filename does not find them.
+    """
+    _real, stub = _scan_source_page_keys(wiki_sources_dir)
+    return stub
 
 
 def discover_unsynth_session_rels(
@@ -975,13 +1060,39 @@ def synthesize_new_sessions(
                 "is_doc": True,
             })
 
+    stub_source_keys = discover_stub_source_keys(sources_out)
+
     new_items: list[dict[str, Any]] = []
     for it in items:
         try:
             mtime = it["path"].stat().st_mtime
         except OSError:
             continue
-        if it["rel"] in state and (state[it["rel"]] + 1e-6) >= mtime and not force:
+        # A state entry only means "done" when the page it produced is a real
+        # one. A stub still on disk is pending work, so re-synthesize it (#24).
+        # It is found either by the source key it claims — which holds for a
+        # page an older release filed under another name — or at the pages this
+        # source actually wrote, part-pages included: a doc's parts are
+        # complementary, so a real part does not cover a stub one. The
+        # write-guard below keeps a real page safe from a stub.
+        rel = str(it["rel"])
+        source_key = (
+            "raw/docs/" + rel[len("docs::"):] if it["is_doc"] else "raw/sessions/" + rel
+        )
+        targets = source_page_paths(
+            sources_out / str(it["project"]),
+            synth_page_filename(it["meta"], it["path"].stem),
+            is_doc=bool(it["is_doc"]),
+        )
+        page_is_pending = source_key in stub_source_keys or any(
+            page_is_stub(t) for t in targets
+        )
+        if (
+            it["rel"] in state
+            and (state[it["rel"]] + 1e-6) >= mtime
+            and not force
+            and not page_is_pending
+        ):
             continue
         new_items.append(it)
 
@@ -1008,26 +1119,13 @@ def synthesize_new_sessions(
     for it in new_items:
         p, meta, body = it["path"], it["meta"], it["body"]
         project, rel = it["project"], it["rel"]
+        # G-21 (#307): slug is normalised (spaces → hyphens, filesystem-unsafe
+        # chars stripped) and G-06 (#292): date-prefixed so Claude Code's
+        # 3-word auto-slugs can't silently collide. Output path is
+        # `wiki/sources/<project>/<YYYY-MM-DD>-<slug>.md`.
         raw_slug = meta.get("slug", p.stem)
-        # YAML parses numeric-looking session-hash slugs (e.g. "15824711",
-        # "6051e147") as int/float — and the scientific-notation ones lose
-        # their value entirely (6051e147 → inf), so str() would collapse
-        # many distinct sessions onto "inf". Fall back to the filename stem,
-        # which always carries the correct, unique slug.
-        if not isinstance(raw_slug, str):
-            raw_slug = p.stem
-
-        # G-21 (#307): normalise slug — spaces → hyphens, strip filesystem-
-        # unsafe chars so the output filename is URL-safe + shell-safe.
-        slug = _normalise_slug(raw_slug)
-
-        # G-06 (#292): prepend the session date to prevent silent slug
-        # collisions. Claude Code's 3-word auto-slugs collide often (12×
-        # `flickering-orbiting-fern` in one corpus). Output path now
-        # `wiki/sources/<project>/<YYYY-MM-DD>-<slug>.md`. Falls back to
-        # just the slug when no date is present (preserves old tests).
-        date = str(meta.get("date", "")).strip()
-        filename = f"{date}-{slug}" if date else slug
+        slug = _normalise_slug(raw_slug if isinstance(raw_slug, str) else p.stem)
+        filename = synth_page_filename(meta, p.stem)
 
         # #1: oversized docs are split on headings into part-pages so each
         # chunk fits one backend call. Sessions are never chunked.
