@@ -8,13 +8,23 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ## [Unreleased]
 
+### Added
+
+- **`stub_source_pages` lint rule (#24)** — flags pages in `wiki/sources/` whose body is machine-generated filler (pending sentinel `<!-- llmwiki-pending: … -->` or the dummy backend's `Auto-synthesized from session`), so unfilled placeholders surface even when the state file claims they are done.
+- **Queued `synthesize` tasks accept a payload (#23)** — `payload.paths` (raw file paths) and `payload.force` map onto `synthesize_new_sessions(only_paths=…, force=…)`. An empty payload keeps draining the whole backlog.
+
 ### Changed
 
+- **`llmwiki/queue_ops.py` dispatches through a `TASK_HANDLERS` table (#23)** — the table is the single source of truth for task types. `enqueue_task()` validates against it and raises `ValueError` (listing the known types) for an unknown one, so producer/consumer drift fails at enqueue time instead of turning into unprocessable `status: error` items on the first `queue run`.
+- **`migrate-state` resolves legacy pending prompts instead of queueing them (#23)** — `.llmwiki-pending-prompts/<uuid>.md` files are matched against the sentinel pages left in `wiki/sources/`; the backlog is drained by exactly ONE `synthesize` task (none when the backlog is empty). Pre-existing dead `synth_request` items are purged, so re-running the migration repairs a vault migrated with the earlier version. The report gains `pending_prompts_total`, `pending_prompts_unfilled`, `synth_request_items_purged`, `queued_synthesize`, and `warnings`.
+- **`migrate-state` warns on a removed synthesis backend (#23)** — `synthesis.backend` values dropped in v1.4.0 (`agent`, `agent-delegate`, `agent_delegate`) silently fall back to `dummy`, which writes stub pages. The migration now flags them and points at `claude` / `ollama` / `dummy`.
 - **Single CLI-bound active state file** — `configure_state_file` / `get_state_file` in `state_store.py`; `apply_default_vault` configures the path once at CLI entry. Removed import-time `DEFAULT_STATE_FILE`, `STATE_FILE`, `DEFAULT_QUEUE_FILE`, and `DEFAULT_QUARANTINE_FILE` so tests and library callers cannot leak into `config.json`'s `vault.default_path`. `_save_state` merges synth keys instead of replacing the whole map.
 - **Docs refreshed for v1.4.0 CLI surface** — README / configuration / modes / tutorials no longer document removed flags (`serve --vault`, `sync --dry-run`, `synthesize --list-pending` / `--complete`) or the agent-delegate backend; synthesis backends are `dummy` / `ollama` / `claude`; state file is `llmwiki-state.json`; minimum Python is 3.12+.
 
 ### Fixed
 
+- **Stub pages no longer count as synthesized (#24)** — `discover_synth_source_keys()` skips pages whose body is a stub/sentinel, and `synthesize_new_sessions()` re-synthesizes a source whose page is a stub even when the state file says it is done. `queue status` (`unsynth_total`), `synth.pending` in `llmwiki-state.json`, and `synthesize --estimate` now report unfilled placeholder pages as backlog instead of reporting "nothing new". A stub is tied to its source by the `source_file` key the page itself declares (`discover_stub_source_keys()`), so a page an older release filed under another slug scheme — the common case in a migrated vault — is still recognised; a real page for the same source wins over a leftover stub. An oversized doc is checked at the `--part-NN` pages it actually wrote (`source_page_paths()`): its parts are complementary, so a stub part keeps the doc in the backlog even when its other parts are real.
+- **`migrate-state` no longer enqueues unprocessable `synth_request` tasks (#23)** — every migrated item was dead on arrival: the runner has no handler, so the first `queue run` marked them all `status: error` (43 items in one real vault).
 - **Test isolation** — autouse `conftest` fixture calls `configure_state_file(tmp)`; estimate CLI tests require `--vault` for subprocess runs.
 
 ## [1.4.0] — 2026-07-09

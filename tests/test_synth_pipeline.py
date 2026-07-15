@@ -50,6 +50,23 @@ Done. Used [[pytest]] and [[FastAPI]].
 """
 
 
+class RealSynthesizer(BaseSynthesizer):
+    """Backend whose output is a real page body — not a stub.
+
+    The dummy backend's canned body counts as backlog (#24), so a corpus
+    synthesized with it never reaches a steady state. Idempotency is a
+    property of real synthesis output, which this backend stands in for.
+    """
+
+    name = "real"
+
+    def is_available(self) -> bool:
+        return True
+
+    def synthesize_source_page(self, body, meta, prompt_template):
+        return "## Summary\n\nReal synthesis.\n\n## Connections\n\n- [[pytest]]\n"
+
+
 def _seed_raw(tmp_path: Path) -> Path:
     raw = tmp_path / "raw" / "sessions" / "test-proj"
     raw.mkdir(parents=True)
@@ -187,18 +204,38 @@ def test_synthesize_idempotent_rerun_is_noop(tmp_path: Path):
 
     # First run
     s1 = synthesize_new_sessions(
-        backend=DummySynthesizer(), raw_dir=raw, wiki_sources_dir=wiki_sources,
+        backend=RealSynthesizer(), raw_dir=raw, wiki_sources_dir=wiki_sources,
         log_path=log_file,
     )
     assert s1["synthesized"] == 1
 
     # Second run — should be a no-op (mtime hasn't changed)
     s2 = synthesize_new_sessions(
-        backend=DummySynthesizer(), raw_dir=raw, wiki_sources_dir=wiki_sources,
+        backend=RealSynthesizer(), raw_dir=raw, wiki_sources_dir=wiki_sources,
         log_path=log_file,
     )
     assert s2["new_files"] == 0
     assert s2["synthesized"] == 0
+
+
+def test_stub_pages_stay_in_the_backlog(tmp_path: Path):
+    """A dummy-backend page is filler — the source stays unsynthesized (#24)."""
+    raw = _seed_raw(tmp_path)
+    wiki_sources = tmp_path / "wiki" / "sources"
+    wiki_sources.mkdir(parents=True)
+    log_file = tmp_path / "wiki" / "log.md"
+    log_file.write_text("# Log\n", encoding="utf-8")
+
+    common = dict(
+        raw_dir=raw, wiki_sources_dir=wiki_sources, log_path=log_file,
+    )
+    assert synthesize_new_sessions(backend=DummySynthesizer(), **common)["synthesized"] == 1
+    # Still pending: the dummy page carries no synthesis.
+    s2 = synthesize_new_sessions(backend=DummySynthesizer(), **common)
+    assert s2["new_files"] == 1
+    # A real backend fills it, and only then does the source drop out.
+    assert synthesize_new_sessions(backend=RealSynthesizer(), **common)["synthesized"] == 1
+    assert synthesize_new_sessions(backend=RealSynthesizer(), **common)["new_files"] == 0
 
 
 def test_synthesize_force_resynthesizes(tmp_path: Path):
@@ -232,14 +269,14 @@ def test_synthesize_skip_already_processed(tmp_path: Path):
 
     # First run — synthesizes
     s1 = synthesize_new_sessions(
-        backend=DummySynthesizer(), raw_dir=raw, wiki_sources_dir=wiki_sources,
+        backend=RealSynthesizer(), raw_dir=raw, wiki_sources_dir=wiki_sources,
         log_path=log_file,
     )
     assert s1["synthesized"] == 1
 
     # Second run — skips (already done, mtime unchanged)
     s2 = synthesize_new_sessions(
-        backend=DummySynthesizer(), raw_dir=raw, wiki_sources_dir=wiki_sources,
+        backend=RealSynthesizer(), raw_dir=raw, wiki_sources_dir=wiki_sources,
         log_path=log_file,
     )
     assert s2["new_files"] == 0

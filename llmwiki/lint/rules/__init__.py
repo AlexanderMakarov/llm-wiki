@@ -21,6 +21,7 @@ Post-v1.0 rules:
   14. stale_reference_detection   (G-17 · #303)
   15. frontmatter_count_consistency  (v1.2 · issues.md #2)
   16. tools_consistency              (v1.2 · issues.md #4)
+  17. stub_source_pages              (#24)
 
 Import order matters — every per-rule module's top-level ``@register``
 decorator runs at import time and inserts its rule into the
@@ -67,3 +68,4 @@ from llmwiki.lint.rules.tags_topics_convention import TagsTopicsConvention  # no
 from llmwiki.lint.rules.stale_reference_detection import StaleReferenceDetection  # noqa: F401
 from llmwiki.lint.rules.frontmatter_count_consistency import FrontmatterCountConsistency  # noqa: F401
 from llmwiki.lint.rules.tools_consistency import ToolsConsistency  # noqa: F401
+from llmwiki.lint.rules.stub_source_pages import StubSourcePages  # noqa: F401
