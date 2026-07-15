@@ -29,6 +29,7 @@ python3 -m llmwiki sync [options]
 | `--project` | `substring` | none | Only sync projects whose slug contains this |
 | `--include-current` | flag | off | Don't skip live sessions (< 60 min old) |
 | `--force` | flag | off | Ignore state file, reconvert everything |
+| `--force-resync` | flag | off | Override the newer-schema / corrupt-state guard (#29) and reconvert from scratch. Implies `--force`; may duplicate an already-populated `raw/` |
 | `--dry-run` | flag | off | Preview what would be written |
 | `--download-images` | flag | off | Download remote images in `.md` files to `raw/assets/` |
 | `--fail-on-errors` | flag | off | Exit 1 if any file fails to convert; by default per-file errors are quarantined and the run exits 0 |

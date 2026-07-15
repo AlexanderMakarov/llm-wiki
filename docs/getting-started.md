@@ -4,7 +4,7 @@
 
 ## Prerequisites
 
-- Python ≥ 3.9 (macOS ships 3.9+ by default; most Linux distros do too)
+- Python ≥ 3.12
 - `git`
 - Sessions from at least one supported agent already on disk:
   - **Claude Code** — `~/.claude/projects/`
@@ -20,28 +20,53 @@ That's it. No `npm`, no `brew`, no database, no account.
 
 ## Install
 
-### macOS / Linux
+The git clone holds **code + demo seeds only**. Your transcripts, wiki pages, and built site live in a separate **vault** directory *outside* the repo, so personal data never lands in git. (See [the README](../README.md#personal-data-stays-outside-the-repo) for the full rationale.)
+
+### 1. Clone the code and set up a venv
+
+Clone anywhere — the directory is just the engine, not your data.
+
+**macOS / Linux**
 
 ```bash
-git clone https://github.com/Pratiyush/llm-wiki.git
+git clone git@github.com:AlexanderMakarov/llm-wiki.git
 cd llm-wiki
+python3 -m venv .venv && source .venv/bin/activate
 ./setup.sh
 ```
 
-### Windows
+**Windows**
 
 ```cmd
-git clone https://github.com/Pratiyush/llm-wiki.git
+git clone https://github.com/AlexanderMakarov/llm-wiki.git
 cd llm-wiki
+python -m venv .venv && .venv\Scripts\activate
 setup.bat
 ```
 
-`setup.sh` / `setup.bat` does the following, idempotently:
+`setup.sh` / `setup.bat` is idempotent and:
 
-1. Installs `markdown` (the only runtime dep) via `pip install --user`. Syntax highlighting runs in the browser via highlight.js loaded from a CDN, so the build stays stdlib-only.
-2. Scaffolds `raw/`, `wiki/`, `site/` directories
-3. Runs `llmwiki adapters` to show which agents are detected
-4. Does a dry-run of the first sync so you see what *would* be converted
+1. Installs the `markdown` runtime dep via `pip install --user`. Syntax highlighting runs in the browser via highlight.js, so the build stays stdlib-only.
+2. Runs `llmwiki adapters` to show which agents are detected.
+3. Reports `sync --status` so you see how many sessions *would* convert.
+
+> setup **does not** scaffold `raw/`, `wiki/`, `site/` inside the clone — that data belongs in your vault (step 2). If no vault is configured yet, setup warns and points you here instead of growing data in the git checkout.
+
+### 2. Create a vault and point `config.json` at it
+
+Make an empty directory anywhere for your personal data, then tell llmwiki where it is via a gitignored `config.json` at the repo root:
+
+```bash
+mkdir -p ~/llmwiki-vault
+cat > config.json <<'JSON'
+{
+  "vault": { "default_path": "/home/you/llmwiki-vault" }
+}
+JSON
+llmwiki init          # scaffolds raw/ wiki/ site/ INTO the vault
+```
+
+With `vault.default_path` set, `sync` / `build` / `synthesize` / `queue` / `lint` / `init` all target the vault automatically — no `--vault` flag needed. Override it for a single run with `--vault PATH`.
 
 ### Checking detected agents
 
@@ -70,10 +95,12 @@ Any adapter marked `available: yes` will be included when you run `llmwiki sync`
 
 ## Three commands after install
 
+With `vault.default_path` set (step 2 above), these all read and write the vault, not the clone:
+
 ```bash
-./sync.sh        # pull new sessions from your agent store → raw/sessions/<project>/*.md
-./build.sh       # compile raw/ + wiki/ → site/
-./serve.sh       # serve site/ at http://127.0.0.1:8765/
+llmwiki sync     # pull new sessions from your agent store → <vault>/raw/sessions/<project>/*.md
+llmwiki build    # compile <vault>/raw/ + <vault>/wiki/ → <vault>/site/
+llmwiki serve --dir <vault>/site   # serve at http://127.0.0.1:8765/
 ```
 
 Open [http://127.0.0.1:8765/](http://127.0.0.1:8765/) and click around. Try:
@@ -86,30 +113,31 @@ Open [http://127.0.0.1:8765/](http://127.0.0.1:8765/) and click around. Try:
 
 ## Where your data ends up
 
+Everything lands in your **vault** directory (the `vault.default_path` from step 2), *not* the git clone:
+
 ```
-llm-wiki/
-├── raw/sessions/             # [gitignored] converted transcripts
+/home/you/llmwiki-vault/      ← vault root (NOT …/wiki)
+├── raw/sessions/             # converted transcripts
 │   ├── ai-newsletter/
 │   │   ├── 2026-04-04-<slug>.md
 │   │   └── ...
 │   └── <other-project>/
-├── wiki/                     # [gitignored] LLM-maintained wiki pages
+├── wiki/                     # LLM-maintained wiki pages
 │   ├── index.md
 │   ├── log.md
 │   ├── overview.md
 │   ├── sources/
 │   ├── entities/
 │   └── concepts/
-└── site/                     # [gitignored] generated static HTML
-    ├── index.html
-    ├── style.css
-    ├── script.js
-    ├── search-index.json
-    ├── projects/
-    └── sessions/
+├── site/                     # generated static HTML
+│   ├── index.html
+│   ├── search-index.json
+│   ├── projects/
+│   └── sessions/
+└── llmwiki-state.json        # unified sync + queue + synth + quarantine state
 ```
 
-Everything under `raw/`, `wiki/`, and `site/` stays **local**. It is never committed and never sent anywhere.
+The vault lives outside the repo, so it is never committed and never sent anywhere. The clone itself stays clean — only code and demo seeds.
 
 ## New in recent versions
 
@@ -120,17 +148,17 @@ Everything under `raw/`, `wiki/`, and `site/` stays **local**. It is never commi
 
 ## Building the wiki (Karpathy layer 2)
 
-The `sync` step populates `raw/sessions/` with markdown. To build the actual **wiki** on top of that — `wiki/sources/`, `wiki/entities/`, `wiki/concepts/`, linked by `[[wikilinks]]` — you need an LLM in the loop. That's where Claude Code (or any supported agent) comes in.
+The `sync` step populates the vault's `raw/sessions/` with markdown. To build the actual **wiki** on top of that — `wiki/sources/`, `wiki/entities/`, `wiki/concepts/`, linked by `[[wikilinks]]` — you need an LLM in the loop. That's where Claude Code (or any supported agent) comes in.
 
-Inside a Claude Code session at the llm-wiki repo root:
+Inside a Claude Code session at the llm-wiki repo root (with your `config.json` pointing at the vault):
 
 ```
 /wiki-ingest raw/sessions/ai-newsletter/
 ```
 
-The agent reads the source markdowns, writes summary pages, cross-links entities, and updates `wiki/index.md`. See [CLAUDE.md](../CLAUDE.md) for the full Ingest Workflow.
+The agent reads the source markdowns from the vault, writes summary pages, cross-links entities, and updates `wiki/index.md`. See [CLAUDE.md](../CLAUDE.md) for the full Ingest Workflow.
 
-Then re-run `./build.sh` to get the compiled wiki into the HTML site.
+Then re-run `llmwiki build` to get the compiled wiki into the HTML site.
 
 ## Auto-sync on session start (optional)
 

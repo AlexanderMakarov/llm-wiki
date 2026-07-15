@@ -155,6 +155,7 @@ llmwiki sync --adapter obsidian
 | `--since YYYY-MM-DD` | `sync` | Only sessions after that date |
 | `--project <slug>` | `sync` | Restrict to one project |
 | `--force` | `sync`, `synthesize` | Ignore state file, reconvert everything |
+| `--force-resync` | `sync` | Override the newer-schema/corrupt-state guard (#29); implies `--force`, may duplicate `raw/` |
 | `--fail-on-errors` | `lint` | Non-zero exit on error-severity issues |
 | `--vault <path>` | `sync`, `build`, `synthesize`, `add`, `queue`, `all` | Operate on an external vault (also sets the active state file) |
 | `--dir <path>` | `serve` | Directory to serve (usually `<vault>/site`) |

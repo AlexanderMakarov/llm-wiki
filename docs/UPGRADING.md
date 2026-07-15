@@ -15,6 +15,27 @@ The canonical per-release detail is
 [CHANGELOG.md](https://github.com/Pratiyush/llm-wiki/blob/master/CHANGELOG.md)
 — this guide focuses on "what might break".
 
+## Downgrading is guarded (#29)
+
+Pointing an **older** checkout at a vault a **newer** engine wrote used to
+silently reconvert everything under the old slug scheme, duplicating
+`raw/`. As of #29, `sync` refuses to run when the vault's
+`llmwiki-state.json` was written by a newer `meta.schema_version`, or is
+present but unreadable:
+
+```
+error: <vault>/llmwiki-state.json: state file was written by a newer llmwiki
+(schema_version=2 > 1). Upgrade llmwiki, or pass --force-resync to reconvert
+from scratch ...
+```
+
+The fix is to **upgrade the engine** to match the vault. Only pass
+`sync --force-resync` if you genuinely want a full reconvert from scratch
+(it implies `--force` and may duplicate an already-populated `raw/`). This
+guard protects the newer→older direction; the older engine that lacks it
+still can't see the unified file, so keep engines at or ahead of the
+version that last wrote the vault.
+
 ## v1.4.0 — unified queue + vault state (hard cutover)
 
 **Requires Python ≥ 3.12.**

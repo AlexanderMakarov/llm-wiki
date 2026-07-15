@@ -4,7 +4,7 @@ llmwiki ships Windows `.bat` files alongside the Unix shell scripts. Most things
 
 ## Prerequisites
 
-- **Python ≥ 3.9** — install from [python.org](https://www.python.org/downloads/windows/) or the Microsoft Store. Make sure "Add Python to PATH" is checked.
+- **Python ≥ 3.12** — install from [python.org](https://www.python.org/downloads/windows/) or the Microsoft Store. Make sure "Add Python to PATH" is checked.
 - **Git** — install from [git-scm.com](https://git-scm.com/download/win).
 - **Claude Code for Windows** — optional but recommended.
 
@@ -13,12 +13,15 @@ llmwiki ships Windows `.bat` files alongside the Unix shell scripts. Most things
 Open a fresh **Command Prompt** or **PowerShell** window after installing Python (to pick up the new PATH).
 
 ```cmd
-git clone https://github.com/Pratiyush/llm-wiki.git
+git clone https://github.com/AlexanderMakarov/llm-wiki.git
 cd llm-wiki
+python -m venv .venv && .venv\Scripts\activate
 setup.bat
 ```
 
 If `setup.bat` says "python is required but was not found", close and re-open your terminal. If that doesn't fix it, your Python install didn't set PATH — reinstall with the PATH checkbox enabled.
+
+> Like the Unix flow, your transcripts/wiki/site live in an external **vault**, not the clone. After `setup.bat`, follow [getting-started.md](getting-started.md#2-create-a-vault-and-point-configjson-at-it) to create a vault directory and point `config.json` `vault.default_path` at it.
 
 ## Running commands
 
