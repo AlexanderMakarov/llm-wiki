@@ -76,17 +76,33 @@ def cmd_all(args: argparse.Namespace) -> int:
 
 
 def cmd_init(args: argparse.Namespace) -> int:
-    """Create raw/, wiki/, site/ directory structure."""
+    """Create raw/, wiki/, site/ directory structure.
+
+    #29: scaffold into the configured vault (``--vault`` / ``config.json``
+    ``vault.default_path``) so personal data lands outside the git clone.
+    Falls back to REPO_ROOT only when no vault is configured (demo/dev use).
+    """
+    _apply_default_vault(args)
+    base = REPO_ROOT
+    if getattr(args, "vault", None):
+        from llmwiki.vault import resolve_vault
+        try:
+            base = resolve_vault(args.vault).root
+        except (FileNotFoundError, NotADirectoryError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        print(f"==> scaffolding into vault: {base}")
+
     for name in ("raw/sessions", "wiki/sources", "wiki/entities", "wiki/concepts", "wiki/syntheses", "site"):
-        p = REPO_ROOT / name
+        p = base / name
         p.mkdir(parents=True, exist_ok=True)
         keep = p / ".gitkeep"
         if not keep.exists() and not any(p.iterdir()):
             keep.touch()
-        print(f"  {p.relative_to(REPO_ROOT)}/")
+        print(f"  {p.relative_to(base)}/")
 
     # Also create hot/ for per-project caches
-    hot_dir = REPO_ROOT / "wiki" / "hot"
+    hot_dir = base / "wiki" / "hot"
     hot_dir.mkdir(parents=True, exist_ok=True)
     keep = hot_dir / ".gitkeep"
     if not keep.exists():
@@ -117,9 +133,11 @@ def cmd_init(args: argparse.Namespace) -> int:
         "wiki/CRITICAL_FACTS.md": '---\ntitle: "Critical Facts"\ntype: navigation\nlast_updated: ""\n---\n\n# Critical Facts\n\n- raw/ is immutable — never modify files under raw/\n- Wiki uses Obsidian-style double-bracket syntax for cross-references\n- Confidence: 0.0-1.0, 4-factor formula\n- Lifecycle: draft > reviewed > verified > stale > archived\n',
     }
 
-    # v1.0 (#153): seed dashboard.md from examples/wiki_dashboard.md template
+    # v1.0 (#153): seed dashboard.md from examples/wiki_dashboard.md template.
+    # The template ships with the code, so it always reads from REPO_ROOT;
+    # the copy lands in the (possibly vault) base.
     dashboard_template = REPO_ROOT / "examples" / "wiki_dashboard.md"
-    dashboard_target = REPO_ROOT / "wiki" / "dashboard.md"
+    dashboard_target = base / "wiki" / "dashboard.md"
     if dashboard_template.is_file() and not dashboard_target.is_file():
         dashboard_target.write_text(
             dashboard_template.read_text(encoding="utf-8"),
@@ -127,10 +145,10 @@ def cmd_init(args: argparse.Namespace) -> int:
         )
         print(f"  seeded wiki/dashboard.md")
     for rel, content in seeds.items():
-        p = REPO_ROOT / rel
+        p = base / rel
         if not p.exists():
             p.write_text(content, encoding="utf-8")
-            print(f"  seeded {p.relative_to(REPO_ROOT)}")
+            print(f"  seeded {p.relative_to(base)}")
     return 0
 
 
@@ -143,7 +161,11 @@ def cmd_sync(args: argparse.Namespace) -> int:
     _apply_default_vault(args)
 
     from llmwiki.convert import convert_all, DEFAULT_OUT_DIR
-    from llmwiki.state_store import resolve_state_file
+    from llmwiki.state_store import (
+        resolve_state_file,
+        check_sync_state_compatible,
+        IncompatibleStateError,
+    )
 
     # v1.2 (#54): vault-overlay mode — resolve the vault early so bad
     # paths fail before we spend time converting sessions.
@@ -170,6 +192,19 @@ def cmd_sync(args: argparse.Namespace) -> int:
         # via ``apply_default_vault`` → ``configure_state_file``.
         out_dir = vault.root / "raw" / "sessions"
 
+    # #29: downgrade / corrupt-state guard. An older engine (or a truncated
+    # write) that reads the vault's unified state as "empty" would silently
+    # reconvert the whole corpus and duplicate raw/. Hard-stop before we
+    # spend time converting; --force-resync is the explicit escape hatch and
+    # implies a full reconvert.
+    force_resync = getattr(args, "force_resync", False)
+    try:
+        check_sync_state_compatible(state_file, force_resync=force_resync)
+    except IncompatibleStateError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    force = args.force or force_resync
+
     # PR #19 field report: two llmwiki processes on one vault corrupt each
     # other's site resets — serialize the mutating pipeline on a vault lock.
     from llmwiki.pipeline_lock import pipeline_lock
@@ -182,7 +217,7 @@ def cmd_sync(args: argparse.Namespace) -> int:
             since=args.since,
             project=args.project,
             include_current=args.include_current,
-            force=args.force,
+            force=force,
             fail_on_errors=getattr(args, "fail_on_errors", False),
         )
         from llmwiki.synth.pipeline import refresh_synth_pending
@@ -1116,6 +1151,9 @@ def _add_vault_arg(parser: argparse.ArgumentParser, *, role: str) -> None:
             "add": "(#16) Vault-overlay mode: write the converted document "
                    "under the vault's raw/docs/ and run synthesize/build "
                    "against the vault.",
+            "init": "(#29) Scaffold raw/, wiki/, site/ into this vault "
+                    "instead of the repo, so personal data lands outside "
+                    "the git clone.",
         }[role],
     )
 
@@ -1174,6 +1212,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     # init
     init = sub.add_parser("init", help="Scaffold raw/, wiki/, site/ directories")
+    _add_vault_arg(init, role="init")
     init.set_defaults(func=cmd_init)
 
     # sync
@@ -1183,6 +1222,12 @@ def build_parser() -> argparse.ArgumentParser:
     sync.add_argument("--project", type=str, help="Substring filter on project slug")
     sync.add_argument("--include-current", action="store_true", help="Don't skip live sessions (<60 min)")
     sync.add_argument("--force", action="store_true", help="Ignore state file, reconvert everything")
+    sync.add_argument(
+        "--force-resync", action="store_true",
+        help="Override the newer-schema/corrupt-state guard and reconvert "
+             "from scratch (#29). Implies --force; may duplicate an "
+             "already-populated raw/.",
+    )
     sync.add_argument(
         "--fail-on-errors", action="store_true",
         help="Exit 1 if any file fails to convert (default: per-file "
