@@ -1,5 +1,5 @@
 {
-  "_comment": "#arch-m5 (#618): despite living under examples/, this IS the canonical config llmwiki ships. Loaded by convert.load_config() when no ./config.json exists. Copy to ./config.json (gitignored) only if you need a per-checkout override.",
+  "_comment": "#arch-m5 (#618): despite living under examples/, this IS the canonical config llmwiki ships — the base for every command. Your gitignored ./config.json is merged section-wise ON TOP of it (per-section keys override; omitted keys fall through to these defaults), so you only copy the sections you want to change. This merge applies to sync/convert too (#25).",
 
   "filters": {
     "live_session_minutes": 60,
