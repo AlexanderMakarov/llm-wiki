@@ -134,34 +134,10 @@ def _safe_slug(value: str | None, *, fallback: str = "_unknown") -> str:
     return s
 
 
-def _is_subagent(meta: dict[str, Any], path: Path) -> bool:
-    """Return True iff a session is a sub-agent run (#492 / #406).
-
-    Prefers the adapter-written ``is_subagent`` frontmatter field
-    (canonical contract since #406). Falls back to the legacy
-    ``"subagent" in path.name`` substring check ONLY if the field is
-    missing — needed to keep pre-#406 raw files classified correctly
-    until they're re-synced.
-
-    Accepts the field as either a real bool or one of the
-    case-insensitive strings ``"true"`` / ``"false"`` since
-    frontmatter parsers historically coerced inconsistently.
-    """
-    raw = meta.get("is_subagent")
-    if isinstance(raw, bool):
-        return raw
-    if isinstance(raw, str):
-        s = raw.strip().lower()
-        if s in ("true", "yes", "1"):
-            return True
-        if s in ("false", "no", "0"):
-            return False
-    # Field absent or unrecognised — fall back to the legacy heuristic
-    # so pre-#406 raw files (no is_subagent field) still get the right
-    # answer. The renderer renames sub-agent slugs to
-    # `<slug>-subagent-<id>`, so the substring match is correct on
-    # canonically-renamed files even when meta is missing.
-    return "subagent" in path.name
+# Single source of truth lives in _frontmatter (shared with the synth
+# pipeline's include_subagents policy, #30). Aliased here so build.py's
+# call sites keep the familiar private name.
+from llmwiki._frontmatter import is_subagent as _is_subagent  # noqa: E402
 
 
 def discover_sources(root: Path) -> list[tuple[Path, dict[str, Any], str]]:

@@ -29,7 +29,7 @@ from llmwiki import REPO_ROOT
 # #py-m1 (#587) / #arch-h5 (#610): import directly from _frontmatter
 # instead of via build.py. The build module pulls in 145+ transitive
 # imports; the parser sits cleanly in _frontmatter.py with no deps.
-from llmwiki._frontmatter import parse_frontmatter
+from llmwiki._frontmatter import is_subagent, parse_frontmatter
 from llmwiki.synth.base import BaseSynthesizer, DummySynthesizer
 from llmwiki.state_store import read_state as _read_unified_state
 from llmwiki.state_store import resolve_state_file as _resolve_state_file
@@ -169,6 +169,26 @@ def resolve_backend(
             "Unknown synthesis.backend %r — falling back to dummy", name
         )
     return DummySynthesizer()
+
+# #30: valid values for filters.include_subagents. "only-raw" (default) keeps
+# subagent transcripts in raw/ but skips them in synthesize/queue backlog;
+# "all" synthesizes them like any session; "off" never converts them (handled
+# at sync time in convert.py). Kept here next to the synth policy that reads it.
+INCLUDE_SUBAGENTS_MODES = ("all", "only-raw", "off")
+DEFAULT_INCLUDE_SUBAGENTS = "only-raw"
+
+
+def resolve_include_subagents(cfg: Optional[dict[str, Any]] = None) -> str:
+    """Normalize ``cfg["filters"]["include_subagents"]`` to a valid mode (#30).
+
+    Unknown/typo values fall back to the shipped default ``only-raw`` rather
+    than crashing sync/synthesize — mirroring ``resolve_backend``'s
+    tolerance of a bad ``synthesis.backend``.
+    """
+    filters = (cfg or {}).get("filters", {}) or {}
+    raw = str(filters.get("include_subagents", DEFAULT_INCLUDE_SUBAGENTS)).strip().lower()
+    return raw if raw in INCLUDE_SUBAGENTS_MODES else DEFAULT_INCLUDE_SUBAGENTS
+
 
 RAW_SESSIONS = REPO_ROOT / "raw" / "sessions"
 # #1: manually-added documents (kbbuilder `wikiAddDocument`) land here.
@@ -359,6 +379,7 @@ def discover_unsynth_session_rels(
     raw_dir: Optional[Path] = None,
     wiki_sources_dir: Optional[Path] = None,
     state_file: Optional[Path] = None,
+    include_subagents: Optional[str] = None,
 ) -> set[str]:
     """Session rel-paths that the shared estimate logic considers unsynth."""
     from llmwiki.synth.estimate import synthesize_estimate_report
@@ -384,6 +405,7 @@ def discover_unsynth_session_rels(
         wiki_sources_dir=wiki_sources_dir,
         raw_root=raw_dir or RAW_SESSIONS,
         docs_root=(raw_dir.parent / "docs") if raw_dir is not None else RAW_DOCS,
+        include_subagents=include_subagents,
     )
     out: set[str] = set()
     for it in report.get("unsynth_items", []):
@@ -399,14 +421,21 @@ def refresh_synth_pending(
     docs_dir: Optional[Path] = None,
     wiki_sources_dir: Optional[Path] = None,
     state_file: Optional[Path] = None,
+    include_subagents: Optional[str] = None,
 ) -> dict[str, Any]:
     """Compute unsynth backlog and persist it in unified state.
 
     Stores a lightweight pending list under ``synth.pending`` so users can
     inspect backlog risk before running `llmwiki synthesize`/`llm-wiki-add`.
+    The backlog honors ``filters.include_subagents`` (#30) so ``queue status``
+    doesn't count skipped subagents as permanently-pending — resolved from the
+    user's config when the caller doesn't pass a mode explicitly.
     """
     sources_out = wiki_sources_dir or WIKI_SOURCES
     from llmwiki.synth.estimate import synthesize_estimate_report
+    if include_subagents is None:
+        from llmwiki.config_schedule import _load_sessions_config
+        include_subagents = resolve_include_subagents(_load_sessions_config())
     raw_sessions = _discover_raw_sessions(raw_dir)
     state = _load_state(state_file)
     report = synthesize_estimate_report(
@@ -416,6 +445,7 @@ def refresh_synth_pending(
         wiki_sources_dir=sources_out,
         raw_root=raw_dir or RAW_SESSIONS,
         docs_root=docs_dir or ((raw_dir.parent / "docs") if raw_dir is not None else RAW_DOCS),
+        include_subagents=include_subagents,
     )
     pending: list[dict[str, Any]] = []
     for it in report.get("unsynth_items", []):
@@ -961,6 +991,7 @@ def synthesize_new_sessions(
     doc_chunk_max_chars: Optional[int] = None,
     include_docs: bool = True,
     only_paths: Optional[set[Path] | set[str]] = None,
+    include_subagents: Optional[str] = None,
 ) -> dict[str, Any]:
     """Main entry point. Returns a summary dict:
 
@@ -991,6 +1022,16 @@ def synthesize_new_sessions(
         }
 
     sources_out = wiki_sources_dir or WIKI_SOURCES
+    # #30: resolve the subagent policy once. In "only-raw" (the default),
+    # subagent transcripts are skipped here even under --force — the flag means
+    # "redo synthesis", not "override which sessions are eligible".
+    if include_subagents is None:
+        from llmwiki.config_schedule import _load_sessions_config
+        include_subagents = resolve_include_subagents(_load_sessions_config())
+    else:
+        include_subagents = resolve_include_subagents(
+            {"filters": {"include_subagents": include_subagents}}
+        )
     prompt_template = _load_prompt_template()
     # #54: feed the auto-derived topic vocabulary back into the prompt so the
     # model reuses canonical spellings instead of coining new variants. Filled
@@ -1019,10 +1060,18 @@ def synthesize_new_sessions(
             raw_dir=raw_dir,
             wiki_sources_dir=wiki_sources_dir,
             state_file=state_file,
+            include_subagents=include_subagents,
         )
 
     items: list[dict[str, Any]] = []
     for p, meta, body in _discover_raw_sessions(raw_dir):
+        # #30: "only-raw" keeps subagents in raw/ but out of synthesis — even
+        # when --force or an explicit only_paths list would otherwise pull them
+        # in. Switching to "all" is the only way to make them eligible.
+        if include_subagents == "only-raw" and is_subagent(
+            meta if isinstance(meta, dict) else {}, p
+        ):
+            continue
         if only_resolved is not None:
             try:
                 if p.resolve() not in only_resolved:
@@ -1219,6 +1268,7 @@ def synthesize_new_sessions(
         docs_dir=docs_dir,
         wiki_sources_dir=wiki_sources_dir,
         state_file=state_file,
+        include_subagents=include_subagents,
     )
 
     # G-09 (#295): rebuild wiki/index.md so lint's index_sync rule
