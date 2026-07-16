@@ -82,6 +82,94 @@ def default_state() -> dict[str, Any]:
     }
 
 
+class IncompatibleStateError(RuntimeError):
+    """A sync cannot safely reconcile with the on-disk state file.
+
+    Raised when the state file is present but unreadable, or was written by
+    a newer schema than this engine understands. Reading it as an empty
+    dict would silently reconvert the whole corpus and duplicate ``raw/``
+    (#29), so we hard-stop instead and require an explicit ``--force-resync``.
+    """
+
+
+_FORCE_RESYNC_HINT = (
+    "Upgrade llmwiki, or pass --force-resync to reconvert from scratch "
+    "(this re-slugs and may duplicate an already-populated raw/)."
+)
+
+
+def state_incompatibility_reason(raw_text: str | None) -> str | None:
+    """Decide whether an on-disk state blob is unsafe to sync against.
+
+    ``raw_text`` is the verbatim contents of ``llmwiki-state.json``, or
+    ``None`` when the file does not exist. Return a short human-readable
+    reason string when a sync must NOT proceed (it would otherwise treat
+    the state as empty and full-reconvert), or ``None`` when the state is
+    a safe, understood, same-or-older-schema file.
+
+    The three cases that must block are:
+      * present but not valid JSON (half-written / corrupt);
+      * valid JSON but not a state object (e.g. a bare list);
+      * ``meta.schema_version`` greater than this engine's ``SCHEMA_VERSION``.
+
+    An empty / whitespace-only file is treated as compatible: it carries no
+    data to lose (usually a ``touch``ed artifact or an interrupted first
+    write), so blocking on it would only annoy a genuine first sync.
+    """
+    if raw_text is None:
+        return None
+    if not raw_text.strip():
+        return None
+    try:
+        parsed = json.loads(raw_text)
+    except ValueError:
+        return "state file is present but unreadable (corrupt JSON)"
+    if not isinstance(parsed, dict):
+        return "state file is present but is not a state object"
+    meta = parsed.get("meta")
+    version = meta.get("schema_version") if isinstance(meta, dict) else None
+    if version is not None and not isinstance(version, bool):
+        # Fail closed: a numeric version above ours, or a present-but-non-numeric
+        # version (a foreign/unknown format), both mean "don't reconvert blindly".
+        if isinstance(version, (int, float)):
+            if version > SCHEMA_VERSION:
+                return (
+                    f"state file was written by a newer llmwiki "
+                    f"(schema_version={version} > {SCHEMA_VERSION})"
+                )
+        else:
+            return (
+                f"state file has an unrecognized schema_version "
+                f"({version!r}); assuming a newer or foreign format"
+            )
+    return None
+
+
+def check_sync_state_compatible(
+    state_file: Path | None = None, *, force_resync: bool = False
+) -> None:
+    """Hard-stop a sync when the vault's state file is unsafe to reconcile.
+
+    Border check for ``cmd_sync``: raises :class:`IncompatibleStateError`
+    unless ``force_resync`` is set. A missing file is always fine — that is
+    a genuine first sync.
+    """
+    if force_resync:
+        return
+    target = resolve_state_file(state_file)
+    raw_text: str | None = None
+    if target.exists():
+        try:
+            raw_text = target.read_text(encoding="utf-8")
+        except OSError as exc:
+            raise IncompatibleStateError(
+                f"{target}: cannot read state file ({exc}). {_FORCE_RESYNC_HINT}"
+            ) from exc
+    reason = state_incompatibility_reason(raw_text)
+    if reason is not None:
+        raise IncompatibleStateError(f"{target}: {reason}. {_FORCE_RESYNC_HINT}")
+
+
 def _normalize_state_path(explicit: Path) -> Path:
     """Map a vault root or state file path to ``…/llmwiki-state.json``."""
     p = Path(explicit).expanduser().resolve()

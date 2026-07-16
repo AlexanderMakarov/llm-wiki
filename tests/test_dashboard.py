@@ -68,6 +68,12 @@ def test_dashboard_has_connections_section():
 
 def test_cmd_init_seeds_dashboard(tmp_path: Path, monkeypatch):
     """cmd_init should copy the dashboard template to wiki/dashboard.md."""
+    # #29: cmd_init now honors config.json vault.default_path like sync/build.
+    # Isolate from a dev machine's real vault so this exercises the
+    # no-vault (REPO_ROOT) path.
+    monkeypatch.setattr(
+        "llmwiki.config_schedule.load_default_vault_path", lambda: None
+    )
     monkeypatch.setattr("llmwiki.cli.REPO_ROOT", tmp_path)
     # Copy the template into the tmp REPO_ROOT
     (tmp_path / "examples").mkdir()

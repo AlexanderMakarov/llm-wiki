@@ -61,7 +61,7 @@ Edit `config.json`:
 }
 ```
 
-Re-run `./sync.sh --force` to apply the new patterns to existing sessions.
+Re-run `llmwiki sync --force` to apply the new patterns to existing sessions.
 
 ## `.llmwikiignore` — coarse-grained exclusion
 
@@ -83,15 +83,13 @@ ai-newsletter/2026-04-04-secret-deal-*
 | Path | What's there | Gitignored? |
 |---|---|---|
 | `~/.claude/projects/*/*.jsonl` | Raw session transcripts | N/A (outside repo) |
-| `llm-wiki/raw/sessions/` | Converted, redacted markdown | ✅ |
-| `llm-wiki/wiki/` | LLM-maintained wiki pages | ✅ |
-| `llm-wiki/site/` | Generated HTML site | ✅ |
-| `llm-wiki/.ingestion-state.json` | Mtime tracker | ✅ |
-| `llm-wiki/.framework/` | Personal framework notes | ✅ |
-| `llm-wiki/.temp/` | Research corpus (cloned repos) | ✅ |
-| `llm-wiki/config.json` | Your config override | ✅ |
+| `<vault>/raw/sessions/` | Converted, redacted markdown | ✅ (vault lives outside the repo) |
+| `<vault>/wiki/` | LLM-maintained wiki pages | ✅ |
+| `<vault>/site/` | Generated HTML site | ✅ |
+| `<vault>/llmwiki-state.json` | Unified sync + queue + synth state | ✅ |
+| `llm-wiki/config.json` | Your config override (points at the vault) | ✅ |
 
-Everything with a ✅ stays on your machine. None of it is committed, uploaded, or synced.
+`<vault>` is the directory you set as `vault.default_path`. It lives outside the git clone, so nothing under it is tracked. When no vault is configured, these paths fall back to the repo root (demo/dev use). Everything with a ✅ stays on your machine — none of it is committed, uploaded, or synced.
 
 ## The `claude -p` synthesis exception
 
@@ -111,7 +109,7 @@ Even this is off by default. You have to pass `--synthesize` explicitly. If you 
 If you want to share with a colleague on the same network:
 
 ```bash
-./serve.sh --host 0.0.0.0 --port 8765
+llmwiki serve --dir <vault>/site --host 0.0.0.0 --port 8765
 ```
 
 Note: this exposes `site/` (which may contain redacted transcripts of your sessions) to anyone who can reach your machine. Don't do this on untrusted networks.

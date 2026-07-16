@@ -28,8 +28,20 @@ if errorlevel 1 (
 REM 3. Syntax highlighting (v0.5): highlight.js loads from CDN at view time,
 REM    so there is no longer an optional Python dep to install here.
 
-REM 4. Scaffold raw/ wiki/ site/
-python -m llmwiki init
+REM 4. Scaffold raw/ wiki/ site/ — but only into a configured vault.
+REM #29: never grow personal data (raw/ wiki/ site/) inside the git clone.
+set "VAULT_PATH="
+for /f "delims=" %%p in ('python -c "import json;from pathlib import Path;c=Path('config.json');print(((json.loads(c.read_text(encoding='utf-8')).get('vault') or {}).get('default_path') or '') if c.exists() else '')" 2^>nul') do set "VAULT_PATH=%%p"
+if defined VAULT_PATH (
+  echo ==^> scaffolding into vault: !VAULT_PATH!
+  python -m llmwiki init
+) else (
+  echo.
+  echo ==^> no vault configured ^(config.json vault.default_path is unset^).
+  echo     Skipping scaffold so raw/ wiki/ site/ do NOT grow inside this git clone.
+  echo     Create a vault, point config.json at it, then run: python -m llmwiki init
+  echo     See docs\getting-started.md section 2.
+)
 
 REM 5. Show available adapters
 python -m llmwiki adapters

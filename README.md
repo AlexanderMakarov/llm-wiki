@@ -208,6 +208,7 @@ Useful flags:
 - `--vault PATH` — override `config.json` default for one run (`sync` / `build` / `synthesize` / `add` / `queue` / `all`)
 - `--adapter <name>` — limit sync to one source
 - `--force` — re-convert / re-synthesize even if unchanged
+- `--force-resync` (`sync`) — override the newer-schema / corrupt-state guard (#29) and reconvert from scratch; implies `--force`
 - `llmwiki serve --dir PATH` — serve a built `site/` (no `--vault` on serve)
 - `llmwiki lint` — broken wikilinks, orphans, stale pages
 
@@ -246,8 +247,8 @@ Agent workflows (`/wiki-sync`, `/wiki-ingest`, `/wiki-query`) are defined in [CL
 ## CLI reference
 
 ```bash
-llmwiki init
-llmwiki sync [--adapter NAME] [--vault PATH] [--force] [--status]
+llmwiki init [--vault PATH]
+llmwiki sync [--adapter NAME] [--vault PATH] [--force] [--force-resync] [--status]
 llmwiki add <url|file|folder>... [--vault PATH] [--no-synthesize] [--no-build]
 llmwiki build [--vault PATH] [--out PATH]
 llmwiki serve [--dir PATH] [--port N]          # serve a built site/; no --vault

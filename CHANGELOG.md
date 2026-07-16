@@ -10,6 +10,8 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Added
 
+- **Downgrade / corrupt-state guard for `sync` (#29)** — before converting, `sync` inspects the vault's `llmwiki-state.json` and hard-stops (exit 2, nothing converted) when the file is present but unreadable or was written by a newer `meta.schema_version` than this engine understands. Previously an older engine (or a truncated write) read the state as an empty dict and silently reconverted the whole corpus, duplicating `raw/`. The escape hatch is the new `sync --force-resync`, which implies `--force`. Empty/whitespace-only state files are still treated as a legitimate first sync.
+- **`llmwiki init --vault PATH` (#29)** — `init` now honors the configured vault (`--vault` / `config.json` `vault.default_path`) and scaffolds `raw/` `wiki/` `site/` into it, so `setup.sh` no longer grows personal data inside the git clone. With no vault configured it still scaffolds the repo (demo/dev use).
 - **`stub_source_pages` lint rule (#24)** — flags pages in `wiki/sources/` whose body is machine-generated filler (pending sentinel `<!-- llmwiki-pending: … -->` or the dummy backend's `Auto-synthesized from session`), so unfilled placeholders surface even when the state file claims they are done.
 - **Queued `synthesize` tasks accept a payload (#23)** — `payload.paths` (raw file paths) and `payload.force` map onto `synthesize_new_sessions(only_paths=…, force=…)`. An empty payload keeps draining the whole backlog.
 
