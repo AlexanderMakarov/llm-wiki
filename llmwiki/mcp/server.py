@@ -23,6 +23,7 @@ Ships as stdlib-only Python — no MCP SDK dependency.
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 import sys
@@ -31,6 +32,7 @@ from pathlib import Path
 from typing import Any
 
 from llmwiki import __version__, REPO_ROOT as SOURCE_ROOT
+from llmwiki import usage as _usage
 from llmwiki.config_schedule import resolve_content_root
 
 CONTENT_ROOT = resolve_content_root()
@@ -44,6 +46,98 @@ SERVER_INFO = {
 }
 
 PROTOCOL_VERSION = "2024-11-05"
+
+# ─── Usage telemetry (#26) ────────────────────────────────────────────────
+# Every tool call is logged locally so we can answer "is this wiki earning
+# its synthesis spend?". Collection is per-process (each server owns one
+# JSONL file under <root>/usage/), lock-free, and strictly best-effort —
+# a telemetry failure must never break a tool call. Set the env var
+# LLMWIKI_MCP_TELEMETRY=0 to opt out entirely.
+TELEMETRY_ENABLED = os.environ.get(
+    "LLMWIKI_MCP_TELEMETRY", "1").strip().lower() not in {"0", "false", "no", "off"}
+
+# One recorder per content root (keyed by str so tests that repoint
+# REPO_ROOT get their own isolated file).
+_RECORDERS: dict[str, _usage.UsageRecorder] = {}
+
+
+def _get_recorder() -> _usage.UsageRecorder | None:
+    if not TELEMETRY_ENABLED:
+        return None
+    key = str(REPO_ROOT)
+    rec = _RECORDERS.get(key)
+    if rec is None:
+        rec = _usage.UsageRecorder(REPO_ROOT)
+        _RECORDERS[key] = rec
+    return rec
+
+
+def _result_text(result: dict[str, Any]) -> str:
+    """Concatenate the text parts of a tool result payload."""
+    parts = result.get("content") or []
+    return "".join(
+        p.get("text", "") for p in parts if isinstance(p, dict))
+
+
+def _hit_count_from_text(is_error: bool, text: str) -> int | None:
+    """Best-effort result count for a JSON tool payload (already serialized
+    to ``text``, so the hot path stringifies the result only once).
+
+    A zero-hit call is the signal that matters (knowledge gap / noise).
+    An error is 0 hits; a top-level list is its length; a dict exposes its
+    results under one of the known list keys. A non-JSON prose payload is
+    skipped without an exception-throwing parse. Anything we can't
+    interpret is ``None`` (unknown, not a miss). Tools that can report
+    their own exact count do so via the private ``_hits`` result key
+    instead of relying on this — see ``_record_usage``."""
+    if is_error:
+        return 0
+    stripped = text.lstrip()
+    if not stripped or stripped[0] not in "[{":
+        return None  # prose payload → unknown; don't pay for a failed parse
+    try:
+        data = json.loads(text)
+    except (json.JSONDecodeError, ValueError):
+        return None
+    if isinstance(data, list):
+        return len(data)
+    if isinstance(data, dict):
+        for key in ("matches", "results", "pages", "sources",
+                    "items", "entities", "hits"):
+            val = data.get(key)
+            if isinstance(val, list):
+                return len(val)
+    return None
+
+
+def _resolve_hits(result: dict[str, Any], text: str) -> int | None:
+    """Prefer the exact count a tool reported out-of-band (``_hits``); fall
+    back to inferring it from the serialized payload."""
+    explicit = result.get("_hits")
+    if isinstance(explicit, int):
+        return explicit
+    return _hit_count_from_text(bool(result.get("isError")), text)
+
+
+def _record_usage(
+    name: str, args: dict[str, Any], result: dict[str, Any], duration_ms: int,
+) -> None:
+    # The whole body — recorder construction included — is best-effort:
+    # telemetry is observability, never a failure mode for the caller.
+    try:
+        recorder = _get_recorder()
+        if recorder is None:
+            return
+        text = _result_text(result)
+        recorder.record(
+            tool=name,
+            query=_usage.extract_query(args),
+            hits=_resolve_hits(result, text),
+            resp_bytes=len(text.encode("utf-8")),
+            duration_ms=duration_ms,
+        )
+    except Exception:
+        pass
 
 # ─── Tool definitions ─────────────────────────────────────────────────────
 
@@ -441,7 +535,13 @@ def tool_wiki_query(args: dict[str, Any]) -> dict[str, Any]:
     out.append("## Overview context\n")
     out.append(overview[:1000] if overview else "(no overview.md)")
 
-    return _ok("\n".join(out))
+    # Report the exact matched-page count to telemetry out-of-band (#26):
+    # deriving it from the prose above is unreliable because a page body
+    # can contain a line shaped like a result heading. `_hits` is stripped
+    # before the result is sent to the client.
+    result = _ok("\n".join(out))
+    result["_hits"] = len(top)
+    return result
 
 
 def _extract_snippet(content: str, tokens: list[str], max_chars: int = 400) -> str:
@@ -1001,10 +1101,16 @@ def handle_tools_call(params: dict[str, Any]) -> dict[str, Any]:
     impl = TOOL_IMPLS.get(name)
     if impl is None:
         return _err(f"Unknown tool: {name}")
+    start = time.perf_counter()
     try:
-        return impl(args)
+        result = impl(args)
     except Exception as e:
-        return _err(f"Internal error in {name}: {e}")
+        result = _err(f"Internal error in {name}: {e}")
+    duration_ms = int((time.perf_counter() - start) * 1000)
+    _record_usage(name, args, result, duration_ms)
+    # `_hits` is a private telemetry channel — never leak it to the client.
+    result.pop("_hits", None)
+    return result
 
 
 HANDLERS = {

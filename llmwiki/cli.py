@@ -9,6 +9,7 @@ Subcommands:
     add               Add documents: URL, file, or folder → raw/docs/ + synthesize + build
     build             Compile static HTML site from raw/ + wiki/
     serve             Start local HTTP server
+    usage             Report local MCP tool-usage telemetry vs synthesis cost
     adapters          List available session-store adapters
     graph             Build the knowledge graph (graph/graph.json + graph.html)
     export            Export AI-consumable formats: llms-txt, llms-full-txt, jsonld, sitemap, rss, robots, ai-readme, marp
@@ -23,6 +24,7 @@ Subcommands:
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 from typing import Any, Optional
@@ -330,6 +332,69 @@ def cmd_serve(args: argparse.Namespace) -> int:
     """Serve the built site via a local HTTP server."""
     from llmwiki.serve import serve_site
     return serve_site(directory=args.dir, port=args.port, host=args.host, open_browser=args.open)
+
+
+def cmd_usage(args: argparse.Namespace) -> int:
+    """Report local MCP tool-usage telemetry (#26).
+
+    Folds the per-process ``usage/`` logs into totals and prints them
+    next to the synthesis *cost* already persisted in state, so the
+    "is this wiki earning its synthesis spend?" question is answerable
+    at a glance. Local-only — reads files, never the network.
+    """
+    from llmwiki import usage
+    from llmwiki.state_store import read_state
+
+    _apply_default_vault(args)
+    root = Path(args.vault).expanduser().resolve() if getattr(args, "vault", None) else REPO_ROOT
+
+    if getattr(args, "compact", False):
+        usage.compact(root)
+
+    consumption = usage.combined_totals(root)
+
+    estimate = read_state(getattr(args, "state_file", None)).get("synth", {}).get("estimate", {})
+    cost = {
+        "full_force_usd": float(estimate.get("full_force_usd", 0.0) or 0.0),
+        "incremental_usd": float(estimate.get("incremental_usd", 0.0) or 0.0),
+        "updated_at": str(estimate.get("updated_at", "")),
+    }
+
+    if getattr(args, "json", False):
+        print(json.dumps({"consumption": consumption, "cost": cost}, indent=2))
+        return 0
+
+    _print_usage_report(consumption, cost)
+    return 0
+
+
+def _print_usage_report(consumption: dict[str, Any], cost: dict[str, Any]) -> None:
+    total_calls = consumption["total_calls"]
+    print(f"MCP tool usage — {total_calls} calls, "
+          f"{consumption['total_resp_bytes'] / 1024:.1f} KiB served")
+    if not total_calls:
+        print("  (no tool calls logged yet)")
+    else:
+        print(f"  {'tool':<22}{'calls':>7}{'zero-hit':>10}{'bytes':>12}")
+        for tool, s in sorted(consumption["per_tool"].items(),
+                              key=lambda kv: kv[1]["calls"], reverse=True):
+            print(f"  {tool:<22}{s['calls']:>7}"
+                  f"{s['zero_hit_rate'] * 100:>9.0f}%{s['resp_bytes']:>12}")
+        if consumption["per_project"]:
+            print("  by project:")
+            for proj, s in sorted(consumption["per_project"].items(),
+                                  key=lambda kv: kv[1]["calls"], reverse=True):
+                print(f"    {proj:<20}{s['calls']:>7} calls")
+
+    # Cost side: what it took to synthesize the data being consumed.
+    ff = cost["full_force_usd"]
+    if ff:
+        line = f"synthesis cost (full corpus): ${ff:,.2f}"
+        if cost["incremental_usd"]:
+            line += f"   incremental: ${cost['incremental_usd']:,.2f}"
+        print(line)
+    else:
+        print("synthesis cost: unknown (run `llmwiki synthesize --estimate`)")
 
 
 def cmd_adapters(args: argparse.Namespace) -> int:
@@ -1310,6 +1375,23 @@ def build_parser() -> argparse.ArgumentParser:
     serve.add_argument("--host", type=str, default="127.0.0.1")
     serve.add_argument("--open", action="store_true", help="Open browser after starting")
     serve.set_defaults(func=cmd_serve)
+
+    # usage (#26) — local MCP tool-usage telemetry
+    usage_p = sub.add_parser(
+        "usage",
+        help="Report local MCP tool-usage telemetry (calls, zero-hit rate, "
+             "bytes served) next to synthesis cost",
+    )
+    usage_p.add_argument("--vault", type=Path, default=None,
+                         help="Read telemetry from this vault instead of the repo root")
+    usage_p.add_argument("--state-file", type=Path, default=None,
+                         help="State file to read synthesis-cost estimate from")
+    usage_p.add_argument("--json", action="store_true",
+                         help="Emit the aggregated totals as JSON")
+    usage_p.add_argument("--compact", action="store_true",
+                         help="Fold past-month raw logs into the kept-forever "
+                              "rollup and delete them before reporting")
+    usage_p.set_defaults(func=cmd_usage)
 
     # adapters
     ads = sub.add_parser("adapters", help="List available adapters")
