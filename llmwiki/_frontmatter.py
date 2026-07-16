@@ -17,6 +17,7 @@ lists with `- ` bullets).
 from __future__ import annotations
 
 import re
+from pathlib import Path
 from typing import Any, Optional
 
 # Accept LF, CRLF, or CR after each fence so Windows-authored (CRLF) and
@@ -58,6 +59,34 @@ def parse_frontmatter(text: str) -> tuple[dict[str, Any], str]:
         key, raw = mm.group(1), mm.group(2).strip()
         meta[key] = _parse_scalar(raw)
     return meta, body
+
+
+def is_subagent(meta: dict[str, Any], path: Path) -> bool:
+    """Return True iff a session is a sub-agent run (#406 / #492 / #30).
+
+    Prefers the adapter-written ``is_subagent`` frontmatter field (canonical
+    contract since #406), accepting it as a real bool or one of the
+    case-insensitive strings ``"true"``/``"false"`` since frontmatter parsers
+    historically coerced inconsistently. Falls back to the legacy
+    ``"subagent" in path.name`` substring check ONLY when the field is missing
+    — needed to keep pre-#406 raw files (no field) classified correctly until
+    they're re-synced. The renderer renames sub-agent slugs to
+    ``<slug>-subagent-<id>``, so the substring match is correct on canonically
+    renamed files even when meta is absent.
+
+    Single source of truth for both ``build`` (HTML session counts) and the
+    synth pipeline (``include_subagents`` backlog policy).
+    """
+    raw = meta.get("is_subagent")
+    if isinstance(raw, bool):
+        return raw
+    if isinstance(raw, str):
+        s = raw.strip().lower()
+        if s in ("true", "yes", "1"):
+            return True
+        if s in ("false", "no", "0"):
+            return False
+    return "subagent" in path.name
 
 
 def parse_frontmatter_dict(text: str) -> dict[str, Any]:

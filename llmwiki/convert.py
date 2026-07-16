@@ -51,6 +51,14 @@ DEFAULT_CONFIG: dict[str, Any] = {
         # real work, so we don't silently drop it. Opt in if your temp dirs
         # only ever hold e2e/scratch junk.
         "exclude_temp_cwd": False,
+        # #30: what to do with subagent transcripts (is_subagent: true).
+        #   "all"      — sync AND synthesize them like any session.
+        #   "only-raw" — sync into raw/ but SKIP in synthesize/queue backlog;
+        #                the parent session's synthesis already covers them.
+        #                DEFAULT.
+        #   "off"      — don't convert them at all (only the ~500-char excerpt
+        #                in the coordinator's transcript survives).
+        "include_subagents": "only-raw",
     },
     "redaction": {
         "real_username": "",
@@ -1566,6 +1574,11 @@ def convert_all(
     live_cutoff = datetime.now(timezone.utc) - timedelta(minutes=live_minutes)
     exclude_headless = config.get("filters", {}).get("exclude_headless", True)
     exclude_temp_cwd = config.get("filters", {}).get("exclude_temp_cwd", False)
+    # #30: "off" drops subagent transcripts before they ever hit raw/. The
+    # "only-raw"/"all" modes both convert them here (they diverge only in
+    # synthesis), so sync only cares about the "off" case.
+    from llmwiki.synth.pipeline import resolve_include_subagents
+    include_subagents = resolve_include_subagents(config)
 
     since_dt: Optional[datetime] = None
     if since:
@@ -1620,7 +1633,7 @@ def convert_all(
     # `claude -p` runs), so surface the count instead of silently folding
     # it into `filtered` — otherwise the user has no idea why their session
     # history didn't land in the wiki, nor which toggle to flip to get it.
-    excluded_headless = excluded_temp = 0
+    excluded_headless = excluded_temp = excluded_subagents = 0
 
     # G-03 (#289): per-adapter counters so `llmwiki sync --status` can
     # report which adapter saw what. Written under ``_counters`` in the
@@ -1783,6 +1796,16 @@ def convert_all(
                 if not dry_run:
                     state[key] = mtime_to_iso(mtime)
                 continue
+            # #30: compute once here so the "off" filter and the render call
+            # below share a single is_subagent classification.
+            is_subagent_file = adapter.is_subagent(path)
+            if include_subagents == "off" and is_subagent_file:
+                filtered += 1
+                excluded_subagents += 1
+                _bump(cls.name, "filtered")
+                if not dry_run:
+                    state[key] = mtime_to_iso(mtime)
+                continue
             last_t = latest_record_time(records)
             if last_t and last_t > live_cutoff and not include_current:
                 live += 1
@@ -1795,7 +1818,7 @@ def convert_all(
             try:
                 md, slug, started = render_session_markdown(
                     records, path, project_slug, redact, config,
-                    adapter.is_subagent(path),
+                    is_subagent_file,
                     adapter_name=cls.name,
                 )
             except Exception as e:
@@ -1928,11 +1951,12 @@ def convert_all(
         f"summary: {converted} converted, {unchanged} unchanged, "
         f"{live} live, {filtered} filtered, {ignored_count} ignored, {errors} errors"
     )
-    # #8: break out the two content filters so a large silent drop is
+    # #8/#30: break out the content filters so a large silent drop is
     # visible and the user knows which toggle re-enables ingestion.
-    if excluded_headless or excluded_temp:
+    if excluded_headless or excluded_temp or excluded_subagents:
         print(
             f"  filtered breakdown: {excluded_headless} headless "
-            f"(exclude_headless), {excluded_temp} temp-cwd (exclude_temp_cwd)"
+            f"(exclude_headless), {excluded_temp} temp-cwd (exclude_temp_cwd), "
+            f"{excluded_subagents} subagent (include_subagents=off)"
         )
     return 1 if (errors and fail_on_errors) else 0

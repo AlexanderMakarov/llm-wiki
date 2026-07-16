@@ -29,6 +29,7 @@ def synthesize_estimate_report(
     raw_root: Optional[Any] = None,
     docs_root: Optional[Any] = None,
     pricing_table: Optional[dict[str, dict[str, float]]] = None,
+    include_subagents: Optional[str] = None,
 ) -> dict:
     """Compute the incremental vs full-force cost report (G-07 · #293).
 
@@ -95,6 +96,23 @@ def synthesize_estimate_report(
 
     if raw_sessions is None:
         raw_sessions = _discover_raw_sessions()
+    # #30: in "only-raw" (the default), subagent transcripts live in raw/ but
+    # are not synthesis backlog — the parent session's synthesis already covers
+    # them. Drop them from the whole estimate so `new`, `unsynth_items`, and
+    # full-force cost all reflect the sessions actually eligible for synthesis.
+    from llmwiki._frontmatter import is_subagent as _is_subagent
+    from llmwiki.synth.pipeline import (
+        DEFAULT_INCLUDE_SUBAGENTS,
+        INCLUDE_SUBAGENTS_MODES,
+    )
+    mode = (include_subagents or DEFAULT_INCLUDE_SUBAGENTS)
+    if mode not in INCLUDE_SUBAGENTS_MODES:
+        mode = DEFAULT_INCLUDE_SUBAGENTS
+    if mode == "only-raw":
+        raw_sessions = [
+            (p, m, b) for (p, m, b) in raw_sessions
+            if not _is_subagent(m if isinstance(m, dict) else {}, p)
+        ]
     discovered_source_keys = (
         synthesized_source_keys
         if synthesized_source_keys is not None

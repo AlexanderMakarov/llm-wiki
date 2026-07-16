@@ -13,7 +13,9 @@
     "_headless_comment": "#8: skip headless `claude -p` / Agent-SDK sessions (entrypoint=sdk-* or promptSource=sdk). Prevents the synthesis feedback loop when the synthesizer shells out to `claude -p`.",
     "exclude_headless": true,
     "_temp_cwd_comment": "#8: skip sessions whose cwd is a throwaway temp dir (/tmp, /var/folders, ...). Default OFF — a git worktree under /tmp is often real work. Set true only if your temp dirs hold e2e/scratch junk.",
-    "exclude_temp_cwd": false
+    "exclude_temp_cwd": false,
+    "_subagents_comment": "#30: what to do with subagent transcripts (is_subagent: true — each Agent tool fan-out logs its own session; ~59% of a real corpus). 'all' = sync AND synthesize them like any session (full detail, maximum token spend). 'only-raw' = sync into raw/ (complete, greppable, re-synthesizable) but SKIP them in synthesize / queue-run backlog — the wiki covers their outcome via the parent session's synthesis. DEFAULT. 'off' = don't convert them at all; the only record is the ~500-char truncated excerpt of each subagent's final report inside the coordinator session (truncation.tool_result_chars). Switching only-raw->all makes existing raw subagents eligible for synthesis (they appear as backlog); switching to off only affects future syncs — it never deletes existing raw/ files.",
+    "include_subagents": "only-raw"
   },
 
   "redaction": {

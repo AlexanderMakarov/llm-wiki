@@ -965,7 +965,12 @@ def _synthesize_estimate(args: argparse.Namespace | None = None) -> int:
                 )
     from llmwiki.cache import estimate_tokens
     from llmwiki.state_store import resolve_state_file, update_state
-    from llmwiki.synth.pipeline import _discover_raw_sessions, _load_state, discover_synth_source_keys
+    from llmwiki.synth.pipeline import (
+        _discover_raw_sessions,
+        _load_state,
+        discover_synth_source_keys,
+        resolve_include_subagents,
+    )
 
     state_target = resolve_state_file()
     vault_root = state_target.parent
@@ -991,6 +996,7 @@ def _synthesize_estimate(args: argparse.Namespace | None = None) -> int:
         wiki_sources_dir=wiki_sources_dir,
         raw_root=raw_root,
         docs_root=docs_root,
+        include_subagents=resolve_include_subagents(loaded_cfg),
     )
     from datetime import datetime, timezone
     pending_rows = [
