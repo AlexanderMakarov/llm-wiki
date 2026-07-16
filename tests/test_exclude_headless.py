@@ -110,14 +110,16 @@ def test_temp_cwd_filter_default_off():
 
 
 def _write_session(path: Path, *, cwd: str = "/home/user/proj",
-                   entrypoint: str = "cli", prompt_source: str = "typed") -> None:
+                   entrypoint: str = "cli", prompt_source: str = "typed",
+                   session_id: str = "sess-1", slug: str = "demo",
+                   timestamp: str = "2026-04-16T10:00:00Z") -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
         json.dumps({
             "type": "user",
-            "sessionId": "sess-1",
-            "slug": "demo",
-            "timestamp": "2026-04-16T10:00:00Z",
+            "sessionId": session_id,
+            "slug": slug,
+            "timestamp": timestamp,
             "cwd": cwd,
             "entrypoint": entrypoint,
             "promptSource": prompt_source,
@@ -126,7 +128,7 @@ def _write_session(path: Path, *, cwd: str = "/home/user/proj",
         }) + "\n"
         + json.dumps({
             "type": "assistant",
-            "sessionId": "sess-1",
+            "sessionId": session_id,
             "timestamp": "2026-04-16T10:00:01Z",
             "entrypoint": entrypoint,
             "message": {"role": "assistant", "content": "hello"},
@@ -264,6 +266,110 @@ def test_filtered_session_persists_mtime(tmp_path, monkeypatch):
     saved = json.loads(state.read_text(encoding="utf-8"))
     keys = list(saved.get("sync", {}).get("files", {}).keys())
     assert any(k.endswith("headless.jsonl") for k in keys), keys
+
+
+# ─── #25: sync/convert must honor the user's root config.json ─────────────
+#
+# convert_all called with no config_file (the sync + queue default) must
+# merge the personal root config.json over the shipped
+# examples/sessions_config.json — matching _load_sessions_config, which the
+# synth/schedule paths already use. Before the fix, filters like
+# exclude_temp_cwd set in config.json silently no-op'd on sync.
+
+
+def _write_default_configs(tmp_path, monkeypatch, *, examples: dict, user: dict | None):
+    examples_dir = tmp_path / "clone" / "examples"
+    examples_dir.mkdir(parents=True)
+    examples_cfg = examples_dir / "sessions_config.json"
+    examples_cfg.write_text(json.dumps({"filters": examples}), encoding="utf-8")
+    monkeypatch.setattr(c, "DEFAULT_CONFIG_FILE", examples_cfg)
+    user_cfg = tmp_path / "clone" / "config.json"
+    if user is not None:
+        user_cfg.write_text(json.dumps({"filters": user}), encoding="utf-8")
+    monkeypatch.setattr(c, "USER_CONFIG_FILE", user_cfg)
+
+
+def test_default_sync_applies_root_config_filter_override(tmp_path, monkeypatch):
+    # examples ships exclude_temp_cwd OFF; the user's root config.json turns it
+    # ON. A convert_all with no config_file (what sync/queue do) must skip the
+    # temp-cwd session.
+    home, proj, out_dir, state = _seed(tmp_path)
+    _write_session(proj / "scratch.jsonl", cwd="/tmp/awos-e2e-99")
+    _patch(monkeypatch, home, state)
+    _write_default_configs(
+        tmp_path, monkeypatch,
+        examples={"exclude_temp_cwd": False},
+        user={"exclude_temp_cwd": True},
+    )
+    c.discover_adapters()
+    c.convert_all(adapters=["claude_code"], out_dir=out_dir, state_file=state,
+                  include_current=True)
+    assert sorted(out_dir.rglob("*.md")) == []
+
+
+def test_default_sync_without_root_config_keeps_temp_cwd(tmp_path, monkeypatch):
+    # Control: no root config.json → examples default (OFF) wins → session kept.
+    home, proj, out_dir, state = _seed(tmp_path)
+    _write_session(proj / "scratch.jsonl", cwd="/tmp/awos-e2e-99")
+    _patch(monkeypatch, home, state)
+    _write_default_configs(
+        tmp_path, monkeypatch,
+        examples={"exclude_temp_cwd": False},
+        user=None,
+    )
+    c.discover_adapters()
+    c.convert_all(adapters=["claude_code"], out_dir=out_dir, state_file=state,
+                  include_current=True)
+    assert len(sorted(out_dir.rglob("*.md"))) == 1
+
+
+def test_root_config_merge_is_section_wise(tmp_path, monkeypatch):
+    # examples turns exclude_headless OFF and exclude_temp_cwd OFF; the root
+    # config.json only sets exclude_temp_cwd ON. Seed one headless + one
+    # temp-cwd session. A correct section-wise merge keeps the headless one
+    # (examples' exclude_headless=False survives) and drops the temp-cwd one
+    # (user's override applies) → exactly the headless file remains.
+    #
+    # This discriminates all three implementations:
+    #   * no merge          → both kept (2 files)     [the #25 bug]
+    #   * whole-section replace → exclude_headless key lost, code default True
+    #                          drops the headless one → temp-cwd also dropped (0)
+    #   * section-wise merge → exactly the headless file (1)  ✓
+    home, proj, out_dir, state = _seed(tmp_path)
+    _write_session(proj / "headless.jsonl", entrypoint="sdk-cli", prompt_source="sdk",
+                   session_id="sess-headless", slug="headless")
+    _write_session(proj / "scratch.jsonl", cwd="/tmp/awos-e2e-99",
+                   session_id="sess-scratch", slug="scratch")
+    _patch(monkeypatch, home, state)
+    _write_default_configs(
+        tmp_path, monkeypatch,
+        examples={"exclude_headless": False, "exclude_temp_cwd": False},
+        user={"exclude_temp_cwd": True},
+    )
+    c.discover_adapters()
+    c.convert_all(adapters=["claude_code"], out_dir=out_dir, state_file=state,
+                  include_current=True)
+    # Exactly one file: the headless session (kept), not the temp-cwd one.
+    assert len(sorted(out_dir.rglob("*.md"))) == 1
+
+
+def test_explicit_config_file_ignores_root_config(tmp_path, monkeypatch):
+    # Test isolation: passing an explicit config_file stays a single-file read.
+    # The root config.json (exclude_temp_cwd ON) must NOT leak in, so the
+    # temp-cwd session is kept.
+    home, proj, out_dir, state = _seed(tmp_path)
+    _write_session(proj / "scratch.jsonl", cwd="/tmp/awos-e2e-99")
+    _patch(monkeypatch, home, state)
+    _write_default_configs(
+        tmp_path, monkeypatch,
+        examples={"exclude_temp_cwd": False},
+        user={"exclude_temp_cwd": True},
+    )
+    explicit = _write_config(tmp_path, {"exclude_temp_cwd": False})
+    c.discover_adapters()
+    c.convert_all(adapters=["claude_code"], out_dir=out_dir, state_file=state,
+                  config_file=explicit, include_current=True)
+    assert len(sorted(out_dir.rglob("*.md"))) == 1
 
 
 def test_resync_skips_filtered_session_as_unchanged(tmp_path, monkeypatch, capsys):

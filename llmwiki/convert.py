@@ -27,6 +27,11 @@ from llmwiki.state_store import update_state as _update_unified_state
 from llmwiki.state_store import mtime_from_state, mtime_to_iso
 
 DEFAULT_CONFIG_FILE = REPO_ROOT / "examples" / "sessions_config.json"
+# #25: the user's personal, gitignored root config.json. On the sync/queue
+# path (convert_all with no explicit config_file) it is merged over
+# DEFAULT_CONFIG_FILE so `filters` overrides actually apply — mirroring
+# config_schedule._load_sessions_config, which the synth/schedule paths use.
+USER_CONFIG_FILE = REPO_ROOT / "config.json"
 DEFAULT_OUT_DIR = REPO_ROOT / "raw" / "sessions"
 DEFAULT_IGNORE_FILE = REPO_ROOT / ".llmwikiignore"
 
@@ -129,6 +134,51 @@ def load_config(path: Path) -> dict[str, Any]:
             cfg["redaction"]["real_username"] = candidate
         except Exception:
             pass
+    return cfg
+
+
+def _overlay_config_file(cfg: dict[str, Any], path: Path) -> None:
+    """Section-wise merge of ``path``'s JSON over ``cfg`` in place (#25).
+
+    Mirrors ``load_config``'s merge (and ``_load_sessions_config``'s): dict
+    sections are ``.update``d so keys the overlay omits survive; everything
+    else is replaced. Missing/unreadable files are a no-op.
+    """
+    if not path.exists():
+        return
+    try:
+        user = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as e:
+        print(f"  warning: bad config {path}: {e}", file=sys.stderr)
+        return
+    if not isinstance(user, dict):
+        return
+    for section, value in user.items():
+        if isinstance(value, dict) and isinstance(cfg.get(section), dict):
+            cfg[section].update(value)
+        else:
+            cfg[section] = value
+
+
+def _resolve_convert_config(config_file: Optional[Path]) -> dict[str, Any]:
+    """Resolve the effective convert-time config (#25).
+
+    With no explicit ``config_file`` — the ``sync`` and queue default — merge
+    the user's gitignored root ``config.json`` over the shipped
+    ``examples/sessions_config.json`` so ``filters`` overrides (exclude_temp_cwd,
+    exclude_headless, drop_record_types, …) actually reach the convert path.
+    This matches ``config_schedule._load_sessions_config``, which the
+    synth/schedule paths already use — before #25 the two loaders disagreed and
+    ``config.json`` filters silently no-op'd on sync.
+
+    An explicit ``config_file`` stays a single-file read, for ``--config``
+    callers and test isolation. Paths are read from the module globals at call
+    time so an external vault / test fixture can redirect them.
+    """
+    if config_file is not None:
+        return load_config(config_file)
+    cfg = load_config(DEFAULT_CONFIG_FILE)
+    _overlay_config_file(cfg, USER_CONFIG_FILE)
     return cfg
 
 
@@ -1484,7 +1534,7 @@ def convert_all(
     adapters: list[str] | None = None,
     out_dir: Path = DEFAULT_OUT_DIR,
     state_file: Optional[Path] = None,
-    config_file: Path = DEFAULT_CONFIG_FILE,
+    config_file: Optional[Path] = None,
     ignore_file: Path = DEFAULT_IGNORE_FILE,
     since: Optional[str] = None,
     project: Optional[str] = None,
@@ -1504,7 +1554,7 @@ def convert_all(
     when any file errored — for CI-style callers that want a hard gate.
     """
     state_file = _resolve_state_file(state_file)
-    config = load_config(config_file)
+    config = _resolve_convert_config(config_file)
     state = {} if force else load_state(state_file, adapter_names=list(REGISTRY.keys()))
     redact = Redactor(config)
     ignore = IgnoreMatcher.from_file(ignore_file)
