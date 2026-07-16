@@ -61,7 +61,7 @@ Edit `config.json`:
 }
 ```
 
-Re-run `./sync.sh --force` to apply the new patterns to existing sessions.
+Re-run `llmwiki sync --force` to apply the new patterns to existing sessions.
 
 ## `.llmwikiignore` — coarse-grained exclusion
 
@@ -109,7 +109,7 @@ Even this is off by default. You have to pass `--synthesize` explicitly. If you 
 If you want to share with a colleague on the same network:
 
 ```bash
-./serve.sh --host 0.0.0.0 --port 8765
+llmwiki serve --dir <vault>/site --host 0.0.0.0 --port 8765
 ```
 
 Note: this exposes `site/` (which may contain redacted transcripts of your sessions) to anyone who can reach your machine. Don't do this on untrusted networks.

@@ -86,8 +86,21 @@ def cmd_init(args: argparse.Namespace) -> int:
     base = REPO_ROOT
     if getattr(args, "vault", None):
         from llmwiki.vault import resolve_vault
+        vault_arg = Path(args.vault).expanduser()
+        # `init` is the bootstrap command: create the vault root if it does
+        # not exist yet instead of erroring out (#29 review). Print the
+        # creation so a wrong/unmounted path is visible, not silently masked.
+        # An existing path that is not a directory still errors via resolve_vault.
+        if not vault_arg.exists():
+            try:
+                vault_arg.mkdir(parents=True, exist_ok=True)
+            except OSError as exc:
+                print(f"error: cannot create vault directory {vault_arg}: {exc}",
+                      file=sys.stderr)
+                return 2
+            print(f"==> created vault directory: {vault_arg}")
         try:
-            base = resolve_vault(args.vault).root
+            base = resolve_vault(vault_arg).root
         except (FileNotFoundError, NotADirectoryError) as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 2

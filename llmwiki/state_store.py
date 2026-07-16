@@ -128,11 +128,20 @@ def state_incompatibility_reason(raw_text: str | None) -> str | None:
         return "state file is present but is not a state object"
     meta = parsed.get("meta")
     version = meta.get("schema_version") if isinstance(meta, dict) else None
-    if isinstance(version, int) and version > SCHEMA_VERSION:
-        return (
-            f"state file was written by a newer llmwiki "
-            f"(schema_version={version} > {SCHEMA_VERSION})"
-        )
+    if version is not None and not isinstance(version, bool):
+        # Fail closed: a numeric version above ours, or a present-but-non-numeric
+        # version (a foreign/unknown format), both mean "don't reconvert blindly".
+        if isinstance(version, (int, float)):
+            if version > SCHEMA_VERSION:
+                return (
+                    f"state file was written by a newer llmwiki "
+                    f"(schema_version={version} > {SCHEMA_VERSION})"
+                )
+        else:
+            return (
+                f"state file has an unrecognized schema_version "
+                f"({version!r}); assuming a newer or foreign format"
+            )
     return None
 
 

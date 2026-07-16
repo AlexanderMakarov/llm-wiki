@@ -60,6 +60,38 @@ def test_newer_schema_version_is_incompatible():
     assert reason is not None
 
 
+def test_float_newer_schema_version_is_incompatible():
+    # A JSON number like 2.0 deserializes to float — must still block.
+    reason = state_incompatibility_reason(
+        json.dumps({"meta": {"schema_version": float(SCHEMA_VERSION + 1)}})
+    )
+    assert reason is not None
+
+
+def test_non_numeric_schema_version_is_incompatible():
+    # A present-but-non-numeric version means a foreign/unknown format:
+    # fail closed rather than silently reconverting.
+    reason = state_incompatibility_reason(
+        json.dumps({"meta": {"schema_version": "brand-new"}})
+    )
+    assert reason is not None
+
+
+def test_bool_schema_version_is_compatible():
+    # bool is an int subclass but never a real version — don't spuriously block.
+    assert state_incompatibility_reason(
+        json.dumps({"meta": {"schema_version": True}})
+    ) is None
+
+
+def test_meta_not_a_dict_is_compatible():
+    # A legacy/odd state whose meta isn't a dict has no version to trust;
+    # treat as older/compatible (reconcilable), not a hard stop.
+    assert state_incompatibility_reason(
+        json.dumps({"meta": "oops", "sync": {"files": {}}})
+    ) is None
+
+
 # --- the guard used at the sync border ---------------------------------
 
 def test_guard_passes_for_missing_file(tmp_path: Path):
@@ -94,3 +126,20 @@ def test_force_resync_bypasses_guard(tmp_path: Path):
     state_file.write_text("{ half-written", encoding="utf-8")
     # Explicit override: user accepts the full reconvert.
     check_sync_state_compatible(state_file, force_resync=True)
+
+
+def test_guard_raises_on_unreadable_file(tmp_path: Path, monkeypatch):
+    # Present but unreadable (permission/IO error) must hard-stop, not
+    # fall through to an empty state.
+    state_file = tmp_path / "llmwiki-state.json"
+    state_file.write_text("{}", encoding="utf-8")
+    orig_read_text = Path.read_text
+
+    def boom(self, *args, **kwargs):
+        if self.name == "llmwiki-state.json":
+            raise OSError("permission denied")
+        return orig_read_text(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", boom)
+    with pytest.raises(IncompatibleStateError):
+        check_sync_state_compatible(state_file)

@@ -51,7 +51,11 @@ PY
 )
 if [ -n "$VAULT_PATH" ]; then
   echo "==> scaffolding into vault: $VAULT_PATH"
-  python3 -m llmwiki init
+  # Don't let a scaffold failure (e.g. an unreachable/unmounted vault path)
+  # abort the rest of setup under `set -e` — the adapters/status diagnostics
+  # below are what the user needs to diagnose it.
+  python3 -m llmwiki init || \
+    echo "    (init did not complete — run 'llmwiki init' once the vault path is reachable)"
 else
   echo
   echo "==> no vault configured (config.json vault.default_path is unset)."

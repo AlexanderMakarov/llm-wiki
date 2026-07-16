@@ -33,3 +33,18 @@ def test_init_scaffolds_into_vault(tmp_path: Path):
     assert (vault / "site").is_dir()
     # The seed content lands in the vault, not the repo.
     assert "# Wiki Index" in (vault / "wiki" / "index.md").read_text(encoding="utf-8")
+
+
+def test_init_bootstraps_a_missing_vault_dir(tmp_path: Path):
+    # `init` is the command that creates the structure — if the configured
+    # vault dir doesn't exist yet, it should create it, not error out (#29
+    # review). Prevents the "set a vault path, run init, get exit 2" trap.
+    from llmwiki.cli import cmd_init
+
+    vault = tmp_path / "not-yet-created"
+    assert not vault.exists()
+    rc = cmd_init(argparse.Namespace(vault=vault))
+
+    assert rc == 0
+    assert (vault / "raw" / "sessions").is_dir()
+    assert (vault / "wiki" / "index.md").is_file()
