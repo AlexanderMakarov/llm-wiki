@@ -344,6 +344,14 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     color: var(--g-text); font-size: 0.82rem; min-width: 160px;
   }
   .control input::placeholder { color: var(--g-muted); }
+  /* #21: layout-density dropdown sits in the same control pill as the
+     cluster toggle. Match the pill's typography; kill the native chrome. */
+  .control select {
+    border: none; outline: none; background: transparent;
+    color: var(--g-text); font-size: 0.82rem; font-family: inherit;
+    cursor: pointer; font-weight: 600;
+  }
+  .control select option { background: var(--g-panel); color: var(--g-text); }
 
   /* #456: site nav above the graph subheader takes ~56px; subheader itself
      ~58px. Subtract both so the canvas fills the remaining viewport.
@@ -478,6 +486,17 @@ __SITE_NAV__
   <label class="control" title="Filter nodes by label">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
     <input id="search-input" type="search" placeholder="Search nodes… (type to filter)" autocomplete="off">
+  </label>
+  <!-- #21: layout-density switch. 'sparse' (forceAtlas2, loose springs) is
+       the default readable spread; 'tight' pulls single-edge leaf topics
+       back toward the cluster with extra central gravity. Choice persists
+       in localStorage so it survives navigation. -->
+  <label class="control" title="Layout density">
+    Layout:
+    <select id="layout-select" aria-label="Layout density">
+      <option value="sparse">sparse</option>
+      <option value="tight">tight</option>
+    </select>
   </label>
   <button class="control" id="cluster-toggle" title="Group nodes by project / type">
     Cluster: <b id="cluster-mode">off</b>
@@ -686,28 +705,80 @@ function main() {
 
   // ─── Render network ──────────────────────────────────────────────────
   const container = document.getElementById('network');
+
+  // #21: layout-density presets. forceAtlas2Based spreads hub-heavy graphs
+  // far more evenly than barnesHut, which let the dominant hub collapse
+  // everything inward into an unreadable clump. `tight` adds central
+  // gravity + shorter/stiffer springs to reel single-edge leaves back in.
+  const LAYOUTS = {
+    sparse: {
+      solver: 'forceAtlas2Based',
+      forceAtlas2Based: { gravitationalConstant: -120, springLength: 180,
+        springConstant: 0.08, avoidOverlap: 0.6, damping: 0.4 },
+      stabilization: { iterations: 2000 },
+    },
+    tight: {
+      solver: 'forceAtlas2Based',
+      forceAtlas2Based: { gravitationalConstant: -120, centralGravity: 0.06,
+        springLength: 120, springConstant: 0.14, avoidOverlap: 0.7, damping: 0.4 },
+      stabilization: { iterations: 2000 },
+    },
+  };
+  // Persisted choice (defaults to sparse). Guarded so a locked-down
+  // localStorage can't break the render.
+  let layoutMode = 'sparse';
+  try {
+    const s = localStorage.getItem('llmwiki-graph-layout');
+    if (s === 'sparse' || s === 'tight') layoutMode = s;
+  } catch (e) { /* private mode / disabled storage */ }
+
   const network = new vis.Network(container, { nodes, edges }, {
     nodes: {
       shape: 'dot',
       font: { color: cssVar('--g-text'), size: 12, face: 'system-ui' },
       scaling: { min: 8, max: 32, label: { enabled: true, min: 10, max: 18 } },
     },
-    edges: { smooth: { enabled: true, type: 'continuous' } },
-    physics: {
-      barnesHut: { gravitationalConstant: -4000, springLength: 120, springConstant: 0.03 },
-      stabilization: { iterations: 200 },
-    },
+    // #21: cubicBezier is a STATIC curve type, so edges keep their
+    // curvature after the physics freeze. The old "continuous" type
+    // rendered as near-straight lines; the "dynamic" type would curve
+    // more but needs live physics, conflicting with the #9 freeze.
+    edges: { smooth: { enabled: true, type: 'cubicBezier', roundness: 0.4 } },
+    physics: LAYOUTS[layoutMode],
     interaction: { hover: true, tooltipDelay: 120 },
   });
 
-  // #9: freeze the layout once the initial simulation settles. Physics
-  // left running keeps perturbing node positions live ("shaking" on every
-  // open). `once`, not `on`: clustering can restabilize later, and a
-  // repeated fit() would yank the camera away from the user.
-  network.once('stabilizationIterationsDone', () => {
-    network.setOptions({ physics: false });
-    network.fit();
-  });
+  // #9: freeze the layout once the simulation settles. Physics left running
+  // keeps perturbing node positions live ("shaking" on every open).
+  // `once`, not `on`, and re-registered explicitly on each layout switch,
+  // so a stray restabilize (e.g. clustering) never yanks the camera.
+  function freezeWhenStable(fit) {
+    network.once('stabilizationIterationsDone', () => {
+      network.setOptions({ physics: false });
+      if (fit) network.fit();
+    });
+  }
+  freezeWhenStable(true);
+
+  // #21: switch layout density live, then re-freeze + fit. Fitting here is
+  // intentional — the #9 no-yank rule guards incidental clicks; a deliberate
+  // layout change repositions every node, so framing it is expected.
+  function applyLayout(mode) {
+    if (!LAYOUTS[mode]) return;
+    layoutMode = mode;
+    try { localStorage.setItem('llmwiki-graph-layout', mode); } catch (e) {}
+    freezeWhenStable(true);
+    network.setOptions({ physics: Object.assign({ enabled: true }, LAYOUTS[mode]) });
+    // setOptions re-enables *live* physics but does NOT emit
+    // stabilizationIterationsDone, so the freeze handler above would never
+    // fire and the new layout would shake forever (#9). Kick an explicit
+    // stabilization run to drive it to a settled, frozen state.
+    network.stabilize();
+  }
+  const layoutSelect = document.getElementById('layout-select');
+  if (layoutSelect) {
+    layoutSelect.value = layoutMode;
+    layoutSelect.addEventListener('change', e => applyLayout(e.target.value));
+  }
 
   // ─── Click: focus neighbourhood + navigate (#328) ─────────────────────
   // A left-click ALWAYS highlights the node's 1-hop neighbourhood — the
