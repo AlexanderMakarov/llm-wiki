@@ -66,7 +66,7 @@ from llmwiki.project_topics import (
     render_topic_chips,
 )
 from llmwiki import raw_docs_site
-from llmwiki.usage import combined_totals as _mcp_combined_totals
+from llmwiki.usage import combined_totals as _mcp_combined_totals, is_entity_tool
 from llmwiki.viz_heatmap import collect_session_counts, render_heatmap
 from llmwiki.viz_tokens import (
     render_project_token_card,
@@ -1477,6 +1477,71 @@ def render_sessions_index(
     return out_path
 
 
+def render_mcp_usage_section(
+    usage_totals: dict[str, Any],
+    docs_by_project: dict[str, int],
+    link_prefix: str = "",
+) -> str:
+    """Static "Wiki usage (MCP)" block: per-tool calls/items, totals, the
+    most MCP-active project, and the raw-document total. Empty string when
+    there is neither telemetry nor any raw document."""
+    total_calls = int(usage_totals.get("total_calls", 0) or 0)
+    total_docs = sum(docs_by_project.values()) if docs_by_project else 0
+    if total_calls == 0 and total_docs == 0:
+        return ""
+
+    per_tool = usage_totals.get("per_tool", {})
+    rows = []
+    for tool, s in sorted(per_tool.items(), key=lambda kv: -kv[1].get("calls", 0)):
+        calls = int(s.get("calls", 0) or 0)
+        items = int(s.get("items_returned", 0) or 0)
+        items_cell = str(items) if is_entity_tool(tool) else "—"
+        zhr = float(s.get("zero_hit_rate", 0.0) or 0.0)
+        rows.append(
+            f'<tr><td>{html.escape(tool)}</td><td>{calls}</td>'
+            f'<td>{items_cell}</td><td>{zhr * 100:.0f}%</td></tr>'
+        )
+    table = (
+        '<table class="mcp-usage-table"><thead><tr>'
+        '<th>Tool</th><th>Calls</th><th>Items returned</th><th>Zero-hit rate</th>'
+        '</tr></thead><tbody>' + "".join(rows) + '</tbody></table>'
+    ) if rows else ""
+
+    per_project = usage_totals.get("per_project", {})
+    most_active = ""
+    if per_project:
+        slug, s = max(per_project.items(), key=lambda kv: kv[1].get("calls", 0))
+        if s.get("calls", 0):
+            most_active = (
+                f'<a class="token-stat" href="{link_prefix}projects/{html.escape(slug)}.html">'
+                f'<div class="token-stat-label muted">Most MCP-active project</div>'
+                f'<div class="token-stat-value">{int(s.get("calls", 0))}</div>'
+                f'<div class="token-stat-sub muted">{html.escape(slug)} · calls</div></a>'
+            )
+    total_items = int(usage_totals.get("total_items_returned", 0) or 0)
+    total_procs = int(usage_totals.get("total_server_processes", 0) or 0)
+    summary = (
+        '<div class="token-stat-grid">'
+        f'<div class="token-stat"><div class="token-stat-label muted">MCP calls</div>'
+        f'<div class="token-stat-value">{total_calls}</div></div>'
+        f'<div class="token-stat"><div class="token-stat-label muted">Items returned</div>'
+        f'<div class="token-stat-value">{total_items}</div></div>'
+        f'<div class="token-stat"><div class="token-stat-label muted">MCP server processes</div>'
+        f'<div class="token-stat-value">{total_procs}</div></div>'
+        f'<div class="token-stat"><div class="token-stat-label muted">Raw documents</div>'
+        f'<div class="token-stat-value">{total_docs}</div></div>'
+        f'{most_active}'
+        '</div>'
+    )
+    return (
+        '<section class="section mcp-usage-section"><div class="container">'
+        '<h2>Wiki usage (MCP)</h2>'
+        '<p class="muted">Lifetime MCP tool usage, as of last build.</p>'
+        f'{summary}{table}'
+        '</div></section>'
+    )
+
+
 def render_analytics(
     groups: dict[str, list[tuple[Path, dict[str, Any], str]]],
     all_sources: list[tuple[Path, dict[str, Any], str]],
@@ -1508,11 +1573,11 @@ def render_analytics(
     # "last year of activity" view.
     heatmap_entries = [m for _, m, _ in all_sources]
     heatmap_counts = collect_session_counts(heatmap_entries)
-    heatmap_svg = render_heatmap(heatmap_counts, title_prefix="Activity")
+    heatmap_svg = render_heatmap(heatmap_counts, title_prefix="Agents Activity")
     heatmap_block = f"""<section class="section heatmap-section">
   <div class="container">
     <div class="activity-heatmap">
-      <div class="heatmap-label muted">Activity · last 365 days</div>
+      <div class="heatmap-label muted">Agents Activity · last 365 days</div>
       {heatmap_svg}
     </div>
   </div>
@@ -1525,6 +1590,12 @@ def render_analytics(
     for project, sessions in groups.items():
         metas_by_project[project] = [m for _, m, _ in sessions]
     token_stats_block = render_site_token_stats(metas_by_project, link_prefix="")
+
+    # #27: site-wide "Wiki usage (MCP)" block — per-tool call/item table,
+    # totals, most MCP-active project, and raw-document total. Empty when
+    # there is no telemetry and no raw document.
+    mcp_block = render_mcp_usage_section(
+        usage_totals or {}, docs_by_project or {}, link_prefix="")
 
     # Recently updated — show last 10 entries from wiki/log.md.
     log_events = _recent_log_events(
@@ -1581,6 +1652,7 @@ def render_analytics(
 
     body = f"""{heatmap_block}
 {token_stats_block}
+{mcp_block}
 {recent_block}
 <section class="section">
   <div class="container">

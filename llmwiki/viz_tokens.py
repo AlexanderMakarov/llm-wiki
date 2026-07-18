@@ -400,10 +400,9 @@ def render_site_token_stats(
         '<section class="section token-stats-section">',
         '  <div class="container">',
         '    <div class="token-stat-grid">',
-        f'      <div class="token-stat"><div class="token-stat-label muted">Total tokens</div>'
-        f'<div class="token-stat-value">{format_tokens(total)}</div></div>',
-        f'      <div class="token-stat"><div class="token-stat-label muted">Average per session</div>'
-        f'<div class="token-stat-value">{format_tokens(avg)}</div></div>',
+        f'      <div class="token-stat"><div class="token-stat-label muted">Tokens</div>'
+        f'<div class="token-stat-value">{format_tokens(total)}</div>'
+        f'<div class="token-stat-sub muted">{format_tokens(avg)} / session avg</div></div>',
     ]
     if best is not None:
         slug, r = best
@@ -418,7 +417,7 @@ def render_site_token_stats(
         slug, total_proj = heaviest
         parts.append(
             f'      <a class="token-stat" href="{link_prefix}projects/{html.escape(slug)}.html">'
-            f'<div class="token-stat-label muted">Heaviest project</div>'
+            f'<div class="token-stat-label muted">Heaviest project (by tokens)</div>'
             f'<div class="token-stat-value">{format_tokens(total_proj)}</div>'
             f'<div class="token-stat-sub muted">{html.escape(slug)}</div>'
             f'</a>'
