@@ -400,7 +400,11 @@ def render_recent_activity(log_events: list[Any]) -> str:
     for ev in log_events:
         # Prefer a processed-count detail when present; otherwise show title.
         processed = ev.details.get("Processed") if hasattr(ev, "details") else None
-        right_label = f"{processed} processed" if processed else ev.title
+        if processed is not None and str(processed).strip():
+            p = str(processed).strip()
+            right_label = f"{p} processed" if p.isdigit() else p
+        else:
+            right_label = ev.title
         # #ui-l4 (#580): the event label is truncated visually via CSS
         # `text-overflow: ellipsis` when it exceeds the column width.
         # Add `title=` so a hover surfaces the full text — keyboard
