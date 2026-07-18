@@ -221,3 +221,6 @@ test-results/
 .playwright/
 .playwright-mcp/
 
+
+# MCP usage telemetry (#26) — runtime data, per-vault
+usage/

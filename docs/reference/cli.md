@@ -203,6 +203,41 @@ don't expose to the public internet.
 
 ---
 
+## `usage` — MCP tool-usage telemetry vs synthesis cost (#26)
+
+```bash
+python3 -m llmwiki usage              # human-readable report
+python3 -m llmwiki usage --json       # machine-readable totals
+python3 -m llmwiki usage --compact    # roll past months into rollup.json first
+```
+
+Folds the local MCP telemetry logs into totals and prints them next to
+the synthesis cost persisted in state — so the "is this wiki earning its
+synthesis spend?" question is answerable at a glance.
+
+The MCP server logs one JSON record per tool call to a **per-process**
+file under `<vault>/usage/` (`mcp-<pid>-<start>.jsonl`), merged at read
+time. Several server processes run at once (one per editor session), so
+per-process files mean zero write contention and no lock on the hot path;
+telemetry never touches `llmwiki-state.json`. Each record carries `tool`,
+`query`, `hits` (`0` = a knowledge gap or noise; `null` = the tool can't
+report a count), `resp_bytes`, `duration_ms`, `caller_project`,
+`server_pid`, `server_started`. Writes are best-effort — a telemetry
+failure never breaks a tool call. Opt out with `LLMWIKI_MCP_TELEMETRY=0`.
+
+Scope is MCP calls only — `file://` static-site browsing stays untracked.
+
+### Flags
+
+| Flag | What |
+|---|---|
+| `--json` | Emit the aggregated totals (`consumption` + `cost`) as JSON. |
+| `--compact` | Fold whole past months into the kept-forever `usage/rollup.json` and delete their raw logs before reporting. |
+| `--vault PATH` | Read telemetry from this vault instead of the repo root. |
+| `--state-file PATH` | State file to read the synthesis-cost estimate from. |
+
+---
+
 ## `adapters` — list every adapter + its status
 
 ```bash
