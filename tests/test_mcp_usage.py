@@ -398,3 +398,35 @@ def test_entity_tool_classification():
     assert is_entity_tool("wiki_search") is True
     assert is_entity_tool("wiki_dashboard") is False
     assert "wiki_confidence" in ENTITY_TOOLS and "wiki_sync" not in ENTITY_TOOLS
+
+
+# ─── Task 2: server_processes ─────────────────────────────────────────────
+
+def test_server_processes_counts_distinct_pairs():
+    from llmwiki.usage import aggregate
+    records = [
+        {"tool": "wiki_search", "caller_project": "a", "server_pid": 1, "server_started": "s1"},
+        {"tool": "wiki_search", "caller_project": "a", "server_pid": 1, "server_started": "s1"},  # same proc
+        {"tool": "wiki_query",  "caller_project": "a", "server_pid": 2, "server_started": "s2"},  # 2nd proc
+        {"tool": "wiki_query",  "caller_project": "b", "server_pid": 3, "server_started": "s3"},
+    ]
+    agg = aggregate(records)
+    assert agg["per_project"]["a"]["server_processes"] == 2
+    assert agg["per_project"]["b"]["server_processes"] == 1
+    assert agg["total_server_processes"] == 3
+
+def test_merge_sums_server_processes_and_legacy_rollup_defaults_zero():
+    from llmwiki.usage import aggregate, merge_aggregates
+    live = aggregate([
+        {"tool": "wiki_search", "caller_project": "a", "server_pid": 9, "server_started": "s9"},
+    ])
+    legacy = {  # old rollup shape: no items_returned / server_processes
+        "total_calls": 2, "total_resp_bytes": 0,
+        "per_tool": {"wiki_search": {"calls": 2, "zero_hits": 0, "resp_bytes": 0}},
+        "per_project": {"a": {"calls": 2, "resp_bytes": 0}},
+    }
+    merged = merge_aggregates(legacy, live)
+    assert merged["per_project"]["a"]["server_processes"] == 1   # 0 (legacy) + 1 (live)
+    assert merged["per_project"]["a"]["items_returned"] == 0
+    assert merged["total_server_processes"] == 1
+    assert merged["total_calls"] == 3

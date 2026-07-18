@@ -196,6 +196,7 @@ def aggregate(records: Iterable[dict[str, Any]]) -> dict[str, Any]:
     so it is never counted as zero-hit.
     """
     totals = _empty_totals()
+    proc_sets: dict[str, set] = {}
     for r in records:
         tool = r.get("tool") or "unknown"
         project = r.get("caller_project") or "unknown"
@@ -219,8 +220,20 @@ def aggregate(records: Iterable[dict[str, Any]]) -> dict[str, Any]:
             pstat["items_returned"] += hits
             totals["total_items_returned"] += hits
 
+        pid = r.get("server_pid")
+        started = r.get("server_started")
+        if pid is not None and started is not None:
+            proc_sets.setdefault(project, set()).add((pid, started))
+
         totals["total_calls"] += 1
         totals["total_resp_bytes"] += resp_bytes
+
+    for proj, procs in proc_sets.items():
+        pstat = totals["per_project"].setdefault(
+            proj, {"calls": 0, "resp_bytes": 0, "items_returned": 0, "server_processes": 0})
+        pstat["server_processes"] = len(procs)
+        totals["total_server_processes"] += len(procs)
+
     return _finalize_rates(totals)
 
 
