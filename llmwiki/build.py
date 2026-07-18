@@ -66,6 +66,7 @@ from llmwiki.project_topics import (
     render_topic_chips,
 )
 from llmwiki import raw_docs_site
+from llmwiki.usage import combined_totals as _mcp_combined_totals
 from llmwiki.viz_heatmap import collect_session_counts, render_heatmap
 from llmwiki.viz_tokens import (
     render_project_token_card,
@@ -1132,6 +1133,8 @@ def render_project_page(
     project_slug: str,
     sessions: list[tuple[Path, dict[str, Any], str]],
     out_dir: Path,
+    usage_totals: Optional[dict[str, Any]] = None,
+    doc_count: int = 0,
 ) -> Path:
     main_sessions = [s for s in sessions if not _is_subagent(s[1], s[0])]
     subagent_sessions = [s for s in sessions if s not in main_sessions]
@@ -1479,6 +1482,8 @@ def render_analytics(
     all_sources: list[tuple[Path, dict[str, Any], str]],
     out_dir: Path,
     synthesis: Optional[str] = None,
+    usage_totals: Optional[dict[str, Any]] = None,
+    docs_by_project: Optional[dict[str, int]] = None,
 ) -> Path:
     """Render ``analytics.html`` — hero stats, activity heatmap, token
     stats, recently-updated, projects grid."""
@@ -2539,8 +2544,19 @@ def build_site(
     if sibling_writers_loaded:
         print(f"  wrote {n_siblings} per-page siblings (.txt + .json)")
 
+    # Raw-doc tree + MCP usage totals are needed by both the per-project
+    # pages and the analytics page, so compute them once up front.
+    raw_docs_dir = raw_dir / "docs"
+    doc_files = raw_docs_site.scan_raw_docs(raw_docs_dir)
+    docs_by_project = raw_docs_site.count_docs_by_project(doc_files)
+    usage_totals = _mcp_combined_totals(REPO_ROOT)
+
     for project, sessions in groups.items():
-        render_project_page(project, sessions, out_dir)
+        render_project_page(
+            project, sessions, out_dir,
+            usage_totals=usage_totals,
+            doc_count=docs_by_project.get(project, 0),
+        )
     print(f"  wrote {len(groups)} project pages")
 
     render_projects_index(groups, out_dir)
@@ -2550,14 +2566,16 @@ def build_site(
     # tree browser; recent.html lists newest documents; analytics.html
     # carries the heatmap,
     # token stats, and projects grid.
-    raw_docs_dir = raw_dir / "docs"
-    doc_files = raw_docs_site.scan_raw_docs(raw_docs_dir)
     docs_root = raw_docs_site.build_tree(doc_files)
     doc_entries = raw_docs_site.group_documents(doc_files)
     render_index(docs_root, doc_entries, len(doc_files), out_dir)
     render_raw(docs_root, doc_entries, len(doc_files), out_dir)
     render_recent(doc_entries, out_dir)
-    render_analytics(groups, sources, out_dir, synthesis=synthesis)
+    render_analytics(
+        groups, sources, out_dir, synthesis=synthesis,
+        usage_totals=usage_totals,
+        docs_by_project=docs_by_project,
+    )
     doc_pages = raw_docs_site.render_document_pages(
         doc_files,
         docs_root,
