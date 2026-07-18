@@ -282,8 +282,8 @@ def test_site_stats_block_returns_empty_when_no_data():
 
 
 def test_site_stats_block_renders_three_cards():
-    # #27: the former "Total tokens" + "Average per session" cards were
-    # merged into a single "Tokens" card (value + "N / session avg" sub-line).
+    # #27: Site token stats render a single "Tokens" card (value + "<avg> / session avg"
+    # sub-line), plus Best cache hit and Heaviest project (by tokens).
     by_project = {
         "alpha": [{"token_totals": '{"input": 100, "cache_read": 900}'}],
         "beta": [{"token_totals": '{"input": 500, "cache_read": 10, "output": 2000}'}],

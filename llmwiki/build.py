@@ -1208,11 +1208,11 @@ def render_project_page(
     # the full grid with the rest as level-0 cells, so the shape matches.
     proj_entries = [m for _, m, _ in sessions]
     proj_counts = collect_session_counts(proj_entries, project_slug=project_slug)
-    proj_heatmap = render_heatmap(proj_counts, title_prefix=f"{project_slug} activity")
+    proj_heatmap = render_heatmap(proj_counts, title_prefix=f"{project_slug} agents activity")
     heatmap_block = f"""<section class="section heatmap-section">
   <div class="container">
     <div class="activity-heatmap">
-      <div class="heatmap-label muted">Activity · last 365 days · {html.escape(project_slug)}</div>
+      <div class="heatmap-label muted">Agents Activity · last 365 days · {html.escape(project_slug)}</div>
       {proj_heatmap}
     </div>
   </div>
@@ -1612,9 +1612,9 @@ def render_analytics(
   </div>
 </section>"""
 
-    # v0.8 (#66): site-wide token summary stats — four cards showing
-    # total tokens processed, average per session, best cache hit project,
-    # heaviest project. Empty if no session has token_totals data.
+    # v0.8 (#66): site-wide token summary stats — three cards showing
+    # Tokens (value + avg per session), best cache hit project, and heaviest
+    # project (by tokens). Empty if no session has token_totals data.
     metas_by_project: dict[str, list[dict[str, Any]]] = {}
     for project, sessions in groups.items():
         metas_by_project[project] = [m for _, m, _ in sessions]
