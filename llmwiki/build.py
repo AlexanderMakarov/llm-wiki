@@ -1129,6 +1129,32 @@ def render_session(
     return out_path
 
 
+def render_project_usage_block(
+    project_slug: str, usage_totals: dict[str, Any], doc_count: int
+) -> str:
+    """Per-project stats: raw-doc count + MCP calls / items / server processes.
+    Empty when the project has neither raw docs nor telemetry."""
+    p = (usage_totals or {}).get("per_project", {}).get(project_slug, {})
+    calls = int(p.get("calls", 0) or 0)
+    items = int(p.get("items_returned", 0) or 0)
+    procs = int(p.get("server_processes", 0) or 0)
+    if calls == 0 and doc_count == 0:
+        return ""
+    return (
+        '<section class="section project-usage-section"><div class="container">'
+        '<div class="token-stat-grid">'
+        f'<div class="token-stat"><div class="token-stat-label muted">Raw documents</div>'
+        f'<div class="token-stat-value">{int(doc_count)}</div></div>'
+        f'<div class="token-stat"><div class="token-stat-label muted">MCP calls</div>'
+        f'<div class="token-stat-value">{calls}</div></div>'
+        f'<div class="token-stat"><div class="token-stat-label muted">MCP items returned</div>'
+        f'<div class="token-stat-value">{items}</div></div>'
+        f'<div class="token-stat"><div class="token-stat-label muted">MCP server processes</div>'
+        f'<div class="token-stat-value">{procs}</div></div>'
+        '</div></div></section>'
+    )
+
+
 def render_project_page(
     project_slug: str,
     sessions: list[tuple[Path, dict[str, Any], str]],
@@ -1252,10 +1278,13 @@ def render_project_page(
             '</section>\n'
         )
 
+    usage_block = render_project_usage_block(project_slug, usage_totals or {}, doc_count)
+
     body = f"""{topics_strip}
 {heatmap_block}
 {tool_chart_block}
 {token_timeline_block}
+{usage_block}
 <section class="section">
   <div class="container">
     {crumbs}
