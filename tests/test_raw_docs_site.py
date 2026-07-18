@@ -14,8 +14,10 @@ import pytest
 
 from llmwiki.build import render_index, render_recent, nav_bar
 from llmwiki.raw_docs_site import (
+    RawDocFile,
     build_tree,
     clean_chunk_title,
+    count_docs_by_project,
     group_documents,
     render_document_pages,
     render_sidebar,
@@ -157,3 +159,21 @@ def test_nav_order_and_no_changelog():
     positions = [html_text.index(f">{label}</a>") for label in links]
     assert positions == sorted(positions)
     assert "changelog" not in html_text.lower()
+
+
+def _doc(rel, project=None):
+    """Helper to create a RawDocFile for testing."""
+    from pathlib import PurePosixPath
+    meta = {"project": project} if project else {}
+    return RawDocFile(path=Path("/x"), rel=PurePosixPath(rel), meta=meta, body="")
+
+
+def test_count_docs_by_project_uses_frontmatter_then_folder():
+    files = [
+        _doc("alpha/a.md", project="proj-x"),
+        _doc("alpha/b.md", project="proj-x"),
+        _doc("beta/c.md"),                 # no project → folder "beta"
+        _doc("solo.md"),                   # no project, no folder → stem "solo"
+    ]
+    counts = count_docs_by_project(files)
+    assert counts == {"proj-x": 2, "beta": 1, "solo": 1}

@@ -115,6 +115,22 @@ def scan_raw_docs(docs_dir: Path) -> list[RawDocFile]:
     return out
 
 
+def count_docs_by_project(files: list[RawDocFile]) -> dict[str, int]:
+    """Count raw documents per owning project.
+
+    Attribution mirrors ``add_doc``: the ``project`` frontmatter field when
+    present, else the top folder segment under ``raw/docs``, else the file
+    stem for a bare top-level doc.
+    """
+    out: dict[str, int] = {}
+    for f in files:
+        proj = str(f.meta.get("project") or "").strip()
+        if not proj:
+            proj = f.rel.parts[0] if len(f.rel.parts) > 1 else f.rel.stem
+        out[proj] = out.get(proj, 0) + 1
+    return out
+
+
 def build_tree(files: list[RawDocFile]) -> DocFolder:
     """Fold the flat file list into a nested folder tree."""
     root = DocFolder(name="")
