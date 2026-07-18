@@ -43,11 +43,33 @@ def test_freeze_handler_registered_once():
     assert "network.once('stabilizationIterationsDone'" in HTML_TEMPLATE
 
 
-def test_edges_use_continuous_smoothing():
-    # 'dynamic' smoothing adds live per-frame recomputation via helper
-    # nodes; 'continuous' is the cheap static variant.
-    assert "'continuous'" in HTML_TEMPLATE
+def test_edges_use_static_curved_smoothing():
+    # #21: 'continuous' rendered edges as near-straight lines. 'cubicBezier'
+    # is a STATIC curve type whose curvature survives the physics freeze
+    # (unlike 'dynamic', which needs live physics and conflicts with the #9
+    # freeze).
+    assert "cubicBezier" in HTML_TEMPLATE
     assert "'dynamic'" not in HTML_TEMPLATE
+
+
+def test_forceatlas2_solver_used():
+    # #21: forceAtlas2Based spreads hub-heavy graphs far more evenly than
+    # barnesHut, which let the dominant hub collapse everything inward.
+    assert "forceAtlas2Based" in HTML_TEMPLATE
+
+
+def test_layout_density_selector_present():
+    # #21: a user-switchable layout-density control lives next to the
+    # cluster toggle — 'sparse' (default) and 'tight'.
+    assert 'id="layout-select"' in HTML_TEMPLATE
+    assert 'value="sparse"' in HTML_TEMPLATE
+    assert 'value="tight"' in HTML_TEMPLATE
+
+
+def test_layout_switch_refreezes():
+    # Switching layout must re-run the simulation and re-freeze — otherwise
+    # the new layout would either never settle or keep shaking (#9).
+    assert "applyLayout" in HTML_TEMPLATE
 
 
 # ─── 2. Search matches highlighted red ────────────────────────────────
