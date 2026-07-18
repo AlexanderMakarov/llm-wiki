@@ -38,6 +38,18 @@ QUERY_MAX_CHARS = 200
 # Arg keys that count as "the thing the caller asked for", in priority order.
 _QUERY_KEYS = ("term", "question", "path", "query", "project")
 
+# Tools whose result is a set of retrievable entities/answers. Only these
+# contribute to "items returned" — lint/sync/lifecycle/dashboard perform an
+# action or report status rather than returning corpus items.
+ENTITY_TOOLS = frozenset({
+    "wiki_query", "wiki_search", "wiki_list_sources", "wiki_read_page",
+    "wiki_entity_search", "wiki_category_browse", "wiki_export", "wiki_confidence",
+})
+
+
+def is_entity_tool(tool: str) -> bool:
+    return tool in ENTITY_TOOLS
+
 
 def usage_dir(content_root: Path) -> Path:
     return Path(content_root) / USAGE_DIRNAME
@@ -160,6 +172,8 @@ def _empty_totals() -> dict[str, Any]:
     return {
         "total_calls": 0,
         "total_resp_bytes": 0,
+        "total_items_returned": 0,
+        "total_server_processes": 0,
         "per_tool": {},
         "per_project": {},
     }
@@ -189,16 +203,21 @@ def aggregate(records: Iterable[dict[str, Any]]) -> dict[str, Any]:
         hits = r.get("hits")
 
         tstat = totals["per_tool"].setdefault(
-            tool, {"calls": 0, "zero_hits": 0, "resp_bytes": 0})
+            tool, {"calls": 0, "zero_hits": 0, "resp_bytes": 0, "items_returned": 0})
         tstat["calls"] += 1
         tstat["resp_bytes"] += resp_bytes
         if hits == 0:
             tstat["zero_hits"] += 1
 
         pstat = totals["per_project"].setdefault(
-            project, {"calls": 0, "resp_bytes": 0})
+            project, {"calls": 0, "resp_bytes": 0, "items_returned": 0, "server_processes": 0})
         pstat["calls"] += 1
         pstat["resp_bytes"] += resp_bytes
+
+        if tool in ENTITY_TOOLS and isinstance(hits, int) and hits > 0:
+            tstat["items_returned"] += hits
+            pstat["items_returned"] += hits
+            totals["total_items_returned"] += hits
 
         totals["total_calls"] += 1
         totals["total_resp_bytes"] += resp_bytes
@@ -212,18 +231,25 @@ def merge_aggregates(a: dict[str, Any], b: dict[str, Any]) -> dict[str, Any]:
     out["total_calls"] = a.get("total_calls", 0) + b.get("total_calls", 0)
     out["total_resp_bytes"] = (
         a.get("total_resp_bytes", 0) + b.get("total_resp_bytes", 0))
+    out["total_items_returned"] = (
+        a.get("total_items_returned", 0) + b.get("total_items_returned", 0))
+    out["total_server_processes"] = (
+        a.get("total_server_processes", 0) + b.get("total_server_processes", 0))
     for side in (a, b):
         for tool, stats in side.get("per_tool", {}).items():
             dst = out["per_tool"].setdefault(
-                tool, {"calls": 0, "zero_hits": 0, "resp_bytes": 0})
+                tool, {"calls": 0, "zero_hits": 0, "resp_bytes": 0, "items_returned": 0})
             dst["calls"] += stats.get("calls", 0)
             dst["zero_hits"] += stats.get("zero_hits", 0)
             dst["resp_bytes"] += stats.get("resp_bytes", 0)
+            dst["items_returned"] += stats.get("items_returned", 0)
         for project, stats in side.get("per_project", {}).items():
             dst = out["per_project"].setdefault(
-                project, {"calls": 0, "resp_bytes": 0})
+                project, {"calls": 0, "resp_bytes": 0, "items_returned": 0, "server_processes": 0})
             dst["calls"] += stats.get("calls", 0)
             dst["resp_bytes"] += stats.get("resp_bytes", 0)
+            dst["items_returned"] += stats.get("items_returned", 0)
+            dst["server_processes"] += stats.get("server_processes", 0)
     return _finalize_rates(out)
 
 
