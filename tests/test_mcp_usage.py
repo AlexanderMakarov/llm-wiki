@@ -430,3 +430,32 @@ def test_merge_sums_server_processes_and_legacy_rollup_defaults_zero():
     assert merged["per_project"]["a"]["items_returned"] == 0
     assert merged["total_server_processes"] == 1
     assert merged["total_calls"] == 3
+
+
+# ─── Task 9: per_project_tool breakdown ────────────────────────────────────
+
+def test_per_project_tool_breakdown():
+    from llmwiki.usage import aggregate
+    records = [
+        {"tool": "wiki_search", "hits": 5, "caller_project": "a", "server_pid": 1, "server_started": "s1"},
+        {"tool": "wiki_search", "hits": 2, "caller_project": "a", "server_pid": 1, "server_started": "s1"},
+        {"tool": "wiki_lint",   "hits": 9, "caller_project": "a", "server_pid": 1, "server_started": "s1"},  # entity=False → items 0
+        {"tool": "wiki_query",  "hits": 4, "caller_project": "b", "server_pid": 2, "server_started": "s2"},
+    ]
+    agg = aggregate(records)
+    assert agg["per_project_tool"]["a"]["wiki_search"] == {"calls": 2, "items_returned": 7}
+    assert agg["per_project_tool"]["a"]["wiki_lint"] == {"calls": 1, "items_returned": 0}
+    assert agg["per_project_tool"]["b"]["wiki_query"] == {"calls": 1, "items_returned": 4}
+
+def test_merge_sums_per_project_tool_and_legacy_defaults_empty():
+    from llmwiki.usage import aggregate, merge_aggregates
+    live = aggregate([
+        {"tool": "wiki_search", "hits": 3, "caller_project": "a", "server_pid": 9, "server_started": "s9"},
+    ])
+    legacy = {  # old rollup shape: no per_project_tool at all
+        "total_calls": 1, "total_resp_bytes": 0,
+        "per_tool": {"wiki_search": {"calls": 1, "zero_hits": 0, "resp_bytes": 0}},
+        "per_project": {"a": {"calls": 1, "resp_bytes": 0}},
+    }
+    merged = merge_aggregates(legacy, live)
+    assert merged["per_project_tool"]["a"]["wiki_search"] == {"calls": 1, "items_returned": 3}

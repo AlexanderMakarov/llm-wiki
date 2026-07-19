@@ -343,6 +343,11 @@ kbd { display: inline-block; padding: 2px 6px; font-family: var(--mono); font-si
 .sessions-table code { font-family: var(--mono); font-size: 0.82em; color: var(--text-secondary); }
 .sessions-table tr[hidden] { display: none; }
 
+.mcp-usage-table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 0.88rem; }
+.mcp-usage-table th, .mcp-usage-table td { padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border); }
+.mcp-usage-table th { background: var(--bg-alt); font-weight: 600; color: var(--text-secondary); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; }
+.mcp-usage-table tr:last-child td { border-bottom: none; }
+
 /* Filter bar */
 .filter-bar { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin-bottom: 16px; padding: 12px 16px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); }
 .filter-bar label { display: flex; flex-direction: column; gap: 4px; font-size: 0.72rem; color: var(--text-muted); font-weight: 500; text-transform: uppercase; letter-spacing: 0.04em; }

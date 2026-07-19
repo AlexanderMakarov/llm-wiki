@@ -176,6 +176,7 @@ def _empty_totals() -> dict[str, Any]:
         "total_server_processes": 0,
         "per_tool": {},
         "per_project": {},
+        "per_project_tool": {},
     }
 
 
@@ -220,6 +221,12 @@ def aggregate(records: Iterable[dict[str, Any]]) -> dict[str, Any]:
             pstat["items_returned"] += hits
             totals["total_items_returned"] += hits
 
+        pt = totals["per_project_tool"].setdefault(project, {}).setdefault(
+            tool, {"calls": 0, "items_returned": 0})
+        pt["calls"] += 1
+        if tool in ENTITY_TOOLS and isinstance(hits, int) and hits > 0:
+            pt["items_returned"] += hits
+
         pid = r.get("server_pid")
         started = r.get("server_started")
         if pid is not None and started is not None:
@@ -263,6 +270,12 @@ def merge_aggregates(a: dict[str, Any], b: dict[str, Any]) -> dict[str, Any]:
             dst["resp_bytes"] += stats.get("resp_bytes", 0)
             dst["items_returned"] += stats.get("items_returned", 0)
             dst["server_processes"] += stats.get("server_processes", 0)
+        for project, tools in side.get("per_project_tool", {}).items():
+            dproj = out["per_project_tool"].setdefault(project, {})
+            for tool, stats in tools.items():
+                dt = dproj.setdefault(tool, {"calls": 0, "items_returned": 0})
+                dt["calls"] += stats.get("calls", 0)
+                dt["items_returned"] += stats.get("items_returned", 0)
     return _finalize_rates(out)
 
 

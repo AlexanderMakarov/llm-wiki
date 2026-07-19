@@ -1140,6 +1140,20 @@ def render_project_usage_block(
     procs = int(p.get("server_processes", 0) or 0)
     if calls == 0 and doc_count == 0:
         return ""
+    ptools = (usage_totals or {}).get("per_project_tool", {}).get(project_slug, {})
+    tool_table = ""
+    if ptools:
+        rows = []
+        for tool, s in sorted(ptools.items(), key=lambda kv: -kv[1].get("calls", 0)):
+            calls_t = int(s.get("calls", 0) or 0)
+            items_t = int(s.get("items_returned", 0) or 0)
+            items_cell = str(items_t) if is_entity_tool(tool) else "—"
+            rows.append(
+                f'<tr><td>{html.escape(tool)}</td><td>{calls_t}</td><td>{items_cell}</td></tr>')
+        tool_table = (
+            '<table class="mcp-usage-table"><thead><tr>'
+            '<th>Tool</th><th>Calls</th><th>Answers</th></tr></thead><tbody>'
+            + "".join(rows) + '</tbody></table>')
     return (
         '<section class="section project-usage-section"><div class="container">'
         '<div class="token-stat-grid">'
@@ -1151,7 +1165,7 @@ def render_project_usage_block(
         f'<div class="token-stat-value">{items}</div></div>'
         f'<div class="token-stat"><div class="token-stat-label muted">MCP server processes</div>'
         f'<div class="token-stat-value">{procs}</div></div>'
-        '</div></div></section>'
+        f'</div>{tool_table}</div></section>'
     )
 
 

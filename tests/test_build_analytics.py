@@ -35,3 +35,18 @@ def test_project_usage_block_shows_project_slice():
 def test_project_usage_block_empty_without_data():
     totals = {"per_project": {}, "per_tool": {}}
     assert render_project_usage_block("proj-x", totals, doc_count=0) == ""
+
+
+def test_project_usage_block_renders_per_tool_table():
+    totals = {
+        "per_project": {"proj-x": {"calls": 3, "items_returned": 7, "server_processes": 1, "resp_bytes": 0}},
+        "per_project_tool": {"proj-x": {
+            "wiki_search": {"calls": 2, "items_returned": 7},
+            "wiki_lint":   {"calls": 1, "items_returned": 0},
+        }},
+        "per_tool": {},
+    }
+    out = render_project_usage_block("proj-x", totals, doc_count=0)
+    assert "wiki_search" in out and "wiki_lint" in out
+    assert "mcp-usage-table" in out          # per-tool table present
+    assert "—" in out                        # wiki_lint (non-entity) items cell is em dash
