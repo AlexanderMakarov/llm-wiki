@@ -50,7 +50,12 @@ def test_project_usage_block_shows_project_slice():
     totals = {"per_project": {"proj-x": {"calls": 7, "items_returned": 20, "server_processes": 2, "resp_bytes": 0}},
               "per_tool": {}}
     out = render_project_usage_block("proj-x", totals, doc_count=4)
-    assert "7" in out and "20" in out and "2" in out and "4" in out
+    # anchor on the value cells so a wrong number can't pass on an incidental
+    # substring match (e.g. "2" inside a class name)
+    assert ">7</div>" in out       # MCP calls
+    assert ">20</div>" in out      # items returned
+    assert ">2</div>" in out       # server processes
+    assert ">4</div>" in out       # raw documents
     assert "MCP server processes" in out
 
 
