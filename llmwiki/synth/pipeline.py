@@ -475,6 +475,20 @@ def refresh_synth_pending(
     return {"pending_total": len(pending), "pending": pending, "updated_at": stamp}
 
 
+def _format_producer_breakdown(producers: dict[str, int]) -> str:
+    """Render a synthesize run's per-producer counts as a short breakdown,
+    e.g. ``2 Claude · 1 Cursor · 3 docs``. Agent buckets come first (most
+    first), raw documents last. Empty string when nothing was produced —
+    callers fall back to a bare count."""
+    docs = producers.get("docs", 0)
+    agents = [(k, v) for k, v in producers.items() if k != "docs" and v > 0]
+    agents.sort(key=lambda kv: (-kv[1], kv[0]))
+    parts = [f"{v} {k}" for k, v in agents]
+    if docs > 0:
+        parts.append(f"{docs} doc" if docs == 1 else f"{docs} docs")
+    return " · ".join(parts)
+
+
 def _append_log(
     title: str,
     *,
@@ -1165,6 +1179,12 @@ def synthesize_new_sessions(
             print(f"  {it['meta'].get('slug', it['path'].stem)}")
         return summary
 
+    # #27: tally what each successful synthesis produced (raw doc vs which
+    # agent's session) so the log entry carries a producer breakdown the
+    # Analytics "Recent activity" widget renders verbatim.
+    from llmwiki.build import detect_agent_label
+    producers: dict[str, int] = {}
+
     for it in new_items:
         p, meta, body = it["path"], it["meta"], it["body"]
         project, rel = it["project"], it["rel"]
@@ -1238,6 +1258,8 @@ def synthesize_new_sessions(
             except Exception:
                 pass
             summary["synthesized"] += 1
+            key = "docs" if it["is_doc"] else detect_agent_label(meta)[0]
+            producers[key] = producers.get(key, 0) + 1
 
         except Exception as e:
             summary["errors"].append(f"{slug}: {e}")
@@ -1256,7 +1278,7 @@ def synthesize_new_sessions(
             log_path=log_path,
             operation="synthesize",
             details={
-                "processed": summary["synthesized"],
+                "processed": _format_producer_breakdown(producers) or summary["synthesized"],
                 "created": sorted(projects_touched.keys()),
                 "errors": summary["errors"],
             },
