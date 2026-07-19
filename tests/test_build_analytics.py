@@ -1,7 +1,11 @@
-from llmwiki.build import render_mcp_usage_section, render_project_usage_block
+from llmwiki.build import (
+    render_mcp_heaviest_card,
+    render_mcp_usage_section,
+    render_project_usage_block,
+)
 
 
-def test_mcp_section_renders_tools_and_totals():
+def test_mcp_section_renders_tools_and_totals_caption():
     totals = {
         "total_calls": 12, "total_items_returned": 40, "total_server_processes": 3,
         "per_tool": {
@@ -12,16 +16,34 @@ def test_mcp_section_renders_tools_and_totals():
     }
     html_out = render_mcp_usage_section(totals, {"proj-x": 5}, link_prefix="")
     assert "wiki_search" in html_out
-    assert "Most MCP-active project" in html_out
-    assert "proj-x" in html_out
-    assert "40" in html_out            # items returned total
-    assert "5" in html_out             # raw docs count
+    assert "mcp-usage-table" in html_out             # per-tool table present
+    assert "12 MCP calls" in html_out                # totals caption
+    assert "40 items returned" in html_out
+    assert "3 server processes" in html_out
+    assert "5 raw documents" in html_out
+    # the most-active project moved out of this section into its own card
+    assert "Most MCP-active project" not in html_out
 
 
 def test_mcp_section_empty_without_data():
     empty = {"total_calls": 0, "total_items_returned": 0, "total_server_processes": 0,
              "per_tool": {}, "per_project": {}}
     assert render_mcp_usage_section(empty, {}, link_prefix="") == ""
+
+
+def test_mcp_heaviest_card_picks_top_project():
+    totals = {"per_project": {
+        "proj-a": {"calls": 3}, "proj-b": {"calls": 9}, "proj-c": {"calls": 1},
+    }}
+    card = render_mcp_heaviest_card(totals, link_prefix="")
+    assert "Heaviest project by MCP usage" in card
+    assert "proj-b" in card and ">9<" in card
+    assert 'href="projects/proj-b.html"' in card
+
+
+def test_mcp_heaviest_card_empty_without_telemetry():
+    assert render_mcp_heaviest_card({"per_project": {}}, link_prefix="") == ""
+    assert render_mcp_heaviest_card({"per_project": {"p": {"calls": 0}}}, link_prefix="") == ""
 
 
 def test_project_usage_block_shows_project_slice():

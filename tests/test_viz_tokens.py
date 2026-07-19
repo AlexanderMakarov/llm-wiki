@@ -303,3 +303,21 @@ def test_site_stats_block_respects_link_prefix():
     }
     block = render_site_token_stats(by_project, link_prefix="../")
     assert 'href="../projects/alpha.html"' in block
+
+
+def test_site_stats_block_appends_extra_cards_in_same_row():
+    by_project = {
+        "alpha": [{"token_totals": '{"input": 100, "cache_read": 900}'}],
+    }
+    extra = '<a class="token-stat"><div class="token-stat-label muted">Heaviest project by MCP usage</div></a>'
+    block = render_site_token_stats(by_project, extra_cards=extra)
+    # single grid row: Tokens card and the extra MCP card share one token-stat-grid
+    assert block.count("token-stat-grid") == 1
+    assert "Tokens" in block and "Heaviest project by MCP usage" in block
+
+
+def test_site_stats_block_renders_extra_cards_even_without_token_data():
+    extra = '<a class="token-stat"><div class="token-stat-label muted">Heaviest project by MCP usage</div></a>'
+    block = render_site_token_stats({}, extra_cards=extra)
+    assert "Heaviest project by MCP usage" in block
+    assert "Tokens" not in block          # no token cards when there are no sessions
