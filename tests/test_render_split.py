@@ -108,13 +108,17 @@ def test_build_py_is_smaller():
       * 2,400 (#425 stub-defaults pre-population helpers)
       * 2,500 (#492 _is_subagent helper for renderer-side classification)
       * 2,850 (Home queue dashboard + Raw page + estimate widget)
+      * 2,900 (#27 Analytics: render_mcp_usage_section + wiring)
+      * 2,950 (#27 per-project render_project_usage_block + wiring)
+      * 3,000 (#27 feedback: single card row, render_mcp_heaviest_card,
+        analytics-scoped spacing, wiki_dir log-source fix)
     Next refactor target: extract md_to_html + preprocessor to
     llmwiki/render/markdown.py (tracked in the deep-audit epic #286).
     """
     from llmwiki import REPO_ROOT
     build_py = REPO_ROOT / "llmwiki" / "build.py"
     line_count = len(build_py.read_text(encoding="utf-8").splitlines())
-    assert line_count < 2850, f"build.py is {line_count} lines (ceiling 2850)"
+    assert line_count < 3000, f"build.py is {line_count} lines (ceiling 3000)"
 
 
 def test_css_module_under_800_lines():
@@ -122,7 +126,7 @@ def test_css_module_under_800_lines():
     from llmwiki import REPO_ROOT
     css_py = REPO_ROOT / "llmwiki" / "render" / "css.py"
     line_count = len(css_py.read_text(encoding="utf-8").splitlines())
-    assert line_count < 1010, f"css.py is {line_count} lines"
+    assert line_count < 1015, f"css.py is {line_count} lines"
 
 
 # ─── Build equivalence ───────────────────────────────────────────────

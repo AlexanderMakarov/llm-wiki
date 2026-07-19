@@ -151,6 +151,10 @@ kbd { display: inline-block; padding: 2px 6px; font-family: var(--mono); font-si
 .section { padding: 28px 0 32px; }
 .section h2 { font-size: 1.5rem; font-weight: 700; margin: 24px 0 16px; color: var(--text); }
 .section h3 { font-size: 1.15rem; font-weight: 600; margin: 20px 0 10px; color: var(--text); }
+/* #27: the Analytics page stacks several stat sections; tighten the vertical
+   rhythm so they read as one dashboard rather than distant blocks. */
+.analytics-page .section { padding: 12px 0; }
+.analytics-page .section h2 { margin-top: 8px; }
 
 .meta-tools { font-size: 0.82rem; margin-bottom: 12px; overflow-wrap: break-word; }
 
@@ -342,6 +346,11 @@ kbd { display: inline-block; padding: 2px 6px; font-family: var(--mono); font-si
 .sessions-table td.num { text-align: right; font-variant-numeric: tabular-nums; color: var(--text-secondary); }
 .sessions-table code { font-family: var(--mono); font-size: 0.82em; color: var(--text-secondary); }
 .sessions-table tr[hidden] { display: none; }
+
+.mcp-usage-table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 0.88rem; }
+.mcp-usage-table th, .mcp-usage-table td { padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border); }
+.mcp-usage-table th { background: var(--bg-alt); font-weight: 600; color: var(--text-secondary); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; }
+.mcp-usage-table tr:last-child td { border-bottom: none; }
 
 /* Filter bar */
 .filter-bar { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin-bottom: 16px; padding: 12px 16px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); }

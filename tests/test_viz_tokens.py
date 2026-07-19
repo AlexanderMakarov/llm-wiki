@@ -281,16 +281,18 @@ def test_site_stats_block_returns_empty_when_no_data():
     assert render_site_token_stats({}) == ""
 
 
-def test_site_stats_block_renders_four_cards():
+def test_site_stats_block_renders_three_cards():
+    # #27: Site token stats render a single "Tokens" card (value + "<avg> / session avg"
+    # sub-line), plus Best cache hit and Heaviest project (by tokens).
     by_project = {
         "alpha": [{"token_totals": '{"input": 100, "cache_read": 900}'}],
         "beta": [{"token_totals": '{"input": 500, "cache_read": 10, "output": 2000}'}],
     }
     block = render_site_token_stats(by_project)
-    assert "Total tokens" in block
-    assert "Average per session" in block
+    assert "Tokens" in block
+    assert "/ session avg" in block
     assert "Best cache hit" in block
-    assert "Heaviest project" in block
+    assert "Heaviest project (by tokens)" in block
     assert 'href="projects/alpha.html"' in block
     assert 'href="projects/beta.html"' in block
 
@@ -301,3 +303,21 @@ def test_site_stats_block_respects_link_prefix():
     }
     block = render_site_token_stats(by_project, link_prefix="../")
     assert 'href="../projects/alpha.html"' in block
+
+
+def test_site_stats_block_appends_extra_cards_in_same_row():
+    by_project = {
+        "alpha": [{"token_totals": '{"input": 100, "cache_read": 900}'}],
+    }
+    extra = '<a class="token-stat"><div class="token-stat-label muted">Heaviest project by MCP usage</div></a>'
+    block = render_site_token_stats(by_project, extra_cards=extra)
+    # single grid row: Tokens card and the extra MCP card share one token-stat-grid
+    assert block.count("token-stat-grid") == 1
+    assert "Tokens" in block and "Heaviest project by MCP usage" in block
+
+
+def test_site_stats_block_renders_extra_cards_even_without_token_data():
+    extra = '<a class="token-stat"><div class="token-stat-label muted">Heaviest project by MCP usage</div></a>'
+    block = render_site_token_stats({}, extra_cards=extra)
+    assert "Heaviest project by MCP usage" in block
+    assert "Tokens" not in block          # no token cards when there are no sessions

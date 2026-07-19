@@ -385,11 +385,15 @@ def compute_site_stats(
 def render_site_token_stats(
     metas_by_project: dict[str, list[Mapping[str, object]]],
     link_prefix: str = "",
+    extra_cards: str = "",
 ) -> str:
-    """Return a 4-card HTML block for `site/index.html` summarising
-    site-wide token stats. Empty string if no sessions have token data."""
+    """Return a single-row stat-card block for the Analytics page: Tokens,
+    Best cache hit, and Heaviest project (by tokens). ``extra_cards`` holds
+    pre-rendered ``token-stat`` cards (e.g. the MCP-usage card) that share
+    the same row. Empty string when there are neither token stats nor
+    extra cards."""
     stats = compute_site_stats(metas_by_project)
-    if stats["session_count"] == 0:
+    if stats["session_count"] == 0 and not extra_cards:
         return ""
     total = stats["total_tokens"]
     avg = stats["avg_per_session"]
@@ -400,11 +404,13 @@ def render_site_token_stats(
         '<section class="section token-stats-section">',
         '  <div class="container">',
         '    <div class="token-stat-grid">',
-        f'      <div class="token-stat"><div class="token-stat-label muted">Total tokens</div>'
-        f'<div class="token-stat-value">{format_tokens(total)}</div></div>',
-        f'      <div class="token-stat"><div class="token-stat-label muted">Average per session</div>'
-        f'<div class="token-stat-value">{format_tokens(avg)}</div></div>',
     ]
+    if stats["session_count"] > 0:
+        parts.append(
+            f'      <div class="token-stat"><div class="token-stat-label muted">Tokens</div>'
+            f'<div class="token-stat-value">{format_tokens(total)}</div>'
+            f'<div class="token-stat-sub muted">{format_tokens(avg)} / session avg</div></div>'
+        )
     if best is not None:
         slug, r = best
         parts.append(
@@ -418,11 +424,13 @@ def render_site_token_stats(
         slug, total_proj = heaviest
         parts.append(
             f'      <a class="token-stat" href="{link_prefix}projects/{html.escape(slug)}.html">'
-            f'<div class="token-stat-label muted">Heaviest project</div>'
+            f'<div class="token-stat-label muted">Heaviest project (by tokens)</div>'
             f'<div class="token-stat-value">{format_tokens(total_proj)}</div>'
             f'<div class="token-stat-sub muted">{html.escape(slug)}</div>'
             f'</a>'
         )
+    if extra_cards:
+        parts.append(extra_cards)
     parts.append('    </div>')
     parts.append('  </div>')
     parts.append('</section>')

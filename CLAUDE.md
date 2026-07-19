@@ -194,6 +194,8 @@ grep "^## \[" wiki/log.md | tail -10
 
 Operations: `sync`, `ingest`, `query`, `lint`, `build`.
 
+The `Processed:` detail may carry a short producer breakdown instead of a bare count, e.g. `- Processed: 2 Claude · 1 Cursor · 0 docs`, which the Analytics "Recent activity" widget renders verbatim.
+
 ## Hard rules
 
 1. **`raw/` is immutable.** Never modify files under `raw/`. If source data is wrong, fix the converter, not the output. **Enforced at runtime as of #326**: `llmwiki sync` refuses to overwrite an existing `raw/` file unless you pass `--force`; failures go into `.llmwiki-quarantine.json` so you can see what didn't sync and why. Non-AI adapters (Obsidian, Jira, Meeting, PDF) are opt-in only — they never fire on a default `sync` without explicit `enabled: true` in `sessions_config.json`.

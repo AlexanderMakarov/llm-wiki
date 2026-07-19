@@ -11,9 +11,18 @@ from llmwiki.synth.base import BaseSynthesizer, DummySynthesizer
 from llmwiki.synth.pipeline import (
     _build_source_page,
     _discover_raw_sessions,
+    _format_producer_breakdown,
     _load_prompt_template,
     synthesize_new_sessions,
 )
+
+
+def test_format_producer_breakdown_agents_then_docs():
+    # agents ordered by count desc, docs last, singular/plural on docs
+    assert _format_producer_breakdown({"Claude": 2, "Cursor": 1, "docs": 3}) == "2 Claude · 1 Cursor · 3 docs"
+    assert _format_producer_breakdown({"docs": 1}) == "1 doc"
+    assert _format_producer_breakdown({"Claude": 1}) == "1 Claude"
+    assert _format_producer_breakdown({}) == ""            # empty → caller falls back to a count
 
 
 # ─── fixtures ────────────────────────────────────────────────────────────
@@ -193,6 +202,10 @@ def test_synthesize_fresh_run_produces_source_pages(tmp_path: Path):
     content = out_file.read_text(encoding="utf-8")
     assert "type: source" in content
     assert "## Summary" in content
+    # #27: the log entry carries a producer breakdown (the fixture session's
+    # `model: claude-sonnet-4-6` classifies as Claude), not a bare count.
+    log_text = log_file.read_text(encoding="utf-8")
+    assert "- Processed: 1 Claude" in log_text
 
 
 def test_synthesize_idempotent_rerun_is_noop(tmp_path: Path):

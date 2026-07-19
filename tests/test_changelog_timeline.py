@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date
+from types import SimpleNamespace
 
 import pytest
 
@@ -13,6 +14,7 @@ from llmwiki.changelog_timeline import (
     render_changelog_timeline,
     render_price_sparkline,
     render_recently_updated,
+    render_recent_activity,
 )
 
 
@@ -318,3 +320,18 @@ def test_render_recently_updated_respects_link_prefix():
     items = [("X", {"date": "2026-04-05", "event": "x"})]
     out = render_recently_updated(items, link_prefix="../entities/")
     assert 'href="../entities/X.html"' in out
+
+
+# ─── render_recent_activity ────────────────────────────────────────────────
+
+
+def _ev(processed=None, title="t", op="sync"):
+    details = {"Processed": processed} if processed is not None else {}
+    return SimpleNamespace(date=date(2026, 7, 18), operation=op, title=title, details=details)
+
+
+def test_recent_activity_numeric_vs_breakdown():
+    out = render_recent_activity([_ev(processed="3"), _ev(processed="2 Claude · 1 Cursor · 0 docs")])
+    assert "3 processed" in out
+    assert "2 Claude · 1 Cursor · 0 docs" in out
+    assert "2 Claude · 1 Cursor · 0 docs processed" not in out   # breakdown shown verbatim
