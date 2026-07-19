@@ -361,6 +361,52 @@ TOOLS = [
             },
         },
     },
+    # #37 A3: the one write tool other than wiki_sync — MCP-only agents
+    # otherwise have no supported way to land a new document.
+    {
+        "name": "wiki_add",
+        "description": (
+            "Ingest one source into the wiki via the add pipeline — the "
+            "same conversion/write path the `llmwiki add` CLI uses. "
+            "Converts the source to markdown and writes it under the "
+            "resolved vault's raw/docs/ (never the repo's own wiki/). "
+            "Exactly one of url, path, or content is required."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "url": {
+                    "type": "string",
+                    "description": "http(s) URL to fetch and convert.",
+                },
+                "path": {
+                    "type": "string",
+                    "description": "Local file or folder path to convert.",
+                },
+                "content": {
+                    "type": "string",
+                    "description": "Literal markdown/text content to land directly.",
+                },
+                "title": {
+                    "type": "string",
+                    "description": "Override title derivation.",
+                },
+                "project": {
+                    "type": "string",
+                    "description": "Group under raw/docs/<project>/ instead of the doc's own slug.",
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Extra frontmatter tags.",
+                },
+                "note": {
+                    "type": "string",
+                    "description": "Blockquote note prepended to the document body.",
+                },
+            },
+        },
+    },
     {
         "name": "wiki_category_browse",
         "description": (
@@ -879,6 +925,70 @@ def tool_wiki_export(args: dict[str, Any]) -> dict[str, Any]:
     return _ok(content)
 
 
+def tool_wiki_add(args: dict[str, Any]) -> dict[str, Any]:
+    """Ingest one source (url | path | content) via the add pipeline
+    (#37 A3). A thin wrapper around ``add_sources`` — the same
+    conversion/write path the ``llmwiki add`` CLI and the queue's
+    ``add_doc`` task use — so MCP-only agents have a supported write
+    path. Runs synchronously and only writes raw/docs/: post-steps
+    (synthesize, build) are the caller's job, exactly like the queue's
+    ``add_doc`` task leaves them to a separate ``synthesize`` task.
+    """
+    from llmwiki.add_doc import add_sources
+
+    url = (args.get("url") or "").strip()
+    path = (args.get("path") or "").strip()
+    content = args.get("content") or ""
+    provided = [v for v in (url, path, content) if v]
+    if len(provided) != 1:
+        return _err(
+            "exactly one of url, path, or content is required "
+            f"(got {len(provided)})"
+        )
+
+    title = args.get("title")
+    project = args.get("project")
+    tags = tuple(args.get("tags") or ())
+    note = args.get("note")
+
+    docs_dir = REPO_ROOT / "raw" / "docs"
+
+    tmp_path: Path | None = None
+    try:
+        if content:
+            import tempfile
+
+            fd, tmp_name = tempfile.mkstemp(suffix=".md", prefix="wiki-add-content-")
+            os.close(fd)
+            tmp_path = Path(tmp_name)
+            tmp_path.write_text(content, encoding="utf-8")
+            source = str(tmp_path)
+        else:
+            source = url or path
+
+        result = add_sources(
+            [source], docs_dir,
+            title=title, project=project, tags=tags, note=note,
+            dry_run=False,
+        )
+    finally:
+        if tmp_path is not None:
+            tmp_path.unlink(missing_ok=True)
+
+    if result["errors"]:
+        return _err("; ".join(result["errors"]))
+
+    written_rel = [str(p.relative_to(REPO_ROOT)) for p in result["written"]]
+    payload = {
+        "written": written_rel,
+        "titles": result["titles"],
+        "warnings": result["warnings"],
+    }
+    out = _ok(json.dumps(payload, indent=2))
+    out["_hits"] = len(written_rel)
+    return out
+
+
 def _ok(text: str) -> dict[str, Any]:
     return {"content": [{"type": "text", "text": text}], "isError": False}
 
@@ -1071,6 +1181,8 @@ TOOL_IMPLS = {
     "wiki_lint": tool_wiki_lint,
     "wiki_sync": tool_wiki_sync,
     "wiki_export": tool_wiki_export,
+    # #37 A3
+    "wiki_add": tool_wiki_add,
     # v1.0 (#159)
     "wiki_confidence": tool_wiki_confidence,
     "wiki_lifecycle": tool_wiki_lifecycle,
