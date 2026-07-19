@@ -151,6 +151,10 @@ kbd { display: inline-block; padding: 2px 6px; font-family: var(--mono); font-si
 .section { padding: 28px 0 32px; }
 .section h2 { font-size: 1.5rem; font-weight: 700; margin: 24px 0 16px; color: var(--text); }
 .section h3 { font-size: 1.15rem; font-weight: 600; margin: 20px 0 10px; color: var(--text); }
+/* #27: the Analytics page stacks several stat sections; tighten the vertical
+   rhythm so they read as one dashboard rather than distant blocks. */
+.analytics-page .section { padding: 12px 0; }
+.analytics-page .section h2 { margin-top: 8px; }
 
 .meta-tools { font-size: 0.82rem; margin-bottom: 12px; overflow-wrap: break-word; }
 

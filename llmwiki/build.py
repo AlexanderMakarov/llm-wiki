@@ -852,10 +852,17 @@ def breadcrumbs_bar(crumbs: list[tuple[str, str]], link_prefix: str = "") -> str
     return f'<nav class="breadcrumbs" aria-label="Breadcrumb">{sep.join(parts)}</nav>'
 
 
-def hero(title: str, subtitle: str, size: str = "", subtitle_is_html: bool = False) -> str:
+def hero(
+    title: str,
+    subtitle: str,
+    size: str = "",
+    subtitle_is_html: bool = False,
+    main_class: str = "",
+) -> str:
     cls = f"hero {size}".strip()
     sub = subtitle if subtitle_is_html else html.escape(subtitle)
-    return f"""<main id="main-content">
+    main_attr = f' class="{main_class}"' if main_class else ""
+    return f"""<main id="main-content"{main_attr}>
 <section class="{cls}">
   <div class="container">
     <h1>{html.escape(title)}</h1>
@@ -1594,6 +1601,7 @@ def render_analytics(
     synthesis: Optional[str] = None,
     usage_totals: Optional[dict[str, Any]] = None,
     docs_by_project: Optional[dict[str, int]] = None,
+    wiki_dir: Optional[Path] = None,
 ) -> Path:
     """Render ``analytics.html`` — hero stats, activity heatmap, token
     stats, recently-updated, projects grid."""
@@ -1646,9 +1654,11 @@ def render_analytics(
     mcp_block = render_mcp_usage_section(
         usage_totals or {}, docs_by_project or {}, link_prefix="")
 
-    # Recently updated — show last 10 entries from wiki/log.md.
+    # Recently updated — show last 10 entries from the wiki's log.md. Read
+    # from the vault's wiki_dir (falling back to REPO_ROOT for a repo build),
+    # not the module REPO_ROOT — otherwise a vault site shows the repo's log.
     log_events = _recent_log_events(
-        REPO_ROOT / "wiki" / "log.md", limit=10
+        (wiki_dir or (REPO_ROOT / "wiki")) / "log.md", limit=10
     )
     recent_block_inner = render_recent_activity(log_events)
     recent_block = (
@@ -1720,6 +1730,7 @@ def render_analytics(
         + hero(
             "Analytics",
             f"{_pluralize(mains, 'main session')} · {_pluralize(subs, 'sub-agent run')} · {_pluralize(len(groups), 'project')}",
+            main_class="analytics-page",
         )
         + synth_block
         + body
@@ -2700,6 +2711,7 @@ def build_site(
         groups, sources, out_dir, synthesis=synthesis,
         usage_totals=usage_totals,
         docs_by_project=docs_by_project,
+        wiki_dir=wiki_dir,
     )
     doc_pages = raw_docs_site.render_document_pages(
         doc_files,
