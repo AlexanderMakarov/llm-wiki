@@ -1123,9 +1123,12 @@ def synthesize_new_sessions(
                 "is_doc": True,
             })
 
-    stub_source_keys = discover_stub_source_keys(sources_out)
+    # Split the source-page scan once: real keys drive the dedup guard
+    # below, stub keys keep filler slots in the backlog (#24).
+    real_source_keys, stub_source_keys = _scan_source_page_keys(sources_out)
 
     new_items: list[dict[str, Any]] = []
+    dedup_skipped = 0
     for it in items:
         try:
             mtime = it["path"].stat().st_mtime
@@ -1157,13 +1160,29 @@ def synthesize_new_sessions(
             and not page_is_pending
         ):
             continue
+        # Dedup guard (#37): a REAL page under any folder/slug already claims
+        # this source. A hand-written page lives outside synth state and off
+        # the derived target path, so neither the state check above nor the
+        # write-guard below sees it — synth would drop a sibling duplicate.
+        # Skip only when the real page is elsewhere: a real page AT the derived
+        # target is the normal overwrite/protect path, and --force re-synthesizes.
+        derived_has_real = any(
+            t.exists() and not page_is_stub(t) for t in targets
+        )
+        if not force and source_key in real_source_keys and not derived_has_real:
+            print(
+                f"  skipped: {it['project']} → {source_key} "
+                "(real source page already claims this source; not duplicating)"
+            )
+            dedup_skipped += 1
+            continue
         new_items.append(it)
 
     summary: dict[str, Any] = {
         "total_scanned": len(items),
         "new_files": len(new_items),
         "synthesized": 0,
-        "skipped": 0,
+        "skipped": dedup_skipped,
         "protected": 0,
         "errors": [],
         "backend": backend.name,

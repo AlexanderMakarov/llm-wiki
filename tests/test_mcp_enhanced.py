@@ -22,13 +22,13 @@ from llmwiki.mcp.server import (
 # ─── Registration ─────────────────────────────────────────────────────
 
 
-def test_all_12_tools_registered():
-    assert len(TOOLS) == 12
+def test_all_13_tools_registered():
+    assert len(TOOLS) == 13
     names = {t["name"] for t in TOOLS}
     for required in ["wiki_query", "wiki_search", "wiki_list_sources",
                       "wiki_read_page", "wiki_lint", "wiki_sync", "wiki_export",
                       "wiki_confidence", "wiki_lifecycle", "wiki_dashboard",
-                      "wiki_entity_search", "wiki_category_browse"]:
+                      "wiki_entity_search", "wiki_category_browse", "wiki_add"]:
         assert required in names
 
 
