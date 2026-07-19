@@ -1520,14 +1520,35 @@ def render_sessions_index(
     return out_path
 
 
+def render_mcp_heaviest_card(
+    usage_totals: dict[str, Any], link_prefix: str = ""
+) -> str:
+    """The "Heaviest project by MCP usage" stat card — the project with the
+    most llm-wiki MCP calls. Shares the token-stats row. Empty string when
+    there is no telemetry."""
+    per_project = usage_totals.get("per_project", {})
+    if not per_project:
+        return ""
+    slug, s = max(per_project.items(), key=lambda kv: kv[1].get("calls", 0))
+    calls = int(s.get("calls", 0) or 0)
+    if calls == 0:
+        return ""
+    return (
+        f'      <a class="token-stat" href="{link_prefix}projects/{html.escape(slug)}.html">'
+        f'<div class="token-stat-label muted">Heaviest project by MCP usage</div>'
+        f'<div class="token-stat-value">{calls}</div>'
+        f'<div class="token-stat-sub muted">{html.escape(slug)} · calls</div></a>'
+    )
+
+
 def render_mcp_usage_section(
     usage_totals: dict[str, Any],
     docs_by_project: dict[str, int],
     link_prefix: str = "",
 ) -> str:
-    """Static "Wiki usage (MCP)" block: per-tool calls/items, totals, the
-    most MCP-active project, and the raw-document total. Empty string when
-    there is neither telemetry nor any raw document."""
+    """Static "Wiki usage (MCP)" section: a one-line totals caption plus a
+    per-tool calls/items/zero-hit table. Empty string when there is neither
+    telemetry nor any raw document."""
     total_calls = int(usage_totals.get("total_calls", 0) or 0)
     total_docs = sum(docs_by_project.values()) if docs_by_project else 0
     if total_calls == 0 and total_docs == 0:
@@ -1550,37 +1571,18 @@ def render_mcp_usage_section(
         '</tr></thead><tbody>' + "".join(rows) + '</tbody></table>'
     ) if rows else ""
 
-    per_project = usage_totals.get("per_project", {})
-    most_active = ""
-    if per_project:
-        slug, s = max(per_project.items(), key=lambda kv: kv[1].get("calls", 0))
-        if s.get("calls", 0):
-            most_active = (
-                f'<a class="token-stat" href="{link_prefix}projects/{html.escape(slug)}.html">'
-                f'<div class="token-stat-label muted">Most MCP-active project</div>'
-                f'<div class="token-stat-value">{int(s.get("calls", 0))}</div>'
-                f'<div class="token-stat-sub muted">{html.escape(slug)} · calls</div></a>'
-            )
     total_items = int(usage_totals.get("total_items_returned", 0) or 0)
     total_procs = int(usage_totals.get("total_server_processes", 0) or 0)
-    summary = (
-        '<div class="token-stat-grid">'
-        f'<div class="token-stat"><div class="token-stat-label muted">MCP calls</div>'
-        f'<div class="token-stat-value">{total_calls}</div></div>'
-        f'<div class="token-stat"><div class="token-stat-label muted">Items returned</div>'
-        f'<div class="token-stat-value">{total_items}</div></div>'
-        f'<div class="token-stat"><div class="token-stat-label muted">MCP server processes</div>'
-        f'<div class="token-stat-value">{total_procs}</div></div>'
-        f'<div class="token-stat"><div class="token-stat-label muted">Raw documents</div>'
-        f'<div class="token-stat-value">{total_docs}</div></div>'
-        f'{most_active}'
-        '</div>'
+    caption = (
+        f'{total_calls} MCP calls · {total_items} items returned · '
+        f'{total_procs} server processes · {total_docs} raw documents · '
+        f'as of last build.'
     )
     return (
         '<section class="section mcp-usage-section"><div class="container">'
         '<h2>Wiki usage (MCP)</h2>'
-        '<p class="muted">Lifetime MCP tool usage, as of last build.</p>'
-        f'{summary}{table}'
+        f'<p class="muted">{caption}</p>'
+        f'{table}'
         '</div></section>'
     )
 
@@ -1632,11 +1634,15 @@ def render_analytics(
     metas_by_project: dict[str, list[dict[str, Any]]] = {}
     for project, sessions in groups.items():
         metas_by_project[project] = [m for _, m, _ in sessions]
-    token_stats_block = render_site_token_stats(metas_by_project, link_prefix="")
+    # #27: the "Heaviest project by MCP usage" card shares the token-stats
+    # row, so the analytics page opens with a single line of stat cards.
+    mcp_heaviest_card = render_mcp_heaviest_card(usage_totals or {}, link_prefix="")
+    token_stats_block = render_site_token_stats(
+        metas_by_project, link_prefix="", extra_cards=mcp_heaviest_card)
 
-    # #27: site-wide "Wiki usage (MCP)" block — per-tool call/item table,
-    # totals, most MCP-active project, and raw-document total. Empty when
-    # there is no telemetry and no raw document.
+    # #27: site-wide "Wiki usage (MCP)" section — a one-line totals caption
+    # plus a per-tool call/item table. Empty when there is no telemetry and
+    # no raw document.
     mcp_block = render_mcp_usage_section(
         usage_totals or {}, docs_by_project or {}, link_prefix="")
 
@@ -2660,11 +2666,15 @@ def build_site(
         print(f"  wrote {n_siblings} per-page siblings (.txt + .json)")
 
     # Raw-doc tree + MCP usage totals are needed by both the per-project
-    # pages and the analytics page, so compute them once up front.
+    # pages and the analytics page, so compute them once up front. MCP
+    # telemetry lives in ``<content_root>/usage/``; the content root is the
+    # parent of ``raw/`` (the vault when one is configured, else REPO_ROOT) —
+    # the MCP server writes there, so read from the same place.
     raw_docs_dir = raw_dir / "docs"
+    content_root = raw_dir.parent
     doc_files = raw_docs_site.scan_raw_docs(raw_docs_dir)
     docs_by_project = raw_docs_site.count_docs_by_project(doc_files)
-    usage_totals = _mcp_combined_totals(REPO_ROOT)
+    usage_totals = _mcp_combined_totals(content_root)
 
     for project, sessions in groups.items():
         render_project_page(
