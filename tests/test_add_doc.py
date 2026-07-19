@@ -718,3 +718,95 @@ def test_written_doc_flows_through_synth_pipeline(tmp_path):
     pages = list((tmp_path / "wiki" / "sources").rglob("*.md"))
     assert len(pages) == 1
     assert "flow-doc" in pages[0].name
+
+
+# ── boilerplate extraction hardening (#37 PR2/B1) ────────────────────
+# trafilatura lives only in the [add] extra (not in the system python
+# that runs pytest), so these inject a fake module into sys.modules to
+# exercise the "present" path without a hard dependency.
+
+import sys as _sys
+import types as _types
+
+
+def _install_fake_trafilatura(monkeypatch, *, md="clean article body", title="Meta Title",
+                              captured=None):
+    mod = _types.ModuleType("trafilatura")
+
+    def extract(html, **kwargs):
+        if captured is not None:
+            captured.update(kwargs)
+        return md
+
+    class _Meta:
+        pass
+
+    _Meta.title = title
+    mod.extract = extract
+    mod.extract_metadata = lambda html: _Meta()
+    monkeypatch.setitem(_sys.modules, "trafilatura", mod)
+    return mod
+
+
+def test_extract_html_passes_precision_kwargs_when_trafilatura_present(monkeypatch):
+    from llmwiki import add_doc as m
+
+    captured: dict = {}
+    _install_fake_trafilatura(monkeypatch, md="extracted body", title="T", captured=captured)
+    title, md, extractor = m._extract_html("<html><body><article>x</article></body></html>")
+    assert extractor == "trafilatura"
+    assert md == "extracted body"
+    assert title == "T"
+    # Aggressive-but-safe: precision on, boilerplate/comments off, but
+    # in-content links + tables preserved for citations / prev-next parts.
+    assert captured["favor_precision"] is True
+    assert captured["include_links"] is True
+    assert captured["include_comments"] is False
+    assert captured["include_tables"] is True
+
+
+def test_convert_url_records_trafilatura_extractor(monkeypatch):
+    _install_fake_trafilatura(
+        monkeypatch,
+        md="clean article body, long enough to clear the quality gate. " * 6,
+        title="Doc - Site",
+    )
+    fetch = _fetcher([FetchResult(url="https://ex.com/t", status=200,
+                                  content_type="text/html", body=HTML_DOC)])
+    doc = convert_url("https://ex.com/t", fetch=fetch)
+    assert doc.extractor == "trafilatura"
+    assert doc.html_title == "Doc - Site"
+    assert not any("llm-wiki[add]" in w for w in doc.warnings)
+
+
+def test_convert_url_stdlib_extractor_and_loud_warning_when_trafilatura_absent(monkeypatch):
+    # Real test env has no trafilatura; make the absence explicit so a
+    # stray injection from another test can never mask this path.
+    monkeypatch.delitem(_sys.modules, "trafilatura", raising=False)
+    fetch = _fetcher([FetchResult(url="https://ex.com/nav", status=200,
+                                  content_type="text/html", body=HTML_DOC)])
+    doc = convert_url("https://ex.com/nav", fetch=fetch, render="never")
+    assert doc.extractor == "stdlib"
+    assert any("llm-wiki[add]" in w and "trafilatura" in w for w in doc.warnings)
+
+
+def test_write_raw_doc_records_extractor_in_frontmatter(tmp_path):
+    from llmwiki._frontmatter import parse_frontmatter
+
+    paths = write_raw_doc(_doc(extractor="trafilatura"), tmp_path, today="2026-07-04")
+    meta, _body = parse_frontmatter(paths[0].read_text())
+    assert meta.get("extractor") == "trafilatura"
+
+
+def test_write_raw_doc_records_stdlib_extractor_in_frontmatter(tmp_path):
+    from llmwiki._frontmatter import parse_frontmatter
+
+    paths = write_raw_doc(_doc(extractor="stdlib"), tmp_path, today="2026-07-04")
+    meta, _body = parse_frontmatter(paths[0].read_text())
+    assert meta.get("extractor") == "stdlib"
+
+
+def test_write_raw_doc_omits_extractor_when_unset(tmp_path):
+    # Local files / markdown passthrough carry no extractor — no line.
+    paths = write_raw_doc(_doc(), tmp_path, today="2026-07-04")
+    assert "extractor:" not in paths[0].read_text()

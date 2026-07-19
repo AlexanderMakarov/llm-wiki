@@ -446,6 +446,7 @@ class ConvertedDoc:
     url: str | None = None
     path_name: str | None = None   # filename/dirname for title fallback
     warnings: list[str] = field(default_factory=list)
+    extractor: str | None = None   # "trafilatura" | "stdlib" for HTML sources
 
 
 def assert_readable_path(value: str) -> Path:
@@ -578,14 +579,31 @@ def _quality_ok(text: str, html: str) -> bool:
     return True
 
 
-def _extract_html(html: str) -> tuple[str, str]:
-    """(title, markdown) via trafilatura when available, stdlib otherwise."""
+def _has_trafilatura() -> bool:
+    try:
+        import trafilatura  # noqa: F401
+    except ImportError:
+        return False
+    return True
+
+
+def _extract_html(html: str) -> tuple[str, str, str]:
+    """(title, markdown, extractor) via trafilatura when available, stdlib
+    otherwise. ``extractor`` is ``"trafilatura"`` or ``"stdlib"`` so the
+    writer can record which produced the doc — stdlib output on div-soup
+    sites is nav-only and prunable later."""
     try:
         import trafilatura
     except ImportError:
-        return html_to_markdown(html)
+        title, md = html_to_markdown(html)
+        return title, md, "stdlib"
+    # favor_precision drops boilerplate (nav/header/footer) aggressively;
+    # include_links keeps in-content links & citations (prev/next-part
+    # anchors) synthesis relies on; comments off, tables on.
     md = trafilatura.extract(html, output_format="markdown",
-                             include_links=True, include_formatting=True)
+                             favor_precision=True, include_links=True,
+                             include_comments=False, include_tables=True,
+                             include_formatting=True)
     title = ""
     try:
         meta = trafilatura.extract_metadata(html)
@@ -593,8 +611,9 @@ def _extract_html(html: str) -> tuple[str, str]:
     except Exception:  # noqa: BLE001 — metadata is best-effort
         pass
     if not md:
-        return html_to_markdown(html)
-    return title, md
+        s_title, s_md = html_to_markdown(html)
+        return s_title, s_md, "stdlib"
+    return title, md, "trafilatura"
 
 
 def _default_renderer() -> object | None:
@@ -620,6 +639,14 @@ def _default_renderer() -> object | None:
 _RENDER_HINT = ("content may be a JS shell — install the render layer: "
                 "pip install 'llm-notebook[e2e]' && playwright install chromium, "
                 "or re-run with --render")
+
+# trafilatura absent ⇒ div-soup sites fall through to the stdlib tag-strip,
+# which keeps only nav/header/footer boilerplate. Distinct from the JS-shell
+# render hint: this is a missing-converter problem, not a JS-render one.
+_TRAFILATURA_HINT = ("trafilatura not installed — site boilerplate "
+                     "(nav/header/footer) was NOT stripped and this doc may be "
+                     "mostly navigation junk; install the extractor for clean "
+                     "extraction: pip install 'llm-wiki[add]'")
 
 
 def convert_url(
@@ -667,7 +694,7 @@ def convert_url(
                             source_label=url, url=url)
 
     html = resp.body
-    title, md = _extract_html(html)
+    title, md, extractor = _extract_html(html)
 
     needs_render = render == "force" or (render == "auto" and not _quality_ok(md, html))
     if needs_render and render != "never":
@@ -680,9 +707,9 @@ def convert_url(
                 active_renderer = None
                 render_hint = f"renderer failed: {exc} — {_RENDER_HINT}"
             else:
-                r_title, r_md = _extract_html(rendered_html)
+                r_title, r_md, r_extractor = _extract_html(rendered_html)
                 if len(r_md.strip()) > len(md.strip()):
-                    title, md = (r_title or title), r_md
+                    title, md, extractor = (r_title or title), r_md, r_extractor
                 if not _quality_ok(md, rendered_html):
                     warnings.append(render_hint)
         if active_renderer is None:
@@ -690,9 +717,14 @@ def convert_url(
     elif not _quality_ok(md, html):
         warnings.append(_RENDER_HINT)
 
+    # A stdlib extraction when trafilatura is genuinely absent (not just an
+    # empty-output fallback) means boilerplate was never stripped — warn loudly.
+    if extractor == "stdlib" and not _has_trafilatura():
+        warnings.append(_TRAFILATURA_HINT)
+
     return ConvertedDoc(title="", markdown=_note_header(note) + header + md.strip() + "\n",
                         source_label=url, url=url, html_title=title or None,
-                        warnings=warnings)
+                        warnings=warnings, extractor=extractor)
 
 
 # ── raw-doc writer (byte-compatible with kbbuilder makeRawDocWriter) ─
@@ -739,8 +771,10 @@ def find_existing_by_hash(docs_dir: Path, content_hash: str) -> str | None:
 
 
 def _frontmatter(title: str, slug: str, project: str, tags: tuple[str, ...],
-                 today: str, source: str, *, content_sha256: str) -> str:
+                 today: str, source: str, *, content_sha256: str,
+                 extractor: str | None = None) -> str:
     tag_list = ", ".join(("wiki-add", "raw-doc") + tags)
+    extractor_line = f"extractor: {extractor}\n" if extractor else ""
     return (
         "---\n"
         f"title: {json.dumps(title, ensure_ascii=False)}\n"
@@ -751,6 +785,7 @@ def _frontmatter(title: str, slug: str, project: str, tags: tuple[str, ...],
         f"date: {today}\n"
         f"source: {json.dumps(source, ensure_ascii=False)}\n"
         f"content_sha256: {content_sha256}\n"
+        f"{extractor_line}"
         "---\n\n"
     )
 
@@ -841,7 +876,7 @@ def write_raw_doc(
         else:
             chunk_title, breadcrumb = title, ""
         fm = _frontmatter(chunk_title, chunk_slug, proj, extra_tags, day, doc.source_label,
-                          content_sha256=content_hash)
+                          content_sha256=content_hash, extractor=doc.extractor)
         path = target / f"{chunk_slug}.md"
         if path.exists():  # belt-and-braces: raw/ is immutable
             raise AddError(f"refusing to overwrite existing raw file {path}")
