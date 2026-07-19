@@ -145,6 +145,34 @@ URL sources go through a layered pipeline (markdown negotiation → extraction �
 
 ---
 
+## `remove` — cascade-remove a raw doc and everything derived (#B2)
+
+Selects raw docs under the resolved vault's `raw/docs/` by a project name or slug glob, then removes them **together with** every artifact derived from them — the `synth.files` state keys and the `wiki/sources/` pages (part-pages included) — so a naive delete can never leave orphan pages or dangling state behind. After deletion it prunes backlinks, rebuilds `wiki/index.md`, and appends a `remove` entry to `wiki/log.md`.
+
+```bash
+python3 -m llmwiki remove ip-v-armenii --dry-run     # preview the full cascade
+python3 -m llmwiki remove 'ip-v-armenii*' --yes       # slug glob, no prompt
+python3 -m llmwiki remove taxes --vault ~/my-vault --yes
+```
+
+### Positional
+
+| Value | What |
+|---|---|
+| `SELECTOR` | Project name or slug glob (e.g. `ip-v-armenii*`) matched against `raw/docs/`. |
+
+### Flags
+
+| Flag | What |
+|---|---|
+| `--dry-run` | Print the full cascade (every raw file, state key, and wiki page) and change nothing. |
+| `--yes` | Skip the confirmation prompt. **Required** when stdin is not a TTY — cascade deletion is never silent. |
+| `--vault PATH` | Cascade against the given vault instead of the repo's own directories. |
+
+A selector that matches nothing is a clean no-op with a message. Without `--dry-run` and without `--yes`, the command prints the cascade and asks for confirmation on a TTY, or refuses (exit 2) when there is none.
+
+---
+
 ## `build` — compile the static HTML site
 
 Turns `wiki/` markdown into `site/` HTML.
