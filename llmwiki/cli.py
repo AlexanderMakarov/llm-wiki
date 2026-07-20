@@ -53,6 +53,32 @@ from llmwiki.sync.status import (  # noqa: F401
 )
 
 
+def _content_root(args: argparse.Namespace) -> Path:
+    """Resolve the content root a command should read and write.
+
+    The vault (``--vault``, else ``config.json`` ``vault.default_path``)
+    owns the user's ``raw/`` + ``wiki/``; ``REPO_ROOT`` is the content root
+    only in demo/dev mode, when no vault is configured at all. Commands
+    take their directory defaults from here — a module-level
+    ``REPO_ROOT / "wiki"`` default silently targets the git clone's seed
+    content instead of the user's vault.
+
+    A configured-but-unusable vault warns rather than silently falling
+    through to the clone, so a wrong or unmounted path is visible.
+    """
+    _apply_default_vault(args)
+    configured = getattr(args, "vault", None)
+    if configured is None:
+        return REPO_ROOT
+    from llmwiki.vault import resolve_vault
+    try:
+        return resolve_vault(Path(configured)).root
+    except (FileNotFoundError, NotADirectoryError) as exc:
+        print(f"warning: configured vault {configured} is unusable ({exc}) — "
+              f"falling back to {REPO_ROOT}", file=sys.stderr)
+        return REPO_ROOT
+
+
 def cmd_version(args: argparse.Namespace) -> int:
     print(f"llmwiki {__version__}")
     return 0
@@ -490,7 +516,15 @@ def cmd_graph(args: argparse.Namespace) -> int:
     gets *some* graph. Only the builtin engine's exit code is
     authoritative for the CLI return value.
     """
+    root = _content_root(args)
     engine = getattr(args, "engine", "graphify")
+    if engine == "graphify" and root != REPO_ROOT:
+        # graphify_bridge reads/writes its own REPO_ROOT-anchored constants,
+        # so it would graph the clone's wiki and write into the clone. The
+        # builtin engine takes wiki_dir/graph_dir, so vault mode uses it.
+        print("  graphify engine does not support vault mode — "
+              "falling back to builtin engine", file=sys.stderr)
+        engine = "builtin"
     if engine == "graphify":
         from llmwiki.graphify_bridge import is_available, build_graphify_graph
         if not is_available():
@@ -521,7 +555,10 @@ def cmd_graph(args: argparse.Namespace) -> int:
     from llmwiki.graph import build_and_report
     write_json = args.format in ("json", "both")
     write_html = args.format in ("html", "both")
-    return build_and_report(write_json_flag=write_json, write_html_flag=write_html)
+    return build_and_report(
+        write_json_flag=write_json, write_html_flag=write_html,
+        wiki_dir=root / "wiki", graph_dir=root / "graph",
+    )
 
 
 # cmd_sync_status + _resolve_key_exists moved to llmwiki/sync/status.py
@@ -544,10 +581,12 @@ def cmd_export(args: argparse.Namespace) -> int:
     )
     from llmwiki.build import discover_sources, group_by_project, RAW_SESSIONS
 
-    out_dir = args.out if args.out else REPO_ROOT / "site"
+    root = _content_root(args)
+    out_dir = args.out if args.out else root / "site"
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    sources = discover_sources(RAW_SESSIONS)
+    sessions_dir = RAW_SESSIONS if root == REPO_ROOT else root / "raw" / "sessions"
+    sources = discover_sources(sessions_dir)
     if not sources:
         print("error: no sources found. Run 'llmwiki sync' first.", file=_sys.stderr)
         return 2
@@ -584,7 +623,9 @@ def cmd_lint(args: argparse.Namespace) -> int:
     """Run every registered lint rule against the wiki and print a report."""
     from llmwiki.lint import REGISTRY, load_pages, run_all, summarize  # noqa: F401
 
-    wiki_dir = args.wiki_dir or (REPO_ROOT / "wiki")
+    # --wiki-dir is the narrower flag and wins; otherwise lint the vault's
+    # wiki, not the clone's seed demo content.
+    wiki_dir = args.wiki_dir or (_content_root(args) / "wiki")
     if not wiki_dir.is_dir():
         print(f"error: wiki directory not found: {wiki_dir}", file=sys.stderr)
         return 2
@@ -1219,7 +1260,7 @@ def cmd_candidates(args: argparse.Namespace) -> int:
         stale_candidates,
     )
 
-    wiki_dir = args.wiki_dir or (REPO_ROOT / "wiki")
+    wiki_dir = args.wiki_dir or (_content_root(args) / "wiki")
     if not wiki_dir.is_dir():
         print(f"error: wiki directory not found: {wiki_dir}", file=sys.stderr)
         return 2
@@ -1309,6 +1350,13 @@ def _add_vault_arg(parser: argparse.ArgumentParser, *, role: str) -> None:
             "init": "(#29) Scaffold raw/, wiki/, site/ into this vault "
                     "instead of the repo, so personal data lands outside "
                     "the git clone.",
+            "graph": "Graph this vault's wiki/ and write graph/ under it, "
+                     "instead of the repo's. Vault mode uses the builtin "
+                     "engine (graphify is repo-anchored).",
+            "export": "Export from this vault's raw/sessions/ and write the "
+                      "site output under it, instead of the repo's.",
+            "candidates": "Triage candidate pages under this vault's wiki/, "
+                          "instead of the repo's.",
         }[role],
     )
 
@@ -1480,6 +1528,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--engine", choices=["builtin", "graphify"], default="graphify",
         help="Graph engine: 'graphify' (AI-powered, default) or 'builtin' (stdlib wikilinks fallback)",
     )
+    _add_vault_arg(graph, role="graph")
     graph.set_defaults(func=cmd_graph)
 
     # export (v0.4)
@@ -1494,6 +1543,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     exp2.add_argument("--out", type=Path, default=None, help="Output directory (default: site/)")
     exp2.add_argument("--topic", type=str, default="", help="Topic filter for marp slide generation")
+    _add_vault_arg(exp2, role="export")
     exp2.set_defaults(func=cmd_export)
 
     # lint (v1.0, #155) — live count via the rule registry (currently 15)
@@ -1553,6 +1603,7 @@ def build_parser() -> argparse.ArgumentParser:
     cand.add_argument("--stale-days", type=int, default=30,
                       help="Staleness threshold in days (default 30)")
     cand.add_argument("--json", action="store_true", help="JSON output for list")
+    _add_vault_arg(cand, role="candidates")
     cand.set_defaults(func=cmd_candidates)
 
     # synthesize (v1.1, #35) — LLM-backed wiki page synthesis

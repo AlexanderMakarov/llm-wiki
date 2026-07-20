@@ -1157,21 +1157,35 @@ def copy_to_site(site_dir: Path, *, graph: Optional[dict[str, Any]] = None,
     return out
 
 
-def build_and_report(write_json_flag: bool = True, write_html_flag: bool = True) -> int:
-    graph = build_graph()
+def _rel(path: Path) -> str:
+    """Repo-relative for repo output, absolute for a vault's."""
+    return str(path.relative_to(REPO_ROOT) if path.is_relative_to(REPO_ROOT) else path)
+
+
+def build_and_report(write_json_flag: bool = True, write_html_flag: bool = True,
+                     wiki_dir: Path | None = None,
+                     graph_dir: Path | None = None) -> int:
+    """``wiki_dir``/``graph_dir`` select which wiki to graph and where the
+    output lands; both default to the repo's (demo/dev mode). The CLI
+    passes the resolved vault's so a configured vault is never bypassed."""
+    source_dir = wiki_dir or WIKI_DIR
+    out_dir = graph_dir or GRAPH_DIR
+    graph = build_graph(wiki_dir=wiki_dir)
     if not graph["nodes"]:
-        print(f"warning: no wiki pages found under {WIKI_DIR}", file=sys.stderr)
+        print(f"warning: no wiki pages found under {source_dir}", file=sys.stderr)
         return 1
 
+    out_dir.mkdir(parents=True, exist_ok=True)
+
     if write_json_flag:
-        json_path = GRAPH_DIR / "graph.json"
+        json_path = out_dir / "graph.json"
         write_json(graph, json_path)
-        print(f"  wrote {json_path.relative_to(REPO_ROOT)}")
+        print(f"  wrote {_rel(json_path)}")
 
     if write_html_flag:
-        html_path = GRAPH_DIR / "graph.html"
+        html_path = out_dir / "graph.html"
         write_html(graph, html_path)
-        print(f"  wrote {html_path.relative_to(REPO_ROOT)}")
+        print(f"  wrote {_rel(html_path)}")
 
     stats = graph["stats"]
     print()
