@@ -16,7 +16,8 @@ from __future__ import annotations
 
 import argparse
 import sys
-from typing import Any, Optional
+from pathlib import Path
+from typing import Any
 
 from llmwiki import REPO_ROOT
 
@@ -77,12 +78,14 @@ def run_pipeline(args: argparse.Namespace) -> int:
         steps.append((
             "graph",
             f"graph --format both --engine {args.graph_engine}",
-            _ns(format="both", engine=args.graph_engine),
+            _ns(format="both", engine=args.graph_engine,
+                vault=getattr(args, "vault", None)),
         ))
     steps.append((
         "export",
         f"export all --out {args.out}",
-        _ns(format="all", out=args.out, topic=""),
+        _ns(format="all", out=args.out, topic="",
+            vault=getattr(args, "vault", None)),
     ))
     # ``lint --fail-on-errors`` so error-severity issues already fail the step;
     # ``--strict`` additionally escalates warnings (checked below).
@@ -96,6 +99,7 @@ def run_pipeline(args: argparse.Namespace) -> int:
             include_llm=False,
             json=False,
             fail_on_errors=args.strict,
+            vault=getattr(args, "vault", None),
         ),
     ))
 
@@ -108,7 +112,7 @@ def run_pipeline(args: argparse.Namespace) -> int:
     }
 
     overall_rc = 0
-    lint_rc: Optional[int] = None
+    lint_rc: int | None = None
     for name, label, sub_args in steps:
         print(f"\n==> llmwiki {label}")
         rc = dispatch[name](sub_args)
@@ -127,7 +131,8 @@ def run_pipeline(args: argparse.Namespace) -> int:
         # don't depend on lint's own exit code, which by design only fires
         # on error-severity issues.
         from llmwiki.lint import load_pages, run_all, summarize
-        wiki_dir = REPO_ROOT / "wiki"
+        vault_root = getattr(args, "vault", None)
+        wiki_dir = (Path(vault_root) / "wiki") if vault_root else (REPO_ROOT / "wiki")
         if wiki_dir.is_dir():
             pages = load_pages(wiki_dir)
             issues = run_all(pages)
