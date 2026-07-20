@@ -57,6 +57,12 @@ def _community_labels(G, communities: dict[int, list[str]]) -> dict[int, str]:
     return labels
 
 
+def _rel(path: Path) -> str:
+    """Repo-relative for repo output, absolute for a vault's."""
+    return str(path.relative_to(REPO_ROOT)
+               if path.is_relative_to(REPO_ROOT) else path)
+
+
 def _extract_wiki_nodes(wiki_dir: Path) -> dict[str, Any]:
     """Build graph nodes + edges from wiki markdown frontmatter + wikilinks.
 
@@ -222,6 +228,9 @@ def build_graphify_graph(
     *,
     directed: bool = False,
     include_code: bool = False,
+    wiki_dir: Path | None = None,
+    graph_dir: Path | None = None,
+    graphify_out: Path | None = None,
 ) -> dict[str, Any]:
     """Run the Graphify pipeline on the wiki.
 
@@ -231,12 +240,21 @@ def build_graphify_graph(
         Use directed graph (preserves edge direction).
     include_code : bool
         Also extract llmwiki/ source code into the graph.
+    wiki_dir, graph_dir, graphify_out : Path | None
+        Which wiki to graph and where output lands; each defaults to the
+        repo's. The CLI passes the resolved vault's so a configured vault
+        is graphed instead of the clone.
 
     Returns
     -------
     dict with keys: graph (NetworkX), communities, gods, report_path,
     json_path, html_path, stats.
     """
+    # Default to the repo dirs; the CLI passes the resolved vault's so a
+    # configured vault is graphed instead of the clone (#43).
+    wiki_root = wiki_dir or WIKI_DIR
+    graph_root = graph_dir or GRAPH_DIR
+    out_root = graphify_out or GRAPHIFY_OUT
     from graphify.detect import detect
     from graphify.extract import extract
     from graphify.build import build_from_json
@@ -247,10 +265,10 @@ def build_graphify_graph(
 
     # Step 1: Extract wiki pages into nodes + edges
     print("  graphify: extracting wiki pages (frontmatter + wikilinks)...")
-    extraction = _extract_wiki_nodes(WIKI_DIR)
+    extraction = _extract_wiki_nodes(wiki_root)
 
     # Build a detection_result compatible with Graphify's report generator
-    wiki_files = list(WIKI_DIR.rglob("*.md"))
+    wiki_files = list(wiki_root.rglob("*.md"))
     detection_result: dict = {
         "files": {"document": [str(f) for f in wiki_files], "code": []},
         "total_files": len(wiki_files),
@@ -264,7 +282,7 @@ def build_graphify_graph(
             code_files = [Path(f) for f in result.get("files", {}).get("code", [])]
             if code_files:
                 print(f"  graphify: extracting {len(code_files)} code files (AST)...")
-                code_ext = extract(code_files, cache_root=GRAPHIFY_OUT)
+                code_ext = extract(code_files, cache_root=out_root)
                 extraction["nodes"].extend(code_ext.get("nodes", []))
                 extraction["edges"].extend(code_ext.get("edges", []))
 
@@ -320,14 +338,14 @@ def build_graphify_graph(
         print(f"  graphify: {len(hyperedges)} hyperedges attached")
 
     # Step 7: Export (all formats)
-    GRAPHIFY_OUT.mkdir(parents=True, exist_ok=True)
-    GRAPH_DIR.mkdir(parents=True, exist_ok=True)
+    out_root.mkdir(parents=True, exist_ok=True)
+    graph_root.mkdir(parents=True, exist_ok=True)
 
-    json_path = GRAPHIFY_OUT / "graph.json"
-    html_path = GRAPHIFY_OUT / "graph.html"
-    svg_path = GRAPHIFY_OUT / "graph.svg"
-    graphml_path = GRAPHIFY_OUT / "graph.graphml"
-    report_path = GRAPHIFY_OUT / "GRAPH_REPORT.md"
+    json_path = out_root / "graph.json"
+    html_path = out_root / "graph.html"
+    svg_path = out_root / "graph.svg"
+    graphml_path = out_root / "graph.graphml"
+    report_path = out_root / "GRAPH_REPORT.md"
 
     to_json(G, communities, str(json_path))
     to_html(G, communities, str(html_path), community_labels=labels)
@@ -358,8 +376,8 @@ def build_graphify_graph(
         print(f"  graphify: GraphML export skipped ({e})", file=sys.stderr)
 
     # Copy to graph/ for build pipeline compatibility
-    graph_json = GRAPH_DIR / "graph.json"
-    graph_html = GRAPH_DIR / "graph.html"
+    graph_json = graph_root / "graph.json"
+    graph_html = graph_root / "graph.html"
     graph_json.write_text(json_path.read_text(encoding="utf-8"), encoding="utf-8")
     graph_html.write_text(html_path.read_text(encoding="utf-8"), encoding="utf-8")
 
@@ -370,11 +388,11 @@ def build_graphify_graph(
         "god_nodes": [g.get("label", str(g)) if isinstance(g, dict) else str(g) for g in gods[:5]],
     }
 
-    print(f"  graphify: wrote {json_path.relative_to(REPO_ROOT)}")
-    print(f"  graphify: wrote {html_path.relative_to(REPO_ROOT)}")
-    print(f"  graphify: wrote {svg_path.relative_to(REPO_ROOT)}")
-    print(f"  graphify: wrote {graphml_path.relative_to(REPO_ROOT)}")
-    print(f"  graphify: wrote {report_path.relative_to(REPO_ROOT)}")
+    print(f"  graphify: wrote {_rel(json_path)}")
+    print(f"  graphify: wrote {_rel(html_path)}")
+    print(f"  graphify: wrote {_rel(svg_path)}")
+    print(f"  graphify: wrote {_rel(graphml_path)}")
+    print(f"  graphify: wrote {_rel(report_path)}")
     print(f"  graphify: {stats['total_nodes']} nodes, {stats['total_edges']} edges, "
           f"{stats['communities']} communities")
 

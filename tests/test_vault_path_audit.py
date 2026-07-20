@@ -119,15 +119,47 @@ def test_content_root_uses_repo_when_no_vault_configured(monkeypatch):
     assert cli_mod._content_root(args) == REPO_ROOT
 
 
-def test_content_root_warns_when_configured_vault_is_unusable(tmp_path, monkeypatch, capsys):
-    """A configured-but-missing vault must not silently target the git clone."""
+def test_content_root_errors_when_configured_vault_is_unusable(tmp_path, monkeypatch, capsys):
+    """A configured-but-missing vault is a hard error — falling back to the
+    repo would write the user's content into the git clone on a typo."""
     missing = tmp_path / "gone"
     monkeypatch.setattr(
         "llmwiki.config_schedule.load_default_vault_path", lambda: missing
     )
     args = cli_mod.build_parser().parse_args(["lint"])
-    root = cli_mod._content_root(args)
-    err = capsys.readouterr().err
-    assert root == REPO_ROOT
-    assert "vault" in err.lower()
-    assert str(missing) in err
+    with pytest.raises(SystemExit) as exc:
+        cli_mod._content_root(args)
+    assert exc.value.code == 2
+    assert str(missing) in capsys.readouterr().err
+
+
+def test_unusable_vault_does_not_write_into_the_repo(tmp_path, monkeypatch):
+    """Regression: `export --vault /typo` must not mkdir+write REPO_ROOT/site."""
+    missing = tmp_path / "gone"
+    monkeypatch.setattr(
+        "llmwiki.config_schedule.load_default_vault_path", lambda: missing
+    )
+    args = cli_mod.build_parser().parse_args(["export", "llms-txt"])
+    with pytest.raises(SystemExit) as exc:
+        args.func(args)
+    assert exc.value.code == 2
+
+
+def test_graph_vault_mode_still_uses_graphify(tmp_path, monkeypatch):
+    """graphify is the default engine; a configured vault must not silently
+    disable it — it now receives the vault's dirs instead."""
+    vault = _vault_with_wiki(tmp_path)
+    seen: dict = {}
+
+    def _fake_build(**kw):
+        seen.update(kw)
+        return {"graph": {"nodes": [{"id": "x"}], "edges": []}}
+
+    monkeypatch.setattr("llmwiki.graphify_bridge.is_available", lambda: True)
+    monkeypatch.setattr("llmwiki.graphify_bridge.build_graphify_graph", _fake_build)
+    args = cli_mod.build_parser().parse_args(
+        ["graph", "--vault", str(vault), "--format", "json"]
+    )
+    assert args.func(args) == 0
+    assert seen["wiki_dir"] == vault.resolve() / "wiki"
+    assert seen["graph_dir"] == vault.resolve() / "graph"

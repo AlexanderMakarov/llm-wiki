@@ -63,8 +63,10 @@ def _content_root(args: argparse.Namespace) -> Path:
     ``REPO_ROOT / "wiki"`` default silently targets the git clone's seed
     content instead of the user's vault.
 
-    A configured-but-unusable vault warns rather than silently falling
-    through to the clone, so a wrong or unmounted path is visible.
+    A configured-but-unusable vault is a hard error (exit 2), matching
+    ``build`` / ``all`` / ``consolidate-topics``. Falling back to the repo
+    would write the user's content into the git clone on a typo — exactly
+    what routing through here prevents.
     """
     _apply_default_vault(args)
     configured = getattr(args, "vault", None)
@@ -72,11 +74,10 @@ def _content_root(args: argparse.Namespace) -> Path:
         return REPO_ROOT
     from llmwiki.vault import resolve_vault
     try:
-        return resolve_vault(Path(configured)).root
+        return resolve_vault(Path(configured).expanduser()).root
     except (FileNotFoundError, NotADirectoryError) as exc:
-        print(f"warning: configured vault {configured} is unusable ({exc}) — "
-              f"falling back to {REPO_ROOT}", file=sys.stderr)
-        return REPO_ROOT
+        print(f"error: {exc}", file=sys.stderr)
+        raise SystemExit(2) from exc
 
 
 def cmd_version(args: argparse.Namespace) -> int:
@@ -355,9 +356,20 @@ def cmd_build(args: argparse.Namespace) -> int:
 
 
 def cmd_serve(args: argparse.Namespace) -> int:
-    """Serve the built site via a local HTTP server."""
+    """Serve the built site via a local HTTP server.
+
+    ``build --vault`` writes to ``<vault>/site``, so serving the repo's
+    ``site/`` afterwards shows a stale or empty tree. Resolution is from
+    the configured vault only — ``serve --vault`` was dropped in v1.4.0 —
+    and an explicit ``--dir`` still wins.
+    """
+    directory = args.dir
+    if directory == REPO_ROOT / "site":
+        root = _content_root(args)
+        if root != REPO_ROOT:
+            directory = root / "site"
     from llmwiki.serve import serve_site
-    return serve_site(directory=args.dir, port=args.port, host=args.host, open_browser=args.open)
+    return serve_site(directory=directory, port=args.port, host=args.host, open_browser=args.open)
 
 
 def cmd_usage(args: argparse.Namespace) -> int:
@@ -518,13 +530,6 @@ def cmd_graph(args: argparse.Namespace) -> int:
     """
     root = _content_root(args)
     engine = getattr(args, "engine", "graphify")
-    if engine == "graphify" and root != REPO_ROOT:
-        # graphify_bridge reads/writes its own REPO_ROOT-anchored constants,
-        # so it would graph the clone's wiki and write into the clone. The
-        # builtin engine takes wiki_dir/graph_dir, so vault mode uses it.
-        print("  graphify engine does not support vault mode — "
-              "falling back to builtin engine", file=sys.stderr)
-        engine = "builtin"
     if engine == "graphify":
         from llmwiki.graphify_bridge import is_available, build_graphify_graph
         if not is_available():
@@ -533,7 +538,10 @@ def cmd_graph(args: argparse.Namespace) -> int:
             engine = "builtin"
         else:
             try:
-                result = build_graphify_graph()
+                result = build_graphify_graph(
+                    wiki_dir=root / "wiki", graph_dir=root / "graph",
+                    graphify_out=root / "graphify-out",
+                )
             except Exception as e:
                 # #488: uncaught graphify exception used to surface as a
                 # bare stack trace + non-zero exit. Now we log a warning
@@ -583,6 +591,11 @@ def cmd_export(args: argparse.Namespace) -> int:
 
     root = _content_root(args)
     out_dir = args.out if args.out else root / "site"
+    # `all` always passes its --out default (REPO_ROOT/site), which is truthy,
+    # so the fallback above never fires from the pipeline. Remap it the way
+    # cmd_build does, or a vault run overwrites the clone's site/.
+    if root != REPO_ROOT and out_dir == REPO_ROOT / "site":
+        out_dir = root / "site"
     out_dir.mkdir(parents=True, exist_ok=True)
 
     sessions_dir = RAW_SESSIONS if root == REPO_ROOT else root / "raw" / "sessions"
