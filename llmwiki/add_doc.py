@@ -597,11 +597,14 @@ def _extract_html(html: str) -> tuple[str, str, str]:
     except ImportError:
         title, md = html_to_markdown(html)
         return title, md, "stdlib"
-    # favor_precision drops boilerplate (nav/header/footer) aggressively;
-    # include_links keeps in-content links & citations (prev/next-part
-    # anchors) synthesis relies on; comments off, tables on.
+    # Default recall already drops site chrome (nav/header/footer) while
+    # keeping the article body. favor_precision was too aggressive — on real
+    # pages (armgate.am) it discarded the whole article as low-confidence,
+    # extracting only a skip-to-content link. include_links keeps in-content
+    # links & citations (prev/next-part anchors) synthesis relies on;
+    # comments off, tables on.
     md = trafilatura.extract(html, output_format="markdown",
-                             favor_precision=True, include_links=True,
+                             include_links=True,
                              include_comments=False, include_tables=True,
                              include_formatting=True)
     title = ""

@@ -748,7 +748,7 @@ def _install_fake_trafilatura(monkeypatch, *, md="clean article body", title="Me
     return mod
 
 
-def test_extract_html_passes_precision_kwargs_when_trafilatura_present(monkeypatch):
+def test_extract_html_passes_content_kwargs_when_trafilatura_present(monkeypatch):
     from llmwiki import add_doc as m
 
     captured: dict = {}
@@ -757,12 +757,14 @@ def test_extract_html_passes_precision_kwargs_when_trafilatura_present(monkeypat
     assert extractor == "trafilatura"
     assert md == "extracted body"
     assert title == "T"
-    # Aggressive-but-safe: precision on, boilerplate/comments off, but
-    # in-content links + tables preserved for citations / prev-next parts.
-    assert captured["favor_precision"] is True
+    # Default recall keeps the article body; comments off; in-content links +
+    # tables preserved for citations / prev-next parts.
     assert captured["include_links"] is True
     assert captured["include_comments"] is False
     assert captured["include_tables"] is True
+    # favor_precision must NOT be set: on real pages it discarded the whole
+    # article as low-confidence, leaving only a skip-to-content link.
+    assert captured.get("favor_precision") in (None, False)
 
 
 def test_convert_url_records_trafilatura_extractor(monkeypatch):
