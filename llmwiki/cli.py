@@ -979,6 +979,74 @@ def _cmd_add_locked(args: argparse.Namespace, docs_dir: Path,
     return 2 if failed else 0
 
 
+def cmd_remove(args: argparse.Namespace) -> int:
+    """Cascade-remove raw docs and everything derived from them (B2).
+
+    A selector (project name or slug glob, e.g. ``ip-v-armenii*``) selects
+    raw docs under the resolved vault's ``raw/docs/``; the removal drags
+    their synth-state keys and ``wiki/sources/`` pages out too, then
+    refreshes backlinks / index / log. ``--dry-run`` prints the full
+    cascade and touches nothing; a real run needs ``--yes`` (or an
+    interactive confirm) — cascade deletion is never silent.
+    """
+    _apply_default_vault(args)
+
+    from llmwiki.remove_doc import build_remove_plan, execute_remove_plan, format_plan
+
+    vault_root = REPO_ROOT
+    if getattr(args, "vault", None):
+        from llmwiki.vault import resolve_vault
+        try:
+            vault_root = resolve_vault(args.vault).root
+        except (FileNotFoundError, NotADirectoryError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+
+    state_file = vault_root / "llmwiki-state.json"
+    plan = build_remove_plan(vault_root, args.selector, state_file=state_file)
+
+    if args.dry_run:
+        print(format_plan(plan))
+        return 0
+
+    if plan.is_empty:
+        print(f"remove: selector {args.selector!r} matched nothing — nothing to do.")
+        return 0
+
+    print(format_plan(plan))
+    if not args.yes:
+        if not sys.stdin.isatty():
+            print("error: refusing to cascade-remove without confirmation — "
+                  "re-run with --yes (or --dry-run to preview).", file=sys.stderr)
+            return 2
+        reply = input(f"Remove {len(plan.raw_docs)} raw doc(s) and "
+                      f"{len(plan.source_pages)} derived page(s)? [y/N] ").strip().lower()
+        if reply not in ("y", "yes"):
+            print("aborted.")
+            return 1
+
+    from llmwiki.pipeline_lock import pipeline_lock
+    from llmwiki.remove_doc import RemoveIncompleteError
+    with pipeline_lock(vault_root):
+        # Re-plan under the lock. The preview above was built outside it, and
+        # an interactive confirm can sit here for minutes — long enough for a
+        # concurrent synthesize to land a page this plan doesn't know about.
+        plan = build_remove_plan(vault_root, args.selector, state_file=state_file)
+        if plan.is_empty:
+            print(f"remove: selector {args.selector!r} matched nothing — nothing to do.")
+            return 0
+        try:
+            result = execute_remove_plan(plan, state_file=state_file)
+        except RemoveIncompleteError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+    print(f"  removed {result['raw_docs']} raw doc(s), "
+          f"{result['source_pages']} wiki page(s), "
+          f"{result['state_keys']} synth-state key(s), "
+          f"{result['pending_entries']} pending entry(ies)")
+    return 0
+
+
 def _synthesize_estimate(args: argparse.Namespace | None = None) -> int:
     """Print the G-07 incremental-vs-full-force cost report (v1.1.0 · #50 · #293).
 
@@ -1235,6 +1303,9 @@ def _add_vault_arg(parser: argparse.ArgumentParser, *, role: str) -> None:
             "add": "(#16) Vault-overlay mode: write the converted document "
                    "under the vault's raw/docs/ and run synthesize/build "
                    "against the vault.",
+            "remove": "(#B2) Cascade-remove raw docs + their derived pages "
+                      "from this vault's raw/docs/ + wiki/, instead of the "
+                      "repo's own directories.",
             "init": "(#29) Scaffold raw/, wiki/, site/ into this vault "
                     "instead of the repo, so personal data lands outside "
                     "the git clone.",
@@ -1544,6 +1615,21 @@ def build_parser() -> argparse.ArgumentParser:
                        help="Always land a new snapshot even when body matches an existing doc (#22)")
     _add_vault_arg(add_p, role="add")
     add_p.set_defaults(func=cmd_add)
+
+    # remove — cascade-delete raw docs + their derived artifacts (B2)
+    rm_p = sub.add_parser(
+        "remove",
+        help="Cascade-remove raw docs (by project or slug glob) and everything "
+             "derived: synth state, wiki/sources pages, index/log/backlinks",
+    )
+    rm_p.add_argument("selector", metavar="SELECTOR",
+                      help="Project name or slug glob, e.g. 'ip-v-armenii*'")
+    rm_p.add_argument("--dry-run", action="store_true",
+                      help="Print the full cascade and change nothing")
+    rm_p.add_argument("--yes", action="store_true",
+                      help="Skip the confirmation prompt (required without a TTY)")
+    _add_vault_arg(rm_p, role="remove")
+    rm_p.set_defaults(func=cmd_remove)
 
     # consolidate-topics — one-time LLM dedup + description pass (#54)
     cons = sub.add_parser(
