@@ -1030,7 +1030,8 @@ def cmd_remove(args: argparse.Namespace) -> int:
         result = execute_remove_plan(plan, state_file=state_file)
     print(f"  removed {result['raw_docs']} raw doc(s), "
           f"{result['source_pages']} wiki page(s), "
-          f"{result['state_keys']} synth-state key(s)")
+          f"{result['state_keys']} synth-state key(s), "
+          f"{result['pending_entries']} pending entry(ies)")
     return 0
 
 

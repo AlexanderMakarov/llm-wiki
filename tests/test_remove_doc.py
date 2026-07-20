@@ -196,3 +196,36 @@ def test_cli_remove_dry_run_reports_without_deleting(tmp_path: Path, capsys) -> 
     assert "ip-v-armenii" in out
     assert "docs::ip-v-armenii/ip-v-armenii.md" in out
     assert written[0].exists()
+
+
+def test_pending_backlog_entry_is_dropped(tmp_path: Path) -> None:
+    """A doc removed before it was ever synthesized has no ``synth.files``
+    key — only a ``synth.pending`` entry. Dropping just the files dict would
+    strand the backlog pointing at a file that no longer exists."""
+    vault, written, state_file = _build_vault(tmp_path)
+    raw_doc = written[0]
+    rel = raw_doc.relative_to(vault / "raw" / "docs").as_posix()
+    source = f"raw/docs/{rel}"
+
+    state = json.loads(state_file.read_text())
+    synth = state["synth"]
+    synth["pending"] = [
+        {"is_doc": True, "project": "ip-v-armenii", "rel": rel,
+         "source": source, "mtime": "2026-07-07T00:00:00Z"},
+        {"is_doc": False, "project": "other", "rel": "s.md",
+         "source": "raw/sessions/s.md", "mtime": "2026-07-07T00:00:00Z"},
+    ]
+    synth["pending_total"] = 2
+    state_file.write_text(json.dumps(state), encoding="utf-8")
+
+    plan = build_remove_plan(vault, "ip-v-armenii*", state_file=state_file)
+    assert source in plan.pending_sources
+
+    result = execute_remove_plan(plan, state_file=state_file)
+    assert result["pending_entries"] == 1
+
+    after = json.loads(state_file.read_text())["synth"]
+    remaining = [e["source"] for e in after["pending"]]
+    assert source not in remaining
+    assert "raw/sessions/s.md" in remaining  # unrelated backlog survives
+    assert after["pending_total"] == 1

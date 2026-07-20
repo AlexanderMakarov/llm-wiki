@@ -50,10 +50,12 @@ class RemovePlan:
     raw_docs: list[Path] = field(default_factory=list)
     state_keys: list[str] = field(default_factory=list)
     source_pages: list[Path] = field(default_factory=list)
+    pending_sources: list[str] = field(default_factory=list)
 
     @property
     def is_empty(self) -> bool:
-        return not (self.raw_docs or self.state_keys or self.source_pages)
+        return not (self.raw_docs or self.state_keys or self.source_pages
+                    or self.pending_sources)
 
 
 def _matches(rel: Path, selector: str) -> bool:
@@ -138,7 +140,8 @@ def build_remove_plan(
     if not docs_dir.is_dir():
         return plan
 
-    present_keys = set(read_state(state_file).get("synth", {}).get("files", {}))
+    synth_state = read_state(state_file).get("synth", {})
+    present_keys = set(synth_state.get("files", {}))
     source_file_keys: set[str] = set()
     pages: list[Path] = []
     seen_pages: set[Path] = set()
@@ -163,6 +166,16 @@ def build_remove_plan(
             pages.append(page)
 
     plan.source_pages = pages
+    # synth.pending is the not-yet-synthesized backlog — a LIST, separate from
+    # the synth.files dict. A doc removed before it was ever synthesized has no
+    # files key, only a pending entry; dropping just files would strand it
+    # pointing at a file that no longer exists.
+    plan.pending_sources = sorted({
+        str(entry.get("source", ""))
+        for entry in synth_state.get("pending", [])
+        if isinstance(entry, dict)
+        and str(entry.get("source", "")) in source_file_keys
+    })
     return plan
 
 
@@ -179,6 +192,8 @@ def format_plan(plan: RemovePlan) -> str:
     lines += [f"    - {p}" for p in plan.raw_docs]
     lines += ["", "  synth-state keys:"]
     lines += [f"    - {k}" for k in plan.state_keys] or ["    (none)"]
+    lines += ["", "  synth pending entries:"]
+    lines += [f"    - {s}" for s in plan.pending_sources] or ["    (none)"]
     lines += ["", "  wiki/sources pages:"]
     lines += [f"    - {p}" for p in plan.source_pages] or ["    (none)"]
     lines += [
@@ -203,6 +218,7 @@ def execute_remove_plan(
         "raw_docs": 0,
         "source_pages": 0,
         "state_keys": len(plan.state_keys),
+        "pending_entries": len(plan.pending_sources),
     }
     if plan.is_empty:
         return result
@@ -210,13 +226,25 @@ def execute_remove_plan(
     result["raw_docs"] = len(remove_raw_docs(plan.raw_docs))
     result["source_pages"] = len(remove_raw_docs(plan.source_pages))
 
-    if plan.state_keys:
-        drop = set(plan.state_keys)
+    if plan.state_keys or plan.pending_sources:
+        drop_keys = set(plan.state_keys)
+        drop_pending = set(plan.pending_sources)
 
         def _mut(state: dict) -> dict:
-            files = state.setdefault("synth", {}).setdefault("files", {})
-            for key in drop:
+            synth = state.setdefault("synth", {})
+            files = synth.setdefault("files", {})
+            for key in drop_keys:
                 files.pop(key, None)
+            pending = synth.get("pending")
+            if drop_pending and isinstance(pending, list):
+                kept = [
+                    e for e in pending
+                    if not (isinstance(e, dict)
+                            and str(e.get("source", "")) in drop_pending)
+                ]
+                synth["pending"] = kept
+                if isinstance(synth.get("pending_total"), int):
+                    synth["pending_total"] = len(kept)
             return state
 
         update_state(_mut, state_file)
