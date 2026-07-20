@@ -17,7 +17,7 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from llmwiki import REPO_ROOT
 
@@ -112,7 +112,7 @@ def run_pipeline(args: argparse.Namespace) -> int:
     }
 
     overall_rc = 0
-    lint_rc: Optional[int] = None
+    lint_rc: int | None = None
     for name, label, sub_args in steps:
         print(f"\n==> llmwiki {label}")
         rc = dispatch[name](sub_args)

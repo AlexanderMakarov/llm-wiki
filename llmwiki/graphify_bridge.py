@@ -59,8 +59,7 @@ def _community_labels(G, communities: dict[int, list[str]]) -> dict[int, str]:
 
 def _rel(path: Path) -> str:
     """Repo-relative for repo output, absolute for a vault's."""
-    return str(path.relative_to(REPO_ROOT)
-               if path.is_relative_to(REPO_ROOT) else path)
+    return str(path.relative_to(REPO_ROOT) if path.is_relative_to(REPO_ROOT) else path)
 
 
 def _extract_wiki_nodes(wiki_dir: Path) -> dict[str, Any]:
@@ -255,13 +254,13 @@ def build_graphify_graph(
     wiki_root = wiki_dir or WIKI_DIR
     graph_root = graph_dir or GRAPH_DIR
     out_root = graphify_out or GRAPHIFY_OUT
-    from graphify.detect import detect
-    from graphify.extract import extract
+    from graphify.analyze import god_nodes, suggest_questions, surprising_connections
     from graphify.build import build_from_json
     from graphify.cluster import cluster, score_all
-    from graphify.analyze import god_nodes, surprising_connections, suggest_questions
+    from graphify.detect import detect
+    from graphify.export import to_html, to_json
+    from graphify.extract import extract
     from graphify.report import generate as generate_report
-    from graphify.export import to_json, to_html
 
     # Step 1: Extract wiki pages into nodes + edges
     print("  graphify: extracting wiki pages (frontmatter + wikilinks)...")
@@ -352,7 +351,7 @@ def build_graphify_graph(
     report_path.write_text(report_md, encoding="utf-8")
 
     # SVG export
-    from graphify.export import to_svg, to_graphml
+    from graphify.export import to_graphml, to_svg
     to_svg(G, communities, str(svg_path), community_labels=labels)
 
     # GraphML — flatten list attributes to strings first (GraphML only supports scalars)
@@ -419,7 +418,7 @@ def build_graphify_graph(
 
 def export_to_obsidian(vault_path: Path) -> Path:
     """Export the Graphify graph to an Obsidian vault."""
-    from graphify.export import to_obsidian, to_canvas
+    from graphify.export import to_canvas, to_obsidian
 
     json_path = GRAPHIFY_OUT / "graph.json"
     if not json_path.is_file():
@@ -427,7 +426,6 @@ def export_to_obsidian(vault_path: Path) -> Path:
             f"No graph found at {json_path}. Run `llmwiki graph` first."
         )
 
-    import networkx as nx
     from networkx.readwrite import json_graph
     data = json.loads(json_path.read_text(encoding="utf-8"))
     G = json_graph.node_link_graph(data)
@@ -455,7 +453,6 @@ def query_graph(question: str, *, depth: int = 3, token_budget: int = 2000) -> s
     if not json_path.is_file():
         return "No graph found. Run `llmwiki graph` first."
 
-    import networkx as nx
     from networkx.readwrite import json_graph
 
     data = json.loads(json_path.read_text(encoding="utf-8"))
@@ -506,7 +503,6 @@ def query_graph(question: str, *, depth: int = 3, token_budget: int = 2000) -> s
         label = ndata.get("label", nid)
         ntype = ndata.get("type", "")
         degree = G.degree(nid)
-        community = ndata.get("community", "?")
         file_ = ndata.get("file", "")
         line = f"- **{label}** ({ntype}, {degree} connections)"
         if file_:

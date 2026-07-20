@@ -20,7 +20,7 @@ import json
 import re
 import sys
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from llmwiki import REPO_ROOT
 
@@ -198,7 +198,7 @@ def build_graph(verify_site_dir: Path | None = None,
 
     # Compute in-degree
     in_deg: dict[str, int] = {slug: 0 for slug in pages}
-    for slug, page in pages.items():
+    for page in pages.values():
         for target in page["out_links"]:
             if target in in_deg:
                 in_deg[target] += 1
@@ -1133,8 +1133,8 @@ def write_html(graph: dict[str, Any], out_path: Path) -> None:
     out_path.write_text(html, encoding="utf-8")
 
 
-def copy_to_site(site_dir: Path, *, graph: Optional[dict[str, Any]] = None,
-                 wiki_dir: Path | None = None) -> Optional[Path]:
+def copy_to_site(site_dir: Path, *, graph: dict[str, Any] | None = None,
+                 wiki_dir: Path | None = None) -> Path | None:
     """Emit ``site/graph.html`` so the interactive viewer is reachable
     from the static site (v1.1.0 · #118).
 

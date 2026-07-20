@@ -26,31 +26,36 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from datetime import UTC
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
-from llmwiki import __version__, REPO_ROOT
+from llmwiki import REPO_ROOT, __version__
 from llmwiki.adapters import REGISTRY, discover_adapters
+
 # #v1378-review (#691 follow-up): hoist these re-exports from mid-module
 # to here so the file passes E402 cleanly. They re-export business
 # logic that lives in the proper domain modules now (#611) — kept here
 # for any caller still importing from llmwiki.cli.
 from llmwiki.adapters.status import adapter_status as _adapter_status  # noqa: F401
-from llmwiki.synth.estimate import synthesize_estimate_report  # noqa: F401
+
 # #691 / #arch-h8: extracted business logic moves out of cli.py.
 # cli.py keeps thin re-export wrappers for back-compat with anyone
 # doing `from llmwiki.cli import cmd_all, cmd_sync_status, ...`.
 from llmwiki.config_schedule import (  # noqa: F401
     apply_default_vault as _apply_default_vault,
-    load_default_vault_path as _load_default_vault_path,
+)
+from llmwiki.config_schedule import (
     load_schedule_config as _load_schedule_config,
+)
+from llmwiki.config_schedule import (
     should_run_after_sync as _should_run_after_sync,
 )
 from llmwiki.pipeline import run_pipeline as _run_pipeline
 from llmwiki.sync.status import (  # noqa: F401
     cmd_sync_status,
-    resolve_key_exists as _resolve_key_exists,
 )
+from llmwiki.synth.estimate import synthesize_estimate_report  # noqa: F401
 
 
 def _content_root(args: argparse.Namespace) -> Path:
@@ -185,7 +190,7 @@ def cmd_init(args: argparse.Namespace) -> int:
             dashboard_template.read_text(encoding="utf-8"),
             encoding="utf-8",
         )
-        print(f"  seeded wiki/dashboard.md")
+        print("  seeded wiki/dashboard.md")
     for rel, content in seeds.items():
         p = base / rel
         if not p.exists():
@@ -202,11 +207,11 @@ def cmd_sync(args: argparse.Namespace) -> int:
 
     _apply_default_vault(args)
 
-    from llmwiki.convert import convert_all, DEFAULT_OUT_DIR
+    from llmwiki.convert import DEFAULT_OUT_DIR, convert_all
     from llmwiki.state_store import (
-        resolve_state_file,
-        check_sync_state_compatible,
         IncompatibleStateError,
+        check_sync_state_compatible,
+        resolve_state_file,
     )
 
     # v1.2 (#54): vault-overlay mode — resolve the vault early so bad
@@ -280,7 +285,7 @@ def cmd_sync(args: argparse.Namespace) -> int:
             site_root = (vault.root / "site") if vault_path else (REPO_ROOT / "site")
             if args.auto_build and _should_run_after_sync(schedule.get("build", "on-sync")):
                 print("  auto-build: regenerating site/...")
-                from llmwiki.build import build_site, RAW_SESSIONS, RAW_DIR
+                from llmwiki.build import RAW_DIR, RAW_SESSIONS, build_site
                 # #54 vault-overlay: read the freshly-synced sessions from the
                 # vault, not the repo's empty raw/ (which makes auto-build fail
                 # with "RAW_SESSIONS does not exist" right after a vault sync).
@@ -315,11 +320,9 @@ def cmd_sync(args: argparse.Namespace) -> int:
 def cmd_build(args: argparse.Namespace) -> int:
     """Build the static HTML site."""
     _apply_default_vault(args)
-    from llmwiki.build import build_site
-
     # v1.2 (#54): vault-overlay mode. Validate the path up front so a
     # typo fails fast before the build walks raw/.
-    from llmwiki.build import RAW_SESSIONS, RAW_DIR
+    from llmwiki.build import RAW_DIR, RAW_SESSIONS, build_site
     raw_sessions, raw_dir, out_dir = RAW_SESSIONS, RAW_DIR, args.out
     wiki_dir = REPO_ROOT / "wiki"
     lock_root = REPO_ROOT
@@ -469,7 +472,7 @@ def cmd_adapters(args: argparse.Namespace) -> int:
     # legend below.
     wide = bool(getattr(args, "wide", False))
     if wide:
-        desc_width: Optional[int] = None  # no cap
+        desc_width: int | None = None  # no cap
     else:
         term_cols = _shutil.get_terminal_size(fallback=(80, 24)).columns
         # Layout: "  name(16)  present(8)  enabled(10)  active(7)  desc"
@@ -531,7 +534,7 @@ def cmd_graph(args: argparse.Namespace) -> int:
     root = _content_root(args)
     engine = getattr(args, "engine", "graphify")
     if engine == "graphify":
-        from llmwiki.graphify_bridge import is_available, build_graphify_graph
+        from llmwiki.graphify_bridge import build_graphify_graph, is_available
         if not is_available():
             print("  graphify not installed — falling back to builtin engine", file=sys.stderr)
             print("  install with: pip install llmwiki[graph]", file=sys.stderr)
@@ -576,18 +579,19 @@ def cmd_graph(args: argparse.Namespace) -> int:
 def cmd_export(args: argparse.Namespace) -> int:
     """Export AI-consumable formats from the compiled wiki."""
     import sys as _sys
+
+    from llmwiki.build import RAW_SESSIONS, discover_sources, group_by_project
     from llmwiki.exporters import (
-        write_llms_txt,
-        write_llms_full_txt,
-        write_graph_jsonld,
-        write_sitemap,
-        write_rss,
-        write_robots_txt,
-        write_ai_readme,
-        write_marp,
         export_all,
+        write_ai_readme,
+        write_graph_jsonld,
+        write_llms_full_txt,
+        write_llms_txt,
+        write_marp,
+        write_robots_txt,
+        write_rss,
+        write_sitemap,
     )
-    from llmwiki.build import discover_sources, group_by_project, RAW_SESSIONS
 
     root = _content_root(args)
     out_dir = args.out if args.out else root / "site"
@@ -608,7 +612,7 @@ def cmd_export(args: argparse.Namespace) -> int:
     format_ = args.format
     if format_ == "all":
         paths = export_all(out_dir, groups, sources)
-        for name, p in sorted(paths.items()):
+        for _name, p in sorted(paths.items()):
             print(f"  wrote {p.relative_to(REPO_ROOT) if p.is_relative_to(REPO_ROOT) else p}")
         return 0
 
@@ -686,9 +690,10 @@ def cmd_lint(args: argparse.Namespace) -> int:
     if args.fail_on_errors and summary.get("error", 0) > 0:
         return 1
     _apply_default_vault(args)
+    from datetime import datetime
+
     from llmwiki.state_store import resolve_state_file, update_state
-    from datetime import datetime, timezone
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    now = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     update_state(
         lambda s: (s.setdefault("ops", {}).__setitem__("last_lint_run_at", now) or s),
         resolve_state_file(),
@@ -698,7 +703,7 @@ def cmd_lint(args: argparse.Namespace) -> int:
 
 def cmd_queue(args: argparse.Namespace) -> int:
     from llmwiki.queue_ops import enqueue_task, queue_status, run_queue
-    from llmwiki.state_store import resolve_state_file, read_state
+    from llmwiki.state_store import read_state, resolve_state_file
 
     _apply_default_vault(args)
     vault = getattr(args, "vault", None)
@@ -885,16 +890,17 @@ def cmd_add(args: argparse.Namespace) -> int:
 def _cmd_add_locked(args: argparse.Namespace, docs_dir: Path,
                     vault_root: Path | None, render: str) -> int:
     """Body of cmd_add that runs under the pipeline lock (except dry-run)."""
+    from datetime import datetime
+
     from llmwiki.add_doc import add_sources
     from llmwiki.state_store import resolve_state_file, update_state
-    from datetime import datetime, timezone
 
     state_target = resolve_state_file()
-    now_ts = datetime.now(timezone.utc)
+    now_ts = datetime.now(UTC)
     task_id = f"add-sync-{int(now_ts.timestamp() * 1000)}"
 
     def _track(status: str, *, result_msg: str = "", error_msg: str = "") -> None:
-        stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        stamp = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
         def _mut(s: dict[str, Any]) -> dict[str, Any]:
             items = s.setdefault("queue", {}).setdefault("items", [])
             row = None
@@ -1185,7 +1191,7 @@ def _synthesize_estimate(args: argparse.Namespace | None = None) -> int:
         docs_root=docs_root,
         include_subagents=resolve_include_subagents(loaded_cfg),
     )
-    from datetime import datetime, timezone
+    from datetime import datetime
     pending_rows = [
         {
             "rel": str(it.get("rel", "")),
@@ -1197,7 +1203,7 @@ def _synthesize_estimate(args: argparse.Namespace | None = None) -> int:
         for it in report.get("unsynth_items", [])
         if str(it.get("rel", "")).strip()
     ]
-    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    stamp = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     def _mut(s: dict[str, Any]) -> dict[str, Any]:
         synth = s.setdefault("synth", {})
@@ -1247,7 +1253,7 @@ def _synthesize_estimate(args: argparse.Namespace | None = None) -> int:
         print(f"Prefix: {report['prefix_tokens']:,} tok  Pricing model: {report['model']}")
     print()
     if report["new"] == 0:
-        print(f"Incremental sync:  $0.0000  (nothing new — this is a no-op)")
+        print("Incremental sync:  $0.0000  (nothing new — this is a no-op)")
     else:
         print(
             f"Incremental sync:  ${report['incremental_usd']:.4f}  "
@@ -1265,12 +1271,15 @@ def _synthesize_estimate(args: argparse.Namespace | None = None) -> int:
 def cmd_candidates(args: argparse.Namespace) -> int:
     """List / promote / merge / discard candidate pages (v1.1.0 · #51)."""
     import json as _json
+
     from llmwiki.candidates import (
+        discard,
         list_candidates,
         promote,
-        merge as merge_candidate,
-        discard,
         stale_candidates,
+    )
+    from llmwiki.candidates import (
+        merge as merge_candidate,
     )
 
     wiki_dir = args.wiki_dir or (_content_root(args) / "wiki")
@@ -1384,7 +1393,9 @@ def cmd_consolidate_topics(args: argparse.Namespace) -> int:
     """
     _apply_default_vault(args)
     from llmwiki.topics_consolidate import (
-        render_consolidation_prompt, parse_and_cache, cache_path,
+        cache_path,
+        parse_and_cache,
+        render_consolidation_prompt,
     )
     wiki_dir = REPO_ROOT / "wiki"
     vault = getattr(args, "vault", None)
