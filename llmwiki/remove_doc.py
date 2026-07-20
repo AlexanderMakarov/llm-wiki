@@ -24,7 +24,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from llmwiki._frontmatter import parse_frontmatter
-from llmwiki.add_doc import expected_source_page, remove_raw_docs
+from llmwiki.add_doc import remove_raw_docs
 from llmwiki.synth.pipeline import (
     _append_log,
     _rebuild_index,
@@ -33,11 +33,17 @@ from llmwiki.synth.pipeline import (
 )
 
 __all__ = [
+    "RemoveIncompleteError",
     "RemovePlan",
     "build_remove_plan",
     "format_plan",
     "execute_remove_plan",
 ]
+
+
+class RemoveIncompleteError(RuntimeError):
+    """A raw doc could not be unlinked, so the cascade stopped before
+    touching anything derived from it."""
 
 
 @dataclass
@@ -61,16 +67,20 @@ class RemovePlan:
 def _matches(rel: Path, selector: str) -> bool:
     """True when ``selector`` (a glob) selects this raw doc.
 
-    Tried against the project dir (first path segment), the file stem,
-    and the full posix rel-path, so a bare project name (``ip-v-armenii``),
-    a slug glob (``ip-v-armenii*``), or a nested path all land the doc.
+    Matched against the project dir (first path segment) and the rel-path,
+    with and without the ``.md`` suffix — so ``ip-v-armenii*`` takes whole
+    projects and ``proj/slug`` takes one doc.
+
+    The bare file stem is deliberately NOT an axis: globbing it crosses
+    project boundaries (``notes`` would select both ``taxes/notes.md`` and
+    ``legal/notes.md``), which is the wrong default for a cascade that
+    deletes. Target a single doc with its ``<project>/<stem>`` path.
     """
     project = rel.parts[0] if rel.parts else ""
-    posix = rel.as_posix()
     return (
         fnmatch.fnmatch(project, selector)
-        or fnmatch.fnmatch(rel.stem, selector)
-        or fnmatch.fnmatch(posix, selector)
+        or fnmatch.fnmatch(rel.as_posix(), selector)
+        or fnmatch.fnmatch(rel.with_suffix("").as_posix(), selector)
     )
 
 
@@ -84,9 +94,25 @@ def _source_file_key(rel: Path) -> str:
     return "raw/docs/" + rel.as_posix()
 
 
-def _source_pages_for(
-    raw_doc: Path, docs_dir: Path, wiki_sources: Path
-) -> list[Path]:
+def _owned_by(page: Path, source_key: str) -> bool:
+    """True when ``page`` is safe to delete as ``source_key``'s derivative.
+
+    Path derivation alone is not ownership: sessions write into the same
+    ``wiki/sources/<project>/<date>-<slug>.md`` namespace, and the part-page
+    glob (``<name>--part-*.md``) can also catch a differently-named doc's
+    page. So a page that names a DIFFERENT ``source_file`` is left alone.
+    Synthesized doc pages carry an empty ``source_file``, which is why an
+    empty value still counts as owned.
+    """
+    try:
+        meta, _body = parse_frontmatter(page.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError):
+        return False
+    claimed = str(meta.get("source_file", "")).strip()
+    return claimed in ("", source_key)
+
+
+def _source_pages_for(raw_doc: Path, wiki_sources: Path) -> list[Path]:
     """Every ``wiki/sources`` page derived from one raw doc, by path.
 
     Reuses the pipeline's own filename derivation + part-page discovery,
@@ -154,9 +180,10 @@ def build_remove_plan(
         key = _state_key(rel)
         if key in present_keys:
             plan.state_keys.append(key)
-        source_file_keys.add(_source_file_key(rel))
-        for page in _source_pages_for(raw_doc, docs_dir, wiki_sources):
-            if page.exists() and page not in seen_pages:
+        src_key = _source_file_key(rel)
+        source_file_keys.add(src_key)
+        for page in _source_pages_for(raw_doc, wiki_sources):
+            if page.exists() and page not in seen_pages and _owned_by(page, src_key):
                 seen_pages.add(page)
                 pages.append(page)
 
@@ -210,21 +237,36 @@ def execute_remove_plan(
 ) -> dict[str, int]:
     """Carry out ``plan``: unlink raw docs + source pages, drop their
     synth-state keys, then refresh the derived indexes (backlinks, wiki
-    index, log). A no-op plan changes nothing and logs nothing."""
-    from llmwiki.backlinks import prune_all
+    index, log). A no-op plan changes nothing and logs nothing.
+
+    Raises :class:`RemoveIncompleteError` when a raw doc could not be
+    unlinked, BEFORE any derived page or state key is touched — a vault
+    left holding the raw file but missing its page and state entry is
+    worse than one that was never touched."""
     from llmwiki.state_store import update_state
 
     result = {
         "raw_docs": 0,
         "source_pages": 0,
-        "state_keys": len(plan.state_keys),
-        "pending_entries": len(plan.pending_sources),
+        "state_keys": 0,
+        "pending_entries": 0,
     }
     if plan.is_empty:
         return result
 
-    result["raw_docs"] = len(remove_raw_docs(plan.raw_docs))
+    removed_raw = remove_raw_docs(plan.raw_docs)
+    if len(removed_raw) != len(plan.raw_docs):
+        stuck = [str(p) for p in plan.raw_docs if p.exists()]
+        shown = ", ".join(stuck[:3]) + (" …" if len(stuck) > 3 else "")
+        raise RemoveIncompleteError(
+            f"removed {len(removed_raw)} of {len(plan.raw_docs)} raw doc(s); "
+            f"could not delete {shown} — derived pages and synth state were "
+            "left untouched"
+        )
+    result["raw_docs"] = len(removed_raw)
     result["source_pages"] = len(remove_raw_docs(plan.source_pages))
+    result["state_keys"] = len(plan.state_keys)
+    result["pending_entries"] = len(plan.pending_sources)
 
     if plan.state_keys or plan.pending_sources:
         drop_keys = set(plan.state_keys)
@@ -249,11 +291,14 @@ def execute_remove_plan(
 
         update_state(_mut, state_file)
 
+    # No backlink pruning here: `backlinks.prune_all` strips the block from
+    # EVERY page in the wiki, and nothing regenerates them (`inject_all` has
+    # no caller), so calling it would destroy backlinks wiki-wide as a side
+    # effect of removing one project.
     wiki_dir = plan.vault_root / "wiki"
-    prune_all(wiki_dir)
     _rebuild_index(wiki_dir)
     _append_log(
-        f"{len(plan.raw_docs)} docs ({plan.selector})",
+        f"{result['raw_docs']} docs ({plan.selector})",
         log_path=wiki_dir / "log.md",
         operation="remove",
     )

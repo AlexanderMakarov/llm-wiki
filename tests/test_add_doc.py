@@ -810,3 +810,28 @@ def test_write_raw_doc_omits_extractor_when_unset(tmp_path):
     # Local files / markdown passthrough carry no extractor — no line.
     paths = write_raw_doc(_doc(), tmp_path, today="2026-07-04")
     assert "extractor:" not in paths[0].read_text()
+
+
+def test_real_trafilatura_strips_boilerplate_and_keeps_inline_links(tmp_path):
+    """The headline claim, against the real library: div-soup chrome is
+    dropped while in-content links survive. Skipped where the optional
+    [add] extra isn't installed (system python has no trafilatura)."""
+    pytest.importorskip("trafilatura")
+    from llmwiki.add_doc import _extract_html
+
+    html = (
+        "<html><head><title>Guide</title></head><body>"
+        "<div class='nav'><a href='/'>Home</a><a href='/about'>About</a>"
+        "<a href='/contact'>Contact</a></div>"
+        "<div class='content'><h1>Registering a business</h1>"
+        "<p>" + ("The registry office accepts applications in person. " * 12) + "</p>"
+        "<p>See <a href='/part-2'>part 2</a> for the tax section.</p></div>"
+        "<div class='footer'>© 2026 Example · Terms · Privacy</div>"
+        "</body></html>"
+    )
+    _title, md, extractor = _extract_html(html)
+    assert extractor == "trafilatura"
+    assert "registry office accepts applications" in md
+    assert "/part-2" in md, "in-content link must survive"
+    for chrome in ("About", "Contact", "Privacy", "Terms"):
+        assert chrome not in md, f"boilerplate {chrome!r} leaked into the output"

@@ -1026,8 +1026,20 @@ def cmd_remove(args: argparse.Namespace) -> int:
             return 1
 
     from llmwiki.pipeline_lock import pipeline_lock
+    from llmwiki.remove_doc import RemoveIncompleteError
     with pipeline_lock(vault_root):
-        result = execute_remove_plan(plan, state_file=state_file)
+        # Re-plan under the lock. The preview above was built outside it, and
+        # an interactive confirm can sit here for minutes — long enough for a
+        # concurrent synthesize to land a page this plan doesn't know about.
+        plan = build_remove_plan(vault_root, args.selector, state_file=state_file)
+        if plan.is_empty:
+            print(f"remove: selector {args.selector!r} matched nothing — nothing to do.")
+            return 0
+        try:
+            result = execute_remove_plan(plan, state_file=state_file)
+        except RemoveIncompleteError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
     print(f"  removed {result['raw_docs']} raw doc(s), "
           f"{result['source_pages']} wiki page(s), "
           f"{result['state_keys']} synth-state key(s), "

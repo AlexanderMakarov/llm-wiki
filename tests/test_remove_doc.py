@@ -229,3 +229,83 @@ def test_pending_backlog_entry_is_dropped(tmp_path: Path) -> None:
     assert source not in remaining
     assert "raw/sessions/s.md" in remaining  # unrelated backlog survives
     assert after["pending_total"] == 1
+
+
+def test_backlink_blocks_survive_removal(tmp_path: Path) -> None:
+    """`backlinks.prune_all` strips the block from EVERY page and nothing
+    regenerates it (`inject_all` has no caller), so removal must not call it —
+    otherwise removing one project silently wipes backlinks wiki-wide."""
+    vault, written, state_file = _build_vault(tmp_path)
+    entities = vault / "wiki" / "entities"
+    entities.mkdir(parents=True, exist_ok=True)
+    keeper = entities / "Foo.md"
+    keeper.write_text(
+        "# Foo\n\n<!-- BACKLINKS:START -->\n## Referenced by\n\n- [[Bar]]\n"
+        "<!-- BACKLINKS:END -->\n",
+        encoding="utf-8",
+    )
+
+    plan = build_remove_plan(vault, "ip-v-armenii*", state_file=state_file)
+    execute_remove_plan(plan, state_file=state_file)
+
+    assert "BACKLINKS:START" in keeper.read_text(encoding="utf-8")
+
+
+def test_partial_raw_failure_aborts_before_touching_derivatives(tmp_path: Path) -> None:
+    """If a raw doc cannot be unlinked, the page and state key must survive —
+    reporting success while the vault is half-removed is worse than failing."""
+    from llmwiki.remove_doc import RemoveIncompleteError
+
+    vault, written, state_file = _build_vault(tmp_path)
+    raw_doc = written[0]
+    page = expected_source_page(raw_doc, vault / "wiki" / "sources")
+    assert page.exists()
+
+    plan = build_remove_plan(vault, "ip-v-armenii*", state_file=state_file)
+    raw_doc.parent.chmod(0o500)  # read+execute: unlink denied
+    try:
+        with pytest.raises(RemoveIncompleteError):
+            execute_remove_plan(plan, state_file=state_file)
+    finally:
+        raw_doc.parent.chmod(0o700)
+
+    assert raw_doc.exists()
+    assert page.exists(), "derived page deleted despite the raw doc surviving"
+    assert "docs::ip-v-armenii/ip-v-armenii.md" in _read_synth_keys(state_file)
+
+
+def test_selector_does_not_cross_project_boundaries(tmp_path: Path) -> None:
+    """A bare stem must not glob across projects — `notes` selecting both
+    `taxes/notes.md` and `legal/notes.md` is the wrong default for a delete."""
+    vault, _written, state_file = _build_vault(tmp_path)
+    docs = vault / "raw" / "docs"
+    for proj in ("taxes", "legal"):
+        (docs / proj).mkdir(parents=True, exist_ok=True)
+        (docs / proj / "notes.md").write_text(
+            f"---\nproject: {proj}\nslug: notes\n---\n\n# Notes\n", encoding="utf-8"
+        )
+
+    plan = build_remove_plan(vault, "notes", state_file=state_file)
+    assert plan.raw_docs == [], "bare stem must not select across projects"
+
+    # The project-qualified form still targets exactly one doc.
+    plan = build_remove_plan(vault, "taxes/notes", state_file=state_file)
+    assert [p.name for p in plan.raw_docs] == ["notes.md"]
+    assert plan.raw_docs[0].parent.name == "taxes"
+
+
+def test_page_owned_by_another_source_is_not_deleted(tmp_path: Path) -> None:
+    """A page whose `source_file` names a DIFFERENT raw file must survive even
+    if it collides on the derived path (sessions share that namespace)."""
+    vault, written, state_file = _build_vault(tmp_path)
+    raw_doc = written[0]
+    page = expected_source_page(raw_doc, vault / "wiki" / "sources")
+    page.write_text(
+        "---\ntitle: \"Someone else\"\nsource_file: raw/sessions/other.md\n---\n\nBody\n",
+        encoding="utf-8",
+    )
+
+    plan = build_remove_plan(vault, "ip-v-armenii*", state_file=state_file)
+    assert page not in plan.source_pages
+    execute_remove_plan(plan, state_file=state_file)
+    assert page.exists()
