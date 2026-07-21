@@ -837,3 +837,48 @@ def test_real_trafilatura_strips_boilerplate_and_keeps_inline_links(tmp_path):
     assert "/part-2" in md, "in-content link must survive"
     for chrome in ("About", "Contact", "Privacy", "Terms"):
         assert chrome not in md, f"boilerplate {chrome!r} leaked into the output"
+
+
+def test_convert_url_flags_a_page_with_no_reachable_content(monkeypatch):
+    """A URL that returns 200 but yields no article (stale slug serving a
+    site shell, or a JS-only page) is FLAGGED, not landed. convert_url stays
+    a pure converter — the writer decides — so the shell tests above that
+    expect a doc back keep working."""
+    from llmwiki.add_doc import convert_url
+
+    _install_fake_trafilatura(monkeypatch, md="[Skip to content](#content)", title="Site")
+    shell = "<html><body>" + "<div class='nav'>menu</div>" * 1200 + "</body></html>"
+    fetch = _fetcher([FetchResult(url="https://ex.com/gone", status=200,
+                                  content_type="text/html", body=shell)])
+    doc = convert_url("https://ex.com/gone", fetch=fetch, render="never")
+    assert doc.no_content is True
+
+
+def test_short_real_page_is_not_flagged_as_unreachable(monkeypatch):
+    """A genuinely short page (small markup) must still land — the shell
+    signature is 'lots of markup, no text', not merely 'short'."""
+    from llmwiki.add_doc import convert_url
+
+    _install_fake_trafilatura(monkeypatch, md="A short but real answer.", title="FAQ")
+    fetch = _fetcher([FetchResult(url="https://ex.com/faq", status=200,
+                                  content_type="text/html",
+                                  body="<html><body><article>A short but real answer.</article></body></html>")])
+    doc = convert_url("https://ex.com/faq", fetch=fetch, render="never")
+    assert doc.no_content is False
+
+
+def test_add_sources_reports_unreachable_urls_without_landing_them(monkeypatch, tmp_path):
+    """The unreachable URL is listed in errors and no raw doc is written."""
+    from llmwiki.add_doc import add_sources
+
+    _install_fake_trafilatura(monkeypatch, md="[Skip to content](#content)", title="Site")
+    shell = "<html><body>" + "<div class='nav'>menu</div>" * 1200 + "</body></html>"
+    fetch = _fetcher([FetchResult(url="https://ex.com/gone", status=200,
+                                  content_type="text/html", body=shell)])
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    res = add_sources(["https://ex.com/gone"], docs, fetch=fetch, render="never")
+    assert res["written"] == []
+    assert any("no reachable content" in e and "https://ex.com/gone" in e
+               for e in res["errors"])
+    assert list(docs.rglob("*.md")) == []

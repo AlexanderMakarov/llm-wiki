@@ -47,6 +47,7 @@ __all__ = [
     "compute_content_hash",
     "find_existing_by_hash",
     "DuplicateContentError",
+    "NoReachableContentError",
     "resolve_write_target",
     "write_raw_doc",
     "add_sources",
@@ -58,6 +59,17 @@ __all__ = [
 class AddError(Exception):
     """User-facing failure adding one source (bad URL, blocked address,
     unreadable path, missing optional converter)."""
+
+
+class NoReachableContentError(AddError):
+    """The URL fetched fine but yielded no article body — a stale/renamed
+    URL serving a site shell, or a client-side-rendered page. Reported so
+    the caller can list it, never landed as a navigation-only raw doc."""
+
+
+# Markup size above which "no extracted text" means a shell rather than a
+# genuinely short page — the discriminator that keeps short real pages.
+_SHELL_HTML_BYTES = 20_000
 
 
 class DuplicateContentError(AddError):
@@ -445,6 +457,7 @@ class ConvertedDoc:
     html_title: str | None = None  # <title> when the source was an HTML page
     url: str | None = None
     path_name: str | None = None   # filename/dirname for title fallback
+    no_content: bool = False       # fetched 200 but yielded no article body
     warnings: list[str] = field(default_factory=list)
     extractor: str | None = None   # "trafilatura" | "stdlib" for HTML sources
 
@@ -725,9 +738,17 @@ def convert_url(
     if extractor == "stdlib" and not _has_trafilatura():
         warnings.append(_TRAFILATURA_HINT)
 
+    # Shell signature: substantial markup but no article text. That is a
+    # stale/renamed URL serving the site's shell, or a client-side-rendered
+    # page — landing it produces a navigation-only raw doc that costs
+    # synthesis tokens and says nothing. Flagged (not raised) so this stays a
+    # pure converter; `add_sources` decides not to write it. The markup-size
+    # condition keeps a genuinely short page (small HTML) landing normally.
+    no_content = len(md.strip()) < _MIN_TEXT_CHARS and len(html) > _SHELL_HTML_BYTES
+
     return ConvertedDoc(title="", markdown=_note_header(note) + header + md.strip() + "\n",
                         source_label=url, url=url, html_title=title or None,
-                        warnings=warnings, extractor=extractor)
+                        warnings=warnings, extractor=extractor, no_content=no_content)
 
 
 # ── raw-doc writer (byte-compatible with kbbuilder makeRawDocWriter) ─
@@ -922,6 +943,16 @@ def add_sources(
                                        html_title=doc.html_title, url=doc.url,
                                        path_name=doc.path_name)
             warnings.extend(f"{src}: {w}" for w in doc.warnings)
+            if doc.no_content:
+                # Stale/renamed URL or a client-side-rendered page: report it
+                # so the caller gets a list of unreachable sources instead of
+                # a navigation-only raw doc silently entering the wiki.
+                raise NoReachableContentError(
+                    f"no reachable content at {src} — the page returned only "
+                    "navigation/chrome. The URL may be stale (renamed or "
+                    "removed) or render its body client-side; check the "
+                    "current URL, or install a render layer and use --render"
+                )
             if not force_new:
                 existing = find_existing_by_hash(docs_dir, compute_content_hash(doc.markdown))
                 if existing is not None:
