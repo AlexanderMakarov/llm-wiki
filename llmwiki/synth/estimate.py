@@ -30,6 +30,7 @@ def synthesize_estimate_report(
     docs_root: Optional[Any] = None,
     pricing_table: Optional[dict[str, dict[str, float]]] = None,
     include_subagents: Optional[str] = None,
+    exclude_headless: bool | None = None,
 ) -> dict:
     """Compute the incremental vs full-force cost report (G-07 · #293).
 
@@ -108,11 +109,34 @@ def synthesize_estimate_report(
     mode = (include_subagents or DEFAULT_INCLUDE_SUBAGENTS)
     if mode not in INCLUDE_SUBAGENTS_MODES:
         mode = DEFAULT_INCLUDE_SUBAGENTS
+    excluded_subagents = 0
     if mode == "only-raw":
+        before = len(raw_sessions)
         raw_sessions = [
             (p, m, b) for (p, m, b) in raw_sessions
             if not _is_subagent(m if isinstance(m, dict) else {}, p)
         ]
+        excluded_subagents = before - len(raw_sessions)
+    # #8 follow-up: a headless run is the wiki's own machinery talking to an
+    # agent CLI, so synthesizing it pays to summarize our own output — and
+    # every synthesis pass manufactures more of them. `exclude_headless`
+    # blocks them at ingest; drop any that predate the filter here too, so
+    # the estimate and `synthesize` agree on what is eligible.
+    from llmwiki._frontmatter import is_headless as _is_headless
+    from llmwiki.synth.pipeline import resolve_exclude_headless
+    if exclude_headless is None:
+        from llmwiki.config_schedule import _load_sessions_config
+        drop_headless = resolve_exclude_headless(_load_sessions_config())
+    else:
+        drop_headless = bool(exclude_headless)
+    excluded_headless = 0
+    if drop_headless:
+        before = len(raw_sessions)
+        raw_sessions = [
+            (p, m, b) for (p, m, b) in raw_sessions
+            if not _is_headless(m if isinstance(m, dict) else {})
+        ]
+        excluded_headless = before - len(raw_sessions)
     discovered_source_keys = (
         synthesized_source_keys
         if synthesized_source_keys is not None
@@ -281,6 +305,12 @@ def synthesize_estimate_report(
         "corpus_sessions": corpus,
         "corpus_docs": synthed_docs + new_docs,
         "synthesized": synthed_sessions + synthed_docs,
+        # What the eligibility policy removed before any costing — so
+        # `--estimate` can show that `synthesize` will skip these too.
+        "excluded_subagents": excluded_subagents,
+        "excluded_headless": excluded_headless,
+        "include_subagents": mode,
+        "exclude_headless": drop_headless,
         "synthesized_sessions": synthed_sessions,
         "synthesized_docs": synthed_docs,
         "new": new_sessions + new_docs,

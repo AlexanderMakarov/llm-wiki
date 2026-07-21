@@ -89,6 +89,37 @@ def is_subagent(meta: dict[str, Any], path: Path) -> bool:
     return "subagent" in path.name
 
 
+def is_headless(meta: dict[str, Any]) -> bool:
+    """True when this session was an automated ``claude -p`` / SDK run.
+
+    Reads the ``is_headless`` flag the converter records, tolerating the same
+    string/bool spellings as :func:`is_subagent`, and falls back to the raw
+    ``entrypoint`` / ``promptSource`` markers when only those were written.
+
+    Absent every marker this returns False rather than guessing from message
+    counts. Files converted before the flag existed therefore read as "not
+    headless" — a deliberate choice, since silently reclassifying an old
+    session as machine noise is worse than leaving it in the backlog where
+    it is visible. Re-sync (or prune) to classify legacy files.
+
+    Single source of truth for the synth pipeline's headless backlog policy.
+    """
+    raw = meta.get("is_headless")
+    if isinstance(raw, bool):
+        return raw
+    if isinstance(raw, str):
+        s = raw.strip().lower()
+        if s in ("true", "yes", "1"):
+            return True
+        if s in ("false", "no", "0"):
+            return False
+    entrypoint = meta.get("entrypoint")
+    if isinstance(entrypoint, str) and entrypoint.strip().lower().startswith("sdk-"):
+        return True
+    prompt_source = meta.get("promptSource")
+    return isinstance(prompt_source, str) and prompt_source.strip().lower() == "sdk"
+
+
 def parse_frontmatter_dict(text: str) -> dict[str, Any]:
     """Return just the metadata dict — convenience for callers that
     don't need the body."""

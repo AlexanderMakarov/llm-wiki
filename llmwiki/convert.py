@@ -1424,6 +1424,15 @@ def render_session_markdown(
     cwd = first_field(records, "cwd")
     git_branch = first_field(records, "gitBranch")
     permission_mode = first_field(records, "permissionMode")
+    # #8 follow-up: persist the headless discriminators. `exclude_headless`
+    # filters at ingest, but a session already in raw/ carried no record of
+    # how it was launched, so nothing downstream could tell an automated
+    # `claude -p` run from a real one. Synthesis needs that (a headless run
+    # is the wiki's own output, not material worth a page), and without it
+    # the only recourse is guessing from message counts.
+    entrypoint = first_field(records, "entrypoint")
+    prompt_source = first_field(records, "promptSource")
+    headless = is_headless_session(records)
     model = most_common_model(records)
     tools_used = extract_tools_used(records)
     u_count = count_user_messages(records)
@@ -1476,6 +1485,9 @@ def render_session_markdown(
         f"hour_buckets: {json.dumps(hour_buckets, sort_keys=False)}",
         f"duration_seconds: {duration_seconds}",
         f"is_subagent: {str(is_subagent_file).lower()}",
+        f"entrypoint: {entrypoint}",
+        f"promptSource: {prompt_source}",
+        f"is_headless: {str(headless).lower()}",
         "---",
         "",
     ]
