@@ -241,3 +241,57 @@ def test_template_renders_no_page_alert():
     end = HTML_TEMPLATE.index("break", idx)
     block = HTML_TEMPLATE[idx:end]
     assert "no compiled page" in block
+
+
+# ─── #45: wiki-add raw docs compile to documents/, not sessions/ ──────────
+
+
+def test_raw_doc_source_page_maps_to_documents():
+    """A wiki-add raw doc is rendered by raw_docs_site to
+    ``documents/<project>/<stem>.html``; linking it to ``sessions/…`` 404s."""
+    text = (
+        "---\ntitle: ISO audit overview\n"
+        "project: citation-iso\n"
+        "tags: [wiki-add, raw-doc]\n"
+        "source_file: \n---\nbody\n"
+    )
+    url = _compute_site_url(
+        text, ("sources", "citation-iso", "2026-07-20-iso-audit-overview-02.md"),
+        "2026-07-20-iso-audit-overview-02", "sources",
+    )
+    assert url == "documents/citation-iso/iso-audit-overview-02.html"
+
+
+def test_raw_doc_source_file_under_raw_docs_maps_to_documents():
+    """An explicit ``source_file: raw/docs/…`` must resolve too — it used to
+    fall through the raw/sessions/ split and return None (no link at all)."""
+    text = (
+        "---\ntitle: X\n"
+        "source_file: raw/docs/citation-iso/iso-audit-overview-02.md\n---\n"
+    )
+    url = _compute_site_url(
+        text, ("sources", "citation-iso", "iso-audit-overview-02.md"),
+        "iso-audit-overview-02", "sources",
+    )
+    assert url == "documents/citation-iso/iso-audit-overview-02.html"
+
+
+def test_raw_doc_tag_alone_is_enough():
+    """`raw-doc` without `wiki-add` still identifies a document page."""
+    text = "---\ntitle: X\nproject: proj\ntags: [raw-doc]\nslug: my-stem\n---\n"
+    url = _compute_site_url(
+        text, ("sources", "proj", "2026-07-20-my-stem.md"),
+        "2026-07-20-my-stem", "sources",
+    )
+    assert url == "documents/proj/my-stem.html"
+
+
+def test_session_page_without_tags_still_maps_to_sessions():
+    """Regression guard: a genuine session source page (no raw-doc tag) keeps
+    the sessions/ prefix."""
+    text = "---\ntitle: X\nproject: proj\ntags: [claude-code, session-transcript]\n---\n"
+    url = _compute_site_url(
+        text, ("sources", "proj", "2026-07-20-some-session.md"),
+        "2026-07-20-some-session", "sources",
+    )
+    assert url == "sessions/proj/some-session.html"

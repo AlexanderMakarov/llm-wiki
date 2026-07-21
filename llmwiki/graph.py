@@ -61,6 +61,23 @@ def _source_raw_stem(text: str, wiki_slug: str) -> str:
     return wiki_slug
 
 
+def _is_raw_doc_page(text: str) -> bool:
+    """True when a ``wiki/sources`` page stands for a ``raw/docs/`` document
+    rather than a session transcript.
+
+    Documents compile to ``documents/<project>/<stem>.html``
+    (``raw_docs_site``) while sessions compile to ``sessions/…``, so the two
+    need different link prefixes. ``llmwiki add`` stamps every raw doc with
+    ``wiki-add``/``raw-doc`` tags; a genuine session page has neither, which
+    keeps session links on the sessions/ prefix.
+    """
+    m = re.search(r"^tags:\s*(.+)$", text, re.MULTILINE)
+    if not m:
+        return False
+    tags = m.group(1).lower()
+    return "raw-doc" in tags or "wiki-add" in tags
+
+
 def _source_project(text: str, rel_parts: tuple[str, ...]) -> str:
     pm = re.search(r"^project:\s*(.+)$", text, re.MULTILINE)
     if pm:
@@ -75,9 +92,11 @@ def _compute_site_url(text: str, rel_parts: tuple[str, ...],
 
     * ``wiki/index.md`` → ``index.html``
     * ``wiki/projects/<slug>.md`` → ``projects/<slug>.html``
-    * ``wiki/sources/<proj>/<stem>.md`` → the matching ``sessions/<proj>/<date-stem>.html``
-      (looked up from the ``source_file`` frontmatter field, because wiki source
-      pages use bare slugs but site session pages use date-prefixed stems).
+    * ``wiki/sources/<proj>/<stem>.md`` → the matching compiled page, looked up
+      from the ``source_file`` frontmatter field (wiki source pages use bare
+      slugs but site session pages use date-prefixed stems). Session sources
+      resolve under ``sessions/``; ``raw/docs/`` documents — which
+      ``raw_docs_site`` renders — resolve under ``documents/``.
     * entities / concepts / syntheses / nav files → None
 
     Never raises — returns ``None`` on any lookup miss so the caller can
@@ -93,6 +112,14 @@ def _compute_site_url(text: str, rel_parts: tuple[str, ...],
         m = re.search(r"^source_file:[ \t]*([^\n\r]*)", text, re.MULTILINE)
         sf = m.group(1).strip().strip("'\"") if m else ""
         if sf:
+            # A raw/docs/ source is a document, not a session — it compiles
+            # under documents/. Splitting it on raw/sessions/ used to raise
+            # and return None, so those pages got no link at all.
+            if "raw/docs/" in sf:
+                rel = sf.split("raw/docs/", 1)[1].removesuffix(".md")
+                if "/" in rel:
+                    return f"documents/{rel}.html"
+                return f"documents/{project}/{rel}.html" if project else None
             try:
                 rel = sf.split("raw/sessions/", 1)[1]
             except IndexError:
@@ -103,11 +130,12 @@ def _compute_site_url(text: str, rel_parts: tuple[str, ...],
             if not project:
                 return None
             return f"sessions/{project}/{rel}.html"
-        # Fallback: wiki-add / raw-doc pages with empty source_file but a
-        # compiled session page at sessions/<project>/<raw-stem>.html.
+        # No source_file: session pages and wiki-add raw docs both land here,
+        # and they compile under different roots — pick by the raw-doc tags.
         raw_stem = _source_raw_stem(text, slug)
         if project and raw_stem:
-            return f"sessions/{project}/{raw_stem}.html"
+            root = "documents" if _is_raw_doc_page(text) else "sessions"
+            return f"{root}/{project}/{raw_stem}.html"
         return None
     if type_ in _NO_SITE_TYPES:
         return None
