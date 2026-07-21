@@ -90,6 +90,60 @@ def test_first_heading_none():
     assert first_heading("no headings here") == ""
 
 
+def test_first_heading_drops_permalink_anchor():
+    # CMSs (BetterDocs/Elementor and friends) render a self-link inside every
+    # heading. It survives extraction as a markdown link whose whole label is
+    # punctuation, and used to end up in the title, the slug AND the raw/docs
+    # project directory name (`primer-zagolovka-0-toc-title`). Cyrillic here
+    # on purpose: the title feeds slugify, so this also covers the case where
+    # the markup survives transliteration.
+    assert first_heading("# Пример заголовка [#](#0-toc-title)\n") == "Пример заголовка"
+    assert first_heading("# Title [¶](#1-toc-title)\n") == "Title"
+
+
+def test_first_heading_keeps_real_link_label():
+    # A heading may legitimately contain a link; keep its text, drop the markup.
+    assert first_heading("# Taxes for [sole traders](/docs/ip)\n") == "Taxes for sole traders"
+
+
+def test_first_heading_strips_emphasis_markers():
+    assert first_heading("# **Bold** and _thin_\n") == "Bold and thin"
+
+
+def test_first_heading_can_restrict_to_levels():
+    md = "## Subsection\n\ntext\n\n# Real Title\n"
+    assert first_heading(md) == "Subsection"
+    assert first_heading(md, levels=(1,)) == "Real Title"
+    assert first_heading("## Only a subsection\n", levels=(1,)) == ""
+
+
+def test_derive_title_prefers_html_title_over_body_subsection():
+    # A CMS article <h1> often sits outside the extracted content container,
+    # so the first heading in the markdown is an ## body subsection. Using it
+    # gave whole families of articles the same generic title ("Signing in" for
+    # every bank's guide), colliding into "-2" directory suffixes, while the
+    # real title sat unused in html_title.
+    title = derive_title(
+        explicit=None,
+        markdown="## Вход в систему\n\ntext\n\n## Меню\n",
+        html_title="Пример Банк: инструкция для юрлиц",
+        url="https://ex.com/docs/banks/primer-bank",
+        path_name=None,
+    )
+    assert title == "Пример Банк: инструкция для юрлиц"
+
+
+def test_derive_title_still_prefers_h1_over_html_title():
+    title = derive_title(
+        explicit=None,
+        markdown="# Document Heading\n\ntext\n",
+        html_title="Document Heading - Some Site",
+        url="https://ex.com/x",
+        path_name=None,
+    )
+    assert title == "Document Heading"
+
+
 # ── title_from_url ───────────────────────────────────────────────────
 
 def test_title_from_url_path_segment():
