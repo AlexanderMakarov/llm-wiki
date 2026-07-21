@@ -1042,7 +1042,7 @@ def _cmd_add_locked(args: argparse.Namespace, docs_dir: Path,
 def cmd_remove(args: argparse.Namespace) -> int:
     """Cascade-remove raw docs and everything derived from them (B2).
 
-    A selector (project name or slug glob, e.g. ``ip-v-armenii*``) selects
+    A selector (project name or slug glob, e.g. ``old-project*``) selects
     raw docs under the resolved vault's ``raw/docs/``; the removal drags
     their synth-state keys and ``wiki/sources/`` pages out too, then
     refreshes backlinks / index / log. ``--dry-run`` prints the full
@@ -1698,7 +1698,7 @@ def build_parser() -> argparse.ArgumentParser:
              "derived: synth state, wiki/sources pages, index/log/backlinks",
     )
     rm_p.add_argument("selector", metavar="SELECTOR",
-                      help="Project name or slug glob, e.g. 'ip-v-armenii*'")
+                      help="Project name or slug glob, e.g. 'old-project*'")
     rm_p.add_argument("--dry-run", action="store_true",
                       help="Print the full cascade and change nothing")
     rm_p.add_argument("--yes", action="store_true",

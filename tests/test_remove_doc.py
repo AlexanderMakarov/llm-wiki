@@ -40,8 +40,8 @@ def _build_vault(tmp_path: Path) -> tuple[Path, list[Path], Path]:
     )
 
     src = tmp_path / "note.md"
-    src.write_text("# Ip v Armenii\n\nProperty rules in Armenia. " * 30, encoding="utf-8")
-    res = add_sources([str(src)], docs, project="ip-v-armenii")
+    src.write_text("# Old Project\n\nReference notes for the old project. " * 30, encoding="utf-8")
+    res = add_sources([str(src)], docs, project="old-project")
 
     state_file = vault / "llmwiki-state.json"
     synthesize_new_sessions(
@@ -57,11 +57,11 @@ def test_plan_lists_the_full_cascade(tmp_path: Path) -> None:
     page = expected_source_page(raw_doc, vault / "wiki" / "sources")
     assert raw_doc.exists() and page.exists()
 
-    plan = build_remove_plan(vault, "ip-v-armenii*", state_file=state_file)
+    plan = build_remove_plan(vault, "old-project*", state_file=state_file)
 
     assert raw_doc in plan.raw_docs
     assert page in plan.source_pages
-    assert "docs::ip-v-armenii/ip-v-armenii.md" in plan.state_keys
+    assert "docs::old-project/old-project.md" in plan.state_keys
     assert not plan.is_empty
 
 
@@ -73,7 +73,7 @@ def test_dry_run_mutates_nothing(tmp_path: Path) -> None:
     keys_before = _read_synth_keys(state_file)
 
     # Planning is read-only; a dry-run is exactly "plan, then don't execute".
-    plan = build_remove_plan(vault, "ip-v-armenii*", state_file=state_file)
+    plan = build_remove_plan(vault, "old-project*", state_file=state_file)
     assert not plan.is_empty
 
     assert raw_doc.exists()
@@ -89,13 +89,13 @@ def test_execute_removes_the_whole_cascade_orphan_free(tmp_path: Path) -> None:
     wiki_sources = vault / "wiki" / "sources"
     page = expected_source_page(raw_doc, wiki_sources)
 
-    plan = build_remove_plan(vault, "ip-v-armenii*", state_file=state_file)
+    plan = build_remove_plan(vault, "old-project*", state_file=state_file)
     result = execute_remove_plan(plan, state_file=state_file)
 
     # Raw doc + its wiki page + its state key are all gone.
     assert not raw_doc.exists()
     assert not page.exists()
-    assert "docs::ip-v-armenii/ip-v-armenii.md" not in _read_synth_keys(state_file)
+    assert "docs::old-project/old-project.md" not in _read_synth_keys(state_file)
     assert result["raw_docs"] == 1
     assert result["source_pages"] == 1
 
@@ -103,11 +103,11 @@ def test_execute_removes_the_whole_cascade_orphan_free(tmp_path: Path) -> None:
     from llmwiki._frontmatter import parse_frontmatter
     for p in wiki_sources.rglob("*.md"):
         meta, _ = parse_frontmatter(p.read_text())
-        assert "ip-v-armenii" not in str(meta.get("source_file", ""))
+        assert "old-project" not in str(meta.get("source_file", ""))
 
     # A remove entry landed in the log, unrelated index sections survived.
     log = (vault / "wiki" / "log.md").read_text()
-    assert "remove | 1 docs (ip-v-armenii*)" in log
+    assert "remove | 1 docs (old-project*)" in log
     assert "keep me" in (vault / "wiki" / "index.md").read_text()
 
 
@@ -118,11 +118,11 @@ def test_source_file_frontmatter_page_is_caught(tmp_path: Path) -> None:
     manual = vault / "wiki" / "sources" / "hand-written.md"
     manual.write_text(
         "---\ntitle: manual\ntype: source\n"
-        "source_file: raw/docs/ip-v-armenii/ip-v-armenii.md\n---\n\nbody\n",
+        "source_file: raw/docs/old-project/old-project.md\n---\n\nbody\n",
         encoding="utf-8",
     )
 
-    plan = build_remove_plan(vault, "ip-v-armenii*", state_file=state_file)
+    plan = build_remove_plan(vault, "old-project*", state_file=state_file)
     assert manual in plan.source_pages
     execute_remove_plan(plan, state_file=state_file)
     assert not manual.exists()
@@ -141,10 +141,10 @@ def test_glob_scopes_to_matching_docs(tmp_path: Path) -> None:
         log_path=vault / "wiki" / "log.md",
     )
 
-    plan = build_remove_plan(vault, "ip-v-armenii*", state_file=state_file)
+    plan = build_remove_plan(vault, "old-project*", state_file=state_file)
     execute_remove_plan(plan, state_file=state_file)
 
-    assert not (docs / "ip-v-armenii").exists()
+    assert not (docs / "old-project").exists()
     assert (docs / "taxes" / "taxes.md").exists()
     assert "docs::taxes/taxes.md" in _read_synth_keys(state_file)
 
@@ -169,7 +169,7 @@ def test_cli_remove_requires_confirmation(tmp_path: Path, monkeypatch) -> None:
 
     # No --yes and no TTY → refuse to cascade, exit non-zero, touch nothing.
     monkeypatch.setattr("sys.stdin.isatty", lambda: False)
-    rc = main(["remove", "ip-v-armenii*", "--vault", str(vault)])
+    rc = main(["remove", "old-project*", "--vault", str(vault)])
     assert rc != 0
     assert written[0].exists()
 
@@ -179,22 +179,22 @@ def test_cli_remove_yes_executes(tmp_path: Path) -> None:
     page = expected_source_page(written[0], vault / "wiki" / "sources")
     from llmwiki.cli import main
 
-    rc = main(["remove", "ip-v-armenii*", "--yes", "--vault", str(vault)])
+    rc = main(["remove", "old-project*", "--yes", "--vault", str(vault)])
     assert rc == 0
     assert not written[0].exists()
     assert not page.exists()
-    assert "docs::ip-v-armenii/ip-v-armenii.md" not in _read_synth_keys(state_file)
+    assert "docs::old-project/old-project.md" not in _read_synth_keys(state_file)
 
 
 def test_cli_remove_dry_run_reports_without_deleting(tmp_path: Path, capsys) -> None:
     vault, written, state_file = _build_vault(tmp_path)
     from llmwiki.cli import main
 
-    rc = main(["remove", "ip-v-armenii*", "--dry-run", "--vault", str(vault)])
+    rc = main(["remove", "old-project*", "--dry-run", "--vault", str(vault)])
     assert rc == 0
     out = capsys.readouterr().out
-    assert "ip-v-armenii" in out
-    assert "docs::ip-v-armenii/ip-v-armenii.md" in out
+    assert "old-project" in out
+    assert "docs::old-project/old-project.md" in out
     assert written[0].exists()
 
 
@@ -210,7 +210,7 @@ def test_pending_backlog_entry_is_dropped(tmp_path: Path) -> None:
     state = json.loads(state_file.read_text())
     synth = state["synth"]
     synth["pending"] = [
-        {"is_doc": True, "project": "ip-v-armenii", "rel": rel,
+        {"is_doc": True, "project": "old-project", "rel": rel,
          "source": source, "mtime": "2026-07-07T00:00:00Z"},
         {"is_doc": False, "project": "other", "rel": "s.md",
          "source": "raw/sessions/s.md", "mtime": "2026-07-07T00:00:00Z"},
@@ -218,7 +218,7 @@ def test_pending_backlog_entry_is_dropped(tmp_path: Path) -> None:
     synth["pending_total"] = 2
     state_file.write_text(json.dumps(state), encoding="utf-8")
 
-    plan = build_remove_plan(vault, "ip-v-armenii*", state_file=state_file)
+    plan = build_remove_plan(vault, "old-project*", state_file=state_file)
     assert source in plan.pending_sources
 
     result = execute_remove_plan(plan, state_file=state_file)
@@ -245,7 +245,7 @@ def test_backlink_blocks_survive_removal(tmp_path: Path) -> None:
         encoding="utf-8",
     )
 
-    plan = build_remove_plan(vault, "ip-v-armenii*", state_file=state_file)
+    plan = build_remove_plan(vault, "old-project*", state_file=state_file)
     execute_remove_plan(plan, state_file=state_file)
 
     assert "BACKLINKS:START" in keeper.read_text(encoding="utf-8")
@@ -261,7 +261,7 @@ def test_partial_raw_failure_aborts_before_touching_derivatives(tmp_path: Path) 
     page = expected_source_page(raw_doc, vault / "wiki" / "sources")
     assert page.exists()
 
-    plan = build_remove_plan(vault, "ip-v-armenii*", state_file=state_file)
+    plan = build_remove_plan(vault, "old-project*", state_file=state_file)
     raw_doc.parent.chmod(0o500)  # read+execute: unlink denied
     try:
         with pytest.raises(RemoveIncompleteError):
@@ -271,7 +271,7 @@ def test_partial_raw_failure_aborts_before_touching_derivatives(tmp_path: Path) 
 
     assert raw_doc.exists()
     assert page.exists(), "derived page deleted despite the raw doc surviving"
-    assert "docs::ip-v-armenii/ip-v-armenii.md" in _read_synth_keys(state_file)
+    assert "docs::old-project/old-project.md" in _read_synth_keys(state_file)
 
 
 def test_selector_does_not_cross_project_boundaries(tmp_path: Path) -> None:
@@ -305,7 +305,7 @@ def test_page_owned_by_another_source_is_not_deleted(tmp_path: Path) -> None:
         encoding="utf-8",
     )
 
-    plan = build_remove_plan(vault, "ip-v-armenii*", state_file=state_file)
+    plan = build_remove_plan(vault, "old-project*", state_file=state_file)
     assert page not in plan.source_pages
     execute_remove_plan(plan, state_file=state_file)
     assert page.exists()

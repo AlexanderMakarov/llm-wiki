@@ -748,7 +748,7 @@ def _install_fake_trafilatura(monkeypatch, *, md="clean article body", title="Me
     return mod
 
 
-def test_extract_html_passes_precision_kwargs_when_trafilatura_present(monkeypatch):
+def test_extract_html_passes_content_kwargs_when_trafilatura_present(monkeypatch):
     from llmwiki import add_doc as m
 
     captured: dict = {}
@@ -757,12 +757,14 @@ def test_extract_html_passes_precision_kwargs_when_trafilatura_present(monkeypat
     assert extractor == "trafilatura"
     assert md == "extracted body"
     assert title == "T"
-    # Aggressive-but-safe: precision on, boilerplate/comments off, but
-    # in-content links + tables preserved for citations / prev-next parts.
-    assert captured["favor_precision"] is True
+    # Default recall keeps the article body; comments off; in-content links +
+    # tables preserved for citations / prev-next parts.
     assert captured["include_links"] is True
     assert captured["include_comments"] is False
     assert captured["include_tables"] is True
+    # favor_precision must NOT be set: on real pages it discarded the whole
+    # article as low-confidence, leaving only a skip-to-content link.
+    assert captured.get("favor_precision") in (None, False)
 
 
 def test_convert_url_records_trafilatura_extractor(monkeypatch):
@@ -835,3 +837,48 @@ def test_real_trafilatura_strips_boilerplate_and_keeps_inline_links(tmp_path):
     assert "/part-2" in md, "in-content link must survive"
     for chrome in ("About", "Contact", "Privacy", "Terms"):
         assert chrome not in md, f"boilerplate {chrome!r} leaked into the output"
+
+
+def test_convert_url_flags_a_page_with_no_reachable_content(monkeypatch):
+    """A URL that returns 200 but yields no article (stale slug serving a
+    site shell, or a JS-only page) is FLAGGED, not landed. convert_url stays
+    a pure converter — the writer decides — so the shell tests above that
+    expect a doc back keep working."""
+    from llmwiki.add_doc import convert_url
+
+    _install_fake_trafilatura(monkeypatch, md="[Skip to content](#content)", title="Site")
+    shell = "<html><body>" + "<div class='nav'>menu</div>" * 1200 + "</body></html>"
+    fetch = _fetcher([FetchResult(url="https://ex.com/gone", status=200,
+                                  content_type="text/html", body=shell)])
+    doc = convert_url("https://ex.com/gone", fetch=fetch, render="never")
+    assert doc.no_content is True
+
+
+def test_short_real_page_is_not_flagged_as_unreachable(monkeypatch):
+    """A genuinely short page (small markup) must still land — the shell
+    signature is 'lots of markup, no text', not merely 'short'."""
+    from llmwiki.add_doc import convert_url
+
+    _install_fake_trafilatura(monkeypatch, md="A short but real answer.", title="FAQ")
+    fetch = _fetcher([FetchResult(url="https://ex.com/faq", status=200,
+                                  content_type="text/html",
+                                  body="<html><body><article>A short but real answer.</article></body></html>")])
+    doc = convert_url("https://ex.com/faq", fetch=fetch, render="never")
+    assert doc.no_content is False
+
+
+def test_add_sources_reports_unreachable_urls_without_landing_them(monkeypatch, tmp_path):
+    """The unreachable URL is listed in errors and no raw doc is written."""
+    from llmwiki.add_doc import add_sources
+
+    _install_fake_trafilatura(monkeypatch, md="[Skip to content](#content)", title="Site")
+    shell = "<html><body>" + "<div class='nav'>menu</div>" * 1200 + "</body></html>"
+    fetch = _fetcher([FetchResult(url="https://ex.com/gone", status=200,
+                                  content_type="text/html", body=shell)])
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    res = add_sources(["https://ex.com/gone"], docs, fetch=fetch, render="never")
+    assert res["written"] == []
+    assert any("no reachable content" in e and "https://ex.com/gone" in e
+               for e in res["errors"])
+    assert list(docs.rglob("*.md")) == []
