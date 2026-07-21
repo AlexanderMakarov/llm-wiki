@@ -68,7 +68,7 @@ def _matches(rel: Path, selector: str) -> bool:
     """True when ``selector`` (a glob) selects this raw doc.
 
     Matched against the project dir (first path segment) and the rel-path,
-    with and without the ``.md`` suffix — so ``ip-v-armenii*`` takes whole
+    with and without the ``.md`` suffix — so ``<project>*`` takes whole
     projects and ``proj/slug`` takes one doc.
 
     The bare file stem is deliberately NOT an axis: globbing it crosses

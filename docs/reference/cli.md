@@ -150,8 +150,8 @@ URL sources go through a layered pipeline (markdown negotiation → extraction �
 Selects raw docs under the resolved vault's `raw/docs/` by a project name or slug glob, then removes them **together with** every artifact derived from them — the `synth.files` state keys and the `wiki/sources/` pages (part-pages included) — so a naive delete can never leave orphan pages or dangling state behind. After deletion it prunes backlinks, rebuilds `wiki/index.md`, and appends a `remove` entry to `wiki/log.md`.
 
 ```bash
-python3 -m llmwiki remove ip-v-armenii --dry-run     # preview the full cascade
-python3 -m llmwiki remove 'ip-v-armenii*' --yes       # slug glob, no prompt
+python3 -m llmwiki remove old-project --dry-run      # preview the full cascade
+python3 -m llmwiki remove 'old-project*' --yes        # slug glob, no prompt
 python3 -m llmwiki remove taxes --vault ~/my-vault --yes
 ```
 
@@ -159,7 +159,7 @@ python3 -m llmwiki remove taxes --vault ~/my-vault --yes
 
 | Value | What |
 |---|---|
-| `SELECTOR` | Project name or slug glob (e.g. `ip-v-armenii*`) matched against `raw/docs/`. |
+| `SELECTOR` | Project name or slug glob (e.g. `old-project*`) matched against `raw/docs/`. |
 
 ### Flags
 

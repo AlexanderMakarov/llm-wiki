@@ -599,7 +599,7 @@ def _extract_html(html: str) -> tuple[str, str, str]:
         return title, md, "stdlib"
     # Default recall already drops site chrome (nav/header/footer) while
     # keeping the article body. favor_precision was too aggressive — on real
-    # pages (armgate.am) it discarded the whole article as low-confidence,
+    # article pages it discarded the whole body as low-confidence,
     # extracting only a skip-to-content link. include_links keeps in-content
     # links & citations (prev/next-part anchors) synthesis relies on;
     # comments off, tables on.
