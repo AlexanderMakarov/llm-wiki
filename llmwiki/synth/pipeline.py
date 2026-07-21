@@ -29,7 +29,7 @@ from llmwiki import REPO_ROOT
 # #py-m1 (#587) / #arch-h5 (#610): import directly from _frontmatter
 # instead of via build.py. The build module pulls in 145+ transitive
 # imports; the parser sits cleanly in _frontmatter.py with no deps.
-from llmwiki._frontmatter import is_subagent, parse_frontmatter
+from llmwiki._frontmatter import is_headless, is_subagent, parse_frontmatter
 from llmwiki.synth.base import BaseSynthesizer, DummySynthesizer
 from llmwiki.state_store import read_state as _read_unified_state
 from llmwiki.state_store import resolve_state_file as _resolve_state_file
@@ -188,6 +188,31 @@ def resolve_include_subagents(cfg: Optional[dict[str, Any]] = None) -> str:
     filters = (cfg or {}).get("filters", {}) or {}
     raw = str(filters.get("include_subagents", DEFAULT_INCLUDE_SUBAGENTS)).strip().lower()
     return raw if raw in INCLUDE_SUBAGENTS_MODES else DEFAULT_INCLUDE_SUBAGENTS
+
+
+# #8 follow-up: `filters.exclude_headless` used to act only at ingest, so a
+# headless session already in raw/ (converted before the filter shipped, or
+# with the filter off) stayed in the synthesis backlog forever. That is the
+# expensive half of the feedback loop: synthesis shells out to an agent CLI,
+# that run is logged as a session, and the next synthesis pays to summarize
+# the wiki's own output. The setting now also governs the backlog, so it
+# means what it says — headless runs are never wiki material.
+DEFAULT_EXCLUDE_HEADLESS = True
+
+
+def resolve_exclude_headless(cfg: dict[str, Any] | None = None) -> bool:
+    """Read ``cfg["filters"]["exclude_headless"]`` (default True).
+
+    Same key the converter reads, so one setting covers ingest and backlog
+    and the two can never disagree.
+    """
+    filters = (cfg or {}).get("filters", {}) or {}
+    raw = filters.get("exclude_headless", DEFAULT_EXCLUDE_HEADLESS)
+    if isinstance(raw, bool):
+        return raw
+    if isinstance(raw, str):
+        return raw.strip().lower() not in ("false", "no", "0", "off")
+    return DEFAULT_EXCLUDE_HEADLESS
 
 
 RAW_SESSIONS = REPO_ROOT / "raw" / "sessions"
@@ -380,6 +405,7 @@ def discover_unsynth_session_rels(
     wiki_sources_dir: Optional[Path] = None,
     state_file: Optional[Path] = None,
     include_subagents: Optional[str] = None,
+    exclude_headless: bool | None = None,
 ) -> set[str]:
     """Session rel-paths that the shared estimate logic considers unsynth."""
     from llmwiki.synth.estimate import synthesize_estimate_report
@@ -406,6 +432,7 @@ def discover_unsynth_session_rels(
         raw_root=raw_dir or RAW_SESSIONS,
         docs_root=(raw_dir.parent / "docs") if raw_dir is not None else RAW_DOCS,
         include_subagents=include_subagents,
+        exclude_headless=exclude_headless,
     )
     out: set[str] = set()
     for it in report.get("unsynth_items", []):
@@ -422,6 +449,7 @@ def refresh_synth_pending(
     wiki_sources_dir: Optional[Path] = None,
     state_file: Optional[Path] = None,
     include_subagents: Optional[str] = None,
+    exclude_headless: bool | None = None,
 ) -> dict[str, Any]:
     """Compute unsynth backlog and persist it in unified state.
 
@@ -436,6 +464,9 @@ def refresh_synth_pending(
     if include_subagents is None:
         from llmwiki.config_schedule import _load_sessions_config
         include_subagents = resolve_include_subagents(_load_sessions_config())
+    if exclude_headless is None:
+        from llmwiki.config_schedule import _load_sessions_config as _cfg
+        exclude_headless = resolve_exclude_headless(_cfg())
     raw_sessions = _discover_raw_sessions(raw_dir)
     state = _load_state(state_file)
     report = synthesize_estimate_report(
@@ -446,6 +477,7 @@ def refresh_synth_pending(
         raw_root=raw_dir or RAW_SESSIONS,
         docs_root=docs_dir or ((raw_dir.parent / "docs") if raw_dir is not None else RAW_DOCS),
         include_subagents=include_subagents,
+        exclude_headless=exclude_headless,
     )
     pending: list[dict[str, Any]] = []
     for it in report.get("unsynth_items", []):
@@ -1006,6 +1038,7 @@ def synthesize_new_sessions(
     include_docs: bool = True,
     only_paths: Optional[set[Path] | set[str]] = None,
     include_subagents: Optional[str] = None,
+    exclude_headless: bool | None = None,
 ) -> dict[str, Any]:
     """Main entry point. Returns a summary dict:
 
@@ -1046,6 +1079,13 @@ def synthesize_new_sessions(
         include_subagents = resolve_include_subagents(
             {"filters": {"include_subagents": include_subagents}}
         )
+    # #8 follow-up: same policy the estimate applies, resolved the same way,
+    # so `--estimate` and a real run never disagree about what is eligible.
+    if exclude_headless is None:
+        from llmwiki.config_schedule import _load_sessions_config as _cfg
+        exclude_headless = resolve_exclude_headless(_cfg())
+    else:
+        exclude_headless = bool(exclude_headless)
     prompt_template = _load_prompt_template()
     # #54: feed the auto-derived topic vocabulary back into the prompt so the
     # model reuses canonical spellings instead of coining new variants. Filled
@@ -1075,6 +1115,7 @@ def synthesize_new_sessions(
             wiki_sources_dir=wiki_sources_dir,
             state_file=state_file,
             include_subagents=include_subagents,
+            exclude_headless=exclude_headless,
         )
 
     items: list[dict[str, Any]] = []
@@ -1085,6 +1126,11 @@ def synthesize_new_sessions(
         if include_subagents == "only-raw" and is_subagent(
             meta if isinstance(meta, dict) else {}, p
         ):
+            continue
+        # Headless runs are the wiki's own agent-CLI calls; synthesizing them
+        # summarizes our own output and breeds more of them. Skipped even
+        # under --force/only_paths, exactly like the subagent rule above.
+        if exclude_headless and is_headless(meta if isinstance(meta, dict) else {}):
             continue
         if only_resolved is not None:
             try:

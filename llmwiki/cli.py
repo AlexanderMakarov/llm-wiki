@@ -1162,6 +1162,7 @@ def _synthesize_estimate(args: argparse.Namespace | None = None) -> int:
         _discover_raw_sessions,
         _load_state,
         discover_synth_source_keys,
+        resolve_exclude_headless,
         resolve_include_subagents,
     )
 
@@ -1190,6 +1191,7 @@ def _synthesize_estimate(args: argparse.Namespace | None = None) -> int:
         raw_root=raw_root,
         docs_root=docs_root,
         include_subagents=resolve_include_subagents(loaded_cfg),
+        exclude_headless=resolve_exclude_headless(loaded_cfg),
     )
     from datetime import datetime
     pending_rows = [
@@ -1243,6 +1245,18 @@ def _synthesize_estimate(args: argparse.Namespace | None = None) -> int:
         f"{report.get('corpus_sessions', 0)} total, docs {report.get('new_docs', 0)} new / "
         f"{report.get('corpus_docs', 0)} total"
     )
+    # The eligibility policy is applied identically here and in `synthesize`,
+    # so state it — an estimate that silently skipped sessions a real run
+    # would also skip is indistinguishable from one that forgot them.
+    ex_sub = int(report.get("excluded_subagents", 0) or 0)
+    ex_head = int(report.get("excluded_headless", 0) or 0)
+    if ex_sub or ex_head:
+        parts = []
+        if ex_sub:
+            parts.append(f"{ex_sub} subagent (include_subagents={report.get('include_subagents')})")
+        if ex_head:
+            parts.append(f"{ex_head} headless (exclude_headless=true)")
+        print(f"Not eligible (synthesize skips these too): {', '.join(parts)}")
     print()
     if execution_model:
         print(

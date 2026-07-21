@@ -194,7 +194,7 @@ cp examples/sessions_config.json config.json
 | `filters` | `include_projects` | list | [] | If non-empty, only sync matching project slugs |
 | `filters` | `exclude_projects` | list | [] | Skip projects containing these substrings |
 | `filters` | `drop_record_types` | list | [3 types] | JSONL record types to discard |
-| `filters` | `exclude_headless` | bool | true | Skip headless `claude -p` / Agent-SDK sessions (`entrypoint=sdk-cli` or `promptSource=sdk`). Prevents the synthesis feedback loop |
+| `filters` | `exclude_headless` | bool | true | Skip headless `claude -p` / Agent-SDK sessions (`entrypoint=sdk-cli` or `promptSource=sdk`). Prevents the synthesis feedback loop. Applies at **both** ingest (never converted) and synthesis (a headless session already in `raw/` is never synthesized and never counted as backlog) |
 | `filters` | `exclude_temp_cwd` | bool | false | Opt-in: skip sessions whose `cwd` is a throwaway temp dir (`/tmp`, `/var/folders`, …). Off by default — a git worktree under `/tmp` is often real work |
 | `redaction` | `real_username` | string | `$USER` | Your OS username (auto-detected if empty) |
 | `redaction` | `replacement_username` | string | `USER` | Replacement in path redaction |
