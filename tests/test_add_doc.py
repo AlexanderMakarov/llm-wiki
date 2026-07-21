@@ -59,6 +59,14 @@ def test_chunk_small_doc_single_chunk():
     assert chunks[0].body.endswith("\n")
 
 
+def test_chunk_heading_strips_inline_markup():
+    # A chunk's heading becomes the "(part N/M: <sub>)" suffix of the page
+    # title, so a permalink anchor in it surfaces in the title just as it did
+    # for the document heading.
+    chunks = chunk_markdown_by_sections("## Итоги раздела [#](#15-toc-title)\n\nbody\n")
+    assert chunks[0].heading == "Итоги раздела"
+
+
 def test_chunk_splits_on_headings_not_hard_chars():
     # Two ~600-char sections with max_chars=1000: must split at the
     # heading boundary (section-aware), not at char 1000.
@@ -333,7 +341,16 @@ def test_layer1_token_savings_reported_lowercase_headers():
     assert any("3150" in w for w in doc.warnings)
 
 
-def test_layer2_html_converted():
+def _force_no_trafilatura(monkeypatch):
+    """Make ``import trafilatura`` raise ImportError regardless of whether the
+    package is installed. A None entry in sys.modules is the documented way to
+    do that; deleting the entry only clears the cache, so a real install would
+    just be re-imported and the stdlib path never exercised."""
+    monkeypatch.setitem(_sys.modules, "trafilatura", None)
+
+
+def test_layer2_html_converted(monkeypatch):
+    _force_no_trafilatura(monkeypatch)
     fetch = _fetcher([FetchResult(url="https://ex.com/b", status=200,
                                   content_type="text/html", body=HTML_DOC)])
     doc = convert_url("https://ex.com/b", fetch=fetch)
@@ -765,6 +782,10 @@ def test_extract_html_passes_content_kwargs_when_trafilatura_present(monkeypatch
     # favor_precision must NOT be set: on real pages it discarded the whole
     # article as low-confidence, leaving only a skip-to-content link.
     assert captured.get("favor_precision") in (None, False)
+    # favor_recall MUST be set: at default recall trafilatura drops whole
+    # paragraphs that carry an inline <a> — exactly the cross-references
+    # ("see part 2", citations) that include_links is here to keep.
+    assert captured.get("favor_recall") is True
 
 
 def test_convert_url_records_trafilatura_extractor(monkeypatch):
@@ -782,9 +803,7 @@ def test_convert_url_records_trafilatura_extractor(monkeypatch):
 
 
 def test_convert_url_stdlib_extractor_and_loud_warning_when_trafilatura_absent(monkeypatch):
-    # Real test env has no trafilatura; make the absence explicit so a
-    # stray injection from another test can never mask this path.
-    monkeypatch.delitem(_sys.modules, "trafilatura", raising=False)
+    _force_no_trafilatura(monkeypatch)
     fetch = _fetcher([FetchResult(url="https://ex.com/nav", status=200,
                                   content_type="text/html", body=HTML_DOC)])
     doc = convert_url("https://ex.com/nav", fetch=fetch, render="never")

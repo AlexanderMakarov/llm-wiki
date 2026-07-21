@@ -58,8 +58,36 @@ def strip_site_suffix(title: str) -> str:
     return title.strip()
 
 
-def first_heading(markdown: str) -> str:
-    """First markdown heading, skipping '#' lines inside code fences."""
+def _plain_heading_text(text: str) -> str:
+    """Heading text with inline markdown markup resolved to plain prose.
+
+    A heading becomes a title, a slug, and a raw/docs directory name, so any
+    surviving markup leaks into all three. Two cases matter in practice:
+
+    * ``[#](#0-toc-title)`` — the self-link CMSs render inside every heading.
+      Its label is pure punctuation and carries no meaning, so it is dropped
+      whole rather than reduced to its label.
+    * ``[sole traders](/docs/ip)`` — a genuine in-heading link. Keep the
+      label, drop the target.
+    """
+    def _link(m: re.Match[str]) -> str:
+        label = m.group(1).strip()
+        # Punctuation-only labels (#, ¶, §, ↩) are permalink glyphs, not words.
+        return "" if not re.search(r"[^\W_]", label, re.UNICODE) else label
+
+    text = re.sub(r"\[([^\]]*)\]\([^)]*\)", _link, text)
+    text = re.sub(r"(\*{1,3}|_{1,3})(?=\S)(.+?)(?<=\S)\1", r"\2", text)
+    text = text.replace("`", "")
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def first_heading(markdown: str, levels: tuple[int, ...] = (1, 2, 3, 4, 5, 6)) -> str:
+    """First markdown heading, skipping '#' lines inside code fences.
+
+    ``levels`` restricts which heading depths count, so a caller after the
+    document's own title can ask for ``(1,)`` and not settle for a body
+    subsection.
+    """
     fence = None
     for line in markdown.split("\n"):
         m = re.match(r"^\s*(`{3,}|~{3,})", line)
@@ -69,9 +97,9 @@ def first_heading(markdown: str) -> str:
             continue
         if fence is not None:
             continue
-        h = re.match(r"^#{1,6}\s+(.*)$", line.strip())
-        if h:
-            return h.group(1).strip()
+        h = re.match(r"^(#{1,6})\s+(.*)$", line.strip())
+        if h and len(h.group(1)) in levels:
+            return _plain_heading_text(h.group(2))
     return ""
 
 
@@ -96,11 +124,20 @@ def derive_title(
     url: str | None,
     path_name: str | None,
 ) -> str:
-    """Spec preference chain: --title → first real MD heading → cleaned
-    HTML <title> → URL path segments → filename stem → hostname."""
+    """Spec preference chain: --title → the document's own H1 → cleaned
+    HTML <title> → URL path segments → filename stem → hostname.
+
+    Only an H1 counts as "the document's own" heading. A CMS article's <h1>
+    frequently sits outside the container an extractor treats as content, so
+    the first heading in the markdown is a body subsection — using it gave
+    whole families of articles the same generic title (every bank's guide
+    named after its "signing in" section, colliding into "-2" suffixes)
+    while the correct, specific title sat unused in html_title. A
+    lower-level heading is still the last resort below, for documents that
+    have nothing else to offer."""
     if explicit and explicit.strip():
         return explicit.strip()
-    heading = first_heading(markdown)
+    heading = first_heading(markdown, levels=(1,))
     if heading and heading.lower() not in _BOILERPLATE_HEADINGS and slugify(heading):
         return heading
     if html_title:
@@ -115,5 +152,7 @@ def derive_title(
         stem = re.sub(r"\.[A-Za-z0-9]{1,8}$", "", path_name)
         if stem:
             return stem
-    # Absolute last resort — heading/html_title even if boilerplate, then raw input.
-    return heading or (html_title or "").strip() or (url or path_name or "").strip()
+    # Absolute last resort — any heading (a subsection beats nothing) or an
+    # html_title even if boilerplate, then raw input.
+    return (heading or first_heading(markdown) or (html_title or "").strip()
+            or (url or path_name or "").strip())

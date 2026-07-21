@@ -27,7 +27,7 @@ from urllib.parse import urljoin, urlparse
 
 from llmwiki import __version__
 from llmwiki.htmlmd import html_to_markdown
-from llmwiki.slugs import derive_title, slugify
+from llmwiki.slugs import derive_title, first_heading, slugify
 
 __all__ = [
     "AddError",
@@ -211,19 +211,10 @@ class MarkdownChunk:
 
 
 def _first_heading_line(body: str) -> str:
-    fence = None
-    for line in body.split("\n"):
-        m = _FENCE_RE.match(line)
-        if m:
-            marker = m.group(1)[0]
-            fence = marker if fence is None else (None if fence == marker else fence)
-            continue
-        if fence is not None:
-            continue
-        h = _re.match(r"^#{1,6}\s+(.*)$", line.lstrip())
-        if h:
-            return h.group(1).strip()
-    return ""
+    """A chunk's heading, which becomes the ``(part N/M: <sub>)`` suffix of
+    the page title — so it goes through the same markup-stripping the
+    document heading does."""
+    return first_heading(body)
 
 
 def _split_sections(text: str, levels: tuple[int, ...]) -> list[str]:
@@ -610,14 +601,20 @@ def _extract_html(html: str) -> tuple[str, str, str]:
     except ImportError:
         title, md = html_to_markdown(html)
         return title, md, "stdlib"
-    # Default recall already drops site chrome (nav/header/footer) while
-    # keeping the article body. favor_precision was too aggressive — on real
-    # article pages it discarded the whole body as low-confidence,
-    # extracting only a skip-to-content link. include_links keeps in-content
-    # links & citations (prev/next-part anchors) synthesis relies on;
-    # comments off, tables on.
+    # Extraction aggressiveness is a three-way choice, measured against a
+    # CMS's own REST API as ground truth on a 9-page sample:
+    #   favor_precision — discards the whole article body as low-confidence,
+    #                     leaving only a skip-to-content link. Unusable.
+    #   default         — drops entire paragraphs whose text carries an
+    #                     inline <a>, losing up to 16% of the article and,
+    #                     specifically, every cross-reference.
+    #   favor_recall    — matches ground truth, and pulled back no
+    #                     nav/header/footer on any sampled page.
+    # So recall it is: include_links only preserves citations and
+    # prev/next-part anchors if the paragraphs holding them survive at all.
+    # Comments off, tables on.
     md = trafilatura.extract(html, output_format="markdown",
-                             include_links=True,
+                             include_links=True, favor_recall=True,
                              include_comments=False, include_tables=True,
                              include_formatting=True)
     title = ""
