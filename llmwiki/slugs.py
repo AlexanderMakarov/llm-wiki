@@ -29,6 +29,10 @@ _SUFFIX_SEP = re.compile(r"\s+[-|—–]\s+")
 
 _INDEXISH = frozenset({"index", "index.html", "index.htm", "index.php", "default.aspx"})
 
+# Segments that mark the end of the machine-specific prefix in a cwd-encoded
+# directory name — whatever follows one of these is the project itself.
+_WORKSPACE_MARKERS = ("draft", "production", "Desktop")
+
 
 def slugify(text: str, max_len: int = 80) -> str:
     """Kebab-case ASCII slug. Returns '' when nothing survives —
@@ -40,6 +44,42 @@ def slugify(text: str, max_len: int = 80) -> str:
     s = re.sub(r"^https?://", "", s)
     s = re.sub(r"[^a-z0-9]+", "-", s).strip("-")
     return s[:max_len].rstrip("-")
+
+
+def project_slug_from_encoded_dir(name: str) -> str:
+    """Decode a cwd-encoded directory name into a project slug.
+
+    Agent tooling flattens a working directory into one path segment by
+    replacing separators with hyphens — ``~/.claude/projects/-home-dev-code-my-app/``
+    and the per-session scratchpad dirs both use this form. The separators
+    are unrecoverable, so the tail is a heuristic: everything after a
+    recognizable workspace marker, otherwise the last two segments (a
+    two-word project name is far more common than a one-word one at the end
+    of a ``.../code/<project>`` path).
+    """
+    parts = name.lstrip("-").split("-")
+    for marker in _WORKSPACE_MARKERS:
+        if marker in parts:
+            idx = len(parts) - 1 - parts[::-1].index(marker)
+            tail = parts[idx + 1:]
+            if tail:
+                return "-".join(tail)
+    return "-".join(parts[-2:]) if len(parts) >= 2 else name
+
+
+def project_slug_from_abs_path(path: str) -> str:
+    """Project slug for an absolute filesystem path.
+
+    Reproduces the session store's dash-encoded directory form — Claude Code
+    names each project dir by flattening its absolute path, separators to
+    dashes (``/Users/u/code/app`` → ``-Users-u-code-app``) — then reuses the
+    one decoder, so a project resolves to a single slug whether it arrived
+    through ingestion (`derive_project_slug`) or through live MCP attribution
+    (#51, #36). Windows separators and spaces fold to the same dash so a
+    workspace path and its stored form never diverge."""
+    norm = str(path).replace("\\", "/").rstrip("/")
+    encoded = re.sub(r"[^A-Za-z0-9]+", "-", norm)
+    return project_slug_from_encoded_dir(encoded)
 
 
 def strip_site_suffix(title: str) -> str:

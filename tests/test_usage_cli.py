@@ -31,11 +31,12 @@ def _ns(**kw) -> argparse.Namespace:
 
 
 def _seed_records(root: Path) -> None:
-    rec = usage.UsageRecorder(root, caller_project="sde-automation",
-                              pid=1, started="2026-07-16T09:00:00Z")
-    rec.record(tool="wiki_search", query="sync", hits=3, resp_bytes=100, duration_ms=5)
-    rec.record(tool="wiki_search", query="nothing", hits=0, resp_bytes=40, duration_ms=5)
-    rec.record(tool="wiki_query", query="what", hits=2, resp_bytes=200, duration_ms=9)
+    rec = usage.UsageRecorder(root, pid=1, started="2026-07-16T09:00:00Z")
+    caller = dict(caller_project="sde-automation",
+                  caller_source=usage.CALLER_CLIENT_ROOT)
+    rec.record(tool="wiki_search", query="sync", hits=3, resp_bytes=100, duration_ms=5, **caller)
+    rec.record(tool="wiki_search", query="nothing", hits=0, resp_bytes=40, duration_ms=5, **caller)
+    rec.record(tool="wiki_query", query="what", hits=2, resp_bytes=200, duration_ms=9, **caller)
 
 
 def test_usage_json_reports_consumption(tmp_path: Path, monkeypatch, capsys):
@@ -82,6 +83,20 @@ def test_usage_human_output_lists_tools(tmp_path: Path, monkeypatch, capsys):
     out = capsys.readouterr().out
     assert "wiki_search" in out
     assert "wiki_query" in out
+
+
+def test_usage_report_labels_calls_with_no_identified_caller(
+    tmp_path: Path, monkeypatch, capsys
+):
+    """#51: calls the server couldn't attribute print as unattributed, not
+    under a project slug someone might mistake for a real caller."""
+    monkeypatch.setattr(cli, "REPO_ROOT", tmp_path)
+    usage.UsageRecorder(tmp_path, pid=1, started="2026-07-16T09:00:00Z").record(
+        tool="wiki_query", hits=1)
+
+    assert cli.cmd_usage(_ns(state_file=tmp_path / "llmwiki-state.json")) == 0
+    out = capsys.readouterr().out
+    assert "unattributed" in out
 
 
 def test_usage_compact_folds_old_logs(tmp_path: Path, monkeypatch, capsys):

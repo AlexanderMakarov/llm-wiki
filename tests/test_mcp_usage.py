@@ -20,11 +20,12 @@ def _read_lines(p: Path) -> list[dict]:
 
 def test_recorder_writes_per_process_file(tmp_path: Path):
     rec = usage.UsageRecorder(
-        tmp_path, caller_project="sde-automation", pid=51119,
-        started="2026-07-16T09:00:00Z",
+        tmp_path, pid=51119, started="2026-07-16T09:00:00Z",
     )
     rec.record(tool="wiki_search", query="sync", hits=3,
-               resp_bytes=18432, duration_ms=210, ts="2026-07-16T12:00:00Z")
+               resp_bytes=18432, duration_ms=210, ts="2026-07-16T12:00:00Z",
+               caller_project="sde-automation",
+               caller_source=usage.CALLER_CLIENT_ROOT)
 
     files = list((tmp_path / "usage").glob("mcp-*.jsonl"))
     assert len(files) == 1
@@ -40,6 +41,7 @@ def test_recorder_writes_per_process_file(tmp_path: Path):
         "resp_bytes": 18432,
         "duration_ms": 210,
         "caller_project": "sde-automation",
+        "caller_source": "client-root",
         "server_pid": 51119,
         "server_started": "2026-07-16T09:00:00Z",
     }]
@@ -91,9 +93,9 @@ def test_iter_records_empty_when_no_dir(tmp_path: Path):
 
 def test_aggregate_totals_per_tool_and_project():
     records = [
-        {"tool": "wiki_search", "hits": 3, "resp_bytes": 100, "caller_project": "a"},
-        {"tool": "wiki_search", "hits": 0, "resp_bytes": 50, "caller_project": "a"},
-        {"tool": "wiki_query", "hits": 2, "resp_bytes": 200, "caller_project": "b"},
+        {"tool": "wiki_search", "hits": 3, "resp_bytes": 100, "caller_project": "a", "caller_source": "client-root"},
+        {"tool": "wiki_search", "hits": 0, "resp_bytes": 50, "caller_project": "a", "caller_source": "client-root"},
+        {"tool": "wiki_query", "hits": 2, "resp_bytes": 200, "caller_project": "b", "caller_source": "client-root"},
     ]
     agg = usage.aggregate(records)
     assert agg["total_calls"] == 3
@@ -127,11 +129,11 @@ def test_aggregate_unknown_fields_default():
 
 def test_merge_aggregates_sums_counters():
     a = usage.aggregate([
-        {"tool": "wiki_search", "hits": 1, "resp_bytes": 10, "caller_project": "p"},
+        {"tool": "wiki_search", "hits": 1, "resp_bytes": 10, "caller_project": "p", "caller_source": "client-root"},
     ])
     b = usage.aggregate([
-        {"tool": "wiki_search", "hits": 0, "resp_bytes": 5, "caller_project": "p"},
-        {"tool": "wiki_query", "hits": 3, "resp_bytes": 7, "caller_project": "q"},
+        {"tool": "wiki_search", "hits": 0, "resp_bytes": 5, "caller_project": "p", "caller_source": "client-root"},
+        {"tool": "wiki_query", "hits": 3, "resp_bytes": 7, "caller_project": "q", "caller_source": "client-root"},
     ])
     m = usage.merge_aggregates(a, b)
     assert m["total_calls"] == 3
@@ -380,11 +382,11 @@ def test_hits_channel_stripped_from_client_result(tmp_path: Path, monkeypatch):
 def test_items_returned_counts_only_entity_tools():
     from llmwiki.usage import aggregate, ENTITY_TOOLS, is_entity_tool
     records = [
-        {"tool": "wiki_search", "hits": 5, "caller_project": "p", "server_pid": 1, "server_started": "s1"},
-        {"tool": "wiki_query", "hits": 3, "caller_project": "p", "server_pid": 1, "server_started": "s1"},
-        {"tool": "wiki_lint", "hits": 9, "caller_project": "p", "server_pid": 1, "server_started": "s1"},   # excluded
-        {"tool": "wiki_search", "hits": None, "caller_project": "p", "server_pid": 1, "server_started": "s1"},  # unknown, not counted
-        {"tool": "wiki_search", "hits": 0, "caller_project": "p", "server_pid": 1, "server_started": "s1"},  # zero, not counted
+        {"tool": "wiki_search", "hits": 5, "caller_project": "p", "caller_source": "client-root", "server_pid": 1, "server_started": "s1"},
+        {"tool": "wiki_query", "hits": 3, "caller_project": "p", "caller_source": "client-root", "server_pid": 1, "server_started": "s1"},
+        {"tool": "wiki_lint", "hits": 9, "caller_project": "p", "caller_source": "client-root", "server_pid": 1, "server_started": "s1"},   # excluded
+        {"tool": "wiki_search", "hits": None, "caller_project": "p", "caller_source": "client-root", "server_pid": 1, "server_started": "s1"},  # unknown, not counted
+        {"tool": "wiki_search", "hits": 0, "caller_project": "p", "caller_source": "client-root", "server_pid": 1, "server_started": "s1"},  # zero, not counted
     ]
     agg = aggregate(records)
     assert agg["total_items_returned"] == 8            # 5 + 3
@@ -405,10 +407,10 @@ def test_entity_tool_classification():
 def test_server_processes_counts_distinct_pairs():
     from llmwiki.usage import aggregate
     records = [
-        {"tool": "wiki_search", "caller_project": "a", "server_pid": 1, "server_started": "s1"},
-        {"tool": "wiki_search", "caller_project": "a", "server_pid": 1, "server_started": "s1"},  # same proc
-        {"tool": "wiki_query",  "caller_project": "a", "server_pid": 2, "server_started": "s2"},  # 2nd proc
-        {"tool": "wiki_query",  "caller_project": "b", "server_pid": 3, "server_started": "s3"},
+        {"tool": "wiki_search", "caller_project": "a", "caller_source": "client-root", "server_pid": 1, "server_started": "s1"},
+        {"tool": "wiki_search", "caller_project": "a", "caller_source": "client-root", "server_pid": 1, "server_started": "s1"},  # same proc
+        {"tool": "wiki_query",  "caller_project": "a", "caller_source": "client-root", "server_pid": 2, "server_started": "s2"},  # 2nd proc
+        {"tool": "wiki_query",  "caller_project": "b", "caller_source": "client-root", "server_pid": 3, "server_started": "s3"},
     ]
     agg = aggregate(records)
     assert agg["per_project"]["a"]["server_processes"] == 2
@@ -418,7 +420,7 @@ def test_server_processes_counts_distinct_pairs():
 def test_merge_sums_server_processes_and_legacy_rollup_defaults_zero():
     from llmwiki.usage import aggregate, merge_aggregates
     live = aggregate([
-        {"tool": "wiki_search", "caller_project": "a", "server_pid": 9, "server_started": "s9"},
+        {"tool": "wiki_search", "caller_project": "a", "caller_source": "client-root", "server_pid": 9, "server_started": "s9"},
     ])
     legacy = {  # old rollup shape: no items_returned / server_processes
         "total_calls": 2, "total_resp_bytes": 0,
@@ -437,10 +439,10 @@ def test_merge_sums_server_processes_and_legacy_rollup_defaults_zero():
 def test_per_project_tool_breakdown():
     from llmwiki.usage import aggregate
     records = [
-        {"tool": "wiki_search", "hits": 5, "caller_project": "a", "server_pid": 1, "server_started": "s1"},
-        {"tool": "wiki_search", "hits": 2, "caller_project": "a", "server_pid": 1, "server_started": "s1"},
-        {"tool": "wiki_lint",   "hits": 9, "caller_project": "a", "server_pid": 1, "server_started": "s1"},  # entity=False → items 0
-        {"tool": "wiki_query",  "hits": 4, "caller_project": "b", "server_pid": 2, "server_started": "s2"},
+        {"tool": "wiki_search", "hits": 5, "caller_project": "a", "caller_source": "client-root", "server_pid": 1, "server_started": "s1"},
+        {"tool": "wiki_search", "hits": 2, "caller_project": "a", "caller_source": "client-root", "server_pid": 1, "server_started": "s1"},
+        {"tool": "wiki_lint",   "hits": 9, "caller_project": "a", "caller_source": "client-root", "server_pid": 1, "server_started": "s1"},  # entity=False → items 0
+        {"tool": "wiki_query",  "hits": 4, "caller_project": "b", "caller_source": "client-root", "server_pid": 2, "server_started": "s2"},
     ]
     agg = aggregate(records)
     assert agg["per_project_tool"]["a"]["wiki_search"] == {"calls": 2, "items_returned": 7}
@@ -450,7 +452,7 @@ def test_per_project_tool_breakdown():
 def test_merge_sums_per_project_tool_and_legacy_defaults_empty():
     from llmwiki.usage import aggregate, merge_aggregates
     live = aggregate([
-        {"tool": "wiki_search", "hits": 3, "caller_project": "a", "server_pid": 9, "server_started": "s9"},
+        {"tool": "wiki_search", "hits": 3, "caller_project": "a", "caller_source": "client-root", "server_pid": 9, "server_started": "s9"},
     ])
     legacy = {  # old rollup shape: no per_project_tool at all
         "total_calls": 1, "total_resp_bytes": 0,

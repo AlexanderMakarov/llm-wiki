@@ -201,3 +201,87 @@ def test_tools_call_with_unknown_tool_returns_error() -> None:
     else:
         result = resp.get("result", {})
         assert result.get("isError") is True or "error" in str(result).lower()
+
+
+# ─── Caller identity via MCP roots (#51) ──────────────────────────────
+
+
+def _read_frame(proc: subprocess.Popen, timeout: float = 5.0) -> dict:
+    """Read one frame the server sent on its own initiative.
+
+    Unlike `_exchange`, nothing was requested here, so a regression means no
+    frame ever arrives — `select` turns that into a fast failure instead of
+    a hung run."""
+    import select
+    ready, _, _ = select.select([proc.stdout], [], [], timeout)
+    if not ready:
+        pytest.fail(f"no frame from the server within {timeout}s")
+    raw = proc.stdout.readline()  # type: ignore[union-attr]
+    if not raw:
+        err = proc.stderr.read().decode("utf-8", errors="replace") if proc.stderr else ""
+        pytest.fail(f"MCP server closed stdout unexpectedly. stderr:\n{err}")
+    return json.loads(raw.decode("utf-8"))
+
+
+def _write(proc: subprocess.Popen, message: dict) -> None:
+    proc.stdin.write((json.dumps(message) + "\n").encode("utf-8"))  # type: ignore[union-attr]
+    proc.stdin.flush()  # type: ignore[union-attr]
+
+
+def test_server_asks_a_roots_capable_client_for_its_roots() -> None:
+    """Telemetry needs to know which project called; the server's own cwd
+    doesn't answer that, so it asks the client for its workspace roots."""
+    proc = _spawn()
+    try:
+        _exchange(proc, {
+            "jsonrpc": "2.0", "id": 1, "method": "initialize",
+            "params": {"protocolVersion": "2024-11-05",
+                       "capabilities": {"roots": {"listChanged": True}}},
+        })
+        _write(proc, {"jsonrpc": "2.0", "method": "notifications/initialized"})
+        frame = _read_frame(proc)
+        assert frame["method"] == "roots/list"
+        assert "id" in frame
+        # Replying must not draw an error back — and the next real request
+        # still gets its own response, in order.
+        _write(proc, {"jsonrpc": "2.0", "id": frame["id"],
+                      "result": {"roots": [{"uri": "file:///home/dev/code/proj-a"}]}})
+        resp = _exchange(proc, {
+            "jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}})
+    finally:
+        _shutdown(proc)
+    assert resp is not None and resp["id"] == 2
+
+
+def test_client_without_roots_capability_sees_no_extra_frames() -> None:
+    """A client that never advertised roots reads one response per request;
+    an unsolicited server request would desynchronise it."""
+    proc = _spawn()
+    try:
+        _exchange(proc, {
+            "jsonrpc": "2.0", "id": 1, "method": "initialize",
+            "params": {"protocolVersion": "2024-11-05", "capabilities": {}},
+        })
+        _write(proc, {"jsonrpc": "2.0", "method": "notifications/initialized"})
+        resp = _exchange(proc, {
+            "jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}})
+    finally:
+        _shutdown(proc)
+    assert resp is not None and resp["id"] == 2, (
+        "expected the tools/list response, got an unsolicited frame first")
+
+
+def test_stray_response_frame_draws_no_reply() -> None:
+    """A frame with an `id` but no `method` is a response, not a request.
+    Answering one with a JSON-RPC error corrupts the client's bookkeeping —
+    it would read our error as the reply to its *next* request."""
+    proc = _spawn()
+    try:
+        _write(proc, {"jsonrpc": "2.0", "id": "not-a-request-we-sent",
+                      "result": {"roots": []}})
+        resp = _exchange(proc, {
+            "jsonrpc": "2.0", "id": 7, "method": "tools/list", "params": {}})
+    finally:
+        _shutdown(proc)
+    assert resp is not None and resp["id"] == 7, (
+        "expected the tools/list response, got a reply to the stray frame")

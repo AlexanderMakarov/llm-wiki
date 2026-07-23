@@ -41,6 +41,22 @@ def test_mcp_heaviest_card_picks_top_project():
     assert 'href="projects/proj-b.html"' in card
 
 
+def test_mcp_heaviest_card_ignores_unattributed_calls():
+    """#51: the unattributed bucket is not a project — surfacing it would both
+    name a project that never called and link to a page that doesn't exist."""
+    totals = {"per_project": {
+        "unknown": {"calls": 42}, "proj-a": {"calls": 3},
+    }}
+    card = render_mcp_heaviest_card(totals, link_prefix="")
+    assert "proj-a" in card and ">3<" in card
+    assert "unknown" not in card
+
+
+def test_mcp_heaviest_card_empty_when_every_call_is_unattributed():
+    assert render_mcp_heaviest_card(
+        {"per_project": {"unknown": {"calls": 42}}}, link_prefix="") == ""
+
+
 def test_mcp_heaviest_card_empty_without_telemetry():
     assert render_mcp_heaviest_card({"per_project": {}}, link_prefix="") == ""
     assert render_mcp_heaviest_card({"per_project": {"p": {"calls": 0}}}, link_prefix="") == ""

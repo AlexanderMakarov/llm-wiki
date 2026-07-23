@@ -5,6 +5,8 @@ from __future__ import annotations
 from llmwiki.slugs import (
     derive_title,
     first_heading,
+    project_slug_from_abs_path,
+    project_slug_from_encoded_dir,
     slugify,
     strip_site_suffix,
     title_from_url,
@@ -187,3 +189,37 @@ def test_derive_title_boilerplate_heading_falls_to_url():
 def test_derive_title_path_name():
     assert derive_title(explicit=None, markdown="", html_title=None, url=None,
                         path_name="notes.txt") == "notes"
+
+
+# ── project_slug_from_abs_path (#51 / #36) ───────────────────────────
+
+def test_abs_path_slug_matches_the_session_adapter():
+    """An absolute path and the session store's dash-encoded form of the same
+    path must resolve to one slug, so MCP telemetry keyed by a live path lines
+    up with the project page the ingestion adapter built."""
+    from llmwiki.adapters.claude_code import ClaudeCodeAdapter
+
+    adapter = ClaudeCodeAdapter()
+    encoded = adapter.session_store_path / "-Users-alice-code-webapp" / "s.jsonl"
+    assert (project_slug_from_abs_path("/Users/alice/code/webapp")
+            == adapter.derive_project_slug(encoded)
+            == "code-webapp")
+
+
+def test_abs_path_slug_reuses_the_encoded_decoder():
+    assert (project_slug_from_abs_path("/home/dev/code/project-a")
+            == project_slug_from_encoded_dir("-home-dev-code-project-a"))
+
+
+def test_abs_path_slug_honors_workspace_markers():
+    assert (project_slug_from_abs_path(
+        "/Users/alice/Desktop/2026/production/draft/ai-newsletter")
+        == "ai-newsletter")
+
+
+def test_abs_path_slug_normalizes_spaces_and_trailing_slash():
+    assert project_slug_from_abs_path("/home/dev/code/my project/") == "my-project"
+
+
+def test_abs_path_slug_windows_separators():
+    assert project_slug_from_abs_path(r"C:\\Users\\alice\\code\\webapp") == "code-webapp"

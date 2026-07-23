@@ -66,7 +66,8 @@ from llmwiki.project_topics import (
     render_topic_chips,
 )
 from llmwiki import raw_docs_site
-from llmwiki.usage import combined_totals as _mcp_combined_totals, is_entity_tool
+from llmwiki.usage import (
+    UNATTRIBUTED, combined_totals as _mcp_combined_totals, is_entity_tool)
 from llmwiki.viz_heatmap import collect_session_counts, render_heatmap
 from llmwiki.viz_tokens import (
     render_project_token_card,
@@ -1547,8 +1548,13 @@ def render_mcp_heaviest_card(
 ) -> str:
     """The "Heaviest project by MCP usage" stat card — the project with the
     most llm-wiki MCP calls. Shares the token-stats row. Empty string when
-    there is no telemetry."""
-    per_project = usage_totals.get("per_project", {})
+    there is no telemetry.
+
+    Calls whose caller couldn't be identified are excluded (#51): the
+    unattributed bucket isn't a project, and naming it here would both credit
+    a project that never called and link to a page that doesn't exist."""
+    per_project = {slug: s for slug, s in usage_totals.get("per_project", {}).items()
+                   if slug != UNATTRIBUTED}
     if not per_project:
         return ""
     slug, s = max(per_project.items(), key=lambda kv: kv[1].get("calls", 0))
