@@ -72,6 +72,71 @@ def _get_recorder() -> _usage.UsageRecorder | None:
     return rec
 
 
+# ─── Caller identity (#51) ────────────────────────────────────────────────
+# Telemetry has to say *who* called, and a stdio server's own cwd doesn't
+# answer that — it's wherever the process was launched, unchanged across
+# every session it serves. MCP's `roots` are the client's own workspace
+# directories, so we ask for them (once the client says it's initialized,
+# and only if it advertised the capability) and attribute each call to them.
+_CLIENT: dict[str, Any] = {"supports_roots": False, "roots": [], "pending": set(), "seq": 0}
+_ROOTS_ID_PREFIX = "llmwiki-roots-"
+
+
+def reset_client_state() -> None:
+    _CLIENT.update({"supports_roots": False, "roots": [], "pending": set(), "seq": 0})
+
+
+def client_roots() -> list[str]:
+    """Workspace root URIs last reported by the client; empty until it
+    answers, or forever if it doesn't speak the roots protocol."""
+    return list(_CLIENT["roots"])
+
+
+def pending_roots_ids() -> list[str]:
+    return sorted(_CLIENT["pending"])
+
+
+def request_client_roots() -> None:
+    """Send a `roots/list` request. Fire-and-forget: the reply is picked up
+    by the main loop whenever it arrives, and calls made before then are
+    recorded as unattributed rather than blocking on the client."""
+    if not _CLIENT["supports_roots"]:
+        return
+    _CLIENT["seq"] += 1
+    req_id = f"{_ROOTS_ID_PREFIX}{_CLIENT['seq']}"
+    # Supersede any outstanding request: the client only tells us roots
+    # changed when the older answer is already stale, and keeping every id
+    # would grow the set for the life of the session.
+    _CLIENT["pending"] = {req_id}
+    send({"jsonrpc": "2.0", "id": req_id, "method": "roots/list"})
+
+
+def handle_client_notification(method: str) -> None:
+    """Client → server notifications we act on. Everything else is ignored,
+    per JSON-RPC (a notification never gets a response)."""
+    if method in ("notifications/initialized", "notifications/roots/list_changed"):
+        request_client_roots()
+
+
+def handle_client_response(message: dict[str, Any]) -> bool:
+    """Consume a reply to a server-initiated request. Returns False for an
+    id we never sent, so the caller can fall through to its normal handling
+    instead of silently swallowing someone else's frame."""
+    req_id = message.get("id")
+    if req_id not in _CLIENT["pending"]:
+        return False
+    _CLIENT["pending"].discard(req_id)
+    result = message.get("result")
+    if isinstance(result, dict):
+        # An error reply (client can't or won't list roots) leaves the last
+        # known roots in place — no roots is honest, a wrong guess isn't.
+        _CLIENT["roots"] = [
+            r["uri"] for r in result.get("roots") or []
+            if isinstance(r, dict) and isinstance(r.get("uri"), str)
+        ]
+    return True
+
+
 def _result_text(result: dict[str, Any]) -> str:
     """Concatenate the text parts of a tool result payload."""
     parts = result.get("content") or []
@@ -129,12 +194,16 @@ def _record_usage(
         if recorder is None:
             return
         text = _result_text(result)
+        project, source = _usage.resolve_caller(
+            args, client_roots=client_roots(), content_root=REPO_ROOT)
         recorder.record(
             tool=name,
             query=_usage.extract_query(args),
             hits=_resolve_hits(result, text),
             resp_bytes=len(text.encode("utf-8")),
             duration_ms=duration_ms,
+            caller_project=project,
+            caller_source=source,
         )
     except Exception:
         pass
@@ -1196,6 +1265,11 @@ TOOL_IMPLS = {
 
 
 def handle_initialize(params: dict[str, Any]) -> dict[str, Any]:
+    # Note the roots capability but don't use it yet — the spec allows
+    # server-initiated requests only after `notifications/initialized`.
+    caps = params.get("capabilities") or {}
+    _CLIENT["supports_roots"] = isinstance(caps, dict) and isinstance(
+        caps.get("roots"), dict)
     return {
         "protocolVersion": PROTOCOL_VERSION,
         "serverInfo": SERVER_INFO,
@@ -1262,9 +1336,24 @@ def main() -> int:
             req_id = req.get("id")
             params = req.get("params", {}) or {}
 
+            # A frame with no method is a reply to something *we* asked for
+            # (`roots/list`), not a request — answering it with an error
+            # would corrupt the client's request/response bookkeeping.
+            if not method:
+                if handle_client_response(req) or "result" in req or "error" in req:
+                    # Ours, or a reply to a request we've since superseded —
+                    # either way a response frame never earns an error back:
+                    # the client would read it as the reply to its next call.
+                    continue
+                if req_id is None:
+                    continue
+                send(error_response(req_id, -32600, "Invalid Request"))
+                continue
+
             handler = HANDLERS.get(method)
             if handler is None:
                 if req_id is None:
+                    handle_client_notification(method)
                     continue  # notifications don't get a response
                 send(error_response(req_id, -32601, f"Method not found: {method}"))
                 continue

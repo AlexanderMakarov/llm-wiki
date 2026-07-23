@@ -17,6 +17,7 @@ from pathlib import Path
 
 from llmwiki.adapters import register
 from llmwiki.adapters.base import BaseAdapter
+from llmwiki.slugs import project_slug_from_encoded_dir
 
 
 @register("claude_code")
@@ -27,7 +28,11 @@ class ClaudeCodeAdapter(BaseAdapter):
     session_store_path = Path.home() / ".claude" / "projects"
 
     def derive_project_slug(self, jsonl_path: Path) -> str:
-        """Strip the '-Users-...-production-draft-' prefix from the project dir name."""
+        """Strip the '-Users-...-production-draft-' prefix from the project dir name.
+
+        Shares ``slugs.project_slug_from_encoded_dir`` with MCP caller
+        attribution (#51) so a project gets the same slug whether it was
+        reached through ingestion or through telemetry."""
         store = Path(self.session_store_path).expanduser()
         try:
             rel = jsonl_path.relative_to(store)
@@ -35,16 +40,7 @@ class ClaudeCodeAdapter(BaseAdapter):
             return jsonl_path.parent.name
         if not rel.parts:
             return jsonl_path.parent.name
-        project_dir = rel.parts[0]
-        parts = project_dir.lstrip("-").split("-")
-        # Find a recognizable split point — anything after 'draft', 'production', or 'Desktop'
-        for marker in ("draft", "production", "Desktop"):
-            if marker in parts:
-                idx = len(parts) - 1 - parts[::-1].index(marker)
-                tail = parts[idx + 1 :]
-                if tail:
-                    return "-".join(tail)
-        return "-".join(parts[-2:]) if len(parts) >= 2 else project_dir
+        return project_slug_from_encoded_dir(rel.parts[0])
 
     def is_subagent(self, jsonl_path: Path) -> bool:
         """Detect Claude Code sub-agent runs by canonical path layout (#406).

@@ -250,8 +250,27 @@ per-process files mean zero write contention and no lock on the hot path;
 telemetry never touches `llmwiki-state.json`. Each record carries `tool`,
 `query`, `hits` (`0` = a knowledge gap or noise; `null` = the tool can't
 report a count), `resp_bytes`, `duration_ms`, `caller_project`,
-`server_pid`, `server_started`. Writes are best-effort — a telemetry
-failure never breaks a tool call. Opt out with `LLMWIKI_MCP_TELEMETRY=0`.
+`caller_source`, `server_pid`, `server_started`. Writes are best-effort — a
+telemetry failure never breaks a tool call. Opt out with
+`LLMWIKI_MCP_TELEMETRY=0`.
+
+**Caller attribution.** `caller_project` is resolved per call and
+`caller_source` says where it came from:
+
+| `caller_source` | Meaning |
+|---|---|
+| `client-root` | The client's own workspace directory, obtained via an MCP `roots/list` request. Attributed to the first root when a client reports several. |
+| `path` | A path argument carrying the caller's working directory encoded into one segment (`…/-home-dev-code-my-app/…`), used for clients that don't support roots. |
+| `unattributed` | No caller-scoped signal — `caller_project` is `unknown`. |
+
+Unattributed calls are counted in the totals but never presented as a
+project: they print as `(unattributed)` here and are excluded from the
+site's "Heaviest project by MCP usage" card. Records written by an earlier
+version carry no `caller_source` and are read as unattributed regardless of
+the project name they hold, because that name is the server process's own
+working directory rather than the caller's. The same applies to a
+`usage/rollup.json` written before this change — the raw records behind it
+are already deleted, so its labels are retracted rather than recomputed.
 
 Scope is MCP calls only — `file://` static-site browsing stays untracked.
 

@@ -25,13 +25,36 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import tempfile
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, Iterable, Iterator
+from urllib.parse import unquote, urlparse
+
+from llmwiki.slugs import project_slug_from_encoded_dir
 
 USAGE_DIRNAME = "usage"
 ROLLUP_NAME = "rollup.json"
+
+# ─── Caller attribution (#51) ─────────────────────────────────────────────
+# The bucket a call lands in when nothing caller-scoped was available. It is
+# never rendered as a project — see build.render_mcp_heaviest_card.
+UNATTRIBUTED = "unknown"
+# Where a record's attribution came from. Records written before #51 carry no
+# source at all and are folded into UNATTRIBUTED at aggregation time: their
+# project name is the server's own cwd, not the caller's.
+CALLER_CLIENT_ROOT = "client-root"
+CALLER_PATH = "path"
+CALLER_UNATTRIBUTED = "unattributed"
+_TRUSTED_CALLER_SOURCES = frozenset({CALLER_CLIENT_ROOT, CALLER_PATH})
+# Bumped when the meaning of an aggregate's project labels changes; a rollup
+# without it predates per-call attribution and cannot be trusted.
+ATTRIBUTION_VERSION = 1
+
+# Tool arguments that may carry the caller's own working directory.
+_CALLER_PATH_KEYS = ("path",)
+_UNSAFE_SLUG_CHARS = re.compile(r"[^A-Za-z0-9._-]+")
 # Only the primary user-supplied argument is recorded, capped so a record
 # stays well under PIPE_BUF — keeps lines tiny and never leaks large blobs.
 QUERY_MAX_CHARS = 200
@@ -64,15 +87,90 @@ def _fs_safe(stamp: str) -> str:
     return stamp.replace(":", "-")
 
 
-def detect_caller_project() -> str:
-    """stdio MCP servers inherit the client session's working directory, so
-    ``os.getcwd()`` captured once at server start is a workable project
-    attribution. Fall back to ``"unknown"``."""
-    try:
-        name = os.path.basename(os.getcwd())
-    except OSError:
-        return "unknown"
-    return name or "unknown"
+def project_from_client_root(root: str) -> str | None:
+    """Project slug for one MCP root (``file:///home/dev/code/my-app``).
+
+    The client reports its own workspace directories, so the basename is the
+    caller's project by construction. Case is preserved — these slugs are
+    matched against project pages built from session frontmatter."""
+    if not isinstance(root, str) or not root.strip():
+        return None
+    text = root.strip()
+    if "://" in text:
+        parsed = urlparse(text)
+        if parsed.scheme not in ("file", ""):
+            return None  # a non-filesystem root tells us nothing about a project
+        text = unquote(parsed.path)
+    name = PurePosixPath(text.replace("\\", "/").rstrip("/")).name
+    safe = _UNSAFE_SLUG_CHARS.sub("-", name).strip("-")
+    return safe or None
+
+
+def project_from_path(value: str, content_root: Path | None) -> str | None:
+    """Project slug for a path argument, or ``None`` when the path says
+    nothing about *who called*.
+
+    Only paths that carry the caller's own working directory count. Agent
+    tooling encodes that directory into a single path segment
+    (``/tmp/…/-home-dev-code-my-app/<session>/scratchpad/note.md``,
+    ``~/.claude/projects/-home-dev-code-my-app/<session>.jsonl``), which is
+    the signal read here.
+
+    A path *inside* the wiki — ``wiki/sources/my-app/…`` — names the
+    **subject** of a call, not its caller. Attributing on subject would make
+    every retrieval look same-project and erase exactly the cross-project
+    signal this telemetry exists to measure, so those return ``None``."""
+    if not isinstance(value, str) or not value.strip():
+        return None
+    p = Path(value.strip()).expanduser()
+    if not p.is_absolute():
+        return None  # relative → resolved against the wiki, i.e. subject
+    if content_root is not None:
+        try:
+            if p.resolve().is_relative_to(Path(content_root).resolve()):
+                return None
+        except OSError:
+            return None
+    for part in p.parts:
+        if _looks_cwd_encoded(part):
+            return project_slug_from_encoded_dir(part) or None
+    return None
+
+
+def _looks_cwd_encoded(segment: str) -> bool:
+    """A cwd flattened into one segment: leading separator-turned-hyphen plus
+    at least a couple more path components (``-home-dev-code-my-app``)."""
+    return segment.startswith("-") and segment.count("-") >= 3
+
+
+def resolve_caller(
+    args: dict[str, Any],
+    *,
+    client_roots: Iterable[str] = (),
+    content_root: Path | None = None,
+) -> tuple[str, str]:
+    """Resolve ``(project, source)`` for one tool call, best signal first.
+
+    1. **MCP roots** — the client's own workspace directories, obtained via a
+       ``roots/list`` request. This is the only signal that answers "who
+       called"; a client reporting several roots is attributed to the first.
+    2. **A cwd-encoded path argument** — a per-call hint for clients that
+       don't speak the roots protocol.
+    3. **Nothing** — ``("unknown", "unattributed")``.
+
+    The server's own ``os.getcwd()`` is deliberately absent: a server started
+    from a fixed directory (or serving several sessions over its lifetime)
+    has no relation to the caller's project, and stamping its name on a
+    record publishes a guess as a fact (#51)."""
+    for root in client_roots:
+        name = project_from_client_root(root)
+        if name:
+            return name, CALLER_CLIENT_ROOT
+    for key in _CALLER_PATH_KEYS:
+        name = project_from_path(args.get(key), content_root)  # type: ignore[arg-type]
+        if name:
+            return name, CALLER_PATH
+    return UNATTRIBUTED, CALLER_UNATTRIBUTED
 
 
 def extract_query(args: dict[str, Any]) -> str | None:
@@ -95,14 +193,12 @@ class UsageRecorder:
         self,
         content_root: Path,
         *,
-        caller_project: str | None = None,
         pid: int | None = None,
         started: str | None = None,
     ) -> None:
         self.dir = usage_dir(content_root)
         self.pid = pid if pid is not None else os.getpid()
         self.started = started or _iso_now()
-        self.caller_project = caller_project or detect_caller_project()
         self.path = self.dir / f"mcp-{self.pid}-{_fs_safe(self.started)}.jsonl"
 
     def record(
@@ -114,7 +210,12 @@ class UsageRecorder:
         resp_bytes: int = 0,
         duration_ms: int = 0,
         ts: str | None = None,
+        caller_project: str | None = None,
+        caller_source: str | None = None,
     ) -> None:
+        """Append one call. Attribution is a *per-call* argument: one process
+        serves many sessions over its lifetime, so a value fixed at
+        construction cannot tell them apart (#51)."""
         record = {
             "ts": ts or _iso_now(),
             "tool": tool,
@@ -122,7 +223,8 @@ class UsageRecorder:
             "hits": hits,
             "resp_bytes": int(resp_bytes),
             "duration_ms": int(duration_ms),
-            "caller_project": self.caller_project,
+            "caller_project": caller_project or UNATTRIBUTED,
+            "caller_source": caller_source or CALLER_UNATTRIBUTED,
             "server_pid": self.pid,
             "server_started": self.started,
         }
@@ -187,9 +289,22 @@ def _finalize_rates(totals: dict[str, Any]) -> dict[str, Any]:
     return totals
 
 
+def attributed_project(record: dict[str, Any]) -> str:
+    """The project a record may be counted against.
+
+    A record only keeps its ``caller_project`` when it also says where that
+    name came from and the source is caller-scoped. Records written before
+    #51 carry no ``caller_source``: their project name is the server
+    process's own working directory, so counting them under it would
+    republish the bug's output as fact."""
+    if record.get("caller_source") in _TRUSTED_CALLER_SOURCES:
+        return str(record.get("caller_project") or UNATTRIBUTED)
+    return UNATTRIBUTED
+
+
 def aggregate(records: Iterable[dict[str, Any]]) -> dict[str, Any]:
     """Fold raw records into totals: calls + bytes + zero-hit counts per
-    tool and per caller_project.
+    tool and per attributed caller project.
 
     ``hits == 0`` is the signal that matters — a zero-hit call is a
     knowledge gap or noise (raw material for ``/wiki-reflect``). A missing
@@ -200,7 +315,7 @@ def aggregate(records: Iterable[dict[str, Any]]) -> dict[str, Any]:
     proc_sets: dict[str, set] = {}
     for r in records:
         tool = r.get("tool") or "unknown"
-        project = r.get("caller_project") or "unknown"
+        project = attributed_project(r)
         resp_bytes = int(r.get("resp_bytes") or 0)
         hits = r.get("hits")
 
@@ -304,7 +419,35 @@ def load_rollup(content_root: Path) -> dict[str, Any]:
     out = merge_aggregates(_empty_totals(), data)
     out["folded_files"] = [
         str(x) for x in data.get("folded_files", []) if isinstance(x, str)]
+    version = data.get("attribution_version")
+    if not isinstance(version, int) or version < ATTRIBUTION_VERSION:
+        # Compaction deletes the raw records, so this rollup is the only
+        # surviving copy of totals that were mis-attributed when written —
+        # the labels can't be recomputed, only retracted (#51).
+        _collapse_to_unattributed(out)
+    out["attribution_version"] = ATTRIBUTION_VERSION
     return out
+
+
+def _collapse_to_unattributed(totals: dict[str, Any]) -> None:
+    """Relabel every per-project total as unattributed, in place. Call counts
+    and item counts are unaffected — only the project they were filed under."""
+    if totals["per_project"]:
+        merged = {"calls": 0, "resp_bytes": 0, "items_returned": 0,
+                  "server_processes": 0}
+        for stats in totals["per_project"].values():
+            for key in merged:
+                merged[key] += int(stats.get(key, 0) or 0)
+        totals["per_project"] = {UNATTRIBUTED: merged}
+    if totals["per_project_tool"]:
+        merged_tools: dict[str, dict[str, int]] = {}
+        for tools in totals["per_project_tool"].values():
+            for tool, stats in tools.items():
+                dst = merged_tools.setdefault(
+                    tool, {"calls": 0, "items_returned": 0})
+                dst["calls"] += int(stats.get("calls", 0) or 0)
+                dst["items_returned"] += int(stats.get("items_returned", 0) or 0)
+        totals["per_project_tool"] = {UNATTRIBUTED: merged_tools}
 
 
 def save_rollup(content_root: Path, data: dict[str, Any]) -> None:
@@ -373,6 +516,9 @@ def compact(content_root: Path, *, now_month: str | None = None) -> dict[str, An
         rollup = merge_aggregates(rollup, aggregate(iter_records_file(p)))
         folded.add(p.name)
         rollup["folded_files"] = sorted(folded)
+        # merge_aggregates only carries numeric totals; re-stamp the label
+        # semantics so the next load doesn't re-collapse already-clean data.
+        rollup["attribution_version"] = ATTRIBUTION_VERSION
         to_delete.append(p)
         newly_folded = True
 

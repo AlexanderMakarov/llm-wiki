@@ -410,6 +410,8 @@ def cmd_usage(args: argparse.Namespace) -> int:
 
 
 def _print_usage_report(consumption: dict[str, Any], cost: dict[str, Any]) -> None:
+    from llmwiki.usage import UNATTRIBUTED
+
     total_calls = consumption["total_calls"]
     print(f"MCP tool usage — {total_calls} calls, "
           f"{consumption['total_resp_bytes'] / 1024:.1f} KiB served")
@@ -422,10 +424,13 @@ def _print_usage_report(consumption: dict[str, Any], cost: dict[str, Any]) -> No
             print(f"  {tool:<22}{s['calls']:>7}"
                   f"{s['zero_hit_rate'] * 100:>9.0f}%{s['resp_bytes']:>12}")
         if consumption["per_project"]:
-            print("  by project:")
+            print("  by caller project:")
             for proj, s in sorted(consumption["per_project"].items(),
                                   key=lambda kv: kv[1]["calls"], reverse=True):
-                print(f"    {proj:<20}{s['calls']:>7} calls")
+                # The bucket for calls whose caller couldn't be identified is
+                # spelled out rather than printed as a project name (#51).
+                label = "(unattributed)" if proj == UNATTRIBUTED else proj
+                print(f"    {label:<20}{s['calls']:>7} calls")
 
     # Cost side: what it took to synthesize the data being consumed.
     ff = cost["full_force_usd"]
