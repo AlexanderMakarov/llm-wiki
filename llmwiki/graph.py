@@ -583,6 +583,7 @@ __SITE_NAV__
   </div>
 </div>
 </main>
+__SITE_PALETTE__
 <!-- #456: load the site's script.js so the nav's command palette,
      theme toggle, and keyboard shortcuts (g h / g p / g s / / / ?) work
      here too. The site's theme handler reads & writes the same
@@ -1151,12 +1152,16 @@ def write_html(graph: dict[str, Any], out_path: Path) -> None:
     # #456: inject the site's standard nav so graph.html isn't a navigation
     # dead end. Imported lazily to avoid a top-level circular dependency
     # (build.py imports graph.copy_to_site).
-    from llmwiki.build import nav_bar
+    from llmwiki.build import nav_bar, search_palette_markup
     site_nav_html = nav_bar(active="graph", link_prefix="")
+    # The nav renders a search button and script.js binds Cmd+K, but both
+    # no-op unless the dialog they open is on the page too — graph.html
+    # shipped the button without the dialog until this was wired up.
     html = (
         HTML_TEMPLATE
         .replace("__GRAPH_JSON__", payload)
         .replace("__SITE_NAV__", site_nav_html)
+        .replace("__SITE_PALETTE__", search_palette_markup(js_prefix=""))
     )
     out_path.write_text(html, encoding="utf-8")
 

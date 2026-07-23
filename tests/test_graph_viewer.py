@@ -210,13 +210,15 @@ def test_write_html_escapes_closing_script_tag(tmp_path: Path):
     out = tmp_path / "g.html"
     write_html(g, out)
     text = out.read_text(encoding="utf-8")
-    # Four real </script> tags exist in the rendered output now: the
+    # Five real </script> tags exist in the rendered output now: the
     # #477 pre-paint inline block in <head>, the CDN loader, the
+    # search-index globals that come with the shared palette markup
+    # (#20 — the nav's search button needs the dialog it opens), the
     # site script.js loader (#456 — graph isn't a dead end anymore),
-    # and the main inline graph script. A fifth would mean the
+    # and the main inline graph script. A sixth would mean the
     # </script> inside the label injected out of the payload — catch
     # that.
-    assert text.count("</script>") == 4
+    assert text.count("</script>") == 5
     # And the escaped form should be present inside the JSON payload.
     assert "<\\/script>" in text
 

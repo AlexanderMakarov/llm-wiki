@@ -196,6 +196,46 @@ def test_palette_distinguishes_broken_index_from_empty_corpus():
     assert "palette-note" in JS
 
 
+# ─── the search button must open something on every page that shows it ─────
+
+
+def test_graph_page_ships_the_palette_it_advertises():
+    """graph.html renders the nav's search button and loads script.js, but
+    carried no dialog for them to open — Cmd+K and the button both no-opped."""
+    from llmwiki.graph import HTML_TEMPLATE
+
+    assert "__SITE_PALETTE__" in HTML_TEMPLATE
+
+
+def test_graph_html_renders_palette_and_index_globals(tmp_path: Path):
+    from llmwiki.graph import write_html
+
+    out = tmp_path / "graph.html"
+    write_html({"nodes": [{"id": "a", "label": "A", "type": "topic"}], "edges": []}, out)
+    html = out.read_text(encoding="utf-8")
+
+    for probe in ['id="palette"', 'id="palette-input"', 'id="palette-results"',
+                  'id="open-palette"', "LLMWIKI_INDEX_JS_URL"]:
+        assert probe in html, f"graph.html missing {probe}"
+    assert "__SITE_PALETTE__" not in html, "placeholder left unsubstituted"
+
+
+def test_graph_html_does_not_double_load_script_js(tmp_path: Path):
+    """Two <script src="script.js"> tags would double-bind every listener."""
+    from llmwiki.graph import write_html
+
+    out = tmp_path / "graph.html"
+    write_html({"nodes": [{"id": "a", "label": "A", "type": "topic"}], "edges": []}, out)
+    assert out.read_text(encoding="utf-8").count('src="script.js"') == 1
+
+
+def test_palette_markup_is_shared_not_duplicated():
+    """One source for the dialog, so the two pages can't drift apart."""
+    from llmwiki.build import page_foot, search_palette_markup
+
+    assert search_palette_markup("") in page_foot("")
+
+
 def test_palette_note_is_styled():
     """The note must be visible, not inherit a result-row layout."""
     from llmwiki.render.css import CSS
