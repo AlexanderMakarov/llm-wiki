@@ -25,14 +25,13 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import tempfile
 from datetime import datetime, timezone
-from pathlib import Path, PurePosixPath
-from typing import Any, Iterable, Iterator
+from pathlib import Path
+from typing import Any, Iterable, Iterator, Mapping
 from urllib.parse import unquote, urlparse
 
-from llmwiki.slugs import project_slug_from_encoded_dir
+from llmwiki.slugs import project_slug_from_abs_path, project_slug_from_encoded_dir
 
 USAGE_DIRNAME = "usage"
 ROLLUP_NAME = "rollup.json"
@@ -44,17 +43,23 @@ UNATTRIBUTED = "unknown"
 # Where a record's attribution came from. Records written before #51 carry no
 # source at all and are folded into UNATTRIBUTED at aggregation time: their
 # project name is the server's own cwd, not the caller's.
+CALLER_PROJECT_DIR = "project-dir-env"
 CALLER_CLIENT_ROOT = "client-root"
 CALLER_PATH = "path"
 CALLER_UNATTRIBUTED = "unattributed"
-_TRUSTED_CALLER_SOURCES = frozenset({CALLER_CLIENT_ROOT, CALLER_PATH})
+_TRUSTED_CALLER_SOURCES = frozenset(
+    {CALLER_PROJECT_DIR, CALLER_CLIENT_ROOT, CALLER_PATH})
+# Env vars an agentic client auto-injects with the caller's workspace path.
+# CLAUDE_PROJECT_DIR is set by Claude Code (>= v2.1.139) into every stdio MCP
+# server — zero user config, and since Claude Code spawns one server per
+# session, it is a stable per-caller signal for that server's whole life.
+_PROJECT_DIR_ENV_KEYS = ("CLAUDE_PROJECT_DIR",)
 # Bumped when the meaning of an aggregate's project labels changes; a rollup
 # without it predates per-call attribution and cannot be trusted.
 ATTRIBUTION_VERSION = 1
 
 # Tool arguments that may carry the caller's own working directory.
 _CALLER_PATH_KEYS = ("path",)
-_UNSAFE_SLUG_CHARS = re.compile(r"[^A-Za-z0-9._-]+")
 # Only the primary user-supplied argument is recorded, capped so a record
 # stays well under PIPE_BUF — keeps lines tiny and never leaks large blobs.
 QUERY_MAX_CHARS = 200
@@ -90,9 +95,11 @@ def _fs_safe(stamp: str) -> str:
 def project_from_client_root(root: str) -> str | None:
     """Project slug for one MCP root (``file:///home/dev/code/my-app``).
 
-    The client reports its own workspace directories, so the basename is the
-    caller's project by construction. Case is preserved — these slugs are
-    matched against project pages built from session frontmatter."""
+    The client reports its own workspace directory, so the path is the
+    caller's project by construction. Derived through the shared
+    ``project_slug_from_abs_path`` so it matches the slug the ingestion
+    adapter assigns the same project (#36) — not the bare basename, which
+    diverges for single-word project names."""
     if not isinstance(root, str) or not root.strip():
         return None
     text = root.strip()
@@ -101,9 +108,7 @@ def project_from_client_root(root: str) -> str | None:
         if parsed.scheme not in ("file", ""):
             return None  # a non-filesystem root tells us nothing about a project
         text = unquote(parsed.path)
-    name = PurePosixPath(text.replace("\\", "/").rstrip("/")).name
-    safe = _UNSAFE_SLUG_CHARS.sub("-", name).strip("-")
-    return safe or None
+    return project_slug_from_abs_path(text) or None
 
 
 def project_from_path(value: str, content_root: Path | None) -> str | None:
@@ -147,21 +152,35 @@ def resolve_caller(
     args: dict[str, Any],
     *,
     client_roots: Iterable[str] = (),
+    env: Mapping[str, str] | None = None,
     content_root: Path | None = None,
 ) -> tuple[str, str]:
     """Resolve ``(project, source)`` for one tool call, best signal first.
 
-    1. **MCP roots** — the client's own workspace directories, obtained via a
-       ``roots/list`` request. This is the only signal that answers "who
-       called"; a client reporting several roots is attributed to the first.
-    2. **A cwd-encoded path argument** — a per-call hint for clients that
-       don't speak the roots protocol.
-    3. **Nothing** — ``("unknown", "unattributed")``.
+    1. **Auto-injected workspace env** — the path a client sets into the
+       server's environment (``CLAUDE_PROJECT_DIR``). Zero user config, no
+       round-trip, and — because such clients spawn one server per session —
+       a stable per-caller signal available at the very first call.
+    2. **MCP roots** — the client's own workspace directories, obtained via a
+       ``roots/list`` request; the standard fallback for compliant clients.
+       A client reporting several roots is attributed to the first.
+    3. **A cwd-encoded path argument** — a per-call hint for clients that
+       offer neither of the above.
+    4. **Nothing** — ``("unknown", "unattributed")``.
 
-    The server's own ``os.getcwd()`` is deliberately absent: a server started
-    from a fixed directory (or serving several sessions over its lifetime)
-    has no relation to the caller's project, and stamping its name on a
-    record publishes a guess as a fact (#51)."""
+    The server's own ``os.getcwd()`` is deliberately absent: a client may
+    launch the server anywhere (Claude Code's desktop app uses ``$HOME``, and
+    a fixed-dir install uses that dir), so it is unrelated to the caller's
+    project — stamping its name on a record publishes a guess as a fact
+    (#51). ``env`` defaults to ``os.environ``; read per call so nothing is
+    frozen at construction."""
+    environ = os.environ if env is None else env
+    for key in _PROJECT_DIR_ENV_KEYS:
+        value = environ.get(key)
+        if isinstance(value, str) and value.strip():
+            name = project_slug_from_abs_path(value.strip())
+            if name:
+                return name, CALLER_PROJECT_DIR
     for root in client_roots:
         name = project_from_client_root(root)
         if name:

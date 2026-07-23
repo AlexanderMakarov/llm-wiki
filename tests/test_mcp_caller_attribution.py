@@ -13,8 +13,18 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from llmwiki import usage
 from llmwiki.mcp import server as mcp_server
+
+
+@pytest.fixture(autouse=True)
+def _clear_ambient_project_dir(monkeypatch):
+    """Tests run by a dev inside a Claude Code session inherit a real
+    CLAUDE_PROJECT_DIR; clear it so a call that means to exercise the roots or
+    path branch isn't silently answered by the env branch first."""
+    monkeypatch.delenv("CLAUDE_PROJECT_DIR", raising=False)
 
 
 def _read_lines(p: Path) -> list[dict]:
@@ -36,6 +46,53 @@ def test_client_root_uri_names_the_caller_project(tmp_path: Path):
         {}, client_roots=["file:///home/dev/code/armenian-words"],
         content_root=tmp_path)
     assert (project, source) == ("armenian-words", usage.CALLER_CLIENT_ROOT)
+
+
+def test_client_root_slug_matches_the_project_page_slug(tmp_path: Path):
+    """#36 reconciliation: a single-word project's slug carries its parent
+    segment (``code-webapp``) exactly as the ingestion adapter derives it, so
+    telemetry keys onto the project's own page instead of a basename that
+    never matches."""
+    from llmwiki.adapters.claude_code import ClaudeCodeAdapter
+    project, _ = usage.resolve_caller(
+        {}, client_roots=["file:///Users/alice/code/webapp"], content_root=tmp_path)
+    adapter = ClaudeCodeAdapter()
+    encoded = adapter.session_store_path / "-Users-alice-code-webapp" / "s.jsonl"
+    assert project == adapter.derive_project_slug(encoded) == "code-webapp"
+
+
+def test_claude_project_dir_env_is_the_top_signal(tmp_path: Path):
+    """The workspace path Claude Code auto-injects (v2.1.139+) is the most
+    direct project identity there is — available synchronously at the first
+    call, no roots round-trip — so it wins."""
+    project, source = usage.resolve_caller(
+        {}, client_roots=["file:///home/dev/code/other"],
+        env={"CLAUDE_PROJECT_DIR": "/Users/alice/code/webapp"},
+        content_root=tmp_path)
+    assert (project, source) == ("code-webapp", usage.CALLER_PROJECT_DIR)
+
+
+def test_claude_project_dir_env_outranks_a_path_argument(tmp_path: Path):
+    project, source = usage.resolve_caller(
+        {"path": "/tmp/-home-dev-code-project-a/s/scratchpad/n.md"},
+        env={"CLAUDE_PROJECT_DIR": "/home/dev/code/project-b"},
+        content_root=tmp_path)
+    assert (project, source) == ("project-b", usage.CALLER_PROJECT_DIR)
+
+
+def test_blank_claude_project_dir_env_is_ignored(tmp_path: Path):
+    project, source = usage.resolve_caller(
+        {}, client_roots=["file:///home/dev/code/project-a"],
+        env={"CLAUDE_PROJECT_DIR": "   "}, content_root=tmp_path)
+    assert (project, source) == ("project-a", usage.CALLER_CLIENT_ROOT)
+
+
+def test_project_dir_env_is_a_trusted_attribution_source():
+    totals = usage.aggregate([
+        {"tool": "wiki_query", "caller_project": "code-webapp",
+         "caller_source": usage.CALLER_PROJECT_DIR, "hits": 1},
+    ])
+    assert totals["per_project"]["code-webapp"]["calls"] == 1
 
 
 def test_percent_encoded_client_root_is_decoded(tmp_path: Path):
@@ -101,10 +158,10 @@ def test_no_caller_signal_never_falls_back_to_server_cwd(tmp_path: Path, monkeyp
 
 def test_first_client_root_wins_when_several_are_reported(tmp_path: Path):
     project, _ = usage.resolve_caller(
-        {}, client_roots=["file:///home/dev/code/first",
-                          "file:///home/dev/code/second"],
+        {}, client_roots=["file:///home/dev/code/first-svc",
+                          "file:///home/dev/code/second-svc"],
         content_root=tmp_path)
-    assert project == "first"
+    assert project == "first-svc"
 
 
 # ─── Recorder ─────────────────────────────────────────────────────────────

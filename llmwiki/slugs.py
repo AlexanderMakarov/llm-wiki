@@ -67,6 +67,21 @@ def project_slug_from_encoded_dir(name: str) -> str:
     return "-".join(parts[-2:]) if len(parts) >= 2 else name
 
 
+def project_slug_from_abs_path(path: str) -> str:
+    """Project slug for an absolute filesystem path.
+
+    Reproduces the session store's dash-encoded directory form — Claude Code
+    names each project dir by flattening its absolute path, separators to
+    dashes (``/Users/u/code/app`` → ``-Users-u-code-app``) — then reuses the
+    one decoder, so a project resolves to a single slug whether it arrived
+    through ingestion (`derive_project_slug`) or through live MCP attribution
+    (#51, #36). Windows separators and spaces fold to the same dash so a
+    workspace path and its stored form never diverge."""
+    norm = str(path).replace("\\", "/").rstrip("/")
+    encoded = re.sub(r"[^A-Za-z0-9]+", "-", norm)
+    return project_slug_from_encoded_dir(encoded)
+
+
 def strip_site_suffix(title: str) -> str:
     """Drop one trailing site-name segment ("X - Site" → "X"); collapse
     exact repeats ("OpenClaw - OpenClaw" → "OpenClaw")."""

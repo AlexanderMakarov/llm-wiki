@@ -259,9 +259,24 @@ telemetry failure never breaks a tool call. Opt out with
 
 | `caller_source` | Meaning |
 |---|---|
+| `project-dir-env` | The workspace path a client auto-injects into the server's environment. **Claude Code** sets `CLAUDE_PROJECT_DIR` (≥ v2.1.139) into every stdio MCP server — zero config — and spawns one server per session, so it is a stable per-caller signal available at the first call. |
 | `client-root` | The client's own workspace directory, obtained via an MCP `roots/list` request. Attributed to the first root when a client reports several. |
-| `path` | A path argument carrying the caller's working directory encoded into one segment (`…/-home-dev-code-my-app/…`), used for clients that don't support roots. |
+| `path` | A path argument carrying the caller's working directory encoded into one segment (`…/-home-dev-code-my-app/…`), used for clients that offer neither of the above. |
 | `unattributed` | No caller-scoped signal — `caller_project` is `unknown`. |
+
+They are tried in that order. All three project sources feed one shared
+`slugs.project_slug_from_abs_path`, so a project resolves to the same slug
+whether it arrived through telemetry or through session ingestion (and thus
+keys onto its own project page).
+
+**Client coverage.** Claude Code attributes every call with no setup, via
+`CLAUDE_PROJECT_DIR`. **Cursor** currently provides no zero-config signal —
+it advertises the `roots` capability but returns `Method not found` on the
+actual `roots/list` call, and injects no workspace env var — so its calls
+fall to the path heuristic where a path argument is present, else
+`unknown`, until it ships a fix. The server's own `os.getcwd()` is never
+used: a client may launch the server anywhere (Claude Code's desktop app
+uses `$HOME`), so it is unrelated to the caller's project.
 
 Unattributed calls are counted in the totals but never presented as a
 project: they print as `(unattributed)` here and are excluded from the
