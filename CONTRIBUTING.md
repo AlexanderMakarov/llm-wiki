@@ -46,8 +46,8 @@ python3 -m pytest tests/ -q
 
 Requirements:
 
-- Python ≥ 3.9
-- `markdown` (required — the only runtime dep)
+- Python ≥ 3.12 (`requires-python` in `pyproject.toml`; CI runs 3.12 + 3.13)
+- `markdown` (required — the only runtime dep; `graph` is an optional extra)
 - `ruff` (dev — lint)
 - `pytest` (dev — tests)
 
@@ -59,12 +59,13 @@ See [docs/architecture.md](docs/architecture.md) for the full breakdown. TL;DR:
 
 ```
 llmwiki/              # Python package
-├── cli.py            # argparse entry (init/sync/build/serve/adapters/version)
+├── cli.py            # argparse entry (19 subcommands — `llmwiki --help`)
 ├── convert.py        # .jsonl → markdown
 ├── build.py          # markdown → HTML (god-level UI)
+├── render/           # emitted site assets (css.py, js.py, data.py)
 ├── serve.py          # localhost HTTP server
 ├── adapters/         # session-store adapters (one per agent)
-└── mcp/              # MCP server (7 production tools, stdio transport)
+└── mcp/              # MCP server (13 tools, stdio transport)
 
 .claude/              # Claude Code plugin surface
 .claude-plugin/       # plugin.json + marketplace.json
@@ -106,9 +107,9 @@ Conventional Commits. Types we accept:
 
 Optionally scope with a version: `feat(v0.8): tool chart`. Include the issue number: `Closes #65` in the body.
 
-### PR body — 15-box pre-merge checklist
+### PR body — 16-box pre-merge checklist
 
-Every box must be checked (or have a one-line waiver). See [`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md) for the current list. Covers at minimum:
+Every box must be checked (or have a one-line waiver). [`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md) is the authoritative list; it covers:
 
 1. One intent (no mixing concerns)
 2. CI green
@@ -121,10 +122,11 @@ Every box must be checked (or have a one-line waiver). See [`.github/PULL_REQUES
 9. No real session data in `raw/` or fixtures
 10. No machine-specific paths or secrets
 11. Docs updated for user-visible changes
-12. **UI verified in light AND dark mode** (for CSS/UI changes) — screenshots attached
-13. **A11y verified** — keyboard nav, focus rings, WCAG 2.1 AA (≥ 4.5:1 contrast)
-14. Commits GPG-signed, no AI co-author trailers, atomic
-15. Reviewer has read every changed line (no rubber-stamping)
+12. Release notes drafted — one line fit for the next `gh release create --notes`
+13. **UI verified in light AND dark mode** (for CSS/UI changes) — screenshots attached
+14. **A11y verified** — keyboard nav, focus rings, WCAG 2.1 AA (≥ 4.5:1 contrast)
+15. Commits GPG-signed, no AI co-author trailers, atomic
+16. Reviewer has read every changed line (no rubber-stamping)
 
 ### Branch protection
 
@@ -184,37 +186,14 @@ are exempt.
 
 ## Static-site error handling
 
-The viewer is vanilla JS with no error boundary and no telemetry — if it swallows a failure, nobody ever finds out. #20 sat open for months because the search index returned an empty array on every error, so a completely broken index was pixel-identical to a corpus with no matches.
+The viewer is vanilla JS with no error boundary and no telemetry — a swallowed failure is one nobody ever hears about. #20 sat open for months because a broken search index and an empty corpus rendered identically. Rules for any JS the build emits (`llmwiki/render/js.py`):
 
-**Rules for any code in `llmwiki/render/js.py` (or any JS the build emits):**
-
-1. **No silent `catch`.** A `catch` that returns a default without reporting is a bug. This is banned:
-
-   ```js
-   .catch(function () { idx = []; return idx; })          // ✗ user sees nothing
-   ```
-
-   Do this instead:
-
-   ```js
-   .catch(function (e) {                                   // ✓
-     window.__llmwikiReportError("Search index failed to load", e);
-     idx = [];
-     return idx;
-   })
-   ```
-
-2. **Report through `window.__llmwikiReportError(context, err)`.** It writes to `console.error` *and* renders a dismissible `role="alert"` bar on the page, de-duplicated by message. `context` should name the user-facing capability that just broke ("Related pages unavailable"), not the internal function.
-
-3. **Distinguish "broken" from "empty" in the UI.** When a feature degrades, the surface that normally shows results must say which it is. The palette renders a `.palette-note` row for this — an empty result list must never be the only signal that loading failed.
-
-4. **Degrade partially where you can.** One missing search chunk drops that project's sessions and reports it; it does not abort the whole index. Report the partial state, don't hide it.
-
-5. **The error surface must not depend on what it reports.** `__llmwikiReportError` styles its bar inline rather than via `style.css`, so it still renders when the stylesheet is what failed.
-
-6. **Test the failure path.** A PR touching a load path needs a test asserting the error is reported — see `tests/test_file_protocol_search.py`.
-
-**Also: don't use `fetch` for build-emitted data.** Browsers block `fetch`/XHR against `file://`, and users do open the built site by double-clicking `index.html`. Emit a `.js` sidecar via `write_js_sidecar()` (`llmwiki/render/data.py`) and load it with `window.__llmwikiLoadData(url, key)`, which injects a `<script>` tag and works identically served and local.
+1. **No silent `catch`.** Report through `window.__llmwikiReportError(context, err)` — it logs *and* renders a dismissible `role="alert"` bar. Name the capability that broke ("Related pages unavailable"), not the function.
+2. **Say "broken", not "empty".** An empty result list must never be the only signal that loading failed; the palette renders a `.palette-note` row instead.
+3. **Degrade partially.** One missing search chunk drops that project and reports it rather than aborting the whole index.
+4. **Keep the error surface independent of what it reports.** The bar is styled inline, so it survives a broken stylesheet.
+5. **Test the failure path** — see `tests/test_file_protocol_search.py`.
+6. **Never `fetch` build-emitted data.** Blocked over `file://`, and users do double-click `index.html`. Emit a `.js` sidecar with `write_js_sidecar()` (`llmwiki/render/data.py`), load it via `window.__llmwikiLoadData(url, key)`.
 
 ## Privacy rules
 
@@ -244,14 +223,14 @@ Every adapter must ship with:
 
 ## Releases
 
-`v0.x` is pre-production. API, schema, and file layout may change.
+Current version is **1.4.0** — see `CHANGELOG.md` for what changed when.
 
 Release flow (Phase 6 of the framework):
 
-1. Bump version in `llmwiki/__init__.py`
+1. Bump `__version__` in `llmwiki/__init__.py` **and** `version` in `pyproject.toml` — they must match
 2. Update `CHANGELOG.md`
-3. `git tag v0.x.y && git push origin v0.x.y`
-4. Create a GitHub Release (mark pre-release for 0.x)
+3. `git tag v1.x.y && git push origin v1.x.y`
+4. Create a GitHub Release
 5. `.github/workflows/pages.yml` auto-deploys the demo site
 
 ## Questions?
