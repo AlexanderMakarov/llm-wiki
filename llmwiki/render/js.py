@@ -614,6 +614,95 @@ document.addEventListener("DOMContentLoaded", function () {
   });
 });
 
+// ─── Visible error reporting (#20) ─────────────────────────────────────
+// Runtime failures used to be swallowed by bare `.catch()` handlers, so a
+// broken search index looked exactly like a corpus with no matches. Anything
+// that fails at runtime now says so on the page, not just in the console.
+(function () {
+  var seen = {};
+  var listEl = null;
+
+  function bar() {
+    if (listEl) return listEl;
+    var wrap = document.createElement("div");
+    wrap.id = "llmwiki-errors";
+    wrap.setAttribute("role", "alert");
+    // Styled inline on purpose: an error surface must not depend on the
+    // stylesheet it might itself be reporting the failure of.
+    wrap.style.cssText = "position:fixed;left:0;right:0;bottom:0;z-index:9999;" +
+      "background:#7f1d1d;color:#fff;font:13px/1.5 ui-monospace,monospace;" +
+      "padding:10px 40px 10px 14px;max-height:40vh;overflow:auto;" +
+      "box-shadow:0 -2px 12px rgba(0,0,0,.4)";
+    listEl = document.createElement("div");
+    wrap.appendChild(listEl);
+    var close = document.createElement("button");
+    close.textContent = "×";
+    close.setAttribute("aria-label", "Dismiss errors");
+    close.style.cssText = "position:absolute;top:6px;right:10px;background:none;" +
+      "border:0;color:#fff;font-size:20px;cursor:pointer;line-height:1";
+    close.addEventListener("click", function () { wrap.remove(); listEl = null; seen = {}; });
+    wrap.appendChild(close);
+    (document.body || document.documentElement).appendChild(wrap);
+    return listEl;
+  }
+
+  window.__llmwikiReportError = function (context, err) {
+    var detail = err && err.message ? err.message : String(err || "unknown error");
+    var msg = context + " — " + detail;
+    if (seen[msg]) return;          // don't stack duplicates from retries
+    seen[msg] = true;
+    if (window.console && console.error) console.error("[llmwiki] " + msg);
+    try {
+      var row = document.createElement("div");
+      row.textContent = "⚠ " + msg;
+      bar().appendChild(row);
+    } catch (e) {
+      // DOM not ready (or unavailable) — the console line above still stands.
+    }
+  };
+})();
+
+// ─── Runtime data loader (#20) ─────────────────────────────────────────
+// Data is loaded by injecting <script src>, never by fetch(). Browsers block
+// fetch/XHR against file:// URLs, so a site opened straight from disk would
+// otherwise get an empty search index with no visible symptom. Script
+// execution *is* allowed on file://, so one code path covers served + local.
+(function () {
+  var pending = {};
+  window.llmwikiData = window.llmwikiData || {};
+
+  window.__llmwikiLoadData = function (url, key) {
+    if (window.llmwikiData[key] !== undefined) {
+      return Promise.resolve(window.llmwikiData[key]);
+    }
+    if (pending[key]) return pending[key];
+    pending[key] = new Promise(function (resolve, reject) {
+      var s = document.createElement("script");
+      s.src = url;
+      s.async = true;
+      s.onload = function () {
+        if (window.llmwikiData[key] === undefined) {
+          reject(new Error(url + " loaded but did not define " + key));
+        } else {
+          resolve(window.llmwikiData[key]);
+        }
+      };
+      s.onerror = function () { reject(new Error("could not load " + url)); };
+      (document.head || document.documentElement).appendChild(s);
+    });
+    return pending[key];
+  };
+
+  // Where the search payloads live. Prefer the explicit global the build
+  // emits; fall back to rewriting the .json URL so a page built before #20
+  // still resolves a sensible path.
+  window.__llmwikiIndexJsUrl = function () {
+    if (window.LLMWIKI_INDEX_JS_URL) return window.LLMWIKI_INDEX_JS_URL;
+    var json = window.LLMWIKI_INDEX_URL || "search-index.json";
+    return json.replace(/\.json$/, ".js");
+  };
+})();
+
 // ─── Command palette (Cmd+K) + search index loader ─────────────────────
 (function () {
   let idx = null;
@@ -621,17 +710,19 @@ document.addEventListener("DOMContentLoaded", function () {
   let metaEntries = null;  // project + page entries (loaded first, fast)
   let activeIdx = 0;
   let currentResults = [];
+  let idxFailed = false;   // index unreachable — every search is meaningless
+  let idxPartial = false;  // some chunks missing — results are incomplete
 
   // Lazy-chunked loader (#47): loads the small meta index first (projects +
-  // static pages), then fetches per-project session chunks in parallel on
-  // first demand. Backwards-compatible with the old flat-array format.
+  // static pages), then pulls per-project session chunks in parallel on first
+  // demand. Backwards-compatible with the old flat-array format. Data arrives
+  // via script injection rather than fetch so file:// works too (#20).
   function loadIndex() {
     if (idx) return Promise.resolve(idx);
     if (idxPromise) return idxPromise;
-    const url = window.LLMWIKI_INDEX_URL || "search-index.json";
-    const base = url.substring(0, url.lastIndexOf("/") + 1);
-    idxPromise = fetch(url)
-      .then(function (r) { return r.ok ? r.json() : []; })
+    const jsUrl = window.__llmwikiIndexJsUrl();
+    const base = jsUrl.substring(0, jsUrl.lastIndexOf("/") + 1);
+    idxPromise = window.__llmwikiLoadData(jsUrl, "search-index")
       .then(function (data) {
         // Old format: flat array → return as-is
         if (Array.isArray(data)) { idx = data; return idx; }
@@ -640,9 +731,16 @@ document.addEventListener("DOMContentLoaded", function () {
         var chunkUrls = data._chunks || [];
         if (!chunkUrls.length) { idx = metaEntries; return idx; }
         return Promise.all(chunkUrls.map(function (cu) {
-          return fetch(base + cu)
-            .then(function (r) { return r.ok ? r.json() : []; })
-            .catch(function () { return []; });
+          // The manifest lists .json paths; the executable twin sits beside
+          // it and is keyed by that same manifest path.
+          return window.__llmwikiLoadData(base + cu.replace(/\.json$/, ".js"), cu)
+            .catch(function (e) {
+              // One bad chunk degrades search rather than killing it — but
+              // the user is told the results are incomplete.
+              idxPartial = true;
+              window.__llmwikiReportError("Search chunk " + cu + " failed to load", e);
+              return [];
+            });
         })).then(function (chunks) {
           idx = metaEntries.slice();
           chunks.forEach(function (c) {
@@ -651,7 +749,12 @@ document.addEventListener("DOMContentLoaded", function () {
           return idx;
         });
       })
-      .catch(function () { idx = []; return idx; });
+      .catch(function (e) {
+        idxFailed = true;
+        window.__llmwikiReportError("Search index failed to load", e);
+        idx = [];
+        return idx;
+      });
     return idxPromise;
   }
   // Expose the shared loader so wikilink-preview + related-pages can reuse it
@@ -749,6 +852,15 @@ document.addEventListener("DOMContentLoaded", function () {
     if (!ul) return;
     currentResults = results;
     activeIdx = 0;
+    // #20: an unreachable index produces zero matches for every query, which
+    // is indistinguishable from an empty corpus. Say which one it is.
+    if (!results.length && (idxFailed || idxPartial)) {
+      ul.innerHTML = '<li class="palette-note">' + escapeHtml(idxFailed
+        ? "Search data could not be loaded — this page is broken, not empty."
+        : "No matches, but part of the search data failed to load.") + '</li>';
+      currentResults = [];
+      return;
+    }
     ul.innerHTML = results.map(function (r, i) {
       const meta = [r.project, r.date, r.model].filter(Boolean).join(" · ");
       return '<li data-i="' + i + '" class="' + (i === 0 ? 'active' : '') + '">' +
@@ -1120,14 +1232,16 @@ document.addEventListener("DOMContentLoaded", function () {
     if (window.__llmwikiLoadIndex) {
       return window.__llmwikiLoadIndex().then(function (data) { idx = data; return idx; });
     }
-    var url = window.LLMWIKI_INDEX_URL || "search-index.json";
-    return fetch(url)
-      .then(function (r) { return r.ok ? r.json() : []; })
+    return window.__llmwikiLoadData(window.__llmwikiIndexJsUrl(), "search-index")
       .then(function (data) {
         idx = Array.isArray(data) ? data : (data.entries || []);
         return idx;
       })
-      .catch(function () { idx = []; return idx; });
+      .catch(function (e) {
+        window.__llmwikiReportError("Wikilink previews unavailable", e);
+        idx = [];
+        return idx;
+      });
   }
 
   function findEntry(keyOrText) {
@@ -1342,10 +1456,13 @@ document.addEventListener("DOMContentLoaded", function () {
     // Reuse the shared chunked loader (#47) — includes session entries
     var loader = window.__llmwikiLoadIndex
       ? window.__llmwikiLoadIndex()
-      : fetch(window.LLMWIKI_INDEX_URL || "search-index.json")
-          .then(function (r) { return r.ok ? r.json() : []; })
+      : window.__llmwikiLoadData(window.__llmwikiIndexJsUrl(), "search-index")
           .then(function (d) { return Array.isArray(d) ? d : (d.entries || []); });
     loader
+      .catch(function (e) {
+        window.__llmwikiReportError("Related pages unavailable", e);
+        return [];
+      })
       .then(function (entries) {
         if (!entries || !entries.length) return;
         // Score each other session: same project = 2 pts, shared wikilink targets = +1 per token

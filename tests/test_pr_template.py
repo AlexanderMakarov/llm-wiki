@@ -105,9 +105,19 @@ def test_template_has_out_of_scope_section():
 # ─── CONTRIBUTING.md matches template ────────────────────────────────
 
 
-def test_contributing_documents_15_box_checklist():
+def test_contributing_documents_the_checklist_box_count():
+    """Derived from the template, not hardcoded — the literal "15-box" string
+    outlived the template growing a 16th box, so pin the two together."""
+    boxes = len([
+        ln for ln in TEMPLATE.read_text(encoding="utf-8").splitlines()
+        if ln.startswith("- [ ]")
+    ])
     text = CONTRIBUTING.read_text(encoding="utf-8")
-    assert "15-box pre-merge checklist" in text
+    assert f"{boxes}-box pre-merge checklist" in text, (
+        f"template has {boxes} boxes; CONTRIBUTING says otherwise"
+    )
+    # ...and the summary list under that heading enumerates all of them.
+    assert f"\n{boxes}. " in text, f"summary list doesn't reach item {boxes}"
 
 
 def test_contributing_lists_all_conventional_commit_types():

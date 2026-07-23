@@ -41,6 +41,8 @@ The static build writes these to `site/` on every `llmwiki build`:
 | `/graph.html` | HTML | Interactive vis-network graph (#118) |
 | `/search-index.json` | JSON | Top-level search index + facets + chunk manifest |
 | `/search-chunks/<project>.json` | JSON | Per-project search chunk (lazy-loaded) |
+| `/search-index.js` | JS | Same payload as `search-index.json`, assigned to `window.llmwikiData["search-index"]` (#20) |
+| `/search-chunks/<project>.js` | JS | Same payload as the sibling `.json`, keyed by its manifest path (#20) |
 | `/manifest.json` | JSON | Every file + SHA-256 + performance budget |
 | `/sitemap.xml` | XML | Standard sitemap with `lastmod` |
 | `/rss.xml` | XML | RSS 2.0 feed of newest sessions |

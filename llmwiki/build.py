@@ -872,38 +872,15 @@ def hero(
 """
 
 
-def page_foot(js_prefix: str = "") -> str:
-    built = (
-        f" · built {_BUILD_NOW.strftime('%Y-%m-%d %H:%M')} UTC" if _BUILD_NOW else ""
-    )
-    return f"""<footer class="footer">
-  <div class="container">
-    <p class="muted">llmwiki · <a href="{js_prefix}index.html">home</a> · press <kbd>?</kbd> for shortcuts{built}</p>
-  </div>
-</footer>
-<nav class="mobile-bottom-nav" aria-label="Mobile navigation">
-  <a href="{js_prefix}index.html" class="mbn-link" data-page="home">
-    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-    <span>Home</span>
-  </a>
-  <a href="{js_prefix}projects/index.html" class="mbn-link" data-page="projects">
-    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-    <span>Projects</span>
-  </a>
-  <a href="{js_prefix}sessions/index.html" class="mbn-link" data-page="sessions">
-    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
-    <span>Sessions</span>
-  </a>
-  <button type="button" class="mbn-link" id="mbn-search" aria-label="Search">
-    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-    <span>Search</span>
-  </button>
-  <button type="button" class="mbn-link" id="mbn-theme" aria-label="Toggle theme" aria-pressed="false">
-    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-    <span>Theme</span>
-  </button>
-</nav>
-<div id="palette" class="palette">
+def search_palette_markup(js_prefix: str = "") -> str:
+    """Command palette + shortcuts dialog + the search-data globals.
+
+    Shared so every page carrying the nav's search button also carries the
+    dialog that button opens. graph.html loads script.js for the palette
+    (#456) but injected only the nav, so the button and Cmd+K silently
+    no-opped on `#palette` being absent (#20 follow-up).
+    """
+    return f"""<div id="palette" class="palette">
   <div class="palette-backdrop" id="palette-backdrop"></div>
   <div class="palette-modal" role="dialog" aria-modal="true" aria-label="Command palette">
     <div class="palette-header">
@@ -948,8 +925,46 @@ def page_foot(js_prefix: str = "") -> str:
     <button class="btn" id="help-close">Close</button>
   </div>
 </div>
-<script src="{js_prefix}search-index.json" type="application/json" id="search-index-hint"></script>
-<script>window.LLMWIKI_INDEX_URL = "{js_prefix}search-index.json";</script>
+<script>
+  window.LLMWIKI_INDEX_URL = "{js_prefix}search-index.json";
+  // #20: the search data the page actually loads. Injected as a script tag on
+  // demand, which is the only channel that also works over file://.
+  window.LLMWIKI_INDEX_JS_URL = "{js_prefix}search-index.js";
+</script>"""
+
+
+def page_foot(js_prefix: str = "") -> str:
+    built = (
+        f" · built {_BUILD_NOW.strftime('%Y-%m-%d %H:%M')} UTC" if _BUILD_NOW else ""
+    )
+    return f"""<footer class="footer">
+  <div class="container">
+    <p class="muted">llmwiki · <a href="{js_prefix}index.html">home</a> · press <kbd>?</kbd> for shortcuts{built}</p>
+  </div>
+</footer>
+<nav class="mobile-bottom-nav" aria-label="Mobile navigation">
+  <a href="{js_prefix}index.html" class="mbn-link" data-page="home">
+    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+    <span>Home</span>
+  </a>
+  <a href="{js_prefix}projects/index.html" class="mbn-link" data-page="projects">
+    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+    <span>Projects</span>
+  </a>
+  <a href="{js_prefix}sessions/index.html" class="mbn-link" data-page="sessions">
+    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+    <span>Sessions</span>
+  </a>
+  <button type="button" class="mbn-link" id="mbn-search" aria-label="Search">
+    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+    <span>Search</span>
+  </button>
+  <button type="button" class="mbn-link" id="mbn-theme" aria-label="Toggle theme" aria-pressed="false">
+    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+    <span>Theme</span>
+  </button>
+</nav>
+{search_palette_markup(js_prefix)}
 <script src="{js_prefix}../llmwiki-state.js"></script>
 <script src="{HLJS_SCRIPT}" defer></script>
 <script>
@@ -2138,6 +2153,11 @@ def render_vs_section(
 
 # ─── search index ──────────────────────────────────────────────────────────
 
+# #20: search payloads are emitted as .js sidecars too, so the site works
+# when opened over file://. Re-exported for callers importing it from here.
+from llmwiki.render.data import write_js_sidecar  # noqa: E402
+
+
 def build_search_index(
     sources: list[tuple[Path, dict[str, Any], str]],
     groups: dict[str, list[tuple[Path, dict[str, Any], str]]],
@@ -2147,6 +2167,9 @@ def build_search_index(
     doc_files: Optional[list["raw_docs_site.RawDocFile"]] = None,
 ) -> Path:
     """Build a chunked search index for lazy loading (#47).
+
+    Each ``.json`` below is emitted a second time as a ``.js`` sidecar so the
+    site works when opened over ``file://`` — see :func:`write_js_sidecar`.
 
     Writes:
       search-index.json          — meta entries (projects + pages) + _chunks manifest
@@ -2194,7 +2217,11 @@ def build_search_index(
         chunk_path = chunks_dir / f"{project_slug}.json"
         data = json.dumps(entries, ensure_ascii=False)
         chunk_path.write_text(data, encoding="utf-8")
-        chunk_manifest.append(f"search-chunks/{project_slug}.json")
+        rel = f"search-chunks/{project_slug}.json"
+        # #20: keyed by its manifest path, which is the exact string the
+        # client already holds — no key-derivation rules to keep in sync.
+        write_js_sidecar(chunk_path, rel, data)
+        chunk_manifest.append(rel)
         total_chunk_bytes += len(data.encode("utf-8"))
 
     # ── meta index: projects + static pages + chunk manifest ──
@@ -2315,7 +2342,9 @@ def build_search_index(
         "_mode_badge": mode_badge,
     }
     out_path = out_dir / "search-index.json"
-    out_path.write_text(json.dumps(index_obj, ensure_ascii=False), encoding="utf-8")
+    index_json = json.dumps(index_obj, ensure_ascii=False)
+    out_path.write_text(index_json, encoding="utf-8")
+    write_js_sidecar(out_path, "search-index", index_json)
 
     meta_kb = len(json.dumps(index_obj).encode("utf-8")) // 1024
     chunks_kb = total_chunk_bytes // 1024
