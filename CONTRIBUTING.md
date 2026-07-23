@@ -12,6 +12,7 @@ Thanks for wanting to contribute. This project follows strict rules about commit
 - [Project structure](#project-structure)
 - [Commit + PR rules](#commit--pr-rules)
 - [Adding a new adapter](#adding-a-new-adapter)
+- [Static-site error handling](#static-site-error-handling)
 - [Privacy rules](#privacy-rules)
 - [Testing](#testing)
 - [Releases](#releases)
@@ -26,8 +27,9 @@ Thanks for wanting to contribute. This project follows strict rules about commit
 6. **Every PR ships docs + CHANGELOG + release-note bullet.** For every user-visible change update (a) `CHANGELOG.md` under `## [Unreleased]`, (b) any `docs/tutorials/*` / `docs/reference/*` / `README.md` / inline `--help` that describes the touched surface, and (c) a one-line release-note bullet either in the CHANGELOG entry or in the PR body so `gh release create` can pick it up. PRs adding a new CLI subcommand, slash command, config key, or lint rule MUST add the matching row to `docs/reference/*.md` in the same PR. CI enforces the CHANGELOG check; reviewers check the rest.
 7. **Verify old issues before fixing them.** Issues accumulate; some are fixed via side-effect, some describe problems that no longer reproduce, some refer to modules that have since been refactored. Before changing code for a stale issue: (a) reproduce the problem on current `master` — shell command, click-path, or test that fails; (b) re-read the issue's linked code paths to confirm they still exist. If the bug is gone, close with a one-line comment citing the commit that resolved it (`gh issue close N --reason completed --comment "resolved in <sha>"`); if the description is wrong but there's a real bug nearby, file a new precise issue and link to the old one. Never ship a speculative fix — if you can't reproduce, say so in the PR body.
 8. **Open an issue first** for anything bigger than a one-file fix. Keeps scope aligned.
+9. **Never fail silently in the browser.** Every runtime failure in the static site must be visible on the page, not just in the console — see [Static-site error handling](#static-site-error-handling).
 
-That's it. If you follow those eight rules your PR is 90% of the way through review.
+That's it. If you follow those nine rules your PR is 90% of the way through review.
 
 ## Code of conduct
 
@@ -179,6 +181,40 @@ are exempt.
 - [ ] `docs/adapters/<agent>.md` exists and is linked from README
 - [ ] Graceful degradation: unknown record types are skipped, not crashed on
 - [ ] No new runtime deps introduced
+
+## Static-site error handling
+
+The viewer is vanilla JS with no error boundary and no telemetry — if it swallows a failure, nobody ever finds out. #20 sat open for months because the search index returned an empty array on every error, so a completely broken index was pixel-identical to a corpus with no matches.
+
+**Rules for any code in `llmwiki/render/js.py` (or any JS the build emits):**
+
+1. **No silent `catch`.** A `catch` that returns a default without reporting is a bug. This is banned:
+
+   ```js
+   .catch(function () { idx = []; return idx; })          // ✗ user sees nothing
+   ```
+
+   Do this instead:
+
+   ```js
+   .catch(function (e) {                                   // ✓
+     window.__llmwikiReportError("Search index failed to load", e);
+     idx = [];
+     return idx;
+   })
+   ```
+
+2. **Report through `window.__llmwikiReportError(context, err)`.** It writes to `console.error` *and* renders a dismissible `role="alert"` bar on the page, de-duplicated by message. `context` should name the user-facing capability that just broke ("Related pages unavailable"), not the internal function.
+
+3. **Distinguish "broken" from "empty" in the UI.** When a feature degrades, the surface that normally shows results must say which it is. The palette renders a `.palette-note` row for this — an empty result list must never be the only signal that loading failed.
+
+4. **Degrade partially where you can.** One missing search chunk drops that project's sessions and reports it; it does not abort the whole index. Report the partial state, don't hide it.
+
+5. **The error surface must not depend on what it reports.** `__llmwikiReportError` styles its bar inline rather than via `style.css`, so it still renders when the stylesheet is what failed.
+
+6. **Test the failure path.** A PR touching a load path needs a test asserting the error is reported — see `tests/test_file_protocol_search.py`.
+
+**Also: don't use `fetch` for build-emitted data.** Browsers block `fetch`/XHR against `file://`, and users do open the built site by double-clicking `index.html`. Emit a `.js` sidecar via `write_js_sidecar()` (`llmwiki/render/data.py`) and load it with `window.__llmwikiLoadData(url, key)`, which injects a `<script>` tag and works identically served and local.
 
 ## Privacy rules
 

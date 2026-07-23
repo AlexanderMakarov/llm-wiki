@@ -387,6 +387,10 @@ kbd { display: inline-block; padding: 2px 6px; font-family: var(--mono); font-si
 .palette-results .result-title { font-weight: 500; font-size: 0.9rem; color: var(--text); }
 .palette-results .result-meta { font-size: 0.75rem; color: var(--text-muted); margin-top: 2px; }
 .palette-results .result-type { display: inline-block; padding: 1px 6px; background: var(--bg-code); border-radius: 3px; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.04em; margin-right: 6px; color: var(--accent); }
+/* #20: shown when the search data itself failed to load, so a broken index
+   doesn't masquerade as "no matches". Not selectable — it isn't a result. */
+.palette-results li.palette-note { cursor: default; border-left-color: #b91c1c; color: #b91c1c; font-size: 0.85rem; }
+.palette-results li.palette-note:hover { background: transparent; }
 .palette-footer { display: flex; gap: 16px; padding: 10px 16px; border-top: 1px solid var(--border); font-size: 0.75rem; background: var(--bg-alt); }
 
 /* Help dialog */

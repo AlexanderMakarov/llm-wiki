@@ -948,8 +948,12 @@ def page_foot(js_prefix: str = "") -> str:
     <button class="btn" id="help-close">Close</button>
   </div>
 </div>
-<script src="{js_prefix}search-index.json" type="application/json" id="search-index-hint"></script>
-<script>window.LLMWIKI_INDEX_URL = "{js_prefix}search-index.json";</script>
+<script>
+  window.LLMWIKI_INDEX_URL = "{js_prefix}search-index.json";
+  // #20: the search data the page actually loads. Injected as a script tag on
+  // demand, which is the only channel that also works over file://.
+  window.LLMWIKI_INDEX_JS_URL = "{js_prefix}search-index.js";
+</script>
 <script src="{js_prefix}../llmwiki-state.js"></script>
 <script src="{HLJS_SCRIPT}" defer></script>
 <script>
@@ -2138,6 +2142,11 @@ def render_vs_section(
 
 # ─── search index ──────────────────────────────────────────────────────────
 
+# #20: search payloads are emitted as .js sidecars too, so the site works
+# when opened over file://. Re-exported for callers importing it from here.
+from llmwiki.render.data import write_js_sidecar  # noqa: E402
+
+
 def build_search_index(
     sources: list[tuple[Path, dict[str, Any], str]],
     groups: dict[str, list[tuple[Path, dict[str, Any], str]]],
@@ -2147,6 +2156,9 @@ def build_search_index(
     doc_files: Optional[list["raw_docs_site.RawDocFile"]] = None,
 ) -> Path:
     """Build a chunked search index for lazy loading (#47).
+
+    Each ``.json`` below is emitted a second time as a ``.js`` sidecar so the
+    site works when opened over ``file://`` — see :func:`write_js_sidecar`.
 
     Writes:
       search-index.json          — meta entries (projects + pages) + _chunks manifest
@@ -2194,7 +2206,11 @@ def build_search_index(
         chunk_path = chunks_dir / f"{project_slug}.json"
         data = json.dumps(entries, ensure_ascii=False)
         chunk_path.write_text(data, encoding="utf-8")
-        chunk_manifest.append(f"search-chunks/{project_slug}.json")
+        rel = f"search-chunks/{project_slug}.json"
+        # #20: keyed by its manifest path, which is the exact string the
+        # client already holds — no key-derivation rules to keep in sync.
+        write_js_sidecar(chunk_path, rel, data)
+        chunk_manifest.append(rel)
         total_chunk_bytes += len(data.encode("utf-8"))
 
     # ── meta index: projects + static pages + chunk manifest ──
@@ -2315,7 +2331,9 @@ def build_search_index(
         "_mode_badge": mode_badge,
     }
     out_path = out_dir / "search-index.json"
-    out_path.write_text(json.dumps(index_obj, ensure_ascii=False), encoding="utf-8")
+    index_json = json.dumps(index_obj, ensure_ascii=False)
+    out_path.write_text(index_json, encoding="utf-8")
+    write_js_sidecar(out_path, "search-index", index_json)
 
     meta_kb = len(json.dumps(index_obj).encode("utf-8")) // 1024
     chunks_kb = total_chunk_bytes // 1024
