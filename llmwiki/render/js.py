@@ -520,6 +520,29 @@ function copyMarkdown(btn) {
   }
 }
 
+// #36: copy the `cd … && claude --resume …` one-liner from a session page.
+function copyResume(btn) {
+  const wrap = btn.closest(".resume-command");
+  if (!wrap) return;
+  const code = wrap.querySelector(".resume-cmd-text");
+  if (!code) return;
+  const text = code.textContent || "";
+  const finish = function (ok) {
+    btn.textContent = ok ? "Copied!" : "Failed";
+    btn.classList.add("copied");
+    setTimeout(function () { btn.textContent = "Copy"; btn.classList.remove("copied"); }, 1800);
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(function () { finish(true); }, function () { finish(false); });
+  } else {
+    const tmp = document.createElement("textarea");
+    tmp.value = text; tmp.style.position = "fixed"; tmp.style.left = "-9999px";
+    document.body.appendChild(tmp); tmp.select();
+    try { document.execCommand("copy"); finish(true); } catch (e) { finish(false); }
+    document.body.removeChild(tmp);
+  }
+}
+
 // ─── Copy-code buttons on every <pre> ────────────────────────────────────
 document.addEventListener("DOMContentLoaded", function () {
   document.querySelectorAll(".content pre").forEach(function (pre) {

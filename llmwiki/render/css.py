@@ -160,6 +160,30 @@ kbd { display: inline-block; padding: 2px 6px; font-family: var(--mono); font-si
 
 /* Actions strip */
 .session-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid var(--border); }
+
+/* #36: copyable `cd … && claude --resume …` one-liner on session pages */
+.resume-command {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px;
+  margin: -8px 0 24px; padding: 10px 12px;
+  background: var(--surface-2, var(--bg-secondary, rgba(124,58,237,0.06)));
+  border: 1px solid var(--border); border-radius: 8px;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+}
+.resume-command .resume-cmd-text {
+  flex: 1 1 240px; font-size: 0.82rem; word-break: break-all;
+  background: transparent; border: 0; padding: 0; color: var(--text);
+}
+.resume-command .resume-copy-btn { flex: 0 0 auto; }
+.resume-command .resume-hint { flex: 1 1 100%; font-size: 0.75rem; font-family: Inter, system-ui, sans-serif; }
+.resume-command.resume-stale { opacity: 0.55; }
+.resume-command.resume-stale .resume-cmd-text { text-decoration: line-through; text-decoration-thickness: 1px; }
+
+.project-disk-path { font-size: 0.9rem; margin: 0 0 8px; }
+.project-disk-path code, .card-path code {
+  font-size: 0.85em; word-break: break-all;
+}
+.card-path { font-size: 0.78rem; margin-top: 4px; line-height: 1.35; }
+.session-id { word-break: break-all; }
 .btn { display: inline-flex; align-items: center; padding: 6px 14px; font-size: 0.82rem; font-weight: 500; background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; color: var(--text-secondary); cursor: pointer; text-decoration: none; transition: all 0.15s; font-family: var(--font); }
 .btn:hover { border-color: var(--accent); color: var(--accent); text-decoration: none; }
 .btn-primary { background: var(--accent); color: #ffffff; border-color: var(--accent); }
