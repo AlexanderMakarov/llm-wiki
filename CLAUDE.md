@@ -204,7 +204,6 @@ The `Processed:` detail may carry a short producer breakdown instead of a bare c
 4. **Frontmatter is authoritative.** Always fill `title`, `type`, `tags`, `sources` (where applicable), and `last_updated`.
 5. **One commit per page group** when publishing to git — match the PR rules in the open-source framework.
 6. **Always rebuild static site** after relevant to it change implemented.
-7. **No local vault / personal machine details in PRs or commits.** Never put absolute home paths, OS usernames, vault roots, or personal session examples in PR bodies, commit messages, issue comments, or CHANGELOG. Use placeholders (`/home/USER/…`, `<vault>`, `<user>`).
 
 ## Upgrading between versions
 

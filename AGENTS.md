@@ -211,6 +211,3 @@ Every entity page should declare `entity_type` in frontmatter:
 3. Cross-link everything — every page has a `## Connections` section.
 4. Frontmatter is authoritative. Always populate `title`, `type`, `tags`, `sources`, `last_updated`, `confidence`, `lifecycle`, `entity_type`.
 5. Do not ingest raw `.jsonl` files directly — only ingest the markdown under `raw/`.
-6. Never put local vault paths, OS usernames, machine hostnames, or personal
-   absolute home paths in PRs, commit messages, issue comments, or CHANGELOG
-   entries. Use placeholders (`/home/USER/…`, `<vault>`, `<user>`).
