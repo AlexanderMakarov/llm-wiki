@@ -236,6 +236,12 @@ def test_project_page_lists_divergent_cwds(tmp_path: Path):
     assert f"/Users/{REAL}/code/a" in html
     assert f"/Users/{REAL}/code/b" in html
     assert "Also seen at" in html
+    # comma-delimited, not middot
+    assert (
+        f"<code>/Users/{REAL}/code/a</code>, "
+        f"<code>/Users/{REAL}/code/b</code>"
+    ) in html
+    assert " · " not in html.split("Also seen at", 1)[1].split("</div>", 1)[0]
 
 
 def test_projects_index_titled_by_absolute_path(tmp_path: Path):
@@ -245,6 +251,44 @@ def test_projects_index_titled_by_absolute_path(tmp_path: Path):
     html = out.read_text(encoding="utf-8")
     assert f"<code>{LOCAL_CWD}</code>" in html
     assert "slug <code>demo-proj</code>" in html
+
+
+def test_projects_index_other_cwds_label(tmp_path: Path):
+    sessions = [
+        _src(_meta(cwd=f"/Users/{REPL}/code/a")),
+        _src(_meta(cwd=f"/Users/{REPL}/code/b")),
+        _src(_meta(cwd=f"/Users/{REPL}/code/c")),
+    ]
+    out = render_projects_index({"demo-proj": sessions}, tmp_path)
+    html = out.read_text(encoding="utf-8")
+    assert "(+2 other cwd-s)" in html
+    assert "(+2 more)" not in html
+
+
+def test_project_page_does_not_render_homepage(tmp_path: Path, monkeypatch):
+    """External homepage under the topic chips was noise next to the cwd title."""
+    from llmwiki import build as build_mod
+
+    monkeypatch.setattr(
+        build_mod,
+        "load_project_profile",
+        lambda *_a, **_k: {
+            "topics": ["python"],
+            "homepage": "https://github.com/example/repo",
+            "description": "",
+        },
+    )
+    monkeypatch.setattr(
+        build_mod,
+        "get_project_topics",
+        lambda *_a, **_k: ["python"],
+    )
+    sessions = [_src(_meta(cwd=f"/Users/{REPL}/code/demo-proj"))]
+    out = render_project_page("demo-proj", sessions, tmp_path)
+    html = out.read_text(encoding="utf-8")
+    assert "project-homepage" not in html
+    assert "https://github.com/example/repo" not in html
+    assert 'class="project-page"' in html
 
 
 # ─── search index ─────────────────────────────────────────────────────

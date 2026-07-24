@@ -1128,7 +1128,7 @@ def render_project_disk_path_html(primary: Optional[str], all_paths: list[str]) 
     """
     if not primary or len(all_paths) <= 1:
         return ""
-    chips = " · ".join(f"<code>{html.escape(p)}</code>" for p in all_paths)
+    chips = ", ".join(f"<code>{html.escape(p)}</code>" for p in all_paths)
     return (
         f'<div class="project-disk-path muted">'
         f'Also seen at <span class="project-disk-path-list">{chips}</span></div>'
@@ -1437,21 +1437,16 @@ def render_project_page(
             f'<p class="project-description muted">'
             f'{html.escape(proj_profile["description"])}</p>'
         )
-    homepage_html = ""
-    if proj_profile and proj_profile.get("homepage"):
-        hp = proj_profile["homepage"]
-        homepage_html = (
-            f'<a class="project-homepage" href="{html.escape(hp)}" '
-            f'rel="noopener">{html.escape(hp)} ↗</a>'
-        )
+    # homepage from wiki/projects/<slug>.md is intentionally not rendered
+    # on the project page (#36 follow-up) — the absolute cwd is the
+    # identity; an external URL under the chips was noise.
     topics_strip = ""
-    if topics_html or description_html or homepage_html:
+    if topics_html or description_html:
         topics_strip = (
             '<section class="section project-topics-section">\n'
             '  <div class="container">\n'
             f'    {description_html}\n'
             f'    {topics_html}\n'
-            f'    {homepage_html}\n'
             '  </div>\n'
             '</section>\n'
         )
@@ -1507,7 +1502,12 @@ def render_project_page(
             css_prefix="../",
         )
         + nav_bar("projects", link_prefix="../")
-        + hero(display_name, " · ".join(hero_sub_bits), subtitle_is_html=True)
+        + hero(
+            display_name,
+            " · ".join(hero_sub_bits),
+            subtitle_is_html=True,
+            main_class="project-page",
+        )
         + body
         + page_foot(js_prefix="../")
     )
@@ -1540,7 +1540,11 @@ def render_projects_index(
         title = primary_cwd or project
         extra = ""
         if primary_cwd and len(all_cwds) > 1:
-            extra = f' <span class="muted">(+{len(all_cwds) - 1} more)</span>'
+            n_other = len(all_cwds) - 1
+            extra = (
+                f' <span class="muted">'
+                f'(+{n_other} other cwd{"-s" if n_other != 1 else ""})</span>'
+            )
         slug_bit = (
             f'<div class="card-meta">slug <code>{html.escape(project)}</code>'
             f' · {main_count} main · {sub_count} sub-agent</div>'

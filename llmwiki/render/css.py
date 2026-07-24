@@ -185,6 +185,22 @@ kbd { display: inline-block; padding: 2px 6px; font-family: var(--mono); font-si
 .card-path { font-size: 0.78rem; margin-top: 4px; line-height: 1.35; }
 .hero h1 { overflow-wrap: anywhere; word-break: break-word; }
 .session-id { word-break: break-all; }
+
+/* #36 follow-up: project pages stack many thin strips (topics, disk
+   paths, heatmap, charts, sessions) — default .section padding burned
+   too much vertical space between them. */
+.project-page > .hero { padding: 32px 0 16px; margin-bottom: 4px; }
+.project-page .section { padding: 8px 0 12px; }
+.project-page .section h2 { margin: 12px 0 10px; }
+.project-page .project-topics-section { padding-top: 4px; padding-bottom: 4px; }
+.project-page .project-topics-section .container { padding-top: 4px; padding-bottom: 0; }
+.project-page .project-disk-section { padding-top: 0; padding-bottom: 4px; }
+.project-page .heatmap-section,
+.project-page .tool-chart-section,
+.project-page .token-timeline-section { padding-top: 4px; padding-bottom: 8px; }
+.project-page .project-usage-section { padding-top: 4px; padding-bottom: 8px; }
+.project-page .sub-section { margin-top: 16px; }
+.project-page .breadcrumbs { margin-bottom: 8px; }
 .btn { display: inline-flex; align-items: center; padding: 6px 14px; font-size: 0.82rem; font-weight: 500; background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; color: var(--text-secondary); cursor: pointer; text-decoration: none; transition: all 0.15s; font-family: var(--font); }
 .btn:hover { border-color: var(--accent); color: var(--accent); text-decoration: none; }
 .btn-primary { background: var(--accent); color: #ffffff; border-color: var(--accent); }
