@@ -301,3 +301,96 @@ def test_search_index_includes_session_id(tmp_path: Path):
     chunk = tmp_path / "search-chunks" / "demo-proj.json"
     entries = json.loads(chunk.read_text(encoding="utf-8"))
     assert entries[0]["sessionId"] == "8057bbe6-73e8-418f-b439-b4d11bad1ad7"
+
+
+# ─── #56: encoded segments + index pages ───────────────────────────────
+
+
+def test_restore_local_path_encoded_users_segment():
+    assert (
+        restore_local_path(
+            "/Users/USER/.claude/projects/-Users-USER-code-demo/x",
+            real_user=REAL,
+            repl_user=REPL,
+        )
+        == f"/Users/{REAL}/.claude/projects/-Users-{REAL}-code-demo/x"
+    )
+
+
+def test_restore_local_path_encoded_home_segment():
+    assert (
+        restore_local_path(
+            "/home/USER/.claude/projects/-home-USER-code-app/x",
+            real_user=REAL,
+            repl_user=REPL,
+        )
+        == f"/home/{REAL}/.claude/projects/-home-{REAL}-code-app/x"
+    )
+
+
+def test_projects_index_restores_all_titles_including_encoded(tmp_path: Path):
+    """#56 defect 1: every card title must be restored, including cwds
+    under ``~/.claude/projects/-Users-…``."""
+    groups = {
+        "demo-a": [_src(_meta(cwd=f"/Users/{REPL}/code/demo-a", project="demo-a"))],
+        "demo-b": [
+            _src(
+                _meta(
+                    cwd=(
+                        f"/Users/{REPL}/.claude/projects/"
+                        f"-Users-{REPL}-code-demo-b"
+                    ),
+                    project="demo-b",
+                )
+            )
+        ],
+    }
+    out = render_projects_index(groups, tmp_path)
+    html = out.read_text(encoding="utf-8")
+    assert f"/Users/{REAL}/code/demo-a" in html
+    assert (
+        f"/Users/{REAL}/.claude/projects/-Users-{REAL}-code-demo-b" in html
+    )
+    assert "/Users/USER/" not in html
+
+
+def test_sessions_index_shows_restored_cwd(tmp_path: Path):
+    """#56 defect 2: sessions table cwd column uses restored local path."""
+    from llmwiki.build import render_sessions_index
+
+    sources = [
+        _src(
+            _meta(
+                cwd=(
+                    f"/Users/{REPL}/.claude/projects/"
+                    f"-Users-{REPL}-code-demo"
+                )
+            )
+        )
+    ]
+    groups = {"demo-proj": sources}
+    out = render_sessions_index(sources, groups, tmp_path)
+    html = out.read_text(encoding="utf-8")
+    restored = (
+        f"/Users/{REAL}/.claude/projects/-Users-{REAL}-code-demo"
+    )
+    assert restored in html
+    assert "/Users/USER/" not in html
+
+
+def test_sessions_index_restores_paths_in_description(tmp_path: Path):
+    from llmwiki.build import render_sessions_index
+
+    sources = [
+        _src(
+            _meta(
+                description=(
+                    f"Review the repo at /Users/{REPL}/code/demo-proj"
+                )
+            )
+        )
+    ]
+    out = render_sessions_index(sources, {"demo-proj": sources}, tmp_path)
+    html = out.read_text(encoding="utf-8")
+    assert f"/Users/{REAL}/code/demo-proj" in html
+    assert "/Users/USER/" not in html

@@ -20,13 +20,15 @@ Everything in this table is redacted at the **converter** layer — the moment e
 
 | Pattern | What matches | Replacement |
 |---|---|---|
-| Username in paths | `/Users/<you>/…` and `/home/<you>/…` | `/Users/USER/…` |
+| Username in paths | `/Users/<you>/…`, `/home/<you>/…`, and dash-encoded store segments (`-Users-<you>-…`, `-home-<you>-…`) | `/Users/USER/…`, `-Users-USER-…` |
 | API key tokens | `(?i)(api[_-]?key\|secret\|token\|bearer\|password)[\"'\s:=]+[\w\-\.]{8,}` | `<REDACTED>` |
 | Anthropic/OpenAI keys | `sk-[A-Za-z0-9]{20,}` | `<REDACTED>` |
 | Emails | `[\w.+-]+@[a-zA-Z0-9-]+\.[\w.-]+` | `<REDACTED>` |
 | Thinking blocks | `<thinking>…</thinking>` | dropped entirely (configurable) |
 
 All patterns live in `examples/sessions_config.json` under `redaction.extra_patterns`. You can add your own (company domain, customer names, internal hostnames, etc.).
+
+**Already-synced `raw/`:** new syncs apply encoded-segment redaction automatically. Files written before that change keep whatever was on disk (`raw/` is immutable during normal sync). To rewrite them without re-converting from agent stores (transcripts are often gone after ~30 days) and without re-synthesizing wiki pages, run `llmwiki migrate-raw-redaction --vault PATH` — see [UPGRADING.md](UPGRADING.md) and [CLI reference](reference/cli.md#migrate-raw-redaction--deterministic-username-rewrite-in-raw-56).
 
 ## What is NOT redacted by default
 

@@ -100,49 +100,63 @@ def load_config(path: Path) -> dict[str, Any]:
                 cfg[section].update(value)
             else:
                 cfg[section] = value
-    # Auto-detect username if not set. #489: be careful here.
-    #
-    # The previous logic was `os.environ["USER"] or Path.home().name`.
-    # Two failure modes that bit users in the wild:
-    #
-    # 1. **Windows.** Windows uses ``USERNAME``, not ``USER``. The env
-    #    var lookup returns empty, the fallback returns
-    #    ``Path.home().name`` — which is the user's actual name, fine
-    #    on a real desktop but the redactor then matches the *short*
-    #    string in path components anywhere in transcripts. On a
-    #    Windows machine where the user's name is short (e.g. "AB")
-    #    this flagged unrelated path tokens.
-    # 2. **Stripped Docker images / CI.** ``USER`` is unset and
-    #    ``Path.home()`` returns ``/`` or ``/root``; ``Path("/").name``
-    #    is empty, but ``Path("/root").name`` is ``"root"`` — every
-    #    ``/Users/root/`` and ``/home/root/`` path got rewritten as
-    #    ``/Users/USER/`` even when the actual transcript author had
-    #    a totally different username.
-    #
-    # Fix: prefer ``USER`` (Unix) → ``USERNAME`` (Windows) →
-    # ``Path.home().name`` *only if it's at least 3 chars long*.
-    # Anything shorter is too risky as a substring rewrite target;
-    # leave the field empty and let the user opt in via config.
-    if not cfg["redaction"].get("real_username"):
-        try:
-            import os
-            candidate = (
-                os.environ.get("USER")
-                or os.environ.get("USERNAME")
-                or ""
-            ).strip()
-            if not candidate:
-                home_name = Path.home().name.strip()
-                # Only trust the home-dir name when it's not a generic
-                # container default and is long enough to be specific.
-                if len(home_name) >= 3 and home_name.lower() not in (
-                    "root", "user", "users", "home", "ubuntu",
-                ):
-                    candidate = home_name
-            cfg["redaction"]["real_username"] = candidate
-        except Exception:
-            pass
+    _ensure_real_username(cfg)
     return cfg
+
+
+def _ensure_real_username(cfg: dict[str, Any]) -> None:
+    """Fill ``redaction.real_username`` from the environment when empty (#489, #56).
+
+    The previous logic was ``os.environ["USER"] or Path.home().name``.
+    Two failure modes that bit users in the wild:
+
+    1. **Windows.** Windows uses ``USERNAME``, not ``USER``. The env
+       var lookup returns empty, the fallback returns
+       ``Path.home().name`` — which is the user's actual name, fine
+       on a real desktop but the redactor then matches the *short*
+       string in path components anywhere in transcripts. On a
+       Windows machine where the user's name is short (e.g. "AB")
+       this flagged unrelated path tokens.
+    2. **Stripped Docker images / CI.** ``USER`` is unset and
+       ``Path.home()`` returns ``/`` or ``/root``; ``Path("/").name``
+       is empty, but ``Path("/root").name`` is ``"root"`` — every
+       ``/Users/root/`` and ``/home/root/`` path got rewritten as
+       ``/Users/USER/`` even when the actual transcript author had
+       a totally different username.
+
+    Fix: prefer ``USER`` (Unix) → ``USERNAME`` (Windows) →
+    ``Path.home().name`` *only if it's at least 3 chars long*.
+    Anything shorter is too risky as a substring rewrite target;
+    leave the field empty and let the user opt in via config.
+
+    #56: also re-run after config overlay. ``examples/sessions_config.json``
+    ships ``"real_username": ""`` as a "please auto-detect" placeholder;
+    users who copy that block into root ``config.json`` would otherwise
+    wipe the value ``load_config`` already filled, leaving
+    ``restore_local_path`` a no-op and ``projects/index.html`` mixing
+    ``/Users/USER/…`` with never-redacted real paths.
+    """
+    red = cfg.setdefault("redaction", {})
+    if red.get("real_username"):
+        return
+    try:
+        import os
+        candidate = (
+            os.environ.get("USER")
+            or os.environ.get("USERNAME")
+            or ""
+        ).strip()
+        if not candidate:
+            home_name = Path.home().name.strip()
+            # Only trust the home-dir name when it's not a generic
+            # container default and is long enough to be specific.
+            if len(home_name) >= 3 and home_name.lower() not in (
+                "root", "user", "users", "home", "ubuntu",
+            ):
+                candidate = home_name
+        red["real_username"] = candidate
+    except Exception:
+        pass
 
 
 def _overlay_config_file(cfg: dict[str, Any], path: Path) -> None:
@@ -187,6 +201,9 @@ def _resolve_convert_config(config_file: Optional[Path]) -> dict[str, Any]:
         return load_config(config_file)
     cfg = load_config(DEFAULT_CONFIG_FILE)
     _overlay_config_file(cfg, USER_CONFIG_FILE)
+    # #56: overlay may have re-emptied real_username with the examples
+    # placeholder; re-autodetect so restore/redact stay consistent.
+    _ensure_real_username(cfg)
     return cfg
 
 
@@ -792,6 +809,15 @@ class Redactor:
         r"\\\\wsl\$\\[A-Za-z0-9_-]+\\home\\",
     )
 
+    # #56: agent session stores flatten absolute paths into one segment
+    # (``/Users/alice/code/x`` → ``-Users-alice-code-x``). Redacting only
+    # the leading ``/Users/<u>/`` left the real name in the encoded
+    # segment — cosmetic privacy. Same allowlist idea, dash-encoded.
+    _ENCODED_PATH_PREFIXES = (
+        r"-Users-",
+        r"-home-",
+    )
+
     def _redact_username(self, text: str) -> str:
         """Replace the real username in home-directory paths.
 
@@ -808,31 +834,41 @@ class Redactor:
         the wild on a multi-drive Windows box or a Cygwin/WSL
         environment.
 
+        #56: also rewrites dash-encoded segments
+        (``-Users-<u>-…``, ``-home-<u>-…``) used under
+        ``~/.claude/projects/`` and similar agent stores.
+
         Username can contain hyphens, underscores, and unicode.
         """
-        # #py-h8 (#586): cache the compiled username pattern on the
-        # instance so a long sync doesn't recompile the same regex
-        # thousands of times. Key on the real_user string so a config
-        # change between calls (rare) still rebuilds the pattern.
-        cached = getattr(self, "_username_pattern_cache", None)
-        if cached and cached[0] == self.real_user:
-            return cached[1].sub(
-                lambda m: m.group("prefix") + self.repl_user, text
-            )
-        u = re.escape(self.real_user)
-        repl_user = self.repl_user
-        # Single regex with prefix alternation; word-style boundary
-        # (lookahead) prevents matching `aliceandbob` when `alice` is
-        # the real user. The username group is itself the only thing
-        # we substitute — separators and prefix are preserved.
-        pattern = re.compile(
-            r"(?P<prefix>" + "|".join(self._HOME_PATH_PREFIXES) + r")"
-            + r"(?P<user>" + u + r")"
-            + r"(?=$|[/\\])"
+        return _substitute_path_username(
+            text, from_user=self.real_user, to_user=self.repl_user
         )
-        # Cache for next call.
-        self._username_pattern_cache = (self.real_user, pattern)
-        return pattern.sub(lambda m: m.group("prefix") + repl_user, text)
+
+
+def _substitute_path_username(text: str, *, from_user: str, to_user: str) -> str:
+    """Rewrite ``from_user`` → ``to_user`` in home-path and encoded shapes.
+
+    Shared by ``Redactor._redact_username`` and ``restore_local_path`` so
+    the two directions cannot drift (#36, #56).
+    """
+    if not text or not from_user or from_user == to_user:
+        return text
+    u = re.escape(from_user)
+    # Home-dir shapes: prefix + user + path boundary.
+    home = re.compile(
+        r"(?P<prefix>" + "|".join(Redactor._HOME_PATH_PREFIXES) + r")"
+        + r"(?P<user>" + u + r")"
+        + r"(?=$|[/\\])"
+    )
+    # Encoded shapes: ``-Users-alice-code-x`` — user ends at next ``-``
+    # or end of segment (``/``, ``\``, whitespace, end).
+    encoded = re.compile(
+        r"(?P<prefix>" + "|".join(Redactor._ENCODED_PATH_PREFIXES) + r")"
+        + r"(?P<user>" + u + r")"
+        + r"(?=$|[-/\\\s])"
+    )
+    text = home.sub(lambda m: m.group("prefix") + to_user, text)
+    return encoded.sub(lambda m: m.group("prefix") + to_user, text)
 
 
 def restore_local_path(
@@ -841,14 +877,15 @@ def restore_local_path(
     real_user: Optional[str] = None,
     repl_user: Optional[str] = None,
 ) -> str:
-    """Undo username redaction in an already-absolute path (#36).
+    """Undo username redaction in an already-absolute path (#36, #56).
 
     The absolute cwd was captured at convert time from the transcript.
-    Redaction then replaced only the home-dir username
-    (``/home/alice/code/x`` → ``/home/USER/code/x``) so ``raw/`` is
-    safe to publish. This reverses that one substitution using the
-    same ``_HOME_PATH_PREFIXES`` allowlist — it does not invent or
-    look up the project path.
+    Redaction then replaced the home-dir username
+    (``/home/alice/code/x`` → ``/home/USER/code/x``) and the matching
+    dash-encoded segment (``-Users-alice-…`` → ``-Users-USER-…``) so
+    ``raw/`` is safe to publish. This reverses those substitutions
+    using the same allowlists — it does not invent or look up the
+    project path.
 
     When ``real_user`` / ``repl_user`` are omitted, reads them from the
     same convert-time redaction config that wrote the redacted form.
@@ -867,13 +904,9 @@ def restore_local_path(
     repl_user = (repl_user or "USER").strip() or "USER"
     if not real_user or real_user == repl_user:
         return path
-    # Reverse of Redactor._redact_username: prefix + USER → prefix + real.
-    pattern = re.compile(
-        r"(?P<prefix>" + "|".join(Redactor._HOME_PATH_PREFIXES) + r")"
-        + r"(?P<user>" + re.escape(repl_user) + r")"
-        + r"(?=$|[/\\])"
+    return _substitute_path_username(
+        path, from_user=repl_user, to_user=real_user
     )
-    return pattern.sub(lambda m: m.group("prefix") + real_user, path)
 
 
 def _close_open_fence(text: str) -> str:

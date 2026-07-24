@@ -1597,6 +1597,8 @@ def render_sessions_index(
     groups: dict[str, list[tuple[Path, dict[str, Any], str]]],
     out_dir: Path,
 ) -> Path:
+    from llmwiki.convert import restore_local_path
+
     rows = []
 
     def key(t: tuple[Path, dict[str, Any], str]) -> str:
@@ -1623,7 +1625,11 @@ def render_sessions_index(
         # if frontmatter carries one, render it as a small muted line
         # below the slug. Falls back to no second line for older
         # sessions without the field.
-        description = str(meta.get("description") or "").strip()
+        # #56: descriptions were redacted at convert time; restore local
+        # paths so the index matches session detail / resume paths.
+        description = restore_local_path(
+            str(meta.get("description") or "").strip()
+        )
         desc_line = (
             f'<div class="session-cell-desc muted">{html.escape(description)}</div>'
             if description else ""
@@ -1631,6 +1637,13 @@ def render_sessions_index(
         model = meta.get("model", "")
         umsgs = meta.get("user_messages", "")
         tcalls = meta.get("tool_calls", "")
+        # #56: surface restored cwd so the index matches the detail page
+        # one click away (and so encoded ``-Users-USER-`` segments are
+        # reversed like the leading ``/Users/USER/``).
+        cwd_local = local_cwd(meta)
+        cwd_cell = (
+            f"<code>{html.escape(cwd_local)}</code>" if cwd_local else ""
+        )
         href = f"{project}/{p.stem}.html"
         rows.append(
             f"""        <tr data-project="{html.escape(str(project))}" data-model="{html.escape(str(model))}" data-date="{html.escape(str(date))}" data-slug="{html.escape(str(slug))}">
@@ -1638,6 +1651,7 @@ def render_sessions_index(
           <td>{render_agent_badge(meta)}</td>
           <td><a href="../projects/{html.escape(str(project))}.html">{html.escape(str(project))}</a></td>
           <td>{html.escape(str(date))}</td>
+          <td class="session-cwd">{cwd_cell}</td>
           <td><code>{html.escape(str(model))}</code></td>
           <td class="num">{html.escape(str(umsgs))}</td>
           <td class="num">{html.escape(str(tcalls))}</td>
@@ -1692,16 +1706,17 @@ def render_sessions_index(
     <div class="table-wrap">
     <table class="sessions-table">
       <colgroup>
-        <col style="width: 27%">
-        <col style="width: 8%">
-        <col style="width: 16%">
-        <col style="width: 13%">
         <col style="width: 22%">
         <col style="width: 7%">
-        <col style="width: 7%">
+        <col style="width: 12%">
+        <col style="width: 11%">
+        <col style="width: 20%">
+        <col style="width: 16%">
+        <col style="width: 6%">
+        <col style="width: 6%">
       </colgroup>
       <thead>
-        <tr><th>Session</th><th>Agent</th><th>Project</th><th>Date</th><th>Model</th><th>Msgs</th><th>Tools</th></tr>
+        <tr><th>Session</th><th>Agent</th><th>Project</th><th>Date</th><th>Cwd</th><th>Model</th><th>Msgs</th><th>Tools</th></tr>
       </thead>
       <tbody id="sessions-tbody">
 {chr(10).join(rows)}

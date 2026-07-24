@@ -776,6 +776,41 @@ def cmd_migrate_state(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_migrate_raw_redaction(args: argparse.Namespace) -> int:
+    """#56: deterministic username redaction rewrite of raw/sessions (no synth)."""
+    import importlib.util
+
+    script = REPO_ROOT / "scripts" / "migrate_raw_encoded_username.py"
+    spec = importlib.util.spec_from_file_location(
+        "migrate_raw_encoded_username", script
+    )
+    if spec is None or spec.loader is None:
+        print(f"error: migration script missing: {script}", file=sys.stderr)
+        return 2
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    vault = getattr(args, "vault", None)
+    if not vault:
+        print(
+            "error: --vault PATH is required (migrate the user's vault, "
+            "not the llm-wiki clone)",
+            file=sys.stderr,
+        )
+        return 2
+    try:
+        report = mod.run_migration(
+            vault=Path(vault),
+            real_username=getattr(args, "real_username", None),
+            replacement_username=getattr(args, "replacement_username", None),
+            dry_run=bool(getattr(args, "dry_run", False)),
+        )
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    mod.print_report(report)
+    return 1 if report["errors"] else 0
+
+
 def cmd_synthesize(args: argparse.Namespace) -> int:
     """Synthesize wiki source pages from raw sessions (v1.1.0 · #35).
 
@@ -1620,6 +1655,36 @@ def build_parser() -> argparse.ArgumentParser:
     migrate = sub.add_parser("migrate-state", help="One-time migration into unified state")
     migrate.add_argument("--state-file", type=Path, default=None, help="Target unified state file")
     migrate.set_defaults(func=cmd_migrate_state)
+
+    migrate_raw = sub.add_parser(
+        "migrate-raw-redaction",
+        help=(
+            "Deterministic #56 rewrite: redact encoded usernames in "
+            "raw/sessions (no re-sync, no synthesize)"
+        ),
+    )
+    migrate_raw.add_argument(
+        "--vault",
+        type=Path,
+        required=True,
+        help="Vault root containing raw/sessions/",
+    )
+    migrate_raw.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Report would-change files; write nothing",
+    )
+    migrate_raw.add_argument(
+        "--real-username",
+        default=None,
+        help="Override redaction.real_username",
+    )
+    migrate_raw.add_argument(
+        "--replacement-username",
+        default=None,
+        help="Override replacement placeholder (default USER)",
+    )
+    migrate_raw.set_defaults(func=cmd_migrate_raw_redaction)
 
     # candidates (v1.1, #51) — approval workflow
     cand = sub.add_parser(

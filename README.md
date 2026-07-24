@@ -256,6 +256,7 @@ llmwiki synthesize [--vault PATH] [--check] [--estimate] [--force]
 llmwiki consolidate-topics [--complete reply.json] [--vault PATH]
 llmwiki queue {status|enqueue|run} [--vault PATH] [--state-file PATH]
 llmwiki migrate-state [--state-file PATH]
+llmwiki migrate-raw-redaction --vault PATH [--dry-run]  # #56: USER-mask encoded paths in raw/
 llmwiki graph [--engine builtin|graphify]
 llmwiki lint [--wiki-dir PATH]
 llmwiki export all

@@ -68,7 +68,7 @@ def test_session_cell_no_longer_contains_date(tmp_path: Path) -> None:
     html_text = out.read_text(encoding="utf-8")
     row = _row_for_slug(html_text, "dark-mode-toggle")
     cells = re.findall(r"<td.*?>(.*?)</td>", row, re.DOTALL)
-    # cells = [Session, Agent, Project, Date, Model, Msgs, Tools]
+    # cells = [Session, Agent, Project, Date, Cwd, Model, Msgs, Tools]
     session_cell, _, _, date_cell, *_ = cells
     session_text = _link_text(session_cell)
     assert "dark-mode-toggle" in session_text
@@ -111,7 +111,7 @@ def test_colgroup_present_for_sticky_header_alignment(tmp_path: Path) -> None:
     out = render_sessions_index(sources, {"demo": sources}, tmp_path)
     html_text = out.read_text(encoding="utf-8")
     assert "<colgroup>" in html_text
-    assert html_text.count("<col ") == 7  # 7 columns
+    assert html_text.count("<col ") == 8  # 8 columns (incl. Cwd, #56)
     # The CSS rule that makes colgroup widths binding must be present.
     assert "table-layout: fixed" in CSS
     assert ".sessions-table" in CSS
@@ -120,14 +120,13 @@ def test_colgroup_present_for_sticky_header_alignment(tmp_path: Path) -> None:
 def test_date_column_wide_enough_for_full_iso_date(tmp_path: Path) -> None:
     """Date col must show YYYY-MM-DD in full — not ``2026-07-…``.
 
-    Widths: Session/Agent/Project/Date/Model/Msgs/Tools. Date gets 13%
-    (was 10%, which ellipsized under table-layout:fixed + cell padding).
+    Widths: Session/Agent/Project/Date/Cwd/Model/Msgs/Tools (#56 added Cwd).
     """
     sources = [_src("a", "2026-07-23")]
     out = render_sessions_index(sources, {"demo": sources}, tmp_path)
     html_text = out.read_text(encoding="utf-8")
     cols = re.findall(r'<col style="width:\s*([^"]+)"\s*/?>', html_text)
-    assert cols == ["27%", "8%", "16%", "13%", "22%", "7%", "7%"], cols
+    assert cols == ["22%", "7%", "12%", "11%", "20%", "16%", "6%", "6%"], cols
     # CSS must not ellipsize the Date cell (4th column).
     assert "td:nth-child(4)" in CSS
     assert re.search(
