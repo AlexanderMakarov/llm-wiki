@@ -757,11 +757,16 @@ def _build_metadata_comment(
     ]
     for key in (
         "date", "started", "ended", "model", "gitBranch", "permissionMode",
-        "user_messages", "tool_calls", "sessionId", "cwd",
+        "user_messages", "tool_calls", "sessionId",
     ):
         val = meta.get(key)
         if val is not None:
             fields.append(f"{key}: {val}")
+    # #36: restore local username in cwd so agents scraping the HTML
+    # comment get a usable path (raw frontmatter keeps USER).
+    cwd_local = local_cwd(meta)
+    if cwd_local:
+        fields.append(f"cwd: {cwd_local}")
     tools = get_tools_list(meta)
     if tools:
         fields.append(f"tools_used: [{', '.join(tools)}]")
@@ -1014,6 +1019,17 @@ def calc_reading_time(body: str, wpm: int = 225) -> int:
 RESUME_RETENTION_DAYS = 30
 
 
+def local_cwd(meta: dict[str, Any]) -> str:
+    """Session cwd with username redaction reversed for local use (#36).
+
+    Frontmatter stores ``/home/USER/...`` so raw/ is safe to commit; the
+    site owner needs the real absolute path to ``cd`` / resume.
+    """
+    from llmwiki.convert import restore_local_path
+
+    return restore_local_path(str(meta.get("cwd") or "").strip())
+
+
 def supports_resume(meta: dict[str, Any], path: Optional[Path] = None) -> bool:
     """True when this session can be resumed with ``claude --resume``.
 
@@ -1027,10 +1043,10 @@ def supports_resume(meta: dict[str, Any], path: Optional[Path] = None) -> bool:
 
 
 def resume_command(meta: dict[str, Any], path: Optional[Path] = None) -> Optional[str]:
-    """Return ``cd <cwd> && claude --resume <sessionId>``, or None."""
+    """Return ``cd <real-cwd> && claude --resume <sessionId>``, or None."""
     if not supports_resume(meta, path):
         return None
-    cwd = str(meta.get("cwd") or "").strip()
+    cwd = local_cwd(meta)
     session_id = str(meta.get("sessionId") or "").strip()
     if not cwd or not session_id:
         return None
@@ -1064,13 +1080,13 @@ def project_disk_paths(
     """Derive a project's on-disk path(s) from session ``cwd`` values.
 
     Returns ``(primary, all_distinct)`` where ``primary`` is the most
-    common cwd (or None) and ``all_distinct`` is every unique cwd in
-    frequency-then-alpha order. Divergent cwds (renames, worktrees)
-    stay visible so the reader isn't lied to by a single path.
+    common *local* (un-redacted) cwd, and ``all_distinct`` is every
+    unique cwd in frequency-then-alpha order. Divergent cwds (renames,
+    worktrees) stay visible so the reader isn't lied to by a single path.
     """
     counts: Counter[str] = Counter()
     for _path, meta, _body in sessions:
-        cwd = str(meta.get("cwd") or "").strip()
+        cwd = local_cwd(meta)
         if cwd:
             counts[cwd] += 1
     if not counts:
@@ -1105,20 +1121,17 @@ def render_resume_block(meta: dict[str, Any], path: Optional[Path] = None) -> st
 
 
 def render_project_disk_path_html(primary: Optional[str], all_paths: list[str]) -> str:
-    """HTML strip showing a project's on-disk path(s) (#36)."""
-    if not primary:
+    """HTML strip listing *additional* project paths when they diverge (#36).
+
+    The primary absolute path is the project page title — only emit this
+    strip when there is more than one distinct cwd.
+    """
+    if not primary or len(all_paths) <= 1:
         return ""
-    if len(all_paths) <= 1:
-        return (
-            f'<div class="project-disk-path muted">'
-            f'Path <code>{html.escape(primary)}</code></div>'
-        )
     chips = " · ".join(f"<code>{html.escape(p)}</code>" for p in all_paths)
     return (
         f'<div class="project-disk-path muted">'
-        f'Paths <span class="project-disk-path-list">{chips}</span>'
-        f' <span class="muted">(most common: '
-        f'<code>{html.escape(primary)}</code>)</span></div>'
+        f'Also seen at <span class="project-disk-path-list">{chips}</span></div>'
     )
 
 
@@ -1172,9 +1185,11 @@ def render_session(
     if meta.get("model"):
         bits.append(f'<code>{html.escape(str(meta["model"]))}</code>')
     # #36: surface cwd + real sessionId in the hero (the page title is
-    # llmwiki's 8-hex slug, useless for `claude --resume`).
-    if meta.get("cwd"):
-        bits.append(f'cwd <code>{html.escape(str(meta["cwd"]))}</code>')
+    # llmwiki's 8-hex slug, useless for `claude --resume`). cwd is
+    # restored to the local absolute path (frontmatter stores USER).
+    cwd_local = local_cwd(meta)
+    if cwd_local:
+        bits.append(f'cwd <code>{html.escape(cwd_local)}</code>')
     if meta.get("sessionId"):
         bits.append(
             f'id <code class="session-id">{html.escape(str(meta["sessionId"]))}</code>'
@@ -1476,17 +1491,23 @@ def render_project_page(
 </main>
 """
 
+    # #36: project identity is the absolute disk path, not the slug.
+    # Filename stays `<slug>.html` for stable URLs; the hero title is
+    # the restored local cwd. Slug stays in the subtitle for search.
+    display_name = primary_cwd or project_slug
+    hero_sub_bits = [
+        f"slug <code>{html.escape(project_slug)}</code>",
+        f"{len(main_sessions)} main sessions",
+        f"{len(subagent_sessions)} sub-agent runs",
+    ]
     page = (
         page_head(
-            f"{project_slug} — LLM Wiki",
-            f"{len(sessions)} Claude Code sessions from {project_slug}",
+            f"{display_name} — LLM Wiki",
+            f"{len(sessions)} Claude Code sessions from {display_name}",
             css_prefix="../",
         )
         + nav_bar("projects", link_prefix="../")
-        + hero(
-            project_slug,
-            f"{len(main_sessions)} main sessions · {len(subagent_sessions)} sub-agent runs",
-        )
+        + hero(display_name, " · ".join(hero_sub_bits), subtitle_is_html=True)
         + body
         + page_foot(js_prefix="../")
     )
@@ -1512,26 +1533,22 @@ def render_projects_index(
             default={},
         )
         badge = render_freshness(newest_meta)
-        # #36: show the project's disk path on the index card.
+        # #36: project cards are titled by absolute disk path; slug is
+        # secondary meta so munged names like `aleksandrmakarov-code`
+        # aren't the only identity the reader sees.
         primary_cwd, all_cwds = project_disk_paths(sessions)
+        title = primary_cwd or project
+        extra = ""
         if primary_cwd and len(all_cwds) > 1:
-            path_line = (
-                f'<div class="card-path muted">'
-                f'<code>{html.escape(primary_cwd)}</code>'
-                f' <span class="muted">(+{len(all_cwds) - 1} more)</span></div>'
-            )
-        elif primary_cwd:
-            path_line = (
-                f'<div class="card-path muted">'
-                f'<code>{html.escape(primary_cwd)}</code></div>'
-            )
-        else:
-            path_line = ""
+            extra = f' <span class="muted">(+{len(all_cwds) - 1} more)</span>'
+        slug_bit = (
+            f'<div class="card-meta">slug <code>{html.escape(project)}</code>'
+            f' · {main_count} main · {sub_count} sub-agent</div>'
+        )
         cards.append(
             f"""  <a class="card" href="{html.escape(project)}.html">
-    <div class="card-title">{html.escape(project)}</div>
-    <div class="card-meta">{main_count} main · {sub_count} sub-agent</div>
-    {path_line}
+    <div class="card-title"><code>{html.escape(title)}</code>{extra}</div>
+    {slug_bit}
     <div class="card-badge">{badge}</div>
   </a>"""
         )
@@ -2842,6 +2859,10 @@ def build_site(
             meta_copy = dict(meta)
             meta_copy.setdefault("slug", str(meta.get("slug", path.stem)))
             meta_copy.setdefault("project", project)
+            # #36: JSON sibling cwd must be the real local path so
+            # machine consumers can build a usable resume command.
+            if meta_copy.get("cwd"):
+                meta_copy["cwd"] = local_cwd(meta_copy)
             write_page_json(html_path, meta_copy, body_stripped, wikilinks_out)
             n_siblings += 1
         except (OSError, ValueError, RuntimeError) as e:
