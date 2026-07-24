@@ -328,11 +328,14 @@ kbd { display: inline-block; padding: 2px 6px; font-family: var(--mono); font-si
    context (isolation: isolate) on the table parent so the sticky
    thead doesn't lose its z-axis ordering against the nav blur. The
    `transform: translateZ(0)` gives older WebKit a hardware layer so
-   the sticky cells don't get repainted as plain rows during scroll. */
+   the sticky cells don't get repainted as plain rows during scroll.
+   top must be 0 — NOT the nav height. `.table-wrap { overflow-x: auto }`
+   is the sticky containing block; a non-zero top offsets the thead
+   down into the first body rows on initial paint (overlap bug). */
 .sessions-table thead {
   position: -webkit-sticky;
   position: sticky;
-  top: 56px;
+  top: 0;
   background: var(--bg-alt);
   z-index: 1;
   transform: translateZ(0);

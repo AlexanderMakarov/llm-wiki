@@ -115,3 +115,22 @@ def test_colgroup_present_for_sticky_header_alignment(tmp_path: Path) -> None:
     # The CSS rule that makes colgroup widths binding must be present.
     assert "table-layout: fixed" in CSS
     assert ".sessions-table" in CSS
+
+
+def test_sticky_thead_top_is_zero_not_nav_offset() -> None:
+    """Sticky thead must use top:0 — `.table-wrap { overflow-x: auto }`
+    is the sticky containing block, so top:56px (nav height) offsets the
+    header down into the first body row on initial paint."""
+    # Pull the .sessions-table thead rule body (not other `top: 56px` uses).
+    m = re.search(
+        r"\.sessions-table thead\s*\{([^}]+)\}",
+        CSS,
+        re.DOTALL,
+    )
+    assert m, ".sessions-table thead rule missing from CSS"
+    rule = m.group(1)
+    assert re.search(r"\btop:\s*0\s*;", rule), (
+        "sessions-table thead must use top:0 so it does not overlap "
+        f"the first data row; got rule body: {rule!r}"
+    )
+    assert not re.search(r"\btop:\s*56px\s*;", rule)
