@@ -225,8 +225,5 @@ test-results/
 # MCP usage telemetry (#26) — runtime data, per-vault
 usage/
 
-# ─── Cursor IDE ──────────────────────────────────────────────────────────
-# Ignore local Cursor scratch; keep committed agent rules shareable.
-.cursor/*
-!.cursor/rules/
-!.cursor/rules/**
+# ─── Cursor IDE (local agent rules / scratch) ────────────────────────────
+.cursor/
