@@ -106,3 +106,63 @@ def test_explicit_config_value_overrides_autodetect(tmp_path: Path, monkeypatch)
     monkeypatch.setenv("USER", "should-be-ignored")
     cfg = load_config(cfg_path)
     assert cfg["redaction"]["real_username"] == "explicitly-mine"
+
+
+def test_empty_real_username_in_overlay_does_not_wipe_autodetect(
+    tmp_path: Path, monkeypatch
+):
+    """#56: config.json copied from examples often has ``"real_username": ""``
+    meaning "auto-detect". Overlaying that empty string must not erase the
+    username ``load_config`` already filled from ``$USER`` — otherwise
+    ``restore_local_path`` no-ops and projects/index mixes ``/Users/USER/``
+    with never-redacted real paths.
+    """
+    import json
+
+    from llmwiki.convert import (
+        DEFAULT_CONFIG_FILE,
+        _overlay_config_file,
+        _ensure_real_username,
+        load_config,
+    )
+
+    monkeypatch.setenv("USER", "alice")
+    monkeypatch.delenv("USERNAME", raising=False)
+
+    cfg = load_config(DEFAULT_CONFIG_FILE)
+    assert cfg["redaction"]["real_username"] == "alice"
+
+    overlay = tmp_path / "config.json"
+    overlay.write_text(
+        json.dumps({"redaction": {"real_username": "", "replacement_username": "USER"}}),
+        encoding="utf-8",
+    )
+    _overlay_config_file(cfg, overlay)
+    _ensure_real_username(cfg)
+    assert cfg["redaction"]["real_username"] == "alice"
+
+
+def test_resolve_convert_config_recovers_from_empty_overlay(
+    tmp_path: Path, monkeypatch
+):
+    """End-to-end: ``_resolve_convert_config`` must still autodetect after
+    a user config that carries the examples placeholder empty string."""
+    import json
+
+    from llmwiki import convert as convert_mod
+
+    monkeypatch.setenv("USER", "alice")
+    monkeypatch.delenv("USERNAME", raising=False)
+
+    examples = tmp_path / "examples.json"
+    examples.write_text("{}", encoding="utf-8")
+    user = tmp_path / "config.json"
+    user.write_text(
+        json.dumps({"redaction": {"real_username": ""}}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(convert_mod, "DEFAULT_CONFIG_FILE", examples)
+    monkeypatch.setattr(convert_mod, "USER_CONFIG_FILE", user)
+
+    cfg = convert_mod._resolve_convert_config(None)
+    assert cfg["redaction"]["real_username"] == "alice"

@@ -507,3 +507,28 @@ def test_render_session_markdown_fixture():
     assert "`Bash`" in md
     # Redaction: since the fixture uses USER already, nothing to redact. Just verify structure.
     assert "/Users/USER/sample-project" in md
+
+
+# ─── #56: encoded cwd segments in agent project dirs ─────────────────
+
+
+def test_redactor_encoded_users_segment():
+    """Claude Code stores projects as ``~/.claude/projects/-Users-<u>-…``.
+    Redacting only ``/Users/<u>/`` leaves the username in the encoded
+    segment (#56).
+    """
+    r = _user_redactor("alice")
+    path = "/Users/alice/.claude/projects/-Users-alice-code-demo/sess.jsonl"
+    out = r(path)
+    assert "alice" not in out
+    assert out == (
+        "/Users/USER/.claude/projects/-Users-USER-code-demo/sess.jsonl"
+    )
+
+
+def test_redactor_encoded_home_segment():
+    r = _user_redactor("alice")
+    path = "/home/alice/.claude/projects/-home-alice-code-demo/x"
+    out = r(path)
+    assert "alice" not in out
+    assert out == "/home/USER/.claude/projects/-home-USER-code-demo/x"
