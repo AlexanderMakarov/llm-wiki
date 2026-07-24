@@ -45,33 +45,51 @@ with restored local cwds (and a **Cwd** column on the sessions table).
 Nothing in `raw/` or `wiki/` is harmed by skipping rebuild; only the
 browsable site stays wrong / inconsistent with session heroes.
 
-### Optional: re-sync only if redaction completeness matters
+### Optional: deterministic raw/ redaction rewrite (no LLM)
 
 #56 also teaches convert to rewrite dash-encoded agent-store segments
-(`~/.claude/projects/-Users-<name>-…` → `-Users-USER-…`). That runs on
-**new** syncs automatically.
+(`~/.claude/projects/-Users-<name>-…` → `-Users-USER-…`). **New** syncs
+do that automatically.
 
-Existing `raw/sessions/*.md` are immutable by design. They are **not**
-rewritten by upgrading or by `build`. For a vault that stays private and
-local, leaving old `raw/` alone is fine — the site restore path already
-shows usable local cwds after rebuild.
+Existing `raw/sessions/*.md` are immutable during normal sync. For a
+vault that stays private and local, leaving old `raw/` alone is fine —
+site restore already shows usable local cwds after rebuild.
 
-Re-convert only when the user intends to **publish or share `raw/`**
-(or otherwise rely on the `USER` placeholder being complete in every
-path shape):
+When the user intends to **publish or share `raw/`** (or otherwise wants
+the `USER` placeholder complete in every path shape already on disk),
+run the **deterministic** migrator — it rewrites path strings in place,
+does **not** call the LLM, does **not** enqueue `synthesize`, and does
+**not** touch `wiki/`:
 
 ```bash
-llmwiki sync --force --vault /path/to/their/vault
+# preview
+llmwiki migrate-raw-redaction --vault /path/to/their/vault --dry-run
+# or: python3 scripts/migrate_raw_encoded_username.py --vault … --dry-run
+
+llmwiki migrate-raw-redaction --vault /path/to/their/vault
 llmwiki build --vault /path/to/their/vault
 ```
 
-**If you skip re-sync** (normal for private vaults):
+**Do not** use `llmwiki sync --force` / re-convert from
+`~/.claude/projects/` or Cursor session folders for this:
 
-- Day-to-day browsing and resume commands: **unaffected** after rebuild.
+- Agent stores usually retain transcripts only ~**30 days** (Claude Code
+  retention; Cursor similar). Older sessions in `raw/` often have **no**
+  source file left to re-convert from — force-sync silently skips or
+  fails those rows while still looking like “migration work”.
+- Force-sync is the wrong tool anyway: agents may follow it with
+  `synthesize` / queue digest and **burn LLM tokens** rewriting wiki
+  pages that did not need to change. The path-string rewrite above is
+  enough.
+
+**If you skip the raw migrator** (normal for private vaults):
+
+- Day-to-day browsing and resume: **unaffected** after rebuild.
 - Old `raw/` rows that already contain `-Users-<real-username>-…` next to
   a redacted `/Users/USER/…` prefix keep that incomplete masking until
-  those files are force-reconverted. That is a redaction-contract gap for
-  publish/share workflows, not data escaping a private vault.
+  `migrate-raw-redaction` (or a future sync of still-present sources).
+  That is a redaction-contract gap for publish/share workflows, not data
+  escaping a private vault.
 
 ### Config note
 
