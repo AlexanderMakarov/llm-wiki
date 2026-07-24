@@ -1014,16 +1014,21 @@ def calc_reading_time(body: str, wpm: int = 225) -> int:
     return max(1, round(words / wpm))
 
 
-# #36: Claude Code keeps transcripts for ~30 days; resume outside that
-# window is unlikely to work. Used to grey out the copyable one-liner.
+# #36: stale greying for the copyable resume one-liner.
+# Only Claude Code gets a resume command today (issue #36); its transcript
+# retention is ~30 days. Cursor (`agent --resume`) and OpenClaw are not
+# wired here yet — when they are, give each adapter its own window rather
+# than reusing this Claude-specific constant.
 RESUME_RETENTION_DAYS = 30
 
 
 def local_cwd(meta: dict[str, Any]) -> str:
     """Session cwd with username redaction reversed for local use (#36).
 
-    Frontmatter stores ``/home/USER/...`` so raw/ is safe to commit; the
-    site owner needs the real absolute path to ``cd`` / resume.
+    Convert already wrote the absolute cwd into frontmatter — then
+    redacted the home-dir username to ``USER`` so ``raw/`` is safe to
+    commit. Build reverses that single substitution so resume / project
+    titles show a real path. See ``restore_local_path``.
     """
     from llmwiki.convert import restore_local_path
 
@@ -1033,8 +1038,9 @@ def local_cwd(meta: dict[str, Any]) -> str:
 def supports_resume(meta: dict[str, Any], path: Optional[Path] = None) -> bool:
     """True when this session can be resumed with ``claude --resume``.
 
-    Only Claude Code main sessions qualify — hide for subagents and for
-    adapters that don't expose a resume CLI (Codex, Cursor, Gemini, …).
+    Issue #36 only specified Claude Code. Cursor has ``agent --resume``
+    and OpenClaw is unconfirmed — both stay hidden until we wire them
+    with the right CLI shape (not ``claude --resume``).
     """
     if _is_subagent(meta, path or Path("session.md")):
         return False

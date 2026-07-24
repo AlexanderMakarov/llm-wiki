@@ -770,8 +770,14 @@ class Redactor:
         return text
 
     # Shared with restore_local_path (#36) so redact/unredact can't drift.
-    # #416: macOS / Linux / Windows C: / WSL /mnt. #485: non-C drives,
-    # Cygwin, extended-length `\\?\`, WSL UNC.
+    #
+    # These are NOT path guesses. Convert already stores the absolute
+    # ``cwd`` from the session transcript; redaction only rewrites the
+    # *username segment* inside known home-directory shapes
+    # (``/home/<you>/…`` → ``/home/USER/…``) so raw/ can be committed.
+    # ``restore_local_path`` reverses that same substitution at build
+    # time. The list is the allowlist of shapes where a username may
+    # legally sit — macOS / Linux / Windows / WSL / Cygwin (#416, #485).
     _HOME_PATH_PREFIXES = (
         r"/Users/",
         r"/home/",
@@ -835,12 +841,14 @@ def restore_local_path(
     real_user: Optional[str] = None,
     repl_user: Optional[str] = None,
 ) -> str:
-    """Undo username redaction in a path for local site rendering (#36).
+    """Undo username redaction in an already-absolute path (#36).
 
-    ``raw/`` stores home paths with the username replaced by ``USER`` so
-    they are safe to commit / publish. Resume commands and project disk
-    paths need the *real* absolute path on the machine that builds the
-    site — ``cd /home/USER/...`` is not a usable directory.
+    The absolute cwd was captured at convert time from the transcript.
+    Redaction then replaced only the home-dir username
+    (``/home/alice/code/x`` → ``/home/USER/code/x``) so ``raw/`` is
+    safe to publish. This reverses that one substitution using the
+    same ``_HOME_PATH_PREFIXES`` allowlist — it does not invent or
+    look up the project path.
 
     When ``real_user`` / ``repl_user`` are omitted, reads them from the
     same convert-time redaction config that wrote the redacted form.
