@@ -769,6 +769,29 @@ class Redactor:
             text = pat.sub("<REDACTED>", text)
         return text
 
+    # Shared with restore_local_path (#36) so redact/unredact can't drift.
+    #
+    # These are NOT path guesses. Convert already stores the absolute
+    # ``cwd`` from the session transcript; redaction only rewrites the
+    # *username segment* inside known home-directory shapes
+    # (``/home/<you>/…`` → ``/home/USER/…``) so raw/ can be committed.
+    # ``restore_local_path`` reverses that same substitution at build
+    # time. The list is the allowlist of shapes where a username may
+    # legally sit — macOS / Linux / Windows / WSL / Cygwin (#416, #485).
+    _HOME_PATH_PREFIXES = (
+        r"/Users/",
+        r"/home/",
+        r"C:\\Users\\",
+        r"C:/Users/",
+        r"/mnt/[a-z]/Users/",
+        r"[A-Za-z]:\\Users\\",
+        r"[A-Za-z]:/Users/",
+        r"/cygdrive/[a-z]/Users/",
+        r"\\\\\?\\[A-Za-z]:\\Users\\",
+        r"\\\\wsl\.localhost\\[A-Za-z0-9_-]+\\home\\",
+        r"\\\\wsl\$\\[A-Za-z0-9_-]+\\home\\",
+    )
+
     def _redact_username(self, text: str) -> str:
         """Replace the real username in home-directory paths.
 
@@ -802,37 +825,55 @@ class Redactor:
         # (lookahead) prevents matching `aliceandbob` when `alice` is
         # the real user. The username group is itself the only thing
         # we substitute — separators and prefix are preserved.
-        prefixes = (
-            # Original (#416): macOS / Linux / Windows C: / WSL /mnt
-            r"/Users/",
-            r"/home/",
-            r"C:\\Users\\",
-            r"C:/Users/",
-            r"/mnt/[a-z]/Users/",
-            # #485: Windows non-C drives (D, E, F, ...) — both backslash
-            # and forward-slash forms (Powershell prints either depending
-            # on origin).
-            r"[A-Za-z]:\\Users\\",
-            r"[A-Za-z]:/Users/",
-            # #485: Cygwin home format
-            r"/cygdrive/[a-z]/Users/",
-            # #485: Windows extended-length path prefix `\\?\C:\Users\`
-            # (used by APIs that bypass MAX_PATH; appears in some tool
-            # output).
-            r"\\\\\?\\[A-Za-z]:\\Users\\",
-            # #485: WSL UNC prefixes — both modern (`wsl.localhost`) and
-            # legacy (`wsl$`). Distro name allows letters/digits/hyphens.
-            r"\\\\wsl\.localhost\\[A-Za-z0-9_-]+\\home\\",
-            r"\\\\wsl\$\\[A-Za-z0-9_-]+\\home\\",
-        )
         pattern = re.compile(
-            r"(?P<prefix>" + "|".join(prefixes) + r")"
+            r"(?P<prefix>" + "|".join(self._HOME_PATH_PREFIXES) + r")"
             + r"(?P<user>" + u + r")"
             + r"(?=$|[/\\])"
         )
         # Cache for next call.
         self._username_pattern_cache = (self.real_user, pattern)
         return pattern.sub(lambda m: m.group("prefix") + repl_user, text)
+
+
+def restore_local_path(
+    path: str,
+    *,
+    real_user: Optional[str] = None,
+    repl_user: Optional[str] = None,
+) -> str:
+    """Undo username redaction in an already-absolute path (#36).
+
+    The absolute cwd was captured at convert time from the transcript.
+    Redaction then replaced only the home-dir username
+    (``/home/alice/code/x`` → ``/home/USER/code/x``) so ``raw/`` is
+    safe to publish. This reverses that one substitution using the
+    same ``_HOME_PATH_PREFIXES`` allowlist — it does not invent or
+    look up the project path.
+
+    When ``real_user`` / ``repl_user`` are omitted, reads them from the
+    same convert-time redaction config that wrote the redacted form.
+    """
+    if not path:
+        return path
+    if real_user is None or repl_user is None:
+        # Same merge convert uses for sync (#25): examples + root config.json.
+        cfg = _resolve_convert_config(None)
+        red = cfg.get("redaction", {})
+        if real_user is None:
+            real_user = str(red.get("real_username") or "")
+        if repl_user is None:
+            repl_user = str(red.get("replacement_username") or "USER")
+    real_user = (real_user or "").strip()
+    repl_user = (repl_user or "USER").strip() or "USER"
+    if not real_user or real_user == repl_user:
+        return path
+    # Reverse of Redactor._redact_username: prefix + USER → prefix + real.
+    pattern = re.compile(
+        r"(?P<prefix>" + "|".join(Redactor._HOME_PATH_PREFIXES) + r")"
+        + r"(?P<user>" + re.escape(repl_user) + r")"
+        + r"(?=$|[/\\])"
+    )
+    return pattern.sub(lambda m: m.group("prefix") + real_user, path)
 
 
 def _close_open_fence(text: str) -> str:

@@ -32,8 +32,8 @@ import re
 import shutil
 import subprocess
 import sys
-from collections import defaultdict
-from datetime import datetime, timezone
+from collections import Counter, defaultdict
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional
 
@@ -755,10 +755,18 @@ def _build_metadata_comment(
         f"slug: {slug}",
         f"project: {project_slug}",
     ]
-    for key in ("date", "started", "ended", "model", "gitBranch", "permissionMode", "user_messages", "tool_calls"):
+    for key in (
+        "date", "started", "ended", "model", "gitBranch", "permissionMode",
+        "user_messages", "tool_calls", "sessionId",
+    ):
         val = meta.get(key)
         if val is not None:
             fields.append(f"{key}: {val}")
+    # #36: restore local username in cwd so agents scraping the HTML
+    # comment get a usable path (raw frontmatter keeps USER).
+    cwd_local = local_cwd(meta)
+    if cwd_local:
+        fields.append(f"cwd: {cwd_local}")
     tools = get_tools_list(meta)
     if tools:
         fields.append(f"tools_used: [{', '.join(tools)}]")
@@ -1006,6 +1014,133 @@ def calc_reading_time(body: str, wpm: int = 225) -> int:
     return max(1, round(words / wpm))
 
 
+# #36: stale greying for the copyable resume one-liner.
+# Only Claude Code gets a resume command today (issue #36); its transcript
+# retention is ~30 days. Cursor (`agent --resume`) and OpenClaw are not
+# wired here yet — when they are, give each adapter its own window rather
+# than reusing this Claude-specific constant.
+RESUME_RETENTION_DAYS = 30
+
+
+def local_cwd(meta: dict[str, Any]) -> str:
+    """Session cwd with username redaction reversed for local use (#36).
+
+    Convert already wrote the absolute cwd into frontmatter — then
+    redacted the home-dir username to ``USER`` so ``raw/`` is safe to
+    commit. Build reverses that single substitution so resume / project
+    titles show a real path. See ``restore_local_path``.
+    """
+    from llmwiki.convert import restore_local_path
+
+    return restore_local_path(str(meta.get("cwd") or "").strip())
+
+
+def supports_resume(meta: dict[str, Any], path: Optional[Path] = None) -> bool:
+    """True when this session can be resumed with ``claude --resume``.
+
+    Issue #36 only specified Claude Code. Cursor has ``agent --resume``
+    and OpenClaw is unconfirmed — both stay hidden until we wire them
+    with the right CLI shape (not ``claude --resume``).
+    """
+    if _is_subagent(meta, path or Path("session.md")):
+        return False
+    _label, css_class = detect_agent_label(meta)
+    return css_class == "agent-claude"
+
+
+def resume_command(meta: dict[str, Any], path: Optional[Path] = None) -> Optional[str]:
+    """Return ``cd <real-cwd> && claude --resume <sessionId>``, or None."""
+    if not supports_resume(meta, path):
+        return None
+    cwd = local_cwd(meta)
+    session_id = str(meta.get("sessionId") or "").strip()
+    if not cwd or not session_id:
+        return None
+    return f"cd {cwd} && claude --resume {session_id}"
+
+
+def resume_is_stale(meta: dict[str, Any], *, now: Optional[datetime] = None) -> bool:
+    """True when the session is older than Claude Code's retention window."""
+    raw = str(meta.get("started") or meta.get("ended") or meta.get("date") or "")
+    if not raw:
+        return False
+    try:
+        # Accept both ISO timestamps and bare YYYY-MM-DD.
+        if "T" in raw:
+            started = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        else:
+            started = datetime.fromisoformat(raw).replace(tzinfo=timezone.utc)
+    except ValueError:
+        return False
+    if started.tzinfo is None:
+        started = started.replace(tzinfo=timezone.utc)
+    ref = now or datetime.now(timezone.utc)
+    if ref.tzinfo is None:
+        ref = ref.replace(tzinfo=timezone.utc)
+    return (ref - started) > timedelta(days=RESUME_RETENTION_DAYS)
+
+
+def project_disk_paths(
+    sessions: list[tuple[Path, dict[str, Any], str]],
+) -> tuple[Optional[str], list[str]]:
+    """Derive a project's on-disk path(s) from session ``cwd`` values.
+
+    Returns ``(primary, all_distinct)`` where ``primary`` is the most
+    common *local* (un-redacted) cwd, and ``all_distinct`` is every
+    unique cwd in frequency-then-alpha order. Divergent cwds (renames,
+    worktrees) stay visible so the reader isn't lied to by a single path.
+    """
+    counts: Counter[str] = Counter()
+    for _path, meta, _body in sessions:
+        cwd = local_cwd(meta)
+        if cwd:
+            counts[cwd] += 1
+    if not counts:
+        return None, []
+    # Most common first; ties broken alphabetically for stability.
+    ordered = sorted(counts.keys(), key=lambda c: (-counts[c], c))
+    return ordered[0], ordered
+
+
+def render_resume_block(meta: dict[str, Any], path: Optional[Path] = None) -> str:
+    """HTML for the copyable ``claude --resume`` one-liner (#36)."""
+    cmd = resume_command(meta, path)
+    if not cmd:
+        return ""
+    stale = resume_is_stale(meta)
+    stale_cls = " resume-stale" if stale else ""
+    hint = (
+        "Resume may fail — session is older than Claude Code's ~30-day "
+        "transcript retention window."
+        if stale
+        else "Resume works while the transcript is within Claude Code's "
+        "retention window (~30 days)."
+    )
+    return (
+        f'<div class="resume-command{stale_cls}">'
+        f'<code class="resume-cmd-text">{html.escape(cmd)}</code>'
+        f'<button class="btn resume-copy-btn" type="button" '
+        f'title="Copy resume command" onclick="copyResume(this)">Copy</button>'
+        f'<span class="muted resume-hint">{html.escape(hint)}</span>'
+        f"</div>"
+    )
+
+
+def render_project_disk_path_html(primary: Optional[str], all_paths: list[str]) -> str:
+    """HTML strip listing *additional* project paths when they diverge (#36).
+
+    The primary absolute path is the project page title — only emit this
+    strip when there is more than one distinct cwd.
+    """
+    if not primary or len(all_paths) <= 1:
+        return ""
+    chips = ", ".join(f"<code>{html.escape(p)}</code>" for p in all_paths)
+    return (
+        f'<div class="project-disk-path muted">'
+        f'Also seen at <span class="project-disk-path-list">{chips}</span></div>'
+    )
+
+
 def render_session(
     path: Path,
     meta: dict[str, Any],
@@ -1055,6 +1190,16 @@ def render_session(
         bits.append(f'branch <code>{html.escape(str(meta["gitBranch"]))}</code>')
     if meta.get("model"):
         bits.append(f'<code>{html.escape(str(meta["model"]))}</code>')
+    # #36: surface cwd + real sessionId in the hero (the page title is
+    # llmwiki's 8-hex slug, useless for `claude --resume`). cwd is
+    # restored to the local absolute path (frontmatter stores USER).
+    cwd_local = local_cwd(meta)
+    if cwd_local:
+        bits.append(f'cwd <code>{html.escape(cwd_local)}</code>')
+    if meta.get("sessionId"):
+        bits.append(
+            f'id <code class="session-id">{html.escape(str(meta["sessionId"]))}</code>'
+        )
     if meta.get("started"):
         bits.append(f'<span class="muted">{html.escape(short_started(meta))}</span>')
     if meta.get("user_messages"):
@@ -1095,6 +1240,7 @@ def render_session(
     # NOT `<slug>.html`. The siblings + canonical must use path.stem.
     html_stem = path.stem
     raw_md_path = f"../../sources/{project_slug}/{path.name}"
+    resume_html = render_resume_block(meta, path)
     actions_html = f"""<div class="session-actions">
   <button class="btn btn-primary" type="button" aria-label="Copy session content as markdown" title="Copy as markdown" onclick="copyMarkdown(this)">Copy as markdown</button>
   <a class="btn" href="../../projects/{html.escape(project_slug)}.html">← {html.escape(project_slug)}</a>
@@ -1102,7 +1248,8 @@ def render_session(
   <a class="btn" href="{html.escape(html_stem + '.txt')}" title="plain-text sibling for AI agents">.txt</a>
   <a class="btn" href="{html.escape(html_stem + '.json')}" title="structured JSON sibling for AI agents">.json</a>
   <textarea class="md-source" hidden>{raw_md_for_copy}</textarea>
-</div>"""
+</div>
+{resume_html}"""
 
     crumbs = [
         ("Home", "index.html"),
@@ -1296,28 +1443,38 @@ def render_project_page(
             f'<p class="project-description muted">'
             f'{html.escape(proj_profile["description"])}</p>'
         )
-    homepage_html = ""
-    if proj_profile and proj_profile.get("homepage"):
-        hp = proj_profile["homepage"]
-        homepage_html = (
-            f'<a class="project-homepage" href="{html.escape(hp)}" '
-            f'rel="noopener">{html.escape(hp)} ↗</a>'
-        )
+    # homepage from wiki/projects/<slug>.md is intentionally not rendered
+    # on the project page (#36 follow-up) — the absolute cwd is the
+    # identity; an external URL under the chips was noise.
     topics_strip = ""
-    if topics_html or description_html or homepage_html:
+    if topics_html or description_html:
         topics_strip = (
             '<section class="section project-topics-section">\n'
             '  <div class="container">\n'
             f'    {description_html}\n'
             f'    {topics_html}\n'
-            f'    {homepage_html}\n'
             '  </div>\n'
             '</section>\n'
         )
 
     usage_block = render_project_usage_block(project_slug, usage_totals or {}, doc_count)
 
+    # #36: surface the project's on-disk path (most common cwd across
+    # its sessions; list all distinct cwds when they diverge).
+    primary_cwd, all_cwds = project_disk_paths(sessions)
+    disk_path_html = render_project_disk_path_html(primary_cwd, all_cwds)
+    disk_path_strip = ""
+    if disk_path_html:
+        disk_path_strip = (
+            '<section class="section project-disk-section">\n'
+            '  <div class="container">\n'
+            f'    {disk_path_html}\n'
+            '  </div>\n'
+            '</section>\n'
+        )
+
     body = f"""{topics_strip}
+{disk_path_strip}
 {heatmap_block}
 {tool_chart_block}
 {token_timeline_block}
@@ -1335,16 +1492,27 @@ def render_project_page(
 </main>
 """
 
+    # #36: project identity is the absolute disk path, not the slug.
+    # Filename stays `<slug>.html` for stable URLs; the hero title is
+    # the restored local cwd. Slug stays in the subtitle for search.
+    display_name = primary_cwd or project_slug
+    hero_sub_bits = [
+        f"slug <code>{html.escape(project_slug)}</code>",
+        f"{len(main_sessions)} main sessions",
+        f"{len(subagent_sessions)} sub-agent runs",
+    ]
     page = (
         page_head(
-            f"{project_slug} — LLM Wiki",
-            f"{len(sessions)} Claude Code sessions from {project_slug}",
+            f"{display_name} — LLM Wiki",
+            f"{len(sessions)} Claude Code sessions from {display_name}",
             css_prefix="../",
         )
         + nav_bar("projects", link_prefix="../")
         + hero(
-            project_slug,
-            f"{len(main_sessions)} main sessions · {len(subagent_sessions)} sub-agent runs",
+            display_name,
+            " · ".join(hero_sub_bits),
+            subtitle_is_html=True,
+            main_class="project-page",
         )
         + body
         + page_foot(js_prefix="../")
@@ -1371,10 +1539,26 @@ def render_projects_index(
             default={},
         )
         badge = render_freshness(newest_meta)
+        # #36: project cards are titled by absolute disk path; slug is
+        # secondary meta so munged names like `aleksandrmakarov-code`
+        # aren't the only identity the reader sees.
+        primary_cwd, all_cwds = project_disk_paths(sessions)
+        title = primary_cwd or project
+        extra = ""
+        if primary_cwd and len(all_cwds) > 1:
+            n_other = len(all_cwds) - 1
+            extra = (
+                f' <span class="muted">'
+                f'(+{n_other} other cwd{"-s" if n_other != 1 else ""})</span>'
+            )
+        slug_bit = (
+            f'<div class="card-meta">slug <code>{html.escape(project)}</code>'
+            f' · {main_count} main · {sub_count} sub-agent</div>'
+        )
         cards.append(
             f"""  <a class="card" href="{html.escape(project)}.html">
-    <div class="card-title">{html.escape(project)}</div>
-    <div class="card-meta">{main_count} main · {sub_count} sub-agent</div>
+    <div class="card-title"><code>{html.escape(title)}</code>{extra}</div>
+    {slug_bit}
     <div class="card-badge">{badge}</div>
   </a>"""
         )
@@ -2206,6 +2390,8 @@ def build_search_index(
             "project": project,
             "date": str(meta.get("date", "")),
             "model": str(meta.get("model", "")),
+            # #36: searchable by real agent session id
+            "sessionId": str(meta.get("sessionId") or ""),
             "body": plain,
         }
         # v1.0 (#161): enrich with facet fields.
@@ -2683,6 +2869,10 @@ def build_site(
             meta_copy = dict(meta)
             meta_copy.setdefault("slug", str(meta.get("slug", path.stem)))
             meta_copy.setdefault("project", project)
+            # #36: JSON sibling cwd must be the real local path so
+            # machine consumers can build a usable resume command.
+            if meta_copy.get("cwd"):
+                meta_copy["cwd"] = local_cwd(meta_copy)
             write_page_json(html_path, meta_copy, body_stripped, wikilinks_out)
             n_siblings += 1
         except (OSError, ValueError, RuntimeError) as e:

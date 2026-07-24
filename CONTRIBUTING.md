@@ -28,8 +28,9 @@ Thanks for wanting to contribute. This project follows strict rules about commit
 7. **Verify old issues before fixing them.** Issues accumulate; some are fixed via side-effect, some describe problems that no longer reproduce, some refer to modules that have since been refactored. Before changing code for a stale issue: (a) reproduce the problem on current `master` — shell command, click-path, or test that fails; (b) re-read the issue's linked code paths to confirm they still exist. If the bug is gone, close with a one-line comment citing the commit that resolved it (`gh issue close N --reason completed --comment "resolved in <sha>"`); if the description is wrong but there's a real bug nearby, file a new precise issue and link to the old one. Never ship a speculative fix — if you can't reproduce, say so in the PR body.
 8. **Open an issue first** for anything bigger than a one-file fix. Keeps scope aligned.
 9. **Never fail silently in the browser.** Every runtime failure in the static site must be visible on the page, not just in the console — see [Static-site error handling](#static-site-error-handling).
+10. **No personal vault details in PR text.** Absolute home paths, OS usernames, vault roots, and personal session examples stay out of PR bodies / commits / CHANGELOG — use placeholders. See [Privacy rules](#privacy-rules).
 
-That's it. If you follow those nine rules your PR is 90% of the way through review.
+That's it. If you follow those ten rules your PR is 90% of the way through review.
 
 ## Code of conduct
 
@@ -205,6 +206,7 @@ llmwiki processes session transcripts that may contain PII, API keys, file paths
 4. **Privacy grep** runs in CI: `grep -r "<real_username>" .` must return zero hits in committed files.
 5. **No telemetry, ever.** The tool never calls home.
 6. **Localhost-only binding by default.** The server binds to `127.0.0.1` unless the user explicitly passes `--host 0.0.0.0`.
+7. **No local vault / personal machine details in PRs or commits.** PR bodies, commit messages, issue comments, and CHANGELOG entries must not include absolute home paths, OS usernames, vault roots, or personal session examples. Use placeholders (`/home/USER/…`, `<vault>`, `<user>`).
 
 ## Testing
 

@@ -131,6 +131,9 @@ def write_page_json(
         "ended": meta.get("ended"),
         "model": meta.get("model"),
         "cwd": meta.get("cwd"),
+        # #36: real agent session id (distinct from llmwiki's 8-hex slug)
+        # so machine consumers can build `claude --resume` without scraping HTML.
+        "sessionId": meta.get("sessionId"),
         "git_branch": meta.get("gitBranch"),
         "permission_mode": meta.get("permissionMode"),
         "user_messages": _as_int(meta.get("user_messages")),

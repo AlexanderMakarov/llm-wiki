@@ -160,6 +160,47 @@ kbd { display: inline-block; padding: 2px 6px; font-family: var(--mono); font-si
 
 /* Actions strip */
 .session-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid var(--border); }
+
+/* #36: copyable `cd … && claude --resume …` one-liner on session pages */
+.resume-command {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px;
+  margin: -8px 0 24px; padding: 10px 12px;
+  background: var(--surface-2, var(--bg-secondary, rgba(124,58,237,0.06)));
+  border: 1px solid var(--border); border-radius: 8px;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+}
+.resume-command .resume-cmd-text {
+  flex: 1 1 240px; font-size: 0.82rem; word-break: break-all;
+  background: transparent; border: 0; padding: 0; color: var(--text);
+}
+.resume-command .resume-copy-btn { flex: 0 0 auto; }
+.resume-command .resume-hint { flex: 1 1 100%; font-size: 0.75rem; font-family: Inter, system-ui, sans-serif; }
+.resume-command.resume-stale { opacity: 0.55; }
+.resume-command.resume-stale .resume-cmd-text { text-decoration: line-through; text-decoration-thickness: 1px; }
+
+.project-disk-path { font-size: 0.9rem; margin: 0 0 8px; }
+.project-disk-path code, .card-path code, .card-title code {
+  font-size: 0.85em; word-break: break-all;
+}
+.card-path { font-size: 0.78rem; margin-top: 4px; line-height: 1.35; }
+.hero h1 { overflow-wrap: anywhere; word-break: break-word; }
+.session-id { word-break: break-all; }
+
+/* #36 follow-up: project pages stack many thin strips (topics, disk
+   paths, heatmap, charts, sessions) — default .section padding burned
+   too much vertical space between them. */
+.project-page > .hero { padding: 32px 0 16px; margin-bottom: 4px; }
+.project-page .section { padding: 8px 0 12px; }
+.project-page .section h2 { margin: 12px 0 10px; }
+.project-page .project-topics-section { padding-top: 4px; padding-bottom: 4px; }
+.project-page .project-topics-section .container { padding-top: 4px; padding-bottom: 0; }
+.project-page .project-disk-section { padding-top: 0; padding-bottom: 4px; }
+.project-page .heatmap-section,
+.project-page .tool-chart-section,
+.project-page .token-timeline-section { padding-top: 4px; padding-bottom: 8px; }
+.project-page .project-usage-section { padding-top: 4px; padding-bottom: 8px; }
+.project-page .sub-section { margin-top: 16px; }
+.project-page .breadcrumbs { margin-bottom: 8px; }
 .btn { display: inline-flex; align-items: center; padding: 6px 14px; font-size: 0.82rem; font-weight: 500; background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; color: var(--text-secondary); cursor: pointer; text-decoration: none; transition: all 0.15s; font-family: var(--font); }
 .btn:hover { border-color: var(--accent); color: var(--accent); text-decoration: none; }
 .btn-primary { background: var(--accent); color: #ffffff; border-color: var(--accent); }

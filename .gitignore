@@ -224,3 +224,6 @@ test-results/
 
 # MCP usage telemetry (#26) — runtime data, per-vault
 usage/
+
+# ─── Cursor IDE (local agent rules / scratch) ────────────────────────────
+.cursor/
