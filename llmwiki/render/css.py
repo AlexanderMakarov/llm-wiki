@@ -326,9 +326,11 @@ kbd { display: inline-block; padding: 2px 6px; font-family: var(--mono); font-si
 /* #452: table-layout: fixed pins column widths from <colgroup> so sticky <thead>
    columns stay aligned with <tbody> as the user scrolls. min-width keeps the
    table from crushing cols on narrow viewports. */
-.sessions-table { width: 100%; min-width: 880px; border-collapse: collapse; font-size: 0.88rem; table-layout: fixed; }
+.sessions-table { width: 100%; min-width: 920px; border-collapse: collapse; font-size: 0.88rem; table-layout: fixed; }
 .sessions-table td { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sessions-table td a { display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
+/* Date is always YYYY-MM-DD — never ellipsize; col width + min-width keep it whole. */
+.sessions-table td:nth-child(4) { overflow: visible; text-overflow: clip; font-variant-numeric: tabular-nums; }
 /* #ui-h10 (#569): iOS Safari needs -webkit-sticky and a stacking
    context (isolation: isolate) on the table parent so the sticky
    thead doesn't lose its z-axis ordering against the nav blur. The

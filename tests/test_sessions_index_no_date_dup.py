@@ -117,6 +117,25 @@ def test_colgroup_present_for_sticky_header_alignment(tmp_path: Path) -> None:
     assert ".sessions-table" in CSS
 
 
+def test_date_column_wide_enough_for_full_iso_date(tmp_path: Path) -> None:
+    """Date col must show YYYY-MM-DD in full — not ``2026-07-…``.
+
+    Widths: Session/Agent/Project/Date/Model/Msgs/Tools. Date gets 13%
+    (was 10%, which ellipsized under table-layout:fixed + cell padding).
+    """
+    sources = [_src("a", "2026-07-23")]
+    out = render_sessions_index(sources, {"demo": sources}, tmp_path)
+    html_text = out.read_text(encoding="utf-8")
+    cols = re.findall(r'<col style="width:\s*([^"]+)"\s*/?>', html_text)
+    assert cols == ["27%", "8%", "16%", "13%", "22%", "7%", "7%"], cols
+    # CSS must not ellipsize the Date cell (4th column).
+    assert "td:nth-child(4)" in CSS
+    assert re.search(
+        r"\.sessions-table td:nth-child\(4\)\s*\{[^}]*text-overflow:\s*clip",
+        CSS,
+        re.DOTALL,
+    )
+
 def test_sticky_thead_uses_nav_offset_without_overflow_scrollport() -> None:
     """Page-scroll sticky needs viewport as containing block + top:56px
     (nav height). `.table-wrap` must not carry overflow-x:auto by default
