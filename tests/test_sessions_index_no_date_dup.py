@@ -115,3 +115,53 @@ def test_colgroup_present_for_sticky_header_alignment(tmp_path: Path) -> None:
     # The CSS rule that makes colgroup widths binding must be present.
     assert "table-layout: fixed" in CSS
     assert ".sessions-table" in CSS
+
+
+def test_date_column_wide_enough_for_full_iso_date(tmp_path: Path) -> None:
+    """Date col must show YYYY-MM-DD in full — not ``2026-07-…``.
+
+    Widths: Session/Agent/Project/Date/Model/Msgs/Tools. Date gets 13%
+    (was 10%, which ellipsized under table-layout:fixed + cell padding).
+    """
+    sources = [_src("a", "2026-07-23")]
+    out = render_sessions_index(sources, {"demo": sources}, tmp_path)
+    html_text = out.read_text(encoding="utf-8")
+    cols = re.findall(r'<col style="width:\s*([^"]+)"\s*/?>', html_text)
+    assert cols == ["27%", "8%", "16%", "13%", "22%", "7%", "7%"], cols
+    # CSS must not ellipsize the Date cell (4th column).
+    assert "td:nth-child(4)" in CSS
+    assert re.search(
+        r"\.sessions-table td:nth-child\(4\)\s*\{[^}]*text-overflow:\s*clip",
+        CSS,
+        re.DOTALL,
+    )
+
+def test_sticky_thead_uses_nav_offset_without_overflow_scrollport() -> None:
+    """Page-scroll sticky needs viewport as containing block + top:56px
+    (nav height). `.table-wrap` must not carry overflow-x:auto by default
+    — that scrollport both kills page stickiness and makes top:56px shove
+    the header into the first body row. Narrow viewports may re-enable
+    overflow + top:0 in a media query."""
+    m = re.search(
+        r"\.sessions-table thead\s*\{([^}]+)\}",
+        CSS,
+        re.DOTALL,
+    )
+    assert m, ".sessions-table thead rule missing from CSS"
+    rule = m.group(1)
+    assert re.search(r"\btop:\s*56px\s*;", rule), (
+        "sessions-table thead must use top:56px to clear the sticky nav; "
+        f"got rule body: {rule!r}"
+    )
+    # Default .table-wrap rule (first occurrence) must not create a scrollport.
+    wrap = re.search(r"\.table-wrap\s*\{([^}]+)\}", CSS)
+    assert wrap, ".table-wrap rule missing from CSS"
+    assert "overflow-x: auto" not in wrap.group(1), (
+        "default .table-wrap must not use overflow-x:auto (breaks sticky)"
+    )
+    # Narrow-viewport fallback still offers horizontal pan + top:0.
+    assert re.search(
+        r"@media\s*\(max-width:\s*900px\)\s*\{[^}]*\.table-wrap\s*\{[^}]*overflow-x:\s*auto",
+        CSS,
+        re.DOTALL,
+    )

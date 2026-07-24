@@ -1508,10 +1508,10 @@ def render_sessions_index(
     <div class="table-wrap">
     <table class="sessions-table">
       <colgroup>
-        <col style="width: 30%">
+        <col style="width: 27%">
         <col style="width: 8%">
         <col style="width: 16%">
-        <col style="width: 10%">
+        <col style="width: 13%">
         <col style="width: 22%">
         <col style="width: 7%">
         <col style="width: 7%">
