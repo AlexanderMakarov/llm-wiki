@@ -117,11 +117,12 @@ def test_colgroup_present_for_sticky_header_alignment(tmp_path: Path) -> None:
     assert ".sessions-table" in CSS
 
 
-def test_sticky_thead_top_is_zero_not_nav_offset() -> None:
-    """Sticky thead must use top:0 — `.table-wrap { overflow-x: auto }`
-    is the sticky containing block, so top:56px (nav height) offsets the
-    header down into the first body row on initial paint."""
-    # Pull the .sessions-table thead rule body (not other `top: 56px` uses).
+def test_sticky_thead_uses_nav_offset_without_overflow_scrollport() -> None:
+    """Page-scroll sticky needs viewport as containing block + top:56px
+    (nav height). `.table-wrap` must not carry overflow-x:auto by default
+    — that scrollport both kills page stickiness and makes top:56px shove
+    the header into the first body row. Narrow viewports may re-enable
+    overflow + top:0 in a media query."""
     m = re.search(
         r"\.sessions-table thead\s*\{([^}]+)\}",
         CSS,
@@ -129,8 +130,19 @@ def test_sticky_thead_top_is_zero_not_nav_offset() -> None:
     )
     assert m, ".sessions-table thead rule missing from CSS"
     rule = m.group(1)
-    assert re.search(r"\btop:\s*0\s*;", rule), (
-        "sessions-table thead must use top:0 so it does not overlap "
-        f"the first data row; got rule body: {rule!r}"
+    assert re.search(r"\btop:\s*56px\s*;", rule), (
+        "sessions-table thead must use top:56px to clear the sticky nav; "
+        f"got rule body: {rule!r}"
     )
-    assert not re.search(r"\btop:\s*56px\s*;", rule)
+    # Default .table-wrap rule (first occurrence) must not create a scrollport.
+    wrap = re.search(r"\.table-wrap\s*\{([^}]+)\}", CSS)
+    assert wrap, ".table-wrap rule missing from CSS"
+    assert "overflow-x: auto" not in wrap.group(1), (
+        "default .table-wrap must not use overflow-x:auto (breaks sticky)"
+    )
+    # Narrow-viewport fallback still offers horizontal pan + top:0.
+    assert re.search(
+        r"@media\s*\(max-width:\s*900px\)\s*\{[^}]*\.table-wrap\s*\{[^}]*overflow-x:\s*auto",
+        CSS,
+        re.DOTALL,
+    )
