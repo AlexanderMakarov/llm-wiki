@@ -206,6 +206,7 @@ llmwiki processes session transcripts that may contain PII, API keys, file paths
 4. **Privacy grep** runs in CI: `grep -r "<real_username>" .` must return zero hits in committed files.
 5. **No telemetry, ever.** The tool never calls home.
 6. **Localhost-only binding by default.** The server binds to `127.0.0.1` unless the user explicitly passes `--host 0.0.0.0`.
+7. **No local vault / personal machine details in PRs or commits.** PR bodies, commit messages, issue comments, and CHANGELOG entries must not include absolute home paths, OS usernames, vault roots, or personal session examples. Use placeholders (`/home/USER/…`, `<vault>`, `<user>`).
 
 ## Testing
 
