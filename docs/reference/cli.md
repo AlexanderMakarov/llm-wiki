@@ -592,6 +592,44 @@ Report keys: `state_file`, `migrated`, `orphan_cleanup_suggestions`, `warnings`,
 
 ---
 
+## `migrate-raw-redaction` — deterministic username rewrite in raw/ (#56)
+
+Rewrites already-synced `raw/sessions/*.md` so home-path **and**
+dash-encoded agent-store segments use the `USER` placeholder
+(`-Users-<you>-…` → `-Users-USER-…`). In-place string rewrite only —
+does **not** re-convert from `~/.claude/projects` / Cursor stores, does
+**not** touch `wiki/`, and does **not** enqueue `synthesize`.
+
+Prefer this over `llmwiki sync --force` when redaction completeness in
+existing `raw/` matters: agent transcripts are usually retained only
+~30 days, so older sessions often have no source left to re-convert;
+force-sync followed by re-synth also burns LLM tokens for no benefit.
+
+Implementation: `scripts/migrate_raw_encoded_username.py`; the CLI is a
+thin wrapper. After migrating, rebuild so `site/` picks up any display
+changes: `llmwiki build --vault PATH`.
+
+```bash
+python3 -m llmwiki migrate-raw-redaction --vault /path/to/vault --dry-run
+python3 -m llmwiki migrate-raw-redaction --vault /path/to/vault
+python3 scripts/migrate_raw_encoded_username.py --vault /path/to/vault --dry-run
+```
+
+### Flags
+
+| Flag | What |
+|---|---|
+| `--vault PATH` | **Required.** Vault root containing `raw/sessions/`. |
+| `--dry-run` | Report files that would change; write nothing. |
+| `--real-username NAME` | Override `redaction.real_username` (default: config / `$USER`). |
+| `--replacement-username NAME` | Override placeholder (default: `USER`). |
+
+Idempotent: already-redacted files count as `unchanged`. Private local
+vaults that never publish `raw/` can skip this and only run `llmwiki build`
+after upgrading (see [UPGRADING.md](../UPGRADING.md)).
+
+---
+
 ## `consolidate-topics` — dedupe + describe topics (#54)
 
 One-time LLM pass over the topic list (not the sessions) that merges
