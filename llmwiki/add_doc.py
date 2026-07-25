@@ -3,8 +3,7 @@
 Converts URLs / files / folders to Markdown and lands them under
 raw/docs/ in the exact layout kbbuilder's async add-doc worker
 produces (dir per doc, section-aware chunks), so a machine running
-both never sees format drift. Spec:
-docs/superpowers/specs/2026-07-04-llmwiki-add-design.md
+both never sees format drift.
 
 Security posture ported from kbbuilder src/wiki-convert.ts: SSRF
 egress guard (scheme + every resolved address + every redirect hop)

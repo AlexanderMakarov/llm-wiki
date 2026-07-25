@@ -811,6 +811,36 @@ def cmd_migrate_raw_redaction(args: argparse.Namespace) -> int:
     return 1 if report["errors"] else 0
 
 
+def cmd_migrate_tools_used(args: argparse.Namespace) -> int:
+    """Expand CallMcpTool frontmatter in raw/sessions from origin stores."""
+    import importlib.util
+
+    script = REPO_ROOT / "scripts" / "migrate_tools_used_mcp.py"
+    spec = importlib.util.spec_from_file_location(
+        "migrate_tools_used_mcp", script
+    )
+    if spec is None or spec.loader is None:
+        print(f"error: migration script missing: {script}", file=sys.stderr)
+        return 2
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    vault = getattr(args, "vault", None)
+    if not vault:
+        print(
+            "error: --vault PATH is required (migrate the user's vault, "
+            "not the llm-wiki clone)",
+            file=sys.stderr,
+        )
+        return 2
+    report = mod.run_migration(
+        vault=Path(vault),
+        dry_run=bool(getattr(args, "dry_run", False)),
+        config_file=getattr(args, "config", None),
+    )
+    mod.print_report(report)
+    return 1 if report["errors"] else 0
+
+
 def cmd_synthesize(args: argparse.Namespace) -> int:
     """Synthesize wiki source pages from raw sessions (v1.1.0 · #35).
 
@@ -1685,6 +1715,32 @@ def build_parser() -> argparse.ArgumentParser:
         help="Override replacement placeholder (default USER)",
     )
     migrate_raw.set_defaults(func=cmd_migrate_raw_redaction)
+
+    migrate_tools = sub.add_parser(
+        "migrate-tools-used",
+        help=(
+            "Expand CallMcpTool/GetMcpTools in raw/sessions frontmatter "
+            "from still-available origin session stores (no synthesize)"
+        ),
+    )
+    migrate_tools.add_argument(
+        "--vault",
+        type=Path,
+        required=True,
+        help="Vault root containing raw/sessions/",
+    )
+    migrate_tools.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Report would-change files; write nothing",
+    )
+    migrate_tools.add_argument(
+        "--config",
+        type=Path,
+        default=None,
+        help="Optional sessions_config.json override",
+    )
+    migrate_tools.set_defaults(func=cmd_migrate_tools_used)
 
     # candidates (v1.1, #51) — approval workflow
     cand = sub.add_parser(

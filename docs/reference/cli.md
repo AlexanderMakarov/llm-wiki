@@ -6,10 +6,7 @@ docs_shell: true
 
 # CLI reference
 
-**Every** `python3 -m llmwiki <subcommand>` — with every flag, realistic
-examples, and expected output. If a command isn't listed here it isn't
-shipping. This page is generated against the live argparse tree, so
-adding a flag without documenting it will fail the guardrail test.
+**Every** `python3 -m llmwiki <subcommand>` — with every flag, realistic examples, and expected output. If a command isn't listed here it isn't shipping. This page is generated against the live argparse tree, so adding a flag without documenting it will fail the guardrail test.
 
 Global flags: `-h` / `--help` on every command, `--version` at the root.
 
@@ -23,17 +20,13 @@ python3 -m llmwiki --help       # list every subcommand
 python3 -m llmwiki              # same as --help
 ```
 
-The shorter alias `llmwiki` works too once the package is installed
-(`pip install llm-notebook` or via Homebrew — see
-[`deploy/pypi-publishing.md`](../deploy/pypi-publishing.md) /
-[`deploy/homebrew-setup.md`](../deploy/homebrew-setup.md)).
+The shorter alias `llmwiki` works too once the package is installed (`pip install llm-notebook` or via Homebrew — see [`deploy/pypi-publishing.md`](../deploy/pypi-publishing.md) / [`deploy/homebrew-setup.md`](../deploy/homebrew-setup.md)).
 
 ---
 
 ## `init` — scaffold `raw/` / `wiki/` / `site/`
 
-Creates the three data directories + seeds nine navigation files inside
-`wiki/`.
+Creates the three data directories + seeds nine navigation files inside `wiki/`.
 
 ```bash
 python3 -m llmwiki init
@@ -61,8 +54,7 @@ python3 -m llmwiki init
 
 ## `sync` — convert `.jsonl` sessions to markdown
 
-The workhorse. Walks every configured adapter, converts new sessions
-into `raw/sessions/`, then (by default) auto-builds and auto-lints.
+The workhorse. Walks every configured adapter, converts new sessions into `raw/sessions/`, then (by default) auto-builds and auto-lints.
 
 ```bash
 python3 -m llmwiki sync
@@ -107,8 +99,7 @@ python3 -m llmwiki sync --force
 
 ### Common recipes
 
-- Nightly cron-style sync of one project only:
-  `llmwiki sync --project my-project --no-auto-lint --since $(date -v-1d +%Y-%m-%d)`
+- Nightly cron-style sync of one project only: `llmwiki sync --project my-project --no-auto-lint --since $(date -v-1d +%Y-%m-%d)`
 - Vault-overlay round-trip: `llmwiki sync --vault "~/Documents/Obsidian Vault"`
 
 ---
@@ -226,8 +217,7 @@ python3 -m llmwiki serve --open
 | `--host ADDR` | Bind address. Default: `127.0.0.1`. Use `0.0.0.0` to share on LAN. |
 | `--open` | Open the browser at the root URL after starting. |
 
-**Stdlib only** — it's `http.server` underneath. Safe for local use;
-don't expose to the public internet.
+**Stdlib only** — it's `http.server` underneath. Safe for local use; don't expose to the public internet.
 
 ---
 
@@ -239,23 +229,11 @@ python3 -m llmwiki usage --json       # machine-readable totals
 python3 -m llmwiki usage --compact    # roll past months into rollup.json first
 ```
 
-Folds the local MCP telemetry logs into totals and prints them next to
-the synthesis cost persisted in state — so the "is this wiki earning its
-synthesis spend?" question is answerable at a glance.
+Folds the local MCP telemetry logs into totals and prints them next to the synthesis cost persisted in state — so the "is this wiki earning its synthesis spend?" question is answerable at a glance.
 
-The MCP server logs one JSON record per tool call to a **per-process**
-file under `<vault>/usage/` (`mcp-<pid>-<start>.jsonl`), merged at read
-time. Several server processes run at once (one per editor session), so
-per-process files mean zero write contention and no lock on the hot path;
-telemetry never touches `llmwiki-state.json`. Each record carries `tool`,
-`query`, `hits` (`0` = a knowledge gap or noise; `null` = the tool can't
-report a count), `resp_bytes`, `duration_ms`, `caller_project`,
-`caller_source`, `server_pid`, `server_started`. Writes are best-effort — a
-telemetry failure never breaks a tool call. Opt out with
-`LLMWIKI_MCP_TELEMETRY=0`.
+The MCP server logs one JSON record per tool call to a **per-process** file under `<vault>/usage/` (`mcp-<pid>-<start>.jsonl`), merged at read time. Several server processes run at once (one per editor session), so per-process files mean zero write contention and no lock on the hot path; telemetry never touches `llmwiki-state.json`. Each record carries `tool`, `query`, `hits` (`0` = a knowledge gap or noise; `null` = the tool can't report a count), `resp_bytes`, `duration_ms`, `caller_project`, `caller_source`, `server_pid`, `server_started`. Writes are best-effort — a telemetry failure never breaks a tool call. Opt out with `LLMWIKI_MCP_TELEMETRY=0`.
 
-**Caller attribution.** `caller_project` is resolved per call and
-`caller_source` says where it came from:
+**Caller attribution.** `caller_project` is resolved per call and `caller_source` says where it came from:
 
 | `caller_source` | Meaning |
 |---|---|
@@ -264,28 +242,13 @@ telemetry failure never breaks a tool call. Opt out with
 | `path` | A path argument carrying the caller's working directory encoded into one segment (`…/-home-dev-code-my-app/…`), used for clients that offer neither of the above. |
 | `unattributed` | No caller-scoped signal — `caller_project` is `unknown`. |
 
-They are tried in that order. All three project sources feed one shared
-`slugs.project_slug_from_abs_path`, so a project resolves to the same slug
-whether it arrived through telemetry or through session ingestion (and thus
-keys onto its own project page).
+They are tried in that order. All three project sources feed one shared `slugs.project_slug_from_abs_path`, so a project resolves to the same slug whether it arrived through telemetry or through session ingestion (and thus keys onto its own project page).
 
-**Client coverage.** Claude Code attributes every call with no setup, via
-`CLAUDE_PROJECT_DIR`. **Cursor** currently provides no zero-config signal —
-it advertises the `roots` capability but returns `Method not found` on the
-actual `roots/list` call, and injects no workspace env var — so its calls
-fall to the path heuristic where a path argument is present, else
-`unknown`, until it ships a fix. The server's own `os.getcwd()` is never
-used: a client may launch the server anywhere (Claude Code's desktop app
-uses `$HOME`), so it is unrelated to the caller's project.
+**Client coverage.** Claude Code attributes every call with no setup, via `CLAUDE_PROJECT_DIR`. **Cursor** currently provides no zero-config signal — it advertises the `roots` capability but returns `Method not found` on the actual `roots/list` call, and injects no workspace env var — so its calls fall to the path heuristic where a path argument is present, else `unknown`, until it ships a fix. The server's own `os.getcwd()` is never used: a client may launch the server anywhere (Claude Code's desktop app uses `$HOME`), so it is unrelated to the caller's project.
 
-Unattributed calls are counted in the totals but never presented as a
-project: they print as `(unattributed)` here and are excluded from the
-site's "Heaviest project by MCP usage" card. Records written by an earlier
-version carry no `caller_source` and are read as unattributed regardless of
-the project name they hold, because that name is the server process's own
-working directory rather than the caller's. The same applies to a
-`usage/rollup.json` written before this change — the raw records behind it
-are already deleted, so its labels are retracted rather than recomputed.
+Unattributed calls are counted in the totals but never presented as a project: they print as `(unattributed)` here and are excluded from the site's "Heaviest project by MCP usage" card. Records written by an earlier version carry no `caller_source` and are read as unattributed regardless of the project name they hold, because that name is the server process's own working directory rather than the caller's. The same applies to a `usage/rollup.json` written before this change — the raw records behind it are already deleted, so its labels are retracted rather than recomputed.
+
+**Daily series (#52).** `usage/daily.json` stores per-day MCP call totals (`mcp_calls`, `retrievals`, `writes`, `session_reads`, `doc_reads`, `other_reads`, `by_tool`, attribution counts) so Analytics activity heatmaps survive `--compact`. Compact folds retiring JSONL files into `folded_days` before delete; each `llmwiki build` refreshes the live overlay from non-folded files without double-counting. The CLI report itself is unchanged — the Analytics page is the primary surface. See [State persistence](state-persistence.md).
 
 Scope is MCP calls only — `file://` static-site browsing stays untracked.
 
@@ -327,8 +290,7 @@ Registered adapters:
   web_clipper       no        -             Obsidian Web Clipper intake
 ```
 
-Columns: **default** (runs when you don't pass `--adapter`), **configured**
-(adapter sees a valid session store on this machine).
+Columns: **default** (runs when you don't pass `--adapter`), **configured** (adapter sees a valid session store on this machine).
 
 ---
 
@@ -348,15 +310,9 @@ python3 -m llmwiki graph --format html
 | `--format {json,html,both}` | Output format(s). Default: `both`. |
 | `--engine {builtin,graphify}` | Graph engine. `builtin` = stdlib wikilink graph. `graphify` = AI-powered with community detection, confidence-scored edges, god nodes. Requires `pip install graphifyy`. Default: `builtin`. |
 
-**Builtin engine:** Emits `graph/graph.json` (nodes + edges) and/or `graph/graph.html`
-(vis-network interactive viewer). The interactive version is also
-auto-copied into `site/graph.html` on every `build`.
+**Builtin engine:** Emits `graph/graph.json` (nodes + edges) and/or `graph/graph.html` (vis-network interactive viewer). The interactive version is also auto-copied into `site/graph.html` on every `build`.
 
-**Graphify engine:** Runs the [Graphify](https://github.com/safishamsi/graphify) pipeline:
-tree-sitter AST extraction for code, semantic analysis for docs, Leiden community
-detection, god-node analysis. Outputs to `graphify-out/` (graph.json, graph.html,
-GRAPH_REPORT.md) and copies to `graph/` for build compatibility. Install:
-`pip install llm-notebook[graph]` or `pip install graphifyy`.
+**Graphify engine:** Runs the [Graphify](https://github.com/safishamsi/graphify) pipeline: tree-sitter AST extraction for code, semantic analysis for docs, Leiden community detection, god-node analysis. Outputs to `graphify-out/` (graph.json, graph.html, GRAPH_REPORT.md) and copies to `graph/` for build compatibility. Install: `pip install llm-notebook[graph]` or `pip install graphifyy`.
 
 ---
 
@@ -419,19 +375,11 @@ python3 -m llmwiki lint --wiki-dir ~/another-wiki
 
 ### Rules
 
-14 structural (`frontmatter_completeness`, `frontmatter_validity`,
-`link_integrity`, `orphan_detection`, `content_freshness`,
-`entity_consistency`, `duplicate_detection`, `index_sync`,
-`stale_candidates`, `tags_topics_convention`, `stale_reference_detection`,
-`frontmatter_count_consistency`, `tools_consistency`, `stub_source_pages`)
+14 structural (`frontmatter_completeness`, `frontmatter_validity`, `link_integrity`, `orphan_detection`, `content_freshness`, `entity_consistency`, `duplicate_detection`, `index_sync`, `stale_candidates`, `tags_topics_convention`, `stale_reference_detection`, `frontmatter_count_consistency`, `tools_consistency`, `stub_source_pages`)
 + 3 LLM-powered (`contradiction_detection`, `claim_verification`,
 `summary_accuracy`).
 
-`stub_source_pages` (#24) flags pages under `wiki/sources/` whose body is
-machine-generated filler — a pending sentinel (`<!-- llmwiki-pending: … -->`)
-or the dummy backend's `Auto-synthesized from session` body. Those sources
-still count as unsynthesized backlog; refill them with
-`llmwiki synthesize` on a real backend.
+`stub_source_pages` (#24) flags pages under `wiki/sources/` whose body is machine-generated filler — a pending sentinel (`<!-- llmwiki-pending: … -->`) or the dummy backend's `Auto-synthesized from session` body. Those sources still count as unsynthesized backlog; refill them with `llmwiki synthesize` on a real backend.
 
 ### Expected output
 
@@ -473,8 +421,7 @@ python3 -m llmwiki candidates discard --slug BogusEntity --reason "LLM hallucina
 | `--stale-days N` | Staleness threshold. Default: 30. |
 | `--json` | JSON output for `list`. |
 
-See [`guides/existing-vault.md`](../guides/existing-vault.md) for the
-round-trip semantics when a candidate lives inside a vault.
+See [`guides/existing-vault.md`](../guides/existing-vault.md) for the round-trip semantics when a candidate lives inside a vault.
 
 ---
 
@@ -496,36 +443,22 @@ python3 -m llmwiki synthesize                    # real run
 | `--estimate` | Print cached-vs-fresh token + dollar estimate (#50). |
 | `--vault PATH` | Read/write under the vault root; configures the active `llmwiki-state.json`. |
 
-Backend is picked from `synthesis.backend` in `config.json` /
-`sessions_config.json` (`dummy` by default, `ollama` for local,
-`claude` for synchronous `claude -p`). See
-[`configuration.md`](../configuration.md#synthesis-backend).
+Backend is picked from `synthesis.backend` in `config.json` / `sessions_config.json` (`dummy` by default, `ollama` for local, `claude` for synchronous `claude -p`). See [`configuration.md`](../configuration.md#synthesis-backend).
 
 > **Removed in v1.4.0:** `--list-pending` and `--complete` (agent-delegate
 > pending prompts). Use `synthesis.backend: claude` instead.
 
 ### Auto-tagging (#351)
 
-Every `synthesize` call now produces **topical** tags alongside the
-deterministic baseline.  The synthesizer emits a
-`<!-- suggested-tags: prompt-caching, rag, github-actions -->` block
-as the first line of its response; the pipeline parses it, strips it
-from the body, and merges the tags into frontmatter with:
+Every `synthesize` call now produces **topical** tags alongside the deterministic baseline.  The synthesizer emits a `<!-- suggested-tags: prompt-caching, rag, github-actions -->` block as the first line of its response; the pipeline parses it, strips it from the body, and merges the tags into frontmatter with:
 
 - **Baseline preserved** — adapter, project slug, model family stay.
-- **Maintainer wins** — on `--force`, whatever you added via
-  `llmwiki tag add` is kept at the front of the list.
-- **Stop-word filter** — the LLM can't re-add boilerplate tags
-  (`session`, `summary`, `claude-code`, etc.).
+- **Maintainer wins** — on `--force`, whatever you added via `llmwiki tag add` is kept at the front of the list.
+- **Stop-word filter** — the LLM can't re-add boilerplate tags (`session`, `summary`, `claude-code`, etc.).
 - **Cap 5** — max 5 AI tags per page to prevent drift.
-- **Near-dup rejection** — `prompt-cache` is blocked when
-  `prompt-caching` is already on the page (threshold 0.80 + prefix
-  check).
+- **Near-dup rejection** — `prompt-cache` is blocked when `prompt-caching` is already on the page (threshold 0.80 + prefix check).
 
-No extra API round-trip — rides the existing synthesis call, so cost
-estimates from `--estimate` are unchanged.  If the backend returns no
-suggested-tags block (dummy backend, malformed output), the page still
-ships with baseline tags.
+No extra API round-trip — rides the existing synthesis call, so cost estimates from `--estimate` are unchanged.  If the backend returns no suggested-tags block (dummy backend, malformed output), the page still ships with baseline tags.
 
 ---
 
@@ -594,20 +527,11 @@ Report keys: `state_file`, `migrated`, `orphan_cleanup_suggestions`, `warnings`,
 
 ## `migrate-raw-redaction` — deterministic username rewrite in raw/ (#56)
 
-Rewrites already-synced `raw/sessions/*.md` so home-path **and**
-dash-encoded agent-store segments use the `USER` placeholder
-(`-Users-<you>-…` → `-Users-USER-…`). In-place string rewrite only —
-does **not** re-convert from `~/.claude/projects` / Cursor stores, does
-**not** touch `wiki/`, and does **not** enqueue `synthesize`.
+Rewrites already-synced `raw/sessions/*.md` so home-path **and** dash-encoded agent-store segments use the `USER` placeholder (`-Users-<you>-…` → `-Users-USER-…`). In-place string rewrite only — does **not** re-convert from `~/.claude/projects` / Cursor stores, does **not** touch `wiki/`, and does **not** enqueue `synthesize`.
 
-Prefer this over `llmwiki sync --force` when redaction completeness in
-existing `raw/` matters: agent transcripts are usually retained only
-~30 days, so older sessions often have no source left to re-convert;
-force-sync followed by re-synth also burns LLM tokens for no benefit.
+Prefer this over `llmwiki sync --force` when redaction completeness in existing `raw/` matters: agent transcripts are usually retained only ~30 days, so older sessions often have no source left to re-convert; force-sync followed by re-synth also burns LLM tokens for no benefit.
 
-Implementation: `scripts/migrate_raw_encoded_username.py`; the CLI is a
-thin wrapper. After migrating, rebuild so `site/` picks up any display
-changes: `llmwiki build --vault PATH`.
+Implementation: `scripts/migrate_raw_encoded_username.py`; the CLI is a thin wrapper. After migrating, rebuild so `site/` picks up any display changes: `llmwiki build --vault PATH`.
 
 ```bash
 python3 -m llmwiki migrate-raw-redaction --vault /path/to/vault --dry-run
@@ -624,18 +548,37 @@ python3 scripts/migrate_raw_encoded_username.py --vault /path/to/vault --dry-run
 | `--real-username NAME` | Override `redaction.real_username` (default: config / `$USER`). |
 | `--replacement-username NAME` | Override placeholder (default: `USER`). |
 
-Idempotent: already-redacted files count as `unchanged`. Private local
-vaults that never publish `raw/` can skip this and only run `llmwiki build`
-after upgrading (see [UPGRADING.md](../UPGRADING.md)).
+Idempotent: already-redacted files count as `unchanged`. Private local vaults that never publish `raw/` can skip this and only run `llmwiki build` after upgrading (see [UPGRADING.md](../UPGRADING.md)).
+
+---
+
+## `migrate-tools-used` — expand CallMcpTool frontmatter from origin stores
+
+Rewrites `tools_used` and `tool_counts` in already-synced `raw/sessions/*.md` when the originating agent session file still exists. Re-reads records through the session adapter and applies the same `tool_use_recorded_names` expansion `llmwiki sync` uses (`CallMcpTool` → `mcp__{server}__{tool}`). In-place frontmatter update only — does **not** touch `wiki/`, does **not** enqueue `synthesize`, and **never** invents MCP names when the origin store is gone (TTL / deleted sessions count as `skipped_missing_origin` and stay unchanged).
+
+Implementation: `scripts/migrate_tools_used_mcp.py`; the CLI is a thin wrapper. After migrating, rebuild so analytics and the site pick up the new tool names: `llmwiki build --vault PATH`.
+
+```bash
+python3 -m llmwiki migrate-tools-used --vault /path/to/vault --dry-run
+python3 -m llmwiki migrate-tools-used --vault /path/to/vault
+python3 scripts/migrate_tools_used_mcp.py --vault /path/to/vault --dry-run
+```
+
+### Flags
+
+| Flag | What |
+|---|---|
+| `--vault PATH` | **Required.** Vault root containing `raw/sessions/`. |
+| `--dry-run` | Report files that would change; write nothing. |
+| `--config PATH` | Optional `sessions_config.json` override (record filters). |
+
+Origin resolution prefers the vault's `llmwiki-state.json` sync keys (`adapter::home-relative-path`), then falls back to a glob under the adapter session store by `sessionId`. Claude Code JSONL is fully supported; Cursor and other non-JSONL stores work when the state key or glob resolves a readable origin path. Missing origins leave `CallMcpTool` entries intact for `wiki_adoption` body fallback.
 
 ---
 
 ## `consolidate-topics` — dedupe + describe topics (#54)
 
-One-time LLM pass over the topic list (not the sessions) that merges
-duplicate topic spellings (`LLM-Wiki` / `LLMWiki` / `llm wiki`) into
-one canonical node and writes short descriptions, caching the result
-in `.llmwiki-topics.json` for `llmwiki graph` / `llmwiki build`.
+One-time LLM pass over the topic list (not the sessions) that merges duplicate topic spellings (`LLM-Wiki` / `LLMWiki` / `llm wiki`) into one canonical node and writes short descriptions, caching the result in `.llmwiki-topics.json` for `llmwiki graph` / `llmwiki build`.
 
 ```bash
 python3 -m llmwiki consolidate-topics                # emit the LLM prompt
@@ -650,8 +593,7 @@ python3 -m llmwiki consolidate-topics --complete -    # read the reply from stdi
 | `--complete PATH` | Ingest the LLM's JSON reply (file path, or `-` for stdin) and write the topic cache. Without this flag, the prompt is printed instead. |
 | `--vault PATH` | Read/write the topic cache inside the given vault instead of the repo. |
 
-Re-run after large ingest batches so near-duplicate topic spellings
-don't fragment the knowledge graph.
+Re-run after large ingest batches so near-duplicate topic spellings don't fragment the knowledge graph.
 
 ---
 
@@ -680,16 +622,13 @@ python3 -m llmwiki query "Flutter mobile" --depth 2 --budget 1000
 | `--depth N` | BFS traversal depth. Default: `3`. |
 | `--budget N` | Max output tokens. Default: `2000`. |
 
-Requires Graphify (`pip install llm-notebook[graph]`). Run `llmwiki graph` first
-to build the graph.
+Requires Graphify (`pip install llm-notebook[graph]`). Run `llmwiki graph` first to build the graph.
 
 ---
 
 ## `all` — run the full pipeline
 
-Convenience entry point that runs `build` → `graph` → `export all` → `lint`
-in order. This is the one command to run after `sync` to produce a
-CI-ready site.
+Convenience entry point that runs `build` → `graph` → `export all` → `lint` in order. This is the one command to run after `sync` to produce a CI-ready site.
 
 ```bash
 python3 -m llmwiki all
@@ -724,8 +663,7 @@ Exit codes:
 | `1` | Operation failed (user-visible error) |
 | `2` | Usage error (bad flags, missing file, etc.) |
 
-Subcommands document their own non-zero exit conditions where relevant
-(`lint --fail-on-errors`).
+Subcommands document their own non-zero exit conditions where relevant (`lint --fail-on-errors`).
 
 ---
 

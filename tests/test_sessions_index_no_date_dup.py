@@ -126,7 +126,7 @@ def test_date_column_wide_enough_for_full_iso_date(tmp_path: Path) -> None:
     out = render_sessions_index(sources, {"demo": sources}, tmp_path)
     html_text = out.read_text(encoding="utf-8")
     cols = re.findall(r'<col style="width:\s*([^"]+)"\s*/?>', html_text)
-    assert cols == ["22%", "7%", "12%", "11%", "20%", "16%", "6%", "6%"], cols
+    assert cols == ["18%", "7%", "16%", "10%", "26%", "13%", "5%", "5%"], cols
     # CSS must not ellipsize the Date cell (4th column).
     assert "td:nth-child(4)" in CSS
     assert re.search(

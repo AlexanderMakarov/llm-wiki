@@ -2,7 +2,7 @@
 
 Covers:
 * data collection + project filtering
-* 365-day rolling window Sunday-alignment
+* ~18-month rolling window Sunday-alignment
 * quantile bucketing over non-zero days
 * SVG structure (cell count, rects, titles, a11y label)
 * stdlib-only (no extra deps)
@@ -18,12 +18,13 @@ import pytest
 from llmwiki.viz_heatmap import (
     CELL_SIZE,
     ROW_COUNT,
-    WEEK_COLS,
+    WINDOW_DAYS,
     cell_count_for_window,
     collect_session_counts,
     compute_quantile_thresholds,
     level_for,
     render_heatmap,
+    week_column_count,
     window_bounds,
 )
 
@@ -40,21 +41,21 @@ def test_window_bounds_is_sunday_aligned():
     start, returned_end = window_bounds(end)
     assert returned_end == end
     assert start.weekday() == 6  # Sunday
-    # The raw (unaligned) start would be 364 days before end.
     from datetime import timedelta
 
-    assert start <= end - timedelta(days=364)
+    assert start <= end - timedelta(days=WINDOW_DAYS - 1)
 
 
 def test_window_bounds_when_end_is_a_sunday():
     """When end_date IS a Sunday, the grid shape must still be well-formed
-    — the start-date Sunday alignment should push the start back to exactly
-    52 weeks earlier, giving a clean 53-column window of 371 cells."""
+    — start aligns to a Sunday and the inclusive span is at least
+    WINDOW_DAYS."""
     end = date(2026, 4, 12)  # Sunday
     assert end.weekday() == 6
     start, _ = window_bounds(end)
     assert start.weekday() == 6
-    assert (end - start).days == 364
+    assert (end - start).days + 1 >= WINDOW_DAYS
+    assert (end - start).days + 1 <= WINDOW_DAYS + 6
 
 
 # ─── cell_count_for_window: always whole weeks ───────────────────────────
@@ -62,23 +63,19 @@ def test_window_bounds_when_end_is_a_sunday():
 
 def test_cell_count_covers_full_window():
     """The grid must cover every day from the Sunday-aligned start through
-    the end date, inclusive. For an end date mid-week the cell count is
-    365 + days-from-end-sunday-to-sunday-before-end — between 365 and 371."""
+    the end date, inclusive. Span is WINDOW_DAYS .. WINDOW_DAYS+6."""
     for offset in range(0, 7):
-        end = date(2026, 4, 9) - date.resolution * 0
+        end = date(2026, 4, 9)
         end_shifted = end.replace(day=min(end.day + offset, 28))
         n = cell_count_for_window(end_shifted)
-        assert 365 <= n <= 371
+        assert WINDOW_DAYS <= n <= WINDOW_DAYS + 6
 
 
 def test_cell_count_exact_for_known_end_date():
-    # 2026-04-09 is a Thursday (weekday()=3). The 364-days-ago date is
-    # 2025-04-10 (also a Thursday, weekday()=3). Aligning to the preceding
-    # Sunday pushes start to 2025-04-06. Total days: (2026-04-09 -
-    # 2025-04-06) = 368 days + 1 inclusive = 369 cells.
     end = date(2026, 4, 9)
-    assert end.weekday() == 3  # Thu — sanity check
-    assert cell_count_for_window(end) == 369
+    start, _ = window_bounds(end)
+    assert cell_count_for_window(end) == (end - start).days + 1
+    assert week_column_count(start, end) * 7 >= cell_count_for_window(end)
 
 
 # ─── collect_session_counts: project filter + bad dates ──────────────────
@@ -179,19 +176,24 @@ def test_level_for_boundary_values():
 
 
 def test_render_heatmap_emits_svg_root_with_aria_label():
-    svg = render_heatmap({}, end_date=date(2026, 4, 9))
+    end = date(2026, 4, 9)
+    start, _ = window_bounds(end)
+    svg = render_heatmap({}, end_date=end)
     assert svg.startswith('<svg')
     assert 'role="img"' in svg
-    assert 'aria-label="Activity heatmap, 2025-04-06 to 2026-04-09"' in svg
+    assert (
+        f'aria-label="Activity heatmap, {start.isoformat()} to {end.isoformat()}"'
+        in svg
+    )
     assert svg.rstrip().endswith('</svg>')
 
 
 def test_render_heatmap_emits_expected_cell_count_for_end_date():
-    """End date 2026-04-09 (Thu) — 369 cells as per test_cell_count_exact_for_known_end_date.
-    Every cell is a `<rect>` with one of `l0..l4` classes."""
-    svg = render_heatmap({}, end_date=date(2026, 4, 9))
+    """Cell count matches Sunday-aligned window; every cell is l0..l4."""
+    end = date(2026, 4, 9)
+    svg = render_heatmap({}, end_date=end)
     rects = re.findall(r'<rect class="l[0-4]"', svg)
-    assert len(rects) == 369
+    assert len(rects) == cell_count_for_window(end)
 
 
 def test_render_heatmap_highlights_counted_days():
@@ -244,10 +246,16 @@ def test_render_heatmap_stdlib_only_no_html_injection():
 
 
 def test_render_heatmap_cell_count_constants():
-    """Sanity: the layout constants produce a 53×7 grid — the GitHub shape."""
-    assert WEEK_COLS == 53
+    """Sanity: layout constants + ~18-month window fill a wide card."""
     assert ROW_COUNT == 7
     assert CELL_SIZE == 11
+    assert WINDOW_DAYS == 525
+    end = date(2026, 4, 9)
+    start, _ = window_bounds(end)
+    cols = week_column_count(start, end)
+    assert cols >= 70  # wider than the old 53-week GitHub year
+    width = 28 + cols * (CELL_SIZE + 2) - 2 + 4
+    assert 950 <= width <= 1050
 
 
 def test_render_heatmap_has_weekday_labels():
@@ -261,7 +269,7 @@ def test_render_heatmap_has_month_labels():
     """At least a few month labels should appear — the exact set depends
     on which months have a first-Sunday in the window."""
     svg = render_heatmap({}, end_date=date(2026, 4, 9))
-    # All 12 month names should appear across a 365-day window.
+    # ~18 months should cover every month name at least once.
     month_labels_found = sum(
         1 for m in ("Jan", "Feb", "Mar", "Apr", "May", "Jun",
                     "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")

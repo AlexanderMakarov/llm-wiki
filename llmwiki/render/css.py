@@ -31,6 +31,8 @@ CSS = """/* llmwiki — god-level docs style */
   --shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.1), 0 8px 10px -6px rgba(15, 23, 42, 0.04);
   --shadow-card: 0 1px 3px rgba(15, 23, 42, 0.08), 0 1px 2px rgba(15, 23, 42, 0.04);  /* v1.0 #119: card shadow */
   --shadow-card-hover: 0 4px 12px rgba(15, 23, 42, 0.12), 0 2px 4px rgba(15, 23, 42, 0.06);
+  --section-y: 20px 0 24px;
+  --block-gap: 16px;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -148,12 +150,12 @@ kbd { display: inline-block; padding: 2px 6px; font-family: var(--mono); font-si
 .breadcrumbs [aria-current="page"] { color: var(--text); font-weight: 500; }
 
 /* Section */
-.section { padding: 28px 0 32px; }
+.section { padding: var(--section-y); }
 .section h2 { font-size: 1.5rem; font-weight: 700; margin: 24px 0 16px; color: var(--text); }
 .section h3 { font-size: 1.15rem; font-weight: 600; margin: 20px 0 10px; color: var(--text); }
 /* #27: the Analytics page stacks several stat sections; tighten the vertical
    rhythm so they read as one dashboard rather than distant blocks. */
-.analytics-page .section { padding: 12px 0; }
+.analytics-page { --section-y: 12px 0; }
 .analytics-page .section h2 { margin-top: 8px; }
 
 .meta-tools { font-size: 0.82rem; margin-bottom: 12px; overflow-wrap: break-word; }
@@ -187,18 +189,13 @@ kbd { display: inline-block; padding: 2px 6px; font-family: var(--mono); font-si
 .session-id { word-break: break-all; }
 
 /* #36 follow-up: project pages stack many thin strips (topics, disk
-   paths, heatmap, charts, sessions) — default .section padding burned
-   too much vertical space between them. */
+   paths, heatmap, charts, sessions) — tighten via --section-y once. */
+.project-page { --section-y: 8px 0 12px; }
 .project-page > .hero { padding: 32px 0 16px; margin-bottom: 4px; }
-.project-page .section { padding: 8px 0 12px; }
 .project-page .section h2 { margin: 12px 0 10px; }
 .project-page .project-topics-section { padding-top: 4px; padding-bottom: 4px; }
 .project-page .project-topics-section .container { padding-top: 4px; padding-bottom: 0; }
 .project-page .project-disk-section { padding-top: 0; padding-bottom: 4px; }
-.project-page .heatmap-section,
-.project-page .tool-chart-section,
-.project-page .token-timeline-section { padding-top: 4px; padding-bottom: 8px; }
-.project-page .project-usage-section { padding-top: 4px; padding-bottom: 8px; }
 .project-page .sub-section { margin-top: 16px; }
 .project-page .breadcrumbs { margin-bottom: 8px; }
 .btn { display: inline-flex; align-items: center; padding: 6px 14px; font-size: 0.82rem; font-weight: 500; background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; color: var(--text-secondary); cursor: pointer; text-decoration: none; transition: all 0.15s; font-family: var(--font); }
@@ -365,14 +362,23 @@ kbd { display: inline-block; padding: 2px 6px; font-family: var(--mono); font-si
    for narrow viewports only. */
 .table-wrap { max-width: 100%; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-card); isolation: isolate; }
 /* #452: table-layout: fixed pins column widths from <colgroup> so sticky <thead>
-   columns stay aligned with <tbody> as the user scrolls. min-width keeps the
-   table from crushing cols on narrow viewports. */
-.sessions-table { width: 100%; min-width: 1100px; border-collapse: collapse; font-size: 0.88rem; table-layout: fixed; }
-.sessions-table td { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sessions-table td a { display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
-/* Date is always YYYY-MM-DD — never ellipsize; col width + min-width keep it whole. */
-.sessions-table td:nth-child(4) { overflow: visible; text-overflow: clip; font-variant-numeric: tabular-nums; }
-.sessions-table td.session-cwd code { font-size: 0.78em; }
+   columns stay aligned with <tbody> as the user scrolls. String columns wrap so
+   the table can stay inside the card without a horizontal scrollport (Msgs/Tools
+   stay narrow + nowrap). */
+.sessions-table { width: 100%; max-width: 100%; border-collapse: collapse; font-size: 0.88rem; table-layout: fixed; }
+.sessions-table td { overflow: hidden; }
+/* String content: Session, Project, Cwd, Model — wrap instead of ellipsis crush. */
+.sessions-table td:nth-child(1),
+.sessions-table td:nth-child(3),
+.sessions-table td:nth-child(5),
+.sessions-table td:nth-child(6) {
+  white-space: normal; overflow-wrap: anywhere; word-break: break-word;
+}
+.sessions-table td a { display: inline; max-width: 100%; overflow-wrap: anywhere; word-break: break-word; }
+/* Date is always YYYY-MM-DD — never ellipsize; keep on one line. */
+.sessions-table td:nth-child(4) { overflow: visible; text-overflow: clip; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.sessions-table td.session-cwd code { font-size: 0.78em; word-break: break-all; }
+.sessions-table td.num { white-space: nowrap; }
 /* #ui-h10 (#569): iOS Safari needs -webkit-sticky and a stacking
    context (isolation: isolate) on the table parent so the sticky
    thead doesn't lose its z-axis ordering against the nav blur. The
@@ -409,6 +415,14 @@ kbd { display: inline-block; padding: 2px 6px; font-family: var(--mono); font-si
 .mcp-usage-table th, .mcp-usage-table td { padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border); }
 .mcp-usage-table th { background: var(--bg-alt); font-weight: 600; color: var(--text-secondary); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; }
 .mcp-usage-table tr:last-child td { border-bottom: none; }
+
+/* #52 Wiki value / Wiki usage */
+.wiki-value-section h3, .wiki-usage-section h3 { margin: 20px 0 8px; font-size: 1rem; }
+.wiki-usage-mcp { margin-top: 16px; }
+.wiki-value-cost { margin: 0 0 16px; font-size: 0.82rem; }
+.wiki-value-list { margin: 6px 0 0; padding-left: 1.2em; font-size: 0.86rem; }
+.wiki-value-list li { margin: 2px 0; }
+.wiki-value-mix, .wiki-value-top, .wiki-value-dead { margin: 12px 0 8px; }
 
 /* Filter bar */
 .filter-bar { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin-bottom: 16px; padding: 12px 16px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); }
@@ -545,9 +559,16 @@ kbd { display: inline-block; padding: 2px 6px; font-family: var(--mono); font-si
   --heatmap-4: #39d353;
 }
 .heatmap-section { padding-top: 16px; padding-bottom: 16px; }
-.activity-heatmap { margin-bottom: 24px; padding: 14px 16px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); overflow-x: auto; }
-.heatmap-label { font-size: 0.78rem; margin-bottom: 8px; }
-.heatmap-svg { display: block; max-width: 100%; }
+.activity-heatmap {
+  display: flex; flex-direction: column; align-items: center;
+  margin-bottom: var(--block-gap); padding: 14px 16px;
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius); overflow-x: auto; width: 100%;
+  box-sizing: border-box;
+}
+.heatmap-label { font-size: 0.78rem; margin-bottom: 8px; text-align: center; width: 100%; }
+.heatmap-totals { font-size: 0.78rem; margin: 8px 0 0; text-align: center; width: 100%; }
+.heatmap-svg { display: block; max-width: 100%; margin-inline: auto; }
 .heatmap-svg rect { transition: stroke 0.1s; }
 .heatmap-svg rect:hover { stroke: var(--accent); stroke-width: 1; }
 

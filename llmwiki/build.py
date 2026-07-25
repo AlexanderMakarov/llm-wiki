@@ -33,7 +33,7 @@ import shutil
 import subprocess
 import sys
 from collections import Counter, defaultdict
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional
 
@@ -67,8 +67,20 @@ from llmwiki.project_topics import (
 )
 from llmwiki import raw_docs_site
 from llmwiki.usage import (
-    UNATTRIBUTED, combined_totals as _mcp_combined_totals, is_entity_tool)
-from llmwiki.viz_heatmap import collect_session_counts, render_heatmap
+    combined_totals as _mcp_combined_totals,
+    corpus_source_mix as _mcp_corpus_mix,
+    iter_live_records as _mcp_live_records,
+    page_retrievals as _mcp_page_retrievals,
+    read_mix_from_retrievals as _mcp_read_mix,
+    refresh_daily as _mcp_refresh_daily,
+)
+from llmwiki.viz_heatmap import (
+    activity_heatmap_div,
+    collect_session_counts,
+    day_int_counts,
+    mcp_day_has_signal,
+    render_heatmap,
+)
 from llmwiki.viz_tokens import (
     render_project_token_card,
     render_session_token_card,
@@ -78,6 +90,12 @@ from llmwiki.viz_tools import (
     render_project_tool_chart,
     render_session_tool_chart,
 )
+from llmwiki.viz_wiki_value import (  # noqa: F401
+    render_mcp_heaviest_card,
+    render_project_usage_block,
+    render_wiki_value_section,
+)
+from llmwiki.wiki_adoption import daily_wiki_sessions_from_dir as _wiki_session_days
 
 # ─── paths ─────────────────────────────────────────────────────────────────
 
@@ -1299,46 +1317,6 @@ def render_session(
     return out_path
 
 
-def render_project_usage_block(
-    project_slug: str, usage_totals: dict[str, Any], doc_count: int
-) -> str:
-    """Per-project stats: raw-doc count + MCP calls / items / server processes.
-    Empty when the project has neither raw docs nor telemetry."""
-    p = (usage_totals or {}).get("per_project", {}).get(project_slug, {})
-    calls = int(p.get("calls", 0) or 0)
-    items = int(p.get("items_returned", 0) or 0)
-    procs = int(p.get("server_processes", 0) or 0)
-    if calls == 0 and doc_count == 0:
-        return ""
-    ptools = (usage_totals or {}).get("per_project_tool", {}).get(project_slug, {})
-    tool_table = ""
-    if ptools:
-        rows = []
-        for tool, s in sorted(ptools.items(), key=lambda kv: -kv[1].get("calls", 0)):
-            calls_t = int(s.get("calls", 0) or 0)
-            items_t = int(s.get("items_returned", 0) or 0)
-            items_cell = str(items_t) if is_entity_tool(tool) else "—"
-            rows.append(
-                f'<tr><td>{html.escape(tool)}</td><td>{calls_t}</td><td>{items_cell}</td></tr>')
-        tool_table = (
-            '<table class="mcp-usage-table"><thead><tr>'
-            '<th>Tool</th><th>Calls</th><th>Answers</th></tr></thead><tbody>'
-            + "".join(rows) + '</tbody></table>')
-    return (
-        '<section class="section project-usage-section"><div class="container">'
-        '<div class="token-stat-grid">'
-        f'<div class="token-stat"><div class="token-stat-label muted">Raw documents</div>'
-        f'<div class="token-stat-value">{int(doc_count)}</div></div>'
-        f'<div class="token-stat"><div class="token-stat-label muted">MCP calls</div>'
-        f'<div class="token-stat-value">{calls}</div></div>'
-        f'<div class="token-stat"><div class="token-stat-label muted">MCP items returned</div>'
-        f'<div class="token-stat-value">{items}</div></div>'
-        f'<div class="token-stat"><div class="token-stat-label muted">MCP server processes</div>'
-        f'<div class="token-stat-value">{procs}</div></div>'
-        f'</div>{tool_table}</div></section>'
-    )
-
-
 def render_project_page(
     project_slug: str,
     sessions: list[tuple[Path, dict[str, Any], str]],
@@ -1396,7 +1374,7 @@ def render_project_page(
     heatmap_block = f"""<section class="section heatmap-section">
   <div class="container">
     <div class="activity-heatmap">
-      <div class="heatmap-label muted">Agents Activity · last 365 days · {html.escape(project_slug)}</div>
+      <div class="heatmap-label muted">Agents Activity · last 18 months · {html.escape(project_slug)}</div>
       {proj_heatmap}
     </div>
   </div>
@@ -1706,14 +1684,14 @@ def render_sessions_index(
     <div class="table-wrap">
     <table class="sessions-table">
       <colgroup>
-        <col style="width: 22%">
+        <col style="width: 18%">
         <col style="width: 7%">
-        <col style="width: 12%">
-        <col style="width: 11%">
-        <col style="width: 20%">
         <col style="width: 16%">
-        <col style="width: 6%">
-        <col style="width: 6%">
+        <col style="width: 10%">
+        <col style="width: 26%">
+        <col style="width: 13%">
+        <col style="width: 5%">
+        <col style="width: 5%">
       </colgroup>
       <thead>
         <tr><th>Session</th><th>Agent</th><th>Project</th><th>Date</th><th>Cwd</th><th>Model</th><th>Msgs</th><th>Tools</th></tr>
@@ -1742,78 +1720,6 @@ def render_sessions_index(
     return out_path
 
 
-def render_mcp_heaviest_card(
-    usage_totals: dict[str, Any], link_prefix: str = ""
-) -> str:
-    """The "Heaviest project by MCP usage" stat card — the project with the
-    most llm-wiki MCP calls. Shares the token-stats row. Empty string when
-    there is no telemetry.
-
-    Calls whose caller couldn't be identified are excluded (#51): the
-    unattributed bucket isn't a project, and naming it here would both credit
-    a project that never called and link to a page that doesn't exist."""
-    per_project = {slug: s for slug, s in usage_totals.get("per_project", {}).items()
-                   if slug != UNATTRIBUTED}
-    if not per_project:
-        return ""
-    slug, s = max(per_project.items(), key=lambda kv: kv[1].get("calls", 0))
-    calls = int(s.get("calls", 0) or 0)
-    if calls == 0:
-        return ""
-    return (
-        f'      <a class="token-stat" href="{link_prefix}projects/{html.escape(slug)}.html">'
-        f'<div class="token-stat-label muted">Heaviest project by MCP usage</div>'
-        f'<div class="token-stat-value">{calls}</div>'
-        f'<div class="token-stat-sub muted">{html.escape(slug)} · calls</div></a>'
-    )
-
-
-def render_mcp_usage_section(
-    usage_totals: dict[str, Any],
-    docs_by_project: dict[str, int],
-    link_prefix: str = "",
-) -> str:
-    """Static "Wiki usage (MCP)" section: a one-line totals caption plus a
-    per-tool calls/items/zero-hit table. Empty string when there is neither
-    telemetry nor any raw document."""
-    total_calls = int(usage_totals.get("total_calls", 0) or 0)
-    total_docs = sum(docs_by_project.values()) if docs_by_project else 0
-    if total_calls == 0 and total_docs == 0:
-        return ""
-
-    per_tool = usage_totals.get("per_tool", {})
-    rows = []
-    for tool, s in sorted(per_tool.items(), key=lambda kv: -kv[1].get("calls", 0)):
-        calls = int(s.get("calls", 0) or 0)
-        items = int(s.get("items_returned", 0) or 0)
-        items_cell = str(items) if is_entity_tool(tool) else "—"
-        zhr = float(s.get("zero_hit_rate", 0.0) or 0.0)
-        rows.append(
-            f'<tr><td>{html.escape(tool)}</td><td>{calls}</td>'
-            f'<td>{items_cell}</td><td>{zhr * 100:.0f}%</td></tr>'
-        )
-    table = (
-        '<table class="mcp-usage-table"><thead><tr>'
-        '<th>Tool</th><th>Calls</th><th>Items returned</th><th>Zero-hit rate</th>'
-        '</tr></thead><tbody>' + "".join(rows) + '</tbody></table>'
-    ) if rows else ""
-
-    total_items = int(usage_totals.get("total_items_returned", 0) or 0)
-    total_procs = int(usage_totals.get("total_server_processes", 0) or 0)
-    caption = (
-        f'{total_calls} MCP calls · {total_items} items returned · '
-        f'{total_procs} server processes · {total_docs} raw documents · '
-        f'as of last build.'
-    )
-    return (
-        '<section class="section mcp-usage-section"><div class="container">'
-        '<h2>Wiki usage (MCP)</h2>'
-        f'<p class="muted">{caption}</p>'
-        f'{table}'
-        '</div></section>'
-    )
-
-
 def render_analytics(
     groups: dict[str, list[tuple[Path, dict[str, Any], str]]],
     all_sources: list[tuple[Path, dict[str, Any], str]],
@@ -1822,9 +1728,10 @@ def render_analytics(
     usage_totals: Optional[dict[str, Any]] = None,
     docs_by_project: Optional[dict[str, int]] = None,
     wiki_dir: Optional[Path] = None,
+    wiki_value: Optional[dict[str, Any]] = None,
 ) -> Path:
-    """Render ``analytics.html`` — hero stats, activity heatmap, token
-    stats, recently-updated, projects grid."""
+    """Render ``analytics.html`` — hero stats, activity heatmaps, token
+    stats, wiki usage (#52), recently-updated, projects grid."""
     total = len(all_sources)
     mains = sum(1 for p, m, _ in all_sources if not _is_subagent(m, p))
     subs = total - mains
@@ -1840,21 +1747,37 @@ def render_analytics(
   </div>
 </section>"""
 
-    # v0.8 (#64, #72): aggregate 365-day GitHub-style heatmap. Counts all
-    # main sessions across all projects. Rendered as a pure-SVG block just
-    # above the projects grid so the landing page gives a glanceable
-    # "last year of activity" view.
+    # Aggregate GitHub-style heatmaps (~18 months) — agents,
+    # MCP calls, and optional read-type splits in one Activity section.
     heatmap_entries = [m for _, m, _ in all_sources]
     heatmap_counts = collect_session_counts(heatmap_entries)
-    heatmap_svg = render_heatmap(heatmap_counts, title_prefix="Agents Activity")
-    heatmap_block = f"""<section class="section heatmap-section">
-  <div class="container">
-    <div class="activity-heatmap">
-      <div class="heatmap-label muted">Agents Activity · last 365 days</div>
-      {heatmap_svg}
-    </div>
-  </div>
-</section>"""
+    wv = wiki_value or {}
+    mcp_days = wv.get("mcp_days") or {}
+    activity_heatmaps = [
+        activity_heatmap_div("Agents Activity", heatmap_counts, unit="sessions"),
+        activity_heatmap_div(
+            "Wiki MCP calls", day_int_counts(mcp_days, "mcp_calls"), unit="calls",
+        ),
+    ]
+    if mcp_day_has_signal(mcp_days, "session_reads"):
+        activity_heatmaps.append(activity_heatmap_div(
+            "Session-page reads",
+            day_int_counts(mcp_days, "session_reads"),
+            unit="reads",
+        ))
+    if mcp_day_has_signal(mcp_days, "doc_reads"):
+        activity_heatmaps.append(activity_heatmap_div(
+            "Doc-page reads",
+            day_int_counts(mcp_days, "doc_reads"),
+            unit="reads",
+        ))
+    heatmap_block = (
+        '<section class="section heatmap-section">\n'
+        '  <div class="container">\n'
+        '    <h2>Activity</h2>\n'
+        + "\n".join(activity_heatmaps)
+        + '\n  </div>\n</section>'
+    )
 
     # v0.8 (#66): site-wide token summary stats — three cards showing
     # Tokens (value + avg per session), best cache hit project, and heaviest
@@ -1868,11 +1791,20 @@ def render_analytics(
     token_stats_block = render_site_token_stats(
         metas_by_project, link_prefix="", extra_cards=mcp_heaviest_card)
 
-    # #27: site-wide "Wiki usage (MCP)" section — a one-line totals caption
-    # plus a per-tool call/item table. Empty when there is no telemetry and
-    # no raw document.
-    mcp_block = render_mcp_usage_section(
-        usage_totals or {}, docs_by_project or {}, link_prefix="")
+    # Wiki usage (#52): value cards, corpus mix, top pages, MCP table.
+    wiki_usage_block = render_wiki_value_section(
+        usage_totals or {},
+        mcp_days=mcp_days,
+        session_days=wv.get("session_days") or {},
+        corpus_mix=wv.get("corpus_mix") or {},
+        read_mix=wv.get("read_mix") or {},
+        top_pages=wv.get("top_pages") or [],
+        dead_stock=wv.get("dead_stock") or [],
+        dead_stock_total=int(wv.get("dead_stock_total") or 0),
+        wiki_page_count=int(wv.get("wiki_page_count") or 0),
+        estimate=wv.get("estimate"),
+        docs_by_project=docs_by_project or {},
+    )
 
     # Recently updated — show last 10 entries from the wiki's log.md. Read
     # from the vault's wiki_dir (falling back to REPO_ROOT for a repo build),
@@ -1929,9 +1861,8 @@ def render_analytics(
   </a>"""
         )
 
-    body = f"""{heatmap_block}
-{token_stats_block}
-{mcp_block}
+    body = f"""{token_stats_block}
+{heatmap_block}
 {recent_block}
 <section class="section">
   <div class="container">
@@ -1941,11 +1872,12 @@ def render_analytics(
     </div>
   </div>
 </section>
+{wiki_usage_block}
 </main>
 """
 
     page = (
-        page_head("Analytics — LLM Wiki", "Session activity, token stats, and project analytics", css_prefix="")
+        page_head("Analytics — LLM Wiki", "Session activity, wiki value, and project analytics", css_prefix="")
         + nav_bar("analytics", link_prefix="")
         + hero(
             "Analytics",
@@ -2927,6 +2859,56 @@ def build_site(
     docs_by_project = raw_docs_site.count_docs_by_project(doc_files)
     usage_totals = _mcp_combined_totals(content_root)
 
+    # #52: refresh durable daily MCP series, then gather wiki-value inputs.
+    mcp_days = _mcp_refresh_daily(content_root)
+    session_days = _wiki_session_days(raw_dir / "sessions")
+    wiki_sources = (wiki_dir or (content_root / "wiki")) / "sources"
+    wiki_root = wiki_sources.parent
+    corpus_mix = _mcp_corpus_mix(wiki_sources)
+    live_records = list(_mcp_live_records(content_root))
+    retrievals = _mcp_page_retrievals(live_records)
+    read_mix = _mcp_read_mix(retrievals, wiki_root=wiki_root)
+    top_pages = list(retrievals.items())[:12]
+    # Dead stock: synthesized sources with zero read_page hits in retained logs.
+    retrieved = set(retrievals)
+    dead: list[str] = []
+    source_page_count = 0
+    dead_total = 0
+    if wiki_sources.is_dir():
+        for p in sorted(wiki_sources.rglob("*.md")):
+            if p.name.startswith("_"):
+                continue
+            source_page_count += 1
+            rel = "wiki/sources/" + p.relative_to(wiki_sources).as_posix()
+            alt = "sources/" + p.relative_to(wiki_sources).as_posix()
+            keys = {rel, alt, "wiki/" + alt}
+            if retrieved.isdisjoint(keys):
+                dead_total += 1
+                if len(dead) < 24:
+                    dead.append(rel)
+    estimate: dict[str, Any] = {}
+    try:
+        from llmwiki.state_store import read_state, resolve_state_file
+        state_path = resolve_state_file(None)
+        # Prefer the vault's state when content_root differs from the default.
+        vault_state = content_root / "llmwiki-state.json"
+        if vault_state.is_file():
+            state_path = vault_state
+        estimate = (read_state(state_path).get("synth") or {}).get("estimate") or {}
+    except (OSError, ValueError, TypeError):
+        estimate = {}
+    wiki_value = {
+        "mcp_days": mcp_days,
+        "session_days": session_days,
+        "corpus_mix": corpus_mix,
+        "read_mix": read_mix,
+        "top_pages": top_pages,
+        "dead_stock": dead,
+        "dead_stock_total": dead_total,
+        "wiki_page_count": source_page_count or int(corpus_mix.get("total", 0) or 0),
+        "estimate": estimate if isinstance(estimate, dict) else {},
+    }
+
     for project, sessions in groups.items():
         render_project_page(
             project, sessions, out_dir,
@@ -2952,6 +2934,7 @@ def build_site(
         usage_totals=usage_totals,
         docs_by_project=docs_by_project,
         wiki_dir=wiki_dir,
+        wiki_value=wiki_value,
     )
     doc_pages = raw_docs_site.render_document_pages(
         doc_files,

@@ -7,11 +7,12 @@ hotlinking.
 
 Design goals:
 
-* **365-day rolling window** (#72) ending at the build timestamp. Empty days
-  render as the lightest cell, not omitted — the grid dimensions are constant
-  regardless of how new/sparse the project is.
+* **~18-month rolling window** ending at the build timestamp (extended from
+  the original 365-day GitHub window so the SVG fills a normal `.container`
+  width without large empty side margins). Empty days render as the lightest
+  cell, not omitted — the grid is whole weeks after Sunday alignment.
 * **GitHub alignment** — the first column is the Sunday of the week containing
-  `end_date - 364 days`, so the grid is always whole weeks (53 columns) with
+  ``end_date - (WINDOW_DAYS - 1)``, so the grid is always whole weeks with
   the final column holding the week of the end date.
 * **Five-level quantile bucketing** — the default color scale matches GitHub's
   original contributions palette but is theme-aware (see `site/style.css`
@@ -49,10 +50,15 @@ from typing import Iterable, Mapping, Optional
 CELL_SIZE = 11
 CELL_GAP = 2
 CELL_RADIUS = 2
-WEEK_COLS = 53  # 52 full weeks + the partial week at the end of the window
 ROW_COUNT = 7  # Sunday (row 0) through Saturday (row 6)
 LEFT_PAD = 28  # room for weekday labels
 TOP_PAD = 18  # room for month labels
+
+# Inclusive day count for the rolling window (~18 months). Chosen so the SVG
+# width at CELL_SIZE=11 roughly fills a max-width 1080px content column
+# (minus container + card padding) instead of floating in empty side space.
+WINDOW_DAYS = 525
+WINDOW_LABEL = "last 18 months"
 
 # Five-level color scale. These are inline fallbacks for when the SVG is
 # opened directly (no page CSS). The *page* CSS overrides via the
@@ -108,17 +114,24 @@ def collect_session_counts(
 
 
 def window_bounds(end_date: date) -> tuple[date, date]:
-    """Return the `(start, end)` inclusive dates for the 365-day window.
+    """Return the `(start, end)` inclusive dates for the rolling window.
 
-    `start` is the Sunday of the week containing ``end_date - 364``. This is
-    the GitHub-style alignment rule — it guarantees the grid is always whole
-    weeks and the final column holds the week of ``end_date``.
+    `start` is the Sunday of the week containing
+    ``end_date - (WINDOW_DAYS - 1)``. This is the GitHub-style alignment
+    rule — it guarantees the grid is always whole weeks and the final
+    column holds the week of ``end_date``.
     """
-    raw_start = end_date - timedelta(days=364)
+    raw_start = end_date - timedelta(days=WINDOW_DAYS - 1)
     # Python's weekday(): Mon=0..Sun=6. We want Sunday=0 offset.
     sunday_offset = (raw_start.weekday() + 1) % 7
     start = raw_start - timedelta(days=sunday_offset)
     return start, end_date
+
+
+def week_column_count(start: date, end: date) -> int:
+    """How many Sunday-start week columns cover ``start..end`` inclusive."""
+    days = (end - start).days + 1
+    return (days + ROW_COUNT - 1) // ROW_COUNT
 
 
 def compute_quantile_thresholds(counts: dict[date, int]) -> list[int]:
@@ -194,21 +207,21 @@ def render_heatmap(
     end_date: Optional[date] = None,
     title_prefix: str = "Activity",
 ) -> str:
-    """Return a self-contained SVG string for a 365-day activity heatmap.
+    """Return a self-contained SVG string for the rolling activity heatmap.
 
     ``counts`` is the output of ``collect_session_counts``. ``end_date``
     defaults to today (UTC). ``title_prefix`` is used in the a11y label and
-    in the per-cell tooltips (e.g. "Activity heatmap, 2025-04-09 to
-    2026-04-09"; per-cell "Activity 2026-04-07 — 12 sessions").
+    in the per-cell tooltips.
     """
     if end_date is None:
         end_date = datetime.now(timezone.utc).date()
     start, end = window_bounds(end_date)
+    week_cols = week_column_count(start, end)
 
     thresholds = compute_quantile_thresholds(counts)
 
     # SVG outer dimensions
-    inner_w = WEEK_COLS * (CELL_SIZE + CELL_GAP) - CELL_GAP
+    inner_w = week_cols * (CELL_SIZE + CELL_GAP) - CELL_GAP
     inner_h = ROW_COUNT * (CELL_SIZE + CELL_GAP) - CELL_GAP
     total_w = LEFT_PAD + inner_w + 4
     total_h = TOP_PAD + inner_h + 4
@@ -223,9 +236,6 @@ def render_heatmap(
         f'viewBox="0 0 {total_w} {total_h}" '
         f'width="{total_w}" height="{total_h}" '
         f'role="img" aria-label="{html.escape(label)}">',
-        # CSS custom-property fallback colors embedded as a <style> so the
-        # SVG still shows *something* when opened standalone. The page CSS
-        # wins when the SVG is inlined in a styled host document.
         '<style>',
         '.heatmap-svg text { font: 9px system-ui, -apple-system, sans-serif; fill: var(--text-muted, #64748b); }',
         f'.heatmap-svg .l0 {{ fill: var(--heatmap-0, {_PALETTE_LIGHT[0]}); }}',
@@ -236,18 +246,14 @@ def render_heatmap(
         '</style>',
     ]
 
-    # ── month labels (top row) ────────────────────────────────────────
-    # Draw the abbreviated month name over the first Sunday column of that
-    # month within the window — same rule GitHub uses.
     seen_months: set[tuple[int, int]] = set()
-    for col in range(WEEK_COLS):
+    for col in range(week_cols):
         col_date = start + timedelta(days=col * 7)
         if col_date > end:
             break
         key = (col_date.year, col_date.month)
         if key in seen_months:
             continue
-        # Only label when the first Sunday of that month falls in this column
         if col_date.day <= 7:
             x = LEFT_PAD + col * (CELL_SIZE + CELL_GAP)
             parts.append(
@@ -256,20 +262,16 @@ def render_heatmap(
             )
             seen_months.add(key)
 
-    # ── weekday labels (left column) ──────────────────────────────────
     for row, label_text in enumerate(_WEEKDAY_LABELS):
         if not label_text:
             continue
         y = TOP_PAD + row * (CELL_SIZE + CELL_GAP) + CELL_SIZE - 1
-        parts.append(
-            f'<text x="0" y="{y}">{label_text}</text>'
-        )
+        parts.append(f'<text x="0" y="{y}">{label_text}</text>')
 
-    # ── cells ─────────────────────────────────────────────────────────
     cell_count = 0
     d = start
     col = 0
-    while col < WEEK_COLS:
+    while col < week_cols:
         for row in range(ROW_COUNT):
             if d > end:
                 d += timedelta(days=1)
@@ -295,6 +297,62 @@ def render_heatmap(
 
     parts.append('</svg>')
     return "\n".join(parts)
+
+
+def render_heatmap_totals(
+    counts: dict[date, int],
+    *,
+    unit: str = "sessions",
+) -> str:
+    """Muted one-line summary under a heatmap — total + busiest day."""
+    total = sum(counts.values())
+    if total == 0:
+        return f'<p class="heatmap-totals muted">0 {html.escape(unit)}</p>'
+    busiest_day, busiest_count = max(counts.items(), key=lambda kv: kv[1])
+    return (
+        f'<p class="heatmap-totals muted">'
+        f'{total} {html.escape(unit)} · busiest {busiest_day.isoformat()}: '
+        f'{busiest_count}'
+        f'</p>'
+    )
+
+
+def day_int_counts(
+    mcp_days: dict[str, dict] | None,
+    field: str,
+) -> dict[date, int]:
+    """Convert ``mcp_days`` day buckets to ``dict[date, int]`` for heatmaps."""
+    out: dict[date, int] = {}
+    for d, b in (mcp_days or {}).items():
+        try:
+            out[date.fromisoformat(d)] = int((b or {}).get(field, 0) or 0)
+        except ValueError:
+            continue
+    return {k: v for k, v in out.items() if v}
+
+
+def mcp_day_has_signal(mcp_days: dict[str, dict] | None, field: str) -> bool:
+    """True when any day bucket has a positive value for ``field``."""
+    for b in (mcp_days or {}).values():
+        if int((b or {}).get(field, 0) or 0) > 0:
+            return True
+    return False
+
+
+def activity_heatmap_div(
+    label: str, counts: dict[date, int], *, unit: str,
+) -> str:
+    """One Activity-section heatmap card (label + SVG + totals line)."""
+    svg = render_heatmap(counts, title_prefix=label)
+    totals = render_heatmap_totals(counts, unit=unit)
+    return (
+        f'    <div class="activity-heatmap">\n'
+        f'      <div class="heatmap-label muted">'
+        f'{html.escape(label)} · {WINDOW_LABEL}</div>\n'
+        f'      {svg}\n'
+        f'      {totals}\n'
+        f'    </div>'
+    )
 
 
 def cell_count_for_window(end_date: date) -> int:
