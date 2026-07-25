@@ -25,8 +25,10 @@ import re
 from pathlib import Path
 from typing import Any
 
+import sqlite3
+
 from llmwiki._frontmatter import parse_frontmatter
-from llmwiki.adapters import REGISTRY, discover_adapters, resolve_adapter_name
+from llmwiki.adapters import REGISTRY, discover_all, resolve_adapter_name
 from llmwiki.convert import (
     _MCP_TOOL_WRAPPERS,
     _resolve_convert_config,
@@ -47,7 +49,13 @@ def _sessions_dir(vault: Path) -> Path:
     return vault / "raw" / "sessions"
 
 
+def _ensure_adapters_loaded() -> None:
+    """Core + contrib — migration must resolve cursor_cli / etc. from tags."""
+    discover_all()
+
+
 def _infer_adapter_name(meta: dict[str, Any]) -> str:
+    _ensure_adapters_loaded()
     tags = meta.get("tags") or []
     if isinstance(tags, str):
         tags = [t.strip() for t in tags.split(",") if t.strip()]
@@ -61,6 +69,18 @@ def _infer_adapter_name(meta: dict[str, Any]) -> str:
             if canon:
                 return canon
     return "claude_code"
+
+
+def _raw_tool_names(records: list[dict[str, Any]]) -> set[str]:
+    """Unexpanded ``tool_use.name`` set — fingerprint Cursor origins."""
+    seen: set[str] = set()
+    for r in records:
+        if r.get("type") != "assistant":
+            continue
+        for b in r.get("message", {}).get("content", []) or []:
+            if isinstance(b, dict) and b.get("type") == "tool_use":
+                seen.add(str(b.get("name") or "Unknown"))
+    return seen
 
 
 def _state_key_to_path(key: str) -> tuple[str, Path] | None:
@@ -105,13 +125,53 @@ def _verify_origin(
 ) -> list[dict[str, Any]] | None:
     try:
         records = _load_filtered_records(adapter, path, config)
-    except (OSError, json.JSONDecodeError, ValueError):
+    except (OSError, json.JSONDecodeError, ValueError, sqlite3.Error):
+        return None
+    except Exception:
         return None
     if not records:
         return None
-    if _records_session_id(records, path) != session_id:
-        return None
+    # Cursor CLI stores every chat as ``store.db`` — stem is always "store".
+    if session_id not in {"store", "store.db"}:
+        if _records_session_id(records, path) != session_id:
+            return None
     return records
+
+
+def _cursor_cli_candidates(
+    *,
+    adapter: Any,
+    adapter_name: str,
+    state_file: Path,
+    project_slug: str | None,
+) -> list[Path]:
+    """Cursor origins: state keys + live store.db under ~/.cursor/chats."""
+    seen: set[Path] = set()
+    out: list[Path] = []
+    state = load_state(state_file, [adapter_name])
+    for key in state:
+        parsed = _state_key_to_path(key)
+        if parsed is None:
+            continue
+        ad, path = parsed
+        if ad != adapter_name or not path.is_file():
+            continue
+        if project_slug and adapter.derive_project_slug(path) != project_slug:
+            continue
+        rp = path.resolve()
+        if rp not in seen:
+            seen.add(rp)
+            out.append(path)
+    for path in adapter.discover_sessions():
+        if not path.is_file():
+            continue
+        if project_slug and adapter.derive_project_slug(path) != project_slug:
+            continue
+        rp = path.resolve()
+        if rp not in seen:
+            seen.add(rp)
+            out.append(path)
+    return out
 
 
 def resolve_origin_path(
@@ -121,16 +181,52 @@ def resolve_origin_path(
     state_file: Path,
     disambig_hash: str | None,
     config: dict[str, Any],
+    project_slug: str | None = None,
+    tools_fingerprint: set[str] | None = None,
 ) -> Path | None:
     """Return the on-disk origin session path, or None when unavailable."""
     if not session_id:
         return None
 
-    discover_adapters()
+    _ensure_adapters_loaded()
     adapter_cls = REGISTRY.get(adapter_name)
     if adapter_cls is None:
         return None
     adapter = adapter_cls(config)
+
+    # Cursor CLI: every chat is ``…/<uuid>/store.db`` with sessionId "store".
+    if adapter_name == "cursor_cli" or session_id in {"store", "store.db"}:
+        if adapter_name != "cursor_cli":
+            cls = REGISTRY.get("cursor_cli")
+            if cls is None:
+                return None
+            adapter = cls(config)
+            adapter_name = "cursor_cli"
+        candidates = _cursor_cli_candidates(
+            adapter=adapter,
+            adapter_name=adapter_name,
+            state_file=state_file,
+            project_slug=project_slug,
+        )
+        if disambig_hash:
+            for path in candidates:
+                if _source_hash8(path) == disambig_hash:
+                    if _verify_origin(adapter, path, session_id, config) is not None:
+                        return path
+        if tools_fingerprint:
+            hits: list[Path] = []
+            for path in candidates:
+                records = _verify_origin(adapter, path, session_id, config)
+                if records is None:
+                    continue
+                if _raw_tool_names(records) == tools_fingerprint:
+                    hits.append(path)
+            if len(hits) == 1:
+                return hits[0]
+        if len(candidates) == 1:
+            if _verify_origin(adapter, candidates[0], session_id, config) is not None:
+                return candidates[0]
+        return None
 
     candidates: list[Path] = []
     state = load_state(state_file, [adapter_name])
@@ -226,16 +322,23 @@ def migrate_session_text(
     session_id = str(meta.get("sessionId") or "").strip()
     adapter_name = _infer_adapter_name(meta)
     disambig = _disambig_from_filename(path.name)
+    project_slug = str(meta.get("project") or "").strip() or None
+    tools_fp = _normalise_tools_used(meta.get("tools_used"))
     origin = resolve_origin_path(
         session_id=session_id,
         adapter_name=adapter_name,
         state_file=state_file,
         disambig_hash=disambig,
         config=config,
+        project_slug=project_slug,
+        tools_fingerprint=tools_fp,
     )
     if origin is None:
         return text, "skipped_missing_origin"
 
+    # Cursor resolution may upgrade adapter_name to cursor_cli.
+    if adapter_name != "cursor_cli" and origin.name == "store.db":
+        adapter_name = "cursor_cli"
     records = _load_filtered_records(
         REGISTRY[adapter_name](config), origin, config
     )
@@ -259,6 +362,7 @@ def run_migration(
 ) -> dict[str, Any]:
     """Rewrite ``vault/raw/sessions/**/*.md`` in place. Returns a report dict."""
     vault = vault.expanduser().resolve()
+    _ensure_adapters_loaded()
     config = _resolve_convert_config(config_file)
     state_file = resolve_state_file(vault)
     sessions = _sessions_dir(vault)
