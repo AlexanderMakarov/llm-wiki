@@ -1,0 +1,47 @@
+---
+description: Read CONTRIBUTING.md and lint before pushing when changing repo code
+alwaysApply: true
+---
+
+# Repo code work: read CONTRIBUTING.md, lint before pushing
+
+At the **start of every session** that changes **this repository's code or
+docs** (fixes, features, tests, PRs), read [`CONTRIBUTING.md`](../../CONTRIBUTING.md)
+with the Read tool and follow it. Do not rely on a memory of it from a prior
+turn — re-read when starting new work that ships a PR or user-facing change.
+
+Pay special attention to:
+
+1. One concern per PR; conventional-commit titles (`feat` `fix` `chore` `docs`
+   `test` `refactor` `perf` `security` `release` — nothing else)
+2. Docs + CHANGELOG for every user-visible change
+3. New CLI subcommands / config keys / lint rules → matching row in
+   `docs/reference/*.md` (CI enforces CLI coverage)
+4. No new runtime deps — stdlib plus `markdown` only
+5. No real session data; no personal vault paths / usernames in PRs or commits
+
+## Lint and test before pushing
+
+Run both from the repo root before any push:
+
+```bash
+ruff check llmwiki tests scripts   # lint
+python3 -m pytest tests/ -q        # tests
+```
+
+A committed `pre-push` hook in `.githooks/` lints the Python files in your push
+and rejects it on violations. `./setup.sh` wires it; enable it by hand with
+`git config core.hooksPath .githooks`. `ruff check --fix` clears the mechanical
+findings, and `git push --no-verify` bypasses the hook if you must — say why in
+the PR.
+
+Lint is not yet clean repo-wide; a backlog of pre-existing violations is being
+cleared in separate sweeps (issue #58 has the plan) and CI does not fail on them
+yet. Keep your own diff clean rather than adding to the backlog.
+
+## Do not confuse with AGENTS.md / CLAUDE.md
+
+[`AGENTS.md`](../../AGENTS.md) and [`CLAUDE.md`](../../CLAUDE.md) in this
+repo are **vault wiki schemas** (how agents maintain `raw/` → `wiki/` →
+`site/` for a user's knowledge base). They are **not** contribution guides
+for developing llmwiki itself. Do not put repo/PR/process rules into them.

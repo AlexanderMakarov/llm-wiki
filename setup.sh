@@ -73,6 +73,16 @@ echo
 echo "==> sync status:"
 python3 -m llmwiki sync --status || true
 
+# 7. Git hooks — ruff on pushed Python files only
+if git rev-parse --git-dir >/dev/null 2>&1; then
+  echo
+  echo "==> wiring git hooks (.githooks)"
+  git config core.hooksPath .githooks
+else
+  echo
+  echo "    (not a git checkout — skipping hook wiring)"
+fi
+
 echo
 echo "================================================================"
 echo "  Setup complete."

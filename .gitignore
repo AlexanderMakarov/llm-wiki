@@ -225,5 +225,13 @@ test-results/
 # MCP usage telemetry (#26) — runtime data, per-vault
 usage/
 
-# ─── Cursor IDE (local agent rules / scratch) ────────────────────────────
-.cursor/
+# ─── Cursor IDE ──────────────────────────────────────────────────────────
+# Cursor scratch/state stays local. The shared project rules under
+# .cursor/rules/ are committed so every contributor's Cursor session gets the
+# same guardrails — allowlisted one file at a time, because a rule that names a
+# personal vault path or machine layout must stay on the machine it describes.
+.cursor/*
+!.cursor/rules/
+.cursor/rules/*
+!.cursor/rules/read-contributing.mdc
+!.cursor/rules/no-local-vault-in-prs.mdc

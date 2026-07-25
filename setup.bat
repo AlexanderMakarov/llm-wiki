@@ -51,6 +51,17 @@ echo.
 echo ==^> dry-run of first sync:
 python -m llmwiki sync --dry-run
 
+REM 7. Git hooks — ruff on pushed Python files only
+git rev-parse --git-dir >nul 2>&1
+if not errorlevel 1 (
+  echo.
+  echo ==^> wiring git hooks ^(.githooks^)
+  git config core.hooksPath .githooks
+) else (
+  echo.
+  echo     ^(not a git checkout — skipping hook wiring^)
+)
+
 echo.
 echo ================================================================
 echo   Setup complete.
