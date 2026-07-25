@@ -31,6 +31,8 @@ CSS = """/* llmwiki — god-level docs style */
   --shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.1), 0 8px 10px -6px rgba(15, 23, 42, 0.04);
   --shadow-card: 0 1px 3px rgba(15, 23, 42, 0.08), 0 1px 2px rgba(15, 23, 42, 0.04);  /* v1.0 #119: card shadow */
   --shadow-card-hover: 0 4px 12px rgba(15, 23, 42, 0.12), 0 2px 4px rgba(15, 23, 42, 0.06);
+  --section-y: 20px 0 24px;
+  --block-gap: 16px;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -148,12 +150,12 @@ kbd { display: inline-block; padding: 2px 6px; font-family: var(--mono); font-si
 .breadcrumbs [aria-current="page"] { color: var(--text); font-weight: 500; }
 
 /* Section */
-.section { padding: 28px 0 32px; }
+.section { padding: var(--section-y); }
 .section h2 { font-size: 1.5rem; font-weight: 700; margin: 24px 0 16px; color: var(--text); }
 .section h3 { font-size: 1.15rem; font-weight: 600; margin: 20px 0 10px; color: var(--text); }
 /* #27: the Analytics page stacks several stat sections; tighten the vertical
    rhythm so they read as one dashboard rather than distant blocks. */
-.analytics-page .section { padding: 12px 0; }
+.analytics-page { --section-y: 12px 0; }
 .analytics-page .section h2 { margin-top: 8px; }
 
 .meta-tools { font-size: 0.82rem; margin-bottom: 12px; overflow-wrap: break-word; }
@@ -187,18 +189,13 @@ kbd { display: inline-block; padding: 2px 6px; font-family: var(--mono); font-si
 .session-id { word-break: break-all; }
 
 /* #36 follow-up: project pages stack many thin strips (topics, disk
-   paths, heatmap, charts, sessions) — default .section padding burned
-   too much vertical space between them. */
+   paths, heatmap, charts, sessions) — tighten via --section-y once. */
+.project-page { --section-y: 8px 0 12px; }
 .project-page > .hero { padding: 32px 0 16px; margin-bottom: 4px; }
-.project-page .section { padding: 8px 0 12px; }
 .project-page .section h2 { margin: 12px 0 10px; }
 .project-page .project-topics-section { padding-top: 4px; padding-bottom: 4px; }
 .project-page .project-topics-section .container { padding-top: 4px; padding-bottom: 0; }
 .project-page .project-disk-section { padding-top: 0; padding-bottom: 4px; }
-.project-page .heatmap-section,
-.project-page .tool-chart-section,
-.project-page .token-timeline-section { padding-top: 4px; padding-bottom: 8px; }
-.project-page .project-usage-section { padding-top: 4px; padding-bottom: 8px; }
 .project-page .sub-section { margin-top: 16px; }
 .project-page .breadcrumbs { margin-bottom: 8px; }
 .btn { display: inline-flex; align-items: center; padding: 6px 14px; font-size: 0.82rem; font-weight: 500; background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; color: var(--text-secondary); cursor: pointer; text-decoration: none; transition: all 0.15s; font-family: var(--font); }
@@ -564,7 +561,7 @@ kbd { display: inline-block; padding: 2px 6px; font-family: var(--mono); font-si
 .heatmap-section { padding-top: 16px; padding-bottom: 16px; }
 .activity-heatmap {
   display: flex; flex-direction: column; align-items: center;
-  margin-bottom: 24px; padding: 14px 16px;
+  margin-bottom: var(--block-gap); padding: 14px 16px;
   background: var(--bg-card); border: 1px solid var(--border);
   border-radius: var(--radius); overflow-x: auto; width: 100%;
   box-sizing: border-box;

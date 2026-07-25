@@ -44,6 +44,8 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Changed
 
+- **Shared section spacing tokens** — `--section-y` / `--block-gap` drive `.section` padding site-wide; analytics/project pages set denser `--section-y` once instead of per-widget padding overrides.
+
 - **Analytics page layout redesign** — section order is now Activity heatmaps (agents, MCP, session/doc reads) → Recent activity → Projects → Wiki usage (value cards + MCP table merged). Removed the dual daily bar chart; daily trends read from heatmaps instead. Convert expands Cursor-style `CallMcpTool` into `mcp__{server}__{tool}`; `llmwiki migrate-tools-used` backfills already-synced raw when the origin session still exists (TTL-missing → skip). Docs: [`docs/reference/state-persistence.md`](docs/reference/state-persistence.md).
 
 - **`llmwiki/queue_ops.py` dispatches through a `TASK_HANDLERS` table (#23)** — the table is the single source of truth for task types. `enqueue_task()` validates against it and raises `ValueError` (listing the known types) for an unknown one, so producer/consumer drift fails at enqueue time instead of turning into unprocessable `status: error` items on the first `queue run`.
