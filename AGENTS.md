@@ -2,13 +2,7 @@
 
 This file is the schema for **Codex CLI** and any other coding agent that reads `AGENTS.md` instead of `CLAUDE.md` (OpenCode, Gemini CLI, etc.). The workflows are identical to [CLAUDE.md](CLAUDE.md) — only the language is agent-agnostic.
 
-> **Changing llmwiki's own code or docs instead of a vault?** This file is the
-> *product schema* — it tells you how to maintain a user's `raw/` → `wiki/` →
-> `site/` knowledge base. It is not the contribution guide. For repo work
-> (fixes, features, tests, PRs) read [`CONTRIBUTING.md`](CONTRIBUTING.md). Cursor
-> loads the short form from [`.cursor/rules/`](.cursor/rules); Claude Code loads
-> it from [`.claude/rules/contributing.md`](.claude/rules/contributing.md). Run
-> `ruff check` and `python3 -m pytest tests/ -q` before pushing.
+> **Changing llmwiki's own code or docs instead of a vault?** This file is the *product schema* — it tells you how to maintain a user's `raw/` → `wiki/` → `site/` knowledge base. It is not the contribution guide. For repo work (fixes, features, tests, PRs) read [`CONTRIBUTING.md`](CONTRIBUTING.md). Cursor loads the short form from [`.cursor/rules/`](.cursor/rules); Claude Code loads it from [`.claude/rules/contributing.md`](.claude/rules/contributing.md). Run `ruff check` and `python3 -m pytest tests/ -q` before pushing.
 
 ## Three layers
 

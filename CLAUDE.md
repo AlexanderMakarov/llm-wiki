@@ -2,14 +2,7 @@
 
 You are maintaining an **LLM Wiki** (per [Karpathy's spec](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)) that compiles the user's Claude Code session history into a structured, interlinked markdown knowledge base.
 
-> **Changing llmwiki's own code or docs instead of a vault?** This file is the
-> *product schema* — it tells you how to maintain a user's `raw/` → `wiki/` →
-> `site/` knowledge base. It is not the contribution guide. For repo work
-> (fixes, features, tests, PRs) read [`CONTRIBUTING.md`](CONTRIBUTING.md), whose
-> short form is loaded automatically from
-> [`.claude/rules/contributing.md`](.claude/rules/contributing.md) when you touch
-> `llmwiki/`, `tests/`, `scripts/`, or `docs/`. Run `ruff check` and
-> `python3 -m pytest tests/ -q` before pushing.
+> **Changing llmwiki's own code or docs instead of a vault?** This file is the *product schema* — it tells you how to maintain a user's `raw/` → `wiki/` → `site/` knowledge base. It is not the contribution guide. For repo work (fixes, features, tests, PRs) read [`CONTRIBUTING.md`](CONTRIBUTING.md), whose short form is loaded automatically from [`.claude/rules/contributing.md`](.claude/rules/contributing.md) when you touch `llmwiki/`, `tests/`, `scripts/`, or `docs/`. Run `ruff check` and `python3 -m pytest tests/ -q` before pushing.
 
 ## Three layers
 
