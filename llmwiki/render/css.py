@@ -365,14 +365,23 @@ kbd { display: inline-block; padding: 2px 6px; font-family: var(--mono); font-si
    for narrow viewports only. */
 .table-wrap { max-width: 100%; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-card); isolation: isolate; }
 /* #452: table-layout: fixed pins column widths from <colgroup> so sticky <thead>
-   columns stay aligned with <tbody> as the user scrolls. min-width keeps the
-   table from crushing cols on narrow viewports. */
-.sessions-table { width: 100%; min-width: 1100px; border-collapse: collapse; font-size: 0.88rem; table-layout: fixed; }
-.sessions-table td { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sessions-table td a { display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
-/* Date is always YYYY-MM-DD — never ellipsize; col width + min-width keep it whole. */
-.sessions-table td:nth-child(4) { overflow: visible; text-overflow: clip; font-variant-numeric: tabular-nums; }
-.sessions-table td.session-cwd code { font-size: 0.78em; }
+   columns stay aligned with <tbody> as the user scrolls. String columns wrap so
+   the table can stay inside the card without a horizontal scrollport (Msgs/Tools
+   stay narrow + nowrap). */
+.sessions-table { width: 100%; max-width: 100%; border-collapse: collapse; font-size: 0.88rem; table-layout: fixed; }
+.sessions-table td { overflow: hidden; }
+/* String content: Session, Project, Cwd, Model — wrap instead of ellipsis crush. */
+.sessions-table td:nth-child(1),
+.sessions-table td:nth-child(3),
+.sessions-table td:nth-child(5),
+.sessions-table td:nth-child(6) {
+  white-space: normal; overflow-wrap: anywhere; word-break: break-word;
+}
+.sessions-table td a { display: inline; max-width: 100%; overflow-wrap: anywhere; word-break: break-word; }
+/* Date is always YYYY-MM-DD — never ellipsize; keep on one line. */
+.sessions-table td:nth-child(4) { overflow: visible; text-overflow: clip; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.sessions-table td.session-cwd code { font-size: 0.78em; word-break: break-all; }
+.sessions-table td.num { white-space: nowrap; }
 /* #ui-h10 (#569): iOS Safari needs -webkit-sticky and a stacking
    context (isolation: isolate) on the table parent so the sticky
    thead doesn't lose its z-axis ordering against the nav blur. The
@@ -553,10 +562,16 @@ kbd { display: inline-block; padding: 2px 6px; font-family: var(--mono); font-si
   --heatmap-4: #39d353;
 }
 .heatmap-section { padding-top: 16px; padding-bottom: 16px; }
-.activity-heatmap { margin-bottom: 24px; padding: 14px 16px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); overflow-x: auto; }
-.heatmap-label { font-size: 0.78rem; margin-bottom: 8px; }
-.heatmap-totals { font-size: 0.78rem; margin: 8px 0 0; text-align: center; }
-.heatmap-svg { display: block; max-width: 100%; }
+.activity-heatmap {
+  display: flex; flex-direction: column; align-items: center;
+  margin-bottom: 24px; padding: 14px 16px;
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius); overflow-x: auto; width: 100%;
+  box-sizing: border-box;
+}
+.heatmap-label { font-size: 0.78rem; margin-bottom: 8px; text-align: center; width: 100%; }
+.heatmap-totals { font-size: 0.78rem; margin: 8px 0 0; text-align: center; width: 100%; }
+.heatmap-svg { display: block; max-width: 100%; margin-inline: auto; }
 .heatmap-svg rect { transition: stroke 0.1s; }
 .heatmap-svg rect:hover { stroke: var(--accent); stroke-width: 1; }
 

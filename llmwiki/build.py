@@ -1374,7 +1374,7 @@ def render_project_page(
     heatmap_block = f"""<section class="section heatmap-section">
   <div class="container">
     <div class="activity-heatmap">
-      <div class="heatmap-label muted">Agents Activity · last 365 days · {html.escape(project_slug)}</div>
+      <div class="heatmap-label muted">Agents Activity · last 18 months · {html.escape(project_slug)}</div>
       {proj_heatmap}
     </div>
   </div>
@@ -1684,14 +1684,14 @@ def render_sessions_index(
     <div class="table-wrap">
     <table class="sessions-table">
       <colgroup>
-        <col style="width: 22%">
+        <col style="width: 18%">
         <col style="width: 7%">
-        <col style="width: 12%">
-        <col style="width: 11%">
-        <col style="width: 20%">
         <col style="width: 16%">
-        <col style="width: 6%">
-        <col style="width: 6%">
+        <col style="width: 10%">
+        <col style="width: 26%">
+        <col style="width: 13%">
+        <col style="width: 5%">
+        <col style="width: 5%">
       </colgroup>
       <thead>
         <tr><th>Session</th><th>Agent</th><th>Project</th><th>Date</th><th>Cwd</th><th>Model</th><th>Msgs</th><th>Tools</th></tr>
@@ -1747,7 +1747,7 @@ def render_analytics(
   </div>
 </section>"""
 
-    # v0.8 (#64, #72): aggregate 365-day GitHub-style heatmaps — agents,
+    # Aggregate GitHub-style heatmaps (~18 months) — agents,
     # MCP calls, and optional read-type splits in one Activity section.
     heatmap_entries = [m for _, m, _ in all_sources]
     heatmap_counts = collect_session_counts(heatmap_entries)

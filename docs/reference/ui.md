@@ -211,7 +211,7 @@ project by tokens, and heaviest project by MCP usage.
 
 Below that, sections appear in this order:
 
-1. **Activity** — 365-day GitHub-style heatmaps: **Agents Activity**
+1. **Activity** — ~18-month GitHub-style heatmaps: **Agents Activity**
    (session counts), **Wiki MCP calls**, and — when telemetry carries
    signal — **Session-page reads** and **Doc-page reads** split from
    `wiki_read_page` hits.
