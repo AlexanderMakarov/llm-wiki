@@ -6,9 +6,7 @@ docs_shell: true
 
 # llmwiki documentation
 
-A local, stdlib-only Python knowledge base built from your AI-coding-agent
-session transcripts. Install in five minutes, then keep every session
-searchable, interlinked, and offline. No database, no account, no cloud.
+A local, stdlib-only Python knowledge base built from your AI-coding-agent session transcripts. Install in five minutes, then keep every session searchable, interlinked, and offline. No database, no account, no cloud.
 
 ---
 
@@ -107,9 +105,7 @@ llmwiki runs two interchangeable ways. Pick one, start — you can switch later.
 
 ## What llmwiki is not
 
-It's not a vector database, not a RAG framework, not a hosted service. It
-compiles markdown from JSONL transcripts, writes a static site, and stays
-out of the way. The only third-party runtime dependency is `markdown`.
+It's not a vector database, not a RAG framework, not a hosted service. It compiles markdown from JSONL transcripts, writes a static site, and stays out of the way. The only third-party runtime dependency is `markdown`.
 
 ## What's new
 

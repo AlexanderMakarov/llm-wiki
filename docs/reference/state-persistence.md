@@ -6,9 +6,7 @@ docs_shell: true
 
 # State persistence
 
-Where llmwiki keeps durable counters, telemetry, and pipeline state in
-a vault. These files live beside `raw/`, `wiki/`, and `site/` — they are
-not merged into one blob. Each has a single job.
+Where llmwiki keeps durable counters, telemetry, and pipeline state in a vault. These files live beside `raw/`, `wiki/`, and `site/` — they are not merged into one blob. Each has a single job.
 
 ---
 
@@ -22,9 +20,7 @@ not merged into one blob. Each has a single job.
 | `llmwiki-state.json` | Synth queue, sync mtimes, cost estimate, quarantine — separate from `usage/`; MCP telemetry never writes here. | `sync`, `synthesize`, `queue`, `migrate-state`, related CLI | Same CLI family; `llmwiki build` (optional synth cost line on Analytics); `migrate-tools-used` (origin lookup via sync keys) |
 | `raw/sessions/*.md` frontmatter | Session-side signal — `tools_used`, `tool_counts`, dates — used for wiki-adoption heatmaps and best-effort session/day counts alongside MCP logs. | `llmwiki sync` / convert; `migrate-tools-used` (tools fields only) | `llmwiki build` (session pages, Agents Activity heatmap, wiki-using session days); `migrate-tools-used` |
 
-Nothing in this table replaces anything else. `llmwiki build` reads
-`combined_totals()` (rollup + live JSONL), `daily.json`, and session
-frontmatter together when it renders Analytics.
+Nothing in this table replaces anything else. `llmwiki build` reads `combined_totals()` (rollup + live JSONL), `daily.json`, and session frontmatter together when it renders Analytics.
 
 ---
 
@@ -46,15 +42,9 @@ llmwiki build
     → render Analytics from the merged view
 ```
 
-**Append** happens on every MCP tool call (best-effort; failures never
-break the call). **Compact** is explicit — `llmwiki usage --compact` —
-and rolls whole past months into numeric summaries before deleting the
-source logs. **Build** refreshes the live overlay from non-folded JSONL
-on every run so heatmaps and tables stay current without waiting for
-compact.
+**Append** happens on every MCP tool call (best-effort; failures never break the call). **Compact** is explicit — `llmwiki usage --compact` — and rolls whole past months into numeric summaries before deleting the source logs. **Build** refreshes the live overlay from non-folded JSONL on every run so heatmaps and tables stay current without waiting for compact.
 
-`llmwiki-state.json` follows a different lifecycle: sync and synth update
-it; it does not participate in MCP log folding.
+`llmwiki-state.json` follows a different lifecycle: sync and synth update it; it does not participate in MCP log folding.
 
 ---
 
@@ -77,5 +67,4 @@ Regenerating `site/` is always safe — it is derived output.
 - **[`llmwiki usage`](cli.md#usage--mcp-tool-usage-telemetry-vs-synthesis-cost-26)** — print folded totals; `--compact` performs the rollup + daily fold and deletes retired JSONL.
 - **[`llmwiki migrate-tools-used`](cli.md#migrate-tools-used--expand-callmcptool-frontmatter-from-origin-stores)** — expand `CallMcpTool` entries in already-synced raw frontmatter when the origin session file still exists (deterministic, no LLM, no wiki churn).
 
-For upgrade steps after an Analytics layout change, see
-[`UPGRADING.md`](../UPGRADING.md).
+For upgrade steps after an Analytics layout change, see [`UPGRADING.md`](../UPGRADING.md).
