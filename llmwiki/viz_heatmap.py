@@ -297,6 +297,61 @@ def render_heatmap(
     return "\n".join(parts)
 
 
+def render_heatmap_totals(
+    counts: dict[date, int],
+    *,
+    unit: str = "sessions",
+) -> str:
+    """Muted one-line summary under a heatmap — total + busiest day."""
+    total = sum(counts.values())
+    if total == 0:
+        return f'<p class="heatmap-totals muted">0 {html.escape(unit)}</p>'
+    busiest_day, busiest_count = max(counts.items(), key=lambda kv: kv[1])
+    return (
+        f'<p class="heatmap-totals muted">'
+        f'{total} {html.escape(unit)} · busiest {busiest_day.isoformat()}: '
+        f'{busiest_count}'
+        f'</p>'
+    )
+
+
+def day_int_counts(
+    mcp_days: dict[str, dict] | None,
+    field: str,
+) -> dict[date, int]:
+    """Convert ``mcp_days`` day buckets to ``dict[date, int]`` for heatmaps."""
+    out: dict[date, int] = {}
+    for d, b in (mcp_days or {}).items():
+        try:
+            out[date.fromisoformat(d)] = int((b or {}).get(field, 0) or 0)
+        except ValueError:
+            continue
+    return {k: v for k, v in out.items() if v}
+
+
+def mcp_day_has_signal(mcp_days: dict[str, dict] | None, field: str) -> bool:
+    """True when any day bucket has a positive value for ``field``."""
+    for b in (mcp_days or {}).values():
+        if int((b or {}).get(field, 0) or 0) > 0:
+            return True
+    return False
+
+
+def activity_heatmap_div(
+    label: str, counts: dict[date, int], *, unit: str,
+) -> str:
+    """One Activity-section heatmap card (label + SVG + totals line)."""
+    svg = render_heatmap(counts, title_prefix=label)
+    totals = render_heatmap_totals(counts, unit=unit)
+    return (
+        f'    <div class="activity-heatmap">\n'
+        f'      <div class="heatmap-label muted">{html.escape(label)} · last 365 days</div>\n'
+        f'      {svg}\n'
+        f'      {totals}\n'
+        f'    </div>'
+    )
+
+
 def cell_count_for_window(end_date: date) -> int:
     """Compute how many cells `render_heatmap` will emit for a given
     end date. Useful for tests and layout debugging.

@@ -565,9 +565,13 @@ def compact(content_root: Path, *, now_month: str | None = None) -> dict[str, An
         to_delete.append(p)
         newly_folded = True
         if p.name not in daily_folded:
+            wiki_root = content_root / "wiki"
             daily["folded_days"] = merge_day_buckets(
                 daily.get("folded_days") or {},
-                day_buckets_from_records(file_records),
+                day_buckets_from_records(
+                    file_records,
+                    wiki_root=wiki_root if wiki_root.is_dir() else None,
+                ),
             )
             daily_folded.add(p.name)
             daily["folded_daily_files"] = sorted(daily_folded)
@@ -626,6 +630,9 @@ def _empty_day_bucket() -> dict[str, Any]:
         "mcp_calls": 0,
         "retrievals": 0,
         "writes": 0,
+        "session_reads": 0,
+        "doc_reads": 0,
+        "other_reads": 0,
         "by_tool": {},
         "attributed_projects": 0,
         "unattributed_calls": 0,
@@ -648,7 +655,51 @@ def _day_key(ts: Any) -> str | None:
     return None
 
 
-def day_buckets_from_records(records: Iterable[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+def _wiki_page_path(wiki_root: Path, rel: str) -> Path:
+    """Resolve a normalized wiki-relative path to an on-disk page."""
+    if rel.startswith("wiki/"):
+        return wiki_root.parent / rel
+    return wiki_root / rel
+
+
+def classify_read_kind(
+    query: str | None,
+    *,
+    wiki_root: Path | None = None,
+) -> str:
+    """Classify a ``wiki_read_page`` target as ``session``, ``doc``, or ``other``.
+
+    Uses ``normalize_read_path`` plus ``classify_source_kind``. When ``wiki_root``
+    is set, source pages under ``wiki/sources/`` are read for frontmatter; when
+    it is not, path heuristics apply (``raw/sessions/`` vs ``raw/docs/`` in the
+    normalized path, non-source wiki paths → ``other``).
+    """
+    path = normalize_read_path(query)
+    if not path:
+        return "other"
+    norm = path.replace("\\", "/")
+    if "raw/docs/" in norm:
+        return "doc"
+    if "raw/sessions/" in norm:
+        return "session"
+    if "/sources/" not in norm:
+        return "other"
+    if wiki_root is not None:
+        page = _wiki_page_path(wiki_root, path)
+        try:
+            if page.is_file():
+                text = page.read_text(encoding="utf-8", errors="replace")[:4000]
+                return classify_source_kind(text)
+        except OSError:
+            pass
+    return "other"
+
+
+def day_buckets_from_records(
+    records: Iterable[dict[str, Any]],
+    *,
+    wiki_root: Path | None = None,
+) -> dict[str, dict[str, Any]]:
     """Fold raw records into per-``YYYY-MM-DD`` buckets."""
     days: dict[str, dict[str, Any]] = {}
     for r in records:
@@ -664,6 +715,17 @@ def day_buckets_from_records(records: Iterable[dict[str, Any]]) -> dict[str, dic
             bucket["retrievals"] += 1
         if tool in WRITE_TOOLS:
             bucket["writes"] += 1
+        if tool == "wiki_read_page":
+            kind = classify_read_kind(
+                r.get("query") if isinstance(r.get("query"), str) else None,
+                wiki_root=wiki_root,
+            )
+            if kind == "session":
+                bucket["session_reads"] += 1
+            elif kind == "doc":
+                bucket["doc_reads"] += 1
+            else:
+                bucket["other_reads"] += 1
         project = attributed_project(r)
         if project == UNATTRIBUTED:
             bucket["unattributed_calls"] += 1
@@ -691,6 +753,9 @@ def merge_day_buckets(
             dst["mcp_calls"] += int(raw.get("mcp_calls", 0) or 0)
             dst["retrievals"] += int(raw.get("retrievals", 0) or 0)
             dst["writes"] += int(raw.get("writes", 0) or 0)
+            dst["session_reads"] += int(raw.get("session_reads", 0) or 0)
+            dst["doc_reads"] += int(raw.get("doc_reads", 0) or 0)
+            dst["other_reads"] += int(raw.get("other_reads", 0) or 0)
             dst["unattributed_calls"] += int(raw.get("unattributed_calls", 0) or 0)
             # Distinct projects aren't recoverable after fold; keep the larger
             # of the two counts as a lower-bound signal.
@@ -719,6 +784,9 @@ def _normalize_day_bucket(raw: Any) -> dict[str, Any] | None:
         "mcp_calls": int(raw.get("mcp_calls", 0) or 0),
         "retrievals": int(raw.get("retrievals", 0) or 0),
         "writes": int(raw.get("writes", 0) or 0),
+        "session_reads": int(raw.get("session_reads", 0) or 0),
+        "doc_reads": int(raw.get("doc_reads", 0) or 0),
+        "other_reads": int(raw.get("other_reads", 0) or 0),
         "by_tool": by_tool,
         "attributed_projects": int(raw.get("attributed_projects", 0) or 0),
         "unattributed_calls": int(raw.get("unattributed_calls", 0) or 0),
@@ -817,7 +885,11 @@ def _live_day_buckets(
         if p.name in daily_folded:
             continue
         records.extend(iter_records_file(p))
-    return day_buckets_from_records(records)
+    wiki_root = content_root / "wiki"
+    return day_buckets_from_records(
+        records,
+        wiki_root=wiki_root if wiki_root.is_dir() else None,
+    )
 
 
 def refresh_daily(content_root: Path) -> dict[str, dict[str, Any]]:

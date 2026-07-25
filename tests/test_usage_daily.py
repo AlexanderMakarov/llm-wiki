@@ -29,11 +29,77 @@ def test_day_buckets_from_records_counts_retrievals_and_writes():
     assert days["2026-07-19"]["mcp_calls"] == 3
     assert days["2026-07-19"]["retrievals"] == 2
     assert days["2026-07-19"]["writes"] == 1
+    assert days["2026-07-19"]["session_reads"] == 0
+    assert days["2026-07-19"]["doc_reads"] == 0
+    assert days["2026-07-19"]["other_reads"] == 0
     assert days["2026-07-19"]["attributed_projects"] == 2
     assert days["2026-07-19"]["by_tool"]["wiki_query"] == 1
     assert days["2026-07-20"]["mcp_calls"] == 1
     assert days["2026-07-20"]["unattributed_calls"] == 1
     assert days["2026-07-20"]["attributed_projects"] == 0
+
+
+def test_day_buckets_session_vs_doc_reads(tmp_path: Path):
+    wiki = tmp_path / "wiki"
+    sources = wiki / "sources"
+    sources.mkdir(parents=True)
+    (sources / "sess.md").write_text(
+        "---\nsource_file: raw/sessions/p/s.md\n---\n", encoding="utf-8")
+    (sources / "doc.md").write_text(
+        "---\nsource_file: raw/docs/p/d.md\n---\n", encoding="utf-8")
+    (sources / "tagged.md").write_text(
+        "---\ntags: [wiki-add, raw-doc]\n---\n", encoding="utf-8")
+    records = [
+        {"ts": "2026-07-19T10:00:00Z", "tool": "wiki_read_page",
+         "query": "wiki/sources/sess.md"},
+        {"ts": "2026-07-19T11:00:00Z", "tool": "wiki_read_page",
+         "query": "sources/doc.md"},
+        {"ts": "2026-07-19T12:00:00Z", "tool": "wiki_read_page",
+         "query": "wiki/sources/tagged.md"},
+        {"ts": "2026-07-19T13:00:00Z", "tool": "wiki_read_page",
+         "query": "wiki/entities/Foo.md"},
+    ]
+    days = usage.day_buckets_from_records(records, wiki_root=wiki)
+    bucket = days["2026-07-19"]
+    assert bucket["session_reads"] == 1
+    assert bucket["doc_reads"] == 2  # source_file doc + raw-doc tags
+    assert bucket["other_reads"] == 1
+    assert bucket["retrievals"] == 4
+
+
+def test_day_buckets_read_kind_path_heuristics_without_wiki_root():
+    """When wiki_root is absent, raw/sessions vs raw/docs in the path classify reads."""
+    records = [
+        {"ts": "2026-07-19T10:00:00Z", "tool": "wiki_read_page",
+         "query": "raw/sessions/foo/bar.md"},
+        {"ts": "2026-07-19T11:00:00Z", "tool": "wiki_read_page",
+         "query": "raw/docs/foo/bar.md"},
+        {"ts": "2026-07-19T12:00:00Z", "tool": "wiki_read_page",
+         "query": "wiki/sources/unknown.md"},
+    ]
+    days = usage.day_buckets_from_records(records)
+    bucket = days["2026-07-19"]
+    assert bucket["session_reads"] == 1
+    assert bucket["doc_reads"] == 1
+    assert bucket["other_reads"] == 1
+
+
+def test_merge_day_buckets_sums_read_kinds():
+    a = {"2026-07-19": {"mcp_calls": 1, "session_reads": 2, "doc_reads": 1}}
+    b = {"2026-07-19": {"mcp_calls": 3, "session_reads": 1, "other_reads": 2}}
+    merged = usage.merge_day_buckets(a, b)
+    assert merged["2026-07-19"]["session_reads"] == 3
+    assert merged["2026-07-19"]["doc_reads"] == 1
+    assert merged["2026-07-19"]["other_reads"] == 2
+    assert merged["2026-07-19"]["mcp_calls"] == 4
+
+
+def test_normalize_day_bucket_defaults_missing_read_fields():
+    norm = usage._normalize_day_bucket({"mcp_calls": 5})
+    assert norm is not None
+    assert norm["session_reads"] == 0
+    assert norm["doc_reads"] == 0
+    assert norm["other_reads"] == 0
 
 
 def test_refresh_daily_idempotent_across_builds(tmp_path: Path):

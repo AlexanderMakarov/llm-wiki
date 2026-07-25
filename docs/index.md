@@ -74,6 +74,7 @@ llmwiki runs two interchangeable ways. Pick one, start — you can switch later.
 - **[Slash commands reference](reference/slash-commands.md)** — every `/wiki-*` command used from Claude Code / Codex.
 - **[UI reference](reference/ui.md)** — every screen on the compiled site, how to reach it, what it shows.
 - **[Architecture](architecture.md)** — three layers (`raw/` / `wiki/` / `site/`).
+- **[State persistence](reference/state-persistence.md)** — vault usage logs, rollup, daily series, and state file.
 - **[Configuration](configuration.md)** · **[Full configuration reference](configuration-reference.md)**.
 - **[Cache tiers](reference/cache-tiers.md)** — L1 / L2 / L3 / L4 frontmatter.
 - **[Prompt caching + batch API](reference/prompt-caching.md)**.

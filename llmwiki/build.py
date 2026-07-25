@@ -33,7 +33,7 @@ import shutil
 import subprocess
 import sys
 from collections import Counter, defaultdict
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional
 
@@ -74,7 +74,13 @@ from llmwiki.usage import (
     read_mix_from_retrievals as _mcp_read_mix,
     refresh_daily as _mcp_refresh_daily,
 )
-from llmwiki.viz_heatmap import collect_session_counts, render_heatmap
+from llmwiki.viz_heatmap import (
+    activity_heatmap_div,
+    collect_session_counts,
+    day_int_counts,
+    mcp_day_has_signal,
+    render_heatmap,
+)
 from llmwiki.viz_tokens import (
     render_project_token_card,
     render_session_token_card,
@@ -86,9 +92,7 @@ from llmwiki.viz_tools import (
 )
 from llmwiki.viz_wiki_value import (  # noqa: F401
     render_mcp_heaviest_card,
-    render_mcp_usage_section,
     render_project_usage_block,
-    render_wiki_value_daily_chart,
     render_wiki_value_section,
 )
 from llmwiki.wiki_adoption import daily_wiki_sessions_from_dir as _wiki_session_days
@@ -1726,8 +1730,8 @@ def render_analytics(
     wiki_dir: Optional[Path] = None,
     wiki_value: Optional[dict[str, Any]] = None,
 ) -> Path:
-    """Render ``analytics.html`` — hero stats, activity heatmap, token
-    stats, wiki value (#52), recently-updated, projects grid."""
+    """Render ``analytics.html`` — hero stats, activity heatmaps, token
+    stats, wiki usage (#52), recently-updated, projects grid."""
     total = len(all_sources)
     mains = sum(1 for p, m, _ in all_sources if not _is_subagent(m, p))
     subs = total - mains
@@ -1743,21 +1747,37 @@ def render_analytics(
   </div>
 </section>"""
 
-    # v0.8 (#64, #72): aggregate 365-day GitHub-style heatmap. Counts all
-    # main sessions across all projects. Rendered as a pure-SVG block just
-    # above the projects grid so the landing page gives a glanceable
-    # "last year of activity" view.
+    # v0.8 (#64, #72): aggregate 365-day GitHub-style heatmaps — agents,
+    # MCP calls, and optional read-type splits in one Activity section.
     heatmap_entries = [m for _, m, _ in all_sources]
     heatmap_counts = collect_session_counts(heatmap_entries)
-    heatmap_svg = render_heatmap(heatmap_counts, title_prefix="Agents Activity")
-    heatmap_block = f"""<section class="section heatmap-section">
-  <div class="container">
-    <div class="activity-heatmap">
-      <div class="heatmap-label muted">Agents Activity · last 365 days</div>
-      {heatmap_svg}
-    </div>
-  </div>
-</section>"""
+    wv = wiki_value or {}
+    mcp_days = wv.get("mcp_days") or {}
+    activity_heatmaps = [
+        activity_heatmap_div("Agents Activity", heatmap_counts, unit="sessions"),
+        activity_heatmap_div(
+            "Wiki MCP calls", day_int_counts(mcp_days, "mcp_calls"), unit="calls",
+        ),
+    ]
+    if mcp_day_has_signal(mcp_days, "session_reads"):
+        activity_heatmaps.append(activity_heatmap_div(
+            "Session-page reads",
+            day_int_counts(mcp_days, "session_reads"),
+            unit="reads",
+        ))
+    if mcp_day_has_signal(mcp_days, "doc_reads"):
+        activity_heatmaps.append(activity_heatmap_div(
+            "Doc-page reads",
+            day_int_counts(mcp_days, "doc_reads"),
+            unit="reads",
+        ))
+    heatmap_block = (
+        '<section class="section heatmap-section">\n'
+        '  <div class="container">\n'
+        '    <h2>Activity</h2>\n'
+        + "\n".join(activity_heatmaps)
+        + '\n  </div>\n</section>'
+    )
 
     # v0.8 (#66): site-wide token summary stats — three cards showing
     # Tokens (value + avg per session), best cache hit project, and heaviest
@@ -1771,11 +1791,10 @@ def render_analytics(
     token_stats_block = render_site_token_stats(
         metas_by_project, link_prefix="", extra_cards=mcp_heaviest_card)
 
-    # #52: usage-led Wiki value section (retrievals, daily trend, mix, …).
-    wv = wiki_value or {}
-    wiki_value_block = render_wiki_value_section(
+    # Wiki usage (#52): value cards, corpus mix, top pages, MCP table.
+    wiki_usage_block = render_wiki_value_section(
         usage_totals or {},
-        mcp_days=wv.get("mcp_days") or {},
+        mcp_days=mcp_days,
         session_days=wv.get("session_days") or {},
         corpus_mix=wv.get("corpus_mix") or {},
         read_mix=wv.get("read_mix") or {},
@@ -1784,13 +1803,8 @@ def render_analytics(
         dead_stock_total=int(wv.get("dead_stock_total") or 0),
         wiki_page_count=int(wv.get("wiki_page_count") or 0),
         estimate=wv.get("estimate"),
+        docs_by_project=docs_by_project or {},
     )
-
-    # #27: site-wide "Wiki usage (MCP)" section — a one-line totals caption
-    # plus a per-tool call/item table. Empty when there is no telemetry and
-    # no raw document.
-    mcp_block = render_mcp_usage_section(
-        usage_totals or {}, docs_by_project or {}, link_prefix="")
 
     # Recently updated — show last 10 entries from the wiki's log.md. Read
     # from the vault's wiki_dir (falling back to REPO_ROOT for a repo build),
@@ -1847,10 +1861,8 @@ def render_analytics(
   </a>"""
         )
 
-    body = f"""{heatmap_block}
-{token_stats_block}
-{wiki_value_block}
-{mcp_block}
+    body = f"""{token_stats_block}
+{heatmap_block}
 {recent_block}
 <section class="section">
   <div class="container">
@@ -1860,6 +1872,7 @@ def render_analytics(
     </div>
   </div>
 </section>
+{wiki_usage_block}
 </main>
 """
 

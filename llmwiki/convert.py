@@ -1000,6 +1000,34 @@ def count_tool_calls(records: list[dict[str, Any]]) -> int:
     return n
 
 
+_MCP_TOOL_WRAPPERS = frozenset({"CallMcpTool", "GetMcpTools"})
+
+
+def tool_use_recorded_names(block: dict[str, Any]) -> list[str]:
+    """Return tool names to record for a ``tool_use`` block.
+
+    Cursor-style MCP wrappers (``CallMcpTool``, ``GetMcpTools``) expand to
+    both the wrapper name and ``mcp__{server}__{tool}`` when ``input`` carries
+    ``server`` plus ``toolName`` / ``tool`` / ``tool_name``. Missing pieces
+    leave the wrapper name only — never invent a canonical MCP name.
+    """
+    name = block.get("name") or "Unknown"
+    if name not in _MCP_TOOL_WRAPPERS:
+        return [name]
+    inp = block.get("input") or {}
+    if not isinstance(inp, dict):
+        return [name]
+    server = inp.get("server")
+    tool = inp.get("toolName") or inp.get("tool") or inp.get("tool_name")
+    if not server or not tool:
+        return [name]
+    server_s = str(server).strip()
+    tool_s = str(tool).strip()
+    if not server_s or not tool_s:
+        return [name]
+    return [name, f"mcp__{server_s}__{tool_s}"]
+
+
 def extract_tools_used(records: list[dict[str, Any]]) -> list[str]:
     seen: dict[str, None] = {}
     for r in records:
@@ -1007,7 +1035,8 @@ def extract_tools_used(records: list[dict[str, Any]]) -> list[str]:
             continue
         for b in r.get("message", {}).get("content", []) or []:
             if isinstance(b, dict) and b.get("type") == "tool_use":
-                seen.setdefault(b.get("name", "Unknown"), None)
+                for tool_name in tool_use_recorded_names(b):
+                    seen.setdefault(tool_name, None)
     return list(seen.keys())
 
 
@@ -1026,8 +1055,8 @@ def compute_tool_counts(records: list[dict[str, Any]]) -> dict[str, int]:
             continue
         for b in r.get("message", {}).get("content", []) or []:
             if isinstance(b, dict) and b.get("type") == "tool_use":
-                name = b.get("name") or "Unknown"
-                counts[name] = counts.get(name, 0) + 1
+                for name in tool_use_recorded_names(b):
+                    counts[name] = counts.get(name, 0) + 1
     # Return with stable ordering (by count desc then name) so the rendered
     # frontmatter is byte-identical across runs.
     return dict(sorted(counts.items(), key=lambda kv: (-kv[1], kv[0])))
@@ -1195,6 +1224,15 @@ def summarize_tool_use(block: dict[str, Any], redact: Redactor, config: dict[str
     if name == "Task":
         desc = inp.get("description", "") or inp.get("subagent_type", "")
         return f"`Task`: {redact(truncate_chars(desc, 200))}"
+
+    if name in _MCP_TOOL_WRAPPERS:
+        server = inp.get("server")
+        tool = inp.get("toolName") or inp.get("tool") or inp.get("tool_name")
+        if server and tool:
+            return (
+                f"`{name}`: `{redact(str(server).strip())}` / "
+                f"`{redact(str(tool).strip())}`"
+            )
 
     keys = ", ".join(inp.keys())
     return f"`{name}` (inputs: {keys})"

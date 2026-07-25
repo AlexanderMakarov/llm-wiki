@@ -5,7 +5,6 @@ structured per-session metrics in frontmatter.
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
 
 import pytest
 
@@ -15,6 +14,9 @@ from llmwiki.convert import (
     compute_token_totals,
     compute_tool_counts,
     compute_turn_count,
+    extract_tools_used,
+    summarize_tool_use,
+    tool_use_recorded_names,
 )
 
 
@@ -122,6 +124,114 @@ def test_tool_counts_sorted_descending():
     # Bash (3) > Edit (2) > Read (1); insertion order preserved
     assert list(counts.keys()) == ["Bash", "Edit", "Read"]
     assert counts == {"Bash": 3, "Edit": 2, "Read": 1}
+
+
+# ─── CallMcpTool expansion ─────────────────────────────────────────────────
+
+
+def _call_mcp_block(
+    server: str | None = "llmwiki",
+    tool: str | None = "wiki_query",
+    *,
+    tool_key: str = "toolName",
+) -> dict:
+    inp: dict = {"arguments": {"query": "test"}}
+    if server is not None:
+        inp["server"] = server
+    if tool is not None:
+        inp[tool_key] = tool
+    return {
+        "type": "tool_use",
+        "name": "CallMcpTool",
+        "input": inp,
+    }
+
+
+def test_tool_use_recorded_names_expands_call_mcp_tool():
+    block = _call_mcp_block()
+    assert tool_use_recorded_names(block) == [
+        "CallMcpTool",
+        "mcp__llmwiki__wiki_query",
+    ]
+
+
+def test_tool_use_recorded_names_accepts_tool_alias():
+    block = _call_mcp_block(tool_key="tool")
+    assert tool_use_recorded_names(block) == [
+        "CallMcpTool",
+        "mcp__llmwiki__wiki_query",
+    ]
+
+
+def test_tool_use_recorded_names_accepts_tool_name_alias():
+    block = _call_mcp_block(tool_key="tool_name")
+    assert tool_use_recorded_names(block) == [
+        "CallMcpTool",
+        "mcp__llmwiki__wiki_query",
+    ]
+
+
+def test_tool_use_recorded_names_missing_server_stays_wrapper_only():
+    block = _call_mcp_block(server=None)
+    assert tool_use_recorded_names(block) == ["CallMcpTool"]
+
+
+def test_tool_use_recorded_names_missing_tool_stays_wrapper_only():
+    block = _call_mcp_block(tool=None)
+    assert tool_use_recorded_names(block) == ["CallMcpTool"]
+
+
+def test_extract_tools_used_expands_call_mcp_tool():
+    records = [
+        {
+            "type": "assistant",
+            "message": {"content": [_call_mcp_block()]},
+        }
+    ]
+    assert extract_tools_used(records) == [
+        "CallMcpTool",
+        "mcp__llmwiki__wiki_query",
+    ]
+
+
+def test_compute_tool_counts_expands_call_mcp_tool():
+    records = [
+        {
+            "type": "assistant",
+            "message": {
+                "content": [
+                    _call_mcp_block(tool="wiki_query"),
+                    _call_mcp_block(tool="wiki_search"),
+                ]
+            },
+        }
+    ]
+    counts = compute_tool_counts(records)
+    assert counts == {
+        "CallMcpTool": 2,
+        "mcp__llmwiki__wiki_query": 1,
+        "mcp__llmwiki__wiki_search": 1,
+    }
+
+
+def test_summarize_call_mcp_tool_shows_server_and_tool():
+    from llmwiki.convert import Redactor
+
+    block = _call_mcp_block(server="llmwiki", tool="wiki_query")
+    out = summarize_tool_use(block, Redactor({}), {})
+    assert out == "`CallMcpTool`: `llmwiki` / `wiki_query`"
+
+
+def test_summarize_call_mcp_tool_without_tool_falls_back_to_inputs():
+    from llmwiki.convert import Redactor
+
+    block = {
+        "type": "tool_use",
+        "name": "CallMcpTool",
+        "input": {"server": "llmwiki", "arguments": {}},
+    }
+    out = summarize_tool_use(block, Redactor({}), {})
+    assert out == "`CallMcpTool` (inputs: server, arguments)"
 
 
 # ─── compute_token_totals ────────────────────────────────────────────────

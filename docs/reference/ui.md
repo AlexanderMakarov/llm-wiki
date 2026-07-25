@@ -24,7 +24,7 @@ opens the command palette from any page.
 | 3 | **Graph** | `/graph.html` | interactive force-directed knowledge graph (vis-network) |
 | 4 | **Projects** | `/projects/index.html` | filterable card grid of every project + freshness badge |
 | 5 | **Sessions** | `/sessions/index.html` | sortable table of every session, agent badge, project, model, tool-call count |
-| 6 | **Analytics** | `/analytics.html` | activity heatmap, token stats, recently updated, project grid |
+| 6 | **Analytics** | `/analytics.html` | activity heatmaps, wiki usage, recent activity, project grid |
 | 7 | **Models** | `/models/index.html` | structured model-profile cards (provider, pricing, benchmarks) |
 | 8 | **Compare** | `/vs/index.html` | auto-generated vs-pages between AI models |
 | 9 | **Docs** | `/docs/index.html` | editorial docs hub — tutorials, references, deployment guides |
@@ -204,16 +204,30 @@ source, and links into the Home tree browser.
 
 URL: `/analytics.html`
 
-Session analytics plus the **Wiki value** layer (#52):
+Session analytics plus usage-led wiki value (#52). The page opens with a
+hero line (main sessions · sub-agent runs · projects) and a row of stat
+cards — tokens (total + per-session average), best cache hit, heaviest
+project by tokens, and heaviest project by MCP usage.
 
-- Hero stats (main sessions / sub-agent runs / projects)
-- 365-day agents activity heatmap
-- Site-wide token stats (including heaviest project by MCP usage)
-- **Wiki value** — retrievals · writes · answer rate · payoff-per-page · distinct attributed projects; dual daily chart (MCP calls + best-effort wiki-using sessions); sessions vs docs corpus/read mix; top-earning pages and dead stock from retained `wiki_read_page` telemetry
-- **Wiki usage (MCP)** — per-tool calls / items returned / zero-hit rate
-- Recently updated wiki pages and the project card grid
+Below that, sections appear in this order:
 
-Daily MCP totals persist under `<vault>/usage/daily.json` so they survive monthly log compaction.
+1. **Activity** — 365-day GitHub-style heatmaps: **Agents Activity**
+   (session counts), **Wiki MCP calls**, and — when telemetry carries
+   signal — **Session-page reads** and **Doc-page reads** split from
+   `wiki_read_page` hits.
+2. **Recent activity** — last entries from `wiki/log.md` (including
+   producer breakdown lines such as `Processed: 2 Claude · 1 Cursor`).
+3. **Projects** — filterable card grid (session counts, date range,
+   topic chips) linking to per-project detail pages.
+4. **Wiki usage** — merged value block and MCP table in one section:
+   retrievals · writes · answer rate · payoff-per-page · distinct
+   attributed projects; optional synthesis cost line; sessions vs
+   documents corpus/read mix; top-earning pages and dead stock; per-tool
+   calls, items returned, and zero-hit rate.
+
+There is no daily bar chart — trends are read from the heatmaps. Durable
+counts and series are described in
+[`reference/state-persistence.md`](state-persistence.md).
 
 ---
 

@@ -288,11 +288,13 @@ working directory rather than the caller's. The same applies to a
 are already deleted, so its labels are retracted rather than recomputed.
 
 **Daily series (#52).** `usage/daily.json` stores per-day MCP call totals
-(`mcp_calls`, `retrievals`, `writes`, `by_tool`, attribution counts) so the
-Analytics dual daily chart survives `--compact`. Compact folds retiring
-JSONL files into `folded_days` before delete; each `llmwiki build` refreshes
-the live overlay from non-folded files without double-counting. The CLI
-report itself is unchanged — the Analytics page is the primary surface.
+(`mcp_calls`, `retrievals`, `writes`, `session_reads`, `doc_reads`,
+`other_reads`, `by_tool`, attribution counts) so Analytics activity heatmaps
+survive `--compact`. Compact folds retiring JSONL files into `folded_days`
+before delete; each `llmwiki build` refreshes the live overlay from non-folded
+files without double-counting. The CLI report itself is unchanged — the
+Analytics page is the primary surface. See
+[State persistence](state-persistence.md).
 
 Scope is MCP calls only — `file://` static-site browsing stays untracked.
 
@@ -634,6 +636,43 @@ python3 scripts/migrate_raw_encoded_username.py --vault /path/to/vault --dry-run
 Idempotent: already-redacted files count as `unchanged`. Private local
 vaults that never publish `raw/` can skip this and only run `llmwiki build`
 after upgrading (see [UPGRADING.md](../UPGRADING.md)).
+
+---
+
+## `migrate-tools-used` — expand CallMcpTool frontmatter from origin stores
+
+Rewrites `tools_used` and `tool_counts` in already-synced `raw/sessions/*.md`
+when the originating agent session file still exists. Re-reads records through
+the session adapter and applies the same `tool_use_recorded_names` expansion
+`llmwiki sync` uses (`CallMcpTool` → `mcp__{server}__{tool}`). In-place
+frontmatter update only — does **not** touch `wiki/`, does **not** enqueue
+`synthesize`, and **never** invents MCP names when the origin store is gone
+(TTL / deleted sessions count as `skipped_missing_origin` and stay unchanged).
+
+Implementation: `scripts/migrate_tools_used_mcp.py`; the CLI is a thin
+wrapper. After migrating, rebuild so analytics and the site pick up the new
+tool names: `llmwiki build --vault PATH`.
+
+```bash
+python3 -m llmwiki migrate-tools-used --vault /path/to/vault --dry-run
+python3 -m llmwiki migrate-tools-used --vault /path/to/vault
+python3 scripts/migrate_tools_used_mcp.py --vault /path/to/vault --dry-run
+```
+
+### Flags
+
+| Flag | What |
+|---|---|
+| `--vault PATH` | **Required.** Vault root containing `raw/sessions/`. |
+| `--dry-run` | Report files that would change; write nothing. |
+| `--config PATH` | Optional `sessions_config.json` override (record filters). |
+
+Origin resolution prefers the vault's `llmwiki-state.json` sync keys
+(`adapter::home-relative-path`), then falls back to a glob under the adapter
+session store by `sessionId`. Claude Code JSONL is fully supported; Cursor and
+other non-JSONL stores work when the state key or glob resolves a readable
+origin path. Missing origins leave `CallMcpTool` entries intact for
+`wiki_adoption` body fallback.
 
 ---
 

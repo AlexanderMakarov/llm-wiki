@@ -1,4 +1,7 @@
-from llmwiki.build import (
+from pathlib import Path
+
+from llmwiki.build import render_analytics
+from llmwiki.viz_wiki_value import (
     render_mcp_heaviest_card,
     render_mcp_usage_section,
     render_project_usage_block,
@@ -96,7 +99,7 @@ def test_project_usage_block_renders_per_tool_table():
     assert "—" in out                        # wiki_lint (non-entity) items cell is em dash
 
 
-def test_wiki_value_section_renders_cards_and_chart():
+def test_wiki_value_section_renders_cards_without_chart():
     totals = {
         "total_calls": 10,
         "per_tool": {
@@ -123,20 +126,23 @@ def test_wiki_value_section_renders_cards_and_chart():
         dead_stock=["wiki/sources/dead.md"],
         dead_stock_total=1,
         wiki_page_count=14,
+        docs_by_project={"proj-a": 2},
     )
-    assert "Wiki value" in out
+    assert "Wiki usage" in out
+    assert "Wiki value" not in out
     assert "Retrievals" in out
     assert ">7</div>" in out
     assert "Distinct projects" in out
     assert ">1</div>" in out  # attributed project count
     assert "unattributed calls" in out
-    assert "wiki-value-chart" in out
-    assert "wiki-value-bar mcp" in out
-    assert "wiki-value-bar sess" in out
+    assert "wiki-value-chart" not in out
+    assert "wiki-value-bar" not in out
     assert "Corpus: 10 session pages · 4 doc pages" in out
     assert "Top-earning pages" in out
     assert "wiki/sources/a.md" in out
     assert "Dead stock (1)" in out
+    assert "10 MCP calls" in out
+    assert "mcp-usage-table" in out
 
 
 def test_wiki_value_section_empty_without_data():
@@ -155,3 +161,90 @@ def test_wiki_value_excludes_unknown_from_distinct_projects():
     assert "Distinct projects" in out
     assert ">0</div>" in out
     assert "3 unattributed calls" in out
+
+
+def _analytics_session(
+    date: str, project: str = "demo", *, with_tokens: bool = False,
+) -> tuple:
+    meta = {
+        "title": f"session-{date}",
+        "slug": f"session-{date}",
+        "project": project,
+        "date": date,
+        "model": "claude-sonnet-4-6",
+        "tools_used": [],
+    }
+    if with_tokens:
+        meta["token_totals"] = {
+            "input": 1000,
+            "output": 500,
+            "cache_read": 2000,
+            "cache_creation": 100,
+        }
+    return (Path(f"raw/sessions/{date}-{project}.md"), meta, "body")
+
+
+def _render_analytics(tmp_path: Path, **kwargs) -> str:
+    groups = kwargs.pop("groups", {"demo": [_analytics_session("2026-07-20")]})
+    all_sources = kwargs.pop(
+        "all_sources", [s for sessions in groups.values() for s in sessions],
+    )
+    out_path = render_analytics(
+        groups=groups,
+        all_sources=all_sources,
+        out_dir=tmp_path,
+        **kwargs,
+    )
+    return out_path.read_text(encoding="utf-8")
+
+
+def test_analytics_section_order_activity_recent_projects_wiki_usage(tmp_path: Path):
+    wiki_dir = tmp_path / "wiki"
+    wiki_dir.mkdir()
+    (wiki_dir / "log.md").write_text(
+        "## [2026-07-20] ingest | demo source\n- Processed: 1\n",
+        encoding="utf-8",
+    )
+    groups = {"demo": [_analytics_session("2026-07-20", with_tokens=True)]}
+    html_out = _render_analytics(
+        tmp_path,
+        groups=groups,
+        wiki_dir=wiki_dir,
+        usage_totals={
+            "total_calls": 5,
+            "total_items_returned": 10,
+            "total_server_processes": 1,
+            "per_tool": {"wiki_search": {"calls": 5, "items_returned": 10, "zero_hit_rate": 0.0}},
+            "per_project": {"demo": {"calls": 5}},
+        },
+        wiki_value={
+            "mcp_days": {"2026-07-19": {"mcp_calls": 3}},
+            "wiki_page_count": 1,
+        },
+    )
+    pos_token = html_out.index("token-stats-section")
+    pos_activity = html_out.index('<h2>Activity</h2>')
+    pos_recent = html_out.index("recently-updated-section")
+    pos_projects = html_out.index("<h2>Projects</h2>")
+    pos_wiki_usage = html_out.index("wiki-usage-section")
+    assert pos_token < pos_activity < pos_recent < pos_projects < pos_wiki_usage
+
+
+def test_analytics_mcp_heatmap_when_mcp_days_provided(tmp_path: Path):
+    html_out = _render_analytics(
+        tmp_path,
+        wiki_value={
+            "mcp_days": {
+                "2026-07-18": {"mcp_calls": 2, "session_reads": 1, "doc_reads": 0},
+                "2026-07-19": {"mcp_calls": 8, "session_reads": 0, "doc_reads": 3},
+            },
+        },
+    )
+    assert "Wiki MCP calls" in html_out
+    assert "Session-page reads" in html_out
+    assert "Doc-page reads" in html_out
+    assert "heatmap-totals" in html_out
+    assert "10 calls" in html_out
+    assert "busiest 2026-07-19: 8" in html_out
+    assert "1 reads" in html_out
+    assert "3 reads" in html_out

@@ -15,6 +15,35 @@ The canonical per-release detail is
 [CHANGELOG.md](https://github.com/Pratiyush/llm-wiki/blob/master/CHANGELOG.md)
 — this guide focuses on "what might break".
 
+## Unreleased — Analytics layout + CallMcpTool migration
+
+After upgrading the engine, rebuild the vault site so Analytics picks up
+the new section order and heatmaps:
+
+```bash
+llmwiki build --vault /path/to/vault
+# or, when vault.default_path is already configured:
+llmwiki build
+```
+
+**Optional:** expand `CallMcpTool` entries in already-synced
+`raw/sessions/*.md` when the originating agent session file still exists:
+
+```bash
+llmwiki migrate-tools-used --vault /path/to/vault --dry-run
+llmwiki migrate-tools-used --vault /path/to/vault
+llmwiki build --vault /path/to/vault
+```
+
+When the origin store is gone (TTL / deleted sessions), rows are skipped
+safely — the migrator never invents MCP tool names. Prefer this over
+`sync --force` for the same TTL reasons as other raw rewrites: agent
+transcripts are usually retained only ~30 days, so force re-convert often
+has nothing left to read.
+
+See [`reference/state-persistence.md`](reference/state-persistence.md) for
+how usage logs, rollup, daily series, and state file relate.
+
 ## Unreleased — index cwd restore + encoded-path redaction (#56)
 
 **For AI agents maintaining a user's vault:** after the user upgrades
