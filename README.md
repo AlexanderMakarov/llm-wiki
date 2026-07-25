@@ -14,8 +14,6 @@ This repo is a **personal fork** ([AlexanderMakarov/llm-wiki](https://github.com
 [![Wiki checks](https://github.com/AlexanderMakarov/llm-wiki/actions/workflows/wiki-checks.yml/badge.svg?branch=main)](https://github.com/AlexanderMakarov/llm-wiki/actions/workflows/wiki-checks.yml)
 [![Docker](https://github.com/AlexanderMakarov/llm-wiki/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/AlexanderMakarov/llm-wiki/pkgs/container/llm-wiki)
 
-**Upstream demo site** (synthetic data only): [pratiyush.github.io/llm-wiki](https://pratiyush.github.io/llm-wiki/)
-
 ---
 
 Claude Code, Codex CLI, Copilot, **Cursor**, **OpenClaw**, Gemini CLI, and Obsidian all leave transcripts on disk. **llmwiki** converts them to redacted markdown, builds a searchable static site, and exposes the corpus to MCP clients.

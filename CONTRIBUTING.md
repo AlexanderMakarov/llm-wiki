@@ -2,18 +2,19 @@
 
 Thanks for wanting to contribute. This project follows strict rules about commits, PRs, and privacy — please read this before opening a PR.
 
-**Try the live demo first:** [pratiyush.github.io/llm-wiki](https://pratiyush.github.io/llm-wiki/). It's rebuilt on every `master` push from [`examples/demo-sessions/`](examples/demo-sessions) so you can see every feature working before touching code.
-
 ## Table of contents
 
 - [TL;DR rules of contribution](#tldr-rules-of-contribution)
 - [Code of conduct](#code-of-conduct)
 - [Dev setup](#dev-setup)
 - [Project structure](#project-structure)
+- [Agent instruction files](#agent-instruction-files)
 - [Commit + PR rules](#commit--pr-rules)
 - [Adding a new adapter](#adding-a-new-adapter)
 - [Static-site error handling](#static-site-error-handling)
 - [Privacy rules](#privacy-rules)
+- [Markdown conventions](#markdown-conventions)
+- [Linting](#linting)
 - [Testing](#testing)
 - [Releases](#releases)
 
@@ -25,12 +26,13 @@ Thanks for wanting to contribute. This project follows strict rules about commit
 4. **No new runtime deps.** Stdlib + `markdown` only. Viewer loads highlight.js from a CDN — no server-side parser needed.
 5. **Tests must pass.** Run `python3 -m pytest tests/ -q` before pushing. CI runs on Python 3.12 + 3.13.
 6. **Every PR ships docs + CHANGELOG + release-note bullet.** For every user-visible change update (a) `CHANGELOG.md` under `## [Unreleased]`, (b) any `docs/tutorials/*` / `docs/reference/*` / `README.md` / inline `--help` that describes the touched surface, and (c) a one-line release-note bullet either in the CHANGELOG entry or in the PR body so `gh release create` can pick it up. PRs adding a new CLI subcommand, slash command, config key, or lint rule MUST add the matching row to `docs/reference/*.md` in the same PR. CI enforces the CHANGELOG check; reviewers check the rest.
-7. **Verify old issues before fixing them.** Issues accumulate; some are fixed via side-effect, some describe problems that no longer reproduce, some refer to modules that have since been refactored. Before changing code for a stale issue: (a) reproduce the problem on current `master` — shell command, click-path, or test that fails; (b) re-read the issue's linked code paths to confirm they still exist. If the bug is gone, close with a one-line comment citing the commit that resolved it (`gh issue close N --reason completed --comment "resolved in <sha>"`); if the description is wrong but there's a real bug nearby, file a new precise issue and link to the old one. Never ship a speculative fix — if you can't reproduce, say so in the PR body.
+7. **Verify old issues before fixing them.** Issues accumulate; some are fixed via side-effect, some describe problems that no longer reproduce, some refer to modules that have since been refactored. Before changing code for a stale issue: (a) reproduce the problem on current `main` — shell command, click-path, or test that fails; (b) re-read the issue's linked code paths to confirm they still exist. If the bug is gone, close with a one-line comment citing the commit that resolved it (`gh issue close N --reason completed --comment "resolved in <sha>"`); if the description is wrong but there's a real bug nearby, file a new precise issue and link to the old one. Never ship a speculative fix — if you can't reproduce, say so in the PR body.
 8. **Open an issue first** for anything bigger than a one-file fix. Keeps scope aligned.
 9. **Never fail silently in the browser.** Every runtime failure in the static site must be visible on the page, not just in the console — see [Static-site error handling](#static-site-error-handling).
 10. **No personal vault details in PR text.** Absolute home paths, OS usernames, vault roots, and personal session examples stay out of PR bodies / commits / CHANGELOG — use placeholders. See [Privacy rules](#privacy-rules).
+11. **Lint before you push.** `ruff check llmwiki tests scripts`. A committed `pre-push` hook checks the Python files in your push; see [Linting](#linting).
 
-That's it. If you follow those ten rules your PR is 90% of the way through review.
+That's it. If you follow those eleven rules your PR is 90% of the way through review.
 
 ## Code of conduct
 
@@ -41,8 +43,15 @@ Be kind. Respect privacy. Prefer plain English to jargon. No scope creep.
 ```bash
 git clone https://github.com/Pratiyush/llm-wiki.git
 cd llm-wiki
-./setup.sh                # installs markdown, scaffolds raw/ wiki/ site/
+./setup.sh                # installs markdown, scaffolds raw/ wiki/ site/,
+                          # wires the pre-push lint hook
 python3 -m pytest tests/ -q
+```
+
+`setup.sh` points `core.hooksPath` at the committed `.githooks/` directory. If you set the repo up by hand, enable the hook yourself:
+
+```bash
+git config core.hooksPath .githooks
 ```
 
 Requirements:
@@ -68,12 +77,35 @@ llmwiki/              # Python package
 ├── adapters/         # session-store adapters (one per agent)
 └── mcp/              # MCP server (13 tools, stdio transport)
 
-.claude/              # Claude Code plugin surface
+.claude/              # Claude Code plugin surface (commands, skills, rules)
 .claude-plugin/       # plugin.json + marketplace.json
+.cursor/rules/        # Cursor project rules
 .kiro/steering/       # always-loaded rules
+.githooks/            # committed git hooks (pre-push lint)
 docs/                 # user-facing + framework docs
 tests/                # fixtures + snapshot tests
 ```
+
+## Agent instruction files
+
+This repo is two things at once, and the instruction files split along that seam. Getting the two confused is the most common way an agent goes wrong here.
+
+**`CLAUDE.md` and `AGENTS.md` at the repo root are the *product* schema.** They describe how a coding agent maintains a **user's** knowledge vault — the `raw/` → `wiki/` → `site/` pipeline, page formats, ingest and query workflows. They ship to users. Never put repo, PR, or process rules in them.
+
+**`CONTRIBUTING.md` — this file — governs work on llmwiki itself.** Because Claude Code auto-loads only `CLAUDE.md` and Cursor auto-loads only `AGENTS.md` plus `.cursor/rules/`, neither agent would otherwise ever see this file. Three surfaces route them here:
+
+| Surface | Tool | Loads when |
+|---|---|---|
+| `.claude/rules/contributing.md` | Claude Code | agent reads a file under `llmwiki/`, `tests/`, `scripts/`, `docs/`, or the root build files (`paths:` frontmatter) |
+| `.cursor/rules/read-contributing.mdc` | Cursor | every session (`alwaysApply: true`) |
+| `.kiro/steering/contributing-rules.md` | Kiro | every session (`load: always`) |
+
+Plus a short pointer block at the top of `CLAUDE.md` and `AGENTS.md`, so an agent that only ever reads the root schema still finds its way here.
+
+Two rules for maintaining them:
+
+1. **They are pointers, not copies.** Each one distils the same handful of non-negotiables and links back here. An earlier version of the Kiro file restated the rules in full and drifted — it ended up mandating commit types this guide doesn't accept and a branch name that no longer matched. Process rules change here first; the pointers only change when the *summary* is wrong.
+2. **Keep them free of machine-specific detail.** `.cursor/` is gitignored except for an explicit allowlist in `.gitignore`, so a local rule naming your own vault path or directory layout stays on your machine. Add a new shared Cursor rule by allowlisting it there deliberately.
 
 ## Commit + PR rules
 
@@ -131,10 +163,10 @@ Every box must be checked (or have a one-line waiver). [`.github/PULL_REQUEST_TE
 
 ### Branch protection
 
-- Default branch is `master`; never push directly — PR required.
+- Default branch is `main`; never push directly — PR required.
 - CI must pass before merge.
 - Signed commits required.
-- Branch must be up-to-date with master before merge.
+- Branch must be up-to-date with `main` before merge.
 
 ## Adding a new adapter
 
@@ -207,6 +239,28 @@ llmwiki processes session transcripts that may contain PII, API keys, file paths
 5. **No telemetry, ever.** The tool never calls home.
 6. **Localhost-only binding by default.** The server binds to `127.0.0.1` unless the user explicitly passes `--host 0.0.0.0`.
 7. **No local vault / personal machine details in PRs or commits.** PR bodies, commit messages, issue comments, and CHANGELOG entries must not include absolute home paths, OS usernames, vault roots, or personal session examples. Use placeholders (`/home/USER/…`, `<vault>`, `<user>`).
+
+## Markdown conventions
+
+**Never hard-wrap prose at a fixed column.** One paragraph is one line, however long. Line width is the renderer's job, not the file's, and a hard-wrapped paragraph turns a one-word edit into a diff that reflows every following line — which buries the actual change and causes needless merge conflicts. This applies to every `.md` file in the repo, including `CLAUDE.md`, `AGENTS.md`, and the agent rule files under `.claude/rules/`, `.cursor/rules/`, and `.kiro/steering/`.
+
+Wrapping is fine inside fenced code blocks, tables, and anywhere the line is not prose.
+
+## Linting
+
+```bash
+ruff check llmwiki tests scripts        # lint
+ruff check --fix llmwiki tests scripts  # clear the mechanical findings
+```
+
+Ruff config lives in `pyproject.toml` under `[tool.ruff]`: line length 120, target `py312`, selecting `E`, `F`, `I`, `B`, and `UP`.
+
+**Run lint before you push.** The committed `pre-push` hook checks the Python files in your push and rejects it on violations; `git push --no-verify` bypasses it, but say why in the PR.
+
+Lint is **not yet clean repo-wide.** A backlog of pre-existing violations is being cleared in dedicated sweeps tracked in [#58](https://github.com/AlexanderMakarov/llm-wiki/issues/58), and CI does not fail on them yet — that is why the hook is scoped to the files you are actually pushing. Keep your own diff clean rather than adding to the backlog. Two conventions the linter can't check on its own:
+
+- **Imports belong at the top of the module.** Deferring one into a function body is acceptable only for an optional extra (`trafilatura`, `markitdown`, `graphifyy`, `networkx`), to break a genuine import cycle, or to keep CLI startup fast. Put the reason in a comment on the line — `llmwiki/cli.py` defers heavy submodule imports precisely so `llmwiki --help` and shell completion stay fast.
+- **A deliberate re-export needs `# noqa: F401`.** `ruff --fix` will otherwise delete an import that looks unused in its own module but is part of that module's public surface.
 
 ## Testing
 

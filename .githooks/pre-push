@@ -1,0 +1,109 @@
+#!/bin/sh
+# Pre-push: run ruff on Python files in the push diff only (not the whole repo).
+
+GIT_REMOTE_NAME=${1:-origin}
+
+if [ "${LLMWIKI_SKIP_PREPUSH:-}" = "1" ]; then
+  echo "LLMWIKI_SKIP_PREPUSH=1 — skipping pre-push ruff check"
+  exit 0
+fi
+
+ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+cd "$ROOT" || exit 1
+
+ZERO=0000000000000000000000000000000000000000
+EMPTY_TREE=4b825dc642cb6eb9a060e54bf8d69288fbee4904
+py_list=$(mktemp)
+py_filtered=$(mktemp)
+trap 'rm -f "$py_list" "$py_filtered"' EXIT INT HUP TERM
+
+resolve_default_ref() {
+  remote_name=${GIT_REMOTE_NAME:-origin}
+  ref=""
+  if git symbolic-ref -q "refs/remotes/${remote_name}/HEAD" >/dev/null 2>&1; then
+    ref=$(git symbolic-ref "refs/remotes/${remote_name}/HEAD" 2>/dev/null | sed 's@^refs/remotes/@@')
+  fi
+  if [ -z "$ref" ]; then
+    for candidate in "${remote_name}/master" "${remote_name}/main"; do
+      if git rev-parse --verify "$candidate" >/dev/null 2>&1; then
+        ref=$candidate
+        break
+      fi
+    done
+  fi
+  printf '%s' "$ref"
+}
+
+collect_changed_names() {
+  remote_sha=$1
+  local_sha=$2
+
+  if [ "$local_sha" = "$ZERO" ]; then
+    return 0
+  fi
+
+  if [ "$remote_sha" != "$ZERO" ]; then
+    git diff --name-only --diff-filter=ACMR "${remote_sha}..${local_sha}"
+    return 0
+  fi
+
+  # New branch on remote — diff from merge-base with default branch, not entire history.
+  default_ref=$(resolve_default_ref)
+  if [ -n "$default_ref" ]; then
+    base=$(git merge-base "$local_sha" "$default_ref" 2>/dev/null) || base=""
+    if [ -n "$base" ] && [ "$base" != "$ZERO" ]; then
+      git diff --name-only --diff-filter=ACMR "${base}..${local_sha}"
+      return 0
+    fi
+  fi
+
+  # No default branch: lint files touched by commits being pushed (not on any remote).
+  oldest=$(git rev-list --reverse "$local_sha" --not --remotes 2>/dev/null | sed -n '1p')
+  if [ -n "$oldest" ]; then
+    parent=$(git rev-parse "${oldest}^" 2>/dev/null) || parent=$EMPTY_TREE
+    git diff --name-only --diff-filter=ACMR "${parent}..${local_sha}"
+  fi
+}
+
+while read -r local_ref local_sha remote_ref remote_sha _extra; do
+  [ -n "$local_sha" ] || continue
+  collect_changed_names "$remote_sha" "$local_sha" >> "$py_list"
+done
+
+if [ -s "$py_list" ]; then
+  sort -u "$py_list" | while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    case "$f" in
+      *.py)
+        if [ -f "$f" ]; then
+          echo "$f"
+        fi
+        ;;
+    esac
+  done | sort -u > "$py_filtered"
+fi
+
+if [ ! -s "$py_filtered" ]; then
+  exit 0
+fi
+
+if ! command -v ruff >/dev/null 2>&1; then
+  echo "warning: ruff not found on PATH — skipping pre-push lint" >&2
+  echo "  Install with: pip install ruff  (or: pip install -e '.[dev]')" >&2
+  exit 0
+fi
+
+set --
+while IFS= read -r f; do
+  [ -n "$f" ] && set -- "$@" "$f"
+done < "$py_filtered"
+
+if ruff check "$@"; then
+  exit 0
+fi
+
+echo "" >&2
+echo "Pre-push ruff check failed." >&2
+echo "  Fix:  ruff check --fix $*" >&2
+echo "  Skip: git push --no-verify" >&2
+exit 1

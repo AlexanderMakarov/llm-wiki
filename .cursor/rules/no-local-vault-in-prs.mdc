@@ -1,0 +1,17 @@
+---
+description: Never put local vault paths, usernames, or personal machine details in PRs/commits
+alwaysApply: true
+---
+
+# No local vault / personal machine details in git artifacts
+
+PRs, commit messages, issue comments, and CHANGELOG entries are public. Do not include:
+
+- Absolute home paths (`/home/<you>/…`, `/Users/<you>/…`, Windows profiles)
+- OS usernames, machine hostnames, or vault paths (`/mnt/…`, Obsidian vault roots)
+- Concrete local session filenames, project cards, or screenshots from a personal vault
+- Examples that embed a real username — use placeholders: `/home/USER/…`, `<vault>`, `<user>`
+
+Prefer generic wording in test plans ("build a vault with Claude sessions") over naming a specific local vault or rebuilt path.
+
+`raw/` redaction to `USER` exists so committed transcripts stay anonymous — do not undo that privacy in PR text.
