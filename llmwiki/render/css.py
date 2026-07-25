@@ -410,6 +410,23 @@ kbd { display: inline-block; padding: 2px 6px; font-family: var(--mono); font-si
 .mcp-usage-table th { background: var(--bg-alt); font-weight: 600; color: var(--text-secondary); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; }
 .mcp-usage-table tr:last-child td { border-bottom: none; }
 
+/* #52 Wiki value */
+.wiki-value-section h3 { margin: 20px 0 8px; font-size: 1rem; }
+.wiki-value-cost { margin: 0 0 16px; font-size: 0.82rem; }
+.wiki-value-chart-wrap { margin: 8px 0 20px; }
+.wiki-value-legend { display: flex; align-items: center; gap: 6px; font-size: 0.78rem; margin-bottom: 8px; }
+.wiki-value-swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 2px; }
+.wiki-value-swatch.mcp { background: var(--accent, #7C3AED); }
+.wiki-value-swatch.sess { background: var(--text-secondary, #6b7280); }
+.wiki-value-chart { display: block; max-width: 100%; }
+.wiki-value-bar.mcp { fill: var(--accent, #7C3AED); opacity: 0.9; }
+.wiki-value-bar.sess { fill: var(--text-secondary, #6b7280); opacity: 0.75; }
+.wiki-value-axis { fill: var(--text-secondary); font-size: 10px; font-family: 'JetBrains Mono', monospace; }
+.wiki-value-caption { font-size: 0.78rem; margin-top: 8px; }
+.wiki-value-list { margin: 6px 0 0; padding-left: 1.2em; font-size: 0.86rem; }
+.wiki-value-list li { margin: 2px 0; }
+.wiki-value-mix, .wiki-value-top, .wiki-value-dead { margin: 12px 0 8px; }
+
 /* Filter bar */
 .filter-bar { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin-bottom: 16px; padding: 12px 16px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); }
 .filter-bar label { display: flex; flex-direction: column; gap: 4px; font-size: 0.72rem; color: var(--text-muted); font-weight: 500; text-transform: uppercase; letter-spacing: 0.04em; }

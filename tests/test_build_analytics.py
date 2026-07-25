@@ -2,6 +2,7 @@ from llmwiki.build import (
     render_mcp_heaviest_card,
     render_mcp_usage_section,
     render_project_usage_block,
+    render_wiki_value_section,
 )
 
 
@@ -93,3 +94,64 @@ def test_project_usage_block_renders_per_tool_table():
     assert "wiki_search" in out and "wiki_lint" in out
     assert "mcp-usage-table" in out          # per-tool table present
     assert "—" in out                        # wiki_lint (non-entity) items cell is em dash
+
+
+def test_wiki_value_section_renders_cards_and_chart():
+    totals = {
+        "total_calls": 10,
+        "per_tool": {
+            "wiki_query": {"calls": 4, "zero_hits": 1},
+            "wiki_search": {"calls": 3, "zero_hits": 0},
+            "wiki_add": {"calls": 2, "zero_hits": 0},
+            "wiki_lint": {"calls": 1, "zero_hits": 0},
+        },
+        "per_project": {
+            "unknown": {"calls": 5},
+            "proj-a": {"calls": 5},
+        },
+    }
+    out = render_wiki_value_section(
+        totals,
+        mcp_days={
+            "2026-07-18": {"mcp_calls": 2},
+            "2026-07-19": {"mcp_calls": 8},
+        },
+        session_days={"2026-07-18": 1, "2026-07-19": 3},
+        corpus_mix={"session": 10, "doc": 4, "other": 0, "total": 14},
+        read_mix={"session": 3, "doc": 1, "other": 0, "total": 4},
+        top_pages=[("wiki/sources/a.md", 5)],
+        dead_stock=["wiki/sources/dead.md"],
+        dead_stock_total=1,
+        wiki_page_count=14,
+    )
+    assert "Wiki value" in out
+    assert "Retrievals" in out
+    assert ">7</div>" in out
+    assert "Distinct projects" in out
+    assert ">1</div>" in out  # attributed project count
+    assert "unattributed calls" in out
+    assert "wiki-value-chart" in out
+    assert "wiki-value-bar mcp" in out
+    assert "wiki-value-bar sess" in out
+    assert "Corpus: 10 session pages · 4 doc pages" in out
+    assert "Top-earning pages" in out
+    assert "wiki/sources/a.md" in out
+    assert "Dead stock (1)" in out
+
+
+def test_wiki_value_section_empty_without_data():
+    assert render_wiki_value_section(
+        {"total_calls": 0, "per_tool": {}, "per_project": {}},
+    ) == ""
+
+
+def test_wiki_value_excludes_unknown_from_distinct_projects():
+    totals = {
+        "total_calls": 3,
+        "per_tool": {"wiki_query": {"calls": 3, "zero_hits": 0}},
+        "per_project": {"unknown": {"calls": 3}},
+    }
+    out = render_wiki_value_section(totals, wiki_page_count=1)
+    assert "Distinct projects" in out
+    assert ">0</div>" in out
+    assert "3 unattributed calls" in out

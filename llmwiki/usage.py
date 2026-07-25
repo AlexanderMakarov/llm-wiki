@@ -25,16 +25,19 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import tempfile
-from datetime import datetime, timezone
+from collections.abc import Iterable, Iterator, Mapping
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Iterable, Iterator, Mapping
+from typing import Any
 from urllib.parse import unquote, urlparse
 
 from llmwiki.slugs import project_slug_from_abs_path, project_slug_from_encoded_dir
 
 USAGE_DIRNAME = "usage"
 ROLLUP_NAME = "rollup.json"
+DAILY_NAME = "daily.json"
 
 # ─── Caller attribution (#51) ─────────────────────────────────────────────
 # The bucket a call lands in when nothing caller-scoped was available. It is
@@ -74,9 +77,23 @@ ENTITY_TOOLS = frozenset({
     "wiki_entity_search", "wiki_category_browse", "wiki_export", "wiki_confidence",
 })
 
+# Consumption tools for the value headline / daily retrievals counter (#52).
+RETRIEVAL_TOOLS = frozenset({
+    "wiki_query", "wiki_search", "wiki_read_page",
+})
+WRITE_TOOLS = frozenset({"wiki_add"})
+
 
 def is_entity_tool(tool: str) -> bool:
     return tool in ENTITY_TOOLS
+
+
+def is_retrieval_tool(tool: str) -> bool:
+    return tool in RETRIEVAL_TOOLS
+
+
+def is_write_tool(tool: str) -> bool:
+    return tool in WRITE_TOOLS
 
 
 def usage_dir(content_root: Path) -> Path:
@@ -84,7 +101,7 @@ def usage_dir(content_root: Path) -> Path:
 
 
 def _iso_now() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _fs_safe(stamp: str) -> str:
@@ -515,15 +532,21 @@ def compact(content_root: Path, *, now_month: str | None = None) -> dict[str, An
     (``folded_files`` excludes the file from live aggregation). Files with a
     current-month record are left untouched — they may still be open for
     append by a live server.
+
+    Each retiring file is also folded into ``usage/daily.json`` (#52) before
+    unlink so the per-day series survives compaction.
     """
-    month = now_month or datetime.now(timezone.utc).strftime("%Y-%m")
+    month = now_month or datetime.now(UTC).strftime("%Y-%m")
     d = usage_dir(content_root)
     rollup = load_rollup(content_root)
+    daily = load_daily(content_root)
     if not d.exists():
         return rollup
 
     folded: set[str] = set(rollup.get("folded_files", []))
+    daily_folded: set[str] = set(daily.get("folded_daily_files", []))
     newly_folded = False
+    daily_changed = False
     to_delete: list[Path] = []
     for p in sorted(d.glob("mcp-*.jsonl")):
         if p.name in folded:
@@ -532,7 +555,8 @@ def compact(content_root: Path, *, now_month: str | None = None) -> dict[str, An
         latest = _latest_record_month(p)
         if latest is None or latest >= month:
             continue  # active this month (or empty/unparseable) → leave alone
-        rollup = merge_aggregates(rollup, aggregate(iter_records_file(p)))
+        file_records = list(iter_records_file(p))
+        rollup = merge_aggregates(rollup, aggregate(file_records))
         folded.add(p.name)
         rollup["folded_files"] = sorted(folded)
         # merge_aggregates only carries numeric totals; re-stamp the label
@@ -540,9 +564,24 @@ def compact(content_root: Path, *, now_month: str | None = None) -> dict[str, An
         rollup["attribution_version"] = ATTRIBUTION_VERSION
         to_delete.append(p)
         newly_folded = True
+        if p.name not in daily_folded:
+            daily["folded_days"] = merge_day_buckets(
+                daily.get("folded_days") or {},
+                day_buckets_from_records(file_records),
+            )
+            daily_folded.add(p.name)
+            daily["folded_daily_files"] = sorted(daily_folded)
+            daily_changed = True
 
     if newly_folded:
         save_rollup(content_root, rollup)  # durable BEFORE any unlink
+    if daily_changed:
+        daily["attribution_version"] = ATTRIBUTION_VERSION
+        daily["days"] = merge_day_buckets(
+            daily.get("folded_days") or {},
+            _live_day_buckets(content_root, daily_folded),
+        )
+        save_daily(content_root, daily)
     for p in to_delete:
         try:
             p.unlink()
@@ -566,3 +605,380 @@ def combined_totals(content_root: Path) -> dict[str, Any]:
                 continue
             live_records.extend(iter_records_file(p))
     return merge_aggregates(rollup, aggregate(live_records))
+
+
+def iter_live_records(content_root: Path) -> Iterator[dict[str, Any]]:
+    """Yield records from JSONL files not yet folded into the rollup."""
+    folded = set(load_rollup(content_root).get("folded_files", []))
+    d = usage_dir(content_root)
+    if not d.exists():
+        return
+    for p in sorted(d.glob("mcp-*.jsonl")):
+        if p.name in folded:
+            continue
+        yield from iter_records_file(p)
+
+
+# ─── Daily series (#52) ───────────────────────────────────────────────────
+
+def _empty_day_bucket() -> dict[str, Any]:
+    return {
+        "mcp_calls": 0,
+        "retrievals": 0,
+        "writes": 0,
+        "by_tool": {},
+        "attributed_projects": 0,
+        "unattributed_calls": 0,
+        "_projects": set(),  # transient; stripped before save
+    }
+
+
+def _empty_daily() -> dict[str, Any]:
+    return {
+        "attribution_version": ATTRIBUTION_VERSION,
+        "folded_daily_files": [],
+        "folded_days": {},
+        "days": {},
+    }
+
+
+def _day_key(ts: Any) -> str | None:
+    if isinstance(ts, str) and len(ts) >= 10 and ts[4] == "-" and ts[7] == "-":
+        return ts[:10]
+    return None
+
+
+def day_buckets_from_records(records: Iterable[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """Fold raw records into per-``YYYY-MM-DD`` buckets."""
+    days: dict[str, dict[str, Any]] = {}
+    for r in records:
+        day = _day_key(r.get("ts"))
+        if day is None:
+            continue
+        bucket = days.setdefault(day, _empty_day_bucket())
+        tool = str(r.get("tool") or "unknown")
+        bucket["mcp_calls"] += 1
+        by_tool = bucket["by_tool"]
+        by_tool[tool] = int(by_tool.get(tool, 0) or 0) + 1
+        if tool in RETRIEVAL_TOOLS:
+            bucket["retrievals"] += 1
+        if tool in WRITE_TOOLS:
+            bucket["writes"] += 1
+        project = attributed_project(r)
+        if project == UNATTRIBUTED:
+            bucket["unattributed_calls"] += 1
+        else:
+            projects = bucket["_projects"]
+            if isinstance(projects, set):
+                projects.add(project)
+    for bucket in days.values():
+        projects = bucket.pop("_projects", set())
+        bucket["attributed_projects"] = len(projects) if isinstance(projects, set) else 0
+    return days
+
+
+def merge_day_buckets(
+    a: Mapping[str, Any], b: Mapping[str, Any],
+) -> dict[str, dict[str, Any]]:
+    """Sum two day maps. ``attributed_projects`` takes the max (lower bound)."""
+    out: dict[str, dict[str, Any]] = {}
+    for side in (a, b):
+        for day, raw in side.items():
+            if not isinstance(raw, dict):
+                continue
+            dst = out.setdefault(day, _empty_day_bucket())
+            dst.pop("_projects", None)
+            dst["mcp_calls"] += int(raw.get("mcp_calls", 0) or 0)
+            dst["retrievals"] += int(raw.get("retrievals", 0) or 0)
+            dst["writes"] += int(raw.get("writes", 0) or 0)
+            dst["unattributed_calls"] += int(raw.get("unattributed_calls", 0) or 0)
+            # Distinct projects aren't recoverable after fold; keep the larger
+            # of the two counts as a lower-bound signal.
+            dst["attributed_projects"] = max(
+                int(dst.get("attributed_projects", 0) or 0),
+                int(raw.get("attributed_projects", 0) or 0),
+            )
+            for tool, n in (raw.get("by_tool") or {}).items():
+                by_tool = dst["by_tool"]
+                by_tool[str(tool)] = int(by_tool.get(str(tool), 0) or 0) + int(n or 0)
+    for bucket in out.values():
+        bucket.pop("_projects", None)
+    return out
+
+
+def _normalize_day_bucket(raw: Any) -> dict[str, Any] | None:
+    if not isinstance(raw, dict):
+        return None
+    by_tool_raw = raw.get("by_tool") or {}
+    by_tool = {
+        str(k): int(v or 0)
+        for k, v in by_tool_raw.items()
+        if isinstance(k, str)
+    } if isinstance(by_tool_raw, dict) else {}
+    return {
+        "mcp_calls": int(raw.get("mcp_calls", 0) or 0),
+        "retrievals": int(raw.get("retrievals", 0) or 0),
+        "writes": int(raw.get("writes", 0) or 0),
+        "by_tool": by_tool,
+        "attributed_projects": int(raw.get("attributed_projects", 0) or 0),
+        "unattributed_calls": int(raw.get("unattributed_calls", 0) or 0),
+    }
+
+
+def load_daily(content_root: Path) -> dict[str, Any]:
+    """Kept-forever per-day MCP series (#52)."""
+    p = usage_dir(content_root) / DAILY_NAME
+    out = _empty_daily()
+    if not p.exists():
+        return out
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return out
+    if not isinstance(data, dict):
+        return out
+    out["folded_daily_files"] = [
+        str(x) for x in data.get("folded_daily_files", []) if isinstance(x, str)]
+    folded_days: dict[str, dict[str, Any]] = {}
+    for day, raw in (data.get("folded_days") or {}).items():
+        if isinstance(day, str):
+            norm = _normalize_day_bucket(raw)
+            if norm is not None:
+                folded_days[day] = norm
+    # Legacy daily.json written before folded_days existed: promote ``days``
+    # only when compact has already recorded folded file names — those days
+    # are durable history. A display-only ``days`` snapshot (live overlay)
+    # must not become folded history or refresh would double-count.
+    if not folded_days and out["folded_daily_files"]:
+        for day, raw in (data.get("days") or {}).items():
+            if isinstance(day, str):
+                norm = _normalize_day_bucket(raw)
+                if norm is not None:
+                    folded_days[day] = norm
+    version = data.get("attribution_version")
+    if not isinstance(version, int) or version < ATTRIBUTION_VERSION:
+        # Old daily files may have counted cwd-attributed projects as real —
+        # zero the project counters; call totals stay.
+        for bucket in folded_days.values():
+            bucket["attributed_projects"] = 0
+            # Move all calls into unattributed for honesty.
+            bucket["unattributed_calls"] = int(bucket.get("mcp_calls", 0) or 0)
+    out["folded_days"] = folded_days
+    out["attribution_version"] = ATTRIBUTION_VERSION
+    out["days"] = dict(folded_days)
+    return out
+
+
+def save_daily(content_root: Path, data: dict[str, Any]) -> None:
+    """Persist daily.json atomically (temp + replace)."""
+    d = usage_dir(content_root)
+    d.mkdir(parents=True, exist_ok=True)
+    folded_days = {}
+    for day, raw in (data.get("folded_days") or {}).items():
+        norm = _normalize_day_bucket(raw)
+        if norm is not None:
+            folded_days[str(day)] = norm
+    days = {}
+    for day, raw in (data.get("days") or folded_days).items():
+        norm = _normalize_day_bucket(raw)
+        if norm is not None:
+            days[str(day)] = norm
+    payload_obj = {
+        "attribution_version": int(
+            data.get("attribution_version") or ATTRIBUTION_VERSION),
+        "folded_daily_files": sorted({
+            str(x) for x in data.get("folded_daily_files", [])
+            if isinstance(x, str)}),
+        "folded_days": folded_days,
+        "days": days,
+    }
+    payload = json.dumps(payload_obj, indent=2, ensure_ascii=False) + "\n"
+    fd, tmp = tempfile.mkstemp(dir=str(d), prefix=".daily-", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(payload)
+        os.replace(tmp, d / DAILY_NAME)
+    finally:
+        try:
+            if os.path.exists(tmp):
+                os.unlink(tmp)
+        except OSError:
+            pass
+
+
+def _live_day_buckets(
+    content_root: Path, daily_folded: set[str],
+) -> dict[str, dict[str, Any]]:
+    d = usage_dir(content_root)
+    if not d.exists():
+        return {}
+    records: list[dict[str, Any]] = []
+    for p in sorted(d.glob("mcp-*.jsonl")):
+        if p.name in daily_folded:
+            continue
+        records.extend(iter_records_file(p))
+    return day_buckets_from_records(records)
+
+
+def refresh_daily(content_root: Path) -> dict[str, dict[str, Any]]:
+    """Recompute display ``days`` = folded history + current live files.
+
+    Live contributions are recomputed from scratch each call (not appended),
+    so repeated builds never double-count. Compact moves live files into
+    ``folded_days`` before deleting them.
+    """
+    daily = load_daily(content_root)
+    daily_folded = set(daily.get("folded_daily_files", []))
+    live = _live_day_buckets(content_root, daily_folded)
+    days = merge_day_buckets(daily.get("folded_days") or {}, live)
+    daily["days"] = days
+    daily["attribution_version"] = ATTRIBUTION_VERSION
+    save_daily(content_root, daily)
+    return days
+
+
+# ─── Value aggregates (#52) ───────────────────────────────────────────────
+
+def value_summary(
+    totals: Mapping[str, Any],
+    *,
+    wiki_page_count: int = 0,
+) -> dict[str, Any]:
+    """Headline numbers for the Analytics Wiki value section."""
+    per_tool = totals.get("per_tool") or {}
+    retrievals = 0
+    writes = 0
+    entity_calls = 0
+    entity_zero = 0
+    for tool, stats in per_tool.items():
+        if not isinstance(stats, dict):
+            continue
+        calls = int(stats.get("calls", 0) or 0)
+        if tool in RETRIEVAL_TOOLS:
+            retrievals += calls
+        if tool in WRITE_TOOLS:
+            writes += calls
+        if tool in ENTITY_TOOLS:
+            entity_calls += calls
+            entity_zero += int(stats.get("zero_hits", 0) or 0)
+    answer_rate = (
+        ((entity_calls - entity_zero) / entity_calls) if entity_calls else 0.0)
+    pages = max(0, int(wiki_page_count or 0))
+    payoff = (retrievals / pages) if pages else 0.0
+    per_project = totals.get("per_project") or {}
+    attributed = [
+        slug for slug in per_project
+        if slug != UNATTRIBUTED and int((per_project[slug] or {}).get("calls", 0) or 0) > 0
+    ]
+    unattributed_calls = int(
+        (per_project.get(UNATTRIBUTED) or {}).get("calls", 0) or 0)
+    return {
+        "retrievals": retrievals,
+        "writes": writes,
+        "answer_rate": answer_rate,
+        "payoff_per_page": payoff,
+        "wiki_page_count": pages,
+        "attributed_project_count": len(attributed),
+        "unattributed_calls": unattributed_calls,
+        "total_calls": int(totals.get("total_calls", 0) or 0),
+    }
+
+
+def normalize_read_path(query: str | None) -> str | None:
+    """Normalize a ``wiki_read_page`` query to a vault-relative wiki path."""
+    if not isinstance(query, str) or not query.strip():
+        return None
+    text = query.strip().replace("\\", "/")
+    # Strip leading ./ and collapse duplicate slashes.
+    while text.startswith("./"):
+        text = text[2:]
+    text = "/".join(part for part in text.split("/") if part not in ("", "."))
+    if text.startswith("wiki/"):
+        return text
+    if text.endswith(".md") or text.startswith(("sources/", "entities/", "concepts/",
+                                                 "syntheses/", "projects/", "comparisons/",
+                                                 "questions/", "archive/")):
+        return "wiki/" + text.lstrip("/")
+    return text or None
+
+
+def page_retrievals(records: Iterable[dict[str, Any]]) -> dict[str, int]:
+    """Count ``wiki_read_page`` hits per normalized wiki path."""
+    counts: dict[str, int] = {}
+    for r in records:
+        if r.get("tool") != "wiki_read_page":
+            continue
+        path = normalize_read_path(r.get("query") if isinstance(r.get("query"), str) else None)
+        if not path:
+            continue
+        counts[path] = counts.get(path, 0) + 1
+    return dict(sorted(counts.items(), key=lambda kv: (-kv[1], kv[0])))
+
+
+def classify_source_kind(text: str, *, source_file: str | None = None) -> str:
+    """Classify a wiki source page as ``session``, ``doc``, or ``other``.
+
+    Mirrors the ``raw/docs`` vs ``raw/sessions`` / raw-doc tag rules used by
+    the graph compiler.
+    """
+    sf = source_file or ""
+    if not sf:
+        m = re.search(r"^source_file:\s*(.+)$", text, re.MULTILINE)
+        if m:
+            sf = m.group(1).strip().strip("'\"")
+    sf_norm = sf.replace("\\", "/")
+    if "raw/docs/" in sf_norm:
+        return "doc"
+    if "raw/sessions/" in sf_norm:
+        return "session"
+    tags_m = re.search(r"^tags:\s*(.+)$", text, re.MULTILINE)
+    if tags_m:
+        tags = tags_m.group(1).lower()
+        if "raw-doc" in tags or "wiki-add" in tags:
+            return "doc"
+    return "other"
+
+
+def corpus_source_mix(wiki_sources_dir: Path) -> dict[str, int]:
+    """Count synthesized source pages by session/doc/other."""
+    mix = {"session": 0, "doc": 0, "other": 0, "total": 0}
+    if not wiki_sources_dir.is_dir():
+        return mix
+    for p in wiki_sources_dir.rglob("*.md"):
+        if p.name.startswith("_"):
+            continue
+        try:
+            text = p.read_text(encoding="utf-8", errors="replace")[:4000]
+        except OSError:
+            continue
+        kind = classify_source_kind(text)
+        mix[kind] = mix.get(kind, 0) + 1
+        mix["total"] += 1
+    return mix
+
+
+def read_mix_from_retrievals(
+    retrievals: Mapping[str, int],
+    wiki_root: Path,
+) -> dict[str, int]:
+    """Among ``wiki_read_page`` hits, count session vs doc vs other pages."""
+    mix = {"session": 0, "doc": 0, "other": 0, "total": 0}
+    for rel, n in retrievals.items():
+        path = wiki_root / rel if not rel.startswith("wiki/") else wiki_root.parent / rel
+        # rel is like wiki/sources/... — content root is parent of wiki/
+        if rel.startswith("wiki/"):
+            path = wiki_root.parent / rel
+        else:
+            path = wiki_root / rel
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")[:4000] if path.is_file() else ""
+        except OSError:
+            text = ""
+        kind = classify_source_kind(text) if text else "other"
+        # Paths outside sources (entities/concepts) stay "other".
+        if "/sources/" not in rel.replace("\\", "/") and kind == "other":
+            kind = "other"
+        mix[kind] = mix.get(kind, 0) + int(n)
+        mix["total"] += int(n)
+    return mix
+

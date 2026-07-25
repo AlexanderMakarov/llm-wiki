@@ -287,6 +287,13 @@ working directory rather than the caller's. The same applies to a
 `usage/rollup.json` written before this change — the raw records behind it
 are already deleted, so its labels are retracted rather than recomputed.
 
+**Daily series (#52).** `usage/daily.json` stores per-day MCP call totals
+(`mcp_calls`, `retrievals`, `writes`, `by_tool`, attribution counts) so the
+Analytics dual daily chart survives `--compact`. Compact folds retiring
+JSONL files into `folded_days` before delete; each `llmwiki build` refreshes
+the live overlay from non-folded files without double-counting. The CLI
+report itself is unchanged — the Analytics page is the primary surface.
+
 Scope is MCP calls only — `file://` static-site browsing stays untracked.
 
 ### Flags

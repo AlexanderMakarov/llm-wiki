@@ -112,13 +112,15 @@ def test_build_py_is_smaller():
       * 2,950 (#27 per-project render_project_usage_block + wiring)
       * 3,000 (#27 feedback: single card row, render_mcp_heaviest_card,
         analytics-scoped spacing, wiki_dir log-source fix)
+      * 3,200 (#52 Wiki value extract → llmwiki/viz_wiki_value.py;
+        orchestrator still holds analytics wiring)
     Next refactor target: extract md_to_html + preprocessor to
     llmwiki/render/markdown.py (tracked in the deep-audit epic #286).
     """
     from llmwiki import REPO_ROOT
     build_py = REPO_ROOT / "llmwiki" / "build.py"
     line_count = len(build_py.read_text(encoding="utf-8").splitlines())
-    assert line_count < 3000, f"build.py is {line_count} lines (ceiling 3000)"
+    assert line_count < 3200, f"build.py is {line_count} lines (ceiling 3200)"
 
 
 def test_css_module_under_800_lines():
@@ -127,11 +129,12 @@ def test_css_module_under_800_lines():
     Threshold adjusted as follow-on features landed:
       * 1,015 (refactor acceptance criterion)
       * 1,020 (#20 palette-note styling for unloadable search data)
+      * 1,110 (#52 Wiki value chart / mix / dead-stock styles)
     """
     from llmwiki import REPO_ROOT
     css_py = REPO_ROOT / "llmwiki" / "render" / "css.py"
     line_count = len(css_py.read_text(encoding="utf-8").splitlines())
-    assert line_count < 1020, f"css.py is {line_count} lines"
+    assert line_count < 1110, f"css.py is {line_count} lines"
 
 
 # ─── Build equivalence ───────────────────────────────────────────────

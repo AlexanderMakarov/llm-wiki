@@ -204,9 +204,16 @@ source, and links into the Home tree browser.
 
 URL: `/analytics.html`
 
-Session analytics: hero stats (main sessions / sub-agent runs /
-projects), 365-day activity heatmap, site-wide token stats, recently
-updated wiki pages, and the project card grid.
+Session analytics plus the **Wiki value** layer (#52):
+
+- Hero stats (main sessions / sub-agent runs / projects)
+- 365-day agents activity heatmap
+- Site-wide token stats (including heaviest project by MCP usage)
+- **Wiki value** — retrievals · writes · answer rate · payoff-per-page · distinct attributed projects; dual daily chart (MCP calls + best-effort wiki-using sessions); sessions vs docs corpus/read mix; top-earning pages and dead stock from retained `wiki_read_page` telemetry
+- **Wiki usage (MCP)** — per-tool calls / items returned / zero-hit rate
+- Recently updated wiki pages and the project card grid
+
+Daily MCP totals persist under `<vault>/usage/daily.json` so they survive monthly log compaction.
 
 ---
 
