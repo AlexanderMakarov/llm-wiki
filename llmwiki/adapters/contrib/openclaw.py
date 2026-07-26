@@ -7,7 +7,19 @@ writes one transcript per session under:
 
 Alongside each transcript it writes ``<uuid>.trajectory.jsonl`` and
 ``<uuid>.trajectory-path.json`` (tool-execution traces, 2026.6.1+); those are
-NOT conversation transcripts and are skipped here.
+NOT conversation transcripts and are skipped here. Some deployments also mirror
+sessions into a vault inbox at ``<vault>/.openclaw-sessions-inbox/<agent>/<uuid>.jsonl``
+(no ``sessions/`` segment) — a periodic checkpoint sidecar
+(``<uuid>.checkpoint.<n>.jsonl``) and a ``_quarantine/`` dir for
+failed/rejected mirrors can also appear there, and neither is a conversation
+transcript either.
+
+Session roots are configurable via ``config.json``::
+
+    {"adapters": {"openclaw": {"roots": ["/path/to/.openclaw-sessions-inbox"]}}}
+
+When no ``roots`` are configured, the adapter falls back to the default
+``~/.openclaw/agents`` layout.
 
 On-disk record shape (one JSON object per line)::
 
@@ -54,39 +66,79 @@ def _flatten_text_blocks(content: Any) -> str:
     return "\n".join(parts)
 
 
+def _is_non_transcript(path: Path) -> bool:
+    """True for sidecar/control files that are not conversation transcripts.
+
+    - ``*.trajectory.jsonl`` — tool-execution traces (2026.6.1+).
+    - ``*.checkpoint.<n>.jsonl`` — periodic checkpoint sidecars written
+      alongside the live transcript by the vault-inbox mirror.
+    - anything under a ``_quarantine/`` directory — mirrored sessions that
+      failed validation and were set aside rather than accepted.
+    """
+    name = path.name
+    if name.endswith(".trajectory.jsonl"):
+        return True
+    if ".checkpoint." in name and name.endswith(".jsonl"):
+        return True
+    if "_quarantine" in path.parts:
+        return True
+    return False
+
+
 @register("openclaw")
 class OpenClawAdapter(BaseAdapter):
     """OpenClaw — reads ~/.openclaw/agents/*/sessions/*.jsonl (skips trajectories)"""
 
     is_ai_session = True
 
-    # The store root; discover_sessions() narrows to <agent>/sessions/*.jsonl.
-    session_store_path = Path.home() / ".openclaw" / "agents"
+    # Default store root; discover_sessions() narrows to <agent>/sessions/*.jsonl.
+    DEFAULT_ROOTS = [Path.home() / ".openclaw" / "agents"]
+
+    def __init__(self, config: dict[str, Any] | None = None):
+        super().__init__(config)
+        ad_cfg = (config or {}).get("adapters", {}).get("openclaw", {})
+        paths = ad_cfg.get("roots") or []
+        self.roots: list[Path] = (
+            [Path(p).expanduser() for p in paths] if paths else self.DEFAULT_ROOTS
+        )
+
+    @property
+    def session_store_path(self):  # type: ignore[override]
+        return self.roots
+
+    # #496: is_available() inherited from BaseAdapter — temp instance
+    # reads self.session_store_path (returns self.roots = DEFAULT_ROOTS
+    # when no config override).
 
     def discover_sessions(self) -> list[Path]:
-        """Find every conversation transcript, excluding trajectory sidecars.
+        """Find every conversation transcript under every configured root.
 
-        Layout is ``<agent>/sessions/<uuid>.jsonl``; ``*.trajectory.jsonl`` are
-        tool-execution traces, not transcripts, and are filtered out.
+        Layout is either ``<agent>/sessions/<uuid>.jsonl`` (default install)
+        or ``<agent>/<uuid>.jsonl`` (vault inbox mirror). Sidecar/control
+        files (trajectories, checkpoints, quarantined mirrors) are filtered
+        out via ``_is_non_transcript``.
         """
-        store = Path(self.session_store_path).expanduser()
-        if not store.exists():
-            return []
-        return sorted(
-            p
-            for p in store.rglob("*.jsonl")
-            if not p.name.endswith(".trajectory.jsonl")
-        )
+        out: list[Path] = []
+        for root in self.roots:
+            root = Path(root).expanduser()
+            if not root.exists():
+                continue
+            out.extend(
+                p for p in sorted(root.rglob("*.jsonl")) if not _is_non_transcript(p)
+            )
+        return out
 
     def derive_project_slug(self, jsonl_path: Path) -> str:
         """Use the agent directory name (e.g. 'main') as the project slug."""
-        store = Path(self.session_store_path).expanduser()
-        try:
-            rel = jsonl_path.relative_to(store)
-        except ValueError:
-            return jsonl_path.parent.name
-        agent = rel.parts[0] if rel.parts else jsonl_path.parent.name
-        return f"openclaw-{agent}"
+        for root in self.roots:
+            root = Path(root).expanduser()
+            try:
+                rel = jsonl_path.relative_to(root)
+            except ValueError:
+                continue
+            agent = rel.parts[0] if rel.parts else jsonl_path.parent.name
+            return f"openclaw-{agent}"
+        return jsonl_path.parent.name
 
     def normalize_records(self, records: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Translate OpenClaw typed records into the shared Claude-style schema.

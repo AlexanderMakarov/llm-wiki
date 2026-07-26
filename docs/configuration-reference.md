@@ -274,7 +274,8 @@ Each adapter can be configured in the `adapters` section of `config.json`. The k
 | Copilot CLI | `copilot_cli` | yes (default on) | `roots` |
 | Cursor | `cursor` | yes (default on) | `roots` |
 | Gemini CLI | `gemini_cli` | yes (default on) | `roots` |
-| OpenCode / OpenClaw | `opencode` | yes (default on) | `roots` |
+| OpenCode / OpenClaw (app-config dir) | `opencode` | yes (default on) | `roots` |
+| OpenClaw (native session store) | `openclaw` | yes (default on) | `roots` |
 | ChatGPT | `chatgpt` | yes (opt-in) | `enabled`, `conversations_json` |
 | Obsidian | `obsidian` | **no** (opt-in) | `vault_paths`, `exclude_folders`, `min_content_chars` |
 | Jira | `jira` | **no** (opt-in) | `server`, `email`, `api_token` / `api_token_env`, `jql`, `max_results` |
