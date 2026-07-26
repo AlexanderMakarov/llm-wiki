@@ -75,6 +75,8 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
       '<tr><td><code>llmwiki sync</code></td><td>Convert new agent sessions into <code>raw/sessions/</code>.</td><td><button class="btn queue-copy-btn" data-copy="llmwiki sync">Copy</button></td></tr>' +
       '<tr><td><code>llmwiki sync --project &lt;slug&gt;</code></td><td>Sync only one project&apos;s sessions (replace <code>&lt;slug&gt;</code> with the project id).</td><td><button class="btn queue-copy-btn" data-copy="llmwiki sync --project &lt;slug&gt;">Copy</button></td></tr>' +
       '<tr><td><code>llmwiki synthesize</code></td><td>Drain the unsynthesized backlog into <code>wiki/sources/</code>.</td><td><button class="btn queue-copy-btn" data-copy="llmwiki synthesize">Copy</button></td></tr>' +
+      '<tr><td><code>llmwiki synthesize --path raw/sessions/&lt;file&gt;.md</code></td><td>Synthesize one raw session (replace <code>&lt;file&gt;</code>; repeatable).</td><td><button class="btn queue-copy-btn" data-copy="llmwiki synthesize --path raw/sessions/&lt;file&gt;.md">Copy</button></td></tr>' +
+      '<tr><td><code>llmwiki synthesize --path raw/docs/&lt;file&gt;.md</code></td><td>Synthesize one raw document (replace <code>&lt;file&gt;</code>; repeatable).</td><td><button class="btn queue-copy-btn" data-copy="llmwiki synthesize --path raw/docs/&lt;file&gt;.md">Copy</button></td></tr>' +
       '<tr><td><code>llmwiki synthesize --estimate</code></td><td>Refresh the cost estimate + pipeline table without calling the model.</td><td><button class="btn queue-copy-btn" data-copy="llmwiki synthesize --estimate">Copy</button></td></tr>' +
       '<tr><td><code>llmwiki queue run --limit 20</code></td><td>Process pending queue tasks (including synthesize when enqueued).</td><td><button class="btn queue-copy-btn" data-copy="llmwiki queue run --limit 20">Copy</button></td></tr>' +
       '<tr><td><code>llmwiki build</code></td><td>Rebuild the static site from raw/ + wiki/.</td><td><button class="btn queue-copy-btn" data-copy="llmwiki build">Copy</button></td></tr>' +
@@ -189,7 +191,7 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
       detailsSection("Timeline", 5, timelineBody) +
       detailsSection("Not synthesized sessions", pendingSessions.length, pendingListHtml(pendingSessions)) +
       detailsSection("Not synthesized docs", pendingDocs.length, pendingListHtml(pendingDocs)) +
-      detailsSection("Commands", 6, commandsBody()) +
+      detailsSection("Commands", 8, commandsBody()) +
       detailsSection("Estimate warnings", warnings.length, warningsBody) +
       "</div>";
   }

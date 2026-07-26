@@ -841,6 +841,41 @@ def cmd_migrate_tools_used(args: argparse.Namespace) -> int:
     return 1 if report["errors"] else 0
 
 
+def _resolve_synthesize_only_paths(paths: list[str], vault_root: Path) -> set[Path]:
+    """Resolve repeatable ``synthesize --path`` args under ``vault_root`` (#62).
+
+    Paths may be vault-relative (``raw/sessions/….md``) or absolute under the
+    vault. Raises ``ValueError`` with a user-facing message when a path is
+    missing, not a file, outside the vault, or not under ``raw/sessions`` /
+    ``raw/docs``.
+    """
+    root = vault_root.expanduser().resolve()
+    resolved: set[Path] = set()
+    for raw in paths:
+        candidate = Path(raw).expanduser()
+        if not candidate.is_absolute():
+            candidate = root / candidate
+        try:
+            candidate = candidate.resolve(strict=True)
+        except FileNotFoundError as exc:
+            raise ValueError(f"path not found: {raw}") from exc
+        except OSError as exc:
+            raise ValueError(f"path not found: {raw}") from exc
+        try:
+            rel = candidate.relative_to(root)
+        except ValueError as exc:
+            raise ValueError(f"path outside vault: {raw}") from exc
+        if not candidate.is_file():
+            raise ValueError(f"path not found: {raw}")
+        parts = rel.parts
+        if len(parts) < 3 or parts[0] != "raw" or parts[1] not in ("sessions", "docs"):
+            raise ValueError(
+                f"path must be under raw/sessions/ or raw/docs/: {raw}"
+            )
+        resolved.add(candidate)
+    return resolved
+
+
 def cmd_synthesize(args: argparse.Namespace) -> int:
     """Synthesize wiki source pages from raw sessions (v1.1.0 · #35).
 
@@ -848,21 +883,35 @@ def cmd_synthesize(args: argparse.Namespace) -> int:
     ``sessions_config.json`` (dummy | ollama). ``--check`` prints backend
     availability without running synthesis — useful for diagnosing Ollama
     connectivity before a long sync. ``--estimate`` prints a cached-vs-fresh
-    token + dollar breakdown before spending money (#50).
+    token + dollar breakdown before spending money (#50). ``--path`` limits
+    the run to one or more raw session/doc files (#62).
     """
     _apply_default_vault(args)
     from llmwiki.config_schedule import _load_sessions_config
     from llmwiki.synth.pipeline import resolve_backend, synthesize_new_sessions
 
     config: dict = _load_sessions_config()
+    path_args = getattr(args, "paths", None) or None
 
     if args.estimate:
+        if path_args:
+            print(
+                "error: --path cannot be combined with --estimate",
+                file=sys.stderr,
+            )
+            return 2
         return _synthesize_estimate(args)
 
     backend = resolve_backend(config)
     print(f"Backend: {backend.name}")
 
     if args.check:
+        if path_args:
+            print(
+                "error: --path cannot be combined with --check",
+                file=sys.stderr,
+            )
+            return 2
         available = backend.is_available()
         print(f"Available: {available}")
         return 0 if available else 1
@@ -878,6 +927,7 @@ def cmd_synthesize(args: argparse.Namespace) -> int:
     # #420: vault-overlay mode isolates raw/wiki to the vault root.
     vault_path = getattr(args, "vault", None)
     raw_dir = wiki_sources_dir = None
+    vault_root = REPO_ROOT
     if vault_path:
         from llmwiki.vault import resolve_vault
         try:
@@ -889,14 +939,24 @@ def cmd_synthesize(args: argparse.Namespace) -> int:
         # __truediv__ — `vault / "raw"` raises TypeError. cmd_sync at
         # line 205 correctly uses `vault.root / "raw"`; this site was
         # the missed copy. Caught by the multi-agent code review.
+        vault_root = vault.root
         raw_dir = vault.root / "raw" / "sessions"
         wiki_sources_dir = vault.root / "wiki" / "sources"
+
+    only_paths = None
+    if path_args:
+        try:
+            only_paths = _resolve_synthesize_only_paths(path_args, vault_root)
+        except ValueError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
 
     summary = synthesize_new_sessions(
         backend=backend,
         force=args.force,
         raw_dir=raw_dir,
         wiki_sources_dir=wiki_sources_dir,
+        only_paths=only_paths,
     )
     print(
         f"Scanned {summary['total_scanned']}, new {summary['new_files']}, "
@@ -1804,6 +1864,18 @@ def build_parser() -> argparse.ArgumentParser:
     syn.add_argument(
         "--force", action="store_true",
         help="Ignore state file, re-synthesize all sessions",
+    )
+    # #62: drain one backlog item without synthesizing the whole vault.
+    # Repeatable; resolved relative to the vault root (or absolute under it).
+    syn.add_argument(
+        "--path",
+        action="append",
+        dest="paths",
+        metavar="PATH",
+        help=(
+            "Synthesize only this raw session/doc under raw/sessions/ or "
+            "raw/docs/ (repeatable; relative to vault root) (#62)"
+        ),
     )
     _add_vault_arg(syn, role="synthesize")
     syn.set_defaults(func=cmd_synthesize)

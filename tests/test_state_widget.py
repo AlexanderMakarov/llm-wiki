@@ -33,6 +33,9 @@ def test_state_widget_js_has_pipeline_table_and_collapsibles():
     assert "collapse-section-count" in js.JS
     assert "data-llmwiki-state-widget" in js.JS
     assert "llmwiki sync --project" in js.JS
+    assert "llmwiki synthesize --path raw/sessions/" in js.JS
+    assert "llmwiki synthesize --path raw/docs/" in js.JS
+    assert 'detailsSection("Commands", 8,' in js.JS
     assert "queued " in js.JS
     assert "in progress " in js.JS
     # Timeline must appear before the backlog lists in the render order.
