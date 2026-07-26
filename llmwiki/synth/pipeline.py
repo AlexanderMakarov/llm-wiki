@@ -1112,6 +1112,7 @@ def synthesize_new_sessions(
     state_file: Optional[Path] = None,
     docs_dir: Optional[Path] = None,
     doc_chunk_max_chars: Optional[int] = None,
+    include_sessions: bool = True,
     include_docs: bool = True,
     only_paths: Optional[set[Path] | set[str]] = None,
     include_subagents: Optional[str] = None,
@@ -1127,6 +1128,9 @@ def synthesize_new_sessions(
         "errors": list[str],
         "backend": str,
     }
+
+    ``include_sessions`` / ``include_docs`` — restrict the scan to one
+    corpus (CLI ``--sessions-only`` / ``--docs-only``). Both default True.
 
     ``only_paths`` — when set, only synthesize these raw files (resolved
     paths). Used by ``llmwiki add`` so a single add does not drain the
@@ -1186,7 +1190,7 @@ def synthesize_new_sessions(
     # When only_paths is set (llmwiki add), skip the full unsynth scan —
     # we only care about the explicit allow-list below.
     unsynth_session_rels: set[str] = set()
-    if only_resolved is None:
+    if include_sessions and only_resolved is None:
         unsynth_session_rels = discover_unsynth_session_rels(
             raw_dir=raw_dir,
             wiki_sources_dir=wiki_sources_dir,
@@ -1196,36 +1200,37 @@ def synthesize_new_sessions(
         )
 
     items: list[dict[str, Any]] = []
-    for p, meta, body in _discover_raw_sessions(raw_dir):
-        # #30: "only-raw" keeps subagents in raw/ but out of synthesis — even
-        # when --force or an explicit only_paths list would otherwise pull them
-        # in. Switching to "all" is the only way to make them eligible.
-        if include_subagents == "only-raw" and is_subagent(
-            meta if isinstance(meta, dict) else {}, p
-        ):
-            continue
-        # Headless runs are the wiki's own agent-CLI calls; synthesizing them
-        # summarizes our own output and breeds more of them. Skipped even
-        # under --force/only_paths, exactly like the subagent rule above.
-        if exclude_headless and is_headless(meta if isinstance(meta, dict) else {}):
-            continue
-        if only_resolved is not None:
-            try:
-                if p.resolve() not in only_resolved:
+    if include_sessions:
+        for p, meta, body in _discover_raw_sessions(raw_dir):
+            # #30: "only-raw" keeps subagents in raw/ but out of synthesis — even
+            # when --force or an explicit only_paths list would otherwise pull them
+            # in. Switching to "all" is the only way to make them eligible.
+            if include_subagents == "only-raw" and is_subagent(
+                meta if isinstance(meta, dict) else {}, p
+            ):
+                continue
+            # Headless runs are the wiki's own agent-CLI calls; synthesizing them
+            # summarizes our own output and breeds more of them. Skipped even
+            # under --force/only_paths, exactly like the subagent rule above.
+            if exclude_headless and is_headless(meta if isinstance(meta, dict) else {}):
+                continue
+            if only_resolved is not None:
+                try:
+                    if p.resolve() not in only_resolved:
+                        continue
+                except OSError:
                     continue
-            except OSError:
-                continue
-        else:
+            else:
+                rel = str(p.relative_to(session_base))
+                if rel not in unsynth_session_rels and not force:
+                    continue
             rel = str(p.relative_to(session_base))
-            if rel not in unsynth_session_rels and not force:
-                continue
-        rel = str(p.relative_to(session_base))
-        items.append({
-            "path": p, "meta": meta, "body": body,
-            "rel": rel,
-            "project": meta.get("project", p.parent.name),
-            "is_doc": False,
-        })
+            items.append({
+                "path": p, "meta": meta, "body": body,
+                "rel": rel,
+                "project": meta.get("project", p.parent.name),
+                "is_doc": False,
+            })
     if include_docs:
         for p, meta, body in _discover_raw_docs(docs_base):
             if only_resolved is not None:

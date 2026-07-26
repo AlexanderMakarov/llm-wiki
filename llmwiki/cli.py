@@ -876,6 +876,24 @@ def _resolve_synthesize_only_paths(paths: list[str], vault_root: Path) -> set[Pa
     return resolved
 
 
+def _validate_synthesize_path_kinds(
+    paths: set[Path],
+    vault_root: Path,
+    *,
+    include_sessions: bool,
+    include_docs: bool,
+) -> None:
+    """Reject ``--path`` targets that conflict with ``--sessions-only`` / ``--docs-only``."""
+    root = vault_root.expanduser().resolve()
+    for path in paths:
+        rel = path.resolve().relative_to(root)
+        kind = rel.parts[1]
+        if kind == "sessions" and not include_sessions:
+            raise ValueError(f"--docs-only cannot target a session: {rel.as_posix()}")
+        if kind == "docs" and not include_docs:
+            raise ValueError(f"--sessions-only cannot target a doc: {rel.as_posix()}")
+
+
 def cmd_synthesize(args: argparse.Namespace) -> int:
     """Synthesize wiki source pages from raw sessions (v1.1.0 · #35).
 
@@ -884,7 +902,8 @@ def cmd_synthesize(args: argparse.Namespace) -> int:
     availability without running synthesis — useful for diagnosing Ollama
     connectivity before a long sync. ``--estimate`` prints a cached-vs-fresh
     token + dollar breakdown before spending money (#50). ``--path`` limits
-    the run to one or more raw session/doc files (#62).
+    the run to one or more raw session/doc files (#62). ``--sessions-only`` /
+    ``--docs-only`` restrict the corpus without naming individual files.
     """
     _apply_default_vault(args)
     from llmwiki.config_schedule import _load_sessions_config
@@ -892,11 +911,21 @@ def cmd_synthesize(args: argparse.Namespace) -> int:
 
     config: dict = _load_sessions_config()
     path_args = getattr(args, "paths", None) or None
+    sessions_only = bool(getattr(args, "sessions_only", False))
+    docs_only = bool(getattr(args, "docs_only", False))
+    include_sessions = not docs_only
+    include_docs = not sessions_only
 
     if args.estimate:
         if path_args:
             print(
                 "error: --path cannot be combined with --estimate",
+                file=sys.stderr,
+            )
+            return 2
+        if sessions_only or docs_only:
+            print(
+                "error: --sessions-only/--docs-only cannot be combined with --estimate",
                 file=sys.stderr,
             )
             return 2
@@ -909,6 +938,12 @@ def cmd_synthesize(args: argparse.Namespace) -> int:
         if path_args:
             print(
                 "error: --path cannot be combined with --check",
+                file=sys.stderr,
+            )
+            return 2
+        if sessions_only or docs_only:
+            print(
+                "error: --sessions-only/--docs-only cannot be combined with --check",
                 file=sys.stderr,
             )
             return 2
@@ -947,6 +982,12 @@ def cmd_synthesize(args: argparse.Namespace) -> int:
     if path_args:
         try:
             only_paths = _resolve_synthesize_only_paths(path_args, vault_root)
+            _validate_synthesize_path_kinds(
+                only_paths,
+                vault_root,
+                include_sessions=include_sessions,
+                include_docs=include_docs,
+            )
         except ValueError as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 2
@@ -957,6 +998,8 @@ def cmd_synthesize(args: argparse.Namespace) -> int:
         raw_dir=raw_dir,
         wiki_sources_dir=wiki_sources_dir,
         only_paths=only_paths,
+        include_sessions=include_sessions,
+        include_docs=include_docs,
     )
     print(
         f"Scanned {summary['total_scanned']}, new {summary['new_files']}, "
@@ -1882,6 +1925,20 @@ def build_parser() -> argparse.ArgumentParser:
             "Synthesize only this raw session/doc under raw/sessions/ or "
             "raw/docs/ (repeatable; relative to vault root) (#62)"
         ),
+    )
+    # Corpus scope: default is both sessions and docs. Mutually exclusive
+    # with each other; combinable with --path / --force (not --check /
+    # --estimate).
+    syn_corpus = syn.add_mutually_exclusive_group()
+    syn_corpus.add_argument(
+        "--sessions-only",
+        action="store_true",
+        help="Synthesize only raw/sessions/ (skip raw/docs/)",
+    )
+    syn_corpus.add_argument(
+        "--docs-only",
+        action="store_true",
+        help="Synthesize only raw/docs/ (skip raw/sessions/)",
     )
     _add_vault_arg(syn, role="synthesize")
     syn.set_defaults(func=cmd_synthesize)
