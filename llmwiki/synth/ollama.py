@@ -51,7 +51,7 @@ import urllib.request
 from dataclasses import dataclass
 from typing import Any, Optional
 
-from llmwiki.synth.base import BaseSynthesizer
+from llmwiki.synth.base import BaseSynthesizer, split_prompt_template
 
 # ─── Constants ─────────────────────────────────────────────────────────
 
@@ -236,12 +236,19 @@ class OllamaSynthesizer(BaseSynthesizer):
         # don't blow Ollama's context window — agent_delegate uses the
         # same cap; centralise here so the limit lives next to the prompt.
         truncated_body = raw_body[:8000] if raw_body else ""
-        prompt = _render_prompt(prompt_template, raw_body=truncated_body, meta=meta)
-        payload = {
+        # Ollama bills nothing, but it does keep a KV cache keyed on the
+        # prompt prefix: passing the run-stable half as `system` keeps that
+        # prefix identical across pages, so only the per-page tail is
+        # re-evaluated. Same split every backend uses, different mechanism.
+        stable, per_page = split_prompt_template(prompt_template)
+        prompt = _render_prompt(per_page, raw_body=truncated_body, meta=meta)
+        payload: dict[str, Any] = {
             "model": self.config.model,
             "prompt": prompt,
             "stream": False,
         }
+        if stable:
+            payload["system"] = stable
 
         data = self._call_generate(payload)
         response = data.get("response", "")

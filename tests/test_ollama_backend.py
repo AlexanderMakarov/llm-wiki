@@ -195,6 +195,40 @@ def test_synthesize_happy_path_returns_response_text():
     assert "Raw session." in payload["prompt"]
 
 
+def test_synthesize_routes_stable_half_to_the_system_field():
+    """Same split as the claude backend, mapped onto Ollama's mechanism.
+
+    Ollama bills nothing, but it keys its KV cache on the prompt prefix, so
+    the run-stable half belongs in `system` where it stays byte-identical
+    across pages instead of ahead of a body that changes every call.
+    """
+    body = json.dumps({"response": "## Summary\n\nok"})
+    synth, post, _ = _make_synth(post_script=[(200, body)])
+    synth.synthesize_source_page(
+        raw_body="RAW-MARKER",
+        meta={"slug": "s"},
+        prompt_template=(
+            "Rules and vocabulary.\n\n## Session to synthesize\n{meta}\n{body}\n"
+        ),
+    )
+    _url, payload, _ = post.calls[0]
+    assert payload["system"] == "Rules and vocabulary."
+    assert "RAW-MARKER" in payload["prompt"]
+    assert "Rules and vocabulary." not in payload["prompt"]
+
+
+def test_synthesize_omits_system_field_for_a_custom_template():
+    """No marker → no split; the whole template stays in `prompt`."""
+    body = json.dumps({"response": "ok"})
+    synth, post, _ = _make_synth(post_script=[(200, body)])
+    synth.synthesize_source_page(
+        raw_body="R", meta={}, prompt_template="Just: {body}",
+    )
+    _url, payload, _ = post.calls[0]
+    assert "system" not in payload
+    assert "Just: R" in payload["prompt"]
+
+
 def test_synthesize_passes_configured_model():
     body = json.dumps({"response": "ok"})
     cfg = OllamaConfig(model="mistral:7b", backoff_base=0.0)

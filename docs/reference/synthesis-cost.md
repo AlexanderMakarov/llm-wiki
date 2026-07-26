@@ -68,13 +68,40 @@ That single page was a small, clean demo session. Across **29 real vault pages**
 
 Real transcripts are roughly twice the size of the demo and generate about twice the page, so budget **~$0.08/page**, not $0.04. On a 200-page backlog that is roughly $74 without the lean flags versus **$15** with them.
 
-### You pay a cache-write premium and get no cache reads
+### Where the prompt sits decides what you pay for it
 
-On all 29 measured pages, `cache_read_input_tokens` was **0** and 100% of input arrived as `cache_creation_input_tokens` at the 1-hour TTL — billed at **2x** the fresh input rate.
+Input is billed as a 1-hour cache **write** at 2x the fresh rate, not at the plain input rate. What varies is whether you ever get the **read** back at 0.1x.
 
-The prompt template and its injected vocabulary are byte-identical across every page, so in principle that prefix should be re-read at 0.1x instead of re-written at 2x. It isn't: the CLI places a single cache breakpoint at the end of the user message, so the cache key covers the whole prompt — body included — and no two pages ever share one. Every page pays the write premium and collects none of the discount.
+Originally every page sent the whole prompt as one user message. Measured across 29 pages, `cache_read_input_tokens` was **0** on all of them: the CLI places a single cache breakpoint at the end of the user message, so the key covers the body too and no two pages ever share one. The template and vocabulary — byte-identical across the run — were re-written at 2x on every page.
 
-There is no CLI flag to move the breakpoint. Fixing it properly needs direct API access, where `cache_control` can be placed after the template — which is exactly what [`prompt-caching.md`](prompt-caching.md) already builds. On a large backfill that prefix is ~5,000 tokens/page, so the difference is real: at sonnet-5 rates, ~$0.030/page written versus ~$0.0015/page read.
+The fix is placement, not size. The template splits at `## Session to synthesize` into a run-stable half and a per-page half; the stable half goes into the **system prompt**, which the CLI *does* reuse across invocations:
+
+| | page 1 (cold) | page 2+ |
+|---|---|---|
+| cache write | 9,715 | ~5,000 |
+| **cache read** | 0 | **4,642** |
+| $/page | $0.092 | **~$0.057** |
+
+About **25% off steady-state**, on top of the lean flags. The remaining write is the page body, which is genuinely unique and cannot be cached.
+
+### Other backends and other providers
+
+The split is **not** Claude-specific. `split_prompt_template()` lives in `llmwiki/synth/base.py`, the shared backend contract, and returns `(stable_prefix, per_page_tail)`. Every provider bills a repeated prefix more cheaply than fresh input; they just want it in different places, so each backend maps the stable half onto its own mechanism:
+
+| Backend | Where the stable half goes | Mechanism |
+|---|---|---|
+| `claude` CLI | `--system-prompt` | 1h prompt cache, reused across invocations |
+| `ollama` | `system` field on `/api/generate` | KV-cache prefix reuse (no billing) |
+| OpenAI / OpenRouter *(not built)* | leading system message | automatic prefix caching, ~50% off repeated prefixes |
+| Anthropic API *(scaffolded)* | `cache_control` breakpoint after the prefix | explicit, see [`prompt-caching.md`](prompt-caching.md) |
+
+A new backend gets the benefit by calling `split_prompt_template()` and putting the prefix wherever its provider caches. A template with no marker — a user's custom prompt — returns an empty prefix and the whole template as the tail, so it still synthesizes correctly; caching is an optimisation, never a correctness requirement.
+
+Two caveats for a hypothetical OpenAI/OpenRouter backend. Its prefix caching is automatic but needs the prefix to be **identical and leading**, so the stable half must come first in the messages array — the same discipline, unenforced. And OpenRouter's discount depends on which upstream provider serves the request, so the same model can bill differently run to run; `model_pricing.csv` assumes one rate per model and would need a per-provider row.
+
+### Vocabulary size is now nearly free
+
+Because the vocabulary rides in the cached prefix, it is written once per run and read at 0.1x thereafter — so breadth costs almost nothing. `_VOCAB_LIMIT` was raised **80 → 200** on that basis. A topic missing from the list gets re-coined under a new spelling, which fragments the graph and the backlink index; that is the failure the list exists to prevent, and it was previously being traded away to save tokens that caching now makes cheap.
 
 ### Turning it off
 

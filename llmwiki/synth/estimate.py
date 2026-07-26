@@ -281,35 +281,51 @@ def synthesize_estimate_report(
             (text or "")[:BODY_CHAR_CAP], TRANSCRIPT_CHARS_PER_TOKEN
         )
 
-    def _page_usd(body_tokens: int) -> float:
+    def _page_usd(body_tokens: int, *, first: bool) -> float:
         """Dollars for one page: overhead + template + body in, completion out.
 
-        Claude Code writes the whole prompt into the 1-hour prompt cache on
-        every call, so input is billed at the cache-write rate, not the fresh
-        input rate. It is never billed as a *read*: measured across 29 real
-        pages, ``cache_read_input_tokens`` was 0 on all of them. The one
-        breakpoint sits at the end of the user message, so even the identical
-        template prefix shared by every page earns no reuse — the wiki pays
-        the write premium and collects none of the discount.
+        Input is billed at the 1-hour cache-*write* rate, not the fresh input
+        rate — Claude Code writes every prompt into the cache. The run-stable
+        half (the template + its topic vocabulary) rides in the system
+        prompt, which the CLI does re-read across invocations: it is written
+        once on the first page of a run and read at 0.1x on every page after.
+        The body half is unique per page and never re-read.
 
         Without lean mode the scaffolding is large and stable enough that
-        repeat calls do re-read roughly half of it.
+        repeat calls also re-read roughly half of it.
         """
         rates = rates_table[chosen_model]
         write_rate = rates["input"] * CACHE_WRITE_1H_MULTIPLIER
-        prompt_tokens = template_tokens + body_tokens
+        # Cached prefix: full write on page 1, cache read thereafter.
+        prefix_rate = write_rate if first else rates["cached_input"]
+        billable = template_tokens * prefix_rate + body_tokens * write_rate
         if lean:
-            billable = (overhead_tokens + prompt_tokens) * write_rate
+            billable += overhead_tokens * (write_rate if first else rates["cached_input"])
         else:
             read = overhead_tokens * NON_LEAN_CACHE_READ_FRACTION
-            billable = (
-                read * rates["cached_input"]
-                + (overhead_tokens - read) * write_rate
-                + prompt_tokens * write_rate
+            billable += (
+                read * rates["cached_input"] + (overhead_tokens - read) * write_rate
             )
         return (
             billable + output_tokens_per_call * rates["output"]
         ) / 1_000_000
+
+    # The cached prefix is written once per *run*, so the two buckets count
+    # their own first call: a full re-synth pays the write on its first page,
+    # an incremental run pays it on the first new page.
+    call_counts = {"ff": 0, "inc": 0}
+
+    def _ff_usd(body_tokens: int) -> float:
+        """Cost of one page in the full-force bucket."""
+        cost = _page_usd(body_tokens, first=call_counts["ff"] == 0)
+        call_counts["ff"] += 1
+        return cost
+
+    def _inc_usd(body_tokens: int) -> float:
+        """Cost of one page in the incremental bucket."""
+        cost = _page_usd(body_tokens, first=call_counts["inc"] == 0)
+        call_counts["inc"] += 1
+        return cost
 
     # Lazy import — estimate is imported from CLI paths that may not need
     # the full build module until this walk runs.
@@ -353,7 +369,7 @@ def synthesize_estimate_report(
         )
         body_tokens = _body_tokens(body)
         # Full-force bucket: every session contributes regardless of state.
-        ff_cost = _page_usd(body_tokens)
+        ff_cost = _ff_usd(body_tokens)
         full_force_usd += ff_cost
         row = _bucket(agent_label, kind="session", css=agent_css)
         row["raw"] += 1
@@ -363,7 +379,7 @@ def synthesize_estimate_report(
             row["synthesized"] += 1
         else:
             new_sessions += 1
-            inc_cost = ff_cost
+            inc_cost = _inc_usd(body_tokens)
             incremental_usd += inc_cost
             row["pending"] += 1
             row["next_usd"] += inc_cost
@@ -409,7 +425,8 @@ def synthesize_estimate_report(
         )
         # An oversized doc is written as one page per chunk, and each page is
         # its own `claude` call — so it is billed per chunk, not per doc.
-        ff_cost = sum(_page_usd(_body_tokens(c)) for c in chunks) if chunks else _page_usd(0)
+        chunk_tokens = [_body_tokens(c) for c in chunks] or [0]
+        ff_cost = sum(_ff_usd(t) for t in chunk_tokens)
         full_force_usd += ff_cost
         docs_row["raw"] += 1
         if matched:
@@ -417,7 +434,7 @@ def synthesize_estimate_report(
             docs_row["synthesized"] += 1
         else:
             new_docs += 1
-            inc_cost = ff_cost
+            inc_cost = sum(_inc_usd(t) for t in chunk_tokens)
             incremental_usd += inc_cost
             docs_row["pending"] += 1
             docs_row["next_usd"] += inc_cost

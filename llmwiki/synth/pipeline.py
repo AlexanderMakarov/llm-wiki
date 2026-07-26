@@ -245,9 +245,16 @@ def _load_prompt_template() -> str:
     return PROMPT_TEMPLATE_PATH.read_text(encoding="utf-8")
 
 
-# How many top topics to surface as the reuse vocabulary in the prompt. Enough
-# to cover the recurring scopes without bloating every request's token budget.
-_VOCAB_LIMIT = 80
+# How many top topics to surface as the reuse vocabulary in the prompt.
+#
+# The vocabulary is byte-identical for every page of a run, so backends put
+# it in the cached half of the prompt (see base.split_prompt_template) and
+# it is billed once per run rather than once per page. That makes breadth
+# cheap: a topic that is missing from this list gets re-coined under a new
+# spelling, which fragments the graph and the backlink index — the failure
+# this list exists to prevent. Raised 80 -> 200 once caching made the extra
+# entries cost ~0.1x on every page after the first.
+_VOCAB_LIMIT = 200
 
 
 def _vocab_attr(value: str) -> str:

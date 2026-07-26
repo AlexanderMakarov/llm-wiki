@@ -170,8 +170,10 @@ def test_matches_measured_cost_per_page():
     """Calibration guard against 29 real synth calls (see synthesis-cost.md).
 
     Measured: 9,282 input tok, 1,372 output tok, $0.0763/page on sonnet-5
-    for a mean prompt of 18,977 chars. The model should land within 15% and
-    err high — a cost estimate that under-promises is the harmful direction.
+    for a mean prompt of 18,977 chars. That corpus predates the cached
+    system prompt, so it is the *cold* per-page cost — this single-page
+    report pays the same full cache write. The model should land within 15%
+    and err high: an estimate that under-promises is the harmful direction.
     """
     from llmwiki.cache import TRANSCRIPT_CHARS_PER_TOKEN
     from llmwiki.cli import synthesize_estimate_report
@@ -217,6 +219,45 @@ def test_input_is_billed_as_cache_write_not_fresh_input():
         + DEFAULT_OUTPUT_TOKENS * rates["output"]
     ) / 1_000_000
     assert rpt["full_force_usd"] == pytest.approx(expected)
+
+
+def test_cached_prefix_is_written_once_per_run():
+    """The stable template rides in the cached system prompt.
+
+    Page 1 pays the cache write; every later page reads it at 0.1x. So the
+    marginal page must cost materially less than the first, and a 10-page
+    run must cost far less than 10x one page.
+    """
+    from llmwiki.cli import synthesize_estimate_report
+    one = synthesize_estimate_report(
+        raw_sessions=_sessions("a.md"), state_keys=set(),
+        template_tokens=5000, model="claude-sonnet-5",
+    )["full_force_usd"]
+    ten = synthesize_estimate_report(
+        raw_sessions=_sessions(*[f"s{i}.md" for i in range(10)]), state_keys=set(),
+        template_tokens=5000, model="claude-sonnet-5",
+    )["full_force_usd"]
+    marginal = (ten - one) / 9
+    assert marginal < one, "later pages must be cheaper than the first"
+    assert ten < one * 10, "a run must beat N independent cold pages"
+
+
+def test_incremental_bucket_pays_its_own_cache_write():
+    """An incremental run is its own process — it cannot reuse a cache
+    write from pages that were synthesized in some earlier run."""
+    from llmwiki.cli import synthesize_estimate_report
+    rpt = synthesize_estimate_report(
+        # Two already done, one new: the new page is page 1 of *this* run.
+        raw_sessions=_sessions("a.md", "b.md", "c.md"),
+        state_keys={"a.md", "b.md"},
+        template_tokens=5000,
+        model="claude-sonnet-5",
+    )
+    cold = synthesize_estimate_report(
+        raw_sessions=_sessions("c.md"), state_keys=set(),
+        template_tokens=5000, model="claude-sonnet-5",
+    )["full_force_usd"]
+    assert rpt["incremental_usd"] == pytest.approx(cold)
 
 
 def test_custom_model_propagates():

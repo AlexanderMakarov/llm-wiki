@@ -23,7 +23,7 @@ from __future__ import annotations
 import subprocess
 from typing import Any
 
-from llmwiki.synth.base import BaseSynthesizer
+from llmwiki.synth.base import BaseSynthesizer, split_prompt_template
 from llmwiki.synth.ollama import _render_prompt
 
 _DEFAULT_TIMEOUT = 180
@@ -46,14 +46,22 @@ _LEAN_ARGV: tuple[str, ...] = (
     "--setting-sources", "",
 )
 
-# Replaces the agent system prompt. Deliberately minimal — the page format,
-# the topic vocabulary, and every rule live in prompts/source_page.md, which
-# is rendered into the user prompt.
+# Replaces the agent system prompt when the template carries no stable half
+# to put there (a custom prompt without the marker).
 _LEAN_SYSTEM_PROMPT = (
     "You synthesize wiki source pages from session transcripts. "
     "Follow the user's format instructions exactly. "
     "Output only the requested markdown, with no preamble or commentary."
 )
+
+# Claude Code caches the system prompt across separate `claude -p`
+# invocations; the user message it does not — the single cache breakpoint
+# sits at the end of that message, so a key that includes the page body is
+# unique per page and never re-read. Putting the run-stable half of the
+# template into --system-prompt is therefore the difference between paying
+# the 2x cache-write rate on it every page and paying the 0.1x read rate
+# after the first. Measured on real pages: 4,642 tokens read back per page,
+# $0.076 -> $0.057. See docs/reference/synthesis-cost.md.
 
 
 # The site overview is a short prose summary of a JSON brief — the cheapest
@@ -133,11 +141,11 @@ class ClaudeCLISynthesizer(BaseSynthesizer):
         self.timeout = timeout
         self.lean = lean
 
-    def _argv(self, claude: str) -> list[str]:
+    def _argv(self, claude: str, system_prompt: str) -> list[str]:
         """Build the `claude` command line for one page."""
         return lean_argv(
             claude,
-            system_prompt=_LEAN_SYSTEM_PROMPT,
+            system_prompt=system_prompt,
             model=self.model,
             lean=self.lean,
         )
@@ -172,8 +180,11 @@ class ClaudeCLISynthesizer(BaseSynthesizer):
         # Same 8 KB body cap as the ollama/agent-delegate backends: the
         # add pipeline chunks raw docs to ~7 KB, so nothing is lost.
         truncated_body = raw_body[:8000] if raw_body else ""
-        prompt = _render_prompt(prompt_template, raw_body=truncated_body, meta=meta)
-        argv = self._argv(claude)
+        # Route the run-stable half of the template to the system prompt,
+        # which is the only part `claude -p` caches between invocations.
+        stable, per_page = split_prompt_template(prompt_template)
+        prompt = _render_prompt(per_page, raw_body=truncated_body, meta=meta)
+        argv = self._argv(claude, stable or _LEAN_SYSTEM_PROMPT)
         try:
             result = subprocess.run(
                 argv, input=prompt, capture_output=True, text=True,
