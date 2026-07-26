@@ -211,6 +211,7 @@ cp examples/sessions_config.json config.json
 | `synthesis` | `backend` | enum | `"dummy"` | Which synthesizer: `"dummy"` / `"ollama"` / `"claude"` (synchronous `claude -p` CLI). Unknown values warn and fall back to `"dummy"`. The old `"agent"` / agent-delegate backend was removed in v1.4.0. See [configuration.md § Synthesis backend](configuration.md#synthesis-backend). |
 | `synthesis` | `claude_model` | string | `"sonnet"` | Model alias for the `claude` backend |
 | `synthesis` | `claude_path` | string | `""` | Optional path to the `claude` binary |
+| `synthesis` | `overview_model` | string | `"haiku"` | Model for the landing-page overview call in `build --synthesize`. Prose-from-JSON, so the small model is the default. See [reference/synthesis-cost.md](reference/synthesis-cost.md) |
 | `synthesis` | `claude_lean` | bool | true | Strip agent scaffolding (tool schemas, MCP servers, skills, `CLAUDE.md`, agent system prompt) from each `claude` call — ~9x cheaper per page, measured. Only an explicit `false` opts out. See [reference/synthesis-cost.md](reference/synthesis-cost.md) |
 | `synthesis.ollama` | `model` | string | `"llama3.1:8b"` | Ollama model name (pull via `ollama pull`) |
 | `synthesis.ollama` | `base_url` | string | `"http://127.0.0.1:11434"` | Ollama HTTP endpoint |

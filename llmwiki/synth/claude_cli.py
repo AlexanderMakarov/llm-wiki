@@ -56,6 +56,41 @@ _LEAN_SYSTEM_PROMPT = (
 )
 
 
+# The site overview is a short prose summary of a JSON brief — the cheapest
+# real LLM task in the codebase, so it defaults to the small model rather
+# than the (larger) page-synthesis model. Override with
+# ``synthesis.overview_model``.
+DEFAULT_OVERVIEW_MODEL = "haiku"
+
+
+_OVERVIEW_SYSTEM_PROMPT = (
+    "You write short prose summaries for a knowledge-base landing page. "
+    "Output only the requested markdown."
+)
+
+
+def resolve_overview_model(cfg: dict[str, Any] | None = None) -> str:
+    """Pick the model for the site-overview call (build.py)."""
+    if cfg is None:
+        from llmwiki.config_schedule import _load_sessions_config
+        cfg = _load_sessions_config()
+    synth_cfg = (cfg or {}).get("synthesis", {}) or {}
+    return str(synth_cfg.get("overview_model", "") or "").strip() or DEFAULT_OVERVIEW_MODEL
+
+
+def overview_argv(claude: str, model: str | None = None) -> list[str]:
+    """Command line for build.py's site-overview call.
+
+    Lives here rather than in build.py so both `claude` call sites share
+    one flag set and one model-resolution path.
+    """
+    return lean_argv(
+        claude,
+        system_prompt=_OVERVIEW_SYSTEM_PROMPT,
+        model=model or resolve_overview_model(),
+    )
+
+
 def lean_argv(
     claude: str,
     *,

@@ -127,10 +127,15 @@ def test_render_index_is_tree_browser(docs_dir: Path, tmp_path: Path):
     files = scan_raw_docs(docs_dir)
     render_index(build_tree(files), group_documents(files), len(files), out)
     html_text = (out / "index.html").read_text(encoding="utf-8")
-    assert "Queue dashboard" in html_text
+    # The Home pipeline State widget replaced the old queue-status cards.
+    assert "Pipeline state" in html_text
+    assert "llmwiki-state-widget" in html_text
     assert "Recent raw documents" in html_text
     assert "Standalone Doc" in html_text
-    assert "<summary><h3 style=\"display:inline\">Commands</h3></summary>" in html_text
+    # The Commands collapsible moved into the state widget, which render/js.py
+    # fills client-side — it is no longer emitted as static markup here.
+    from llmwiki.render.js import JS
+    assert 'detailsSection("Commands"' in JS
     assert "Open Raw browser" not in html_text
 
 

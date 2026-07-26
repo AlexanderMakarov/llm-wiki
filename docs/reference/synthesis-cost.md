@@ -91,11 +91,43 @@ Haiku's headline rate is ~3x cheaper than Sonnet's, but with thinking left on it
 
 **Recommendation:** keep `claude_model: "sonnet"` (the default). The lean flags already removed the dominant cost, and what remains buys measurably better graph structure. If your corpus is large and you accept weaker `Connections`, set `claude_model` to a Haiku id *and* `MAX_THINKING_TOKENS=0` — otherwise you pay for reasoning you did not want.
 
-## Caveat: `synthesize --estimate` models a different call
+## What `synthesize --estimate` prices
 
-`--estimate` predates the `claude` CLI backend and prices an Anthropic API-style call: a stable prefix (`CLAUDE.md` + `wiki/index.md` + `wiki/overview.md`) written to cache once, then re-read on every subsequent page.
+`--estimate` prices exactly what the backend sends, per page:
 
-The `claude` backend does not work that way. It never sends `index.md` or `overview.md`, and each invocation is a fresh process, so the prefix is largely re-written to cache every call rather than read. Treat `--estimate` as a **lower bound** for the `claude` backend. It remains accurate for `ollama` (free) and for the API-based path in [`prompt-caching.md`](prompt-caching.md).
+```
+(per-call overhead + prompt template + body) x input rate
+                                   + completion x output rate
+```
+
+with no shared cached prefix — each page is its own process, so cost is linear in page count. The report splits the fixed part so a surprising number is traceable:
+
+```
+Per page: 5,288 tok fixed (890 agent overhead + 4,398 prompt) + body, ~800 out
+```
+
+A large `prompt` figure means the injected topic vocabulary has grown — it is re-sent on every call, and on a mature wiki it is usually the single biggest fixed cost per page, larger than the lean scaffolding. With `claude_lean` off, the overhead column jumps to ~35,000 and the report adds a warning.
+
+`--estimate` never calls the API. It uses the rate card in `model_pricing.csv` plus a chars-per-token heuristic, so treat it as ±20%; on a real corpus the modelled figure came out ~10% under the measured one ($0.038 vs $0.042 per page).
+
+### Corrections landed with this model (#57)
+
+The previous estimator was wrong in four independent ways, each verified against `--output-format json`:
+
+| Error | Effect |
+|---|---|
+| Priced a cached prefix of `CLAUDE.md` + `index.md` + `overview.md` | Billed ~32k tokens per page that the backend never sends, while ignoring the scaffolding and template it does |
+| Assumed 1 cache write + N−1 cache hits | No prefix is shared across processes, so the discount never existed |
+| Counted tokens at 4 chars/token | Transcripts run ~2.33 chars/token — a ~1.7x undercount |
+| Counted full bodies, one call per doc | Bodies are truncated to 8,000 chars, and multi-part docs cost one call *per chunk* |
+
+The rate card was wrong too: `sonnet-5` was listed at $2/$10 per MTok. Derived from `modelUsage.costUSD` (905 input + 494 output = $0.010125) the real figures are **$3/$15**. `haiku-4.5` at $1/$5 checked out.
+
+The API-cache path in [`prompt-caching.md`](prompt-caching.md) is unaffected — a prefix genuinely is cached and re-read there.
+
+## The site overview call
+
+`llmwiki build --synthesize` makes one extra `claude` call to write the landing-page overview. It gets the same lean flags, and its model is `synthesis.overview_model` — defaulting to `haiku`, since writing three prose paragraphs from a JSON brief is the cheapest real task here and shows none of the `Connections` weakness that matters for source pages.
 
 ## Reproduce these numbers
 

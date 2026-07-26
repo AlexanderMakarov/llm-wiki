@@ -113,6 +113,27 @@ def test_lean_composes_with_model_flag(tmp_path):
     assert "--strict-mcp-config" in argv
 
 
+def test_overview_model_is_configurable_not_hardcoded():
+    from llmwiki.synth.claude_cli import (
+        DEFAULT_OVERVIEW_MODEL,
+        overview_argv,
+        resolve_overview_model,
+    )
+    assert resolve_overview_model({}) == DEFAULT_OVERVIEW_MODEL
+    assert resolve_overview_model(
+        {"synthesis": {"overview_model": "sonnet"}}
+    ) == "sonnet"
+    # Blank config value must not win over the default.
+    assert resolve_overview_model(
+        {"synthesis": {"overview_model": "  "}}
+    ) == DEFAULT_OVERVIEW_MODEL
+    # The overview call gets the same scaffolding-stripping flags.
+    argv = overview_argv("/bin/claude", "sonnet")
+    assert argv[argv.index("--model") + 1] == "sonnet"
+    assert "--strict-mcp-config" in argv
+    assert argv[argv.index("--tools") + 1] == ""
+
+
 def test_resolve_backend_lean_defaults_on_and_opts_out():
     base = {"backend": "claude", "claude_path": "/nonexistent/claude"}
     assert resolve_backend({"synthesis": base}).lean is True
