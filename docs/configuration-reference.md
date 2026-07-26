@@ -211,9 +211,11 @@ cp examples/sessions_config.json config.json
 | `synthesis` | `backend` | enum | `"dummy"` | Which synthesizer: `"dummy"` / `"ollama"` / `"claude"` (synchronous `claude -p` CLI). Unknown values warn and fall back to `"dummy"`. The old `"agent"` / agent-delegate backend was removed in v1.4.0. See [configuration.md § Synthesis backend](configuration.md#synthesis-backend). |
 | `synthesis` | `claude_model` | string | `"sonnet"` | Model alias for the `claude` backend |
 | `synthesis` | `claude_path` | string | `""` | Optional path to the `claude` binary |
+| `synthesis` | `claude_timeout` | int (s) | 180 | Per-page timeout for the `claude` backend. Separate from `synthesis.ollama.timeout` — before v1.4.1 both backends shared one `timeout` key, so the Ollama default silently capped claude pages at 60s |
+| `synthesis` | `claude_effort` | enum | unset | `--effort` for the `claude` backend (`low`/`medium`/`high`/`xhigh`/`max`). Extended thinking is billed as output at ~5x input; on Haiku it was 5,753 output tokens/page at the default vs 1,609 at `low`. Set `low` on small models |
 | `synthesis` | `overview_model` | string | `"haiku"` | Model for the landing-page overview call in `build --synthesize`. Prose-from-JSON, so the small model is the default. See [reference/synthesis-cost.md](reference/synthesis-cost.md) |
 | `synthesis` | `claude_lean` | bool | true | Strip agent scaffolding (tool schemas, MCP servers, skills, `CLAUDE.md`, agent system prompt) from each `claude` call — ~9x cheaper per page, measured. Only an explicit `false` opts out. See [reference/synthesis-cost.md](reference/synthesis-cost.md) |
-| `synthesis.ollama` | `model` | string | `"llama3.1:8b"` | Ollama model name (pull via `ollama pull`) |
+| `synthesis.ollama` | `model` | string | `"llama3.1:8b"` | Ollama model name (pull via `ollama pull`). This nested block is canonical; the legacy flat `synthesis.model` / `timeout` / … still work but share a namespace with the other backends |
 | `synthesis.ollama` | `base_url` | string | `"http://127.0.0.1:11434"` | Ollama HTTP endpoint |
 | `synthesis.ollama` | `timeout` | int (s) | 60 | Per-request timeout |
 | `synthesis.ollama` | `max_retries` | int | 3 | Exponential-backoff retry count on 5xx / timeout |

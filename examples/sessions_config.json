@@ -1,6 +1,5 @@
 {
-  "_comment": "#arch-m5 (#618): despite living under examples/, this IS the canonical config llmwiki ships — the base for every command. Your gitignored ./config.json is merged section-wise ON TOP of it (per-section keys override; omitted keys fall through to these defaults), so you only copy the sections you want to change. This merge applies to sync/convert too (#25).",
-
+  "_comment": "#arch-m5 (#618): despite living under examples/, this IS the canonical config llmwiki ships \u2014 the base for every command. Your gitignored ./config.json is merged section-wise ON TOP of it (per-section keys override; omitted keys fall through to these defaults), so you only copy the sections you want to change. This merge applies to sync/convert too (#25).",
   "filters": {
     "live_session_minutes": 60,
     "include_projects": [],
@@ -12,12 +11,11 @@
     ],
     "_headless_comment": "#8: skip headless `claude -p` / Agent-SDK sessions (entrypoint=sdk-* or promptSource=sdk). Prevents the synthesis feedback loop when the synthesizer shells out to `claude -p`.",
     "exclude_headless": true,
-    "_temp_cwd_comment": "#8: skip sessions whose cwd is a throwaway temp dir (/tmp, /var/folders, ...). Default OFF — a git worktree under /tmp is often real work. Set true only if your temp dirs hold e2e/scratch junk.",
+    "_temp_cwd_comment": "#8: skip sessions whose cwd is a throwaway temp dir (/tmp, /var/folders, ...). Default OFF \u2014 a git worktree under /tmp is often real work. Set true only if your temp dirs hold e2e/scratch junk.",
     "exclude_temp_cwd": false,
-    "_subagents_comment": "#30: what to do with subagent transcripts (is_subagent: true — each Agent tool fan-out logs its own session; ~59% of a real corpus). 'all' = sync AND synthesize them like any session (full detail, maximum token spend). 'only-raw' = sync into raw/ (complete, greppable, re-synthesizable) but SKIP them in synthesize / queue-run backlog — the wiki covers their outcome via the parent session's synthesis. DEFAULT. 'off' = don't convert them at all; the only record is the ~500-char truncated excerpt of each subagent's final report inside the coordinator session (truncation.tool_result_chars). Switching only-raw->all makes existing raw subagents eligible for synthesis (they appear as backlog); switching to off only affects future syncs — it never deletes existing raw/ files.",
+    "_subagents_comment": "#30: what to do with subagent transcripts (is_subagent: true \u2014 each Agent tool fan-out logs its own session; ~59% of a real corpus). 'all' = sync AND synthesize them like any session (full detail, maximum token spend). 'only-raw' = sync into raw/ (complete, greppable, re-synthesizable) but SKIP them in synthesize / queue-run backlog \u2014 the wiki covers their outcome via the parent session's synthesis. DEFAULT. 'off' = don't convert them at all; the only record is the ~500-char truncated excerpt of each subagent's final report inside the coordinator session (truncation.tool_result_chars). Switching only-raw->all makes existing raw subagents eligible for synthesis (they appear as backlog); switching to off only affects future syncs \u2014 it never deletes existing raw/ files.",
     "include_subagents": "only-raw"
   },
-
   "redaction": {
     "_comment": "Set real_username to the part of your home path to replace. Auto-detected from $USER if empty.",
     "real_username": "",
@@ -28,7 +26,6 @@
       "[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\\.[a-zA-Z0-9-.]+"
     ]
   },
-
   "truncation": {
     "tool_result_chars": 500,
     "bash_stdout_lines": 5,
@@ -36,15 +33,12 @@
     "user_prompt_chars": 4000,
     "assistant_text_chars": 8000
   },
-
   "drop_thinking_blocks": true,
-
   "_schedule_comment": "Controls when wiki-build and wiki-lint run. Values: on-sync (after every sync), daily, weekly, manual, never.",
   "schedule": {
     "build": "on-sync",
     "lint": "manual"
   },
-
   "_vault_comment": "Default vault path for --vault flag. Set to your Obsidian/Logseq vault. Empty = must pass --vault explicitly.",
   "vault": {
     "default_path": "",
@@ -57,46 +51,45 @@
     },
     "allow_overwrite": false
   },
-
   "_graph_comment": "Default graph engine. builtin = stdlib wikilink graph (zero deps). graphify = AI-powered (requires pip install llmwiki[graph]).",
   "graph": {
     "default_engine": "builtin",
     "format": "both"
   },
-
   "_serve_comment": "Default serve settings.",
   "serve": {
     "port": 8765,
     "host": "127.0.0.1",
     "open_browser": false
   },
-
   "_build_comment": "Default build settings.",
   "build": {
     "out_dir": "site",
     "search_mode": "auto",
     "synthesize": false
   },
-
-  "_adapters_comment": "Contrib adapters. All disabled by default — enable with: llmwiki sync --adapter <name>",
-
+  "_adapters_comment": "Contrib adapters. All disabled by default \u2014 enable with: llmwiki sync --adapter <name>",
   "web_clipper": {
     "enabled": false,
     "_comment": "Obsidian Web Clipper intake path.",
     "watch_dir": "raw/web",
-    "extensions": [".md"],
+    "extensions": [
+      ".md"
+    ],
     "auto_queue": true
   },
-
   "_synthesis_comment": "LLM backend for auto-synthesizing wiki source pages. backend=dummy (default, offline) | ollama (local HTTP) | claude (synchronous `claude -p` CLI; defaults to claude_model=sonnet, optional claude_path override). One backend serves every command (sync/synthesize/add). Run `llmwiki synthesize --check` to probe availability.",
   "synthesis": {
     "backend": "dummy",
     "claude_model": "sonnet",
+    "claude_timeout": 180,
     "_pricing_comment": "Optional pricing override (USD per 1M tokens) for `llmwiki synthesize --estimate` when provider prices/models change. If omitted, llmwiki uses the built-in local rate card and prints a warning that estimate may deviate.",
     "pricing": {},
-    "model": "llama3.1:8b",
-    "base_url": "http://127.0.0.1:11434",
-    "timeout": 60,
-    "max_retries": 3
+    "ollama": {
+      "model": "llama3.1:8b",
+      "base_url": "http://127.0.0.1:11434",
+      "timeout": 60,
+      "max_retries": 3
+    }
   }
 }

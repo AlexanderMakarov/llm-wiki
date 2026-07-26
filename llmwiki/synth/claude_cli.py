@@ -9,9 +9,10 @@ substitutes this backend whenever agent-delegate is configured.
 
 Also selectable outright with ``"synthesis": {"backend": "claude"}``.
 Optional config keys: ``claude_path`` (else $PATH lookup),
-``claude_model`` (defaults to ``sonnet``), ``timeout`` (seconds
-per page, default 180), ``claude_lean`` (default true — strip the
-agent scaffolding from each call; see ``_LEAN_ARGV``).
+``claude_model`` (defaults to ``sonnet``), ``claude_timeout`` (seconds
+per page, default 180), ``claude_effort`` (``--effort``; caps extended
+thinking, which is billed as output), and ``claude_lean`` (default true —
+strip the agent scaffolding from each call; see ``_LEAN_ARGV``).
 
 Reuses build.py's hardened ``_resolve_claude_path`` (#421: shell-metachar
 rejection, PATH lookup) and passes the prompt via stdin (#486 precedent:
@@ -26,7 +27,7 @@ from typing import Any
 from llmwiki.synth.base import BaseSynthesizer, split_prompt_template
 from llmwiki.synth.ollama import _render_prompt
 
-_DEFAULT_TIMEOUT = 180
+DEFAULT_CLAUDE_TIMEOUT = 180
 
 # Synthesis is text-in / text-out: the prompt carries everything the model
 # needs and we only ever read stdout, so the agent scaffolding `claude`
@@ -105,12 +106,19 @@ def lean_argv(
     system_prompt: str,
     model: str | None = None,
     lean: bool = True,
+    effort: str | None = None,
 ) -> list[str]:
     """Build a `claude -p -` command line for a one-shot text task.
 
     Shared by every non-interactive `claude` call in the codebase, so the
     scaffolding-stripping flags can't drift between call sites. ``lean=False``
     restores the plain invocation.
+
+    ``effort`` maps to ``--effort``, which governs extended thinking. That
+    is billed as output at ~5x the input rate, so it dominates the bill on
+    the small models: Haiku spent 5,753 output tokens on a page at its
+    default effort versus 1,609 at ``low`` — for a summarization task whose
+    reasoning is already spelled out in the prompt.
     """
     argv = [claude, "-p", "-"]
     if lean:
@@ -118,6 +126,8 @@ def lean_argv(
         argv += ["--system-prompt", system_prompt]
     if model:
         argv += ["--model", model]
+    if effort:
+        argv += ["--effort", effort]
     return argv
 
 
@@ -133,13 +143,15 @@ class ClaudeCLISynthesizer(BaseSynthesizer):
         self,
         claude_path: str | None = None,
         model: str | None = None,
-        timeout: int = _DEFAULT_TIMEOUT,
+        timeout: int = DEFAULT_CLAUDE_TIMEOUT,
         lean: bool = True,
+        effort: str | None = None,
     ) -> None:
         self.claude_path = claude_path
         self.model = model
         self.timeout = timeout
         self.lean = lean
+        self.effort = effort
 
     def _argv(self, claude: str, system_prompt: str) -> list[str]:
         """Build the `claude` command line for one page."""
@@ -148,6 +160,7 @@ class ClaudeCLISynthesizer(BaseSynthesizer):
             system_prompt=system_prompt,
             model=self.model,
             lean=self.lean,
+            effort=self.effort,
         )
 
     @property

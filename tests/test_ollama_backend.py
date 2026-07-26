@@ -195,6 +195,26 @@ def test_synthesize_happy_path_returns_response_text():
     assert "Raw session." in payload["prompt"]
 
 
+def test_config_prefers_the_documented_nested_ollama_block():
+    """`synthesis.ollama.*` is the documented shape; flat keys are legacy."""
+    cfg = load_ollama_config({
+        "synthesis": {
+            "ollama": {"model": "nested:7b", "timeout": 99},
+            # Flat leftovers from another backend must lose to the block.
+            "model": "flat:1b",
+            "timeout": 60,
+        }
+    })
+    assert cfg.model == "nested:7b"
+    assert cfg.timeout == 99
+
+
+def test_config_still_reads_legacy_flat_keys():
+    cfg = load_ollama_config({"synthesis": {"model": "flat:1b", "timeout": 42}})
+    assert cfg.model == "flat:1b"
+    assert cfg.timeout == 42
+
+
 def test_synthesize_routes_stable_half_to_the_system_field():
     """Same split as the claude backend, mapped onto Ollama's mechanism.
 

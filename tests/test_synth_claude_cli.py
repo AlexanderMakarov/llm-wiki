@@ -21,7 +21,7 @@ def test_resolve_backend_claude():
     backend = resolve_backend({"synthesis": {"backend": "claude",
                                              "claude_path": "/nonexistent/claude",
                                              "claude_model": "some-model",
-                                             "timeout": 42}})
+                                             "claude_timeout": 42}})
     assert isinstance(backend, ClaudeCLISynthesizer)
     assert backend.name == "claude-cli"
     assert backend.model == "some-model"
@@ -192,6 +192,38 @@ def test_overview_model_is_configurable_not_hardcoded():
     assert argv[argv.index("--model") + 1] == "sonnet"
     assert "--strict-mcp-config" in argv
     assert argv[argv.index("--tools") + 1] == ""
+
+
+def test_claude_timeout_is_not_the_shared_ollama_key():
+    """`timeout` belongs to the Ollama block and must not reach this backend.
+
+    The shipped example config sets a flat `timeout: 60` for Ollama. Reading
+    it here silently capped every claude page at 60s instead of 180s — real
+    pages take 19-37s, so a long transcript would fail on a setting the user
+    never aimed at this backend.
+    """
+    from llmwiki.synth.claude_cli import DEFAULT_CLAUDE_TIMEOUT
+    base = {"backend": "claude", "claude_path": "/nonexistent/claude"}
+    assert resolve_backend(
+        {"synthesis": {**base, "timeout": 60}}
+    ).timeout == DEFAULT_CLAUDE_TIMEOUT
+    assert resolve_backend(
+        {"synthesis": {**base, "claude_timeout": 300}}
+    ).timeout == 300
+
+
+def test_claude_effort_is_configurable_and_off_by_default():
+    base = {"backend": "claude", "claude_path": "/nonexistent/claude"}
+    assert resolve_backend({"synthesis": base}).effort is None
+    assert resolve_backend({"synthesis": {**base, "claude_effort": "low"}}).effort == "low"
+    # A blank value must not emit a bare `--effort` with no argument.
+    assert resolve_backend({"synthesis": {**base, "claude_effort": "  "}}).effort is None
+
+
+def test_effort_flag_reaches_argv(tmp_path):
+    argv = _argv_of(tmp_path, "claude-effort", effort="low")
+    assert argv[argv.index("--effort") + 1] == "low"
+    assert "--effort" not in _argv_of(tmp_path, "claude-noeffort")
 
 
 def test_resolve_backend_lean_defaults_on_and_opts_out():

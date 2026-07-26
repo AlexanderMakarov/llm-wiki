@@ -139,8 +139,8 @@ def resolve_backend(
       - ``"dummy"`` (default) — canned offline backend for previews/tests
       - ``"ollama"`` — local Ollama HTTP backend (#35)
       - ``"claude"`` — synchronous ``claude -p`` CLI calls (#16).
-        Optional keys: ``claude_path``, ``claude_model``, ``timeout``,
-        ``claude_lean``.
+        Optional keys: ``claude_path``, ``claude_model``,
+        ``claude_timeout``, ``claude_lean``.
 
     Unknown values fall back to the dummy backend with a warning so a
     typo in config.json doesn't crash sync.
@@ -156,13 +156,20 @@ def resolve_backend(
         return OllamaSynthesizer(config=load_ollama_config(cfg))
 
     if name == "claude":
-        from llmwiki.synth.claude_cli import ClaudeCLISynthesizer
+        from llmwiki.synth.claude_cli import (
+            DEFAULT_CLAUDE_TIMEOUT,
+            ClaudeCLISynthesizer,
+        )
 
+        # Deliberately NOT the shared `timeout` key: that one belongs to the
+        # Ollama block, and reading it here meant a 60s Ollama default
+        # silently capped every claude page at 60s instead of 180s.
         return ClaudeCLISynthesizer(
             claude_path=synth_cfg.get("claude_path"),
             model=synth_cfg.get("claude_model") or "sonnet",
-            timeout=int(synth_cfg.get("timeout") or 180),
+            timeout=int(synth_cfg.get("claude_timeout") or DEFAULT_CLAUDE_TIMEOUT),
             lean=synth_cfg.get("claude_lean", True) is not False,
+            effort=str(synth_cfg.get("claude_effort", "") or "").strip() or None,
         )
 
     if name != "dummy":

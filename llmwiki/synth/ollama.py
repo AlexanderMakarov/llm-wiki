@@ -130,17 +130,35 @@ def load_ollama_config(cfg: Optional[dict[str, Any]]) -> OllamaConfig:
     is enough to reach a working local default.
     """
     synth = (cfg or {}).get("synthesis", {}) or {}
+    # Documented shape is the nested `synthesis.ollama` block. The flat
+    # `synthesis.*` layout is the legacy one and still works, but it shares a
+    # namespace with the other backends' keys — a flat `timeout` meant for
+    # Ollama was silently shortening the claude backend's per-page budget.
+    # Nested wins; flat is the fallback so existing configs keep working.
+    nested = synth.get("ollama") or {}
+    if not isinstance(nested, dict):
+        nested = {}
+
+    def _key(name: str) -> Any:
+        """Value for ``name``, nested block first, then the legacy flat key."""
+        if name in nested:
+            return nested[name]
+        return synth.get(name)
+
+    def _has(name: str) -> bool:
+        return name in nested or name in synth
+
     # Use `in` checks (not `or`) so an explicit 0 fails validation instead
     # of being silently swapped for the default.
-    model = synth.get("model") or DEFAULT_MODEL
-    base_url = synth.get("base_url") or DEFAULT_BASE_URL
-    timeout = int(synth["timeout"]) if "timeout" in synth else DEFAULT_TIMEOUT
+    model = _key("model") or DEFAULT_MODEL
+    base_url = _key("base_url") or DEFAULT_BASE_URL
+    timeout = int(_key("timeout")) if _has("timeout") else DEFAULT_TIMEOUT
     max_retries = (
-        int(synth["max_retries"]) if "max_retries" in synth else DEFAULT_MAX_RETRIES
+        int(_key("max_retries")) if _has("max_retries") else DEFAULT_MAX_RETRIES
     )
     backoff_base = (
-        float(synth["backoff_base"])
-        if "backoff_base" in synth
+        float(_key("backoff_base"))
+        if _has("backoff_base")
         else DEFAULT_BACKOFF_BASE
     )
 
