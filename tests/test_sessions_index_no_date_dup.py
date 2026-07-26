@@ -42,7 +42,9 @@ def _src(slug: str, date: str, project: str = "demo", title: str | None = None):
 
 def _row_for_slug(html_text: str, slug: str) -> str:
     m = re.search(
-        r'<tr data-project="[^"]*" data-model="[^"]*" data-date="[^"]*" data-slug="' + re.escape(slug) + r'">.*?</tr>',
+        r'<tr data-project="[^"]*"(?: data-agent="[^"]*")? data-model="[^"]*" data-date="[^"]*" data-slug="'
+        + re.escape(slug)
+        + r'">.*?</tr>',
         html_text,
         re.DOTALL,
     )
