@@ -2595,9 +2595,26 @@ def _validate_overview_slug(s: Any) -> str:
     return s
 
 
+# The overview is a short prose summary of a JSON brief — the cheapest
+# real task in the codebase, so it defaults to the small model rather than
+# the synthesis model. Override with synthesis.overview_model.
+_DEFAULT_OVERVIEW_MODEL = "haiku"
+
+
+def _resolve_overview_model(cfg: Optional[dict[str, Any]] = None) -> str:
+    """Pick the overview model: explicit config, else the small default."""
+    if cfg is None:
+        from llmwiki.config_schedule import _load_sessions_config
+        cfg = _load_sessions_config()
+    synth_cfg = (cfg or {}).get("synthesis", {}) or {}
+    configured = str(synth_cfg.get("overview_model", "") or "").strip()
+    return configured or _DEFAULT_OVERVIEW_MODEL
+
+
 def synthesize_overview(
     groups: dict[str, list[tuple[Path, dict[str, Any], str]]],
     claude_path: str,
+    model: Optional[str] = None,
 ) -> Optional[str]:
     resolved = _resolve_claude_path(claude_path)
     if resolved is None:
@@ -2644,8 +2661,19 @@ def synthesize_overview(
         # #486: pass the prompt via stdin (`-p -`) instead of argv so we
         # dodge the OS argv-length limit entirely. The byte cap above is
         # defence-in-depth — argv-length DoS path closed regardless.
+        # Same scaffolding-stripping flags as page synthesis: this call
+        # writes prose from a JSON brief and can't use a single tool.
+        from llmwiki.synth.claude_cli import lean_argv
+
         result = subprocess.run(
-            [claude_path, "-p", "-", "--model", "claude-haiku-4-5-20251001"],
+            lean_argv(
+                claude_path,
+                system_prompt=(
+                    "You write short prose summaries for a knowledge-base "
+                    "landing page. Output only the requested markdown."
+                ),
+                model=model or _resolve_overview_model(),
+            ),
             input=prompt,
             capture_output=True, text=True, timeout=120,
         )

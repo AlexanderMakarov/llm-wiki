@@ -1249,7 +1249,6 @@ def _synthesize_estimate(args: argparse.Namespace | None = None) -> int:
     _apply_default_vault(args)
     raw_sessions = None
     state_keys = None
-    prefix_tokens = None
     synthesized_source_keys = None
     wiki_sources_dir = None
     docs_root = None
@@ -1286,7 +1285,6 @@ def _synthesize_estimate(args: argparse.Namespace | None = None) -> int:
                     f"pricing model fallback: execution model '{execution_model}' has no rate card entry; "
                     "using default pricing model."
                 )
-    from llmwiki.cache import estimate_tokens
     from llmwiki.state_store import resolve_state_file, update_state
     from llmwiki.synth.pipeline import (
         _discover_raw_sessions,
@@ -1304,16 +1302,16 @@ def _synthesize_estimate(args: argparse.Namespace | None = None) -> int:
     raw_sessions = _discover_raw_sessions(raw_root)
     state_keys = set(_load_state(state_target).keys())
     synthesized_source_keys = discover_synth_source_keys(wiki_sources_dir)
-    prefix_parts: list[str] = []
-    for rel in ("CLAUDE.md", "wiki/index.md", "wiki/overview.md"):
-        p = vault_root / rel
-        if p.is_file():
-            prefix_parts.append(p.read_text(encoding="utf-8"))
-    prefix_tokens = estimate_tokens("\n".join(prefix_parts))
+    # prefix_tokens is left for the report to derive: what every page pays
+    # up front is the CLI's own per-call overhead plus the rendered prompt
+    # template, not CLAUDE.md / index.md / overview.md — the `claude`
+    # backend never sends the latter two.
     report = synthesize_estimate_report(
         raw_sessions=raw_sessions,
         state_keys=state_keys,
-        prefix_tokens=prefix_tokens,
+        lean=synth_cfg.get("claude_lean", True) is not False
+        if isinstance(synth_cfg, dict)
+        else True,
         model=pricing_model,
         pricing_table=pricing_table,
         synthesized_source_keys=synthesized_source_keys,
@@ -1396,13 +1394,21 @@ def _synthesize_estimate(args: argparse.Namespace | None = None) -> int:
             parts.append(f"{ex_head} headless (exclude_headless=true)")
         print(f"Not eligible (synthesize skips these too): {', '.join(parts)}")
     print()
+    # Per-page fixed cost, split so an unexpectedly large figure is
+    # traceable to either the agent scaffolding or a bloated vocabulary.
+    per_page = (
+        f"Per page: {report['prefix_tokens']:,} tok fixed "
+        f"({report.get('overhead_tokens', 0):,} agent overhead + "
+        f"{report.get('template_tokens', 0):,} prompt) "
+        f"+ body, ~{report.get('output_tokens_per_call', 0):,} out"
+    )
+    if not report.get("lean", True):
+        per_page += "  [claude_lean=off]"
+    print(per_page)
     if execution_model:
-        print(
-            f"Prefix: {report['prefix_tokens']:,} tok  "
-            f"Execution model: {execution_model}  Pricing model: {report['model']}"
-        )
+        print(f"Execution model: {execution_model}  Pricing model: {report['model']}")
     else:
-        print(f"Prefix: {report['prefix_tokens']:,} tok  Pricing model: {report['model']}")
+        print(f"Pricing model: {report['model']}")
     print()
     if report["new"] == 0:
         print("Incremental sync:  $0.0000  (nothing new — this is a no-op)")
@@ -1415,7 +1421,7 @@ def _synthesize_estimate(args: argparse.Namespace | None = None) -> int:
         )
     print(
         f"Full re-synth:     ${report['full_force_usd']:.4f}  "
-        f"(--force — {report['corpus']} source(s), 1 cache write + {max(report['corpus'] - 1, 0)} hits)"
+        f"(--force — {report['corpus']} source(s), one call each)"
     )
     return 0
 

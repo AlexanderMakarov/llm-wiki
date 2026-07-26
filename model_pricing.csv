@@ -6,7 +6,7 @@ opus-4.7,opus,claude-opus-4-7,5.0,0.5,6.25,25.0,anthropic-pricing-2026-07,curren
 opus-4.6,opus,claude-opus-4-6,5.0,0.5,6.25,25.0,anthropic-pricing-2026-07,current
 opus-4.5,opus,,5.0,0.5,6.25,25.0,anthropic-pricing-2026-07,current
 opus-4.1,opus,,15.0,1.5,18.75,75.0,anthropic-pricing-2026-07,deprecated
-sonnet-5,sonnet,claude-sonnet-5,2.0,0.2,2.5,10.0,anthropic-pricing-2026-07,intro through 2026-08-31
+sonnet-5,sonnet,claude-sonnet-5,3.0,0.3,3.75,15.0,measured-2026-07-26,derived from modelUsage costUSD; see docs/reference/synthesis-cost.md
 sonnet-4.6,sonnet,claude-sonnet-4-6,3.0,0.3,3.75,15.0,anthropic-pricing-2026-07,current
 sonnet-4.5,sonnet,claude-sonnet-4-5,3.0,0.3,3.75,15.0,anthropic-pricing-2026-07,current
 haiku-4.5,haiku,claude-haiku-4|claude-haiku-4-5-20251001,1.0,0.1,1.25,5.0,anthropic-pricing-2026-07,current

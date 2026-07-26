@@ -5,7 +5,7 @@ Covers:
 * Fresh corpus (nothing in state file) → incremental == full_force.
 * Fully-synthesized corpus → incremental = $0, full_force > $0.
 * Partial progress → incremental < full_force.
-* Prefix-too-small warning surfaces into ``warnings`` bucket.
+* Non-lean scaffolding warning surfaces into ``warnings`` bucket.
 * Custom model + custom output_tokens override pricing.
 * CLI subprocess prints the expected layout.
 * Money numbers are non-negative and full_force ≥ incremental.
@@ -129,25 +129,41 @@ def test_money_numbers_are_non_negative():
     assert rpt["full_force_usd"] >= 0.0
 
 
-def test_prefix_too_small_warning():
+def test_small_prefix_is_not_a_warning():
+    """A tiny per-call prefix is the goal, not a problem.
+
+    The old model priced an API-style call with a cached prefix, so a prefix
+    under the 1,024-token cache floor earned a warning. The `claude` backend
+    has no shared prefix to cache — lean mode exists precisely to make the
+    fixed part small — so a small prefix must not warn.
+    """
     from llmwiki.cli import synthesize_estimate_report
     rpt = synthesize_estimate_report(
-        raw_sessions=[],
-        state_keys=set(),
-        prefix_tokens=50,  # far below cache floor
-    )
-    assert rpt["warnings"], "expected a warning for tiny prefix"
-    assert any("cache" in w.lower() or "1024" in w for w in rpt["warnings"])
-
-
-def test_healthy_prefix_no_warning():
-    from llmwiki.cli import synthesize_estimate_report
-    rpt = synthesize_estimate_report(
-        raw_sessions=[],
-        state_keys=set(),
-        prefix_tokens=4000,
+        raw_sessions=[], state_keys=set(), prefix_tokens=50,
     )
     assert rpt["warnings"] == []
+
+
+def test_non_lean_warns_about_scaffolding():
+    from llmwiki.cli import synthesize_estimate_report
+    rpt = synthesize_estimate_report(
+        raw_sessions=[], state_keys=set(), lean=False,
+    )
+    assert any("claude_lean" in w for w in rpt["warnings"])
+
+
+def test_non_lean_costs_far_more_per_page():
+    """The scaffolding the lean flags strip dominates the per-page bill."""
+    from llmwiki.cli import synthesize_estimate_report
+    sessions = [(_P("a.md"), {"project": "p"}, "body " * 200)]
+    lean = synthesize_estimate_report(
+        raw_sessions=sessions, state_keys=set(), lean=True,
+    )
+    fat = synthesize_estimate_report(
+        raw_sessions=sessions, state_keys=set(), lean=False,
+    )
+    assert fat["full_force_usd"] > lean["full_force_usd"] * 3
+    assert fat["overhead_tokens"] > lean["overhead_tokens"] * 10
 
 
 def test_custom_model_propagates():
@@ -204,21 +220,51 @@ def test_report_is_serialisable_to_json():
     assert round_tripped["new"] == 1
 
 
-def test_prefix_tokens_auto_computed_from_real_files(tmp_path, monkeypatch):
-    """When prefix_tokens isn't provided, it's computed from the three
-    cached-prefix files in REPO_ROOT."""
+def test_prefix_tokens_is_overhead_plus_template(tmp_path, monkeypatch):
+    """The per-call prefix is scaffolding + prompt template, nothing else."""
     import llmwiki.cli as cli_mod
-    monkeypatch.setattr(cli_mod, "REPO_ROOT", tmp_path)
-    (tmp_path / "CLAUDE.md").write_text("CLAUDE\n" * 2000, encoding="utf-8")
-    (tmp_path / "wiki").mkdir()
-    (tmp_path / "wiki" / "index.md").write_text("index\n" * 500, encoding="utf-8")
-    (tmp_path / "wiki" / "overview.md").write_text("overview\n" * 500, encoding="utf-8")
     rpt = cli_mod.synthesize_estimate_report(
         raw_sessions=_sessions("a.md"),
         state_keys=set(),
+        template_tokens=1234,
         # prefix_tokens deliberately NOT passed
     )
-    assert rpt["prefix_tokens"] > 0
+    assert rpt["template_tokens"] == 1234
+    assert rpt["prefix_tokens"] == rpt["overhead_tokens"] + 1234
+
+
+def test_prefix_tokens_ignores_claude_md_and_wiki_pages(tmp_path, monkeypatch):
+    """CLAUDE.md / index.md / overview.md are never sent by this backend.
+
+    The old model priced them as a cached prefix, so a large wiki inflated
+    the estimate for tokens that were never transmitted. Growing all three
+    must not move the per-call figure.
+    """
+    import llmwiki.cli as cli_mod
+    monkeypatch.setattr(cli_mod, "REPO_ROOT", tmp_path)
+    (tmp_path / "wiki").mkdir()
+    baseline = cli_mod.synthesize_estimate_report(
+        raw_sessions=_sessions("a.md"), state_keys=set(), template_tokens=100,
+    )
+    (tmp_path / "CLAUDE.md").write_text("CLAUDE\n" * 20000, encoding="utf-8")
+    (tmp_path / "wiki" / "index.md").write_text("index\n" * 5000, encoding="utf-8")
+    (tmp_path / "wiki" / "overview.md").write_text("ov\n" * 5000, encoding="utf-8")
+    after = cli_mod.synthesize_estimate_report(
+        raw_sessions=_sessions("a.md"), state_keys=set(), template_tokens=100,
+    )
+    assert after["prefix_tokens"] == baseline["prefix_tokens"]
+    assert after["full_force_usd"] == pytest.approx(baseline["full_force_usd"])
+
+
+def test_body_past_the_truncation_cap_is_not_billed():
+    """claude_cli.py truncates bodies to BODY_CHAR_CAP before sending."""
+    from llmwiki.cli import synthesize_estimate_report
+    from llmwiki.synth.estimate import BODY_CHAR_CAP
+    capped = [(_P("a.md"), {}, "x" * BODY_CHAR_CAP)]
+    way_over = [(_P("a.md"), {}, "x" * (BODY_CHAR_CAP * 10))]
+    a = synthesize_estimate_report(raw_sessions=capped, state_keys=set())
+    b = synthesize_estimate_report(raw_sessions=way_over, state_keys=set())
+    assert a["full_force_usd"] == pytest.approx(b["full_force_usd"])
 
 
 # ─── CLI subprocess smoke tests ──────────────────────────────────────────
@@ -252,11 +298,22 @@ def test_cli_estimate_prints_both_cost_rows(estimate_vault):
     assert "Full re-synth:" in cp.stdout
 
 
-def test_cli_estimate_prints_model_and_prefix(estimate_vault):
+def test_cli_estimate_prints_model_and_per_page_cost(estimate_vault):
     cp = _run_cli("synthesize", "--estimate", "--vault", str(estimate_vault))
     assert cp.returncode == 0, cp.stderr
-    assert "Prefix:" in cp.stdout
+    # Split into its halves so a surprising figure is traceable to either
+    # the agent scaffolding or a bloated topic vocabulary.
+    assert "Per page:" in cp.stdout
+    assert "agent overhead" in cp.stdout
+    assert "prompt" in cp.stdout
     assert "Pricing model:" in cp.stdout or "Execution model:" in cp.stdout
+
+
+def test_cli_estimate_does_not_claim_cache_reuse(estimate_vault):
+    """Each page is its own process — there is no prefix to re-read."""
+    cp = _run_cli("synthesize", "--estimate", "--vault", str(estimate_vault))
+    assert "cache write" not in cp.stdout
+    assert "hits)" not in cp.stdout
 
 
 def test_cli_estimate_doesnt_hit_network(estimate_vault):

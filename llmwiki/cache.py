@@ -49,6 +49,14 @@ CACHE_CONTROL_EPHEMERAL = {"type": "ephemeral"}
 # in the API response usage block.
 CHARS_PER_TOKEN = 4
 
+# Session transcripts are not English prose. They are dense in code, paths,
+# JSON, tool output, and punctuation, all of which tokenize far finer than
+# prose. Measured against the real synthesis prompt (8,567 chars) via
+# `claude --output-format json`: 3,677 prompt tokens, i.e. 2.33 chars/token,
+# so the prose heuristic under-counts this content by ~1.7x. Used by the
+# synth cost estimate; see docs/reference/synthesis-cost.md.
+TRANSCRIPT_CHARS_PER_TOKEN = 2.33
+
 # Minimum prefix size the Anthropic cache will accept. Below this the
 # ``cache_control`` header is ignored and you pay the full input price.
 # (Value per Anthropic docs; kept here so ``estimate_cost`` can warn
@@ -197,16 +205,20 @@ def build_messages(prompt: CachedPrompt) -> list[dict[str, Any]]:
 # ─── Token + cost estimation ──────────────────────────────────────────
 
 
-def estimate_tokens(text: str) -> int:
-    """Rough token count via char/4 heuristic.
+def estimate_tokens(
+    text: str, chars_per_token: float = CHARS_PER_TOKEN
+) -> int:
+    """Rough token count via a chars-per-token heuristic.
 
-    Slightly under-counts emoji-heavy text and over-counts code-heavy
-    text, but it's plenty accurate for a pre-spend sanity check. Real
-    counts come back in ``usage`` on each API response.
+    The default (``CHARS_PER_TOKEN``) is tuned for English prose. Code,
+    paths, JSON, and tool output tokenize much finer — pass
+    ``TRANSCRIPT_CHARS_PER_TOKEN`` for session-transcript content, or the
+    result under-counts by ~1.7x. Real counts come back in ``usage`` on
+    each API response.
     """
     if not text:
         return 0
-    return max(1, len(text) // CHARS_PER_TOKEN)
+    return max(1, int(len(text) / chars_per_token))
 
 
 @dataclass(frozen=True)

@@ -14,7 +14,65 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from llmwiki import REPO_ROOT
+# ─── Measured per-call constants for the `claude` CLI backend ──────────
+#
+# The pre-#57 model priced an Anthropic API-style call: a stable prefix
+# (CLAUDE.md + wiki/index.md + wiki/overview.md) written to cache once and
+# re-read on every later page. The `claude` CLI backend does none of that.
+# It never sends index.md or overview.md, and every page is a separate
+# process, so there is no prefix to re-read. Numbers below are measured via
+# `claude --output-format json`; see docs/reference/synthesis-cost.md.
+
+# What each invocation costs before the prompt is added. Lean mode strips
+# tool schemas, MCP servers, skills, CLAUDE.md, and the agent system prompt;
+# what is left is framing Claude Code always injects.
+LEAN_OVERHEAD_TOKENS = 890
+# Without lean mode: the full coding-agent context. Varies with how many MCP
+# servers and skills the user has configured — this is a mid-range figure,
+# not a ceiling.
+FULL_AGENT_OVERHEAD_TOKENS = 35_000
+# Non-lean repeat calls re-read about half the scaffolding from the prompt
+# cache and re-write the other half (measured: 17,544 read / 17,790 written).
+NON_LEAN_CACHE_READ_FRACTION = 0.5
+# Typical completion for one source page (measured 730–815 across models).
+DEFAULT_OUTPUT_TOKENS = 800
+# claude_cli.py truncates every body to this many characters before sending,
+# so anything past it is never billed.
+BODY_CHAR_CAP = 8000
+
+
+def _rendered_template_tokens(wiki_sources_dir: Optional[Any] = None) -> int:
+    """Tokens in the prompt template as actually sent, vocabulary included.
+
+    The `{vocabulary}` block is expanded from the wiki's canonical topics
+    and grows with the wiki, so a fixed figure would drift. Falls back to
+    the un-expanded template if the wiki can't be read — an estimate that
+    is slightly low beats one that raises.
+    """
+    from pathlib import Path as _Path
+
+    from llmwiki.cache import TRANSCRIPT_CHARS_PER_TOKEN, estimate_tokens
+
+    tmpl_path = _Path(__file__).resolve().parent / "prompts" / "source_page.md"
+    try:
+        template = tmpl_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return 0
+    try:
+        from llmwiki.synth.pipeline import WIKI_SOURCES, _inject_vocabulary
+
+        wiki_dir = (
+            _Path(wiki_sources_dir).parent
+            if wiki_sources_dir is not None
+            else WIKI_SOURCES.parent
+        )
+        template = _inject_vocabulary(template, wiki_dir)
+    except (OSError, UnicodeDecodeError, ValueError, AttributeError):
+        pass
+    # The body/meta placeholders are replaced by content counted separately.
+    for token in ("{body}", "{meta}"):
+        template = template.replace(token, "")
+    return estimate_tokens(template, TRANSCRIPT_CHARS_PER_TOKEN)
 
 
 def synthesize_estimate_report(
@@ -22,7 +80,7 @@ def synthesize_estimate_report(
     raw_sessions: Optional[list[tuple[Any, dict, str]]] = None,
     state_keys: Optional[set[str]] = None,
     prefix_tokens: Optional[int] = None,
-    output_tokens_per_call: int = 1000,
+    output_tokens_per_call: int = DEFAULT_OUTPUT_TOKENS,
     model: Optional[str] = None,
     synthesized_source_keys: Optional[set[str]] = None,
     wiki_sources_dir: Optional[Any] = None,
@@ -31,8 +89,17 @@ def synthesize_estimate_report(
     pricing_table: Optional[dict[str, dict[str, float]]] = None,
     include_subagents: Optional[str] = None,
     exclude_headless: bool | None = None,
+    lean: bool = True,
+    template_tokens: Optional[int] = None,
 ) -> dict:
     """Compute the incremental vs full-force cost report (G-07 · #293).
+
+    Prices what the ``claude`` CLI backend actually sends per page:
+    per-call scaffolding + the rendered prompt template (including the
+    injected topic vocabulary) + the body, truncated to
+    ``BODY_CHAR_CAP`` as ``claude_cli.py`` truncates it. There is no
+    shared cached prefix — each page is a separate process — so cost
+    scales linearly with page count.
 
     Returns a plain dict so the CLI can render it AND tests can inspect
     the numbers without parsing stdout. Keys:
@@ -42,12 +109,15 @@ def synthesize_estimate_report(
     * ``new`` — ``corpus - synthesized``
     * ``incremental_usd`` — dollars to synthesize the ``new`` bucket
     * ``full_force_usd`` — dollars to re-synthesize the **whole** corpus
-      with ``--force`` (one cache write + N-1 cache hits)
-    * ``prefix_tokens`` — tokens in the stable CLAUDE.md + index.md +
-      overview.md prefix
+      with ``--force`` (N x the per-page cost)
+    * ``prefix_tokens`` — fixed per-call overhead in tokens (scaffolding
+      + rendered prompt template), i.e. what every page pays before its
+      own body
+    * ``overhead_tokens`` / ``template_tokens`` — that figure split into
+      its agent-scaffolding and prompt-template halves
+    * ``lean`` — whether lean-mode scaffolding stripping was assumed
     * ``model`` — model id used for pricing
-    * ``warnings`` — list of human-readable warnings (e.g. prefix too
-      small to be cached)
+    * ``warnings`` — list of human-readable warnings
     * ``unsynth_items`` — list of unsynthesized session descriptors
 
     Any of the args can be injected for tests; the default reads from
@@ -56,9 +126,9 @@ def synthesize_estimate_report(
     from llmwiki.cache import (
         MODEL_PRICING,
         DEFAULT_MODEL,
+        TRANSCRIPT_CHARS_PER_TOKEN,
         resolve_pricing_model,
         estimate_tokens,
-        warn_prefix_too_small,
     )
     from pathlib import Path as _Path
     from llmwiki.synth.pipeline import (
@@ -84,16 +154,24 @@ def synthesize_estimate_report(
         chosen_model = resolve_pricing_model(DEFAULT_MODEL, rates_table)
     warnings: list[str] = []
 
+    # The prompt template is sent verbatim on every call, and the topic
+    # vocabulary injected into it grows with the wiki — so measure the
+    # rendered article rather than assuming a fixed size.
+    if template_tokens is None:
+        template_tokens = _rendered_template_tokens(wiki_sources_dir)
+    overhead_tokens = (
+        LEAN_OVERHEAD_TOKENS if lean else FULL_AGENT_OVERHEAD_TOKENS
+    )
+    # `prefix_tokens` keeps its name (persisted state and the site widget
+    # read it) but now means what every page pays before its own body.
     if prefix_tokens is None:
-        prefix_parts: list[str] = []
-        for rel in ("CLAUDE.md", "wiki/index.md", "wiki/overview.md"):
-            p = REPO_ROOT / rel
-            if p.is_file():
-                prefix_parts.append(p.read_text(encoding="utf-8"))
-        prefix_tokens = estimate_tokens("\n".join(prefix_parts))
-    prefix_warning = warn_prefix_too_small(prefix_tokens)
-    if prefix_warning:
-        warnings.append(prefix_warning)
+        prefix_tokens = overhead_tokens + template_tokens
+    if not lean:
+        warnings.append(
+            "synthesis.claude_lean is off: every page re-sends the full agent "
+            f"context (~{FULL_AGENT_OVERHEAD_TOKENS:,} tok of tool schemas, MCP "
+            "servers, skills, and CLAUDE.md that synthesis cannot use)."
+        )
 
     if raw_sessions is None:
         raw_sessions = _discover_raw_sessions()
@@ -173,8 +251,6 @@ def synthesize_estimate_report(
     new_docs = 0
     incremental_usd = 0.0
     full_force_usd = 0.0
-    incremental_first = True
-    full_force_first = True
     unsynth_items: list[dict[str, Any]] = []
     # Per-agent (sessions) + Documents row for the Home state widget.
     # Keys are display labels from detect_agent_label; docs use "Documents".
@@ -196,17 +272,35 @@ def synthesize_estimate_report(
             pipeline_buckets[label] = row
         return row
 
-    def _add_to_bucket(fresh_tokens: int, first: bool) -> tuple[float, bool]:
-        """Return (cost, was_first?). Cost-of-this-call uses cache_hit=
-        not first, mirroring the old _bucket_usd semantics."""
+    def _body_tokens(text: str) -> int:
+        """Tokens actually billed for one body — the backend truncates first."""
+        return estimate_tokens(
+            (text or "")[:BODY_CHAR_CAP], TRANSCRIPT_CHARS_PER_TOKEN
+        )
+
+    def _page_usd(body_tokens: int) -> float:
+        """Dollars for one page: overhead + template + body in, completion out.
+
+        Every page is its own `claude` process, so there is no prefix to
+        re-read across pages and cost is linear in page count. In lean mode
+        the residual overhead is far below the 1,024-token cache minimum, so
+        it is priced as fresh input. Without lean mode the scaffolding is
+        large enough to cache, and repeat calls re-read roughly half of it.
+        """
         rates = rates_table[chosen_model]
-        prefix_rate = rates["cached_input"] if not first else rates["cache_write"]
-        usd = (
-            prefix_tokens * prefix_rate
-            + fresh_tokens * rates["input"]
+        if lean:
+            overhead_usd = overhead_tokens * rates["input"]
+        else:
+            read = overhead_tokens * NON_LEAN_CACHE_READ_FRACTION
+            overhead_usd = (
+                read * rates["cached_input"]
+                + (overhead_tokens - read) * rates["cache_write"]
+            )
+        return (
+            overhead_usd
+            + (template_tokens + body_tokens) * rates["input"]
             + output_tokens_per_call * rates["output"]
         ) / 1_000_000
-        return usd, False  # second-and-later calls hit the cache
 
     # Lazy import — estimate is imported from CLI paths that may not need
     # the full build module until this walk runs.
@@ -248,9 +342,9 @@ def synthesize_estimate_report(
             or source_key in discovered_source_keys
             or output_exists
         )
-        body_tokens = estimate_tokens(body)
+        body_tokens = _body_tokens(body)
         # Full-force bucket: every session contributes regardless of state.
-        ff_cost, full_force_first = _add_to_bucket(body_tokens, full_force_first)
+        ff_cost = _page_usd(body_tokens)
         full_force_usd += ff_cost
         row = _bucket(agent_label, kind="session", css=agent_css)
         row["raw"] += 1
@@ -260,9 +354,7 @@ def synthesize_estimate_report(
             row["synthesized"] += 1
         else:
             new_sessions += 1
-            inc_cost, incremental_first = _add_to_bucket(
-                body_tokens, incremental_first
-            )
+            inc_cost = ff_cost
             incremental_usd += inc_cost
             row["pending"] += 1
             row["next_usd"] += inc_cost
@@ -306,8 +398,9 @@ def synthesize_estimate_report(
         matched = not output_is_stub and (
             rel in state_keys or source_key in discovered_source_keys or output_exists
         )
-        body_tokens = estimate_tokens(body)
-        ff_cost, full_force_first = _add_to_bucket(body_tokens, full_force_first)
+        # An oversized doc is written as one page per chunk, and each page is
+        # its own `claude` call — so it is billed per chunk, not per doc.
+        ff_cost = sum(_page_usd(_body_tokens(c)) for c in chunks) if chunks else _page_usd(0)
         full_force_usd += ff_cost
         docs_row["raw"] += 1
         if matched:
@@ -315,7 +408,7 @@ def synthesize_estimate_report(
             docs_row["synthesized"] += 1
         else:
             new_docs += 1
-            inc_cost, incremental_first = _add_to_bucket(body_tokens, incremental_first)
+            inc_cost = ff_cost
             incremental_usd += inc_cost
             docs_row["pending"] += 1
             docs_row["next_usd"] += inc_cost
@@ -369,6 +462,12 @@ def synthesize_estimate_report(
         "incremental_usd": incremental_usd,
         "full_force_usd": full_force_usd,
         "prefix_tokens": prefix_tokens,
+        # The two halves of prefix_tokens, so the CLI can show where the
+        # fixed per-page cost comes from.
+        "overhead_tokens": overhead_tokens,
+        "template_tokens": template_tokens,
+        "output_tokens_per_call": output_tokens_per_call,
+        "lean": lean,
         "model": chosen_model,
         "warnings": warnings,
         "unsynth_items": unsynth_items,

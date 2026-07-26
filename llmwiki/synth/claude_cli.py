@@ -56,6 +56,28 @@ _LEAN_SYSTEM_PROMPT = (
 )
 
 
+def lean_argv(
+    claude: str,
+    *,
+    system_prompt: str,
+    model: str | None = None,
+    lean: bool = True,
+) -> list[str]:
+    """Build a `claude -p -` command line for a one-shot text task.
+
+    Shared by every non-interactive `claude` call in the codebase, so the
+    scaffolding-stripping flags can't drift between call sites. ``lean=False``
+    restores the plain invocation.
+    """
+    argv = [claude, "-p", "-"]
+    if lean:
+        argv += list(_LEAN_ARGV)
+        argv += ["--system-prompt", system_prompt]
+    if model:
+        argv += ["--model", model]
+    return argv
+
+
 class ClaudeCLIError(RuntimeError):
     """One page failed to synthesize via the claude CLI."""
 
@@ -78,13 +100,12 @@ class ClaudeCLISynthesizer(BaseSynthesizer):
 
     def _argv(self, claude: str) -> list[str]:
         """Build the `claude` command line for one page."""
-        argv = [claude, "-p", "-"]
-        if self.lean:
-            argv += list(_LEAN_ARGV)
-            argv += ["--system-prompt", _LEAN_SYSTEM_PROMPT]
-        if self.model:
-            argv += ["--model", self.model]
-        return argv
+        return lean_argv(
+            claude,
+            system_prompt=_LEAN_SYSTEM_PROMPT,
+            model=self.model,
+            lean=self.lean,
+        )
 
     @property
     def name(self) -> str:
