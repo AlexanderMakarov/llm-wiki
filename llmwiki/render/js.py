@@ -40,13 +40,12 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
     if (!isFinite(v) || v <= 0) return "";
     return "$" + v.toFixed(4);
   }
-  function stageCell(count, nextCost, nextLabel) {
+  /** One-line cell: ``42`` or ``42 ($1.2345)``. */
+  function stageCell(count, nextCost) {
     var cost = formatUsd(nextCost);
     var html = '<span class="state-cell-count">' + Number(count || 0) + "</span>";
     if (cost) {
-      html += '<span class="state-cell-cost">' + cost + " → " + escapeHtml(nextLabel || "next") + "</span>";
-    } else if (nextLabel) {
-      html += '<span class="state-cell-cost muted">—</span>';
+      html += ' <span class="state-cell-cost">(' + cost + ")</span>";
     }
     return html;
   }
@@ -74,6 +73,7 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
       '<table class="queue-commands-table">' +
       "<thead><tr><th>Command</th><th>Purpose</th><th></th></tr></thead><tbody>" +
       '<tr><td><code>llmwiki sync</code></td><td>Convert new agent sessions into <code>raw/sessions/</code>.</td><td><button class="btn queue-copy-btn" data-copy="llmwiki sync">Copy</button></td></tr>' +
+      '<tr><td><code>llmwiki sync --project &lt;slug&gt;</code></td><td>Sync only one project&apos;s sessions (replace <code>&lt;slug&gt;</code> with the project id).</td><td><button class="btn queue-copy-btn" data-copy="llmwiki sync --project &lt;slug&gt;">Copy</button></td></tr>' +
       '<tr><td><code>llmwiki synthesize</code></td><td>Drain the unsynthesized backlog into <code>wiki/sources/</code>.</td><td><button class="btn queue-copy-btn" data-copy="llmwiki synthesize">Copy</button></td></tr>' +
       '<tr><td><code>llmwiki synthesize --estimate</code></td><td>Refresh the cost estimate + pipeline table without calling the model.</td><td><button class="btn queue-copy-btn" data-copy="llmwiki synthesize --estimate">Copy</button></td></tr>' +
       '<tr><td><code>llmwiki queue run --limit 20</code></td><td>Process pending queue tasks (including synthesize when enqueued).</td><td><button class="btn queue-copy-btn" data-copy="llmwiki queue run --limit 20">Copy</button></td></tr>' +
@@ -96,8 +96,12 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
     var lastSync = ((snapshot.sync || {}).meta || {}).last_sync || "";
     var items = Array.isArray((snapshot.queue || {}).items) ? snapshot.queue.items : [];
     var oldest = "";
+    var queuePending = 0;
+    var queueRunning = 0;
     items.forEach(function (it) {
       var st = (it && it.status) ? String(it.status) : "pending";
+      if (st === "pending") queuePending += 1;
+      if (st === "running") queueRunning += 1;
       if (st === "pending" && it.created_at && (!oldest || it.created_at < oldest)) oldest = it.created_at;
     });
     pendingList.forEach(function (it) {
@@ -124,31 +128,35 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
       totalPending += pending;
       totalNext += nextUsd;
       var badge = '<span class="agent-badge ' + escapeHtml(css) + '">' + escapeHtml(label) + "</span>";
+      // Columns left→right: Raw → To synthesize → Synthesized
       return (
         "<tr>" +
         '<td class="state-row-label">' + badge + "</td>" +
-        "<td>" + stageCell(raw, nextUsd, "synth") + "</td>" +
-        "<td>" + stageCell(synthesized, 0, "build") + "</td>" +
+        "<td>" + stageCell(raw, 0) + "</td>" +
+        "<td>" + stageCell(pending, nextUsd) + "</td>" +
+        "<td>" + stageCell(synthesized, 0) + "</td>" +
         "</tr>"
       );
     }).join("");
 
     var footHtml = "";
     if (!bodyRows) {
-      bodyRows = '<tr><td colspan="3" class="muted">No pipeline rows yet — run <code>llmwiki sync</code> then <code>llmwiki synthesize --estimate</code>.</td></tr>';
+      bodyRows = '<tr><td colspan="4" class="muted">No pipeline rows yet — run <code>llmwiki sync</code> then <code>llmwiki synthesize --estimate</code>. Rows appear per agent that has contributed at least one session.</td></tr>';
     } else {
       footHtml =
         "<tfoot><tr>" +
-        "<td>Total</td>" +
-        "<td>" + stageCell(totalRaw, totalNext, "synth") + "</td>" +
-        "<td>" + stageCell(totalSynth, 0, "build") +
-        (totalPending ? ' <span class="muted">(' + totalPending + " pending)</span>" : "") +
-        "</td></tr></tfoot>";
+        "<td>Total" +
+        ' <span class="muted state-queue-meta">(queued ' + queuePending +
+        " · in progress " + queueRunning + ")</span></td>" +
+        "<td>" + stageCell(totalRaw, 0) + "</td>" +
+        "<td>" + stageCell(totalPending, totalNext) + "</td>" +
+        "<td>" + stageCell(totalSynth, 0) + "</td>" +
+        "</tr></tfoot>";
     }
 
     var tableHtml =
       '<div class="state-table-wrap"><table class="state-pipeline-table">' +
-      "<thead><tr><th>Source</th><th>Raw</th><th>Synthesized</th></tr></thead>" +
+      "<thead><tr><th>Source</th><th>Raw</th><th>To synthesize</th><th>Synthesized</th></tr></thead>" +
       "<tbody>" + bodyRows + "</tbody>" + footHtml + "</table></div>";
 
     var timelineBody =
@@ -178,10 +186,10 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
       tableHtml +
       estNote +
       '<div class="state-sections">' +
+      detailsSection("Timeline", 5, timelineBody) +
       detailsSection("Not synthesized sessions", pendingSessions.length, pendingListHtml(pendingSessions)) +
       detailsSection("Not synthesized docs", pendingDocs.length, pendingListHtml(pendingDocs)) +
-      detailsSection("Timeline", 5, timelineBody) +
-      detailsSection("Commands", 5, commandsBody()) +
+      detailsSection("Commands", 6, commandsBody()) +
       detailsSection("Estimate warnings", warnings.length, warningsBody) +
       "</div>";
   }

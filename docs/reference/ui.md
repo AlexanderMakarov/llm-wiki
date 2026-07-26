@@ -39,7 +39,7 @@ URL: `/index.html`
 
 Queue-first landing page. Layout:
 
-1. **Pipeline state widget** (reusable mount `#llmwiki-state-widget`) — a table of Raw → Synthesized counts with one row per agent (Claude / Cursor / OpenClaw / …) plus a Documents row. Each Raw cell shows the item count and the estimated USD to synthesize the pending slice of that row; Synthesized cells are local (build has no LLM cost). Collapsible sections under the table list not-synthesized sessions, not-synthesized docs, timeline stamps (oldest pending / last sync / queue / lint / reflect), copyable commands, and estimate warnings — each summary shows its item count.
+1. **Pipeline state widget** (reusable mount `#llmwiki-state-widget`) — a table with columns Raw → To synthesize → Synthesized, one row per agent that has contributed at least one session (Claude / Cursor / OpenClaw / …) plus a Documents row. Each cell is a single count; the To synthesize cell adds estimated USD in parentheses when non-zero. The Total row also shows queue **queued** / **in progress** counts. Collapsible sections under the table (Timeline first, then not-synthesized sessions/docs, Commands, estimate warnings) each show an item count in the summary.
 2. **Recent raw documents** — newest `raw/docs/` entries with title + source meta.
 
 Numbers come from `llmwiki-state.js` (`synth.pipeline` + `synth.pending` + `synth.estimate`), refreshed by `llmwiki sync` / `llmwiki synthesize --estimate`. The session-analytics content (heatmap, stats, project grid) lives on [Analytics](#analytics).

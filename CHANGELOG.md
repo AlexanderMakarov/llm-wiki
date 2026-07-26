@@ -10,7 +10,7 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Added
 
-- **Home pipeline State widget** — replaces the old queue-status cards / task-type list / truncated “Not synthesized” preview / cost-estimate block on `index.html` with a reusable State widget (`#llmwiki-state-widget`, `llmwiki/render/state_widget.py`). Columns are Raw and Synthesized; rows are one per agent (Claude, Cursor, OpenClaw, …) plus a Documents row. Each Raw cell shows the count and estimated USD to synthesize that row’s backlog; collapsible sections under the table list not-synthesized sessions, not-synthesized docs, timeline stamps, commands, and estimate warnings (counts in each summary). `synthesize --estimate` / `refresh_synth_pending` now persist `synth.pipeline` (and `agent` / `usd` on pending items). Docs: `docs/reference/ui.md`. Tests: `tests/test_state_widget.py`.
+- **Home pipeline State widget** — replaces the old queue-status cards / task-type list / truncated “Not synthesized” preview / cost-estimate block on `index.html` with a reusable State widget (`#llmwiki-state-widget`, `llmwiki/render/state_widget.py`). Columns are Raw → To synthesize → Synthesized (left-to-right flow); rows are one per agent that has contributed at least one session, plus Documents. Each cell is a single count with optional `($…)` cost on the To synthesize column; the Total row also shows queue queued / in progress counts. Collapsibles under the table start with Timeline, then backlog lists, Commands (including `sync --project <slug>`), and estimate warnings. `synthesize --estimate` / `refresh_synth_pending` persist `synth.pipeline` (and `agent` / `usd` on pending items). Docs: `docs/reference/ui.md`. Tests: `tests/test_state_widget.py`.
 
 ### Fixed
 

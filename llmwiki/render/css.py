@@ -516,7 +516,8 @@ kbd { display: inline-block; padding: 2px 6px; font-family: var(--mono); font-si
 .state-pipeline-table th, .state-pipeline-table td { border: 1px solid var(--border); padding: 10px 12px; vertical-align: top; text-align: left; }
 .state-pipeline-table th { background: var(--bg-alt); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); }
 .state-pipeline-table .state-cell-count { font-weight: 700; font-variant-numeric: tabular-nums; }
-.state-pipeline-table .state-cell-cost { display: block; margin-top: 4px; font-size: 0.8rem; color: var(--text-muted); }
+.state-pipeline-table .state-cell-cost { font-size: 0.85em; color: var(--text-muted); white-space: nowrap; }
+.state-pipeline-table .state-queue-meta { font-weight: 400; font-size: 0.85em; }
 .state-pipeline-table .state-row-label { font-weight: 600; }
 .state-pipeline-table tfoot td { background: var(--bg-alt); font-weight: 600; }
 .state-sections { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }

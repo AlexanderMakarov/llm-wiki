@@ -65,6 +65,7 @@ def test_queue_trace_js_renders_state_widget():
 
     assert "renderStateWidget" in js.JS
     assert "state-pipeline-table" in js.JS
+    assert "To synthesize" in js.JS
     assert "Not synthesized sessions" in js.JS
     assert "Estimate warnings" in js.JS
     assert "Cost estimate" not in js.JS

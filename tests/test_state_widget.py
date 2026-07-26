@@ -30,15 +30,25 @@ def test_dashboard_uses_state_widget_not_old_cards():
 def test_state_widget_js_has_pipeline_table_and_collapsibles():
     assert "renderStateWidget" in js.JS
     assert "state-pipeline-table" in js.JS
+    assert "To synthesize" in js.JS
     assert "Not synthesized sessions" in js.JS
     assert "Not synthesized docs" in js.JS
     assert "Estimate warnings" in js.JS
     assert "data-llmwiki-state-widget" in js.JS
+    assert "llmwiki sync --project" in js.JS
+    assert "queued " in js.JS
+    assert "in progress " in js.JS
+    # Timeline must appear before the backlog lists in the render order.
+    timeline_idx = js.JS.index('detailsSection("Timeline"')
+    sessions_idx = js.JS.index('detailsSection("Not synthesized sessions"')
+    assert timeline_idx < sessions_idx
     # Old dashboard chrome removed from the renderer.
     assert "Unsynth estimate" not in js.JS
     assert "Queue task types" not in js.JS
     assert "Cost estimate" not in js.JS
     assert "previewLimit = 3" not in js.JS
+    # Cost renders as ``42 ($1.2345)`` on one line, not ``$… → synth`` on a second.
+    assert " → \" + escapeHtml(nextLabel" not in js.JS
 
 
 def test_estimate_pipeline_rows_by_agent(tmp_path: Path):
