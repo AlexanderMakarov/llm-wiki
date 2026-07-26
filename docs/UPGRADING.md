@@ -10,7 +10,7 @@ How to upgrade between `llmwiki` releases.  Most releases are drop-in (`pip inst
 
 The canonical per-release detail is [CHANGELOG.md](https://github.com/Pratiyush/llm-wiki/blob/master/CHANGELOG.md) — this guide focuses on "what might break".
 
-## Unreleased — Analytics layout + CallMcpTool migration
+## v1.5.0 — Analytics layout + CallMcpTool migration
 
 After upgrading the engine, rebuild the vault site so Analytics picks up the new section order and heatmaps:
 
@@ -32,7 +32,7 @@ When the origin store is gone (TTL / deleted sessions), rows are skipped safely 
 
 See [`reference/state-persistence.md`](reference/state-persistence.md) for how usage logs, rollup, daily series, and state file relate.
 
-## Unreleased — index cwd restore + encoded-path redaction (#56)
+## v1.5.0 — index cwd restore + encoded-path redaction (#56)
 
 **For AI agents maintaining a user's vault:** after the user upgrades `llm-wiki` (pull / `pip install -U` / brew), fix **their** vault — not the llm-wiki git clone. The engine change alone does not rewrite `site/` or `raw/`.
 
