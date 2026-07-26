@@ -28,107 +28,187 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
     if (!ts) return "never";
     return ts;
   }
-  function renderQueueTrace() {
-    var snapshot = window.LLMWIKI_STATE_SNAPSHOT;
-    var home = document.getElementById("queue-home-content");
-    var raw = document.getElementById("queue-raw-content");
-    if (!home && !raw) return;
-    if (!snapshot || !snapshot.queue) {
-      if (home) home.textContent = "No queue state available.";
-      if (raw) raw.textContent = "No queue state available.";
-      return;
+  function escapeHtml(s) {
+    return String(s == null ? "" : s)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+  function formatUsd(n) {
+    var v = Number(n || 0);
+    if (!isFinite(v) || v <= 0) return "";
+    return "$" + v.toFixed(4);
+  }
+  /** One-line cell: ``42`` or ``42 ($1.2345)``. */
+  function stageCell(count, nextCost) {
+    var cost = formatUsd(nextCost);
+    var html = '<span class="state-cell-count">' + Number(count || 0) + "</span>";
+    if (cost) {
+      html += ' <span class="state-cell-cost">(' + cost + ")</span>";
     }
-
-    var items = Array.isArray(snapshot.queue.items) ? snapshot.queue.items : [];
-    var counts = { pending: 0, running: 0, done: 0, error: 0 };
-    var taskTypeCounts = {};
-    var oldest = "";
-    items.forEach(function (it) {
-      var st = (it && it.status) ? String(it.status) : "pending";
-      counts[st] = (counts[st] || 0) + 1;
-      if (st === "pending" && it.created_at && (!oldest || it.created_at < oldest)) oldest = it.created_at;
-      var tt = (it && it.task_type) ? String(it.task_type) : "unknown";
-      taskTypeCounts[tt] = (taskTypeCounts[tt] || 0) + 1;
-    });
-
-    var sync = snapshot.sync || {};
-    var counters = sync.counters || {};
-    var totalConverted = 0;
-    Object.keys(counters).forEach(function (name) {
-      var row = counters[name] || {};
-      totalConverted += Number(row.converted || 0);
-    });
-    var synthState = snapshot.synth || {};
-    var synthFiles = (synthState.files || {});
-    var synthCount = Object.keys(synthFiles).length;
-    var unsynthEstimate = Math.max(totalConverted - synthCount, 0);
-    var pendingList = Array.isArray(synthState.pending) ? synthState.pending : [];
-    var estimate = (synthState && synthState.estimate) ? synthState.estimate : {};
-    var previewLimit = 3;
-    var pendingSessions = pendingList.filter(function (it) { return !(it && it.is_doc); }).length;
-    var pendingDocs = pendingList.length - pendingSessions;
-    var pendingPreview = pendingList.slice(0, previewLimit).map(function (it) {
+    return html;
+  }
+  function pendingListHtml(items) {
+    if (!items.length) return '<p class="muted">None.</p>';
+    return "<ul class=\"queue-type-list\">" + items.map(function (it) {
       var rel = it && it.rel ? String(it.rel) : "";
       var project = it && it.project ? String(it.project) : "unknown";
-      var kind = (it && it.is_doc) ? "doc" : "session";
-      var label = kind + " · " + project;
-      return "<li><code>" + rel + "</code> <span class=\"muted\">(" + label + ")</span></li>";
-    }).join("");
-    if (pendingList.length > previewLimit) {
-      pendingPreview += "<li class=\"muted\">... and " + (pendingList.length - previewLimit) + " more</li>";
+      var agent = it && it.agent ? String(it.agent) : "";
+      var usd = formatUsd(it && it.usd);
+      var meta = project + (agent ? " · " + agent : "") + (usd ? " · " + usd : "");
+      return "<li><code>" + escapeHtml(rel) + "</code> <span class=\"muted\">(" + escapeHtml(meta) + ")</span></li>";
+    }).join("") + "</ul>";
+  }
+  function detailsSection(title, count, bodyHtml) {
+    return (
+      '<details class="collapse-section">' +
+      "<summary>" + escapeHtml(title) +
+      '<span class="collapse-section-count">' + Number(count || 0) + "</span></summary>" +
+      '<div class="collapse-section-body">' + bodyHtml + "</div></details>"
+    );
+  }
+  function commandsBody() {
+    return (
+      '<table class="queue-commands-table">' +
+      "<thead><tr><th>Command</th><th>Purpose</th><th></th></tr></thead><tbody>" +
+      '<tr><td><code>llmwiki sync</code></td><td>Convert new agent sessions into <code>raw/sessions/</code>.</td><td><button class="btn queue-copy-btn" data-copy="llmwiki sync">Copy</button></td></tr>' +
+      '<tr><td><code>llmwiki sync --project &lt;slug&gt;</code></td><td>Sync only one project&apos;s sessions (replace <code>&lt;slug&gt;</code> with the project id).</td><td><button class="btn queue-copy-btn" data-copy="llmwiki sync --project &lt;slug&gt;">Copy</button></td></tr>' +
+      '<tr><td><code>llmwiki synthesize</code></td><td>Drain the unsynthesized backlog into <code>wiki/sources/</code>.</td><td><button class="btn queue-copy-btn" data-copy="llmwiki synthesize">Copy</button></td></tr>' +
+      '<tr><td><code>llmwiki synthesize --estimate</code></td><td>Refresh the cost estimate + pipeline table without calling the model.</td><td><button class="btn queue-copy-btn" data-copy="llmwiki synthesize --estimate">Copy</button></td></tr>' +
+      '<tr><td><code>llmwiki queue run --limit 20</code></td><td>Process pending queue tasks (including synthesize when enqueued).</td><td><button class="btn queue-copy-btn" data-copy="llmwiki queue run --limit 20">Copy</button></td></tr>' +
+      '<tr><td><code>llmwiki build</code></td><td>Rebuild the static site from raw/ + wiki/.</td><td><button class="btn queue-copy-btn" data-copy="llmwiki build">Copy</button></td></tr>' +
+      "</tbody></table>"
+    );
+  }
+  function renderStateWidget(root, snapshot) {
+    if (!root) return;
+    if (!snapshot) {
+      root.innerHTML = '<p class="muted">No state snapshot available.</p>';
+      return;
     }
-    var pendingCount = Number(synthState.pending_total || pendingList.length || 0);
-
+    var synthState = snapshot.synth || {};
+    var pipeline = synthState.pipeline || {};
+    var rows = Array.isArray(pipeline.rows) ? pipeline.rows : [];
+    var pendingList = Array.isArray(synthState.pending) ? synthState.pending : [];
+    var estimate = (synthState && synthState.estimate) ? synthState.estimate : {};
     var ops = snapshot.ops || {};
     var lastSync = ((snapshot.sync || {}).meta || {}).last_sync || "";
-    var typeRows = Object.keys(taskTypeCounts).sort().map(function (name) {
-      return "<li><code>" + name + "</code>: " + taskTypeCounts[name] + "</li>";
-    }).join("");
-    var typeCount = Object.keys(taskTypeCounts).length;
+    var items = Array.isArray((snapshot.queue || {}).items) ? snapshot.queue.items : [];
+    var oldest = "";
+    var queuePending = 0;
+    var queueRunning = 0;
+    items.forEach(function (it) {
+      var st = (it && it.status) ? String(it.status) : "pending";
+      if (st === "pending") queuePending += 1;
+      if (st === "running") queueRunning += 1;
+      if (st === "pending" && it.created_at && (!oldest || it.created_at < oldest)) oldest = it.created_at;
+    });
+    pendingList.forEach(function (it) {
+      if (it && it.mtime && (!oldest || it.mtime < oldest)) oldest = it.mtime;
+    });
 
-    var estimateHtml = "";
-    if (estimate && (typeof estimate === "object") && (estimate.updated_at || estimate.corpus_total || estimate.new_total || estimate.incremental_usd || estimate.full_force_usd)) {
-      var execModel = estimate.execution_model ? String(estimate.execution_model) : "default";
-      var pricingModel = estimate.pricing_model ? String(estimate.pricing_model) : "default";
-      var estWarnings = Array.isArray(estimate.warnings) ? estimate.warnings : [];
-      var warningText = estWarnings.map(function (w) { return String(w); }).join(" | ");
-      estimateHtml =
-        '<div><strong>Cost estimate</strong> <span class="muted">(updated: ' + formatTs(estimate.updated_at || "") + ')</span>' +
-        '<div class="muted">Incremental sync: $' + Number(estimate.incremental_usd || 0).toFixed(4) +
-        ' (' + Number(estimate.new_total || 0) + ' new: ' + Number(estimate.new_sessions || 0) + ' sessions, ' + Number(estimate.new_docs || 0) + ' docs)' +
-        ' · Prefix: ' + Number(estimate.prefix_tokens || 0).toLocaleString() +
-        ' tok · Exec: <code>' + execModel + '</code> · Pricing: <code>' + pricingModel + '</code></div>' +
-        '<div class="muted"><strong>Estimate warnings (' + estWarnings.length + ')</strong>' +
-        (estWarnings.length ? ': ' + warningText : '') +
-        '</div>' +
-        '</div>';
+    var pendingSessions = pendingList.filter(function (it) { return !(it && it.is_doc); });
+    var pendingDocs = pendingList.filter(function (it) { return !!(it && it.is_doc); });
+    var warnings = Array.isArray(estimate.warnings) ? estimate.warnings : [];
+
+    var totalRaw = 0;
+    var totalSynth = 0;
+    var totalPending = 0;
+    var totalNext = 0;
+    var bodyRows = rows.map(function (row) {
+      var label = row && row.label ? String(row.label) : "Unknown";
+      var css = row && row.css ? String(row.css) : "agent-unknown";
+      var raw = Number(row && row.raw || 0);
+      var synthesized = Number(row && row.synthesized || 0);
+      var pending = Number(row && row.pending || 0);
+      var nextUsd = Number(row && row.next_usd || 0);
+      totalRaw += raw;
+      totalSynth += synthesized;
+      totalPending += pending;
+      totalNext += nextUsd;
+      var badge = '<span class="agent-badge ' + escapeHtml(css) + '">' + escapeHtml(label) + "</span>";
+      // Columns left→right: Raw → To synthesize → Synthesized
+      return (
+        "<tr>" +
+        '<td class="state-row-label">' + badge + "</td>" +
+        "<td>" + stageCell(raw, 0) + "</td>" +
+        "<td>" + stageCell(pending, nextUsd) + "</td>" +
+        "<td>" + stageCell(synthesized, 0) + "</td>" +
+        "</tr>"
+      );
+    }).join("");
+
+    var footHtml = "";
+    if (!bodyRows) {
+      bodyRows = '<tr><td colspan="4" class="muted">No pipeline rows yet — run <code>llmwiki sync</code> then <code>llmwiki synthesize --estimate</code>. Rows appear per agent that has contributed at least one session.</td></tr>';
+    } else {
+      footHtml =
+        "<tfoot><tr>" +
+        "<td>Total" +
+        ' <span class="muted state-queue-meta">(queued ' + queuePending +
+        " · in progress " + queueRunning + ")</span></td>" +
+        "<td>" + stageCell(totalRaw, 0) + "</td>" +
+        "<td>" + stageCell(totalPending, totalNext) + "</td>" +
+        "<td>" + stageCell(totalSynth, 0) + "</td>" +
+        "</tr></tfoot>";
     }
 
-    var html =
-      '<div class="queue-stats-grid">' +
-      '<div class="queue-stat"><div class="queue-stat-label">Pending</div><div class="queue-stat-value">' + (counts.pending || 0) + '</div></div>' +
-      '<div class="queue-stat"><div class="queue-stat-label">Running</div><div class="queue-stat-value">' + (counts.running || 0) + '</div></div>' +
-      '<div class="queue-stat"><div class="queue-stat-label">Done</div><div class="queue-stat-value">' + (counts.done || 0) + '</div></div>' +
-      '<div class="queue-stat"><div class="queue-stat-label">Error</div><div class="queue-stat-value">' + (counts.error || 0) + '</div></div>' +
-      '<div class="queue-stat"><div class="queue-stat-label">Unsynth estimate</div><div class="queue-stat-value">' + unsynthEstimate + '</div></div>' +
-      '</div>' +
-      '<div class="queue-meta-grid">' +
-      '<div><strong>Oldest pending:</strong> ' + (oldest || "none") + '</div>' +
-      '<div><strong>Last sync:</strong> ' + formatTs(lastSync) + '</div>' +
-      '<div><strong>Last queue run:</strong> ' + formatTs(ops.last_queue_run_at) + '</div>' +
-      '<div><strong>Last lint run:</strong> ' + formatTs(ops.last_lint_run_at) + '</div>' +
-      '<div><strong>Last reflect run:</strong> ' + formatTs(ops.last_reflect_run_at) + '</div>' +
-      '</div>' +
-      '<div><strong>Queue task types (' + typeCount + ')</strong>' + (typeCount ? '<ul class="queue-type-list">' + typeRows + '</ul>' : '') + '</div>' +
-      '<div><strong>Not synthesized (' + pendingCount + ' total; sessions=' + pendingSessions + ', docs=' + pendingDocs + ')</strong>' + (pendingCount ? '<ul class="queue-type-list">' + pendingPreview + '</ul>' : '') + '</div>' +
-      estimateHtml;
+    var tableHtml =
+      '<div class="state-table-wrap"><table class="state-pipeline-table">' +
+      "<thead><tr><th>Source</th><th>Raw</th><th>To synthesize</th><th>Synthesized</th></tr></thead>" +
+      "<tbody>" + bodyRows + "</tbody>" + footHtml + "</table></div>";
 
-    if (home) home.innerHTML = html;
-    if (raw) raw.innerHTML = html;
+    var timelineBody =
+      "<ul class=\"queue-type-list\">" +
+      "<li><strong>Oldest pending:</strong> " + escapeHtml(oldest || "none") + "</li>" +
+      "<li><strong>Last sync:</strong> " + escapeHtml(formatTs(lastSync)) + "</li>" +
+      "<li><strong>Last queue run:</strong> " + escapeHtml(formatTs(ops.last_queue_run_at)) + "</li>" +
+      "<li><strong>Last lint run:</strong> " + escapeHtml(formatTs(ops.last_lint_run_at)) + "</li>" +
+      "<li><strong>Last reflect run:</strong> " + escapeHtml(formatTs(ops.last_reflect_run_at)) + "</li>" +
+      "</ul>";
+
+    var warningsBody = warnings.length
+      ? ("<ul class=\"queue-type-list\">" + warnings.map(function (w) {
+          return "<li>" + escapeHtml(w) + "</li>";
+        }).join("") + "</ul>")
+      : '<p class="muted">No estimate warnings.</p>';
+
+    var estNote = "";
+    if (estimate && (estimate.updated_at || estimate.incremental_usd != null)) {
+      estNote =
+        '<p class="muted">Estimate updated ' + escapeHtml(formatTs(estimate.updated_at || "")) +
+        " · incremental $" + Number(estimate.incremental_usd || 0).toFixed(4) +
+        " · pricing <code>" + escapeHtml(estimate.pricing_model || "default") + "</code></p>";
+    }
+
+    root.innerHTML =
+      tableHtml +
+      estNote +
+      '<div class="collapse-sections">' +
+      detailsSection("Timeline", 5, timelineBody) +
+      detailsSection("Not synthesized sessions", pendingSessions.length, pendingListHtml(pendingSessions)) +
+      detailsSection("Not synthesized docs", pendingDocs.length, pendingListHtml(pendingDocs)) +
+      detailsSection("Commands", 6, commandsBody()) +
+      detailsSection("Estimate warnings", warnings.length, warningsBody) +
+      "</div>";
   }
 
-  function wireQueueCopyButtons() {
-    document.querySelectorAll(".queue-copy-btn").forEach(function (btn) {
+  function renderQueueTrace() {
+    var snapshot = window.LLMWIKI_STATE_SNAPSHOT;
+    var mounts = document.querySelectorAll("[data-llmwiki-state-widget], #llmwiki-state-widget, #queue-home-content, #queue-raw-content");
+    if (!mounts.length) return;
+    mounts.forEach(function (el) {
+      renderStateWidget(el, snapshot);
+      wireQueueCopyButtons(el);
+    });
+  }
+
+  function wireQueueCopyButtons(root) {
+    var scope = root || document;
+    scope.querySelectorAll(".queue-copy-btn").forEach(function (btn) {
+      if (btn.getAttribute("data-wired") === "1") return;
+      btn.setAttribute("data-wired", "1");
       btn.addEventListener("click", function () {
         var txt = btn.getAttribute("data-copy") || "";
         if (!txt) return;

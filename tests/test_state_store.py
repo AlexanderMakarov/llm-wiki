@@ -55,16 +55,19 @@ def test_update_state_increments_revision(tmp_path: Path):
 def test_queue_trace_js_has_no_fetch():
     from llmwiki.render import js
 
-    idx = js.JS.index("renderQueueTrace")
-    chunk = js.JS[idx : idx + 900]
+    idx = js.JS.index("renderStateWidget")
+    chunk = js.JS[idx : idx + 1200]
     assert "fetch(" not in chunk
 
 
-def test_queue_trace_js_renders_estimate_block():
+def test_queue_trace_js_renders_state_widget():
     from llmwiki.render import js
 
-    assert "Cost estimate" in js.JS
-    assert "estimate.incremental_usd" in js.JS
-    assert "Estimate warnings (" in js.JS
-    assert "previewLimit = 3" in js.JS
+    assert "renderStateWidget" in js.JS
+    assert "state-pipeline-table" in js.JS
+    assert "To synthesize" in js.JS
+    assert "Not synthesized sessions" in js.JS
+    assert "Estimate warnings" in js.JS
+    assert "Cost estimate" not in js.JS
+    assert "previewLimit = 3" not in js.JS
     assert "<li>none</li>" not in js.JS

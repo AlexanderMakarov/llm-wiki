@@ -8,6 +8,10 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ## [Unreleased]
 
+### Added
+
+- **Home pipeline State widget** — replaces the old queue-status cards / task-type list / truncated “Not synthesized” preview / cost-estimate block on `index.html` with a Home-only pipeline table mount (inlined in `raw_docs_site.render_dashboard_body`, filled by `render/js.py`). Columns are Raw → To synthesize → Synthesized (left-to-right flow); rows are one per agent that has contributed at least one session, plus Documents. Each cell is a single count with optional `($…)` cost on the To synthesize column; the Total row also shows queue queued / in progress counts. Shared collapsible chrome (`llmwiki/render/collapse_section.py`) powers Home fold-outs and Analytics **Dead stock** (full unread source list, no “…and N more” cap). Collapsibles under the table start with Timeline, then backlog lists, Commands (including `sync --project <slug>`), and estimate warnings. `synthesize --estimate` / `refresh_synth_pending` persist `synth.pipeline` (and `agent` / `usd` on pending items). Docs: `docs/reference/ui.md`. Tests: `tests/test_state_widget.py`, `tests/test_collapse_section.py`.
+
 ### Fixed
 
 - **Index pages restore cwd paths consistently; encoded path segments covered by redaction (#56)** — follow-up to #36/#55. Three holes: (1) copying the examples `"real_username": ""` placeholder into root `config.json` wiped the autodetected username on overlay, so `restore_local_path` became a no-op and `projects/index.html` mixed `/Users/USER/…` with never-redacted real paths; `_ensure_real_username` now re-runs after overlay. (2) `sessions/index.html` never restored paths — it now has a **Cwd** column via `local_cwd` and restores paths inside description text. (3) redaction only rewrote the leading `/Users/<you>/` (or `/home/<you>/`), leaving the real name in dash-encoded agent store segments (`~/.claude/projects/-Users-<you>-…`); both redact and restore now cover `-Users-` / `-home-` encoded prefixes via shared `_substitute_path_username`. Tests in `test_username_autodetect.py`, `test_convert.py`, `test_session_resume_cwd.py`.

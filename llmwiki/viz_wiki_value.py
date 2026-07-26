@@ -224,20 +224,25 @@ def render_wiki_value_section(
 
     dead_block = ""
     if dead_stock_total or dead_stock:
-        sample = "".join(
-            f'<li><code>{html.escape(p)}</code></li>' for p in dead_stock[:8]
-        )
-        more = (
-            f'<p class="muted">…and {dead_stock_total - len(dead_stock)} more</p>'
-            if dead_stock_total > len(dead_stock) else ""
+        from llmwiki.render.collapse_section import collapse_section_list
+
+        items = [
+            f"<li><code>{html.escape(p)}</code></li>" for p in dead_stock
+        ]
+        intro = (
+            '<p class="muted">Synthesized source pages with no wiki_read_page hit '
+            "in retained telemetry.</p>"
         )
         dead_block = (
             '<div class="wiki-value-dead">'
-            f'<h3>Dead stock ({dead_stock_total})</h3>'
-            '<p class="muted">Synthesized source pages with no wiki_read_page hit '
-            'in retained telemetry.</p>'
-            f'<ul class="wiki-value-list">{sample}</ul>{more}'
-            '</div>'
+            + collapse_section_list(
+                "Dead stock",
+                items,
+                count=dead_stock_total or len(dead_stock),
+                intro_html=intro,
+                extra_class="wiki-value-dead-collapse",
+            )
+            + "</div>"
         )
 
     return (

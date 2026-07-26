@@ -140,7 +140,11 @@ def test_wiki_value_section_renders_cards_without_chart():
     assert "Corpus: 10 session pages · 4 doc pages" in out
     assert "Top-earning pages" in out
     assert "wiki/sources/a.md" in out
-    assert "Dead stock (1)" in out
+    assert "Dead stock" in out
+    assert "collapse-section" in out
+    assert "collapse-section-count" in out
+    assert "wiki/sources/dead.md" in out
+    assert "<h3>Dead stock" not in out
     assert "10 MCP calls" in out
     assert "mcp-usage-table" in out
 

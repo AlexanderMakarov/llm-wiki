@@ -491,20 +491,33 @@ def refresh_synth_pending(
                 "project": str(it.get("project", "unknown")),
                 "is_doc": bool(it.get("is_doc", False)),
                 "mtime": str(it.get("mtime", "")),
+                "agent": str(it.get("agent", "")),
+                "usd": float(it.get("usd", 0.0) or 0.0),
             }
         )
 
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    pipeline = {
+        "stages": list(report.get("pipeline_stages") or ["raw", "synthesized"]),
+        "rows": list(report.get("pipeline_rows") or []),
+        "updated_at": stamp,
+    }
 
     def _mut(s: dict[str, Any]) -> dict[str, Any]:
         synth = s.setdefault("synth", {})
         synth["pending"] = pending
         synth["pending_total"] = len(pending)
         synth["pending_updated_at"] = stamp
+        synth["pipeline"] = pipeline
         return s
 
     _update_unified_state(_mut, _resolve_state_file(state_file))
-    return {"pending_total": len(pending), "pending": pending, "updated_at": stamp}
+    return {
+        "pending_total": len(pending),
+        "pending": pending,
+        "pipeline": pipeline,
+        "updated_at": stamp,
+    }
 
 
 def _format_producer_breakdown(producers: dict[str, int]) -> str:

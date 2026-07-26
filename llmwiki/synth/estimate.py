@@ -176,6 +176,25 @@ def synthesize_estimate_report(
     incremental_first = True
     full_force_first = True
     unsynth_items: list[dict[str, Any]] = []
+    # Per-agent (sessions) + Documents row for the Home state widget.
+    # Keys are display labels from detect_agent_label; docs use "Documents".
+    pipeline_buckets: dict[str, dict[str, Any]] = {}
+
+    def _bucket(label: str, *, kind: str, css: str = "") -> dict[str, Any]:
+        row = pipeline_buckets.get(label)
+        if row is None:
+            row = {
+                "id": label.lower().replace(" ", "-"),
+                "label": label,
+                "kind": kind,
+                "css": css,
+                "raw": 0,
+                "synthesized": 0,
+                "pending": 0,
+                "next_usd": 0.0,
+            }
+            pipeline_buckets[label] = row
+        return row
 
     def _add_to_bucket(fresh_tokens: int, first: bool) -> tuple[float, bool]:
         """Return (cost, was_first?). Cost-of-this-call uses cache_hit=
@@ -189,8 +208,13 @@ def synthesize_estimate_report(
         ) / 1_000_000
         return usd, False  # second-and-later calls hit the cache
 
+    # Lazy import — estimate is imported from CLI paths that may not need
+    # the full build module until this walk runs.
+    from llmwiki.build import detect_agent_label
+
     for p, _meta, body in raw_sessions:
         meta = _meta if isinstance(_meta, dict) else {}
+        agent_label, agent_css = detect_agent_label(meta)
         keys_to_try: set[str] = set()
         name = getattr(p, "name", str(p))
         keys_to_try.add(name)
@@ -228,15 +252,20 @@ def synthesize_estimate_report(
         # Full-force bucket: every session contributes regardless of state.
         ff_cost, full_force_first = _add_to_bucket(body_tokens, full_force_first)
         full_force_usd += ff_cost
+        row = _bucket(agent_label, kind="session", css=agent_css)
+        row["raw"] += 1
         # Incremental bucket: only un-synthesised sessions contribute.
         if matched:
             synthed_sessions += 1
+            row["synthesized"] += 1
         else:
             new_sessions += 1
             inc_cost, incremental_first = _add_to_bucket(
                 body_tokens, incremental_first
             )
             incremental_usd += inc_cost
+            row["pending"] += 1
+            row["next_usd"] += inc_cost
             project = str(meta.get("project") or getattr(getattr(p, "parent", None), "name", "unknown"))
             mtime_iso = ""
             try:
@@ -253,10 +282,13 @@ def synthesize_estimate_report(
                     "source_file": source_key,
                     "mtime": mtime_iso,
                     "is_doc": False,
+                    "agent": agent_label,
+                    "usd": round(inc_cost, 6),
                 }
             )
 
     # Docs estimate path — mirrors synth pipeline inclusion rules.
+    docs_row = _bucket("Documents", kind="docs", css="agent-docs")
     for p, meta, body in _discover_raw_docs(docs_root_path):
         rel = "docs::" + str(p.relative_to(docs_root_path))
         source_key = "raw/docs/" + str(p.relative_to(docs_root_path))
@@ -277,12 +309,16 @@ def synthesize_estimate_report(
         body_tokens = estimate_tokens(body)
         ff_cost, full_force_first = _add_to_bucket(body_tokens, full_force_first)
         full_force_usd += ff_cost
+        docs_row["raw"] += 1
         if matched:
             synthed_docs += 1
+            docs_row["synthesized"] += 1
         else:
             new_docs += 1
             inc_cost, incremental_first = _add_to_bucket(body_tokens, incremental_first)
             incremental_usd += inc_cost
+            docs_row["pending"] += 1
+            docs_row["next_usd"] += inc_cost
             mtime_iso = ""
             try:
                 mtime_iso = datetime.fromtimestamp(
@@ -297,8 +333,22 @@ def synthesize_estimate_report(
                     "source_file": source_key,
                     "mtime": mtime_iso,
                     "is_doc": True,
+                    "agent": "Documents",
+                    "usd": round(inc_cost, 6),
                 }
             )
+
+    # Session agents first (most pending, then label); Documents last.
+    session_rows = [
+        row for row in pipeline_buckets.values() if row["kind"] == "session" and row["raw"] > 0
+    ]
+    session_rows.sort(key=lambda r: (-int(r["pending"]), -int(r["raw"]), str(r["label"])))
+    docs_rows = [
+        row for row in pipeline_buckets.values() if row["kind"] == "docs" and row["raw"] > 0
+    ]
+    pipeline_rows = session_rows + docs_rows
+    for row in pipeline_rows:
+        row["next_usd"] = round(float(row["next_usd"]), 6)
 
     return {
         "corpus": corpus + synthed_docs + new_docs,
@@ -322,4 +372,6 @@ def synthesize_estimate_report(
         "model": chosen_model,
         "warnings": warnings,
         "unsynth_items": unsynth_items,
+        "pipeline_rows": pipeline_rows,
+        "pipeline_stages": ["raw", "synthesized"],
     }

@@ -1271,17 +1271,25 @@ def _synthesize_estimate(args: argparse.Namespace | None = None) -> int:
             "project": str(it.get("project", "unknown")),
             "is_doc": bool(it.get("is_doc", False)),
             "mtime": str(it.get("mtime", "")),
+            "agent": str(it.get("agent", "")),
+            "usd": float(it.get("usd", 0.0) or 0.0),
         }
         for it in report.get("unsynth_items", [])
         if str(it.get("rel", "")).strip()
     ]
     stamp = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    pipeline = {
+        "stages": list(report.get("pipeline_stages") or ["raw", "synthesized"]),
+        "rows": list(report.get("pipeline_rows") or []),
+        "updated_at": stamp,
+    }
 
     def _mut(s: dict[str, Any]) -> dict[str, Any]:
         synth = s.setdefault("synth", {})
         synth["pending"] = pending_rows
         synth["pending_total"] = len(pending_rows)
         synth["pending_updated_at"] = stamp
+        synth["pipeline"] = pipeline
         synth["estimate"] = {
             "updated_at": stamp,
             "execution_model": execution_model or "",

@@ -16,7 +16,7 @@ Every page in the site carries the same header nav. Keyboard: `⌘K` opens the c
 
 | # | Label | URL | Surfaces |
 |---|---|---|---|
-| 1 | **Home** | `/index.html` | queue dashboard (sync/synth status, cost estimate, commands) + recent raw docs |
+| 1 | **Home** | `/index.html` | pipeline State widget (per-agent Raw→Synthesized table + collapsible backlog/timeline/commands) + recent raw docs |
 | 2 | **Raw** | `/raw.html` | file tree browser of raw documents (wiki-add layer) |
 | 3 | **Graph** | `/graph.html` | interactive force-directed knowledge graph (vis-network) |
 | 4 | **Projects** | `/projects/index.html` | filterable card grid of every project + freshness badge |
@@ -37,14 +37,12 @@ Mobile: the six middle links collapse into a bottom-nav below 768 px; Search + T
 
 URL: `/index.html`
 
-The raw-documents browser. Two-column layout:
+Queue-first landing page. Layout:
 
-1. **File tree sidebar** — every document under `raw/docs/**` as a collapsible folder tree (`<details>`, no JS). Chunked documents appear as children of their folder.
-2. **Intro pane** — document count, the five newest documents, and a link to the Recent page.
+1. **Pipeline state** — Home-only table mount (`#llmwiki-state-widget`, inlined on `index.html`) with columns Raw → To synthesize → Synthesized, one row per agent that has contributed at least one session (Claude / Cursor / OpenClaw / …) plus a Documents row. Each cell is a single count; the To synthesize cell adds estimated USD in parentheses when non-zero. The Total row also shows queue **queued** / **in progress** counts. Under the table, shared **collapse sections** (`llmwiki/render/collapse_section.py`: title + count badge + fold-out body) cover Timeline, not-synthesized sessions/docs, Commands (including `sync --project <slug>`), and estimate warnings.
+2. **Recent raw documents** — newest `raw/docs/` entries with title + source meta.
 
-Clicking a file opens `/documents/<path>.html` — the rendered document with the same tree sidebar (current file highlighted) and breadcrumbs.
-
-The session-analytics content (heatmap, stats, project grid) lives on [Analytics](#analytics).
+Numbers come from `llmwiki-state.js` (`synth.pipeline` + `synth.pending` + `synth.estimate`), refreshed by `llmwiki sync` / `llmwiki synthesize --estimate`. The session-analytics content (heatmap, stats, project grid) lives on [Analytics](#analytics).
 
 ---
 
@@ -180,7 +178,7 @@ Below that, sections appear in this order:
 1. **Activity** — ~18-month GitHub-style heatmaps: **Agents Activity** (session counts), **Wiki MCP calls**, and — when telemetry carries signal — **Session-page reads** and **Doc-page reads** split from `wiki_read_page` hits.
 2. **Recent activity** — last entries from `wiki/log.md` (including producer breakdown lines such as `Processed: 2 Claude · 1 Cursor`).
 3. **Projects** — filterable card grid (session counts, date range, topic chips) linking to per-project detail pages.
-4. **Wiki usage** — merged value block and MCP table in one section: retrievals · writes · answer rate · payoff-per-page · distinct attributed projects; optional synthesis cost line; sessions vs documents corpus/read mix; top-earning pages and dead stock; per-tool calls, items returned, and zero-hit rate.
+4. **Wiki usage** — merged value block and MCP table in one section: retrievals · writes · answer rate · payoff-per-page · distinct attributed projects; optional synthesis cost line; sessions vs documents corpus/read mix; top-earning pages; **Dead stock** as a shared count-badge collapsible listing every unread synthesized source (`collapse_section`); per-tool calls, items returned, and zero-hit rate.
 
 There is no daily bar chart — trends are read from the heatmaps. Durable counts and series are described in [`reference/state-persistence.md`](state-persistence.md).
 
