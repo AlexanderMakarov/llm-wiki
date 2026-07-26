@@ -7,8 +7,8 @@ import sqlite3
 from pathlib import Path
 
 from llmwiki.adapters import REGISTRY, discover_all
-from llmwiki.adapters.contrib.openclaw import OpenClawAdapter, _flatten_text_blocks
 from llmwiki.adapters.contrib.cursor_cli import CursorCliAdapter
+from llmwiki.adapters.contrib.openclaw import OpenClawAdapter, _flatten_text_blocks
 from llmwiki.convert import truncate_chars
 
 
@@ -106,6 +106,72 @@ def test_openclaw_derive_project_slug_with_custom_root_layout(tmp_path: Path):
 
     ad = OpenClawAdapter(config={"adapters": {"openclaw": {"roots": [str(root)]}}})
     assert ad.derive_project_slug(session) == "openclaw-worker-1"
+
+
+def test_openclaw_empty_roots_list_falls_back_to_default():
+    ad = OpenClawAdapter(config={"adapters": {"openclaw": {"roots": []}}})
+    assert ad.roots == OpenClawAdapter.DEFAULT_ROOTS
+
+
+def test_openclaw_discover_empty_when_no_roots_exist(tmp_path: Path):
+    ad = OpenClawAdapter(config={
+        "adapters": {"openclaw": {"roots": [str(tmp_path / "nonexistent")]}}
+    })
+    assert ad.discover_sessions() == []
+
+
+def test_openclaw_discover_across_multiple_roots(tmp_path: Path):
+    root_a = tmp_path / "inbox-a" / "main"
+    root_b = tmp_path / "inbox-b" / "ops"
+    root_a.mkdir(parents=True)
+    root_b.mkdir(parents=True)
+    (root_a / "a.jsonl").write_text("{}")
+    (root_b / "b.jsonl").write_text("{}")
+
+    ad = OpenClawAdapter(config={
+        "adapters": {"openclaw": {"roots": [str(root_a.parent), str(root_b.parent)]}}
+    })
+    found = sorted(p.name for p in ad.discover_sessions())
+    assert found == ["a.jsonl", "b.jsonl"]
+
+
+def test_openclaw_roots_expanduser(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
+    inbox = tmp_path / "vault-inbox"
+    inbox.mkdir()
+    (inbox / "main").mkdir()
+    (inbox / "main" / "s.jsonl").write_text("{}")
+
+    ad = OpenClawAdapter(config={
+        "adapters": {"openclaw": {"roots": ["~/vault-inbox"]}}
+    })
+    assert ad.roots == [inbox]
+    assert [p.name for p in ad.discover_sessions()] == ["s.jsonl"]
+
+
+def test_openclaw_classic_sessions_layout_under_custom_root(tmp_path: Path):
+    # Native layout still works when roots points at an agents-style tree.
+    agents = tmp_path / "agents"
+    session_dir = agents / "main" / "sessions"
+    session_dir.mkdir(parents=True)
+    session = session_dir / "uuid-1.jsonl"
+    session.write_text("{}")
+    (session_dir / "uuid-1.trajectory.jsonl").write_text("{}")
+
+    ad = OpenClawAdapter(config={"adapters": {"openclaw": {"roots": [str(agents)]}}})
+    assert [p.name for p in ad.discover_sessions()] == ["uuid-1.jsonl"]
+    assert ad.derive_project_slug(session) == "openclaw-main"
+
+
+def test_openclaw_derive_project_slug_fallback_outside_roots(tmp_path: Path):
+    outside = tmp_path / "elsewhere" / "orphan.jsonl"
+    outside.parent.mkdir(parents=True)
+    outside.write_text("{}")
+    ad = OpenClawAdapter(config={
+        "adapters": {"openclaw": {"roots": [str(tmp_path / "inbox")]}}
+    })
+    assert ad.derive_project_slug(outside) == "elsewhere"
 
 
 def _make_cursor_store(db_path: Path, messages: list[dict]) -> None:

@@ -87,7 +87,7 @@ def _is_non_transcript(path: Path) -> bool:
 
 @register("openclaw")
 class OpenClawAdapter(BaseAdapter):
-    """OpenClaw — reads ~/.openclaw/agents/*/sessions/*.jsonl (skips trajectories)"""
+    """OpenClaw — reads configured roots (default ~/.openclaw/agents; skips non-transcripts)."""
 
     is_ai_session = True
 

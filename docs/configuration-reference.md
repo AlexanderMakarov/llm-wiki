@@ -181,6 +181,9 @@ cp examples/sessions_config.json config.json
     },
     "gemini_cli": {
       "roots": ["~/.gemini"]
+    },
+    "openclaw": {
+      "roots": ["~/.openclaw/agents", "<vault>/.openclaw-sessions-inbox"]
     }
   }
 }
