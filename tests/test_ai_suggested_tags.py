@@ -22,6 +22,7 @@ from llmwiki.synth.pipeline import (
     _AI_TAG_CAP,
     _build_source_page,
     _derive_baseline_tags,
+    _dedupe_connections,
     _extract_suggested_tags,
     _merge_tags,
 )
@@ -310,3 +311,78 @@ def test_build_source_page_strips_comment_even_without_trailing_newline():
     page = _build_source_page(meta, body)
     assert "<!-- suggested-tags" not in page
     assert "## Summary" in page
+
+
+# ─── _dedupe_connections ──────────────────────────────────────────────
+
+
+_CONN_BODY = """## Summary
+
+Work on [[MCP]], and [[MCP]] again in prose.
+
+## Connections
+
+- [[tgcli]] — the project
+- [[MCP]] — protocol
+- [[OpenClaw]] — host
+- [[MCP]] — protocol, repeated
+- [[tgcli]] — repeated
+
+## Contradictions
+
+- Contradicts [[tgcli]] on: nothing
+"""
+
+
+def _conn_links(page: str) -> list[str]:
+    import re
+    section = page.split("## Connections")[1].split("## Contradictions")[0]
+    return re.findall(r"\[\[([^\]]+)\]\]", section)
+
+
+def test_dedupe_keeps_first_occurrence_only():
+    out = _dedupe_connections(_CONN_BODY)
+    assert _conn_links(out) == ["tgcli", "MCP", "OpenClaw"]
+    # The first bullet wins, so its description survives.
+    assert "- [[MCP]] — protocol\n" in out
+    assert "protocol, repeated" not in out
+
+
+def test_dedupe_leaves_other_sections_alone():
+    """A scope named in prose and again under Connections is not a repeat."""
+    out = _dedupe_connections(_CONN_BODY)
+    assert "Work on [[MCP]], and [[MCP]] again in prose." in out
+    assert "Contradicts [[tgcli]] on: nothing" in out
+
+
+def test_dedupe_is_case_sensitive():
+    """Spelling variants are distinct graph nodes; collapsing them is the
+    topic-consolidation pass's job, not this one."""
+    body = "## Connections\n\n- [[MCP]] — a\n- [[Mcp]] — b\n"
+    assert _conn_links(_dedupe_connections(body) + "## Contradictions") == ["MCP", "Mcp"]
+
+
+def test_dedupe_handles_aliased_links():
+    """`[[Target|alias]]` de-dupes on the target, matching the graph."""
+    body = "## Connections\n\n- [[MCP|the protocol]] — a\n- [[MCP]] — b\n"
+    out = _dedupe_connections(body)
+    assert out.count("- [[") == 1
+    assert "[[MCP|the protocol]]" in out
+
+
+def test_dedupe_preserves_non_link_lines():
+    body = "## Connections\n\n*(no connections detected)*\n\n- [[A]] — x\n"
+    out = _dedupe_connections(body)
+    assert "*(no connections detected)*" in out
+    assert "- [[A]] — x" in out
+
+
+def test_dedupe_no_connections_section_is_a_noop():
+    body = "## Summary\n\n- [[A]]\n- [[A]]\n"
+    assert _dedupe_connections(body) == body
+
+
+def test_build_source_page_dedupes_connections():
+    meta = {"slug": "s", "project": "p", "date": "2026-01-01"}
+    page = _build_source_page(meta, _CONN_BODY)
+    assert _conn_links(page) == ["tgcli", "MCP", "OpenClaw"]

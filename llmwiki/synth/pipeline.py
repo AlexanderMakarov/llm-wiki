@@ -30,6 +30,9 @@ from llmwiki import REPO_ROOT
 # instead of via build.py. The build module pulls in 145+ transitive
 # imports; the parser sits cleanly in _frontmatter.py with no deps.
 from llmwiki._frontmatter import is_headless, is_subagent, parse_frontmatter
+# Same matcher the graph builder uses, so "a link" means the same thing to
+# the de-duplicator and to the thing that consumes the links.
+from llmwiki.graph import WIKILINK_RE
 from llmwiki.synth.base import BaseSynthesizer, DummySynthesizer
 from llmwiki.state_store import read_state as _read_unified_state
 from llmwiki.state_store import resolve_state_file as _resolve_state_file
@@ -838,6 +841,50 @@ _AI_TAG_STOPWORDS = frozenset({
 })
 
 
+_CONNECTIONS_HEADING_RE = re.compile(r"^##[ \t]+Connections[ \t]*$", re.M)
+_NEXT_HEADING_RE = re.compile(r"^##[ \t]+", re.M)
+
+
+def _dedupe_connections(body: str) -> str:
+    """Drop repeat ``[[links]]`` from the ``## Connections`` section.
+
+    Models sometimes list the same scope twice — the smaller ones more
+    often, e.g. ``[[MCP]]`` in two bullets of one page. The graph already
+    de-duplicates (``graph.py`` collects links into a set, and topic edge
+    weights count distinct sessions), so this is a rendering fix, not a
+    correctness one: the duplicate bullets are visible on the page.
+
+    Only the Connections section is touched — the same scope named in
+    ``## Summary`` and again under Connections is normal prose, not a
+    repeat. The first bullet wins, since it carries the description the
+    model wrote first.
+
+    Matching is case-sensitive, so ``[[MCP]]`` and ``[[Mcp]]`` both
+    survive: they are distinct nodes to the graph, and collapsing spelling
+    variants is the topic-consolidation pass's job, not this one.
+    """
+    heading = _CONNECTIONS_HEADING_RE.search(body)
+    if not heading:
+        return body
+    start = heading.end()
+    nxt = _NEXT_HEADING_RE.search(body, start)
+    end = nxt.start() if nxt else len(body)
+
+    seen: set[str] = set()
+    kept: list[str] = []
+    for line in body[start:end].splitlines(keepends=True):
+        targets = WIKILINK_RE.findall(line)
+        if not targets:
+            kept.append(line)          # blank lines, prose, "(none)" markers
+            continue
+        key = targets[0].strip()
+        if key in seen:
+            continue
+        seen.add(key)
+        kept.append(line)
+    return body[:start] + "".join(kept) + body[end:]
+
+
 def _extract_suggested_tags(body: str) -> tuple[list[str], str]:
     """Pull the ``<!-- suggested-tags: … -->`` block off the top of
     ``body`` and return ``(tags, cleaned_body)``.
@@ -1009,6 +1056,7 @@ def _build_source_page(
 
     # #351: pull AI-suggested tags off the top of the body.
     ai_tags, clean_body = _extract_suggested_tags(synthesized_body)
+    clean_body = _dedupe_connections(clean_body)
 
     # Preserve any maintainer-curated tags on re-synthesize.
     # #py-h5 (#584): the broad `except Exception` was eating real
