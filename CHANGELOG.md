@@ -10,6 +10,8 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Added
 
+- **`llmwiki synthesize --path` for a single session/doc (#62)** — drain one (or a few) backlog items without synthesizing the whole vault. Paths resolve relative to the vault root (or absolute under it), must live under `raw/sessions/` or `raw/docs/`, and reuse the existing `only_paths=` pipeline path used by `llmwiki add`. Filters (`include_subagents` / `exclude_headless`) still apply. Home Commands gains copyable `--path` templates for sessions and docs. Docs: `docs/reference/cli.md`, `docs/reference/ui.md`. Tests: `tests/test_synthesize_path.py`.
+
 - **Home pipeline State widget** — replaces the old queue-status cards / task-type list / truncated “Not synthesized” preview / cost-estimate block on `index.html` with a Home-only pipeline table mount (inlined in `raw_docs_site.render_dashboard_body`, filled by `render/js.py`). Columns are Raw → To synthesize → Synthesized (left-to-right flow); rows are one per agent that has contributed at least one session, plus Documents. Each cell is a single count with optional `($…)` cost on the To synthesize column; the Total row also shows queue queued / in progress counts. Shared collapsible chrome (`llmwiki/render/collapse_section.py`) powers Home fold-outs and Analytics **Dead stock** (full unread source list, no “…and N more” cap). Collapsibles under the table start with Timeline, then backlog lists, Commands (including `sync --project <slug>`), and estimate warnings. `synthesize --estimate` / `refresh_synth_pending` persist `synth.pipeline` (and `agent` / `usd` on pending items). Docs: `docs/reference/ui.md`. Tests: `tests/test_state_widget.py`, `tests/test_collapse_section.py`.
 
 ### Fixed
