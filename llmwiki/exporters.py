@@ -5,8 +5,7 @@ Produces standard formats that any AI agent can consume without scraping HTML:
 - llms.txt            — short index per https://llmstxt.org
 - llms-full.txt       — flattened plain-text dump of every wiki page
 - graph.jsonld        — schema.org JSON-LD graph export
-- <page>.txt          — sibling plain-text for every HTML page
-- <page>.json         — sibling structured JSON for every HTML page
+- sources/<project>/<stem>.md — raw session markdown for download / agents
 - sitemap.xml         — standard sitemap with lastmod
 - rss.xml             — RSS 2.0 feed of newest sessions
 - robots.txt          — with sitemap + llms.txt references
@@ -25,13 +24,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from llmwiki import REPO_ROOT, __version__
+from llmwiki import __version__
 
 # ─── helpers ──────────────────────────────────────────────────────────────
 
 
 def _plain_text(markdown_body: str) -> str:
-    """Strip markdown to plain text (for llms-full and per-page .txt).
+    """Strip markdown to plain text (for llms-full and search/RSS extracts).
 
     Fenced code blocks are unwrapped (fences removed, body preserved) so that
     code in transcripts survives into AI-consumable exports. Previously this
@@ -68,95 +67,7 @@ def _page_id(project: str, slug: str) -> str:
     return f"{project}/{slug}"
 
 
-def _as_int(value: Any) -> Any:
-    """Coerce frontmatter scalars to int where possible; leave other types alone."""
-    if value is None or isinstance(value, bool):
-        return value
-    if isinstance(value, int):
-        return value
-    if isinstance(value, str):
-        s = value.strip()
-        if s.lstrip("-").isdigit():
-            try:
-                return int(s)
-            except ValueError:
-                return value
-    return value
-
-
-def _as_bool(value: Any) -> Any:
-    """Coerce frontmatter scalars to bool. Strings like 'false'/'0' map to False.
-
-    Critical because raw YAML-loaded strings like ``"false"`` are truthy in both
-    Python and JavaScript, which silently flips downstream boolean checks.
-    """
-    if value is None:
-        return None
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, str):
-        s = value.strip().lower()
-        if s in ("true", "1", "yes"):
-            return True
-        if s in ("false", "0", "no", ""):
-            return False
-    return bool(value)
-
-
-# ─── per-page sibling files (A3 + A4) ────────────────────────────────────
-
-
-def write_page_txt(page_html_path: Path, markdown_body: str) -> Path:
-    """Write a sibling .txt next to <slug>.html."""
-    txt_path = page_html_path.with_suffix(".txt")
-    txt_path.write_text(_plain_text(markdown_body), encoding="utf-8")
-    return txt_path
-
-
-def write_page_json(
-    page_html_path: Path,
-    meta: dict[str, Any],
-    markdown_body: str,
-    wikilinks_out: list[str],
-) -> Path:
-    """Write a structured JSON sibling next to <slug>.html."""
-    data = {
-        "id": _page_id(str(meta.get("project", "")), str(meta.get("slug", ""))),
-        "slug": meta.get("slug"),
-        "title": meta.get("title"),
-        "type": meta.get("type"),
-        "project": meta.get("project"),
-        "date": meta.get("date"),
-        "started": meta.get("started"),
-        "ended": meta.get("ended"),
-        "model": meta.get("model"),
-        "cwd": meta.get("cwd"),
-        # #36: real agent session id (distinct from llmwiki's 8-hex slug)
-        # so machine consumers can build `claude --resume` without scraping HTML.
-        "sessionId": meta.get("sessionId"),
-        "git_branch": meta.get("gitBranch"),
-        "permission_mode": meta.get("permissionMode"),
-        "user_messages": _as_int(meta.get("user_messages")),
-        "tool_calls": _as_int(meta.get("tool_calls")),
-        "tools_used": meta.get("tools_used"),
-        "is_subagent": _as_bool(meta.get("is_subagent")),
-        "wikilinks_out": sorted(set(wikilinks_out)),
-        "body_text": _plain_text(markdown_body),
-        "sha256": _sha256_16(markdown_body),
-        # #415: source_url must match build.py's session HTML path which uses
-        # page_html_path.stem (carries date prefix + any disambig hash),
-        # NOT the bare slug field.
-        "source_url": f"sessions/{meta.get('project', '')}/{page_html_path.stem}.html",
-    }
-    # Drop None values so the JSON is clean
-    data = {k: v for k, v in data.items() if v is not None}
-    json_path = page_html_path.with_suffix(".json")
-    json_path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
-    return json_path
-
-
 # ─── llms.txt + llms-full.txt (A1) ───────────────────────────────────────
-
 
 def write_llms_txt(
     out_dir: Path,
@@ -205,13 +116,12 @@ def write_llms_txt(
             "- [Sitemap](sitemap.xml): Standard sitemap with lastmod timestamps.",
             "- [RSS feed](rss.xml): Newest sessions first.",
             "",
-            "## Machine-readable siblings",
+            "## Session markdown",
             "",
-            "Every HTML page has sibling `.txt` and `.json` files at the same URL:",
+            "Each session ships HTML for humans and a nested `.md` copy for agents:",
             "",
-            "- `sessions/<project>/<slug>.html` — human HTML",
-            "- `sessions/<project>/<slug>.txt` — plain text of the same content",
-            "- `sessions/<project>/<slug>.json` — structured metadata + body",
+            "- `sessions/<project>/<stem>.html` — human HTML",
+            "- `sources/<project>/<stem>.md` — raw session markdown (Download .md on the page)",
             "",
             "## AI agent entry point",
             "",
@@ -257,7 +167,7 @@ def write_llms_full_txt(
         plain = _plain_text(body)
         # Cap per-session at 2000 chars for the full dump
         if len(plain) > 2000:
-            plain = plain[:2000] + f"\n…(truncated, {len(plain) - 2000} more chars — see .txt sibling)"
+            plain = plain[:2000] + f"\n…(truncated, {len(plain) - 2000} more chars — see sources/<project>/<stem>.md)"
         lines.append(plain)
         lines.append("")
         # Check running total
@@ -515,14 +425,12 @@ You probably want one of these, not the HTML:
 | **sitemap.xml** | `/sitemap.xml` | You want every page's URL + last-modified |
 | **rss.xml** | `/rss.xml` | You want the 50 newest sessions |
 
-Every HTML page has sibling `.txt` and `.json` files at the same URL:
+Every session has a nested markdown copy for agents:
 
-- `sessions/<project>/<slug>.html` — human-readable HTML
-- `sessions/<project>/<slug>.txt` — plain text of the same content
-- `sessions/<project>/<slug>.json` — structured metadata + body
+- `sessions/<project>/<stem>.html` — human-readable HTML
+- `sources/<project>/<stem>.md` — raw session markdown (same as the page Download .md button)
 
-Prefer the `.json` siblings for structured queries, the `.txt` siblings
-for content, and the HTML only when you need the rendered view.
+Prefer `sources/…/*.md` for full transcript content, `llms-full.txt` for a pasteable dump, and HTML only when you need the rendered view.
 
 ## Navigation structure
 

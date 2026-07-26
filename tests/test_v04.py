@@ -52,8 +52,6 @@ def test_exporters_module_imports():
         write_rss,
         write_robots_txt,
         write_ai_readme,
-        write_page_txt,
-        write_page_json,
         _plain_text,
         _sha256_16,
         _page_id,
@@ -61,9 +59,11 @@ def test_exporters_module_imports():
     for f in (
         export_all, write_llms_txt, write_llms_full_txt, write_graph_jsonld,
         write_sitemap, write_rss, write_robots_txt, write_ai_readme,
-        write_page_txt, write_page_json,
     ):
         assert callable(f)
+    assert callable(_plain_text)
+    assert callable(_sha256_16)
+    assert callable(_page_id)
 
 
 def test_plain_text_strips_markdown():
@@ -179,18 +179,20 @@ def test_manifest_has_files_and_hashes():
         assert "path" in entry and "size" in entry and "sha256" in entry
 
 
-def test_per_page_sibling_txt_and_json_exist():
-    site_sessions = REPO_ROOT / "site" / "sessions"
+def test_session_md_source_exists_without_txt_json_siblings():
+    site = REPO_ROOT / "site"
+    site_sessions = site / "sessions"
     if not site_sessions.exists():
         pytest.skip("site/sessions/ not built")
     html_files = [p for p in site_sessions.rglob("*.html") if p.name != "index.html"]
     if not html_files:
         pytest.skip("no session HTML files")
     sample = html_files[0]
-    txt = sample.with_suffix(".txt")
-    jsn = sample.with_suffix(".json")
-    assert txt.exists(), f"missing .txt sibling for {sample.name}"
-    assert jsn.exists(), f"missing .json sibling for {sample.name}"
+    assert not sample.with_suffix(".txt").exists(), f"unexpected .txt sibling for {sample.name}"
+    assert not sample.with_suffix(".json").exists(), f"unexpected .json sibling for {sample.name}"
+    # sources/<project>/<stem>.md — project is the parent folder of the HTML
+    md = site / "sources" / sample.parent.name / f"{sample.stem}.md"
+    assert md.exists(), f"missing sources .md for {sample.name}: expected {md}"
 
 
 def test_session_page_has_schema_org_microdata():

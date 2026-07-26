@@ -33,7 +33,7 @@ llmwiki runs two interchangeable ways. Pick one, start — you can switch later.
 | 01 | [Installation](tutorials/01-installation.md) — macOS / Linux / Windows / Docker | 5 min |
 | 02 | [First sync](tutorials/02-first-sync.md) — from install to a browsable site | 5 min |
 
-*If it's not working in 10 minutes, [open an issue](https://github.com/Pratiyush/llm-wiki/issues/new) — that's a bug in the docs.*
+*If it's not working in 10 minutes, [open an issue]({{__llmwiki_github__}}/issues/new) — that's a bug in the docs.*
 
 ---
 
@@ -91,7 +91,7 @@ llmwiki runs two interchangeable ways. Pick one, start — you can switch later.
 - **[FAQ](faq.md)** · **[Troubleshooting](troubleshooting.md)** · **[Privacy](privacy.md)**.
 - **[Accessibility](accessibility.md)** (WCAG 2.1 AA).
 - **[Benchmarks](benchmarks.md)** · **[Competitor landscape](competitor-landscape.md)**.
-- **Maintainers** — governance docs at [`docs/maintainers/`](https://github.com/Pratiyush/llm-wiki/tree/master/docs/maintainers).
+- **Maintainers** — governance docs at [`docs/maintainers/`]({{__llmwiki_github_blob__}}/docs/maintainers).
 
 ---
 
@@ -110,6 +110,6 @@ It's not a vector database, not a RAG framework, not a hosted service. It compil
 
 ## What's new
 
-See the **[CHANGELOG](https://github.com/Pratiyush/llm-wiki/blob/master/CHANGELOG.md)**. Latest tagged release: **v{{__llmwiki_version__}}**.
+See the **[CHANGELOG]({{__llmwiki_github_blob__}}/CHANGELOG.md)**. Latest tagged release: **v{{__llmwiki_version__}}**.
 
 > The version above is substituted from `llmwiki/__init__.py:__version__` at build time, so this hub stays current on every release without a manual edit (#457).

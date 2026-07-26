@@ -69,28 +69,28 @@ def test_alias_collision_with_canonical_name_raises():
         register("dummy_x", aliases=["claude_code"])(_DummyAdapter)
 
 
-# ─── Fix #2 — build_site sibling-failure isolation ───────────────────
+# ─── Fix #2 — build_site per-source copy isolation ───────────────────
 
 
-def test_build_site_sibling_failure_isolation_is_documented_in_source():
-    """Static check on the build.py source: a per-source sibling-write
-    failure must NOT short-circuit the loop. Spinning up the real
-    build_site fixture is expensive; this lightweight check pins the
-    code shape so the regression-causing pattern can't come back.
+def test_build_site_md_copy_failure_isolation_is_documented_in_source():
+    """Static check on the build.py source: a per-source sources/ .md copy
+    failure must NOT short-circuit the session render loop.
 
-    The bad pattern: setting `siblings_failed = True` and then
-    `continue`-ing in subsequent iterations on the strength of that
-    flag. The good pattern: append to a `sibling_failures` list and
-    let the loop keep running.
+    Historically this applied to per-page `.txt`/`.json` sibling writes
+    (`sibling_failures`). Those siblings are gone; the same isolation
+    contract now applies to nesting session markdown under
+    ``sources/<project>/``.
+
+    The bad pattern: setting a process-wide failed flag and then
+    `continue`-ing in subsequent iterations. The good pattern: append
+    to a failures list and let the loop keep running.
     """
     build_path = REPO_ROOT / "llmwiki" / "build.py"
     text = build_path.read_text(encoding="utf-8")
 
-    # The new contract: there's a sibling_failures list (or equivalent
-    # per-source-isolated structure) the loop appends to.
-    assert "sibling_failures" in text, (
-        "build.py no longer tracks per-source sibling failures in a list; "
-        "the v1.3.78 regression isolation may have been removed"
+    assert "md_copy_failures" in text, (
+        "build.py no longer tracks per-source sources/ .md copy failures "
+        "in a list; the isolation contract from v1.3.78 may have been removed"
     )
     # The pattern that caused the bug: a single flag + continue.
     bad_pattern = re.compile(

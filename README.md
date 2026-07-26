@@ -112,7 +112,7 @@ See [docs/guides/existing-vault.md](docs/guides/existing-vault.md) for Obsidian/
 ### Static site
 
 - Session browser with search (Cmd+K), filters, syntax highlighting, dark mode
-- Per-session `.html` + `.txt` + `.json` siblings for humans and agents
+- Per-session `.html` for humans + `sources/<project>/<stem>.md` for agents
 - Project pages with topic chips, activity heatmap, agent badges
 - Site exports: `llms.txt`, `llms-full.txt`, `graph.jsonld`, sitemap, RSS
 

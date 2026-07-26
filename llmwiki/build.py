@@ -564,7 +564,7 @@ def md_to_plain_text(body: str) -> str:
     #417: memoized on the same content key as md_to_html. The build
     pipeline calls md_to_html and md_to_plain_text on the same body
     repeatedly (per-page render + search-index extract + RSS summary
-    + .txt sibling). Sharing the key makes the second + third + …
+    + RSS summary). Sharing the key makes the second + third + …
     calls free.
     """
     global _plain_cache_hits, _plain_cache_misses
@@ -768,7 +768,7 @@ def _build_metadata_comment(
     html_stem: str = "",
 ) -> str:
     """An HTML comment at the top of every session page that AI agents can
-    parse without needing to fetch the separate .json sibling."""
+    parse without needing a separate sidecar file."""
     fields = [
         f"slug: {slug}",
         f"project: {project_slug}",
@@ -789,9 +789,8 @@ def _build_metadata_comment(
     if tools:
         fields.append(f"tools_used: [{', '.join(tools)}]")
     fields.append(f"reading_min: {reading_min}")
-    sibling_stem = html_stem or slug
-    fields.append(f"txt_sibling: {sibling_stem}.txt")
-    fields.append(f"json_sibling: {sibling_stem}.json")
+    stem = html_stem or slug
+    fields.append(f"md_source: sources/{project_slug}/{stem}.md")
     body = "\n".join(fields)
     return f"<!-- llmwiki:metadata\n{body}\n-->\n"
 
@@ -1255,7 +1254,7 @@ def render_session(
     token_card_block = render_session_token_card(meta)
 
     # IMPORTANT: The HTML file is named `<path.stem>.html` (e.g. date-slug),
-    # NOT `<slug>.html`. The siblings + canonical must use path.stem.
+    # NOT `<slug>.html`. The Download .md link + canonical must use path.stem.
     html_stem = path.stem
     raw_md_path = f"../../sources/{project_slug}/{path.name}"
     resume_html = render_resume_block(meta, path)
@@ -1263,8 +1262,6 @@ def render_session(
   <button class="btn btn-primary" type="button" aria-label="Copy session content as markdown" title="Copy as markdown" onclick="copyMarkdown(this)">Copy as markdown</button>
   <a class="btn" href="../../projects/{html.escape(project_slug)}.html">← {html.escape(project_slug)}</a>
   <a class="btn" href="{html.escape(raw_md_path)}" download>Download .md</a>
-  <a class="btn" href="{html.escape(html_stem + '.txt')}" title="plain-text sibling for AI agents">.txt</a>
-  <a class="btn" href="{html.escape(html_stem + '.json')}" title="structured JSON sibling for AI agents">.json</a>
   <textarea class="md-source" hidden>{raw_md_for_copy}</textarea>
 </div>
 {resume_html}"""
@@ -1278,7 +1275,7 @@ def render_session(
     breadcrumbs = breadcrumbs_bar(crumbs, link_prefix="../../")
 
     # v0.4: machine-readable metadata appendix (HTML comment that AI agents
-    # scraping HTML can parse without fetching the .json sibling).
+    # scraping HTML can parse; full markdown lives under sources/<project>/).
     metadata_comment = _build_metadata_comment(meta, slug, project_slug, reading_min, html_stem=html_stem)
 
     # v0.4: page_head with schema.org article microdata + canonical link.
@@ -1615,6 +1612,7 @@ def render_sessions_index(
         model = meta.get("model", "")
         umsgs = meta.get("user_messages", "")
         tcalls = meta.get("tool_calls", "")
+        agent_label, _agent_css = detect_agent_label(meta)
         # #56: surface restored cwd so the index matches the detail page
         # one click away (and so encoded ``-Users-USER-`` segments are
         # reversed like the leading ``/Users/USER/``).
@@ -1624,7 +1622,7 @@ def render_sessions_index(
         )
         href = f"{project}/{p.stem}.html"
         rows.append(
-            f"""        <tr data-project="{html.escape(str(project))}" data-model="{html.escape(str(model))}" data-date="{html.escape(str(date))}" data-slug="{html.escape(str(slug))}">
+            f"""        <tr data-project="{html.escape(str(project))}" data-agent="{html.escape(agent_label)}" data-model="{html.escape(str(model))}" data-date="{html.escape(str(date))}" data-slug="{html.escape(str(slug))}">
           <td><a href="{html.escape(str(href))}">{html.escape(str(display_title))}</a>{desc_line}</td>
           <td>{render_agent_badge(meta)}</td>
           <td><a href="../projects/{html.escape(str(project))}.html">{html.escape(str(project))}</a></td>
@@ -1639,6 +1637,15 @@ def render_sessions_index(
     project_options = "\n".join(
         f'        <option value="{html.escape(p)}">{html.escape(p)}</option>'
         for p in sorted(groups.keys())
+    )
+
+    agents = sorted({
+        detect_agent_label(m)[0]
+        for _, m, _ in sources
+    })
+    agent_options = "\n".join(
+        f'        <option value="{html.escape(a)}">{html.escape(a)}</option>'
+        for a in agents
     )
 
     models = sorted(
@@ -1661,6 +1668,12 @@ def render_sessions_index(
         <select id="filter-project">
           <option value="">All projects</option>
 {project_options}
+        </select>
+      </label>
+      <label>Agent
+        <select id="filter-agent">
+          <option value="">All agents</option>
+{agent_options}
         </select>
       </label>
       <label>Model
@@ -2750,12 +2763,14 @@ def build_site(
     (out_dir / "script.js").write_text(JS, encoding="utf-8")
     print("  wrote style.css, script.js")
 
-    # Copy raw markdown files for "Download .md" links
+    # Copy raw markdown under sources/<project>/ for "Download .md" links
+    # (matches session action hrefs + docs/architecture.md). Flat copytree
+    # used to put every file at sources/<stem>.md while links expected a
+    # project subdir — every Download .md button 404'd.
     sources_out = out_dir / "sources"
     if sources_out.exists():
         shutil.rmtree(sources_out)
-    shutil.copytree(raw_sessions, sources_out)
-    print(f"  copied raw .md sources to sources/")
+    sources_out.mkdir(parents=True)
 
     # v0.7 (#96): copy downloaded image assets into site/assets/
     raw_assets = raw_dir / "assets"
@@ -2774,84 +2789,34 @@ def build_site(
         if synthesis:
             print(f"  synthesis: {len(synthesis)} chars")
 
-    # Render pages — single pass over `sources` (#py-m8 / #594).
-    # Sibling writes (.txt + .json) happen inside the same iteration so
-    # we don't re-walk `sources` later. The exporter import is hoisted
-    # ABOVE the loop with try/except: a missing module degrades to "no
-    # siblings on any session" (the import-fail case is truly fatal —
-    # no sense retrying it per-source).
-    #
-    # #v1378-review (architect + python-reviewer): per-source write
-    # failures are now isolated. The previous version set a single
-    # `siblings_failed` flag on the first OSError/ValueError/
-    # RuntimeError and silently dropped sibling writes for EVERY
-    # subsequent session in the loop — a single bad body on session 3
-    # of 500 produced 497 silently missing siblings. Now each source's
-    # sibling write is wrapped individually and collects errors into
-    # a list; the build proceeds and we print a summary at the end.
-    sibling_writers_loaded = True
-    sibling_import_error: Optional[BaseException] = None
-    try:
-        from llmwiki.exporters import write_page_json, write_page_txt
-    except (ImportError, OSError, ValueError, RuntimeError) as e:
-        sibling_writers_loaded = False
-        sibling_import_error = e
-
+    # Render session HTML + nest the .md copy for agents in one pass.
+    # Per-page .txt / .json siblings were dropped: agents use
+    # sources/<project>/<stem>.md (and site-level llms.txt / llms-full.txt).
     n_sessions = 0
-    n_siblings = 0
-    sibling_failures: list[tuple[str, BaseException]] = []
-    _wikilink_re = re.compile(r"\[\[([^\]|]+)(?:\|[^\]]*)?\]\]")
+    n_md_sources = 0
+    md_copy_failures: list[tuple[str, BaseException]] = []
     for path, meta, body in sources:
         project = str(meta.get("project") or path.parent.name)
         render_session(path, meta, body, out_dir, project)
         n_sessions += 1
-
-        if not sibling_writers_loaded:
-            continue
-        # render_session writes site/sessions/<project>/<stem>.html;
-        # mirror its path here so the siblings land alongside it.
-        html_path = out_dir / "sessions" / project / f"{path.stem}.html"
-        if not html_path.exists():
-            continue
+        dest = sources_out / project / path.name
         try:
-            body_stripped = strip_leading_h1(body)
-            wikilinks_out = _wikilink_re.findall(body_stripped)
-            write_page_txt(html_path, body_stripped)
-            n_siblings += 1
-            meta_copy = dict(meta)
-            meta_copy.setdefault("slug", str(meta.get("slug", path.stem)))
-            meta_copy.setdefault("project", project)
-            # #36: JSON sibling cwd must be the real local path so
-            # machine consumers can build a usable resume command.
-            if meta_copy.get("cwd"):
-                meta_copy["cwd"] = local_cwd(meta_copy)
-            write_page_json(html_path, meta_copy, body_stripped, wikilinks_out)
-            n_siblings += 1
-        except (OSError, ValueError, RuntimeError) as e:
-            # Isolate to this source — the next iteration still attempts
-            # both writes. n_siblings increments only after each
-            # successful write so the count never over-reports.
-            sibling_failures.append((str(html_path), e))
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(path, dest)
+            n_md_sources += 1
+        except OSError as e:
+            md_copy_failures.append((str(path), e))
 
-    # Print warnings BEFORE the success line so a CI log scanner sees
-    # them in the right order (architect-review feedback).
-    if not sibling_writers_loaded:
+    if md_copy_failures:
+        first_path, first_err = md_copy_failures[0]
         print(
-            f"  warning: per-page siblings disabled (exporter import failed): "
-            f"{sibling_import_error}",
-            file=sys.stderr,
-        )
-    if sibling_failures:
-        first_path, first_err = sibling_failures[0]
-        print(
-            f"  warning: per-page sibling write failed on "
-            f"{len(sibling_failures)} of {n_sessions} sessions; "
+            f"  warning: sources/ .md copy failed on "
+            f"{len(md_copy_failures)} of {n_sessions} sessions; "
             f"first failure: {first_path}: {first_err}",
             file=sys.stderr,
         )
     print(f"  wrote {n_sessions} session pages")
-    if sibling_writers_loaded:
-        print(f"  wrote {n_siblings} per-page siblings (.txt + .json)")
+    print(f"  copied {n_md_sources} raw .md sources to sources/<project>/")
 
     # Raw-doc tree + MCP usage totals are needed by both the per-project
     # pages and the analytics page, so compute them once up front. MCP
@@ -2930,6 +2895,9 @@ def build_site(
     # token stats, and projects grid.
     docs_root = raw_docs_site.build_tree(doc_files)
     doc_entries = raw_docs_site.group_documents(doc_files)
+    tree_path = raw_docs_site.write_documents_tree(docs_root, out_dir)
+    tree_kb = max(1, tree_path.stat().st_size // 1024)
+    print(f"  wrote documents-tree.json ({tree_kb} KB) + .js sidecar")
     render_index(docs_root, doc_entries, len(doc_files), out_dir)
     render_raw(docs_root, doc_entries, len(doc_files), out_dir)
     render_recent(doc_entries, out_dir)
@@ -3048,10 +3016,8 @@ def build_site(
     except (OSError, ValueError, RuntimeError) as e:
         print(f"  warning: docs compile failed: {e}", file=sys.stderr)
 
-    # v0.4 per-page sibling .txt and .json — collapsed into the
-    # render_session loop above (#py-m8 / #594). The duplicate walk and
-    # html_path.exists() guard are gone; siblings now write inside the
-    # same iteration that produced the HTML.
+    # Session markdown for agents is under sources/<project>/ (copied in the
+    # render loop above). Per-page .txt / .json siblings are no longer emitted.
 
     # v0.4: Build manifest with SHA-256 hashes
     try:

@@ -3,8 +3,8 @@
 > Status: **contract-only**. No server yet — today the static site is the
 > API. This doc locks the shape so when we add a hosted / SPA reader we
 > don't have to rewrite the content model. Freezing this now protects
-> the build pipeline (`site/` outputs) and the sibling `.txt` / `.json`
-> files from drift (#116).
+> the build pipeline (`site/` outputs) and the AI-facing markdown under
+> `sources/` from drift (#116).
 
 ## Why a contract first
 
@@ -12,13 +12,13 @@ llmwiki is, and will stay, **static-site-first**. But a few near-term
 bets depend on the data being reachable without HTML parsing:
 
 - A browser extension that answers "what do I know about X" from the
-  wiki's `.json` sibling of the current tab.
+  wiki's `sources/<project>/<stem>.md` next to the current session tab.
 - A Raycast/Alfred plugin that hits `manifest.json` + `search-index.json`
   to open a page.
 - A future lightweight SPA reader that can live on the same origin as
   the generated site.
-- Downstream LLM agents consuming `llms-full.txt` + per-page `.json` to
-  answer questions without pulling HTML.
+- Downstream LLM agents consuming `llms-full.txt` + per-session `.md`
+  under `sources/` to answer questions without pulling HTML.
 
 Every one of those wants the same shape of data. This doc says what that
 shape is, so refactors of `llmwiki/build.py` can't silently break
@@ -33,8 +33,9 @@ The static build writes these to `site/` on every `llmwiki build`:
 | `/index.html` | HTML | Home page |
 | `/<group>/index.html` | HTML | Project / sessions / models / vs index |
 | `/<group>/<slug>.html` | HTML | Individual page |
-| `/<group>/<slug>.txt` | Plain text | HTML-free body + first-line frontmatter |
-| `/<group>/<slug>.json` | JSON | Structured metadata + body + outbound wikilinks |
+| `/sources/<project>/<stem>.md` | Markdown | Raw session transcript for download / agents |
+| `/documents-tree.json` | JSON | Shared raw-docs file tree (sidebar payload) |
+| `/documents-tree.js` | JS | Same tree for `file://` via `window.llmwikiData["documents-tree"]` |
 | `/llms.txt` | Markdown | Short AI-agent index ([llmstxt.org spec](https://llmstxt.org)) |
 | `/llms-full.txt` | Plain text | Flattened dump (≤ 5 MB) |
 | `/graph.jsonld` | JSON-LD | Schema.org entity/concept/source graph |
@@ -257,35 +258,29 @@ Anything a client can depend on:
 
 Today's static site already does this implicitly:
 
-- `curl .../page.html`  → HTML
-- `curl .../page.txt`   → plain text
-- `curl .../page.json`  → structured
+- `curl .../sessions/<project>/<stem>.html` → HTML
+- `curl .../sources/<project>/<stem>.md` → raw session markdown
 
-The future server will keep those three paths **exactly as-is**.
-`Accept: application/json` on `.html` routes should redirect to
-the `.json` sibling rather than serving JSON on the HTML URL —
-that way caches and proxies stay simple.
+The future server keeps those paths. `Accept: text/markdown` on a session
+HTML route should redirect to the nested `sources/` copy rather than
+serving markdown on the HTML URL — that way caches and proxies stay
+simple.
 
 ---
 
 ## Migration path — static → hosted
 
-1. **Today:** `llmwiki build` writes the JSON/txt files. External tools
-   read them directly. (Done — #116 is this doc.)
-2. **v1.2:** Add a tiny `llmwiki serve --api` flag that wraps the same
-   files behind `/api/v1/*` paths so the reader SPA can fetch them
-   uniformly in dev. No new data, just routing.
-3. **v1.3+:** If a hosted multi-tenant reader ships, the server reuses
-   the same routes with per-user auth. The content pipeline doesn't
-   change.
+1. **Today:** `llmwiki build` writes HTML, nested `sources/*.md`, and site-level AI exports. External tools read them directly. (Done — #116 is this doc.)
+2. **v1.2:** Add a tiny `llmwiki serve --api` flag that wraps the same files behind `/api/v1/*` paths so the reader SPA can fetch them uniformly in dev. No new data, just routing.
+3. **v1.3+:** If a hosted multi-tenant reader ships, the server reuses the same routes with per-user auth. The content pipeline doesn't change.
 
-At no point does the contract require a rewrite of `llmwiki/build.py` —
-every endpoint maps to something build.py already emits.
+At no point does the contract require a rewrite of `llmwiki/build.py` — every endpoint maps to something build.py already emits.
 
 ## Related
 
 - `llmwiki/build.py` — produces every file referenced above
-- `llmwiki/exporters.py` — `llms.txt` + JSON-LD + per-page siblings
+- `llmwiki/exporters.py` — `llms.txt` + JSON-LD + site-level AI exports
+- `llmwiki/raw_docs_site.py` — `documents-tree.json|.js` for the Raw sidebar
 - `docs/reference/cache-tiers.md` — `cache_tier` invariant (#52)
 - `docs/design/brand-system.md` — theme tokens returned by `/bootstrap`
 - `#116` — this issue

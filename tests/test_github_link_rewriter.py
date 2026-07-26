@@ -21,11 +21,34 @@ import pytest
 
 from llmwiki.docs_pages import (
     _rewrite_one_to_github,
+    rewrite_md_links_to_html,
     rewrite_source_code_links_to_github,
 )
 
-
 _GH = "https://github.com/Pratiyush/llm-wiki/blob/master"
+
+
+@pytest.fixture(autouse=True)
+def _pin_upstream_github(monkeypatch):
+    """Pin the rewriter to upstream so local fork remotes don't drift assertions."""
+    monkeypatch.setattr(
+        "llmwiki.docs_pages.resolve_github_repo",
+        lambda: "Pratiyush/llm-wiki",
+    )
+
+
+def test_rewrite_directory_hrefs_to_index_html():
+    html = (
+        '<a href="modes/">comparison</a>'
+        '<a href="modes/agent/">agent</a>'
+        '<a href="modes/agent/#setup">anchor</a>'
+        '<a href="https://example.com/modes/">ext</a>'
+    )
+    out = rewrite_md_links_to_html(html)
+    assert 'href="modes/index.html"' in out
+    assert 'href="modes/agent/index.html"' in out
+    assert 'href="modes/agent/index.html#setup"' in out
+    assert 'href="https://example.com/modes/"' in out
 
 
 # ─── _rewrite_one_to_github: unit ────────────────────────────────────────

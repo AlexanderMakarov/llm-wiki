@@ -188,6 +188,9 @@ def _check_links(doc: Path) -> list[str]:
     for target in LINK_RE.findall(text):
         if target.startswith(("http://", "https://", "#", "mailto:")):
             continue
+        # Build-time placeholders (fork GitHub URLs, version) — resolved in docs_pages.
+        if "{{__llmwiki_" in target:
+            continue
         # Strip anchor
         base = target.split("#", 1)[0]
         if not base:

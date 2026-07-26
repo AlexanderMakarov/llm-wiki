@@ -135,7 +135,11 @@ def test_footer_middle_has_both_prev_and_next():
     assert 'placeholder' not in html  # no placeholder for middle
 
 
-def test_footer_edit_on_github_link_present():
+def test_footer_edit_on_github_link_present(monkeypatch):
+    monkeypatch.setattr(
+        "llmwiki.docs_pages.resolve_github_repo",
+        lambda: "Pratiyush/llm-wiki",
+    )
     pages = [_tutorial_page(1, "T1"), _tutorial_page(2, "T2")]
     html = _tutorial_footer_html(pages[0], pages, "../")
     assert 'class="edit-on-github"' in html

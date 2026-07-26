@@ -128,7 +128,8 @@ def test_wiki_value_section_renders_cards_without_chart():
         wiki_page_count=14,
         docs_by_project={"proj-a": 2},
     )
-    assert "Wiki usage" in out
+    assert "Wiki usage" not in out or "LLM-Wiki MCP usage" in out
+    assert "LLM-Wiki MCP usage" in out
     assert "Wiki value" not in out
     assert "Retrievals" in out
     assert ">7</div>" in out
