@@ -1,8 +1,9 @@
-"""Reusable Home/Raw pipeline State widget mount.
+"""Home pipeline State widget mount (table filled client-side).
 
-The interactive table + collapsible sections are filled client-side from
-``window.LLMWIKI_STATE_SNAPSHOT`` (see ``render/js.py``). This module only
-emits the mount point so other pages can embed the same widget later.
+Collapsible sections under the table share
+``llmwiki.render.collapse_section`` chrome (CSS class ``collapse-section``);
+this module only emits the Home-specific mount for the pipeline table +
+JS-filled sections.
 """
 
 from __future__ import annotations

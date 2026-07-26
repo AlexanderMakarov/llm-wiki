@@ -520,16 +520,17 @@ kbd { display: inline-block; padding: 2px 6px; font-family: var(--mono); font-si
 .state-pipeline-table .state-queue-meta { font-weight: 400; font-size: 0.85em; }
 .state-pipeline-table .state-row-label { font-weight: 600; }
 .state-pipeline-table tfoot td { background: var(--bg-alt); font-weight: 600; }
-.state-sections { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
-.state-section { border: 1px solid var(--border); border-radius: 8px; background: var(--bg-alt); }
-.state-section > summary { cursor: pointer; list-style: none; padding: 10px 12px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
-.state-section > summary::-webkit-details-marker { display: none; }
-.state-section > summary::before { content: "▸"; color: var(--text-muted); font-size: 0.85rem; }
-.state-section[open] > summary::before { content: "▾"; }
-.state-section-count { margin-left: auto; font-size: 0.78rem; font-weight: 600; color: var(--text-muted); background: var(--bg-card); border: 1px solid var(--border); border-radius: 999px; padding: 1px 8px; }
-.state-section-body { padding: 0 12px 12px; border-top: 1px solid var(--border); }
-.state-section-body ul { margin: 8px 0 0 18px; }
-.state-section-body .queue-commands-table { margin-top: 10px; }
+.collapse-sections { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+.collapse-section { border: 1px solid var(--border); border-radius: 8px; background: var(--bg-alt); }
+.collapse-section > summary { cursor: pointer; list-style: none; padding: 10px 12px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+.collapse-section > summary::-webkit-details-marker { display: none; }
+.collapse-section > summary::before { content: "▸"; color: var(--text-muted); font-size: 0.85rem; }
+.collapse-section[open] > summary::before { content: "▾"; }
+.collapse-section-count { margin-left: auto; font-size: 0.78rem; font-weight: 600; color: var(--text-muted); background: var(--bg-card); border: 1px solid var(--border); border-radius: 999px; padding: 1px 8px; }
+.collapse-section-body { padding: 0 12px 12px; border-top: 1px solid var(--border); }
+.collapse-section-body ul,
+.collapse-section-list { margin: 8px 0 0 18px; }
+.collapse-section-body .queue-commands-table { margin-top: 10px; }
 .queue-stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-bottom: 12px; }
 .queue-stat { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; background: var(--bg-alt); }
 .queue-stat-label { font-size: 0.74rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }

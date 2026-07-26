@@ -34,6 +34,9 @@ def test_state_widget_js_has_pipeline_table_and_collapsibles():
     assert "Not synthesized sessions" in js.JS
     assert "Not synthesized docs" in js.JS
     assert "Estimate warnings" in js.JS
+    assert "collapse-section" in js.JS
+    assert "collapse-sections" in js.JS
+    assert "collapse-section-count" in js.JS
     assert "data-llmwiki-state-widget" in js.JS
     assert "llmwiki sync --project" in js.JS
     assert "queued " in js.JS

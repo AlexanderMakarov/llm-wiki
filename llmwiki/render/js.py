@@ -62,10 +62,10 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
   }
   function detailsSection(title, count, bodyHtml) {
     return (
-      '<details class="state-section">' +
+      '<details class="collapse-section">' +
       "<summary>" + escapeHtml(title) +
-      '<span class="state-section-count">' + Number(count || 0) + "</span></summary>" +
-      '<div class="state-section-body">' + bodyHtml + "</div></details>"
+      '<span class="collapse-section-count">' + Number(count || 0) + "</span></summary>" +
+      '<div class="collapse-section-body">' + bodyHtml + "</div></details>"
     );
   }
   function commandsBody() {
@@ -185,7 +185,7 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
     root.innerHTML =
       tableHtml +
       estNote +
-      '<div class="state-sections">' +
+      '<div class="collapse-sections">' +
       detailsSection("Timeline", 5, timelineBody) +
       detailsSection("Not synthesized sessions", pendingSessions.length, pendingListHtml(pendingSessions)) +
       detailsSection("Not synthesized docs", pendingDocs.length, pendingListHtml(pendingDocs)) +
