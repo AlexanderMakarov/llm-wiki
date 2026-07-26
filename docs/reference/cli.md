@@ -431,6 +431,8 @@ See [`guides/existing-vault.md`](../guides/existing-vault.md) for the round-trip
 python3 -m llmwiki synthesize --check            # probe the backend
 python3 -m llmwiki synthesize --estimate         # cost preview, no API calls
 python3 -m llmwiki synthesize --force            # re-synth everything
+python3 -m llmwiki synthesize --sessions-only    # all pending sessions (skip docs)
+python3 -m llmwiki synthesize --docs-only        # all pending docs (skip sessions)
 python3 -m llmwiki synthesize --path raw/sessions/<file>.md
 python3 -m llmwiki synthesize --path raw/docs/<file>.md --path raw/sessions/<other>.md
 python3 -m llmwiki synthesize                    # real run (whole backlog)
@@ -443,6 +445,8 @@ python3 -m llmwiki synthesize                    # real run (whole backlog)
 | `--check` | Probe backend availability + exit (0 if reachable). |
 | `--force` | Ignore state, re-synth every source. |
 | `--estimate` | Print cached-vs-fresh token + dollar estimate (#50). |
+| `--sessions-only` | Synthesize only `raw/sessions/` — skip `raw/docs/`. Mutually exclusive with `--docs-only`. Combinable with `--path` / `--force` (paths under `raw/docs/` then exit 2). Incompatible with `--check` / `--estimate`. |
+| `--docs-only` | Synthesize only `raw/docs/` — skip `raw/sessions/`. Mutually exclusive with `--sessions-only`. Combinable with `--path` / `--force` (paths under `raw/sessions/` then exit 2). Incompatible with `--check` / `--estimate`. |
 | `--path PATH` | Synthesize only this raw session or doc under `raw/sessions/` or `raw/docs/` (repeatable; relative to the vault root, or absolute under it) (#62). Exit 2 if the path is missing or outside the vault. Still honours `filters.include_subagents` / `exclude_headless` (ineligible files are skipped even when named). Incompatible with `--check` / `--estimate`. |
 | `--vault PATH` | Read/write under the vault root; configures the active `llmwiki-state.json`. |
 

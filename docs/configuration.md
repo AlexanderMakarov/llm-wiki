@@ -140,6 +140,8 @@ Sanity-check what's active and what a run would cost:
 ```bash
 llmwiki synthesize --check      # prints the resolved backend + availability
 llmwiki synthesize --estimate   # cached-vs-fresh token + dollar estimate
+llmwiki synthesize --sessions-only   # pending sessions only (skip docs)
+llmwiki synthesize --docs-only       # pending docs only (skip sessions)
 ```
 
 **Synthesis is incremental.** `<vault>/llmwiki-state.json` (`synth.files`)

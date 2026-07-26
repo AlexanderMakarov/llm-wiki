@@ -10,6 +10,8 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Added
 
+- **`llmwiki synthesize --sessions-only` / `--docs-only`** — restrict a synthesize run to `raw/sessions/` or `raw/docs/` without naming every file. Still combinable with `--path` (mismatched kind exits 2) and `--force`; incompatible with `--check` / `--estimate`. Default (no flag) synthesizes both corpora. Docs: `docs/reference/cli.md`, `docs/reference/ui.md`, `docs/configuration.md`. Tests: `tests/test_synthesize_path.py`.
+
 - **`OpenClawAdapter` (`openclaw`) gains configurable `roots`** — previously hardcoded to `~/.openclaw/agents`, so a laptop syncing OpenClaw sessions mirrored elsewhere (e.g. into a vault inbox at `<vault>/.openclaw-sessions-inbox/<agent>/<uuid>.jsonl`, no `sessions/` segment) had no way to point the adapter at that path. `adapters.openclaw.roots` in `config.json` now overrides the default, following the same `roots`/`@property session_store_path` pattern as `opencode` and `gemini_cli`; `derive_project_slug` resolves the agent name relative to whichever configured root matches. `discover_sessions` also now skips `*.checkpoint.*.jsonl` sidecars and anything under a `_quarantine/` directory, in addition to the existing `*.trajectory.jsonl` filter — both can appear in a mirrored inbox and neither is a conversation transcript. Docs: `docs/adapters/openclaw.md`, `docs/configuration-reference.md`. Tests: `tests/test_openclaw_cursor_cli_adapters.py`.
 
 ### Changed
