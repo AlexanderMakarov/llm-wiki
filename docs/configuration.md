@@ -129,7 +129,9 @@ Minimal config:
 |---|---|---|
 | `dummy` | Canned stub page: metadata summary, one `[[ProjectEntity]]` link, plain-text `## Raw Mentions`. For previews/tests. | nothing |
 | `ollama` | Local LLM over the Ollama HTTP API. Configure `synthesis.ollama.{model,base_url,timeout,max_retries}`. | running `ollama serve` |
-| `claude` | Synchronous `claude -p` CLI calls (#16). Optional `claude_path` / `claude_model` (default `sonnet`) / `timeout`. Works from a plain terminal and nested inside agent sessions. | `claude` on `$PATH` (or `claude_path`) |
+| `claude` | Synchronous `claude -p` CLI calls (#16). Optional `claude_path` / `claude_model` (default `sonnet`) / `timeout` / `claude_lean`. Works from a plain terminal and nested inside agent sessions. | `claude` on `$PATH` (or `claude_path`) |
+
+Calls run in **lean mode** by default: tool schemas, MCP servers, skills, `CLAUDE.md`, and the agent system prompt are stripped from each invocation, since a synthesis call only reads stdout and can't use any of them. That is ~9x cheaper per page, measured — see [reference/synthesis-cost.md](reference/synthesis-cost.md) for the numbers and for why `claude_model` defaults to `sonnet` rather than a cheaper model. Set `"claude_lean": false` to opt out.
 
 The old `agent` / `agent_delegate` backend (pending-prompt files + `--list-pending` / `--complete`) was removed in v1.4.0 — use `claude` instead.
 

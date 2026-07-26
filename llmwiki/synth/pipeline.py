@@ -139,7 +139,8 @@ def resolve_backend(
       - ``"dummy"`` (default) — canned offline backend for previews/tests
       - ``"ollama"`` — local Ollama HTTP backend (#35)
       - ``"claude"`` — synchronous ``claude -p`` CLI calls (#16).
-        Optional keys: ``claude_path``, ``claude_model``, ``timeout``.
+        Optional keys: ``claude_path``, ``claude_model``, ``timeout``,
+        ``claude_lean``.
 
     Unknown values fall back to the dummy backend with a warning so a
     typo in config.json doesn't crash sync.
@@ -161,6 +162,7 @@ def resolve_backend(
             claude_path=synth_cfg.get("claude_path"),
             model=synth_cfg.get("claude_model") or "sonnet",
             timeout=int(synth_cfg.get("timeout") or 180),
+            lean=synth_cfg.get("claude_lean", True) is not False,
         )
 
     if name != "dummy":

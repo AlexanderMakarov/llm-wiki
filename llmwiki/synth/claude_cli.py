@@ -10,7 +10,8 @@ substitutes this backend whenever agent-delegate is configured.
 Also selectable outright with ``"synthesis": {"backend": "claude"}``.
 Optional config keys: ``claude_path`` (else $PATH lookup),
 ``claude_model`` (defaults to ``sonnet``), ``timeout`` (seconds
-per page, default 180).
+per page, default 180), ``claude_lean`` (default true — strip the
+agent scaffolding from each call; see ``_LEAN_ARGV``).
 
 Reuses build.py's hardened ``_resolve_claude_path`` (#421: shell-metachar
 rejection, PATH lookup) and passes the prompt via stdin (#486 precedent:
@@ -27,6 +28,33 @@ from llmwiki.synth.ollama import _render_prompt
 
 _DEFAULT_TIMEOUT = 180
 
+# Synthesis is text-in / text-out: the prompt carries everything the model
+# needs and we only ever read stdout, so the agent scaffolding `claude`
+# assembles by default is pure overhead billed on every page. Measured in
+# this repo with a trivial prompt: 35,081 input tokens without these flags
+# vs 700 with them. Each flag drops one scaffolding source:
+#   --tools ""                → built-in tool schemas
+#   --strict-mcp-config       → every configured MCP server's tools
+#   --disable-slash-commands  → the skill listing
+#   --setting-sources ""      → settings files + CLAUDE.md auto-discovery
+#   --system-prompt           → the full agent system prompt
+# `--tools` is variadic, so its "" must be followed by another `--flag`.
+_LEAN_ARGV: tuple[str, ...] = (
+    "--tools", "",
+    "--strict-mcp-config",
+    "--disable-slash-commands",
+    "--setting-sources", "",
+)
+
+# Replaces the agent system prompt. Deliberately minimal — the page format,
+# the topic vocabulary, and every rule live in prompts/source_page.md, which
+# is rendered into the user prompt.
+_LEAN_SYSTEM_PROMPT = (
+    "You synthesize wiki source pages from session transcripts. "
+    "Follow the user's format instructions exactly. "
+    "Output only the requested markdown, with no preamble or commentary."
+)
+
 
 class ClaudeCLIError(RuntimeError):
     """One page failed to synthesize via the claude CLI."""
@@ -41,10 +69,22 @@ class ClaudeCLISynthesizer(BaseSynthesizer):
         claude_path: str | None = None,
         model: str | None = None,
         timeout: int = _DEFAULT_TIMEOUT,
+        lean: bool = True,
     ) -> None:
         self.claude_path = claude_path
         self.model = model
         self.timeout = timeout
+        self.lean = lean
+
+    def _argv(self, claude: str) -> list[str]:
+        """Build the `claude` command line for one page."""
+        argv = [claude, "-p", "-"]
+        if self.lean:
+            argv += list(_LEAN_ARGV)
+            argv += ["--system-prompt", _LEAN_SYSTEM_PROMPT]
+        if self.model:
+            argv += ["--model", self.model]
+        return argv
 
     @property
     def name(self) -> str:
@@ -77,9 +117,7 @@ class ClaudeCLISynthesizer(BaseSynthesizer):
         # add pipeline chunks raw docs to ~7 KB, so nothing is lost.
         truncated_body = raw_body[:8000] if raw_body else ""
         prompt = _render_prompt(prompt_template, raw_body=truncated_body, meta=meta)
-        argv = [claude, "-p", "-"]
-        if self.model:
-            argv += ["--model", self.model]
+        argv = self._argv(claude)
         try:
             result = subprocess.run(
                 argv, input=prompt, capture_output=True, text=True,
