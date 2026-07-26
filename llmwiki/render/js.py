@@ -1228,6 +1228,7 @@ document.addEventListener("DOMContentLoaded", function () {
   const tbody = document.getElementById("sessions-tbody");
   if (!tbody) return;
   const fProject = document.getElementById("filter-project");
+  const fAgent = document.getElementById("filter-agent");
   const fModel = document.getElementById("filter-model");
   const fFrom = document.getElementById("filter-date-from");
   const fTo = document.getElementById("filter-date-to");
@@ -1251,6 +1252,7 @@ document.addEventListener("DOMContentLoaded", function () {
     try {
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify({
         p: fProject ? fProject.value : "",
+        a: fAgent ? fAgent.value : "",
         m: fModel ? fModel.value : "",
         from: fFrom ? fFrom.value : "",
         to: fTo ? fTo.value : "",
@@ -1262,6 +1264,7 @@ document.addEventListener("DOMContentLoaded", function () {
   const saved = _readSaved();
   if (saved) {
     if (fProject && saved.p) fProject.value = saved.p;
+    if (fAgent && saved.a) fAgent.value = saved.a;
     if (fModel && saved.m) fModel.value = saved.m;
     if (fFrom && saved.from) fFrom.value = saved.from;
     if (fTo && saved.to) fTo.value = saved.to;
@@ -1270,6 +1273,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
   function apply() {
     const p = fProject ? fProject.value : "";
+    const a = fAgent ? fAgent.value : "";
     const m = fModel ? fModel.value : "";
     const from = fFrom ? fFrom.value : "";
     const to = fTo ? fTo.value : "";
@@ -1277,11 +1281,13 @@ document.addEventListener("DOMContentLoaded", function () {
     let shown = 0;
     Array.from(tbody.querySelectorAll("tr")).forEach(function (r) {
       const rp = r.getAttribute("data-project") || "";
+      const ra = r.getAttribute("data-agent") || "";
       const rm = r.getAttribute("data-model") || "";
       const rd = r.getAttribute("data-date") || "";
       const rs = (r.getAttribute("data-slug") || "").toLowerCase();
       let show = true;
       if (p && rp !== p) show = false;
+      if (a && ra !== a) show = false;
       if (m && rm !== m) show = false;
       if (from && rd < from) show = false;
       if (to && rd > to) show = false;
@@ -1293,11 +1299,12 @@ document.addEventListener("DOMContentLoaded", function () {
     _writeSaved();
   }
 
-  [fProject, fModel, fFrom, fTo, fText].forEach(function (el) {
+  [fProject, fAgent, fModel, fFrom, fTo, fText].forEach(function (el) {
     if (el) el.addEventListener("input", apply);
   });
   if (fClear) fClear.addEventListener("click", function () {
     if (fProject) fProject.value = "";
+    if (fAgent) fAgent.value = "";
     if (fModel) fModel.value = "";
     if (fFrom) fFrom.value = "";
     if (fTo) fTo.value = "";
@@ -1495,7 +1502,10 @@ document.addEventListener("DOMContentLoaded", function () {
       const barH = (count / maxCount) * (h - 16);
       const y = h - barH - 4;
       return '<rect x="' + x + '" y="' + y + '" width="' + barW + '" height="' + barH +
-             '" fill="var(--accent)" opacity="0.7" data-date="' + escAttr(d) + '" data-count="' + escAttr(count) + '"></rect>';
+             '" fill="var(--accent)" opacity="0.7" data-date="' + escAttr(d) +
+             '" data-count="' + escAttr(count) + '">' +
+             '<title>' + escAttr(d) + ' — ' + escAttr(count) +
+             (count === 1 ? ' session' : ' sessions') + '</title></rect>';
     }).join("");
 
     const svg =
@@ -1525,6 +1535,46 @@ document.addEventListener("DOMContentLoaded", function () {
     labelEl.textContent = labelText;
     tl.appendChild(labelEl);
     tl.insertAdjacentHTML("beforeend", svg);
+
+    // Show the day count in the label on hover/focus/click (native
+    // <title> covers the browser tooltip; the label is the persistent cue).
+    const svgEl = tl.querySelector("svg");
+    function showBarValue(rect) {
+      const d = rect.getAttribute("data-date") || "";
+      const c = rect.getAttribute("data-count") || "0";
+      labelEl.textContent = d + " · " + c + (c === "1" ? " session" : " sessions");
+    }
+    function resetLabel() {
+      labelEl.textContent = labelText;
+    }
+    if (svgEl) {
+      svgEl.addEventListener("mouseover", function (ev) {
+        const r = ev.target.closest("rect");
+        if (r) showBarValue(r);
+      });
+      svgEl.addEventListener("mouseout", function (ev) {
+        const to = ev.relatedTarget && ev.relatedTarget.closest
+          ? ev.relatedTarget.closest("rect") : null;
+        if (!to) resetLabel();
+      });
+      svgEl.addEventListener("focusin", function (ev) {
+        const r = ev.target.closest("rect");
+        if (r) showBarValue(r);
+      });
+      svgEl.addEventListener("focusout", resetLabel);
+      svgEl.addEventListener("click", function (ev) {
+        const r = ev.target.closest("rect");
+        if (r) showBarValue(r);
+      });
+      // Keyboard: make bars focusable so focusin works.
+      svgEl.querySelectorAll("rect").forEach(function (r) {
+        r.setAttribute("tabindex", "0");
+        r.setAttribute("role", "img");
+        const d = r.getAttribute("data-date") || "";
+        const c = r.getAttribute("data-count") || "0";
+        r.setAttribute("aria-label", d + ": " + c + (c === "1" ? " session" : " sessions"));
+      });
+    }
 
     // Insert above the filter bar
     const filter = container.querySelector(".filter-bar");
@@ -1654,6 +1704,99 @@ document.addEventListener("DOMContentLoaded", function () {
   }
   // Expose so the palette renderer can call it if it chooses
   window.llmwikiHighlight = highlight;
+})();
+
+// ─── Documents tree (lazy load — one payload for all document pages) ───────
+(function () {
+  function escapeHtml(s) {
+    return String(s || "").replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  function renderNode(node, prefix, activeRel, pathParts) {
+    var html = "<ul>";
+    var folders = node.folders || [];
+    for (var i = 0; i < folders.length; i++) {
+      var folder = folders[i];
+      var nextParts = pathParts.concat([folder.name]);
+      var isOpen = false;
+      if (activeRel) {
+        var activeParts = activeRel.split("/");
+        isOpen = activeParts.slice(0, nextParts.length).join("/") === nextParts.join("/");
+      }
+      html += "<li><details" + (isOpen ? " open" : "") + ">"
+        + "<summary>" + escapeHtml(folder.name) + "</summary>"
+        + renderNode(folder, prefix, activeRel, nextParts)
+        + "</details></li>";
+    }
+    var files = node.files || [];
+    for (var j = 0; j < files.length; j++) {
+      var f = files[j];
+      var cls = (activeRel && f.rel === activeRel)
+        ? ' class="active" aria-current="page"' : "";
+      html += '<li><a href="' + escapeHtml(prefix + f.href) + '"' + cls + ">"
+        + escapeHtml(f.label) + "</a></li>";
+    }
+    html += "</ul>";
+    return html;
+  }
+
+  function mountAside(aside) {
+    var prefix = aside.getAttribute("data-link-prefix") || "";
+    var activeRel = aside.getAttribute("data-active-rel") || "";
+    var jsUrl = aside.getAttribute("data-doctree-js") || (prefix + "documents-tree.js");
+    var loading = aside.querySelector(".doctree-loading");
+    var title = aside.querySelector(".doctree-title");
+
+    function showError(err) {
+      window.__llmwikiReportError("Documents tree unavailable", err);
+      if (loading) {
+        loading.textContent = "Documents tree could not be loaded — this page is broken, not empty.";
+        loading.classList.add("doctree-error");
+      }
+    }
+
+    if (typeof window.__llmwikiLoadData !== "function") {
+      showError(new Error("__llmwikiLoadData missing"));
+      return;
+    }
+
+    window.__llmwikiLoadData(jsUrl, "documents-tree")
+      .then(function (tree) {
+        if (!tree || (typeof tree !== "object")) {
+          throw new Error("documents-tree payload missing or invalid");
+        }
+        var body = renderNode(tree, prefix, activeRel, []);
+        // Replace loading / noscript; keep the title.
+        var keep = title ? [title] : [];
+        aside.innerHTML = "";
+        keep.forEach(function (el) { aside.appendChild(el); });
+        if (!tree.folders || !tree.folders.length) {
+          if (!tree.files || !tree.files.length) {
+            var empty = document.createElement("p");
+            empty.className = "muted";
+            empty.textContent = "No documents yet.";
+            aside.appendChild(empty);
+            return;
+          }
+        }
+        var wrap = document.createElement("div");
+        wrap.innerHTML = body;
+        while (wrap.firstChild) aside.appendChild(wrap.firstChild);
+      })
+      .catch(showError);
+  }
+
+  function init() {
+    document.querySelectorAll("[data-doctree-mount]").forEach(mountAside);
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init);
+  } else {
+    init();
+  }
 })();
 
 // ─── v0.4: Deep-link icon next to headings ────────────────────────────────

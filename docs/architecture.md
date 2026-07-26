@@ -102,13 +102,15 @@ Pages rendered (v0.9 surface):
 - `site/models/<slug>.html` — per-model info card + changelog timeline + pricing sparkline (v0.7, #56)
 - `site/vs/index.html` — auto-generated vs-comparison index (v0.7, #58)
 - `site/vs/<a>-vs-<b>.html` — side-by-side info table + benchmark chart + price delta
-- `site/index.html` — file-tree browser over `raw/docs/**` (wiki-add documents)
-- `site/documents/<path>.html` — one page per raw document file, shared tree sidebar
+- `site/index.html` — pipeline State dashboard (recent raw docs)
+- `site/raw.html` — raw-docs file-tree browser (tree loaded from `documents-tree.js`)
+- `site/documents/<path>.html` — one page per raw document file; shared tree sidebar loaded once via JS
+- `site/documents-tree.json` (+ `.js` sidecar) — single shared doctree payload for Raw + document pages
 - `site/recent.html` — newest raw documents, one row per logical document
 - `site/analytics.html` — activity heatmap, token stats, project grid
 - `site/search-index.json` — pre-built client-side search index
-- `site/sources/<project>/<slug>.md` — copies of raw source for download
-- Plus AI-consumable exports: `llms.txt`, `llms-full.txt`, `graph.jsonld`, `sitemap.xml`, `rss.xml`, per-page `.txt` + `.json` siblings
+- `site/sources/<project>/<slug>.md` — copies of raw session markdown for download / agents
+- Plus AI-consumable exports: `llms.txt`, `llms-full.txt`, `graph.jsonld`, `sitemap.xml`, `rss.xml`
 
 Documents enter `raw/docs/` either via the asynchronous producer queue path or synchronously via `llmwiki add` (`llmwiki/add_doc.py`, #16) — both produce the same dir-per-doc, section-chunked layout.
 

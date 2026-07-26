@@ -24,7 +24,6 @@ from llmwiki.build import (
     supports_resume,
 )
 from llmwiki.convert import restore_local_path
-from llmwiki.exporters import write_page_json
 
 
 REAL = "alice"
@@ -180,20 +179,23 @@ def test_old_session_resume_marked_stale(tmp_path: Path):
     assert "claude --resume" in html
 
 
-# ─── JSON sibling ─────────────────────────────────────────────────────
+# ─── HTML metadata (session id + cwd for agents) ──────────────────────
 
 
-def test_json_sibling_includes_session_id_and_local_cwd(tmp_path: Path):
-    html_path = tmp_path / "sessions" / "demo-proj" / "sess.html"
-    html_path.parent.mkdir(parents=True)
-    html_path.write_text("<html></html>", encoding="utf-8")
-    meta = _meta()
-    meta["cwd"] = local_cwd(meta)  # build loop restores before write
-    jsn = write_page_json(html_path, meta, "body", [])
-    data = json.loads(jsn.read_text(encoding="utf-8"))
-    assert data["sessionId"] == "8057bbe6-73e8-418f-b439-b4d11bad1ad7"
-    assert data["cwd"] == LOCAL_CWD
-
+def test_session_html_metadata_includes_session_id_and_local_cwd(tmp_path: Path):
+    path, meta, body = _src()
+    out = render_session(path, meta, body, tmp_path, "demo-proj")
+    html = out.read_text(encoding="utf-8")
+    assert "llmwiki:metadata" in html
+    assert "sessionId: 8057bbe6-73e8-418f-b439-b4d11bad1ad7" in html
+    assert f"cwd: {LOCAL_CWD}" in html
+    assert "md_source: sources/demo-proj/" in html
+    assert "txt_sibling:" not in html
+    assert "json_sibling:" not in html
+    assert 'title="plain-text sibling' not in html
+    assert 'title="structured JSON sibling' not in html
+    assert "Download .md" in html
+    assert 'href="../../sources/demo-proj/' in html
 
 # ─── project disk paths / names ───────────────────────────────────────
 

@@ -134,7 +134,7 @@ def render_wiki_value_section(
     estimate: dict[str, Any] | None = None,
     docs_by_project: dict[str, int] | None = None,
 ) -> str:
-    """Analytics "Wiki usage" section (#52) — value cards, mix, MCP table."""
+    """Analytics "LLM-Wiki MCP usage" section (#52) — value cards, mix, MCP table."""
     summary = value_summary(usage_totals or {}, wiki_page_count=wiki_page_count)
     mcp_days = mcp_days or {}
     session_days = session_days or {}
@@ -247,9 +247,9 @@ def render_wiki_value_section(
 
     return (
         '<section class="section wiki-usage-section"><div class="container">'
-        '<h2>Wiki usage</h2>'
-        '<p class="muted">Usage-led signals: is the wiki being retrieved, by whom, '
-        'and which pages earn their keep?</p>'
+        '<h2>LLM-Wiki MCP usage</h2>'
+        '<p class="muted">MCP telemetry only: is the wiki being retrieved via '
+        'llmwiki tools, by whom, and which pages earn their keep?</p>'
         f'{cards}{cost_line}{mix_block}{top_block}{dead_block}{mcp_inner}'
         '</div></section>'
     )
@@ -260,13 +260,13 @@ def render_mcp_usage_section(
     docs_by_project: dict[str, int],
     link_prefix: str = "",
 ) -> str:
-    """Standalone MCP section — kept for tests; analytics merges into Wiki usage."""
+    """Standalone MCP section — kept for tests; analytics merges into MCP usage."""
     inner = _render_mcp_usage_inner(usage_totals, docs_by_project)
     if not inner:
         return ""
     return (
         '<section class="section mcp-usage-section"><div class="container">'
-        '<h2>Wiki usage (MCP)</h2>'
+        '<h2>LLM-Wiki MCP usage</h2>'
         f'{inner}'
         '</div></section>'
     )

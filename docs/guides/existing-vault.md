@@ -143,8 +143,8 @@ llmwiki build --vault ~/my-vault --out ~/my-vault-site
 ```
 
 This compiles pages *from* the vault into a gitignorable static site.
-The same `site/graph.html`, `search-index.json`, and per-page `.txt` /
-`.json` siblings get written.
+The same `site/graph.html`, `search-index.json`, and nested
+`sources/<project>/*.md` copies get written.
 
 ## Python API
 

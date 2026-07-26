@@ -4,7 +4,7 @@ type: navigation
 docs_shell: true
 ---
 
-<div style="background: #7C3AED; color: white; padding: 8px 16px; border-radius: 6px; font-weight: 600; margin-bottom: 24px;">LOCAL / CLI SYNTHESIS — no Anthropic HTTP batch API.</div>
+> **LOCAL / CLI SYNTHESIS** — no Anthropic HTTP batch API.
 
 # Synthesis backends (v1.4.0+)
 

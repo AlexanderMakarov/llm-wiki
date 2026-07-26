@@ -71,7 +71,7 @@ These are not strictly SEO but help AI crawlers index your content:
 - `llms.txt` — short plain-text index per the llmstxt.org spec
 - `llms-full.txt` — full wiki dump, capped at 5 MB
 - `graph.jsonld` — Schema.org JSON-LD knowledge graph
-- Per-page `.txt` + `.json` siblings next to every HTML file
+- Nested `sources/<project>/<stem>.md` next to every session HTML page
 
 ## Custom domain setup
 

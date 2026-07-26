@@ -237,6 +237,7 @@ cp examples/sessions_config.json config.json
 | `web_clipper` | `watch_dir` | string | `"raw/web"` | Directory to watch |
 | `web_clipper` | `extensions` | list | `[".md"]` | File extensions to pick up |
 | `web_clipper` | `auto_queue` | bool | true | Auto-enqueue into unified `llmwiki-state.json` queue |
+| `site` | `github_repo` | string | `""` | Optional `owner/name` for CHANGELOG / edit-on-GitHub / source-code links in compiled docs. Empty = detect from `git remote get-url origin`, else `Pratiyush/llm-wiki` |
 
 ## Environment variables
 

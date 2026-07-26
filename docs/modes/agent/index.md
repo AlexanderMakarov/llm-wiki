@@ -4,7 +4,7 @@ type: navigation
 docs_shell: true
 ---
 
-<div style="background: #0D9488; color: white; padding: 8px 16px; border-radius: 6px; font-weight: 600; margin-bottom: 24px;">AGENT MODE — uses your existing Claude Code / Codex CLI session.</div>
+> **AGENT MODE** — uses your existing Claude Code / Codex CLI session.
 
 # Mode B · Agent
 

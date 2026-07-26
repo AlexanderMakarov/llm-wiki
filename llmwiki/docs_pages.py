@@ -230,9 +230,61 @@ def _breadcrumb(page: DocsPage) -> str:
     )
 
 
-_GITHUB_EDIT_BASE = (
-    "https://github.com/Pratiyush/llm-wiki/edit/master/docs"
-)
+_DEFAULT_GITHUB_REPO = "Pratiyush/llm-wiki"
+
+
+def resolve_github_repo() -> str:
+    """Return ``owner/repo`` for GitHub links in the compiled docs.
+
+    Order: ``site.github_repo`` in config → ``git remote get-url origin``
+    → upstream default. Forks set ``site.github_repo`` (or rely on origin)
+    so CHANGELOG / edit-on-GitHub / source-code links point at their repo.
+    """
+    try:
+        from llmwiki.config_schedule import _load_sessions_config
+        site = _load_sessions_config().get("site") or {}
+        configured = str(site.get("github_repo") or "").strip()
+        if configured:
+            return configured.removeprefix("https://github.com/").strip("/")
+    except (OSError, ValueError, TypeError, ImportError):
+        pass
+    try:
+        import subprocess
+
+        from llmwiki import PACKAGE_ROOT
+        raw = subprocess.run(
+            ["git", "remote", "get-url", "origin"],
+            cwd=PACKAGE_ROOT.parent,
+            capture_output=True,
+            text=True,
+            timeout=2,
+            check=False,
+        ).stdout.strip()
+        if raw:
+            # git@github.com:Owner/repo.git  or  https://github.com/Owner/repo.git
+            raw = raw.removesuffix(".git")
+            if "github.com:" in raw:
+                return raw.split("github.com:", 1)[1]
+            if "github.com/" in raw:
+                return raw.split("github.com/", 1)[1]
+    except (OSError, ValueError, TypeError):
+        pass
+    return _DEFAULT_GITHUB_REPO
+
+
+def github_blob_url() -> str:
+    return f"https://github.com/{resolve_github_repo()}/blob/master"
+
+
+def github_edit_docs_url() -> str:
+    return f"https://github.com/{resolve_github_repo()}/edit/master/docs"
+
+
+# Lazily refreshed at compile time so tests that monkeypatch
+# resolve_github_repo see the new value. Module-level aliases kept for
+# older call sites / tests that read `_GITHUB_BLOB_URL`.
+_GITHUB_BLOB_URL = f"https://github.com/{_DEFAULT_GITHUB_REPO}/blob/master"
+_GITHUB_EDIT_BASE = f"https://github.com/{_DEFAULT_GITHUB_REPO}/edit/master/docs"
 
 
 def _tutorial_seq(pages: list["DocsPage"]) -> list["DocsPage"]:
@@ -326,7 +378,7 @@ def _tutorial_footer_html(
     else:
         bits.append('<span class="next-tut placeholder"></span>')
 
-    edit_href = f"{_GITHUB_EDIT_BASE}/{current.rel}"
+    edit_href = f"{github_edit_docs_url()}/{current.rel}"
     edit_html = (
         f'<a class="edit-on-github" href="{html.escape(edit_href)}" '
         f'target="_blank" rel="noopener">Edit on GitHub ↗</a>'
@@ -371,19 +423,28 @@ def compile_docs_site(
     # #457: substitute {{__llmwiki_version__}} at build time so the docs
     # hub never goes stale on a release. Reading the version lazily
     # (inside the loop instead of at module load) keeps the docs_pages
-    # module cheap to import.
+    # module cheap to import. GitHub placeholders follow the same
+    # pattern so forks point CHANGELOG / issues at their own repo.
     from llmwiki import __version__ as _llmwiki_version
+    _gh_repo = resolve_github_repo()
+    _gh_blob = github_blob_url()
+    _gh_home = f"https://github.com/{_gh_repo}"
+    # Keep module-level aliases in sync for anything that still reads them.
+    global _GITHUB_BLOB_URL, _GITHUB_EDIT_BASE
+    _GITHUB_BLOB_URL = _gh_blob
+    _GITHUB_EDIT_BASE = github_edit_docs_url()
 
     for page in all_pages:
         meta_strip = render_meta_strip(page.body) if page.is_shell else ""
         body_without_meta = (
             _strip_meta_lines(page.body) if page.is_shell else page.body
         )
-        # #457: template substitution. Currently supports the version
-        # placeholder used by the docs hub; can be extended with more
-        # placeholders (e.g. release date, latest CHANGELOG bullet) later.
-        body_without_meta = body_without_meta.replace(
-            "{{__llmwiki_version__}}", _llmwiki_version
+        # #457: template substitution.
+        body_without_meta = (
+            body_without_meta
+            .replace("{{__llmwiki_version__}}", _llmwiki_version)
+            .replace("{{__llmwiki_github__}}", _gh_home)
+            .replace("{{__llmwiki_github_blob__}}", _gh_blob)
         )
         body_html = md_to_html(body_without_meta)
 
@@ -459,6 +520,13 @@ _MD_HREF_RE = re.compile(
     r'href="(?!https?:|mailto:|#)([^"]+?)\.md(\#[^"]*)?"'
 )
 
+# Directory links (`href="modes/"`, `href="modes/agent/"`) resolve as
+# folder listings over file:// / some static hosts. Point them at the
+# compiled index.html inside the folder instead.
+_DIR_HREF_RE = re.compile(
+    r'href="(?!https?:|mailto:|#)([^"]*?/)(\#[^"]*)?"'
+)
+
 # #270: docs pages frequently reference source code or root files that
 # don't compile to HTML — link rewriter used to leave them dangling.
 # Match anything under ../.. that points at source code or repo-root
@@ -477,7 +545,8 @@ _ROOT_ONLY_MD_BASENAMES = {
     "CLAUDE.md", "AGENTS.md", "SECURITY.md", "RELEASE-NOTES.md",
     "LICENSE", ".gitignore", ".env", ".editorconfig",
 }
-_GITHUB_BLOB_URL = "https://github.com/Pratiyush/llm-wiki/blob/master"
+# `_GITHUB_BLOB_URL` is defined above via resolve_github_repo defaults;
+# `_rewrite_one_to_github` calls `github_blob_url()` at rewrite time.
 
 _CODE_OR_ROOT_HREF_RE = re.compile(
     r'href="(?!https?:|mailto:|#)([^"]+?)"'
@@ -504,11 +573,11 @@ def _rewrite_one_to_github(href: str) -> str | None:
     base = path_no_fragment.rsplit("/", 1)[-1]
     # Source-code files — always route to GitHub.
     if path_no_fragment.endswith(_SOURCE_CODE_EXTS):
-        return f"{_GITHUB_BLOB_URL}/{path_no_fragment}"
+        return f"{github_blob_url()}/{path_no_fragment}"
     # Repo-root files (README, CONTRIBUTING, LICENSE, CODE_OF_CONDUCT,
     # .gitignore) that aren't compiled to HTML.
     if base in _ROOT_ONLY_MD_BASENAMES:
-        return f"{_GITHUB_BLOB_URL}/{path_no_fragment}"
+        return f"{github_blob_url()}/{path_no_fragment}"
     # Previously-rewritten .html versions of root-only files
     # (e.g. ``../CLAUDE.html`` from an earlier md→html pass that ran
     # before we knew the file is repo-root-only).  Flip back to the
@@ -516,7 +585,7 @@ def _rewrite_one_to_github(href: str) -> str | None:
     if base in _ROOT_ONLY_HTML_BASENAMES:
         md_name = base.replace(".html", ".md")
         md_path = path_no_fragment.rsplit("/", 1)[0] + "/" + md_name if "/" in path_no_fragment else md_name
-        return f"{_GITHUB_BLOB_URL}/{md_path}"
+        return f"{github_blob_url()}/{md_path}"
     return None
 
 
@@ -617,7 +686,7 @@ def strip_dead_session_refs(html_body: str) -> str:
     )
 
     def _sub(m: _re.Match) -> str:
-        pre, href, post, inner = m.group(1), m.group(2), m.group(3), m.group(4)
+        href, inner = m.group(2), m.group(4)
         # Respect absolute + mailto + in-page anchors — they're never dead.
         if href.startswith(("http:", "https:", "mailto:", "#")):
             return m.group(0)
@@ -652,29 +721,47 @@ def rewrite_source_code_links_to_github(html_body: str) -> str:
 
 def rewrite_md_links_to_html(html_body: str) -> str:
     """Rewrite every internal ``href="foo.md"`` (and ``foo.md#anchor``)
-    to ``foo.html``. Leaves external URLs untouched.
+    to ``foo.html``, and every trailing-slash directory link
+    (``href="modes/"``) to ``modes/index.html``.
 
-    The docs compiler writes ``.html`` files, but Markdown source
-    authors use ``.md`` so the links work on GitHub too. This one
-    pass reconciles the two.
+    Leaves external URLs untouched. Authors write GitHub-friendly
+    ``.md`` / directory links; the compiled site needs ``.html``.
 
     #270: callers should now run
     :func:`rewrite_source_code_links_to_github` BEFORE this function
     so repo-root ``.md`` files (README, CONTRIBUTING, etc.) get routed
     to GitHub instead of becoming dangling ``.html`` links.
     """
-    return _MD_HREF_RE.sub(
+    out = _MD_HREF_RE.sub(
         lambda m: f'href="{m.group(1)}.html{m.group(2) or ""}"',
         html_body,
     )
 
+    def _dir_sub(m: re.Match[str]) -> str:
+        path = m.group(1)
+        anchor = m.group(2) or ""
+        # Already points at a file (…/index.html/, unlikely) or empty.
+        if not path or path.endswith(".html/") or path.endswith("index.html"):
+            return m.group(0)
+        # Avoid doubling: modes/index.html/ already handled above.
+        if path.endswith("index.html/"):
+            return m.group(0)
+        return f'href="{path}index.html{anchor}"'
+
+    return _DIR_HREF_RE.sub(_dir_sub, out)
+
 
 def _first_paragraph(body: str) -> str:
-    """First non-heading paragraph; used as the ``<meta description>``."""
+    """First non-heading paragraph; used as the ``<meta description>``.
+
+    Skips raw HTML blocks and blockquotes so mode-banner callouts don't
+    leak escaped markup into ``<meta name="description">``.
+    """
     for block in body.split("\n\n"):
         stripped = block.strip()
-        if stripped and not stripped.startswith(("#", "---")):
-            return re.sub(r"\s+", " ", stripped)
+        if not stripped or stripped.startswith(("#", "---", "<", ">")):
+            continue
+        return re.sub(r"\s+", " ", stripped)
     return ""
 
 

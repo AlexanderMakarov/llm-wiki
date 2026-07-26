@@ -62,6 +62,10 @@
     "host": "127.0.0.1",
     "open_browser": false
   },
+  "_site_comment": "Static-site / docs settings. github_repo (owner/name) controls CHANGELOG, edit-on-GitHub, and source-code links in compiled docs. Empty = detect from `git remote get-url origin`, else Pratiyush/llm-wiki.",
+  "site": {
+    "github_repo": ""
+  },
   "_build_comment": "Default build settings.",
   "build": {
     "out_dir": "site",

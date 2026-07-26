@@ -21,7 +21,10 @@ from llmwiki.raw_docs_site import (
     group_documents,
     render_document_pages,
     render_sidebar,
+    render_sidebar_mount,
     scan_raw_docs,
+    tree_to_dict,
+    write_documents_tree,
 )
 
 
@@ -98,7 +101,27 @@ def test_sidebar_marks_active_and_opens_folder(docs_dir: Path):
     assert 'href="../../documents/runbook/runbook-02.html"' in html_text
 
 
-def test_document_pages_written_with_tree_and_content(docs_dir: Path, tmp_path: Path):
+def test_tree_to_dict_and_write_documents_tree(docs_dir: Path, tmp_path: Path):
+    files = scan_raw_docs(docs_dir)
+    root = build_tree(files)
+    data = tree_to_dict(root)
+    assert any(f["rel"] == "standalone.md" for f in data["files"])
+    runbook = next(f for f in data["folders"] if f["name"] == "runbook")
+    assert {f["rel"] for f in runbook["files"]} == {
+        "runbook/runbook-01.md",
+        "runbook/runbook-02.md",
+        "runbook/runbook-03.md",
+    }
+    out = tmp_path / "site"
+    out.mkdir()
+    path = write_documents_tree(root, out)
+    assert path.name == "documents-tree.json"
+    assert (out / "documents-tree.js").is_file()
+    loaded = __import__("json").loads(path.read_text(encoding="utf-8"))
+    assert loaded == data
+
+
+def test_document_pages_use_mount_not_inline_tree(docs_dir: Path, tmp_path: Path):
     from llmwiki.build import (
         breadcrumbs_bar, md_to_html, page_foot, page_head,
     )
@@ -115,10 +138,17 @@ def test_document_pages_written_with_tree_and_content(docs_dir: Path, tmp_path: 
     )
     assert len(written) == 4
     page = (out / "documents" / "runbook" / "runbook-01.html").read_text(encoding="utf-8")
-    assert "doctree-sidebar" in page
+    assert 'data-doctree-mount' in page
+    assert 'data-active-rel="runbook/runbook-01.md"' in page
+    assert "doctree-loading" in page
     assert "Body text." in page
-    # css/nav prefixed for depth 2
+    # Must NOT inline every document link (that was the 350 MB blow-up).
+    assert "runbook-02.html" not in page
+    assert "standalone.html" not in page
     assert 'href="../../style.css"' in page
+    mount = render_sidebar_mount(active_rel=files[0].rel, link_prefix="../../")
+    assert "data-doctree-js" in mount
+    assert "documents-tree.js" in mount
 
 
 def test_render_index_is_tree_browser(docs_dir: Path, tmp_path: Path):

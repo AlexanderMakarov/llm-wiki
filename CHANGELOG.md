@@ -8,8 +8,24 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ## [Unreleased]
 
+### Changed
+
+- **Static site no longer duplicates the documents tree into every HTML page** — each of the ~1400 document pages used to embed the full Raw sidebar (~250 KB of links), which ballooned `site/documents/` alone past 350 MB on a mid-size vault. The tree now ships once as `documents-tree.json` + a `.js` sidecar (same `file://`-safe pattern as search-index) and `script.js` mounts it into an empty aside on `raw.html` and every document page. Load failures surface via `__llmwikiReportError` instead of a silently empty sidebar.
+- **Per-session `.txt` / `.json` siblings removed** — agents get nested markdown at `sources/<project>/<stem>.md` (Download .md on the session page) plus site-level `llms.txt` / `llms-full.txt` / `ai-readme.md`. Session HTML metadata comments now advertise `md_source:` instead of `txt_sibling:` / `json_sibling:`.
+- **`site/sources/` is nested by project** — Download .md already linked to `sources/<project>/<file>.md` and `docs/architecture.md` documented that layout, but build did a flat `copytree` so every button 404'd. Copies now land under the project subdir next to the session HTML write.
+- **Analytics section renamed "Wiki usage" → "LLM-Wiki MCP usage"** — the cards and table only reflect MCP telemetry, not `file://` browsing; the heading now says so.
+- **Compiled docs GitHub links follow the fork** — CHANGELOG / edit-on-GitHub / source-code rewrites use `site.github_repo` from config, else `git remote get-url origin`, else upstream `Pratiyush/llm-wiki`. Forks no longer hard-link every Operate tip at the upstream blob URL.
+
+### Fixed
+
+- **Sessions Activity timeline shows the day count on hover / focus / click** — bars already carried `data-date` / `data-count` but nothing surfaced them; the label now updates (native `<title>` tooltip too) and bars are keyboard-focusable.
+- **Sessions filter bar includes Agent** — same select pattern as Project / Model, persisted in `sessionStorage` with the other filters.
+- **Docs directory links open `index.html` under `file://`** — `href="modes/"` and `href="modes/agent/"` used to open a bare folder listing; the md→html rewriter now appends `index.html` (anchors preserved).
+- **Mode-page banner callouts no longer render as escaped raw HTML** — agent / API mode pages used a literal `<div style=…>` that the HTML-escape preprocessor showed as text; they use markdown blockquotes instead.
+
 ### Added
 
+- **`site.github_repo`** — optional `owner/name` in `config.json` / `examples/sessions_config.json` so compiled docs point CHANGELOG and source links at a fork. Empty = detect from `origin`, else upstream default.
 - **`llmwiki synthesize --sessions-only` / `--docs-only`** — restrict a synthesize run to `raw/sessions/` or `raw/docs/` without naming every file. Still combinable with `--path` (mismatched kind exits 2) and `--force`; incompatible with `--check` / `--estimate`. Default (no flag) synthesizes both corpora. Docs: `docs/reference/cli.md`, `docs/reference/ui.md`, `docs/configuration.md`. Tests: `tests/test_synthesize_path.py`.
 
 - **`OpenClawAdapter` (`openclaw`) gains configurable `roots`** — previously hardcoded to `~/.openclaw/agents`, so a laptop syncing OpenClaw sessions mirrored elsewhere (e.g. into a vault inbox at `<vault>/.openclaw-sessions-inbox/<agent>/<uuid>.jsonl`, no `sessions/` segment) had no way to point the adapter at that path. `adapters.openclaw.roots` in `config.json` now overrides the default, following the same `roots`/`@property session_store_path` pattern as `opencode` and `gemini_cli`; `derive_project_slug` resolves the agent name relative to whichever configured root matches. `discover_sessions` also now skips `*.checkpoint.*.jsonl` sidecars and anything under a `_quarantine/` directory, in addition to the existing `*.trajectory.jsonl` filter — both can appear in a mirrored inbox and neither is a conversation transcript. Docs: `docs/adapters/openclaw.md`, `docs/configuration-reference.md`. Tests: `tests/test_openclaw_cursor_cli_adapters.py`.

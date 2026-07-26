@@ -3,7 +3,7 @@
 Renders the wiki-add document layer (``raw/docs/**``) into the static
 site:
 
-- a shared file-tree sidebar (pure ``<details>`` HTML, no JS required)
+- a shared file-tree sidebar loaded once from ``documents-tree.json|.js``
 - one HTML page per document file under ``site/documents/…``
 - the Home queue dashboard (body of ``index.html``)
 - the Raw tree pane (body of ``raw.html``)
@@ -16,12 +16,14 @@ injected as callables by ``build.py``, mirroring how
 from __future__ import annotations
 
 import html
+import json
 import re
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import Any, Callable, Optional
 
 from llmwiki._frontmatter import parse_frontmatter
+from llmwiki.render.data import write_js_sidecar
 
 # Path-safe segment — same alphabet as build._safe_slug (#405). Files
 # whose relative path contains any other segment are skipped (they
@@ -183,15 +185,74 @@ def group_documents(files: list[RawDocFile]) -> list[DocEntry]:
 # ─── sidebar tree ──────────────────────────────────────────────────────────
 
 
+def tree_to_dict(root: DocFolder) -> dict[str, Any]:
+    """Serialize ``DocFolder`` for ``documents-tree.json`` (site-root hrefs)."""
+
+    def folder_dict(node: DocFolder) -> dict[str, Any]:
+        return {
+            "name": node.name,
+            "folders": [
+                folder_dict(child)
+                for _name, child in sorted(node.folders.items())
+            ],
+            "files": [
+                {
+                    "label": (
+                        clean_chunk_title(f.title)
+                        if f.rel.parts[:-1] == ()
+                        else f.rel.stem
+                    ),
+                    "href": f.out_rel,
+                    "rel": f.rel.as_posix(),
+                }
+                for f in sorted(node.files, key=lambda f: f.rel.as_posix())
+            ],
+        }
+
+    top = folder_dict(root)
+    return {"folders": top["folders"], "files": top["files"]}
+
+
+def write_documents_tree(root: DocFolder, out_dir: Path) -> Path:
+    """Write ``documents-tree.json`` + ``.js`` sidecar once for the whole site."""
+    payload = json.dumps(tree_to_dict(root), ensure_ascii=False, separators=(",", ":"))
+    out_path = out_dir / "documents-tree.json"
+    out_path.write_text(payload, encoding="utf-8")
+    write_js_sidecar(out_path, "documents-tree", payload)
+    return out_path
+
+
+def render_sidebar_mount(
+    *,
+    active_rel: Optional[PurePosixPath] = None,
+    link_prefix: str = "",
+) -> str:
+    """Empty doctree aside; ``script.js`` fills it from ``documents-tree.js``."""
+    active = html.escape(active_rel.as_posix()) if active_rel else ""
+    prefix = html.escape(link_prefix)
+    raw_href = f"{prefix}raw.html"
+    return (
+        f'<aside class="doctree-sidebar" aria-label="Documents tree" '
+        f'data-doctree-mount data-active-rel="{active}" '
+        f'data-link-prefix="{prefix}" '
+        f'data-doctree-js="{prefix}documents-tree.js">'
+        '<div class="doctree-title">Documents</div>'
+        '<p class="muted doctree-loading">Loading documents tree…</p>'
+        f'<noscript><p class="muted">Enable JavaScript to browse the tree, '
+        f'or open <a href="{raw_href}">Raw</a>.</p></noscript>'
+        "</aside>"
+    )
+
+
 def render_sidebar(
     root: DocFolder,
     active_rel: Optional[PurePosixPath] = None,
     link_prefix: str = "",
 ) -> str:
-    """Render the shared file-tree sidebar.
+    """Render the shared file-tree sidebar as static HTML (tests / fallback).
 
-    Folders are ``<details>`` (open along the path to the active file),
-    files are links; the active file gets ``class="active"``.
+    Production pages use :func:`render_sidebar_mount` + ``documents-tree.js``
+    so the ~250 KB tree is not duplicated into every document HTML file.
     """
     def file_link(f: RawDocFile) -> str:
         cls = ' class="active" aria-current="page"' if f.rel == active_rel else ""
@@ -271,12 +332,12 @@ def render_dashboard_body(
 
 
 def render_raw_body(
-    root: DocFolder,
+    _root: DocFolder,
     entries: list[DocEntry],
     doc_file_count: int,
 ) -> str:
-    """Body of raw.html — tree sidebar + intro pane."""
-    sidebar = render_sidebar(root, active_rel=None, link_prefix="")
+    """Body of raw.html — tree sidebar mount + intro pane."""
+    sidebar = render_sidebar_mount(active_rel=None, link_prefix="")
     if doc_file_count == 0:
         intro = (
             '<p>No raw documents yet. Add one with <code>wiki-add</code> '
@@ -342,7 +403,7 @@ def render_recent_body(entries: list[DocEntry]) -> str:
 
 def render_document_pages(
     files: list[RawDocFile],
-    root: DocFolder,
+    _root: DocFolder,
     out_dir: Path,
     *,
     md_to_html: Callable[[str], str],
@@ -353,8 +414,11 @@ def render_document_pages(
 ) -> list[Path]:
     """Write one HTML page per raw doc file under ``site/documents/``.
 
-    ``nav_builder(link_prefix)`` must return the nav with the Home item
-    active — document pages live under the Home tree browser.
+    ``_root`` is accepted for call-site compatibility; the doctree itself is
+    loaded client-side from ``documents-tree.js`` (see
+    :func:`write_documents_tree`). ``nav_builder(link_prefix)`` must return
+    the nav with the Raw item active — document pages live under the Raw
+    tree browser.
     """
     written: list[Path] = []
     for f in files:
@@ -369,7 +433,7 @@ def render_document_pages(
   <div class="container">
     {breadcrumbs_bar(crumbs, link_prefix=prefix)}
     <div class="doctree-layout">
-      {render_sidebar(root, active_rel=f.rel, link_prefix=prefix)}
+      {render_sidebar_mount(active_rel=f.rel, link_prefix=prefix)}
       <article class="article doc-article">
         {md_to_html(f.body)}
       </article>

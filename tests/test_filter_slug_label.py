@@ -60,10 +60,11 @@ def test_filter_text_no_longer_bare(tmp_path: Path) -> None:
 
 
 def test_all_filters_have_labels(tmp_path: Path) -> None:
-    """Project, Model, From, To, and Slug all need a `<label>` wrapper."""
+    """Project, Agent, Model, From, To, and Slug all need a `<label>` wrapper."""
     html_text = _render(tmp_path)
     for control_id in (
         "filter-project",
+        "filter-agent",
         "filter-model",
         "filter-date-from",
         "filter-date-to",
@@ -73,3 +74,10 @@ def test_all_filters_have_labels(tmp_path: Path) -> None:
         assert m, f"{control_id} not in rendered html"
         prefix = html_text[max(0, m.start() - 200) : m.start()]
         assert "<label>" in prefix, f"{control_id} not wrapped in label"
+
+
+def test_agent_filter_and_data_attr(tmp_path: Path) -> None:
+    html_text = _render(tmp_path)
+    assert 'id="filter-agent"' in html_text
+    assert "All agents" in html_text
+    assert 'data-agent="' in html_text

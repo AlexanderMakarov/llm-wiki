@@ -77,9 +77,11 @@ URL: `/sessions/index.html`
 
 Sortable table across every project. Default sort: date desc.
 
-**Columns:** Project · Slug · Date · Model · User msgs · Tool calls · Agent badge.
+**Columns:** Session · Agent · Project · Date · Cwd · Model · Msgs · Tools.
 
-**Filter bar at top:** free-text across project/slug/model, plus agent-badge filter chips (click an agent to narrow).
+**Filter bar at top:** Project · Agent · Model · date range · slug substring (Clear resets; selections persist in `sessionStorage` for the tab).
+
+**Activity timeline** above the filter bar — SVG sparkline of sessions/day across the calendar span. Hover, focus, or click a bar to show that day's date and count in the label (native tooltip too).
 
 Clicking a row navigates to `/sessions/<project>/<slug>.html`.
 
@@ -92,7 +94,7 @@ Clicking a row navigates to `/sessions/<project>/<slug>.html`.
 - **Conversation** — full transcript, tool outputs collapsible (auto- expand on long blocks)
 - **Connections** — `[[wikilinks]]` out to entities, concepts, related sessions
 - **Related** — top-3 similarity matches (from heading/body n-gram)
-- **Sibling files** — `.txt` + `.json` sibling URLs for AI-agent consumption
+- **Download .md** — nested `sources/<project>/<stem>.md` for AI-agent consumption
 
 ---
 
@@ -178,7 +180,7 @@ Below that, sections appear in this order:
 1. **Activity** — ~18-month GitHub-style heatmaps: **Agents Activity** (session counts), **Wiki MCP calls**, and — when telemetry carries signal — **Session-page reads** and **Doc-page reads** split from `wiki_read_page` hits.
 2. **Recent activity** — last entries from `wiki/log.md` (including producer breakdown lines such as `Processed: 2 Claude · 1 Cursor`).
 3. **Projects** — filterable card grid (session counts, date range, topic chips) linking to per-project detail pages.
-4. **Wiki usage** — merged value block and MCP table in one section: retrievals · writes · answer rate · payoff-per-page · distinct attributed projects; optional synthesis cost line; sessions vs documents corpus/read mix; top-earning pages; **Dead stock** as a shared count-badge collapsible listing every unread synthesized source (`collapse_section`); per-tool calls, items returned, and zero-hit rate.
+4. **LLM-Wiki MCP usage** — merged value block and MCP table in one section (MCP telemetry only, not `file://` browsing): retrievals · writes · answer rate · payoff-per-page · distinct attributed projects; optional synthesis cost line; sessions vs documents corpus/read mix; top-earning pages; **Dead stock** as a shared count-badge collapsible listing every unread synthesized source (`collapse_section`); per-tool calls, items returned, and zero-hit rate.
 
 There is no daily bar chart — trends are read from the heatmaps. Durable counts and series are described in [`reference/state-persistence.md`](state-persistence.md).
 
@@ -209,10 +211,9 @@ The palette lazy-loads chunks as the query narrows. See [`reference/reader-api.m
 
 ## AI-consumable exports
 
-Every HTML page has two sibling files at the same URL:
+Every session page links to a nested markdown copy for agents:
 
-- `<page>.txt` — plain-text body (no HTML tags), first-line frontmatter
-- `<page>.json` — full structured body + metadata + outbound `[[wikilinks]]`
+- `sources/<project>/<stem>.md` — raw session markdown (same as the page Download .md button)
 
 Site-level exports AI agents should start with:
 

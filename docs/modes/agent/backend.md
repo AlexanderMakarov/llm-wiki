@@ -5,7 +5,7 @@ docs_shell: true
 docs_passthrough: true
 ---
 
-<div style="background: #0D9488; color: white; padding: 8px 16px; border-radius: 6px; font-weight: 600; margin-bottom: 24px;">AGENT / CLI MODE — synchronous `claude -p` synthesis.</div>
+> **AGENT / CLI MODE** — synchronous `claude -p` synthesis.
 
 # Claude CLI synthesis backend
 
