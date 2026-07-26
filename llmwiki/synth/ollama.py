@@ -51,7 +51,7 @@ import urllib.request
 from dataclasses import dataclass
 from typing import Any, Optional
 
-from llmwiki.synth.base import BaseSynthesizer
+from llmwiki.synth.base import BaseSynthesizer, split_prompt_template
 
 # ─── Constants ─────────────────────────────────────────────────────────
 
@@ -130,17 +130,35 @@ def load_ollama_config(cfg: Optional[dict[str, Any]]) -> OllamaConfig:
     is enough to reach a working local default.
     """
     synth = (cfg or {}).get("synthesis", {}) or {}
+    # Documented shape is the nested `synthesis.ollama` block. The flat
+    # `synthesis.*` layout is the legacy one and still works, but it shares a
+    # namespace with the other backends' keys — a flat `timeout` meant for
+    # Ollama was silently shortening the claude backend's per-page budget.
+    # Nested wins; flat is the fallback so existing configs keep working.
+    nested = synth.get("ollama") or {}
+    if not isinstance(nested, dict):
+        nested = {}
+
+    def _key(name: str) -> Any:
+        """Value for ``name``, nested block first, then the legacy flat key."""
+        if name in nested:
+            return nested[name]
+        return synth.get(name)
+
+    def _has(name: str) -> bool:
+        return name in nested or name in synth
+
     # Use `in` checks (not `or`) so an explicit 0 fails validation instead
     # of being silently swapped for the default.
-    model = synth.get("model") or DEFAULT_MODEL
-    base_url = synth.get("base_url") or DEFAULT_BASE_URL
-    timeout = int(synth["timeout"]) if "timeout" in synth else DEFAULT_TIMEOUT
+    model = _key("model") or DEFAULT_MODEL
+    base_url = _key("base_url") or DEFAULT_BASE_URL
+    timeout = int(_key("timeout")) if _has("timeout") else DEFAULT_TIMEOUT
     max_retries = (
-        int(synth["max_retries"]) if "max_retries" in synth else DEFAULT_MAX_RETRIES
+        int(_key("max_retries")) if _has("max_retries") else DEFAULT_MAX_RETRIES
     )
     backoff_base = (
-        float(synth["backoff_base"])
-        if "backoff_base" in synth
+        float(_key("backoff_base"))
+        if _has("backoff_base")
         else DEFAULT_BACKOFF_BASE
     )
 
@@ -236,12 +254,19 @@ class OllamaSynthesizer(BaseSynthesizer):
         # don't blow Ollama's context window — agent_delegate uses the
         # same cap; centralise here so the limit lives next to the prompt.
         truncated_body = raw_body[:8000] if raw_body else ""
-        prompt = _render_prompt(prompt_template, raw_body=truncated_body, meta=meta)
-        payload = {
+        # Ollama bills nothing, but it does keep a KV cache keyed on the
+        # prompt prefix: passing the run-stable half as `system` keeps that
+        # prefix identical across pages, so only the per-page tail is
+        # re-evaluated. Same split every backend uses, different mechanism.
+        stable, per_page = split_prompt_template(prompt_template)
+        prompt = _render_prompt(per_page, raw_body=truncated_body, meta=meta)
+        payload: dict[str, Any] = {
             "model": self.config.model,
             "prompt": prompt,
             "stream": False,
         }
+        if stable:
+            payload["system"] = stable
 
         data = self._call_generate(payload)
         response = data.get("response", "")

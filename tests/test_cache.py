@@ -325,6 +325,22 @@ def test_synthesize_parser_estimate_defaults_false():
     assert args.estimate is False
 
 
+# `_synthesize_estimate` reads the merged config, which includes the
+# developer's gitignored root `config.json`. Without pinning it, these
+# assertions describe whatever model that machine happens to be set to —
+# they pass in CI (no config.json) and fail locally the moment someone
+# switches backend or model.
+_PINNED_SYNTH_CFG = {"synthesis": {"backend": "claude", "claude_model": "sonnet"}}
+
+
+def _pin_synth_config(monkeypatch):
+    """Make an --estimate test independent of the local config.json."""
+    import llmwiki.cli as _cli
+    import llmwiki.config_schedule as _cs
+    monkeypatch.setattr(_cs, "_load_sessions_config", lambda *a, **k: _PINNED_SYNTH_CFG)
+    monkeypatch.setattr(_cli, "_load_sessions_config", lambda *a, **k: _PINNED_SYNTH_CFG, raising=False)
+
+
 def test_estimate_command_emits_total(tmp_path, monkeypatch, capsys):
     # _synthesize_estimate() reads REPO_ROOT for the prefix and calls
     # _discover_raw_sessions() / _load_state() for the per-session bodies.
@@ -343,6 +359,7 @@ def test_estimate_command_emits_total(tmp_path, monkeypatch, capsys):
         def read_text(self, encoding="utf-8"):
             return self._text or ""
 
+    _pin_synth_config(monkeypatch)
     monkeypatch.setattr(cli_mod, "REPO_ROOT", tmp_path)
     # Seed a prefix so the token estimator has something to chew on.
     (tmp_path / "CLAUDE.md").write_text("x" * 4000, encoding="utf-8")
@@ -391,10 +408,11 @@ def test_estimate_command_no_new_sessions(tmp_path, monkeypatch, capsys):
     assert "0.0000" in out
 
 
-def test_estimate_persists_unsynth_backlog_for_vault(tmp_path, capsys):
+def test_estimate_persists_unsynth_backlog_for_vault(tmp_path, capsys, monkeypatch):
     from llmwiki import cli as cli_mod
     from llmwiki.state_store import read_state
 
+    _pin_synth_config(monkeypatch)
     vault = tmp_path / "vault"
     (vault / "raw" / "sessions").mkdir(parents=True)
     (vault / "raw" / "docs").mkdir(parents=True)

@@ -30,6 +30,9 @@ from llmwiki import REPO_ROOT
 # instead of via build.py. The build module pulls in 145+ transitive
 # imports; the parser sits cleanly in _frontmatter.py with no deps.
 from llmwiki._frontmatter import is_headless, is_subagent, parse_frontmatter
+# Same matcher the graph builder uses, so "a link" means the same thing to
+# the de-duplicator and to the thing that consumes the links.
+from llmwiki.graph import WIKILINK_RE
 from llmwiki.synth.base import BaseSynthesizer, DummySynthesizer
 from llmwiki.state_store import read_state as _read_unified_state
 from llmwiki.state_store import resolve_state_file as _resolve_state_file
@@ -139,7 +142,8 @@ def resolve_backend(
       - ``"dummy"`` (default) — canned offline backend for previews/tests
       - ``"ollama"`` — local Ollama HTTP backend (#35)
       - ``"claude"`` — synchronous ``claude -p`` CLI calls (#16).
-        Optional keys: ``claude_path``, ``claude_model``, ``timeout``.
+        Optional keys: ``claude_path``, ``claude_model``,
+        ``claude_timeout``, ``claude_lean``.
 
     Unknown values fall back to the dummy backend with a warning so a
     typo in config.json doesn't crash sync.
@@ -155,12 +159,20 @@ def resolve_backend(
         return OllamaSynthesizer(config=load_ollama_config(cfg))
 
     if name == "claude":
-        from llmwiki.synth.claude_cli import ClaudeCLISynthesizer
+        from llmwiki.synth.claude_cli import (
+            DEFAULT_CLAUDE_TIMEOUT,
+            ClaudeCLISynthesizer,
+        )
 
+        # Deliberately NOT the shared `timeout` key: that one belongs to the
+        # Ollama block, and reading it here meant a 60s Ollama default
+        # silently capped every claude page at 60s instead of 180s.
         return ClaudeCLISynthesizer(
             claude_path=synth_cfg.get("claude_path"),
             model=synth_cfg.get("claude_model") or "sonnet",
-            timeout=int(synth_cfg.get("timeout") or 180),
+            timeout=int(synth_cfg.get("claude_timeout") or DEFAULT_CLAUDE_TIMEOUT),
+            lean=synth_cfg.get("claude_lean", True) is not False,
+            effort=str(synth_cfg.get("claude_effort", "") or "").strip() or None,
         )
 
     if name != "dummy":
@@ -243,9 +255,16 @@ def _load_prompt_template() -> str:
     return PROMPT_TEMPLATE_PATH.read_text(encoding="utf-8")
 
 
-# How many top topics to surface as the reuse vocabulary in the prompt. Enough
-# to cover the recurring scopes without bloating every request's token budget.
-_VOCAB_LIMIT = 80
+# How many top topics to surface as the reuse vocabulary in the prompt.
+#
+# The vocabulary is byte-identical for every page of a run, so backends put
+# it in the cached half of the prompt (see base.split_prompt_template) and
+# it is billed once per run rather than once per page. That makes breadth
+# cheap: a topic that is missing from this list gets re-coined under a new
+# spelling, which fragments the graph and the backlink index — the failure
+# this list exists to prevent. Raised 80 -> 200 once caching made the extra
+# entries cost ~0.1x on every page after the first.
+_VOCAB_LIMIT = 200
 
 
 def _vocab_attr(value: str) -> str:
@@ -822,6 +841,50 @@ _AI_TAG_STOPWORDS = frozenset({
 })
 
 
+_CONNECTIONS_HEADING_RE = re.compile(r"^##[ \t]+Connections[ \t]*$", re.M)
+_NEXT_HEADING_RE = re.compile(r"^##[ \t]+", re.M)
+
+
+def _dedupe_connections(body: str) -> str:
+    """Drop repeat ``[[links]]`` from the ``## Connections`` section.
+
+    Models sometimes list the same scope twice — the smaller ones more
+    often, e.g. ``[[MCP]]`` in two bullets of one page. The graph already
+    de-duplicates (``graph.py`` collects links into a set, and topic edge
+    weights count distinct sessions), so this is a rendering fix, not a
+    correctness one: the duplicate bullets are visible on the page.
+
+    Only the Connections section is touched — the same scope named in
+    ``## Summary`` and again under Connections is normal prose, not a
+    repeat. The first bullet wins, since it carries the description the
+    model wrote first.
+
+    Matching is case-sensitive, so ``[[MCP]]`` and ``[[Mcp]]`` both
+    survive: they are distinct nodes to the graph, and collapsing spelling
+    variants is the topic-consolidation pass's job, not this one.
+    """
+    heading = _CONNECTIONS_HEADING_RE.search(body)
+    if not heading:
+        return body
+    start = heading.end()
+    nxt = _NEXT_HEADING_RE.search(body, start)
+    end = nxt.start() if nxt else len(body)
+
+    seen: set[str] = set()
+    kept: list[str] = []
+    for line in body[start:end].splitlines(keepends=True):
+        targets = WIKILINK_RE.findall(line)
+        if not targets:
+            kept.append(line)          # blank lines, prose, "(none)" markers
+            continue
+        key = targets[0].strip()
+        if key in seen:
+            continue
+        seen.add(key)
+        kept.append(line)
+    return body[:start] + "".join(kept) + body[end:]
+
+
 def _extract_suggested_tags(body: str) -> tuple[list[str], str]:
     """Pull the ``<!-- suggested-tags: … -->`` block off the top of
     ``body`` and return ``(tags, cleaned_body)``.
@@ -993,6 +1056,7 @@ def _build_source_page(
 
     # #351: pull AI-suggested tags off the top of the body.
     ai_tags, clean_body = _extract_suggested_tags(synthesized_body)
+    clean_body = _dedupe_connections(clean_body)
 
     # Preserve any maintainer-curated tags on re-synthesize.
     # #py-h5 (#584): the broad `except Exception` was eating real

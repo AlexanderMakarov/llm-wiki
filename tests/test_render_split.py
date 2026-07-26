@@ -130,11 +130,12 @@ def test_css_module_under_800_lines():
       * 1,015 (refactor acceptance criterion)
       * 1,020 (#20 palette-note styling for unloadable search data)
       * 1,110 (#52 Wiki value chart / mix / dead-stock styles)
+      * 1,130 (Home pipeline State table + shared collapse-section chrome)
     """
     from llmwiki import REPO_ROOT
     css_py = REPO_ROOT / "llmwiki" / "render" / "css.py"
     line_count = len(css_py.read_text(encoding="utf-8").splitlines())
-    assert line_count < 1110, f"css.py is {line_count} lines"
+    assert line_count < 1130, f"css.py is {line_count} lines"
 
 
 # ─── Build equivalence ───────────────────────────────────────────────

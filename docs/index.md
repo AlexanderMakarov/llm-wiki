@@ -76,6 +76,7 @@ llmwiki runs two interchangeable ways. Pick one, start — you can switch later.
 - **[Configuration](configuration.md)** · **[Full configuration reference](configuration-reference.md)**.
 - **[Cache tiers](reference/cache-tiers.md)** — L1 / L2 / L3 / L4 frontmatter.
 - **[Prompt caching + batch API](reference/prompt-caching.md)**.
+- **[Synthesis cost](reference/synthesis-cost.md)** — how LLM pricing works, what a page actually costs, why the defaults are what they are.
 - **[Reader API contract](reference/reader-api.md)** — stable shapes of every file `llmwiki build` writes.
 - **[Reader-first article shell](reference/reader-shell.md)** — opt-in Wikipedia-style layout.
 - **[Entity schema](reference/entity-schema.md)** — structured model-profile frontmatter.

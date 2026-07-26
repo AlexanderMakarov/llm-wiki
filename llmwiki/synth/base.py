@@ -18,6 +18,36 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any
 
+# Section header in prompts/source_page.md that separates the part which is
+# identical for every page in a run (format rules + injected topic
+# vocabulary) from the part that changes per page ({meta} + {body}).
+#
+# Every provider bills a repeated prefix more cheaply than fresh input, but
+# each wants it in a different place: a system prompt (Claude CLI, Ollama),
+# an automatically-matched leading prefix (OpenAI/OpenRouter), or an
+# explicit cache_control breakpoint (Anthropic API). Splitting here — in the
+# shared contract — lets each backend map the stable half onto whatever its
+# provider caches, instead of every backend re-deriving the boundary.
+PER_PAGE_MARKER = "## Session to synthesize"
+
+
+def split_prompt_template(template: str) -> tuple[str, str]:
+    """Split a prompt template into (stable_prefix, per_page_tail).
+
+    The prefix is byte-identical across every page of a run, so it is what
+    a backend should hand to its provider's caching mechanism. The tail
+    carries the ``{meta}`` / ``{body}`` placeholders.
+
+    A template without the marker (a user's custom prompt) yields an empty
+    prefix and the whole template as the tail — caching is an optimisation,
+    never a correctness requirement, so an unrecognised template must still
+    synthesize correctly.
+    """
+    head, sep, tail = template.partition(PER_PAGE_MARKER)
+    if not sep:
+        return "", template
+    return head.rstrip(), sep + tail
+
 
 class BaseSynthesizer(ABC):
     """Interface for LLM-backed wiki-page synthesizers."""

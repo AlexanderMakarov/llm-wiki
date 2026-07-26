@@ -2598,6 +2598,7 @@ def _validate_overview_slug(s: Any) -> str:
 def synthesize_overview(
     groups: dict[str, list[tuple[Path, dict[str, Any], str]]],
     claude_path: str,
+    model: Optional[str] = None,
 ) -> Optional[str]:
     resolved = _resolve_claude_path(claude_path)
     if resolved is None:
@@ -2644,8 +2645,12 @@ def synthesize_overview(
         # #486: pass the prompt via stdin (`-p -`) instead of argv so we
         # dodge the OS argv-length limit entirely. The byte cap above is
         # defence-in-depth — argv-length DoS path closed regardless.
+        # Same scaffolding-stripping flags as page synthesis: this call
+        # writes prose from a JSON brief and can't use a single tool.
+        from llmwiki.synth.claude_cli import overview_argv
+
         result = subprocess.run(
-            [claude_path, "-p", "-", "--model", "claude-haiku-4-5-20251001"],
+            overview_argv(claude_path, model),
             input=prompt,
             capture_output=True, text=True, timeout=120,
         )
