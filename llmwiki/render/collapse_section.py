@@ -1,8 +1,9 @@
 """Shared collapsible section with a count badge in the summary.
 
-Used on Home (pipeline backlog / timeline / commands) and Analytics
-(Dead stock). The Home pipeline **table** stays separate
-(``state_widget.py``); only this fold-out chrome is shared.
+Used on Home (pipeline backlog / timeline / commands, filled client-side)
+and Analytics (Dead stock, server-rendered). The Home pipeline table mount
+is inlined in ``raw_docs_site.render_dashboard_body``; only this fold-out
+chrome is shared.
 """
 
 from __future__ import annotations

@@ -6,20 +6,14 @@ from pathlib import Path
 
 from llmwiki.raw_docs_site import render_dashboard_body
 from llmwiki.render import js
-from llmwiki.render.state_widget import state_widget_mount
 from llmwiki.synth.estimate import synthesize_estimate_report
 from llmwiki.synth.pipeline import refresh_synth_pending
 
 
-def test_state_widget_mount_reusable():
-    html = state_widget_mount(widget_id="custom-state")
-    assert 'id="custom-state"' in html
-    assert "data-llmwiki-state-widget" in html
-
-
-def test_dashboard_uses_state_widget_not_old_cards():
+def test_dashboard_inlines_state_mount_not_old_cards():
     body = render_dashboard_body([], 0)
-    assert "llmwiki-state-widget" in body
+    assert 'id="llmwiki-state-widget"' in body
+    assert "data-llmwiki-state-widget" in body
     assert "Pipeline state" in body
     assert "Recent raw documents" in body
     assert "queue-home-content" not in body

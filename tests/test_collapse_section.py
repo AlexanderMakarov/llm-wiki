@@ -41,14 +41,16 @@ def test_collapse_section_open_and_list_helpers():
 def test_analytics_dead_stock_uses_collapse_section():
     out = render_wiki_value_section(
         {"total_calls": 1, "per_tool": {"wiki_query": {"calls": 1, "zero_hits": 0}}},
-        dead_stock=["wiki/sources/x.md", "wiki/sources/y.md"],
-        dead_stock_total=5,
+        dead_stock=["wiki/sources/x.md", "wiki/sources/y.md", "wiki/sources/z.md"],
+        dead_stock_total=3,
         wiki_page_count=2,
         corpus_mix={"session": 1, "doc": 1, "other": 0, "total": 2},
     )
     assert 'class="collapse-section wiki-value-dead-collapse"' in out
-    assert ">Dead stock<" in out or ">Dead stock</" in out or "Dead stock" in out
-    assert 'class="collapse-section-count">5</span>' in out
+    assert "Dead stock" in out
+    assert 'class="collapse-section-count">3</span>' in out
     assert "wiki/sources/x.md" in out
-    assert "…and 3 more" in out
+    assert "wiki/sources/y.md" in out
+    assert "wiki/sources/z.md" in out
+    assert "…and" not in out
     assert "<h3>Dead stock" not in out

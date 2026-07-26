@@ -229,12 +229,6 @@ def render_wiki_value_section(
         items = [
             f"<li><code>{html.escape(p)}</code></li>" for p in dead_stock
         ]
-        more = (
-            f'<p class="muted">…and {dead_stock_total - len(dead_stock)} more '
-            f"(cap at build time)</p>"
-            if dead_stock_total > len(dead_stock)
-            else ""
-        )
         intro = (
             '<p class="muted">Synthesized source pages with no wiki_read_page hit '
             "in retained telemetry.</p>"
@@ -244,9 +238,8 @@ def render_wiki_value_section(
             + collapse_section_list(
                 "Dead stock",
                 items,
-                count=dead_stock_total,
+                count=dead_stock_total or len(dead_stock),
                 intro_html=intro,
-                footer_html=more,
                 extra_class="wiki-value-dead-collapse",
             )
             + "</div>"

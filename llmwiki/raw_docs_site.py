@@ -239,9 +239,7 @@ def render_dashboard_body(
     entries: list[DocEntry],
     doc_file_count: int,
 ) -> str:
-    """Body of index.html — pipeline State widget + recent raw docs."""
-    from llmwiki.render.state_widget import state_widget_mount
-
+    """Body of index.html — pipeline State table mount + recent raw docs."""
     if not entries:
         recent_block = '<p class="muted">No recent raw documents yet.</p>'
     else:
@@ -260,7 +258,9 @@ def render_dashboard_body(
     <div class="queue-widget">
       <h2>Pipeline state</h2>
       <p class="muted">Raw → synthesized counts by agent, with cost to drain the backlog.</p>
-      {state_widget_mount()}
+      <div id="llmwiki-state-widget" class="state-widget" data-llmwiki-state-widget>
+        <p class="muted">Loading pipeline state…</p>
+      </div>
       <h3>Recent raw documents</h3>
       {recent_block}
     </div>

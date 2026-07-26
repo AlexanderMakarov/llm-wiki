@@ -39,7 +39,7 @@ URL: `/index.html`
 
 Queue-first landing page. Layout:
 
-1. **Pipeline state widget** (reusable mount `#llmwiki-state-widget`) — a table with columns Raw → To synthesize → Synthesized, one row per agent that has contributed at least one session (Claude / Cursor / OpenClaw / …) plus a Documents row. Each cell is a single count; the To synthesize cell adds estimated USD in parentheses when non-zero. The Total row also shows queue **queued** / **in progress** counts. Under the table, shared **collapse sections** (`llmwiki/render/collapse_section.py`: title + count badge + fold-out body) cover Timeline, not-synthesized sessions/docs, Commands (including `sync --project <slug>`), and estimate warnings.
+1. **Pipeline state** — Home-only table mount (`#llmwiki-state-widget`, inlined on `index.html`) with columns Raw → To synthesize → Synthesized, one row per agent that has contributed at least one session (Claude / Cursor / OpenClaw / …) plus a Documents row. Each cell is a single count; the To synthesize cell adds estimated USD in parentheses when non-zero. The Total row also shows queue **queued** / **in progress** counts. Under the table, shared **collapse sections** (`llmwiki/render/collapse_section.py`: title + count badge + fold-out body) cover Timeline, not-synthesized sessions/docs, Commands (including `sync --project <slug>`), and estimate warnings.
 2. **Recent raw documents** — newest `raw/docs/` entries with title + source meta.
 
 Numbers come from `llmwiki-state.js` (`synth.pipeline` + `synth.pending` + `synth.estimate`), refreshed by `llmwiki sync` / `llmwiki synthesize --estimate`. The session-analytics content (heatmap, stats, project grid) lives on [Analytics](#analytics).
@@ -178,7 +178,7 @@ Below that, sections appear in this order:
 1. **Activity** — ~18-month GitHub-style heatmaps: **Agents Activity** (session counts), **Wiki MCP calls**, and — when telemetry carries signal — **Session-page reads** and **Doc-page reads** split from `wiki_read_page` hits.
 2. **Recent activity** — last entries from `wiki/log.md` (including producer breakdown lines such as `Processed: 2 Claude · 1 Cursor`).
 3. **Projects** — filterable card grid (session counts, date range, topic chips) linking to per-project detail pages.
-4. **Wiki usage** — merged value block and MCP table in one section: retrievals · writes · answer rate · payoff-per-page · distinct attributed projects; optional synthesis cost line; sessions vs documents corpus/read mix; top-earning pages; **Dead stock** as a shared count-badge collapsible (`collapse_section`, same chrome as Home fold-outs); per-tool calls, items returned, and zero-hit rate.
+4. **Wiki usage** — merged value block and MCP table in one section: retrievals · writes · answer rate · payoff-per-page · distinct attributed projects; optional synthesis cost line; sessions vs documents corpus/read mix; top-earning pages; **Dead stock** as a shared count-badge collapsible listing every unread synthesized source (`collapse_section`); per-tool calls, items returned, and zero-hit rate.
 
 There is no daily bar chart — trends are read from the heatmaps. Durable counts and series are described in [`reference/state-persistence.md`](state-persistence.md).
 

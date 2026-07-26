@@ -2870,10 +2870,10 @@ def build_site(
     read_mix = _mcp_read_mix(retrievals, wiki_root=wiki_root)
     top_pages = list(retrievals.items())[:12]
     # Dead stock: synthesized sources with zero read_page hits in retained logs.
+    # Full list — Analytics folds it behind a collapse section (no build-time cap).
     retrieved = set(retrievals)
     dead: list[str] = []
     source_page_count = 0
-    dead_total = 0
     if wiki_sources.is_dir():
         for p in sorted(wiki_sources.rglob("*.md")):
             if p.name.startswith("_"):
@@ -2883,9 +2883,8 @@ def build_site(
             alt = "sources/" + p.relative_to(wiki_sources).as_posix()
             keys = {rel, alt, "wiki/" + alt}
             if retrieved.isdisjoint(keys):
-                dead_total += 1
-                if len(dead) < 24:
-                    dead.append(rel)
+                dead.append(rel)
+    dead_total = len(dead)
     estimate: dict[str, Any] = {}
     try:
         from llmwiki.state_store import read_state, resolve_state_file
