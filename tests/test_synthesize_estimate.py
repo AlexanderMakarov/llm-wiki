@@ -166,6 +166,59 @@ def test_non_lean_costs_far_more_per_page():
     assert fat["overhead_tokens"] > lean["overhead_tokens"] * 10
 
 
+def test_matches_measured_cost_per_page():
+    """Calibration guard against 29 real synth calls (see synthesis-cost.md).
+
+    Measured: 9,282 input tok, 1,372 output tok, $0.0763/page on sonnet-5
+    for a mean prompt of 18,977 chars. The model should land within 15% and
+    err high — a cost estimate that under-promises is the harmful direction.
+    """
+    from llmwiki.cache import TRANSCRIPT_CHARS_PER_TOKEN
+    from llmwiki.cli import synthesize_estimate_report
+    from llmwiki.synth.estimate import BODY_CHAR_CAP, LEAN_OVERHEAD_TOKENS
+    # The 18,977-char prompt is the rendered template plus a body already
+    # truncated to the cap — split it the same way here.
+    mean_chars = 18_977
+    template_chars = mean_chars - BODY_CHAR_CAP
+    rpt = synthesize_estimate_report(
+        raw_sessions=[(_P("a.md"), {}, "x" * BODY_CHAR_CAP)],
+        state_keys=set(),
+        template_tokens=int(template_chars / TRANSCRIPT_CHARS_PER_TOKEN),
+        model="claude-sonnet-5",
+    )
+    assert rpt["overhead_tokens"] == LEAN_OVERHEAD_TOKENS
+    modelled = rpt["full_force_usd"]
+    measured = 0.0763
+    assert modelled == pytest.approx(measured, rel=0.15), (
+        f"per-page model ${modelled:.4f} drifted from measured ${measured:.4f}"
+    )
+    assert modelled >= measured, "estimate must not under-promise cost"
+
+
+def test_input_is_billed_as_cache_write_not_fresh_input():
+    """Claude Code writes every prompt to the 1h cache; reads never happen.
+
+    Measured across 29 real pages: cache_read_input_tokens was 0 on all of
+    them, and 100% of input arrived as cache_creation. Pricing this at the
+    plain input rate understates every run by ~2x.
+    """
+    from llmwiki.cache import CACHE_WRITE_1H_MULTIPLIER, MODEL_PRICING
+    from llmwiki.cli import synthesize_estimate_report
+    from llmwiki.synth.estimate import DEFAULT_OUTPUT_TOKENS, LEAN_OVERHEAD_TOKENS
+    rpt = synthesize_estimate_report(
+        raw_sessions=[(_P("a.md"), {}, "")],
+        state_keys=set(),
+        template_tokens=0,
+        model="claude-sonnet-5",
+    )
+    rates = MODEL_PRICING["sonnet-5"]
+    expected = (
+        LEAN_OVERHEAD_TOKENS * rates["input"] * CACHE_WRITE_1H_MULTIPLIER
+        + DEFAULT_OUTPUT_TOKENS * rates["output"]
+    ) / 1_000_000
+    assert rpt["full_force_usd"] == pytest.approx(expected)
+
+
 def test_custom_model_propagates():
     from llmwiki.cli import synthesize_estimate_report
     rpt = synthesize_estimate_report(

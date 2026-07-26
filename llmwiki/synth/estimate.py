@@ -34,8 +34,10 @@ FULL_AGENT_OVERHEAD_TOKENS = 35_000
 # Non-lean repeat calls re-read about half the scaffolding from the prompt
 # cache and re-write the other half (measured: 17,544 read / 17,790 written).
 NON_LEAN_CACHE_READ_FRACTION = 0.5
-# Typical completion for one source page (measured 730–815 across models).
-DEFAULT_OUTPUT_TOKENS = 800
+# Typical completion for one source page. Measured across 29 real sessions:
+# mean 1,372, spread 902-2,554. (A clean demo session returns ~800; real
+# transcripts carry more claims and quotes, so they generate more page.)
+DEFAULT_OUTPUT_TOKENS = 1400
 # claude_cli.py truncates every body to this many characters before sending,
 # so anything past it is never billed.
 BODY_CHAR_CAP = 8000
@@ -125,6 +127,7 @@ def synthesize_estimate_report(
     """
     from llmwiki.cache import (
         MODEL_PRICING,
+        CACHE_WRITE_1H_MULTIPLIER,
         DEFAULT_MODEL,
         TRANSCRIPT_CHARS_PER_TOKEN,
         resolve_pricing_model,
@@ -281,25 +284,31 @@ def synthesize_estimate_report(
     def _page_usd(body_tokens: int) -> float:
         """Dollars for one page: overhead + template + body in, completion out.
 
-        Every page is its own `claude` process, so there is no prefix to
-        re-read across pages and cost is linear in page count. In lean mode
-        the residual overhead is far below the 1,024-token cache minimum, so
-        it is priced as fresh input. Without lean mode the scaffolding is
-        large enough to cache, and repeat calls re-read roughly half of it.
+        Claude Code writes the whole prompt into the 1-hour prompt cache on
+        every call, so input is billed at the cache-write rate, not the fresh
+        input rate. It is never billed as a *read*: measured across 29 real
+        pages, ``cache_read_input_tokens`` was 0 on all of them. The one
+        breakpoint sits at the end of the user message, so even the identical
+        template prefix shared by every page earns no reuse — the wiki pays
+        the write premium and collects none of the discount.
+
+        Without lean mode the scaffolding is large and stable enough that
+        repeat calls do re-read roughly half of it.
         """
         rates = rates_table[chosen_model]
+        write_rate = rates["input"] * CACHE_WRITE_1H_MULTIPLIER
+        prompt_tokens = template_tokens + body_tokens
         if lean:
-            overhead_usd = overhead_tokens * rates["input"]
+            billable = (overhead_tokens + prompt_tokens) * write_rate
         else:
             read = overhead_tokens * NON_LEAN_CACHE_READ_FRACTION
-            overhead_usd = (
+            billable = (
                 read * rates["cached_input"]
-                + (overhead_tokens - read) * rates["cache_write"]
+                + (overhead_tokens - read) * write_rate
+                + prompt_tokens * write_rate
             )
         return (
-            overhead_usd
-            + (template_tokens + body_tokens) * rates["input"]
-            + output_tokens_per_call * rates["output"]
+            billable + output_tokens_per_call * rates["output"]
         ) / 1_000_000
 
     # Lazy import — estimate is imported from CLI paths that may not need

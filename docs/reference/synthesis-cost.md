@@ -56,7 +56,25 @@ Measured end-to-end on one real page, same prompt, same model:
 | `sonnet`, no lean flags | 58,169 | 1,299 | **$0.369** |
 | `sonnet`, lean flags | 4,607 | 730 | **$0.042** |
 
-**~9x cheaper, with no change to the prompt or the output contract.** On a 200-page backlog that is roughly $74 versus $8.
+**~9x cheaper, with no change to the prompt or the output contract.**
+
+That single page was a small, clean demo session. Across **29 real vault pages** the same lean configuration measured:
+
+| | mean | spread |
+|---|---|---|
+| Input tokens | 9,282 | 6,251 – 10,254 |
+| Output tokens | 1,372 | 902 – 2,554 |
+| **Cost** | **$0.0763/page** | |
+
+Real transcripts are roughly twice the size of the demo and generate about twice the page, so budget **~$0.08/page**, not $0.04. On a 200-page backlog that is roughly $74 without the lean flags versus **$15** with them.
+
+### You pay a cache-write premium and get no cache reads
+
+On all 29 measured pages, `cache_read_input_tokens` was **0** and 100% of input arrived as `cache_creation_input_tokens` at the 1-hour TTL — billed at **2x** the fresh input rate.
+
+The prompt template and its injected vocabulary are byte-identical across every page, so in principle that prefix should be re-read at 0.1x instead of re-written at 2x. It isn't: the CLI places a single cache breakpoint at the end of the user message, so the cache key covers the whole prompt — body included — and no two pages ever share one. Every page pays the write premium and collects none of the discount.
+
+There is no CLI flag to move the breakpoint. Fixing it properly needs direct API access, where `cache_control` can be placed after the template — which is exactly what [`prompt-caching.md`](prompt-caching.md) already builds. On a large backfill that prefix is ~5,000 tokens/page, so the difference is real: at sonnet-5 rates, ~$0.030/page written versus ~$0.0015/page read.
 
 ### Turning it off
 
@@ -118,7 +136,9 @@ The previous estimator was wrong in four independent ways, each verified against
 |---|---|
 | Priced a cached prefix of `CLAUDE.md` + `index.md` + `overview.md` | Billed ~32k tokens per page that the backend never sends, while ignoring the scaffolding and template it does |
 | Assumed 1 cache write + N−1 cache hits | No prefix is shared across processes, so the discount never existed |
-| Counted tokens at 4 chars/token | Transcripts run ~2.33 chars/token — a ~1.7x undercount |
+| Counted tokens at 4 chars/token | Transcripts run ~2.05 chars/token — a ~2x undercount |
+| Priced input at the fresh `input` rate | It is billed as a 1-hour cache **write** at 2x, on every page |
+| Assumed an 800-token completion | Real pages average ~1,372 |
 | Counted full bodies, one call per doc | Bodies are truncated to 8,000 chars, and multi-part docs cost one call *per chunk* |
 
 The rate card was wrong too: `sonnet-5` was listed at $2/$10 per MTok. Derived from `modelUsage.costUSD` (905 input + 494 output = $0.010125) the real figures are **$3/$15**. `haiku-4.5` at $1/$5 checked out.

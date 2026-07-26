@@ -51,11 +51,18 @@ CHARS_PER_TOKEN = 4
 
 # Session transcripts are not English prose. They are dense in code, paths,
 # JSON, tool output, and punctuation, all of which tokenize far finer than
-# prose. Measured against the real synthesis prompt (8,567 chars) via
-# `claude --output-format json`: 3,677 prompt tokens, i.e. 2.33 chars/token,
-# so the prose heuristic under-counts this content by ~1.7x. Used by the
-# synth cost estimate; see docs/reference/synthesis-cost.md.
-TRANSCRIPT_CHARS_PER_TOKEN = 2.33
+# prose. Calibrated on 29 real synthesis calls (prompt chars vs billed
+# tokens from the session transcripts): 2.03 chars/token, spread 1.96-2.12.
+# The prose heuristic under-counts this content by ~2x. Used by the synth
+# cost estimate; see docs/reference/synthesis-cost.md.
+TRANSCRIPT_CHARS_PER_TOKEN = 2.05
+
+# Claude Code writes each prompt into the prompt cache with a 1-hour TTL,
+# billed at 2x the fresh input rate (the 1.25x `cache_write` column in
+# model_pricing.csv is the 5-minute tier). Kept as a multiplier rather than
+# a new CSV column so the ModelRates shape — a documented reader-API
+# surface — stays unchanged.
+CACHE_WRITE_1H_MULTIPLIER = 2.0
 
 # Minimum prefix size the Anthropic cache will accept. Below this the
 # ``cache_control`` header is ignored and you pay the full input price.
