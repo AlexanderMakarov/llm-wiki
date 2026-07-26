@@ -164,7 +164,7 @@ Core adapters (auto-detected on `sync` when the session store exists):
 
 | Agent | Adapter | Session store |
 |---|---|---|
-| **[OpenClaw](https://openclaw.ai)** | `openclaw` | `~/.openclaw/agents/*/sessions/*.jsonl` |
+| **[OpenClaw](https://openclaw.ai)** | `openclaw` | `~/.openclaw/agents/*/sessions/*.jsonl` (or `adapters.openclaw.roots`, e.g. `<vault>/.openclaw-sessions-inbox`) |
 | **[Cursor CLI](https://cursor.com)** (`cursor-agent`) | `cursor_cli` | `~/.cursor/chats/<hash>/<uuid>/store.db` |
 | Cursor IDE | `cursor` | IDE workspaceStorage (legacy) |
 | OpenCode | `opencode` | Shared schema with OpenClaw |
@@ -327,7 +327,7 @@ confidential-client/
 | Upgrade / state migration | [docs/UPGRADING.md](docs/UPGRADING.md) |
 | Upstream changelog | [CHANGELOG.md](CHANGELOG.md) |
 
-Per-adapter docs: [Claude Code](docs/adapters/claude-code.md) · [Codex CLI](docs/adapters/codex-cli.md) · [Cursor](docs/adapters/cursor.md) · [Obsidian](docs/adapters/obsidian.md)
+Per-adapter docs: [Claude Code](docs/adapters/claude-code.md) · [Codex CLI](docs/adapters/codex-cli.md) · [Cursor](docs/adapters/cursor.md) · [OpenClaw](docs/adapters/openclaw.md) · [Obsidian](docs/adapters/obsidian.md)
 
 ---
 
