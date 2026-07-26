@@ -8,6 +8,10 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ## [Unreleased]
 
+### Added
+
+- **Home pipeline State widget** — replaces the old queue-status cards / task-type list / truncated “Not synthesized” preview / cost-estimate block on `index.html` with a reusable State widget (`#llmwiki-state-widget`, `llmwiki/render/state_widget.py`). Columns are Raw and Synthesized; rows are one per agent (Claude, Cursor, OpenClaw, …) plus a Documents row. Each Raw cell shows the count and estimated USD to synthesize that row’s backlog; collapsible sections under the table list not-synthesized sessions, not-synthesized docs, timeline stamps, commands, and estimate warnings (counts in each summary). `synthesize --estimate` / `refresh_synth_pending` now persist `synth.pipeline` (and `agent` / `usd` on pending items). Docs: `docs/reference/ui.md`. Tests: `tests/test_state_widget.py`.
+
 ### Fixed
 
 - **Index pages restore cwd paths consistently; encoded path segments covered by redaction (#56)** — follow-up to #36/#55. Three holes: (1) copying the examples `"real_username": ""` placeholder into root `config.json` wiped the autodetected username on overlay, so `restore_local_path` became a no-op and `projects/index.html` mixed `/Users/USER/…` with never-redacted real paths; `_ensure_real_username` now re-runs after overlay. (2) `sessions/index.html` never restored paths — it now has a **Cwd** column via `local_cwd` and restores paths inside description text. (3) redaction only rewrote the leading `/Users/<you>/` (or `/home/<you>/`), leaving the real name in dash-encoded agent store segments (`~/.claude/projects/-Users-<you>-…`); both redact and restore now cover `-Users-` / `-home-` encoded prefixes via shared `_substitute_path_username`. Tests in `test_username_autodetect.py`, `test_convert.py`, `test_session_resume_cwd.py`.

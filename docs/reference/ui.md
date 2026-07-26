@@ -16,7 +16,7 @@ Every page in the site carries the same header nav. Keyboard: `⌘K` opens the c
 
 | # | Label | URL | Surfaces |
 |---|---|---|---|
-| 1 | **Home** | `/index.html` | queue dashboard (sync/synth status, cost estimate, commands) + recent raw docs |
+| 1 | **Home** | `/index.html` | pipeline State widget (per-agent Raw→Synthesized table + collapsible backlog/timeline/commands) + recent raw docs |
 | 2 | **Raw** | `/raw.html` | file tree browser of raw documents (wiki-add layer) |
 | 3 | **Graph** | `/graph.html` | interactive force-directed knowledge graph (vis-network) |
 | 4 | **Projects** | `/projects/index.html` | filterable card grid of every project + freshness badge |
@@ -37,14 +37,12 @@ Mobile: the six middle links collapse into a bottom-nav below 768 px; Search + T
 
 URL: `/index.html`
 
-The raw-documents browser. Two-column layout:
+Queue-first landing page. Layout:
 
-1. **File tree sidebar** — every document under `raw/docs/**` as a collapsible folder tree (`<details>`, no JS). Chunked documents appear as children of their folder.
-2. **Intro pane** — document count, the five newest documents, and a link to the Recent page.
+1. **Pipeline state widget** (reusable mount `#llmwiki-state-widget`) — a table of Raw → Synthesized counts with one row per agent (Claude / Cursor / OpenClaw / …) plus a Documents row. Each Raw cell shows the item count and the estimated USD to synthesize the pending slice of that row; Synthesized cells are local (build has no LLM cost). Collapsible sections under the table list not-synthesized sessions, not-synthesized docs, timeline stamps (oldest pending / last sync / queue / lint / reflect), copyable commands, and estimate warnings — each summary shows its item count.
+2. **Recent raw documents** — newest `raw/docs/` entries with title + source meta.
 
-Clicking a file opens `/documents/<path>.html` — the rendered document with the same tree sidebar (current file highlighted) and breadcrumbs.
-
-The session-analytics content (heatmap, stats, project grid) lives on [Analytics](#analytics).
+Numbers come from `llmwiki-state.js` (`synth.pipeline` + `synth.pending` + `synth.estimate`), refreshed by `llmwiki sync` / `llmwiki synthesize --estimate`. The session-analytics content (heatmap, stats, project grid) lives on [Analytics](#analytics).
 
 ---
 

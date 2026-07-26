@@ -510,6 +510,25 @@ kbd { display: inline-block; padding: 2px 6px; font-family: var(--mono); font-si
 .doc-article { min-width: 0; }
 .queue-widget { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; box-shadow: var(--shadow-card); }
 .queue-widget-content { margin: 14px 0; }
+.state-widget { margin: 14px 0; }
+.state-table-wrap { overflow-x: auto; margin-bottom: 14px; }
+.state-pipeline-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; min-width: 420px; }
+.state-pipeline-table th, .state-pipeline-table td { border: 1px solid var(--border); padding: 10px 12px; vertical-align: top; text-align: left; }
+.state-pipeline-table th { background: var(--bg-alt); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); }
+.state-pipeline-table .state-cell-count { font-weight: 700; font-variant-numeric: tabular-nums; }
+.state-pipeline-table .state-cell-cost { display: block; margin-top: 4px; font-size: 0.8rem; color: var(--text-muted); }
+.state-pipeline-table .state-row-label { font-weight: 600; }
+.state-pipeline-table tfoot td { background: var(--bg-alt); font-weight: 600; }
+.state-sections { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+.state-section { border: 1px solid var(--border); border-radius: 8px; background: var(--bg-alt); }
+.state-section > summary { cursor: pointer; list-style: none; padding: 10px 12px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+.state-section > summary::-webkit-details-marker { display: none; }
+.state-section > summary::before { content: "▸"; color: var(--text-muted); font-size: 0.85rem; }
+.state-section[open] > summary::before { content: "▾"; }
+.state-section-count { margin-left: auto; font-size: 0.78rem; font-weight: 600; color: var(--text-muted); background: var(--bg-card); border: 1px solid var(--border); border-radius: 999px; padding: 1px 8px; }
+.state-section-body { padding: 0 12px 12px; border-top: 1px solid var(--border); }
+.state-section-body ul { margin: 8px 0 0 18px; }
+.state-section-body .queue-commands-table { margin-top: 10px; }
 .queue-stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-bottom: 12px; }
 .queue-stat { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; background: var(--bg-alt); }
 .queue-stat-label { font-size: 0.74rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
@@ -818,6 +837,9 @@ a.topic-chip:hover {
 .agent-cursor   { color: #92400E; background: rgba(217,119,6,0.1); border-color: rgba(217,119,6,0.3); }
 .agent-gemini   { color: #991B1B; background: rgba(220,38,38,0.1); border-color: rgba(220,38,38,0.3); }
 .agent-obsidian { color: #7E22CE; background: rgba(126,34,206,0.1); border-color: rgba(126,34,206,0.3); }
+.agent-openclaw { color: #0F766E; background: rgba(15,118,110,0.1); border-color: rgba(15,118,110,0.3); }
+.agent-opencode { color: #0369A1; background: rgba(3,105,161,0.1); border-color: rgba(3,105,161,0.3); }
+.agent-docs     { color: #4B5563; background: rgba(75,85,99,0.1); border-color: rgba(75,85,99,0.3); }
 /* Simplification sweep removed the PDF adapter — agent-pdf rule deleted. */
 .agent-unknown  { color: #6B7280; background: rgba(107,114,128,0.1); border-color: rgba(107,114,128,0.3); }
 :root[data-theme="dark"] .agent-claude   { color: #A78BFA; background: rgba(167,139,250,0.15); border-color: rgba(167,139,250,0.3); }
@@ -825,6 +847,9 @@ a.topic-chip:hover {
 :root[data-theme="dark"] .agent-copilot  { color: #60A5FA; background: rgba(96,165,250,0.15); border-color: rgba(96,165,250,0.3); }
 :root[data-theme="dark"] .agent-cursor   { color: #FBBF24; background: rgba(251,191,36,0.15); border-color: rgba(251,191,36,0.3); }
 :root[data-theme="dark"] .agent-gemini   { color: #F87171; background: rgba(248,113,113,0.15); border-color: rgba(248,113,113,0.3); }
+:root[data-theme="dark"] .agent-openclaw { color: #5EEAD4; background: rgba(94,234,212,0.15); border-color: rgba(94,234,212,0.3); }
+:root[data-theme="dark"] .agent-opencode { color: #7DD3FC; background: rgba(125,211,252,0.15); border-color: rgba(125,211,252,0.3); }
+:root[data-theme="dark"] .agent-docs     { color: #D1D5DB; background: rgba(209,213,219,0.12); border-color: rgba(209,213,219,0.3); }
 .sessions-table .agent-badge { font-size: 0.65rem; padding: 1px 6px; }
 
 /* v0.4: Deep-link icon next to headings */

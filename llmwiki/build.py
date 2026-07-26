@@ -1907,7 +1907,7 @@ def render_index(
         + nav_bar("home", link_prefix="")
         + hero(
             "LLM Wiki",
-            "Queue-first view for sync and synthesis workflow",
+            "Pipeline state for sync and synthesis",
         )
         + body
         + page_foot(js_prefix="")
@@ -3124,6 +3124,10 @@ def detect_agent_label(meta: dict) -> tuple[str, str]:
         return ("Copilot", "agent-copilot")
     if "cursor" in source:
         return ("Cursor", "agent-cursor")
+    if "openclaw" in source:
+        return ("OpenClaw", "agent-openclaw")
+    if "opencode" in source:
+        return ("OpenCode", "agent-opencode")
     if "gemini" in source:
         return ("Gemini", "agent-gemini")
     if "claude" in source or ".claude" in source:
@@ -3139,6 +3143,12 @@ def detect_agent_label(meta: dict) -> tuple[str, str]:
         return ("Codex", "agent-codex")
     if "copilot" in tag_str:
         return ("Copilot", "agent-copilot")
+    if "cursor" in tag_str:
+        return ("Cursor", "agent-cursor")
+    if "openclaw" in tag_str:
+        return ("OpenClaw", "agent-openclaw")
+    if "opencode" in tag_str:
+        return ("OpenCode", "agent-opencode")
     if "claude" in tag_str:
         return ("Claude", "agent-claude")
     
@@ -3156,8 +3166,11 @@ def _agent_map(agent: str) -> tuple[str, str]:
         "copilot-chat": ("Copilot", "agent-copilot"),
         "copilot-cli": ("Copilot", "agent-copilot"),
         "cursor": ("Cursor", "agent-cursor"),
+        "cursor-cli": ("Cursor", "agent-cursor"),
         "gemini": ("Gemini", "agent-gemini"),
         "gemini-cli": ("Gemini", "agent-gemini"),
+        "openclaw": ("OpenClaw", "agent-openclaw"),
+        "opencode": ("OpenCode", "agent-opencode"),
         "obsidian": ("Obsidian", "agent-obsidian"),
         # Simplification sweep removed the PDF adapter. The "pdf" entry
         # used to live here; left as a comment so a future grep sees
