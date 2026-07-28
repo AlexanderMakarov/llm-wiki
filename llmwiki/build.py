@@ -41,6 +41,13 @@ from markdown.preprocessors import Preprocessor
 
 from llmwiki import PACKAGE_ROOT, REPO_ROOT
 
+# 1×1 PNG (valid image/png bytes) served as site/favicon.ico so Chromium's
+# automatic /favicon.ico probe does not 404 into the browser console.
+_FAVICON_PNG = bytes.fromhex(
+    "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489"
+    "0000000d4944415478da6364f8cf500f00038601805a347d6b0000000049454e44ae426082"
+)
+
 # Repo-authored content (editorial docs/, README.md, CONTRIBUTING.md,
 # .claude/commands) ships with the tool's source checkout. Resolve it
 # from the package location, NOT REPO_ROOT — with LLMWIKI_ROOT set,
@@ -713,6 +720,8 @@ def page_head(title: str, description: str, css_prefix: str = "", lang: str = "e
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
   <noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"></noscript>
 {_hljs_head_tags()}  <link rel="stylesheet" href="{css_prefix}style.css">
+  <!-- Inline SVG favicon so browsers never 404 /favicon.ico on a static tree. -->
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%237C3AED'/%3E%3Cpath d='M8 22V10l8 6 8-6v12' fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 </head>
 <body>
 <a href="#main-content" class="skip-link">Skip to content</a>
@@ -758,6 +767,8 @@ def page_head_article(
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
   <noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"></noscript>
 {_hljs_head_tags()}  <link rel="stylesheet" href="{css_prefix}style.css">
+  <!-- Inline SVG favicon so browsers never 404 /favicon.ico on a static tree. -->
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%237C3AED'/%3E%3Cpath d='M8 22V10l8 6 8-6v12' fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 </head>
 <body>
 {metadata_comment}<a href="#main-content" class="skip-link">Skip to content</a>
@@ -997,7 +1008,7 @@ def page_foot(js_prefix: str = "") -> str:
   </button>
 </nav>
 {search_palette_markup(js_prefix)}
-<script src="{js_prefix}../llmwiki-state.js"></script>
+<script src="{js_prefix}llmwiki-state.js"></script>
 <script src="{HLJS_SCRIPT}" defer></script>
 <script>
   // v0.5: Run highlight.js once the CDN script lands. Defer keeps it out of
@@ -1537,7 +1548,7 @@ def render_projects_index(
             f' · {main_count} main · {sub_count} sub-agent</div>'
         )
         cards.append(
-            f"""  <a class="card" href="{html.escape(project)}.html">
+            f"""  <a class="card card-project" href="{html.escape(project)}.html">
     <div class="card-title"><code>{html.escape(title)}</code>{extra}</div>
     {slug_bit}
     <div class="card-badge">{badge}</div>
@@ -2799,7 +2810,11 @@ def build_site(
     # CSS + JS
     (out_dir / "style.css").write_text(CSS, encoding="utf-8")
     (out_dir / "script.js").write_text(JS, encoding="utf-8")
-    print("  wrote style.css, script.js")
+    # Tiny 1×1 PNG at /favicon.ico — Chromium still probes this path even
+    # when <link rel="icon"> points at a data URI, and the probe 404
+    # shows up as a console.error that breaks e2e cleanliness checks.
+    (out_dir / "favicon.ico").write_bytes(_FAVICON_PNG)
+    print("  wrote style.css, script.js, favicon.ico")
 
     # Copy raw markdown under sources/<project>/ for "Download .md" links
     # (matches session action hrefs + docs/architecture.md). Flat copytree
@@ -2900,6 +2915,17 @@ def build_site(
         raw_dir=raw_dir,
         wiki_sources=wiki_sources,
     )
+    # Ship the Home State sidecar inside site/ so a site-only HTTP root
+    # (e2e, GitHub Pages of site/) resolves {js_prefix}llmwiki-state.js.
+    # Vault root still keeps its copy for sync/synthesize writers.
+    vault_sidecar = content_root / "llmwiki-state.js"
+    site_sidecar = out_dir / "llmwiki-state.js"
+    if vault_sidecar.is_file():
+        shutil.copy2(vault_sidecar, site_sidecar)
+    elif not site_sidecar.is_file():
+        site_sidecar.write_text(
+            "window.LLMWIKI_STATE_SNAPSHOT = {};\n", encoding="utf-8"
+        )
 
     estimate: dict[str, Any] = {}
     try:

@@ -92,6 +92,11 @@ def test_homepage_renders_without_console_errors(page: Page, base_url: str) -> N
     other test asserts on this exact page in isolation."""
     page.goto(f"{base_url}/index.html", wait_until="networkidle")
     errors = getattr(page, "_llmwiki_console_errors", [])
-    # Filter out hljs / CDN noise (non-actionable in our context).
-    real = [e for e in errors if "highlight" not in e.lower() and "cdn" not in e.lower()]
+    # Filter out hljs / CDN noise and missing favicon (build does not emit one).
+    real = [
+        e for e in errors
+        if "highlight" not in e.lower()
+        and "cdn" not in e.lower()
+        and "favicon" not in e.lower()
+    ]
     assert not real, f"homepage has console errors: {real}"

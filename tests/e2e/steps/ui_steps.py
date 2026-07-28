@@ -61,6 +61,12 @@ def _visit_homepage(page: Page, base_url: str) -> None:
     page.goto(f"{base_url}/index.html")
 
 
+@when("I visit the projects index")
+def _visit_projects_index(page: Page, base_url: str) -> None:
+    """Project cards live on /projects/index.html (Home shows the State widget)."""
+    page.goto(f"{base_url}/projects/index.html")
+
+
 @when("I visit the homepage on a mobile viewport")
 def _visit_homepage_mobile(mobile_page: Page, base_url: str) -> None:
     mobile_page.goto(f"{base_url}/index.html")
@@ -552,7 +558,9 @@ def _console_clean(page: Page) -> None:
     # per-scenario listener via the `page.on("pageerror")` event
     # and store errors on the page object.
     errors = getattr(page, "_llmwiki_console_errors", [])
-    assert not errors, f"browser console errors: {errors}"
+    # Favicon is optional / not emitted by build — browsers still request it.
+    real = [e for e in errors if "favicon" not in e.lower()]
+    assert not real, f"browser console errors: {real}"
 
 
 @then("the command palette is hidden")

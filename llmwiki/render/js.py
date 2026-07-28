@@ -69,19 +69,26 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
     );
   }
   function commandsBody() {
+    function copyBtn(cmd) {
+      // aria-label survives collapsed/hidden sections where innerText is empty.
+      return (
+        '<button type="button" class="btn queue-copy-btn" data-copy="' + cmd +
+        '" aria-label="Copy command: ' + cmd + '" title="Copy command">Copy</button>'
+      );
+    }
     return (
       '<table class="queue-commands-table">' +
       "<thead><tr><th>Command</th><th>Purpose</th><th></th></tr></thead><tbody>" +
-      '<tr><td><code>llmwiki sync</code></td><td>Convert new agent sessions into <code>raw/sessions/</code>.</td><td><button class="btn queue-copy-btn" data-copy="llmwiki sync">Copy</button></td></tr>' +
-      '<tr><td><code>llmwiki sync --project &lt;slug&gt;</code></td><td>Sync only one project&apos;s sessions (replace <code>&lt;slug&gt;</code> with the project id).</td><td><button class="btn queue-copy-btn" data-copy="llmwiki sync --project &lt;slug&gt;">Copy</button></td></tr>' +
-      '<tr><td><code>llmwiki synthesize</code></td><td>Drain the unsynthesized backlog into <code>wiki/sources/</code>.</td><td><button class="btn queue-copy-btn" data-copy="llmwiki synthesize">Copy</button></td></tr>' +
-      '<tr><td><code>llmwiki synthesize --sessions-only</code></td><td>Synthesize pending sessions only (skip <code>raw/docs/</code>).</td><td><button class="btn queue-copy-btn" data-copy="llmwiki synthesize --sessions-only">Copy</button></td></tr>' +
-      '<tr><td><code>llmwiki synthesize --docs-only</code></td><td>Synthesize pending docs only (skip <code>raw/sessions/</code>).</td><td><button class="btn queue-copy-btn" data-copy="llmwiki synthesize --docs-only">Copy</button></td></tr>' +
-      '<tr><td><code>llmwiki synthesize --path raw/sessions/&lt;file&gt;.md</code></td><td>Synthesize one raw session (replace <code>&lt;file&gt;</code>; repeatable).</td><td><button class="btn queue-copy-btn" data-copy="llmwiki synthesize --path raw/sessions/&lt;file&gt;.md">Copy</button></td></tr>' +
-      '<tr><td><code>llmwiki synthesize --path raw/docs/&lt;file&gt;.md</code></td><td>Synthesize one raw document (replace <code>&lt;file&gt;</code>; repeatable).</td><td><button class="btn queue-copy-btn" data-copy="llmwiki synthesize --path raw/docs/&lt;file&gt;.md">Copy</button></td></tr>' +
-      '<tr><td><code>llmwiki synthesize --estimate</code></td><td>Refresh the cost estimate + pipeline table without calling the model.</td><td><button class="btn queue-copy-btn" data-copy="llmwiki synthesize --estimate">Copy</button></td></tr>' +
-      '<tr><td><code>llmwiki queue run --limit 20</code></td><td>Process pending queue tasks (including synthesize when enqueued).</td><td><button class="btn queue-copy-btn" data-copy="llmwiki queue run --limit 20">Copy</button></td></tr>' +
-      '<tr><td><code>llmwiki build</code></td><td>Rebuild the static site from raw/ + wiki/.</td><td><button class="btn queue-copy-btn" data-copy="llmwiki build">Copy</button></td></tr>' +
+      '<tr><td><code>llmwiki sync</code></td><td>Convert new agent sessions into <code>raw/sessions/</code>.</td><td>' + copyBtn("llmwiki sync") + "</td></tr>" +
+      '<tr><td><code>llmwiki sync --project &lt;slug&gt;</code></td><td>Sync only one project&apos;s sessions (replace <code>&lt;slug&gt;</code> with the project id).</td><td>' + copyBtn("llmwiki sync --project &lt;slug&gt;") + "</td></tr>" +
+      '<tr><td><code>llmwiki synthesize</code></td><td>Drain the unsynthesized backlog into <code>wiki/sources/</code>.</td><td>' + copyBtn("llmwiki synthesize") + "</td></tr>" +
+      '<tr><td><code>llmwiki synthesize --sessions-only</code></td><td>Synthesize pending sessions only (skip <code>raw/docs/</code>).</td><td>' + copyBtn("llmwiki synthesize --sessions-only") + "</td></tr>" +
+      '<tr><td><code>llmwiki synthesize --docs-only</code></td><td>Synthesize pending docs only (skip <code>raw/sessions/</code>).</td><td>' + copyBtn("llmwiki synthesize --docs-only") + "</td></tr>" +
+      '<tr><td><code>llmwiki synthesize --path raw/sessions/&lt;file&gt;.md</code></td><td>Synthesize one raw session (replace <code>&lt;file&gt;</code>; repeatable).</td><td>' + copyBtn("llmwiki synthesize --path raw/sessions/&lt;file&gt;.md") + "</td></tr>" +
+      '<tr><td><code>llmwiki synthesize --path raw/docs/&lt;file&gt;.md</code></td><td>Synthesize one raw document (replace <code>&lt;file&gt;</code>; repeatable).</td><td>' + copyBtn("llmwiki synthesize --path raw/docs/&lt;file&gt;.md") + "</td></tr>" +
+      '<tr><td><code>llmwiki synthesize --estimate</code></td><td>Refresh the cost estimate + pipeline table without calling the model.</td><td>' + copyBtn("llmwiki synthesize --estimate") + "</td></tr>" +
+      '<tr><td><code>llmwiki queue run --limit 20</code></td><td>Process pending queue tasks (including synthesize when enqueued).</td><td>' + copyBtn("llmwiki queue run --limit 20") + "</td></tr>" +
+      '<tr><td><code>llmwiki build</code></td><td>Rebuild the static site from raw/ + wiki/.</td><td>' + copyBtn("llmwiki build") + "</td></tr>" +
       "</tbody></table>"
     );
   }
@@ -159,7 +166,8 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
     }
 
     var tableHtml =
-      '<div class="state-table-wrap"><table class="state-pipeline-table">' +
+      '<div class="state-table-wrap" tabindex="0" role="region" aria-label="Pipeline state">' +
+      '<table class="state-pipeline-table">' +
       "<thead><tr><th>Source</th><th>Raw</th><th>To synthesize</th><th>Synthesized</th></tr></thead>" +
       "<tbody>" + bodyRows + "</tbody>" + footHtml + "</table></div>";
 
