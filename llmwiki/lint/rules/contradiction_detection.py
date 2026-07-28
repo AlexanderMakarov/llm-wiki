@@ -21,15 +21,48 @@ _FILLER_MARKUP_RE = re.compile(
     r"[*_`~\[\]()]+|^\s*[-*+]\s+|^\s*\d+\.\s+",
     re.MULTILINE,
 )
-_FILLER_BODY_RE = re.compile(
+
+# Exact short placeholder lines (after normalize).
+_FILLER_EXACT_RE = re.compile(
     r"^(?:"
     r"none"
-    r"|none\s+identified(?:\s+against\s+existing\s+wiki\s+content)?"
-    r"|none\s+noted"
+    r"|none\s+(?:identified|detected|found|noted|apparent|known|observed|recorded|applicable|seen)"
+    r"(?:\s+(?:in|from|with|within|against|relative\s+to)\b.*)?"
     r"|none\s*[—\-–]\s*no\s+claims\s+were\s+made(?:\s+in\s+this\s+session)?"
-    r"|no\s+claims\s+were\s+made(?:\s+in\s+this\s+session)?"
+    r"|no\s+claims?\s+were\s+made(?:\s+in\s+this\s+session)?"
+    r"|no\s+contradictions?"
     r"|n/?a"
     r")\.?$",
+    re.IGNORECASE,
+)
+
+# Body opens as a negative stub ("None identified. This is a reference…").
+# Deliberately does NOT match "None of the earlier claims hold…".
+_FILLER_OPENING_RE = re.compile(
+    r"^(?:"
+    r"n/?a\b"
+    r"|no\s+claims?\s+were\s+made\b"
+    r"|no\s+contradictions?\b"
+    r"|none(?:\s*$|[.!?,;:]|"
+    r"\s+(?:identified|detected|found|noted|apparent|known|observed|recorded|applicable|seen)\b|"
+    r"\s*[—\-–])"
+    r")",
+    re.IGNORECASE,
+)
+
+# Affirmative conflict cues — keep the section flagged when present.
+# Avoid bare "conflict with existing" — synthesis filler often says
+# "does not conflict with existing wiki entries".
+_AFFIRMATIVE_CUE_RE = re.compile(
+    r"(?:"
+    r"contradicts\s+(?:earlier|prior|the\b|\[\[)"
+    r"|while\s+others"
+    r"|user\s+assumption"
+    r"|receives\s+contradictory"
+    r"|conflicts?\s+with\s+(?:earlier|prior)\b"
+    r"|says\s+.+\s+while\s+.+\s+says"
+    r"|vs\.?\s+"
+    r")",
     re.IGNORECASE,
 )
 
@@ -40,12 +73,17 @@ def _normalize_filler_line(line: str) -> str:
 
 
 def _is_filler_contradictions_body(section: str) -> bool:
-    """True when every non-empty line is placeholder text, not a real conflict."""
+    """True when the section is placeholder text, not a real conflict."""
     lines = [_normalize_filler_line(ln) for ln in section.splitlines()]
     lines = [ln for ln in lines if ln]
     if not lines:
         return True
-    return all(_FILLER_BODY_RE.match(ln) for ln in lines)
+    whole = " ".join(lines)
+    if _AFFIRMATIVE_CUE_RE.search(whole):
+        return False
+    if _FILLER_OPENING_RE.match(whole):
+        return True
+    return all(_FILLER_EXACT_RE.match(ln) for ln in lines)
 
 
 @register

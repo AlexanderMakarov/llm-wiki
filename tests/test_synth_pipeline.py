@@ -435,6 +435,33 @@ def test_rebuild_index_creates_index_when_missing(tmp_path: Path):
     assert "sources/proj/2026-04-09-hello.md" in text
 
 
+def test_rebuild_index_lists_projects(tmp_path: Path):
+    """Project stubs under wiki/projects/ land in ## Projects."""
+    from llmwiki.synth.pipeline import _rebuild_index
+    wiki_dir = tmp_path / "wiki"
+    sources = wiki_dir / "sources" / "proj"
+    sources.mkdir(parents=True)
+    (sources / "2026-04-09-hello.md").write_text(
+        '---\ntitle: "Session: hello"\ntype: source\n---\n# body\n',
+        encoding="utf-8",
+    )
+    projects = wiki_dir / "projects"
+    projects.mkdir()
+    (projects / "llm-wiki.md").write_text(
+        "---\ntitle: llm-wiki\ntype: entity\nentity_type: project\n---\n# llm-wiki\n",
+        encoding="utf-8",
+    )
+    (wiki_dir / "index.md").write_text(
+        "# Wiki Index\n\n## Sources\n*(none)*\n\n## Entities\n- keep me\n",
+        encoding="utf-8",
+    )
+    _rebuild_index(wiki_dir)
+    text = (wiki_dir / "index.md").read_text(encoding="utf-8")
+    assert "## Projects" in text
+    assert "projects/llm-wiki.md" in text
+    assert "## Entities" in text and "- keep me" in text
+
+
 # ─── G-20 (#306): batched log entry ─────────────────────────────────────
 
 

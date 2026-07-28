@@ -549,12 +549,41 @@ def test_contradiction_detects_section():
     "_(none identified)_",
     "n/a",
     "(none)",
+    "None detected.",
+    "None found.",
+    "None apparent.",
+    "None applicable.",
+    "None identified in this session.",
+    "None identified. This document does not conflict with existing wiki entries.",
+    "N/A — This is a reference document, not a claim-making session.",
+    "None — this session's claims are consistent with prior sessions.",
 ])
 def test_contradiction_skips_filler(body: str):
     pages = {
         "a.md": _mk_page({"title": "A"}, f"## Contradictions\n{body}\n"),
     }
     assert ContradictionDetection().run(pages) == []
+
+
+def test_contradiction_keeps_real_conflict_opening_with_none():
+    """'None of …' is a real claim, not a filler stub."""
+    pages = {
+        "a.md": _mk_page(
+            {"title": "A"},
+            "## Contradictions\nNone of the earlier claims hold; A says X, B says Y.\n",
+        ),
+    }
+    assert len(ContradictionDetection().run(pages)) == 1
+
+
+def test_contradiction_keeps_contradicts_earlier():
+    pages = {
+        "a.md": _mk_page(
+            {"title": "A"},
+            "## Contradictions\n- Contradicts earlier framing of build --synthesize\n",
+        ),
+    }
+    assert len(ContradictionDetection().run(pages)) == 1
 
 
 def test_claim_verification_no_claims_is_clean():
