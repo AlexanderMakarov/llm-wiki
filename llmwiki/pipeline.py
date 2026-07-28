@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any
 
 from llmwiki import REPO_ROOT
+from llmwiki.lint import load_pages, run_all, summarize
 
 
 def run_pipeline(args: argparse.Namespace) -> int:
@@ -43,7 +44,7 @@ def run_pipeline(args: argparse.Namespace) -> int:
     # the relevant cmd_* expects; no global parser involvement.
     # cmd_* are lazy-imported here to avoid a circular import — cli.py
     # imports run_pipeline at module top.
-    from llmwiki.cli import (  # noqa: PLC0415 — import cycle / lazy load
+    from llmwiki.cli import (  # noqa: PLC0415 — cycle: pipeline↔cli
         cmd_build,
         cmd_export,
         cmd_graph,
@@ -135,7 +136,6 @@ def run_pipeline(args: argparse.Namespace) -> int:
         # into a pipeline failure. Re-read the lint report directly so we
         # don't depend on lint's own exit code, which by design only fires
         # on error-severity issues.
-        from llmwiki.lint import load_pages, run_all, summarize  # noqa: PLC0415 — import cycle / lazy load
         vault_root = getattr(args, "vault", None)
         wiki_dir = (Path(vault_root) / "wiki") if vault_root else (REPO_ROOT / "wiki")
         if wiki_dir.is_dir():

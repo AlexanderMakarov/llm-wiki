@@ -31,6 +31,8 @@ from llmwiki import REPO_ROOT
 # instead of via build.py. The build module pulls in 145+ transitive
 # imports; the parser sits cleanly in _frontmatter.py with no deps.
 from llmwiki._frontmatter import is_headless, is_subagent, parse_frontmatter
+from llmwiki.agent_label import detect_agent_label
+from llmwiki.config_schedule import _load_sessions_config
 
 # Same matcher the graph builder uses, so "a link" means the same thing to
 # the de-duplicator and to the thing that consumes the links.
@@ -40,6 +42,14 @@ from llmwiki.state_store import read_state as _read_unified_state
 from llmwiki.state_store import resolve_state_file as _resolve_state_file
 from llmwiki.state_store import update_state as _update_unified_state
 from llmwiki.synth.base import BaseSynthesizer, DummySynthesizer
+from llmwiki.synth.claude_cli import (
+    DEFAULT_CLAUDE_TIMEOUT,
+    ClaudeCLISynthesizer,
+)
+from llmwiki.synth.estimate import synthesize_estimate_report
+from llmwiki.synth.ollama import OllamaSynthesizer, load_ollama_config
+from llmwiki.tags import TagEntry, near_duplicate_tags
+from llmwiki.topics import build_topic_graph
 
 # G-21 (#307): shell- and URL-unsafe chars we scrub from slugs at
 # synthesize-time. Spaces → hyphens; filesystem-reserved + Windows-
@@ -153,21 +163,9 @@ def resolve_backend(
     name = (synth_cfg.get("backend") or "dummy").strip().lower()
 
     if name == "ollama":
-        # Imported lazily so the `urllib`-based module isn't loaded when
-        # users stick with the default dummy backend.
-        from llmwiki.synth.ollama import (  # noqa: PLC0415 — import cycle / lazy load
-            OllamaSynthesizer,
-            load_ollama_config,
-        )
-
         return OllamaSynthesizer(config=load_ollama_config(cfg))
 
     if name == "claude":
-        from llmwiki.synth.claude_cli import (  # noqa: PLC0415 — import cycle / lazy load
-            DEFAULT_CLAUDE_TIMEOUT,
-            ClaudeCLISynthesizer,
-        )
-
         # Deliberately NOT the shared `timeout` key: that one belongs to the
         # Ollama block, and reading it here meant a 60s Ollama default
         # silently capped every claude page at 60s instead of 180s.
@@ -293,7 +291,6 @@ def _inject_vocabulary(template: str, wiki_dir: Path, *, limit: int = _VOCAB_LIM
     if "{vocabulary}" not in template:
         return template
     try:
-        from llmwiki.topics import build_topic_graph  # noqa: PLC0415 — import cycle / lazy load
 
         graph = build_topic_graph(wiki_dir)
     except Exception:
@@ -430,7 +427,6 @@ def discover_unsynth_session_rels(
     exclude_headless: bool | None = None,
 ) -> set[str]:
     """Session rel-paths that the shared estimate logic considers unsynth."""
-    from llmwiki.synth.estimate import synthesize_estimate_report  # noqa: PLC0415 — import cycle / lazy load
 
     sessions = _discover_raw_sessions(raw_dir)
     state_keys: set[str]
@@ -482,13 +478,10 @@ def refresh_synth_pending(
     user's config when the caller doesn't pass a mode explicitly.
     """
     sources_out = wiki_sources_dir or WIKI_SOURCES
-    from llmwiki.synth.estimate import synthesize_estimate_report  # noqa: PLC0415 — import cycle / lazy load
     if include_subagents is None:
-        from llmwiki.config_schedule import _load_sessions_config  # noqa: PLC0415 — import cycle / lazy load
         include_subagents = resolve_include_subagents(_load_sessions_config())
     if exclude_headless is None:
-        from llmwiki.config_schedule import _load_sessions_config as _cfg  # noqa: PLC0415 — import cycle / lazy load
-        exclude_headless = resolve_exclude_headless(_cfg())
+        exclude_headless = resolve_exclude_headless(_load_sessions_config())
     raw_sessions = _discover_raw_sessions(raw_dir)
     state = _load_state(state_file)
     report = synthesize_estimate_report(
@@ -977,7 +970,6 @@ def _merge_tags(
     reject ``prompt-cache`` when ``prompt-caching`` is already present.
     """
     # Local import to avoid a circular at module load.
-    from llmwiki.tags import TagEntry, near_duplicate_tags  # noqa: PLC0415 — import cycle / lazy load
 
     out: list[str] = []
     seen: set[str] = set()
@@ -1193,7 +1185,6 @@ def synthesize_new_sessions(
     # subagent transcripts are skipped here even under --force — the flag means
     # "redo synthesis", not "override which sessions are eligible".
     if include_subagents is None:
-        from llmwiki.config_schedule import _load_sessions_config  # noqa: PLC0415 — import cycle / lazy load
         include_subagents = resolve_include_subagents(_load_sessions_config())
     else:
         include_subagents = resolve_include_subagents(
@@ -1202,8 +1193,7 @@ def synthesize_new_sessions(
     # #8 follow-up: same policy the estimate applies, resolved the same way,
     # so `--estimate` and a real run never disagree about what is eligible.
     if exclude_headless is None:
-        from llmwiki.config_schedule import _load_sessions_config as _cfg  # noqa: PLC0415 — import cycle / lazy load
-        exclude_headless = resolve_exclude_headless(_cfg())
+        exclude_headless = resolve_exclude_headless(_load_sessions_config())
     else:
         exclude_headless = bool(exclude_headless)
     prompt_template = _load_prompt_template()
@@ -1368,7 +1358,6 @@ def synthesize_new_sessions(
     # #27: tally what each successful synthesis produced (raw doc vs which
     # agent's session) so the log entry carries a producer breakdown the
     # Analytics "Recent activity" widget renders verbatim.
-    from llmwiki.build import detect_agent_label  # noqa: PLC0415 — import cycle / lazy load
     producers: dict[str, int] = {}
 
     for it in new_items:

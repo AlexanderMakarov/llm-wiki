@@ -25,13 +25,13 @@ from pathlib import Path
 
 from llmwiki._frontmatter import parse_frontmatter
 from llmwiki.add_doc import remove_raw_docs
+from llmwiki.state_store import read_state, update_state
 from llmwiki.synth.pipeline import (
     _append_log,
     _rebuild_index,
     source_page_paths,
     synth_page_filename,
 )
-from llmwiki.state_store import read_state, update_state
 
 __all__ = [
     "RemoveIncompleteError",

@@ -34,7 +34,9 @@ import subprocess
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from llmwiki import PACKAGE_ROOT, __version__ as _llmwiki_version
+
+from llmwiki import PACKAGE_ROOT
+from llmwiki import __version__ as _llmwiki_version
 from llmwiki.config_schedule import _load_sessions_config
 
 # ─── Frontmatter parsing ─────────────────────────────────────────────
@@ -458,7 +460,7 @@ def compile_docs_site(
         # Splice the meta strip (then TOC) right after the <h1>…</h1> line.
         if meta_strip or toc_html:
             replacement = f"</h1>\n{meta_strip}\n{toc_html}"
-            body_html = bodyhtml.replace("</h1>", replacement, 1)
+            body_html = body_html.replace("</h1>", replacement, 1)
 
         # #270: route source-code + repo-root-only links to GitHub
         # before the generic .md→.html pass, so e.g. `../../llmwiki/convert.py`

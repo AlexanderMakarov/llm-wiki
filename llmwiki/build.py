@@ -55,6 +55,7 @@ _FAVICON_PNG = bytes.fromhex(
 # REPO_ROOT points at the user's vault, which has none of these files.
 SOURCE_ROOT = PACKAGE_ROOT.parent
 from llmwiki import raw_docs_site
+from llmwiki.agent_label import detect_agent_label, render_agent_badge
 from llmwiki.changelog_timeline import (
     extract_price_points,
     parse_changelog,
@@ -62,15 +63,54 @@ from llmwiki.changelog_timeline import (
     render_price_sparkline,
     render_recent_activity,
 )
+from llmwiki.claude_path import resolve_claude_path as _resolve_claude_path
+from llmwiki.compare import (
+    discover_user_overrides,
+    generate_pairs,
+    pair_slug,
+    render_comparison_body,
+    render_comparisons_index,
+)
 from llmwiki.context_md import is_context_file
+from llmwiki.convert import restore_local_path
+from llmwiki.docs_pages import (
+    _first_paragraph,
+    compile_docs_site,
+    iter_docs_pages,
+    rewrite_md_links_to_html,
+    rewrite_source_code_links_to_github,
+    strip_dead_session_refs,
+)
+from llmwiki.exporters import export_all
 from llmwiki.freshness import freshness_badge, load_freshness_config
+from llmwiki.graph import copy_to_site as copy_graph_to_site
+from llmwiki.graph import write_html as write_graph_html
 from llmwiki.log_reader import recent_events as _recent_log_events
+from llmwiki.manifest import write_manifest
+from llmwiki.models_page import (
+    discover_model_entities,
+    discover_model_entities_with_meta,
+    render_model_info_card,
+    render_models_index,
+)
 from llmwiki.project_topics import (
     extract_session_topics,
     get_project_topics,
     load_project_profile,
     render_topic_chips,
 )
+from llmwiki.search_facets import aggregate_facets, enrich_entry
+from llmwiki.search_tree import (
+    annotate_entry_headings,
+    decide_search_mode,
+    search_index_footer_badge,
+)
+from llmwiki.state_store import read_state, resolve_state_file, synth_pipeline_shape_ok
+from llmwiki.synth.claude_cli import overview_argv
+from llmwiki.synth.pipeline import refresh_synth_pending
+from llmwiki.tag_utils import NOISE_TAGS
+from llmwiki.topics import build_topic_graph
+from llmwiki.topics_page import build_topic_pages
 from llmwiki.usage import (
     combined_totals as _mcp_combined_totals,
 )
@@ -111,46 +151,6 @@ from llmwiki.viz_wiki_value import (  # noqa: F401
     render_wiki_value_section,
 )
 from llmwiki.wiki_adoption import daily_wiki_sessions_from_dir as _wiki_session_days
-from llmwiki.agent_label import detect_agent_label, render_agent_badge
-from llmwiki.claude_path import resolve_claude_path as _resolve_claude_path
-from llmwiki.compare import (
-    discover_user_overrides,
-    generate_pairs,
-    pair_slug,
-    render_comparison_body,
-    render_comparisons_index,
-)
-from llmwiki.convert import restore_local_path
-from llmwiki.docs_pages import (
-    _first_paragraph,
-    compile_docs_site,
-    iter_docs_pages,
-    rewrite_md_links_to_html,
-    rewrite_source_code_links_to_github,
-    strip_dead_session_refs,
-)
-from llmwiki.exporters import export_all
-from llmwiki.graph import copy_to_site as copy_graph_to_site
-from llmwiki.graph import write_html as write_graph_html
-from llmwiki.manifest import write_manifest
-from llmwiki.models_page import (
-    discover_model_entities,
-    discover_model_entities_with_meta,
-    render_model_info_card,
-    render_models_index,
-)
-from llmwiki.search_facets import aggregate_facets, enrich_entry
-from llmwiki.search_tree import (
-    annotate_entry_headings,
-    decide_search_mode,
-    search_index_footer_badge,
-)
-from llmwiki.state_store import read_state, resolve_state_file, synth_pipeline_shape_ok
-from llmwiki.synth.claude_cli import overview_argv
-from llmwiki.synth.pipeline import refresh_synth_pending
-from llmwiki.tag_utils import NOISE_TAGS
-from llmwiki.topics import build_topic_graph
-from llmwiki.topics_page import build_topic_pages
 
 # ─── paths ─────────────────────────────────────────────────────────────────
 

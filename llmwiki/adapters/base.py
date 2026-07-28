@@ -188,7 +188,7 @@ class BaseAdapter:
         The import is local to avoid a circular import (``convert`` imports the
         adapter registry at module load).
         """
-        from llmwiki.convert import parse_jsonl  # noqa: PLC0415 — import cycle / lazy load
+        from llmwiki.convert import parse_jsonl  # noqa: PLC0415 — cycle: adapters↔convert
 
         return parse_jsonl(path)
 

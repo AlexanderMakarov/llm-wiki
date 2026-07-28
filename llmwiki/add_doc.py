@@ -28,8 +28,11 @@ from pathlib import Path
 from urllib.parse import urljoin, urlparse
 
 from llmwiki import __version__
+from llmwiki._frontmatter import parse_frontmatter
+from llmwiki.claude_path import resolve_claude_path as _resolve_claude_path
 from llmwiki.htmlmd import html_to_markdown
 from llmwiki.slugs import derive_title, first_heading, slugify
+from llmwiki.synth.pipeline import _normalise_slug
 
 __all__ = [
     "AddError",
@@ -361,7 +364,6 @@ def _ocr_image(path: Path, timeout: int = 300) -> str:
     name, and claude runs with that dir as its working directory + read
     scope (``--add-dir``), so a crafted filename or in-image instruction
     can't steer a read of an arbitrary file."""
-    from llmwiki.build import _resolve_claude_path  # noqa: PLC0415 — optional extra or lazy load
 
     claude = _resolve_claude_path(None)
     if claude is None:
@@ -773,7 +775,6 @@ def find_existing_by_hash(docs_dir: Path, content_hash: str) -> str | None:
     """Return ``project/slug`` for a raw/docs file with this hash, or None."""
     if not docs_dir.is_dir():
         return None
-    from llmwiki._frontmatter import parse_frontmatter  # noqa: PLC0415 — optional extra or lazy load
 
     for path in sorted(docs_dir.rglob("*.md")):
         try:
@@ -988,8 +989,6 @@ def expected_source_page(raw_doc: Path, wiki_sources_dir: Path) -> Path:
     """Where ``synthesize_new_sessions`` writes this raw doc's wiki page:
     ``wiki/sources/<project>/<date>-<slug>.md`` (G-06 date prefix). Used
     by the add CLI to verify synthesis actually produced a page."""
-    from llmwiki._frontmatter import parse_frontmatter  # noqa: PLC0415 — optional extra or lazy load
-    from llmwiki.synth.pipeline import _normalise_slug  # noqa: PLC0415 — optional extra or lazy load
 
     try:
         meta, _body = parse_frontmatter(raw_doc.read_text(encoding="utf-8"))

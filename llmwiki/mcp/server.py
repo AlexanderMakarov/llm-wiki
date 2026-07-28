@@ -36,7 +36,10 @@ from typing import Any
 from llmwiki import REPO_ROOT as SOURCE_ROOT
 from llmwiki import __version__
 from llmwiki import usage as _usage
+from llmwiki.add_doc import add_sources
+from llmwiki.categories import scan_tags
 from llmwiki.config_schedule import resolve_content_root
+from llmwiki.lint import load_pages
 
 CONTENT_ROOT = resolve_content_root()
 # Back-compat test seam: many MCP tests monkeypatch llmwiki.mcp.server.REPO_ROOT.
@@ -1007,7 +1010,6 @@ def tool_wiki_add(args: dict[str, Any]) -> dict[str, Any]:
     (synthesize, build) are the caller's job, exactly like the queue's
     ``add_doc`` task leaves them to a separate ``synthesize`` task.
     """
-    from llmwiki.add_doc import add_sources  # noqa: PLC0415 — lazy load / keep MCP startup light
 
     url = (args.get("url") or "").strip()
     path = (args.get("path") or "").strip()
@@ -1070,7 +1072,6 @@ def _err(text: str) -> dict[str, Any]:
 
 def tool_wiki_confidence(args: dict[str, Any]) -> dict[str, Any]:
     """List pages filtered by confidence score range (v1.0 · #159)."""
-    from llmwiki.lint import load_pages  # noqa: PLC0415 — lazy load / keep MCP startup light
 
     min_c = float(args.get("min_confidence", 0.0))
     max_c = float(args.get("max_confidence", 1.0))
@@ -1106,7 +1107,6 @@ def tool_wiki_confidence(args: dict[str, Any]) -> dict[str, Any]:
 
 def tool_wiki_lifecycle(args: dict[str, Any]) -> dict[str, Any]:
     """List pages filtered by lifecycle state (v1.0 · #159)."""
-    from llmwiki.lint import load_pages  # noqa: PLC0415 — lazy load / keep MCP startup light
 
     state = (args.get("state") or "").strip().lower()
     if not state:
@@ -1132,7 +1132,6 @@ def tool_wiki_lifecycle(args: dict[str, Any]) -> dict[str, Any]:
 
 def tool_wiki_dashboard(args: dict[str, Any]) -> dict[str, Any]:
     """Return wiki health summary (v1.0 · #159)."""
-    from llmwiki.lint import load_pages  # noqa: PLC0415 — lazy load / keep MCP startup light
 
     wiki = REPO_ROOT / "wiki"
     pages = load_pages(wiki)
@@ -1179,7 +1178,6 @@ def tool_wiki_dashboard(args: dict[str, Any]) -> dict[str, Any]:
 
 def tool_wiki_entity_search(args: dict[str, Any]) -> dict[str, Any]:
     """Search entities by name or entity_type (v1.0 · #159)."""
-    from llmwiki.lint import load_pages  # noqa: PLC0415 — lazy load / keep MCP startup light
 
     name_q = (args.get("name") or "").strip().lower()
     etype_q = (args.get("entity_type") or "").strip().lower()
@@ -1216,8 +1214,6 @@ def tool_wiki_entity_search(args: dict[str, Any]) -> dict[str, Any]:
 
 def tool_wiki_category_browse(args: dict[str, Any]) -> dict[str, Any]:
     """Browse tags / categories (v1.0 · #159)."""
-    from llmwiki.categories import scan_tags  # noqa: PLC0415 — lazy load / keep MCP startup light
-    from llmwiki.lint import load_pages  # noqa: PLC0415 — lazy load / keep MCP startup light
 
     tag = (args.get("tag") or "").strip().lower()
     min_count = int(args.get("min_count", 1))

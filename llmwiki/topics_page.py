@@ -16,6 +16,7 @@ import html
 import re
 from pathlib import Path
 from typing import Any
+
 from llmwiki.topics import topic_slug
 
 _ALIAS_NORM = re.compile(r"[\s\-_]+")
@@ -97,7 +98,7 @@ def build_topic_pages(graph: dict[str, Any], out_dir: Path) -> list[Path]:
 
     Returns the list of files written.
     """
-    from llmwiki.build import hero, nav_bar, page_foot, page_head  # noqa: PLC0415 — lazy load / avoid cycle
+    from llmwiki.build import hero, nav_bar, page_foot, page_head  # noqa: PLC0415 — cycle: topics_page↔build
 
     nodes = graph.get("nodes", [])
     edges = graph.get("edges", [])

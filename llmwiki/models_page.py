@@ -29,13 +29,13 @@ from typing import Any
 from llmwiki._frontmatter import parse_frontmatter as _parse_frontmatter
 from llmwiki.format_numbers import format_tokens
 from llmwiki.schema import (
+    KNOWN_BENCHMARKS,
     ModelProfile,
     benchmark_label,
     format_price,
     is_model_entity,
     parse_model_profile,
 )
-from llmwiki.schema import KNOWN_BENCHMARKS
 
 
 def discover_model_entities(

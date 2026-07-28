@@ -11,8 +11,7 @@ import json as _json
 from pathlib import Path
 from typing import Any
 
-from llmwiki import PACKAGE_ROOT
-from llmwiki import REPO_ROOT
+from llmwiki import PACKAGE_ROOT, REPO_ROOT
 from llmwiki.state_store import configure_state_file
 
 # Config files always live in the git clone, even when ``LLMWIKI_ROOT``

@@ -50,7 +50,7 @@ def _collect(parser: ArgumentParser) -> tuple[list[str], dict[str, list[str]]]:
 
 def _get_parser() -> ArgumentParser:
     """Lazy import to avoid circular deps during completion generation."""
-    from llmwiki.cli import build_parser  # noqa: PLC0415 — import cycle / lazy load
+    from llmwiki.cli import build_parser  # noqa: PLC0415 — cycle: completion↔cli
     return build_parser()
 
 

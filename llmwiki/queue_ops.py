@@ -7,10 +7,10 @@ from typing import Any
 
 from llmwiki.add_doc import add_sources
 from llmwiki.build import build_site
+from llmwiki.config_schedule import _load_sessions_config
 from llmwiki.convert import convert_all
 from llmwiki.state_store import read_state, resolve_state_file, update_state
 from llmwiki.synth.pipeline import resolve_backend, synthesize_new_sessions
-from llmwiki.config_schedule import _load_sessions_config
 
 
 def _now() -> str:

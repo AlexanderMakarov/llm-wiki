@@ -19,6 +19,10 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from llmwiki import REPO_ROOT
+from llmwiki import quarantine as _q
+from llmwiki.config_schedule import apply_default_vault, synthesis_status_hint
+from llmwiki.log_reader import recent_events
+from llmwiki.state_store import get_state_file, read_state
 
 
 def resolve_key_exists(key: str) -> bool:
@@ -36,9 +40,6 @@ def resolve_key_exists(key: str) -> bool:
 
 def cmd_sync_status(args: argparse.Namespace) -> int:
     """Report sync observability — last run, per-adapter counters, quarantined sources."""
-    from llmwiki import quarantine as _q  # noqa: PLC0415 — lazy load / avoid cycle
-    from llmwiki.config_schedule import apply_default_vault  # noqa: PLC0415 — lazy load / avoid cycle
-    from llmwiki.state_store import get_state_file, read_state  # noqa: PLC0415 — lazy load / avoid cycle
 
     apply_default_vault(args)
     state_path = get_state_file()
@@ -119,14 +120,12 @@ def cmd_sync_status(args: argparse.Namespace) -> int:
     else:
         print("Quarantined sources: 0")
 
-    from llmwiki.config_schedule import synthesis_status_hint  # noqa: PLC0415 — lazy load / avoid cycle
     hint = synthesis_status_hint()
     if hint:
         print()
         print(f"Hint: {hint}")
 
     if args.recent:
-        from llmwiki.log_reader import recent_events  # noqa: PLC0415 — lazy load / avoid cycle
         log_path = REPO_ROOT / "wiki" / "log.md"
         events = recent_events(log_path, limit=args.recent, operations={"sync", "synthesize"})
         if events:

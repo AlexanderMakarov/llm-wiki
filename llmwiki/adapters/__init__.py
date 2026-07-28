@@ -96,7 +96,7 @@ def resolve_adapter_name(name: str) -> str | None:
 
 def discover_adapters() -> None:
     """Import core adapters so they register themselves."""
-    from llmwiki.adapters import (  # noqa: PLC0415 — lazy package import
+    from llmwiki.adapters import (  # noqa: PLC0415 — lazy package discover
         claude_code,  # noqa: F401
         codex_cli,  # noqa: F401
     )

@@ -8,8 +8,8 @@ from __future__ import annotations
 import html
 from typing import Any
 
-from llmwiki.usage import UNATTRIBUTED, is_entity_tool, value_summary
 from llmwiki.render.collapse_section import collapse_section_list
+from llmwiki.usage import UNATTRIBUTED, is_entity_tool, value_summary
 
 
 def render_project_usage_block(

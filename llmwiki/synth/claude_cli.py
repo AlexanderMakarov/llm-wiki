@@ -14,7 +14,7 @@ per page, default 180), ``claude_effort`` (``--effort``; caps extended
 thinking, which is billed as output), and ``claude_lean`` (default true —
 strip the agent scaffolding from each call; see ``_LEAN_ARGV``).
 
-Reuses build.py's hardened ``_resolve_claude_path`` (#421: shell-metachar
+Reuses ``llmwiki.claude_path.resolve_claude_path`` (#421: shell-metachar
 rejection, PATH lookup) and passes the prompt via stdin (#486 precedent:
 dodges argv limits and injection-via-argv).
 """
@@ -24,6 +24,8 @@ from __future__ import annotations
 import subprocess
 from typing import Any
 
+from llmwiki.claude_path import resolve_claude_path as _resolve_claude_path
+from llmwiki.config_schedule import _load_sessions_config
 from llmwiki.synth.base import BaseSynthesizer, split_prompt_template
 from llmwiki.synth.ollama import _render_prompt
 
@@ -81,7 +83,6 @@ _OVERVIEW_SYSTEM_PROMPT = (
 def resolve_overview_model(cfg: dict[str, Any] | None = None) -> str:
     """Pick the model for the site-overview call (build.py)."""
     if cfg is None:
-        from llmwiki.config_schedule import _load_sessions_config  # noqa: PLC0415 — import cycle / lazy load
         cfg = _load_sessions_config()
     synth_cfg = (cfg or {}).get("synthesis", {}) or {}
     return str(synth_cfg.get("overview_model", "") or "").strip() or DEFAULT_OVERVIEW_MODEL
@@ -170,7 +171,6 @@ class ClaudeCLISynthesizer(BaseSynthesizer):
     def _resolved(self) -> str | None:
         # Lazy import: build.py is heavy and claude_cli must stay cheap
         # to import from resolve_backend.
-        from llmwiki.build import _resolve_claude_path  # noqa: PLC0415 — import cycle / lazy load
 
         resolved = _resolve_claude_path(self.claude_path)
         return str(resolved) if resolved else None

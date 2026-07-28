@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from llmwiki._system_pages import SYSTEM_PAGE_FILES
 from llmwiki.lint import LintRule, register
 from llmwiki.lint.rules._helpers import _basename
 
@@ -22,7 +23,7 @@ class FrontmatterCompleteness(LintRule):
     # #arch-l7: canonical list lives in llmwiki/_system_pages.py so
     # graph.py + lint don't drift independently. Use the .md-filename
     # form because lint walks page paths read off disk.
-    from llmwiki._system_pages import SYSTEM_PAGE_FILES as EXEMPT_FILES  # noqa: PLC0415 — lazy load / avoid cycle
+    EXEMPT_FILES = SYSTEM_PAGE_FILES
 
     def run(self, pages, *, llm_callback=None):
         issues = []

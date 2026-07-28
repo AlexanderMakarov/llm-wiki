@@ -15,6 +15,19 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from llmwiki._frontmatter import is_headless as _is_headless
+from llmwiki._frontmatter import is_subagent as _is_subagent
+from llmwiki.agent_label import detect_agent_label
+from llmwiki.cache import (
+    CACHE_WRITE_1H_MULTIPLIER,
+    DEFAULT_MODEL,
+    MODEL_PRICING,
+    TRANSCRIPT_CHARS_PER_TOKEN,
+    estimate_tokens,
+    resolve_pricing_model,
+)
+from llmwiki.config_schedule import _load_sessions_config
+
 # ─── Measured per-call constants for the `claude` CLI backend ──────────
 #
 # The pre-#57 model priced an Anthropic API-style call: a stable prefix
@@ -52,7 +65,6 @@ def _rendered_template_tokens(wiki_sources_dir: Any | None = None) -> int:
     the un-expanded template if the wiki can't be read — an estimate that
     is slightly low beats one that raises.
     """
-    from llmwiki.cache import TRANSCRIPT_CHARS_PER_TOKEN, estimate_tokens  # noqa: PLC0415 — import cycle / lazy load
 
     tmpl_path = Path(__file__).resolve().parent / "prompts" / "source_page.md"
     try:
@@ -60,7 +72,10 @@ def _rendered_template_tokens(wiki_sources_dir: Any | None = None) -> int:
     except (OSError, UnicodeDecodeError):
         return 0
     try:
-        from llmwiki.synth.pipeline import WIKI_SOURCES, _inject_vocabulary  # noqa: PLC0415 — import cycle / lazy load
+        from llmwiki.synth.pipeline import (  # noqa: PLC0415 — cycle: synth.pipeline↔synth.estimate
+            WIKI_SOURCES,
+            _inject_vocabulary,
+        )
 
         wiki_dir = (
             Path(wiki_sources_dir).parent
@@ -124,15 +139,7 @@ def synthesize_estimate_report(
     Any of the args can be injected for tests; the default reads from
     disk and is what the CLI invokes.
     """
-    from llmwiki.cache import (  # noqa: PLC0415 — import cycle / lazy load
-        CACHE_WRITE_1H_MULTIPLIER,
-        DEFAULT_MODEL,
-        MODEL_PRICING,
-        TRANSCRIPT_CHARS_PER_TOKEN,
-        estimate_tokens,
-        resolve_pricing_model,
-    )
-    from llmwiki.synth.pipeline import (  # noqa: PLC0415 — import cycle / lazy load
+    from llmwiki.synth.pipeline import (  # noqa: PLC0415 — cycle: synth.pipeline↔synth.estimate
         _DOC_CHUNK_MAX_CHARS,
         _chunk_markdown,
         _discover_raw_docs,
@@ -143,13 +150,13 @@ def synthesize_estimate_report(
         page_is_stub,
         synth_page_filename,
     )
-    from llmwiki.synth.pipeline import (  # noqa: PLC0415 — import cycle / lazy load
+    from llmwiki.synth.pipeline import (  # noqa: PLC0415 — cycle: synth.pipeline↔synth.estimate
         RAW_DOCS as _RAW_DOCS_DEFAULT,
     )
-    from llmwiki.synth.pipeline import (  # noqa: PLC0415 — import cycle / lazy load
+    from llmwiki.synth.pipeline import (  # noqa: PLC0415 — cycle: synth.pipeline↔synth.estimate
         RAW_SESSIONS as _RAW_DEFAULT,
     )
-    from llmwiki.synth.pipeline import (  # noqa: PLC0415 — import cycle / lazy load
+    from llmwiki.synth.pipeline import (  # noqa: PLC0415 — cycle: synth.pipeline↔synth.estimate
         WIKI_SOURCES as _WIKI_SOURCES,
     )
 
@@ -186,8 +193,7 @@ def synthesize_estimate_report(
     # are not synthesis backlog — the parent session's synthesis already covers
     # them. Drop them from the whole estimate so `new`, `unsynth_items`, and
     # full-force cost all reflect the sessions actually eligible for synthesis.
-    from llmwiki._frontmatter import is_subagent as _is_subagent  # noqa: PLC0415 — import cycle / lazy load
-    from llmwiki.synth.pipeline import (  # noqa: PLC0415 — import cycle / lazy load
+    from llmwiki.synth.pipeline import (  # noqa: PLC0415 — cycle: synth.pipeline↔synth.estimate
         DEFAULT_INCLUDE_SUBAGENTS,
         INCLUDE_SUBAGENTS_MODES,
     )
@@ -207,10 +213,8 @@ def synthesize_estimate_report(
     # every synthesis pass manufactures more of them. `exclude_headless`
     # blocks them at ingest; drop any that predate the filter here too, so
     # the estimate and `synthesize` agree on what is eligible.
-    from llmwiki._frontmatter import is_headless as _is_headless  # noqa: PLC0415 — import cycle / lazy load
-    from llmwiki.synth.pipeline import resolve_exclude_headless  # noqa: PLC0415 — import cycle / lazy load
+    from llmwiki.synth.pipeline import resolve_exclude_headless  # noqa: PLC0415 — cycle: synth.pipeline↔synth.estimate
     if exclude_headless is None:
-        from llmwiki.config_schedule import _load_sessions_config  # noqa: PLC0415 — import cycle / lazy load
         drop_headless = resolve_exclude_headless(_load_sessions_config())
     else:
         drop_headless = bool(exclude_headless)
@@ -333,7 +337,6 @@ def synthesize_estimate_report(
 
     # Lazy import — estimate is imported from CLI paths that may not need
     # the full build module until this walk runs.
-    from llmwiki.build import detect_agent_label  # noqa: PLC0415 — import cycle / lazy load
 
     for p, _meta, body in raw_sessions:
         meta = _meta if isinstance(_meta, dict) else {}

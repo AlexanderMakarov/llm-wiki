@@ -23,7 +23,7 @@ import time
 from pathlib import Path
 
 from llmwiki import REPO_ROOT
-from llmwiki.adapters import REGISTRY, discover_adapters
+from llmwiki.adapters import REGISTRY, discover_adapters, resolve_adapter_name
 
 
 def scan_mtimes(adapters: list[str] | None) -> dict[str, float]:

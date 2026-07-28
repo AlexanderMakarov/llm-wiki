@@ -22,6 +22,7 @@ import json
 import re
 from pathlib import Path
 from typing import Any
+
 from llmwiki import REPO_ROOT
 
 CONSOLIDATION_PROMPT_PATH = (
@@ -48,7 +49,7 @@ def _attr(value: str) -> str:
 
 def build_candidates(wiki_dir: Path | None = None) -> list[dict[str, Any]]:
     """Candidate topics for the consolidator: name, reach, aka, with, sample."""
-    from llmwiki.topics import build_topic_graph  # noqa: PLC0415 — lazy load / avoid cycle
+    from llmwiki.topics import build_topic_graph  # noqa: PLC0415 — cycle: topics↔topics_consolidate
 
     g = build_topic_graph(wiki_dir, min_sessions=_CANDIDATE_MIN_SESSIONS)
     sessions = g.get("sessions", {})
