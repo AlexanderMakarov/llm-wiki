@@ -63,6 +63,10 @@ def default_state() -> dict[str, Any]:
             "pending_total": 0,
             "pending_updated_at": "",
             "estimate": {},
+            # ``pipeline`` is intentionally absent here. Pre-v1.5 vaults and a
+            # fresh default lack it; ``synth_pipeline_shape_ok`` detects that so
+            # ``build`` can one-shot backfill (#70). Do not invent an empty
+            # pipeline in defaults — that would skip the backfill forever.
         },
         "quarantine": {"entries": []},
         "ops": {
@@ -80,6 +84,22 @@ def default_state() -> dict[str, Any]:
             },
         },
     }
+
+
+def synth_pipeline_shape_ok(synth: Any) -> bool:
+    """Return True when ``synth.pipeline`` matches the Home State widget shape.
+
+    v1.5.0 introduced ``synth.pipeline`` (``stages`` + ``rows``). Older state
+    files omit it; ``build`` uses this check to decide whether a one-shot
+    ``refresh_synth_pending`` is needed (#70). A present but empty ``rows``
+    list is valid (genuinely empty vault after sync/estimate).
+    """
+    if not isinstance(synth, dict):
+        return False
+    pipeline = synth.get("pipeline")
+    if not isinstance(pipeline, dict):
+        return False
+    return isinstance(pipeline.get("rows"), list)
 
 
 class IncompatibleStateError(RuntimeError):

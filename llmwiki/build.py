@@ -2684,6 +2684,40 @@ def synthesize_overview(
 
 # ─── main ──────────────────────────────────────────────────────────────────
 
+def _ensure_synth_pipeline_snapshot(
+    *,
+    content_root: Path,
+    raw_dir: Path,
+    wiki_sources: Path,
+) -> bool:
+    """Backfill ``synth.pipeline`` once when state predates the Home widget (#70).
+
+    Returns True when ``refresh_synth_pending`` ran. Only fires on a shape
+    mismatch (missing / non-dict ``pipeline``, or ``rows`` not a list) — not
+    when the snapshot is merely stale vs newest raw. Sync / add / estimate
+    already refresh on content changes; paying estimate cost on every build
+    would be a permanent tax for a one-time v1.4→v1.5 migration.
+    """
+    from llmwiki.state_store import read_state, synth_pipeline_shape_ok
+    from llmwiki.synth.pipeline import refresh_synth_pending
+
+    state_path = content_root / "llmwiki-state.json"
+    try:
+        synth = read_state(state_path).get("synth") or {}
+    except (OSError, ValueError, TypeError):
+        synth = {}
+    if synth_pipeline_shape_ok(synth):
+        return False
+    print("  backfilling synth.pipeline for Home State widget...")
+    refresh_synth_pending(
+        raw_dir=raw_dir / "sessions",
+        docs_dir=raw_dir / "docs",
+        wiki_sources_dir=wiki_sources,
+        state_file=state_path,
+    )
+    return True
+
+
 def build_site(
     out_dir: Path | None = None,
     synthesize: bool = False,
@@ -2855,6 +2889,14 @@ def build_site(
             if retrieved.isdisjoint(keys):
                 dead.append(rel)
     dead_total = len(dead)
+    # #70: one-shot backfill when llmwiki-state.json predates synth.pipeline
+    # (v1.4→v1.5). Skip when the expected shape is already present.
+    _ensure_synth_pipeline_snapshot(
+        content_root=content_root,
+        raw_dir=raw_dir,
+        wiki_sources=wiki_sources,
+    )
+
     estimate: dict[str, Any] = {}
     try:
         from llmwiki.state_store import read_state, resolve_state_file

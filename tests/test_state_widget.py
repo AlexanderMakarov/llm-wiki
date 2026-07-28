@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from llmwiki.raw_docs_site import render_dashboard_body
 from llmwiki.render import js
+from llmwiki.state_store import synth_pipeline_shape_ok
 from llmwiki.synth.estimate import synthesize_estimate_report
 from llmwiki.synth.pipeline import refresh_synth_pending
 
@@ -49,6 +51,16 @@ def test_state_widget_js_has_pipeline_table_and_collapsibles():
     assert "previewLimit = 3" not in js.JS
     # Cost renders as ``42 ($1.2345)`` on one line, not ``$… → synth`` on a second.
     assert " → \" + escapeHtml(nextLabel" not in js.JS
+
+
+def test_synth_pipeline_shape_ok():
+    assert synth_pipeline_shape_ok({"pipeline": {"rows": []}})
+    assert synth_pipeline_shape_ok({"pipeline": {"stages": ["raw"], "rows": [{"label": "Claude"}]}})
+    assert not synth_pipeline_shape_ok({})
+    assert not synth_pipeline_shape_ok({"pipeline": {}})
+    assert not synth_pipeline_shape_ok({"pipeline": {"rows": "bad"}})
+    assert not synth_pipeline_shape_ok({"pipeline": None})
+    assert not synth_pipeline_shape_ok(None)
 
 
 def test_estimate_pipeline_rows_by_agent(tmp_path: Path):
@@ -132,3 +144,111 @@ def test_refresh_synth_pending_stores_pipeline(tmp_path: Path):
     state = read_state(state_file)
     assert state["synth"]["pipeline"]["rows"][0]["label"] == "OpenClaw"
     assert state["synth"]["pending"][0]["agent"] == "OpenClaw"
+
+
+def _seed_build_vault(tmp_path: Path) -> Path:
+    """Minimal vault with one session so ``build_site`` has something to walk."""
+    vault = tmp_path / "vault"
+    raw = vault / "raw" / "sessions" / "demo"
+    raw.mkdir(parents=True)
+    (vault / "raw" / "docs").mkdir(parents=True)
+    (vault / "wiki" / "sources").mkdir(parents=True)
+    (raw / "2026-07-01T10-00-demo-x.md").write_text(
+        '---\ntitle: "S"\ntype: source\nproject: demo\nagent: claude-code\n---\n# S\n',
+        encoding="utf-8",
+    )
+    return vault
+
+
+def test_build_backfills_missing_pipeline(tmp_path: Path, monkeypatch):
+    """#70: v1.4-shaped state (no synth.pipeline) → first build writes rows."""
+    from llmwiki import build as build_mod
+    from llmwiki.build import build_site
+    from llmwiki.state_store import read_state
+
+    vault = _seed_build_vault(tmp_path)
+    # Pre-v1.5 state: pending/estimate present, pipeline absent.
+    state_path = vault / "llmwiki-state.json"
+    state_path.write_text(
+        json.dumps(
+            {
+                "queue": {"items": [], "legacy_pending_paths": []},
+                "sync": {"files": {}, "meta": {}, "counters": {}},
+                "synth": {
+                    "files": {},
+                    "pending": [],
+                    "pending_total": 0,
+                    "pending_updated_at": "2026-07-01T00:00:00Z",
+                    "estimate": {"updated_at": "2026-07-01T00:00:00Z"},
+                },
+                "quarantine": {"entries": []},
+                "ops": {
+                    "last_queue_run_at": "",
+                    "last_lint_run_at": "",
+                    "last_reflect_run_at": "",
+                },
+                "meta": {"schema_version": 1, "updated_at": "", "revision": 1},
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    assert "pipeline" not in json.loads(state_path.read_text(encoding="utf-8"))["synth"]
+
+    monkeypatch.setattr(build_mod, "REPO_ROOT", vault)
+    monkeypatch.setattr(build_mod, "RAW_DIR", vault / "raw")
+    monkeypatch.setattr(build_mod, "RAW_SESSIONS", vault / "raw" / "sessions")
+    monkeypatch.setattr(build_mod, "DEFAULT_OUT_DIR", vault / "site")
+
+    rc = build_site(
+        out_dir=vault / "site",
+        raw_sessions=vault / "raw" / "sessions",
+        raw_dir=vault / "raw",
+        wiki_dir=vault / "wiki",
+    )
+    assert rc == 0
+    state = read_state(state_path)
+    assert isinstance(state["synth"]["pipeline"]["rows"], list)
+    assert state["synth"]["pipeline"]["rows"]
+    sidecar = (vault / "llmwiki-state.js").read_text(encoding="utf-8")
+    assert "pipeline" in sidecar
+
+
+def test_build_skips_pipeline_refresh_when_shape_ok(tmp_path: Path, monkeypatch):
+    """#70: once pipeline shape exists, build must not re-run the estimate walk."""
+    from llmwiki import build as build_mod
+    from llmwiki.build import build_site
+
+    vault = _seed_build_vault(tmp_path)
+    state_path = vault / "llmwiki-state.json"
+    refresh_synth_pending(
+        raw_dir=vault / "raw" / "sessions",
+        docs_dir=vault / "raw" / "docs",
+        wiki_sources_dir=vault / "wiki" / "sources",
+        state_file=state_path,
+        include_subagents="all",
+        exclude_headless=False,
+    )
+    calls: list[object] = []
+
+    def _spy(**kwargs):
+        calls.append(kwargs)
+        raise AssertionError("refresh_synth_pending must not run when shape is ok")
+
+    monkeypatch.setattr(build_mod, "REPO_ROOT", vault)
+    monkeypatch.setattr(build_mod, "RAW_DIR", vault / "raw")
+    monkeypatch.setattr(build_mod, "RAW_SESSIONS", vault / "raw" / "sessions")
+    monkeypatch.setattr(build_mod, "DEFAULT_OUT_DIR", vault / "site")
+    monkeypatch.setattr(
+        "llmwiki.synth.pipeline.refresh_synth_pending",
+        _spy,
+    )
+
+    rc = build_site(
+        out_dir=vault / "site",
+        raw_sessions=vault / "raw" / "sessions",
+        raw_dir=vault / "raw",
+        wiki_dir=vault / "wiki",
+    )
+    assert rc == 0
+    assert calls == []
