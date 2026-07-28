@@ -639,26 +639,34 @@ def _auto_archive_log(log_path: Path) -> Optional[Path]:
     return archive
 
 
-_SOURCES_HEADING = re.compile(r"^##\s+Sources\s*$", re.MULTILINE)
 _NEXT_H2 = re.compile(r"^##\s+", re.MULTILINE)
 
 
-def _rebuild_index(wiki_dir: Path) -> Optional[Path]:
-    """Rewrite the ``## Sources`` section of ``wiki/index.md`` (G-09 · #295).
+def _replace_index_section(original: str, heading: str, block: str) -> str:
+    """Replace or append a ``## Heading`` section in ``index.md`` text."""
+    heading_re = re.compile(rf"^##\s+{re.escape(heading)}\s*$", re.MULTILINE)
+    match = heading_re.search(original)
+    if not match:
+        return original.rstrip() + "\n\n" + block
+    start = match.start()
+    tail = original[match.end():]
+    next_match = _NEXT_H2.search(tail)
+    end = match.end() + next_match.start() if next_match else len(original)
+    return original[:start] + block + "\n" + original[end:]
 
-    Walks ``wiki_dir/sources/**/*.md`` and emits one bullet per source
-    page, preserving every other section (Overview, Entities, Concepts,
-    hand-curated text) untouched.  If ``wiki/index.md`` is missing the
-    caller gets a freshly seeded index with just Sources in it.
-    """
-    index = wiki_dir / "index.md"
-    sources_dir = wiki_dir / "sources"
-    if not sources_dir.is_dir():
-        return None
 
-    # Collect (relpath, title, one-line-summary) for every source page.
+def _index_bullets_for_dir(
+    wiki_dir: Path,
+    subdir: str,
+    *,
+    include_project_suffix: bool,
+) -> list[str]:
+    """Collect index bullets for every ``.md`` under ``wiki_dir/subdir``."""
+    root = wiki_dir / subdir
+    if not root.is_dir():
+        return []
     bullets: list[str] = []
-    for p in sorted(sources_dir.rglob("*.md")):
+    for p in sorted(root.rglob("*.md")):
         if p.name.startswith("_"):
             continue
         try:
@@ -668,18 +676,52 @@ def _rebuild_index(wiki_dir: Path) -> Optional[Path]:
         meta, _ = parse_frontmatter(text)
         rel = p.relative_to(wiki_dir).as_posix()
         title = meta.get("title") or p.stem
-        date = str(meta.get("date", "")).strip()
-        project = meta.get("project", "")
         suffix_parts: list[str] = []
-        if project:
-            suffix_parts.append(str(project))
-        if date:
-            suffix_parts.append(date)
+        if include_project_suffix:
+            project = meta.get("project", "")
+            if project:
+                suffix_parts.append(str(project))
+            date = str(meta.get("date", "")).strip()
+            if date:
+                suffix_parts.append(date)
+        else:
+            # Project stubs: one-line description from first body paragraph
+            # is optional; fall back to entity_type / slug.
+            entity_type = str(meta.get("entity_type", "")).strip()
+            if entity_type:
+                suffix_parts.append(entity_type)
         suffix = f" — {' · '.join(suffix_parts)}" if suffix_parts else ""
         bullets.append(f"- [{title}]({rel}){suffix}")
+    return bullets
+
+
+def _rebuild_index(wiki_dir: Path) -> Optional[Path]:
+    """Rewrite ``## Sources`` and ``## Projects`` in ``wiki/index.md`` (G-09 · #295).
+
+    Walks ``wiki_dir/sources/**/*.md`` and ``wiki_dir/projects/*.md`` and
+    emits one bullet per page, preserving every other section (Overview,
+    Entities, Concepts, hand-curated text) untouched.  If ``wiki/index.md``
+    is missing the caller gets a freshly seeded index with Sources (and
+    Projects when present).
+    """
+    index = wiki_dir / "index.md"
+    sources_dir = wiki_dir / "sources"
+    projects_dir = wiki_dir / "projects"
+    if not sources_dir.is_dir() and not (projects_dir.is_dir() and any(projects_dir.glob("*.md"))):
+        return None
+
+    source_bullets = _index_bullets_for_dir(
+        wiki_dir, "sources", include_project_suffix=True,
+    )
+    project_bullets = _index_bullets_for_dir(
+        wiki_dir, "projects", include_project_suffix=False,
+    )
 
     sources_block = "## Sources\n" + (
-        "\n".join(bullets) if bullets else "*(none yet)*"
+        "\n".join(source_bullets) if source_bullets else "*(none yet)*"
+    ) + "\n"
+    projects_block = "## Projects\n" + (
+        "\n".join(project_bullets) if project_bullets else "*(none yet)*"
     ) + "\n"
 
     if index.is_file():
@@ -689,30 +731,25 @@ def _rebuild_index(wiki_dir: Path) -> Optional[Path]:
             "# Wiki Index\n\n"
             "This file is auto-maintained by synthesize. "
             "Update-in-place only inside this file — sections outside "
-            "`## Sources` are preserved.\n\n"
+            "`## Sources` / `## Projects` are preserved.\n\n"
             "## Sources\n*(placeholder)*\n"
         )
 
-    match = _SOURCES_HEADING.search(original)
-    if not match:
-        # No Sources section yet — append one at the end.
-        new_text = original.rstrip() + "\n\n" + sources_block
-    else:
-        start = match.start()
-        # Find the next `## ` heading *after* the Sources heading.
-        tail = original[match.end():]
-        next_match = _NEXT_H2.search(tail)
-        if next_match:
-            end = match.end() + next_match.start()
-        else:
-            end = len(original)
-        new_text = original[:start] + sources_block + "\n" + original[end:]
+    new_text = original
+    if sources_dir.is_dir():
+        new_text = _replace_index_section(new_text, "Sources", sources_block)
+    if project_bullets or "## Projects" in new_text:
+        new_text = _replace_index_section(new_text, "Projects", projects_block)
 
     # Only write when content changes — avoids bumping mtime needlessly.
     if not index.is_file() or index.read_text(encoding="utf-8") != new_text:
         index.write_text(new_text, encoding="utf-8")
     return index
 
+
+# Keep aliases so older imports / tests that reached for the private
+# heading regexes keep working.
+_SOURCES_HEADING = re.compile(r"^##\s+Sources\s*$", re.MULTILINE)
 
 def _discover_raw_sessions(
     raw_dir: Optional[Path] = None,

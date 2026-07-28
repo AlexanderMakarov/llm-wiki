@@ -12,6 +12,14 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 - **`llmwiki lint --include-llm` removed (#72)** — the flag advertised LLM-powered rules but never wired a callback, and even with one the three `requires_llm` stubs never called it. `contradiction_detection` / `claim_verification` / `summary_accuracy` now always run as structural rules; `contradiction_detection` skips filler `## Contradictions` bodies (`None identified.`, `n/a`, etc.) so a real vault no longer reports ~2000 false positives. Dropped `requires_llm` / `include_llm` / the unused callback gate from the lint runner (legacy kwargs still accepted and ignored). Docs: `docs/reference/cli.md`, `docs/reference/slash-commands.md`, `docs/cheatsheet.md`, `docs/UPGRADING.md`.
 
+- **`contradiction_detection` filler coverage** — after #72, most remaining hits on a real vault were still synthesis boilerplate (`None detected.`, `None identified in this session.`, multi-sentence `None identified. …`). Expand synonyms / location tails and treat bodies that open with `none`/`n/a`/`no contradiction(s)` as filler unless they contain an affirmative conflict cue.
+
+- **`_rebuild_index` maintains `## Projects`** — project stubs under `wiki/projects/` (seeded by `build`) were never listed in `wiki/index.md`, so `index_sync` errored on every project page. Rebuild now rewrites `## Projects` alongside `## Sources`.
+
+- **`orphan_detection` credits catalog markdown links** — pages listed only from `index.md` as `[title](path.md)` were flagged as orphans because the rule only counted `[[wikilinks]]`. Markdown hrefs that resolve to wiki pages now count as inbound.
+
+- **`link_integrity` case/punct-insensitive aliases** — `[[LLM-Wiki]]` / `[[LlmWiki]]` resolve to `llm-wiki.md` via a normalized slug key. No substring matching (`[[kbbuilder]]` still does not match `code-kbbuilder`).
+
 ## [1.5.0] — 2026-07-27
 
 Theme: MCP usage telemetry and Analytics value signals, vault-aware CLI (`add` / `remove` / content-root), ~6–9× cheaper Claude synthesis, `file://` search reliability, session resume/cwd restore, and Home pipeline State.
