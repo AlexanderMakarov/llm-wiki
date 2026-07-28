@@ -34,14 +34,14 @@ REPL = "USER"
 @pytest.fixture(autouse=True)
 def _fixed_restore_user(monkeypatch):
     """Pin redaction reverse to alice/USER so tests don't depend on $USER."""
+    # build.py binds restore_local_path at import time (PLC0415 hoist);
+    # patch the name where callers use it, not convert's definition.
     monkeypatch.setattr(
-        "llmwiki.convert.restore_local_path",
+        "llmwiki.build.restore_local_path",
         lambda path, real_user=None, repl_user=None: restore_local_path(
             path, real_user=REAL, repl_user=REPL
         ),
     )
-    # local_cwd imports restore_local_path inside the function — patch
-    # the convert module symbol (already done) is enough.
     yield
 
 

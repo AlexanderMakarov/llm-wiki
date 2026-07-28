@@ -16,7 +16,6 @@ import sys
 import warnings
 
 from llmwiki import ingest_queue
-from llmwiki import queue as legacy_queue  # noqa: F401
 
 
 def test_canonical_module_imports_cleanly():
@@ -29,19 +28,20 @@ def test_canonical_module_imports_cleanly():
 def test_legacy_shim_re_exports_with_deprecation_warning():
     """`llmwiki.queue` still imports — but warns."""
     # Drop any prior cached import so the shim's warnings.warn fires.
-
+    # Must re-import (not reload): reload requires the module still in
+    # sys.modules, which we just popped.
     sys.modules.pop("llmwiki.queue", None)
 
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
-        importlib.reload(legacy_queue)
+        shim = importlib.import_module("llmwiki.queue")
     msgs = [str(w.message) for w in caught if issubclass(w.category, DeprecationWarning)]
     assert any("llmwiki.queue" in m for m in msgs), (
         f"expected DeprecationWarning mentioning llmwiki.queue, got {msgs}"
     )
     # Public API still works through the shim
-    assert hasattr(legacy_queue, "enqueue")
-    assert hasattr(legacy_queue, "queue_size")
+    assert hasattr(shim, "enqueue")
+    assert hasattr(shim, "queue_size")
 
 
 def test_stdlib_queue_import_unshadowed():
