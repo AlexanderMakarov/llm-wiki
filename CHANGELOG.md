@@ -8,6 +8,10 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`llmwiki lint --include-llm` removed (#72)** — the flag advertised LLM-powered rules but never wired a callback, and even with one the three `requires_llm` stubs never called it. `contradiction_detection` / `claim_verification` / `summary_accuracy` now always run as structural rules; `contradiction_detection` skips filler `## Contradictions` bodies (`None identified.`, `n/a`, etc.) so a real vault no longer reports ~2000 false positives. Dropped `requires_llm` / `include_llm` / the unused callback gate from the lint runner (legacy kwargs still accepted and ignored). Docs: `docs/reference/cli.md`, `docs/reference/slash-commands.md`, `docs/cheatsheet.md`, `docs/UPGRADING.md`.
+
 ## [1.5.0] — 2026-07-27
 
 Theme: MCP usage telemetry and Analytics value signals, vault-aware CLI (`add` / `remove` / content-root), ~6–9× cheaper Claude synthesis, `file://` search reliability, session resume/cwd restore, and Home pipeline State.

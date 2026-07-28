@@ -521,16 +521,12 @@ def test_resolve_index_href_unit():
     assert _resolve_index_href("./a/./b.md") == "a/b.md"
 
 
-# ─── 9-11. LLM-powered rules (stubs) ────────────────────────────────
+# ─── 9-11. Structural contradiction / claim / summary rules (#72) ────
 
 
-def test_contradiction_without_llm_callback():
+def test_contradiction_empty_page_is_clean():
     pages = {"a.md": _mk_page({"title": "A"}, "")}
-    issues = ContradictionDetection().run(pages)
-    # Without llm_callback, returns a "skipped" info message
-    assert len(issues) == 1
-    assert issues[0]["severity"] == "info"
-    assert "requires LLM" in issues[0]["message"]
+    assert ContradictionDetection().run(pages) == []
 
 
 def test_contradiction_detects_section():
@@ -538,15 +534,32 @@ def test_contradiction_detects_section():
         "a.md": _mk_page({"title": "A"},
                          "## Contradictions\n- X says yes, Y says no\n"),
     }
-    issues = ContradictionDetection().run(pages, llm_callback=lambda p: "")
+    issues = ContradictionDetection().run(pages)
     assert len(issues) == 1
 
 
-def test_claim_verification_without_callback():
+@pytest.mark.parametrize("body", [
+    "None identified.",
+    "*(None — no claims were made.)*",
+    "- None identified.",
+    "None.",
+    "None identified against existing wiki content.",
+    "None noted.",
+    "*(None — no claims were made in this session.)*",
+    "_(none identified)_",
+    "n/a",
+    "(none)",
+])
+def test_contradiction_skips_filler(body: str):
+    pages = {
+        "a.md": _mk_page({"title": "A"}, f"## Contradictions\n{body}\n"),
+    }
+    assert ContradictionDetection().run(pages) == []
+
+
+def test_claim_verification_no_claims_is_clean():
     pages = {"a.md": _mk_page({"title": "A"}, "")}
-    issues = ClaimVerification().run(pages)
-    assert len(issues) == 1
-    assert "requires LLM" in issues[0]["message"]
+    assert ClaimVerification().run(pages) == []
 
 
 def test_claim_verification_detects_unsourced():
@@ -556,19 +569,18 @@ def test_claim_verification_detects_unsourced():
             "## Key Facts\n- Some claim with no source\n",
         ),
     }
-    issues = ClaimVerification().run(pages, llm_callback=lambda p: "")
+    issues = ClaimVerification().run(pages)
     assert len(issues) == 1
 
 
-def test_summary_accuracy_without_callback():
+def test_summary_accuracy_missing_field_is_clean():
     pages = {"a.md": _mk_page({"title": "A"}, "")}
-    issues = SummaryAccuracy().run(pages)
-    assert len(issues) == 1
+    assert SummaryAccuracy().run(pages) == []
 
 
 def test_summary_accuracy_empty_summary():
     pages = {"a.md": _mk_page({"title": "A", "summary": ""}, "")}
-    issues = SummaryAccuracy().run(pages, llm_callback=lambda p: "")
+    issues = SummaryAccuracy().run(pages)
     assert len(issues) == 1
     assert "empty" in issues[0]["message"]
 
@@ -576,25 +588,26 @@ def test_summary_accuracy_empty_summary():
 # ─── Runner ──────────────────────────────────────────────────────────
 
 
-def test_run_all_basic_only():
+def test_run_all_includes_structural_former_llm_rules():
     pages = {
         "index.md": _mk_page({"title": "Index"}, ""),
         "entities/Foo.md": _mk_page({"title": "Foo"}, ""),  # missing type
+        "a.md": _mk_page(
+            {"title": "A"},
+            "## Contradictions\n- Real conflict between sources\n",
+        ),
     }
-    issues = run_all(pages, include_llm=False)
-    # Should find frontmatter completeness issues but not LLM stubs
+    issues = run_all(pages)
     rule_names = {i["rule"] for i in issues}
     assert "frontmatter_completeness" in rule_names
-    # LLM rules skipped when include_llm=False
-    assert "contradiction_detection" not in rule_names
-
-
-def test_run_all_include_llm():
-    pages = {"a.md": _mk_page({"title": "A", "type": "entity"}, "")}
-    issues = run_all(pages, include_llm=True)
-    rule_names = {i["rule"] for i in issues}
-    # LLM rules run but return skipped info
     assert "contradiction_detection" in rule_names
+
+
+def test_run_all_ignores_legacy_include_llm_kwarg():
+    """#72 removed the gate; old callers passing include_llm= must not error."""
+    pages = {"a.md": _mk_page({"title": "A", "type": "entity"}, "")}
+    issues = run_all(pages, include_llm=True)  # type: ignore[call-arg]
+    assert isinstance(issues, list)
 
 
 def test_run_all_selected():

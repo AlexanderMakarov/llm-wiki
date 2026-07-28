@@ -124,7 +124,7 @@ After a promote/merge, run:
 /wiki-lint
 ```
 
-It runs the 13 structural + LLM-powered lint rules. Output:
+It runs the 17 structural lint rules. Output:
 
 ```
 == 28 issues: 0 errors, 22 warnings, 6 info

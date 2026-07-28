@@ -82,10 +82,9 @@ llmwiki export ai-readme               # ai-readme.md
 ## Quality
 
 ```bash
-llmwiki lint                           # 14 rules (8 structural + 3 LLM + 2 v1.1)
+llmwiki lint                           # 17 structural rules
 llmwiki lint --json --fail-on-errors   # CI-friendly
 llmwiki lint --rules link_integrity,orphan_detection
-llmwiki lint --include-llm             # + contradiction/claim/summary checks
 ```
 
 ## Candidate workflow

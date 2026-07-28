@@ -359,7 +359,6 @@ python3 -m llmwiki lint
 python3 -m llmwiki lint --json
 python3 -m llmwiki lint --fail-on-errors
 python3 -m llmwiki lint --rules link_integrity,orphan_detection
-python3 -m llmwiki lint --include-llm
 python3 -m llmwiki lint --wiki-dir ~/another-wiki
 ```
 
@@ -369,15 +368,14 @@ python3 -m llmwiki lint --wiki-dir ~/another-wiki
 |---|---|
 | `--wiki-dir PATH` | Wiki dir. Default: `./wiki`. |
 | `--rules NAMES` | Comma-separated rule names. Default: all applicable. |
-| `--include-llm` | Also run the three LLM-powered rules (requires a callback wired in). |
 | `--json` | JSON output. |
 | `--fail-on-errors` | Exit 1 if any error-severity issues. |
 
 ### Rules
 
-14 structural (`frontmatter_completeness`, `frontmatter_validity`, `link_integrity`, `orphan_detection`, `content_freshness`, `entity_consistency`, `duplicate_detection`, `index_sync`, `stale_candidates`, `tags_topics_convention`, `stale_reference_detection`, `frontmatter_count_consistency`, `tools_consistency`, `stub_source_pages`)
-+ 3 LLM-powered (`contradiction_detection`, `claim_verification`,
-`summary_accuracy`).
+17 structural rules (all deterministic — no LLM): `frontmatter_completeness`, `frontmatter_validity`, `link_integrity`, `orphan_detection`, `content_freshness`, `entity_consistency`, `duplicate_detection`, `index_sync`, `contradiction_detection`, `claim_verification`, `summary_accuracy`, `stale_candidates`, `tags_topics_convention`, `stale_reference_detection`, `frontmatter_count_consistency`, `tools_consistency`, `stub_source_pages`.
+
+`contradiction_detection`, `claim_verification`, and `summary_accuracy` used to hide behind `--include-llm` and advertise an LLM callback that was never wired. As of #72 they always run as structural checks: non-filler `## Contradictions` sections, entity/concept claims without sources, and empty `summary:` frontmatter. Filler bodies like `None identified.` are not findings.
 
 `stub_source_pages` (#24) flags pages under `wiki/sources/` whose body is machine-generated filler — a pending sentinel (`<!-- llmwiki-pending: … -->`) or the dummy backend's `Auto-synthesized from session` body. Those sources still count as unsynthesized backlog; refill them with `llmwiki synthesize` on a real backend.
 

@@ -10,6 +10,14 @@ How to upgrade between `llmwiki` releases.  Most releases are drop-in (`pip inst
 
 The canonical per-release detail is [CHANGELOG.md](https://github.com/Pratiyush/llm-wiki/blob/master/CHANGELOG.md) — this guide focuses on "what might break".
 
+## Unreleased — lint: `--include-llm` removed (#72)
+
+`llmwiki lint --include-llm` is gone. The flag never called an LLM (no callback was wired; the three stub rules never invoked one). Scripts that pass it will fail with `unrecognized arguments: --include-llm` — drop the flag.
+
+`contradiction_detection`, `claim_verification`, and `summary_accuracy` now always run with the other structural rules. `contradiction_detection` no longer flags filler `## Contradictions` sections (`None identified.`, `n/a`, and similar synthesis boilerplate).
+
+Python callers of `run_all(..., include_llm=…, llm_callback=…)` still work — those kwargs are ignored.
+
 ## v1.5.0 — Analytics layout + CallMcpTool migration
 
 After upgrading the engine, rebuild the vault site so Analytics picks up the new section order and heatmaps:
