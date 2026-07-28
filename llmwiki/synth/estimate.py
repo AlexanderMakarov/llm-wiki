@@ -12,6 +12,7 @@ working for any test or caller that reached for it.
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 # ─── Measured per-call constants for the `claude` CLI backend ──────────
@@ -51,11 +52,9 @@ def _rendered_template_tokens(wiki_sources_dir: Any | None = None) -> int:
     the un-expanded template if the wiki can't be read — an estimate that
     is slightly low beats one that raises.
     """
-    from pathlib import Path as _Path  # noqa: PLC0415 — import cycle / lazy load
-
     from llmwiki.cache import TRANSCRIPT_CHARS_PER_TOKEN, estimate_tokens  # noqa: PLC0415 — import cycle / lazy load
 
-    tmpl_path = _Path(__file__).resolve().parent / "prompts" / "source_page.md"
+    tmpl_path = Path(__file__).resolve().parent / "prompts" / "source_page.md"
     try:
         template = tmpl_path.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError):
@@ -64,7 +63,7 @@ def _rendered_template_tokens(wiki_sources_dir: Any | None = None) -> int:
         from llmwiki.synth.pipeline import WIKI_SOURCES, _inject_vocabulary  # noqa: PLC0415 — import cycle / lazy load
 
         wiki_dir = (
-            _Path(wiki_sources_dir).parent
+            Path(wiki_sources_dir).parent
             if wiki_sources_dir is not None
             else WIKI_SOURCES.parent
         )
@@ -125,8 +124,6 @@ def synthesize_estimate_report(
     Any of the args can be injected for tests; the default reads from
     disk and is what the CLI invokes.
     """
-    from pathlib import Path as _Path  # noqa: PLC0415 — import cycle / lazy load
-
     from llmwiki.cache import (  # noqa: PLC0415 — import cycle / lazy load
         CACHE_WRITE_1H_MULTIPLIER,
         DEFAULT_MODEL,
@@ -230,12 +227,12 @@ def synthesize_estimate_report(
         if synthesized_source_keys is not None
         else discover_synth_source_keys()
     )
-    sources_root = _Path(wiki_sources_dir) if wiki_sources_dir is not None else _WIKI_SOURCES
+    sources_root = Path(wiki_sources_dir) if wiki_sources_dir is not None else _WIKI_SOURCES
     # #24: a source whose page is a stub is backlog. The page names its own
     # source, so this holds for pages a derived filename would not find.
     stub_source_keys = discover_stub_source_keys(sources_root)
-    raw_root_path = _Path(raw_root) if raw_root is not None else _RAW_DEFAULT
-    docs_root_path = _Path(docs_root) if docs_root is not None else _RAW_DOCS_DEFAULT
+    raw_root_path = Path(raw_root) if raw_root is not None else _RAW_DEFAULT
+    docs_root_path = Path(docs_root) if docs_root is not None else _RAW_DOCS_DEFAULT
     if state_keys is None:
         state_keys = set(_load_state().keys())
 
@@ -394,7 +391,7 @@ def synthesize_estimate_report(
             mtime_iso = ""
             try:
                 mtime_iso = datetime.fromtimestamp(
-                    _Path(p).stat().st_mtime, tz=UTC
+                    Path(p).stat().st_mtime, tz=UTC
                 ).strftime("%Y-%m-%dT%H:%M:%SZ")
             except (OSError, TypeError, ValueError):
                 # Tests inject Path-ish stubs without a real filesystem path.
@@ -448,7 +445,7 @@ def synthesize_estimate_report(
             mtime_iso = ""
             try:
                 mtime_iso = datetime.fromtimestamp(
-                    _Path(p).stat().st_mtime, tz=UTC
+                    Path(p).stat().st_mtime, tz=UTC
                 ).strftime("%Y-%m-%dT%H:%M:%SZ")
             except (OSError, TypeError, ValueError):
                 pass

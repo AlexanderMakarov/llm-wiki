@@ -27,6 +27,10 @@ from llmwiki.synth.pipeline import (
     synth_page_filename,
     synthesize_new_sessions,
 )
+from llmwiki.synth.pipeline import _discover_raw_sessions
+from llmwiki.synth.pipeline import _save_state
+from llmwiki.synth.pipeline import _DOC_CHUNK_MAX_CHARS
+
 
 RAW_SESSION = """---
 title: "Session: alpha — 2026-04-09"
@@ -181,7 +185,6 @@ def test_discover_source_keys_survives_unreadable_page(vault):
 
 
 def _report(vault, state_keys: set[str]) -> dict:
-    from llmwiki.synth.pipeline import _discover_raw_sessions
 
     return synthesize_estimate_report(
         raw_sessions=_discover_raw_sessions(vault["raw_dir"]),
@@ -225,7 +228,6 @@ def test_real_page_wins_over_a_leftover_stub_for_the_same_source(vault):
 
 
 def test_stub_page_filed_under_another_name_is_resynthesized(vault):
-    from llmwiki.synth.pipeline import _save_state
 
     legacy = vault["sources"] / "proj" / "legacy-name.md"
     legacy.write_text(SENTINEL_PAGE, encoding="utf-8")
@@ -278,7 +280,6 @@ def test_refresh_synth_pending_empty_for_real_page(vault):
 def test_stub_page_is_resynthesized_even_when_state_says_done(vault):
     # First pass: a stub landed on disk and state recorded the source as done.
     vault["page"].write_text(SENTINEL_PAGE, encoding="utf-8")
-    from llmwiki.synth.pipeline import _save_state
 
     mtime = (vault["raw_dir"] / "proj" / "2026-04-09-alpha.md").stat().st_mtime
     _save_state({"proj/2026-04-09-alpha.md": mtime}, vault["state"])
@@ -325,7 +326,6 @@ class _StubSynthesizer(BaseSynthesizer):
 @pytest.fixture
 def chunked_doc_vault(vault) -> dict[str, Path]:
     """A doc big enough to be split into part-pages at the default chunk size."""
-    from llmwiki.synth.pipeline import _DOC_CHUNK_MAX_CHARS
 
     docs = vault["docs_dir"]
     docs.mkdir(parents=True, exist_ok=True)

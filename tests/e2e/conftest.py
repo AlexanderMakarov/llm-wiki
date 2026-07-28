@@ -41,6 +41,8 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import pytest
+from llmwiki import build as build_mod
+
 
 # ─── port + server helpers ──────────────────────────────────────────────
 
@@ -288,7 +290,6 @@ def site_root(tmp_path_factory: pytest.TempPathFactory) -> Path:
     the user's real `raw/sessions/`. This fixture is session-scoped
     so all scenarios share a single built site — a full rebuild per
     scenario would make E2E unusable."""
-    from llmwiki import build as build_mod
 
     workspace = tmp_path_factory.mktemp("llmwiki_e2e")
     raw = workspace / "raw"

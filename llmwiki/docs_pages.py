@@ -30,9 +30,12 @@ from __future__ import annotations
 
 import html
 import re
+import subprocess
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
+from llmwiki import PACKAGE_ROOT, __version__ as _llmwiki_version
+from llmwiki.config_schedule import _load_sessions_config
 
 # ─── Frontmatter parsing ─────────────────────────────────────────────
 
@@ -241,7 +244,6 @@ def resolve_github_repo() -> str:
     so CHANGELOG / edit-on-GitHub / source-code links point at their repo.
     """
     try:
-        from llmwiki.config_schedule import _load_sessions_config  # noqa: PLC0415 — import cycle / lazy load
         site = _load_sessions_config().get("site") or {}
         configured = str(site.get("github_repo") or "").strip()
         if configured:
@@ -249,9 +251,6 @@ def resolve_github_repo() -> str:
     except (OSError, ValueError, TypeError, ImportError):
         pass
     try:
-        import subprocess  # noqa: PLC0415 — import cycle / lazy load
-
-        from llmwiki import PACKAGE_ROOT  # noqa: PLC0415 — import cycle / lazy load
         raw = subprocess.run(
             ["git", "remote", "get-url", "origin"],
             cwd=PACKAGE_ROOT.parent,
@@ -425,7 +424,6 @@ def compile_docs_site(
     # (inside the loop instead of at module load) keeps the docs_pages
     # module cheap to import. GitHub placeholders follow the same
     # pattern so forks point CHANGELOG / issues at their own repo.
-    from llmwiki import __version__ as _llmwiki_version  # noqa: PLC0415 — import cycle / lazy load
     _gh_repo = resolve_github_repo()
     _gh_blob = github_blob_url()
     _gh_home = f"https://github.com/{_gh_repo}"
@@ -460,7 +458,7 @@ def compile_docs_site(
         # Splice the meta strip (then TOC) right after the <h1>…</h1> line.
         if meta_strip or toc_html:
             replacement = f"</h1>\n{meta_strip}\n{toc_html}"
-            body_html = body_html.replace("</h1>", replacement, 1)
+            body_html = bodyhtml.replace("</h1>", replacement, 1)
 
         # #270: route source-code + repo-root-only links to GitHub
         # before the generic .md→.html pass, so e.g. `../../llmwiki/convert.py`
@@ -675,17 +673,14 @@ def strip_dead_session_refs(html_body: str) -> str:
     stays visible (users still see the filename that was referenced)
     but the link is gone, so the compiled site stops reporting a 404.
     """
-    # Lazy import to avoid a hard markdown dep at module import time.
-    import re as _re  # noqa: PLC0415 — import cycle / lazy load
-
     # Match anchors we'd otherwise route.  Skip anchors already rewritten
     # to absolute URLs (github.com / external).
-    anchor_re = _re.compile(
+    anchor_re = re.compile(
         r'<a\s+([^>]*?)href="([^"]+)"([^>]*)>(.*?)</a>',
-        _re.IGNORECASE | _re.DOTALL,
+        re.IGNORECASE | re.DOTALL,
     )
 
-    def _sub(m: _re.Match) -> str:
+    def _sub(m: re.Match) -> str:
         href, inner = m.group(2), m.group(4)
         # Respect absolute + mailto + in-page anchors — they're never dead.
         if href.startswith(("http:", "https:", "mailto:", "#")):
@@ -694,8 +689,7 @@ def strip_dead_session_refs(html_body: str) -> str:
             return m.group(0)
         # Preserve the inner text; drop the anchor.  Add title attribute
         # so hover reveals what the original href was.
-        import html as _html  # noqa: PLC0415 — import cycle / lazy load
-        title = _html.escape(href)
+        title = html.escape(href)
         return (
             f'<span class="session-ref dead-link" title="session-local ref: {title}">'
             f'{inner}</span>'

@@ -10,6 +10,7 @@ from llmwiki.build import build_site
 from llmwiki.convert import convert_all
 from llmwiki.state_store import read_state, resolve_state_file, update_state
 from llmwiki.synth.pipeline import resolve_backend, synthesize_new_sessions
+from llmwiki.config_schedule import _load_sessions_config
 
 
 def _now() -> str:
@@ -74,7 +75,6 @@ def _handle_synthesize(payload: dict[str, Any], vault: Path) -> str:
     ``force`` re-synthesizes them. Without a payload the task drains the
     whole backlog.
     """
-    from llmwiki.config_schedule import _load_sessions_config  # noqa: PLC0415 — lazy load / avoid cycle
 
     backend = resolve_backend(_load_sessions_config())
     if not backend.is_available():

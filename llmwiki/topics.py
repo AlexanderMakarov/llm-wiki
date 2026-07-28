@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Any
 
 from llmwiki.graph import scan_pages
+from llmwiki.topics_consolidate import load_cache
 
 # Mirrors tags.near_duplicate_tags' SequenceMatcher comparison; 0.90 merges
 # pure-case, plural, and hyphen/space variants (llm-wiki≈llmwiki 0.93,
@@ -177,7 +178,6 @@ def derive_vocabulary(
 def _load_consolidation_cache(wiki_dir: Path | None):
     """Load the consolidation cache, swallowing any import/IO error."""
     try:
-        from llmwiki.topics_consolidate import load_cache  # noqa: PLC0415 — lazy load / avoid cycle
 
         return load_cache(wiki_dir)
     except Exception:

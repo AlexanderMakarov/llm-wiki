@@ -6,6 +6,13 @@ import subprocess
 import sys
 
 from llmwiki import __version__
+import llmwiki.cli as cli_mod
+import llmwiki.config_schedule as config_mod
+import llmwiki.build as build_mod
+import llmwiki.synth.pipeline as pipeline_mod
+from pathlib import Path
+import llmwiki.add_doc as add_doc_mod
+
 
 
 def test_version_flag():
@@ -135,8 +142,6 @@ def test_add_configured_claude_backend_synthesizes_synchronously(tmp_path, monke
     """`add` uses THE backend configured once for the whole repository
     (config.json synthesis.backend) and produces a real page in the same
     invocation — from a plain terminal or inside an agent session."""
-    import llmwiki.cli as cli_mod
-    import llmwiki.config_schedule as config_mod
 
     vault = _add_vault(tmp_path)
     src = tmp_path / "doc.md"
@@ -146,7 +151,6 @@ def test_add_configured_claude_backend_synthesizes_synchronously(tmp_path, monke
     monkeypatch.setattr(config_mod, "_load_sessions_config", lambda: {
         "synthesis": {"backend": "claude", "claude_path": str(claude)},
     })
-    import llmwiki.build as build_mod
     monkeypatch.setattr(build_mod, "build_site", lambda **kw: 0)
 
     rc = _run_add(cli_mod, vault, str(src))
@@ -161,9 +165,6 @@ def test_add_configured_claude_backend_synthesizes_synchronously(tmp_path, monke
 
 def test_add_synthesizes_only_written_docs(tmp_path, monkeypatch, capsys):
     """`add` must not drain the unsynthesized backlog — only the docs it wrote."""
-    import llmwiki.cli as cli_mod
-    import llmwiki.config_schedule as config_mod
-    import llmwiki.synth.pipeline as pipeline_mod
 
     vault = _add_vault(tmp_path)
     # Pre-existing unsynthesized doc that must NOT be touched by this add.
@@ -197,16 +198,13 @@ def test_add_synthesizes_only_written_docs(tmp_path, monkeypatch, capsys):
     })
     monkeypatch.setattr(pipeline_mod, "resolve_backend", lambda _cfg: _Ok())
     monkeypatch.setattr(pipeline_mod, "synthesize_new_sessions", _fake_synth)
-    import llmwiki.build as build_mod
     monkeypatch.setattr(build_mod, "build_site", lambda **kw: 0)
     # expected_source_page check: create the page so rollback doesn't fire
     def _expected(raw_path, sources_dir):
-        from pathlib import Path
         p = Path(sources_dir) / "docs" / "brand-new.md"
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text("# Brand New\n", encoding="utf-8")
         return p
-    import llmwiki.add_doc as add_doc_mod
     monkeypatch.setattr(add_doc_mod, "expected_source_page", _expected)
 
     rc = _run_add(cli_mod, vault, str(src))
@@ -218,7 +216,6 @@ def test_add_synthesizes_only_written_docs(tmp_path, monkeypatch, capsys):
 
 def test_add_readd_unchanged_skips_without_synth(tmp_path, monkeypatch, capsys):
     """Re-adding identical content exits 0 and does not synthesize/build (#22)."""
-    import llmwiki.cli as cli_mod
 
     vault = _add_vault(tmp_path)
     src = tmp_path / "doc.md"
@@ -227,10 +224,8 @@ def test_add_readd_unchanged_skips_without_synth(tmp_path, monkeypatch, capsys):
     synth_called = {"n": 0}
     build_called = {"n": 0}
 
-    import llmwiki.synth.pipeline as pipeline_mod
     monkeypatch.setattr(pipeline_mod, "synthesize_new_sessions",
                         lambda **kw: (synth_called.__setitem__("n", synth_called["n"] + 1) or {}))
-    import llmwiki.build as build_mod
     monkeypatch.setattr(build_mod, "build_site",
                         lambda **kw: (build_called.__setitem__("n", build_called["n"] + 1) or 0))
 
@@ -252,8 +247,6 @@ def test_add_unavailable_backend_rolls_back_raw_docs(tmp_path, monkeypatch, caps
     """No half-added docs: when the configured backend can't synthesize,
     the just-added raw docs are removed and add fails — only
     --no-synthesize skips synthesis."""
-    import llmwiki.cli as cli_mod
-    import llmwiki.config_schedule as config_mod
 
     vault = _add_vault(tmp_path)
     src = tmp_path / "doc.md"
@@ -267,9 +260,7 @@ def test_add_unavailable_backend_rolls_back_raw_docs(tmp_path, monkeypatch, caps
     monkeypatch.setattr(config_mod, "_load_sessions_config", lambda: {
         "synthesis": {"backend": "dummy"},
     })
-    import llmwiki.synth.pipeline as pipeline_mod
     monkeypatch.setattr(pipeline_mod, "resolve_backend", lambda _cfg: _Unavailable())
-    import llmwiki.build as build_mod
     monkeypatch.setattr(build_mod, "build_site", lambda **kw: 0)
 
     rc = _run_add(cli_mod, vault, str(src))
@@ -285,8 +276,6 @@ def test_add_unavailable_backend_rolls_back_raw_docs(tmp_path, monkeypatch, caps
 def test_add_failed_synthesis_rolls_back_raw_docs(tmp_path, monkeypatch, capsys):
     """A backend that errors per page (claude CLI exiting 1) leaves no
     wiki page — the raw doc must be rolled back, not left half-added."""
-    import llmwiki.cli as cli_mod
-    import llmwiki.config_schedule as config_mod
 
     vault = _add_vault(tmp_path)
     src = tmp_path / "doc.md"
@@ -298,7 +287,6 @@ def test_add_failed_synthesis_rolls_back_raw_docs(tmp_path, monkeypatch, capsys)
     monkeypatch.setattr(config_mod, "_load_sessions_config", lambda: {
         "synthesis": {"backend": "claude", "claude_path": str(broken)},
     })
-    import llmwiki.build as build_mod
     monkeypatch.setattr(build_mod, "build_site", lambda **kw: 0)
 
     rc = _run_add(cli_mod, vault, str(src))
@@ -310,12 +298,10 @@ def test_add_failed_synthesis_rolls_back_raw_docs(tmp_path, monkeypatch, capsys)
 
 def test_add_no_synthesize_keeps_docs(tmp_path, monkeypatch, capsys):
     """--no-synthesize is the explicit opt-out: docs stay raw-only."""
-    import llmwiki.cli as cli_mod
 
     vault = _add_vault(tmp_path)
     src = tmp_path / "doc.md"
     src.write_text("# Raw Only Doc\n\nbody\n")
-    import llmwiki.build as build_mod
     monkeypatch.setattr(build_mod, "build_site", lambda **kw: 0)
 
     rc = _run_add(cli_mod, vault, "--no-synthesize", str(src))
@@ -327,7 +313,6 @@ def test_pyproject_add_extra_includes_markitdown_backends():
     """markitdown gates each converter behind its own extra; a bare
     `markitdown` can't read the PDFs/DOCX this feature advertises
     (PR #19 field report)."""
-    from pathlib import Path
 
     text = (Path(__file__).resolve().parent.parent / "pyproject.toml").read_text(encoding="utf-8")
     assert "markitdown[pdf,docx,pptx,xlsx]" in text

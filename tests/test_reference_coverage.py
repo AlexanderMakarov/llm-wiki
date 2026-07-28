@@ -16,6 +16,8 @@ from __future__ import annotations
 import re
 
 from llmwiki import REPO_ROOT
+from llmwiki.cli import build_parser
+
 
 CLI_REF = REPO_ROOT / "docs" / "reference" / "cli.md"
 SLASH_REF = REPO_ROOT / "docs" / "reference" / "slash-commands.md"
@@ -29,7 +31,6 @@ BUILD_PY = REPO_ROOT / "llmwiki" / "build.py"
 
 def _all_cli_subcommands() -> set[str]:
     """Walk the argparse tree + return every subcommand name."""
-    from llmwiki.cli import build_parser
 
     parser = build_parser()
     for action in parser._actions:

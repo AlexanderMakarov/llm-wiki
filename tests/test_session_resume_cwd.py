@@ -24,6 +24,9 @@ from llmwiki.build import (
     supports_resume,
 )
 from llmwiki.convert import restore_local_path
+from llmwiki import build as build_mod
+from llmwiki.build import render_sessions_index
+
 
 REAL = "alice"
 REPL = "USER"
@@ -268,7 +271,6 @@ def test_projects_index_other_cwds_label(tmp_path: Path):
 
 def test_project_page_does_not_render_homepage(tmp_path: Path, monkeypatch):
     """External homepage under the topic chips was noise next to the cwd title."""
-    from llmwiki import build as build_mod
 
     monkeypatch.setattr(
         build_mod,
@@ -357,7 +359,6 @@ def test_projects_index_restores_all_titles_including_encoded(tmp_path: Path):
 
 def test_sessions_index_shows_restored_cwd(tmp_path: Path):
     """#56 defect 2: sessions table cwd column uses restored local path."""
-    from llmwiki.build import render_sessions_index
 
     sources = [
         _src(
@@ -380,7 +381,6 @@ def test_sessions_index_shows_restored_cwd(tmp_path: Path):
 
 
 def test_sessions_index_restores_paths_in_description(tmp_path: Path):
-    from llmwiki.build import render_sessions_index
 
     sources = [
         _src(

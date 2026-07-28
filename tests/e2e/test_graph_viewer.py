@@ -6,6 +6,8 @@ from playwright.sync_api import Page
 from pytest_bdd import scenarios, then, when
 
 from tests.e2e.steps.ui_steps import *  # noqa: F401,F403
+import pytest
+
 
 scenarios("features/graph_viewer.feature")
 
@@ -26,7 +28,6 @@ def _graph_page_shipped(page: Page, base_url: str) -> bool:
 @when("I visit the graph page")
 def _visit_graph(page: Page, base_url: str) -> None:
     if not _graph_page_shipped(page, base_url):
-        import pytest
         pytest.skip("graph.html not shipped (empty seeded graph)")
     page.goto(base_url + "/graph.html", wait_until="domcontentloaded")
 
@@ -37,7 +38,6 @@ def _graph_visible(page: Page) -> None:
     # the graph-viewer-minimal placeholder that ships when the wiki
     # corpus is too small to render meaningfully.  Both exercise the
     # click + back-link handlers we care about in this feature.
-    import pytest
     try:
         page.wait_for_selector("#network, body", state="attached", timeout=3000)
     except Exception:
@@ -47,7 +47,6 @@ def _graph_visible(page: Page) -> None:
 @then("the stats overlay shows the page count")
 def _stats_shown(page: Page) -> None:
     # Skip cleanly when the seeded site doesn't have a full graph.
-    import pytest
     stats = page.locator("#s-pages")
     try:
         stats.wait_for(state="attached", timeout=2000)

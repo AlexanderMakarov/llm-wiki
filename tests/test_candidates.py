@@ -24,6 +24,13 @@ from llmwiki.candidates import (
     promote,
     stale_candidates,
 )
+from llmwiki.lint import (
+    REGISTRY,
+    rules,  # noqa: F401
+)
+from llmwiki import REPO_ROOT
+from llmwiki.cli import build_parser
+
 
 # ─── Fixtures ──────────────────────────────────────────────────────────
 
@@ -325,10 +332,6 @@ def test_rewrite_status_adds_when_missing():
 
 
 def test_stale_candidates_lint_rule_registered():
-    from llmwiki.lint import (
-        REGISTRY,
-        rules,  # noqa: F401
-    )
     assert "stale_candidates" in REGISTRY
 
 
@@ -338,7 +341,6 @@ def test_stale_candidates_lint_rule_registered():
 def test_wiki_candidates_slash_command_exists():
     """#272: renamed from `wiki-review` → `wiki-candidates` so the slash
     matches the CLI subcommand (`llmwiki candidates …`)."""
-    from llmwiki import REPO_ROOT
     cmd = REPO_ROOT / ".claude" / "commands" / "wiki-candidates.md"
     assert cmd.is_file()
     text = cmd.read_text(encoding="utf-8")
@@ -354,7 +356,6 @@ def test_wiki_candidates_slash_command_exists():
 
 
 def test_cli_candidates_subcommand_registered():
-    from llmwiki.cli import build_parser
     parser = build_parser()
     sub_action = None
     for a in parser._actions:

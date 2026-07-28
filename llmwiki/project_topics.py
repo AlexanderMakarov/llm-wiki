@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import html
 import re
+import urllib.parse
 from collections import Counter
 from collections.abc import Iterable, Mapping
 from pathlib import Path
@@ -186,7 +187,6 @@ def render_topic_chips_linked(
     rendered via `href_template.format(topic=...)` with URL escaping."""
     if not topics:
         return ""
-    import urllib.parse  # noqa: PLC0415 — lazy load / avoid cycle
     visible = topics[:max_visible]
     hidden = len(topics) - len(visible)
     chip_html = "".join(

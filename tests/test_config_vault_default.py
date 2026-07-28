@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import llmwiki.config_schedule as cs
+
 
 
 def test_load_default_vault_path_from_user_config(tmp_path: Path, monkeypatch):
@@ -17,7 +19,6 @@ def test_load_default_vault_path_from_user_config(tmp_path: Path, monkeypatch):
         json.dumps({"vault": {"default_path": str(tmp_path / "my-vault")}}),
         encoding="utf-8",
     )
-    import llmwiki.config_schedule as cs
 
     monkeypatch.setattr(cs, "_CLONE_ROOT", clone)
     monkeypatch.setattr(cs, "_SESSIONS_CONFIG", clone / "examples" / "sessions_config.json")

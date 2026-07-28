@@ -12,6 +12,8 @@ from pathlib import Path
 from typing import Any
 
 from llmwiki import PACKAGE_ROOT
+from llmwiki import REPO_ROOT
+from llmwiki.state_store import configure_state_file
 
 # Config files always live in the git clone, even when ``LLMWIKI_ROOT``
 # points content reads/writes at an external vault.
@@ -78,8 +80,6 @@ def apply_default_vault(args: Any) -> None:
     State path is resolved once at the CLI border — library modules must
     not re-read ``config.json`` for ``llmwiki-state.json``.
     """
-    from llmwiki import REPO_ROOT  # noqa: PLC0415 — lazy load / avoid cycle
-    from llmwiki.state_store import configure_state_file  # noqa: PLC0415 — lazy load / avoid cycle
 
     if getattr(args, "vault", None) is None:
         default = load_default_vault_path()

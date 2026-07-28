@@ -27,13 +27,15 @@ import sys
 from pathlib import Path
 
 import pytest
+import os
+import select
+
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 def _spawn(extra_env: dict | None = None) -> subprocess.Popen:
     """Start the MCP server with stdin + stdout piped."""
-    import os
     env = os.environ.copy()
     if extra_env:
         env.update(extra_env)
@@ -212,7 +214,6 @@ def _read_frame(proc: subprocess.Popen, timeout: float = 5.0) -> dict:
     Unlike `_exchange`, nothing was requested here, so a regression means no
     frame ever arrives — `select` turns that into a fast failure instead of
     a hung run."""
-    import select
     ready, _, _ = select.select([proc.stdout], [], [], timeout)
     if not ready:
         pytest.fail(f"no frame from the server within {timeout}s")

@@ -42,6 +42,10 @@ import re
 
 from llmwiki.build import nav_bar, render_models_section, render_vs_section
 from llmwiki.render.js import JS
+from llmwiki.build import page_foot
+import tempfile
+from pathlib import Path
+
 
 # 1. Per-dialog focus stash.
 
@@ -102,7 +106,6 @@ def test_mbn_theme_has_aria_pressed_in_markup() -> None:
     """page_foot emits the mobile bottom nav. Its theme button now
     ships with `aria-pressed="false"` baked in (JS overwrites on
     page load so the initial value is just a placeholder)."""
-    from llmwiki.build import page_foot
     foot = page_foot()
     # Find the mbn-theme button + its attrs.
     m = re.search(r'id="mbn-theme"[^>]*', foot)
@@ -122,7 +125,6 @@ def test_mbn_theme_js_handler_calls_sync_pressed() -> None:
 # 6. Palette input has accessible label.
 
 def test_palette_input_has_aria_label() -> None:
-    from llmwiki.build import page_foot
     foot = page_foot()
     m = re.search(r'id="palette-input"[^>]*', foot)
     assert m, "palette-input missing from page_foot output"
@@ -138,8 +140,6 @@ def test_render_models_section_does_not_raise_name_error_at_load_time() -> None:
     # Module imported at the top — that already proves no ImportError
     # at load time. Now exercise the function on a tmp tree to make
     # sure lazy imports inside resolve.
-    import tempfile
-    from pathlib import Path
     with tempfile.TemporaryDirectory() as td:
         out = Path(td) / "site"
         out.mkdir(parents=True)
@@ -151,8 +151,6 @@ def test_render_models_section_does_not_raise_name_error_at_load_time() -> None:
 
 
 def test_render_vs_section_does_not_raise_name_error_at_load_time() -> None:
-    import tempfile
-    from pathlib import Path
     with tempfile.TemporaryDirectory() as td:
         out = Path(td) / "site"
         out.mkdir(parents=True)

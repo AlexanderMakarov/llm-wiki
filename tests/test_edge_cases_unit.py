@@ -20,6 +20,8 @@ from pathlib import Path
 # build.py: md_to_html edge cases
 # ═══════════════════════════════════════════════════════════════════════
 from llmwiki.build import md_to_html, normalize_markdown, parse_frontmatter
+from llmwiki.viz_heatmap import level_for
+
 
 
 class TestMdToHtmlEdgeCases:
@@ -164,7 +166,6 @@ class TestHeatmapEdgeCases:
         counts = {date(2026, 4, d): 1 for d in range(1, 8)}
         thresholds = compute_quantile_thresholds(counts)
         # All same → single distinct value → level 4 for all non-zero
-        from llmwiki.viz_heatmap import level_for
         assert level_for(1, thresholds) == 4
 
     def test_massive_count_value(self):

@@ -17,6 +17,13 @@ import re
 import pytest
 
 from llmwiki import REPO_ROOT, __version__
+import subprocess
+import sys
+from llmwiki.lint import (
+    REGISTRY,
+    rules,  # noqa: F401 — force registration
+)
+
 
 README = REPO_ROOT / "README.md"
 
@@ -129,8 +136,6 @@ def test_test_count_badge_within_window_of_actual():
     drift of more than 15% means the badge has been stale through
     multiple PR cycles. Refresh it.
     """
-    import subprocess
-    import sys
 
     badge_match = TEST_COUNT_RE.search(README.read_text(encoding="utf-8"))
     assert badge_match is not None
@@ -170,10 +175,6 @@ def test_no_stale_lint_rule_counts_in_user_docs():
     '13 lint rules' string in README / CLI help / top-level design docs,
     **unless** the surrounding line also mentions a historical release
     (v0.x.y) — those are legitimate release-notes references."""
-    from llmwiki.lint import (
-        REGISTRY,
-        rules,  # noqa: F401 — force registration
-    )
     live = len(REGISTRY)
     assert live >= 14, "unexpectedly low lint-rule count"
 

@@ -22,6 +22,8 @@ from llmwiki.convert import (
     is_headless_session,
     is_temp_cwd_session,
 )
+from llmwiki.adapters.claude_code import ClaudeCodeAdapter
+
 
 # ─── unit: is_headless_session ───────────────────────────────────────────
 
@@ -146,7 +148,6 @@ def _seed(tmp_path: Path) -> tuple[Path, Path, Path, Path]:
 
 
 def _patch(monkeypatch, home, state):
-    from llmwiki.adapters.claude_code import ClaudeCodeAdapter
     store = home / ".claude" / "projects"
     monkeypatch.setattr(ClaudeCodeAdapter, "session_store_path", store, raising=False)
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))

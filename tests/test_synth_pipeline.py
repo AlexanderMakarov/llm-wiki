@@ -12,6 +12,11 @@ from llmwiki.synth.pipeline import (
     _load_prompt_template,
     synthesize_new_sessions,
 )
+from llmwiki.synth.pipeline import _normalise_slug
+from llmwiki.synth.pipeline import _rebuild_index
+from llmwiki.synth.pipeline import _derive_baseline_tags
+from llmwiki.synth.pipeline import _build_source_page
+
 
 
 def test_format_producer_breakdown_agents_then_docs():
@@ -373,7 +378,6 @@ def test_synthesize_date_prefix_prevents_slug_collisions(tmp_path: Path):
 
 
 def test_slug_normalisation_strips_unsafe_chars():
-    from llmwiki.synth.pipeline import _normalise_slug
     assert _normalise_slug("00 - Master Framework Index") == "00-Master-Framework-Index"
     assert _normalise_slug("path/with/slashes") == "path-with-slashes"
     assert _normalise_slug('bad:chars<here>|pipe"quote') == "bad-chars-here-pipe-quote"
@@ -417,7 +421,6 @@ def test_synthesize_rebuilds_index_md(tmp_path: Path):
 
 def test_rebuild_index_creates_index_when_missing(tmp_path: Path):
     """If wiki/index.md doesn't exist yet, _rebuild_index seeds one."""
-    from llmwiki.synth.pipeline import _rebuild_index
     wiki_dir = tmp_path / "wiki"
     sources = wiki_dir / "sources" / "proj"
     sources.mkdir(parents=True)
@@ -434,7 +437,6 @@ def test_rebuild_index_creates_index_when_missing(tmp_path: Path):
 
 def test_rebuild_index_lists_projects(tmp_path: Path):
     """Project stubs under wiki/projects/ land in ## Projects."""
-    from llmwiki.synth.pipeline import _rebuild_index
     wiki_dir = tmp_path / "wiki"
     sources = wiki_dir / "sources" / "proj"
     sources.mkdir(parents=True)
@@ -502,7 +504,6 @@ def test_synthesize_logs_one_summary_entry_per_run(tmp_path: Path):
 
 
 def test_derive_baseline_tags_preserves_existing():
-    from llmwiki.synth.pipeline import _derive_baseline_tags
     tags = _derive_baseline_tags({
         "tags": ["claude-code", "session-transcript"],
         "project": "demo", "model": "claude-sonnet-4-6",
@@ -512,7 +513,6 @@ def test_derive_baseline_tags_preserves_existing():
 
 
 def test_derive_baseline_tags_adds_project_slug():
-    from llmwiki.synth.pipeline import _derive_baseline_tags
     tags = _derive_baseline_tags({
         "tags": [], "project": "my-project", "model": "",
     })
@@ -520,14 +520,12 @@ def test_derive_baseline_tags_adds_project_slug():
 
 
 def test_derive_baseline_tags_adds_session_transcript_marker():
-    from llmwiki.synth.pipeline import _derive_baseline_tags
     tags = _derive_baseline_tags({"tags": [], "project": "", "model": ""})
     assert "session-transcript" in tags
     assert len(tags) >= 1  # never empty
 
 
 def test_derive_baseline_tags_collapses_model_to_family():
-    from llmwiki.synth.pipeline import _derive_baseline_tags
     tags = _derive_baseline_tags({
         "tags": [], "project": "", "model": "claude-sonnet-4-6",
     })
@@ -535,7 +533,6 @@ def test_derive_baseline_tags_collapses_model_to_family():
 
 
 def test_derive_baseline_tags_deduplicates():
-    from llmwiki.synth.pipeline import _derive_baseline_tags
     tags = _derive_baseline_tags({
         "tags": ["claude-code", "demo"],
         "project": "demo", "model": "claude-sonnet-4-6",
@@ -545,7 +542,6 @@ def test_derive_baseline_tags_deduplicates():
 
 
 def test_derive_baseline_tags_skips_unknown_project():
-    from llmwiki.synth.pipeline import _derive_baseline_tags
     tags = _derive_baseline_tags({"tags": [], "project": "unknown", "model": ""})
     assert "unknown" not in tags
 
@@ -554,7 +550,6 @@ def test_build_source_page_always_has_non_empty_tags():
     """#271 follow-up: the synthesize pipeline must never emit a page
     with empty `tags: []` — that was tripping the new
     tags_topics_convention lint rule."""
-    from llmwiki.synth.pipeline import _build_source_page
     # Completely bare metadata — worst case.
     page = _build_source_page({}, "body")
     # Frontmatter should have a tag list with at least one entry.

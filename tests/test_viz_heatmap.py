@@ -25,6 +25,8 @@ from llmwiki.viz_heatmap import (
     week_column_count,
     window_bounds,
 )
+from datetime import timedelta
+
 
 # ─── window_bounds: GitHub-style Sunday alignment ────────────────────────
 
@@ -38,7 +40,6 @@ def test_window_bounds_is_sunday_aligned():
     start, returned_end = window_bounds(end)
     assert returned_end == end
     assert start.weekday() == 6  # Sunday
-    from datetime import timedelta
 
     assert start <= end - timedelta(days=WINDOW_DAYS - 1)
 

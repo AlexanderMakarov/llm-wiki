@@ -21,6 +21,9 @@ from pathlib import Path
 import pytest
 
 from llmwiki import REPO_ROOT
+from llmwiki.render.css import CSS
+from llmwiki.render.docs_css import DOCS_SHELL_CSS
+
 
 DOCS = REPO_ROOT / "docs"
 TUTORIALS = DOCS / "tutorials"
@@ -281,7 +284,6 @@ def test_no_raw_script_tags_in_tutorials():
 
 
 def test_docs_shell_css_appended_to_main_stylesheet():
-    from llmwiki.render.css import CSS
 
     assert ".docs-shell" in CSS, (
         "docs-shell CSS not appended to llmwiki/render/css.py — "
@@ -291,7 +293,6 @@ def test_docs_shell_css_appended_to_main_stylesheet():
 
 def test_docs_shell_css_selectors_namespaced():
     """No leakage onto non-docs pages."""
-    from llmwiki.render.docs_css import DOCS_SHELL_CSS
 
     # Every top-level selector under `.docs-shell` must be prefixed. We
     # accept media queries / keyframes / root-theme blocks as exceptions.
@@ -307,7 +308,6 @@ def test_docs_shell_css_selectors_namespaced():
 def test_docs_shell_css_inherits_brand_tokens_only():
     """No hard-coded hex colors — everything goes through the brand-system
     CSS variables (#115)."""
-    from llmwiki.render.docs_css import DOCS_SHELL_CSS
     # Allow pixel values + rgba inside color-mix; flag only naked #hex.
     # A naked hex is anything that starts with `#` followed by 3 or 6
     # hex digits outside of var() / color-mix / comment context.

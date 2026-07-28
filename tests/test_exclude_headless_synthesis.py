@@ -28,6 +28,17 @@ from llmwiki.synth.pipeline import (
     DEFAULT_EXCLUDE_HEADLESS,
     resolve_exclude_headless,
 )
+from llmwiki.convert import DEFAULT_CONFIG
+from llmwiki.convert import render_session_markdown
+from llmwiki._frontmatter import parse_frontmatter
+from llmwiki.synth.estimate import synthesize_estimate_report
+from llmwiki.synth.base import DummySynthesizer
+from llmwiki.synth.pipeline import synthesize_new_sessions
+from llmwiki.synth.pipeline import (
+    discover_unsynth_session_rels,
+    synthesize_new_sessions,
+)
+
 
 # ─── unit: is_headless frontmatter helper ────────────────────────────────
 
@@ -88,7 +99,6 @@ def test_exclude_headless_tolerates_string_spellings():
 def test_exclude_headless_shares_the_converter_key():
     # One setting governs ingest and backlog, so the two can never disagree
     # about what "headless" means.
-    from llmwiki.convert import DEFAULT_CONFIG
     assert DEFAULT_CONFIG["filters"]["exclude_headless"] is True
 
 
@@ -110,7 +120,6 @@ def _records(entrypoint: str, prompt_source: str) -> list[dict]:
 
 
 def _render(records: list[dict]) -> str:
-    from llmwiki.convert import render_session_markdown
     text, _slug, _started = render_session_markdown(
         records=records,
         jsonl_path=Path("/tmp/s1.jsonl"),
@@ -137,7 +146,6 @@ def test_converter_marks_interactive_session_not_headless():
 def test_converted_headless_frontmatter_round_trips():
     # The whole point: what the converter writes must be readable back by the
     # synthesis policy, or the backlog can't act on it.
-    from llmwiki._frontmatter import parse_frontmatter
     meta, _body = parse_frontmatter(_render(_records("sdk-cli", "sdk")))
     assert is_headless(meta) is True
 
@@ -170,7 +178,6 @@ def _mixed_sessions():
 
 
 def test_estimate_excludes_headless_from_backlog():
-    from llmwiki.synth.estimate import synthesize_estimate_report
     rpt = synthesize_estimate_report(
         raw_sessions=_mixed_sessions(),
         state_keys=set(),
@@ -183,7 +190,6 @@ def test_estimate_excludes_headless_from_backlog():
 
 
 def test_estimate_includes_headless_when_filter_disabled():
-    from llmwiki.synth.estimate import synthesize_estimate_report
     rpt = synthesize_estimate_report(
         raw_sessions=_mixed_sessions(),
         state_keys=set(),
@@ -197,7 +203,6 @@ def test_estimate_includes_headless_when_filter_disabled():
 def test_estimate_headless_does_not_inflate_full_force_cost():
     # Full-force bills the whole corpus, so an ineligible session must be
     # dropped before costing — not merely omitted from the incremental bucket.
-    from llmwiki.synth.estimate import synthesize_estimate_report
     on = synthesize_estimate_report(
         raw_sessions=_mixed_sessions(), state_keys=set(),
         synthesized_source_keys=set(), exclude_headless=True,
@@ -259,8 +264,6 @@ def _written(wiki_sources: Path) -> list[str]:
 
 
 def test_synthesize_skips_headless_already_in_raw(tmp_path: Path):
-    from llmwiki.synth.base import DummySynthesizer
-    from llmwiki.synth.pipeline import synthesize_new_sessions
     raw, wiki_sources = _seed(tmp_path)
     summary = synthesize_new_sessions(
         backend=DummySynthesizer(), raw_dir=raw, wiki_sources_dir=wiki_sources,
@@ -274,8 +277,6 @@ def test_synthesize_skips_headless_already_in_raw(tmp_path: Path):
 def test_synthesize_skips_headless_even_with_force(tmp_path: Path):
     # --force means "redo synthesis", not "override eligibility" — same
     # contract the include_subagents policy holds to.
-    from llmwiki.synth.base import DummySynthesizer
-    from llmwiki.synth.pipeline import synthesize_new_sessions
     raw, wiki_sources = _seed(tmp_path)
     summary = synthesize_new_sessions(
         backend=DummySynthesizer(), raw_dir=raw, wiki_sources_dir=wiki_sources,
@@ -287,8 +288,6 @@ def test_synthesize_skips_headless_even_with_force(tmp_path: Path):
 
 
 def test_synthesize_includes_headless_when_filter_disabled(tmp_path: Path):
-    from llmwiki.synth.base import DummySynthesizer
-    from llmwiki.synth.pipeline import synthesize_new_sessions
     raw, wiki_sources = _seed(tmp_path)
     summary = synthesize_new_sessions(
         backend=DummySynthesizer(), raw_dir=raw, wiki_sources_dir=wiki_sources,
@@ -301,8 +300,6 @@ def test_synthesize_includes_headless_when_filter_disabled(tmp_path: Path):
 def test_synthesize_does_not_leave_headless_in_raw(tmp_path: Path):
     # Skipping must not delete: raw/ is immutable, and "not synthesized" is
     # a backlog policy, not a retention one.
-    from llmwiki.synth.base import DummySynthesizer
-    from llmwiki.synth.pipeline import synthesize_new_sessions
     raw, wiki_sources = _seed(tmp_path)
     synthesize_new_sessions(
         backend=DummySynthesizer(), raw_dir=raw, wiki_sources_dir=wiki_sources,
@@ -322,11 +319,6 @@ def test_estimate_backlog_matches_what_synthesize_runs(tmp_path: Path):
     and quoted a price for them, while a run would (now) skip them — so the
     number shown was for work that would never happen.
     """
-    from llmwiki.synth.base import DummySynthesizer
-    from llmwiki.synth.pipeline import (
-        discover_unsynth_session_rels,
-        synthesize_new_sessions,
-    )
     raw, wiki_sources = _seed(tmp_path)
     state = tmp_path / "state.json"
 

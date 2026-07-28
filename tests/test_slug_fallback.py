@@ -16,6 +16,9 @@ from __future__ import annotations
 from pathlib import Path
 
 from llmwiki.convert import _source_hash8, derive_session_slug
+from datetime import datetime
+from llmwiki.convert import flat_output_name
+
 
 
 def test_explicit_slug_field_used_as_is():
@@ -125,9 +128,7 @@ def test_no_disambig_needed_for_distinct_uuid_jsonls(tmp_path: Path):
     Pre-fix: both produced ``YYYY-MM-DDTHH-MM-proj-b7f0e3c4-21.md``
     Post-fix: both produce distinct hashes → no collision.
     """
-    from datetime import datetime
 
-    from llmwiki.convert import flat_output_name
 
     started = datetime(2026, 4, 26, 10, 0, 0)
     a = tmp_path / "aaaaaaaa-1111-1111-1111-111111111111.jsonl"

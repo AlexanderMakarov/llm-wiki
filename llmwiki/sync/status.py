@@ -14,6 +14,7 @@ logic, not argparse glue. ``cli.py`` re-exports ``cmd_sync_status``
 from __future__ import annotations
 
 import argparse
+import json
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -47,9 +48,8 @@ def cmd_sync_status(args: argparse.Namespace) -> int:
     meta: dict = {}
     counters: dict = {}
     try:
-        import json as _json  # noqa: PLC0415 — lazy load / avoid cycle
-        payload = _json.loads(state_path.read_text(encoding="utf-8")) if state_path.exists() else {}
-    except (OSError, _json.JSONDecodeError):
+        payload = json.loads(state_path.read_text(encoding="utf-8")) if state_path.exists() else {}
+    except (OSError, json.JSONDecodeError):
         payload = {}
     if isinstance(payload, dict) and isinstance(payload.get("sync"), dict):
         sync_state = payload.get("sync", {})

@@ -17,6 +17,8 @@ import pytest
 
 from llmwiki import usage
 from llmwiki.mcp import server as mcp_server
+from llmwiki.adapters.claude_code import ClaudeCodeAdapter
+
 
 
 @pytest.fixture(autouse=True)
@@ -53,7 +55,6 @@ def test_client_root_slug_matches_the_project_page_slug(tmp_path: Path):
     segment (``code-webapp``) exactly as the ingestion adapter derives it, so
     telemetry keys onto the project's own page instead of a basename that
     never matches."""
-    from llmwiki.adapters.claude_code import ClaudeCodeAdapter
     project, _ = usage.resolve_caller(
         {}, client_roots=["file:///Users/alice/code/webapp"], content_root=tmp_path)
     adapter = ClaudeCodeAdapter()

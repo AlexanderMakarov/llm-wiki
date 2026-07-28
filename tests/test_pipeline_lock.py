@@ -10,6 +10,9 @@ import time
 import pytest
 
 from llmwiki.pipeline_lock import LOCK_DIRNAME, pipeline_lock
+import llmwiki.cli as cli_mod
+import llmwiki.pipeline_lock as lock_mod
+
 
 
 def test_acquire_creates_and_releases_lock(tmp_path):
@@ -73,8 +76,6 @@ def test_fresh_pidless_lock_is_respected(tmp_path):
 
 def test_cmd_add_dry_run_takes_no_lock(tmp_path, monkeypatch, capsys):
     """--dry-run must stay lock-free (and must not leave a lock behind)."""
-    import llmwiki.cli as cli_mod
-    import llmwiki.pipeline_lock as lock_mod
 
     src = tmp_path / "in.md"
     src.write_text("# Dry Run Doc\n\nbody\n")

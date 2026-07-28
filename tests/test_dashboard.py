@@ -5,6 +5,9 @@ from __future__ import annotations
 from pathlib import Path
 
 from llmwiki import REPO_ROOT
+import argparse
+from llmwiki.cli import cmd_init
+
 
 DASHBOARD_TEMPLATE = REPO_ROOT / "examples" / "wiki_dashboard.md"
 
@@ -78,9 +81,7 @@ def test_cmd_init_seeds_dashboard(tmp_path: Path, monkeypatch):
         "---\ntitle: Test\n---\n# Test Dashboard\n", encoding="utf-8"
     )
 
-    import argparse
 
-    from llmwiki.cli import cmd_init
     args = argparse.Namespace()
     rc = cmd_init(args)
     assert rc == 0

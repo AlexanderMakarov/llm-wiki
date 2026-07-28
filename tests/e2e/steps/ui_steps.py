@@ -27,6 +27,11 @@ from typing import Any
 import pytest
 from playwright.sync_api import Page, expect
 from pytest_bdd import given, parsers, then, when
+from urllib.parse import urlparse
+import os
+from pathlib import Path as _Path
+import pytest as _pytest
+
 
 # ─── shared background steps ────────────────────────────────────────────
 
@@ -286,7 +291,6 @@ def _current_path(page: Page) -> str:
     is safe post-navigation.  parse ``urlparse().path`` so callers get
     the pathname just like the old code.
     """
-    from urllib.parse import urlparse
     return urlparse(page.url).path
 
 
@@ -739,8 +743,6 @@ def _capture_screenshot(page: Page, tag: str, tmp_path_factory: pytest.TempPathF
     real regressions (a layout shift, a missing image, a recolored
     accent) without flaking on hljs-async noise. Override via
     ``LLMWIKI_VR_TOLERANCE_PCT`` (e.g. ``2.0`` for tighter)."""
-    import os
-    from pathlib import Path as _Path
 
     capture_dir = _Path(os.environ.get("LLMWIKI_E2E_SCREENSHOT_DIR") or "tests/e2e/screenshots")
     baseline_dir = _Path("tests/e2e/visual_baselines")
@@ -779,9 +781,9 @@ def _capture_screenshot(page: Page, tag: str, tmp_path_factory: pytest.TempPathF
     # when missing instead of failing, so non-e2e contributors don't get
     # blocked by a missing image library.
     try:
-        from PIL import Image, ImageChops
+        from PIL import Image, ImageChops  # noqa: PLC0415
     except ImportError:
-        import warnings as _warnings
+        import warnings as _warnings  # noqa: PLC0415
         _warnings.warn(
             "Pillow not installed — skipping visual regression comparison "
             f"for {tag!r}. `pip install -e '.[e2e]'` to enable.",
@@ -793,7 +795,6 @@ def _capture_screenshot(page: Page, tag: str, tmp_path_factory: pytest.TempPathF
         baseline_img = Image.open(baseline_path).convert("RGB")
         capture_img = Image.open(capture_path).convert("RGB")
     except Exception as e:  # corrupt PNG, decoder failure, etc.
-        import pytest as _pytest
         _pytest.fail(
             f"could not open baseline / capture for {tag!r}: {e}. "
             f"Try regenerating with LLMWIKI_VR_UPDATE=1."
@@ -801,7 +802,6 @@ def _capture_screenshot(page: Page, tag: str, tmp_path_factory: pytest.TempPathF
 
     # If sizes differ the diff is meaningless — flag it as a hard fail.
     if baseline_img.size != capture_img.size:
-        import pytest as _pytest
         _pytest.fail(
             f"visual regression {tag!r}: size changed from "
             f"{baseline_img.size} to {capture_img.size}. "
@@ -833,7 +833,6 @@ def _capture_screenshot(page: Page, tag: str, tmp_path_factory: pytest.TempPathF
     if pct > tolerance_pct:
         # Save the diff image so the maintainer can see what changed.
         diff.save(diff_path)
-        import pytest as _pytest
         _pytest.fail(
             f"visual regression {tag!r}: {pct:.2f}% of pixels differ "
             f"(tolerance {tolerance_pct}%). "

@@ -16,7 +16,10 @@ import hashlib
 import ipaddress
 import json
 import re as _re  # aliased: `re` is shadowed by hot loop locals in later sections
+import shutil
 import socket
+import subprocess
+import tempfile
 import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
@@ -358,10 +361,6 @@ def _ocr_image(path: Path, timeout: int = 300) -> str:
     name, and claude runs with that dir as its working directory + read
     scope (``--add-dir``), so a crafted filename or in-image instruction
     can't steer a read of an arbitrary file."""
-    import shutil  # noqa: PLC0415 — optional extra or lazy load
-    import subprocess  # noqa: PLC0415 — optional extra or lazy load
-    import tempfile  # noqa: PLC0415 — optional extra or lazy load
-
     from llmwiki.build import _resolve_claude_path  # noqa: PLC0415 — optional extra or lazy load
 
     claude = _resolve_claude_path(None)

@@ -25,6 +25,8 @@ from llmwiki.mcp.server import (
     tool_wiki_query,
     tool_wiki_search,
 )
+import re as _re
+
 
 # ─── Helpers ─────────────────────────────────────────────────────────
 
@@ -274,7 +276,6 @@ def _seed_query_corpus(tmp_path: Path, pages: dict[str, str]) -> None:
 def _query_pages_in_order(result: dict) -> list[str]:
     """Extract the ordered list of page paths from a wiki_query result."""
     text = _result_text(result)
-    import re as _re
     return _re.findall(r"## `([^`]+)`", text)
 
 

@@ -23,10 +23,12 @@ Ships as stdlib-only Python — no MCP SDK dependency.
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 from typing import Any
@@ -615,8 +617,7 @@ def tool_wiki_query(args: dict[str, Any]) -> dict[str, Any]:
         # pages (frontmatter-only) from getting a massive boost on
         # zero-token queries.
         if body_score > 0:
-            import math as _math  # noqa: PLC0415 — lazy load / keep MCP startup light
-            length_factor = _math.log2(max(len(content), 256))
+            length_factor = math.log2(max(len(content), 256))
             normalised_body = body_score / length_factor
         else:
             normalised_body = 0.0
@@ -1028,8 +1029,6 @@ def tool_wiki_add(args: dict[str, Any]) -> dict[str, Any]:
     tmp_path: Path | None = None
     try:
         if content:
-            import tempfile  # noqa: PLC0415 — lazy load / keep MCP startup light
-
             fd, tmp_name = tempfile.mkstemp(suffix=".md", prefix="wiki-add-content-")
             os.close(fd)
             tmp_path = Path(tmp_name)

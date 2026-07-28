@@ -19,6 +19,8 @@ Contrib adapters (loaded on demand via --adapter flag):
 
 from __future__ import annotations
 
+import sys
+
 from llmwiki.adapters.base import BaseAdapter
 
 REGISTRY: dict[str, type[BaseAdapter]] = {}
@@ -115,7 +117,6 @@ def discover_contrib(names: list[str] | None = None) -> None:
         try:
             __import__(f"llmwiki.adapters.contrib.{name}")
         except ImportError as e:
-            import sys  # noqa: PLC0415 — lazy package import
             print(f"  warning: contrib adapter {name!r} failed to load: {e}",
                   file=sys.stderr)
 

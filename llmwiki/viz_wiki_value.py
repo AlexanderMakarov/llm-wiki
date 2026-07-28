@@ -9,6 +9,7 @@ import html
 from typing import Any
 
 from llmwiki.usage import UNATTRIBUTED, is_entity_tool, value_summary
+from llmwiki.render.collapse_section import collapse_section_list
 
 
 def render_project_usage_block(
@@ -224,7 +225,6 @@ def render_wiki_value_section(
 
     dead_block = ""
     if dead_stock_total or dead_stock:
-        from llmwiki.render.collapse_section import collapse_section_list  # noqa: PLC0415 — lazy load / avoid cycle
 
         items = [
             f"<li><code>{html.escape(p)}</code></li>" for p in dead_stock

@@ -9,8 +9,11 @@ mtime, so re-running on unchanged files is a fast no-op.
 
 from __future__ import annotations
 
+import copy
 import fnmatch as _fnmatch  # #py-m11 (#597): module-level alias
+import hashlib
 import json
+import os
 import re
 import sys
 from collections.abc import Iterable
@@ -19,13 +22,14 @@ from pathlib import Path
 from typing import Any
 
 from llmwiki import REPO_ROOT
-from llmwiki.adapters import REGISTRY, discover_adapters
+from llmwiki.adapters import REGISTRY, discover_adapters, discover_contrib, resolve_adapter_name
 from llmwiki.quarantine import add_entry as _quarantine_add
 from llmwiki.quarantine import clear_entry as _quarantine_clear
 from llmwiki.state_store import mtime_from_state, mtime_to_iso
 from llmwiki.state_store import read_state as _read_unified_state
 from llmwiki.state_store import resolve_state_file as _resolve_state_file
 from llmwiki.state_store import update_state as _update_unified_state
+from llmwiki.synth.pipeline import resolve_include_subagents
 
 DEFAULT_CONFIG_FILE = REPO_ROOT / "examples" / "sessions_config.json"
 # #25: the user's personal, gitignored root config.json. On the sync/queue
@@ -88,7 +92,6 @@ def load_config(path: Path) -> dict[str, Any]:
     # round-trip deep-copy from the era before copy.deepcopy was a
     # builtin import. copy.deepcopy is ~5× faster and avoids the
     # implicit "JSON-serializable types only" constraint.
-    import copy  # noqa: PLC0415 — lazy load / avoid cycle
     cfg: dict[str, Any] = copy.deepcopy(DEFAULT_CONFIG)
     if path.exists():
         try:
@@ -141,7 +144,6 @@ def _ensure_real_username(cfg: dict[str, Any]) -> None:
     if red.get("real_username"):
         return
     try:
-        import os  # noqa: PLC0415 — lazy load / avoid cycle
         candidate = (
             os.environ.get("USER")
             or os.environ.get("USERNAME")
@@ -451,10 +453,9 @@ class IgnoreMatcher:
             # permission / IO problems from operators. Print a warning
             # to stderr so the failure is visible without breaking
             # callers that expect a usable IgnoreMatcher.
-            import sys as _sys  # noqa: PLC0415 — lazy load / avoid cycle
             print(
                 f"warning: could not read {path}: {e}; treating as no-ignores",
-                file=_sys.stderr,
+                file=sys.stderr,
             )
             return cls([])
         return cls(text.splitlines())
@@ -566,11 +567,10 @@ def parse_jsonl(path: Path) -> list[dict[str, Any]]:
             if consumed > PER_FILE_BYTE_CAP:
                 # Stop here — return what we've accumulated so far so
                 # callers still get partial data instead of nothing.
-                import sys as _sys  # noqa: PLC0415 — lazy load / avoid cycle
                 print(
                     f"warning: {path} exceeded {PER_FILE_BYTE_CAP // (1024*1024)}MB cap; "
                     f"truncating after {line_no} lines",
-                    file=_sys.stderr,
+                    file=sys.stderr,
                 )
                 break
             line = line.strip()
@@ -763,14 +763,13 @@ class Redactor:
         # the good ones. Default token patterns + username redaction
         # still run regardless.
         self.patterns = []
-        import sys as _sys  # noqa: PLC0415 — lazy load / avoid cycle
         for p in red.get("extra_patterns", []):
             try:
                 self.patterns.append(re.compile(p))
             except re.error as e:
                 print(
                     f"warning: invalid redaction pattern {p!r} skipped: {e}",
-                    file=_sys.stderr,
+                    file=sys.stderr,
                 )
 
     def __call__(self, text: str) -> str:
@@ -1396,8 +1395,7 @@ def flat_output_name(
 def _source_hash8(source_path: Path) -> str:
     """Stable 8-char SHA-256 of a source path — used as a filename
     disambiguator when two jsonls would otherwise collide (#339)."""
-    import hashlib as _hl  # noqa: PLC0415 — lazy load / avoid cycle
-    return _hl.sha256(str(source_path).encode("utf-8")).hexdigest()[:8]
+    return hashlib.sha256(str(source_path).encode("utf-8")).hexdigest()[:8]
 
 
 _SESSION_ID_LINE = re.compile(r"^sessionId:\s*(\S+)\s*$", re.MULTILINE)
@@ -1702,7 +1700,6 @@ def convert_all(
     # #30: "off" drops subagent transcripts before they ever hit raw/. The
     # "only-raw"/"all" modes both convert them here (they diverge only in
     # synthesis), so sync only cares about the "off" case.
-    from llmwiki.synth.pipeline import resolve_include_subagents  # noqa: PLC0415 — lazy load / avoid cycle
     include_subagents = resolve_include_subagents(config)
 
     since_dt: datetime | None = None
@@ -1722,7 +1719,6 @@ def convert_all(
         # "unknown adapter" even though the adapter ships. Default-fire (the
         # ``else`` branch) intentionally stays core-only to keep contrib
         # adapters opt-in.
-        from llmwiki.adapters import discover_contrib, resolve_adapter_name  # noqa: PLC0415 — lazy load / avoid cycle
         discover_contrib()
         for name in adapters:
             canonical = resolve_adapter_name(name)

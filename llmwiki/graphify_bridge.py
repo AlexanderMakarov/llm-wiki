@@ -21,6 +21,7 @@ Usage from Python:
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -73,7 +74,6 @@ def _extract_wiki_nodes(wiki_dir: Path) -> dict[str, Any]:
     are connected via project hub nodes and date-proximity edges to
     reduce graph orphans.
     """
-    import re  # noqa: PLC0415 — optional extra
     WIKILINK_RE = re.compile(r"\[\[([^\]|#]+?)(?:#[^\]]*)?(?:\|[^\]]+)?\]\]")
 
     nodes: list[dict] = []

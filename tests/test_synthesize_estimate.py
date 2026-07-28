@@ -19,12 +19,22 @@ import sys
 from pathlib import Path
 
 import pytest
+import os
+from llmwiki.cli import synthesize_estimate_report
+from llmwiki.cache import TRANSCRIPT_CHARS_PER_TOKEN
+from llmwiki.synth.estimate import BODY_CHAR_CAP, LEAN_OVERHEAD_TOKENS
+from llmwiki.cache import CACHE_WRITE_1H_MULTIPLIER, MODEL_PRICING
+from llmwiki.synth.estimate import DEFAULT_OUTPUT_TOKENS, LEAN_OVERHEAD_TOKENS
+import llmwiki.cli as cli_mod
+from llmwiki.synth.estimate import BODY_CHAR_CAP
+import time
+import re
+
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _run_cli(*args):
-    import os
     env = os.environ.copy()
     # Prefer the checkout under test over any other installed llmwiki.
     env["PYTHONPATH"] = str(REPO_ROOT) + (
@@ -64,7 +74,6 @@ def _sessions(*rels: str) -> list:
 
 
 def test_empty_corpus_reports_zero():
-    from llmwiki.cli import synthesize_estimate_report
     rpt = synthesize_estimate_report(
         raw_sessions=[],
         state_keys=set(),
@@ -78,7 +87,6 @@ def test_empty_corpus_reports_zero():
 
 
 def test_fresh_corpus_incremental_equals_full_force():
-    from llmwiki.cli import synthesize_estimate_report
     rpt = synthesize_estimate_report(
         raw_sessions=_sessions("a.md", "b.md", "c.md"),
         state_keys=set(),
@@ -92,7 +100,6 @@ def test_fresh_corpus_incremental_equals_full_force():
 
 
 def test_fully_synthesized_corpus_incremental_is_zero():
-    from llmwiki.cli import synthesize_estimate_report
     rpt = synthesize_estimate_report(
         raw_sessions=_sessions("a.md", "b.md"),
         state_keys={"a.md", "b.md"},
@@ -106,7 +113,6 @@ def test_fully_synthesized_corpus_incremental_is_zero():
 
 
 def test_partial_progress_incremental_less_than_full_force():
-    from llmwiki.cli import synthesize_estimate_report
     rpt = synthesize_estimate_report(
         raw_sessions=_sessions("a.md", "b.md", "c.md"),
         state_keys={"a.md"},  # one already synthesized
@@ -118,7 +124,6 @@ def test_partial_progress_incremental_less_than_full_force():
 
 
 def test_money_numbers_are_non_negative():
-    from llmwiki.cli import synthesize_estimate_report
     rpt = synthesize_estimate_report(
         raw_sessions=_sessions("x.md"),
         state_keys=set(),
@@ -136,7 +141,6 @@ def test_small_prefix_is_not_a_warning():
     has no shared prefix to cache — lean mode exists precisely to make the
     fixed part small — so a small prefix must not warn.
     """
-    from llmwiki.cli import synthesize_estimate_report
     rpt = synthesize_estimate_report(
         raw_sessions=[], state_keys=set(), prefix_tokens=50,
     )
@@ -144,7 +148,6 @@ def test_small_prefix_is_not_a_warning():
 
 
 def test_non_lean_warns_about_scaffolding():
-    from llmwiki.cli import synthesize_estimate_report
     rpt = synthesize_estimate_report(
         raw_sessions=[], state_keys=set(), lean=False,
     )
@@ -153,7 +156,6 @@ def test_non_lean_warns_about_scaffolding():
 
 def test_non_lean_costs_far_more_per_page():
     """The scaffolding the lean flags strip dominates the per-page bill."""
-    from llmwiki.cli import synthesize_estimate_report
     sessions = [(_P("a.md"), {"project": "p"}, "body " * 200)]
     lean = synthesize_estimate_report(
         raw_sessions=sessions, state_keys=set(), lean=True,
@@ -174,9 +176,6 @@ def test_matches_measured_cost_per_page():
     report pays the same full cache write. The model should land within 15%
     and err high: an estimate that under-promises is the harmful direction.
     """
-    from llmwiki.cache import TRANSCRIPT_CHARS_PER_TOKEN
-    from llmwiki.cli import synthesize_estimate_report
-    from llmwiki.synth.estimate import BODY_CHAR_CAP, LEAN_OVERHEAD_TOKENS
     # The 18,977-char prompt is the rendered template plus a body already
     # truncated to the cap — split it the same way here.
     mean_chars = 18_977
@@ -203,9 +202,6 @@ def test_input_is_billed_as_cache_write_not_fresh_input():
     them, and 100% of input arrived as cache_creation. Pricing this at the
     plain input rate understates every run by ~2x.
     """
-    from llmwiki.cache import CACHE_WRITE_1H_MULTIPLIER, MODEL_PRICING
-    from llmwiki.cli import synthesize_estimate_report
-    from llmwiki.synth.estimate import DEFAULT_OUTPUT_TOKENS, LEAN_OVERHEAD_TOKENS
     rpt = synthesize_estimate_report(
         raw_sessions=[(_P("a.md"), {}, "")],
         state_keys=set(),
@@ -227,7 +223,6 @@ def test_cached_prefix_is_written_once_per_run():
     marginal page must cost materially less than the first, and a 10-page
     run must cost far less than 10x one page.
     """
-    from llmwiki.cli import synthesize_estimate_report
     one = synthesize_estimate_report(
         raw_sessions=_sessions("a.md"), state_keys=set(),
         template_tokens=5000, model="claude-sonnet-5",
@@ -244,7 +239,6 @@ def test_cached_prefix_is_written_once_per_run():
 def test_incremental_bucket_pays_its_own_cache_write():
     """An incremental run is its own process — it cannot reuse a cache
     write from pages that were synthesized in some earlier run."""
-    from llmwiki.cli import synthesize_estimate_report
     rpt = synthesize_estimate_report(
         # Two already done, one new: the new page is page 1 of *this* run.
         raw_sessions=_sessions("a.md", "b.md", "c.md"),
@@ -260,7 +254,6 @@ def test_incremental_bucket_pays_its_own_cache_write():
 
 
 def test_custom_model_propagates():
-    from llmwiki.cli import synthesize_estimate_report
     rpt = synthesize_estimate_report(
         raw_sessions=_sessions("a.md"),
         state_keys=set(),
@@ -272,7 +265,6 @@ def test_custom_model_propagates():
 
 
 def test_custom_output_tokens_affects_cost():
-    from llmwiki.cli import synthesize_estimate_report
     rpt_small = synthesize_estimate_report(
         raw_sessions=_sessions("a.md"),
         state_keys=set(),
@@ -291,7 +283,6 @@ def test_custom_output_tokens_affects_cost():
 def test_state_key_matching_accepts_multiple_forms():
     """State keys come from different call sites — match bare-name,
     rel-path, or full-str."""
-    from llmwiki.cli import synthesize_estimate_report
     rpt = synthesize_estimate_report(
         raw_sessions=_sessions("proj/abc.md"),
         state_keys={"proj/abc.md"},  # rel-path form
@@ -302,7 +293,6 @@ def test_state_key_matching_accepts_multiple_forms():
 
 def test_report_is_serialisable_to_json():
     """The JSON-able shape lets downstream tools consume the report."""
-    from llmwiki.cli import synthesize_estimate_report
     rpt = synthesize_estimate_report(
         raw_sessions=_sessions("a.md"),
         state_keys=set(),
@@ -315,7 +305,6 @@ def test_report_is_serialisable_to_json():
 
 def test_prefix_tokens_is_overhead_plus_template(tmp_path, monkeypatch):
     """The per-call prefix is scaffolding + prompt template, nothing else."""
-    import llmwiki.cli as cli_mod
     rpt = cli_mod.synthesize_estimate_report(
         raw_sessions=_sessions("a.md"),
         state_keys=set(),
@@ -333,7 +322,6 @@ def test_prefix_tokens_ignores_claude_md_and_wiki_pages(tmp_path, monkeypatch):
     the estimate for tokens that were never transmitted. Growing all three
     must not move the per-call figure.
     """
-    import llmwiki.cli as cli_mod
     monkeypatch.setattr(cli_mod, "REPO_ROOT", tmp_path)
     (tmp_path / "wiki").mkdir()
     baseline = cli_mod.synthesize_estimate_report(
@@ -351,8 +339,6 @@ def test_prefix_tokens_ignores_claude_md_and_wiki_pages(tmp_path, monkeypatch):
 
 def test_body_past_the_truncation_cap_is_not_billed():
     """claude_cli.py truncates bodies to BODY_CHAR_CAP before sending."""
-    from llmwiki.cli import synthesize_estimate_report
-    from llmwiki.synth.estimate import BODY_CHAR_CAP
     capped = [(_P("a.md"), {}, "x" * BODY_CHAR_CAP)]
     way_over = [(_P("a.md"), {}, "x" * (BODY_CHAR_CAP * 10))]
     a = synthesize_estimate_report(raw_sessions=capped, state_keys=set())
@@ -413,7 +399,6 @@ def test_cli_estimate_doesnt_hit_network(estimate_vault):
     """--estimate is a pure-local calculation; no HTTP libs needed."""
     # Run with DNS poisoned (127.0.0.1 only) via env isn't trivial —
     # instead assert that the CLI returns quickly (sub-5s is plenty).
-    import time
     t0 = time.monotonic()
     cp = _run_cli("synthesize", "--estimate", "--vault", str(estimate_vault))
     elapsed = time.monotonic() - t0
@@ -433,7 +418,6 @@ def test_cli_estimate_full_force_not_less_than_incremental(estimate_vault):
     cp = _run_cli("synthesize", "--estimate", "--vault", str(estimate_vault))
     assert cp.returncode == 0
     # Parse the two dollar figures out of stdout.
-    import re
     incr = re.search(r"Incremental sync:\s+\$([\d.]+)", cp.stdout)
     full = re.search(r"Full re-synth:\s+\$([\d.]+)", cp.stdout)
     assert incr is not None and full is not None, cp.stdout

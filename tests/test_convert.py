@@ -19,6 +19,8 @@ from llmwiki.convert import (
     truncate_lines,
 )
 from tests.conftest import FIXTURES_DIR
+from llmwiki.convert import _close_open_fence
+
 
 
 def test_truncate_chars_short():
@@ -160,7 +162,6 @@ def test_truncate_chars_indented_fence():
 
 def test_close_open_fence_unit_tilde_only():
     """Direct unit test for the helper — odd ~~~ count gets ~~~ close."""
-    from llmwiki.convert import _close_open_fence
     text = "~~~python\ncode here\n"
     out = _close_open_fence(text)
     assert out.endswith("~~~")
@@ -169,14 +170,12 @@ def test_close_open_fence_unit_tilde_only():
 
 def test_close_open_fence_unit_balanced_no_change():
     """Even count of either fence type: no change."""
-    from llmwiki.convert import _close_open_fence
     text = "```\nfoo\n```\n~~~\nbar\n~~~\n"
     assert _close_open_fence(text) == text
 
 
 def test_close_open_fence_unit_both_unclosed():
     """One ``` open + one ~~~ open → both get appended."""
-    from llmwiki.convert import _close_open_fence
     text = "```js\nconst x = 1\n~~~python\nprint('y')\n"
     out = _close_open_fence(text)
     # Both styles are now even.
@@ -186,7 +185,6 @@ def test_close_open_fence_unit_both_unclosed():
 
 def test_close_open_fence_unit_no_fences():
     """Plain text — no fences added."""
-    from llmwiki.convert import _close_open_fence
     text = "just plain text\nwith no fences\n"
     assert _close_open_fence(text) == text
 

@@ -35,6 +35,7 @@ from llmwiki.schema import (
     is_model_entity,
     parse_model_profile,
 )
+from llmwiki.schema import KNOWN_BENCHMARKS
 
 
 def discover_model_entities(
@@ -222,7 +223,6 @@ def render_models_index(
     for _, profile, _, _ in entries:
         all_bench_keys.update((profile.get("benchmarks") or {}).keys())
     # Sort benchmarks: known ones in their declared order, then unknowns alpha.
-    from llmwiki.schema import KNOWN_BENCHMARKS  # noqa: PLC0415 — import cycle / lazy load
     known_order = [k for k in KNOWN_BENCHMARKS if k in all_bench_keys]
     unknown_order = sorted(all_bench_keys - set(KNOWN_BENCHMARKS))
     bench_cols = known_order + unknown_order

@@ -16,6 +16,7 @@ import html
 import re
 from pathlib import Path
 from typing import Any
+from llmwiki.topics import topic_slug
 
 _ALIAS_NORM = re.compile(r"[\s\-_]+")
 _ALIAS_TOOLTIP = (
@@ -79,7 +80,6 @@ def _session_links(slugs: list[str], sessions_meta: dict[str, dict[str, str]]) -
 
 
 def _topic_links(neighbors: list[tuple[str, int]]) -> str:
-    from llmwiki.topics import topic_slug  # noqa: PLC0415 — lazy load / avoid cycle
 
     if not neighbors:
         return '<p class="muted">No connected topics.</p>'
@@ -98,7 +98,6 @@ def build_topic_pages(graph: dict[str, Any], out_dir: Path) -> list[Path]:
     Returns the list of files written.
     """
     from llmwiki.build import hero, nav_bar, page_foot, page_head  # noqa: PLC0415 — lazy load / avoid cycle
-    from llmwiki.topics import topic_slug  # noqa: PLC0415 — lazy load / avoid cycle
 
     nodes = graph.get("nodes", [])
     edges = graph.get("edges", [])

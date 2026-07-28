@@ -25,6 +25,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import html
 import json
 import re
@@ -110,6 +111,46 @@ from llmwiki.viz_wiki_value import (  # noqa: F401
     render_wiki_value_section,
 )
 from llmwiki.wiki_adoption import daily_wiki_sessions_from_dir as _wiki_session_days
+from llmwiki.agent_label import detect_agent_label, render_agent_badge
+from llmwiki.claude_path import resolve_claude_path as _resolve_claude_path
+from llmwiki.compare import (
+    discover_user_overrides,
+    generate_pairs,
+    pair_slug,
+    render_comparison_body,
+    render_comparisons_index,
+)
+from llmwiki.convert import restore_local_path
+from llmwiki.docs_pages import (
+    _first_paragraph,
+    compile_docs_site,
+    iter_docs_pages,
+    rewrite_md_links_to_html,
+    rewrite_source_code_links_to_github,
+    strip_dead_session_refs,
+)
+from llmwiki.exporters import export_all
+from llmwiki.graph import copy_to_site as copy_graph_to_site
+from llmwiki.graph import write_html as write_graph_html
+from llmwiki.manifest import write_manifest
+from llmwiki.models_page import (
+    discover_model_entities,
+    discover_model_entities_with_meta,
+    render_model_info_card,
+    render_models_index,
+)
+from llmwiki.search_facets import aggregate_facets, enrich_entry
+from llmwiki.search_tree import (
+    annotate_entry_headings,
+    decide_search_mode,
+    search_index_footer_badge,
+)
+from llmwiki.state_store import read_state, resolve_state_file, synth_pipeline_shape_ok
+from llmwiki.synth.claude_cli import overview_argv
+from llmwiki.synth.pipeline import refresh_synth_pending
+from llmwiki.tag_utils import NOISE_TAGS
+from llmwiki.topics import build_topic_graph
+from llmwiki.topics_page import build_topic_pages
 
 # ─── paths ─────────────────────────────────────────────────────────────────
 
@@ -268,7 +309,6 @@ def _derive_stub_topics(
     if topics:
         return topics
     # Fallback: tools_used aggregation (filtered by the same noise set).
-    from llmwiki.tag_utils import NOISE_TAGS  # noqa: PLC0415 — lazy load / avoid cycle
     counts: dict[str, int] = {}
     for meta in metas:
         raw = meta.get("tools_used")
@@ -483,8 +523,7 @@ def _content_key(body: str) -> bytes:
     and the 8-byte digest is enough headroom for the 4096-entry cap.
     Bytes (not hex) avoids the encode-back-to-string allocation.
     """
-    import hashlib as _hl  # noqa: PLC0415 — lazy load / avoid cycle
-    return _hl.blake2b(body.encode("utf-8"), digest_size=8).digest()
+    return hashlib.blake2b(body.encode("utf-8"), digest_size=8).digest()
 
 
 def md_to_html_cache_stats() -> dict[str, int]:
@@ -1064,7 +1103,6 @@ def local_cwd(meta: dict[str, Any]) -> str:
     commit. Build reverses that single substitution so resume / project
     titles show a real path. See ``restore_local_path``.
     """
-    from llmwiki.convert import restore_local_path  # noqa: PLC0415 — lazy load / avoid cycle
 
     return restore_local_path(str(meta.get("cwd") or "").strip())
 
@@ -1192,11 +1230,6 @@ def render_session(
     # during the session (tasks.md, CLAUDE.md, convert.py, etc). Route
     # the ones that look like repo source code or root files to GitHub
     # so the links don't dead-end after ingest.
-    from llmwiki.docs_pages import (  # noqa: PLC0415 — lazy load / avoid cycle
-        rewrite_md_links_to_html,
-        rewrite_source_code_links_to_github,
-        strip_dead_session_refs,
-    )
     body_html = rewrite_source_code_links_to_github(body_html)
     # #284: now that README.md and CONTRIBUTING.md compile to
     # site/README.html / site/CONTRIBUTING.html, session bodies that
@@ -1589,7 +1622,6 @@ def render_sessions_index(
     groups: dict[str, list[tuple[Path, dict[str, Any], str]]],
     out_dir: Path,
 ) -> Path:
-    from llmwiki.convert import restore_local_path  # noqa: PLC0415 — lazy load / avoid cycle
 
     rows = []
 
@@ -2018,10 +2050,6 @@ def _render_root_md_page(
     # #270: route embedded source-code + repo-root links to GitHub, then
     # the generic .md→.html pass for anything remaining.  README has
     # plenty of such links.
-    from llmwiki.docs_pages import (  # noqa: PLC0415 — lazy load / avoid cycle
-        rewrite_md_links_to_html,
-        rewrite_source_code_links_to_github,
-    )
     content_html = rewrite_source_code_links_to_github(content_html)
     content_html = rewrite_md_links_to_html(content_html)
 
@@ -2127,11 +2155,6 @@ def render_models_section(out_dir: Path) -> tuple[Path | None, int]:
     # next time someone wires it from the CLI. Previously these names
     # were referenced but never imported — function body was reachable
     # but would crash with NameError on first call.
-    from llmwiki.models_page import (  # noqa: F401, PLC0415 — lazy load / avoid cycle
-        discover_model_entities_with_meta,
-        render_model_info_card,
-        render_models_index,
-    )
     entities_dir = REPO_ROOT / "wiki" / "entities"
     entries_with_meta = discover_model_entities_with_meta(entities_dir)
     # Backwards-compatible list without meta for render_models_index.
@@ -2239,14 +2262,6 @@ def render_vs_section(
     # Post-review: lazy imports so this function actually works the
     # next time someone wires it. Previously these names were referenced
     # but never imported — first call would have crashed with NameError.
-    from llmwiki.compare import (  # noqa: F401, PLC0415 — lazy load / avoid cycle
-        discover_user_overrides,
-        generate_pairs,
-        pair_slug,
-        render_comparison_body,
-        render_comparisons_index,
-    )
-    from llmwiki.models_page import discover_model_entities  # noqa: F401, PLC0415 — lazy load / avoid cycle
     entities_dir = REPO_ROOT / "wiki" / "entities"
     overrides_dir = REPO_ROOT / "wiki" / "vs"
     entries = discover_model_entities(entities_dir)
@@ -2348,12 +2363,6 @@ def build_search_index(
     ``flat`` — matches the `llmwiki build --search-mode` flag.
     """
     # ── session entries grouped by project ──
-    from llmwiki.search_facets import enrich_entry  # noqa: PLC0415 — lazy load / avoid cycle
-    from llmwiki.search_tree import (  # noqa: PLC0415 — lazy load / avoid cycle
-        annotate_entry_headings,
-        decide_search_mode,
-        search_index_footer_badge,
-    )
     chunks: dict[str, list[dict[str, Any]]] = {}
     for p, meta, body in sources:
         project = str(meta.get("project") or p.parent.name)
@@ -2448,7 +2457,6 @@ def build_search_index(
 
     # #277: index every docs/ page + every slash command so the palette
     # becomes a universal quick-find (not just sessions + projects).
-    from llmwiki.docs_pages import _first_paragraph, iter_docs_pages  # noqa: PLC0415 — lazy load / avoid cycle
     docs_dir = SOURCE_ROOT / "docs"
     if docs_dir.is_dir():
         for page in iter_docs_pages(docs_dir):
@@ -2491,7 +2499,6 @@ def build_search_index(
 
     # v1.0 (#161): aggregate facet counts across all session chunks so the
     # client can render filter checkboxes without scanning the full index.
-    from llmwiki.search_facets import aggregate_facets  # noqa: PLC0415 — lazy load / avoid cycle
     all_entries: list[dict[str, Any]] = []
     for chunk_entries in chunks.values():
         all_entries.extend(chunk_entries)
@@ -2547,44 +2554,8 @@ from llmwiki.render.js import JS  # noqa: F401 (re-exported)
 # control chars (0x00–0x1F minus tab) get rejected too because they
 # survive the rejection of `\n` and `\r` only by accident, and can
 # break log parsers / shell prompts in subtle ways.
-_PATH_SHELL_METACHARS = re.compile(r"[;&|`$<>\n\r\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
-
-
-def _resolve_claude_path(claude_path: str | None) -> Path | None:
-    """Resolve and validate the ``--claude`` path (#421).
-
-    Returns ``None`` when:
-      - The path is empty or contains shell metacharacters (rejected loudly).
-      - ``shutil.which`` can't find the binary on PATH (when no path passed).
-      - The resolved path doesn't exist on disk.
-
-    Returns a ``Path`` when the binary is found and looks safe. Callers
-    should treat ``None`` as "skip synthesis" — the synth step is best-
-    effort and never fatal.
-    """
-    if claude_path:
-        # Reject explicit paths containing shell metacharacters even
-        # though argv is list-form — this keeps the path safe to log.
-        if _PATH_SHELL_METACHARS.search(claude_path):
-            print(
-                f"  warning: refusing claude path with shell metacharacters: "
-                f"{claude_path!r}",
-                file=sys.stderr,
-            )
-            return None
-        candidate = Path(claude_path)
-    else:
-        # No explicit path: use shutil.which so PATH-based lookups
-        # (homebrew, asdf, npm-global, Windows %PATH%) all just work.
-        import shutil as _shutil  # noqa: PLC0415 — lazy load / avoid cycle
-        found = _shutil.which("claude")
-        if not found:
-            return None
-        candidate = Path(found)
-    if not candidate.exists():
-        print(f"  warning: claude CLI not found at {candidate}", file=sys.stderr)
-        return None
-    return candidate
+# Re-exported from llmwiki.claude_path for tests / back-compat (#58).
+# (_resolve_claude_path imported at module top.)
 
 
 # #486: validate slug shape before it lands in the synthesize_overview
@@ -2675,8 +2646,6 @@ def synthesize_overview(
         # defence-in-depth — argv-length DoS path closed regardless.
         # Same scaffolding-stripping flags as page synthesis: this call
         # writes prose from a JSON brief and can't use a single tool.
-        from llmwiki.synth.claude_cli import overview_argv  # noqa: PLC0415 — lazy load / avoid cycle
-
         result = subprocess.run(
             overview_argv(claude_path, model),
             input=prompt,
@@ -2713,8 +2682,6 @@ def _ensure_synth_pipeline_snapshot(
     already refresh on content changes; paying estimate cost on every build
     would be a permanent tax for a one-time v1.4→v1.5 migration.
     """
-    from llmwiki.state_store import read_state, synth_pipeline_shape_ok  # noqa: PLC0415 — lazy load / avoid cycle
-    from llmwiki.synth.pipeline import refresh_synth_pending  # noqa: PLC0415 — lazy load / avoid cycle
 
     state_path = content_root / "llmwiki-state.json"
     try:
@@ -2929,7 +2896,6 @@ def build_site(
 
     estimate: dict[str, Any] = {}
     try:
-        from llmwiki.state_store import read_state, resolve_state_file  # noqa: PLC0415 — lazy load / avoid cycle
         state_path = resolve_state_file(None)
         # Prefer the vault's state when content_root differs from the default.
         vault_state = content_root / "llmwiki-state.json"
@@ -3019,7 +2985,6 @@ def build_site(
     # build should crash loud, not log "warning: AI exports failed:
     # No module named ..." and ship a half-built site.
     try:
-        from llmwiki.exporters import export_all  # noqa: PLC0415 — lazy load / avoid cycle
         extra_pages: list[tuple[str, str | None, str]] = [
             ("raw.html", None, "0.9"),
             ("recent.html", None, "0.9"),
@@ -3035,19 +3000,15 @@ def build_site(
     # v1.1 (#118): copy the interactive knowledge graph into the site
     # so the "Graph" nav link works without a separate `llmwiki graph` step.
     try:
-        from llmwiki.graph import copy_to_site as copy_graph_to_site  # noqa: PLC0415 — lazy load / avoid cycle
-        from llmwiki.graph import write_html as write_graph_html  # noqa: PLC0415 — lazy load / avoid cycle
         # #54: prefer the topic-first graph (topics as nodes, sessions as the
         # edges/backlinks between them) when the wiki has topics; fall back to
         # the page graph otherwise (repo mode, empty wikis). All local CPU.
         topic_graph = None
         try:
-            from llmwiki.topics import build_topic_graph  # noqa: PLC0415 — lazy load / avoid cycle
             topic_graph = build_topic_graph(wiki_dir)
         except Exception as e:  # noqa: BLE001 — never fail the build over the graph
             print(f"  warning: topic graph build failed: {e}", file=sys.stderr)
         if topic_graph and topic_graph.get("nodes"):
-            from llmwiki.topics_page import build_topic_pages  # noqa: PLC0415 — lazy load / avoid cycle
             write_graph_html(topic_graph, out_dir / "graph.html")
             tpages = build_topic_pages(topic_graph, out_dir)
             print(f"  wrote graph.html (topic graph: {len(topic_graph['nodes'])} topics, "
@@ -3065,7 +3026,6 @@ def build_site(
     # are included — reference docs that stay GitHub-rendered aren't
     # touched.
     try:
-        from llmwiki.docs_pages import compile_docs_site  # noqa: PLC0415 — lazy load / avoid cycle
         docs_dir = SOURCE_ROOT / "docs"
 
         # nav_builder gets called per-page with the right link_prefix so
@@ -3094,7 +3054,6 @@ def build_site(
 
     # v0.4: Build manifest with SHA-256 hashes
     try:
-        from llmwiki.manifest import write_manifest  # noqa: PLC0415 — lazy load / avoid cycle
         manifest_path = write_manifest(out_dir)
         print(f"  wrote {manifest_path.relative_to(out_dir.parent) if manifest_path.is_relative_to(out_dir.parent) else manifest_path.name}")
     except (OSError, ValueError, RuntimeError) as e:
@@ -3128,105 +3087,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-
-# ─── agent label detection ────────────────────────────────────────────────
-# v0.9: Detect which AI agent produced a session from the model name,
-# source_file path, or explicit frontmatter field. Returns a short label
-# + CSS class for badge rendering.
-
-def detect_agent_label(meta: dict) -> tuple[str, str]:
-    """Return (label, css_class) for the agent that produced this session.
-    
-    Detection order:
-    1. Explicit `agent:` frontmatter field (set by adapters)
-    2. Model name patterns (claude-* → Claude, gpt-* → Codex/Copilot, etc.)
-    3. Source file path patterns (codex → Codex, copilot → Copilot)
-    4. Default: "Unknown"
-    """
-    # 1. Explicit field
-    agent = str(meta.get("agent", "")).strip().lower()
-    if agent:
-        return _agent_map(agent)
-    
-    # 2. Model name
-    model = str(meta.get("model", "")).lower()
-    if "claude" in model:
-        return ("Claude", "agent-claude")
-    if "gpt" in model or "o1" in model or "o3" in model or "o4" in model:
-        return ("Codex", "agent-codex")
-    if "gemini" in model:
-        return ("Gemini", "agent-gemini")
-    if "copilot" in model:
-        return ("Copilot", "agent-copilot")
-    
-    # 3. Source file path
-    source = str(meta.get("source_file", "")).lower()
-    if "codex" in source or ".codex" in source:
-        return ("Codex", "agent-codex")
-    if "copilot" in source:
-        return ("Copilot", "agent-copilot")
-    if "cursor" in source:
-        return ("Cursor", "agent-cursor")
-    if "openclaw" in source:
-        return ("OpenClaw", "agent-openclaw")
-    if "opencode" in source:
-        return ("OpenCode", "agent-opencode")
-    if "gemini" in source:
-        return ("Gemini", "agent-gemini")
-    if "claude" in source or ".claude" in source:
-        return ("Claude", "agent-claude")
-    
-    # 4. Tags fallback
-    tags = meta.get("tags", [])
-    if isinstance(tags, list):
-        tag_str = " ".join(str(t).lower() for t in tags)
-    else:
-        tag_str = str(tags).lower()
-    if "codex" in tag_str:
-        return ("Codex", "agent-codex")
-    if "copilot" in tag_str:
-        return ("Copilot", "agent-copilot")
-    if "cursor" in tag_str:
-        return ("Cursor", "agent-cursor")
-    if "openclaw" in tag_str:
-        return ("OpenClaw", "agent-openclaw")
-    if "opencode" in tag_str:
-        return ("OpenCode", "agent-opencode")
-    if "claude" in tag_str:
-        return ("Claude", "agent-claude")
-    
-    return ("Agent", "agent-unknown")
-
-
-def _agent_map(agent: str) -> tuple[str, str]:
-    """Map an explicit agent name to (label, css_class)."""
-    m = {
-        "claude": ("Claude", "agent-claude"),
-        "claude-code": ("Claude", "agent-claude"),
-        "codex": ("Codex", "agent-codex"),
-        "codex-cli": ("Codex", "agent-codex"),
-        "copilot": ("Copilot", "agent-copilot"),
-        "copilot-chat": ("Copilot", "agent-copilot"),
-        "copilot-cli": ("Copilot", "agent-copilot"),
-        "cursor": ("Cursor", "agent-cursor"),
-        "cursor-cli": ("Cursor", "agent-cursor"),
-        "gemini": ("Gemini", "agent-gemini"),
-        "gemini-cli": ("Gemini", "agent-gemini"),
-        "openclaw": ("OpenClaw", "agent-openclaw"),
-        "opencode": ("OpenCode", "agent-opencode"),
-        "obsidian": ("Obsidian", "agent-obsidian"),
-        # Simplification sweep removed the PDF adapter. The "pdf" entry
-        # used to live here; left as a comment so a future grep sees
-        # the rationale instead of guessing why the agent-pdf badge is
-        # gone. CSS class .agent-pdf is also removed (see render/css.py).
-    }
-    return m.get(agent, (agent.title(), "agent-unknown"))
-
-
-def render_agent_badge(meta: dict) -> str:
-    """Render an inline agent badge chip."""
-    label, css_class = detect_agent_label(meta)
-    return f'<span class="agent-badge {html.escape(css_class)}">{html.escape(label)}</span>'
-
-# Inject agent badge CSS into the CSS constant
-# (This is appended at the module level — it'll be picked up on next build)

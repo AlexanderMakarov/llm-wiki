@@ -11,6 +11,8 @@ import sys
 from pathlib import Path
 
 import pytest
+from llmwiki.state_store import configure_state_file
+
 
 # Ensure the repo root (which contains the `llmwiki/` package dir) is on
 # sys.path when pytest is run from anywhere.
@@ -41,7 +43,6 @@ def _isolate_default_vault(tmp_path_factory, monkeypatch):
         "llmwiki.config_schedule.load_default_vault_path",
         lambda: isolated,
     )
-    from llmwiki.state_store import configure_state_file
 
     configure_state_file(isolated)
     yield isolated

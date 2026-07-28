@@ -29,6 +29,8 @@ from llmwiki.build import (
     page_head,
     page_head_article,
 )
+from llmwiki import build as build_mod
+
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -267,7 +269,6 @@ def test_site_build_emits_hljs_markup(tmp_path, monkeypatch):
     """Run the real builder against a minimal raw/ layout and confirm the
     output HTML actually carries the highlight.js tags. This is the
     smoke-test for the whole swap — if it passes, deploy is safe."""
-    from llmwiki import build as build_mod
 
     raw_root = tmp_path / "raw"
     raw_sessions = raw_root / "sessions"

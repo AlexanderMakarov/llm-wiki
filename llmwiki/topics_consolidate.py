@@ -22,6 +22,7 @@ import json
 import re
 from pathlib import Path
 from typing import Any
+from llmwiki import REPO_ROOT
 
 CONSOLIDATION_PROMPT_PATH = (
     Path(__file__).parent / "synth" / "prompts" / "topic_consolidation.md"
@@ -36,9 +37,8 @@ _CANDIDATE_MIN_SESSIONS = 2
 
 def cache_path(wiki_dir: Path | None) -> Path:
     """Location of the consolidation cache (vault root, beside other state)."""
-    from llmwiki.graph import WIKI_DIR  # noqa: PLC0415 — lazy load / avoid cycle
 
-    base = (wiki_dir or WIKI_DIR).parent
+    base = (wiki_dir or (REPO_ROOT / "wiki")).parent
     return base / CACHE_FILENAME
 
 

@@ -20,6 +20,16 @@ from llmwiki.vault import (
     vault_page_path,
     write_vault_page,
 )
+from llmwiki.cli import build_parser
+from llmwiki.cli import build_parser, cmd_sync
+from llmwiki.cli import build_parser, cmd_build
+from llmwiki import REPO_ROOT
+from llmwiki.state_store import configure_state_file, get_state_file, resolve_state_file
+from llmwiki.state_store import resolve_state_file
+from llmwiki.synth.pipeline import _load_state, _save_state
+from llmwiki.synth.pipeline import _load_state
+from llmwiki.cli import build_parser, cmd_synthesize
+
 
 # ─── Fixtures ──────────────────────────────────────────────────────────
 
@@ -422,14 +432,12 @@ def test_very_long_slug_allowed(tmp_path: Path):
 
 
 def test_cli_sync_accepts_vault_flag():
-    from llmwiki.cli import build_parser
     parser = build_parser()
     args = parser.parse_args(["sync", "--vault", "/tmp/some-vault"])
     assert str(args.vault) == "/tmp/some-vault"
 
 
 def test_cli_sync_defaults_vault_to_none():
-    from llmwiki.cli import build_parser
     parser = build_parser()
     args = parser.parse_args(["sync"])
     assert args.vault is None
@@ -437,7 +445,6 @@ def test_cli_sync_defaults_vault_to_none():
 
 
 def test_cli_sync_allow_overwrite_flag():
-    from llmwiki.cli import build_parser
     parser = build_parser()
     args = parser.parse_args(
         ["sync", "--vault", "/tmp/v", "--allow-overwrite"]
@@ -446,7 +453,6 @@ def test_cli_sync_allow_overwrite_flag():
 
 
 def test_cli_build_accepts_vault_flag():
-    from llmwiki.cli import build_parser
     parser = build_parser()
     args = parser.parse_args(["build", "--vault", "/tmp/v"])
     assert str(args.vault) == "/tmp/v"
@@ -455,7 +461,6 @@ def test_cli_build_accepts_vault_flag():
 def test_cli_sync_bad_vault_path_exits_with_error(tmp_path: Path, capsys):
     """cmd_sync should fail fast with exit 2 when --vault points at a
     non-existent path, not blow through conversion first."""
-    from llmwiki.cli import build_parser, cmd_sync
     parser = build_parser()
     args = parser.parse_args(
         ["sync", "--vault", str(tmp_path / "does-not-exist")]
@@ -467,7 +472,6 @@ def test_cli_sync_bad_vault_path_exits_with_error(tmp_path: Path, capsys):
 
 
 def test_cli_build_bad_vault_path_exits_with_error(tmp_path: Path, capsys):
-    from llmwiki.cli import build_parser, cmd_build
     parser = build_parser()
     args = parser.parse_args(
         ["build", "--vault", str(tmp_path / "nope"), "--out", str(tmp_path / "out")]
@@ -482,7 +486,6 @@ def test_cli_build_bad_vault_path_exits_with_error(tmp_path: Path, capsys):
 
 
 def test_existing_vault_doc_exists():
-    from llmwiki import REPO_ROOT
     doc = REPO_ROOT / "docs" / "guides" / "existing-vault.md"
     assert doc.is_file(), (
         "docs/guides/existing-vault.md is a #54 acceptance criterion; "
@@ -501,8 +504,6 @@ def test_existing_vault_doc_exists():
 
 def test_synth_state_file_default_at_repo_root(tmp_path: Path, monkeypatch):
     """Default mode (no vault): state file lives at repo root."""
-    from llmwiki import REPO_ROOT
-    from llmwiki.state_store import configure_state_file, get_state_file, resolve_state_file
 
     configure_state_file(REPO_ROOT)
     assert resolve_state_file() == get_state_file()
@@ -515,7 +516,6 @@ def test_synth_state_file_per_vault(tmp_path: Path):
     Regression for #420 — without per-vault isolation, two vaults
     synthesised against the same repo silently share idempotency state.
     """
-    from llmwiki.state_store import resolve_state_file
     vault_a = tmp_path / "vault-a" / "llmwiki-state.json"
     vault_b = tmp_path / "vault-b" / "llmwiki-state.json"
     assert resolve_state_file(vault_a) == vault_a
@@ -525,7 +525,6 @@ def test_synth_state_file_per_vault(tmp_path: Path):
 
 def test_synth_load_save_roundtrip_with_explicit_state_file(tmp_path: Path):
     """Writing then reading state via an explicit path round-trips."""
-    from llmwiki.synth.pipeline import _load_state, _save_state
     state_file = tmp_path / "vault-x" / "llmwiki-state.json"
     state_file.parent.mkdir(parents=True)
     sample = {"sources/foo.md": 1234567890.0, "sources/bar.md": 1234567891.5}
@@ -537,7 +536,6 @@ def test_synth_load_save_roundtrip_with_explicit_state_file(tmp_path: Path):
 
 def test_synth_state_isolated_per_vault(tmp_path: Path):
     """End-to-end: writing state to vault A doesn't leak into vault B."""
-    from llmwiki.synth.pipeline import _load_state, _save_state
     vault_a = tmp_path / "vault-a"
     vault_b = tmp_path / "vault-b"
     vault_a.mkdir()
@@ -561,7 +559,6 @@ def test_synth_state_isolated_per_vault(tmp_path: Path):
 def test_synth_state_corrupted_file_returns_empty(tmp_path: Path):
     """If the state file exists but contains invalid JSON, fall back to
     empty state instead of crashing."""
-    from llmwiki.synth.pipeline import _load_state
     state_file = tmp_path / ".llmwiki-synth-state.json"
     state_file.write_text("not valid json {{{", encoding="utf-8")
     assert _load_state(state_file) == {}
@@ -569,14 +566,12 @@ def test_synth_state_corrupted_file_returns_empty(tmp_path: Path):
 
 def test_synth_state_missing_file_returns_empty(tmp_path: Path):
     """Missing state file → empty state (clean first run)."""
-    from llmwiki.synth.pipeline import _load_state
     state_file = tmp_path / "does-not-exist.json"
     assert _load_state(state_file) == {}
 
 
 def test_synth_state_file_with_unicode_path(tmp_path: Path):
     """Vault paths with unicode characters work end-to-end."""
-    from llmwiki.synth.pipeline import _load_state, _save_state
     vault = tmp_path / "vault-café-🚀"
     vault.mkdir()
     state_file = vault / ".llmwiki-synth-state.json"
@@ -586,7 +581,6 @@ def test_synth_state_file_with_unicode_path(tmp_path: Path):
 
 def test_synth_state_file_with_spaces_in_path(tmp_path: Path):
     """Vault paths with spaces (common on macOS)."""
-    from llmwiki.synth.pipeline import _load_state, _save_state
     vault = tmp_path / "Obsidian Vault"
     vault.mkdir()
     state_file = vault / ".llmwiki-synth-state.json"
@@ -596,7 +590,6 @@ def test_synth_state_file_with_spaces_in_path(tmp_path: Path):
 
 def test_cli_synthesize_accepts_vault_flag():
     """CLI exposes --vault flag on `synthesize` (#420)."""
-    from llmwiki.cli import build_parser
     parser = build_parser()
     args = parser.parse_args(["synthesize", "--vault", "/tmp/myvault"])
     assert str(args.vault) == "/tmp/myvault"
@@ -604,7 +597,6 @@ def test_cli_synthesize_accepts_vault_flag():
 
 def test_cli_synthesize_default_vault_is_none():
     """No --vault flag → args.vault is None → state lives at repo root."""
-    from llmwiki.cli import build_parser
     parser = build_parser()
     args = parser.parse_args(["synthesize"])
     assert getattr(args, "vault", None) is None
@@ -612,7 +604,6 @@ def test_cli_synthesize_default_vault_is_none():
 
 def test_cli_synthesize_bad_vault_path_exits_with_error(tmp_path: Path, capsys):
     """cmd_synthesize fails fast with exit 2 on non-existent --vault path."""
-    from llmwiki.cli import build_parser, cmd_synthesize
     parser = build_parser()
     args = parser.parse_args(
         ["synthesize", "--vault", str(tmp_path / "missing-vault")]

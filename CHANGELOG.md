@@ -10,7 +10,7 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Changed
 
-- **Ruff lint is clean and blocking in CI (#58)** — cleared the ~700-finding backlog under `E`/`F`/`I`/`B`/`UP`, enabled `PLC0415` for `llmwiki/` (with `# noqa: PLC0415` + reason on legitimate deferred imports; `tests/`/`scripts/`/`cli.py` exempt), and dropped `|| true` from `.github/workflows/ci.yml` so `ruff check llmwiki tests scripts` fails the build. Callers import shared tag helpers from `llmwiki.tag_utils` rather than facade re-exports. Shared `format_tokens` lives in `llmwiki.format_numbers` (used by viz/models/compare). Removed per-file line-count ceilings in `tests/test_render_split.py`. See `CONTRIBUTING.md` Linting.
+- **Ruff lint is clean and blocking in CI (#58)** — cleared the ~700-finding backlog under `E`/`F`/`I`/`B`/`UP`, enabled `PLC0415` everywhere except `scripts/**` (deferred imports only for optional extras or proven cycles; stdlib never deferred; `# noqa: PLC0415` + reason on legitimate remaining deferrals), and dropped `|| true` from `.github/workflows/ci.yml` so `ruff check llmwiki tests scripts` fails the build. Callers import shared tag helpers from `llmwiki.tag_utils` rather than facade re-exports. Shared `format_tokens` lives in `llmwiki.format_numbers` (used by viz/models/compare). Removed per-file line-count ceilings in `tests/test_render_split.py`. See `CONTRIBUTING.md` Linting.
 
 ### Fixed
 

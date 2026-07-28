@@ -16,6 +16,7 @@ Both are checked. Users can override via config.json.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -79,8 +80,6 @@ class CodexCliAdapter(BaseAdapter):
         (which will be the DD date bucket — not great, but better than
         crashing).
         """
-        import json  # noqa: PLC0415 — lazy load / avoid cycle
-
         # Try to read cwd from the session_meta record
         try:
             with open(path, encoding="utf-8", errors="replace") as f:

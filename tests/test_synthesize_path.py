@@ -13,6 +13,9 @@ from llmwiki.cli import (
 )
 from llmwiki.synth.base import DummySynthesizer
 from llmwiki.synth.pipeline import synthesize_new_sessions
+import llmwiki.config_schedule as config_mod
+import llmwiki.synth.pipeline as pipeline_mod
+
 
 
 def _seed_vault(tmp_path: Path) -> tuple[Path, Path, Path]:
@@ -147,8 +150,6 @@ def test_cmd_synthesize_path_passes_only_paths(
             "backend": "dummy",
         }
 
-    import llmwiki.config_schedule as config_mod
-    import llmwiki.synth.pipeline as pipeline_mod
 
     monkeypatch.setattr(config_mod, "_load_sessions_config", lambda: {
         "synthesis": {"backend": "dummy"},
@@ -180,8 +181,6 @@ def test_cmd_synthesize_missing_path_exits_2(
         def is_available(self) -> bool:
             return True
 
-    import llmwiki.config_schedule as config_mod
-    import llmwiki.synth.pipeline as pipeline_mod
 
     monkeypatch.setattr(config_mod, "_load_sessions_config", lambda: {
         "synthesis": {"backend": "dummy"},
@@ -318,8 +317,6 @@ def test_cmd_synthesize_sessions_only_passes_flags(
             "backend": "dummy",
         }
 
-    import llmwiki.config_schedule as config_mod
-    import llmwiki.synth.pipeline as pipeline_mod
 
     monkeypatch.setattr(config_mod, "_load_sessions_config", lambda: {
         "synthesis": {"backend": "dummy"},
@@ -362,8 +359,6 @@ def test_cmd_synthesize_docs_only_passes_flags(
             "backend": "dummy",
         }
 
-    import llmwiki.config_schedule as config_mod
-    import llmwiki.synth.pipeline as pipeline_mod
 
     monkeypatch.setattr(config_mod, "_load_sessions_config", lambda: {
         "synthesis": {"backend": "dummy"},
@@ -393,8 +388,6 @@ def test_cmd_synthesize_sessions_only_rejects_doc_path(
         def is_available(self) -> bool:
             return True
 
-    import llmwiki.config_schedule as config_mod
-    import llmwiki.synth.pipeline as pipeline_mod
 
     monkeypatch.setattr(config_mod, "_load_sessions_config", lambda: {
         "synthesis": {"backend": "dummy"},
@@ -423,8 +416,6 @@ def test_cmd_synthesize_docs_only_rejects_session_path(
         def is_available(self) -> bool:
             return True
 
-    import llmwiki.config_schedule as config_mod
-    import llmwiki.synth.pipeline as pipeline_mod
 
     monkeypatch.setattr(config_mod, "_load_sessions_config", lambda: {
         "synthesis": {"backend": "dummy"},

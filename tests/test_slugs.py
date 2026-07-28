@@ -11,6 +11,9 @@ from llmwiki.slugs import (
     strip_site_suffix,
     title_from_url,
 )
+import re
+from llmwiki.adapters.claude_code import ClaudeCodeAdapter
+
 
 # ── slugify ──────────────────────────────────────────────────────────
 
@@ -43,7 +46,6 @@ def test_slugify_caps_at_80_chars_no_trailing_dash():
 def test_slugify_output_is_site_safe():
     # raw_docs_site._SAFE_SEG_RE requires ^[A-Za-z0-9._-]+$ — anything else
     # is silently invisible to the site build.
-    import re
     s = slugify("Weird 「title」 withّ marks — and stuff")
     assert re.fullmatch(r"[a-z0-9-]+", s)
 
@@ -197,7 +199,6 @@ def test_abs_path_slug_matches_the_session_adapter():
     """An absolute path and the session store's dash-encoded form of the same
     path must resolve to one slug, so MCP telemetry keyed by a live path lines
     up with the project page the ingestion adapter built."""
-    from llmwiki.adapters.claude_code import ClaudeCodeAdapter
 
     adapter = ClaudeCodeAdapter()
     encoded = adapter.session_store_path / "-Users-alice-code-webapp" / "s.jsonl"

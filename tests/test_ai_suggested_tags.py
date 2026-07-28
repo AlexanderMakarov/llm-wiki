@@ -22,6 +22,8 @@ from llmwiki.synth.pipeline import (
     _extract_suggested_tags,
     _merge_tags,
 )
+import re
+
 
 # ─── _extract_suggested_tags ──────────────────────────────────────────
 
@@ -330,7 +332,6 @@ Work on [[MCP]], and [[MCP]] again in prose.
 
 
 def _conn_links(page: str) -> list[str]:
-    import re
     section = page.split("## Connections")[1].split("## Contradictions")[0]
     return re.findall(r"\[\[([^\]]+)\]\]", section)
 

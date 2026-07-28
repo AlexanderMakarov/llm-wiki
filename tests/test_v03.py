@@ -6,6 +6,8 @@ import pytest
 
 from llmwiki import __version__
 from tests.conftest import REPO_ROOT
+import re
+
 
 # ─── version bump ────────────────────────────────────────────────────────
 
@@ -29,7 +31,6 @@ def test_pyproject_exists():
     assert 'name = "llm-wiki"' in content
     assert 'requires-python = ">=3.12"' in content
     # Accept any valid semver — bumped to 1.0 in v1.0.0 release
-    import re
     assert re.search(r'version = "\d+\.\d+\.\d+', content), "missing version string"
     assert "markdown" in content
     assert "[project.scripts]" in content

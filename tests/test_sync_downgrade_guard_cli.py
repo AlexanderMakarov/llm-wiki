@@ -16,11 +16,13 @@ from unittest.mock import patch
 import pytest
 
 from llmwiki.state_store import SCHEMA_VERSION
+import llmwiki.config_schedule as config_schedule_mod
+from llmwiki.cli import cmd_sync
+
 
 
 @pytest.fixture(autouse=True)
 def _no_personal_vault_config(monkeypatch):
-    import llmwiki.config_schedule as config_schedule_mod
 
     monkeypatch.setattr(config_schedule_mod, "load_default_vault_path", lambda: None)
 
@@ -50,7 +52,6 @@ def _write_newer_schema_state(vault: Path) -> None:
 
 
 def test_sync_aborts_on_newer_schema_vault(tmp_path: Path, capsys):
-    from llmwiki.cli import cmd_sync
 
     vault = tmp_path / "vault"
     vault.mkdir()
@@ -74,7 +75,6 @@ def test_sync_aborts_on_newer_schema_vault(tmp_path: Path, capsys):
 def test_plain_force_still_aborts_on_newer_schema(tmp_path: Path):
     # Contract: plain --force reconverts a *compatible* vault, but must NOT
     # bypass the newer-schema/corrupt guard — only --force-resync does.
-    from llmwiki.cli import cmd_sync
 
     vault = tmp_path / "vault"
     vault.mkdir()
@@ -94,7 +94,6 @@ def test_plain_force_still_aborts_on_newer_schema(tmp_path: Path):
 
 
 def test_force_resync_bypasses_and_converts(tmp_path: Path):
-    from llmwiki.cli import cmd_sync
 
     vault = tmp_path / "vault"
     vault.mkdir()

@@ -18,6 +18,9 @@ from llmwiki.convert import (
     summarize_tool_use,
     tool_use_recorded_names,
 )
+from llmwiki.convert import Redactor
+from llmwiki.convert import Redactor, render_session_markdown
+
 
 # ─── synthetic records fixture ───────────────────────────────────────────
 
@@ -214,7 +217,6 @@ def test_compute_tool_counts_expands_call_mcp_tool():
 
 
 def test_summarize_call_mcp_tool_shows_server_and_tool():
-    from llmwiki.convert import Redactor
 
     block = _call_mcp_block(server="llmwiki", tool="wiki_query")
     out = summarize_tool_use(block, Redactor({}), {})
@@ -222,7 +224,6 @@ def test_summarize_call_mcp_tool_shows_server_and_tool():
 
 
 def test_summarize_call_mcp_tool_without_tool_falls_back_to_inputs():
-    from llmwiki.convert import Redactor
 
     block = {
         "type": "tool_use",
@@ -375,7 +376,6 @@ def test_duration_seconds_never_negative():
 
 
 def test_render_session_markdown_emits_v08_metrics(synthetic_records, tmp_path):
-    from llmwiki.convert import Redactor, render_session_markdown
 
     redactor = Redactor({})
     jsonl = tmp_path / "abc123.jsonl"
@@ -414,7 +414,6 @@ def test_render_session_markdown_emits_v08_metrics(synthetic_records, tmp_path):
 def test_render_session_markdown_is_idempotent(synthetic_records, tmp_path):
     """Re-running the converter on an unchanged record set produces
     byte-identical output."""
-    from llmwiki.convert import Redactor, render_session_markdown
 
     redactor = Redactor({})
     jsonl = tmp_path / "abc123.jsonl"
@@ -430,7 +429,6 @@ def test_render_session_markdown_is_idempotent(synthetic_records, tmp_path):
 
 def test_render_session_markdown_keeps_legacy_fields(synthetic_records, tmp_path):
     """Adding new frontmatter keys must not remove the old ones."""
-    from llmwiki.convert import Redactor, render_session_markdown
 
     redactor = Redactor({})
     jsonl = tmp_path / "abc123.jsonl"

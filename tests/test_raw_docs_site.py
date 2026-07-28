@@ -26,6 +26,15 @@ from llmwiki.raw_docs_site import (
     tree_to_dict,
     write_documents_tree,
 )
+from llmwiki.build import (
+    breadcrumbs_bar,
+    md_to_html,
+    page_foot,
+    page_head,
+)
+from llmwiki.render.js import JS
+from pathlib import PurePosixPath
+
 
 
 def _write_doc(root: Path, rel: str, title: str, date: str,
@@ -122,12 +131,6 @@ def test_tree_to_dict_and_write_documents_tree(docs_dir: Path, tmp_path: Path):
 
 
 def test_document_pages_use_mount_not_inline_tree(docs_dir: Path, tmp_path: Path):
-    from llmwiki.build import (
-        breadcrumbs_bar,
-        md_to_html,
-        page_foot,
-        page_head,
-    )
     out = tmp_path / "site"
     files = scan_raw_docs(docs_dir)
     root = build_tree(files)
@@ -167,7 +170,6 @@ def test_render_index_is_tree_browser(docs_dir: Path, tmp_path: Path):
     assert "Standalone Doc" in html_text
     # The Commands collapsible moved into the state widget, which render/js.py
     # fills client-side — it is no longer emitted as static markup here.
-    from llmwiki.render.js import JS
     assert 'detailsSection("Commands"' in JS
     assert "Open Raw browser" not in html_text
 
@@ -201,7 +203,6 @@ def test_nav_order_and_no_changelog():
 
 def _doc(rel, project=None):
     """Helper to create a RawDocFile for testing."""
-    from pathlib import PurePosixPath
     meta = {"project": project} if project else {}
     return RawDocFile(path=Path("/x"), rel=PurePosixPath(rel), meta=meta, body="")
 

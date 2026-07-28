@@ -16,6 +16,8 @@ This module asserts:
 from __future__ import annotations
 
 from playwright.sync_api import Page
+import pytest
+
 
 
 def test_unknown_path_returns_404(page: Page, base_url: str) -> None:
@@ -63,7 +65,6 @@ def test_homepage_internal_links_resolve(page: Page, base_url: str) -> None:
 
     if not hrefs:
         # Synthetic corpus has very few links — skip cleanly rather than fail.
-        import pytest
         pytest.skip("homepage has no internal links to verify")
 
     broken: list[tuple[str, int]] = []

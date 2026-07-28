@@ -19,6 +19,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from llmwiki.graph import HTML_TEMPLATE, build_graph, write_html
+import llmwiki.graph as graph_mod
+
 
 # ─── Template-level: ensure every piece is present ────────────────────────
 
@@ -150,7 +152,6 @@ def _seed_wiki(tmp_path: Path) -> None:
 
 
 def _patch_graph_paths(tmp_path, monkeypatch):
-    import llmwiki.graph as graph_mod
     monkeypatch.setattr(graph_mod, "WIKI_DIR", tmp_path / "wiki")
     monkeypatch.setattr(graph_mod, "REPO_ROOT", tmp_path)
 

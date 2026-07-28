@@ -120,7 +120,7 @@ select = [
     "I",  # isort
     "B",  # flake8-bugbear
     "UP", # pyupgrade
-    "PLC0415",  # import-outside-top-level — llmwiki only (see per-file-ignores)
+    "PLC0415",  # import-outside-top-level
 ]
 ignore = [
     "E501",  # line too long — we have long strings for CSS/JS
@@ -128,11 +128,8 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-# Deferred imports in tests/scripts have none of the library consequences; not worth the churn (#58).
-"tests/**" = ["PLC0415"]
+# One-off maintenance scripts are not importable library code; deferred imports there cost nothing (#58).
 "scripts/**" = ["PLC0415"]
-# cli.py defers heavy submodules so `llmwiki --help` / shell completion stay fast (#58).
-"llmwiki/cli.py" = ["PLC0415"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

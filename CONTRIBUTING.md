@@ -253,13 +253,13 @@ ruff check llmwiki tests scripts        # lint (must exit 0)
 ruff check --fix llmwiki tests scripts  # only with an explicit --select for safe families — see below
 ```
 
-Ruff config lives in `pyproject.toml` under `[tool.ruff]`: line length 120, target `py312`, selecting `E`, `F`, `I`, `B`, `UP`, and `PLC0415` (import-outside-top-level). `E501` and `E402` stay ignored. `PLC0415` is enforced for `llmwiki/` only — `tests/**`, `scripts/**`, and `llmwiki/cli.py` are exempt via `per-file-ignores` (tests/scripts have no library import-cost consequence; `cli.py` defers heavy submodules so `llmwiki --help` / shell completion stay fast).
+Ruff config lives in `pyproject.toml` under `[tool.ruff]`: line length 120, target `py312`, selecting `E`, `F`, `I`, `B`, `UP`, and `PLC0415` (import-outside-top-level). `E501` and `E402` stay ignored. `PLC0415` is enforced everywhere except `scripts/**` (one-off maintenance scripts; exempt via `per-file-ignores`).
 
 **Run lint before you push.** The committed `pre-push` hook checks the Python files in your push and rejects it on violations; `git push --no-verify` bypasses it, but say why in the PR. CI runs `ruff check llmwiki tests scripts` and **fails the build** on findings (#58).
 
 **Do not run bare `ruff check --fix`.** `F401` deletes deliberate package-surface re-exports. Prefer mechanical families first (`--select UP,I,F541,…`), and only run `--select F401` after every intentional re-export carries `# noqa: F401`. Two conventions the linter can't fully check on its own:
 
-- **Imports belong at the top of the module.** A deferred import inside a function is legitimate only for (1) an optional extra (`trafilatura`, `markitdown`, `graphifyy`, `networkx`, …), (2) a genuine import cycle, or (3) CLI startup latency (`llmwiki/cli.py`). Elsewhere in `llmwiki/`, remaining deferred imports must carry `# noqa: PLC0415` plus the reason on the same line.
+- **Imports belong at the top of the module.** Deferred imports inside a function are legitimate only for (1) an optional extra (`trafilatura`, `markitdown`, `graphifyy`, `networkx`, …) or (2) a proven import cycle — and the reason goes in a `# noqa: PLC0415` comment on the line. Stdlib modules are never deferred.
 - **A deliberate re-export needs `# noqa: F401`.** Prefer importing from the owning module over growing facade re-exports. `ruff --fix` will otherwise delete an import that looks unused in its own module but is part of that module's public surface.
 - **Prefer low-level imports from the owning module.** Do not reach for helpers via a high-level facade (`from llmwiki.build import md_to_html`) when the symbol lives in a dedicated module.
 

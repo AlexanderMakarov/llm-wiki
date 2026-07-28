@@ -58,7 +58,7 @@ CI runs `ruff check llmwiki tests scripts` and fails the build on findings (#58)
 
 ## Python conventions
 
-- Imports belong at the top of the module. Deferring one inside a function is acceptable **only** for an optional extra (`trafilatura`, `markitdown`, `graphifyy`, `networkx`), to break a genuine import cycle, or to keep CLI startup fast — and the reason goes in a `# noqa: PLC0415` comment on the line (`tests/`/`scripts/`/`cli.py` are exempt).
+- Imports belong at the top of the module. Deferring one inside a function is acceptable **only** for an optional extra (`trafilatura`, `markitdown`, `graphifyy`, `networkx`) or to break a proven import cycle — and the reason goes in a `# noqa: PLC0415` comment on the line. Stdlib is never deferred. `PLC0415` is enforced everywhere except `scripts/**`.
 - Prefer importing helpers from the owning module over high-level facade re-exports.
 - Public functions carry a docstring. Short is fine; absent is not.
 - Remove dead code, unused imports, and unused variables as you go.

@@ -11,6 +11,8 @@ from llmwiki.adapters.contrib.copilot_cli import CopilotCliAdapter
 from llmwiki.adapters.contrib.cursor import CursorAdapter
 from llmwiki.adapters.contrib.gemini_cli import GeminiCliAdapter
 from llmwiki.adapters.contrib.obsidian import ObsidianAdapter
+from llmwiki.adapters import REGISTRY_ALIASES, resolve_adapter_name
+
 
 
 def test_registry_discovers_all_adapters():
@@ -23,7 +25,6 @@ def test_registry_discovers_all_adapters():
     assert "copilot_cli" in REGISTRY
     # #v1378-review: aliases moved to REGISTRY_ALIASES so REGISTRY
     # stays canonical-only. Alias resolution is via resolve_adapter_name.
-    from llmwiki.adapters import REGISTRY_ALIASES, resolve_adapter_name
     assert REGISTRY_ALIASES.get("copilot-chat") == "copilot_chat"
     assert REGISTRY_ALIASES.get("copilot-cli") == "copilot_cli"
     assert resolve_adapter_name("copilot-chat") == "copilot_chat"

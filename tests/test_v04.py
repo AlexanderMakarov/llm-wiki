@@ -8,6 +8,33 @@ import pytest
 
 from llmwiki import __version__
 from tests.conftest import REPO_ROOT
+from llmwiki.exporters import (
+    _page_id,
+    _plain_text,
+    _sha256_16,
+    export_all,
+    write_ai_readme,
+    write_graph_jsonld,
+    write_llms_full_txt,
+    write_llms_txt,
+    write_robots_txt,
+    write_rss,
+    write_sitemap,
+)
+from llmwiki.exporters import _plain_text
+from llmwiki.exporters import _sha256_16
+from llmwiki.exporters import _page_id
+from llmwiki.exporters import write_llms_txt
+from llmwiki.exporters import write_robots_txt
+from llmwiki.exporters import write_ai_readme
+from llmwiki.manifest import PERF_BUDGET, build_manifest, sha256_hex, write_manifest
+from llmwiki.manifest import sha256_hex
+from llmwiki.link_checker import check_site, is_external, resolve_target
+from llmwiki.link_checker import is_external
+from llmwiki.mcp.server import TOOL_IMPLS, TOOLS
+from llmwiki.mcp.server import tool_wiki_export
+from llmwiki.cli import build_parser
+
 
 # ─── version bump ────────────────────────────────────────────────────────
 
@@ -40,19 +67,6 @@ def test_pyproject_version_matches_package():
 
 
 def test_exporters_module_imports():
-    from llmwiki.exporters import (
-        _page_id,
-        _plain_text,
-        _sha256_16,
-        export_all,
-        write_ai_readme,
-        write_graph_jsonld,
-        write_llms_full_txt,
-        write_llms_txt,
-        write_robots_txt,
-        write_rss,
-        write_sitemap,
-    )
     for f in (
         export_all, write_llms_txt, write_llms_full_txt, write_graph_jsonld,
         write_sitemap, write_rss, write_robots_txt, write_ai_readme,
@@ -64,7 +78,6 @@ def test_exporters_module_imports():
 
 
 def test_plain_text_strips_markdown():
-    from llmwiki.exporters import _plain_text
 
     md = "# Heading\n\nSome **bold** and `code` and [link](http://x).\n\n```py\nprint('x')\n```\n\n- Bullet\n- [[wikilink]]\n"
     text = _plain_text(md)
@@ -79,7 +92,6 @@ def test_plain_text_strips_markdown():
 
 
 def test_sha256_16_stable():
-    from llmwiki.exporters import _sha256_16
 
     h1 = _sha256_16("hello")
     h2 = _sha256_16("hello")
@@ -89,13 +101,11 @@ def test_sha256_16_stable():
 
 
 def test_page_id_format():
-    from llmwiki.exporters import _page_id
 
     assert _page_id("ai-newsletter", "my-slug") == "ai-newsletter/my-slug"
 
 
 def test_write_llms_txt(tmp_path):
-    from llmwiki.exporters import write_llms_txt
 
     groups = {"proj-a": [], "proj-b": []}
     p = write_llms_txt(tmp_path, groups, total_sessions=42)
@@ -108,7 +118,6 @@ def test_write_llms_txt(tmp_path):
 
 
 def test_write_robots_txt(tmp_path):
-    from llmwiki.exporters import write_robots_txt
 
     p = write_robots_txt(tmp_path)
     assert p.exists()
@@ -119,7 +128,6 @@ def test_write_robots_txt(tmp_path):
 
 
 def test_write_ai_readme(tmp_path):
-    from llmwiki.exporters import write_ai_readme
 
     p = write_ai_readme(tmp_path, groups={"a": []}, total_sessions=5)
     assert p.exists()
@@ -219,7 +227,6 @@ def test_session_page_has_canonical_link():
 
 
 def test_manifest_module_imports():
-    from llmwiki.manifest import PERF_BUDGET, build_manifest, sha256_hex, write_manifest
 
     assert callable(build_manifest)
     assert callable(write_manifest)
@@ -230,7 +237,6 @@ def test_manifest_module_imports():
 
 
 def test_manifest_sha256_hex_is_16_chars(tmp_path):
-    from llmwiki.manifest import sha256_hex
 
     f = tmp_path / "hello.txt"
     f.write_text("hello world", encoding="utf-8")
@@ -240,7 +246,6 @@ def test_manifest_sha256_hex_is_16_chars(tmp_path):
 
 
 def test_manifest_missing_file_returns_empty_hash(tmp_path):
-    from llmwiki.manifest import sha256_hex
 
     h = sha256_hex(tmp_path / "nonexistent.txt")
     assert h == ""
@@ -250,7 +255,6 @@ def test_manifest_missing_file_returns_empty_hash(tmp_path):
 
 
 def test_link_checker_imports():
-    from llmwiki.link_checker import check_site, is_external, resolve_target
 
     assert callable(check_site)
     assert callable(is_external)
@@ -258,7 +262,6 @@ def test_link_checker_imports():
 
 
 def test_link_checker_is_external():
-    from llmwiki.link_checker import is_external
 
     assert is_external("http://example.com")
     assert is_external("https://example.com")
@@ -272,7 +275,6 @@ def test_link_checker_is_external():
 
 
 def test_mcp_has_wiki_export_tool():
-    from llmwiki.mcp.server import TOOL_IMPLS, TOOLS
 
     names = {t["name"] for t in TOOLS}
     assert "wiki_export" in names
@@ -280,7 +282,6 @@ def test_mcp_has_wiki_export_tool():
 
 
 def test_mcp_wiki_export_list_format():
-    from llmwiki.mcp.server import tool_wiki_export
 
     result = tool_wiki_export({"format": "list"})
     assert "content" in result
@@ -288,7 +289,6 @@ def test_mcp_wiki_export_list_format():
 
 
 def test_mcp_wiki_export_unknown_format():
-    from llmwiki.mcp.server import tool_wiki_export
 
     result = tool_wiki_export({"format": "bogus"})
     assert result["isError"] is True
@@ -298,7 +298,6 @@ def test_mcp_wiki_export_unknown_format():
 
 
 def test_cli_has_v04_subcommands():
-    from llmwiki.cli import build_parser
 
     parser = build_parser()
     help_text = parser.format_help()

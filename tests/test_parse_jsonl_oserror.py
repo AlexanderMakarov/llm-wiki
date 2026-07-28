@@ -19,6 +19,8 @@ from pathlib import Path
 import pytest
 
 from llmwiki.convert import parse_jsonl
+import os
+
 
 
 def test_oserror_now_propagates_to_caller(tmp_path: Path):
@@ -32,7 +34,6 @@ def test_oserror_now_propagates_to_caller(tmp_path: Path):
 def test_oserror_on_permission_denied(tmp_path: Path):
     """On Unix, a chmod 000 file raises PermissionError (OSError subclass).
     Skip on Windows where chmod semantics differ."""
-    import os
     if os.name == "nt":
         pytest.skip("chmod 000 doesn't simulate denial on Windows")
     p = tmp_path / "denied.jsonl"

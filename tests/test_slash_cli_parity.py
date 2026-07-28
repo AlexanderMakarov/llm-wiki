@@ -18,6 +18,8 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from llmwiki.cli import build_parser
+
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SLASH_DIR = REPO_ROOT / ".claude" / "commands"
@@ -46,7 +48,6 @@ LEGACY_SLASH_FILES = {
 
 
 def _cli_subcommands() -> set[str]:
-    from llmwiki.cli import build_parser
     parser = build_parser()
     for a in parser._actions:
         if hasattr(a, "choices") and a.choices:

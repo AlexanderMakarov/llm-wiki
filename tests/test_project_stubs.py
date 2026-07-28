@@ -17,6 +17,13 @@ Key invariants:
 from __future__ import annotations
 
 from pathlib import Path
+from llmwiki.build import ensure_project_stubs
+from llmwiki.project_topics import load_project_profile
+from llmwiki import build as build_mod
+from llmwiki.build import build_site
+from llmwiki.cli import build_parser
+from llmwiki.build import _humanize_slug
+
 
 
 def _groups_with(*slugs: str) -> dict[str, list]:
@@ -25,7 +32,6 @@ def _groups_with(*slugs: str) -> dict[str, list]:
 
 
 def test_ensure_project_stubs_creates_missing(tmp_path: Path):
-    from llmwiki.build import ensure_project_stubs
 
     meta_dir = tmp_path / "wiki" / "projects"
     groups = _groups_with("alpha", "beta")
@@ -46,7 +52,6 @@ def test_ensure_project_stubs_creates_missing(tmp_path: Path):
 
 
 def test_ensure_project_stubs_never_clobbers_existing(tmp_path: Path):
-    from llmwiki.build import ensure_project_stubs
 
     meta_dir = tmp_path / "wiki" / "projects"
     meta_dir.mkdir(parents=True)
@@ -76,7 +81,6 @@ def test_ensure_project_stubs_never_clobbers_existing(tmp_path: Path):
 
 
 def test_ensure_project_stubs_is_idempotent(tmp_path: Path):
-    from llmwiki.build import ensure_project_stubs
 
     meta_dir = tmp_path / "wiki" / "projects"
     groups = _groups_with("alpha", "beta", "gamma")
@@ -91,7 +95,6 @@ def test_ensure_project_stubs_is_idempotent(tmp_path: Path):
 
 def test_ensure_project_stubs_creates_meta_dir(tmp_path: Path):
     """Helper must create the wiki/projects/ directory if it's missing."""
-    from llmwiki.build import ensure_project_stubs
 
     meta_dir = tmp_path / "wiki" / "projects"
     assert not meta_dir.exists()
@@ -109,8 +112,6 @@ def test_stub_frontmatter_is_loadable_by_project_profile(tmp_path: Path):
     succeeds and that ``topics`` round-trips as an empty list — that's
     enough to prove the stub's frontmatter is syntactically valid.
     """
-    from llmwiki.build import ensure_project_stubs
-    from llmwiki.project_topics import load_project_profile
 
     meta_dir = tmp_path / "wiki" / "projects"
     ensure_project_stubs(_groups_with("my-proj"), meta_dir)
@@ -125,7 +126,6 @@ def test_stub_frontmatter_is_loadable_by_project_profile(tmp_path: Path):
 
 
 def test_ensure_project_stubs_empty_groups(tmp_path: Path):
-    from llmwiki.build import ensure_project_stubs
 
     meta_dir = tmp_path / "wiki" / "projects"
     assert ensure_project_stubs({}, meta_dir) == []
@@ -149,7 +149,6 @@ def _seed_one_session(tmp_path: Path) -> Path:
 
 def _patch_build_paths(monkeypatch, repo: Path):
     """Point build's module-level paths at a tmp REPO_ROOT."""
-    from llmwiki import build as build_mod
     monkeypatch.setattr(build_mod, "REPO_ROOT", repo)
     monkeypatch.setattr(build_mod, "RAW_DIR", repo / "raw")
     monkeypatch.setattr(build_mod, "RAW_SESSIONS", repo / "raw" / "sessions")
@@ -164,7 +163,6 @@ def test_build_site_default_does_not_seed_stubs(tmp_path: Path, monkeypatch):
     `wiki/projects/<slug>.md`. CI runs on curated wiki/ checkouts saw
     surprise commits in their working tree. New default is read-only.
     """
-    from llmwiki.build import build_site
 
     repo = _seed_one_session(tmp_path)
     projects_dir = repo / "wiki" / "projects"
@@ -184,7 +182,6 @@ def test_build_site_default_does_not_seed_stubs(tmp_path: Path, monkeypatch):
 
 def test_build_site_with_flag_seeds_stubs(tmp_path: Path, monkeypatch):
     """Opt-in path: explicit seed_project_stubs=True still seeds."""
-    from llmwiki.build import build_site
 
     repo = _seed_one_session(tmp_path)
     projects_dir = repo / "wiki" / "projects"
@@ -200,7 +197,6 @@ def test_build_site_with_flag_seeds_stubs(tmp_path: Path, monkeypatch):
 
 def test_build_site_default_preserves_existing_stubs(tmp_path: Path, monkeypatch):
     """Hand-authored stubs are never touched, even when seeding is off."""
-    from llmwiki.build import build_site
 
     repo = _seed_one_session(tmp_path)
     projects_dir = repo / "wiki" / "projects"
@@ -222,7 +218,6 @@ def test_build_site_default_preserves_existing_stubs(tmp_path: Path, monkeypatch
 def test_cli_build_flag_round_trips(tmp_path: Path):
     """Sanity: the new --seed-project-stubs flag is registered on the
     build subparser and parses to args.seed_project_stubs=True."""
-    from llmwiki.cli import build_parser
     parser = build_parser()
     args = parser.parse_args(["build", "--seed-project-stubs"])
     assert getattr(args, "seed_project_stubs", False) is True
@@ -248,7 +243,6 @@ def _session(slug: str, *, tags=None, tools=None, summary=None):
 
 
 def test_humanize_slug_kebab_to_titlecase():
-    from llmwiki.build import _humanize_slug
     assert _humanize_slug("my-cool-project") == "My Cool Project"
     assert _humanize_slug("snake_case_thing") == "Snake Case Thing"
     assert _humanize_slug("mixed-case_thing") == "Mixed Case Thing"
@@ -256,7 +250,6 @@ def test_humanize_slug_kebab_to_titlecase():
 
 
 def test_humanize_slug_edge_cases():
-    from llmwiki.build import _humanize_slug
     assert _humanize_slug("") == ""
     assert _humanize_slug("   ") == ""
     assert _humanize_slug("a-b-c") == "A B C"
@@ -266,7 +259,6 @@ def test_humanize_slug_edge_cases():
 
 
 def test_stub_topics_pre_populated_from_tags(tmp_path: Path):
-    from llmwiki.build import ensure_project_stubs
     sessions = [
         _session("first-session", tags=["python", "api"]),
         _session("second-session", tags=["python", "fastapi"]),
@@ -279,7 +271,6 @@ def test_stub_topics_pre_populated_from_tags(tmp_path: Path):
 
 def test_stub_topics_filter_noise(tmp_path: Path):
     """Universal noise tags are filtered, matching project_topics."""
-    from llmwiki.build import ensure_project_stubs
     sessions = [
         _session(
             "s1",
@@ -299,7 +290,6 @@ def test_stub_topics_filter_noise(tmp_path: Path):
 def test_stub_topics_fallback_to_tools_used(tmp_path: Path):
     """When sessions carry no `tags:` but do carry `tools_used`, those
     populate topics so a fresh project still gets non-empty chips."""
-    from llmwiki.build import ensure_project_stubs
     sessions = [
         _session("s1", tools=["Read", "Edit", "Bash"]),
         _session("s2", tools=["Read", "Grep"]),
@@ -314,7 +304,6 @@ def test_stub_topics_fallback_to_tools_used(tmp_path: Path):
 
 def test_stub_topics_caps_at_six(tmp_path: Path):
     """Avoid renderer overflow — cap at 6 most-common topics."""
-    from llmwiki.build import ensure_project_stubs
     tags = [f"tag{i}" for i in range(20)]
     sessions = [_session("s", tags=tags)]
     groups = {"alpha": sessions}
@@ -329,7 +318,6 @@ def test_stub_topics_caps_at_six(tmp_path: Path):
 
 def test_stub_topics_empty_when_no_tags_or_tools(tmp_path: Path):
     """0/1 sessions without tags or tools → empty topics list."""
-    from llmwiki.build import ensure_project_stubs
     groups = {"alpha": [_session("only-session")]}
     ensure_project_stubs(groups, tmp_path)
     text = (tmp_path / "alpha.md").read_text()
@@ -338,7 +326,6 @@ def test_stub_topics_empty_when_no_tags_or_tools(tmp_path: Path):
 
 def test_stub_description_from_summary(tmp_path: Path):
     """Description prefers `summary:` over slug humanisation."""
-    from llmwiki.build import ensure_project_stubs
     sessions = [
         _session("old-session", summary="Old work"),
         _session("latest-session", summary="Latest progress on the parser"),
@@ -351,7 +338,6 @@ def test_stub_description_from_summary(tmp_path: Path):
 
 def test_stub_description_from_slug_when_no_summary(tmp_path: Path):
     """Description falls back to humanised slug when summary missing."""
-    from llmwiki.build import ensure_project_stubs
     sessions = [_session("rewrite-the-parser")]
     groups = {"alpha": sessions}
     ensure_project_stubs(groups, tmp_path)
@@ -361,7 +347,6 @@ def test_stub_description_from_slug_when_no_summary(tmp_path: Path):
 
 def test_stub_description_truncated(tmp_path: Path):
     """Long summaries are truncated to fit the hero block."""
-    from llmwiki.build import ensure_project_stubs
     long_summary = "x " * 200  # 400 chars
     sessions = [_session("s", summary=long_summary)]
     groups = {"alpha": sessions}
@@ -375,7 +360,6 @@ def test_stub_description_truncated(tmp_path: Path):
 
 def test_stub_description_empty_when_no_source(tmp_path: Path):
     """Sessions with neither slug nor summary → empty description."""
-    from llmwiki.build import ensure_project_stubs
     # `_session(slug="")` would still set meta["slug"]=""; pass tuple manually.
     groups = {"alpha": [(Path("/raw/x.md"), {}, "")]}
     ensure_project_stubs(groups, tmp_path)
@@ -385,7 +369,6 @@ def test_stub_description_empty_when_no_source(tmp_path: Path):
 
 def test_stub_description_escapes_quotes(tmp_path: Path):
     """Embedded double-quotes in summaries don't break YAML."""
-    from llmwiki.build import ensure_project_stubs
     sessions = [_session("s", summary='Why didn\'t "this" work?')]
     groups = {"alpha": sessions}
     ensure_project_stubs(groups, tmp_path)
@@ -397,7 +380,6 @@ def test_stub_description_escapes_quotes(tmp_path: Path):
 
 def test_stub_homepage_always_empty(tmp_path: Path):
     """User-only field — auto-seeder never fills homepage."""
-    from llmwiki.build import ensure_project_stubs
     sessions = [_session("s", tags=["x"], summary="y")]
     groups = {"alpha": sessions}
     ensure_project_stubs(groups, tmp_path)
@@ -407,7 +389,6 @@ def test_stub_homepage_always_empty(tmp_path: Path):
 
 def test_stub_existing_never_overwritten_with_pre_populated(tmp_path: Path):
     """Hand-authored stub stays byte-identical even with rich session data."""
-    from llmwiki.build import ensure_project_stubs
     curated = tmp_path / "alpha.md"
     curated_text = (
         "---\ntitle: \"alpha\"\ntopics: [hand-curated]\n"
@@ -423,8 +404,6 @@ def test_stub_existing_never_overwritten_with_pre_populated(tmp_path: Path):
 
 def test_stub_pre_populated_loadable_by_project_profile(tmp_path: Path):
     """Round-trip: pre-populated stub parses cleanly via load_project_profile."""
-    from llmwiki.build import ensure_project_stubs
-    from llmwiki.project_topics import load_project_profile
     sessions = [
         _session("api-rewrite", tags=["python", "api"], summary="API rewrite"),
     ]

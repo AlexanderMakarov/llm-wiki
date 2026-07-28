@@ -11,6 +11,8 @@ from llmwiki.completion import (
     generate,
     zsh_script,
 )
+from llmwiki.cli import build_parser
+
 
 # ─── registry ─────────────────────────────────────────────────────────
 
@@ -121,7 +123,6 @@ def test_fish_completes_flags_for_sync():
 
 def test_cli_completion_subcommand_removed():
     """`llmwiki completion` subcommand has been removed."""
-    from llmwiki.cli import build_parser
     parser = build_parser()
     sub_action = None
     for a in parser._actions:

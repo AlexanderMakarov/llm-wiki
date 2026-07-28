@@ -18,7 +18,9 @@ synthesized. Re-running on an unchanged tree is a sub-second no-op.
 from __future__ import annotations
 
 import glob
+import logging
 import re
+import sys
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -178,7 +180,6 @@ def resolve_backend(
         )
 
     if name != "dummy":
-        import logging  # noqa: PLC0415 — import cycle / lazy load
         logging.getLogger(__name__).warning(
             "Unknown synthesis.backend %r — falling back to dummy", name
         )
@@ -1114,11 +1115,10 @@ def _build_source_page(
             existing_tags = list(existing_meta.get("tags", []) or [])
         except (OSError, ValueError, UnicodeDecodeError) as e:
             # Log loud — silent drop is what #584 was about.
-            import sys as _sys  # noqa: PLC0415 — import cycle / lazy load
             print(
                 f"warning: could not preserve tags from "
                 f"{existing_page_path}: {e}",
-                file=_sys.stderr,
+                file=sys.stderr,
             )
             existing_tags = []
 

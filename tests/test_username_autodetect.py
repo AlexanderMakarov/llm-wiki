@@ -22,6 +22,15 @@ from __future__ import annotations
 from pathlib import Path
 
 from llmwiki.convert import load_config
+import json
+from llmwiki.convert import (
+    DEFAULT_CONFIG_FILE,
+    _ensure_real_username,
+    _overlay_config_file,
+    load_config,
+)
+from llmwiki import convert as convert_mod
+
 
 
 def _config_path(tmp_path: Path) -> Path:
@@ -95,7 +104,6 @@ def test_long_specific_homedir_used(tmp_path: Path, monkeypatch):
 
 def test_explicit_config_value_overrides_autodetect(tmp_path: Path, monkeypatch):
     """If the user wrote `real_username` into config, never auto-overwrite."""
-    import json
     cfg_path = tmp_path / "cfg.json"
     cfg_path.write_text(
         json.dumps({"redaction": {"real_username": "explicitly-mine"}}),
@@ -115,14 +123,7 @@ def test_empty_real_username_in_overlay_does_not_wipe_autodetect(
     ``restore_local_path`` no-ops and projects/index mixes ``/Users/USER/``
     with never-redacted real paths.
     """
-    import json
 
-    from llmwiki.convert import (
-        DEFAULT_CONFIG_FILE,
-        _ensure_real_username,
-        _overlay_config_file,
-        load_config,
-    )
 
     monkeypatch.setenv("USER", "alice")
     monkeypatch.delenv("USERNAME", raising=False)
@@ -145,9 +146,7 @@ def test_resolve_convert_config_recovers_from_empty_overlay(
 ):
     """End-to-end: ``_resolve_convert_config`` must still autodetect after
     a user config that carries the examples placeholder empty string."""
-    import json
 
-    from llmwiki import convert as convert_mod
 
     monkeypatch.setenv("USER", "alice")
     monkeypatch.delenv("USERNAME", raising=False)

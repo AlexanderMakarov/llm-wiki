@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from llmwiki.tag_utils import NOISE_TAGS, parse_tags_field, scan_tags
+from llmwiki.categories import scan_tags as cat_scan_tags
+
 
 # ─── NOISE_TAGS ──────────────────────────────────────────────────────
 
@@ -117,5 +119,4 @@ def test_scan_filters_noise_from_each_page():
 
 def test_categories_module_still_exposes_scan_tags():
     """categories.py re-uses tag_utils.scan_tags for category generation."""
-    from llmwiki.categories import scan_tags as cat_scan_tags
     assert cat_scan_tags is scan_tags
