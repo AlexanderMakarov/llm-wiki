@@ -310,21 +310,10 @@ def test_build_emits_index_html(tmp_workspace: Path) -> None:
     rc = build_site(out_dir=out, synthesize=False)
     assert rc == 0, f"build_site returned {rc}"
     assert (out / "index.html").is_file(), "site/index.html missing"
-    # Home is the State widget; project/session listings carry the slug.
-    project_html = out / "projects" / "cli-smoke.html"
-    projects_index = out / "projects" / "index.html"
-    sessions_dir = out / "sessions"
-    surfaces = []
-    if project_html.is_file():
-        surfaces.append(project_html.read_text(encoding="utf-8"))
-    if projects_index.is_file():
-        surfaces.append(projects_index.read_text(encoding="utf-8"))
-    if sessions_dir.is_dir():
-        for p in sessions_dir.rglob("*.html"):
-            surfaces.append(p.read_text(encoding="utf-8"))
-    blob = "\n".join(surfaces).lower()
-    assert "cli-smoke" in blob, (
-        "seeded project not found under projects/ or sessions/ — did discovery break?"
+    # The home page should reference the seeded session.
+    home_html = (out / "index.html").read_text(encoding="utf-8")
+    assert "cli-smoke" in home_html.lower(), (
+        "home page does not mention the seeded session — did discovery break?"
     )
 
 

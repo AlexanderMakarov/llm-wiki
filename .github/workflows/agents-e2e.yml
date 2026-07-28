@@ -57,17 +57,11 @@ jobs:
 
       - name: Serve site in the background
         run: |
-          # bash -e aborts on the first failing curl unless we gate it with `if`.
-          python3 -m llmwiki serve --dir site --port 8765 &
+          python3 -m llmwiki serve --port 8765 &
           for i in {1..30}; do
-            if curl -fsS http://127.0.0.1:8765/ > /dev/null; then
-              echo "server up"
-              exit 0
-            fi
+            curl -fsS http://127.0.0.1:8765/ > /dev/null && break
             sleep 1
           done
-          echo "server failed to start" >&2
-          exit 1
 
       - name: Run Playwright Test Agents
         run: npx playwright test

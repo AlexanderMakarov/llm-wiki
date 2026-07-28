@@ -167,15 +167,13 @@ kbd { display: inline-block; padding: 2px 6px; font-family: var(--mono); font-si
 .resume-command {
   display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px;
   margin: -8px 0 24px; padding: 10px 12px;
-  background: var(--bg-alt);
+  background: var(--surface-2, var(--bg-secondary, rgba(124,58,237,0.06)));
   border: 1px solid var(--border); border-radius: 8px;
   font-family: "JetBrains Mono", ui-monospace, monospace;
 }
-/* Explicit fg/bg so we beat `.content code` (--bg-code) and keep WCAG AA. */
-.content .resume-command .resume-cmd-text,
 .resume-command .resume-cmd-text {
   flex: 1 1 240px; font-size: 0.82rem; word-break: break-all;
-  background: var(--bg-alt); border: 0; padding: 0; color: var(--text);
+  background: transparent; border: 0; padding: 0; color: var(--text);
 }
 .resume-command .resume-copy-btn { flex: 0 0 auto; }
 .resume-command .resume-hint { flex: 1 1 100%; font-size: 0.75rem; font-family: Inter, system-ui, sans-serif; }
