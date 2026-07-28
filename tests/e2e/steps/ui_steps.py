@@ -22,16 +22,16 @@ an unregistered step will fail loudly at collection time.
 
 from __future__ import annotations
 
+import os
+import warnings
+from pathlib import Path as _Path
 from typing import Any
+from urllib.parse import urlparse
 
 import pytest
+import pytest as _pytest
 from playwright.sync_api import Page, expect
 from pytest_bdd import given, parsers, then, when
-from urllib.parse import urlparse
-import os
-from pathlib import Path as _Path
-import pytest as _pytest
-
 
 # ─── shared background steps ────────────────────────────────────────────
 
@@ -783,8 +783,7 @@ def _capture_screenshot(page: Page, tag: str, tmp_path_factory: pytest.TempPathF
     try:
         from PIL import Image, ImageChops  # noqa: PLC0415
     except ImportError:
-        import warnings as _warnings  # noqa: PLC0415
-        _warnings.warn(
+        warnings.warn(
             "Pillow not installed — skipping visual regression comparison "
             f"for {tag!r}. `pip install -e '.[e2e]'` to enable.",
             stacklevel=2,
