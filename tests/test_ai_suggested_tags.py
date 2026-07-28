@@ -14,6 +14,8 @@ Covers:
 
 from __future__ import annotations
 
+import re
+
 from llmwiki.synth.pipeline import (
     _AI_TAG_CAP,
     _build_source_page,
@@ -22,8 +24,6 @@ from llmwiki.synth.pipeline import (
     _extract_suggested_tags,
     _merge_tags,
 )
-import re
-
 
 # ─── _extract_suggested_tags ──────────────────────────────────────────
 

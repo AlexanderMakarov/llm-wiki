@@ -18,6 +18,7 @@ from pathlib import Path
 
 import pytest
 
+from llmwiki import build as build_mod
 from llmwiki.build import (
     HLJS_DARK_CSS,
     HLJS_LIGHT_CSS,
@@ -29,8 +30,6 @@ from llmwiki.build import (
     page_head,
     page_head_article,
 )
-from llmwiki import build as build_mod
-
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 

@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import re
+
+from llmwiki.adapters.claude_code import ClaudeCodeAdapter
 from llmwiki.slugs import (
     derive_title,
     first_heading,
@@ -11,9 +14,6 @@ from llmwiki.slugs import (
     strip_site_suffix,
     title_from_url,
 )
-import re
-from llmwiki.adapters.claude_code import ClaudeCodeAdapter
-
 
 # ── slugify ──────────────────────────────────────────────────────────
 

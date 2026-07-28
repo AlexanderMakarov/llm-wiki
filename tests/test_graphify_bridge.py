@@ -2,24 +2,21 @@
 
 from __future__ import annotations
 
+import importlib
 import importlib.util
 from unittest.mock import patch
 
 import pytest
 
-from llmwiki.graphify_bridge import is_available
-import importlib
-from llmwiki import graphify_bridge
+from llmwiki import REPO_ROOT, graphify_bridge
+from llmwiki.cli import build_parser
 from llmwiki.graphify_bridge import (
+    _extract_wiki_nodes,
     build_graphify_graph,
     export_to_obsidian,
+    is_available,
     query_graph,
 )
-from llmwiki.cli import build_parser
-from llmwiki import REPO_ROOT
-from llmwiki.graphify_bridge import query_graph
-from llmwiki.graphify_bridge import _extract_wiki_nodes
-
 
 _GRAPHIFY_INSTALLED = importlib.util.find_spec("graphify") is not None
 

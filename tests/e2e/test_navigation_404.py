@@ -15,9 +15,8 @@ This module asserts:
 
 from __future__ import annotations
 
-from playwright.sync_api import Page
 import pytest
-
+from playwright.sync_api import Page
 
 
 def test_unknown_path_returns_404(page: Page, base_url: str) -> None:

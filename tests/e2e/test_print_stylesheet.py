@@ -22,9 +22,9 @@ colour-flip drifts out of sync with the print spec.
 """
 from __future__ import annotations
 
-from playwright.sync_api import Page
 import re
 
+from playwright.sync_api import Page
 
 
 def _flip_to_print(page: Page) -> None:

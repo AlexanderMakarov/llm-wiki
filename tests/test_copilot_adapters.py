@@ -9,13 +9,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from llmwiki.adapters import REGISTRY, discover_all
+from llmwiki.adapters import REGISTRY, REGISTRY_ALIASES, discover_all, resolve_adapter_name
 from llmwiki.adapters.base import BaseAdapter
 from llmwiki.adapters.contrib.copilot_chat import CopilotChatAdapter
-from llmwiki.adapters.contrib.copilot_cli import CopilotCliAdapter
-from llmwiki.adapters import REGISTRY_ALIASES, resolve_adapter_name
-from llmwiki.adapters.contrib.copilot_cli import _build_default_roots
-
+from llmwiki.adapters.contrib.copilot_cli import CopilotCliAdapter, _build_default_roots
 
 # ═══════════════════════════════════════════════════════════════════════
 # COPILOT CHAT ADAPTER — Contract

@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
+import re
+
 import pytest
 
 from llmwiki import __version__
 from tests.conftest import REPO_ROOT
-import re
-
 
 # ─── version bump ────────────────────────────────────────────────────────
 

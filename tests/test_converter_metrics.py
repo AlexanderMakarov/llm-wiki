@@ -9,18 +9,17 @@ import json
 import pytest
 
 from llmwiki.convert import (
+    Redactor,
     compute_duration_seconds,
     compute_hour_buckets,
     compute_token_totals,
     compute_tool_counts,
     compute_turn_count,
     extract_tools_used,
+    render_session_markdown,
     summarize_tool_use,
     tool_use_recorded_names,
 )
-from llmwiki.convert import Redactor
-from llmwiki.convert import Redactor, render_session_markdown
-
 
 # ─── synthetic records fixture ───────────────────────────────────────────
 

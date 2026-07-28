@@ -23,7 +23,6 @@ from llmwiki.build import md_to_html, normalize_markdown, parse_frontmatter
 from llmwiki.viz_heatmap import level_for
 
 
-
 class TestMdToHtmlEdgeCases:
     def test_empty_string(self):
         assert md_to_html("") == ""

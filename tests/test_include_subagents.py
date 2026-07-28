@@ -18,14 +18,11 @@ from pathlib import Path
 
 from llmwiki import convert as c
 from llmwiki._frontmatter import is_subagent
-from llmwiki.convert import DEFAULT_CONFIG
-from llmwiki.synth.pipeline import resolve_include_subagents
 from llmwiki.adapters.claude_code import ClaudeCodeAdapter
-from llmwiki.synth.estimate import synthesize_estimate_report
+from llmwiki.convert import DEFAULT_CONFIG
 from llmwiki.synth.base import DummySynthesizer
-from llmwiki.synth.pipeline import synthesize_new_sessions
-from llmwiki.synth.pipeline import refresh_synth_pending
-
+from llmwiki.synth.estimate import synthesize_estimate_report
+from llmwiki.synth.pipeline import refresh_synth_pending, resolve_include_subagents, synthesize_new_sessions
 
 # ─── unit: is_subagent frontmatter helper ────────────────────────────────
 

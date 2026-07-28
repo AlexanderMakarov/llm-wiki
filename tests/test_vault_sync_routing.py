@@ -17,11 +17,11 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-import llmwiki.config_schedule as config_schedule_mod
-from llmwiki.cli import cmd_sync
-from llmwiki import REPO_ROOT
-from llmwiki.convert import DEFAULT_OUT_DIR
 
+import llmwiki.config_schedule as config_schedule_mod
+from llmwiki import REPO_ROOT
+from llmwiki.cli import cmd_sync
+from llmwiki.convert import DEFAULT_OUT_DIR
 
 
 @pytest.fixture(autouse=True)
@@ -74,7 +74,7 @@ def test_vault_sync_routes_out_dir_into_vault(tmp_path: Path):
     vault.mkdir()
 
     captured, fake_convert_all = _capture_convert_all_kwargs()
-    with patch("llmwiki.convert.convert_all", side_effect=fake_convert_all):
+    with patch("llmwiki.cli.convert_all", side_effect=fake_convert_all):
         cmd_sync(_make_args(vault=vault))
 
     assert "out_dir" in captured
@@ -88,7 +88,7 @@ def test_vault_sync_routes_state_file_into_vault(tmp_path: Path):
     vault.mkdir()
 
     captured, fake_convert_all = _capture_convert_all_kwargs()
-    with patch("llmwiki.convert.convert_all", side_effect=fake_convert_all):
+    with patch("llmwiki.cli.convert_all", side_effect=fake_convert_all):
         cmd_sync(_make_args(vault=vault))
 
     assert captured.get("state_file") == vault.resolve() / "llmwiki-state.json"
@@ -98,7 +98,7 @@ def test_default_no_vault_behaviour_unchanged(tmp_path: Path):
     """Without --vault, default paths must be honoured unchanged."""
 
     captured, fake_convert_all = _capture_convert_all_kwargs()
-    with patch("llmwiki.convert.convert_all", side_effect=fake_convert_all):
+    with patch("llmwiki.cli.convert_all", side_effect=fake_convert_all):
         cmd_sync(_make_args())
 
     assert captured.get("out_dir") == DEFAULT_OUT_DIR
@@ -114,7 +114,7 @@ def test_force_with_vault_uses_vault_state_file(tmp_path: Path):
     vault.mkdir()
 
     captured, fake_convert_all = _capture_convert_all_kwargs()
-    with patch("llmwiki.convert.convert_all", side_effect=fake_convert_all):
+    with patch("llmwiki.cli.convert_all", side_effect=fake_convert_all):
         cmd_sync(_make_args(vault=vault, force=True))
 
     assert captured.get("force") is True
@@ -133,8 +133,8 @@ def test_vault_auto_build_writes_site_to_vault(tmp_path: Path):
         build_call.update(kwargs)
         return 0
 
-    with patch("llmwiki.convert.convert_all", return_value=0), \
-         patch("llmwiki.build.build_site", side_effect=fake_build_site), \
+    with patch("llmwiki.cli.convert_all", return_value=0), \
+         patch("llmwiki.cli.build_site", side_effect=fake_build_site), \
          patch("llmwiki.cli._should_run_after_sync", return_value=True), \
          patch("llmwiki.cli._load_schedule_config", return_value={"build": "on-sync"}):
         cmd_sync(_make_args(vault=vault, auto_build=True))
@@ -154,10 +154,10 @@ def test_vault_auto_lint_uses_vault_wiki(tmp_path: Path):
         lint_call["wiki_dir"] = wiki_dir
         return {}
 
-    with patch("llmwiki.convert.convert_all", return_value=0), \
-         patch("llmwiki.lint.load_pages", side_effect=fake_load_pages), \
-         patch("llmwiki.lint.run_all", return_value=[]), \
-         patch("llmwiki.lint.summarize", return_value={}), \
+    with patch("llmwiki.cli.convert_all", return_value=0), \
+         patch("llmwiki.cli.load_pages", side_effect=fake_load_pages), \
+         patch("llmwiki.cli.run_all", return_value=[]), \
+         patch("llmwiki.cli.summarize", return_value={}), \
          patch("llmwiki.cli._should_run_after_sync", return_value=True), \
          patch("llmwiki.cli._load_schedule_config", return_value={"lint": "on-sync"}):
         cmd_sync(_make_args(vault=vault, auto_lint=True))
@@ -181,7 +181,7 @@ def test_vault_sync_does_not_pollute_repo_paths(tmp_path: Path):
     vault.mkdir()
 
     captured, fake_convert_all = _capture_convert_all_kwargs()
-    with patch("llmwiki.convert.convert_all", side_effect=fake_convert_all):
+    with patch("llmwiki.cli.convert_all", side_effect=fake_convert_all):
         cmd_sync(_make_args(vault=vault))
 
     assert captured["out_dir"] != DEFAULT_OUT_DIR

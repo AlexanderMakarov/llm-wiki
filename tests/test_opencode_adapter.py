@@ -4,9 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from llmwiki.adapters.contrib.opencode import OpenCodeAdapter
 from llmwiki.adapters import REGISTRY, discover_all
-
+from llmwiki.adapters.contrib.opencode import OpenCodeAdapter
 
 # ─── Adapter registration ─────────────────────────────────────────────
 

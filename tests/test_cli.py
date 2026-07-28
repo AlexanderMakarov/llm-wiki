@@ -4,15 +4,10 @@ from __future__ import annotations
 
 import subprocess
 import sys
-
-from llmwiki import __version__
-import llmwiki.cli as cli_mod
-import llmwiki.config_schedule as config_mod
-import llmwiki.build as build_mod
-import llmwiki.synth.pipeline as pipeline_mod
 from pathlib import Path
-import llmwiki.add_doc as add_doc_mod
 
+import llmwiki.cli as cli_mod
+from llmwiki import __version__
 
 
 def test_version_flag():
@@ -148,10 +143,10 @@ def test_add_configured_claude_backend_synthesizes_synchronously(tmp_path, monke
     src.write_text("# Sync Doc\n\nbody\n")
 
     claude = _fake_claude(tmp_path)
-    monkeypatch.setattr(config_mod, "_load_sessions_config", lambda: {
+    monkeypatch.setattr(cli_mod, "_load_sessions_config", lambda: {
         "synthesis": {"backend": "claude", "claude_path": str(claude)},
     })
-    monkeypatch.setattr(build_mod, "build_site", lambda **kw: 0)
+    monkeypatch.setattr(cli_mod, "build_site", lambda **kw: 0)
 
     rc = _run_add(cli_mod, vault, str(src))
     out = capsys.readouterr()
@@ -193,19 +188,19 @@ def test_add_synthesizes_only_written_docs(tmp_path, monkeypatch, capsys):
         def is_available(self):
             return True
 
-    monkeypatch.setattr(config_mod, "_load_sessions_config", lambda: {
+    monkeypatch.setattr(cli_mod, "_load_sessions_config", lambda: {
         "synthesis": {"backend": "dummy"},
     })
-    monkeypatch.setattr(pipeline_mod, "resolve_backend", lambda _cfg: _Ok())
-    monkeypatch.setattr(pipeline_mod, "synthesize_new_sessions", _fake_synth)
-    monkeypatch.setattr(build_mod, "build_site", lambda **kw: 0)
+    monkeypatch.setattr(cli_mod, "resolve_backend", lambda _cfg: _Ok())
+    monkeypatch.setattr(cli_mod, "synthesize_new_sessions", _fake_synth)
+    monkeypatch.setattr(cli_mod, "build_site", lambda **kw: 0)
     # expected_source_page check: create the page so rollback doesn't fire
     def _expected(raw_path, sources_dir):
         p = Path(sources_dir) / "docs" / "brand-new.md"
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text("# Brand New\n", encoding="utf-8")
         return p
-    monkeypatch.setattr(add_doc_mod, "expected_source_page", _expected)
+    monkeypatch.setattr(cli_mod, "expected_source_page", _expected)
 
     rc = _run_add(cli_mod, vault, str(src))
     assert rc == 0
@@ -224,9 +219,9 @@ def test_add_readd_unchanged_skips_without_synth(tmp_path, monkeypatch, capsys):
     synth_called = {"n": 0}
     build_called = {"n": 0}
 
-    monkeypatch.setattr(pipeline_mod, "synthesize_new_sessions",
+    monkeypatch.setattr(cli_mod, "synthesize_new_sessions",
                         lambda **kw: (synth_called.__setitem__("n", synth_called["n"] + 1) or {}))
-    monkeypatch.setattr(build_mod, "build_site",
+    monkeypatch.setattr(cli_mod, "build_site",
                         lambda **kw: (build_called.__setitem__("n", build_called["n"] + 1) or 0))
 
     rc1 = _run_add(cli_mod, vault, "--no-synthesize", "--no-build", str(src))
@@ -257,11 +252,11 @@ def test_add_unavailable_backend_rolls_back_raw_docs(tmp_path, monkeypatch, caps
         def is_available(self):
             return False
 
-    monkeypatch.setattr(config_mod, "_load_sessions_config", lambda: {
+    monkeypatch.setattr(cli_mod, "_load_sessions_config", lambda: {
         "synthesis": {"backend": "dummy"},
     })
-    monkeypatch.setattr(pipeline_mod, "resolve_backend", lambda _cfg: _Unavailable())
-    monkeypatch.setattr(build_mod, "build_site", lambda **kw: 0)
+    monkeypatch.setattr(cli_mod, "resolve_backend", lambda _cfg: _Unavailable())
+    monkeypatch.setattr(cli_mod, "build_site", lambda **kw: 0)
 
     rc = _run_add(cli_mod, vault, str(src))
     out = capsys.readouterr()
@@ -284,10 +279,10 @@ def test_add_failed_synthesis_rolls_back_raw_docs(tmp_path, monkeypatch, capsys)
     broken = tmp_path / "claude-broken"
     broken.write_text("#!/bin/sh\ncat > /dev/null\necho boom >&2\nexit 1\n")
     broken.chmod(0o755)
-    monkeypatch.setattr(config_mod, "_load_sessions_config", lambda: {
+    monkeypatch.setattr(cli_mod, "_load_sessions_config", lambda: {
         "synthesis": {"backend": "claude", "claude_path": str(broken)},
     })
-    monkeypatch.setattr(build_mod, "build_site", lambda **kw: 0)
+    monkeypatch.setattr(cli_mod, "build_site", lambda **kw: 0)
 
     rc = _run_add(cli_mod, vault, str(src))
     out = capsys.readouterr()
@@ -302,7 +297,7 @@ def test_add_no_synthesize_keeps_docs(tmp_path, monkeypatch, capsys):
     vault = _add_vault(tmp_path)
     src = tmp_path / "doc.md"
     src.write_text("# Raw Only Doc\n\nbody\n")
-    monkeypatch.setattr(build_mod, "build_site", lambda **kw: 0)
+    monkeypatch.setattr(cli_mod, "build_site", lambda **kw: 0)
 
     rc = _run_add(cli_mod, vault, "--no-synthesize", str(src))
     assert rc == 0

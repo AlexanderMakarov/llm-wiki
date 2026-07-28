@@ -16,10 +16,9 @@ The fix:
 
 from __future__ import annotations
 
-from llmwiki.graph import HTML_TEMPLATE
 from pathlib import Path
-from llmwiki.graph import write_html
 
+from llmwiki.graph import HTML_TEMPLATE, write_html
 
 
 def test_graph_template_uses_llmwiki_theme_key():

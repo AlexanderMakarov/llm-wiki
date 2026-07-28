@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from llmwiki.render import js
 from llmwiki.state_store import (
     configure_state_file,
     get_state_file,
@@ -14,8 +15,6 @@ from llmwiki.state_store import (
     update_state,
     write_state,
 )
-from llmwiki.render import js
-
 
 
 def test_configure_state_file_sets_active(tmp_path: Path):

@@ -41,8 +41,8 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import pytest
-from llmwiki import build as build_mod
 
+from llmwiki import build as build_mod
 
 # ─── port + server helpers ──────────────────────────────────────────────
 

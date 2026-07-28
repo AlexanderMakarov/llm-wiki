@@ -8,11 +8,19 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 import pytest
 
-from llmwiki.build import nav_bar, render_index, render_recent
+from llmwiki.build import (
+    breadcrumbs_bar,
+    md_to_html,
+    nav_bar,
+    page_foot,
+    page_head,
+    render_index,
+    render_recent,
+)
 from llmwiki.raw_docs_site import (
     RawDocFile,
     build_tree,
@@ -26,15 +34,7 @@ from llmwiki.raw_docs_site import (
     tree_to_dict,
     write_documents_tree,
 )
-from llmwiki.build import (
-    breadcrumbs_bar,
-    md_to_html,
-    page_foot,
-    page_head,
-)
 from llmwiki.render.js import JS
-from pathlib import PurePosixPath
-
 
 
 def _write_doc(root: Path, rel: str, title: str, date: str,

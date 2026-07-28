@@ -6,6 +6,10 @@ from dataclasses import FrozenInstanceError
 
 import pytest
 
+import llmwiki.cli as _cli
+import llmwiki.config_schedule as _cs
+import llmwiki.synth.pipeline as pipe
+from llmwiki import cli as cli_mod
 from llmwiki.cache import (
     CACHE_CONTROL_EPHEMERAL,
     CHARS_PER_TOKEN,
@@ -23,12 +27,7 @@ from llmwiki.cache import (
     warn_prefix_too_small,
 )
 from llmwiki.cli import build_parser
-import llmwiki.cli as _cli
-import llmwiki.config_schedule as _cs
-from llmwiki import cli as cli_mod
-import llmwiki.synth.pipeline as pipe
 from llmwiki.state_store import read_state
-
 
 # ─── Constants / defaults ─────────────────────────────────────────────
 

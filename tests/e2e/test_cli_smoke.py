@@ -39,13 +39,12 @@ import sys
 from pathlib import Path
 
 import pytest
-from llmwiki import build as build_mod
-from llmwiki.build import build_site
-from llmwiki.lint import load_pages, run_all, summarize
-from llmwiki.build import RAW_SESSIONS, discover_sources, group_by_project
-from llmwiki.exporters import export_all
-from llmwiki.candidates import list_candidates
 
+from llmwiki import build as build_mod
+from llmwiki.build import RAW_SESSIONS, build_site, discover_sources, group_by_project
+from llmwiki.candidates import list_candidates
+from llmwiki.exporters import export_all
+from llmwiki.lint import load_pages, run_all, summarize
 
 # ─── helpers ────────────────────────────────────────────────────────────
 

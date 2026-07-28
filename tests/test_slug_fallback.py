@@ -13,12 +13,10 @@ source-path hash. Non-UUID stems keep the 12-char prefix.
 
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 
-from llmwiki.convert import _source_hash8, derive_session_slug
-from datetime import datetime
-from llmwiki.convert import flat_output_name
-
+from llmwiki.convert import _source_hash8, derive_session_slug, flat_output_name
 
 
 def test_explicit_slug_field_used_as_is():

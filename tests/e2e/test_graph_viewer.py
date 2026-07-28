@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
+import pytest
 from playwright.sync_api import Page
 from pytest_bdd import scenarios, then, when
 
 from tests.e2e.steps.ui_steps import *  # noqa: F401,F403
-import pytest
-
 
 scenarios("features/graph_viewer.feature")
 

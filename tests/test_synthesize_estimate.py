@@ -14,22 +14,19 @@ Covers:
 from __future__ import annotations
 
 import json
+import os
+import re
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
-import os
-from llmwiki.cli import synthesize_estimate_report
-from llmwiki.cache import TRANSCRIPT_CHARS_PER_TOKEN
-from llmwiki.synth.estimate import BODY_CHAR_CAP, LEAN_OVERHEAD_TOKENS
-from llmwiki.cache import CACHE_WRITE_1H_MULTIPLIER, MODEL_PRICING
-from llmwiki.synth.estimate import DEFAULT_OUTPUT_TOKENS, LEAN_OVERHEAD_TOKENS
-import llmwiki.cli as cli_mod
-from llmwiki.synth.estimate import BODY_CHAR_CAP
-import time
-import re
 
+import llmwiki.cli as cli_mod
+from llmwiki.cache import CACHE_WRITE_1H_MULTIPLIER, MODEL_PRICING, TRANSCRIPT_CHARS_PER_TOKEN
+from llmwiki.cli import synthesize_estimate_report
+from llmwiki.synth.estimate import BODY_CHAR_CAP, DEFAULT_OUTPUT_TOKENS, LEAN_OVERHEAD_TOKENS
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 

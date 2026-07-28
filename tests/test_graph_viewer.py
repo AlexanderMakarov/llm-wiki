@@ -15,6 +15,7 @@ from pathlib import Path
 import pytest
 
 import llmwiki.graph as graph_mod
+from llmwiki import build as build_mod
 from llmwiki.graph import (
     HTML_TEMPLATE,
     build_graph,
@@ -23,8 +24,6 @@ from llmwiki.graph import (
     write_html,
     write_json,
 )
-from llmwiki import build as build_mod
-
 
 # ─── Fixtures ──────────────────────────────────────────────────────────
 

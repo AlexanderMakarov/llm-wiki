@@ -17,13 +17,11 @@ Key invariants:
 from __future__ import annotations
 
 from pathlib import Path
-from llmwiki.build import ensure_project_stubs
-from llmwiki.project_topics import load_project_profile
-from llmwiki import build as build_mod
-from llmwiki.build import build_site
-from llmwiki.cli import build_parser
-from llmwiki.build import _humanize_slug
 
+from llmwiki import build as build_mod
+from llmwiki.build import _humanize_slug, build_site, ensure_project_stubs
+from llmwiki.cli import build_parser
+from llmwiki.project_topics import load_project_profile
 
 
 def _groups_with(*slugs: str) -> dict[str, list]:

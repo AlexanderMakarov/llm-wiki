@@ -10,13 +10,11 @@ from pathlib import Path
 
 import pytest
 
-from llmwiki.add_doc import add_sources, expected_source_page
-from llmwiki.remove_doc import build_remove_plan, execute_remove_plan
-from llmwiki.synth.pipeline import synthesize_new_sessions
 from llmwiki._frontmatter import parse_frontmatter
+from llmwiki.add_doc import add_sources, expected_source_page
 from llmwiki.cli import main
-from llmwiki.remove_doc import RemoveIncompleteError
-
+from llmwiki.remove_doc import RemoveIncompleteError, build_remove_plan, execute_remove_plan
+from llmwiki.synth.pipeline import synthesize_new_sessions
 
 
 def _read_synth_keys(state_file: Path) -> set[str]:

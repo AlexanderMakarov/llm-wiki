@@ -5,11 +5,11 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 from unittest.mock import MagicMock, patch
-from llmwiki.cli import build_parser
-from llmwiki.config_schedule import synthesis_status_hint
+
 from llmwiki import cli
 from llmwiki import cli as cli_mod
-
+from llmwiki.cli import build_parser
+from llmwiki.config_schedule import synthesis_status_hint
 
 
 def test_all_parser_accepts_with_synth_flag():

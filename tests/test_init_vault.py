@@ -11,9 +11,9 @@ import argparse
 from pathlib import Path
 
 import pytest
+
 import llmwiki.config_schedule as config_schedule_mod
 from llmwiki.cli import cmd_init
-
 
 
 @pytest.fixture(autouse=True)

@@ -5,18 +5,12 @@ is byte-identical and backwards-compatible.
 """
 
 from __future__ import annotations
-from llmwiki.render import CSS, JS
-from llmwiki.render.css import CSS
-from llmwiki.render.js import JS
-from llmwiki.build import CSS
-from llmwiki.build import JS
+
 from llmwiki import build
+from llmwiki.build import build_site, discover_sources, parse_frontmatter
+from llmwiki.render import CSS, JS
 from llmwiki.render.css import CSS as RENDER_CSS
 from llmwiki.render.js import JS as RENDER_JS
-from llmwiki.build import build_site
-from llmwiki.build import discover_sources
-from llmwiki.build import parse_frontmatter
-
 
 
 def test_render_package_imports():
@@ -26,11 +20,11 @@ def test_render_package_imports():
 
 
 def test_css_module_directly_importable():
-    assert CSS.startswith("/* llmwiki — god-level docs style */")
+    assert RENDER_CSS.startswith("/* llmwiki — god-level docs style */")
 
 
 def test_js_module_directly_importable():
-    assert "llmwiki viewer" in JS
+    assert "llmwiki viewer" in RENDER_JS
 
 
 # ─── Backwards compatibility ──────────────────────────────────────────
@@ -38,13 +32,13 @@ def test_js_module_directly_importable():
 
 def test_build_module_still_exposes_CSS():
     """Old imports like `from llmwiki.build import CSS` keep working."""
-    assert isinstance(CSS, str)
-    assert len(CSS) > 1000
+    assert isinstance(build.CSS, str)
+    assert len(build.CSS) > 1000
 
 
 def test_build_module_still_exposes_JS():
-    assert isinstance(JS, str)
-    assert len(JS) > 1000
+    assert isinstance(build.JS, str)
+    assert len(build.JS) > 1000
 
 
 def test_build_CSS_identical_to_render_CSS():

@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
+import argparse
 from pathlib import Path
 
 from llmwiki import REPO_ROOT
-import argparse
 from llmwiki.cli import cmd_init
-
 
 DASHBOARD_TEMPLATE = REPO_ROOT / "examples" / "wiki_dashboard.md"
 

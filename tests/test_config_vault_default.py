@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-import llmwiki.config_schedule as cs
 
+import llmwiki.config_schedule as cs
 
 
 def test_load_default_vault_path_from_user_config(tmp_path: Path, monkeypatch):

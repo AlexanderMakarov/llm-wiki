@@ -7,6 +7,7 @@ from pathlib import Path
 from llmwiki.convert import (
     DEFAULT_CONFIG,
     Redactor,
+    _close_open_fence,
     count_tool_calls,
     count_user_messages,
     extract_tools_used,
@@ -19,8 +20,6 @@ from llmwiki.convert import (
     truncate_lines,
 )
 from tests.conftest import FIXTURES_DIR
-from llmwiki.convert import _close_open_fence
-
 
 
 def test_truncate_chars_short():

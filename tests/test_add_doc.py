@@ -2,25 +2,20 @@
 
 from __future__ import annotations
 
-import pytest
-
-from llmwiki.add_doc import AddError, assert_public_url
-import llmwiki.add_doc as m
-import llmwiki.build as build_mod
-import subprocess
-from pathlib import Path
 import email.message
 import io
+import subprocess
 import urllib.response
-from llmwiki import add_doc as m
-from llmwiki.add_doc import DuplicateContentError
+from pathlib import Path
+
+import pytest
+
+import llmwiki.add_doc as m
+import llmwiki.build as build_mod
 from llmwiki._frontmatter import parse_frontmatter
+from llmwiki.add_doc import AddError, DuplicateContentError, _extract_html, add_sources, assert_public_url, convert_url
 from llmwiki.synth.base import DummySynthesizer
 from llmwiki.synth.pipeline import synthesize_new_sessions
-from llmwiki.add_doc import _extract_html
-from llmwiki.add_doc import convert_url
-from llmwiki.add_doc import add_sources
-
 
 # ── SSRF guard (port of kbbuilder wiki-convert.ts assertPublicUrl) ──
 
@@ -285,7 +280,7 @@ def test_folder_skips_symlinks(tmp_path):
 
 # ── layered URL pipeline ─────────────────────────────────────────────
 
-from llmwiki.add_doc import FetchResult, convert_url
+from llmwiki.add_doc import FetchResult
 
 HTML_DOC = ("<html><head><title>Doc - Site</title></head><body><article>"
             "<h1>Doc Title</h1>" + "<p>real paragraph content here.</p>" * 30
@@ -455,7 +450,7 @@ def test_plain_text_response_passthrough():
 
 # ── raw-doc writer + orchestrator ────────────────────────────────────
 
-from llmwiki.add_doc import add_sources, write_raw_doc
+from llmwiki.add_doc import write_raw_doc
 
 
 def _doc(markdown="# Doc Title\n\nbody\n", **kw):

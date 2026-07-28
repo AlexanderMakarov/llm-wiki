@@ -39,13 +39,11 @@ surfaced these real bugs which this PR addresses:
 from __future__ import annotations
 
 import re
-
-from llmwiki.build import nav_bar, render_models_section, render_vs_section
-from llmwiki.render.js import JS
-from llmwiki.build import page_foot
 import tempfile
 from pathlib import Path
 
+from llmwiki.build import nav_bar, page_foot, render_models_section, render_vs_section
+from llmwiki.render.js import JS
 
 # 1. Per-dialog focus stash.
 

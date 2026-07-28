@@ -21,9 +21,8 @@ This file covers all three.
 
 from __future__ import annotations
 
-from playwright.sync_api import BrowserContext, Page, expect
 import pytest
-
+from playwright.sync_api import BrowserContext, Page, expect
 
 
 def _get_theme(page: Page) -> str:

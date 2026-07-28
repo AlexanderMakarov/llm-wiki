@@ -7,6 +7,10 @@ from pathlib import Path
 
 import pytest
 
+from llmwiki import REPO_ROOT
+from llmwiki.cli import build_parser, cmd_build, cmd_sync, cmd_synthesize
+from llmwiki.state_store import configure_state_file, get_state_file, resolve_state_file
+from llmwiki.synth.pipeline import _load_state, _save_state
 from llmwiki.vault import (
     VaultFormat,
     VaultLayout,
@@ -20,16 +24,6 @@ from llmwiki.vault import (
     vault_page_path,
     write_vault_page,
 )
-from llmwiki.cli import build_parser
-from llmwiki.cli import build_parser, cmd_sync
-from llmwiki.cli import build_parser, cmd_build
-from llmwiki import REPO_ROOT
-from llmwiki.state_store import configure_state_file, get_state_file, resolve_state_file
-from llmwiki.state_store import resolve_state_file
-from llmwiki.synth.pipeline import _load_state, _save_state
-from llmwiki.synth.pipeline import _load_state
-from llmwiki.cli import build_parser, cmd_synthesize
-
 
 # ─── Fixtures ──────────────────────────────────────────────────────────
 

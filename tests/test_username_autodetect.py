@@ -19,18 +19,16 @@ it's ≥3 chars AND not in the generic-container set.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
-from llmwiki.convert import load_config
-import json
+from llmwiki import convert as convert_mod
 from llmwiki.convert import (
     DEFAULT_CONFIG_FILE,
     _ensure_real_username,
     _overlay_config_file,
     load_config,
 )
-from llmwiki import convert as convert_mod
-
 
 
 def _config_path(tmp_path: Path) -> Path:

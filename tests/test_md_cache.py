@@ -13,17 +13,16 @@ from __future__ import annotations
 
 import pytest
 
+import llmwiki.build as b
 from llmwiki.build import (
+    _MD_CACHE_MAX,
+    _content_key,
     _md_to_html_uncached,
     md_to_html,
     md_to_html_cache_clear,
     md_to_html_cache_stats,
+    md_to_plain_text,
 )
-import llmwiki.build as b
-from llmwiki.build import md_to_plain_text
-from llmwiki.build import _content_key
-from llmwiki.build import _MD_CACHE_MAX, md_to_plain_text
-
 
 
 @pytest.fixture(autouse=True)

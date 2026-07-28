@@ -6,17 +6,16 @@ See ``gaps.md`` (local) / GitHub issues #288, #296, #297, #304.
 
 from __future__ import annotations
 
+import re
 import subprocess
 import sys
 from datetime import date
 from pathlib import Path
-from llmwiki.synth.pipeline import LOG_ARCHIVE_THRESHOLD, _auto_archive_log
-from llmwiki.synth.pipeline import _auto_archive_log
-from llmwiki.lint.rules import DuplicateDetection
-from llmwiki.changelog_timeline import render_recent_activity
-from llmwiki.log_reader import LogEvent
-import re
 
+from llmwiki.changelog_timeline import render_recent_activity
+from llmwiki.lint.rules import DuplicateDetection
+from llmwiki.log_reader import LogEvent
+from llmwiki.synth.pipeline import LOG_ARCHIVE_THRESHOLD, _auto_archive_log
 
 # ─── G-10 (#296): log archive frontmatter seed ───────────────────────────
 

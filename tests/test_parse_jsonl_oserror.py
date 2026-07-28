@@ -14,13 +14,12 @@ its own try/except that routes through `_quarantine_add` + the
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
 
 from llmwiki.convert import parse_jsonl
-import os
-
 
 
 def test_oserror_now_propagates_to_caller(tmp_path: Path):

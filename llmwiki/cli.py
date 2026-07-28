@@ -24,13 +24,19 @@ Subcommands:
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
+import json as _json
+import shutil as _shutil
 import sys
-from datetime import UTC
+import sys as _sys
+from contextlib import ExitStack
+from datetime import UTC, datetime
+from datetime import date as _date
 from pathlib import Path
 from typing import Any
 
-from llmwiki import REPO_ROOT, __version__
+from llmwiki import REPO_ROOT, __version__, usage
 from llmwiki.adapters import REGISTRY, discover_adapters
 
 # #v1378-review (#691 follow-up): hoist these re-exports from mid-module
@@ -38,6 +44,19 @@ from llmwiki.adapters import REGISTRY, discover_adapters
 # logic that lives in the proper domain modules now (#611) — kept here
 # for any caller still importing from llmwiki.cli.
 from llmwiki.adapters.status import adapter_status as _adapter_status  # noqa: F401
+from llmwiki.add_doc import add_sources, expected_source_page, remove_raw_docs
+from llmwiki.build import RAW_DIR, RAW_SESSIONS, build_site, discover_sources, group_by_project
+from llmwiki.cache import MODEL_PRICING, resolve_pricing_model
+from llmwiki.candidates import (
+    discard,
+    list_candidates,
+    promote,
+    stale_candidates,
+)
+from llmwiki.candidates import (
+    merge as merge_candidate,
+)
+from llmwiki.config_schedule import _load_sessions_config
 
 # #691 / #arch-h8: extracted business logic moves out of cli.py.
 # cli.py keeps thin re-export wrappers for back-compat with anyone
@@ -51,34 +70,7 @@ from llmwiki.config_schedule import (
 from llmwiki.config_schedule import (
     should_run_after_sync as _should_run_after_sync,
 )
-from llmwiki.pipeline import run_pipeline as _run_pipeline
-from llmwiki.sync.status import (  # noqa: F401
-    cmd_sync_status,
-)
-from llmwiki.synth.estimate import synthesize_estimate_report  # noqa: F401
-from llmwiki.vault import resolve_vault
-from llmwiki.pipeline_lock import pipeline_lock
 from llmwiki.convert import DEFAULT_OUT_DIR, convert_all
-from llmwiki.state_store import (
-    IncompatibleStateError,
-    check_sync_state_compatible,
-    resolve_state_file,
-)
-from llmwiki.vault import describe_vault, resolve_vault
-from llmwiki.synth.pipeline import refresh_synth_pending
-from llmwiki.build import RAW_DIR, RAW_SESSIONS, build_site
-from llmwiki.lint import load_pages, run_all, summarize
-from llmwiki.serve import serve_site
-from llmwiki import usage
-from llmwiki.state_store import read_state
-from llmwiki.usage import UNATTRIBUTED
-import json as _json
-import shutil as _shutil
-from llmwiki.graphify_bridge import is_available, query_graph
-from llmwiki.graphify_bridge import build_graphify_graph, is_available
-from llmwiki.graph import build_and_report
-import sys as _sys
-from llmwiki.build import RAW_SESSIONS, discover_sources, group_by_project
 from llmwiki.exporters import (
     export_all,
     write_ai_readme,
@@ -90,45 +82,44 @@ from llmwiki.exporters import (
     write_rss,
     write_sitemap,
 )
-from llmwiki.lint import REGISTRY, load_pages, run_all, summarize  # noqa: F401
-from datetime import datetime
-from llmwiki.state_store import resolve_state_file, update_state
+from llmwiki.graph import build_and_report
+from llmwiki.graphify_bridge import build_graphify_graph, is_available, query_graph
+from llmwiki.lint import REGISTRY as _LINT_REG
+from llmwiki.lint import load_pages, run_all, summarize
+from llmwiki.lint import rules as _lint_rules  # noqa: F401 — force registration
+from llmwiki.pipeline import run_pipeline as _run_pipeline
+from llmwiki.pipeline_lock import pipeline_lock
 from llmwiki.queue_ops import enqueue_task, queue_status, run_queue
-from llmwiki.state_store import read_state, resolve_state_file
-import importlib.util
-from llmwiki.config_schedule import _load_sessions_config
-from llmwiki.synth.pipeline import resolve_backend, synthesize_new_sessions
-from contextlib import ExitStack
-from llmwiki.add_doc import add_sources
-from llmwiki.add_doc import expected_source_page, remove_raw_docs
-from datetime import date as _date
-from llmwiki.remove_doc import build_remove_plan, execute_remove_plan, format_plan
-from llmwiki.remove_doc import RemoveIncompleteError
-from llmwiki.cache import MODEL_PRICING, resolve_pricing_model
+from llmwiki.remove_doc import RemoveIncompleteError, build_remove_plan, execute_remove_plan, format_plan
+from llmwiki.serve import serve_site
+from llmwiki.state_store import (
+    IncompatibleStateError,
+    check_sync_state_compatible,
+    read_state,
+    resolve_state_file,
+    update_state,
+)
+from llmwiki.sync.status import (  # noqa: F401
+    cmd_sync_status,
+)
+from llmwiki.synth.estimate import synthesize_estimate_report  # noqa: F401
 from llmwiki.synth.pipeline import (
     _discover_raw_sessions,
     _load_state,
     discover_synth_source_keys,
+    refresh_synth_pending,
+    resolve_backend,
     resolve_exclude_headless,
     resolve_include_subagents,
-)
-from llmwiki.candidates import (
-    discard,
-    list_candidates,
-    promote,
-    stale_candidates,
-)
-from llmwiki.candidates import (
-    merge as merge_candidate,
+    synthesize_new_sessions,
 )
 from llmwiki.topics_consolidate import (
     cache_path,
     parse_and_cache,
     render_consolidation_prompt,
 )
-from llmwiki.lint import REGISTRY as _LINT_REG
-from llmwiki.lint import rules as _lint_rules  # noqa: F401 — force registration
-
+from llmwiki.usage import UNATTRIBUTED
+from llmwiki.vault import describe_vault, resolve_vault
 
 
 def _content_root(args: argparse.Namespace) -> Path:

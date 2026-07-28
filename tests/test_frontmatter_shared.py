@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from llmwiki import build as build_mod
 from llmwiki._frontmatter import (
     _parse_scalar,
     parse_frontmatter,
@@ -12,9 +13,6 @@ from llmwiki._frontmatter import (
 )
 from llmwiki._frontmatter import parse_frontmatter as canonical_pf
 from llmwiki.build import parse_frontmatter as build_pf
-from llmwiki.build import parse_frontmatter
-from llmwiki import build as build_mod
-
 
 # ─── parse_frontmatter: happy paths ──────────────────────────────────
 

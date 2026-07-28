@@ -18,9 +18,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from llmwiki.graph import HTML_TEMPLATE, build_graph, write_html
 import llmwiki.graph as graph_mod
-
+from llmwiki.graph import HTML_TEMPLATE, build_graph, write_html
 
 # ─── Template-level: ensure every piece is present ────────────────────────
 

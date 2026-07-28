@@ -10,6 +10,7 @@ Three layered defences:
 from __future__ import annotations
 
 from pathlib import Path
+from subprocess import CompletedProcess
 from unittest.mock import patch
 
 import pytest
@@ -19,8 +20,6 @@ from llmwiki.build import (
     _validate_overview_slug,
     synthesize_overview,
 )
-from subprocess import CompletedProcess
-
 
 
 @pytest.mark.parametrize("slug", [

@@ -2,12 +2,18 @@
 
 from __future__ import annotations
 
-from datetime import UTC
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
 
-from llmwiki.lint import REGISTRY, load_pages, run_all, summarize
+from llmwiki.lint import (
+    REGISTRY,
+    load_pages,
+    rules,  # noqa: F401
+    run_all,
+    summarize,
+)
 from llmwiki.lint.rules import (
     ClaimVerification,
     ContentFreshness,
@@ -19,15 +25,12 @@ from llmwiki.lint.rules import (
     IndexSync,
     LinkIntegrity,
     OrphanDetection,
+    StaleCandidates,
     SummaryAccuracy,
+    _normalise_tool_counts_keys,
+    _normalise_tools_used,
+    _resolve_index_href,
 )
-from llmwiki.lint import rules  # noqa: F401
-from llmwiki.lint.rules import StaleCandidates
-from datetime import datetime, timedelta
-from llmwiki.lint.rules import _resolve_index_href
-from llmwiki.lint.rules import _normalise_tools_used
-from llmwiki.lint.rules import _normalise_tool_counts_keys
-
 
 # ─── Fixtures ──────────────────────────────────────────────────────────
 

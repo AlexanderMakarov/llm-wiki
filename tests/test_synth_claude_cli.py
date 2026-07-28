@@ -4,16 +4,16 @@ from __future__ import annotations
 
 import pytest
 
-from llmwiki.synth.claude_cli import ClaudeCLIError, ClaudeCLISynthesizer
-from llmwiki.synth.pipeline import resolve_backend
 from llmwiki.synth.base import split_prompt_template
 from llmwiki.synth.claude_cli import (
+    DEFAULT_CLAUDE_TIMEOUT,
     DEFAULT_OVERVIEW_MODEL,
+    ClaudeCLIError,
+    ClaudeCLISynthesizer,
     overview_argv,
     resolve_overview_model,
 )
-from llmwiki.synth.claude_cli import DEFAULT_CLAUDE_TIMEOUT
-
+from llmwiki.synth.pipeline import resolve_backend
 
 TEMPLATE = "Summarize:\n{body}\nMeta:\n{meta}\n"
 

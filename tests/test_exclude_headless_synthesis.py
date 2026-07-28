@@ -23,22 +23,16 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from llmwiki._frontmatter import is_headless
+from llmwiki._frontmatter import is_headless, parse_frontmatter
+from llmwiki.convert import DEFAULT_CONFIG, render_session_markdown
+from llmwiki.synth.base import DummySynthesizer
+from llmwiki.synth.estimate import synthesize_estimate_report
 from llmwiki.synth.pipeline import (
     DEFAULT_EXCLUDE_HEADLESS,
-    resolve_exclude_headless,
-)
-from llmwiki.convert import DEFAULT_CONFIG
-from llmwiki.convert import render_session_markdown
-from llmwiki._frontmatter import parse_frontmatter
-from llmwiki.synth.estimate import synthesize_estimate_report
-from llmwiki.synth.base import DummySynthesizer
-from llmwiki.synth.pipeline import synthesize_new_sessions
-from llmwiki.synth.pipeline import (
     discover_unsynth_session_rels,
+    resolve_exclude_headless,
     synthesize_new_sessions,
 )
-
 
 # ─── unit: is_headless frontmatter helper ────────────────────────────────
 

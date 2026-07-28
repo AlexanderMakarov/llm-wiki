@@ -20,10 +20,9 @@ from __future__ import annotations
 
 from pathlib import Path
 from unittest.mock import patch
-from llmwiki.build import _resolve_claude_path
-from llmwiki.build import synthesize_overview
-from llmwiki.cli import build_parser
 
+from llmwiki.build import _resolve_claude_path, synthesize_overview
+from llmwiki.cli import build_parser
 
 
 def test_claude_path_resolves_via_shutil_which_when_empty(tmp_path: Path):

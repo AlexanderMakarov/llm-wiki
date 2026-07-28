@@ -10,13 +10,13 @@ shim through one minor cycle.
 
 from __future__ import annotations
 
-import warnings
-from llmwiki import ingest_queue
 import importlib
-import sys
-from llmwiki import queue as legacy_queue  # noqa: F401
 import queue as stdlib_queue
+import sys
+import warnings
 
+from llmwiki import ingest_queue
+from llmwiki import queue as legacy_queue  # noqa: F401
 
 
 def test_canonical_module_imports_cleanly():

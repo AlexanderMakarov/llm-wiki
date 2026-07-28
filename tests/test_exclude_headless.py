@@ -17,13 +17,12 @@ import json
 from pathlib import Path
 
 from llmwiki import convert as c
+from llmwiki.adapters.claude_code import ClaudeCodeAdapter
 from llmwiki.convert import (
     DEFAULT_CONFIG,
     is_headless_session,
     is_temp_cwd_session,
 )
-from llmwiki.adapters.claude_code import ClaudeCodeAdapter
-
 
 # ─── unit: is_headless_session ───────────────────────────────────────────
 

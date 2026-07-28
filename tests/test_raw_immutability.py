@@ -14,11 +14,10 @@ from __future__ import annotations
 
 import pytest
 
-from llmwiki.convert import _raw_write_guard
+import llmwiki.convert as convert_mod
 from llmwiki.adapters import REGISTRY, discover_adapters
 from llmwiki.adapters.base import BaseAdapter
-import llmwiki.convert as convert_mod
-
+from llmwiki.convert import _raw_write_guard
 
 # ─── _raw_write_guard unit ────────────────────────────────────────────────
 

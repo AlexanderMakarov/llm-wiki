@@ -7,16 +7,14 @@ from pathlib import Path
 from llmwiki.synth.base import BaseSynthesizer, DummySynthesizer
 from llmwiki.synth.pipeline import (
     _build_source_page,
+    _derive_baseline_tags,
     _discover_raw_sessions,
     _format_producer_breakdown,
     _load_prompt_template,
+    _normalise_slug,
+    _rebuild_index,
     synthesize_new_sessions,
 )
-from llmwiki.synth.pipeline import _normalise_slug
-from llmwiki.synth.pipeline import _rebuild_index
-from llmwiki.synth.pipeline import _derive_baseline_tags
-from llmwiki.synth.pipeline import _build_source_page
-
 
 
 def test_format_producer_breakdown_agents_then_docs():

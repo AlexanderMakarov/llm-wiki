@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from llmwiki.adapters import REGISTRY, discover_all
+from llmwiki.adapters import REGISTRY, REGISTRY_ALIASES, discover_all, resolve_adapter_name
 from llmwiki.adapters.base import BaseAdapter
 from llmwiki.adapters.claude_code import ClaudeCodeAdapter
 from llmwiki.adapters.codex_cli import CodexCliAdapter
@@ -11,8 +11,6 @@ from llmwiki.adapters.contrib.copilot_cli import CopilotCliAdapter
 from llmwiki.adapters.contrib.cursor import CursorAdapter
 from llmwiki.adapters.contrib.gemini_cli import GeminiCliAdapter
 from llmwiki.adapters.contrib.obsidian import ObsidianAdapter
-from llmwiki.adapters import REGISTRY_ALIASES, resolve_adapter_name
-
 
 
 def test_registry_discovers_all_adapters():

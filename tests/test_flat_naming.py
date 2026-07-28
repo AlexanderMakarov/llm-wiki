@@ -3,13 +3,9 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-
-from llmwiki.convert import flat_output_name
-from datetime import datetime
 from pathlib import Path
-from llmwiki.convert import _source_hash8
-from llmwiki.convert import _source_hash8, flat_output_name
 
+from llmwiki.convert import _source_hash8, flat_output_name
 
 
 def test_basic_flat_name():

@@ -29,7 +29,6 @@ import pytest
 from llmwiki import tags as t
 from llmwiki.lint import REGISTRY, rules  # noqa: F401
 
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 

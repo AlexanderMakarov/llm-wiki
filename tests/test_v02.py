@@ -11,23 +11,21 @@ from llmwiki.adapters import REGISTRY, discover_all
 from llmwiki.adapters.base import BaseAdapter
 from llmwiki.adapters.contrib.cursor import CursorAdapter
 from llmwiki.adapters.contrib.gemini_cli import GeminiCliAdapter
-from tests.conftest import REPO_ROOT
-from llmwiki.graph import build_graph, scan_pages
-from llmwiki.graph import build_graph
-from llmwiki.obsidian_output import _add_source_backlink, _build_readme, export_to_vault
-from llmwiki.obsidian_output import _add_source_backlink
-from llmwiki.obsidian_output import export_to_vault
-from llmwiki.mcp.server import TOOLS
-from llmwiki.mcp.server import PROTOCOL_VERSION, handle_initialize
-from llmwiki.mcp.server import handle_tools_list
-from llmwiki.mcp.server import handle_tools_call
-from llmwiki.mcp.server import tool_wiki_list_sources
-from llmwiki.mcp.server import tool_wiki_lint
-from llmwiki.mcp.server import tool_wiki_read_page
-from llmwiki.watch import run_sync, scan_mtimes, watch
-from llmwiki.watch import scan_mtimes
 from llmwiki.cli import build_parser
-
+from llmwiki.graph import build_graph, scan_pages
+from llmwiki.mcp.server import (
+    PROTOCOL_VERSION,
+    TOOLS,
+    handle_initialize,
+    handle_tools_call,
+    handle_tools_list,
+    tool_wiki_lint,
+    tool_wiki_list_sources,
+    tool_wiki_read_page,
+)
+from llmwiki.obsidian_output import _add_source_backlink, _build_readme, export_to_vault
+from llmwiki.watch import run_sync, scan_mtimes, watch
+from tests.conftest import REPO_ROOT
 
 # ─── adapter registry v0.2 ────────────────────────────────────────────────
 

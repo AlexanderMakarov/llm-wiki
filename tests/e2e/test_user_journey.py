@@ -13,9 +13,8 @@ navigation surface, not any one feature.
 
 from __future__ import annotations
 
-from playwright.sync_api import Page, expect
 import pytest
-
+from playwright.sync_api import Page, expect
 
 
 def test_full_navigation_journey(page: Page, base_url: str) -> None:

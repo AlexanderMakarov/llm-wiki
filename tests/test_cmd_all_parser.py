@@ -16,8 +16,8 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 from unittest.mock import MagicMock, patch
-from llmwiki import cli
 
+from llmwiki import cli
 
 
 def _mk_args(**overrides) -> argparse.Namespace:

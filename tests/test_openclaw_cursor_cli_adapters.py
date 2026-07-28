@@ -9,9 +9,8 @@ from pathlib import Path
 from llmwiki.adapters import REGISTRY, discover_all
 from llmwiki.adapters.contrib.cursor_cli import CursorCliAdapter
 from llmwiki.adapters.contrib.openclaw import OpenClawAdapter, _flatten_text_blocks
-from llmwiki.convert import truncate_chars
 from llmwiki.build import build_site
-
+from llmwiki.convert import truncate_chars
 
 
 def test_adapters_register():

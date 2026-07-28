@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from llmwiki import REPO_ROOT
 from llmwiki.skill_installer import (
     AGENT_TARGETS,
     install_all,
@@ -11,8 +12,6 @@ from llmwiki.skill_installer import (
     list_installed,
     list_targets,
 )
-from llmwiki import REPO_ROOT
-
 
 
 def _seed_source(tmp_path: Path) -> Path:

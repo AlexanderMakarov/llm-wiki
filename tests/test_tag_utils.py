@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from llmwiki.tag_utils import NOISE_TAGS, parse_tags_field, scan_tags
 from llmwiki.categories import scan_tags as cat_scan_tags
-
+from llmwiki.tag_utils import NOISE_TAGS, parse_tags_field, scan_tags
 
 # ─── NOISE_TAGS ──────────────────────────────────────────────────────
 

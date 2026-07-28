@@ -18,7 +18,6 @@ import re
 from llmwiki import REPO_ROOT
 from llmwiki.cli import build_parser
 
-
 CLI_REF = REPO_ROOT / "docs" / "reference" / "cli.md"
 SLASH_REF = REPO_ROOT / "docs" / "reference" / "slash-commands.md"
 UI_REF = REPO_ROOT / "docs" / "reference" / "ui.md"

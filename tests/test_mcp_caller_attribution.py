@@ -16,9 +16,8 @@ from pathlib import Path
 import pytest
 
 from llmwiki import usage
-from llmwiki.mcp import server as mcp_server
 from llmwiki.adapters.claude_code import ClaudeCodeAdapter
-
+from llmwiki.mcp import server as mcp_server
 
 
 @pytest.fixture(autouse=True)

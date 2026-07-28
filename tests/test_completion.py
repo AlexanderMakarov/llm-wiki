@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from llmwiki.cli import build_parser
 from llmwiki.completion import (
     GENERATORS,
     bash_script,
@@ -11,8 +12,6 @@ from llmwiki.completion import (
     generate,
     zsh_script,
 )
-from llmwiki.cli import build_parser
-
 
 # ─── registry ─────────────────────────────────────────────────────────
 

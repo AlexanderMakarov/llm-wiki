@@ -16,7 +16,6 @@ from llmwiki import convert as c
 from llmwiki.adapters.claude_code import ClaudeCodeAdapter
 
 
-
 def _write_jsonl(path: Path, session_id: str, iso_ts: str,
                  slug: str = "shared-slug") -> None:
     """Seed a minimal claude_code-shaped jsonl.

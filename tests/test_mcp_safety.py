@@ -15,6 +15,7 @@ These tests pin two properties that are easy to regress on:
 from __future__ import annotations
 
 import json
+import re as _re
 from pathlib import Path
 from unittest.mock import patch
 
@@ -25,8 +26,6 @@ from llmwiki.mcp.server import (
     tool_wiki_query,
     tool_wiki_search,
 )
-import re as _re
-
 
 # ─── Helpers ─────────────────────────────────────────────────────────
 

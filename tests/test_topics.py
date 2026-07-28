@@ -9,13 +9,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from llmwiki.topics import build_topic_graph, derive_vocabulary, topic_slug
-from llmwiki.topics_page import build_topic_pages
 from llmwiki.synth.pipeline import _inject_vocabulary
+from llmwiki.topics import build_topic_graph, derive_vocabulary, topic_slug
 from llmwiki.topics_consolidate import parse_and_cache, render_consolidation_prompt
-from llmwiki.topics_consolidate import parse_and_cache
-from llmwiki.topics_page import _display_aliases
-
+from llmwiki.topics_page import _display_aliases, build_topic_pages
 
 
 def _session(body_links: list[str], *, stem: str, project: str = "proj") -> str:

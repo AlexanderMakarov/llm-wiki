@@ -15,6 +15,8 @@ from unittest.mock import patch
 
 import pytest
 
+from llmwiki.cli import build_parser
+from llmwiki.synth.base import BaseSynthesizer, DummySynthesizer
 from llmwiki.synth.ollama import (
     DEFAULT_BACKOFF_BASE,
     DEFAULT_BASE_URL,
@@ -31,11 +33,7 @@ from llmwiki.synth.ollama import (
     _urlopen_post,
     load_ollama_config,
 )
-from llmwiki.synth.base import BaseSynthesizer
-from llmwiki.synth.base import DummySynthesizer
 from llmwiki.synth.pipeline import resolve_backend
-from llmwiki.cli import build_parser
-
 
 # ─── Test helpers ─────────────────────────────────────────────────────
 

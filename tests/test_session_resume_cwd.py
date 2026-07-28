@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pytest
 
+from llmwiki import build as build_mod
 from llmwiki.build import (
     build_search_index,
     local_cwd,
@@ -20,13 +21,11 @@ from llmwiki.build import (
     render_project_page,
     render_projects_index,
     render_session,
+    render_sessions_index,
     resume_command,
     supports_resume,
 )
 from llmwiki.convert import restore_local_path
-from llmwiki import build as build_mod
-from llmwiki.build import render_sessions_index
-
 
 REAL = "alice"
 REPL = "USER"

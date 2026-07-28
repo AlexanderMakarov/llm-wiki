@@ -15,10 +15,9 @@ from unittest.mock import patch
 
 import pytest
 
-from llmwiki.state_store import SCHEMA_VERSION
 import llmwiki.config_schedule as config_schedule_mod
 from llmwiki.cli import cmd_sync
-
+from llmwiki.state_store import SCHEMA_VERSION
 
 
 @pytest.fixture(autouse=True)
@@ -63,7 +62,7 @@ def test_sync_aborts_on_newer_schema_vault(tmp_path: Path, capsys):
         called["convert"] = True
         return 0
 
-    with patch("llmwiki.convert.convert_all", side_effect=_fake):
+    with patch("llmwiki.cli.convert_all", side_effect=_fake):
         rc = cmd_sync(_make_args(vault=vault))
 
     assert rc == 2
@@ -86,7 +85,7 @@ def test_plain_force_still_aborts_on_newer_schema(tmp_path: Path):
         called["convert"] = True
         return 0
 
-    with patch("llmwiki.convert.convert_all", side_effect=_fake):
+    with patch("llmwiki.cli.convert_all", side_effect=_fake):
         rc = cmd_sync(_make_args(vault=vault, force=True, force_resync=False))
 
     assert rc == 2
@@ -105,7 +104,7 @@ def test_force_resync_bypasses_and_converts(tmp_path: Path):
         captured.update(kwargs)
         return 0
 
-    with patch("llmwiki.convert.convert_all", side_effect=_fake):
+    with patch("llmwiki.cli.convert_all", side_effect=_fake):
         rc = cmd_sync(_make_args(vault=vault, force_resync=True))
 
     assert rc == 0

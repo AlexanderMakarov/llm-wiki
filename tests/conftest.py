@@ -11,8 +11,8 @@ import sys
 from pathlib import Path
 
 import pytest
-from llmwiki.state_store import configure_state_file
 
+from llmwiki.state_store import configure_state_file
 
 # Ensure the repo root (which contains the `llmwiki/` package dir) is on
 # sys.path when pytest is run from anywhere.

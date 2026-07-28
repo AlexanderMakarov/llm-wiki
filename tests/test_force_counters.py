@@ -27,9 +27,8 @@ from pathlib import Path
 
 import pytest
 
-from llmwiki.convert import convert_all
 from llmwiki.adapters.claude_code import ClaudeCodeAdapter
-
+from llmwiki.convert import convert_all
 
 
 def _sync_state(path: Path) -> dict:

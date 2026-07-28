@@ -24,7 +24,6 @@ from llmwiki import REPO_ROOT
 from llmwiki.render.css import CSS
 from llmwiki.render.docs_css import DOCS_SHELL_CSS
 
-
 DOCS = REPO_ROOT / "docs"
 TUTORIALS = DOCS / "tutorials"
 INDEX = DOCS / "index.md"

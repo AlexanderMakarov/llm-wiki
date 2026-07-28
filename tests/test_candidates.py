@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from llmwiki import REPO_ROOT
 from llmwiki.candidates import (
     ARCHIVE_DIR_NAME,
     CANDIDATES_DIR_NAME,
@@ -24,13 +25,11 @@ from llmwiki.candidates import (
     promote,
     stale_candidates,
 )
+from llmwiki.cli import build_parser
 from llmwiki.lint import (
     REGISTRY,
     rules,  # noqa: F401
 )
-from llmwiki import REPO_ROOT
-from llmwiki.cli import build_parser
-
 
 # ─── Fixtures ──────────────────────────────────────────────────────────
 

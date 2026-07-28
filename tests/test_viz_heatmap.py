@@ -11,7 +11,7 @@ Covers:
 from __future__ import annotations
 
 import re
-from datetime import date
+from datetime import date, timedelta
 
 from llmwiki.viz_heatmap import (
     CELL_SIZE,
@@ -25,8 +25,6 @@ from llmwiki.viz_heatmap import (
     week_column_count,
     window_bounds,
 )
-from datetime import timedelta
-
 
 # ─── window_bounds: GitHub-style Sunday alignment ────────────────────────
 

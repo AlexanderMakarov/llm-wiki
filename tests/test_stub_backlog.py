@@ -20,6 +20,9 @@ from llmwiki.lint.rules import StubSourcePages
 from llmwiki.synth.base import BaseSynthesizer
 from llmwiki.synth.estimate import synthesize_estimate_report
 from llmwiki.synth.pipeline import (
+    _DOC_CHUNK_MAX_CHARS,
+    _discover_raw_sessions,
+    _save_state,
     discover_stub_source_keys,
     discover_synth_source_keys,
     page_is_stub,
@@ -27,10 +30,6 @@ from llmwiki.synth.pipeline import (
     synth_page_filename,
     synthesize_new_sessions,
 )
-from llmwiki.synth.pipeline import _discover_raw_sessions
-from llmwiki.synth.pipeline import _save_state
-from llmwiki.synth.pipeline import _DOC_CHUNK_MAX_CHARS
-
 
 RAW_SESSION = """---
 title: "Session: alpha — 2026-04-09"

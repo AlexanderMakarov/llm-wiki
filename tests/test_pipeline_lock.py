@@ -9,10 +9,9 @@ import time
 
 import pytest
 
-from llmwiki.pipeline_lock import LOCK_DIRNAME, pipeline_lock
 import llmwiki.cli as cli_mod
 import llmwiki.pipeline_lock as lock_mod
-
+from llmwiki.pipeline_lock import LOCK_DIRNAME, pipeline_lock
 
 
 def test_acquire_creates_and_releases_lock(tmp_path):

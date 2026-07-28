@@ -13,9 +13,6 @@ from llmwiki.cli import (
 )
 from llmwiki.synth.base import DummySynthesizer
 from llmwiki.synth.pipeline import synthesize_new_sessions
-import llmwiki.config_schedule as config_mod
-import llmwiki.synth.pipeline as pipeline_mod
-
 
 
 def _seed_vault(tmp_path: Path) -> tuple[Path, Path, Path]:
@@ -151,11 +148,11 @@ def test_cmd_synthesize_path_passes_only_paths(
         }
 
 
-    monkeypatch.setattr(config_mod, "_load_sessions_config", lambda: {
+    monkeypatch.setattr("llmwiki.cli._load_sessions_config", lambda: {
         "synthesis": {"backend": "dummy"},
     })
-    monkeypatch.setattr(pipeline_mod, "resolve_backend", lambda _cfg: _Ok())
-    monkeypatch.setattr(pipeline_mod, "synthesize_new_sessions", _fake_synth)
+    monkeypatch.setattr("llmwiki.cli.resolve_backend", lambda _cfg: _Ok())
+    monkeypatch.setattr("llmwiki.cli.synthesize_new_sessions", _fake_synth)
 
     args = build_parser().parse_args([
         "synthesize",
@@ -182,10 +179,10 @@ def test_cmd_synthesize_missing_path_exits_2(
             return True
 
 
-    monkeypatch.setattr(config_mod, "_load_sessions_config", lambda: {
+    monkeypatch.setattr("llmwiki.cli._load_sessions_config", lambda: {
         "synthesis": {"backend": "dummy"},
     })
-    monkeypatch.setattr(pipeline_mod, "resolve_backend", lambda _cfg: _Ok())
+    monkeypatch.setattr("llmwiki.cli.resolve_backend", lambda _cfg: _Ok())
 
     args = build_parser().parse_args([
         "synthesize",
@@ -203,7 +200,7 @@ def test_cmd_synthesize_path_rejects_estimate(
 ):
     vault, _raw, _wiki = _seed_vault(tmp_path)
     monkeypatch.setattr(
-        "llmwiki.config_schedule._load_sessions_config",
+        "llmwiki.cli._load_sessions_config",
         lambda: {"synthesis": {"backend": "dummy"}},
     )
     args = build_parser().parse_args([
@@ -318,11 +315,11 @@ def test_cmd_synthesize_sessions_only_passes_flags(
         }
 
 
-    monkeypatch.setattr(config_mod, "_load_sessions_config", lambda: {
+    monkeypatch.setattr("llmwiki.cli._load_sessions_config", lambda: {
         "synthesis": {"backend": "dummy"},
     })
-    monkeypatch.setattr(pipeline_mod, "resolve_backend", lambda _cfg: _Ok())
-    monkeypatch.setattr(pipeline_mod, "synthesize_new_sessions", _fake_synth)
+    monkeypatch.setattr("llmwiki.cli.resolve_backend", lambda _cfg: _Ok())
+    monkeypatch.setattr("llmwiki.cli.synthesize_new_sessions", _fake_synth)
 
     args = build_parser().parse_args([
         "synthesize",
@@ -360,11 +357,11 @@ def test_cmd_synthesize_docs_only_passes_flags(
         }
 
 
-    monkeypatch.setattr(config_mod, "_load_sessions_config", lambda: {
+    monkeypatch.setattr("llmwiki.cli._load_sessions_config", lambda: {
         "synthesis": {"backend": "dummy"},
     })
-    monkeypatch.setattr(pipeline_mod, "resolve_backend", lambda _cfg: _Ok())
-    monkeypatch.setattr(pipeline_mod, "synthesize_new_sessions", _fake_synth)
+    monkeypatch.setattr("llmwiki.cli.resolve_backend", lambda _cfg: _Ok())
+    monkeypatch.setattr("llmwiki.cli.synthesize_new_sessions", _fake_synth)
 
     args = build_parser().parse_args([
         "synthesize",
@@ -389,10 +386,10 @@ def test_cmd_synthesize_sessions_only_rejects_doc_path(
             return True
 
 
-    monkeypatch.setattr(config_mod, "_load_sessions_config", lambda: {
+    monkeypatch.setattr("llmwiki.cli._load_sessions_config", lambda: {
         "synthesis": {"backend": "dummy"},
     })
-    monkeypatch.setattr(pipeline_mod, "resolve_backend", lambda _cfg: _Ok())
+    monkeypatch.setattr("llmwiki.cli.resolve_backend", lambda _cfg: _Ok())
 
     args = build_parser().parse_args([
         "synthesize",
@@ -417,10 +414,10 @@ def test_cmd_synthesize_docs_only_rejects_session_path(
             return True
 
 
-    monkeypatch.setattr(config_mod, "_load_sessions_config", lambda: {
+    monkeypatch.setattr("llmwiki.cli._load_sessions_config", lambda: {
         "synthesis": {"backend": "dummy"},
     })
-    monkeypatch.setattr(pipeline_mod, "resolve_backend", lambda _cfg: _Ok())
+    monkeypatch.setattr("llmwiki.cli.resolve_backend", lambda _cfg: _Ok())
 
     args = build_parser().parse_args([
         "synthesize",
@@ -438,7 +435,7 @@ def test_cmd_synthesize_sessions_only_rejects_estimate(
 ):
     vault, _raw, _wiki = _seed_vault(tmp_path)
     monkeypatch.setattr(
-        "llmwiki.config_schedule._load_sessions_config",
+        "llmwiki.cli._load_sessions_config",
         lambda: {"synthesis": {"backend": "dummy"}},
     )
     args = build_parser().parse_args([

@@ -13,17 +13,16 @@ wired up so badges don't silently rot:
 from __future__ import annotations
 
 import re
+import subprocess
+import sys
 
 import pytest
 
 from llmwiki import REPO_ROOT, __version__
-import subprocess
-import sys
 from llmwiki.lint import (
     REGISTRY,
     rules,  # noqa: F401 — force registration
 )
-
 
 README = REPO_ROOT / "README.md"
 

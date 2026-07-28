@@ -15,13 +15,13 @@ This test file is the cross-product matrix from #430.
 
 from __future__ import annotations
 
+import importlib
 from pathlib import Path
 
 import pytest
+
 from llmwiki.adapters.base import BaseAdapter
 from llmwiki.adapters.claude_code import ClaudeCodeAdapter
-import importlib
-
 
 # ─── BaseAdapter default — never True ────────────────────────────────────
 

@@ -5,16 +5,13 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from llmwiki.raw_docs_site import render_dashboard_body
-from llmwiki.render import js
-from llmwiki.state_store import synth_pipeline_shape_ok
-from llmwiki.synth.estimate import synthesize_estimate_report
-from llmwiki.synth.pipeline import refresh_synth_pending
-from llmwiki.synth.pipeline import _discover_raw_sessions
-from llmwiki.state_store import read_state
 from llmwiki import build as build_mod
 from llmwiki.build import build_site
-
+from llmwiki.raw_docs_site import render_dashboard_body
+from llmwiki.render import js
+from llmwiki.state_store import read_state, synth_pipeline_shape_ok
+from llmwiki.synth.estimate import synthesize_estimate_report
+from llmwiki.synth.pipeline import _discover_raw_sessions, refresh_synth_pending
 
 
 def test_dashboard_inlines_state_mount_not_old_cards():

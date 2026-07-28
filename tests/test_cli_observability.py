@@ -20,12 +20,12 @@ from pathlib import Path
 from textwrap import dedent
 
 import pytest
-from llmwiki.cli import _adapter_status
+
 import llmwiki.cli as cli_mod
 import llmwiki.sync.status as sync_status_mod
 from llmwiki import quarantine as q
+from llmwiki.cli import _adapter_status
 from llmwiki.convert import _migrate_legacy_state
-
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 

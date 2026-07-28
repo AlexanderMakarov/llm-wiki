@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import inspect
+import json as _json
 from pathlib import Path
 
 import pytest
 
+from llmwiki.build import build_search_index, build_site
+from llmwiki.cli import build_parser
 from llmwiki.search_tree import (
     DEFAULT_SEARCH_MODE,
     SEARCH_MODES,
@@ -16,12 +20,6 @@ from llmwiki.search_tree import (
     heading_depths,
     search_index_footer_badge,
 )
-import json as _json
-import inspect
-from llmwiki.build import build_site
-from llmwiki.build import build_search_index
-from llmwiki.cli import build_parser
-
 
 # ─── Constants ────────────────────────────────────────────────────────
 

@@ -27,7 +27,6 @@ from llmwiki import quarantine
 from llmwiki.adapters.claude_code import ClaudeCodeAdapter
 
 
-
 def _write_jsonl(path: Path, session_id: str, iso_ts: str,
                  slug: str = "own-slug", extra_turns: int = 0) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
