@@ -5,8 +5,6 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-import pytest
-
 from llmwiki.compare import (
     compare_pair_score,
     discover_user_overrides,
@@ -163,8 +161,8 @@ def test_table_highlights_different_cells():
     assert "Anthropic" in table
     assert "OpenAI" in table
     # Context formatted
-    assert "200K" in table
-    assert "128K" in table
+    assert "200.0K" in table
+    assert "128.0K" in table
 
 
 def test_table_shows_em_dash_for_missing_field():

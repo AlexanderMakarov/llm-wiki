@@ -2,25 +2,25 @@
 
 from __future__ import annotations
 
+from datetime import UTC
 from pathlib import Path
 
 import pytest
 
-from llmwiki.lint import load_pages, run_all, summarize, REGISTRY
+from llmwiki.lint import REGISTRY, load_pages, run_all, summarize
 from llmwiki.lint.rules import (
+    ClaimVerification,
+    ContentFreshness,
+    ContradictionDetection,
+    DuplicateDetection,
+    EntityConsistency,
     FrontmatterCompleteness,
     FrontmatterValidity,
+    IndexSync,
     LinkIntegrity,
     OrphanDetection,
-    ContentFreshness,
-    EntityConsistency,
-    DuplicateDetection,
-    IndexSync,
-    ContradictionDetection,
-    ClaimVerification,
     SummaryAccuracy,
 )
-
 
 # ─── Fixtures ──────────────────────────────────────────────────────────
 
@@ -309,16 +309,16 @@ def test_index_markdown_link_clears_orphan():
 
 
 def test_fresh_page():
-    from datetime import datetime, timezone, timedelta
-    recent = (datetime.now(timezone.utc) - timedelta(days=10)).strftime("%Y-%m-%d")
+    from datetime import datetime, timedelta
+    recent = (datetime.now(UTC) - timedelta(days=10)).strftime("%Y-%m-%d")
     pages = {"a.md": _mk_page({"title": "A", "last_updated": recent}, "")}
     issues = ContentFreshness().run(pages)
     assert issues == []
 
 
 def test_stale_page():
-    from datetime import datetime, timezone, timedelta
-    old = (datetime.now(timezone.utc) - timedelta(days=100)).strftime("%Y-%m-%d")
+    from datetime import datetime, timedelta
+    old = (datetime.now(UTC) - timedelta(days=100)).strftime("%Y-%m-%d")
     pages = {"a.md": _mk_page({"title": "A", "last_updated": old}, "")}
     issues = ContentFreshness().run(pages)
     assert len(issues) == 1

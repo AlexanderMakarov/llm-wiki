@@ -4,10 +4,7 @@ from __future__ import annotations
 
 import re
 
-import pytest
-
 from llmwiki import REPO_ROOT
-
 
 EDITORCONFIG = REPO_ROOT / ".editorconfig"
 LYCHEE = REPO_ROOT / "lychee.toml"

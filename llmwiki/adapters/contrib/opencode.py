@@ -108,7 +108,7 @@ class OpenCodeAdapter(BaseAdapter):
         # Hyphen-bounded match — accepts the subagent identifier whether
         # it appears as a leading, trailing, or interior segment of a
         # `-`-delimited filename.
-        import re
+        import re  # noqa: PLC0415 — lazy load / avoid cycle
         return bool(re.search(r"(?:^|[-/])subagent(?:[-.]|$)", jsonl_path.name))
 
     def normalize_records(

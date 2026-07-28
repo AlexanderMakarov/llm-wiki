@@ -1119,4 +1119,5 @@ CSS = CSS + "\n" + _READER_SHELL_CSS
 # hub index) pick up these styles — selectors are all namespaced under
 # ``.docs-shell`` so no existing page changes render.
 from llmwiki.render.docs_css import DOCS_SHELL_CSS as _DOCS_SHELL_CSS  # noqa: E402
+
 CSS = CSS + "\n" + _DOCS_SHELL_CSS

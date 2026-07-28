@@ -49,7 +49,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 from llmwiki.synth.base import BaseSynthesizer, split_prompt_template
 
@@ -118,7 +118,7 @@ class OllamaConfig:
         return host in LOCAL_HOSTS
 
 
-def load_ollama_config(cfg: Optional[dict[str, Any]]) -> OllamaConfig:
+def load_ollama_config(cfg: dict[str, Any] | None) -> OllamaConfig:
     """Build an :class:`OllamaConfig` from the ``synthesis`` block of
     ``sessions_config.json``.
 
@@ -202,10 +202,10 @@ class OllamaSynthesizer(BaseSynthesizer):
 
     def __init__(
         self,
-        config: Optional[OllamaConfig] = None,
+        config: OllamaConfig | None = None,
         *,
-        http_post: Optional[Any] = None,
-        http_get: Optional[Any] = None,
+        http_post: Any | None = None,
+        http_get: Any | None = None,
     ):
         self.config = config or OllamaConfig()
         self._http_post = http_post or _urlopen_post
@@ -280,7 +280,7 @@ class OllamaSynthesizer(BaseSynthesizer):
 
     def _call_generate(self, payload: dict[str, Any]) -> dict[str, Any]:
         """POST to /api/generate with retry + backoff."""
-        last_exc: Optional[Exception] = None
+        last_exc: Exception | None = None
         for attempt in range(1, self.config.max_retries + 1):
             try:
                 status, body = self._http_post(
@@ -292,7 +292,7 @@ class OllamaSynthesizer(BaseSynthesizer):
                 # Connection refused / DNS failure — don't retry. The
                 # server simply isn't listening; retrying wastes time.
                 raise
-            except (socket.timeout, urllib.error.URLError) as exc:
+            except (TimeoutError, urllib.error.URLError) as exc:
                 last_exc = exc
                 logger.warning(
                     "Ollama request attempt %d/%d failed: %s",

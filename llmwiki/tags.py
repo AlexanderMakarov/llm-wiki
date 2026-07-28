@@ -22,17 +22,14 @@ to disk.
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass
 from difflib import SequenceMatcher
 from pathlib import Path
-from typing import Any, Iterable, Optional
 
 from llmwiki import REPO_ROOT
 
-
 # ─── frontmatter parsing (minimal, schema-agnostic) ──────────────────────
-
-
 # #495: replaced local LF-only regex with the canonical
 # parse_frontmatter_or_none helper, which also strips BOM and accepts
 # CRLF line endings — the previous local regex silently parsed
@@ -95,7 +92,7 @@ def _iter_wiki_pages(wiki_dir: Path) -> list[Path]:
     )
 
 
-def collect_tags(wiki_dir: Optional[Path] = None) -> list[TagEntry]:
+def collect_tags(wiki_dir: Path | None = None) -> list[TagEntry]:
     """Walk ``wiki_dir`` and return every tag occurrence."""
     root = wiki_dir or (REPO_ROOT / "wiki")
     out: list[TagEntry] = []
@@ -127,10 +124,10 @@ def count_tags(entries: Iterable[TagEntry]) -> dict[str, int]:
 def _rewrite_frontmatter_tags(
     text: str,
     *,
-    rename_from: Optional[str] = None,
-    rename_to: Optional[str] = None,
-    add_tag: Optional[str] = None,
-    add_page_field: Optional[str] = None,
+    rename_from: str | None = None,
+    rename_to: str | None = None,
+    add_tag: str | None = None,
+    add_page_field: str | None = None,
 ) -> tuple[str, int]:
     """Return ``(new_text, change_count)`` after applying the op."""
     fm, body = _parse_frontmatter(text)
@@ -229,7 +226,7 @@ def rename_tag(
     old: str,
     new: str,
     *,
-    wiki_dir: Optional[Path] = None,
+    wiki_dir: Path | None = None,
     dry_run: bool = False,
 ) -> dict[Path, int]:
     """Rename ``old`` → ``new`` across every page.

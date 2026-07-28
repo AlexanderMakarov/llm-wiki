@@ -7,16 +7,12 @@ and graceful degradation (no crash on bad input / nonexistent paths).
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
-
-import pytest
 
 from llmwiki.adapters import REGISTRY, discover_all
 from llmwiki.adapters.base import BaseAdapter
 from llmwiki.adapters.contrib.copilot_chat import CopilotChatAdapter
 from llmwiki.adapters.contrib.copilot_cli import CopilotCliAdapter
-
 
 # ═══════════════════════════════════════════════════════════════════════
 # COPILOT CHAT ADAPTER — Contract

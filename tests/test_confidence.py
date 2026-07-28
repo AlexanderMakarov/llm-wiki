@@ -2,21 +2,20 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime
 
 import pytest
 
 from llmwiki.confidence import (
+    apply_decay,
+    avg_source_quality,
+    compute_confidence,
+    cross_reference_score,
+    decay_factor,
+    recency_score,
     source_count_score,
     source_quality_score,
-    avg_source_quality,
-    recency_score,
-    cross_reference_score,
-    compute_confidence,
-    decay_factor,
-    apply_decay,
 )
-
 
 # ─── Factor 1: Source Count ────────────────────────────────────────────
 
@@ -65,22 +64,22 @@ def test_avg_source_quality_mixed():
 
 
 def test_recency_score_recent():
-    now = datetime(2026, 4, 16, tzinfo=timezone.utc)
+    now = datetime(2026, 4, 16, tzinfo=UTC)
     assert recency_score("2026-04-10", now=now) == 1.0  # 6 days ago
 
 
 def test_recency_score_medium():
-    now = datetime(2026, 4, 16, tzinfo=timezone.utc)
+    now = datetime(2026, 4, 16, tzinfo=UTC)
     assert recency_score("2026-02-16", now=now) == 0.8  # 59 days
 
 
 def test_recency_score_old():
-    now = datetime(2026, 4, 16, tzinfo=timezone.utc)
+    now = datetime(2026, 4, 16, tzinfo=UTC)
     assert recency_score("2025-10-01", now=now) == 0.5  # ~198 days
 
 
 def test_recency_score_very_old():
-    now = datetime(2026, 4, 16, tzinfo=timezone.utc)
+    now = datetime(2026, 4, 16, tzinfo=UTC)
     assert recency_score("2024-01-01", now=now) == 0.3  # >1 year
 
 
@@ -93,7 +92,7 @@ def test_recency_score_invalid():
 
 
 def test_recency_score_future():
-    now = datetime(2026, 4, 16, tzinfo=timezone.utc)
+    now = datetime(2026, 4, 16, tzinfo=UTC)
     assert recency_score("2027-01-01", now=now) == 1.0
 
 
@@ -122,7 +121,7 @@ def test_compute_confidence_defaults():
 
 
 def test_compute_confidence_perfect():
-    now = datetime(2026, 4, 16, tzinfo=timezone.utc)
+    now = datetime(2026, 4, 16, tzinfo=UTC)
     score = compute_confidence(
         source_count=5,
         source_qualities=["official", "official"],
@@ -134,7 +133,7 @@ def test_compute_confidence_perfect():
 
 
 def test_compute_confidence_minimal():
-    now = datetime(2026, 4, 16, tzinfo=timezone.utc)
+    now = datetime(2026, 4, 16, tzinfo=UTC)
     score = compute_confidence(
         source_count=0,
         source_qualities=[],

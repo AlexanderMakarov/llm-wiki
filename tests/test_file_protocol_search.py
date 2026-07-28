@@ -153,6 +153,7 @@ def test_loader_derives_js_url_from_the_json_url():
 def test_build_emits_the_js_url_global():
     """The page must tell the loader where the sidecar lives."""
     import inspect
+
     from llmwiki import build
 
     src = inspect.getsource(build)
@@ -163,6 +164,7 @@ def test_build_drops_the_inert_json_script_tag():
     """`<script src="*.json" type="application/json">` neither executes nor
     exposes anything — it read like a file:// fix while doing nothing."""
     import inspect
+
     from llmwiki import build
 
     assert 'type="application/json"' not in inspect.getsource(build)

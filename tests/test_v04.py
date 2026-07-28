@@ -3,14 +3,11 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 import pytest
 
 from llmwiki import __version__
-
 from tests.conftest import REPO_ROOT
-
 
 # ─── version bump ────────────────────────────────────────────────────────
 
@@ -44,17 +41,17 @@ def test_pyproject_version_matches_package():
 
 def test_exporters_module_imports():
     from llmwiki.exporters import (
-        export_all,
-        write_llms_txt,
-        write_llms_full_txt,
-        write_graph_jsonld,
-        write_sitemap,
-        write_rss,
-        write_robots_txt,
-        write_ai_readme,
+        _page_id,
         _plain_text,
         _sha256_16,
-        _page_id,
+        export_all,
+        write_ai_readme,
+        write_graph_jsonld,
+        write_llms_full_txt,
+        write_llms_txt,
+        write_robots_txt,
+        write_rss,
+        write_sitemap,
     )
     for f in (
         export_all, write_llms_txt, write_llms_full_txt, write_graph_jsonld,
@@ -222,7 +219,7 @@ def test_session_page_has_canonical_link():
 
 
 def test_manifest_module_imports():
-    from llmwiki.manifest import build_manifest, write_manifest, sha256_hex, PERF_BUDGET
+    from llmwiki.manifest import PERF_BUDGET, build_manifest, sha256_hex, write_manifest
 
     assert callable(build_manifest)
     assert callable(write_manifest)
@@ -275,7 +272,7 @@ def test_link_checker_is_external():
 
 
 def test_mcp_has_wiki_export_tool():
-    from llmwiki.mcp.server import TOOLS, TOOL_IMPLS
+    from llmwiki.mcp.server import TOOL_IMPLS, TOOLS
 
     names = {t["name"] for t in TOOLS}
     assert "wiki_export" in names

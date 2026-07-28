@@ -81,7 +81,7 @@ _OVERVIEW_SYSTEM_PROMPT = (
 def resolve_overview_model(cfg: dict[str, Any] | None = None) -> str:
     """Pick the model for the site-overview call (build.py)."""
     if cfg is None:
-        from llmwiki.config_schedule import _load_sessions_config
+        from llmwiki.config_schedule import _load_sessions_config  # noqa: PLC0415 — import cycle / lazy load
         cfg = _load_sessions_config()
     synth_cfg = (cfg or {}).get("synthesis", {}) or {}
     return str(synth_cfg.get("overview_model", "") or "").strip() or DEFAULT_OVERVIEW_MODEL
@@ -170,7 +170,7 @@ class ClaudeCLISynthesizer(BaseSynthesizer):
     def _resolved(self) -> str | None:
         # Lazy import: build.py is heavy and claude_cli must stay cheap
         # to import from resolve_backend.
-        from llmwiki.build import _resolve_claude_path
+        from llmwiki.build import _resolve_claude_path  # noqa: PLC0415 — import cycle / lazy load
 
         resolved = _resolve_claude_path(self.claude_path)
         return str(resolved) if resolved else None

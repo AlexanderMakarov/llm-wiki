@@ -21,8 +21,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from llmwiki.convert import load_config
 
 
@@ -121,8 +119,8 @@ def test_empty_real_username_in_overlay_does_not_wipe_autodetect(
 
     from llmwiki.convert import (
         DEFAULT_CONFIG_FILE,
-        _overlay_config_file,
         _ensure_real_username,
+        _overlay_config_file,
         load_config,
     )
 

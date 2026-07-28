@@ -28,7 +28,6 @@ from llmwiki.synth.pipeline import (
     synthesize_new_sessions,
 )
 
-
 RAW_SESSION = """---
 title: "Session: alpha — 2026-04-09"
 type: source

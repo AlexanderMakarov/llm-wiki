@@ -140,7 +140,7 @@ def run_all(
     unused LLM lint gate.
     """
     # Import all rule modules so they register themselves
-    from llmwiki.lint import rules  # noqa: F401
+    from llmwiki.lint import rules  # noqa: F401, PLC0415 — lazy package import
 
     issues: list[dict[str, Any]] = []
     for name, rule_cls in REGISTRY.items():

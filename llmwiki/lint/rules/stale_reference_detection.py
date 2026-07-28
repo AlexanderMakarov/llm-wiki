@@ -23,7 +23,7 @@ class StaleReferenceDetection(LintRule):
     severity = "warning"
 
     def run(self, pages, *, llm_callback=None):
-        from llmwiki.references import find_stale_references
+        from llmwiki.references import find_stale_references  # noqa: PLC0415 — lazy load / avoid cycle
         issues = []
         for stale in find_stale_references(pages):
             excerpt = stale.dated_claim

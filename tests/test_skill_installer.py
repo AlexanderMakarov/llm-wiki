@@ -4,14 +4,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from llmwiki.skill_installer import (
+    AGENT_TARGETS,
     install_all,
     install_skill,
-    list_targets,
     list_installed,
-    AGENT_TARGETS,
+    list_targets,
 )
 
 
@@ -117,7 +115,7 @@ def test_install_all_empty_source(tmp_path: Path):
 
 def test_list_installed_empty_before_install(tmp_path: Path):
     result = list_installed(repo_root=tmp_path)
-    for target, skills in result.items():
+    for _target, skills in result.items():
         assert skills == []
 
 
@@ -125,7 +123,7 @@ def test_list_installed_after_install(tmp_path: Path):
     src = _seed_source(tmp_path)
     install_all(source=src, repo_root=tmp_path)
     result = list_installed(repo_root=tmp_path)
-    for target, skills in result.items():
+    for _target, skills in result.items():
         assert set(skills) == {"skill1", "skill2"}
 
 

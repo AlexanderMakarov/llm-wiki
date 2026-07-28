@@ -380,7 +380,7 @@ def test_hits_channel_stripped_from_client_result(tmp_path: Path, monkeypatch):
 # ─── Task 1: items_returned ───────────────────────────────────────────────
 
 def test_items_returned_counts_only_entity_tools():
-    from llmwiki.usage import aggregate, ENTITY_TOOLS, is_entity_tool
+    from llmwiki.usage import aggregate
     records = [
         {"tool": "wiki_search", "hits": 5, "caller_project": "p", "caller_source": "client-root", "server_pid": 1, "server_started": "s1"},
         {"tool": "wiki_query", "hits": 3, "caller_project": "p", "caller_source": "client-root", "server_pid": 1, "server_started": "s1"},

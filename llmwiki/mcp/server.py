@@ -31,7 +31,8 @@ import time
 from pathlib import Path
 from typing import Any
 
-from llmwiki import __version__, REPO_ROOT as SOURCE_ROOT
+from llmwiki import REPO_ROOT as SOURCE_ROOT
+from llmwiki import __version__
 from llmwiki import usage as _usage
 from llmwiki.config_schedule import resolve_content_root
 
@@ -614,7 +615,7 @@ def tool_wiki_query(args: dict[str, Any]) -> dict[str, Any]:
         # pages (frontmatter-only) from getting a massive boost on
         # zero-token queries.
         if body_score > 0:
-            import math as _math
+            import math as _math  # noqa: PLC0415 — lazy load / keep MCP startup light
             length_factor = _math.log2(max(len(content), 256))
             normalised_body = body_score / length_factor
         else:
@@ -869,7 +870,7 @@ def tool_wiki_lint(args: dict[str, Any]) -> dict[str, Any]:
 
     # 3. Compute in-degree
     in_deg: dict[str, int] = {slug: 0 for slug in pages}
-    for slug, links in out_links.items():
+    for _slug, links in out_links.items():
         for target in links:
             if target in in_deg:
                 in_deg[target] += 1
@@ -935,8 +936,10 @@ def tool_wiki_sync(args: dict[str, Any]) -> dict[str, Any]:
                 return _err("sync timed out after 120s")
         proc.wait(timeout=max(0.1, deadline - time.time()))
     except subprocess.TimeoutExpired:
-        try: proc.kill()  # type: ignore[name-defined]
-        except Exception: pass
+        try:
+            proc.kill()  # type: ignore[name-defined]
+        except Exception:
+            pass
         return _err("sync timed out after 120s")
     except (OSError, subprocess.SubprocessError) as e:
         return _err(f"sync failed: {e}")
@@ -1003,7 +1006,7 @@ def tool_wiki_add(args: dict[str, Any]) -> dict[str, Any]:
     (synthesize, build) are the caller's job, exactly like the queue's
     ``add_doc`` task leaves them to a separate ``synthesize`` task.
     """
-    from llmwiki.add_doc import add_sources
+    from llmwiki.add_doc import add_sources  # noqa: PLC0415 — lazy load / keep MCP startup light
 
     url = (args.get("url") or "").strip()
     path = (args.get("path") or "").strip()
@@ -1025,7 +1028,7 @@ def tool_wiki_add(args: dict[str, Any]) -> dict[str, Any]:
     tmp_path: Path | None = None
     try:
         if content:
-            import tempfile
+            import tempfile  # noqa: PLC0415 — lazy load / keep MCP startup light
 
             fd, tmp_name = tempfile.mkstemp(suffix=".md", prefix="wiki-add-content-")
             os.close(fd)
@@ -1068,7 +1071,7 @@ def _err(text: str) -> dict[str, Any]:
 
 def tool_wiki_confidence(args: dict[str, Any]) -> dict[str, Any]:
     """List pages filtered by confidence score range (v1.0 · #159)."""
-    from llmwiki.lint import load_pages
+    from llmwiki.lint import load_pages  # noqa: PLC0415 — lazy load / keep MCP startup light
 
     min_c = float(args.get("min_confidence", 0.0))
     max_c = float(args.get("max_confidence", 1.0))
@@ -1104,7 +1107,7 @@ def tool_wiki_confidence(args: dict[str, Any]) -> dict[str, Any]:
 
 def tool_wiki_lifecycle(args: dict[str, Any]) -> dict[str, Any]:
     """List pages filtered by lifecycle state (v1.0 · #159)."""
-    from llmwiki.lint import load_pages
+    from llmwiki.lint import load_pages  # noqa: PLC0415 — lazy load / keep MCP startup light
 
     state = (args.get("state") or "").strip().lower()
     if not state:
@@ -1130,7 +1133,7 @@ def tool_wiki_lifecycle(args: dict[str, Any]) -> dict[str, Any]:
 
 def tool_wiki_dashboard(args: dict[str, Any]) -> dict[str, Any]:
     """Return wiki health summary (v1.0 · #159)."""
-    from llmwiki.lint import load_pages
+    from llmwiki.lint import load_pages  # noqa: PLC0415 — lazy load / keep MCP startup light
 
     wiki = REPO_ROOT / "wiki"
     pages = load_pages(wiki)
@@ -1177,7 +1180,7 @@ def tool_wiki_dashboard(args: dict[str, Any]) -> dict[str, Any]:
 
 def tool_wiki_entity_search(args: dict[str, Any]) -> dict[str, Any]:
     """Search entities by name or entity_type (v1.0 · #159)."""
-    from llmwiki.lint import load_pages
+    from llmwiki.lint import load_pages  # noqa: PLC0415 — lazy load / keep MCP startup light
 
     name_q = (args.get("name") or "").strip().lower()
     etype_q = (args.get("entity_type") or "").strip().lower()
@@ -1214,8 +1217,8 @@ def tool_wiki_entity_search(args: dict[str, Any]) -> dict[str, Any]:
 
 def tool_wiki_category_browse(args: dict[str, Any]) -> dict[str, Any]:
     """Browse tags / categories (v1.0 · #159)."""
-    from llmwiki.categories import scan_tags
-    from llmwiki.lint import load_pages
+    from llmwiki.categories import scan_tags  # noqa: PLC0415 — lazy load / keep MCP startup light
+    from llmwiki.lint import load_pages  # noqa: PLC0415 — lazy load / keep MCP startup light
 
     tag = (args.get("tag") or "").strip().lower()
     min_count = int(args.get("min_count", 1))

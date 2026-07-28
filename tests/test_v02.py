@@ -11,9 +11,7 @@ from llmwiki.adapters import REGISTRY, discover_all
 from llmwiki.adapters.base import BaseAdapter
 from llmwiki.adapters.contrib.cursor import CursorAdapter
 from llmwiki.adapters.contrib.gemini_cli import GeminiCliAdapter
-
 from tests.conftest import REPO_ROOT
-
 
 # ─── adapter registry v0.2 ────────────────────────────────────────────────
 
@@ -80,7 +78,7 @@ def test_graph_nodes_have_expected_keys():
 
 
 def test_obsidian_output_imports():
-    from llmwiki.obsidian_output import export_to_vault, _add_source_backlink, _build_readme
+    from llmwiki.obsidian_output import _add_source_backlink, _build_readme, export_to_vault
     assert callable(export_to_vault)
     assert callable(_add_source_backlink)
     assert callable(_build_readme)
@@ -119,7 +117,7 @@ def test_mcp_tools_list():
 
 
 def test_mcp_initialize_handler():
-    from llmwiki.mcp.server import handle_initialize, PROTOCOL_VERSION
+    from llmwiki.mcp.server import PROTOCOL_VERSION, handle_initialize
 
     result = handle_initialize({})
     assert result["protocolVersion"] == PROTOCOL_VERSION
@@ -174,7 +172,7 @@ def test_mcp_tool_wiki_read_page_path_traversal_guard():
 
 
 def test_watch_module_imports():
-    from llmwiki.watch import watch, scan_mtimes, run_sync
+    from llmwiki.watch import run_sync, scan_mtimes, watch
     assert callable(watch)
     assert callable(scan_mtimes)
     assert callable(run_sync)

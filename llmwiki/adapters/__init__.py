@@ -19,8 +19,6 @@ Contrib adapters (loaded on demand via --adapter flag):
 
 from __future__ import annotations
 
-from typing import Any
-
 from llmwiki.adapters.base import BaseAdapter
 
 REGISTRY: dict[str, type[BaseAdapter]] = {}
@@ -96,8 +94,10 @@ def resolve_adapter_name(name: str) -> str | None:
 
 def discover_adapters() -> None:
     """Import core adapters so they register themselves."""
-    from llmwiki.adapters import claude_code  # noqa: F401
-    from llmwiki.adapters import codex_cli  # noqa: F401
+    from llmwiki.adapters import (  # noqa: PLC0415 — lazy package import
+        claude_code,  # noqa: F401
+        codex_cli,  # noqa: F401
+    )
 
 
 def discover_contrib(names: list[str] | None = None) -> None:
@@ -115,7 +115,7 @@ def discover_contrib(names: list[str] | None = None) -> None:
         try:
             __import__(f"llmwiki.adapters.contrib.{name}")
         except ImportError as e:
-            import sys
+            import sys  # noqa: PLC0415 — lazy package import
             print(f"  warning: contrib adapter {name!r} failed to load: {e}",
                   file=sys.stderr)
 

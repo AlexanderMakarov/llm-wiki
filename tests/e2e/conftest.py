@@ -34,15 +34,13 @@ so a step can drive the browser, read the DOM, and assert.
 from __future__ import annotations
 
 import socket
-import sys
 import threading
 import time
+from collections.abc import Iterator
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Iterator
 
 import pytest
-
 
 # ─── port + server helpers ──────────────────────────────────────────────
 

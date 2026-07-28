@@ -15,9 +15,8 @@ from pathlib import Path
 import pytest
 
 from llmwiki import queue_ops
-from llmwiki.queue_ops import TASK_HANDLERS, enqueue_task, _run_one
+from llmwiki.queue_ops import TASK_HANDLERS, _run_one, enqueue_task
 from llmwiki.state_store import read_state
-
 
 REPO = Path(__file__).resolve().parents[1]
 

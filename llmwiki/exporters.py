@@ -20,7 +20,7 @@ import hashlib
 import html
 import json
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -334,7 +334,7 @@ def write_rss(
         f"  <description>Karpathy-style LLM Wiki, newest {limit} sessions</description>",
         f"  <link>{site_base_url or '/'}</link>",
         f"  <generator>llmwiki {__version__}</generator>",
-        f"  <lastBuildDate>{datetime.now(timezone.utc).strftime('%a, %d %b %Y %H:%M:%S +0000')}</lastBuildDate>",
+        f"  <lastBuildDate>{datetime.now(UTC).strftime('%a, %d %b %Y %H:%M:%S +0000')}</lastBuildDate>",
     ]
     for p, meta, body in recent:
         project = str(meta.get("project") or p.parent.name)

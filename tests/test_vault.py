@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
+from dataclasses import FrozenInstanceError
 from pathlib import Path
 
 import pytest
 
 from llmwiki.vault import (
-    Vault,
     VaultFormat,
     VaultLayout,
     _heading_exists,
@@ -20,7 +20,6 @@ from llmwiki.vault import (
     vault_page_path,
     write_vault_page,
 )
-
 
 # ─── Fixtures ──────────────────────────────────────────────────────────
 
@@ -117,7 +116,7 @@ def test_layout_path_for_rejects_unknown_kind():
 
 
 def test_layout_is_frozen():
-    with pytest.raises(Exception):  # FrozenInstanceError
+    with pytest.raises(FrozenInstanceError):
         VaultLayout().entities = "mutated"  # type: ignore[misc]
 
 
@@ -133,7 +132,7 @@ def test_custom_layout_overrides_prefix():
 def test_vault_is_frozen(tmp_path: Path):
     v = _make_obsidian_vault(tmp_path / "v")
     vault = resolve_vault(v)
-    with pytest.raises(Exception):
+    with pytest.raises(FrozenInstanceError):
         vault.format = VaultFormat.LOGSEQ  # type: ignore[misc]
 
 

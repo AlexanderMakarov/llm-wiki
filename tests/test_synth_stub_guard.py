@@ -16,7 +16,6 @@ import pytest
 from llmwiki.synth.base import DummySynthesizer
 from llmwiki.synth.pipeline import _is_stub_page, synthesize_new_sessions
 
-
 REAL_PAGE = """---
 title: "Session: real — 2026-04-01"
 type: source

@@ -30,8 +30,9 @@ from __future__ import annotations
 
 import html
 import json
-from datetime import date, datetime, timedelta, timezone
-from typing import Any, Iterable, Mapping, Optional, TypedDict
+from collections.abc import Iterable, Mapping
+from datetime import UTC, date, datetime, timedelta
+from typing import Any, TypedDict
 
 # ─── types ───────────────────────────────────────────────────────────────
 
@@ -289,7 +290,7 @@ def render_price_sparkline(
             for v in values
         ]
         parts = [f"M {xs[0]:.1f} {ys[0]:.1f}"]
-        for x, y in zip(xs[1:], ys[1:]):
+        for x, y in zip(xs[1:], ys[1:], strict=True):
             parts.append(f"L {x:.1f} {y:.1f}")
         path_d = " ".join(parts)
 
@@ -326,7 +327,7 @@ def render_price_sparkline(
 
 def find_recently_updated(
     pages: Iterable[tuple[str, Mapping[str, Any]]],
-    now: Optional[date] = None,
+    now: date | None = None,
     within_days: int = 30,
 ) -> list[tuple[str, ChangelogEntry]]:
     """Given an iterable of `(slug, meta)` pairs, return a list of
@@ -339,7 +340,7 @@ def find_recently_updated(
     scores revised lately.
     """
     if now is None:
-        now = datetime.now(timezone.utc).date()
+        now = datetime.now(UTC).date()
     cutoff = now - timedelta(days=within_days)
     out: list[tuple[str, ChangelogEntry, date]] = []
     for slug, meta in pages:

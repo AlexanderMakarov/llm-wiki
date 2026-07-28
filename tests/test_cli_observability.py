@@ -21,7 +21,6 @@ from textwrap import dedent
 
 import pytest
 
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -220,7 +219,9 @@ def test_sync_status_renders_counters_table(tmp_path, monkeypatch, capsys):
         encoding="utf-8",
     )
     import llmwiki.cli as cli_mod
-    monkeypatch.setattr(cli_mod, "REPO_ROOT", tmp_path); import llmwiki.sync.status as sync_status_mod; monkeypatch.setattr(sync_status_mod, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(cli_mod, "REPO_ROOT", tmp_path)
+    import llmwiki.sync.status as sync_status_mod
+    monkeypatch.setattr(sync_status_mod, "REPO_ROOT", tmp_path)
     rc = cli_mod.cmd_sync_status(_mk_sync_status_args(state_file=state_file))
     assert rc == 0
     out = capsys.readouterr().out
@@ -239,7 +240,9 @@ def test_sync_status_surfaces_quarantine(tmp_path, monkeypatch, capsys):
     q.add_entry("claude_code", "/tmp/bad.jsonl", "boom", path=state_file)
 
     import llmwiki.cli as cli_mod
-    monkeypatch.setattr(cli_mod, "REPO_ROOT", tmp_path); import llmwiki.sync.status as sync_status_mod; monkeypatch.setattr(sync_status_mod, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(cli_mod, "REPO_ROOT", tmp_path)
+    import llmwiki.sync.status as sync_status_mod
+    monkeypatch.setattr(sync_status_mod, "REPO_ROOT", tmp_path)
 
     rc = cli_mod.cmd_sync_status(_mk_sync_status_args(state_file=state_file))
     assert rc == 0
@@ -254,7 +257,9 @@ def test_sync_status_with_recent_logs_events(tmp_path, monkeypatch, capsys):
     state_file = tmp_path / "state.json"
     state_file.write_text(json.dumps({}), encoding="utf-8")
     import llmwiki.cli as cli_mod
-    monkeypatch.setattr(cli_mod, "REPO_ROOT", tmp_path); import llmwiki.sync.status as sync_status_mod; monkeypatch.setattr(sync_status_mod, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(cli_mod, "REPO_ROOT", tmp_path)
+    import llmwiki.sync.status as sync_status_mod
+    monkeypatch.setattr(sync_status_mod, "REPO_ROOT", tmp_path)
     rc = cli_mod.cmd_sync_status(_mk_sync_status_args(recent=2, state_file=state_file))
     assert rc == 0
     out = capsys.readouterr().out
@@ -268,7 +273,9 @@ def test_sync_status_corrupt_state_file_is_tolerated(tmp_path, monkeypatch, caps
     state_file = tmp_path / "state.json"
     state_file.write_text("{ not json", encoding="utf-8")
     import llmwiki.cli as cli_mod
-    monkeypatch.setattr(cli_mod, "REPO_ROOT", tmp_path); import llmwiki.sync.status as sync_status_mod; monkeypatch.setattr(sync_status_mod, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(cli_mod, "REPO_ROOT", tmp_path)
+    import llmwiki.sync.status as sync_status_mod
+    monkeypatch.setattr(sync_status_mod, "REPO_ROOT", tmp_path)
     rc = cli_mod.cmd_sync_status(_mk_sync_status_args(state_file=state_file))
     assert rc == 0
 

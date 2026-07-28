@@ -27,15 +27,14 @@ from __future__ import annotations
 import argparse
 import html
 import json
-import os
 import re
 import shutil
 import subprocess
 import sys
 from collections import Counter, defaultdict
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import markdown
 from markdown.preprocessors import Preprocessor
@@ -47,31 +46,39 @@ from llmwiki import PACKAGE_ROOT, REPO_ROOT
 # from the package location, NOT REPO_ROOT — with LLMWIKI_ROOT set,
 # REPO_ROOT points at the user's vault, which has none of these files.
 SOURCE_ROOT = PACKAGE_ROOT.parent
+from llmwiki import raw_docs_site
 from llmwiki.changelog_timeline import (
     extract_price_points,
-    find_recently_updated,
     parse_changelog,
     render_changelog_timeline,
     render_price_sparkline,
     render_recent_activity,
-    render_recently_updated,
 )
-from llmwiki.log_reader import recent_events as _recent_log_events
 from llmwiki.context_md import is_context_file
 from llmwiki.freshness import freshness_badge, load_freshness_config
+from llmwiki.log_reader import recent_events as _recent_log_events
 from llmwiki.project_topics import (
     extract_session_topics,
     get_project_topics,
     load_project_profile,
     render_topic_chips,
 )
-from llmwiki import raw_docs_site
 from llmwiki.usage import (
     combined_totals as _mcp_combined_totals,
+)
+from llmwiki.usage import (
     corpus_source_mix as _mcp_corpus_mix,
+)
+from llmwiki.usage import (
     iter_live_records as _mcp_live_records,
+)
+from llmwiki.usage import (
     page_retrievals as _mcp_page_retrievals,
+)
+from llmwiki.usage import (
     read_mix_from_retrievals as _mcp_read_mix,
+)
+from llmwiki.usage import (
     refresh_daily as _mcp_refresh_daily,
 )
 from llmwiki.viz_heatmap import (
@@ -115,10 +122,8 @@ PROJECTS_META_DIR = REPO_ROOT / "wiki" / "projects"
 # `_frontmatter.py`. Re-exported under the historical name so external
 # consumers (and `tests/test_render_split.py`) keep working.
 from llmwiki._frontmatter import (  # noqa: E402
-    _FRONTMATTER_RE,
     parse_frontmatter,
 )
-
 
 # ─── discovery ─────────────────────────────────────────────────────────────
 
@@ -256,7 +261,7 @@ def _derive_stub_topics(
     if topics:
         return topics
     # Fallback: tools_used aggregation (filtered by the same noise set).
-    from llmwiki.project_topics import _NOISE_TAGS
+    from llmwiki.tag_utils import NOISE_TAGS  # noqa: PLC0415 — lazy load / avoid cycle
     counts: dict[str, int] = {}
     for meta in metas:
         raw = meta.get("tools_used")
@@ -268,7 +273,7 @@ def _derive_stub_topics(
             items = []
         for item in items:
             tag = str(item).strip().lower()
-            if tag and tag not in _NOISE_TAGS:
+            if tag and tag not in NOISE_TAGS:
                 counts[tag] = counts.get(tag, 0) + 1
     ordered = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
     return [tag for tag, _ in ordered[:max_topics]]
@@ -471,7 +476,7 @@ def _content_key(body: str) -> bytes:
     and the 8-byte digest is enough headroom for the 4096-entry cap.
     Bytes (not hex) avoids the encode-back-to-string allocation.
     """
-    import hashlib as _hl
+    import hashlib as _hl  # noqa: PLC0415 — lazy load / avoid cycle
     return _hl.blake2b(body.encode("utf-8"), digest_size=8).digest()
 
 
@@ -620,8 +625,8 @@ def short_started(meta: dict[str, Any]) -> str:
 # ─── freshness (content staleness) ────────────────────────────────────────
 # Cached once per build so every page sees the same "now" and the same
 # thresholds. Populated lazily by render_freshness().
-_FRESHNESS_CONFIG: Optional[tuple[int, int]] = None
-_BUILD_NOW: Optional[datetime] = None
+_FRESHNESS_CONFIG: tuple[int, int] | None = None
+_BUILD_NOW: datetime | None = None
 
 
 def render_freshness(meta: dict[str, Any]) -> str:
@@ -635,7 +640,7 @@ def render_freshness(meta: dict[str, Any]) -> str:
     if _FRESHNESS_CONFIG is None:
         _FRESHNESS_CONFIG = load_freshness_config()
     if _BUILD_NOW is None:
-        _BUILD_NOW = datetime.now(timezone.utc).replace(tzinfo=None)
+        _BUILD_NOW = datetime.now(UTC).replace(tzinfo=None)
     green, yellow = _FRESHNESS_CONFIG
     return freshness_badge(meta, now=_BUILD_NOW, green_days=green, yellow_days=yellow)
 
@@ -807,11 +812,12 @@ def nav_bar(active: str, link_prefix: str = "") -> str:
     # Home / Projects / Sessions). The drawer below mirrors the same
     # links vertically. JS in render/js.py wires aria-expanded,
     # ESC-to-close, and focus return.
-    drawer_link = lambda href, label, key: (
-        f'  <a href="{link_prefix}{href}" class="nav-drawer-link'
-        + (' active' if key == active else '') + '">'
-        + label + '</a>'
-    )
+    def drawer_link(href, label, key):
+        return (
+            f'  <a href="{link_prefix}{href}" class="nav-drawer-link'
+            + (' active' if key == active else '') + '">'
+            + label + '</a>'
+        )
     # Post-review: dropped `role="menu"` + `aria-labelledby` — children
     # are plain <a>, not role="menuitem", so screen readers were being
     # told "press arrow keys" which did nothing. The drawer is a
@@ -869,7 +875,7 @@ def breadcrumbs_bar(crumbs: list[tuple[str, str]], link_prefix: str = "") -> str
     if not crumbs:
         return ""
     parts = []
-    for i, (label, href) in enumerate(crumbs):
+    for label, href in crumbs:
         if href:
             parts.append(f'<a href="{link_prefix}{html.escape(href)}">{html.escape(label)}</a>')
         else:
@@ -1047,12 +1053,12 @@ def local_cwd(meta: dict[str, Any]) -> str:
     commit. Build reverses that single substitution so resume / project
     titles show a real path. See ``restore_local_path``.
     """
-    from llmwiki.convert import restore_local_path
+    from llmwiki.convert import restore_local_path  # noqa: PLC0415 — lazy load / avoid cycle
 
     return restore_local_path(str(meta.get("cwd") or "").strip())
 
 
-def supports_resume(meta: dict[str, Any], path: Optional[Path] = None) -> bool:
+def supports_resume(meta: dict[str, Any], path: Path | None = None) -> bool:
     """True when this session can be resumed with ``claude --resume``.
 
     Issue #36 only specified Claude Code. Cursor has ``agent --resume``
@@ -1065,7 +1071,7 @@ def supports_resume(meta: dict[str, Any], path: Optional[Path] = None) -> bool:
     return css_class == "agent-claude"
 
 
-def resume_command(meta: dict[str, Any], path: Optional[Path] = None) -> Optional[str]:
+def resume_command(meta: dict[str, Any], path: Path | None = None) -> str | None:
     """Return ``cd <real-cwd> && claude --resume <sessionId>``, or None."""
     if not supports_resume(meta, path):
         return None
@@ -1076,7 +1082,7 @@ def resume_command(meta: dict[str, Any], path: Optional[Path] = None) -> Optiona
     return f"cd {cwd} && claude --resume {session_id}"
 
 
-def resume_is_stale(meta: dict[str, Any], *, now: Optional[datetime] = None) -> bool:
+def resume_is_stale(meta: dict[str, Any], *, now: datetime | None = None) -> bool:
     """True when the session is older than Claude Code's retention window."""
     raw = str(meta.get("started") or meta.get("ended") or meta.get("date") or "")
     if not raw:
@@ -1086,20 +1092,20 @@ def resume_is_stale(meta: dict[str, Any], *, now: Optional[datetime] = None) -> 
         if "T" in raw:
             started = datetime.fromisoformat(raw.replace("Z", "+00:00"))
         else:
-            started = datetime.fromisoformat(raw).replace(tzinfo=timezone.utc)
+            started = datetime.fromisoformat(raw).replace(tzinfo=UTC)
     except ValueError:
         return False
     if started.tzinfo is None:
-        started = started.replace(tzinfo=timezone.utc)
-    ref = now or datetime.now(timezone.utc)
+        started = started.replace(tzinfo=UTC)
+    ref = now or datetime.now(UTC)
     if ref.tzinfo is None:
-        ref = ref.replace(tzinfo=timezone.utc)
+        ref = ref.replace(tzinfo=UTC)
     return (ref - started) > timedelta(days=RESUME_RETENTION_DAYS)
 
 
 def project_disk_paths(
     sessions: list[tuple[Path, dict[str, Any], str]],
-) -> tuple[Optional[str], list[str]]:
+) -> tuple[str | None, list[str]]:
     """Derive a project's on-disk path(s) from session ``cwd`` values.
 
     Returns ``(primary, all_distinct)`` where ``primary`` is the most
@@ -1119,7 +1125,7 @@ def project_disk_paths(
     return ordered[0], ordered
 
 
-def render_resume_block(meta: dict[str, Any], path: Optional[Path] = None) -> str:
+def render_resume_block(meta: dict[str, Any], path: Path | None = None) -> str:
     """HTML for the copyable ``claude --resume`` one-liner (#36)."""
     cmd = resume_command(meta, path)
     if not cmd:
@@ -1143,7 +1149,7 @@ def render_resume_block(meta: dict[str, Any], path: Optional[Path] = None) -> st
     )
 
 
-def render_project_disk_path_html(primary: Optional[str], all_paths: list[str]) -> str:
+def render_project_disk_path_html(primary: str | None, all_paths: list[str]) -> str:
     """HTML strip listing *additional* project paths when they diverge (#36).
 
     The primary absolute path is the project page title — only emit this
@@ -1175,7 +1181,7 @@ def render_session(
     # during the session (tasks.md, CLAUDE.md, convert.py, etc). Route
     # the ones that look like repo source code or root files to GitHub
     # so the links don't dead-end after ingest.
-    from llmwiki.docs_pages import (
+    from llmwiki.docs_pages import (  # noqa: PLC0415 — lazy load / avoid cycle
         rewrite_md_links_to_html,
         rewrite_source_code_links_to_github,
         strip_dead_session_refs,
@@ -1302,7 +1308,7 @@ def render_session(
         + f'<section class="section">\n  <div class="container">\n{breadcrumbs}\n{tools_preview}\n{actions_html}\n{tool_chart_block}\n{token_card_block}\n    <article class="content" itemscope itemtype="https://schema.org/Article">\n'
         + f'<meta itemprop="headline" content="{html.escape(str(title_raw))}">\n'
         + f'<meta itemprop="datePublished" content="{html.escape(str(meta.get("started") or date))}">\n'
-        + f'<meta itemprop="inLanguage" content="en">\n'
+        + '<meta itemprop="inLanguage" content="en">\n'
         + body_html
         + '\n    </article>\n  </div>\n</section>\n</main>\n'
         + page_foot(js_prefix="../../")
@@ -1318,7 +1324,7 @@ def render_project_page(
     project_slug: str,
     sessions: list[tuple[Path, dict[str, Any], str]],
     out_dir: Path,
-    usage_totals: Optional[dict[str, Any]] = None,
+    usage_totals: dict[str, Any] | None = None,
     doc_count: int = 0,
 ) -> Path:
     main_sessions = [s for s in sessions if not _is_subagent(s[1], s[0])]
@@ -1572,7 +1578,7 @@ def render_sessions_index(
     groups: dict[str, list[tuple[Path, dict[str, Any], str]]],
     out_dir: Path,
 ) -> Path:
-    from llmwiki.convert import restore_local_path
+    from llmwiki.convert import restore_local_path  # noqa: PLC0415 — lazy load / avoid cycle
 
     rows = []
 
@@ -1737,11 +1743,11 @@ def render_analytics(
     groups: dict[str, list[tuple[Path, dict[str, Any], str]]],
     all_sources: list[tuple[Path, dict[str, Any], str]],
     out_dir: Path,
-    synthesis: Optional[str] = None,
-    usage_totals: Optional[dict[str, Any]] = None,
-    docs_by_project: Optional[dict[str, int]] = None,
-    wiki_dir: Optional[Path] = None,
-    wiki_value: Optional[dict[str, Any]] = None,
+    synthesis: str | None = None,
+    usage_totals: dict[str, Any] | None = None,
+    docs_by_project: dict[str, int] | None = None,
+    wiki_dir: Path | None = None,
+    wiki_value: dict[str, Any] | None = None,
 ) -> Path:
     """Render ``analytics.html`` — hero stats, activity heatmaps, token
     stats, wiki usage (#52), recently-updated, projects grid."""
@@ -1908,8 +1914,8 @@ def render_analytics(
 
 
 def render_index(
-    docs_root: "raw_docs_site.DocFolder",
-    doc_entries: list["raw_docs_site.DocEntry"],
+    docs_root: raw_docs_site.DocFolder,
+    doc_entries: list[raw_docs_site.DocEntry],
     doc_file_count: int,
     out_dir: Path,
 ) -> Path:
@@ -1931,8 +1937,8 @@ def render_index(
 
 
 def render_raw(
-    docs_root: "raw_docs_site.DocFolder",
-    doc_entries: list["raw_docs_site.DocEntry"],
+    docs_root: raw_docs_site.DocFolder,
+    doc_entries: list[raw_docs_site.DocEntry],
     doc_file_count: int,
     out_dir: Path,
 ) -> Path:
@@ -1954,7 +1960,7 @@ def render_raw(
 
 
 def render_recent(
-    doc_entries: list["raw_docs_site.DocEntry"],
+    doc_entries: list[raw_docs_site.DocEntry],
     out_dir: Path,
 ) -> Path:
     """Render ``recent.html`` — newest raw documents first."""
@@ -1983,7 +1989,7 @@ def _render_root_md_page(
     out_dir: Path,
     *,
     active_nav: str = "docs",
-) -> Optional[Path]:
+) -> Path | None:
     """Compile a repo-root ``.md`` file to a standalone site page (#284).
 
     Used for ``README.md`` and ``CONTRIBUTING.md`` so visitors don't get
@@ -2001,7 +2007,7 @@ def _render_root_md_page(
     # #270: route embedded source-code + repo-root links to GitHub, then
     # the generic .md→.html pass for anything remaining.  README has
     # plenty of such links.
-    from llmwiki.docs_pages import (
+    from llmwiki.docs_pages import (  # noqa: PLC0415 — lazy load / avoid cycle
         rewrite_md_links_to_html,
         rewrite_source_code_links_to_github,
     )
@@ -2074,7 +2080,7 @@ def render_404(out_dir: Path) -> Path:
     return out_path
 
 
-def render_readme_page(out_dir: Path) -> Optional[Path]:
+def render_readme_page(out_dir: Path) -> Path | None:
     """Compile ``README.md`` to ``site/README.html`` (#284)."""
     return _render_root_md_page(
         "README.md", "README.html",
@@ -2085,7 +2091,7 @@ def render_readme_page(out_dir: Path) -> Optional[Path]:
     )
 
 
-def render_contributing_page(out_dir: Path) -> Optional[Path]:
+def render_contributing_page(out_dir: Path) -> Path | None:
     """Compile ``CONTRIBUTING.md`` to ``site/CONTRIBUTING.html`` (#284)."""
     return _render_root_md_page(
         "CONTRIBUTING.md", "CONTRIBUTING.html",
@@ -2098,7 +2104,7 @@ def render_contributing_page(out_dir: Path) -> Optional[Path]:
 
 # ─── v0.7 (#55) models section ─────────────────────────────────────────────
 
-def render_models_section(out_dir: Path) -> tuple[Optional[Path], int]:
+def render_models_section(out_dir: Path) -> tuple[Path | None, int]:
     """Discover `wiki/entities/*.md` pages with `entity_kind: ai-model`,
     render one detail page per model + a sortable `/models/index.html`.
 
@@ -2110,10 +2116,10 @@ def render_models_section(out_dir: Path) -> tuple[Optional[Path], int]:
     # next time someone wires it from the CLI. Previously these names
     # were referenced but never imported — function body was reachable
     # but would crash with NameError on first call.
-    from llmwiki.models_page import (  # noqa: F401
+    from llmwiki.models_page import (  # noqa: F401, PLC0415 — lazy load / avoid cycle
         discover_model_entities_with_meta,
-        render_models_index,
         render_model_info_card,
+        render_models_index,
     )
     entities_dir = REPO_ROOT / "wiki" / "entities"
     entries_with_meta = discover_model_entities_with_meta(entities_dir)
@@ -2191,7 +2197,7 @@ def render_models_section(out_dir: Path) -> tuple[Optional[Path], int]:
             )
             + nav_bar("models", link_prefix="../")
             + hero(title, profile.get("provider", ""))
-            + f'<section class="section">\n  <div class="container narrow">\n'
+            + '<section class="section">\n  <div class="container narrow">\n'
             + info_card
             + timeline_block
             + warnings_html
@@ -2210,7 +2216,7 @@ def render_vs_section(
     out_dir: Path,
     max_pairs: int = 500,
     min_shared_fields: int = 3,
-) -> tuple[Optional[Path], int]:
+) -> tuple[Path | None, int]:
     """Generate `/vs/<slug_a>-vs-<slug_b>.html` for every pair of
     comparable model entities + an index at `/vs/index.html`.
 
@@ -2222,14 +2228,14 @@ def render_vs_section(
     # Post-review: lazy imports so this function actually works the
     # next time someone wires it. Previously these names were referenced
     # but never imported — first call would have crashed with NameError.
-    from llmwiki.models_page import discover_model_entities  # noqa: F401
-    from llmwiki.compare import (  # noqa: F401
+    from llmwiki.compare import (  # noqa: F401, PLC0415 — lazy load / avoid cycle
         discover_user_overrides,
         generate_pairs,
         pair_slug,
         render_comparison_body,
         render_comparisons_index,
     )
+    from llmwiki.models_page import discover_model_entities  # noqa: F401, PLC0415 — lazy load / avoid cycle
     entities_dir = REPO_ROOT / "wiki" / "entities"
     overrides_dir = REPO_ROOT / "wiki" / "vs"
     entries = discover_model_entities(entities_dir)
@@ -2314,7 +2320,7 @@ def build_search_index(
     out_dir: Path,
     *,
     search_mode: str = "auto",
-    doc_files: Optional[list["raw_docs_site.RawDocFile"]] = None,
+    doc_files: list[raw_docs_site.RawDocFile] | None = None,
 ) -> Path:
     """Build a chunked search index for lazy loading (#47).
 
@@ -2330,13 +2336,13 @@ def build_search_index(
     `search_mode` accepts ``auto`` (default, heuristic), ``tree``, or
     ``flat`` — matches the `llmwiki build --search-mode` flag.
     """
-    from llmwiki.search_tree import (
+    # ── session entries grouped by project ──
+    from llmwiki.search_facets import enrich_entry  # noqa: PLC0415 — lazy load / avoid cycle
+    from llmwiki.search_tree import (  # noqa: PLC0415 — lazy load / avoid cycle
         annotate_entry_headings,
         decide_search_mode,
         search_index_footer_badge,
     )
-    # ── session entries grouped by project ──
-    from llmwiki.search_facets import enrich_entry
     chunks: dict[str, list[dict[str, Any]]] = {}
     for p, meta, body in sources:
         project = str(meta.get("project") or p.parent.name)
@@ -2431,7 +2437,7 @@ def build_search_index(
 
     # #277: index every docs/ page + every slash command so the palette
     # becomes a universal quick-find (not just sessions + projects).
-    from llmwiki.docs_pages import iter_docs_pages, _first_paragraph
+    from llmwiki.docs_pages import _first_paragraph, iter_docs_pages  # noqa: PLC0415 — lazy load / avoid cycle
     docs_dir = SOURCE_ROOT / "docs"
     if docs_dir.is_dir():
         for page in iter_docs_pages(docs_dir):
@@ -2474,7 +2480,7 @@ def build_search_index(
 
     # v1.0 (#161): aggregate facet counts across all session chunks so the
     # client can render filter checkboxes without scanning the full index.
-    from llmwiki.search_facets import aggregate_facets
+    from llmwiki.search_facets import aggregate_facets  # noqa: PLC0415 — lazy load / avoid cycle
     all_entries: list[dict[str, Any]] = []
     for chunk_entries in chunks.values():
         all_entries.extend(chunk_entries)
@@ -2517,8 +2523,6 @@ def build_search_index(
 from llmwiki.render.css import CSS  # noqa: F401 (re-exported)
 from llmwiki.render.js import JS  # noqa: F401 (re-exported)
 
-
-
 # ─── claude synthesis (optional) ───────────────────────────────────────────
 
 # #421: shell metacharacters that have no business in a path-to-an-
@@ -2535,7 +2539,7 @@ from llmwiki.render.js import JS  # noqa: F401 (re-exported)
 _PATH_SHELL_METACHARS = re.compile(r"[;&|`$<>\n\r\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 
 
-def _resolve_claude_path(claude_path: Optional[str]) -> Optional[Path]:
+def _resolve_claude_path(claude_path: str | None) -> Path | None:
     """Resolve and validate the ``--claude`` path (#421).
 
     Returns ``None`` when:
@@ -2561,7 +2565,7 @@ def _resolve_claude_path(claude_path: Optional[str]) -> Optional[Path]:
     else:
         # No explicit path: use shutil.which so PATH-based lookups
         # (homebrew, asdf, npm-global, Windows %PATH%) all just work.
-        import shutil as _shutil
+        import shutil as _shutil  # noqa: PLC0415 — lazy load / avoid cycle
         found = _shutil.which("claude")
         if not found:
             return None
@@ -2611,8 +2615,8 @@ def _validate_overview_slug(s: Any) -> str:
 def synthesize_overview(
     groups: dict[str, list[tuple[Path, dict[str, Any], str]]],
     claude_path: str,
-    model: Optional[str] = None,
-) -> Optional[str]:
+    model: str | None = None,
+) -> str | None:
     resolved = _resolve_claude_path(claude_path)
     if resolved is None:
         return None
@@ -2660,7 +2664,7 @@ def synthesize_overview(
         # defence-in-depth — argv-length DoS path closed regardless.
         # Same scaffolding-stripping flags as page synthesis: this call
         # writes prose from a JSON brief and can't use a single tool.
-        from llmwiki.synth.claude_cli import overview_argv
+        from llmwiki.synth.claude_cli import overview_argv  # noqa: PLC0415 — lazy load / avoid cycle
 
         result = subprocess.run(
             overview_argv(claude_path, model),
@@ -2698,8 +2702,8 @@ def _ensure_synth_pipeline_snapshot(
     already refresh on content changes; paying estimate cost on every build
     would be a permanent tax for a one-time v1.4→v1.5 migration.
     """
-    from llmwiki.state_store import read_state, synth_pipeline_shape_ok
-    from llmwiki.synth.pipeline import refresh_synth_pending
+    from llmwiki.state_store import read_state, synth_pipeline_shape_ok  # noqa: PLC0415 — lazy load / avoid cycle
+    from llmwiki.synth.pipeline import refresh_synth_pending  # noqa: PLC0415 — lazy load / avoid cycle
 
     state_path = content_root / "llmwiki-state.json"
     try:
@@ -2899,7 +2903,7 @@ def build_site(
 
     estimate: dict[str, Any] = {}
     try:
-        from llmwiki.state_store import read_state, resolve_state_file
+        from llmwiki.state_store import read_state, resolve_state_file  # noqa: PLC0415 — lazy load / avoid cycle
         state_path = resolve_state_file(None)
         # Prefer the vault's state when content_root differs from the default.
         vault_state = content_root / "llmwiki-state.json"
@@ -2965,19 +2969,19 @@ def build_site(
 
     # #387 U8: branded 404 page that serve.py returns as the body of any
     # 404 response, instead of the stdlib http.server default.
-    not_found_path = render_404(out_dir)
+    render_404(out_dir)
     # #284: compile README + CONTRIBUTING as standalone site pages so
     # they don't bounce visitors out to GitHub for content we're already
     # shipping as HTML.
-    readme_path = render_readme_page(out_dir)
-    contributing_path = render_contributing_page(out_dir)
+    render_readme_page(out_dir)
+    render_contributing_page(out_dir)
     print(
         "  wrote index.html, raw.html, recent.html, analytics.html, "
         "projects/index.html, sessions/index.html, 404.html"
     )
 
     # Search index (chunked — #47) + tree/flat auto-routing (#53)
-    idx_path = build_search_index(
+    build_search_index(
         sources, groups, out_dir, search_mode=search_mode, doc_files=doc_files
     )
 
@@ -2989,8 +2993,8 @@ def build_site(
     # build should crash loud, not log "warning: AI exports failed:
     # No module named ..." and ship a half-built site.
     try:
-        from llmwiki.exporters import export_all
-        extra_pages: list[tuple[str, Optional[str], str]] = [
+        from llmwiki.exporters import export_all  # noqa: PLC0415 — lazy load / avoid cycle
+        extra_pages: list[tuple[str, str | None, str]] = [
             ("raw.html", None, "0.9"),
             ("recent.html", None, "0.9"),
             ("analytics.html", None, "0.8"),
@@ -3005,18 +3009,19 @@ def build_site(
     # v1.1 (#118): copy the interactive knowledge graph into the site
     # so the "Graph" nav link works without a separate `llmwiki graph` step.
     try:
-        from llmwiki.graph import copy_to_site as copy_graph_to_site, write_html as write_graph_html
+        from llmwiki.graph import copy_to_site as copy_graph_to_site  # noqa: PLC0415 — lazy load / avoid cycle
+        from llmwiki.graph import write_html as write_graph_html  # noqa: PLC0415 — lazy load / avoid cycle
         # #54: prefer the topic-first graph (topics as nodes, sessions as the
         # edges/backlinks between them) when the wiki has topics; fall back to
         # the page graph otherwise (repo mode, empty wikis). All local CPU.
         topic_graph = None
         try:
-            from llmwiki.topics import build_topic_graph
+            from llmwiki.topics import build_topic_graph  # noqa: PLC0415 — lazy load / avoid cycle
             topic_graph = build_topic_graph(wiki_dir)
         except Exception as e:  # noqa: BLE001 — never fail the build over the graph
             print(f"  warning: topic graph build failed: {e}", file=sys.stderr)
         if topic_graph and topic_graph.get("nodes"):
-            from llmwiki.topics_page import build_topic_pages
+            from llmwiki.topics_page import build_topic_pages  # noqa: PLC0415 — lazy load / avoid cycle
             write_graph_html(topic_graph, out_dir / "graph.html")
             tpages = build_topic_pages(topic_graph, out_dir)
             print(f"  wrote graph.html (topic graph: {len(topic_graph['nodes'])} topics, "
@@ -3034,7 +3039,7 @@ def build_site(
     # are included — reference docs that stay GitHub-rendered aren't
     # touched.
     try:
-        from llmwiki.docs_pages import compile_docs_site
+        from llmwiki.docs_pages import compile_docs_site  # noqa: PLC0415 — lazy load / avoid cycle
         docs_dir = SOURCE_ROOT / "docs"
 
         # nav_builder gets called per-page with the right link_prefix so
@@ -3063,7 +3068,7 @@ def build_site(
 
     # v0.4: Build manifest with SHA-256 hashes
     try:
-        from llmwiki.manifest import write_manifest
+        from llmwiki.manifest import write_manifest  # noqa: PLC0415 — lazy load / avoid cycle
         manifest_path = write_manifest(out_dir)
         print(f"  wrote {manifest_path.relative_to(out_dir.parent) if manifest_path.is_relative_to(out_dir.parent) else manifest_path.name}")
     except (OSError, ValueError, RuntimeError) as e:

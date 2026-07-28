@@ -14,10 +14,10 @@ from __future__ import annotations
 import warnings
 
 from llmwiki.ingest_queue import (  # noqa: F401
-    enqueue,
-    dequeue,
-    peek,
     clear,
+    dequeue,
+    enqueue,
+    peek,
     queue_size,
 )
 

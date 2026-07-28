@@ -18,8 +18,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 
 def _groups_with(*slugs: str) -> dict[str, list]:
     """Helper: mimic the ``group_by_project`` return shape."""

@@ -3,13 +3,11 @@
 from __future__ import annotations
 
 import importlib.util
-import json
-from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
-from llmwiki.graphify_bridge import is_available, GRAPHIFY_OUT
+from llmwiki.graphify_bridge import is_available
 
 _GRAPHIFY_INSTALLED = importlib.util.find_spec("graphify") is not None
 
@@ -35,6 +33,7 @@ def test_is_available_false_when_not_installed():
     with patch.dict("sys.modules", {"graphify": None}):
         # Force ImportError by removing the module
         import importlib
+
         from llmwiki import graphify_bridge
         importlib.reload(graphify_bridge)
         # The function does a fresh import each time so we need to mock it
@@ -48,7 +47,6 @@ def test_is_available_false_when_not_installed():
 
 def test_bridge_module_imports():
     from llmwiki.graphify_bridge import (
-        is_available,
         build_graphify_graph,
         export_to_obsidian,
         query_graph,
@@ -139,11 +137,11 @@ def test_extract_wiki_nodes_project_edges(tmp_path):
     from llmwiki.graphify_bridge import _extract_wiki_nodes
 
     # Create three wiki pages in the same project
-    for i, (slug, date) in enumerate([
+    for slug, date in [
         ("alpha", "2026-04-01"),
         ("beta", "2026-04-02"),
         ("gamma", "2026-04-03"),
-    ]):
+    ]:
         (tmp_path / f"{slug}.md").write_text(
             f"---\ntitle: \"{slug}\"\ntype: source\nproject: test-proj\ndate: {date}\n---\n\n# {slug}\n",
             encoding="utf-8",

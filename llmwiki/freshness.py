@@ -27,9 +27,9 @@ from __future__ import annotations
 
 import html
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from llmwiki import REPO_ROOT
 
@@ -57,7 +57,7 @@ def load_freshness_config(repo_root: Path = REPO_ROOT) -> tuple[int, int]:
     return green, yellow
 
 
-def parse_timestamp(value: Any) -> Optional[datetime]:
+def parse_timestamp(value: Any) -> datetime | None:
     """Parse an ISO datetime or ``YYYY-MM-DD`` into a naive UTC datetime.
 
     Returns ``None`` for empty, missing, or malformed values.
@@ -75,7 +75,7 @@ def parse_timestamp(value: Any) -> Optional[datetime]:
         except ValueError:
             return None
         if dt.tzinfo is not None:
-            dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
+            dt = dt.astimezone(UTC).replace(tzinfo=None)
         return dt
     # Fall back to date-only
     try:
@@ -84,7 +84,7 @@ def parse_timestamp(value: Any) -> Optional[datetime]:
         return None
 
 
-def resolve_last_updated(meta: dict[str, Any]) -> Optional[datetime]:
+def resolve_last_updated(meta: dict[str, Any]) -> datetime | None:
     """Pick the newest timestamp available from a page's frontmatter.
 
     Prefers ``last_updated`` (explicit), then ``ended``, ``started``, ``date``.
@@ -117,7 +117,7 @@ def format_relative_time(age_days: int) -> str:
 
 
 def freshness_class(
-    age_days: Optional[int],
+    age_days: int | None,
     green_days: int = DEFAULT_GREEN_DAYS,
     yellow_days: int = DEFAULT_YELLOW_DAYS,
 ) -> str:
@@ -133,7 +133,7 @@ def freshness_class(
 
 def freshness_badge(
     meta: dict[str, Any],
-    now: Optional[datetime] = None,
+    now: datetime | None = None,
     green_days: int = DEFAULT_GREEN_DAYS,
     yellow_days: int = DEFAULT_YELLOW_DAYS,
 ) -> str:
@@ -147,7 +147,7 @@ def freshness_badge(
             '<span class="freshness fresh-unknown" '
             'title="No last-updated timestamp">updated unknown</span>'
         )
-    current = now if now is not None else datetime.now(timezone.utc).replace(tzinfo=None)
+    current = now if now is not None else datetime.now(UTC).replace(tzinfo=None)
     age = (current - dt).days
     cls = freshness_class(age, green_days, yellow_days)
     label = format_relative_time(age)

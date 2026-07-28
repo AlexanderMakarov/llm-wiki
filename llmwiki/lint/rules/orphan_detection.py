@@ -43,7 +43,7 @@ class OrphanDetection(LintRule):
         # an orphan in one rule while exempt in another (it WAS being
         # flagged here even though MetadataValidator's EXEMPT_FILES
         # already exempted it from the strict title/type check).
-        from llmwiki._system_pages import SYSTEM_PAGE_SLUGS
+        from llmwiki._system_pages import SYSTEM_PAGE_SLUGS  # noqa: PLC0415 — lazy load / avoid cycle
         issues = []
         for rel in pages:
             slug = _page_slug(rel)

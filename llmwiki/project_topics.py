@@ -30,16 +30,13 @@ from __future__ import annotations
 import html
 import re
 from collections import Counter
+from collections.abc import Iterable, Mapping
 from pathlib import Path
-from typing import Any, Iterable, Mapping, Optional, TypedDict
+from typing import Any, TypedDict
+
+from llmwiki.tag_utils import parse_tags_field
 
 _FRONTMATTER_RE = re.compile(r"^---\n(.*?)\n---\n(.*)$", re.DOTALL)
-
-# Tags that appear on nearly every session and carry no
-# project-specific signal. Filtered out of the session-tag fallback.
-_NOISE_TAGS: frozenset[str] = frozenset(
-    {"claude-code", "session-transcript", "demo", "codex-cli", "cursor"}
-)
 
 
 class ProjectTopicsProfile(TypedDict, total=False):
@@ -80,7 +77,7 @@ def _parse_topics_frontmatter(text: str) -> dict[str, Any]:
 def load_project_profile(
     projects_dir: Path,
     project_slug: str,
-) -> Optional[ProjectTopicsProfile]:
+) -> ProjectTopicsProfile | None:
     """Load `<projects_dir>/<slug>.md` and extract the topics profile.
 
     Returns `None` if the file doesn't exist. Missing fields are
@@ -132,17 +129,8 @@ def extract_session_topics(
     """
     counts: Counter[str] = Counter()
     for meta in session_metas:
-        raw = meta.get("tags")
-        if isinstance(raw, list):
-            for t in raw:
-                tag = str(t).strip().lower()
-                if tag and tag not in _NOISE_TAGS:
-                    counts[tag] += 1
-        elif isinstance(raw, str) and raw:
-            for t in raw.strip("[]").split(","):
-                tag = t.strip().lower()
-                if tag and tag not in _NOISE_TAGS:
-                    counts[tag] += 1
+        for tag in parse_tags_field(meta.get("tags")):
+            counts[tag] += 1
     filtered = [(tag, c) for tag, c in counts.items() if c >= min_count]
     filtered.sort(key=lambda kv: (-kv[1], kv[0]))
     return [tag for tag, _ in filtered[:max_topics]]
@@ -198,7 +186,7 @@ def render_topic_chips_linked(
     rendered via `href_template.format(topic=...)` with URL escaping."""
     if not topics:
         return ""
-    import urllib.parse
+    import urllib.parse  # noqa: PLC0415 — lazy load / avoid cycle
     visible = topics[:max_visible]
     hidden = len(topics) - len(visible)
     chip_html = "".join(

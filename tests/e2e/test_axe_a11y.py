@@ -29,7 +29,6 @@ from typing import Any
 import pytest
 from playwright.sync_api import Page
 
-
 # Pinned axe-core version. Bump explicitly when adopting new rules.
 # https://github.com/dequelabs/axe-core/releases
 AXE_CORE_CDN = "https://cdnjs.cloudflare.com/ajax/libs/axe-core/4.10.0/axe.min.js"

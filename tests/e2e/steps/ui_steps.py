@@ -28,7 +28,6 @@ import pytest
 from playwright.sync_api import Page, expect
 from pytest_bdd import given, parsers, then, when
 
-
 # ─── shared background steps ────────────────────────────────────────────
 
 
@@ -702,7 +701,7 @@ def _set_theme(page: Page, theme: str) -> None:
 
 
 @then(parsers.parse('I capture a screenshot tagged "{tag}"'))
-def _capture_screenshot(page: Page, tag: str, tmp_path_factory: "pytest.TempPathFactory" = None) -> None:  # type: ignore[name-defined]
+def _capture_screenshot(page: Page, tag: str, tmp_path_factory: pytest.TempPathFactory = None) -> None:  # type: ignore[name-defined]
     """Capture a full-page screenshot AND, if a baseline exists,
     compare it pixel-by-pixel.
 
@@ -777,7 +776,7 @@ def _capture_screenshot(page: Page, tag: str, tmp_path_factory: "pytest.TempPath
         import warnings as _warnings
         _warnings.warn(
             "Pillow not installed — skipping visual regression comparison "
-            "for {!r}. `pip install -e '.[e2e]'` to enable.".format(tag),
+            f"for {tag!r}. `pip install -e '.[e2e]'` to enable.",
             stacklevel=2,
         )
         return

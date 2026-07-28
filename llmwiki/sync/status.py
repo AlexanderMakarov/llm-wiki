@@ -14,12 +14,10 @@ logic, not argparse glue. ``cli.py`` re-exports ``cmd_sync_status``
 from __future__ import annotations
 
 import argparse
-import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from llmwiki import REPO_ROOT
-from llmwiki.state_store import read_state
 
 
 def resolve_key_exists(key: str) -> bool:
@@ -37,9 +35,9 @@ def resolve_key_exists(key: str) -> bool:
 
 def cmd_sync_status(args: argparse.Namespace) -> int:
     """Report sync observability — last run, per-adapter counters, quarantined sources."""
-    from llmwiki.config_schedule import apply_default_vault
-    from llmwiki import quarantine as _q
-    from llmwiki.state_store import get_state_file, read_state
+    from llmwiki import quarantine as _q  # noqa: PLC0415 — lazy load / avoid cycle
+    from llmwiki.config_schedule import apply_default_vault  # noqa: PLC0415 — lazy load / avoid cycle
+    from llmwiki.state_store import get_state_file, read_state  # noqa: PLC0415 — lazy load / avoid cycle
 
     apply_default_vault(args)
     state_path = get_state_file()
@@ -49,7 +47,7 @@ def cmd_sync_status(args: argparse.Namespace) -> int:
     meta: dict = {}
     counters: dict = {}
     try:
-        import json as _json
+        import json as _json  # noqa: PLC0415 — lazy load / avoid cycle
         payload = _json.loads(state_path.read_text(encoding="utf-8")) if state_path.exists() else {}
     except (OSError, _json.JSONDecodeError):
         payload = {}
@@ -74,7 +72,7 @@ def cmd_sync_status(args: argparse.Namespace) -> int:
     if last_sync:
         try:
             ts = datetime.fromisoformat(last_sync.replace("Z", "+00:00"))
-            delta = datetime.now(timezone.utc) - ts
+            delta = datetime.now(UTC) - ts
             human = f"{int(delta.total_seconds() // 3600)}h ago"
             print(f"Last sync: {last_sync} ({human})")
         except ValueError:
@@ -121,14 +119,14 @@ def cmd_sync_status(args: argparse.Namespace) -> int:
     else:
         print("Quarantined sources: 0")
 
-    from llmwiki.config_schedule import synthesis_status_hint
+    from llmwiki.config_schedule import synthesis_status_hint  # noqa: PLC0415 — lazy load / avoid cycle
     hint = synthesis_status_hint()
     if hint:
         print()
         print(f"Hint: {hint}")
 
     if args.recent:
-        from llmwiki.log_reader import recent_events
+        from llmwiki.log_reader import recent_events  # noqa: PLC0415 — lazy load / avoid cycle
         log_path = REPO_ROOT / "wiki" / "log.md"
         events = recent_events(log_path, limit=args.recent, operations={"sync", "synthesize"})
         if events:

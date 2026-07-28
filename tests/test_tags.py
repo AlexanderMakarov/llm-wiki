@@ -28,7 +28,6 @@ import pytest
 
 from llmwiki import tags as t
 
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 

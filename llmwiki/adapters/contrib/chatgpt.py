@@ -45,9 +45,10 @@ Opt-in: disabled by default. Add ``"enabled": true`` and point
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from collections.abc import Iterator
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 
 from llmwiki.adapters import register
 from llmwiki.adapters.base import BaseAdapter
@@ -207,7 +208,7 @@ def _fmt_ts(ts: Any) -> str:
     if ts is None:
         return ""
     try:
-        return datetime.fromtimestamp(float(ts), tz=timezone.utc).strftime("%Y-%m-%d")
+        return datetime.fromtimestamp(float(ts), tz=UTC).strftime("%Y-%m-%d")
     except (ValueError, TypeError, OSError):
         return ""
 
@@ -228,7 +229,7 @@ def render_conversation_markdown(session: dict[str, Any]) -> str:
         "tags: [chatgpt, session-transcript]",
         f"date: {date_str}",
         "project: chatgpt",
-        f"source: chatgpt-export",
+        "source: chatgpt-export",
         f"message_count: {msg_count}",
         f"roles: [{', '.join(roles)}]",
         "---",

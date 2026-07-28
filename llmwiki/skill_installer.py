@@ -25,7 +25,6 @@ from __future__ import annotations
 
 import shutil
 from pathlib import Path
-from typing import Optional
 
 from llmwiki import REPO_ROOT
 
@@ -40,7 +39,7 @@ AGENT_TARGETS: list[str] = [
 ]
 
 
-def list_targets(repo_root: Optional[Path] = None) -> list[Path]:
+def list_targets(repo_root: Path | None = None) -> list[Path]:
     """Return the absolute paths of all agent skill target directories."""
     root = repo_root or REPO_ROOT
     return [root / t for t in AGENT_TARGETS]
@@ -49,8 +48,8 @@ def list_targets(repo_root: Optional[Path] = None) -> list[Path]:
 def install_skill(
     skill_name: str,
     *,
-    source: Optional[Path] = None,
-    repo_root: Optional[Path] = None,
+    source: Path | None = None,
+    repo_root: Path | None = None,
 ) -> int:
     """Copy one skill into every agent target. Returns targets updated."""
     src = source or CANONICAL_SKILLS_DIR
@@ -71,8 +70,8 @@ def install_skill(
 
 def install_all(
     *,
-    source: Optional[Path] = None,
-    repo_root: Optional[Path] = None,
+    source: Path | None = None,
+    repo_root: Path | None = None,
 ) -> int:
     """Copy every skill from ``source`` into every agent target.
 
@@ -96,7 +95,7 @@ def install_all(
 
 def list_installed(
     *,
-    repo_root: Optional[Path] = None,
+    repo_root: Path | None = None,
 ) -> dict[str, list[str]]:
     """Return a map of ``{target_dir: [skill_names]}`` for each target."""
     result: dict[str, list[str]] = {}

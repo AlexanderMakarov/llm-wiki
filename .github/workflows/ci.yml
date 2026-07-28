@@ -32,9 +32,7 @@ jobs:
           python -m pip install ruff pytest
 
       - name: Ruff lint
-        run: |
-          ruff check llmwiki tests || true
-          # Don't fail the build on warnings in v0.1
+        run: ruff check llmwiki tests scripts
 
       - name: CLI smoke tests
         run: |

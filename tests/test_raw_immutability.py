@@ -12,12 +12,9 @@ Covers:
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
 from llmwiki.convert import _raw_write_guard
-
 
 # ─── _raw_write_guard unit ────────────────────────────────────────────────
 

@@ -33,7 +33,7 @@ class StubSourcePages(LintRule):
     _SOURCES_PREFIX = "sources/"
 
     def run(self, pages, *, llm_callback=None):
-        from llmwiki.synth.pipeline import _is_stub_page
+        from llmwiki.synth.pipeline import _is_stub_page  # noqa: PLC0415 — lazy load / avoid cycle
 
         issues = []
         for rel, page in pages.items():

@@ -4,10 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from llmwiki.adapters.contrib.opencode import OpenCodeAdapter
-
 
 # ─── Adapter registration ─────────────────────────────────────────────
 

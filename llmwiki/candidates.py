@@ -31,9 +31,9 @@ from __future__ import annotations
 
 import re
 import shutil
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Optional, TypedDict
+from typing import TypedDict
 
 # ─── constants ─────────────────────────────────────────────────────────
 
@@ -60,7 +60,7 @@ class Candidate(TypedDict):
     abs_path: Path         # absolute path to the file
     kind: str              # "entities" | "concepts" | "sources" | "syntheses"
     title: str             # frontmatter title
-    created: Optional[str] # frontmatter created/last_updated date (YYYY-MM-DD)
+    created: str | None # frontmatter created/last_updated date (YYYY-MM-DD)
     age_days: int          # days since `created`
     body_preview: str      # first 200 chars of body
 
@@ -81,17 +81,17 @@ def _parse_frontmatter(text: str) -> tuple[dict[str, str], str]:
     return out, m.group(2)
 
 
-def _age_days(date_str: Optional[str], *, now: Optional[datetime] = None) -> int:
+def _age_days(date_str: str | None, *, now: datetime | None = None) -> int:
     """Compute days between ``date_str`` (YYYY-MM-DD) and now."""
     if not date_str:
         return 0
     try:
         dt = datetime.fromisoformat(date_str)
         if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
+            dt = dt.replace(tzinfo=UTC)
     except (ValueError, TypeError):
         return 0
-    ref = now or datetime.now(timezone.utc)
+    ref = now or datetime.now(UTC)
     return max(0, (ref - dt).days)
 
 
@@ -117,7 +117,7 @@ def archive_dir(wiki_dir: Path) -> Path:
 def list_candidates(
     wiki_dir: Path,
     *,
-    now: Optional[datetime] = None,
+    now: datetime | None = None,
 ) -> list[Candidate]:
     """Walk wiki/candidates/ and return one entry per pending page."""
     root = candidates_dir(wiki_dir)
@@ -155,7 +155,7 @@ def promote(
     slug: str,
     wiki_dir: Path,
     *,
-    kind: Optional[str] = None,
+    kind: str | None = None,
 ) -> Path:
     """Move ``wiki/candidates/<kind>/<slug>.md`` → ``wiki/<kind>/<slug>.md``.
 
@@ -184,7 +184,7 @@ def merge(
     wiki_dir: Path,
     *,
     into_slug: str,
-    kind: Optional[str] = None,
+    kind: str | None = None,
 ) -> Path:
     """Append the candidate's body under a ``## Candidate merge — <date>``
     heading into the existing wiki page ``<into_slug>.md``, then discard
@@ -204,7 +204,7 @@ def merge(
     candidate_text = candidate.read_text(encoding="utf-8")
     _, candidate_body = _parse_frontmatter(candidate_text)
 
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
     appended = (
         target.read_text(encoding="utf-8").rstrip() +
         f"\n\n## Candidate merge — {today}\n\n" +
@@ -223,7 +223,7 @@ def discard(
     wiki_dir: Path,
     *,
     reason: str = "",
-    kind: Optional[str] = None,
+    kind: str | None = None,
 ) -> Path:
     """Move the candidate to ``wiki/archive/candidates/<timestamp>/<slug>.md``
     with an adjacent ``<slug>.reason.txt`` capturing why.
@@ -238,7 +238,7 @@ def stale_candidates(
     wiki_dir: Path,
     *,
     threshold_days: int = DEFAULT_STALE_DAYS,
-    now: Optional[datetime] = None,
+    now: datetime | None = None,
 ) -> list[Candidate]:
     """Return candidates older than ``threshold_days``."""
     return [
@@ -253,7 +253,7 @@ def stale_candidates(
 def _find_candidate(
     slug: str,
     wiki_dir: Path,
-    kind: Optional[str],
+    kind: str | None,
 ) -> Path:
     """Locate ``<slug>.md`` under wiki/candidates/, optionally filtered by kind."""
     root = candidates_dir(wiki_dir)
@@ -291,7 +291,7 @@ def _archive_candidate(
     reason: str,
 ) -> Path:
     """Move candidate into archive with reason file."""
-    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%S")
+    stamp = datetime.now(UTC).strftime("%Y-%m-%dT%H-%M-%S")
     dest_dir = archive_dir(wiki_dir) / stamp
     dest_dir.mkdir(parents=True, exist_ok=True)
 
@@ -301,7 +301,7 @@ def _archive_candidate(
     if reason:
         reason_file = dest.with_suffix(".reason.txt")
         reason_file.write_text(
-            f"Discarded at: {datetime.now(timezone.utc).isoformat()}\n"
+            f"Discarded at: {datetime.now(UTC).isoformat()}\n"
             f"Reason: {reason}\n"
             f"Original path: candidates/{candidate.parent.name}/{candidate.name}\n",
             encoding="utf-8",

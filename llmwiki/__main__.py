@@ -1,6 +1,7 @@
 """Allow `python3 -m llmwiki` to invoke the CLI."""
-from llmwiki.cli import main
 import sys
+
+from llmwiki.cli import main
 
 if __name__ == "__main__":
     sys.exit(main())

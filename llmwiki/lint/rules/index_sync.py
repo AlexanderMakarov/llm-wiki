@@ -53,7 +53,7 @@ class IndexSync(LintRule):
         # #py-m5 (#591): pull from the canonical SYSTEM_PAGE_FILES list
         # rather than redeclaring it inline (third copy of the same set
         # in this file before the consolidation).
-        from llmwiki._system_pages import SYSTEM_PAGE_FILES as nav_pages
+        from llmwiki._system_pages import SYSTEM_PAGE_FILES as nav_pages  # noqa: PLC0415 — lazy load / avoid cycle
         for rel in pages:
             if rel in nav_pages or rel.endswith("_context.md"):
                 continue

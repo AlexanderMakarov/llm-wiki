@@ -43,7 +43,6 @@ import re
 from llmwiki.build import nav_bar, render_models_section, render_vs_section
 from llmwiki.render.js import JS
 
-
 # 1. Per-dialog focus stash.
 
 def test_dialog_last_focus_is_a_map_not_single_slot() -> None:

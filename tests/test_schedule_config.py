@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import pytest
-
-from llmwiki.cli import _should_run_after_sync, _load_schedule_config
+from llmwiki.cli import _load_schedule_config, _should_run_after_sync
 
 
 def test_on_sync_triggers():

@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import re as _re
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 
 # #sec-7 (#551): project slugs flow into raw/ + site/ paths. The same
 # sanitiser regex is used by build.py for project_slug rendering — keep
@@ -188,7 +188,7 @@ class BaseAdapter:
         The import is local to avoid a circular import (``convert`` imports the
         adapter registry at module load).
         """
-        from llmwiki.convert import parse_jsonl
+        from llmwiki.convert import parse_jsonl  # noqa: PLC0415 — import cycle / lazy load
 
         return parse_jsonl(path)
 

@@ -70,6 +70,7 @@ def test_graph_template_toggle_writes_canonical_key(tmp_path):
     duplicate would flip the theme twice per click.
     """
     from pathlib import Path
+
     from llmwiki.graph import write_html
     g = {"nodes": [], "edges": [],
          "stats": {"total_pages": 0, "total_edges": 0, "orphans": [], "top_linked": []}}

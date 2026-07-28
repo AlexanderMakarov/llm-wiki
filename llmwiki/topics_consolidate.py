@@ -21,7 +21,7 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 CONSOLIDATION_PROMPT_PATH = (
     Path(__file__).parent / "synth" / "prompts" / "topic_consolidation.md"
@@ -36,7 +36,7 @@ _CANDIDATE_MIN_SESSIONS = 2
 
 def cache_path(wiki_dir: Path | None) -> Path:
     """Location of the consolidation cache (vault root, beside other state)."""
-    from llmwiki.graph import WIKI_DIR
+    from llmwiki.graph import WIKI_DIR  # noqa: PLC0415 — lazy load / avoid cycle
 
     base = (wiki_dir or WIKI_DIR).parent
     return base / CACHE_FILENAME
@@ -48,7 +48,7 @@ def _attr(value: str) -> str:
 
 def build_candidates(wiki_dir: Path | None = None) -> list[dict[str, Any]]:
     """Candidate topics for the consolidator: name, reach, aka, with, sample."""
-    from llmwiki.topics import build_topic_graph
+    from llmwiki.topics import build_topic_graph  # noqa: PLC0415 — lazy load / avoid cycle
 
     g = build_topic_graph(wiki_dir, min_sessions=_CANDIDATE_MIN_SESSIONS)
     sessions = g.get("sessions", {})
@@ -135,7 +135,7 @@ def parse_and_cache(result_text: str, wiki_dir: Path | None = None) -> dict[str,
     return cache
 
 
-def load_cache(wiki_dir: Path | None = None) -> Optional[dict[str, Any]]:
+def load_cache(wiki_dir: Path | None = None) -> dict[str, Any] | None:
     """Load the consolidation cache, or ``None`` when absent/unreadable.
 
     Returns ``{"topics": [...], "alias_map": {lower_spelling: canonical},

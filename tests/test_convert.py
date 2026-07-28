@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 from llmwiki.convert import (
@@ -19,7 +18,6 @@ from llmwiki.convert import (
     truncate_chars,
     truncate_lines,
 )
-
 from tests.conftest import FIXTURES_DIR
 
 

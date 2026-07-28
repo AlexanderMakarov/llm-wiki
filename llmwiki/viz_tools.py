@@ -28,7 +28,7 @@ from __future__ import annotations
 
 import html
 import json
-from typing import Mapping, Optional
+from collections.abc import Mapping
 
 # ─── layout constants ────────────────────────────────────────────────────
 
@@ -136,7 +136,7 @@ def aggregate_tool_counts(metas: list[Mapping[str, object]]) -> dict[str, int]:
 def render_tool_chart(
     counts: dict[str, int],
     max_bars: int = 10,
-    title: Optional[str] = None,
+    title: str | None = None,
 ) -> str:
     """Render a horizontal bar chart as a self-contained `<svg>`.
 

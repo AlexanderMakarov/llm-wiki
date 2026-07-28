@@ -17,8 +17,6 @@ import json
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-
 from llmwiki.mcp.server import (
     _MCP_SCAN_AGGREGATE_BYTES,
     _MCP_SCAN_PER_FILE_BYTES,

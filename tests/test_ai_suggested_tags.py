@@ -14,19 +14,14 @@ Covers:
 
 from __future__ import annotations
 
-from pathlib import Path
-
-import pytest
-
 from llmwiki.synth.pipeline import (
     _AI_TAG_CAP,
     _build_source_page,
-    _derive_baseline_tags,
     _dedupe_connections,
+    _derive_baseline_tags,
     _extract_suggested_tags,
     _merge_tags,
 )
-
 
 # ─── _extract_suggested_tags ──────────────────────────────────────────
 

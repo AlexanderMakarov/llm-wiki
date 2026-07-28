@@ -6,18 +6,17 @@ import re
 
 import pytest
 
+from llmwiki.format_numbers import format_tokens
 from llmwiki.viz_tokens import (
     _hit_ratio_tier,
     cache_hit_ratio,
     compute_site_stats,
-    format_tokens,
     parse_token_totals,
     render_project_token_card,
     render_project_token_timeline,
     render_session_token_card,
     render_site_token_stats,
 )
-
 
 # ─── format_tokens: K/M/B suffixes ───────────────────────────────────────
 

@@ -21,7 +21,6 @@ from llmwiki.graph import HTML_TEMPLATE
 from llmwiki.render.css import CSS
 from llmwiki.render.js import JS
 
-
 # ─── #565 — skip-link focus ring ──────────────────────────────────────
 
 

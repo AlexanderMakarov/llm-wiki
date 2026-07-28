@@ -13,12 +13,10 @@ wired up so badges don't silently rot:
 from __future__ import annotations
 
 import re
-from pathlib import Path
 
 import pytest
 
 from llmwiki import REPO_ROOT, __version__
-
 
 README = REPO_ROOT / "README.md"
 
@@ -172,8 +170,10 @@ def test_no_stale_lint_rule_counts_in_user_docs():
     '13 lint rules' string in README / CLI help / top-level design docs,
     **unless** the surrounding line also mentions a historical release
     (v0.x.y) — those are legitimate release-notes references."""
-    from llmwiki.lint import REGISTRY
-    from llmwiki.lint import rules  # noqa: F401 — force registration
+    from llmwiki.lint import (
+        REGISTRY,
+        rules,  # noqa: F401 — force registration
+    )
     live = len(REGISTRY)
     assert live >= 14, "unexpectedly low lint-rule count"
 

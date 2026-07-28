@@ -37,7 +37,7 @@ from __future__ import annotations
 import csv
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional, TypedDict
+from typing import Any, TypedDict
 
 # ─── Constants ─────────────────────────────────────────────────────────
 
@@ -121,8 +121,8 @@ def _load_model_pricing() -> dict[str, ModelRates]:
 
 def resolve_pricing_model(
     requested: str,
-    pricing_table: Optional[dict[str, ModelRates]] = None,
-    family_by_name: Optional[dict[str, str]] = None,
+    pricing_table: dict[str, ModelRates] | None = None,
+    family_by_name: dict[str, str] | None = None,
 ) -> str:
     """Resolve exact model_name; fallback by model_family newest (desc)."""
     table = pricing_table or MODEL_PRICING
@@ -188,7 +188,7 @@ class CachedPrompt:
 
     stable_prefix: str
     dynamic_suffix: str
-    system: Optional[str] = None
+    system: str | None = None
 
     def content_blocks(self) -> list[ContentBlock]:
         """Return the list of content blocks for the user message."""
@@ -310,7 +310,7 @@ def format_estimate(est: CostEstimate) -> str:
     )
 
 
-def warn_prefix_too_small(cached_tokens: int) -> Optional[str]:
+def warn_prefix_too_small(cached_tokens: int) -> str | None:
     """Return a one-line warning if the prefix is below the cache floor.
 
     Anthropic silently ignores ``cache_control`` on prefixes below

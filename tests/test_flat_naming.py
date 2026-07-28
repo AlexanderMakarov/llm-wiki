@@ -2,34 +2,32 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-
-import pytest
+from datetime import UTC, datetime
 
 from llmwiki.convert import flat_output_name
 
 
 def test_basic_flat_name():
-    started = datetime(2026, 4, 16, 10, 30, tzinfo=timezone.utc)
+    started = datetime(2026, 4, 16, 10, 30, tzinfo=UTC)
     result = flat_output_name(started, "ai-newsletter", "kind-tinkering-hejlsberg")
     assert result == "2026-04-16T10-30-ai-newsletter-kind-tinkering-hejlsberg.md"
 
 
 def test_midnight():
-    started = datetime(2026, 1, 1, 0, 0, tzinfo=timezone.utc)
+    started = datetime(2026, 1, 1, 0, 0, tzinfo=UTC)
     result = flat_output_name(started, "demo", "test")
     assert result == "2026-01-01T00-00-demo-test.md"
 
 
 def test_single_digit_hour():
-    started = datetime(2026, 3, 5, 9, 5, tzinfo=timezone.utc)
+    started = datetime(2026, 3, 5, 9, 5, tzinfo=UTC)
     result = flat_output_name(started, "myproject", "slug")
     assert result == "2026-03-05T09-05-myproject-slug.md"
 
 
 def test_ends_with_md():
     result = flat_output_name(
-        datetime(2026, 4, 1, 14, 0, tzinfo=timezone.utc),
+        datetime(2026, 4, 1, 14, 0, tzinfo=UTC),
         "proj",
         "test-slug",
     )
@@ -39,7 +37,7 @@ def test_ends_with_md():
 def test_no_slashes_in_name():
     """Flat naming must not produce nested directories."""
     result = flat_output_name(
-        datetime(2026, 4, 1, 14, 0, tzinfo=timezone.utc),
+        datetime(2026, 4, 1, 14, 0, tzinfo=UTC),
         "my-project",
         "my-slug",
     )
@@ -50,9 +48,9 @@ def test_no_slashes_in_name():
 def test_chronological_sort():
     """Files should sort chronologically by name."""
     names = [
-        flat_output_name(datetime(2026, 4, 16, 10, 0, tzinfo=timezone.utc), "a", "s1"),
-        flat_output_name(datetime(2026, 4, 16, 9, 0, tzinfo=timezone.utc), "a", "s2"),
-        flat_output_name(datetime(2026, 4, 15, 23, 59, tzinfo=timezone.utc), "b", "s3"),
+        flat_output_name(datetime(2026, 4, 16, 10, 0, tzinfo=UTC), "a", "s1"),
+        flat_output_name(datetime(2026, 4, 16, 9, 0, tzinfo=UTC), "a", "s2"),
+        flat_output_name(datetime(2026, 4, 15, 23, 59, tzinfo=UTC), "b", "s3"),
     ]
     assert sorted(names) == [names[2], names[1], names[0]]  # oldest first
 
@@ -60,7 +58,7 @@ def test_chronological_sort():
 def test_project_embedded():
     """Project slug is in the filename for traceability."""
     result = flat_output_name(
-        datetime(2026, 4, 1, 14, 0, tzinfo=timezone.utc),
+        datetime(2026, 4, 1, 14, 0, tzinfo=UTC),
         "germanly",
         "slug",
     )
@@ -70,7 +68,7 @@ def test_project_embedded():
 def test_subagent_slug():
     """Subagent slugs (with -subagent- suffix) work fine."""
     result = flat_output_name(
-        datetime(2026, 4, 1, 14, 0, tzinfo=timezone.utc),
+        datetime(2026, 4, 1, 14, 0, tzinfo=UTC),
         "research",
         "my-slug-subagent-abc12345",
     )
@@ -82,17 +80,19 @@ def test_subagent_slug():
 
 
 def test_flat_output_name_with_disambiguator():
-    from datetime import datetime, timezone
+    from datetime import datetime
+
     from llmwiki.convert import flat_output_name
-    ts = datetime(2026, 4, 16, 10, 0, tzinfo=timezone.utc)
+    ts = datetime(2026, 4, 16, 10, 0, tzinfo=UTC)
     out = flat_output_name(ts, "proj", "slug", disambiguator="ab12cd34")
     assert out == "2026-04-16T10-00-proj-slug--ab12cd34.md"
 
 
 def test_flat_output_name_empty_disambiguator_stays_canonical():
-    from datetime import datetime, timezone
+    from datetime import datetime
+
     from llmwiki.convert import flat_output_name
-    ts = datetime(2026, 4, 16, 10, 0, tzinfo=timezone.utc)
+    ts = datetime(2026, 4, 16, 10, 0, tzinfo=UTC)
     out_none = flat_output_name(ts, "proj", "slug")
     out_empty = flat_output_name(ts, "proj", "slug", disambiguator="")
     assert out_none == out_empty
@@ -101,6 +101,7 @@ def test_flat_output_name_empty_disambiguator_stays_canonical():
 
 def test_source_hash8_is_stable():
     from pathlib import Path
+
     from llmwiki.convert import _source_hash8
     a1 = _source_hash8(Path("/a/b/c.jsonl"))
     a2 = _source_hash8(Path("/a/b/c.jsonl"))
@@ -112,6 +113,7 @@ def test_source_hash8_is_stable():
 
 def test_source_hash8_handles_unicode_path():
     from pathlib import Path
+
     from llmwiki.convert import _source_hash8
     h = _source_hash8(Path("/home/日本語/session.jsonl"))
     assert len(h) == 8
@@ -121,13 +123,13 @@ def test_source_hash8_handles_unicode_path():
 def test_collision_produces_distinct_filenames():
     """#339 regression — subagents and same-minute siblings get
     distinct output names when both sources exist."""
-    from datetime import datetime, timezone
+    from datetime import datetime
     from pathlib import Path
-    from llmwiki.convert import flat_output_name, _source_hash8
-    ts = datetime(2026, 4, 16, 10, 0, tzinfo=timezone.utc)
+
+    from llmwiki.convert import _source_hash8, flat_output_name
+    ts = datetime(2026, 4, 16, 10, 0, tzinfo=UTC)
 
     # Simulate: parent session + one subagent, same minute + slug.
-    parent_src = Path("/u/.claude/projects/p/sess.jsonl")
     sub_src = Path("/u/.claude/projects/p/sess/subagents/agent-abc.jsonl")
 
     parent_name = flat_output_name(ts, "proj", "slug")

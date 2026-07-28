@@ -16,13 +16,10 @@ import json
 from datetime import date
 from pathlib import Path
 
-import pytest
-
 # ═══════════════════════════════════════════════════════════════════════
 # build.py: md_to_html edge cases
 # ═══════════════════════════════════════════════════════════════════════
-
-from llmwiki.build import md_to_html, parse_frontmatter, normalize_markdown
+from llmwiki.build import md_to_html, normalize_markdown, parse_frontmatter
 
 
 class TestMdToHtmlEdgeCases:
@@ -147,7 +144,6 @@ from llmwiki.viz_heatmap import (
     collect_session_counts,
     compute_quantile_thresholds,
     render_heatmap,
-    window_bounds,
 )
 
 
@@ -221,10 +217,9 @@ class TestToolChartEdgeCases:
 # viz_tokens: degenerate data
 # ═══════════════════════════════════════════════════════════════════════
 
+from llmwiki.format_numbers import format_tokens
 from llmwiki.viz_tokens import (
     cache_hit_ratio,
-    format_tokens,
-    parse_token_totals,
     render_session_token_card,
 )
 

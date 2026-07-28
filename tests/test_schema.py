@@ -5,14 +5,12 @@ from __future__ import annotations
 import pytest
 
 from llmwiki.schema import (
-    ENTITY_KIND_AI_MODEL,
     KNOWN_BENCHMARKS,
     benchmark_label,
     format_price,
     is_model_entity,
     parse_model_profile,
 )
-
 
 # ─── is_model_entity ─────────────────────────────────────────────────────
 

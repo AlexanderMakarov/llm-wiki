@@ -4,17 +4,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from llmwiki.context_md import (
-    CONTEXT_FILENAME,
     collect_folder_contexts,
     find_uncontexted_folders,
     folder_context_summary,
     is_context_file,
     load_folder_context,
 )
-
 
 # ─── is_context_file ─────────────────────────────────────────────────────
 

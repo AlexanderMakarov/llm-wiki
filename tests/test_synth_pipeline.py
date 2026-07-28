@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
-
-import pytest
 
 from llmwiki.synth.base import BaseSynthesizer, DummySynthesizer
 from llmwiki.synth.pipeline import (

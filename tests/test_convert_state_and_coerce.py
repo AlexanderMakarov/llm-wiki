@@ -17,13 +17,12 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
 from llmwiki.convert import (
-    Redactor,
     DEFAULT_CONFIG,
+    Redactor,
     _coerce_int,
     _migrate_legacy_state,
     _portable_state_key,
@@ -31,7 +30,6 @@ from llmwiki.convert import (
     save_state,
     summarize_tool_use,
 )
-
 
 # ─── _portable_state_key ──────────────────────────────────────────────────
 

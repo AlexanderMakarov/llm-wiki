@@ -24,12 +24,10 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
-from llmwiki import convert as convert_mod
-from llmwiki.convert import convert_all, load_state, save_state
+from llmwiki.convert import convert_all
 
 
 def _sync_state(path: Path) -> dict:

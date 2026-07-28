@@ -224,7 +224,7 @@ def render_wiki_value_section(
 
     dead_block = ""
     if dead_stock_total or dead_stock:
-        from llmwiki.render.collapse_section import collapse_section_list
+        from llmwiki.render.collapse_section import collapse_section_list  # noqa: PLC0415 — lazy load / avoid cycle
 
         items = [
             f"<li><code>{html.escape(p)}</code></li>" for p in dead_stock

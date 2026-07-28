@@ -23,7 +23,6 @@ from llmwiki.convert import (
     is_temp_cwd_session,
 )
 
-
 # ─── unit: is_headless_session ───────────────────────────────────────────
 
 

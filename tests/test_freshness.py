@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
-
-import pytest
+from datetime import datetime, timedelta
 
 from llmwiki.freshness import (
     DEFAULT_GREEN_DAYS,
@@ -16,7 +14,6 @@ from llmwiki.freshness import (
     parse_timestamp,
     resolve_last_updated,
 )
-
 
 # ─── parse_timestamp ─────────────────────────────────────────────────────
 

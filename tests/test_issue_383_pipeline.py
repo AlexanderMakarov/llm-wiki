@@ -6,8 +6,6 @@ import argparse
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 
 def test_all_parser_accepts_with_synth_flag():
     from llmwiki.cli import build_parser

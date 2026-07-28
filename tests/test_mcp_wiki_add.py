@@ -14,9 +14,7 @@ import json
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-
-from llmwiki.mcp.server import TOOLS, TOOL_IMPLS, tool_wiki_add
+from llmwiki.mcp.server import TOOL_IMPLS, TOOLS, tool_wiki_add
 
 
 def _result_text(result: dict) -> str:

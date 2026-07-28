@@ -32,7 +32,6 @@ from llmwiki.synth.ollama import (
     load_ollama_config,
 )
 
-
 # ─── Test helpers ─────────────────────────────────────────────────────
 
 
@@ -171,7 +170,7 @@ def test_is_available_false_on_500():
 
 
 def test_is_available_false_on_timeout():
-    synth, _, _ = _make_synth(get_script=[socket.timeout("slow")])
+    synth, _, _ = _make_synth(get_script=[TimeoutError("slow")])
     assert synth.is_available() is False
 
 
@@ -298,7 +297,7 @@ def test_synthesize_gives_up_after_max_retries_on_5xx():
 def test_synthesize_retries_on_socket_timeout():
     body_ok = json.dumps({"response": "ok"})
     synth, post, _ = _make_synth(
-        post_script=[socket.timeout("slow"), (200, body_ok)]
+        post_script=[TimeoutError("slow"), (200, body_ok)]
     )
     out = synth.synthesize_source_page(
         raw_body="x", meta={}, prompt_template="{body}"

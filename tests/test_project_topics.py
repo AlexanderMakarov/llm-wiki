@@ -2,19 +2,14 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
-import pytest
-
 from llmwiki.project_topics import (
-    _NOISE_TAGS,
     extract_session_topics,
     get_project_topics,
     load_project_profile,
     render_topic_chips,
     render_topic_chips_linked,
 )
-
+from llmwiki.tag_utils import NOISE_TAGS as _NOISE_TAGS
 
 # ─── load_project_profile ────────────────────────────────────────────────
 

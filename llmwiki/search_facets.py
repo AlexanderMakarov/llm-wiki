@@ -18,9 +18,8 @@ from __future__ import annotations
 
 from typing import Any
 
-# Shared tag parser + NOISE_TAGS live in llmwiki.tag_utils so
-# llmwiki/categories.py uses the same implementation.
-from llmwiki.tag_utils import NOISE_TAGS, parse_tags_field as _parse_tags_field
+# Tag parsing lives in llmwiki.tag_utils (shared with categories).
+from llmwiki.tag_utils import parse_tags_field as _parse_tags_field
 
 
 def _parse_confidence(raw: Any) -> float:

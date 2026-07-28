@@ -213,7 +213,7 @@ def test_blake2b_key_is_8_bytes():
 
 def test_plain_cache_eviction_at_max():
     """FIFO eviction works for the plain cache too (#417)."""
-    from llmwiki.build import md_to_plain_text, _MD_CACHE_MAX
+    from llmwiki.build import _MD_CACHE_MAX, md_to_plain_text
     # Fill the cache one over the cap.
     for i in range(_MD_CACHE_MAX + 5):
         md_to_plain_text(f"body {i}")

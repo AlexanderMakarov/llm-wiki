@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-from pytest_bdd import given, scenarios, then, when
-
-from playwright.sync_api import Page, expect
+from playwright.sync_api import Page
+from pytest_bdd import scenarios, then, when
 
 from tests.e2e.steps.ui_steps import *  # noqa: F401,F403
-
 
 scenarios("features/graph_viewer.feature")
 

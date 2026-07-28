@@ -52,12 +52,13 @@ A committed `pre-push` hook in `.githooks/` lints the Python files in your push 
 git config core.hooksPath .githooks
 ```
 
-`ruff check --fix` clears the mechanical findings. If you must bypass the hook, `git push --no-verify` works, but say why in the PR.
+Prefer `ruff check --fix --select …` for safe rule families — never bare `ruff check --fix` (it can delete deliberate re-exports). If you must bypass the hook, `git push --no-verify` works, but say why in the PR.
 
-Lint is currently **not** clean repo-wide — a backlog of pre-existing violations is being cleared in separate sweeps (see issue #58 for the plan), and CI does not yet fail on them. That is a reason to keep your own diff clean, not a licence to add to the backlog.
+CI runs `ruff check llmwiki tests scripts` and fails the build on findings (#58). Keep your own diff clean.
 
 ## Python conventions
 
-- Imports belong at the top of the module. Deferring one inside a function is acceptable **only** for an optional extra (`trafilatura`, `markitdown`, `graphifyy`, `networkx`), to break a genuine import cycle, or to keep CLI startup fast — and the reason goes in a comment on the line.
+- Imports belong at the top of the module. Deferring one inside a function is acceptable **only** for an optional extra (`trafilatura`, `markitdown`, `graphifyy`, `networkx`), to break a genuine import cycle, or to keep CLI startup fast — and the reason goes in a `# noqa: PLC0415` comment on the line (`tests/`/`scripts/`/`cli.py` are exempt).
+- Prefer importing helpers from the owning module over high-level facade re-exports.
 - Public functions carry a docstring. Short is fine; absent is not.
 - Remove dead code, unused imports, and unused variables as you go.

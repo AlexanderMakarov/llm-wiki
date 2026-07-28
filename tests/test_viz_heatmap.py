@@ -13,8 +13,6 @@ from __future__ import annotations
 import re
 from datetime import date
 
-import pytest
-
 from llmwiki.viz_heatmap import (
     CELL_SIZE,
     ROW_COUNT,
@@ -27,7 +25,6 @@ from llmwiki.viz_heatmap import (
     week_column_count,
     window_bounds,
 )
-
 
 # ─── window_bounds: GitHub-style Sunday alignment ────────────────────────
 

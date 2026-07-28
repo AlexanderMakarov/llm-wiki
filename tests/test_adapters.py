@@ -72,7 +72,6 @@ def test_all_adapters_have_description():
 
 def test_claude_code_project_slug_stripping():
     """derive_project_slug should strip the common '-Users-...-draft-' prefix."""
-    from pathlib import Path
 
     adapter = ClaudeCodeAdapter()
     # Fake a path that looks like what Claude Code writes
@@ -86,7 +85,6 @@ def test_claude_code_project_slug_stripping():
 
 
 def test_claude_code_project_slug_fallback():
-    from pathlib import Path
 
     adapter = ClaudeCodeAdapter()
     # Path that doesn't match the expected pattern

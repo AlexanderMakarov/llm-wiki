@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import FrozenInstanceError
+
 import pytest
 
 from llmwiki.cache import (
@@ -11,7 +13,6 @@ from llmwiki.cache import (
     MIN_CACHEABLE_TOKENS,
     MODEL_PRICING,
     CachedPrompt,
-    CostEstimate,
     build_messages,
     estimate_cost,
     estimate_tokens,
@@ -21,7 +22,6 @@ from llmwiki.cache import (
     resolve_pricing_model,
     warn_prefix_too_small,
 )
-
 
 # ─── Constants / defaults ─────────────────────────────────────────────
 
@@ -135,7 +135,7 @@ def test_build_messages_shape():
 
 def test_cached_prompt_is_frozen():
     p = CachedPrompt(stable_prefix="a", dynamic_suffix="b")
-    with pytest.raises(Exception):  # frozen dataclass → FrozenInstanceError
+    with pytest.raises(FrozenInstanceError):
         p.stable_prefix = "changed"  # type: ignore[misc]
 
 
@@ -389,8 +389,8 @@ def test_estimate_command_emits_total(tmp_path, monkeypatch, capsys):
 
 
 def test_estimate_command_no_new_sessions(tmp_path, monkeypatch, capsys):
-    from llmwiki import cli as cli_mod
     import llmwiki.synth.pipeline as pipe
+    from llmwiki import cli as cli_mod
 
     (tmp_path / "raw" / "sessions").mkdir(parents=True)
     (tmp_path / "raw" / "docs").mkdir(parents=True)

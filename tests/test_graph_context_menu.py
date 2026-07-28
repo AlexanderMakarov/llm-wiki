@@ -18,10 +18,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from llmwiki.graph import HTML_TEMPLATE, build_graph, write_html
-
 
 # ─── Template-level: ensure every piece is present ────────────────────────
 

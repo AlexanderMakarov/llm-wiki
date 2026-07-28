@@ -19,7 +19,6 @@ from pathlib import Path
 
 import pytest
 
-
 # ─── BaseAdapter default — never True ────────────────────────────────────
 
 

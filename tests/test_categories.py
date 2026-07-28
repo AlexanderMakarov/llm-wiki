@@ -4,17 +4,15 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from llmwiki.categories import (
-    _parse_tags,
-    scan_tags,
     dataview_page,
-    static_page,
     generate_dataview_categories,
     generate_static_categories,
-    NOISE_TAGS,
+    scan_tags,
+    static_page,
 )
+from llmwiki.tag_utils import NOISE_TAGS
+from llmwiki.tag_utils import parse_tags_field as _parse_tags
 
 
 def _mk_page(meta: dict) -> dict:

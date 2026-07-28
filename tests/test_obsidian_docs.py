@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-import pytest
-
 from llmwiki import REPO_ROOT
-
 
 DOC = REPO_ROOT / "docs" / "obsidian-integration.md"
 

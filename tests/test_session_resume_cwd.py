@@ -8,7 +8,7 @@ at build time so resume commands and project titles are usable.
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -24,7 +24,6 @@ from llmwiki.build import (
     supports_resume,
 )
 from llmwiki.convert import restore_local_path
-
 
 REAL = "alice"
 REPL = "USER"
@@ -171,7 +170,7 @@ def test_session_page_hides_resume_for_non_claude(tmp_path: Path):
 
 
 def test_old_session_resume_marked_stale(tmp_path: Path):
-    old = (datetime.now(timezone.utc) - timedelta(days=45)).strftime("%Y-%m-%dT%H:%M:%S+00:00")
+    old = (datetime.now(UTC) - timedelta(days=45)).strftime("%Y-%m-%dT%H:%M:%S+00:00")
     path, meta, body = _src(_meta(started=old, date=old[:10]))
     out = render_session(path, meta, body, tmp_path, "demo-proj")
     html = out.read_text(encoding="utf-8")

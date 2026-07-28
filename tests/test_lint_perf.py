@@ -17,13 +17,12 @@ from pathlib import Path
 
 import pytest
 
-from llmwiki.lint import REGISTRY, load_pages, run_all
+from llmwiki.lint import load_pages, run_all
 from llmwiki.lint.rules import (
     DuplicateDetection,
     LinkIntegrity,
     OrphanDetection,
 )
-
 
 # ─── Synthetic corpus generator ──────────────────────────────────────
 
@@ -286,7 +285,7 @@ def test_whitespace_only_difference_flagged(tmp_path):
         encoding="utf-8",
     )
     (sources / "b.md").write_text(
-        f'---\ntitle: "Dup"\ntype: source\nproject: p\n---\n\n'
+        '---\ntitle: "Dup"\ntype: source\nproject: p\n---\n\n'
         + body.replace("\n", "\r\n") + "\r\n",
         encoding="utf-8",
     )

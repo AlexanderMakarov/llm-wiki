@@ -38,7 +38,6 @@ import os
 import shutil
 import subprocess
 import sys
-import time
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -158,16 +157,23 @@ def record(base_url: str) -> Path:
         page = ctx.new_page()
         try:
             # 1. Home
-            page.goto(f"{base_url}/index.html"); page.wait_for_load_state("networkidle")
+            page.goto(f"{base_url}/index.html")
+            page.wait_for_load_state("networkidle")
             inject_overlays(page)
             subtitle(page, "llmwiki — your sessions, browsable", 1400)
-            smooth_scroll(page, 250); subtitle(page, "Activity heatmap")
-            smooth_scroll(page, 480); subtitle(page, "Token stats")
-            smooth_scroll(page, 700); subtitle(page, "Project grid"); page.wait_for_timeout(800)
+            smooth_scroll(page, 250)
+            subtitle(page, "Activity heatmap")
+            smooth_scroll(page, 480)
+            subtitle(page, "Token stats")
+            smooth_scroll(page, 700)
+            subtitle(page, "Project grid")
+            page.wait_for_timeout(800)
 
             # 2. Projects index
-            page.goto(f"{base_url}/projects/index.html"); page.wait_for_load_state("networkidle")
-            inject_overlays(page); subtitle(page, "Projects index — freshness badges", 1400)
+            page.goto(f"{base_url}/projects/index.html")
+            page.wait_for_load_state("networkidle")
+            inject_overlays(page)
+            subtitle(page, "Projects index — freshness badges", 1400)
 
             # 3. Largest project (best-effort match — fallback to sessions index)
             for sel in ('a.card[href="llm-wiki.html"]',
@@ -175,36 +181,48 @@ def record(base_url: str) -> Path:
                         'a.card'):
                 if move_and_click(page, sel, post_ms=1100):
                     break
-            page.wait_for_load_state("networkidle"); inject_overlays(page)
+            page.wait_for_load_state("networkidle")
+            inject_overlays(page)
             subtitle(page, "Per-project sessions list", 900)
             smooth_scroll(page, 350)
 
             # 4. Sessions index — filter
-            page.goto(f"{base_url}/sessions/index.html"); page.wait_for_load_state("networkidle")
-            inject_overlays(page); subtitle(page, "Filter by slug", 800)
-            page.locator("#filter-text").fill("subagent"); page.wait_for_timeout(900)
-            page.locator("#filter-clear").click(); page.wait_for_timeout(400)
+            page.goto(f"{base_url}/sessions/index.html")
+            page.wait_for_load_state("networkidle")
+            inject_overlays(page)
+            subtitle(page, "Filter by slug", 800)
+            page.locator("#filter-text").fill("subagent")
+            page.wait_for_timeout(900)
+            page.locator("#filter-clear").click()
+            page.wait_for_timeout(400)
 
             # 5. Cmd+K palette
-            page.goto(f"{base_url}/index.html"); page.wait_for_load_state("networkidle")
-            inject_overlays(page); subtitle(page, "Cmd+K palette", 700)
+            page.goto(f"{base_url}/index.html")
+            page.wait_for_load_state("networkidle")
+            inject_overlays(page)
+            subtitle(page, "Cmd+K palette", 700)
             move_and_click(page, "#open-palette", post_ms=400)
             try:
                 page.locator("#palette-input").press_sequentially("graph", delay=70)
                 page.wait_for_timeout(900)
             except Exception:
                 pass
-            page.keyboard.press("Escape"); page.wait_for_timeout(500)
+            page.keyboard.press("Escape")
+            page.wait_for_timeout(500)
 
             # 6. Graph
-            page.goto(f"{base_url}/graph.html"); page.wait_for_load_state("networkidle")
-            page.wait_for_timeout(2000); inject_overlays(page)
+            page.goto(f"{base_url}/graph.html")
+            page.wait_for_load_state("networkidle")
+            page.wait_for_timeout(2000)
+            inject_overlays(page)
             subtitle(page, "Knowledge graph", 1200)
             move_and_click(page, "#cluster-toggle", post_ms=1200)
 
             # 7. Theme toggle
-            page.goto(f"{base_url}/index.html"); page.wait_for_load_state("networkidle")
-            inject_overlays(page); subtitle(page, "Theme: dark → light", 800)
+            page.goto(f"{base_url}/index.html")
+            page.wait_for_load_state("networkidle")
+            inject_overlays(page)
+            subtitle(page, "Theme: dark → light", 800)
             move_and_click(page, "#theme-toggle", post_ms=1200)
             subtitle(page, "")
         finally:

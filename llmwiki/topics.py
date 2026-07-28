@@ -177,7 +177,7 @@ def derive_vocabulary(
 def _load_consolidation_cache(wiki_dir: Path | None):
     """Load the consolidation cache, swallowing any import/IO error."""
     try:
-        from llmwiki.topics_consolidate import load_cache
+        from llmwiki.topics_consolidate import load_cache  # noqa: PLC0415 — lazy load / avoid cycle
 
         return load_cache(wiki_dir)
     except Exception:
@@ -240,7 +240,7 @@ def build_topic_graph(
     keep_pairs: set[tuple[str, str]] = set()
     for node, lst in by_node.items():
         lst.sort(reverse=True)
-        for w, other, _ in lst[:max_neighbors]:
+        for _w, other, _ in lst[:max_neighbors]:
             keep_pairs.add(tuple(sorted((node, other))))
 
     edges = []

@@ -37,33 +37,33 @@ from __future__ import annotations
 # (e.g. ``from llmwiki.lint.rules import _basename, _page_slug``).
 # tests/test_lint_windows_paths.py reaches for them this way.
 from llmwiki.lint.rules._helpers import (  # noqa: F401
+    _TOOL_BULLET_RE,
+    _TOOL_COUNTS_KEYS_RE,
+    _TOOLS_USED_RE,
+    _TURN_USER_RE,
     _basename,
     _normalise_tool_counts_keys,
     _normalise_tools_used,
     _page_slug,
     _resolve_index_href,
-    _TOOL_BULLET_RE,
-    _TOOL_COUNTS_KEYS_RE,
-    _TOOLS_USED_RE,
-    _TURN_USER_RE,
 )
+from llmwiki.lint.rules.claim_verification import ClaimVerification  # noqa: F401
+from llmwiki.lint.rules.content_freshness import ContentFreshness  # noqa: F401
+from llmwiki.lint.rules.contradiction_detection import ContradictionDetection  # noqa: F401
+from llmwiki.lint.rules.duplicate_detection import DuplicateDetection  # noqa: F401
+from llmwiki.lint.rules.entity_consistency import EntityConsistency  # noqa: F401
 
 # Rule classes — order matches the pre-split file so REGISTRY enumeration
 # is stable. Each module's top-level @register call runs at import time.
 from llmwiki.lint.rules.frontmatter_completeness import FrontmatterCompleteness  # noqa: F401
+from llmwiki.lint.rules.frontmatter_count_consistency import FrontmatterCountConsistency  # noqa: F401
 from llmwiki.lint.rules.frontmatter_validity import FrontmatterValidity  # noqa: F401
+from llmwiki.lint.rules.index_sync import IndexSync  # noqa: F401
 from llmwiki.lint.rules.link_integrity import LinkIntegrity  # noqa: F401
 from llmwiki.lint.rules.orphan_detection import OrphanDetection  # noqa: F401
-from llmwiki.lint.rules.content_freshness import ContentFreshness  # noqa: F401
-from llmwiki.lint.rules.entity_consistency import EntityConsistency  # noqa: F401
-from llmwiki.lint.rules.duplicate_detection import DuplicateDetection  # noqa: F401
-from llmwiki.lint.rules.index_sync import IndexSync  # noqa: F401
-from llmwiki.lint.rules.contradiction_detection import ContradictionDetection  # noqa: F401
-from llmwiki.lint.rules.claim_verification import ClaimVerification  # noqa: F401
 from llmwiki.lint.rules.stale_candidates import StaleCandidates  # noqa: F401
+from llmwiki.lint.rules.stale_reference_detection import StaleReferenceDetection  # noqa: F401
+from llmwiki.lint.rules.stub_source_pages import StubSourcePages  # noqa: F401
 from llmwiki.lint.rules.summary_accuracy import SummaryAccuracy  # noqa: F401
 from llmwiki.lint.rules.tags_topics_convention import TagsTopicsConvention  # noqa: F401
-from llmwiki.lint.rules.stale_reference_detection import StaleReferenceDetection  # noqa: F401
-from llmwiki.lint.rules.frontmatter_count_consistency import FrontmatterCountConsistency  # noqa: F401
 from llmwiki.lint.rules.tools_consistency import ToolsConsistency  # noqa: F401
-from llmwiki.lint.rules.stub_source_pages import StubSourcePages  # noqa: F401

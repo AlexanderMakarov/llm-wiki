@@ -4,14 +4,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from llmwiki.models_page import (
     discover_model_entities,
     render_model_info_card,
     render_models_index,
 )
-
 
 # ─── discover_model_entities ─────────────────────────────────────────────
 
@@ -88,7 +85,7 @@ def test_info_card_formats_context_window_as_K():
     card = render_model_info_card({
         "title": "X", "model": {"context_window": 200_000}
     })
-    assert "200K" in card
+    assert "200.0K" in card
 
 
 def test_info_card_renders_pricing_row():
@@ -171,8 +168,8 @@ def test_models_index_renders_table_with_rows(tmp_path):
     assert '<a href="ClaudeSonnet4.html">' in out
     assert '<a href="GPT5.html">' in out
     # Context windows formatted
-    assert "200K" in out
-    assert "128K" in out
+    assert "200.0K" in out
+    assert "128.0K" in out
     # Prices
     assert "$3.00" in out
     assert "$20.00" in out

@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from llmwiki.build import render_index, render_recent, nav_bar
+from llmwiki.build import nav_bar, render_index, render_recent
 from llmwiki.raw_docs_site import (
     RawDocFile,
     build_tree,
@@ -123,7 +123,10 @@ def test_tree_to_dict_and_write_documents_tree(docs_dir: Path, tmp_path: Path):
 
 def test_document_pages_use_mount_not_inline_tree(docs_dir: Path, tmp_path: Path):
     from llmwiki.build import (
-        breadcrumbs_bar, md_to_html, page_foot, page_head,
+        breadcrumbs_bar,
+        md_to_html,
+        page_foot,
+        page_head,
     )
     out = tmp_path / "site"
     files = scan_raw_docs(docs_dir)

@@ -21,6 +21,8 @@ NOISE_TAGS: set[str] = {
     "claude-code",
     "session-transcript",
     "demo",
+    "codex-cli",
+    "cursor",
     "",
 }
 
@@ -28,16 +30,20 @@ NOISE_TAGS: set[str] = {
 def parse_tags_field(raw: Any) -> list[str]:
     """Parse a YAML ``tags:`` field into a cleaned list of lowercase tags.
 
-    Handles three input shapes:
+    Handles four input shapes:
       - ``None`` / empty string → ``[]``
+      - ``["a", "b"]`` (already a list) → cleaned list
       - ``"[a, b]"`` (YAML list as string) → ``["a", "b"]``
       - ``"a, b"`` (plain comma list) → ``["a", "b"]``
 
     Strips surrounding brackets, quotes, and whitespace. Filters out
     NOISE_TAGS. Always lowercases.
     """
-    if not raw:
+    if raw is None or raw == "":
         return []
+    if isinstance(raw, list):
+        parts = [str(p).strip().strip('"').strip("'") for p in raw]
+        return [p.lower() for p in parts if p and p.lower() not in NOISE_TAGS]
     raw = str(raw).strip()
     # Strip YAML-list brackets if present
     if raw.startswith("[") and raw.endswith("]"):

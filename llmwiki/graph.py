@@ -1152,7 +1152,7 @@ def write_html(graph: dict[str, Any], out_path: Path) -> None:
     # #456: inject the site's standard nav so graph.html isn't a navigation
     # dead end. Imported lazily to avoid a top-level circular dependency
     # (build.py imports graph.copy_to_site).
-    from llmwiki.build import nav_bar, search_palette_markup
+    from llmwiki.build import nav_bar, search_palette_markup  # noqa: PLC0415 — import cycle / lazy load
     site_nav_html = nav_bar(active="graph", link_prefix="")
     # The nav renders a search button and script.js binds Cmd+K, but both
     # no-op unless the dialog they open is on the page too — graph.html

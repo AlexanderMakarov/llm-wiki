@@ -37,10 +37,8 @@ import re
 import subprocess
 import sys
 from pathlib import Path
-from typing import Iterable
 
 import pytest
-
 
 # ─── helpers ────────────────────────────────────────────────────────────
 
@@ -366,8 +364,8 @@ def test_export_all_writes_expected_artifacts(tmp_workspace: Path) -> None:
     llms.txt) all show up in one pass — a regression where one of the
     writers silently no-ops would slip through unit tests but breaks
     SEO + LLM-discoverability in production."""
+    from llmwiki.build import RAW_SESSIONS, discover_sources, group_by_project
     from llmwiki.exporters import export_all
-    from llmwiki.build import discover_sources, group_by_project, RAW_SESSIONS
 
     out = tmp_workspace / "site"
     out.mkdir(parents=True, exist_ok=True)

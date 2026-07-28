@@ -2,15 +2,10 @@
 
 from __future__ import annotations
 
-import json
-from pathlib import Path
-
 import pytest
 
 from llmwiki import __version__
-
 from tests.conftest import REPO_ROOT
-
 
 # ─── version bump ────────────────────────────────────────────────────────
 

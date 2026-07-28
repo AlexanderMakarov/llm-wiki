@@ -18,12 +18,10 @@ from __future__ import annotations
 import subprocess
 import sys
 from pathlib import Path
-from textwrap import dedent
 
 import pytest
 
 from llmwiki import backlinks as b
-
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 

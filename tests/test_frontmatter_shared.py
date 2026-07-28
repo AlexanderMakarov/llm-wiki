@@ -5,12 +5,11 @@ from __future__ import annotations
 import pytest
 
 from llmwiki._frontmatter import (
+    _parse_scalar,
     parse_frontmatter,
     parse_frontmatter_dict,
     parse_frontmatter_or_none,
-    _parse_scalar,
 )
-
 
 # ─── parse_frontmatter: happy paths ──────────────────────────────────
 
@@ -203,8 +202,8 @@ def test_build_py_parse_frontmatter_is_canonical():
     divergent copy. Regression for #409: divergent regexes silently
     dropped CRLF input on the build-side parser only.
     """
-    from llmwiki.build import parse_frontmatter as build_pf
     from llmwiki._frontmatter import parse_frontmatter as canonical_pf
+    from llmwiki.build import parse_frontmatter as build_pf
     assert build_pf is canonical_pf
 
 

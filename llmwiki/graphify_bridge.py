@@ -35,7 +35,7 @@ GRAPHIFY_OUT = REPO_ROOT / "graphify-out"
 def is_available() -> bool:
     """Return True when graphify is importable."""
     try:
-        import graphify  # noqa: F401
+        import graphify  # noqa: F401, PLC0415 — optional extra
         return True
     except ImportError:
         return False
@@ -73,7 +73,7 @@ def _extract_wiki_nodes(wiki_dir: Path) -> dict[str, Any]:
     are connected via project hub nodes and date-proximity edges to
     reduce graph orphans.
     """
-    import re
+    import re  # noqa: PLC0415 — optional extra
     WIKILINK_RE = re.compile(r"\[\[([^\]|#]+?)(?:#[^\]]*)?(?:\|[^\]]+)?\]\]")
 
     nodes: list[dict] = []
@@ -254,13 +254,13 @@ def build_graphify_graph(
     wiki_root = wiki_dir or WIKI_DIR
     graph_root = graph_dir or GRAPH_DIR
     out_root = graphify_out or GRAPHIFY_OUT
-    from graphify.analyze import god_nodes, suggest_questions, surprising_connections
-    from graphify.build import build_from_json
-    from graphify.cluster import cluster, score_all
-    from graphify.detect import detect
-    from graphify.export import to_html, to_json
-    from graphify.extract import extract
-    from graphify.report import generate as generate_report
+    from graphify.analyze import god_nodes, suggest_questions, surprising_connections  # noqa: PLC0415 — optional extra
+    from graphify.build import build_from_json  # noqa: PLC0415 — optional extra
+    from graphify.cluster import cluster, score_all  # noqa: PLC0415 — optional extra
+    from graphify.detect import detect  # noqa: PLC0415 — optional extra
+    from graphify.export import to_html, to_json  # noqa: PLC0415 — optional extra
+    from graphify.extract import extract  # noqa: PLC0415 — optional extra
+    from graphify.report import generate as generate_report  # noqa: PLC0415 — optional extra
 
     # Step 1: Extract wiki pages into nodes + edges
     print("  graphify: extracting wiki pages (frontmatter + wikilinks)...")
@@ -318,7 +318,7 @@ def build_graphify_graph(
     )
 
     # Step 6b: Hyperedges — group relationships connecting 3+ nodes
-    from graphify.export import attach_hyperedges as _attach
+    from graphify.export import attach_hyperedges as _attach  # noqa: PLC0415 — optional extra
     # Find shared wikilink targets (nodes linked by 3+ pages)
     target_sources: dict[str, list[str]] = {}
     for e in extraction["edges"]:
@@ -351,12 +351,12 @@ def build_graphify_graph(
     report_path.write_text(report_md, encoding="utf-8")
 
     # SVG export
-    from graphify.export import to_graphml, to_svg
+    from graphify.export import to_graphml, to_svg  # noqa: PLC0415 — optional extra
     to_svg(G, communities, str(svg_path), community_labels=labels)
 
     # GraphML — flatten list attributes to strings first (GraphML only supports scalars)
     try:
-        import networkx as nx
+        import networkx as nx  # noqa: PLC0415 — optional extra
         H = nx.Graph(G) if not G.is_directed() else nx.DiGraph(G)
         for _, ndata in H.nodes(data=True):
             for k in list(ndata.keys()):
@@ -418,7 +418,7 @@ def build_graphify_graph(
 
 def export_to_obsidian(vault_path: Path) -> Path:
     """Export the Graphify graph to an Obsidian vault."""
-    from graphify.export import to_canvas, to_obsidian
+    from graphify.export import to_canvas, to_obsidian  # noqa: PLC0415 — optional extra
 
     json_path = GRAPHIFY_OUT / "graph.json"
     if not json_path.is_file():
@@ -426,7 +426,7 @@ def export_to_obsidian(vault_path: Path) -> Path:
             f"No graph found at {json_path}. Run `llmwiki graph` first."
         )
 
-    from networkx.readwrite import json_graph
+    from networkx.readwrite import json_graph  # noqa: PLC0415 — optional extra
     data = json.loads(json_path.read_text(encoding="utf-8"))
     G = json_graph.node_link_graph(data)
 
@@ -453,7 +453,7 @@ def query_graph(question: str, *, depth: int = 3, token_budget: int = 2000) -> s
     if not json_path.is_file():
         return "No graph found. Run `llmwiki graph` first."
 
-    from networkx.readwrite import json_graph
+    from networkx.readwrite import json_graph  # noqa: PLC0415 — optional extra
 
     data = json.loads(json_path.read_text(encoding="utf-8"))
     G = json_graph.node_link_graph(data)

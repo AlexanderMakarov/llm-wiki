@@ -28,9 +28,9 @@ ruff check llmwiki tests scripts   # lint
 python3 -m pytest tests/ -q        # tests
 ```
 
-A committed `pre-push` hook in `.githooks/` lints the Python files in your push and rejects it on violations. `./setup.sh` wires it; enable it by hand with `git config core.hooksPath .githooks`. `ruff check --fix` clears the mechanical findings, and `git push --no-verify` bypasses the hook if you must — say why in the PR.
+A committed `pre-push` hook in `.githooks/` lints the Python files in your push and rejects it on violations. `./setup.sh` wires it; enable it by hand with `git config core.hooksPath .githooks`. Prefer `ruff check --fix --select …` for safe rule families — never bare `ruff check --fix` (it can delete deliberate re-exports). `git push --no-verify` bypasses the hook if you must — say why in the PR.
 
-Lint is not yet clean repo-wide; a backlog of pre-existing violations is being cleared in separate sweeps (issue #58 has the plan) and CI does not fail on them yet. Keep your own diff clean rather than adding to the backlog.
+CI runs `ruff check llmwiki tests scripts` and fails the build on findings (#58). Keep your own diff clean.
 
 ## Do not confuse with AGENTS.md / CLAUDE.md
 

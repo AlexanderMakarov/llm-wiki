@@ -8,6 +8,10 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ## [Unreleased]
 
+### Changed
+
+- **Ruff lint is clean and blocking in CI (#58)** — cleared the ~700-finding backlog under `E`/`F`/`I`/`B`/`UP`, enabled `PLC0415` for `llmwiki/` (with `# noqa: PLC0415` + reason on legitimate deferred imports; `tests/`/`scripts/`/`cli.py` exempt), and dropped `|| true` from `.github/workflows/ci.yml` so `ruff check llmwiki tests scripts` fails the build. Callers import shared tag helpers from `llmwiki.tag_utils` rather than facade re-exports. Shared `format_tokens` lives in `llmwiki.format_numbers` (used by viz/models/compare). Removed per-file line-count ceilings in `tests/test_render_split.py`. See `CONTRIBUTING.md` Linting.
+
 ### Fixed
 
 - **Home State widget empty after v1.4→v1.5 upgrade (#70)** — `synth.pipeline` is required by the Home table but was only written by `sync` / `add` / `synthesize --estimate`, so the documented post-upgrade `build` left a fully-synced vault showing the empty placeholder. `build` now one-shot backfills `synth.pipeline` when the state snapshot lacks that shape (local-only; skipped once present). Docs: `docs/UPGRADING.md`, `docs/reference/ui.md`, `docs/reference/state-persistence.md`.

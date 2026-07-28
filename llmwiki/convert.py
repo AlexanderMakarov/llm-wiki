@@ -13,18 +13,19 @@ import fnmatch as _fnmatch  # #py-m11 (#597): module-level alias
 import json
 import re
 import sys
-from datetime import datetime, timedelta, timezone
+from collections.abc import Iterable
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any, Iterable, Optional
+from typing import Any
 
 from llmwiki import REPO_ROOT
 from llmwiki.adapters import REGISTRY, discover_adapters
 from llmwiki.quarantine import add_entry as _quarantine_add
 from llmwiki.quarantine import clear_entry as _quarantine_clear
+from llmwiki.state_store import mtime_from_state, mtime_to_iso
 from llmwiki.state_store import read_state as _read_unified_state
 from llmwiki.state_store import resolve_state_file as _resolve_state_file
 from llmwiki.state_store import update_state as _update_unified_state
-from llmwiki.state_store import mtime_from_state, mtime_to_iso
 
 DEFAULT_CONFIG_FILE = REPO_ROOT / "examples" / "sessions_config.json"
 # #25: the user's personal, gitignored root config.json. On the sync/queue
@@ -87,7 +88,7 @@ def load_config(path: Path) -> dict[str, Any]:
     # round-trip deep-copy from the era before copy.deepcopy was a
     # builtin import. copy.deepcopy is ~5× faster and avoids the
     # implicit "JSON-serializable types only" constraint.
-    import copy
+    import copy  # noqa: PLC0415 — lazy load / avoid cycle
     cfg: dict[str, Any] = copy.deepcopy(DEFAULT_CONFIG)
     if path.exists():
         try:
@@ -140,7 +141,7 @@ def _ensure_real_username(cfg: dict[str, Any]) -> None:
     if red.get("real_username"):
         return
     try:
-        import os
+        import os  # noqa: PLC0415 — lazy load / avoid cycle
         candidate = (
             os.environ.get("USER")
             or os.environ.get("USERNAME")
@@ -182,7 +183,7 @@ def _overlay_config_file(cfg: dict[str, Any], path: Path) -> None:
             cfg[section] = value
 
 
-def _resolve_convert_config(config_file: Optional[Path]) -> dict[str, Any]:
+def _resolve_convert_config(config_file: Path | None) -> dict[str, Any]:
     """Resolve the effective convert-time config (#25).
 
     With no explicit ``config_file`` — the ``sync`` and queue default — merge
@@ -311,7 +312,7 @@ def _migrate_legacy_state(
             out[k] = parsed_v
             continue
         # Legacy absolute-path key. Try to infer the adapter from the path.
-        inferred: Optional[str] = None
+        inferred: str | None = None
         for name, token in hints:
             if name in known_names and token in k:
                 inferred = name
@@ -331,7 +332,7 @@ def _migrate_legacy_state(
 
 
 def load_state(
-    path: Path, adapter_names: Optional[Iterable[str]] = None
+    path: Path, adapter_names: Iterable[str] | None = None
 ) -> dict[str, Any]:
     """Load ``.llmwiki-state.json`` and migrate legacy absolute-path keys.
 
@@ -440,7 +441,7 @@ class IgnoreMatcher:
             self._rules.append((raw, negate, dir_only))
 
     @classmethod
-    def from_file(cls, path: Path) -> "IgnoreMatcher":
+    def from_file(cls, path: Path) -> IgnoreMatcher:
         if not path.exists():
             return cls([])
         try:
@@ -450,7 +451,7 @@ class IgnoreMatcher:
             # permission / IO problems from operators. Print a warning
             # to stderr so the failure is visible without breaking
             # callers that expect a usable IgnoreMatcher.
-            import sys as _sys
+            import sys as _sys  # noqa: PLC0415 — lazy load / avoid cycle
             print(
                 f"warning: could not read {path}: {e}; treating as no-ignores",
                 file=_sys.stderr,
@@ -565,7 +566,7 @@ def parse_jsonl(path: Path) -> list[dict[str, Any]]:
             if consumed > PER_FILE_BYTE_CAP:
                 # Stop here — return what we've accumulated so far so
                 # callers still get partial data instead of nothing.
-                import sys as _sys
+                import sys as _sys  # noqa: PLC0415 — lazy load / avoid cycle
                 print(
                     f"warning: {path} exceeded {PER_FILE_BYTE_CAP // (1024*1024)}MB cap; "
                     f"truncating after {line_no} lines",
@@ -631,7 +632,7 @@ def is_temp_cwd_session(records: list[dict[str, Any]]) -> bool:
     return cwd in _TEMP_CWD_EXACT or cwd.startswith(_TEMP_CWD_PREFIXES)
 
 
-def parse_iso(ts: Optional[str]) -> Optional[datetime]:
+def parse_iso(ts: str | None) -> datetime | None:
     if not ts:
         return None
     try:
@@ -640,8 +641,8 @@ def parse_iso(ts: Optional[str]) -> Optional[datetime]:
         return None
 
 
-def latest_record_time(records: list[dict[str, Any]]) -> Optional[datetime]:
-    latest: Optional[datetime] = None
+def latest_record_time(records: list[dict[str, Any]]) -> datetime | None:
+    latest: datetime | None = None
     for r in records:
         t = parse_iso(r.get("timestamp"))
         if t and (latest is None or t > latest):
@@ -649,8 +650,8 @@ def latest_record_time(records: list[dict[str, Any]]) -> Optional[datetime]:
     return latest
 
 
-def first_record_time(records: list[dict[str, Any]]) -> Optional[datetime]:
-    earliest: Optional[datetime] = None
+def first_record_time(records: list[dict[str, Any]]) -> datetime | None:
+    earliest: datetime | None = None
     for r in records:
         t = parse_iso(r.get("timestamp"))
         if t and (earliest is None or t < earliest):
@@ -762,7 +763,7 @@ class Redactor:
         # the good ones. Default token patterns + username redaction
         # still run regardless.
         self.patterns = []
-        import sys as _sys
+        import sys as _sys  # noqa: PLC0415 — lazy load / avoid cycle
         for p in red.get("extra_patterns", []):
             try:
                 self.patterns.append(re.compile(p))
@@ -874,8 +875,8 @@ def _substitute_path_username(text: str, *, from_user: str, to_user: str) -> str
 def restore_local_path(
     path: str,
     *,
-    real_user: Optional[str] = None,
-    repl_user: Optional[str] = None,
+    real_user: str | None = None,
+    repl_user: str | None = None,
 ) -> str:
     """Undo username redaction in an already-absolute path (#36, #56).
 
@@ -1096,7 +1097,7 @@ def compute_hour_buckets(records: list[dict[str, Any]]) -> dict[str, int]:
         ts = parse_iso(r.get("timestamp"))
         if ts is None:
             continue
-        ts_utc = ts.astimezone(timezone.utc) if ts.tzinfo else ts
+        ts_utc = ts.astimezone(UTC) if ts.tzinfo else ts
         key = ts_utc.strftime("%Y-%m-%dT%H")
         buckets[key] = buckets.get(key, 0) + 1
     # Sorted chronologically for stable frontmatter output.
@@ -1116,7 +1117,7 @@ def compute_duration_seconds(records: list[dict[str, Any]]) -> int:
 # ─── tool-use rendering ────────────────────────────────────────────────────
 
 
-def _coerce_int(value: Any) -> Optional[int]:
+def _coerce_int(value: Any) -> int | None:
     """Return ``value`` as an ``int`` or ``None`` for unparseable input.
 
     G-05 (#291): sub-agent transcripts occasionally ship tool arguments
@@ -1395,7 +1396,7 @@ def flat_output_name(
 def _source_hash8(source_path: Path) -> str:
     """Stable 8-char SHA-256 of a source path — used as a filename
     disambiguator when two jsonls would otherwise collide (#339)."""
-    import hashlib as _hl
+    import hashlib as _hl  # noqa: PLC0415 — lazy load / avoid cycle
     return _hl.sha256(str(source_path).encode("utf-8")).hexdigest()[:8]
 
 
@@ -1450,7 +1451,7 @@ def _adapter_tag(adapter_name: str) -> str:
     return normalised
 
 
-def derive_description(records: list[dict[str, Any]], redact: "Redactor") -> str:
+def derive_description(records: list[dict[str, Any]], redact: Redactor) -> str:
     """#471: derive a 120-char human-readable description from the
     first non-trivial user prompt in the session.
 
@@ -1523,7 +1524,7 @@ def render_session_markdown(
     is_subagent_file: bool,
     adapter_name: str = "claude_code",
 ) -> tuple[str, str, datetime]:
-    started = first_record_time(records) or datetime.now(timezone.utc)
+    started = first_record_time(records) or datetime.now(UTC)
     ended = latest_record_time(records) or started
     date_str = started.strftime("%Y-%m-%d")
 
@@ -1665,11 +1666,11 @@ def render_session_markdown(
 def convert_all(
     adapters: list[str] | None = None,
     out_dir: Path = DEFAULT_OUT_DIR,
-    state_file: Optional[Path] = None,
-    config_file: Optional[Path] = None,
+    state_file: Path | None = None,
+    config_file: Path | None = None,
     ignore_file: Path = DEFAULT_IGNORE_FILE,
-    since: Optional[str] = None,
-    project: Optional[str] = None,
+    since: str | None = None,
+    project: str | None = None,
     include_current: bool = False,
     force: bool = False,
     dry_run: bool = False,
@@ -1695,19 +1696,19 @@ def convert_all(
 
     drop_types = config.get("filters", {}).get("drop_record_types", [])
     live_minutes = config.get("filters", {}).get("live_session_minutes", 60)
-    live_cutoff = datetime.now(timezone.utc) - timedelta(minutes=live_minutes)
+    live_cutoff = datetime.now(UTC) - timedelta(minutes=live_minutes)
     exclude_headless = config.get("filters", {}).get("exclude_headless", True)
     exclude_temp_cwd = config.get("filters", {}).get("exclude_temp_cwd", False)
     # #30: "off" drops subagent transcripts before they ever hit raw/. The
     # "only-raw"/"all" modes both convert them here (they diverge only in
     # synthesis), so sync only cares about the "off" case.
-    from llmwiki.synth.pipeline import resolve_include_subagents
+    from llmwiki.synth.pipeline import resolve_include_subagents  # noqa: PLC0415 — lazy load / avoid cycle
     include_subagents = resolve_include_subagents(config)
 
-    since_dt: Optional[datetime] = None
+    since_dt: datetime | None = None
     if since:
         try:
-            since_dt = datetime.strptime(since, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+            since_dt = datetime.strptime(since, "%Y-%m-%d").replace(tzinfo=UTC)
         except ValueError:
             print(f"error: --since must be YYYY-MM-DD, got {since!r}", file=sys.stderr)
             return 2
@@ -1721,7 +1722,7 @@ def convert_all(
         # "unknown adapter" even though the adapter ships. Default-fire (the
         # ``else`` branch) intentionally stays core-only to keep contrib
         # adapters opt-in.
-        from llmwiki.adapters import resolve_adapter_name, discover_contrib
+        from llmwiki.adapters import discover_contrib, resolve_adapter_name  # noqa: PLC0415 — lazy load / avoid cycle
         discover_contrib()
         for name in adapters:
             canonical = resolve_adapter_name(name)
@@ -1951,7 +1952,6 @@ def convert_all(
                 _bump(cls.name, "errored")
                 _quarantine_add(cls.name, str(path), f"render failed: {e}")
                 continue
-            date_str = started.strftime("%Y-%m-%d")
             out_name = flat_output_name(started, project_slug, slug)
             out_path = out_dir / out_name
             # #339: disambiguate when the canonical name would collide with
@@ -2064,7 +2064,7 @@ def convert_all(
         # the *previous* run's `last_sync` timestamp, and the next
         # non-force sync would re-process every file all over again.
         meta = {
-            "last_sync": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "last_sync": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "version": 1,
         }
         save_state(state_file, state)

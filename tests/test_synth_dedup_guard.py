@@ -18,7 +18,6 @@ from pathlib import Path
 from llmwiki.synth.base import DummySynthesizer
 from llmwiki.synth.pipeline import synthesize_new_sessions
 
-
 DOC = """---
 title: "OpenClaw Overview"
 slug: openclaw-openclaw

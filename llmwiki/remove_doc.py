@@ -158,7 +158,7 @@ def build_remove_plan(
     only state keys actually present are listed, so a dry-run reports the
     real dangling keys rather than every key it would attempt to pop.
     """
-    from llmwiki.state_store import read_state
+    from llmwiki.state_store import read_state  # noqa: PLC0415 — optional extra or lazy load
 
     docs_dir = vault_root / "raw" / "docs"
     wiki_sources = vault_root / "wiki" / "sources"
@@ -243,7 +243,7 @@ def execute_remove_plan(
     unlinked, BEFORE any derived page or state key is touched — a vault
     left holding the raw file but missing its page and state entry is
     worse than one that was never touched."""
-    from llmwiki.state_store import update_state
+    from llmwiki.state_store import update_state  # noqa: PLC0415 — optional extra or lazy load
 
     result = {
         "raw_docs": 0,

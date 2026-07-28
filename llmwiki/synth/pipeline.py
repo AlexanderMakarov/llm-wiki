@@ -18,27 +18,26 @@ synthesized. Re-running on an unchanged tree is a sub-second no-op.
 from __future__ import annotations
 
 import glob
-import json
-import os
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from llmwiki import REPO_ROOT
+
 # #py-m1 (#587) / #arch-h5 (#610): import directly from _frontmatter
 # instead of via build.py. The build module pulls in 145+ transitive
 # imports; the parser sits cleanly in _frontmatter.py with no deps.
 from llmwiki._frontmatter import is_headless, is_subagent, parse_frontmatter
+
 # Same matcher the graph builder uses, so "a link" means the same thing to
 # the de-duplicator and to the thing that consumes the links.
 from llmwiki.graph import WIKILINK_RE
-from llmwiki.synth.base import BaseSynthesizer, DummySynthesizer
+from llmwiki.state_store import mtime_from_state, mtime_to_iso
 from llmwiki.state_store import read_state as _read_unified_state
 from llmwiki.state_store import resolve_state_file as _resolve_state_file
 from llmwiki.state_store import update_state as _update_unified_state
-from llmwiki.state_store import mtime_from_state, mtime_to_iso
-
+from llmwiki.synth.base import BaseSynthesizer, DummySynthesizer
 
 # G-21 (#307): shell- and URL-unsafe chars we scrub from slugs at
 # synthesize-time. Spaces → hyphens; filesystem-reserved + Windows-
@@ -134,7 +133,7 @@ def source_page_paths(
 
 
 def resolve_backend(
-    cfg: Optional[dict[str, Any]] = None,
+    cfg: dict[str, Any] | None = None,
 ) -> BaseSynthesizer:
     """Pick a synthesizer backend from ``cfg["synthesis"]["backend"]``.
 
@@ -154,12 +153,15 @@ def resolve_backend(
     if name == "ollama":
         # Imported lazily so the `urllib`-based module isn't loaded when
         # users stick with the default dummy backend.
-        from llmwiki.synth.ollama import OllamaSynthesizer, load_ollama_config
+        from llmwiki.synth.ollama import (  # noqa: PLC0415 — import cycle / lazy load
+            OllamaSynthesizer,
+            load_ollama_config,
+        )
 
         return OllamaSynthesizer(config=load_ollama_config(cfg))
 
     if name == "claude":
-        from llmwiki.synth.claude_cli import (
+        from llmwiki.synth.claude_cli import (  # noqa: PLC0415 — import cycle / lazy load
             DEFAULT_CLAUDE_TIMEOUT,
             ClaudeCLISynthesizer,
         )
@@ -176,7 +178,7 @@ def resolve_backend(
         )
 
     if name != "dummy":
-        import logging
+        import logging  # noqa: PLC0415 — import cycle / lazy load
         logging.getLogger(__name__).warning(
             "Unknown synthesis.backend %r — falling back to dummy", name
         )
@@ -190,7 +192,7 @@ INCLUDE_SUBAGENTS_MODES = ("all", "only-raw", "off")
 DEFAULT_INCLUDE_SUBAGENTS = "only-raw"
 
 
-def resolve_include_subagents(cfg: Optional[dict[str, Any]] = None) -> str:
+def resolve_include_subagents(cfg: dict[str, Any] | None = None) -> str:
     """Normalize ``cfg["filters"]["include_subagents"]`` to a valid mode (#30).
 
     Unknown/typo values fall back to the shipped default ``only-raw`` rather
@@ -290,7 +292,7 @@ def _inject_vocabulary(template: str, wiki_dir: Path, *, limit: int = _VOCAB_LIM
     if "{vocabulary}" not in template:
         return template
     try:
-        from llmwiki.topics import build_topic_graph
+        from llmwiki.topics import build_topic_graph  # noqa: PLC0415 — import cycle / lazy load
 
         graph = build_topic_graph(wiki_dir)
     except Exception:
@@ -322,7 +324,7 @@ def _inject_vocabulary(template: str, wiki_dir: Path, *, limit: int = _VOCAB_LIM
     return template.replace("{vocabulary}", "\n".join(lines))
 
 
-def _load_state(state_file: Optional[Path] = None) -> dict[str, float]:
+def _load_state(state_file: Path | None = None) -> dict[str, float]:
     """Load the mtime state file. Returns {relative_path: mtime}.
 
     #sec-16 (#560): validate the schema before trusting it. A
@@ -347,7 +349,7 @@ def _load_state(state_file: Optional[Path] = None) -> dict[str, float]:
     return out
 
 
-def _save_state(state: dict[str, float], state_file: Optional[Path] = None) -> None:
+def _save_state(state: dict[str, float], state_file: Path | None = None) -> None:
     """Persist synth mtimes into unified state.
 
     ``state`` is the full in-memory map for this run (loaded then updated).
@@ -368,7 +370,7 @@ def _save_state(state: dict[str, float], state_file: Optional[Path] = None) -> N
     _update_unified_state(_mut, target)
 
 
-def _scan_source_page_keys(wiki_sources_dir: Optional[Path] = None) -> tuple[set[str], set[str]]:
+def _scan_source_page_keys(wiki_sources_dir: Path | None = None) -> tuple[set[str], set[str]]:
     """``source_file`` keys claimed by wiki/sources pages, split real vs stub."""
     roots = wiki_sources_dir or WIKI_SOURCES
     real: set[str] = set()
@@ -394,7 +396,7 @@ def _scan_source_page_keys(wiki_sources_dir: Optional[Path] = None) -> tuple[set
     return real, stub - real
 
 
-def discover_synth_source_keys(wiki_sources_dir: Optional[Path] = None) -> set[str]:
+def discover_synth_source_keys(wiki_sources_dir: Path | None = None) -> set[str]:
     """Return ``source_file`` keys already synthesized into wiki/sources pages.
 
     Stub pages (dummy-backend filler, agent-delegate pending sentinels) carry
@@ -405,7 +407,7 @@ def discover_synth_source_keys(wiki_sources_dir: Optional[Path] = None) -> set[s
     return real
 
 
-def discover_stub_source_keys(wiki_sources_dir: Optional[Path] = None) -> set[str]:
+def discover_stub_source_keys(wiki_sources_dir: Path | None = None) -> set[str]:
     """Return ``source_file`` keys whose wiki/sources page is a stub (#24).
 
     A page states which raw file it stands for in its ``source_file``
@@ -420,14 +422,14 @@ def discover_stub_source_keys(wiki_sources_dir: Optional[Path] = None) -> set[st
 
 def discover_unsynth_session_rels(
     *,
-    raw_dir: Optional[Path] = None,
-    wiki_sources_dir: Optional[Path] = None,
-    state_file: Optional[Path] = None,
-    include_subagents: Optional[str] = None,
+    raw_dir: Path | None = None,
+    wiki_sources_dir: Path | None = None,
+    state_file: Path | None = None,
+    include_subagents: str | None = None,
     exclude_headless: bool | None = None,
 ) -> set[str]:
     """Session rel-paths that the shared estimate logic considers unsynth."""
-    from llmwiki.synth.estimate import synthesize_estimate_report
+    from llmwiki.synth.estimate import synthesize_estimate_report  # noqa: PLC0415 — import cycle / lazy load
 
     sessions = _discover_raw_sessions(raw_dir)
     state_keys: set[str]
@@ -463,11 +465,11 @@ def discover_unsynth_session_rels(
 
 def refresh_synth_pending(
     *,
-    raw_dir: Optional[Path] = None,
-    docs_dir: Optional[Path] = None,
-    wiki_sources_dir: Optional[Path] = None,
-    state_file: Optional[Path] = None,
-    include_subagents: Optional[str] = None,
+    raw_dir: Path | None = None,
+    docs_dir: Path | None = None,
+    wiki_sources_dir: Path | None = None,
+    state_file: Path | None = None,
+    include_subagents: str | None = None,
     exclude_headless: bool | None = None,
 ) -> dict[str, Any]:
     """Compute unsynth backlog and persist it in unified state.
@@ -479,12 +481,12 @@ def refresh_synth_pending(
     user's config when the caller doesn't pass a mode explicitly.
     """
     sources_out = wiki_sources_dir or WIKI_SOURCES
-    from llmwiki.synth.estimate import synthesize_estimate_report
+    from llmwiki.synth.estimate import synthesize_estimate_report  # noqa: PLC0415 — import cycle / lazy load
     if include_subagents is None:
-        from llmwiki.config_schedule import _load_sessions_config
+        from llmwiki.config_schedule import _load_sessions_config  # noqa: PLC0415 — import cycle / lazy load
         include_subagents = resolve_include_subagents(_load_sessions_config())
     if exclude_headless is None:
-        from llmwiki.config_schedule import _load_sessions_config as _cfg
+        from llmwiki.config_schedule import _load_sessions_config as _cfg  # noqa: PLC0415 — import cycle / lazy load
         exclude_headless = resolve_exclude_headless(_cfg())
     raw_sessions = _discover_raw_sessions(raw_dir)
     state = _load_state(state_file)
@@ -515,7 +517,7 @@ def refresh_synth_pending(
             }
         )
 
-    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    stamp = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     pipeline = {
         "stages": list(report.get("pipeline_stages") or ["raw", "synthesized"]),
         "rows": list(report.get("pipeline_rows") or []),
@@ -556,9 +558,9 @@ def _format_producer_breakdown(producers: dict[str, int]) -> str:
 def _append_log(
     title: str,
     *,
-    log_path: Optional[Path] = None,
+    log_path: Path | None = None,
     operation: str = "synthesize",
-    details: Optional[dict[str, Any]] = None,
+    details: dict[str, Any] | None = None,
 ) -> None:
     """Append a rich structured entry to wiki/log.md.
 
@@ -581,7 +583,7 @@ def _append_log(
     # Auto-archive when log exceeds 50 KB
     _auto_archive_log(target)
 
-    date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    date_str = datetime.now(UTC).strftime("%Y-%m-%d")
     lines = [f"\n## [{date_str}] {operation} | {title}\n"]
     if details:
         if details.get("processed"):
@@ -601,14 +603,14 @@ def _append_log(
 LOG_ARCHIVE_THRESHOLD = 50 * 1024  # 50 KB
 
 
-def _auto_archive_log(log_path: Path) -> Optional[Path]:
+def _auto_archive_log(log_path: Path) -> Path | None:
     """Archive log.md when it exceeds 50 KB. Returns archive path or None."""
     if not log_path.is_file():
         return None
     if log_path.stat().st_size < LOG_ARCHIVE_THRESHOLD:
         return None
 
-    year = datetime.now(timezone.utc).strftime("%Y")
+    year = datetime.now(UTC).strftime("%Y")
     archive = log_path.parent / f"log-archive-{year}.md"
 
     content = log_path.read_text(encoding="utf-8")
@@ -619,7 +621,7 @@ def _auto_archive_log(log_path: Path) -> Optional[Path]:
 
     # G-10 (#296): seed frontmatter on first write so lint's
     # frontmatter_completeness rule doesn't fail on the archive file.
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
     first_write = not archive.is_file()
     if first_write:
         archive.write_text(
@@ -695,7 +697,7 @@ def _index_bullets_for_dir(
     return bullets
 
 
-def _rebuild_index(wiki_dir: Path) -> Optional[Path]:
+def _rebuild_index(wiki_dir: Path) -> Path | None:
     """Rewrite ``## Sources`` and ``## Projects`` in ``wiki/index.md`` (G-09 · #295).
 
     Walks ``wiki_dir/sources/**/*.md`` and ``wiki_dir/projects/*.md`` and
@@ -752,7 +754,7 @@ def _rebuild_index(wiki_dir: Path) -> Optional[Path]:
 _SOURCES_HEADING = re.compile(r"^##\s+Sources\s*$", re.MULTILINE)
 
 def _discover_raw_sessions(
-    raw_dir: Optional[Path] = None,
+    raw_dir: Path | None = None,
 ) -> list[tuple[Path, dict[str, Any], str]]:
     """Walk raw/sessions/ and return (path, meta, body) for each .md file."""
     root = raw_dir or RAW_SESSIONS
@@ -772,7 +774,7 @@ def _discover_raw_sessions(
 
 
 def _discover_raw_docs(
-    docs_dir: Optional[Path] = None,
+    docs_dir: Path | None = None,
 ) -> list[tuple[Path, dict[str, Any], str]]:
     """Walk raw/docs/ and return (path, meta, body) for each .md file.
 
@@ -959,7 +961,7 @@ def _extract_suggested_tags(body: str) -> tuple[list[str], str]:
 def _merge_tags(
     baseline: list[str],
     suggested: list[str],
-    existing: Optional[list[str]] = None,
+    existing: list[str] | None = None,
 ) -> list[str]:
     """Merge the three tag sources into the final frontmatter list.
 
@@ -974,7 +976,7 @@ def _merge_tags(
     reject ``prompt-cache`` when ``prompt-caching`` is already present.
     """
     # Local import to avoid a circular at module load.
-    from llmwiki.tags import near_duplicate_tags, TagEntry
+    from llmwiki.tags import TagEntry, near_duplicate_tags  # noqa: PLC0415 — import cycle / lazy load
 
     out: list[str] = []
     seen: set[str] = set()
@@ -1069,7 +1071,7 @@ def _derive_baseline_tags(meta: dict[str, Any]) -> list[str]:
 def _build_source_page(
     meta: dict[str, Any],
     synthesized_body: str,
-    existing_page_path: Optional[Path] = None,
+    existing_page_path: Path | None = None,
 ) -> str:
     """Combine frontmatter + synthesized body into a full wiki source page.
 
@@ -1112,7 +1114,7 @@ def _build_source_page(
             existing_tags = list(existing_meta.get("tags", []) or [])
         except (OSError, ValueError, UnicodeDecodeError) as e:
             # Log loud — silent drop is what #584 was about.
-            import sys as _sys
+            import sys as _sys  # noqa: PLC0415 — import cycle / lazy load
             print(
                 f"warning: could not preserve tags from "
                 f"{existing_page_path}: {e}",
@@ -1132,7 +1134,7 @@ def _build_source_page(
         f"source_file: {source_file}",
         f"project: {project}",
         f"model: {model}",
-        f"last_updated: {datetime.now(timezone.utc).strftime('%Y-%m-%d')}",
+        f"last_updated: {datetime.now(UTC).strftime('%Y-%m-%d')}",
         "---",
         "",
     ]
@@ -1140,19 +1142,19 @@ def _build_source_page(
 
 
 def synthesize_new_sessions(
-    backend: Optional[BaseSynthesizer] = None,
-    raw_dir: Optional[Path] = None,
-    wiki_sources_dir: Optional[Path] = None,
+    backend: BaseSynthesizer | None = None,
+    raw_dir: Path | None = None,
+    wiki_sources_dir: Path | None = None,
     dry_run: bool = False,
     force: bool = False,
-    log_path: Optional[Path] = None,
-    state_file: Optional[Path] = None,
-    docs_dir: Optional[Path] = None,
-    doc_chunk_max_chars: Optional[int] = None,
+    log_path: Path | None = None,
+    state_file: Path | None = None,
+    docs_dir: Path | None = None,
+    doc_chunk_max_chars: int | None = None,
     include_sessions: bool = True,
     include_docs: bool = True,
-    only_paths: Optional[set[Path] | set[str]] = None,
-    include_subagents: Optional[str] = None,
+    only_paths: set[Path] | set[str] | None = None,
+    include_subagents: str | None = None,
     exclude_headless: bool | None = None,
 ) -> dict[str, Any]:
     """Main entry point. Returns a summary dict:
@@ -1191,7 +1193,7 @@ def synthesize_new_sessions(
     # subagent transcripts are skipped here even under --force — the flag means
     # "redo synthesis", not "override which sessions are eligible".
     if include_subagents is None:
-        from llmwiki.config_schedule import _load_sessions_config
+        from llmwiki.config_schedule import _load_sessions_config  # noqa: PLC0415 — import cycle / lazy load
         include_subagents = resolve_include_subagents(_load_sessions_config())
     else:
         include_subagents = resolve_include_subagents(
@@ -1200,7 +1202,7 @@ def synthesize_new_sessions(
     # #8 follow-up: same policy the estimate applies, resolved the same way,
     # so `--estimate` and a real run never disagree about what is eligible.
     if exclude_headless is None:
-        from llmwiki.config_schedule import _load_sessions_config as _cfg
+        from llmwiki.config_schedule import _load_sessions_config as _cfg  # noqa: PLC0415 — import cycle / lazy load
         exclude_headless = resolve_exclude_headless(_cfg())
     else:
         exclude_headless = bool(exclude_headless)
@@ -1366,7 +1368,7 @@ def synthesize_new_sessions(
     # #27: tally what each successful synthesis produced (raw doc vs which
     # agent's session) so the log entry carries a producer breakdown the
     # Analytics "Recent activity" widget renders verbatim.
-    from llmwiki.build import detect_agent_label
+    from llmwiki.build import detect_agent_label  # noqa: PLC0415 — import cycle / lazy load
     producers: dict[str, int] = {}
 
     for it in new_items:
@@ -1430,7 +1432,7 @@ def synthesize_new_sessions(
             _save_state(state, state_file)
             try:
                 target_state = _resolve_state_file(state_file)
-                def _drop_pending(s: dict[str, Any]) -> dict[str, Any]:
+                def _drop_pending(s: dict[str, Any], rel=rel) -> dict[str, Any]:
                     synth = s.setdefault("synth", {})
                     rows = synth.setdefault("pending", [])
                     if isinstance(rows, list):

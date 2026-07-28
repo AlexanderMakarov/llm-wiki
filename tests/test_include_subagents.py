@@ -21,7 +21,6 @@ from llmwiki._frontmatter import is_subagent
 from llmwiki.convert import DEFAULT_CONFIG
 from llmwiki.synth.pipeline import resolve_include_subagents
 
-
 # ─── unit: is_subagent frontmatter helper ────────────────────────────────
 
 

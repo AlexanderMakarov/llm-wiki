@@ -29,12 +29,11 @@ Manual transitions:
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from enum import Enum
-from typing import Optional
+from datetime import UTC, datetime
+from enum import StrEnum
 
 
-class LifecycleState(str, Enum):
+class LifecycleState(StrEnum):
     """The five lifecycle states a wiki page can be in."""
 
     DRAFT = "draft"
@@ -101,10 +100,10 @@ AUTO_STALE_DAYS = 90
 
 def check_auto_stale(
     current: LifecycleState,
-    last_updated: Optional[str],
+    last_updated: str | None,
     *,
-    now: Optional[datetime] = None,
-) -> Optional[LifecycleState]:
+    now: datetime | None = None,
+) -> LifecycleState | None:
     """Check if a page should auto-transition to stale.
 
     Returns ``LifecycleState.STALE`` if the page is overdue, otherwise
@@ -122,11 +121,11 @@ def check_auto_stale(
     try:
         dt = datetime.fromisoformat(last_updated)
         if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
+            dt = dt.replace(tzinfo=UTC)
     except (ValueError, TypeError):
         return LifecycleState.STALE
 
-    ref = now or datetime.now(timezone.utc)
+    ref = now or datetime.now(UTC)
     age_days = (ref - dt).days
     if age_days >= AUTO_STALE_DAYS:
         return LifecycleState.STALE
@@ -136,7 +135,7 @@ def check_auto_stale(
 def check_confidence_stale(
     current: LifecycleState,
     confidence: float,
-) -> Optional[LifecycleState]:
+) -> LifecycleState | None:
     """Auto-stale if confidence drops below 0.5."""
     if current in (LifecycleState.STALE, LifecycleState.ARCHIVED):
         return None

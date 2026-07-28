@@ -39,8 +39,8 @@ from __future__ import annotations
 
 import html
 from collections import Counter
-from datetime import date, datetime, timedelta, timezone
-from typing import Iterable, Mapping, Optional
+from collections.abc import Iterable, Mapping
+from datetime import UTC, date, datetime, timedelta
 
 # ─── layout constants ─────────────────────────────────────────────────────
 
@@ -83,7 +83,7 @@ _MONTH_NAMES = (
 
 def collect_session_counts(
     entries: Iterable[Mapping[str, object]],
-    project_slug: Optional[str] = None,
+    project_slug: str | None = None,
 ) -> dict[date, int]:
     """Aggregate session counts by UTC date.
 
@@ -204,7 +204,7 @@ def level_for(count: int, thresholds: list[int]) -> int:
 
 def render_heatmap(
     counts: dict[date, int],
-    end_date: Optional[date] = None,
+    end_date: date | None = None,
     title_prefix: str = "Activity",
 ) -> str:
     """Return a self-contained SVG string for the rolling activity heatmap.
@@ -214,7 +214,7 @@ def render_heatmap(
     in the per-cell tooltips.
     """
     if end_date is None:
-        end_date = datetime.now(timezone.utc).date()
+        end_date = datetime.now(UTC).date()
     start, end = window_bounds(end_date)
     week_cols = week_column_count(start, end)
 

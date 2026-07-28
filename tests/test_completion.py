@@ -5,13 +5,12 @@ from __future__ import annotations
 import pytest
 
 from llmwiki.completion import (
+    GENERATORS,
     bash_script,
-    zsh_script,
     fish_script,
     generate,
-    GENERATORS,
+    zsh_script,
 )
-
 
 # ─── registry ─────────────────────────────────────────────────────────
 

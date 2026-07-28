@@ -21,11 +21,10 @@ from unittest.mock import patch
 import pytest
 
 from llmwiki.mcp.server import (
+    tool_wiki_list_sources,
     tool_wiki_query,
     tool_wiki_search,
-    tool_wiki_list_sources,
 )
-
 
 # ─── Helpers ─────────────────────────────────────────────────────────
 

@@ -117,8 +117,8 @@ def test_synth_prompt_injects_vocabulary(tmp_path: Path):
 
 
 def test_consolidation_cache_drives_merge_and_descriptions(tmp_path: Path):
-    from llmwiki.topics_consolidate import parse_and_cache, render_consolidation_prompt
     from llmwiki.synth.pipeline import _inject_vocabulary
+    from llmwiki.topics_consolidate import parse_and_cache, render_consolidation_prompt
 
     wiki = _make_wiki(tmp_path, {
         "s1": ["kbbuilder", "code-kbbuilder", "OpenClaw"],

@@ -6,34 +6,32 @@ negative numbers, extreme values, unicode, type mismatches.
 
 from __future__ import annotations
 
-import json
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
 from llmwiki.confidence import (
+    apply_decay,
+    avg_source_quality,
+    compute_confidence,
+    cross_reference_score,
+    decay_factor,
+    recency_score,
     source_count_score,
     source_quality_score,
-    avg_source_quality,
-    recency_score,
-    cross_reference_score,
-    compute_confidence,
-    decay_factor,
-    apply_decay,
 )
 from llmwiki.lifecycle import (
+    InvalidTransition,
     LifecycleState,
     can_transition,
-    transition,
-    InvalidTransition,
     check_auto_stale,
     check_confidence_stale,
     parse_lifecycle,
+    transition,
 )
 from llmwiki.schema import ENTITY_TYPES, validate_entity_type
 from llmwiki.synth.pipeline import _append_log, _auto_archive_log
-
 
 # ═══════════════════════════════════════════════════════════════════════
 #  CONFIDENCE — edge cases
@@ -89,33 +87,33 @@ class TestConfidenceEdgeCases:
         assert recency_score("") == 0.3
 
     def test_recency_epoch_date(self):
-        now = datetime(2026, 4, 16, tzinfo=timezone.utc)
+        now = datetime(2026, 4, 16, tzinfo=UTC)
         assert recency_score("1970-01-01", now=now) == 0.3  # very old
 
     def test_recency_date_with_time(self):
-        now = datetime(2026, 4, 16, tzinfo=timezone.utc)
+        now = datetime(2026, 4, 16, tzinfo=UTC)
         assert recency_score("2026-04-15T10:30:00", now=now) == 1.0
 
     def test_recency_date_with_timezone(self):
-        now = datetime(2026, 4, 16, tzinfo=timezone.utc)
+        now = datetime(2026, 4, 16, tzinfo=UTC)
         assert recency_score("2026-04-15T10:30:00+05:30", now=now) == 1.0
 
     def test_recency_boundary_30_days(self):
-        now = datetime(2026, 4, 16, tzinfo=timezone.utc)
+        now = datetime(2026, 4, 16, tzinfo=UTC)
         # Exactly 30 days → still 1.0
         assert recency_score("2026-03-17", now=now) == 1.0
         # 31 days → 0.8
         assert recency_score("2026-03-16", now=now) == 0.8
 
     def test_recency_boundary_90_days(self):
-        now = datetime(2026, 4, 16, tzinfo=timezone.utc)
+        now = datetime(2026, 4, 16, tzinfo=UTC)
         # 90 days → still 0.8
         assert recency_score("2026-01-16", now=now) == 0.8
         # 91 days → 0.5
         assert recency_score("2026-01-15", now=now) == 0.5
 
     def test_recency_boundary_365_days(self):
-        now = datetime(2026, 4, 16, tzinfo=timezone.utc)
+        now = datetime(2026, 4, 16, tzinfo=UTC)
         # 365 days → still 0.5
         assert recency_score("2025-04-16", now=now) == 0.5
         # 366 days → 0.3
@@ -196,7 +194,7 @@ class TestLifecycleEdgeCases:
 
     def test_auto_stale_exactly_at_boundary(self):
         """89 days = not stale, 90 days = stale."""
-        now = datetime(2026, 7, 15, tzinfo=timezone.utc)
+        now = datetime(2026, 7, 15, tzinfo=UTC)
         # 89 days
         assert check_auto_stale(
             LifecycleState.DRAFT, "2026-04-17", now=now
@@ -207,7 +205,7 @@ class TestLifecycleEdgeCases:
         ) == LifecycleState.STALE
 
     def test_auto_stale_with_timezone_aware_date(self):
-        now = datetime(2026, 7, 16, tzinfo=timezone.utc)
+        now = datetime(2026, 7, 16, tzinfo=UTC)
         result = check_auto_stale(
             LifecycleState.REVIEWED, "2026-04-16T00:00:00+05:30", now=now
         )

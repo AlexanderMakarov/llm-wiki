@@ -36,7 +36,6 @@ def _isolate_default_vault(tmp_path_factory, monkeypatch):
     (isolated / "raw" / "sessions").mkdir(parents=True)
     (isolated / "raw" / "docs").mkdir(parents=True)
     (isolated / "wiki" / "sources").mkdir(parents=True)
-    state_file = isolated / "llmwiki-state.json"
 
     monkeypatch.setattr(
         "llmwiki.config_schedule.load_default_vault_path",

@@ -11,9 +11,6 @@ import sys
 from datetime import date
 from pathlib import Path
 
-import pytest
-
-
 # ─── G-10 (#296): log archive frontmatter seed ───────────────────────────
 
 
@@ -21,7 +18,7 @@ def test_log_archive_gets_frontmatter_on_first_write(tmp_path: Path):
     """When log.md exceeds the archival threshold, the first write to
     log-archive-<year>.md must include the standard nav frontmatter so
     lint's frontmatter_completeness rule doesn't fail."""
-    from llmwiki.synth.pipeline import _auto_archive_log, LOG_ARCHIVE_THRESHOLD
+    from llmwiki.synth.pipeline import LOG_ARCHIVE_THRESHOLD, _auto_archive_log
 
     log = tmp_path / "log.md"
     # Write past the 50 KB threshold with real-looking headings so the

@@ -23,7 +23,6 @@ from llmwiki.synth.pipeline import (
     synthesize_new_sessions,
 )
 
-
 DEMO_DOC = """---
 title: "OpenClaw Overview"
 slug: openclaw-openclaw

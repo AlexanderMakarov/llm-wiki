@@ -18,9 +18,8 @@ from typing import Any
 
 from llmwiki.config_schedule import _load_sessions_config
 from llmwiki.queue_ops import enqueue_task
-from llmwiki.state_store import read_state, resolve_state_file, write_state, mtime_to_iso
+from llmwiki.state_store import mtime_to_iso, read_state, resolve_state_file, write_state
 from llmwiki.synth.pipeline import refresh_synth_pending
-
 
 LEGACY_FILES = (
     ".llmwiki-state.json",
@@ -213,7 +212,6 @@ def run_migration(state_file: Path | None = None) -> dict[str, Any]:
 def main(argv: list[str] | None = None) -> int:
     import argparse
     import json
-    import sys
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--state-file", type=Path, default=None,
                    help="Target unified state file or vault root")

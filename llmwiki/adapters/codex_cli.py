@@ -79,7 +79,7 @@ class CodexCliAdapter(BaseAdapter):
         (which will be the DD date bucket — not great, but better than
         crashing).
         """
-        import json
+        import json  # noqa: PLC0415 — lazy load / avoid cycle
 
         # Try to read cwd from the session_meta record
         try:

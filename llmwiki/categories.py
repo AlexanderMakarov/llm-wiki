@@ -26,12 +26,10 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
-# Shared tag parser + NOISE_TAGS live in llmwiki.tag_utils so
-# llmwiki/search_facets.py uses the same implementation.
-from llmwiki.tag_utils import NOISE_TAGS, parse_tags_field as _parse_tags, scan_tags
-
+# Tag scanning lives in llmwiki.tag_utils (shared with search_facets).
+from llmwiki.tag_utils import scan_tags
 
 # ─── Dataview output ──────────────────────────────────────────────────
 

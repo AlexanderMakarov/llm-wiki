@@ -22,7 +22,6 @@ import pytest
 
 from llmwiki import REPO_ROOT
 
-
 DOCS = REPO_ROOT / "docs"
 TUTORIALS = DOCS / "tutorials"
 INDEX = DOCS / "index.md"
@@ -314,7 +313,6 @@ def test_docs_shell_css_inherits_brand_tokens_only():
     # hex digits outside of var() / color-mix / comment context.
     # Simple heuristic: count hex tokens not inside var() or comment.
     # We accept zero naked hex codes — the brand tokens cover us.
-    hex_occurrences = re.findall(r"#[0-9A-Fa-f]{3,8}", DOCS_SHELL_CSS)
     # Strip hex values that live inside comments
     comment_stripped = re.sub(r"/\*.*?\*/", "", DOCS_SHELL_CSS, flags=re.DOTALL)
     real_hex = re.findall(r"#[0-9A-Fa-f]{3,8}", comment_stripped)

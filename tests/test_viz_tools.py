@@ -7,16 +7,15 @@ import re
 import pytest
 
 from llmwiki.viz_tools import (
-    _category_for,
-    _TOOL_CATEGORIES,
     _CATEGORY_PALETTE,
+    _TOOL_CATEGORIES,
+    _category_for,
     aggregate_tool_counts,
     parse_tool_counts,
     render_project_tool_chart,
     render_session_tool_chart,
     render_tool_chart,
 )
-
 
 # ─── parse_tool_counts handles all the shapes converter/parser produce ───
 

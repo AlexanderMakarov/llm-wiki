@@ -24,7 +24,6 @@ import pytest
 
 from llmwiki import references as r
 
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 

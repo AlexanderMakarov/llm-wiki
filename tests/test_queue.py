@@ -4,10 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
-from llmwiki.ingest_queue import enqueue, dequeue, peek, clear, queue_size
-
+from llmwiki.ingest_queue import clear, dequeue, enqueue, peek, queue_size
 
 # ─── Basic operations ──────────────────────────────────────────────────
 
