@@ -182,11 +182,7 @@ want to re-run sync.
 
 ### `/wiki-lint`
 
-**What:** run every registered lint rule (15 at last count: 8
-structural + 3 LLM-powered + `stale_candidates` (#51) +
-`cache_tier_consistency` (#52) + `tags_topics_convention` (#302) +
-`stale_reference_detection` (#303)). The live number is printed by
-`llmwiki lint --help`.
+**What:** run every registered lint rule (17 at last count — all structural / deterministic). The live number is printed by `llmwiki lint --help`.
 
 **Wraps:** `python3 -m llmwiki lint`.
 
@@ -200,19 +196,20 @@ structural + 3 LLM-powered + `stale_candidates` (#51) +
 6. `entity_consistency`
 7. `duplicate_detection`
 8. `index_sync`
-9. `contradiction_detection` *(LLM)*
-10. `claim_verification` *(LLM)*
-11. `summary_accuracy` *(LLM)*
+9. `contradiction_detection` — non-filler `## Contradictions` sections
+10. `claim_verification` — entity/concept claims without sources
+11. `summary_accuracy` — empty `summary:` frontmatter
 12. `stale_candidates`
-13. `cache_tier_consistency`
-14. `tags_topics_convention` *(G-16 · #302)*
-15. `stale_reference_detection` *(G-17 · #303)*
+13. `tags_topics_convention` *(G-16 · #302)*
+14. `stale_reference_detection` *(G-17 · #303)*
+15. `frontmatter_count_consistency`
+16. `tools_consistency`
+17. `stub_source_pages`
 
 **Example:**
 
 ```
 /wiki-lint
-/wiki-lint include LLM-powered rules
 /wiki-lint just the link_integrity rule
 ```
 

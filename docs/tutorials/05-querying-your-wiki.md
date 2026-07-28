@@ -32,7 +32,7 @@ type `/`.
 | `/wiki-ingest <path>` | Ingest one source or folder into `wiki/` |
 | `/wiki-query <q>` | Answer a question from the wiki |
 | `/wiki-candidates` | Triage pending candidates (promote / merge / discard) |
-| `/wiki-lint` | Run 13 structural + LLM-powered lint rules |
+| `/wiki-lint` | Run all structural lint rules |
 | `/wiki-graph` | Build the interactive knowledge graph |
 | `/wiki-build` | Regenerate `site/` |
 | `/wiki-serve` | Start the local HTTP server |

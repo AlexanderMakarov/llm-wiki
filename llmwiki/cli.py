@@ -658,11 +658,7 @@ def cmd_lint(args: argparse.Namespace) -> int:
         return 0
 
     selected = args.rules.split(",") if args.rules else None
-    issues = run_all(
-        pages,
-        include_llm=args.include_llm,
-        selected=selected,
-    )
+    issues = run_all(pages, selected=selected)
 
     summary = summarize(issues)
 
@@ -1782,8 +1778,6 @@ def build_parser() -> argparse.ArgumentParser:
                       help="Wiki directory (default: ./wiki)")
     lint.add_argument("--rules", type=str, default=None,
                       help="Comma-separated rule names (default: all applicable)")
-    lint.add_argument("--include-llm", action="store_true",
-                      help="Also run LLM-powered rules (requires --llm-callback)")
     lint.add_argument("--json", action="store_true", help="JSON output")
     lint.add_argument("--fail-on-errors", action="store_true",
                       help="Exit non-zero if any error-severity issues found")

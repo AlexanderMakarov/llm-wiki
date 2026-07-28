@@ -9,22 +9,15 @@ from llmwiki.lint import LintRule, register
 
 @register
 class ClaimVerification(LintRule):
-    """Verify claims are supported by cited sources (LLM-powered)."""
+    """Flag entity/concept pages that make claims but cite no sources."""
 
     name = "claim_verification"
     severity = "info"
-    requires_llm = True
 
-    def run(self, pages, *, llm_callback=None):
-        if llm_callback is None:
-            return [{
-                "rule": self.name,
-                "severity": "info",
-                "page": "",
-                "message": "skipped: requires LLM callback",
-            }]
-        # Structural proxy: check that entity/concept pages with claims
-        # (## Key Facts or ## Key Claims sections) also cite sources.
+    def run(self, pages, *, llm_callback=None):  # llm_callback kept for back-compat
+        del llm_callback  # unused — reserved / legacy kwarg
+        # Structural: entity/concept pages with ## Key Facts / ## Key Claims
+        # should also cite sources (frontmatter, ## Sessions, or ## Sources).
         issues = []
         for rel, page in pages.items():
             meta = page["meta"]

@@ -96,7 +96,6 @@ def run_pipeline(args: argparse.Namespace) -> int:
         _ns(
             wiki_dir=None,
             rules=None,
-            include_llm=False,
             json=False,
             fail_on_errors=args.strict,
             vault=getattr(args, "vault", None),

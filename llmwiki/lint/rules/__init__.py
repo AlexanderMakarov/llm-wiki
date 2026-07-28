@@ -1,6 +1,6 @@
 """All registered lint rules (#615 split — was a single 968-LOC rules.py).
 
-Basic rules (8, no LLM):
+Structural rules (all deterministic — no LLM):
   1. frontmatter_completeness  — required fields present
   2. frontmatter_validity       — enum values + types valid
   3. link_integrity             — [[wikilinks]] resolve
@@ -9,11 +9,9 @@ Basic rules (8, no LLM):
   6. entity_consistency         — entities in body match frontmatter
   7. duplicate_detection        — same-project + title + body similarity
   8. index_sync                 — pages in index.md ↔ pages on disk
-
-LLM-powered rules (3):
-  9. contradiction_detection
-  10. claim_verification
-  11. summary_accuracy
+  9. contradiction_detection    — non-filler ## Contradictions sections
+  10. claim_verification        — entity/concept claims without sources
+  11. summary_accuracy          — empty summary: frontmatter field
 
 Post-v1.0 rules:
   12. stale_candidates            (v1.1 · #51)
