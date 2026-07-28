@@ -14,6 +14,8 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Fixed
 
+- **Session resume command contrast (#58)** — `.resume-command .resume-cmd-text` now uses explicit `color: var(--text)` on `background: var(--bg-alt)` (beating `.content code`'s `--bg-code`) so axe color-contrast stays WCAG AA.
+
 - **Home State widget empty after v1.4→v1.5 upgrade (#70)** — `synth.pipeline` is required by the Home table but was only written by `sync` / `add` / `synthesize --estimate`, so the documented post-upgrade `build` left a fully-synced vault showing the empty placeholder. `build` now one-shot backfills `synth.pipeline` when the state snapshot lacks that shape (local-only; skipped once present). Docs: `docs/UPGRADING.md`, `docs/reference/ui.md`, `docs/reference/state-persistence.md`.
 
 - **`llmwiki lint --include-llm` removed (#72)** — the flag advertised LLM-powered rules but never wired a callback, and even with one the three `requires_llm` stubs never called it. `contradiction_detection` / `claim_verification` / `summary_accuracy` now always run as structural rules; `contradiction_detection` skips filler `## Contradictions` bodies (`None identified.`, `n/a`, etc.) so a real vault no longer reports ~2000 false positives. Dropped `requires_llm` / `include_llm` / the unused callback gate from the lint runner (legacy kwargs still accepted and ignored). Docs: `docs/reference/cli.md`, `docs/reference/slash-commands.md`, `docs/cheatsheet.md`, `docs/UPGRADING.md`.

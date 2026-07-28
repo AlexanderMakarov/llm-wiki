@@ -41,9 +41,9 @@ Feature: Regression locks for UI bugs #452–#460
     Then "#filter-text" has an associated label or aria-label
     And the label text is non-empty
 
-  # ─── #455 — home cards have a date range ─────────────────────────────
+  # ─── #455 — project cards have a date range (on /projects/, not home) ─
   Scenario: Project cards show first / last session date range
-    When I visit the homepage
+    When I visit the projects index
     Then each ".card.card-project" contains a date range chip
     And the chip text matches a "DATE → DATE" or "N days ago" pattern
 

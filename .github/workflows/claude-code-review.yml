@@ -12,6 +12,10 @@ on:
 
 jobs:
   claude-review:
+    # Soft-fail until the Claude Code GitHub App / OAuth are fully wired
+    # for this fork (#69). Do not treat App install / CODEOWNERS / required
+    # checks as in scope for path-triggered CI unblocks (#58).
+    continue-on-error: true
     # Optional: Filter by PR author
     # if: |
     #   github.event.pull_request.user.login == 'external-contributor' ||
@@ -33,6 +37,7 @@ jobs:
 
       - name: Run Claude Code Review
         id: claude-review
+        continue-on-error: true
         # #sec-14 (#558): SHA-pin so a moved @v1 tag can't ship code into our CI.
         # Bump together with claude.yml after auditing the upstream tag history.
         uses: anthropics/claude-code-action@567fe954a4527e81f132d87d1bdbcc94f7737434  # v1
