@@ -16,6 +16,10 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 - **`_rebuild_index` maintains `## Projects`** — project stubs under `wiki/projects/` (seeded by `build`) were never listed in `wiki/index.md`, so `index_sync` errored on every project page. Rebuild now rewrites `## Projects` alongside `## Sources`.
 
+- **`orphan_detection` credits catalog markdown links** — pages listed only from `index.md` as `[title](path.md)` were flagged as orphans because the rule only counted `[[wikilinks]]`. Markdown hrefs that resolve to wiki pages now count as inbound.
+
+- **`link_integrity` case/punct-insensitive aliases** — `[[LLM-Wiki]]` / `[[LlmWiki]]` resolve to `llm-wiki.md` via a normalized slug key. No substring matching (`[[kbbuilder]]` still does not match `code-kbbuilder`).
+
 ## [1.5.0] — 2026-07-27
 
 Theme: MCP usage telemetry and Analytics value signals, vault-aware CLI (`add` / `remove` / content-root), ~6–9× cheaper Claude synthesis, `file://` search reliability, session resume/cwd restore, and Home pipeline State.

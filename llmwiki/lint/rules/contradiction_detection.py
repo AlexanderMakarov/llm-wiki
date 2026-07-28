@@ -22,12 +22,18 @@ _FILLER_MARKUP_RE = re.compile(
     re.MULTILINE,
 )
 
+# Synonyms that mean "nothing to record" after `none`.
+_NONE_SYNONYMS = (
+    r"identified|detected|found|noted|apparent|known|observed|recorded|"
+    r"applicable|seen|introduced"
+)
+
 # Exact short placeholder lines (after normalize).
 _FILLER_EXACT_RE = re.compile(
     r"^(?:"
     r"none"
-    r"|none\s+(?:identified|detected|found|noted|apparent|known|observed|recorded|applicable|seen)"
-    r"(?:\s+(?:in|from|with|within|against|relative\s+to)\b.*)?"
+    r"|none\s+(?:directly\s+)?(?:" + _NONE_SYNONYMS + r")"
+    r"(?:\s+(?:in|from|with|within|against|relative\s+to|by)\b.*)?"
     r"|none\s*[—\-–]\s*no\s+claims\s+were\s+made(?:\s+in\s+this\s+session)?"
     r"|no\s+claims?\s+were\s+made(?:\s+in\s+this\s+session)?"
     r"|no\s+contradictions?"
@@ -43,8 +49,9 @@ _FILLER_OPENING_RE = re.compile(
     r"n/?a\b"
     r"|no\s+claims?\s+were\s+made\b"
     r"|no\s+contradictions?\b"
+    r"|none\s+against\b"
     r"|none(?:\s*$|[.!?,;:]|"
-    r"\s+(?:identified|detected|found|noted|apparent|known|observed|recorded|applicable|seen)\b|"
+    r"\s+(?:directly\s+)?(?:" + _NONE_SYNONYMS + r")\b|"
     r"\s*[—\-–])"
     r")",
     re.IGNORECASE,
@@ -53,15 +60,17 @@ _FILLER_OPENING_RE = re.compile(
 # Affirmative conflict cues — keep the section flagged when present.
 # Avoid bare "conflict with existing" — synthesis filler often says
 # "does not conflict with existing wiki entries".
+# Avoid bare `vs.` — filler often contrasts design modes ("unrestricted vs.
+# restricted") without recording a wiki contradiction.
+# `(?<!than )` skips "rather than conflicts with prior…".
 _AFFIRMATIVE_CUE_RE = re.compile(
     r"(?:"
     r"contradicts\s+(?:earlier|prior|the\b|\[\[)"
     r"|while\s+others"
     r"|user\s+assumption"
     r"|receives\s+contradictory"
-    r"|conflicts?\s+with\s+(?:earlier|prior)\b"
+    r"|(?<!than )conflicts?\s+with\s+(?:earlier|prior)\b"
     r"|says\s+.+\s+while\s+.+\s+says"
-    r"|vs\.?\s+"
     r")",
     re.IGNORECASE,
 )

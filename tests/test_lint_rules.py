@@ -236,6 +236,26 @@ def test_link_with_anchor_resolves():
     assert issues == []
 
 
+def test_link_alias_case_punct_resolves():
+    """[[LLM-Wiki]] resolves to projects/llm-wiki.md via normalized slug."""
+    pages = {
+        "projects/llm-wiki.md": _mk_page({"title": "llm-wiki"}, ""),
+        "sources/a.md": _mk_page({"title": "A"}, "See [[LLM-Wiki]] and [[LlmWiki]]"),
+    }
+    assert LinkIntegrity().run(pages) == []
+
+
+def test_link_no_substring_alias():
+    """[[kbbuilder]] must NOT silently match code-kbbuilder (no substring)."""
+    pages = {
+        "projects/code-kbbuilder.md": _mk_page({"title": "code-kbbuilder"}, ""),
+        "sources/a.md": _mk_page({"title": "A"}, "See [[kbbuilder]]"),
+    }
+    issues = LinkIntegrity().run(pages)
+    assert len(issues) == 1
+    assert "kbbuilder" in issues[0]["message"]
+
+
 # ─── 4. OrphanDetection ──────────────────────────────────────────────
 
 
@@ -267,6 +287,22 @@ def test_nav_files_not_orphan_candidates():
     }
     issues = OrphanDetection().run(pages)
     assert issues == []  # nav files skipped
+
+
+def test_index_markdown_link_clears_orphan():
+    """A page listed only via index.md markdown href is not an orphan."""
+    pages = {
+        "index.md": _mk_page(
+            {"title": "Index"},
+            "## Sources\n- [Session](sources/proj/a.md)\n",
+        ),
+        "sources/proj/a.md": _mk_page({"title": "Session"}, "body"),
+        "entities/Orphan.md": _mk_page({"title": "Orphan"}, "unlinked"),
+    }
+    issues = OrphanDetection().run(pages)
+    orphan_pages = {i["page"] for i in issues}
+    assert "sources/proj/a.md" not in orphan_pages
+    assert "entities/Orphan.md" in orphan_pages
 
 
 # ─── 5. ContentFreshness ─────────────────────────────────────────────
@@ -557,6 +593,11 @@ def test_contradiction_detects_section():
     "None identified. This document does not conflict with existing wiki entries.",
     "N/A — This is a reference document, not a claim-making session.",
     "None — this session's claims are consistent with prior sessions.",
+    "None identified — this session extends rather than conflicts with prior history.",
+    "None directly noted. Methodological divergence only.",
+    "None against existing wiki content. (Internal note only.)",
+    "None introduced by this session itself; it inherits an open question.",
+    "None identified. The design balances unrestricted vs. restricted modes.",
 ])
 def test_contradiction_skips_filler(body: str):
     pages = {
