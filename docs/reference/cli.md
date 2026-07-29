@@ -394,6 +394,56 @@ python3 -m llmwiki lint --wiki-dir ~/another-wiki
 
 ---
 
+## `reindex` — reconcile `wiki/index.md` with the pages on disk (#71)
+
+Rewrites the catalog sections of `wiki/index.md` from what is actually in `wiki/`: pages with no entry get listed, entries whose page is gone get dropped, and every section heading's `(count)` is refreshed. Deterministic — a filesystem reconciliation, no LLM and no token spend.
+
+```bash
+python3 -m llmwiki reindex --dry-run        # print the adds/removes, write nothing
+python3 -m llmwiki reindex                  # write the reconciled index
+python3 -m llmwiki reindex --wiki-dir ~/another-vault/wiki
+```
+
+### Flags
+
+| Flag | What |
+|---|---|
+| `--wiki-dir PATH` | Wiki dir. Default: the configured vault's `wiki/`. |
+| `--dry-run` | Print the adds/removes and change nothing. |
+| `--vault PATH` | Reconcile this vault's `wiki/index.md` instead of the repo's. |
+
+### What it preserves
+
+- **Existing entries, verbatim.** The description after a link is human- or agent-authored prose, so a page that already has a bullet keeps the bullet it had — including its title. Only pages being listed for the first time get a generated bullet (frontmatter `title`, plus `description:` when present; session sources fall back to `project · date`).
+- **Everything that isn't a catalog section.** The preamble, `## Overview`, and any hand-written section pass through untouched.
+- **Page bodies.** `reindex` only ever writes `index.md`.
+
+An entry filed under the wrong heading moves to the section that owns its folder rather than being dropped and re-added. Duplicate headings for the same section are collapsed into one.
+
+### Sections
+
+`sources`, `entities`, `projects`, `concepts`, `syntheses` come first, in that order. Any other folder holding pages (`comparisons/`, `questions/`, `archive/`, …) gets a section named after it, and loose `wiki/*.md` pages that aren't navigation files land under `## Pages` — so a page type added later is listed instead of becoming permanent `index_sync` lint noise. `_context.md` files and empty folders are skipped.
+
+### When to run it
+
+`sync` runs it automatically after the auto-build that seeds `wiki/projects/<slug>.md` stubs, and `synthesize` / `remove` reconcile through the same code, so routine use should not drift. Run it by hand after editing `wiki/` yourself, or to repair a vault that drifted before this command existed:
+
+```bash
+python3 -m llmwiki reindex && python3 -m llmwiki lint --rules index_sync
+```
+
+### Expected output
+
+```
+  index: /path/to/vault/wiki/index.md
+    Sources          651 pages  +3 added
+    Projects          29 pages  +29 added
+    - entities/Anthropic.md (dead link)
+  wrote index.md
+```
+
+---
+
 ## `candidates` — approval workflow
 
 Positional `action` picks `list` / `promote` / `merge` / `discard`.

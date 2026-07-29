@@ -24,8 +24,8 @@ page without descending into a tree. -->
 - [llm-wiki](projects/llm-wiki.md)
 
 ## Concepts (4)
-- [AgenticWorkloads](concepts/AgenticWorkloads.md)
 - [ARC-AGI-2](concepts/ARC-AGI-2.md)
+- [AgenticWorkloads](concepts/AgenticWorkloads.md)
 - [CachePricing](concepts/CachePricing.md)
 - [MultimodalModels](concepts/MultimodalModels.md)
 
