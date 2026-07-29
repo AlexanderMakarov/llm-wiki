@@ -1,7 +1,7 @@
 ---
 title: "GitHub Pages self-demo"
 type: source
-tags: [raw-doc, demo, llmwiki, pages, session-transcript, llm-wiki, github-actions, ci-deployment, pre-synthesis]
+tags: [raw-doc, demo, llmwiki, pages, session-transcript, llm-wiki, github-actions, pre-synthesis, demo-deployment]
 date: 2026-07-29
 source_file: raw/docs/llm-wiki/github-pages-demo.md
 project: llm-wiki
@@ -10,32 +10,26 @@ last_updated: 2026-07-29
 ---
 ## Summary
 
-This document describes the automated GitHub Pages deployment pipeline for llm-wiki. The `.github/workflows/pages.yml` workflow copies pre-synthesized example content (sessions, docs, wiki sources, usage data) into a built site, deploying it without running Claude in CI. The key insight is that content synthesis happens locally with the maintainer's Claude backend; CI's role is only to assemble and publish the result, avoiding secrets, per-deploy costs, and non-determinism.
+The [[llm-wiki]] project uses a GitHub Pages deployment workflow that pre-synthesizes wiki content locally rather than running synthesis in CI. This approach avoids the costs, secret management overhead, and non-determinism of synthesizing in [[GitHub Actions]]. The workflow deploys committed example data (sessions, docs, and synthesized wiki sources), and fork users must explicitly enable [[GitHub Actions]] as the Pages source in repository settings before automatic deploys work.
 
 ## Key Claims
 
-- The GitHub Pages workflow seeds the demo from five committed example directories (`examples/demo-{sessions,docs,wiki,usage}/` and test fixtures), then runs `llmwiki build` to generate the site
-- Running Claude synthesis inside GitHub Actions is problematic due to secret management, per-deploy costs, and loss of reproducibility
-- Pre-synthesized docs eliminate the need to request Claude API access within CI pipelines
-- Enabling GitHub Pages on a fork requires explicitly setting **Settings → Pages → Source: GitHub Actions** first; automatic push deploys fail without this configuration, though manual `workflow_dispatch` can smoke-test once enabled
+- The workflow builds demos exclusively from pre-committed example data—sessions, docs, and synthesized wiki sources—rather than generating content during deployment
+- Pre-synthesizing content offline avoids the need for API credentials in CI, eliminates per-deployment costs, and ensures deterministic builds
+- [[GitHub Pages]] on a fork requires explicit configuration (Settings → Pages → Source: GitHub Actions) to enable automatic workflow deploys
 
 ## Key Quotes
 
-> "Running Claude inside Actions needs secrets, costs money every deploy, and makes the wiki non-deterministic."
-— Core justification for the pre-synthesis architecture
+> "Running Claude inside Actions needs secrets, costs money every deploy, and makes the wiki non-deterministic." — the core rationale for offline synthesis
 
-> "Docs are synthesized once locally with the maintainer's Claude backend; CI only copies the result."
-— Describes the split between local work and CI responsibilities
+> "Docs are synthesized once locally with the maintainer's Claude backend; CI only copies the result." — how the strategy works in practice
 
 ## Connections
 
-- [[llm-wiki]] — product whose public demo this pipeline publishes
-- [[GitHub Pages]] — the hosting platform for the public demo
-- [[GitHub Actions]] — automates the build and deployment pipeline
-- [[Claude]] — used locally to pre-synthesize wiki sources (not in CI)
-- [[MCP]] — fixture usage telemetry seeded for Analytics on the demo
-- [[synthesis]] — happens once offline; CI only copies the result
+- [[llm-wiki]] — the project implementing this deployment strategy
+- [[GitHub Pages]] — the static-site hosting platform  
+- [[GitHub Actions]] — the CI system executing build and deploy
 
 ## Contradictions
 
-- None identified.
+None identified. The design is internally consistent: offline synthesis trades real-time interactivity for simplicity, cost control, and determinism.

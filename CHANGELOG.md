@@ -10,8 +10,6 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Changed
 
-- **Sparse topic graph falls back to page graph** — when `wiki/sources/` only yield fewer than 5 topics after `min_sessions=2` (the Pages demo after a thin Claude seed showed just Claude↔llm-wiki), `build` prefers the interactive page graph instead of a two-node topic view. Demo wiki Connections were also enriched so a healthy topic graph (7 topics) still prefers topic mode when the vocabulary is rich enough.
-
 - **Pages demo corpus: docs + Claude wiki + MCP Analytics (#69)** — `examples/demo-docs/` (product docs about llmwiki), `examples/demo-wiki/sources/` (Claude-synthesized offline; CI copies only), and `examples/demo-usage/` (fixture MCP telemetry). `pages.yml` seeds all three so Documents and Analytics MCP widgets are non-empty. Two demo sessions advertise `mcp__llmwiki__*` in `tools_used` for adoption signal.
 
 - **Actions identity + Pages off for this fork (#69)** — `CODEOWNERS` / `FUNDING.yml` now point at `@AlexanderMakarov`. `pages.yml` no longer deploys on every push (Pages is not enabled here; runs were failing at `configure-pages`). Nightly `synthetic.yml` schedule is off for the same reason. Docker publish / compose use this owner's GHCR namespace. Homebrew bump regenerates the formula only — tap push is disabled so we never write `Pratiyush/homebrew-tap`. Release / reusable-workflow comments document this owner. Commit `uv.lock` so `uv` resolves the same graph locally and in CI. Tutorial links that still cite upstream stay out of scope (issue Step 4).
@@ -19,6 +17,8 @@ Versions below 1.0 are pre-production — API and file formats may change.
 - **Ruff lint is clean and blocking in CI (#58)** — cleared the ~700-finding backlog under `E`/`F`/`I`/`B`/`UP`, enabled `PLC0415` everywhere except `scripts/**` (deferred imports only for optional extras or proven cycles; stdlib never deferred; `# noqa: PLC0415` + reason on legitimate remaining deferrals), and dropped `|| true` from `.github/workflows/ci.yml` so `ruff check llmwiki tests scripts` fails the build. Callers import shared tag helpers from `llmwiki.tag_utils` rather than facade re-exports. Shared `format_tokens` lives in `llmwiki.format_numbers` (used by viz/models/compare). Removed per-file line-count ceilings in `tests/test_render_split.py`. See `CONTRIBUTING.md` Linting.
 
 ### Fixed
+
+- **Sparse topic graph fell back poorly on the Pages demo** — seeding a thin Claude `wiki/sources/` set flipped `graph.html` into topic mode while `min_sessions=2` kept only Claude↔llm-wiki. `build` now falls back to the page graph when there are fewer than 5 topic nodes; demo wiki `## Connections` were enriched (no re-synth) so a healthy topic graph (7 topics / 21 edges) still uses topic mode when the vocabulary is rich enough.
 
 - **Session resume command contrast (#58)** — `.resume-command .resume-cmd-text` now uses explicit `color: var(--text)` on `background: var(--bg-alt)` (beating `.content code`'s `--bg-code`). Stale resume strips no longer use `opacity` (axe treated the diluted text as a contrast failure); they mute via `--text-muted` + line-through instead. Projects index cards keep the `card-project` class expected by e2e. Build emits `favicon.ico` plus an inline SVG `<link rel="icon">`, and copies `llmwiki-state.js` into `site/` (script src is `{prefix}llmwiki-state.js`, not `../`) so site-only hosts no longer 404 the Home State sidecar into the browser console.
 

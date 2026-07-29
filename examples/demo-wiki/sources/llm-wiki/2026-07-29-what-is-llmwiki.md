@@ -1,7 +1,7 @@
 ---
 title: "What is llmwiki"
 type: source
-tags: [raw-doc, demo, llmwiki, session-transcript, llm-wiki, knowledge-base, session-synthesis, immutable-transcripts, static-site-gen]
+tags: [raw-doc, demo, llmwiki, session-transcript, llm-wiki, knowledge-base, session-synthesis, static-site-generation, wiki-architecture]
 date: 2026-07-29
 source_file: raw/docs/llm-wiki/what-is-llmwiki.md
 project: llm-wiki
@@ -10,34 +10,25 @@ last_updated: 2026-07-29
 ---
 ## Summary
 
-llmwiki is a three-layer system that converts coding-agent session transcripts into queryable personal knowledge bases. It maintains immutable raw transcripts, synthesizes them into a cross-linked wiki with LLM-generated summaries and entities, and generates browsable static HTML—enabling future sessions and humans to reference historical decisions without uploading data to third-party services.
+llmwiki is a three-layer system for converting coding-agent session transcripts into a searchable personal knowledge base: immutable raw transcripts, an agent-maintained wiki layer with cross-linked content, and a generated static site. It solves the problem of session context being buried in long conversations by making history queryable for both the current user and future agent sessions, without relying on third-party memory vaults.
 
 ## Key Claims
 
-- Long agent sessions accumulate valuable context (decisions, tool choices, project history) that gets buried unless actively made queryable
-- The system architecture uses three immutable layers: `raw/` (source transcripts never edited by hand), `wiki/` (LLM-maintained synthesis), `site/` (generated HTML output)
-- llmwiki avoids third-party memory products by keeping all history locally searchable and queryable by the next agent session
-- The public demo uses only synthetic/invented sessions and fixture data, not real user transcripts
+- llmwiki architecture has three distinct layers: `raw/` (immutable source of truth), `wiki/` (LLM-synthesized with cross-links), and `site/` (generated static HTML)
+- Raw transcripts are never edited by hand once written and form the authoritative record of session history
+- Session data remains local and self-hosted; optional web publishing does not require uploading to third-party services
+- The system is designed to make session context queryable by both the current user and subsequent agent sessions
+- Supported session sources include Claude Code, Cursor, Codex, OpenClaw, and other coding agents
+- The public demo uses only synthetic and example content; no personal transcripts are published
 
 ## Key Quotes
 
-> "Long agent sessions bury decisions, tool choices, and project context. llmwiki makes that history queryable — by you and by the next agent session"
+> "llmwiki turns coding-agent session history into a Karpathy-style personal knowledge base: immutable raw transcripts, an LLM-maintained wiki layer, and a searchable static site."
+— Core value proposition, combining persistence, agent synthesis, and discoverability
 
-Articulates the core problem llmwiki solves: making session history an asset instead of ephemeral logs.
-
-> "Agent-owned synthesis: source summaries, entities, concepts, index, overview, log"
-
-Describes the structured knowledge artifacts the wiki layer creates from raw transcripts.
+> "Long agent sessions bury decisions, tool choices, and project context. llmwiki makes that history queryable — by you and by the next agent session — without uploading a vault to a third-party memory product."
+— Motivating problem and key architectural constraint
 
 ## Connections
 
-- [[llm-wiki]] — the product this page introduces
-- [[Claude]] — primary agent runtime that feeds sessions into the wiki
-- [[Karpathy]] — inspiration for the three-layer personal knowledge base
-- [[MCP]] — how editors query the wiki without leaving the IDE
-- [[GitHub Pages]] — public demo hosting for this repository
-- [[synthesis]] — how raw docs and sessions become wiki source pages
-
-## Contradictions
-
-None identified (foundational documentation for a new system).
+- Inspired by personal knowledge management practices referenced as [[Karpathy]]-style

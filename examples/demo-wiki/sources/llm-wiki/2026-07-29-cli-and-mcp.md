@@ -1,7 +1,7 @@
 ---
 title: "CLI, sync, and MCP tools"
 type: source
-tags: [raw-doc, demo, llmwiki, mcp, session-transcript, llm-wiki, cli-commands, mcp-server, analytics]
+tags: [raw-doc, demo, llmwiki, mcp, session-transcript, llm-wiki, cli-interface, mcp-server, usage-analytics, document-ingestion, sync-workflow]
 date: 2026-07-29
 source_file: raw/docs/llm-wiki/cli-and-mcp.md
 project: llm-wiki
@@ -10,26 +10,25 @@ last_updated: 2026-07-29
 ---
 ## Summary
 
-This document specifies the [[llm-wiki]] system's core CLI commands and MCP server interface. The CLI implements a four-stage pipeline (sync, synthesize, build, serve) to convert raw agent sessions and documents into published wiki content. The MCP server provides editor integration with tools for corpus discovery, page retrieval, maintenance, and ingestion, with per-call usage metrics tracked to measure tool ROI.
+This document describes the primary user interfaces for the [[LLM Wiki]] system: a CLI command suite for orchestrating the session-to-site pipeline, and an [[MCP]] server providing editor-integrated tool access. The CLI offers six commands (`sync`, `synthesize`, `build`, `serve`, `add`, `lint`) at different stages of the content flow, while the MCP server mirrors core capabilities for editor-native use without context-switching. Tool usage is logged and analyzed to correlate synthesis effort with retrieval value.
 
 ## Key Claims
 
-- The operational workflow follows four stages: `llmwiki sync` (agent sessions → raw), `synthesize` (raw → wiki sources), `build` (sources → HTML), and `serve` (local preview)
-- The MCP server exposes six tool families: discovery (`wiki_query`, `wiki_search`), retrieval (`wiki_read_page`, `wiki_list_sources`), maintenance (`wiki_lint`, `wiki_dashboard`), and ingestion (`wiki_add`)
-- MCP tool usage is recorded per-call in `usage/mcp-*.jsonl` and aggregated in site analytics to generate per-tool heatmaps, usage tables, and cost-benefit ("payoff") ratios
-- The CLI includes an `add` command for document ingestion with optional synthesis and build, a `lint` command for finding orphans and broken links, and a `serve` command for local preview
+- The CLI provides six commands: `sync` converts agent sessions, `synthesize` runs LLM processing, `build` compiles static site HTML, `serve` runs a local HTTP server, `add` ingests external documents, and `lint` performs health checks
+- The MCP server exposes seven tools—`wiki_query`, `wiki_search`, `wiki_read_page`, `wiki_list_sources`, `wiki_lint`, `wiki_dashboard`, and `wiki_add`—mirroring CLI operations for direct editor access
+- Usage of each MCP tool is recorded to `usage/mcp-*.jsonl` and aggregated in a site Analytics page showing per-tool heatmaps and "payoff" views that correlate synthesis cost against retrieval demand
 
 ## Key Quotes
 
-> "Convert new agent sessions into `raw/sessions/`" — the sync stage bridges from agent transcripts into the wiki's raw input layer
+> "Each call can be recorded under `usage/mcp-*.jsonl`. The site Analytics page aggregates those records into MCP heatmaps, per-tool tables, and "payoff" views so you can see whether synthesis spend is earning retrievals."
 
-> "The site Analytics page aggregates those records into MCP heatmaps, per-tool tables, and 'payoff' views so you can see whether synthesis spend is earning retrievals." — usage analytics are designed to measure whether tool adoption justifies its infrastructure cost
+This exemplifies a core design principle: instrument the entire interface to enable feedback loops where curators can measure which synthesis efforts drive the most actual retrieval value.
 
 ## Connections
 
-- [[llm-wiki]] — the system whose operational interface is documented here
-- [[MCP]] — Model Context Protocol provides the editor integration mechanism
-- [[Claude]] — typical host for the MCP server and `synthesize` backend
-- [[synthesis]] — CLI stage that fills `wiki/sources/` from raw input
-- [[Ollama]] — local alternative to the Claude synthesis backend
-- [[GitHub Pages]] — Analytics on the public demo is fed by fixture MCP usage
+- [[LLM Wiki]] — the project whose interfaces this document describes
+- [[MCP]] — the protocol substrate enabling editor-native tool access and observability
+
+## Contradictions
+
+None identified.
