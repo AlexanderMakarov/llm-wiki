@@ -2,7 +2,9 @@
 
 Host your llmwiki site on GitHub Pages for free, with automatic builds on every push to master.
 
-Live example: [pratiyush.github.io/llm-wiki/](https://pratiyush.github.io/llm-wiki/)
+Live example (upstream): [pratiyush.github.io/llm-wiki/](https://pratiyush.github.io/llm-wiki/)
+
+> **This fork (#69):** `pages.yml` is `workflow_dispatch`-only until Settings → Pages → Source: **GitHub Actions** is enabled (push deploys were failing with "Get Pages site failed"). After enabling Pages, restore the `push:` trigger in `.github/workflows/pages.yml`.
 
 ## Prerequisites
 
@@ -99,8 +101,8 @@ The workflow installs `markdown` via pip. If you have added dependencies, update
 
 ### Workflow not triggering
 
-- The workflow triggers on pushes to `master` and `main`. Check your default branch name.
-- For manual runs, go to **Actions > Deploy demo site to GitHub Pages > Run workflow**.
+- On this fork, automatic push deploy is disabled until Pages is configured (#69). Use **Actions → Deploy demo site to GitHub Pages → Run workflow** for a manual run after enabling Pages, then restore the `push:` trigger in `pages.yml`.
+- When the `push:` trigger is restored, it fires on `master` and `main` — check your default branch name.
 
 ### Assets or CSS missing
 

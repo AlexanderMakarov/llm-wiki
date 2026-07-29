@@ -125,11 +125,13 @@ def test_bump_script_rejects_non_semver_tag(tmp_path: Path):
 
 
 def test_bump_script_uses_right_tarball_url(bump_script: str):
-    # Must match the URL pattern the formula test guards.
+    # Must match this product line's GitHub archive (#69). Override via
+    # LLMWIKI_GITHUB_REPO when bumping a mirror.
     assert (
-        "https://github.com/Pratiyush/llm-wiki/archive/refs/tags/${tag}.tar.gz"
+        "https://github.com/${REPO_SLUG}/archive/refs/tags/${tag}.tar.gz"
         in bump_script
     )
+    assert 'REPO_SLUG="${LLMWIKI_GITHUB_REPO:-AlexanderMakarov/llm-wiki}"' in bump_script
 
 
 def test_bump_script_handles_macos_and_linux_sed(bump_script: str):
@@ -167,7 +169,9 @@ def test_workflow_gracefully_handles_missing_secret(workflow: str):
 
 
 def test_workflow_targets_homebrew_tap_repo(workflow: str):
-    assert "Pratiyush/homebrew-tap" in workflow
+    # Push target follows the running repo owner (#69), not a hard-coded
+    # upstream tap. Soft-skips when HOMEBREW_TAP_TOKEN is unset.
+    assert "${GITHUB_REPOSITORY_OWNER}/homebrew-tap" in workflow
 
 
 # ─── Setup doc ────────────────────────────────────────────────────────

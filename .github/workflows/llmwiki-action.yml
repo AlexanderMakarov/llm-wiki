@@ -4,7 +4,7 @@
 #
 #   jobs:
 #     wiki:
-#       uses: Pratiyush/llm-wiki/.github/workflows/llmwiki-action.yml@master
+#       uses: AlexanderMakarov/llm-wiki/.github/workflows/llmwiki-action.yml@main
 #       with:
 #         python-version: "3.12"
 #         sync-args: "--adapter claude-code"

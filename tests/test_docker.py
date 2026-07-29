@@ -74,7 +74,7 @@ def test_compose_exists():
 
 def test_compose_pulls_ghcr_image():
     text = COMPOSE.read_text(encoding="utf-8")
-    assert "image: ghcr.io/pratiyush/llm-wiki" in text
+    assert "image: ghcr.io/alexandermakarov/llm-wiki" in text
 
 
 def test_compose_has_build_fallback():

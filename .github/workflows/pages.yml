@@ -1,14 +1,17 @@
 name: Deploy demo site to GitHub Pages
 
 # Builds a public demo from dummy example sessions (no personal data) and
-# publishes it to GitHub Pages. Triggered on pushes to master/main and manual
-# runs. Not on tag pushes (GitHub Pages env only accepts deploys from master,
-# and the master push already covers the same content). Highlight.js loads
-# client-side from CDN so no extra deps.
+# publishes it to GitHub Pages. Highlight.js loads client-side from CDN
+# so no extra deps.
+#
+# DISABLED (#69): this repo has no GitHub Pages site configured
+# (`GET /repos/.../pages` → 404), so every push to main was failing at
+# `actions/configure-pages` with "Get Pages site failed". Automatic
+# deploy is off until Settings → Pages → Source: GitHub Actions is
+# enabled. Keep `workflow_dispatch` for a manual dry-run after that.
+# See docs/deploy/github-pages.md.
 
 on:
-  push:
-    branches: ["master", "main"]
   workflow_dispatch:
 
 permissions:

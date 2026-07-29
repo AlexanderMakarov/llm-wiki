@@ -27,7 +27,10 @@ fi
 
 cd "$(dirname "$0")/.."
 
-tarball_url="https://github.com/Pratiyush/llm-wiki/archive/refs/tags/${tag}.tar.gz"
+# Default to this product line's GitHub repo (#69). Override with
+# LLMWIKI_GITHUB_REPO=owner/name when bumping a mirror.
+REPO_SLUG="${LLMWIKI_GITHUB_REPO:-AlexanderMakarov/llm-wiki}"
+tarball_url="https://github.com/${REPO_SLUG}/archive/refs/tags/${tag}.tar.gz"
 
 echo "→ Fetching $tarball_url …"
 tmpfile="$(mktemp)"
@@ -68,8 +71,8 @@ echo "✓ Updated $formula:"
 grep -E '^  (url|sha256) ' "$formula"
 echo ""
 echo "Next steps:"
-echo "  1. Copy $formula → Pratiyush/homebrew-tap/Formula/llmwiki.rb"
+echo "  1. Copy $formula → ${REPO_SLUG%%/*}/homebrew-tap/Formula/llmwiki.rb"
 echo "  2. Commit + push the tap repo"
-echo "  3. Users run: brew upgrade Pratiyush/tap/llmwiki"
+echo "  3. Users run: brew upgrade ${REPO_SLUG%%/*}/tap/llmwiki"
 echo ""
 echo "See docs/deploy/homebrew-setup.md for the first-time setup."

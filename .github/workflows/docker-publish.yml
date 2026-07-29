@@ -2,10 +2,11 @@ name: Docker — publish to GHCR
 
 # Builds a multi-arch image (amd64 + arm64) on every tag push and
 # publishes to GitHub Container Registry as
-#   ghcr.io/pratiyush/llm-wiki:<tag>
-#   ghcr.io/pratiyush/llm-wiki:latest    (only on non-prerelease tags)
+#   ghcr.io/<owner>/llm-wiki:<tag>
+#   ghcr.io/<owner>/llm-wiki:latest    (only on non-prerelease tags)
 #
-# See docs/deploy/docker.md for the consumer-side quickstart.
+# Image namespace follows `github.repository` so forks publish under
+# their own GHCR namespace (#69). See docs/deploy/docker.md.
 
 on:
   push:
@@ -46,7 +47,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/pratiyush/llm-wiki
+          images: ghcr.io/${{ github.repository }}
           tags: |
             type=ref,event=tag
             type=semver,pattern={{version}}
