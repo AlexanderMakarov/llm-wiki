@@ -31,8 +31,9 @@ Thanks for wanting to contribute. This project follows strict rules about commit
 9. **Never fail silently in the browser.** Every runtime failure in the static site must be visible on the page, not just in the console — see [Static-site error handling](#static-site-error-handling).
 10. **No personal vault details in PR text.** Absolute home paths, OS usernames, vault roots, and personal session examples stay out of PR bodies / commits / CHANGELOG — use placeholders. See [Privacy rules](#privacy-rules).
 11. **Lint before you push.** `ruff check llmwiki tests scripts`. A committed `pre-push` hook checks the Python files in your push; see [Linting](#linting).
+12. **Wait for CI after every push.** Local green is not enough — after `git push` (new PR or update), watch GitHub Actions on that head SHA, report the result, and fix/repush if anything failed. See [After you push](#after-you-push).
 
-That's it. If you follow those eleven rules your PR is 90% of the way through review.
+That's it. If you follow those twelve rules your PR is 90% of the way through review.
 
 ## Code of conduct
 
@@ -262,6 +263,15 @@ Ruff config lives in `pyproject.toml` under `[tool.ruff]`: line length 120, targ
 - **Imports belong at the top of the module.** Deferred imports inside a function are legitimate only for (1) an optional extra (`trafilatura`, `markitdown`, `graphifyy`, `networkx`, …) or (2) a proven import cycle — and the reason goes in a `# noqa: PLC0415` comment on the line. Stdlib modules are never deferred.
 - **A deliberate re-export needs `# noqa: F401`.** Prefer importing from the owning module over growing facade re-exports. `ruff --fix` will otherwise delete an import that looks unused in its own module but is part of that module's public surface.
 - **Prefer low-level imports from the owning module.** Do not reach for helpers via a high-level facade (`from llmwiki.build import md_to_html`) when the symbol lives in a dedicated module.
+
+## After you push
+
+Local `ruff` + `pytest` are necessary but not sufficient. Coding agents (and humans) working on this repository must **wait for GitHub Actions on the pushed head SHA** before treating a PR as ready or ending the turn after a push.
+
+1. After `git push` that creates or updates a PR branch, poll checks until they finish (or fail). Do not stop at "pushed successfully."
+2. Prefer: `gh pr checks <n> --watch` (or `gh run watch` for the latest run on the branch). For a one-shot status: `gh pr checks <n>` / `gh run list --branch <branch> --limit 5`.
+3. Report the outcome to the user (green / red / cancelled). If anything required is red, fetch failing logs (`gh run view <id> --log-failed` or the job URL), fix, push again, and wait again.
+4. Do not declare the PR merge-ready, ask for review as "done," or move on to unrelated work while required checks are still pending — unless the user explicitly tells you not to wait.
 
 ## Testing
 

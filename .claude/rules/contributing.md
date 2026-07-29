@@ -54,7 +54,9 @@ git config core.hooksPath .githooks
 
 Prefer `ruff check --fix --select …` for safe rule families — never bare `ruff check --fix` (it can delete deliberate re-exports). If you must bypass the hook, `git push --no-verify` works, but say why in the PR.
 
-CI runs `ruff check llmwiki tests scripts` and fails the build on findings (#58). Keep your own diff clean.
+## After you push — wait for CI
+
+Local green is not enough. After every `git push` that creates or updates a PR, **wait for GitHub Actions on that head SHA**, report green/red to the user, and if anything failed: read logs (`gh run view <id> --log-failed`), fix, push, wait again. Prefer `gh pr checks <n> --watch`. Do not call the PR ready while required checks are pending (unless the user says not to wait). Full detail: CONTRIBUTING *After you push*.
 
 ## Python conventions
 
