@@ -190,11 +190,12 @@ There is no daily bar chart — trends are read from the heatmaps. Durable count
 
 Press `⌘K` (or `Ctrl+K` on Linux/Windows) from any page.
 
-- Fuzzy match over **every** page title + body.
+- Fuzzy match over **every** page title + body — including topic pages (`type: topic`) and their alias spellings (#50).
 - Top result on Enter navigates.
 - Shows facet chips: `Project`, `Entity type`, `Lifecycle`, `Confidence`, `Tags` — click a facet to filter.
 - Footer shows the current mode (`flat` / `tree`) from `search-index.json._mode` and the deep-page ratio (see [`reference/cache-tiers.md`](cache-tiers.md) for the tree-mode heuristic).
 - Keyboard: `↑ / ↓` navigate, `Enter` open, `Esc` close.
+- Filter by type: `type:topic` / `type:session` / `type:project` / `type:docs` / `type:document` / `type:slash` / `type:page`.
 
 ---
 
@@ -202,8 +203,10 @@ Press `⌘K` (or `Ctrl+K` on Linux/Windows) from any page.
 
 Two levels:
 
-- `site/search-index.json` — ~7 KB meta index + chunk manifest + facet counts + mode badge.
+- `site/search-index.json` — ~7 KB meta index (projects, static pages, documents, docs, slash commands, **topics**) + chunk manifest + facet counts + mode badge.
 - `site/search-chunks/<project>.json` — per-project session entries with `title`, `url`, `type`, `project`, `date`, `model`, `body`, `heading_max_depth`, `heading_count_by_depth`.
+
+Topic entries (`type: "topic"`) point at `topics/<slug>.html`; their `body` includes session count plus `also: …` aliases so a query using any non-canonical spelling still hits the canonical topic page. The same payloads ship as `.js` sidecars for `file://` (#20).
 
 The palette lazy-loads chunks as the query narrows. See [`reference/reader-api.md`](reader-api.md) for the stable shape.
 

@@ -109,7 +109,7 @@ from llmwiki.state_store import read_state, resolve_state_file, synth_pipeline_s
 from llmwiki.synth.claude_cli import overview_argv
 from llmwiki.synth.pipeline import refresh_synth_pending
 from llmwiki.tag_utils import NOISE_TAGS
-from llmwiki.topics import build_topic_graph
+from llmwiki.topics import build_topic_graph, topic_slug
 from llmwiki.topics_page import build_topic_pages
 from llmwiki.usage import (
     combined_totals as _mcp_combined_totals,
@@ -2347,6 +2347,7 @@ def build_search_index(
     *,
     search_mode: str = "auto",
     doc_files: list[raw_docs_site.RawDocFile] | None = None,
+    topics: list[dict[str, Any]] | None = None,
 ) -> Path:
     """Build a chunked search index for lazy loading (#47).
 
@@ -2354,13 +2355,17 @@ def build_search_index(
     site works when opened over ``file://`` — see :func:`write_js_sidecar`.
 
     Writes:
-      search-index.json          — meta entries (projects + pages) + _chunks manifest
-                                  + _mode + _tree_eligible_ratio (#53)
+      search-index.json          — meta entries (projects + pages + topics) +
+                                  _chunks manifest + _mode + _tree_eligible_ratio (#53)
       search-chunks/<project>.json — session entries per project, each
                                     carrying heading_max_depth + count_by_depth
 
     `search_mode` accepts ``auto`` (default, heuristic), ``tree``, or
     ``flat`` — matches the `llmwiki build --search-mode` flag.
+
+    `topics` is the ``nodes`` list from :func:`build_topic_graph` (#50). Each
+    node becomes a ``type: "topic"`` meta entry whose ``body`` carries aliases
+    so non-canonical spellings match in the Cmd+K palette.
     """
     # ── session entries grouped by project ──
     chunks: dict[str, list[dict[str, Any]]] = {}
@@ -2496,6 +2501,32 @@ def build_search_index(
                 "model": "",
                 "body": first_para[:300],
             })
+
+    # #50: topic pages + their aliases. Built earlier in build_site so the
+    # graph nodes exist before this index is written; aliases live in body
+    # so a query using any non-canonical spelling still finds the topic.
+    for node in (topics or []):
+        name = str(node.get("id") or "")
+        if not name:
+            continue
+        slug = topic_slug(name)
+        aliases = [a for a in (node.get("aliases") or []) if a and a != name]
+        body_parts: list[str] = [f"{int(node.get('session_count') or 0)} sessions"]
+        if aliases:
+            body_parts.append("also: " + ", ".join(aliases))
+        desc = str(node.get("description") or "").strip()
+        if desc:
+            body_parts.append(desc)
+        meta_entries.append({
+            "id": f"topic:{slug}",
+            "url": str(node.get("site_url") or f"topics/{slug}.html"),
+            "title": name,
+            "type": "topic",
+            "project": "",
+            "date": "",
+            "model": "",
+            "body": " · ".join(body_parts)[:500],
+        })
 
     # v1.0 (#161): aggregate facet counts across all session chunks so the
     # client can render filter checkboxes without scanning the full index.
@@ -2972,9 +3003,26 @@ def build_site(
         "projects/index.html, sessions/index.html, 404.html"
     )
 
-    # Search index (chunked — #47) + tree/flat auto-routing (#53)
+    # #50: build the topic graph *before* the search index so topic pages
+    # (and their aliases) can be indexed. Graph HTML / topic pages still
+    # render below — we only hoist the CPU-side construction.
+    _TOPIC_GRAPH_MIN_NODES = 5
+    topic_graph: dict[str, Any] | None = None
+    try:
+        topic_graph = build_topic_graph(wiki_dir)
+    except Exception as e:  # noqa: BLE001 — never fail the build over the graph
+        print(f"  warning: topic graph build failed: {e}", file=sys.stderr)
+    topic_nodes = (topic_graph or {}).get("nodes") or []
+    use_topic_graph = bool(topic_graph) and len(topic_nodes) >= _TOPIC_GRAPH_MIN_NODES
+
+    # Search index (chunked — #47) + tree/flat auto-routing (#53) + topics (#50)
     build_search_index(
-        sources, groups, out_dir, search_mode=search_mode, doc_files=doc_files
+        sources,
+        groups,
+        out_dir,
+        search_mode=search_mode,
+        doc_files=doc_files,
+        topics=topic_nodes if use_topic_graph else None,
     )
 
     # v0.4: AI-consumable exports (llms.txt, llms-full.txt, graph.jsonld,
@@ -3005,16 +3053,9 @@ def build_site(
         # useful; fall back to the page graph otherwise (repo mode, empty
         # wikis, or a tiny demo corpus where min_sessions=2 leaves 1–2 nodes
         # — see #69 Pages demo). All local CPU.
-        topic_graph = None
-        try:
-            topic_graph = build_topic_graph(wiki_dir)
-        except Exception as e:  # noqa: BLE001 — never fail the build over the graph
-            print(f"  warning: topic graph build failed: {e}", file=sys.stderr)
         # Sparse topic graphs look broken in the viewer (one edge, two nodes).
         # Prefer the full page graph until the vocabulary is rich enough.
-        _TOPIC_GRAPH_MIN_NODES = 5
-        topic_nodes = (topic_graph or {}).get("nodes") or []
-        if topic_graph and len(topic_nodes) >= _TOPIC_GRAPH_MIN_NODES:
+        if use_topic_graph and topic_graph is not None:
             write_graph_html(topic_graph, out_dir / "graph.html")
             tpages = build_topic_pages(topic_graph, out_dir)
             print(f"  wrote graph.html (topic graph: {len(topic_graph['nodes'])} topics, "
