@@ -29,10 +29,12 @@ This document describes the automated GitHub Pages deployment pipeline for llm-w
 
 ## Connections
 
+- [[llm-wiki]] — product whose public demo this pipeline publishes
 - [[GitHub Pages]] — the hosting platform for the public demo
 - [[GitHub Actions]] — automates the build and deployment pipeline
-- `llmwiki` CLI — invoked in the workflow (init, build, deploy steps)
-- Example directories — committed templates and fixtures that seed each build
+- [[Claude]] — used locally to pre-synthesize wiki sources (not in CI)
+- [[MCP]] — fixture usage telemetry seeded for Analytics on the demo
+- [[synthesis]] — happens once offline; CI only copies the result
 
 ## Contradictions
 

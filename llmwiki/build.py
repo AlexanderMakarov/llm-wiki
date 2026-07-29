@@ -3001,19 +3001,30 @@ def build_site(
     # so the "Graph" nav link works without a separate `llmwiki graph` step.
     try:
         # #54: prefer the topic-first graph (topics as nodes, sessions as the
-        # edges/backlinks between them) when the wiki has topics; fall back to
-        # the page graph otherwise (repo mode, empty wikis). All local CPU.
+        # edges/backlinks between them) when the wiki has enough topics to be
+        # useful; fall back to the page graph otherwise (repo mode, empty
+        # wikis, or a tiny demo corpus where min_sessions=2 leaves 1–2 nodes
+        # — see #69 Pages demo). All local CPU.
         topic_graph = None
         try:
             topic_graph = build_topic_graph(wiki_dir)
         except Exception as e:  # noqa: BLE001 — never fail the build over the graph
             print(f"  warning: topic graph build failed: {e}", file=sys.stderr)
-        if topic_graph and topic_graph.get("nodes"):
+        # Sparse topic graphs look broken in the viewer (one edge, two nodes).
+        # Prefer the full page graph until the vocabulary is rich enough.
+        _TOPIC_GRAPH_MIN_NODES = 5
+        topic_nodes = (topic_graph or {}).get("nodes") or []
+        if topic_graph and len(topic_nodes) >= _TOPIC_GRAPH_MIN_NODES:
             write_graph_html(topic_graph, out_dir / "graph.html")
             tpages = build_topic_pages(topic_graph, out_dir)
             print(f"  wrote graph.html (topic graph: {len(topic_graph['nodes'])} topics, "
                   f"{len(topic_graph['edges'])} connections) + {len(tpages)} topic pages")
         else:
+            if topic_nodes:
+                print(
+                    f"  topic graph too sparse ({len(topic_nodes)} topics "
+                    f"< {_TOPIC_GRAPH_MIN_NODES}); falling back to page graph",
+                )
             # #54: graph the same wiki we built the site from (vault or repo).
             graph_path = copy_graph_to_site(out_dir, wiki_dir=wiki_dir)
             if graph_path:

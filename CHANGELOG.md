@@ -10,6 +10,8 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Changed
 
+- **Sparse topic graph falls back to page graph** — when `wiki/sources/` only yield fewer than 5 topics after `min_sessions=2` (the Pages demo after a thin Claude seed showed just Claude↔llm-wiki), `build` prefers the interactive page graph instead of a two-node topic view. Demo wiki Connections were also enriched so a healthy topic graph (7 topics) still prefers topic mode when the vocabulary is rich enough.
+
 - **Pages demo corpus: docs + Claude wiki + MCP Analytics (#69)** — `examples/demo-docs/` (product docs about llmwiki), `examples/demo-wiki/sources/` (Claude-synthesized offline; CI copies only), and `examples/demo-usage/` (fixture MCP telemetry). `pages.yml` seeds all three so Documents and Analytics MCP widgets are non-empty. Two demo sessions advertise `mcp__llmwiki__*` in `tools_used` for adoption signal.
 
 - **Actions identity + Pages off for this fork (#69)** — `CODEOWNERS` / `FUNDING.yml` now point at `@AlexanderMakarov`. `pages.yml` no longer deploys on every push (Pages is not enabled here; runs were failing at `configure-pages`). Nightly `synthetic.yml` schedule is off for the same reason. Docker publish / compose use this owner's GHCR namespace. Homebrew bump regenerates the formula only — tap push is disabled so we never write `Pratiyush/homebrew-tap`. Release / reusable-workflow comments document this owner. Commit `uv.lock` so `uv` resolves the same graph locally and in CI. Tutorial links that still cite upstream stay out of scope (issue Step 4).

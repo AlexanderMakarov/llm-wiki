@@ -31,10 +31,11 @@ This documentation describes the synthesis backend system in llm-wiki, which det
 ## Connections
 
 - [[llm-wiki]] — the project these synthesis backends serve
+- [[synthesis]] — the pipeline stage this page configures
 - [[Ollama]] — local backend option for offline synthesis
 - [[Claude]] — cloud backend powered by Anthropic
-- [[Backend-Selection]] — the core architectural choice this page documents
-- [[Cost-Optimization]] — practical strategies for economical synthesis
+- [[Karpathy]] — knowledge-base shape the backends write toward
+- [[MCP]] — editors often trigger synthesis-adjacent reads via MCP tools
 
 ## Contradictions
 

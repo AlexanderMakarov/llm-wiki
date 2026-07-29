@@ -29,3 +29,7 @@ This document specifies the [[llm-wiki]] system's core CLI commands and MCP serv
 
 - [[llm-wiki]] — the system whose operational interface is documented here
 - [[MCP]] — Model Context Protocol provides the editor integration mechanism
+- [[Claude]] — typical host for the MCP server and `synthesize` backend
+- [[synthesis]] — CLI stage that fills `wiki/sources/` from raw input
+- [[Ollama]] — local alternative to the Claude synthesis backend
+- [[GitHub Pages]] — Analytics on the public demo is fed by fixture MCP usage

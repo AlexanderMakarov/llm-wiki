@@ -31,8 +31,12 @@ Describes the structured knowledge artifacts the wiki layer creates from raw tra
 
 ## Connections
 
-- [[Karpathy]] — Explicitly referenced as the inspiration for this "Karpathy-style personal knowledge base" approach to knowledge organization
-- [[Claude]] — Sessions from Claude Code, Claude agents, and other Claude-based tools are the primary input to the system
+- [[llm-wiki]] — the product this page introduces
+- [[Claude]] — primary agent runtime that feeds sessions into the wiki
+- [[Karpathy]] — inspiration for the three-layer personal knowledge base
+- [[MCP]] — how editors query the wiki without leaving the IDE
+- [[GitHub Pages]] — public demo hosting for this repository
+- [[synthesis]] — how raw docs and sessions become wiki source pages
 
 ## Contradictions
 
