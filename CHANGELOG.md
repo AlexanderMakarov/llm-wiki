@@ -18,6 +18,8 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Fixed
 
+- **Topic pages (and aliases) missing from Cmd+K search (#50)** — `build_search_index` never received topic-graph nodes (the graph was built *after* the index), so `topics/*.html` was reachable from the graph and `topics/index.html` but typing a topic name — or any of its alias spellings — into the palette returned nothing. Topic-graph construction now runs before the index; each node becomes a `type: "topic"` meta entry whose `body` carries aliases + session count, and the same payload rides the `#20` `.js` sidecar for `file://`.
+
 - **Sparse topic graph fell back poorly on the Pages demo** — seeding a thin Claude `wiki/sources/` set flipped `graph.html` into topic mode while `min_sessions=2` kept only Claude↔llm-wiki. `build` now falls back to the page graph when there are fewer than 5 topic nodes; demo wiki `## Connections` were enriched (no re-synth) so a healthy topic graph (7 topics / 21 edges) still uses topic mode when the vocabulary is rich enough.
 
 - **Session resume command contrast (#58)** — `.resume-command .resume-cmd-text` now uses explicit `color: var(--text)` on `background: var(--bg-alt)` (beating `.content code`'s `--bg-code`). Stale resume strips no longer use `opacity` (axe treated the diluted text as a contrast failure); they mute via `--text-muted` + line-through instead. Projects index cards keep the `card-project` class expected by e2e. Build emits `favicon.ico` plus an inline SVG `<link rel="icon">`, and copies `llmwiki-state.js` into `site/` (script src is `{prefix}llmwiki-state.js`, not `../`) so site-only hosts no longer 404 the Home State sidecar into the browser console.

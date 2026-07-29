@@ -29,6 +29,10 @@ python3 -m pytest tests/ -q        # tests
 
 The committed `pre-push` hook in `.githooks/` lints the Python files in your push and rejects it on violations. `./setup.sh` wires it; enable it manually with `git config core.hooksPath .githooks`.
 
+## After pushing — wait for CI
+
+Local green is not enough. After every `git push` that creates or updates a PR, wait for GitHub Actions on that head SHA (`gh pr checks <n> --watch`), report the result, and fix/repush on failure. Do not treat the PR as ready while required checks are pending. See CONTRIBUTING *After you push*.
+
 ## Not to be confused with the vault schema
 
 `CLAUDE.md` and `AGENTS.md` at the repo root describe how an agent maintains a **user's** `raw/` → `wiki/` → `site/` knowledge base. They are the product's schema, not rules for developing llmwiki itself.

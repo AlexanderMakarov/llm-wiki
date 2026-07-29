@@ -8,6 +8,7 @@ is rich enough.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import llmwiki.build as build_mod
@@ -75,3 +76,7 @@ def test_sparse_topic_graph_falls_back_to_page_graph(tmp_path: Path, monkeypatch
     html = (vault / "site" / "graph.html").read_text(encoding="utf-8")
     # Page-graph payload has no mode:"topic"; topic graph embeds '"mode": "topic"'.
     assert '"mode": "topic"' not in html
+    # #50: sparse fallback must not index topic URLs that were never written.
+    idx = json.loads((vault / "site" / "search-index.json").read_text(encoding="utf-8"))
+    assert not any(e.get("type") == "topic" for e in idx["entries"])
+    assert not (vault / "site" / "topics").exists()

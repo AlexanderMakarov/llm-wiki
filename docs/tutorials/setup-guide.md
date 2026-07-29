@@ -259,6 +259,7 @@ Press `Cmd+K` (macOS) or `Ctrl+K` (Linux/Windows). Try:
 |-------|--------------|
 | `flutter` | Full-text match |
 | `type:session` | Only session pages |
+| `type:topic` | Only topic pages (aliases match via body) |
 | `project:my-project` | Filter by project |
 | `model:claude-sonnet-4` | Filter by model |
 | `date:2026-04` | Date prefix match |

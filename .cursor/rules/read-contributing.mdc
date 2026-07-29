@@ -30,7 +30,9 @@ python3 -m pytest tests/ -q        # tests
 
 A committed `pre-push` hook in `.githooks/` lints the Python files in your push and rejects it on violations. `./setup.sh` wires it; enable it by hand with `git config core.hooksPath .githooks`. Prefer `ruff check --fix --select …` for safe rule families — never bare `ruff check --fix` (it can delete deliberate re-exports). `git push --no-verify` bypasses the hook if you must — say why in the PR.
 
-CI runs `ruff check llmwiki tests scripts` and fails the build on findings (#58). Keep your own diff clean.
+## After you push — wait for CI
+
+Local green is not enough. After every `git push` that creates or updates a PR, **wait for GitHub Actions on that head SHA**, report green/red to the user, and if anything failed: read logs (`gh run view <id> --log-failed`), fix, push, wait again. Prefer `gh pr checks <n> --watch`. Do not call the PR ready while required checks are pending (unless the user says not to wait). Full detail: CONTRIBUTING *After you push*.
 
 ## Do not confuse with AGENTS.md / CLAUDE.md
 
