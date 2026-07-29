@@ -1,20 +1,16 @@
 name: Nightly synthetic
 
-# #637 (#pw-x9): nightly Playwright run against the deployed demo at
-# https://pratiyush.github.io/llm-wiki/. Catches post-deploy breakage
-# we can't see in regular CI: GitHub Pages publish corruption, CDN
-# issues, browser update breakage, broken third-party scripts.
+# Nightly Playwright run against the deployed demo. Catches post-deploy
+# breakage CI cannot see: Pages publish corruption, CDN issues, browser
+# update breakage, broken third-party scripts.
 #
-# Failure path: opens (or appends to) a single tracking issue titled
-# "Synthetic monitoring failure" so it doesn't spam the tracker on
-# repeated breaks (same dedupe pattern as link-check.yml uses for
-# its broken-links report).
+# DISABLED (#69): this repo has no GitHub Pages demo, and the previous
+# base URL pointed at upstream `pratiyush.github.io/llm-wiki`. Restore
+# the cron below and set `QA_SYNTHETIC_BASE_URL` to our Pages URL once
+# `pages.yml` is re-enabled (Settings → Pages → GitHub Actions).
+# Manual `workflow_dispatch` kept for dry-runs after that.
 
 on:
-  schedule:
-    # 04:13 UTC every day. The off-the-hour minute keeps us out of
-    # GitHub's hourly scheduler peaks where workers can be backlogged.
-    - cron: "13 4 * * *"
   workflow_dispatch:
 
 permissions:
@@ -46,12 +42,10 @@ jobs:
         id: probe
         run: |
           mkdir -p synthetic-report
-          # Re-use the cross-browser smoke as the synthetic check.
           # Override base_url via env so the smoke probes the deployed
-          # site instead of spinning up its own local server. Each
-          # test in the smoke is robust to a site that lacks specific
-          # pages (uses request.get + 404-skip pattern).
-          export QA_SYNTHETIC_BASE_URL="https://pratiyush.github.io/llm-wiki"
+          # site instead of spinning up its own local server.
+          # Set to this repo's Pages URL after pages.yml is live (#69).
+          export QA_SYNTHETIC_BASE_URL="${QA_SYNTHETIC_BASE_URL:-https://alexandermakarov.github.io/llm-wiki}"
           python -m pytest tests/e2e/test_cross_browser_smoke.py \
             --base-url="$QA_SYNTHETIC_BASE_URL" \
             --browser=chromium \

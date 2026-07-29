@@ -2,7 +2,9 @@
 
 Host your llmwiki site on GitHub Pages for free, with automatic builds on every push to master.
 
-Live example: [pratiyush.github.io/llm-wiki/](https://pratiyush.github.io/llm-wiki/)
+Live example (this fork): [alexandermakarov.github.io/llm-wiki](https://alexandermakarov.github.io/llm-wiki/) · upstream: [pratiyush.github.io/llm-wiki](https://pratiyush.github.io/llm-wiki/)
+
+> **This fork (#69):** `pages.yml` is `workflow_dispatch`-only by default (restore `push:` if you want every merge to republish). Seed corpus: `examples/demo-sessions/`, `examples/demo-docs/` (product docs), `examples/demo-wiki/` (Claude-synthesized sources, committed so CI stays free/deterministic), `examples/demo-usage/` (MCP telemetry fixtures for Analytics).
 
 ## Prerequisites
 
@@ -37,20 +39,18 @@ The repo ships with `.github/workflows/pages.yml` which:
 2. Installs Python 3.12 and the `markdown` dependency
 3. Runs `llmwiki init` to scaffold directories
 4. Seeds demo sessions from `examples/demo-sessions/` (or `tests/fixtures/demo/`)
-5. Runs `llmwiki build --out ./site`
-6. Creates a `.nojekyll` file (prevents Jekyll processing)
-7. Uploads `site/` as a Pages artifact
-8. Deploys to GitHub Pages
+5. Seeds product docs from `examples/demo-docs/` into `raw/docs/`
+6. Seeds pre-synthesized wiki pages from `examples/demo-wiki/sources/`
+7. Seeds MCP usage fixtures from `examples/demo-usage/` into `usage/`
+8. Runs `llmwiki build --out ./site`
+9. Adds `.nojekyll` so Pages serves `_`-prefixed paths
+10. Uploads and deploys the artifact
 
-No secrets or tokens are required. The workflow uses GitHub's built-in `actions/deploy-pages@v4`.
+No secrets or tokens are required. The workflow uses GitHub's built-in `actions/deploy-pages`.
 
-## Step 4: Push to master
+## Step 4: Publish
 
-```bash
-git push origin master
-```
-
-The workflow triggers on pushes to `master` or `main`, on version tags (`v*`), and on manual `workflow_dispatch`. After a successful run, your site is live at:
+With auto-push disabled on this fork, run **Actions → Deploy demo site to GitHub Pages → Run workflow** (or restore the `push:` trigger in `pages.yml`). After a successful run, the site is live at:
 
 ```
 https://<username>.github.io/<repo-name>/
@@ -99,8 +99,8 @@ The workflow installs `markdown` via pip. If you have added dependencies, update
 
 ### Workflow not triggering
 
-- The workflow triggers on pushes to `master` and `main`. Check your default branch name.
-- For manual runs, go to **Actions > Deploy demo site to GitHub Pages > Run workflow**.
+- On this fork, automatic push deploy is disabled until Pages is configured (#69). Use **Actions → Deploy demo site to GitHub Pages → Run workflow** for a manual run after enabling Pages, then restore the `push:` trigger in `pages.yml`.
+- When the `push:` trigger is restored, it fires on `master` and `main` — check your default branch name.
 
 ### Assets or CSS missing
 

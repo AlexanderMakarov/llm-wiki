@@ -1,16 +1,11 @@
 name: Bump Homebrew formula
 
 # After every version tag push, regenerate homebrew/llmwiki.rb against
-# the new tag, then (if HOMEBREW_TAP_TOKEN is configured) commit and
-# push the updated formula to Pratiyush/homebrew-tap.
-#
-# If the secret is NOT set, the job runs the bump + prints the new
-# formula content, but skips the push so unconfigured repos don't
-# fail. See docs/deploy/homebrew-setup.md for the one-time setup.
-#
-# Requires secret:
-#   HOMEBREW_TAP_TOKEN  — fine-grained PAT with "Contents: write"
-#                         on Pratiyush/homebrew-tap
+# the new tag and print the formula. Push to a tap is intentionally
+# disabled (#69): auto-pushing would collide with upstream
+# Pratiyush/homebrew-tap, and this fork has no separate tap to publish
+# into. Copy the printed formula by hand if you maintain a private tap.
+# See docs/deploy/homebrew-setup.md.
 
 on:
   push:
@@ -32,8 +27,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          # Need the full history so the formula bump commit has
-          # somewhere to land (even though we push to a different repo).
           fetch-depth: 1
 
       - name: Resolve tag
@@ -50,46 +43,4 @@ jobs:
           bash scripts/bump-homebrew-formula.sh "${{ steps.tag.outputs.tag }}"
           echo "---- homebrew/llmwiki.rb after bump ----"
           cat homebrew/llmwiki.rb
-
-      - name: Check for tap token
-        id: check_token
-        env:
-          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-        run: |
-          if [ -n "$HOMEBREW_TAP_TOKEN" ]; then
-            echo "has_token=true"  >> "$GITHUB_OUTPUT"
-          else
-            echo "has_token=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::HOMEBREW_TAP_TOKEN not set — skipping push to tap repo. See docs/deploy/homebrew-setup.md."
-          fi
-
-      - name: Push to homebrew-tap
-        if: steps.check_token.outputs.has_token == 'true'
-        env:
-          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-          TAG: ${{ steps.tag.outputs.tag }}
-        run: |
-          set -e
-          # #sec-15 (#559): explicit ::add-mask:: of TAP_TOKEN so any
-          # later `set -x` debugging or accidental `echo "$TAP_TOKEN"`
-          # in this step's logs gets redacted by GitHub's log scrubber.
-          # Secrets in `env:` are scrubbed automatically when referenced
-          # via the `${{ secrets.X }}` syntax — but once they land in a
-          # plain shell variable, manual masking is the belt-and-braces.
-          echo "::add-mask::$TAP_TOKEN"
-          tmp="$(mktemp -d)"
-          git clone --depth 1 \
-            "https://x-access-token:${TAP_TOKEN}@github.com/Pratiyush/homebrew-tap.git" \
-            "$tmp"
-          mkdir -p "$tmp/Formula"
-          cp homebrew/llmwiki.rb "$tmp/Formula/llmwiki.rb"
-          cd "$tmp"
-          if git diff --quiet; then
-            echo "No changes — formula already up-to-date for ${TAG}."
-            exit 0
-          fi
-          git config user.name  "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Formula/llmwiki.rb
-          git commit -m "llmwiki ${TAG}"
-          git push
+          echo "::notice::Tap push disabled (#69) — formula printed only; do not push to Pratiyush/homebrew-tap."

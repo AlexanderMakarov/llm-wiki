@@ -1,14 +1,16 @@
 name: Deploy demo site to GitHub Pages
 
-# Builds a public demo from dummy example sessions (no personal data) and
-# publishes it to GitHub Pages. Triggered on pushes to master/main and manual
-# runs. Not on tag pushes (GitHub Pages env only accepts deploys from master,
-# and the master push already covers the same content). Highlight.js loads
-# client-side from CDN so no extra deps.
+# Builds a public demo from committed examples (no personal data) and
+# publishes it to GitHub Pages. Highlight.js loads client-side from CDN
+# so no extra deps.
+#
+# Seeds: demo sessions, product docs (raw/docs), pre-synthesized wiki
+# sources (Claude locally — not in CI), and fixture MCP usage for
+# Analytics. Auto push-deploy stays off (#69); use workflow_dispatch
+# (or restore `push:` once you want every main merge to republish).
+# See docs/deploy/github-pages.md.
 
 on:
-  push:
-    branches: ["master", "main"]
   workflow_dispatch:
 
 permissions:
@@ -37,22 +39,43 @@ jobs:
       - name: Scaffold wiki layout
         run: python -m llmwiki init
 
-      - name: Seed demo sessions (no real user data)
+      - name: Seed demo corpus (no real user data)
         run: |
           set -e
-          mkdir -p raw/sessions
-          # Primary: richer multi-project demo under examples/demo-sessions/.
+          mkdir -p raw/sessions raw/docs usage wiki/sources
+          # Sessions — richer multi-project demo + older fixtures.
           if [ -d examples/demo-sessions ] && [ "$(ls -A examples/demo-sessions 2>/dev/null)" ]; then
             cp -r examples/demo-sessions/* raw/sessions/
             echo "Seeded raw/sessions/ from examples/demo-sessions/"
           fi
-          # Fallback: older synthetic fixtures (kept for test parity).
           if [ -d tests/fixtures/demo ] && [ "$(ls -A tests/fixtures/demo 2>/dev/null)" ]; then
             cp -r tests/fixtures/demo/* raw/sessions/
             echo "Seeded raw/sessions/ from tests/fixtures/demo/"
           fi
-          echo "--- raw/sessions contents ---"
+          # Product docs about llmwiki itself.
+          if [ -d examples/demo-docs ] && [ "$(ls -A examples/demo-docs 2>/dev/null)" ]; then
+            cp -r examples/demo-docs/* raw/docs/
+            echo "Seeded raw/docs/ from examples/demo-docs/"
+          fi
+          # Pre-synthesized wiki pages (Claude offline; CI stays deterministic).
+          if [ -d examples/demo-wiki/sources ] && [ "$(ls -A examples/demo-wiki/sources 2>/dev/null)" ]; then
+            cp -r examples/demo-wiki/sources/* wiki/sources/
+            echo "Seeded wiki/sources/ from examples/demo-wiki/sources/"
+          fi
+          # MCP telemetry fixtures so Analytics shows retrievals / heatmaps.
+          if [ -d examples/demo-usage ]; then
+            find examples/demo-usage -maxdepth 1 \( -name '*.jsonl' -o -name 'daily.json' -o -name 'rollup.json' \) \
+              -exec cp {} usage/ \;
+            echo "Seeded usage/ from examples/demo-usage/ (jsonl + daily/rollup)"
+          fi
+          echo "--- raw/sessions ---"
           find raw/sessions -maxdepth 2 -type f | sort
+          echo "--- raw/docs ---"
+          find raw/docs -maxdepth 2 -type f | sort
+          echo "--- wiki/sources ---"
+          find wiki/sources -maxdepth 2 -type f | sort
+          echo "--- usage ---"
+          find usage -maxdepth 1 -type f | sort
 
       - name: Build static site
         run: python -m llmwiki build --out ./site

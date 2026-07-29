@@ -10,7 +10,7 @@
 
 services:
   llmwiki:
-    image: ghcr.io/pratiyush/llm-wiki:latest
+    image: ghcr.io/alexandermakarov/llm-wiki:latest
     # Fall back to local build if the image isn't available (e.g. before
     # v1.1.0 publishes to ghcr for the first time).
     build:

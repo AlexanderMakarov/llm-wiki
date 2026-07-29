@@ -1,6 +1,6 @@
 # Synthetic monitoring failure
 
-The nightly synthetic monitoring workflow (`.github/workflows/synthetic.yml`) failed against the deployed demo at `https://pratiyush.github.io/llm-wiki/`.
+The nightly synthetic monitoring workflow (`.github/workflows/synthetic.yml`) failed against the deployed demo (default target: `https://alexandermakarov.github.io/llm-wiki/`).
 
 ## Possible causes
 
@@ -8,6 +8,7 @@ The nightly synthetic monitoring workflow (`.github/workflows/synthetic.yml`) fa
 - Third-party CDN failure (highlight.js, vis-network, axe-core, fonts.googleapis.com).
 - A browser update changed default behaviour for one of the tested features.
 - The deploy itself is broken — check the most recent `pages.yml` run.
+- Synthetic / Pages are still disabled (#69) — confirm Settings → Pages and that `pages.yml` has a `push` trigger again before treating a probe failure as a product bug.
 
 ## Debug
 
