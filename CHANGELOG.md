@@ -10,8 +10,6 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Changed
 
-- **Agents must wait for CI after every push** — `CONTRIBUTING.md` TL;DR #12 + *After you push* section: after `git push` that creates/updates a PR, watch GitHub Actions on that head SHA (`gh pr checks --watch`), report green/red, and fix/repush on failure. Mirrored in `.claude/rules/contributing.md`, `.cursor/rules/read-contributing.mdc`, and `.kiro/steering/contributing-rules.md` so coding agents do not stop at "pushed successfully."
-
 - **Pages demo corpus: docs + Claude wiki + MCP Analytics (#69)** — `examples/demo-docs/` (product docs about llmwiki), `examples/demo-wiki/sources/` (Claude-synthesized offline; CI copies only), and `examples/demo-usage/` (fixture MCP telemetry). `pages.yml` seeds all three so Documents and Analytics MCP widgets are non-empty. Two demo sessions advertise `mcp__llmwiki__*` in `tools_used` for adoption signal.
 
 - **Actions identity + Pages off for this fork (#69)** — `CODEOWNERS` / `FUNDING.yml` now point at `@AlexanderMakarov`. `pages.yml` no longer deploys on every push (Pages is not enabled here; runs were failing at `configure-pages`). Nightly `synthetic.yml` schedule is off for the same reason. Docker publish / compose use this owner's GHCR namespace. Homebrew bump regenerates the formula only — tap push is disabled so we never write `Pratiyush/homebrew-tap`. Release / reusable-workflow comments document this owner. Commit `uv.lock` so `uv` resolves the same graph locally and in CI. Tutorial links that still cite upstream stay out of scope (issue Step 4).
