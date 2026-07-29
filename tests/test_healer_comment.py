@@ -22,7 +22,6 @@ import pytest
 
 from llmwiki import REPO_ROOT
 
-
 HEALER = REPO_ROOT / "scripts" / "healer-comment.js"
 
 

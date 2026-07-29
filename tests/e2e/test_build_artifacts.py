@@ -33,7 +33,6 @@ from pathlib import Path
 
 import pytest
 
-
 # ─── search-index.json ─────────────────────────────────────────────────
 
 
@@ -205,7 +204,7 @@ def test_robots_txt_has_valid_directives(site_root: Path) -> None:
         if directive not in valid_directives:
             bad_lines.append(f"line {ln}: unknown directive {directive!r}")
     assert not bad_lines, (
-        f"robots.txt has malformed directives:\n  " + "\n  ".join(bad_lines)
+        "robots.txt has malformed directives:\n  " + "\n  ".join(bad_lines)
     )
 
 

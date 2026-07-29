@@ -53,24 +53,24 @@ def __getattr__(name: str):
     the full transitive import graph at `import llmwiki` time.
     """
     if name == "main":
-        from llmwiki.cli import main
+        from llmwiki.cli import main  # noqa: PLC0415 — lazy package __getattr__
         return main
     if name == "convert_all":
-        from llmwiki.convert import convert_all
+        from llmwiki.convert import convert_all  # noqa: PLC0415 — lazy package __getattr__
         return convert_all
     if name == "build_site":
-        from llmwiki.build import build_site
+        from llmwiki.build import build_site  # noqa: PLC0415 — lazy package __getattr__
         return build_site
     if name == "serve_site":
-        from llmwiki.serve import serve_site
+        from llmwiki.serve import serve_site  # noqa: PLC0415 — lazy package __getattr__
         return serve_site
     if name == "build_and_report":
-        from llmwiki.graph import build_and_report
+        from llmwiki.graph import build_and_report  # noqa: PLC0415 — lazy package __getattr__
         return build_and_report
     if name == "export_all":
-        from llmwiki.exporters import export_all
+        from llmwiki.exporters import export_all  # noqa: PLC0415 — lazy package __getattr__
         return export_all
     if name == "REGISTRY":
-        from llmwiki.adapters import REGISTRY
+        from llmwiki.adapters import REGISTRY  # noqa: PLC0415 — lazy package __getattr__
         return REGISTRY
     raise AttributeError(f"module 'llmwiki' has no attribute {name!r}")

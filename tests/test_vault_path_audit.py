@@ -155,8 +155,8 @@ def test_graph_vault_mode_still_uses_graphify(tmp_path, monkeypatch):
         seen.update(kw)
         return {"graph": {"nodes": [{"id": "x"}], "edges": []}}
 
-    monkeypatch.setattr("llmwiki.graphify_bridge.is_available", lambda: True)
-    monkeypatch.setattr("llmwiki.graphify_bridge.build_graphify_graph", _fake_build)
+    monkeypatch.setattr("llmwiki.cli.is_available", lambda: True)
+    monkeypatch.setattr("llmwiki.cli.build_graphify_graph", _fake_build)
     args = cli_mod.build_parser().parse_args(
         ["graph", "--vault", str(vault), "--format", "json"]
     )

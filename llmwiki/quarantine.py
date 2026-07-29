@@ -26,10 +26,11 @@ local by default).
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field, asdict
-from datetime import datetime, timezone
+from collections.abc import Iterable
+from dataclasses import asdict, dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Iterable, Optional
+from typing import Any
 
 from llmwiki.state_store import read_state, resolve_state_file, update_state
 
@@ -62,10 +63,10 @@ class QuarantineEntry:
 
 
 def _now_utc_iso() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def load(path: Optional[Path] = None) -> list[QuarantineEntry]:
+def load(path: Path | None = None) -> list[QuarantineEntry]:
     """Load the quarantine file. Returns ``[]`` on missing/corrupt file.
 
     Never raises — the caller treats the quarantine as best-effort UI.
@@ -118,7 +119,7 @@ def load(path: Optional[Path] = None) -> list[QuarantineEntry]:
 
 def save(
     entries: Iterable[QuarantineEntry],
-    path: Optional[Path] = None,
+    path: Path | None = None,
 ) -> Path:
     """Write the quarantine file. Sorts deterministically for stable diffs.
 
@@ -143,8 +144,8 @@ def add_entry(
     source: str,
     error: str,
     *,
-    path: Optional[Path] = None,
-    extra: Optional[dict[str, Any]] = None,
+    path: Path | None = None,
+    extra: dict[str, Any] | None = None,
 ) -> QuarantineEntry:
     """Add or refresh a quarantine entry.
 
@@ -187,8 +188,8 @@ def add_entry(
 def clear_entry(
     source: str,
     *,
-    adapter: Optional[str] = None,
-    path: Optional[Path] = None,
+    adapter: str | None = None,
+    path: Path | None = None,
 ) -> int:
     """Remove matching entries.  Returns count removed.
 
@@ -213,7 +214,7 @@ def clear_entry(
     return removed
 
 
-def clear_all(path: Optional[Path] = None) -> int:
+def clear_all(path: Path | None = None) -> int:
     """Drop every entry. Returns count removed."""
     target = resolve_state_file(path)
     entries = load(target)
@@ -224,9 +225,9 @@ def clear_all(path: Optional[Path] = None) -> int:
 
 
 def list_entries(
-    path: Optional[Path] = None,
+    path: Path | None = None,
     *,
-    adapter: Optional[str] = None,
+    adapter: str | None = None,
 ) -> list[QuarantineEntry]:
     """Return entries filtered by adapter (stable ordering)."""
     out = load(resolve_state_file(path))
@@ -264,7 +265,7 @@ def format_table(entries: list[QuarantineEntry]) -> str:
 
 
 def count_by_adapter(
-    path: Optional[Path] = None,
+    path: Path | None = None,
 ) -> dict[str, int]:
     """Aggregate helper for ``llmwiki sync --status``."""
     out: dict[str, int] = {}

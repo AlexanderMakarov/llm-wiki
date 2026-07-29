@@ -1,18 +1,20 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from llmwiki.add_doc import add_sources
 from llmwiki.build import build_site
+from llmwiki.config_schedule import _load_sessions_config
 from llmwiki.convert import convert_all
 from llmwiki.state_store import read_state, resolve_state_file, update_state
 from llmwiki.synth.pipeline import resolve_backend, synthesize_new_sessions
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def enqueue_task(task_type: str, payload: dict[str, Any], state_file: Path | None = None) -> dict[str, Any]:
@@ -20,7 +22,7 @@ def enqueue_task(task_type: str, payload: dict[str, Any], state_file: Path | Non
         known = ", ".join(sorted(TASK_HANDLERS))
         raise ValueError(f"unknown task_type: {task_type} (known: {known})")
     task = {
-        "id": f"{task_type}-{int(datetime.now(timezone.utc).timestamp() * 1000)}",
+        "id": f"{task_type}-{int(datetime.now(UTC).timestamp() * 1000)}",
         "task_type": task_type,
         "payload": payload,
         "status": "pending",
@@ -73,7 +75,6 @@ def _handle_synthesize(payload: dict[str, Any], vault: Path) -> str:
     ``force`` re-synthesizes them. Without a payload the task drains the
     whole backlog.
     """
-    from llmwiki.config_schedule import _load_sessions_config
 
     backend = resolve_backend(_load_sessions_config())
     if not backend.is_available():
@@ -154,7 +155,7 @@ def run_queue(limit: int, vault: Path, state_file: Path | None = None) -> dict[s
             break
         task = items[idx]
 
-        def _mark_running(state: dict[str, Any]) -> dict[str, Any]:
+        def _mark_running(state: dict[str, Any], idx=idx) -> dict[str, Any]:
             qitems = state.setdefault("queue", {}).setdefault("items", [])
             qitems[idx]["status"] = "running"
             qitems[idx]["updated_at"] = _now()
@@ -164,7 +165,7 @@ def run_queue(limit: int, vault: Path, state_file: Path | None = None) -> dict[s
         update_state(_mark_running, target)
         try:
             result = _run_one(task, vault)
-            def _mark_done(state: dict[str, Any]) -> dict[str, Any]:
+            def _mark_done(state: dict[str, Any], idx=idx, result=result) -> dict[str, Any]:
                 qitems = state.setdefault("queue", {}).setdefault("items", [])
                 qitems[idx]["status"] = "done"
                 qitems[idx]["result"] = result
@@ -176,7 +177,7 @@ def run_queue(limit: int, vault: Path, state_file: Path | None = None) -> dict[s
         except Exception as exc:  # pragma: no cover - defensive for CLI flow
             msg = str(exc)
             errors.append(msg)
-            def _mark_error(state: dict[str, Any]) -> dict[str, Any]:
+            def _mark_error(state: dict[str, Any], idx=idx, msg=msg) -> dict[str, Any]:
                 qitems = state.setdefault("queue", {}).setdefault("items", [])
                 qitems[idx]["status"] = "error"
                 qitems[idx]["last_error"] = msg

@@ -5,11 +5,13 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from llmwiki import build as build_mod
+from llmwiki.build import build_site
 from llmwiki.raw_docs_site import render_dashboard_body
 from llmwiki.render import js
-from llmwiki.state_store import synth_pipeline_shape_ok
+from llmwiki.state_store import read_state, synth_pipeline_shape_ok
 from llmwiki.synth.estimate import synthesize_estimate_report
-from llmwiki.synth.pipeline import refresh_synth_pending
+from llmwiki.synth.pipeline import _discover_raw_sessions, refresh_synth_pending
 
 
 def test_dashboard_inlines_state_mount_not_old_cards():
@@ -64,7 +66,6 @@ def test_synth_pipeline_shape_ok():
 
 
 def test_estimate_pipeline_rows_by_agent(tmp_path: Path):
-    from llmwiki.synth.pipeline import _discover_raw_sessions
 
     raw = tmp_path / "raw" / "sessions"
     docs = tmp_path / "raw" / "docs"
@@ -139,7 +140,6 @@ def test_refresh_synth_pending_stores_pipeline(tmp_path: Path):
     assert out["pending_total"] == 1
     assert out["pipeline"]["rows"]
     assert out["pipeline"]["rows"][0]["label"] == "OpenClaw"
-    from llmwiki.state_store import read_state
 
     state = read_state(state_file)
     assert state["synth"]["pipeline"]["rows"][0]["label"] == "OpenClaw"
@@ -162,9 +162,6 @@ def _seed_build_vault(tmp_path: Path) -> Path:
 
 def test_build_backfills_missing_pipeline(tmp_path: Path, monkeypatch):
     """#70: v1.4-shaped state (no synth.pipeline) → first build writes rows."""
-    from llmwiki import build as build_mod
-    from llmwiki.build import build_site
-    from llmwiki.state_store import read_state
 
     vault = _seed_build_vault(tmp_path)
     # Pre-v1.5 state: pending/estimate present, pipeline absent.
@@ -216,8 +213,6 @@ def test_build_backfills_missing_pipeline(tmp_path: Path, monkeypatch):
 
 def test_build_skips_pipeline_refresh_when_shape_ok(tmp_path: Path, monkeypatch):
     """#70: once pipeline shape exists, build must not re-run the estimate walk."""
-    from llmwiki import build as build_mod
-    from llmwiki.build import build_site
 
     vault = _seed_build_vault(tmp_path)
     state_path = vault / "llmwiki-state.json"

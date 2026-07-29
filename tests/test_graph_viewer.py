@@ -15,6 +15,7 @@ from pathlib import Path
 import pytest
 
 import llmwiki.graph as graph_mod
+from llmwiki import build as build_mod
 from llmwiki.graph import (
     HTML_TEMPLATE,
     build_graph,
@@ -23,7 +24,6 @@ from llmwiki.graph import (
     write_html,
     write_json,
 )
-
 
 # ─── Fixtures ──────────────────────────────────────────────────────────
 
@@ -267,7 +267,6 @@ def test_copy_to_site_rebuilds_graph_when_omitted(tmp_path: Path, monkeypatch):
 
 
 def test_site_nav_includes_graph_link():
-    from llmwiki import build as build_mod
     # The nav link template lives in build.py; source-grep is the
     # lightest test that guards the registration.
     src = Path(build_mod.__file__).read_text(encoding="utf-8")

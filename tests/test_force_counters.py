@@ -24,12 +24,11 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
-from llmwiki import convert as convert_mod
-from llmwiki.convert import convert_all, load_state, save_state
+from llmwiki.adapters.claude_code import ClaudeCodeAdapter
+from llmwiki.convert import convert_all
 
 
 def _sync_state(path: Path) -> dict:
@@ -99,7 +98,6 @@ def fake_repo(tmp_path, monkeypatch):
     home. We override the class attribute directly so discovery walks
     our tmp tree on every CI runner.
     """
-    from llmwiki.adapters.claude_code import ClaudeCodeAdapter
 
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
     monkeypatch.setattr(

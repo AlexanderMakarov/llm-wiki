@@ -18,9 +18,11 @@ from pathlib import Path
 
 from llmwiki import convert as c
 from llmwiki._frontmatter import is_subagent
+from llmwiki.adapters.claude_code import ClaudeCodeAdapter
 from llmwiki.convert import DEFAULT_CONFIG
-from llmwiki.synth.pipeline import resolve_include_subagents
-
+from llmwiki.synth.base import DummySynthesizer
+from llmwiki.synth.estimate import synthesize_estimate_report
+from llmwiki.synth.pipeline import refresh_synth_pending, resolve_include_subagents, synthesize_new_sessions
 
 # ─── unit: is_subagent frontmatter helper ────────────────────────────────
 
@@ -102,7 +104,6 @@ def _seed(tmp_path: Path):
 
 
 def _patch(monkeypatch, home):
-    from llmwiki.adapters.claude_code import ClaudeCodeAdapter
     store = home / ".claude" / "projects"
     monkeypatch.setattr(ClaudeCodeAdapter, "session_store_path", store, raising=False)
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
@@ -225,7 +226,6 @@ def _mixed_sessions():
 
 
 def test_estimate_only_raw_excludes_subagent_from_backlog():
-    from llmwiki.synth.estimate import synthesize_estimate_report
     rpt = synthesize_estimate_report(
         raw_sessions=_mixed_sessions(),
         state_keys=set(),
@@ -238,7 +238,6 @@ def test_estimate_only_raw_excludes_subagent_from_backlog():
 
 
 def test_estimate_all_includes_subagent_in_backlog():
-    from llmwiki.synth.estimate import synthesize_estimate_report
     rpt = synthesize_estimate_report(
         raw_sessions=_mixed_sessions(),
         state_keys=set(),
@@ -249,7 +248,6 @@ def test_estimate_all_includes_subagent_in_backlog():
 
 
 def test_estimate_defaults_to_only_raw():
-    from llmwiki.synth.estimate import synthesize_estimate_report
     rpt = synthesize_estimate_report(
         raw_sessions=_mixed_sessions(),
         state_keys=set(),
@@ -305,8 +303,6 @@ def _synth_written(wiki_sources: Path) -> list[str]:
 
 
 def test_synthesize_only_raw_skips_subagent(tmp_path: Path):
-    from llmwiki.synth.base import DummySynthesizer
-    from llmwiki.synth.pipeline import synthesize_new_sessions
     raw, wiki_sources = _seed_raw_pair(tmp_path)
     state = tmp_path / "state.json"
     summary = synthesize_new_sessions(
@@ -321,8 +317,6 @@ def test_synthesize_only_raw_skips_subagent(tmp_path: Path):
 def test_synthesize_only_raw_skips_subagent_even_with_force(tmp_path: Path):
     # --force means "redo synthesis", not "override the include_subagents
     # policy" — subagents stay out until the user switches to "all".
-    from llmwiki.synth.base import DummySynthesizer
-    from llmwiki.synth.pipeline import synthesize_new_sessions
     raw, wiki_sources = _seed_raw_pair(tmp_path)
     state = tmp_path / "state.json"
     summary = synthesize_new_sessions(
@@ -336,8 +330,6 @@ def test_synthesize_only_raw_skips_subagent_even_with_force(tmp_path: Path):
 
 
 def test_synthesize_all_includes_subagent(tmp_path: Path):
-    from llmwiki.synth.base import DummySynthesizer
-    from llmwiki.synth.pipeline import synthesize_new_sessions
     raw, wiki_sources = _seed_raw_pair(tmp_path)
     state = tmp_path / "state.json"
     summary = synthesize_new_sessions(
@@ -355,7 +347,6 @@ def test_synthesize_all_includes_subagent(tmp_path: Path):
 
 
 def test_refresh_pending_only_raw_excludes_subagent(tmp_path: Path):
-    from llmwiki.synth.pipeline import refresh_synth_pending
     raw, wiki_sources = _seed_raw_pair(tmp_path)
     state = tmp_path / "state.json"
     result = refresh_synth_pending(
@@ -372,7 +363,6 @@ def test_refresh_pending_only_raw_excludes_subagent(tmp_path: Path):
 
 
 def test_refresh_pending_all_counts_subagent(tmp_path: Path):
-    from llmwiki.synth.pipeline import refresh_synth_pending
     raw, wiki_sources = _seed_raw_pair(tmp_path)
     state = tmp_path / "state.json"
     result = refresh_synth_pending(

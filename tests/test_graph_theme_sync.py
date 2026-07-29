@@ -16,7 +16,9 @@ The fix:
 
 from __future__ import annotations
 
-from llmwiki.graph import HTML_TEMPLATE
+from pathlib import Path
+
+from llmwiki.graph import HTML_TEMPLATE, write_html
 
 
 def test_graph_template_uses_llmwiki_theme_key():
@@ -69,8 +71,7 @@ def test_graph_template_toggle_writes_canonical_key(tmp_path):
     `themeToggle.addEventListener` block is intentionally gone — a
     duplicate would flip the theme twice per click.
     """
-    from pathlib import Path
-    from llmwiki.graph import write_html
+
     g = {"nodes": [], "edges": [],
          "stats": {"total_pages": 0, "total_edges": 0, "orphans": [], "top_linked": []}}
     out: Path = tmp_path / "graph.html"

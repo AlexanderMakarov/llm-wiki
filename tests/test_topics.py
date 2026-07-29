@@ -9,8 +9,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from llmwiki.synth.pipeline import _inject_vocabulary
 from llmwiki.topics import build_topic_graph, derive_vocabulary, topic_slug
-from llmwiki.topics_page import build_topic_pages
+from llmwiki.topics_consolidate import parse_and_cache, render_consolidation_prompt
+from llmwiki.topics_page import _display_aliases, build_topic_pages
 
 
 def _session(body_links: list[str], *, stem: str, project: str = "proj") -> str:
@@ -99,7 +101,6 @@ def test_build_topic_pages_writes_pages_and_index(tmp_path: Path):
 
 
 def test_synth_prompt_injects_vocabulary(tmp_path: Path):
-    from llmwiki.synth.pipeline import _inject_vocabulary
 
     wiki = _make_wiki(tmp_path, {
         "s1": ["OpenClaw", "Bun"],
@@ -117,8 +118,6 @@ def test_synth_prompt_injects_vocabulary(tmp_path: Path):
 
 
 def test_consolidation_cache_drives_merge_and_descriptions(tmp_path: Path):
-    from llmwiki.topics_consolidate import parse_and_cache, render_consolidation_prompt
-    from llmwiki.synth.pipeline import _inject_vocabulary
 
     wiki = _make_wiki(tmp_path, {
         "s1": ["kbbuilder", "code-kbbuilder", "OpenClaw"],
@@ -152,7 +151,6 @@ def test_consolidation_cache_drives_merge_and_descriptions(tmp_path: Path):
 
 
 def test_consolidation_dropped_excluded_from_graph(tmp_path: Path):
-    from llmwiki.topics_consolidate import parse_and_cache
 
     wiki = _make_wiki(tmp_path, {
         "s1": ["OpenClaw", "Bash"],
@@ -168,7 +166,6 @@ def test_consolidation_dropped_excluded_from_graph(tmp_path: Path):
 
 
 def test_display_aliases_collapse_spelling_variants():
-    from llmwiki.topics_page import _display_aliases
 
     out = _display_aliases(
         "Evrika",

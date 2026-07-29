@@ -24,7 +24,6 @@ from llmwiki.mcp.server import (
     tool_wiki_read_page,
 )
 
-
 # ─── _is_read_page_allowed: positive cases ──────────────────────────────
 
 

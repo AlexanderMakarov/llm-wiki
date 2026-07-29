@@ -20,23 +20,22 @@ Stdlib-only. No new dependencies.
 from __future__ import annotations
 
 import html
-import re
 from pathlib import Path
 from typing import Any
 
+# #495: was a hand-rolled LF-only regex parser that diverged from
+# `_frontmatter.py` after #409 (BOM) and #423 (CRLF) fixes landed
+# there. Now a thin wrapper around the canonical helper.
+from llmwiki._frontmatter import parse_frontmatter as _parse_frontmatter
+from llmwiki.format_numbers import format_tokens
 from llmwiki.schema import (
-    ENTITY_KIND_AI_MODEL,
+    KNOWN_BENCHMARKS,
     ModelProfile,
     benchmark_label,
     format_price,
     is_model_entity,
     parse_model_profile,
 )
-
-# #495: was a hand-rolled LF-only regex parser that diverged from
-# `_frontmatter.py` after #409 (BOM) and #423 (CRLF) fixes landed
-# there. Now a thin wrapper around the canonical helper.
-from llmwiki._frontmatter import parse_frontmatter as _parse_frontmatter
 
 
 def discover_model_entities(
@@ -115,12 +114,12 @@ def render_model_info_card(profile: ModelProfile) -> str:
     if "context_window" in details:
         details_bits.append(
             f'<div class="model-card-kv"><span class="muted">Context</span>'
-            f'<span>{_format_tokens(details["context_window"])}</span></div>'
+            f'<span>{format_tokens(details["context_window"])}</span></div>'
         )
     if "max_output" in details:
         details_bits.append(
             f'<div class="model-card-kv"><span class="muted">Max output</span>'
-            f'<span>{_format_tokens(details["max_output"])}</span></div>'
+            f'<span>{format_tokens(details["max_output"])}</span></div>'
         )
     if "license" in details:
         details_bits.append(
@@ -198,16 +197,6 @@ def render_model_info_card(profile: ModelProfile) -> str:
     return f'<div class="model-card">{"".join(rows)}</div>'
 
 
-def _format_tokens(n: int) -> str:
-    """Format a token count with K/M suffix. Mirrors viz_tokens.format_tokens
-    but kept local to avoid a circular import."""
-    if n >= 1_000_000:
-        return f"{n / 1_000_000:.1f}M"
-    if n >= 1_000:
-        return f"{n // 1000}K"
-    return str(n)
-
-
 # ─── /models/index.html ────────────────────────────────────────────────
 
 
@@ -234,7 +223,6 @@ def render_models_index(
     for _, profile, _, _ in entries:
         all_bench_keys.update((profile.get("benchmarks") or {}).keys())
     # Sort benchmarks: known ones in their declared order, then unknowns alpha.
-    from llmwiki.schema import KNOWN_BENCHMARKS
     known_order = [k for k in KNOWN_BENCHMARKS if k in all_bench_keys]
     unknown_order = sorted(all_bench_keys - set(KNOWN_BENCHMARKS))
     bench_cols = known_order + unknown_order
@@ -252,7 +240,7 @@ def render_models_index(
         details = profile.get("model", {})
         pricing = profile.get("pricing", {})
         currency = pricing.get("currency", "USD")
-        context = _format_tokens(details["context_window"]) if "context_window" in details else "—"
+        context = format_tokens(details["context_window"]) if "context_window" in details else "—"
         inp = format_price(pricing["input_per_1m"], currency) if "input_per_1m" in pricing else "—"
         outp = format_price(pricing["output_per_1m"], currency) if "output_per_1m" in pricing else "—"
 

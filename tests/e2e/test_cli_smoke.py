@@ -37,10 +37,14 @@ import re
 import subprocess
 import sys
 from pathlib import Path
-from typing import Iterable
 
 import pytest
 
+from llmwiki import build as build_mod
+from llmwiki.build import RAW_SESSIONS, build_site, discover_sources, group_by_project
+from llmwiki.candidates import list_candidates
+from llmwiki.exporters import export_all
+from llmwiki.lint import load_pages, run_all, summarize
 
 # ─── helpers ────────────────────────────────────────────────────────────
 
@@ -294,7 +298,6 @@ Hello.
     # codepaths read from. Same trick as conftest.py uses for the e2e
     # session fixture, just folded into a per-test fixture so each CLI
     # subcommand test gets its own clean workspace.
-    from llmwiki import build as build_mod
 
     monkeypatch.setattr(build_mod, "RAW_DIR", raw)
     monkeypatch.setattr(build_mod, "RAW_SESSIONS", raw / "sessions")
@@ -306,16 +309,26 @@ def test_build_emits_index_html(tmp_workspace: Path) -> None:
     """``build_site()`` emits ``site/index.html``. We call the public
     API directly rather than spawning a subprocess so the test is fast
     and we can use ``tmp_workspace``'s monkeypatched paths."""
-    from llmwiki.build import build_site
 
     out = tmp_workspace / "site"
     rc = build_site(out_dir=out, synthesize=False)
     assert rc == 0, f"build_site returned {rc}"
     assert (out / "index.html").is_file(), "site/index.html missing"
-    # The home page should reference the seeded session.
-    home_html = (out / "index.html").read_text(encoding="utf-8")
-    assert "cli-smoke" in home_html.lower(), (
-        "home page does not mention the seeded session — did discovery break?"
+    # Home is the State widget; project/session listings carry the slug.
+    project_html = out / "projects" / "cli-smoke.html"
+    projects_index = out / "projects" / "index.html"
+    sessions_dir = out / "sessions"
+    surfaces = []
+    if project_html.is_file():
+        surfaces.append(project_html.read_text(encoding="utf-8"))
+    if projects_index.is_file():
+        surfaces.append(projects_index.read_text(encoding="utf-8"))
+    if sessions_dir.is_dir():
+        for p in sessions_dir.rglob("*.html"):
+            surfaces.append(p.read_text(encoding="utf-8"))
+    blob = "\n".join(surfaces).lower()
+    assert "cli-smoke" in blob, (
+        "seeded project not found under projects/ or sessions/ — did discovery break?"
     )
 
 
@@ -324,7 +337,6 @@ def test_build_emits_search_index(tmp_workspace: Path) -> None:
     palette consumes. Validating its shape here saves us from a class
     of palette-can't-find-anything bugs that would otherwise only show
     up in browser tests."""
-    from llmwiki.build import build_site
 
     out = tmp_workspace / "site"
     build_site(out_dir=out, synthesize=False)
@@ -348,7 +360,6 @@ def test_lint_runs_and_reports(tmp_workspace: Path) -> None:
     A new project may have many violations; we don't care about the
     count, only that the runner doesn't crash and emits a parseable
     summary (X errors, Y warnings, Z info)."""
-    from llmwiki.lint import load_pages, run_all, summarize
 
     pages = load_pages(tmp_workspace / "wiki")
     issues = run_all(pages)
@@ -366,8 +377,6 @@ def test_export_all_writes_expected_artifacts(tmp_workspace: Path) -> None:
     llms.txt) all show up in one pass — a regression where one of the
     writers silently no-ops would slip through unit tests but breaks
     SEO + LLM-discoverability in production."""
-    from llmwiki.exporters import export_all
-    from llmwiki.build import discover_sources, group_by_project, RAW_SESSIONS
 
     out = tmp_workspace / "site"
     out.mkdir(parents=True, exist_ok=True)
@@ -470,7 +479,6 @@ def test_candidates_list_on_empty_workspace(tmp_workspace: Path) -> None:
     """``cmd_candidates list`` should return 0 with an empty count
     when no candidates exist. Catches the case where a fresh project
     triggers a 'directory not found' error instead of an empty list."""
-    from llmwiki.candidates import list_candidates
 
     items = list_candidates(tmp_workspace / "wiki")
     assert isinstance(items, list), f"list_candidates returned {type(items).__name__}, not list"

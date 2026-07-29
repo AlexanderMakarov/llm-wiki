@@ -36,10 +36,9 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from llmwiki import REPO_ROOT
-
 
 _START = "<!-- BACKLINKS:START -->"
 _END = "<!-- BACKLINKS:END -->"
@@ -139,7 +138,7 @@ def _render_block(entries: list[BacklinkEntry], *, max_entries: int) -> str:
             suffix = f"{suffix} ({e.date})" if suffix else f" ({e.date})"
         lines.append(f"- [[{e.slug}]]{suffix}")
     if truncated:
-        lines.append(f"")
+        lines.append("")
         lines.append(
             f"*…and {len(entries) - max_entries} more referrer(s) — "
             f"run `llmwiki references <slug>` for the full list.*"
@@ -174,7 +173,7 @@ def remove_block(text: str) -> str:
 
 
 def inject_all(
-    wiki_dir: Optional[Path] = None,
+    wiki_dir: Path | None = None,
     *,
     max_entries: int = DEFAULT_MAX_ENTRIES,
     dry_run: bool = False,
@@ -202,7 +201,7 @@ def inject_all(
 
 
 def prune_all(
-    wiki_dir: Optional[Path] = None, *, dry_run: bool = False
+    wiki_dir: Path | None = None, *, dry_run: bool = False
 ) -> int:
     """Strip backlink blocks from every page. Returns count touched."""
     root = wiki_dir or (REPO_ROOT / "wiki")

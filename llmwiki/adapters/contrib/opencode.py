@@ -25,6 +25,7 @@ that the renderer expects.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -108,7 +109,6 @@ class OpenCodeAdapter(BaseAdapter):
         # Hyphen-bounded match — accepts the subagent identifier whether
         # it appears as a leading, trailing, or interior segment of a
         # `-`-delimited filename.
-        import re
         return bool(re.search(r"(?:^|[-/])subagent(?:[-.]|$)", jsonl_path.name))
 
     def normalize_records(

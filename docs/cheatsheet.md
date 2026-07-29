@@ -169,7 +169,7 @@ llmwiki sync --adapter obsidian
 | `config.json` / `examples/sessions_config.json` | All settings (see below) |
 | `.llmwikiignore` | Exclude patterns (git-ignore format) |
 | `llmwiki-state.json` | Unified queue + sync + synth + quarantine state (auto; gitignored) |
-| `llmwiki-state.js` | UI sidecar for the Home queue panel |
+| `llmwiki-state.js` | UI sidecar for the Home queue panel (vault root + copied into `site/` on build) |
 | `.env` | Optional secrets for adapters that need them |
 
 ## All configurable settings (sessions_config.json)

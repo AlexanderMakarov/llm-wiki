@@ -2,22 +2,20 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
 from llmwiki.lifecycle import (
+    InvalidTransition,
     LifecycleState,
     can_transition,
-    transition,
-    InvalidTransition,
     check_auto_stale,
     check_confidence_stale,
     initial_state,
     parse_lifecycle,
-    AUTO_STALE_DAYS,
+    transition,
 )
-
 
 # ─── LifecycleState enum ──────────────────────────────────────────────
 
@@ -76,7 +74,7 @@ def test_invalid_transitions(current, target):
 
 
 def test_auto_stale_triggers_after_90_days():
-    now = datetime(2026, 7, 16, tzinfo=timezone.utc)
+    now = datetime(2026, 7, 16, tzinfo=UTC)
     result = check_auto_stale(
         LifecycleState.DRAFT, "2026-04-16", now=now
     )
@@ -84,7 +82,7 @@ def test_auto_stale_triggers_after_90_days():
 
 
 def test_auto_stale_does_not_trigger_within_90_days():
-    now = datetime(2026, 7, 14, tzinfo=timezone.utc)
+    now = datetime(2026, 7, 14, tzinfo=UTC)
     result = check_auto_stale(
         LifecycleState.DRAFT, "2026-04-16", now=now
     )
@@ -92,7 +90,7 @@ def test_auto_stale_does_not_trigger_within_90_days():
 
 
 def test_auto_stale_skips_already_stale():
-    now = datetime(2026, 12, 1, tzinfo=timezone.utc)
+    now = datetime(2026, 12, 1, tzinfo=UTC)
     result = check_auto_stale(
         LifecycleState.STALE, "2025-01-01", now=now
     )
@@ -100,7 +98,7 @@ def test_auto_stale_skips_already_stale():
 
 
 def test_auto_stale_skips_archived():
-    now = datetime(2026, 12, 1, tzinfo=timezone.utc)
+    now = datetime(2026, 12, 1, tzinfo=UTC)
     result = check_auto_stale(
         LifecycleState.ARCHIVED, "2025-01-01", now=now
     )

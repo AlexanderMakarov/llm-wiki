@@ -18,8 +18,6 @@ where a renamed field crashes the client search.
 """
 from __future__ import annotations
 
-import json
-
 import pytest
 from playwright.sync_api import Page
 

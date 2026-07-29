@@ -14,12 +14,9 @@ tests fail with a clear message pointing at the missing entry.
 from __future__ import annotations
 
 import re
-from pathlib import Path
-
-import pytest
 
 from llmwiki import REPO_ROOT
-
+from llmwiki.cli import build_parser
 
 CLI_REF = REPO_ROOT / "docs" / "reference" / "cli.md"
 SLASH_REF = REPO_ROOT / "docs" / "reference" / "slash-commands.md"
@@ -33,7 +30,6 @@ BUILD_PY = REPO_ROOT / "llmwiki" / "build.py"
 
 def _all_cli_subcommands() -> set[str]:
     """Walk the argparse tree + return every subcommand name."""
-    from llmwiki.cli import build_parser
 
     parser = build_parser()
     for action in parser._actions:
@@ -74,7 +70,7 @@ def test_every_cli_subcommand_gets_an_example():
         r"^##\s+`([A-Za-z0-9_-]+)`\s*—", cli_text, flags=re.MULTILINE
     )
     # sections = [preamble, name1, body1, name2, body2, …]
-    pairs = list(zip(sections[1::2], sections[2::2]))
+    pairs = list(zip(sections[1::2], sections[2::2], strict=True))
     missing_examples: list[str] = []
     for name, body in pairs:
         # Every section must have at least one ```bash fence

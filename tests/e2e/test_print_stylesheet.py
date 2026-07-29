@@ -22,7 +22,8 @@ colour-flip drifts out of sync with the print spec.
 """
 from __future__ import annotations
 
-import pytest
+import re
+
 from playwright.sync_api import Page
 
 
@@ -33,7 +34,6 @@ def _flip_to_print(page: Page) -> None:
 def _rgb_close_to_white(rgb: str) -> bool:
     # `getComputedStyle` returns rgb(R, G, B) — the print rule sets
     # `--bg: #fff` so we accept anything ≥240 per channel.
-    import re
     m = re.search(r"rgb\((\d+),\s*(\d+),\s*(\d+)", rgb)
     if not m:
         return False
@@ -42,7 +42,6 @@ def _rgb_close_to_white(rgb: str) -> bool:
 
 
 def _rgb_close_to_black(rgb: str) -> bool:
-    import re
     m = re.search(r"rgb\((\d+),\s*(\d+),\s*(\d+)", rgb)
     if not m:
         return False

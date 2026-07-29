@@ -25,6 +25,7 @@ from pathlib import Path
 
 from llmwiki._frontmatter import parse_frontmatter
 from llmwiki.add_doc import remove_raw_docs
+from llmwiki.state_store import read_state, update_state
 from llmwiki.synth.pipeline import (
     _append_log,
     _rebuild_index,
@@ -158,7 +159,6 @@ def build_remove_plan(
     only state keys actually present are listed, so a dry-run reports the
     real dangling keys rather than every key it would attempt to pop.
     """
-    from llmwiki.state_store import read_state
 
     docs_dir = vault_root / "raw" / "docs"
     wiki_sources = vault_root / "wiki" / "sources"
@@ -243,7 +243,6 @@ def execute_remove_plan(
     unlinked, BEFORE any derived page or state key is touched — a vault
     left holding the raw file but missing its page and state entry is
     worse than one that was never touched."""
-    from llmwiki.state_store import update_state
 
     result = {
         "raw_docs": 0,

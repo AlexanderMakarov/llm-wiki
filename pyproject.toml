@@ -120,11 +120,16 @@ select = [
     "I",  # isort
     "B",  # flake8-bugbear
     "UP", # pyupgrade
+    "PLC0415",  # import-outside-top-level
 ]
 ignore = [
     "E501",  # line too long — we have long strings for CSS/JS
-    "E402",  # module-level import not at top — we do this in build.py
+    "E402",  # module-level import not at top — legacy; prefer PLC0415 policy for new code
 ]
+
+[tool.ruff.lint.per-file-ignores]
+# One-off maintenance scripts are not importable library code; deferred imports there cost nothing (#58).
+"scripts/**" = ["PLC0415"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

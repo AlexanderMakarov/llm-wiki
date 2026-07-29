@@ -48,7 +48,8 @@ Design notes
 from __future__ import annotations
 
 import re
-from typing import Any, Iterable, Literal, Mapping, Optional, TypedDict
+from collections.abc import Iterable, Mapping
+from typing import Any, Literal, TypedDict
 
 # ─── Constants ─────────────────────────────────────────────────────────
 
@@ -145,7 +146,7 @@ def _deep_ratio(entries: Iterable[Mapping[str, Any]]) -> tuple[int, int, float]:
 def decide_search_mode(
     entries: Iterable[Mapping[str, Any]],
     *,
-    override: Optional[str] = None,
+    override: str | None = None,
 ) -> tuple[SearchMode, float]:
     """Pick the search mode (``"tree"`` or ``"flat"``) for a corpus.
 

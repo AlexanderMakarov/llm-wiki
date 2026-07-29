@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import pytest
 
-from llmwiki.convert import Redactor, DEFAULT_CONFIG
+from llmwiki.convert import Redactor
 
 
 @pytest.fixture

@@ -16,8 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from llmwiki.state_store import read_state, write_state, default_state
-
+from llmwiki.state_store import default_state, read_state, write_state
 
 REPO = Path(__file__).resolve().parents[1]
 

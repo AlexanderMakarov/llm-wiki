@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import fcntl
 import json
+from collections.abc import Iterator
 from contextlib import contextmanager
 from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 
 from llmwiki import REPO_ROOT
-
 
 SCHEMA_VERSION = 1
 DEFAULT_BOUNDED_COMPLETED = 500
@@ -17,11 +17,11 @@ _ACTIVE_STATE_FILE: Path | None = None
 
 
 def _utc_now() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def mtime_to_iso(value: float) -> str:
-    return datetime.fromtimestamp(float(value), tz=timezone.utc).isoformat(
+    return datetime.fromtimestamp(float(value), tz=UTC).isoformat(
         timespec="microseconds"
     ).replace("+00:00", "Z")
 

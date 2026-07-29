@@ -36,7 +36,8 @@ benchmarks: {"gpqa_diamond": 0.725, "swe_bench": 0.619, "mmlu": 0.887}
 from __future__ import annotations
 
 import json
-from typing import Any, Mapping, Optional, TypedDict
+from collections.abc import Mapping
+from typing import Any, TypedDict
 
 ENTITY_KIND_AI_MODEL = "ai-model"
 
@@ -132,14 +133,14 @@ def _try_parse_json(value: Any) -> Any:
     return value
 
 
-def _coerce_float(value: Any) -> Optional[float]:
+def _coerce_float(value: Any) -> float | None:
     try:
         return float(value)
     except (TypeError, ValueError):
         return None
 
 
-def _coerce_int(value: Any) -> Optional[int]:
+def _coerce_int(value: Any) -> int | None:
     try:
         return int(value)
     except (TypeError, ValueError):

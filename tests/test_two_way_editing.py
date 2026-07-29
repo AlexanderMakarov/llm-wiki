@@ -13,11 +13,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
+from llmwiki.categories import generate_static_categories, scan_tags
 from llmwiki.lint import load_pages, run_all
-from llmwiki.categories import scan_tags, generate_static_categories
-
 
 # ─── Obsidian edit → llmwiki reads it ──────────────────────────────────
 

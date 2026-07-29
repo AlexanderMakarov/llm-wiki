@@ -12,8 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from llmwiki import cli, usage
-from llmwiki import state_store
+from llmwiki import cli, state_store, usage
 
 
 @pytest.fixture(autouse=True)

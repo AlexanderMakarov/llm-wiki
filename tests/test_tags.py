@@ -27,7 +27,7 @@ from textwrap import dedent
 import pytest
 
 from llmwiki import tags as t
-
+from llmwiki.lint import REGISTRY, rules  # noqa: F401
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -444,12 +444,10 @@ def test_cli_tag_convention_on_good_wiki(tmp_path):
 
 
 def test_lint_rule_registered():
-    from llmwiki.lint import REGISTRY, rules  # noqa: F401
     assert "tags_topics_convention" in REGISTRY
 
 
 def test_lint_rule_flags_project_with_tags():
-    from llmwiki.lint import REGISTRY, rules  # noqa: F401
 
     rule_cls = REGISTRY["tags_topics_convention"]
     rule = rule_cls()
@@ -465,7 +463,6 @@ def test_lint_rule_flags_project_with_tags():
 
 
 def test_lint_rule_flags_source_with_topics():
-    from llmwiki.lint import REGISTRY, rules  # noqa: F401
 
     rule_cls = REGISTRY["tags_topics_convention"]
     rule = rule_cls()
@@ -480,7 +477,6 @@ def test_lint_rule_flags_source_with_topics():
 
 
 def test_lint_rule_silent_on_correct_usage():
-    from llmwiki.lint import REGISTRY, rules  # noqa: F401
 
     rule_cls = REGISTRY["tags_topics_convention"]
     rule = rule_cls()

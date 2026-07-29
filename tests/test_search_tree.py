@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import inspect
+import json as _json
 from pathlib import Path
 
 import pytest
 
+from llmwiki.build import build_search_index, build_site
+from llmwiki.cli import build_parser
 from llmwiki.search_tree import (
     DEFAULT_SEARCH_MODE,
     SEARCH_MODES,
@@ -16,7 +20,6 @@ from llmwiki.search_tree import (
     heading_depths,
     search_index_footer_badge,
 )
-
 
 # ─── Constants ────────────────────────────────────────────────────────
 
@@ -123,7 +126,6 @@ def test_annotate_preserves_other_keys():
 
 
 def test_annotate_is_json_safe():
-    import json as _json
     entry: dict = {"id": "x"}
     annotate_entry_headings(entry, "# T\n## S")
     # Round-trip must work without a custom encoder
@@ -231,22 +233,19 @@ def test_footer_badge_rounds_to_integer():
 
 def test_build_site_accepts_search_mode_kwarg():
     """`build_site(..., search_mode=...)` must be a real kwarg."""
-    import inspect
-    from llmwiki.build import build_site
+
     sig = inspect.signature(build_site)
     assert "search_mode" in sig.parameters
     assert sig.parameters["search_mode"].default == "auto"
 
 
 def test_build_search_index_accepts_search_mode_kwarg():
-    import inspect
-    from llmwiki.build import build_search_index
+
     sig = inspect.signature(build_search_index)
     assert "search_mode" in sig.parameters
 
 
 def test_cli_build_has_search_mode_flag():
-    from llmwiki.cli import build_parser
     parser = build_parser()
     # Parse a minimal build invocation
     args = parser.parse_args(["build", "--search-mode", "tree"])
@@ -254,14 +253,12 @@ def test_cli_build_has_search_mode_flag():
 
 
 def test_cli_build_search_mode_rejects_unknown():
-    from llmwiki.cli import build_parser
     parser = build_parser()
     with pytest.raises(SystemExit):
         parser.parse_args(["build", "--search-mode", "magic"])
 
 
 def test_cli_build_search_mode_default_is_auto():
-    from llmwiki.cli import build_parser
     parser = build_parser()
     args = parser.parse_args(["build"])
     assert args.search_mode == "auto"
@@ -270,8 +267,7 @@ def test_cli_build_search_mode_default_is_auto():
 def test_build_search_index_stamps_mode_on_output(tmp_path: Path):
     """build_search_index must write `_mode` / `_tree_eligible_ratio` /
     `_mode_badge` into the top-level search-index.json."""
-    import json as _json
-    from llmwiki.build import build_search_index
+
 
     out = tmp_path / "site"
     out.mkdir()
@@ -298,8 +294,7 @@ def test_build_search_index_stamps_mode_on_output(tmp_path: Path):
 def test_build_search_index_annotates_chunks(tmp_path: Path):
     """Session entries in the per-project chunk must carry the heading
     stats the client consumes for tree walks."""
-    import json as _json
-    from llmwiki.build import build_search_index
+
 
     out = tmp_path / "site"
     out.mkdir()

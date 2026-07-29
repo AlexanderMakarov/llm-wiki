@@ -23,7 +23,7 @@ from pathlib import Path
 import pytest
 
 from llmwiki import references as r
-
+from llmwiki.lint import REGISTRY, rules  # noqa: F401
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -330,12 +330,10 @@ def test_format_references_table_sorted():
 
 
 def test_lint_rule_registered():
-    from llmwiki.lint import REGISTRY, rules  # noqa: F401
     assert "stale_reference_detection" in REGISTRY
 
 
 def test_lint_rule_fires_on_stale_pair():
-    from llmwiki.lint import REGISTRY, rules  # noqa: F401
 
     rule = REGISTRY["stale_reference_detection"]()
     pages = dict([
@@ -353,7 +351,6 @@ def test_lint_rule_fires_on_stale_pair():
 
 
 def test_lint_rule_silent_on_fresh_pair():
-    from llmwiki.lint import REGISTRY, rules  # noqa: F401
 
     rule = REGISTRY["stale_reference_detection"]()
     pages = dict([

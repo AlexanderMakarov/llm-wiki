@@ -12,8 +12,6 @@ Does not touch body content outside frontmatter.
 
 import json
 import os
-import re
-import sys
 
 SESSIONS_DIR = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
@@ -33,7 +31,7 @@ def fix_models():
             continue
 
         fpath = os.path.join(SESSIONS_DIR, fname)
-        with open(fpath, "r", encoding="utf-8") as f:
+        with open(fpath, encoding="utf-8") as f:
             lines = f.readlines()
 
         # Find frontmatter boundaries

@@ -9,13 +9,11 @@ the doc, these tests fail and point at the drift.
 from __future__ import annotations
 
 import re
-from pathlib import Path
 
 import pytest
 
 from llmwiki import REPO_ROOT
 from llmwiki.render.css import CSS
-
 
 BRAND_DOC = REPO_ROOT / "docs" / "design" / "brand-system.md"
 

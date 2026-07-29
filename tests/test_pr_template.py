@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-import pytest
-
 from llmwiki import REPO_ROOT
-
 
 TEMPLATE = REPO_ROOT / ".github" / "PULL_REQUEST_TEMPLATE.md"
 CONTRIBUTING = REPO_ROOT / "CONTRIBUTING.md"

@@ -16,13 +16,11 @@ import json
 from datetime import date
 from pathlib import Path
 
-import pytest
-
 # ═══════════════════════════════════════════════════════════════════════
 # build.py: md_to_html edge cases
 # ═══════════════════════════════════════════════════════════════════════
-
-from llmwiki.build import md_to_html, parse_frontmatter, normalize_markdown
+from llmwiki.build import md_to_html, normalize_markdown, parse_frontmatter
+from llmwiki.viz_heatmap import level_for
 
 
 class TestMdToHtmlEdgeCases:
@@ -147,7 +145,6 @@ from llmwiki.viz_heatmap import (
     collect_session_counts,
     compute_quantile_thresholds,
     render_heatmap,
-    window_bounds,
 )
 
 
@@ -168,7 +165,6 @@ class TestHeatmapEdgeCases:
         counts = {date(2026, 4, d): 1 for d in range(1, 8)}
         thresholds = compute_quantile_thresholds(counts)
         # All same → single distinct value → level 4 for all non-zero
-        from llmwiki.viz_heatmap import level_for
         assert level_for(1, thresholds) == 4
 
     def test_massive_count_value(self):
@@ -221,10 +217,9 @@ class TestToolChartEdgeCases:
 # viz_tokens: degenerate data
 # ═══════════════════════════════════════════════════════════════════════
 
+from llmwiki.format_numbers import format_tokens
 from llmwiki.viz_tokens import (
     cache_hit_ratio,
-    format_tokens,
-    parse_token_totals,
     render_session_token_card,
 )
 

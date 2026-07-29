@@ -15,17 +15,17 @@ These tests pin two properties that are easy to regress on:
 from __future__ import annotations
 
 import json
+import re as _re
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
 from llmwiki.mcp.server import (
+    tool_wiki_list_sources,
     tool_wiki_query,
     tool_wiki_search,
-    tool_wiki_list_sources,
 )
-
 
 # ─── Helpers ─────────────────────────────────────────────────────────
 
@@ -275,7 +275,6 @@ def _seed_query_corpus(tmp_path: Path, pages: dict[str, str]) -> None:
 def _query_pages_in_order(result: dict) -> list[str]:
     """Extract the ordered list of page paths from a wiki_query result."""
     text = _result_text(result)
-    import re as _re
     return _re.findall(r"## `([^`]+)`", text)
 
 

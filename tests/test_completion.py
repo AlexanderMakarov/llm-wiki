@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import pytest
 
+from llmwiki.cli import build_parser
 from llmwiki.completion import (
+    GENERATORS,
     bash_script,
-    zsh_script,
     fish_script,
     generate,
-    GENERATORS,
+    zsh_script,
 )
-
 
 # ─── registry ─────────────────────────────────────────────────────────
 
@@ -122,7 +122,6 @@ def test_fish_completes_flags_for_sync():
 
 def test_cli_completion_subcommand_removed():
     """`llmwiki completion` subcommand has been removed."""
-    from llmwiki.cli import build_parser
     parser = build_parser()
     sub_action = None
     for a in parser._actions:

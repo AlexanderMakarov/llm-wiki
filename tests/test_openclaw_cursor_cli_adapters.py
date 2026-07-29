@@ -9,6 +9,7 @@ from pathlib import Path
 from llmwiki.adapters import REGISTRY, discover_all
 from llmwiki.adapters.contrib.cursor_cli import CursorCliAdapter
 from llmwiki.adapters.contrib.openclaw import OpenClawAdapter, _flatten_text_blocks
+from llmwiki.build import build_site
 from llmwiki.convert import truncate_chars
 
 
@@ -222,7 +223,6 @@ def test_build_site_honors_raw_sessions_param(tmp_path: Path):
     # Regression (#54 vault build): build_site used the module-level
     # RAW_SESSIONS constant, so `build --vault` silently read the repo's
     # raw/ instead of the vault's. It must read the path it's given.
-    from llmwiki.build import build_site
 
     missing = tmp_path / "vault" / "raw" / "sessions"
     rc = build_site(out_dir=tmp_path / "site", raw_sessions=missing, raw_dir=missing.parent)

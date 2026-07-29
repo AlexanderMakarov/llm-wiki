@@ -11,8 +11,6 @@ The fix: all three import the canonical parser as a thin wrapper.
 
 from __future__ import annotations
 
-import pytest
-
 from llmwiki._frontmatter import parse_frontmatter as canonical
 from llmwiki.lint import parse_frontmatter as lint_parse
 from llmwiki.models_page import _parse_frontmatter as models_parse

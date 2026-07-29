@@ -18,6 +18,7 @@ from pathlib import Path
 
 import pytest
 
+from llmwiki import build as build_mod
 from llmwiki.build import (
     HLJS_DARK_CSS,
     HLJS_LIGHT_CSS,
@@ -267,7 +268,6 @@ def test_site_build_emits_hljs_markup(tmp_path, monkeypatch):
     """Run the real builder against a minimal raw/ layout and confirm the
     output HTML actually carries the highlight.js tags. This is the
     smoke-test for the whole swap — if it passes, deploy is safe."""
-    from llmwiki import build as build_mod
 
     raw_root = tmp_path / "raw"
     raw_sessions = raw_root / "sessions"

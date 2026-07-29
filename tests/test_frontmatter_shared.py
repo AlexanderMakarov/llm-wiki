@@ -4,13 +4,15 @@ from __future__ import annotations
 
 import pytest
 
+from llmwiki import build as build_mod
 from llmwiki._frontmatter import (
+    _parse_scalar,
     parse_frontmatter,
     parse_frontmatter_dict,
     parse_frontmatter_or_none,
-    _parse_scalar,
 )
-
+from llmwiki._frontmatter import parse_frontmatter as canonical_pf
+from llmwiki.build import parse_frontmatter as build_pf
 
 # ─── parse_frontmatter: happy paths ──────────────────────────────────
 
@@ -203,8 +205,6 @@ def test_build_py_parse_frontmatter_is_canonical():
     divergent copy. Regression for #409: divergent regexes silently
     dropped CRLF input on the build-side parser only.
     """
-    from llmwiki.build import parse_frontmatter as build_pf
-    from llmwiki._frontmatter import parse_frontmatter as canonical_pf
     assert build_pf is canonical_pf
 
 
@@ -212,7 +212,6 @@ def test_build_py_parses_crlf_now():
     """Regression for #409: build.py used to fail on CRLF and silently
     return ``({}, text)`` for any Windows-authored ``wiki/projects/*.md``.
     """
-    from llmwiki.build import parse_frontmatter
     text = '---\r\nproject: my-proj\r\ntopics: [a, b]\r\n---\r\nbody\r\n'
     meta, _ = parse_frontmatter(text)
     assert meta["project"] == "my-proj"
@@ -223,7 +222,6 @@ def test_build_py_parses_bom_now():
     """Regression for #423: BOM-prefixed files used to silently lose
     frontmatter on the build path, leaving project pages headerless.
     """
-    from llmwiki.build import parse_frontmatter
     text = '\ufeff---\ntitle: "BOM Project"\n---\nbody\n'
     meta, _ = parse_frontmatter(text)
     assert meta == {"title": "BOM Project"}
@@ -237,7 +235,6 @@ def test_build_py_parses_inline_list_with_quoted_values():
     distinct elements — this test pins current behaviour rather than
     aspirational quoted-comma support.
     """
-    from llmwiki.build import parse_frontmatter
     text = '---\ntopics: ["foo", "bar"]\n---\n'
     meta, _ = parse_frontmatter(text)
     assert meta["topics"] == ["foo", "bar"]
@@ -249,7 +246,6 @@ def test_build_py_parses_inline_list_with_quoted_values():
 def test_discover_sources_reads_crlf_file(tmp_path, monkeypatch):
     """E2E: a Windows-authored file under raw/ must surface its
     frontmatter through ``discover_sources`` (#409 acceptance)."""
-    from llmwiki import build as build_mod
 
     raw = tmp_path / "raw"
     sessions = raw / "sessions" / "my-proj"
@@ -269,7 +265,6 @@ def test_discover_sources_reads_bom_file(tmp_path):
     """E2E: a Notepad-authored (BOM + CRLF) file surfaces its frontmatter
     instead of falling back to the parent dir name (#423 acceptance).
     """
-    from llmwiki import build as build_mod
 
     sessions = tmp_path / "raw" / "sessions" / "bom-proj"
     sessions.mkdir(parents=True)

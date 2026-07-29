@@ -5,18 +5,15 @@ from __future__ import annotations
 from datetime import date
 from types import SimpleNamespace
 
-import pytest
-
 from llmwiki.changelog_timeline import (
     extract_price_points,
     find_recently_updated,
     parse_changelog,
     render_changelog_timeline,
     render_price_sparkline,
-    render_recently_updated,
     render_recent_activity,
+    render_recently_updated,
 )
-
 
 # ─── parse_changelog ─────────────────────────────────────────────────────
 

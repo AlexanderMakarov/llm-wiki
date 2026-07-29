@@ -16,18 +16,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 import llmwiki.graph as graph_mod
 from llmwiki.graph import (
     HTML_TEMPLATE,
     _compute_site_url,
     _verify_site_url,
     build_graph,
-    scan_pages,
-    write_html,
 )
-
 
 # ─── _compute_site_url ────────────────────────────────────────────────────
 

@@ -2,13 +2,7 @@
 
 from __future__ import annotations
 
-import re
-from pathlib import Path
-
-import pytest
-
 from llmwiki import REPO_ROOT
-
 
 WORKFLOW = REPO_ROOT / ".github" / "workflows" / "wiki-checks.yml"
 

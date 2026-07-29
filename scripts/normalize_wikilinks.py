@@ -16,7 +16,6 @@ Also handles edge cases:
 """
 
 import re
-import sys
 from pathlib import Path
 
 WIKI_DIR = Path(__file__).resolve().parent.parent / "wiki"

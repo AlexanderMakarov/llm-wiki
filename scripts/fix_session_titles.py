@@ -10,7 +10,6 @@ Only modifies the title: line in YAML frontmatter. Does not touch body content.
 
 import os
 import re
-import sys
 
 SESSIONS_DIR = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
@@ -30,7 +29,7 @@ def fix_titles():
             continue
 
         fpath = os.path.join(SESSIONS_DIR, fname)
-        with open(fpath, "r", encoding="utf-8") as f:
+        with open(fpath, encoding="utf-8") as f:
             content = f.read()
 
         # Parse frontmatter (between first --- and second ---)

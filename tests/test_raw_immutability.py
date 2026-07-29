@@ -12,12 +12,12 @@ Covers:
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
+import llmwiki.convert as convert_mod
+from llmwiki.adapters import REGISTRY, discover_adapters
+from llmwiki.adapters.base import BaseAdapter
 from llmwiki.convert import _raw_write_guard
-
 
 # ─── _raw_write_guard unit ────────────────────────────────────────────────
 
@@ -64,7 +64,6 @@ NON_AI_ADAPTERS = {"obsidian", "jira", "meeting", "pdf"}
 
 
 def test_ai_session_adapters_are_marked():
-    from llmwiki.adapters import REGISTRY, discover_adapters
     discover_adapters()
     for name in AI_SESSION_ADAPTERS:
         if name not in REGISTRY:
@@ -76,7 +75,6 @@ def test_ai_session_adapters_are_marked():
 
 
 def test_non_ai_adapters_are_opt_in():
-    from llmwiki.adapters import REGISTRY, discover_adapters
     discover_adapters()
     for name in NON_AI_ADAPTERS:
         if name not in REGISTRY:
@@ -91,7 +89,6 @@ def test_non_ai_adapters_are_opt_in():
 def test_base_adapter_defaults_to_ai_session():
     """Safe default: new adapters without explicit markers are treated
     as AI sessions (so we don't silently skip legitimate adapters)."""
-    from llmwiki.adapters.base import BaseAdapter
     assert BaseAdapter.is_ai_session is True
 
 
@@ -118,7 +115,6 @@ class _FakeNonAI:
 
 def test_default_selection_picks_ai_only(monkeypatch):
     """#326: default adapter selection skips non-AI adapters."""
-    import llmwiki.convert as convert_mod
     monkeypatch.setattr(
         convert_mod, "REGISTRY",
         {"ai_test": _FakeAI, "non_ai_test": _FakeNonAI},
@@ -140,7 +136,6 @@ def test_default_selection_picks_ai_only(monkeypatch):
 
 def test_explicit_enable_includes_non_ai(monkeypatch):
     """#326: non-AI adapters can be opted in via sessions_config.json."""
-    import llmwiki.convert as convert_mod
     monkeypatch.setattr(
         convert_mod, "REGISTRY",
         {"ai_test": _FakeAI, "non_ai_test": _FakeNonAI},

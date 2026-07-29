@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import pytest
-
+from llmwiki.categories import scan_tags as cat_scan_tags
 from llmwiki.tag_utils import NOISE_TAGS, parse_tags_field, scan_tags
-
 
 # ─── NOISE_TAGS ──────────────────────────────────────────────────────
 
@@ -115,18 +113,9 @@ def test_scan_filters_noise_from_each_page():
     assert "real-tag" in tags
 
 
-# ─── Consumer re-exports still work ──────────────────────────────────
+# ─── Consumers import scan_tags from the owning module ───────────────
 
 
 def test_categories_module_still_exposes_scan_tags():
-    """categories.py must continue to expose scan_tags + NOISE_TAGS
-    for backwards compatibility with existing callers + tests."""
-    from llmwiki.categories import scan_tags as cat_scan_tags
-    from llmwiki.categories import NOISE_TAGS as cat_noise
+    """categories.py re-uses tag_utils.scan_tags for category generation."""
     assert cat_scan_tags is scan_tags
-    assert cat_noise is NOISE_TAGS
-
-
-def test_search_facets_module_still_exposes_noise_tags():
-    from llmwiki.search_facets import NOISE_TAGS as sf_noise
-    assert sf_noise is NOISE_TAGS

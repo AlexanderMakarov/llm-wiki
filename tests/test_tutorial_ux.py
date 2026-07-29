@@ -16,9 +16,6 @@ Covers:
 from __future__ import annotations
 
 from pathlib import Path
-from types import SimpleNamespace
-
-import pytest
 
 from llmwiki.docs_pages import (
     DocsPage,
@@ -27,7 +24,6 @@ from llmwiki.docs_pages import (
     _tutorial_toc_html,
     compile_docs_site,
 )
-
 
 # ─── _tutorial_seq ────────────────────────────────────────────────────
 

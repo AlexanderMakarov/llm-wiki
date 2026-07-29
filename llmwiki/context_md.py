@@ -26,8 +26,8 @@ Stdlib-only — plain string and filesystem ops, no new deps.
 from __future__ import annotations
 
 import re
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Iterable, Iterator, Optional
 
 CONTEXT_FILENAME = "_context.md"
 
@@ -45,7 +45,7 @@ def is_context_file(path: Path) -> bool:
     return path.name == CONTEXT_FILENAME
 
 
-def load_folder_context(folder: Path) -> Optional[tuple[dict[str, str], str]]:
+def load_folder_context(folder: Path) -> tuple[dict[str, str], str] | None:
     """Read `<folder>/_context.md` if present.
 
     Returns `(frontmatter_dict, body_text)` or `None` if the file doesn't

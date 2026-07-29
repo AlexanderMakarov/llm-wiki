@@ -15,6 +15,8 @@ from unittest.mock import patch
 
 import pytest
 
+from llmwiki.cli import build_parser
+from llmwiki.synth.base import BaseSynthesizer, DummySynthesizer
 from llmwiki.synth.ollama import (
     DEFAULT_BACKOFF_BASE,
     DEFAULT_BASE_URL,
@@ -31,7 +33,7 @@ from llmwiki.synth.ollama import (
     _urlopen_post,
     load_ollama_config,
 )
-
+from llmwiki.synth.pipeline import resolve_backend
 
 # ─── Test helpers ─────────────────────────────────────────────────────
 
@@ -171,7 +173,7 @@ def test_is_available_false_on_500():
 
 
 def test_is_available_false_on_timeout():
-    synth, _, _ = _make_synth(get_script=[socket.timeout("slow")])
+    synth, _, _ = _make_synth(get_script=[TimeoutError("slow")])
     assert synth.is_available() is False
 
 
@@ -298,7 +300,7 @@ def test_synthesize_gives_up_after_max_retries_on_5xx():
 def test_synthesize_retries_on_socket_timeout():
     body_ok = json.dumps({"response": "ok"})
     synth, post, _ = _make_synth(
-        post_script=[socket.timeout("slow"), (200, body_ok)]
+        post_script=[TimeoutError("slow"), (200, body_ok)]
     )
     out = synth.synthesize_source_page(
         raw_body="x", meta={}, prompt_template="{body}"
@@ -371,7 +373,6 @@ def test_render_prompt_survives_curly_braces_in_body():
 
 
 def test_synthesizer_is_base_synthesizer():
-    from llmwiki.synth.base import BaseSynthesizer
     assert isinstance(OllamaSynthesizer(), BaseSynthesizer)
 
 
@@ -471,23 +472,18 @@ def test_ollama_http_error_message_truncates_long_body():
 
 
 def test_resolve_backend_defaults_to_dummy_when_no_config():
-    from llmwiki.synth.base import DummySynthesizer
-    from llmwiki.synth.pipeline import resolve_backend
 
     assert isinstance(resolve_backend(None), DummySynthesizer)
     assert isinstance(resolve_backend({}), DummySynthesizer)
 
 
 def test_resolve_backend_picks_ollama_when_configured():
-    from llmwiki.synth.pipeline import resolve_backend
 
     backend = resolve_backend({"synthesis": {"backend": "ollama"}})
     assert isinstance(backend, OllamaSynthesizer)
 
 
 def test_resolve_backend_falls_back_on_unknown_name(caplog):
-    from llmwiki.synth.base import DummySynthesizer
-    from llmwiki.synth.pipeline import resolve_backend
 
     with caplog.at_level("WARNING"):
         backend = resolve_backend({"synthesis": {"backend": "magic"}})
@@ -496,7 +492,6 @@ def test_resolve_backend_falls_back_on_unknown_name(caplog):
 
 
 def test_resolve_backend_case_insensitive():
-    from llmwiki.synth.pipeline import resolve_backend
     assert isinstance(
         resolve_backend({"synthesis": {"backend": "OLLAMA"}}),
         OllamaSynthesizer,
@@ -507,7 +502,6 @@ def test_resolve_backend_case_insensitive():
 
 
 def test_synthesize_subcommand_registered():
-    from llmwiki.cli import build_parser
 
     parser = build_parser()
     sub_action = None

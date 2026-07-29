@@ -65,8 +65,6 @@ import enum
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
-
 
 # ─── Format detection ─────────────────────────────────────────────────
 
@@ -176,7 +174,7 @@ class Vault:
 def resolve_vault(
     vault_dir: Path,
     *,
-    layout: Optional[VaultLayout] = None,
+    layout: VaultLayout | None = None,
 ) -> Vault:
     """Detect + build a :class:`Vault` ready for the pipeline.
 

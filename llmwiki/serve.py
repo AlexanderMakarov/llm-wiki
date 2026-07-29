@@ -70,7 +70,8 @@ def serve_site(
     # `os.chdir(directory)` call leaked process state — every test
     # using this function had to remember to chdir back, and
     # concurrent serve_site calls in tests would race.
-    handler_factory = lambda *a, **kw: _QuietHandler(*a, directory=str(directory), **kw)
+    def handler_factory(*a, **kw):
+        return _QuietHandler(*a, directory=str(directory), **kw)
     url = f"http://{host}:{port}/"
     print(f"==> Serving {directory} at {url}")
     print("    Press Ctrl+C to stop.")

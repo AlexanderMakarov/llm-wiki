@@ -22,10 +22,9 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import sqlite3
 from pathlib import Path
 from typing import Any
-
-import sqlite3
 
 from llmwiki._frontmatter import parse_frontmatter
 from llmwiki.adapters import REGISTRY, discover_all, resolve_adapter_name

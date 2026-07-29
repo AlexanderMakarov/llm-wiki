@@ -6,13 +6,16 @@ See ``gaps.md`` (local) / GitHub issues #288, #296, #297, #304.
 
 from __future__ import annotations
 
+import re
 import subprocess
 import sys
 from datetime import date
 from pathlib import Path
 
-import pytest
-
+from llmwiki.changelog_timeline import render_recent_activity
+from llmwiki.lint.rules import DuplicateDetection
+from llmwiki.log_reader import LogEvent
+from llmwiki.synth.pipeline import LOG_ARCHIVE_THRESHOLD, _auto_archive_log
 
 # ─── G-10 (#296): log archive frontmatter seed ───────────────────────────
 
@@ -21,7 +24,6 @@ def test_log_archive_gets_frontmatter_on_first_write(tmp_path: Path):
     """When log.md exceeds the archival threshold, the first write to
     log-archive-<year>.md must include the standard nav frontmatter so
     lint's frontmatter_completeness rule doesn't fail."""
-    from llmwiki.synth.pipeline import _auto_archive_log, LOG_ARCHIVE_THRESHOLD
 
     log = tmp_path / "log.md"
     # Write past the 50 KB threshold with real-looking headings so the
@@ -45,7 +47,6 @@ def test_log_archive_gets_frontmatter_on_first_write(tmp_path: Path):
 
 
 def test_log_archive_below_threshold_is_noop(tmp_path: Path):
-    from llmwiki.synth.pipeline import _auto_archive_log
 
     log = tmp_path / "log.md"
     log.write_text("# Wiki Log\n\n## [2026-04-19] synthesize | small\n", encoding="utf-8")
@@ -67,7 +68,6 @@ def _page(rel: str, *, title: str, project: str = "", ptype: str = "source",
 
 def test_duplicate_detection_respects_project_scope():
     """Same-titled pages in DIFFERENT projects must not be flagged."""
-    from llmwiki.lint.rules import DuplicateDetection
 
     pages = dict([
         _page("sources/proj-a/CHANGELOG.md", title="CHANGELOG",
@@ -82,7 +82,6 @@ def test_duplicate_detection_respects_project_scope():
 def test_duplicate_detection_requires_body_overlap():
     """Same-titled same-project pages with distinct bodies must NOT
     flag — previously the 1.0 title match alone fired."""
-    from llmwiki.lint.rules import DuplicateDetection
 
     body_a = "alpha " * 500
     body_b = "omega " * 500  # zero overlap
@@ -96,7 +95,6 @@ def test_duplicate_detection_requires_body_overlap():
 
 def test_duplicate_detection_flags_true_duplicates():
     """Same project, same title, same body → MUST flag."""
-    from llmwiki.lint.rules import DuplicateDetection
 
     body = "exact same content here for duplicate test " * 50
     pages = dict([
@@ -112,7 +110,6 @@ def test_duplicate_detection_flags_true_duplicates():
 
 def test_duplicate_detection_cross_type_never_flags():
     """An entity page must not be compared against a source page."""
-    from llmwiki.lint.rules import DuplicateDetection
     body = "same body for both"
     pages = dict([
         _page("sources/proj/a.md", title="X", project="proj",
@@ -128,13 +125,10 @@ def test_duplicate_detection_cross_type_never_flags():
 
 
 def test_render_recent_activity_empty_returns_empty_string():
-    from llmwiki.changelog_timeline import render_recent_activity
     assert render_recent_activity([]) == ""
 
 
 def test_render_recent_activity_renders_rows():
-    from llmwiki.changelog_timeline import render_recent_activity
-    from llmwiki.log_reader import LogEvent
 
     events = [
         LogEvent(
@@ -196,6 +190,5 @@ def test_adapters_truncates_without_wide_but_not_with_wide():
 def test_log_heading_regex_still_greppable():
     """CLAUDE.md promises ``grep "^## \\[" wiki/log.md`` works.  The
     batched summary heading must still match that pattern."""
-    import re
     heading = "## [2026-04-19] synthesize | 3 sessions across 2 projects"
     assert re.match(r"^##\s+\[\d{4}-\d{2}-\d{2}\]\s+\S+\s+\|\s+.+", heading)

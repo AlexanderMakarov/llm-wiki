@@ -34,8 +34,9 @@ from __future__ import annotations
 import html
 from itertools import combinations
 from pathlib import Path
-from typing import Any, Mapping, Optional, TypedDict
+from typing import Any, TypedDict
 
+from llmwiki.format_numbers import format_tokens
 from llmwiki.schema import (
     KNOWN_BENCHMARKS,
     ModelProfile,
@@ -159,14 +160,10 @@ def _render_kv(label: str, val_a: Any, val_b: Any, is_numeric: bool = False) -> 
     )
 
 
-def _fmt_context(n: Optional[int]) -> Optional[str]:
+def _fmt_context(n: int | None) -> str | None:
     if n is None:
         return None
-    if n >= 1_000_000:
-        return f"{n / 1_000_000:.1f}M"
-    if n >= 1000:
-        return f"{n // 1000}K"
-    return str(n)
+    return format_tokens(n)
 
 
 def render_comparison_table(pair: ComparisonPair) -> str:

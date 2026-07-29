@@ -12,7 +12,6 @@ Only adds fields that are missing — never overwrites existing ones.
 
 import os
 import re
-import sys
 from datetime import datetime
 
 SESSIONS_DIR = os.path.join(
@@ -57,7 +56,7 @@ def add_missing_metadata():
             continue
 
         fpath = os.path.join(SESSIONS_DIR, fname)
-        with open(fpath, "r", encoding="utf-8") as f:
+        with open(fpath, encoding="utf-8") as f:
             content = f.read()
 
         # Parse frontmatter

@@ -2,18 +2,14 @@
 
 from __future__ import annotations
 
-import pytest
-
 from llmwiki.search_facets import (
-    _parse_tags_field,
     _parse_confidence,
-    enrich_entry,
+    _parse_tags_field,
     aggregate_facets,
-    rank_by_confidence,
+    enrich_entry,
     filter_entries,
-    NOISE_TAGS,
+    rank_by_confidence,
 )
-
 
 # ─── _parse_tags_field ──────────────────────────────────────────────
 

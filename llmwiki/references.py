@@ -25,13 +25,10 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
-from pathlib import Path
-from typing import Any, Iterable, Optional
+from datetime import date, datetime
+from typing import Any
 
-from llmwiki import REPO_ROOT
 from llmwiki.lint import WIKILINK_RE
-
 
 # Dated-claim detection: human prose that commits to a specific moment
 # in time. Captures the date so we can compare to the target's
@@ -72,7 +69,7 @@ class Reference:
 
     source: str    # rel path of the page doing the linking
     target: str    # wikilink target slug
-    target_rel: Optional[str]  # resolved rel path (may be None for broken links)
+    target_rel: str | None  # resolved rel path (may be None for broken links)
     dated_claims: tuple[str, ...] = ()
 
 
@@ -81,9 +78,9 @@ class StaleReference:
     """A reference that looks stale: target newer, source has a dated claim."""
 
     source: str
-    source_last_updated: Optional[str]
+    source_last_updated: str | None
     target: str
-    target_last_updated: Optional[str]
+    target_last_updated: str | None
     dated_claim: str
 
 
@@ -94,7 +91,7 @@ def _rel_to_slug(rel: str) -> str:
     return rel.rsplit("/", 1)[-1].removesuffix(".md")
 
 
-def _parse_date(value: Any) -> Optional[date]:
+def _parse_date(value: Any) -> date | None:
     """Accept ``date``, ``datetime``, ISO string, or raw string. Return
     the UTC date or ``None`` if we can't parse it."""
     if isinstance(value, date) and not isinstance(value, datetime):
@@ -185,7 +182,7 @@ def find_stale_references(
     """
     idx = build_index(pages)
     out: list[StaleReference] = []
-    for target, refs in idx.items():
+    for _target, refs in idx.items():
         target_rel = refs[0].target_rel if refs else None
         if target_rel is None:
             continue

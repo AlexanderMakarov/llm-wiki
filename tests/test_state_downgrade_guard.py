@@ -22,7 +22,6 @@ from llmwiki.state_store import (
     write_state,
 )
 
-
 # --- the pure predicate -------------------------------------------------
 
 def test_missing_state_is_compatible():

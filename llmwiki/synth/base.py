@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import re
 from abc import ABC, abstractmethod
-from pathlib import Path
 from typing import Any
 
 # Section header in prompts/source_page.md that separates the part which is

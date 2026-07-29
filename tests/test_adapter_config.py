@@ -2,17 +2,14 @@
 
 from __future__ import annotations
 
-import pytest
-
 from llmwiki.adapter_config import (
     ADAPTER_SCHEMAS,
+    apply_defaults,
+    enabled_adapters,
+    is_adapter_enabled,
     validate_adapter_config,
     validate_all_adapters,
-    is_adapter_enabled,
-    enabled_adapters,
-    apply_defaults,
 )
-
 
 # ─── Schemas ───────────────────────────────────────────────────────────
 
@@ -22,7 +19,7 @@ def test_adapter_schemas_defined():
 
 
 def test_every_schema_has_required_fields():
-    for name, schema in ADAPTER_SCHEMAS.items():
+    for _name, schema in ADAPTER_SCHEMAS.items():
         assert "required_if_enabled" in schema
         assert "defaults" in schema
         assert "types" in schema

@@ -4,16 +4,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
+from llmwiki.adapters import REGISTRY, discover_all
 from llmwiki.adapters.contrib.opencode import OpenCodeAdapter
-
 
 # ─── Adapter registration ─────────────────────────────────────────────
 
 
 def test_adapter_registered():
-    from llmwiki.adapters import REGISTRY, discover_all
     discover_all()
     assert "opencode" in REGISTRY
 

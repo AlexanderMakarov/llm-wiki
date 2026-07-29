@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 
+from llmwiki._system_pages import SYSTEM_PAGE_FILES as nav_pages
 from llmwiki.lint import LintRule, register
 from llmwiki.lint.rules._helpers import _basename, _page_slug, _resolve_index_href
 
@@ -53,7 +54,6 @@ class IndexSync(LintRule):
         # #py-m5 (#591): pull from the canonical SYSTEM_PAGE_FILES list
         # rather than redeclaring it inline (third copy of the same set
         # in this file before the consolidation).
-        from llmwiki._system_pages import SYSTEM_PAGE_FILES as nav_pages
         for rel in pages:
             if rel in nav_pages or rel.endswith("_context.md"):
                 continue

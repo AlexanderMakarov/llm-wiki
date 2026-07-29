@@ -10,6 +10,7 @@ Three layered defences:
 from __future__ import annotations
 
 from pathlib import Path
+from subprocess import CompletedProcess
 from unittest.mock import patch
 
 import pytest
@@ -77,7 +78,6 @@ def test_overview_passes_prompt_via_stdin_not_argv():
     def fake_run(*args, **kwargs):
         captured["argv"] = args[0]
         captured["input"] = kwargs.get("input")
-        from subprocess import CompletedProcess
         return CompletedProcess(args=args[0], returncode=0, stdout="overview text", stderr="")
 
     with patch("llmwiki.build.subprocess.run", side_effect=fake_run), \
@@ -107,7 +107,6 @@ def test_malicious_slug_replaced_in_actual_call():
 
     def fake_run(*args, **kwargs):
         captured["input"] = kwargs.get("input", "")
-        from subprocess import CompletedProcess
         return CompletedProcess(args=args[0], returncode=0, stdout="ok", stderr="")
 
     with patch("llmwiki.build.subprocess.run", side_effect=fake_run), \
@@ -132,7 +131,6 @@ def test_prompt_size_capped():
 
     def fake_run(*args, **kwargs):
         captured["input"] = kwargs.get("input", "")
-        from subprocess import CompletedProcess
         return CompletedProcess(args=args[0], returncode=0, stdout="ok", stderr="")
 
     with patch("llmwiki.build.subprocess.run", side_effect=fake_run), \
@@ -158,7 +156,6 @@ def test_prompt_injection_string_treated_as_data():
 
     def fake_run(*args, **kwargs):
         captured["input"] = kwargs.get("input", "")
-        from subprocess import CompletedProcess
         return CompletedProcess(args=args[0], returncode=0, stdout="ok", stderr="")
 
     with patch("llmwiki.build.subprocess.run", side_effect=fake_run), \

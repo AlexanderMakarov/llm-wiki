@@ -97,7 +97,7 @@ class DuplicateDetection(LintRule):
                     by_fp.setdefault(fp, []).append(idx)
 
             flagged_pairs: set[tuple[int, int]] = set()
-            for fp, idxs in by_fp.items():
+            for _fp, idxs in by_fp.items():
                 if len(idxs) < 2:
                     continue
                 for i_pos in range(len(idxs)):

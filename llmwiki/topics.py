@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Any
 
 from llmwiki.graph import scan_pages
+from llmwiki.topics_consolidate import load_cache
 
 # Mirrors tags.near_duplicate_tags' SequenceMatcher comparison; 0.90 merges
 # pure-case, plural, and hyphen/space variants (llm-wiki≈llmwiki 0.93,
@@ -177,7 +178,6 @@ def derive_vocabulary(
 def _load_consolidation_cache(wiki_dir: Path | None):
     """Load the consolidation cache, swallowing any import/IO error."""
     try:
-        from llmwiki.topics_consolidate import load_cache
 
         return load_cache(wiki_dir)
     except Exception:
@@ -240,7 +240,7 @@ def build_topic_graph(
     keep_pairs: set[tuple[str, str]] = set()
     for node, lst in by_node.items():
         lst.sort(reverse=True)
-        for w, other, _ in lst[:max_neighbors]:
+        for _w, other, _ in lst[:max_neighbors]:
             keep_pairs.add(tuple(sorted((node, other))))
 
     edges = []

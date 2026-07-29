@@ -12,7 +12,6 @@ from pathlib import Path
 
 from llmwiki.log_reader import LogEvent, parse_log, recent_events
 
-
 SAMPLE_LOG = """# Wiki Log
 
 ## [2026-04-19] synthesize | 3 sessions across 2 projects

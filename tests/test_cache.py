@@ -2,8 +2,14 @@
 
 from __future__ import annotations
 
+from dataclasses import FrozenInstanceError
+
 import pytest
 
+import llmwiki.cli as _cli
+import llmwiki.config_schedule as _cs
+import llmwiki.synth.pipeline as pipe
+from llmwiki import cli as cli_mod
 from llmwiki.cache import (
     CACHE_CONTROL_EPHEMERAL,
     CHARS_PER_TOKEN,
@@ -11,7 +17,6 @@ from llmwiki.cache import (
     MIN_CACHEABLE_TOKENS,
     MODEL_PRICING,
     CachedPrompt,
-    CostEstimate,
     build_messages,
     estimate_cost,
     estimate_tokens,
@@ -21,7 +26,8 @@ from llmwiki.cache import (
     resolve_pricing_model,
     warn_prefix_too_small,
 )
-
+from llmwiki.cli import build_parser
+from llmwiki.state_store import read_state
 
 # ─── Constants / defaults ─────────────────────────────────────────────
 
@@ -135,7 +141,7 @@ def test_build_messages_shape():
 
 def test_cached_prompt_is_frozen():
     p = CachedPrompt(stable_prefix="a", dynamic_suffix="b")
-    with pytest.raises(Exception):  # frozen dataclass → FrozenInstanceError
+    with pytest.raises(FrozenInstanceError):
         p.stable_prefix = "changed"  # type: ignore[misc]
 
 
@@ -310,7 +316,6 @@ def test_cost_estimate_breakdown_sums_to_total():
 
 
 def test_synthesize_parser_accepts_estimate_flag():
-    from llmwiki.cli import build_parser
 
     parser = build_parser()
     args = parser.parse_args(["synthesize", "--estimate"])
@@ -318,7 +323,6 @@ def test_synthesize_parser_accepts_estimate_flag():
 
 
 def test_synthesize_parser_estimate_defaults_false():
-    from llmwiki.cli import build_parser
 
     parser = build_parser()
     args = parser.parse_args(["synthesize"])
@@ -335,8 +339,6 @@ _PINNED_SYNTH_CFG = {"synthesis": {"backend": "claude", "claude_model": "sonnet"
 
 def _pin_synth_config(monkeypatch):
     """Make an --estimate test independent of the local config.json."""
-    import llmwiki.cli as _cli
-    import llmwiki.config_schedule as _cs
     monkeypatch.setattr(_cs, "_load_sessions_config", lambda *a, **k: _PINNED_SYNTH_CFG)
     monkeypatch.setattr(_cli, "_load_sessions_config", lambda *a, **k: _PINNED_SYNTH_CFG, raising=False)
 
@@ -346,7 +348,6 @@ def test_estimate_command_emits_total(tmp_path, monkeypatch, capsys):
     # _discover_raw_sessions() / _load_state() for the per-session bodies.
     # Swap the discovery hook so the test runs in tmp_path with a known
     # body and no dependency on the real raw/ tree.
-    from llmwiki import cli as cli_mod
 
     class _FakePath:
         def __init__(self, name: str, text: str | None = None):
@@ -364,7 +365,6 @@ def test_estimate_command_emits_total(tmp_path, monkeypatch, capsys):
     # Seed a prefix so the token estimator has something to chew on.
     (tmp_path / "CLAUDE.md").write_text("x" * 4000, encoding="utf-8")
 
-    import llmwiki.synth.pipeline as pipe
 
     def _fake_discover(raw_dir=None):
         return [
@@ -389,8 +389,6 @@ def test_estimate_command_emits_total(tmp_path, monkeypatch, capsys):
 
 
 def test_estimate_command_no_new_sessions(tmp_path, monkeypatch, capsys):
-    from llmwiki import cli as cli_mod
-    import llmwiki.synth.pipeline as pipe
 
     (tmp_path / "raw" / "sessions").mkdir(parents=True)
     (tmp_path / "raw" / "docs").mkdir(parents=True)
@@ -409,8 +407,6 @@ def test_estimate_command_no_new_sessions(tmp_path, monkeypatch, capsys):
 
 
 def test_estimate_persists_unsynth_backlog_for_vault(tmp_path, capsys, monkeypatch):
-    from llmwiki import cli as cli_mod
-    from llmwiki.state_store import read_state
 
     _pin_synth_config(monkeypatch)
     vault = tmp_path / "vault"

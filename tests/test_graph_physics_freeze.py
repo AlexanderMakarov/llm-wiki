@@ -18,7 +18,6 @@ from __future__ import annotations
 
 from llmwiki.graph import HTML_TEMPLATE
 
-
 # ─── 1. Physics freeze after stabilization ────────────────────────────
 
 

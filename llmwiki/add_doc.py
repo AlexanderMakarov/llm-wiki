@@ -16,7 +16,10 @@ import hashlib
 import ipaddress
 import json
 import re as _re  # aliased: `re` is shadowed by hot loop locals in later sections
+import shutil
 import socket
+import subprocess
+import tempfile
 import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
@@ -25,8 +28,11 @@ from pathlib import Path
 from urllib.parse import urljoin, urlparse
 
 from llmwiki import __version__
+from llmwiki._frontmatter import parse_frontmatter
+from llmwiki.claude_path import resolve_claude_path as _resolve_claude_path
 from llmwiki.htmlmd import html_to_markdown
 from llmwiki.slugs import derive_title, first_heading, slugify
+from llmwiki.synth.pipeline import _normalise_slug
 
 __all__ = [
     "AddError",
@@ -358,11 +364,6 @@ def _ocr_image(path: Path, timeout: int = 300) -> str:
     name, and claude runs with that dir as its working directory + read
     scope (``--add-dir``), so a crafted filename or in-image instruction
     can't steer a read of an arbitrary file."""
-    import shutil
-    import subprocess
-    import tempfile
-
-    from llmwiki.build import _resolve_claude_path
 
     claude = _resolve_claude_path(None)
     if claude is None:
@@ -584,7 +585,7 @@ def _quality_ok(text: str, html: str) -> bool:
 
 def _has_trafilatura() -> bool:
     try:
-        import trafilatura  # noqa: F401
+        import trafilatura  # noqa: F401, PLC0415 — optional extra
     except ImportError:
         return False
     return True
@@ -596,7 +597,7 @@ def _extract_html(html: str) -> tuple[str, str, str]:
     writer can record which produced the doc — stdlib output on div-soup
     sites is nav-only and prunable later."""
     try:
-        import trafilatura
+        import trafilatura  # noqa: PLC0415 — optional extra
     except ImportError:
         title, md = html_to_markdown(html)
         return title, md, "stdlib"
@@ -631,7 +632,7 @@ def _extract_html(html: str) -> tuple[str, str, str]:
 def _default_renderer() -> object | None:
     """Playwright-backed renderer, or None when playwright is absent."""
     try:
-        from playwright.sync_api import sync_playwright
+        from playwright.sync_api import sync_playwright  # noqa: PLC0415 — optional extra or lazy load
     except ImportError:
         return None
 
@@ -774,7 +775,6 @@ def find_existing_by_hash(docs_dir: Path, content_hash: str) -> str | None:
     """Return ``project/slug`` for a raw/docs file with this hash, or None."""
     if not docs_dir.is_dir():
         return None
-    from llmwiki._frontmatter import parse_frontmatter
 
     for path in sorted(docs_dir.rglob("*.md")):
         try:
@@ -989,8 +989,6 @@ def expected_source_page(raw_doc: Path, wiki_sources_dir: Path) -> Path:
     """Where ``synthesize_new_sessions`` writes this raw doc's wiki page:
     ``wiki/sources/<project>/<date>-<slug>.md`` (G-06 date prefix). Used
     by the add CLI to verify synthesis actually produced a page."""
-    from llmwiki._frontmatter import parse_frontmatter
-    from llmwiki.synth.pipeline import _normalise_slug
 
     try:
         meta, _body = parse_frontmatter(raw_doc.read_text(encoding="utf-8"))

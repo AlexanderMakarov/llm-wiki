@@ -4,7 +4,15 @@ from __future__ import annotations
 
 import pytest
 
-from llmwiki.synth.claude_cli import ClaudeCLIError, ClaudeCLISynthesizer
+from llmwiki.synth.base import split_prompt_template
+from llmwiki.synth.claude_cli import (
+    DEFAULT_CLAUDE_TIMEOUT,
+    DEFAULT_OVERVIEW_MODEL,
+    ClaudeCLIError,
+    ClaudeCLISynthesizer,
+    overview_argv,
+    resolve_overview_model,
+)
 from llmwiki.synth.pipeline import resolve_backend
 
 TEMPLATE = "Summarize:\n{body}\nMeta:\n{meta}\n"
@@ -129,7 +137,6 @@ _SPLIT_TEMPLATE = (
 
 
 def test_split_prompt_template_separates_stable_from_per_page():
-    from llmwiki.synth.base import split_prompt_template
     stable, per_page = split_prompt_template(_SPLIT_TEMPLATE)
     assert "Format rules here." in stable
     assert "<topic" in stable
@@ -142,7 +149,6 @@ def test_split_prompt_template_separates_stable_from_per_page():
 
 def test_split_prompt_template_tolerates_a_custom_template():
     """No marker → everything stays in the user prompt, nothing is lost."""
-    from llmwiki.synth.base import split_prompt_template
     stable, per_page = split_prompt_template("Just do it: {body}")
     assert stable == ""
     assert per_page == "Just do it: {body}"
@@ -174,11 +180,6 @@ def test_custom_template_still_gets_a_system_prompt(tmp_path):
 
 
 def test_overview_model_is_configurable_not_hardcoded():
-    from llmwiki.synth.claude_cli import (
-        DEFAULT_OVERVIEW_MODEL,
-        overview_argv,
-        resolve_overview_model,
-    )
     assert resolve_overview_model({}) == DEFAULT_OVERVIEW_MODEL
     assert resolve_overview_model(
         {"synthesis": {"overview_model": "sonnet"}}
@@ -202,7 +203,6 @@ def test_claude_timeout_is_not_the_shared_ollama_key():
     pages take 19-37s, so a long transcript would fail on a setting the user
     never aimed at this backend.
     """
-    from llmwiki.synth.claude_cli import DEFAULT_CLAUDE_TIMEOUT
     base = {"backend": "claude", "claude_path": "/nonexistent/claude"}
     assert resolve_backend(
         {"synthesis": {**base, "timeout": 60}}

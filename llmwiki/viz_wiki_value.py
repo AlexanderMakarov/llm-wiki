@@ -8,6 +8,7 @@ from __future__ import annotations
 import html
 from typing import Any
 
+from llmwiki.render.collapse_section import collapse_section_list
 from llmwiki.usage import UNATTRIBUTED, is_entity_tool, value_summary
 
 
@@ -224,7 +225,6 @@ def render_wiki_value_section(
 
     dead_block = ""
     if dead_stock_total or dead_stock:
-        from llmwiki.render.collapse_section import collapse_section_list
 
         items = [
             f"<li><code>{html.escape(p)}</code></li>" for p in dead_stock

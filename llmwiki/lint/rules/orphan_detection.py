@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 
+from llmwiki._system_pages import SYSTEM_PAGE_SLUGS
 from llmwiki.lint import WIKILINK_RE, LintRule, register
 from llmwiki.lint.rules._helpers import _page_slug, _resolve_index_href
 
@@ -43,7 +44,6 @@ class OrphanDetection(LintRule):
         # an orphan in one rule while exempt in another (it WAS being
         # flagged here even though MetadataValidator's EXEMPT_FILES
         # already exempted it from the strict title/type check).
-        from llmwiki._system_pages import SYSTEM_PAGE_SLUGS
         issues = []
         for rel in pages:
             slug = _page_slug(rel)

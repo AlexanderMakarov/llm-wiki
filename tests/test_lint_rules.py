@@ -2,25 +2,35 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
 
-from llmwiki.lint import load_pages, run_all, summarize, REGISTRY
+from llmwiki.lint import (
+    REGISTRY,
+    load_pages,
+    rules,  # noqa: F401
+    run_all,
+    summarize,
+)
 from llmwiki.lint.rules import (
+    ClaimVerification,
+    ContentFreshness,
+    ContradictionDetection,
+    DuplicateDetection,
+    EntityConsistency,
     FrontmatterCompleteness,
     FrontmatterValidity,
+    IndexSync,
     LinkIntegrity,
     OrphanDetection,
-    ContentFreshness,
-    EntityConsistency,
-    DuplicateDetection,
-    IndexSync,
-    ContradictionDetection,
-    ClaimVerification,
+    StaleCandidates,
     SummaryAccuracy,
+    _normalise_tool_counts_keys,
+    _normalise_tools_used,
+    _resolve_index_href,
 )
-
 
 # ─── Fixtures ──────────────────────────────────────────────────────────
 
@@ -41,12 +51,10 @@ def test_all_14_rules_registered():
     # + tools_consistency (issues.md #4)
     # + stub_source_pages (#24)
     # cache_tier_consistency removed (cache_tiers module deleted)
-    from llmwiki.lint import rules  # noqa: F401
     assert len(REGISTRY) == 17
 
 
 def test_registered_rule_names():
-    from llmwiki.lint import rules  # noqa: F401
     expected = {
         "frontmatter_completeness",
         "frontmatter_validity",
@@ -78,7 +86,6 @@ def test_stale_candidates_rule_runs_without_nameerror(tmp_path: Path):
     the GH Actions seeded-wiki job failed). Keep this test — if the
     import is dropped again it reproduces immediately.
     """
-    from llmwiki.lint.rules import StaleCandidates
 
     # Build one page that looks like it came from load_pages()
     wiki = tmp_path / "wiki"
@@ -309,16 +316,14 @@ def test_index_markdown_link_clears_orphan():
 
 
 def test_fresh_page():
-    from datetime import datetime, timezone, timedelta
-    recent = (datetime.now(timezone.utc) - timedelta(days=10)).strftime("%Y-%m-%d")
+    recent = (datetime.now(UTC) - timedelta(days=10)).strftime("%Y-%m-%d")
     pages = {"a.md": _mk_page({"title": "A", "last_updated": recent}, "")}
     issues = ContentFreshness().run(pages)
     assert issues == []
 
 
 def test_stale_page():
-    from datetime import datetime, timezone, timedelta
-    old = (datetime.now(timezone.utc) - timedelta(days=100)).strftime("%Y-%m-%d")
+    old = (datetime.now(UTC) - timedelta(days=100)).strftime("%Y-%m-%d")
     pages = {"a.md": _mk_page({"title": "A", "last_updated": old}, "")}
     issues = ContentFreshness().run(pages)
     assert len(issues) == 1
@@ -542,7 +547,6 @@ def test_index_dead_link_with_anchor_still_flagged():
 
 def test_resolve_index_href_unit():
     """Direct unit test for the href resolver covering the matrix."""
-    from llmwiki.lint.rules import _resolve_index_href
     assert _resolve_index_href("entities/Foo.md") == "entities/Foo.md"
     assert _resolve_index_href("./entities/Foo.md") == "entities/Foo.md"
     assert _resolve_index_href("entities/Foo.md#section") == "entities/Foo.md"
@@ -886,7 +890,6 @@ def test_tools_consistency_skips_unsupported_types():
 
 def test_tools_consistency_unit_normalise_tools_used():
     """Direct unit test for the helper — covers the type matrix in one shot."""
-    from llmwiki.lint.rules import _normalise_tools_used
     assert _normalise_tools_used(None) == set()
     assert _normalise_tools_used("") == set()
     assert _normalise_tools_used([]) == set()
@@ -901,7 +904,6 @@ def test_tools_consistency_unit_normalise_tools_used():
 
 
 def test_tools_consistency_unit_normalise_tool_counts_keys():
-    from llmwiki.lint.rules import _normalise_tool_counts_keys
     assert _normalise_tool_counts_keys(None) == set()
     assert _normalise_tool_counts_keys("") == set()
     assert _normalise_tool_counts_keys({}) == set()

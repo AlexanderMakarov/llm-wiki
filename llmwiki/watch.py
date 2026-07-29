@@ -21,10 +21,9 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Any
 
 from llmwiki import REPO_ROOT
-from llmwiki.adapters import REGISTRY, discover_adapters
+from llmwiki.adapters import REGISTRY, discover_adapters, resolve_adapter_name
 
 
 def scan_mtimes(adapters: list[str] | None) -> dict[str, float]:
@@ -35,7 +34,6 @@ def scan_mtimes(adapters: list[str] | None) -> dict[str, float]:
     if adapters:
         # #v1378-review: alias-aware resolution; aliases no longer
         # live in REGISTRY itself.
-        from llmwiki.adapters import resolve_adapter_name
         for name in adapters:
             canonical = resolve_adapter_name(name)
             if canonical is not None:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from llmwiki.candidates import candidates_dir, stale_candidates
 from llmwiki.lint import LintRule, register
 
 
@@ -21,7 +22,6 @@ class StaleCandidates(LintRule):
     STALE_DAYS = 30
 
     def run(self, pages, *, llm_callback=None):
-        from llmwiki.candidates import candidates_dir, stale_candidates
         # load_pages gives us the real wiki dir from page[path]
         issues = []
         if not pages:

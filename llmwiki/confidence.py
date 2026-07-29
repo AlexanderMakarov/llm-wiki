@@ -23,9 +23,7 @@ Content-type decay (Ebbinghaus-inspired half-lives):
 
 from __future__ import annotations
 
-import math
-from datetime import datetime, timezone
-from typing import Any, Optional
+from datetime import UTC, datetime
 
 # ─── Factor 1: Source Count ────────────────────────────────────────────
 
@@ -70,9 +68,9 @@ def avg_source_quality(qualities: list[str]) -> float:
 # ─── Factor 3: Recency ────────────────────────────────────────────────
 
 def recency_score(
-    last_updated: Optional[str],
+    last_updated: str | None,
     *,
-    now: Optional[datetime] = None,
+    now: datetime | None = None,
 ) -> float:
     """Return a score in [0.0, 1.0] based on how recently the page was updated.
 
@@ -88,11 +86,11 @@ def recency_score(
     try:
         dt = datetime.fromisoformat(last_updated)
         if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
+            dt = dt.replace(tzinfo=UTC)
     except (ValueError, TypeError):
         return 0.3
 
-    ref = now or datetime.now(timezone.utc)
+    ref = now or datetime.now(UTC)
     age_days = (ref - dt).days
     if age_days < 0:
         return 1.0
@@ -123,10 +121,10 @@ def cross_reference_score(inbound_links: int) -> float:
 def compute_confidence(
     *,
     source_count: int = 1,
-    source_qualities: Optional[list[str]] = None,
-    last_updated: Optional[str] = None,
+    source_qualities: list[str] | None = None,
+    last_updated: str | None = None,
     inbound_links: int = 0,
-    now: Optional[datetime] = None,
+    now: datetime | None = None,
 ) -> float:
     """Compute the 4-factor confidence score.
 

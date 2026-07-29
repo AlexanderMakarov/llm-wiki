@@ -11,8 +11,22 @@ working for any test or caller that reached for it.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Any, Optional
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
+
+from llmwiki._frontmatter import is_headless as _is_headless
+from llmwiki._frontmatter import is_subagent as _is_subagent
+from llmwiki.agent_label import detect_agent_label
+from llmwiki.cache import (
+    CACHE_WRITE_1H_MULTIPLIER,
+    DEFAULT_MODEL,
+    MODEL_PRICING,
+    TRANSCRIPT_CHARS_PER_TOKEN,
+    estimate_tokens,
+    resolve_pricing_model,
+)
+from llmwiki.config_schedule import _load_sessions_config
 
 # ─── Measured per-call constants for the `claude` CLI backend ──────────
 #
@@ -43,7 +57,7 @@ DEFAULT_OUTPUT_TOKENS = 1400
 BODY_CHAR_CAP = 8000
 
 
-def _rendered_template_tokens(wiki_sources_dir: Optional[Any] = None) -> int:
+def _rendered_template_tokens(wiki_sources_dir: Any | None = None) -> int:
     """Tokens in the prompt template as actually sent, vocabulary included.
 
     The `{vocabulary}` block is expanded from the wiki's canonical topics
@@ -51,20 +65,20 @@ def _rendered_template_tokens(wiki_sources_dir: Optional[Any] = None) -> int:
     the un-expanded template if the wiki can't be read — an estimate that
     is slightly low beats one that raises.
     """
-    from pathlib import Path as _Path
 
-    from llmwiki.cache import TRANSCRIPT_CHARS_PER_TOKEN, estimate_tokens
-
-    tmpl_path = _Path(__file__).resolve().parent / "prompts" / "source_page.md"
+    tmpl_path = Path(__file__).resolve().parent / "prompts" / "source_page.md"
     try:
         template = tmpl_path.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError):
         return 0
     try:
-        from llmwiki.synth.pipeline import WIKI_SOURCES, _inject_vocabulary
+        from llmwiki.synth.pipeline import (  # noqa: PLC0415 — cycle: synth.pipeline↔synth.estimate
+            WIKI_SOURCES,
+            _inject_vocabulary,
+        )
 
         wiki_dir = (
-            _Path(wiki_sources_dir).parent
+            Path(wiki_sources_dir).parent
             if wiki_sources_dir is not None
             else WIKI_SOURCES.parent
         )
@@ -79,20 +93,20 @@ def _rendered_template_tokens(wiki_sources_dir: Optional[Any] = None) -> int:
 
 def synthesize_estimate_report(
     *,
-    raw_sessions: Optional[list[tuple[Any, dict, str]]] = None,
-    state_keys: Optional[set[str]] = None,
-    prefix_tokens: Optional[int] = None,
+    raw_sessions: list[tuple[Any, dict, str]] | None = None,
+    state_keys: set[str] | None = None,
+    prefix_tokens: int | None = None,
     output_tokens_per_call: int = DEFAULT_OUTPUT_TOKENS,
-    model: Optional[str] = None,
-    synthesized_source_keys: Optional[set[str]] = None,
-    wiki_sources_dir: Optional[Any] = None,
-    raw_root: Optional[Any] = None,
-    docs_root: Optional[Any] = None,
-    pricing_table: Optional[dict[str, dict[str, float]]] = None,
-    include_subagents: Optional[str] = None,
+    model: str | None = None,
+    synthesized_source_keys: set[str] | None = None,
+    wiki_sources_dir: Any | None = None,
+    raw_root: Any | None = None,
+    docs_root: Any | None = None,
+    pricing_table: dict[str, dict[str, float]] | None = None,
+    include_subagents: str | None = None,
     exclude_headless: bool | None = None,
     lean: bool = True,
-    template_tokens: Optional[int] = None,
+    template_tokens: int | None = None,
 ) -> dict:
     """Compute the incremental vs full-force cost report (G-07 · #293).
 
@@ -125,19 +139,7 @@ def synthesize_estimate_report(
     Any of the args can be injected for tests; the default reads from
     disk and is what the CLI invokes.
     """
-    from llmwiki.cache import (
-        MODEL_PRICING,
-        CACHE_WRITE_1H_MULTIPLIER,
-        DEFAULT_MODEL,
-        TRANSCRIPT_CHARS_PER_TOKEN,
-        resolve_pricing_model,
-        estimate_tokens,
-    )
-    from pathlib import Path as _Path
-    from llmwiki.synth.pipeline import (
-        RAW_SESSIONS as _RAW_DEFAULT,
-        RAW_DOCS as _RAW_DOCS_DEFAULT,
-        WIKI_SOURCES as _WIKI_SOURCES,
+    from llmwiki.synth.pipeline import (  # noqa: PLC0415 — cycle: synth.pipeline↔synth.estimate
         _DOC_CHUNK_MAX_CHARS,
         _chunk_markdown,
         _discover_raw_docs,
@@ -147,6 +149,15 @@ def synthesize_estimate_report(
         discover_synth_source_keys,
         page_is_stub,
         synth_page_filename,
+    )
+    from llmwiki.synth.pipeline import (  # noqa: PLC0415 — cycle: synth.pipeline↔synth.estimate
+        RAW_DOCS as _RAW_DOCS_DEFAULT,
+    )
+    from llmwiki.synth.pipeline import (  # noqa: PLC0415 — cycle: synth.pipeline↔synth.estimate
+        RAW_SESSIONS as _RAW_DEFAULT,
+    )
+    from llmwiki.synth.pipeline import (  # noqa: PLC0415 — cycle: synth.pipeline↔synth.estimate
+        WIKI_SOURCES as _WIKI_SOURCES,
     )
 
     chosen_model = model or DEFAULT_MODEL
@@ -182,8 +193,7 @@ def synthesize_estimate_report(
     # are not synthesis backlog — the parent session's synthesis already covers
     # them. Drop them from the whole estimate so `new`, `unsynth_items`, and
     # full-force cost all reflect the sessions actually eligible for synthesis.
-    from llmwiki._frontmatter import is_subagent as _is_subagent
-    from llmwiki.synth.pipeline import (
+    from llmwiki.synth.pipeline import (  # noqa: PLC0415 — cycle: synth.pipeline↔synth.estimate
         DEFAULT_INCLUDE_SUBAGENTS,
         INCLUDE_SUBAGENTS_MODES,
     )
@@ -203,10 +213,8 @@ def synthesize_estimate_report(
     # every synthesis pass manufactures more of them. `exclude_headless`
     # blocks them at ingest; drop any that predate the filter here too, so
     # the estimate and `synthesize` agree on what is eligible.
-    from llmwiki._frontmatter import is_headless as _is_headless
-    from llmwiki.synth.pipeline import resolve_exclude_headless
+    from llmwiki.synth.pipeline import resolve_exclude_headless  # noqa: PLC0415 — cycle: synth.pipeline↔synth.estimate
     if exclude_headless is None:
-        from llmwiki.config_schedule import _load_sessions_config
         drop_headless = resolve_exclude_headless(_load_sessions_config())
     else:
         drop_headless = bool(exclude_headless)
@@ -223,12 +231,12 @@ def synthesize_estimate_report(
         if synthesized_source_keys is not None
         else discover_synth_source_keys()
     )
-    sources_root = _Path(wiki_sources_dir) if wiki_sources_dir is not None else _WIKI_SOURCES
+    sources_root = Path(wiki_sources_dir) if wiki_sources_dir is not None else _WIKI_SOURCES
     # #24: a source whose page is a stub is backlog. The page names its own
     # source, so this holds for pages a derived filename would not find.
     stub_source_keys = discover_stub_source_keys(sources_root)
-    raw_root_path = _Path(raw_root) if raw_root is not None else _RAW_DEFAULT
-    docs_root_path = _Path(docs_root) if docs_root is not None else _RAW_DOCS_DEFAULT
+    raw_root_path = Path(raw_root) if raw_root is not None else _RAW_DEFAULT
+    docs_root_path = Path(docs_root) if docs_root is not None else _RAW_DOCS_DEFAULT
     if state_keys is None:
         state_keys = set(_load_state().keys())
 
@@ -329,7 +337,6 @@ def synthesize_estimate_report(
 
     # Lazy import — estimate is imported from CLI paths that may not need
     # the full build module until this walk runs.
-    from llmwiki.build import detect_agent_label
 
     for p, _meta, body in raw_sessions:
         meta = _meta if isinstance(_meta, dict) else {}
@@ -387,7 +394,7 @@ def synthesize_estimate_report(
             mtime_iso = ""
             try:
                 mtime_iso = datetime.fromtimestamp(
-                    _Path(p).stat().st_mtime, tz=timezone.utc
+                    Path(p).stat().st_mtime, tz=UTC
                 ).strftime("%Y-%m-%dT%H:%M:%SZ")
             except (OSError, TypeError, ValueError):
                 # Tests inject Path-ish stubs without a real filesystem path.
@@ -441,7 +448,7 @@ def synthesize_estimate_report(
             mtime_iso = ""
             try:
                 mtime_iso = datetime.fromtimestamp(
-                    _Path(p).stat().st_mtime, tz=timezone.utc
+                    Path(p).stat().st_mtime, tz=UTC
                 ).strftime("%Y-%m-%dT%H:%M:%SZ")
             except (OSError, TypeError, ValueError):
                 pass

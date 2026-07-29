@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from llmwiki.render import js
 from llmwiki.state_store import (
     configure_state_file,
     get_state_file,
@@ -53,7 +54,6 @@ def test_update_state_increments_revision(tmp_path: Path):
 
 
 def test_queue_trace_js_has_no_fetch():
-    from llmwiki.render import js
 
     idx = js.JS.index("renderStateWidget")
     chunk = js.JS[idx : idx + 1200]
@@ -61,7 +61,6 @@ def test_queue_trace_js_has_no_fetch():
 
 
 def test_queue_trace_js_renders_state_widget():
-    from llmwiki.render import js
 
     assert "renderStateWidget" in js.JS
     assert "state-pipeline-table" in js.JS

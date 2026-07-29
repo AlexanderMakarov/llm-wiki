@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 # Accept LF, CRLF, or CR after each fence so Windows-authored (CRLF) and
 # old-Mac (CR) files parse identically to LF input. The optional newline
@@ -126,7 +126,7 @@ def parse_frontmatter_dict(text: str) -> dict[str, Any]:
     return parse_frontmatter(text)[0]
 
 
-def parse_frontmatter_or_none(text: str) -> tuple[Optional[str], str]:
+def parse_frontmatter_or_none(text: str) -> tuple[str | None, str]:
     """Return ``(raw_frontmatter_text | None, body)`` — legacy shape
     used by ``llmwiki/tags.py`` which does its own line-level parsing
     inside the frontmatter block."""

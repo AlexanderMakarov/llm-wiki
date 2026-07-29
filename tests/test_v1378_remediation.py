@@ -7,9 +7,7 @@ PR can't silently regress them.
 
 from __future__ import annotations
 
-import argparse
 import re
-from pathlib import Path
 
 import pytest
 
@@ -22,7 +20,6 @@ from llmwiki.adapters import (
     register,
     resolve_adapter_name,
 )
-
 
 # ─── Fix #1 — REGISTRY canonical-only; aliases live separately ───────
 

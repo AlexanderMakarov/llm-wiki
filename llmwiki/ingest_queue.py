@@ -27,12 +27,11 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Optional
 
 from llmwiki.state_store import read_state, resolve_state_file, update_state
 
 
-def _load(queue_file: Optional[Path] = None) -> list[str]:
+def _load(queue_file: Path | None = None) -> list[str]:
     """Load legacy ingest-pending paths from unified state (or flat JSON array)."""
     qf = resolve_state_file(queue_file)
     if not qf.exists():
@@ -55,7 +54,7 @@ def _load(queue_file: Optional[Path] = None) -> list[str]:
     return sorted({str(p) for p in rows if isinstance(p, str)})
 
 
-def _save(items: list[str], queue_file: Optional[Path] = None) -> None:
+def _save(items: list[str], queue_file: Path | None = None) -> None:
     """Save legacy ingest-pending paths into unified state."""
     qf = resolve_state_file(queue_file)
     deduped = sorted(set(items))
@@ -68,7 +67,7 @@ def _save(items: list[str], queue_file: Optional[Path] = None) -> None:
 def enqueue(
     paths: list[str],
     *,
-    queue_file: Optional[Path] = None,
+    queue_file: Path | None = None,
 ) -> int:
     """Add paths to the pending ingest queue.
 
@@ -80,7 +79,7 @@ def enqueue(
     return len(combined)
 
 
-def dequeue(*, queue_file: Optional[Path] = None) -> list[str]:
+def dequeue(*, queue_file: Path | None = None) -> list[str]:
     """Return all pending paths and clear the queue.
 
     This is the consume operation — after calling this, the queue
@@ -91,16 +90,16 @@ def dequeue(*, queue_file: Optional[Path] = None) -> list[str]:
     return items
 
 
-def peek(*, queue_file: Optional[Path] = None) -> list[str]:
+def peek(*, queue_file: Path | None = None) -> list[str]:
     """Return pending paths without consuming them."""
     return _load(queue_file)
 
 
-def clear(*, queue_file: Optional[Path] = None) -> None:
+def clear(*, queue_file: Path | None = None) -> None:
     """Clear the queue without reading."""
     _save([], resolve_state_file(queue_file))
 
 
-def queue_size(*, queue_file: Optional[Path] = None) -> int:
+def queue_size(*, queue_file: Path | None = None) -> int:
     """Return the number of pending items."""
     return len(_load(queue_file))

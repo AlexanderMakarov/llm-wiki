@@ -5,18 +5,15 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
-
 from llmwiki.adapters.contrib.chatgpt import (
     ChatGPTAdapter,
+    _content_parts,
+    _fmt_ts,
     _linearize,
     _role,
-    _content_parts,
     parse_conversations_json,
     render_conversation_markdown,
-    _fmt_ts,
 )
-
 
 # ─── Fixtures ──────────────────────────────────────────────────────────
 

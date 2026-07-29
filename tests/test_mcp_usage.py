@@ -10,6 +10,8 @@ import json
 from pathlib import Path
 
 from llmwiki import usage
+from llmwiki.mcp import server
+from llmwiki.usage import ENTITY_TOOLS, aggregate, is_entity_tool, merge_aggregates
 
 
 def _read_lines(p: Path) -> list[dict]:
@@ -232,7 +234,6 @@ def test_combined_totals_joins_rollup_and_live(tmp_path: Path):
 # ─── Server integration: handle_tools_call telemetry ──────────────────────
 
 def _reset_server_telemetry():
-    from llmwiki.mcp import server
     server._RECORDERS.clear()
     return server
 
@@ -380,7 +381,6 @@ def test_hits_channel_stripped_from_client_result(tmp_path: Path, monkeypatch):
 # ─── Task 1: items_returned ───────────────────────────────────────────────
 
 def test_items_returned_counts_only_entity_tools():
-    from llmwiki.usage import aggregate, ENTITY_TOOLS, is_entity_tool
     records = [
         {"tool": "wiki_search", "hits": 5, "caller_project": "p", "caller_source": "client-root", "server_pid": 1, "server_started": "s1"},
         {"tool": "wiki_query", "hits": 3, "caller_project": "p", "caller_source": "client-root", "server_pid": 1, "server_started": "s1"},
@@ -396,7 +396,6 @@ def test_items_returned_counts_only_entity_tools():
     assert agg["per_project"]["p"]["items_returned"] == 8
 
 def test_entity_tool_classification():
-    from llmwiki.usage import ENTITY_TOOLS, is_entity_tool
     assert is_entity_tool("wiki_search") is True
     assert is_entity_tool("wiki_dashboard") is False
     assert "wiki_confidence" in ENTITY_TOOLS and "wiki_sync" not in ENTITY_TOOLS
@@ -405,7 +404,6 @@ def test_entity_tool_classification():
 # ─── Task 2: server_processes ─────────────────────────────────────────────
 
 def test_server_processes_counts_distinct_pairs():
-    from llmwiki.usage import aggregate
     records = [
         {"tool": "wiki_search", "caller_project": "a", "caller_source": "client-root", "server_pid": 1, "server_started": "s1"},
         {"tool": "wiki_search", "caller_project": "a", "caller_source": "client-root", "server_pid": 1, "server_started": "s1"},  # same proc
@@ -418,7 +416,6 @@ def test_server_processes_counts_distinct_pairs():
     assert agg["total_server_processes"] == 3
 
 def test_merge_sums_server_processes_and_legacy_rollup_defaults_zero():
-    from llmwiki.usage import aggregate, merge_aggregates
     live = aggregate([
         {"tool": "wiki_search", "caller_project": "a", "caller_source": "client-root", "server_pid": 9, "server_started": "s9"},
     ])
@@ -437,7 +434,6 @@ def test_merge_sums_server_processes_and_legacy_rollup_defaults_zero():
 # ─── Task 9: per_project_tool breakdown ────────────────────────────────────
 
 def test_per_project_tool_breakdown():
-    from llmwiki.usage import aggregate
     records = [
         {"tool": "wiki_search", "hits": 5, "caller_project": "a", "caller_source": "client-root", "server_pid": 1, "server_started": "s1"},
         {"tool": "wiki_search", "hits": 2, "caller_project": "a", "caller_source": "client-root", "server_pid": 1, "server_started": "s1"},
@@ -450,7 +446,6 @@ def test_per_project_tool_breakdown():
     assert agg["per_project_tool"]["b"]["wiki_query"] == {"calls": 1, "items_returned": 4}
 
 def test_merge_sums_per_project_tool_and_legacy_defaults_empty():
-    from llmwiki.usage import aggregate, merge_aggregates
     live = aggregate([
         {"tool": "wiki_search", "hits": 3, "caller_project": "a", "caller_source": "client-root", "server_pid": 9, "server_started": "s9"},
     ])

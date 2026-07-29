@@ -30,9 +30,14 @@ from __future__ import annotations
 
 import html
 import re
+import subprocess
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Optional
+
+from llmwiki import PACKAGE_ROOT
+from llmwiki import __version__ as _llmwiki_version
+from llmwiki.config_schedule import _load_sessions_config
 
 # ─── Frontmatter parsing ─────────────────────────────────────────────
 
@@ -123,7 +128,7 @@ def iter_docs_pages(
         )
 
 
-def _first_h1(body: str) -> Optional[str]:
+def _first_h1(body: str) -> str | None:
     match = re.search(r"^#\s+(.+)$", body, re.MULTILINE)
     return match.group(1).strip() if match else None
 
@@ -159,7 +164,7 @@ def _inline_markdown(text: str) -> str:
     return safe
 
 
-def render_meta_strip(body: str) -> Optional[str]:
+def render_meta_strip(body: str) -> str | None:
     """Turn the tutorial's opening ``**Time: …**`` / ``**You'll need: …**``
     / ``**Result: …**`` lines into a ``<dl class="docs-meta">`` strip.
 
@@ -241,7 +246,6 @@ def resolve_github_repo() -> str:
     so CHANGELOG / edit-on-GitHub / source-code links point at their repo.
     """
     try:
-        from llmwiki.config_schedule import _load_sessions_config
         site = _load_sessions_config().get("site") or {}
         configured = str(site.get("github_repo") or "").strip()
         if configured:
@@ -249,9 +253,6 @@ def resolve_github_repo() -> str:
     except (OSError, ValueError, TypeError, ImportError):
         pass
     try:
-        import subprocess
-
-        from llmwiki import PACKAGE_ROOT
         raw = subprocess.run(
             ["git", "remote", "get-url", "origin"],
             cwd=PACKAGE_ROOT.parent,
@@ -287,7 +288,7 @@ _GITHUB_BLOB_URL = f"https://github.com/{_DEFAULT_GITHUB_REPO}/blob/master"
 _GITHUB_EDIT_BASE = f"https://github.com/{_DEFAULT_GITHUB_REPO}/edit/master/docs"
 
 
-def _tutorial_seq(pages: list["DocsPage"]) -> list["DocsPage"]:
+def _tutorial_seq(pages: list[DocsPage]) -> list[DocsPage]:
     """Return numbered tutorial pages (``docs/tutorials/NN-*.md``) sorted
     by their leading two-digit prefix.  Used for prev/next wiring (#282)."""
     tuts = []
@@ -336,8 +337,8 @@ def _tutorial_toc_html(body: str) -> str:
 
 
 def _tutorial_footer_html(
-    current: "DocsPage",
-    all_pages: list["DocsPage"],
+    current: DocsPage,
+    all_pages: list[DocsPage],
     docs_rel_from_page: str,
 ) -> str:
     """Build the prev/next footer + edit-on-GitHub link shown at the
@@ -425,7 +426,6 @@ def compile_docs_site(
     # (inside the loop instead of at module load) keeps the docs_pages
     # module cheap to import. GitHub placeholders follow the same
     # pattern so forks point CHANGELOG / issues at their own repo.
-    from llmwiki import __version__ as _llmwiki_version
     _gh_repo = resolve_github_repo()
     _gh_blob = github_blob_url()
     _gh_home = f"https://github.com/{_gh_repo}"
@@ -675,17 +675,14 @@ def strip_dead_session_refs(html_body: str) -> str:
     stays visible (users still see the filename that was referenced)
     but the link is gone, so the compiled site stops reporting a 404.
     """
-    # Lazy import to avoid a hard markdown dep at module import time.
-    import re as _re
-
     # Match anchors we'd otherwise route.  Skip anchors already rewritten
     # to absolute URLs (github.com / external).
-    anchor_re = _re.compile(
+    anchor_re = re.compile(
         r'<a\s+([^>]*?)href="([^"]+)"([^>]*)>(.*?)</a>',
-        _re.IGNORECASE | _re.DOTALL,
+        re.IGNORECASE | re.DOTALL,
     )
 
-    def _sub(m: _re.Match) -> str:
+    def _sub(m: re.Match) -> str:
         href, inner = m.group(2), m.group(4)
         # Respect absolute + mailto + in-page anchors — they're never dead.
         if href.startswith(("http:", "https:", "mailto:", "#")):
@@ -694,8 +691,7 @@ def strip_dead_session_refs(html_body: str) -> str:
             return m.group(0)
         # Preserve the inner text; drop the anchor.  Add title attribute
         # so hover reveals what the original href was.
-        import html as _html
-        title = _html.escape(href)
+        title = html.escape(href)
         return (
             f'<span class="session-ref dead-link" title="session-local ref: {title}">'
             f'{inner}</span>'

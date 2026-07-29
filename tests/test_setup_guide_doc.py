@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-import pytest
-
 from llmwiki import REPO_ROOT
-
 
 GUIDE = REPO_ROOT / "docs" / "tutorials" / "setup-guide.md"
 

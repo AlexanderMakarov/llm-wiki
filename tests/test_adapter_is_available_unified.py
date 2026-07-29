@@ -22,7 +22,6 @@ from llmwiki.adapters import REGISTRY
 from llmwiki.adapters.base import BaseAdapter
 from llmwiki.adapters.claude_code import ClaudeCodeAdapter
 
-
 # Force-load every contrib adapter so the registry is populated.
 for mod in (
     "llmwiki.adapters.codex_cli",

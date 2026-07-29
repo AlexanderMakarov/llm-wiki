@@ -5,19 +5,15 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-
-
 from llmwiki.mcp.server import (
-    TOOLS,
     TOOL_IMPLS,
+    TOOLS,
+    tool_wiki_category_browse,
     tool_wiki_confidence,
-    tool_wiki_lifecycle,
     tool_wiki_dashboard,
     tool_wiki_entity_search,
-    tool_wiki_category_browse,
+    tool_wiki_lifecycle,
 )
-
 
 # ─── Registration ─────────────────────────────────────────────────────
 

@@ -2,30 +2,34 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
+from llmwiki import REPO_ROOT
 from llmwiki.candidates import (
-    CANDIDATES_DIR_NAME,
     ARCHIVE_DIR_NAME,
-    MIRRORED_SUBDIRS,
+    CANDIDATES_DIR_NAME,
     DEFAULT_STALE_DAYS,
-    Candidate,
-    is_candidate,
-    candidates_dir,
-    archive_dir,
-    list_candidates,
-    promote,
-    merge,
-    discard,
-    stale_candidates,
-    _parse_frontmatter,
+    MIRRORED_SUBDIRS,
     _age_days,
+    _parse_frontmatter,
     _rewrite_status,
+    archive_dir,
+    candidates_dir,
+    discard,
+    is_candidate,
+    list_candidates,
+    merge,
+    promote,
+    stale_candidates,
 )
-
+from llmwiki.cli import build_parser
+from llmwiki.lint import (
+    REGISTRY,
+    rules,  # noqa: F401
+)
 
 # ─── Fixtures ──────────────────────────────────────────────────────────
 
@@ -140,7 +144,7 @@ def test_list_includes_body_preview(tmp_path: Path):
 def test_list_computes_age_days(tmp_path: Path):
     wiki = _mk_wiki(tmp_path)
     _write_candidate(wiki, "entities", "Old", date="2026-04-01")
-    now = datetime(2026, 4, 17, tzinfo=timezone.utc)
+    now = datetime(2026, 4, 17, tzinfo=UTC)
     items = list_candidates(wiki, now=now)
     assert items[0]["age_days"] == 16
 
@@ -265,7 +269,7 @@ def test_stale_returns_only_old_candidates(tmp_path: Path):
     wiki = _mk_wiki(tmp_path)
     _write_candidate(wiki, "entities", "Old", date="2026-01-01")
     _write_candidate(wiki, "entities", "New", date="2026-04-15")
-    now = datetime(2026, 4, 17, tzinfo=timezone.utc)
+    now = datetime(2026, 4, 17, tzinfo=UTC)
     stale = stale_candidates(wiki, threshold_days=30, now=now)
     assert len(stale) == 1
     assert stale[0]["slug"] == "Old"
@@ -274,7 +278,7 @@ def test_stale_returns_only_old_candidates(tmp_path: Path):
 def test_stale_custom_threshold(tmp_path: Path):
     wiki = _mk_wiki(tmp_path)
     _write_candidate(wiki, "entities", "Medium", date="2026-04-05")
-    now = datetime(2026, 4, 17, tzinfo=timezone.utc)
+    now = datetime(2026, 4, 17, tzinfo=UTC)
     # age = 12 days; threshold 10 → stale; threshold 30 → not stale
     assert len(stale_candidates(wiki, threshold_days=10, now=now)) == 1
     assert len(stale_candidates(wiki, threshold_days=30, now=now)) == 0
@@ -304,7 +308,7 @@ def test_age_days_invalid_returns_zero():
 
 
 def test_age_days_computes_correctly():
-    now = datetime(2026, 4, 17, tzinfo=timezone.utc)
+    now = datetime(2026, 4, 17, tzinfo=UTC)
     assert _age_days("2026-04-01", now=now) == 16
 
 
@@ -327,8 +331,6 @@ def test_rewrite_status_adds_when_missing():
 
 
 def test_stale_candidates_lint_rule_registered():
-    from llmwiki.lint import REGISTRY
-    from llmwiki.lint import rules  # noqa: F401
     assert "stale_candidates" in REGISTRY
 
 
@@ -338,7 +340,6 @@ def test_stale_candidates_lint_rule_registered():
 def test_wiki_candidates_slash_command_exists():
     """#272: renamed from `wiki-review` → `wiki-candidates` so the slash
     matches the CLI subcommand (`llmwiki candidates …`)."""
-    from llmwiki import REPO_ROOT
     cmd = REPO_ROOT / ".claude" / "commands" / "wiki-candidates.md"
     assert cmd.is_file()
     text = cmd.read_text(encoding="utf-8")
@@ -354,7 +355,6 @@ def test_wiki_candidates_slash_command_exists():
 
 
 def test_cli_candidates_subcommand_registered():
-    from llmwiki.cli import build_parser
     parser = build_parser()
     sub_action = None
     for a in parser._actions:

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from llmwiki.adapters import REGISTRY, discover_all
+from llmwiki.adapters import REGISTRY, REGISTRY_ALIASES, discover_all, resolve_adapter_name
 from llmwiki.adapters.base import BaseAdapter
 from llmwiki.adapters.claude_code import ClaudeCodeAdapter
 from llmwiki.adapters.codex_cli import CodexCliAdapter
@@ -23,7 +23,6 @@ def test_registry_discovers_all_adapters():
     assert "copilot_cli" in REGISTRY
     # #v1378-review: aliases moved to REGISTRY_ALIASES so REGISTRY
     # stays canonical-only. Alias resolution is via resolve_adapter_name.
-    from llmwiki.adapters import REGISTRY_ALIASES, resolve_adapter_name
     assert REGISTRY_ALIASES.get("copilot-chat") == "copilot_chat"
     assert REGISTRY_ALIASES.get("copilot-cli") == "copilot_cli"
     assert resolve_adapter_name("copilot-chat") == "copilot_chat"
@@ -72,7 +71,6 @@ def test_all_adapters_have_description():
 
 def test_claude_code_project_slug_stripping():
     """derive_project_slug should strip the common '-Users-...-draft-' prefix."""
-    from pathlib import Path
 
     adapter = ClaudeCodeAdapter()
     # Fake a path that looks like what Claude Code writes
@@ -86,7 +84,6 @@ def test_claude_code_project_slug_stripping():
 
 
 def test_claude_code_project_slug_fallback():
-    from pathlib import Path
 
     adapter = ClaudeCodeAdapter()
     # Path that doesn't match the expected pattern

@@ -15,16 +15,18 @@ This test file is the cross-product matrix from #430.
 
 from __future__ import annotations
 
+import importlib
 from pathlib import Path
 
 import pytest
 
+from llmwiki.adapters.base import BaseAdapter
+from llmwiki.adapters.claude_code import ClaudeCodeAdapter
 
 # ─── BaseAdapter default — never True ────────────────────────────────────
 
 
 def test_base_adapter_default_returns_false():
-    from llmwiki.adapters.base import BaseAdapter
 
     class _Stub(BaseAdapter):
         name = "stub"
@@ -42,7 +44,6 @@ def test_base_adapter_default_returns_false():
 
 
 def _claude_adapter():
-    from llmwiki.adapters.claude_code import ClaudeCodeAdapter
     return ClaudeCodeAdapter({})
 
 
@@ -97,7 +98,6 @@ def test_other_adapters_never_classify_as_subagent(adapter_cls_name):
     explicitly opts in to a substring check (``"subagent" in
     jsonl_path.name``) — that's a legitimate convention for that store
     layout, even if it has the same false-positive risk."""
-    import importlib
     mod_path, cls_name = adapter_cls_name.rsplit(".", 1)
     mod = importlib.import_module(f"llmwiki.adapters.{mod_path}")
     cls = getattr(mod, cls_name)

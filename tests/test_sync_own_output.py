@@ -24,6 +24,7 @@ import pytest
 
 from llmwiki import convert as c
 from llmwiki import quarantine
+from llmwiki.adapters.claude_code import ClaudeCodeAdapter
 
 
 def _write_jsonl(path: Path, session_id: str, iso_ts: str,
@@ -67,7 +68,6 @@ def env(tmp_path, monkeypatch):
     out_dir = tmp_path / "repo" / "raw" / "sessions"
     state = tmp_path / "state.json"
 
-    from llmwiki.adapters.claude_code import ClaudeCodeAdapter
     monkeypatch.setattr(
         ClaudeCodeAdapter, "session_store_path", store, raising=False,
     )

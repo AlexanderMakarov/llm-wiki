@@ -8,11 +8,12 @@ at build time so resume commands and project titles are usable.
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
 
+from llmwiki import build as build_mod
 from llmwiki.build import (
     build_search_index,
     local_cwd,
@@ -20,11 +21,11 @@ from llmwiki.build import (
     render_project_page,
     render_projects_index,
     render_session,
+    render_sessions_index,
     resume_command,
     supports_resume,
 )
 from llmwiki.convert import restore_local_path
-
 
 REAL = "alice"
 REPL = "USER"
@@ -33,14 +34,14 @@ REPL = "USER"
 @pytest.fixture(autouse=True)
 def _fixed_restore_user(monkeypatch):
     """Pin redaction reverse to alice/USER so tests don't depend on $USER."""
+    # build.py binds restore_local_path at import time (PLC0415 hoist);
+    # patch the name where callers use it, not convert's definition.
     monkeypatch.setattr(
-        "llmwiki.convert.restore_local_path",
+        "llmwiki.build.restore_local_path",
         lambda path, real_user=None, repl_user=None: restore_local_path(
             path, real_user=REAL, repl_user=REPL
         ),
     )
-    # local_cwd imports restore_local_path inside the function — patch
-    # the convert module symbol (already done) is enough.
     yield
 
 
@@ -171,7 +172,7 @@ def test_session_page_hides_resume_for_non_claude(tmp_path: Path):
 
 
 def test_old_session_resume_marked_stale(tmp_path: Path):
-    old = (datetime.now(timezone.utc) - timedelta(days=45)).strftime("%Y-%m-%dT%H:%M:%S+00:00")
+    old = (datetime.now(UTC) - timedelta(days=45)).strftime("%Y-%m-%dT%H:%M:%S+00:00")
     path, meta, body = _src(_meta(started=old, date=old[:10]))
     out = render_session(path, meta, body, tmp_path, "demo-proj")
     html = out.read_text(encoding="utf-8")
@@ -269,7 +270,6 @@ def test_projects_index_other_cwds_label(tmp_path: Path):
 
 def test_project_page_does_not_render_homepage(tmp_path: Path, monkeypatch):
     """External homepage under the topic chips was noise next to the cwd title."""
-    from llmwiki import build as build_mod
 
     monkeypatch.setattr(
         build_mod,
@@ -358,7 +358,6 @@ def test_projects_index_restores_all_titles_including_encoded(tmp_path: Path):
 
 def test_sessions_index_shows_restored_cwd(tmp_path: Path):
     """#56 defect 2: sessions table cwd column uses restored local path."""
-    from llmwiki.build import render_sessions_index
 
     sources = [
         _src(
@@ -381,7 +380,6 @@ def test_sessions_index_shows_restored_cwd(tmp_path: Path):
 
 
 def test_sessions_index_restores_paths_in_description(tmp_path: Path):
-    from llmwiki.build import render_sessions_index
 
     sources = [
         _src(

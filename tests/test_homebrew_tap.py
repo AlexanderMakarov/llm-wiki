@@ -20,7 +20,6 @@ import pytest
 
 from llmwiki import REPO_ROOT
 
-
 FORMULA = REPO_ROOT / "homebrew" / "llmwiki.rb"
 BUMP_SCRIPT = REPO_ROOT / "scripts" / "bump-homebrew-formula.sh"
 WORKFLOW = REPO_ROOT / ".github" / "workflows" / "homebrew-bump.yml"

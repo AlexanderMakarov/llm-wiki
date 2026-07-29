@@ -13,6 +13,7 @@ navigation surface, not any one feature.
 
 from __future__ import annotations
 
+import pytest
 from playwright.sync_api import Page, expect
 
 
@@ -133,7 +134,6 @@ def test_breadcrumbs_back_to_home_works(page: Page, base_url: str) -> None:
     )
     crumbs = page.locator(".breadcrumbs a").all()
     if not crumbs:
-        import pytest
         pytest.skip("session page has no breadcrumb anchors")
 
     first = crumbs[0]

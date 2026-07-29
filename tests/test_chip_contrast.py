@@ -12,7 +12,6 @@ import re
 
 from llmwiki.render.css import CSS
 
-
 # ─── W3C relative-luminance + contrast (no external deps) ──────────────
 
 

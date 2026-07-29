@@ -22,12 +22,16 @@ an unregistered step will fail loudly at collection time.
 
 from __future__ import annotations
 
+import os
+import warnings
+from pathlib import Path as _Path
 from typing import Any
+from urllib.parse import urlparse
 
 import pytest
+import pytest as _pytest
 from playwright.sync_api import Page, expect
 from pytest_bdd import given, parsers, then, when
-
 
 # ─── shared background steps ────────────────────────────────────────────
 
@@ -60,6 +64,12 @@ def _clipboard_perms(browser_context_args: dict[str, Any]) -> None:
 @when("I visit the homepage")
 def _visit_homepage(page: Page, base_url: str) -> None:
     page.goto(f"{base_url}/index.html")
+
+
+@when("I visit the projects index")
+def _visit_projects_index(page: Page, base_url: str) -> None:
+    """Project cards live on /projects/index.html (Home shows the State widget)."""
+    page.goto(f"{base_url}/projects/index.html")
 
 
 @when("I visit the homepage on a mobile viewport")
@@ -281,7 +291,6 @@ def _current_path(page: Page) -> str:
     is safe post-navigation.  parse ``urlparse().path`` so callers get
     the pathname just like the old code.
     """
-    from urllib.parse import urlparse
     return urlparse(page.url).path
 
 
@@ -553,7 +562,9 @@ def _console_clean(page: Page) -> None:
     # per-scenario listener via the `page.on("pageerror")` event
     # and store errors on the page object.
     errors = getattr(page, "_llmwiki_console_errors", [])
-    assert not errors, f"browser console errors: {errors}"
+    # Favicon is optional / not emitted by build — browsers still request it.
+    real = [e for e in errors if "favicon" not in e.lower()]
+    assert not real, f"browser console errors: {real}"
 
 
 @then("the command palette is hidden")
@@ -702,7 +713,7 @@ def _set_theme(page: Page, theme: str) -> None:
 
 
 @then(parsers.parse('I capture a screenshot tagged "{tag}"'))
-def _capture_screenshot(page: Page, tag: str, tmp_path_factory: "pytest.TempPathFactory" = None) -> None:  # type: ignore[name-defined]
+def _capture_screenshot(page: Page, tag: str, tmp_path_factory: pytest.TempPathFactory = None) -> None:  # type: ignore[name-defined]
     """Capture a full-page screenshot AND, if a baseline exists,
     compare it pixel-by-pixel.
 
@@ -732,8 +743,6 @@ def _capture_screenshot(page: Page, tag: str, tmp_path_factory: "pytest.TempPath
     real regressions (a layout shift, a missing image, a recolored
     accent) without flaking on hljs-async noise. Override via
     ``LLMWIKI_VR_TOLERANCE_PCT`` (e.g. ``2.0`` for tighter)."""
-    import os
-    from pathlib import Path as _Path
 
     capture_dir = _Path(os.environ.get("LLMWIKI_E2E_SCREENSHOT_DIR") or "tests/e2e/screenshots")
     baseline_dir = _Path("tests/e2e/visual_baselines")
@@ -772,12 +781,11 @@ def _capture_screenshot(page: Page, tag: str, tmp_path_factory: "pytest.TempPath
     # when missing instead of failing, so non-e2e contributors don't get
     # blocked by a missing image library.
     try:
-        from PIL import Image, ImageChops
+        from PIL import Image, ImageChops  # noqa: PLC0415
     except ImportError:
-        import warnings as _warnings
-        _warnings.warn(
+        warnings.warn(
             "Pillow not installed — skipping visual regression comparison "
-            "for {!r}. `pip install -e '.[e2e]'` to enable.".format(tag),
+            f"for {tag!r}. `pip install -e '.[e2e]'` to enable.",
             stacklevel=2,
         )
         return
@@ -786,7 +794,6 @@ def _capture_screenshot(page: Page, tag: str, tmp_path_factory: "pytest.TempPath
         baseline_img = Image.open(baseline_path).convert("RGB")
         capture_img = Image.open(capture_path).convert("RGB")
     except Exception as e:  # corrupt PNG, decoder failure, etc.
-        import pytest as _pytest
         _pytest.fail(
             f"could not open baseline / capture for {tag!r}: {e}. "
             f"Try regenerating with LLMWIKI_VR_UPDATE=1."
@@ -794,7 +801,6 @@ def _capture_screenshot(page: Page, tag: str, tmp_path_factory: "pytest.TempPath
 
     # If sizes differ the diff is meaningless — flag it as a hard fail.
     if baseline_img.size != capture_img.size:
-        import pytest as _pytest
         _pytest.fail(
             f"visual regression {tag!r}: size changed from "
             f"{baseline_img.size} to {capture_img.size}. "
@@ -826,7 +832,6 @@ def _capture_screenshot(page: Page, tag: str, tmp_path_factory: "pytest.TempPath
     if pct > tolerance_pct:
         # Save the diff image so the maintainer can see what changed.
         diff.save(diff_path)
-        import pytest as _pytest
         _pytest.fail(
             f"visual regression {tag!r}: {pct:.2f}% of pixels differ "
             f"(tolerance {tolerance_pct}%). "

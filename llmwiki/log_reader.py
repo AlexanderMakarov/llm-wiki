@@ -19,11 +19,10 @@ surface at "python plus a markdown renderer".
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
-from typing import Iterable, Optional
-
 
 _HEADING = re.compile(r"^##\s+\[(\d{4}-\d{2}-\d{2})\]\s+(\S+)\s*\|\s*(.+?)\s*$")
 # Bullets immediately under a heading look like "- key: value" — we
@@ -62,7 +61,7 @@ def parse_log(log_path: Path) -> list[LogEvent]:
         return []
 
     events: list[LogEvent] = []
-    current: Optional[dict] = None
+    current: dict | None = None
     for raw in lines:
         m = _HEADING.match(raw)
         if m:
@@ -105,7 +104,7 @@ def recent_events(
     log_path: Path,
     *,
     limit: int = 10,
-    operations: Optional[Iterable[str]] = None,
+    operations: Iterable[str] | None = None,
 ) -> list[LogEvent]:
     """Return the most recent ``limit`` log entries (newest first).
 

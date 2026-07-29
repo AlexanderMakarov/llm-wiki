@@ -13,7 +13,8 @@ test.describe("seed — site reachability", () => {
 
   test("nav has the canonical links", async ({ page }) => {
     await page.goto("/");
-    for (const label of ["Home", "Projects", "Sessions", "Graph", "Docs", "Changelog"]) {
+    // Matches llmwiki.build.nav_bar labels (Changelog was replaced by Analytics/Raw).
+    for (const label of ["Home", "Raw", "Graph", "Projects", "Sessions", "Analytics", "Docs"]) {
       await expect(
         page.getByRole("link", { name: label }).first(),
       ).toBeVisible();

@@ -16,8 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from llmwiki.convert import _adapter_tag, render_session_markdown, Redactor, DEFAULT_CONFIG
-
+from llmwiki.convert import DEFAULT_CONFIG, Redactor, _adapter_tag, render_session_markdown
 
 # ─── _adapter_tag unit ────────────────────────────────────────────────
 

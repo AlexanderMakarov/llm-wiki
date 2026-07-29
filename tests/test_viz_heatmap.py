@@ -11,9 +11,7 @@ Covers:
 from __future__ import annotations
 
 import re
-from datetime import date
-
-import pytest
+from datetime import date, timedelta
 
 from llmwiki.viz_heatmap import (
     CELL_SIZE,
@@ -28,7 +26,6 @@ from llmwiki.viz_heatmap import (
     window_bounds,
 )
 
-
 # ─── window_bounds: GitHub-style Sunday alignment ────────────────────────
 
 
@@ -41,7 +38,6 @@ def test_window_bounds_is_sunday_aligned():
     start, returned_end = window_bounds(end)
     assert returned_end == end
     assert start.weekday() == 6  # Sunday
-    from datetime import timedelta
 
     assert start <= end - timedelta(days=WINDOW_DAYS - 1)
 

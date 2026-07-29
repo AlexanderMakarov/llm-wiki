@@ -26,31 +26,10 @@ from __future__ import annotations
 import html
 import json
 import math
+from collections.abc import Iterable, Mapping
 from datetime import date
-from typing import Iterable, Mapping, Optional
 
-# ─── number formatting ───────────────────────────────────────────────────
-
-
-def format_tokens(n: float) -> str:
-    """Format a token count with K/M/B suffix.
-
-    `format_tokens(1_234_567)` → `"1.2M"`. Rounds to 1 decimal place
-    for K/M/B ranges and to an integer for values < 1000. Negative
-    values and zero return a plain number / `"0"`. Shared with the
-    tool chart via the `_shared_format_*` convention.
-    """
-    n = int(n) if not isinstance(n, int) else n
-    if n == 0:
-        return "0"
-    if abs(n) < 1000:
-        return str(n)
-    if abs(n) < 1_000_000:
-        return f"{n / 1000:.1f}K"
-    if abs(n) < 1_000_000_000:
-        return f"{n / 1_000_000:.1f}M"
-    return f"{n / 1_000_000_000:.1f}B"
-
+from llmwiki.format_numbers import format_tokens
 
 # ─── data extraction ─────────────────────────────────────────────────────
 
@@ -80,7 +59,7 @@ def parse_token_totals(meta: Mapping[str, object]) -> dict[str, int]:
     return {}
 
 
-def cache_hit_ratio(totals: dict[str, int]) -> Optional[float]:
+def cache_hit_ratio(totals: dict[str, int]) -> float | None:
     """Return the cache hit ratio as a float in `[0.0, 1.0]`, or None
     if the denominator is zero (no input activity at all).
 
@@ -100,7 +79,7 @@ def cache_hit_ratio(totals: dict[str, int]) -> Optional[float]:
     return cr / denom
 
 
-def _hit_ratio_tier(ratio: Optional[float]) -> tuple[str, str]:
+def _hit_ratio_tier(ratio: float | None) -> tuple[str, str]:
     """Return `(class, label)` for a hit ratio's health tier."""
     if ratio is None:
         return ("tier-unknown", "n/a")
@@ -261,7 +240,7 @@ def render_project_token_timeline(
 
     # Build an area path: line along the top, then drop to the baseline.
     path_d: list[str] = [f"M {xs[0]:.1f} {top_pad + plot_h:.1f}"]
-    for x, y in zip(xs, ys):
+    for x, y in zip(xs, ys, strict=True):
         path_d.append(f"L {x:.1f} {y:.1f}")
     path_d.append(f"L {xs[-1]:.1f} {top_pad + plot_h:.1f} Z")
 
@@ -348,8 +327,8 @@ def compute_site_stats(
     """
     session_count = 0
     total_tokens = 0
-    best_ratio: Optional[tuple[str, float]] = None
-    heaviest: Optional[tuple[str, int]] = None
+    best_ratio: tuple[str, float] | None = None
+    heaviest: tuple[str, int] | None = None
 
     for slug, metas in metas_by_project.items():
         proj_totals = {c: 0 for c in _CATEGORIES}

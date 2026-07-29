@@ -34,7 +34,6 @@ import re
 import pytest
 from playwright.sync_api import Page
 
-
 # Strings that must never leak into rendered text — these are
 # template-rendering bugs.
 TEMPLATE_LEAK_PATTERNS = [
@@ -155,7 +154,7 @@ def test_no_debug_strings_in_rendered_pages(page: Page, base_url: str) -> None:
             ctx_end = min(len(prose), m.end() + 30)
             leaks.append(prose[ctx_start:ctx_end].replace("\n", " "))
     assert not leaks, (
-        f"homepage prose contains debug strings:\n  "
+        "homepage prose contains debug strings:\n  "
         + "\n  ".join(leaks[:5])
     )
 

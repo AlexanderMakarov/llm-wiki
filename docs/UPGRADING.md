@@ -145,7 +145,7 @@ llmwiki queue enqueue --task-type add_doc --source https://example.com
 llmwiki queue run --limit 20
 ```
 
-Rebuild the site after upgrading so the Home page loads `../llmwiki-state.js`.
+Rebuild the site after upgrading so the Home page loads `llmwiki-state.js` from `site/` (build copies the vault sidecar into the site tree).
 
 ### State path isolation (v1.4.0+)
 

@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-import pytest
-
 from llmwiki import REPO_ROOT
-
 
 DOCKERFILE = REPO_ROOT / "Dockerfile"
 COMPOSE = REPO_ROOT / "docker-compose.yml"

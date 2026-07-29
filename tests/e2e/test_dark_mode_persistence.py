@@ -21,7 +21,8 @@ This file covers all three.
 
 from __future__ import annotations
 
-from playwright.sync_api import Page, BrowserContext, expect
+import pytest
+from playwright.sync_api import BrowserContext, Page, expect
 
 
 def _get_theme(page: Page) -> str:
@@ -133,7 +134,6 @@ def test_highlightjs_stylesheet_disabled_state_matches_theme(page: Page, base_ur
     has_light = page.locator("#hljs-light").count() > 0
     has_dark = page.locator("#hljs-dark").count() > 0
     if not (has_light and has_dark):
-        import pytest
         pytest.skip("dual hljs stylesheets not present on this build")
 
     # Snapshot the initial state.

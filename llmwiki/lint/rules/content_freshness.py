@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from llmwiki.lint import LintRule, register
 
@@ -18,7 +18,7 @@ class ContentFreshness(LintRule):
 
     def run(self, pages, *, llm_callback=None):
         issues = []
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         for rel, page in pages.items():
             meta = page["meta"]
             date_str = meta.get("last_verified") or meta.get("last_updated")
@@ -27,7 +27,7 @@ class ContentFreshness(LintRule):
             try:
                 dt = datetime.fromisoformat(date_str)
                 if dt.tzinfo is None:
-                    dt = dt.replace(tzinfo=timezone.utc)
+                    dt = dt.replace(tzinfo=UTC)
             except (ValueError, TypeError):
                 continue
             age_days = (now - dt).days

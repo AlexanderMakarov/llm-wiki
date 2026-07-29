@@ -18,7 +18,6 @@ Usage::
 from __future__ import annotations
 
 from argparse import ArgumentParser
-from typing import Any
 
 
 def _collect(parser: ArgumentParser) -> tuple[list[str], dict[str, list[str]]]:
@@ -51,7 +50,7 @@ def _collect(parser: ArgumentParser) -> tuple[list[str], dict[str, list[str]]]:
 
 def _get_parser() -> ArgumentParser:
     """Lazy import to avoid circular deps during completion generation."""
-    from llmwiki.cli import build_parser
+    from llmwiki.cli import build_parser  # noqa: PLC0415 — cycle: completion↔cli
     return build_parser()
 
 

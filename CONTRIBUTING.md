@@ -249,18 +249,19 @@ Wrapping is fine inside fenced code blocks, tables, and anywhere the line is not
 ## Linting
 
 ```bash
-ruff check llmwiki tests scripts        # lint
-ruff check --fix llmwiki tests scripts  # clear the mechanical findings
+ruff check llmwiki tests scripts        # lint (must exit 0)
+ruff check --fix llmwiki tests scripts  # only with an explicit --select for safe families — see below
 ```
 
-Ruff config lives in `pyproject.toml` under `[tool.ruff]`: line length 120, target `py312`, selecting `E`, `F`, `I`, `B`, and `UP`.
+Ruff config lives in `pyproject.toml` under `[tool.ruff]`: line length 120, target `py312`, selecting `E`, `F`, `I`, `B`, `UP`, and `PLC0415` (import-outside-top-level). `E501` and `E402` stay ignored. `PLC0415` is enforced everywhere except `scripts/**` (one-off maintenance scripts; exempt via `per-file-ignores`).
 
-**Run lint before you push.** The committed `pre-push` hook checks the Python files in your push and rejects it on violations; `git push --no-verify` bypasses it, but say why in the PR.
+**Run lint before you push.** The committed `pre-push` hook checks the Python files in your push and rejects it on violations; `git push --no-verify` bypasses it, but say why in the PR. CI runs `ruff check llmwiki tests scripts` and **fails the build** on findings (#58).
 
-Lint is **not yet clean repo-wide.** A backlog of pre-existing violations is being cleared in dedicated sweeps tracked in [#58](https://github.com/AlexanderMakarov/llm-wiki/issues/58), and CI does not fail on them yet — that is why the hook is scoped to the files you are actually pushing. Keep your own diff clean rather than adding to the backlog. Two conventions the linter can't check on its own:
+**Do not run bare `ruff check --fix`.** `F401` deletes deliberate package-surface re-exports. Prefer mechanical families first (`--select UP,I,F541,…`), and only run `--select F401` after every intentional re-export carries `# noqa: F401`. Two conventions the linter can't fully check on its own:
 
-- **Imports belong at the top of the module.** Deferring one into a function body is acceptable only for an optional extra (`trafilatura`, `markitdown`, `graphifyy`, `networkx`), to break a genuine import cycle, or to keep CLI startup fast. Put the reason in a comment on the line — `llmwiki/cli.py` defers heavy submodule imports precisely so `llmwiki --help` and shell completion stay fast.
-- **A deliberate re-export needs `# noqa: F401`.** `ruff --fix` will otherwise delete an import that looks unused in its own module but is part of that module's public surface.
+- **Imports belong at the top of the module.** Deferred imports inside a function are legitimate only for (1) an optional extra (`trafilatura`, `markitdown`, `graphifyy`, `networkx`, …) or (2) a proven import cycle — and the reason goes in a `# noqa: PLC0415` comment on the line. Stdlib modules are never deferred.
+- **A deliberate re-export needs `# noqa: F401`.** Prefer importing from the owning module over growing facade re-exports. `ruff --fix` will otherwise delete an import that looks unused in its own module but is part of that module's public surface.
+- **Prefer low-level imports from the owning module.** Do not reach for helpers via a high-level facade (`from llmwiki.build import md_to_html`) when the symbol lives in a dedicated module.
 
 ## Testing
 

@@ -10,8 +10,10 @@ from pathlib import Path
 
 import pytest
 
+from llmwiki._frontmatter import parse_frontmatter
 from llmwiki.add_doc import add_sources, expected_source_page
-from llmwiki.remove_doc import build_remove_plan, execute_remove_plan
+from llmwiki.cli import main
+from llmwiki.remove_doc import RemoveIncompleteError, build_remove_plan, execute_remove_plan
 from llmwiki.synth.pipeline import synthesize_new_sessions
 
 
@@ -100,7 +102,6 @@ def test_execute_removes_the_whole_cascade_orphan_free(tmp_path: Path) -> None:
     assert result["source_pages"] == 1
 
     # No orphan page anywhere still pointing at a deleted raw doc.
-    from llmwiki._frontmatter import parse_frontmatter
     for p in wiki_sources.rglob("*.md"):
         meta, _ = parse_frontmatter(p.read_text())
         assert "old-project" not in str(meta.get("source_file", ""))
@@ -165,7 +166,6 @@ def test_empty_match_is_a_clean_noop(tmp_path: Path) -> None:
 
 def test_cli_remove_requires_confirmation(tmp_path: Path, monkeypatch) -> None:
     vault, written, _state_file = _build_vault(tmp_path)
-    from llmwiki.cli import main
 
     # No --yes and no TTY → refuse to cascade, exit non-zero, touch nothing.
     monkeypatch.setattr("sys.stdin.isatty", lambda: False)
@@ -177,7 +177,6 @@ def test_cli_remove_requires_confirmation(tmp_path: Path, monkeypatch) -> None:
 def test_cli_remove_yes_executes(tmp_path: Path) -> None:
     vault, written, state_file = _build_vault(tmp_path)
     page = expected_source_page(written[0], vault / "wiki" / "sources")
-    from llmwiki.cli import main
 
     rc = main(["remove", "old-project*", "--yes", "--vault", str(vault)])
     assert rc == 0
@@ -188,7 +187,6 @@ def test_cli_remove_yes_executes(tmp_path: Path) -> None:
 
 def test_cli_remove_dry_run_reports_without_deleting(tmp_path: Path, capsys) -> None:
     vault, written, state_file = _build_vault(tmp_path)
-    from llmwiki.cli import main
 
     rc = main(["remove", "old-project*", "--dry-run", "--vault", str(vault)])
     assert rc == 0
@@ -254,7 +252,6 @@ def test_backlink_blocks_survive_removal(tmp_path: Path) -> None:
 def test_partial_raw_failure_aborts_before_touching_derivatives(tmp_path: Path) -> None:
     """If a raw doc cannot be unlinked, the page and state key must survive —
     reporting success while the vault is half-removed is worse than failing."""
-    from llmwiki.remove_doc import RemoveIncompleteError
 
     vault, written, state_file = _build_vault(tmp_path)
     raw_doc = written[0]

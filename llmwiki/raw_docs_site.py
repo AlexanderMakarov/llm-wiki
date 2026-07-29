@@ -18,9 +18,10 @@ from __future__ import annotations
 import html
 import json
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
-from typing import Any, Callable, Optional
+from typing import Any
 
 from llmwiki._frontmatter import parse_frontmatter
 from llmwiki.render.data import write_js_sidecar
@@ -72,7 +73,7 @@ class DocFolder:
     """One directory node of the raw/docs tree."""
 
     name: str
-    folders: dict[str, "DocFolder"] = field(default_factory=dict)
+    folders: dict[str, DocFolder] = field(default_factory=dict)
     files: list[RawDocFile] = field(default_factory=list)
 
 
@@ -224,7 +225,7 @@ def write_documents_tree(root: DocFolder, out_dir: Path) -> Path:
 
 def render_sidebar_mount(
     *,
-    active_rel: Optional[PurePosixPath] = None,
+    active_rel: PurePosixPath | None = None,
     link_prefix: str = "",
 ) -> str:
     """Empty doctree aside; ``script.js`` fills it from ``documents-tree.js``."""
@@ -246,7 +247,7 @@ def render_sidebar_mount(
 
 def render_sidebar(
     root: DocFolder,
-    active_rel: Optional[PurePosixPath] = None,
+    active_rel: PurePosixPath | None = None,
     link_prefix: str = "",
 ) -> str:
     """Render the shared file-tree sidebar as static HTML (tests / fallback).
