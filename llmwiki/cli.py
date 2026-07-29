@@ -14,6 +14,7 @@ Subcommands:
     graph             Build the knowledge graph (graph/graph.json + graph.html)
     export            Export AI-consumable formats: llms-txt, llms-full-txt, jsonld, sitemap, rss, robots, ai-readme, marp
     lint              Run lint rules against the wiki
+    reindex           Rewrite wiki/index.md catalog sections from the pages on disk
     candidates        List / promote / merge / discard candidate pages
     synthesize        Synthesize wiki source pages from raw sessions via LLM
     all               Run the full pipeline: build → graph → export all → lint
@@ -90,6 +91,12 @@ from llmwiki.lint import rules as _lint_rules  # noqa: F401 — force registrati
 from llmwiki.pipeline import run_pipeline as _run_pipeline
 from llmwiki.pipeline_lock import pipeline_lock
 from llmwiki.queue_ops import enqueue_task, queue_status, run_queue
+from llmwiki.reindex import (
+    apply_reindex,
+    format_reindex_report,
+    plan_reindex,
+    seed_index_text,
+)
 from llmwiki.remove_doc import RemoveIncompleteError, build_remove_plan, execute_remove_plan, format_plan
 from llmwiki.serve import serve_site
 from llmwiki.state_store import (
@@ -217,20 +224,9 @@ def cmd_init(args: argparse.Namespace) -> int:
 
     # Seed index/log/overview + navigation files if not present
     seeds = {
-        "wiki/index.md": (
-            "# Wiki Index\n\n"
-            "<!-- #387 U6: each section heading carries a (count) so the index\n"
-            "stays scannable as the wiki grows past ~50 pages. Update the count\n"
-            "in the heading when adding/removing pages. The index is otherwise\n"
-            "kept flat (no nested folders) so a single grep/scan can find any\n"
-            "page without descending into a tree. -->\n\n"
-            "## Overview (1)\n- [Overview](overview.md)\n\n"
-            "## Sources (0)\n\n"
-            "## Entities (0)\n\n"
-            "## Projects (0)\n\n"
-            "## Concepts (0)\n\n"
-            "## Syntheses (0)\n"
-        ),
+        # #71: the empty catalog lives in llmwiki/reindex.py so `init` and
+        # `reindex` cannot disagree about the header or the (count) headings.
+        "wiki/index.md": seed_index_text(),
         "wiki/overview.md": '---\ntitle: "Overview"\ntype: synthesis\nsources: []\nlast_updated: ""\n---\n\n# Overview\n\n*This page is maintained by your coding agent.*\n',
         "wiki/log.md": "# Wiki Log\n\nAppend-only chronological record of all operations.\n\nFormat: `## [YYYY-MM-DD] <operation> | <title>`\n\n---\n",
         "wiki/hints.md": '---\ntitle: "Navigation Hints"\ntype: navigation\nlast_updated: ""\n---\n\n# Hints\n\nWriting conventions, entity naming rules, and navigation guidance.\nCustomize this file for your project.\n',
@@ -348,6 +344,16 @@ def cmd_sync(args: argparse.Namespace) -> int:
                 build_site(out_dir=site_root, seed_project_stubs=True,
                            raw_sessions=raw_sessions, raw_dir=raw_dir,
                            wiki_dir=wiki_dir)
+                # #71: the stubs that build just seeded are on disk and the
+                # catalog has never heard of them, which is how index_sync
+                # errors accumulated one per new project forever. Reconcile
+                # here — right after the only step in sync that adds wiki
+                # pages, and before the auto-lint that would report them.
+                plan = plan_reindex(wiki_dir)
+                if plan is not None and plan.changed:
+                    apply_reindex(plan)
+                    print(f"  reindex: index.md +{len(plan.added)} listed, "
+                          f"-{len(plan.removed)} dead link(s)")
             if args.auto_lint and _should_run_after_sync(schedule.get("lint", "manual")):
                 print("  auto-lint: running wiki lint...")
                 # #470: lint the vault's wiki/, not the repo's, when in
@@ -719,6 +725,34 @@ def cmd_lint(args: argparse.Namespace) -> int:
         lambda s: (s.setdefault("ops", {}).__setitem__("last_lint_run_at", now) or s),
         resolve_state_file(),
     )
+    return 0
+
+
+def cmd_reindex(args: argparse.Namespace) -> int:
+    """Rewrite the catalog sections of ``wiki/index.md`` from disk (#71).
+
+    Deterministic, no LLM: enumerate the wiki's page folders, keep every
+    existing entry (descriptions included), drop entries whose page is gone,
+    append pages that were missing, and refresh each ``(count)``.
+    """
+    wiki_dir = args.wiki_dir or (_content_root(args) / "wiki")
+    if not wiki_dir.is_dir():
+        print(f"error: wiki directory not found: {wiki_dir}", file=sys.stderr)
+        return 2
+
+    if args.dry_run:
+        plan = plan_reindex(wiki_dir)
+    else:
+        # Writing the index races the other wiki-mutating commands (sync's
+        # stub seeding, synthesize's own reconcile), so take the lock they do.
+        with pipeline_lock(wiki_dir.parent):
+            plan = plan_reindex(wiki_dir)
+            if plan is not None:
+                apply_reindex(plan)
+    if plan is None:
+        print(f"  no pages and no index.md in {wiki_dir} — nothing to do.")
+        return 0
+    print(format_reindex_report(plan, dry_run=args.dry_run))
     return 0
 
 
@@ -1551,6 +1585,8 @@ def _add_vault_arg(parser: argparse.ArgumentParser, *, role: str) -> None:
                       "site output under it, instead of the repo's.",
             "candidates": "Triage candidate pages under this vault's wiki/, "
                           "instead of the repo's.",
+            "reindex": "(#71) Reconcile this vault's wiki/index.md with the "
+                       "pages under its wiki/, instead of the repo's.",
         }[role],
     )
 
@@ -1750,6 +1786,19 @@ def build_parser() -> argparse.ArgumentParser:
                       help="Exit non-zero if any error-severity issues found")
     _add_vault_arg(lint, role="synthesize")
     lint.set_defaults(func=cmd_lint)
+
+    # reindex (#71) — deterministic wiki/index.md ↔ disk reconciliation
+    reidx = sub.add_parser(
+        "reindex",
+        help="Rewrite wiki/index.md catalog sections from the pages on disk "
+             "(adds unlisted pages, drops dead links, refreshes counts)",
+    )
+    reidx.add_argument("--wiki-dir", type=Path, default=None,
+                       help="Wiki directory (default: the vault's wiki/)")
+    reidx.add_argument("--dry-run", action="store_true",
+                       help="Print the adds/removes and write nothing")
+    _add_vault_arg(reidx, role="reindex")
+    reidx.set_defaults(func=cmd_reindex)
 
     queue_p = sub.add_parser("queue", help="Manage unified llmwiki queue")
     queue_p.add_argument("queue_action", nargs="?", default="status", choices=["status", "run", "enqueue"])

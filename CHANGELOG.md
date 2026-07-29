@@ -8,6 +8,10 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ## [Unreleased]
 
+### Added
+
+- **`llmwiki reindex` — reconcile `wiki/index.md` with the pages on disk (#71)** — nothing rewrote the catalog after `init` seeded it, while `sync` kept seeding a `wiki/projects/<slug>.md` stub for every project it converted, so `index_sync` errors accumulated with ordinary use: one unlisted page per new project, forever, repairable only by hand. Both directions of drift are now fixable by one deterministic command (no LLM, no token spend): unlisted pages are appended, entries whose page is gone are dropped, an entry filed under the wrong heading moves to the section that owns its folder, duplicate headings for one section collapse, and every heading's `(count)` is refreshed per the `#387 U6` convention. Existing entries are preserved **verbatim** — descriptions after the link are human/agent prose — so only newly listed pages get a generated bullet (frontmatter `title` + `description`, with `project · date` as the fallback for session sources). Unmanaged sections, the preamble, and page bodies are never touched. Sections cover the five canonical folders plus any other folder holding pages (`comparisons/`, `questions/`, `archive/`, …) and loose non-navigation `wiki/*.md` pages under `## Pages`, so a page type added later is listed rather than becoming permanent lint noise. `--dry-run` prints the adds/removes and writes nothing. `sync` reconciles automatically after the auto-build that seeds the stubs, and `synthesize` / `remove` now reconcile through the same code instead of their own partial rewrite. Docs: `docs/reference/cli.md`, `docs/UPGRADING.md`, `README.md`. Tests: `tests/test_reindex.py`.
+
 ### Changed
 
 - **Pages demo corpus: docs + Claude wiki + MCP Analytics (#69)** — `examples/demo-docs/` (product docs about llmwiki), `examples/demo-wiki/sources/` (Claude-synthesized offline; CI copies only), and `examples/demo-usage/` (fixture MCP telemetry). `pages.yml` seeds all three so Documents and Analytics MCP widgets are non-empty. Two demo sessions advertise `mcp__llmwiki__*` in `tools_used` for adoption signal.
@@ -30,7 +34,9 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 - **`contradiction_detection` filler coverage** — after #72, most remaining hits on a real vault were still synthesis boilerplate (`None detected.`, `None identified in this session.`, multi-sentence `None identified. …`). Expand synonyms / location tails and treat bodies that open with `none`/`n/a`/`no contradiction(s)` as filler unless they contain an affirmative conflict cue.
 
-- **`_rebuild_index` maintains `## Projects`** — project stubs under `wiki/projects/` (seeded by `build`) were never listed in `wiki/index.md`, so `index_sync` errored on every project page. Rebuild now rewrites `## Projects` alongside `## Sources`.
+- **`_rebuild_index` maintains `## Projects`** — project stubs under `wiki/projects/` (seeded by `build`) were never listed in `wiki/index.md`, so `index_sync` errored on every project page. Rebuild now rewrites `## Projects` alongside `## Sources`. Superseded by `llmwiki reindex` (#71), which owns the reconciliation for every caller: the old helper matched `^## Sources$`, so against the seeded `## Sources (0)` heading it appended a *second*, count-less `## Sources` section, regenerated bullets from frontmatter (clobbering hand-written descriptions), left dead links in place, and never touched entities, concepts, or syntheses.
+
+- **Demo `wiki/index.md` relisted (#71)** — the repo's demo wiki carried 16 project pages and listed 4, so `llmwiki lint --wiki-dir wiki --rules index_sync` reported 12 errors on a clean checkout (and the deployed Pages demo advertised `## Sources (0)` while `pages.yml` seeded 16 source pages into it).
 
 - **`orphan_detection` credits catalog markdown links** — pages listed only from `index.md` as `[title](path.md)` were flagged as orphans because the rule only counted `[[wikilinks]]`. Markdown hrefs that resolve to wiki pages now count as inbound.
 

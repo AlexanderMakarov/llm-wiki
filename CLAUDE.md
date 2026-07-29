@@ -151,6 +151,8 @@ Use Grep and Read to find:
 6. **Data gaps** — questions the wiki can't answer; suggest new sources or queries.
 7. **(v0.5, #60) Uncontexted folders** — any `wiki/` subfolder containing >10 `.md` files that lacks a `_context.md` stub. Large knowledge folders without a context description make deep queries more expensive per call — suggest creating a stub that describes what lives there. Use `python3 -c "from llmwiki.context_md import find_uncontexted_folders; from pathlib import Path; print(list(find_uncontexted_folders(Path('wiki'))))"` or load the helper directly.
 
+Do not hand-repair the catalog. Unlisted pages, dead index links, and stale `(count)` headings are what `python3 -m llmwiki reindex` (#71) fixes deterministically — run it (`--dry-run` first) instead of editing `wiki/index.md` bullet by bullet. It preserves every existing entry's description, so your hand-written prose survives.
+
 Output a report to the chat. Ask the user if they want it saved to `wiki/lint-report.md`.
 
 ## Naming Conventions

@@ -87,6 +87,7 @@ ALL_SUBCOMMANDS = (
     "graph",
     "export",
     "lint",
+    "reindex",
     "candidates",
     "synthesize",
     "query",

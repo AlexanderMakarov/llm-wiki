@@ -394,6 +394,9 @@ def test_synthesize_rebuilds_index_md(tmp_path: Path):
     wiki_dir = tmp_path / "wiki"
     wiki_sources = wiki_dir / "sources"
     wiki_sources.mkdir(parents=True)
+    entity = wiki_dir / "entities" / "Pratiyush.md"
+    entity.parent.mkdir(parents=True)
+    entity.write_text('---\ntitle: "Pratiyush"\n---\n\n# Pratiyush\n', encoding="utf-8")
     # Seed an index.md with hand-curated content that must survive.
     (wiki_dir / "index.md").write_text(
         "# Wiki Index\n\n## Overview\n- curated\n\n## Sources\n*(none)*\n"
@@ -411,10 +414,38 @@ def test_synthesize_rebuilds_index_md(tmp_path: Path):
     idx = (wiki_dir / "index.md").read_text(encoding="utf-8")
     # Source is listed
     assert "sources/test-proj/2026-04-09-test-synth.md" in idx
-    # Hand-curated Entities section survived
-    assert "[Pratiyush](entities/Pratiyush.md)" in idx
+    # Hand-curated Entities entry survived, description included (#71)
+    assert "[Pratiyush](entities/Pratiyush.md) — keep me" in idx
     # Overview line survived
     assert "- curated" in idx
+
+
+def test_synthesize_drops_dead_index_entries(tmp_path: Path):
+    """#71: an entry whose page is gone is a lint error nothing could fix.
+
+    The rebuild that ran before #71 only rewrote `## Sources`, so a link to a
+    deleted entity stayed in the catalog forever.
+    """
+    raw = _seed_raw(tmp_path)
+    wiki_dir = tmp_path / "wiki"
+    wiki_sources = wiki_dir / "sources"
+    wiki_sources.mkdir(parents=True)
+    (wiki_dir / "index.md").write_text(
+        "# Wiki Index\n\n## Sources (0)\n\n"
+        "## Entities (1)\n- [Deleted](entities/Deleted.md) — page is gone\n",
+        encoding="utf-8",
+    )
+    log_file = wiki_dir / "log.md"
+    log_file.write_text("# Log\n", encoding="utf-8")
+
+    synthesize_new_sessions(
+        backend=DummySynthesizer(), raw_dir=raw, wiki_sources_dir=wiki_sources,
+        log_path=log_file,
+    )
+
+    idx = (wiki_dir / "index.md").read_text(encoding="utf-8")
+    assert "entities/Deleted.md" not in idx
+    assert "## Entities (0)" in idx
 
 
 def test_rebuild_index_creates_index_when_missing(tmp_path: Path):

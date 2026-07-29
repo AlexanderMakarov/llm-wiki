@@ -257,6 +257,7 @@ llmwiki migrate-state [--state-file PATH]
 llmwiki migrate-raw-redaction --vault PATH [--dry-run]  # #56: USER-mask encoded paths in raw/
 llmwiki graph [--engine builtin|graphify]
 llmwiki lint [--wiki-dir PATH]
+llmwiki reindex [--vault PATH] [--dry-run]     # #71: relist wiki/index.md from the pages on disk
 llmwiki export all
 llmwiki all [--with-synth] [--vault PATH]
 llmwiki adapters [--wide]

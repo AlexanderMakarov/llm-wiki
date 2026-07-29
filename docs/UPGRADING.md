@@ -10,6 +10,21 @@ How to upgrade between `llmwiki` releases.  Most releases are drop-in (`pip inst
 
 The canonical per-release detail is [CHANGELOG.md](https://github.com/Pratiyush/llm-wiki/blob/master/CHANGELOG.md) — this guide focuses on "what might break".
 
+## Unreleased — `llmwiki reindex` repairs a drifted `wiki/index.md` (#71)
+
+Nothing rewrote the catalog after `init` seeded it, while `sync` kept seeding `wiki/projects/<slug>.md` stubs, so `index_sync` lint errors accumulated with ordinary use — one per new project, forever. `llmwiki reindex` reconciles the catalog with the pages on disk. It is deterministic (no LLM, no token spend) and preserves every existing entry, so it is safe to run on a wiki you have hand-curated:
+
+```bash
+llmwiki reindex --dry-run       # see the adds/removes first
+llmwiki reindex
+llmwiki lint --rules index_sync # should now report zero
+```
+
+No action is required for a healthy vault: `sync` reconciles after the auto-build that seeds the stubs, and `synthesize` / `remove` reconcile through the same code. Two behaviour changes to know about:
+
+- **Index entries whose page no longer exists are now dropped.** The old rebuild left them, which is where the "dead index link" lint errors came from. If you keep deliberate links to pages outside `wiki/`, put them in a section other than the catalog ones (`Sources`, `Entities`, `Projects`, `Concepts`, `Syntheses`, or a folder-named section) — unmanaged sections are never touched.
+- **Titles of already-listed pages are no longer regenerated from frontmatter.** Preserving the whole bullet is what protects hand-written descriptions. Delete a bullet and re-run `reindex` if you want it regenerated.
+
 ## Unreleased — lint: `--include-llm` removed (#72)
 
 `llmwiki lint --include-llm` is gone. The flag never called an LLM (no callback was wired; the three stub rules never invoked one). Scripts that pass it will fail with `unrecognized arguments: --include-llm` — drop the flag.
@@ -110,6 +125,22 @@ from scratch ...
 ```
 
 The fix is to **upgrade the engine** to match the vault. Only pass `sync --force-resync` if you genuinely want a full reconvert from scratch (it implies `--force` and may duplicate an already-populated `raw/`). This guard protects the newer→older direction; the older engine that lacks it still can't see the unified file, so keep engines at or ahead of the version that last wrote the vault.
+
+### Moving an in-clone wiki into a vault (pre-v1.5.0 checkouts only)
+
+#29 shipped in **v1.5.0**, so a fresh install is vault-first and nothing here applies to it. If you ran a pre-release checkout that kept `raw/` and `wiki/` inside the git clone and you are now setting `vault.default_path`, move the content by hand — there is no migration command, and two trees holding the same wiki drift silently:
+
+```bash
+llmwiki init --vault /path/to/vault          # scaffold + seed the vault
+cp -r raw/ wiki/ /path/to/vault/             # move your content across
+llmwiki reindex --vault /path/to/vault       # relist the catalog from what landed
+llmwiki lint --vault /path/to/vault --rules index_sync
+```
+
+Two things to do explicitly, because neither is obvious:
+
+- **Delete the demo entries from the copied `index.md`.** The clone's `wiki/index.md` catalogs the repo's demo pages (`entities/Anthropic.md`, `concepts/CachePricing.md`, `projects/demo-*.md`). Copied into a vault that has none of them, every one becomes a dead index link. `llmwiki reindex` drops them for you — that is the reason to run it right after the copy.
+- **Remove the leftover ignored pages from the clone.** `raw/` and `wiki/` are gitignored, so anything left behind is invisible to `git status` but still real on disk. A command run without a vault (or from a script with a different config) writes there, and you end up with pages that exist in only one of the two trees.
 
 ## v1.4.0 — unified queue + vault state (hard cutover)
 
