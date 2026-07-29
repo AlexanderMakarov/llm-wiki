@@ -15,8 +15,8 @@ permissionMode: default
 model: gemini-2.5-pro
 user_messages: 1
 tool_calls: 3
-tools_used: [Edit, Write]
-tool_counts: {"Edit": 2, "Write": 1}
+tools_used: [Edit, Write, mcp__llmwiki__wiki_read_page]
+tool_counts: {"Edit": 2, "Write": 1, "mcp__llmwiki__wiki_read_page": 1}
 token_totals: {"input": 3800, "cache_creation": 6000, "cache_read": 15000, "output": 1900}
 turn_count: 1
 hour_buckets: {"2026-04-01T15": 6, "2026-04-01T16": 2}
