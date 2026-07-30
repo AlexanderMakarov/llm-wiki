@@ -24,6 +24,8 @@ llmwiki all --strict                     # exit 2 on any lint warning
 ```
 
 - **`llmwiki all` no longer self-deadlocks.** It used to acquire the pipeline lock and then dispatch to `cmd_build` / `cmd_sync` / `cmd_synthesize`, each of which tried to acquire the same non-reentrant lock again and hung. `run_pipeline` now takes the lock exactly once and calls the library functions directly (`convert_all`, `synthesize_new_sessions`, `build_site`, …). No CLI or config change is needed — `llmwiki all` just completes instead of hanging.
+- **`llmwiki watch`** — near-real-time maintain: polls agent session stores and runs sync → synthesize → build when a session finishes (turn-complete gating where the adapter supports it). Restores the v1.2.0-removed daemon as a focused maintain loop; stdlib only, no `watchdog` dep.
+- **`llmwiki install-automation`** — interactive setup for OS schedulers (systemd / launchd / Task Scheduler), optional agent hooks, and synth backend; writes automation status for the site Home panel. Non-interactive flags exist; `./setup.sh` is an alias.
 
 Index reconciliation behaviour (#71) is unchanged — existing entries stay verbatim; dead links drop; `(count)` headings refresh.
 

@@ -56,6 +56,7 @@ _FAVICON_PNG = bytes.fromhex(
 SOURCE_ROOT = PACKAGE_ROOT.parent
 from llmwiki import raw_docs_site
 from llmwiki.agent_label import detect_agent_label, render_agent_badge
+from llmwiki.automation_status import load_status
 from llmwiki.changelog_timeline import (
     extract_price_points,
     parse_changelog,
@@ -1956,14 +1957,63 @@ def render_analytics(
     return out_path
 
 
+def render_automation_panel(content_root: Path | None) -> str:
+    """HTML panel describing install-automation status for the Home page."""
+    if content_root is None:
+        status = None
+    else:
+        status = load_status(content_root)
+
+    if not status:
+        return (
+            '<section class="automation-panel" aria-label="Automation">'
+            "<h2>Automation</h2>"
+            "<p class=\"muted\">No automation configured. Run "
+            "<code>llmwiki install-automation</code> or <code>./setup.sh</code> "
+            "to set a daily scheduler, optional watch, and synth backend.</p>"
+            "</section>"
+        )
+
+    profile = status.get("profile") or "none"
+    hour = int(status.get("hour") or 8)
+    minute = int(status.get("minute") or 0)
+    watch = "on" if status.get("watch_enabled") else "off"
+    hooks = status.get("hooks") or []
+    hooks_s = ", ".join(str(h) for h in hooks) if hooks else "none (recommended)"
+    backend = html.escape(str(status.get("synth_backend") or "dummy"))
+    log_path = html.escape(str(status.get("log_path") or ""))
+    updated = html.escape(str(status.get("updated_at") or ""))
+    note = html.escape(str(status.get("note") or (
+        "Scheduled runs with no new sessions are a no-op."
+    )))
+    return (
+        '<section class="automation-panel" aria-label="Automation">'
+        "<h2>Automation</h2>"
+        "<ul>"
+        f"<li>Scheduler profile: <strong>{html.escape(str(profile))}</strong> "
+        f"at <strong>{hour:02d}:{minute:02d}</strong> local</li>"
+        f"<li>Watch: <strong>{watch}</strong></li>"
+        f"<li>Agent hooks: {html.escape(hooks_s)}</li>"
+        f"<li>Synth backend: <code>{backend}</code></li>"
+        f"<li>Last-run log: <code>{log_path}</code></li>"
+        f"<li class=\"muted\">Updated: {updated}</li>"
+        "</ul>"
+        f"<p class=\"muted\">{note}</p>"
+        "</section>"
+    )
+
+
 def render_index(
     docs_root: raw_docs_site.DocFolder,
     doc_entries: list[raw_docs_site.DocEntry],
     doc_file_count: int,
     out_dir: Path,
+    *,
+    content_root: Path | None = None,
 ) -> Path:
     """Render ``index.html`` — queue/dashboard landing page."""
     body = raw_docs_site.render_dashboard_body(doc_entries, doc_file_count)
+    auto = render_automation_panel(content_root)
     page = (
         page_head("LLM Wiki", "Karpathy-style knowledge base from Claude Code sessions", css_prefix="")
         + nav_bar("home", link_prefix="")
@@ -1971,6 +2021,7 @@ def render_index(
             "LLM Wiki",
             "Pipeline state for sync and synthesis",
         )
+        + auto
         + body
         + page_foot(js_prefix="")
     )
@@ -2967,7 +3018,10 @@ def build_site(
     tree_path = raw_docs_site.write_documents_tree(docs_root, out_dir)
     tree_kb = max(1, tree_path.stat().st_size // 1024)
     print(f"  wrote documents-tree.json ({tree_kb} KB) + .js sidecar")
-    render_index(docs_root, doc_entries, len(doc_files), out_dir)
+    render_index(
+        docs_root, doc_entries, len(doc_files), out_dir,
+        content_root=wiki_dir.parent if wiki_dir is not None else None,
+    )
     render_raw(docs_root, doc_entries, len(doc_files), out_dir)
     render_recent(doc_entries, out_dir)
     render_analytics(

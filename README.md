@@ -258,6 +258,8 @@ llmwiki migrate-raw-redaction --vault PATH [--dry-run]  # #56: USER-mask encoded
 llmwiki graph [--engine builtin|graphify]
 llmwiki lint [--wiki-dir PATH]                 # #71: wiki/index.md is reconciled automatically by sync/synthesize
 llmwiki all [--with-sync] [--with-synth] [--vault PATH]
+llmwiki watch [--adapter NAME...] [--vault PATH]   # near-real-time sync→build when sessions finish
+llmwiki install-automation [--yes] [--profile A|B|C]  # OS scheduler + optional agent hooks
 llmwiki adapters [--wide]
 llmwiki version
 ```

@@ -100,4 +100,4 @@ Yes. `llmwiki build` writes AI-consumable exports into the site output directory
 
 `llmwiki sync --vault PATH` writes through to an Obsidian vault as part of the regular sync (replaces the removed `export-obsidian` subcommand).
 
-> The standalone `export` / `export-obsidian` / `export-qmd` / `export-marp` CLIs are gone — run `llmwiki build` instead. See `docs/UPGRADING.md`.
+> The standalone `export` / `export-obsidian` / `export-qmd` / `export-marp` CLIs are gone — run `llmwiki build` instead. `watch` is restored for near-real-time maintain. See `docs/UPGRADING.md`.

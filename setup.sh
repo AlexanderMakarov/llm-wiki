@@ -93,8 +93,27 @@ echo "  ./sync.sh                   # convert new sessions to markdown"
 echo "  ./build.sh                  # generate the static HTML site"
 echo "  ./serve.sh                  # browse at http://127.0.0.1:8765/"
 echo
-echo "Manual queue (no auto-sync on agent launch):"
+echo "Automation (schedulers / optional hooks / synth backend):"
+echo "  python3 -m llmwiki install-automation"
+echo "  # Asks for daily time (default 08:00). Idle days are a no-op."
+echo "  # Agent hooks default to skip (not recommended)."
+echo "  # Optional: python3 -m llmwiki watch   # near-real-time maintain"
+echo
+echo "Manual queue:"
 echo "  python3 -m llmwiki queue status"
 echo "  python3 -m llmwiki queue run --limit 20"
 echo "  python3 scripts/migrate_state_v1_4_0.py   # one-time legacy state migration"
 echo "  # or: python3 -m llmwiki migrate-state"
+
+# Optional interactive automation wizard (skip when non-TTY / CI)
+if [ -t 0 ] && [ "${LLMWIKI_SKIP_AUTOMATION:-}" != "1" ]; then
+  echo
+  printf "Run install-automation now? [y/N] "
+  read -r _ans || _ans=""
+  case "$_ans" in
+    y|Y|yes|YES)
+      python3 -m llmwiki install-automation || \
+        echo "    (install-automation did not complete)"
+      ;;
+  esac
+fi
