@@ -10,20 +10,22 @@ How to upgrade between `llmwiki` releases.  Most releases are drop-in (`pip inst
 
 The canonical per-release detail is [CHANGELOG.md](https://github.com/Pratiyush/llm-wiki/blob/master/CHANGELOG.md) — this guide focuses on "what might break".
 
-## Unreleased — `llmwiki reindex` repairs a drifted `wiki/index.md` (#71)
+## Unreleased — pipeline reshape: export/reindex CLI removed, `all` extended
 
-Nothing rewrote the catalog after `init` seeded it, while `sync` kept seeding `wiki/projects/<slug>.md` stubs, so `index_sync` lint errors accumulated with ordinary use — one per new project, forever. `llmwiki reindex` reconciles the catalog with the pages on disk. It is deterministic (no LLM, no token spend) and preserves every existing entry, so it is safe to run on a wiki you have hand-curated:
+- **`llmwiki export` is gone.** AI-consumable files (`llms.txt`, `llms-full.txt`, `sitemap.xml`, `rss.xml`, `robots.txt`, `graph.jsonld`, `ai-readme.md`, etc.) are written by `build` into `--out` (default `site/`). Replace `llmwiki export all` with `llmwiki build`. The library module `llmwiki.exporters` (`export_all`, …) remains — only the standalone CLI entry point is removed.
+- **`llmwiki reindex` is gone.** Catalog reconciliation (`wiki/index.md` ↔ pages on disk) runs automatically inside `sync` and `synthesize`. After hand-editing `wiki/`, run `llmwiki sync --no-auto-build` or `llmwiki synthesize` to reconcile, then `llmwiki lint --rules index_sync` to verify. The library module `llmwiki.reindex` (`reindex_wiki`, `plan_reindex`) remains for internal callers.
+- **`sync` always reconciles `wiki/index.md`.** Reconciliation used to run only inside the auto-build branch; it now runs after every successful `sync` regardless of `--no-auto-build`, so a sync-only workflow can't drift the catalog between builds.
+- **`llmwiki all` pipeline order** — `[sync?]` → `[synthesize?]` → `build` → `[graph?]` → `lint`. Optional `--with-sync` converts new agent sessions (auto-build off — `all` builds next), refreshes the synth-pending backlog, and reconciles the catalog. Optional `--with-synth` fills `wiki/sources/` from `raw/`. `build` already calls `export_all`, so there is no separate export step. `graph` is skipped with `--skip-graph`.
 
 ```bash
-llmwiki reindex --dry-run       # see the adds/removes first
-llmwiki reindex
-llmwiki lint --rules index_sync # should now report zero
+llmwiki all                              # build → graph → lint
+llmwiki all --with-sync --with-synth     # sync → synthesize → build → graph → lint
+llmwiki all --strict                     # exit 2 on any lint warning
 ```
 
-No action is required for a healthy vault: `sync` reconciles after the auto-build that seeds the stubs, and `synthesize` / `remove` reconcile through the same code. Two behaviour changes to know about:
+- **`llmwiki all` no longer self-deadlocks.** It used to acquire the pipeline lock and then dispatch to `cmd_build` / `cmd_sync` / `cmd_synthesize`, each of which tried to acquire the same non-reentrant lock again and hung. `run_pipeline` now takes the lock exactly once and calls the library functions directly (`convert_all`, `synthesize_new_sessions`, `build_site`, …). No CLI or config change is needed — `llmwiki all` just completes instead of hanging.
 
-- **Index entries whose page no longer exists are now dropped.** The old rebuild left them, which is where the "dead index link" lint errors came from. If you keep deliberate links to pages outside `wiki/`, put them in a section other than the catalog ones (`Sources`, `Entities`, `Projects`, `Concepts`, `Syntheses`, or a folder-named section) — unmanaged sections are never touched.
-- **Titles of already-listed pages are no longer regenerated from frontmatter.** Preserving the whole bullet is what protects hand-written descriptions. Delete a bullet and re-run `reindex` if you want it regenerated.
+Index reconciliation behaviour (#71) is unchanged — existing entries stay verbatim; dead links drop; `(count)` headings refresh.
 
 ## Unreleased — lint: `--include-llm` removed (#72)
 
@@ -133,13 +135,13 @@ The fix is to **upgrade the engine** to match the vault. Only pass `sync --force
 ```bash
 llmwiki init --vault /path/to/vault          # scaffold + seed the vault
 cp -r raw/ wiki/ /path/to/vault/             # move your content across
-llmwiki reindex --vault /path/to/vault       # relist the catalog from what landed
+llmwiki sync --vault /path/to/vault --no-auto-build   # reconcile index after copy
 llmwiki lint --vault /path/to/vault --rules index_sync
 ```
 
 Two things to do explicitly, because neither is obvious:
 
-- **Delete the demo entries from the copied `index.md`.** The clone's `wiki/index.md` catalogs the repo's demo pages (`entities/Anthropic.md`, `concepts/CachePricing.md`, `projects/demo-*.md`). Copied into a vault that has none of them, every one becomes a dead index link. `llmwiki reindex` drops them for you — that is the reason to run it right after the copy.
+- **Delete the demo entries from the copied `index.md`.** The clone's `wiki/index.md` catalogs the repo's demo pages (`entities/Anthropic.md`, `concepts/CachePricing.md`, `projects/demo-*.md`). Copied into a vault that has none of them, every one becomes a dead index link. `llmwiki sync --no-auto-build` reconciles the catalog for you — that is the reason to run it right after the copy.
 - **Remove the leftover ignored pages from the clone.** `raw/` and `wiki/` are gitignored, so anything left behind is invisible to `git status` but still real on disk. A command run without a vault (or from a script with a different config) writes there, and you end up with pages that exist in only one of the two trees.
 
 ## v1.4.0 — unified queue + vault state (hard cutover)
@@ -285,7 +287,7 @@ If you ran `sync --force` against a corpus where two sources had the same canoni
 One-shot pipeline runner for CI:
 
 ```bash
-llmwiki all                  # build → graph → export → lint
+llmwiki all                  # build → graph → lint
 llmwiki all --strict         # exit 2 on any lint warning
 ```
 

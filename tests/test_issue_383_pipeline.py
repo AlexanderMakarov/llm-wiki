@@ -6,7 +6,7 @@ import argparse
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from llmwiki import cli
+from llmwiki import cli, pipeline
 from llmwiki import cli as cli_mod
 from llmwiki.cli import build_parser
 from llmwiki.config_schedule import synthesis_status_hint
@@ -38,10 +38,20 @@ def test_synthesis_status_hint_for_ollama_backend():
 def test_cmd_all_with_synth_runs_synthesize_first():
 
     order: list[str] = []
+    backend = MagicMock()
+    backend.name = "dummy"
+    backend.is_available.return_value = True
 
-    def make_stub(name: str):
-        def _stub(_args):
+    def track(name: str):
+        def _stub(*_a, **_k):
             order.append(name)
+            if name == "lint":
+                return 0, {}
+            if name == "synth":
+                return {
+                    "total_scanned": 0, "new_files": 0,
+                    "synthesized": 0, "skipped": 0, "errors": [],
+                }
             return 0
         return _stub
 
@@ -58,21 +68,23 @@ def test_cmd_all_with_synth_runs_synthesize_first():
     }
     args = argparse.Namespace(**base)
 
-    with patch.object(cli, "cmd_synthesize", side_effect=make_stub("synthesize")):
-        with patch.object(cli, "cmd_build", side_effect=make_stub("build")):
-            with patch.object(cli, "cmd_export", side_effect=make_stub("export")):
-                with patch.object(cli, "cmd_lint", side_effect=make_stub("lint")):
+    with patch.object(pipeline, "resolve_backend", return_value=backend):
+        with patch.object(pipeline, "synthesize_new_sessions", side_effect=track("synth")):
+            with patch.object(pipeline, "build_site", side_effect=track("build")):
+                with patch.object(pipeline, "_run_lint_step", side_effect=track("lint")):
                     rc = cli.cmd_all(args)
 
     assert rc == 0
-    assert order[0] == "synthesize"
-    assert order[1:] == ["build", "export", "lint"]
+    assert order[0] == "synth"
+    assert order[1:] == ["build", "lint"]
 
 
 def test_cmd_all_with_synth_fail_fast_stops_after_synth_failure():
 
-    synth_fail = MagicMock(return_value=1)
     build_stub = MagicMock(return_value=0)
+    backend = MagicMock()
+    backend.name = "dummy"
+    backend.is_available.return_value = False
     base = {
         "out": Path("/tmp/site-test"),
         "search_mode": "auto",
@@ -86,14 +98,12 @@ def test_cmd_all_with_synth_fail_fast_stops_after_synth_failure():
     }
     args = argparse.Namespace(**base)
 
-    with patch.object(cli, "cmd_synthesize", synth_fail):
-        with patch.object(cli, "cmd_build", build_stub):
-            with patch.object(cli, "cmd_export", MagicMock(return_value=0)):
-                with patch.object(cli, "cmd_lint", MagicMock(return_value=0)):
-                    rc = cli.cmd_all(args)
+    with patch.object(pipeline, "resolve_backend", return_value=backend):
+        with patch.object(pipeline, "build_site", build_stub):
+            with patch.object(pipeline, "_run_lint_step", return_value=(0, {})):
+                rc = cli.cmd_all(args)
 
     assert rc == 1
-    assert synth_fail.call_count == 1
     assert build_stub.call_count == 0
 
 

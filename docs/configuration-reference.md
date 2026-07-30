@@ -36,7 +36,7 @@ python3 -m llmwiki sync [options]
 
 ### `llmwiki build`
 
-Compile the static HTML site from `raw/` and `wiki/`.
+Compile the static HTML site from `raw/` and `wiki/`. Also writes AI-consumable exports into the output directory: `llms.txt`, `llms-full.txt`, `graph.jsonld`, `sitemap.xml`, `rss.xml`, `robots.txt`, and `ai-readme.md`. There is no separate `export` subcommand.
 
 ```bash
 python3 -m llmwiki build [options]
@@ -85,26 +85,9 @@ python3 -m llmwiki graph [options]
 |---|---|---|---|
 | `--format` | `json\|html\|both` | `both` | Output format |
 
-### `llmwiki export`
-
-Export AI-consumable formats from the built site.
-
-```bash
-python3 -m llmwiki export <format> [options]
-```
-
-| Positional | Values |
-|---|---|
-| `format` | `llms-txt`, `llms-full-txt`, `jsonld`, `sitemap`, `rss`, `robots`, `ai-readme`, `marp`, `all` |
-
-| Flag | Type | Default | Description |
-|---|---|---|---|
-| `--out` | `path` | `./site` | Output directory |
-| `--topic` | `string` | none | Topic filter (used by `marp` format) |
-
 ### `llmwiki all` (v1.2)
 
-Run the full pipeline: build → graph → export all → lint.
+Run the full pipeline: `[sync?]` → `[synthesize?]` → build → graph → lint. AI-consumable exports are written by `build`, not a separate step.
 
 ```bash
 python3 -m llmwiki all [options]
@@ -113,6 +96,9 @@ python3 -m llmwiki all [options]
 | Flag | Type | Default | Description |
 |---|---|---|---|
 | `--out` | `path` | `./site` | Output directory |
+| `--with-sync` | flag | off | Run `sync --no-auto-build` before synthesize/build |
+| `--with-synth` | flag | off | Run `synthesize` before build |
+| `--synth-force` | flag | off | With `--with-synth`: pass `--force` to re-synthesize all sessions |
 | `--search-mode` | `auto/tree/flat` | `auto` | Forwarded to build |
 | `--graph-engine` | `builtin/graphify` | `graphify` | Forwarded to graph |
 | `--skip-graph` | flag | off | Skip the graph step |

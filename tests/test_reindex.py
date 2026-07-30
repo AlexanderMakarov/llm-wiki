@@ -1,9 +1,9 @@
-"""`llmwiki reindex` — reconcile wiki/index.md with the pages on disk (#71).
+"""Reconcile wiki/index.md with the pages on disk (#71).
 
 The catalog drifts both ways during ordinary use: `sync` seeds project stubs
-nothing lists, and hand-deleted pages leave dead index links behind. Before
-this command neither direction was repairable, so `index_sync` errors piled up
-one per new project forever. These tests pin the reconciliation semantics —
+nothing lists, and hand-deleted pages leave dead index links behind.
+`reindex_wiki` / `plan_reindex` fix both directions; `sync` and `synthesize`
+call them automatically. These tests pin the reconciliation semantics —
 above all that it never rewrites a hand-written description.
 """
 
@@ -13,7 +13,7 @@ import argparse
 from pathlib import Path
 from unittest.mock import patch
 
-from llmwiki.cli import cmd_sync, main
+from llmwiki.cli import cmd_sync
 from llmwiki.lint import load_pages, run_all
 from llmwiki.reindex import plan_reindex, reindex_wiki, seed_index_text
 
@@ -318,38 +318,6 @@ def test_missing_index_is_seeded_from_disk(tmp_path: Path) -> None:
     text = _index(wiki)
     assert "# Wiki Index" in text
     assert "## Entities (1)" in text
-
-
-# ─── CLI surface ───────────────────────────────────────────────────────
-
-
-def test_cli_dry_run_writes_nothing(tmp_path: Path, capsys) -> None:
-    wiki = _seed_wiki(tmp_path)
-    _page(wiki / "projects" / "awos-audit.md", "awos-audit")
-    before = _index(wiki)
-
-    rc = main(["reindex", "--wiki-dir", str(wiki), "--dry-run"])
-
-    assert rc == 0
-    assert _index(wiki) == before
-    out = capsys.readouterr().out
-    assert "projects/awos-audit.md" in out
-    assert "--dry-run" in out
-
-
-def test_cli_writes_and_reports(tmp_path: Path, capsys) -> None:
-    wiki = _seed_wiki(tmp_path)
-    _page(wiki / "projects" / "awos-audit.md", "awos-audit")
-
-    rc = main(["reindex", "--wiki-dir", str(wiki)])
-
-    assert rc == 0
-    assert "projects/awos-audit.md" in _index(wiki)
-    assert "wrote index.md" in capsys.readouterr().out
-
-
-def test_cli_rejects_a_missing_wiki_dir(tmp_path: Path) -> None:
-    assert main(["reindex", "--wiki-dir", str(tmp_path / "nope")]) == 2
 
 
 def test_sync_leaves_no_index_error_for_a_new_project(tmp_path: Path) -> None:

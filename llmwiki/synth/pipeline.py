@@ -640,8 +640,8 @@ def _rebuild_index(wiki_dir: Path) -> Path | None:
     """Reconcile ``wiki/index.md`` with the pages on disk (G-09 · #295, #71).
 
     Thin wrapper over :func:`llmwiki.reindex.reindex_wiki`, which owns the
-    reconciliation for every caller — ``sync``, ``remove``, and the
-    ``llmwiki reindex`` command. The local implementation this replaced
+    reconciliation for every caller — ``sync``, ``synthesize``, and
+    ``remove``. The local implementation this replaced
     regenerated the ``## Sources`` / ``## Projects`` bullets from frontmatter
     on every run, which clobbered hand-written descriptions, ignored the
     ``(count)`` headings (so it appended a *second* count-less ``## Sources``

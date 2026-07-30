@@ -248,7 +248,7 @@ Agent workflows (`/wiki-sync`, `/wiki-ingest`, `/wiki-query`) are defined in [CL
 llmwiki init [--vault PATH]
 llmwiki sync [--adapter NAME] [--vault PATH] [--force] [--force-resync] [--status]
 llmwiki add <url|file|folder>... [--vault PATH] [--no-synthesize] [--no-build]
-llmwiki build [--vault PATH] [--out PATH]
+llmwiki build [--vault PATH] [--out PATH]      # also writes llms.txt, sitemap.xml, etc. (AI exports)
 llmwiki serve [--dir PATH] [--port N]          # serve a built site/; no --vault
 llmwiki synthesize [--vault PATH] [--check] [--estimate] [--force]
 llmwiki consolidate-topics [--complete reply.json] [--vault PATH]
@@ -256,10 +256,8 @@ llmwiki queue {status|enqueue|run} [--vault PATH] [--state-file PATH]
 llmwiki migrate-state [--state-file PATH]
 llmwiki migrate-raw-redaction --vault PATH [--dry-run]  # #56: USER-mask encoded paths in raw/
 llmwiki graph [--engine builtin|graphify]
-llmwiki lint [--wiki-dir PATH]
-llmwiki reindex [--vault PATH] [--dry-run]     # #71: relist wiki/index.md from the pages on disk
-llmwiki export all
-llmwiki all [--with-synth] [--vault PATH]
+llmwiki lint [--wiki-dir PATH]                 # #71: wiki/index.md is reconciled automatically by sync/synthesize
+llmwiki all [--with-sync] [--with-synth] [--vault PATH]
 llmwiki adapters [--wide]
 llmwiki version
 ```
