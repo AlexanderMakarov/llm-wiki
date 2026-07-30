@@ -287,9 +287,8 @@ def test_mcp_wiki_export_unknown_format():
 # ─── CLI subcommands ─────────────────────────────────────────────────────
 
 
-def test_cli_has_v04_subcommands():
+def test_cli_build_still_registered():
 
     parser = build_parser()
     help_text = parser.format_help()
-    for cmd in ("export",):
-        assert cmd in help_text, f"missing v0.4 CLI subcommand: {cmd}"
+    assert "build" in help_text, "missing build CLI subcommand"

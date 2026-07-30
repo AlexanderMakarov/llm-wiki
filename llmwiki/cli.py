@@ -12,13 +12,10 @@ Subcommands:
     usage             Report local MCP tool-usage telemetry vs synthesis cost
     adapters          List available session-store adapters
     graph             Build the knowledge graph (graph/graph.json + graph.html)
-    export            Export AI-consumable formats: llms-txt, llms-full-txt, jsonld, sitemap, rss, robots, ai-readme, marp
     lint              Run lint rules against the wiki
-    reindex           Rewrite wiki/index.md catalog sections from the pages on disk
     candidates        List / promote / merge / discard candidate pages
     synthesize        Synthesize wiki source pages from raw sessions via LLM
-    all               Run the full pipeline: build → graph → export all → lint
-                      (optional: synthesize first with --with-synth)
+    all               Run the full pipeline: [sync?] → [synthesize?] → build → graph → lint
     version           Print version and exit
 """
 
@@ -46,7 +43,7 @@ from llmwiki.adapters import REGISTRY, discover_adapters
 # for any caller still importing from llmwiki.cli.
 from llmwiki.adapters.status import adapter_status as _adapter_status  # noqa: F401
 from llmwiki.add_doc import add_sources, expected_source_page, remove_raw_docs
-from llmwiki.build import RAW_DIR, RAW_SESSIONS, build_site, discover_sources, group_by_project
+from llmwiki.build import RAW_DIR, RAW_SESSIONS, build_site
 from llmwiki.cache import MODEL_PRICING, resolve_pricing_model
 from llmwiki.candidates import (
     discard,
@@ -72,17 +69,6 @@ from llmwiki.config_schedule import (
     should_run_after_sync as _should_run_after_sync,
 )
 from llmwiki.convert import DEFAULT_OUT_DIR, convert_all
-from llmwiki.exporters import (
-    export_all,
-    write_ai_readme,
-    write_graph_jsonld,
-    write_llms_full_txt,
-    write_llms_txt,
-    write_marp,
-    write_robots_txt,
-    write_rss,
-    write_sitemap,
-)
 from llmwiki.graph import build_and_report
 from llmwiki.graphify_bridge import build_graphify_graph, is_available, query_graph
 from llmwiki.lint import REGISTRY as _LINT_REG
@@ -93,7 +79,6 @@ from llmwiki.pipeline_lock import pipeline_lock
 from llmwiki.queue_ops import enqueue_task, queue_status, run_queue
 from llmwiki.reindex import (
     apply_reindex,
-    format_reindex_report,
     plan_reindex,
     seed_index_text,
 )
@@ -161,20 +146,18 @@ def cmd_version(args: argparse.Namespace) -> int:
 
 
 def cmd_all(args: argparse.Namespace) -> int:
-    """Run the full wiki pipeline end-to-end: build → graph → export all → lint.
+    """Run the full wiki pipeline: [sync?] → [synthesize?] → build → [graph?] → lint.
 
     Thin shim — the implementation lives in ``llmwiki.pipeline`` (#691).
+    ``run_pipeline`` acquires the vault's ``pipeline_lock`` exactly once and
+    calls library functions (``convert_all``, ``synthesize_new_sessions``,
+    ``build_site``, ...) directly — never ``cmd_sync`` / ``cmd_synthesize`` /
+    ``cmd_build``, which would each try to acquire the same non-reentrant
+    lock again and deadlock. AI exports are part of ``build``; there is no
+    separate export step.
     """
     _apply_default_vault(args)
-    lock_root = REPO_ROOT
-    if getattr(args, "vault", None):
-        try:
-            lock_root = resolve_vault(args.vault).root
-        except (FileNotFoundError, NotADirectoryError) as exc:
-            print(f"error: {exc}", file=sys.stderr)
-            return 2
-    with pipeline_lock(lock_root):
-        return _run_pipeline(args)
+    return _run_pipeline(args)
 
 
 def cmd_init(args: argparse.Namespace) -> int:
@@ -330,6 +313,8 @@ def cmd_sync(args: argparse.Namespace) -> int:
         if rc == 0:
             schedule = _load_schedule_config()
             site_root = (vault.root / "site") if vault_path else (REPO_ROOT / "site")
+            # #54: read/graph the vault's wiki/ (not the repo's demo wiki).
+            wiki_dir = (vault.root / "wiki") if vault_path else (REPO_ROOT / "wiki")
             if args.auto_build and _should_run_after_sync(schedule.get("build", "on-sync")):
                 print("  auto-build: regenerating site/...")
                 # #54 vault-overlay: read the freshly-synced sessions from the
@@ -337,29 +322,24 @@ def cmd_sync(args: argparse.Namespace) -> int:
                 # with "RAW_SESSIONS does not exist" right after a vault sync).
                 raw_sessions = (vault.root / "raw" / "sessions") if vault_path else RAW_SESSIONS
                 raw_dir = (vault.root / "raw") if vault_path else RAW_DIR
-                # #54: graph the vault's wiki/ (not the repo's demo wiki).
-                wiki_dir = (vault.root / "wiki") if vault_path else (REPO_ROOT / "wiki")
                 # #414: sync has explicit user opt-in to mutate wiki/, so it's
                 # the right place to seed project stubs.
                 build_site(out_dir=site_root, seed_project_stubs=True,
                            raw_sessions=raw_sessions, raw_dir=raw_dir,
                            wiki_dir=wiki_dir)
-                # #71: the stubs that build just seeded are on disk and the
-                # catalog has never heard of them, which is how index_sync
-                # errors accumulated one per new project forever. Reconcile
-                # here — right after the only step in sync that adds wiki
-                # pages, and before the auto-lint that would report them.
-                plan = plan_reindex(wiki_dir)
-                if plan is not None and plan.changed:
-                    apply_reindex(plan)
-                    print(f"  reindex: index.md +{len(plan.added)} listed, "
-                          f"-{len(plan.removed)} dead link(s)")
+            # Always reconcile wiki/index.md after a successful sync (stubs,
+            # new sources, removals) — not just when auto-build (the only
+            # step that seeds project stubs) ran.
+            plan = plan_reindex(wiki_dir)
+            if plan is not None and plan.changed:
+                apply_reindex(plan)
+                print(f"  reindex: index.md +{len(plan.added)} listed, "
+                      f"-{len(plan.removed)} dead link(s)")
             if args.auto_lint and _should_run_after_sync(schedule.get("lint", "manual")):
                 print("  auto-lint: running wiki lint...")
                 # #470: lint the vault's wiki/, not the repo's, when in
                 # vault-overlay mode.
-                wiki_dir = (vault.root / "wiki") if vault_path else None
-                pages = load_pages(wiki_dir) if wiki_dir else load_pages()
+                pages = load_pages(wiki_dir) if vault_path else load_pages()
                 issues = run_all(pages)
                 summary = summarize(issues)
                 print(f"  lint: {sum(summary.values())} issues "
@@ -622,53 +602,8 @@ def cmd_graph(args: argparse.Namespace) -> int:
 
 # cmd_sync_status + _resolve_key_exists moved to llmwiki/sync/status.py
 # and re-exported at top of file (#691).
-
-
-def cmd_export(args: argparse.Namespace) -> int:
-    """Export AI-consumable formats from the compiled wiki."""
-
-
-    root = _content_root(args)
-    out_dir = args.out if args.out else root / "site"
-    # `all` always passes its --out default (REPO_ROOT/site), which is truthy,
-    # so the fallback above never fires from the pipeline. Remap it the way
-    # cmd_build does, or a vault run overwrites the clone's site/.
-    if root != REPO_ROOT and out_dir == REPO_ROOT / "site":
-        out_dir = root / "site"
-    out_dir.mkdir(parents=True, exist_ok=True)
-
-    sessions_dir = RAW_SESSIONS if root == REPO_ROOT else root / "raw" / "sessions"
-    sources = discover_sources(sessions_dir)
-    if not sources:
-        print("error: no sources found. Run 'llmwiki sync' first.", file=_sys.stderr)
-        return 2
-    groups = group_by_project(sources)
-
-    format_ = args.format
-    if format_ == "all":
-        paths = export_all(out_dir, groups, sources)
-        for _name, p in sorted(paths.items()):
-            print(f"  wrote {p.relative_to(REPO_ROOT) if p.is_relative_to(REPO_ROOT) else p}")
-        return 0
-
-    topic = getattr(args, "topic", "") or ""
-    mapping = {
-        "llms-txt": lambda: write_llms_txt(out_dir, groups, len(sources)),
-        "llms-full-txt": lambda: write_llms_full_txt(out_dir, sources),
-        "jsonld": lambda: write_graph_jsonld(out_dir, groups, sources),
-        "sitemap": lambda: write_sitemap(out_dir, groups, sources),
-        "rss": lambda: write_rss(out_dir, sources),
-        "robots": lambda: write_robots_txt(out_dir),
-        "ai-readme": lambda: write_ai_readme(out_dir, groups, len(sources)),
-        "marp": lambda: write_marp(out_dir, sources, topic=topic),
-    }
-    fn = mapping.get(format_)
-    if not fn:
-        print(f"error: unknown format {format_!r}. Valid: {sorted(mapping.keys())} or 'all'", file=_sys.stderr)
-        return 2
-    p = fn()
-    print(f"  wrote {p.relative_to(REPO_ROOT) if p.is_relative_to(REPO_ROOT) else p}")
-    return 0
+# `export` and `reindex` CLIs removed: AI exports are part of `build`;
+# index reconciliation runs inside `sync` and `synthesize`.
 
 
 def cmd_lint(args: argparse.Namespace) -> int:
@@ -725,34 +660,6 @@ def cmd_lint(args: argparse.Namespace) -> int:
         lambda s: (s.setdefault("ops", {}).__setitem__("last_lint_run_at", now) or s),
         resolve_state_file(),
     )
-    return 0
-
-
-def cmd_reindex(args: argparse.Namespace) -> int:
-    """Rewrite the catalog sections of ``wiki/index.md`` from disk (#71).
-
-    Deterministic, no LLM: enumerate the wiki's page folders, keep every
-    existing entry (descriptions included), drop entries whose page is gone,
-    append pages that were missing, and refresh each ``(count)``.
-    """
-    wiki_dir = args.wiki_dir or (_content_root(args) / "wiki")
-    if not wiki_dir.is_dir():
-        print(f"error: wiki directory not found: {wiki_dir}", file=sys.stderr)
-        return 2
-
-    if args.dry_run:
-        plan = plan_reindex(wiki_dir)
-    else:
-        # Writing the index races the other wiki-mutating commands (sync's
-        # stub seeding, synthesize's own reconcile), so take the lock they do.
-        with pipeline_lock(wiki_dir.parent):
-            plan = plan_reindex(wiki_dir)
-            if plan is not None:
-                apply_reindex(plan)
-    if plan is None:
-        print(f"  no pages and no index.md in {wiki_dir} — nothing to do.")
-        return 0
-    print(format_reindex_report(plan, dry_run=args.dry_run))
     return 0
 
 
@@ -1566,9 +1473,8 @@ def _add_vault_arg(parser: argparse.ArgumentParser, *, role: str) -> None:
                           "flag the state file lives at the repo root, so "
                           "two vaults synthesised against the same repo "
                           "silently share idempotency state.",
-            "all": "(#383) With --with-synth: run synthesize against the "
-                   "vault's raw/ + wiki/sources/ (same semantics as "
-                   "`llmwiki synthesize --vault`).",
+            "all": "Operate on this vault: optional --with-sync / --with-synth, "
+                   "then build → graph → lint (AI exports are part of build).",
             "add": "(#16) Vault-overlay mode: write the converted document "
                    "under the vault's raw/docs/ and run synthesize/build "
                    "against the vault.",
@@ -1581,12 +1487,8 @@ def _add_vault_arg(parser: argparse.ArgumentParser, *, role: str) -> None:
             "graph": "Graph this vault's wiki/ and write graph/ under it, "
                      "instead of the repo's. Vault mode uses the builtin "
                      "engine (graphify is repo-anchored).",
-            "export": "Export from this vault's raw/sessions/ and write the "
-                      "site output under it, instead of the repo's.",
             "candidates": "Triage candidate pages under this vault's wiki/, "
                           "instead of the repo's.",
-            "reindex": "(#71) Reconcile this vault's wiki/index.md with the "
-                       "pages under its wiki/, instead of the repo's.",
         }[role],
     )
 
@@ -1757,21 +1659,6 @@ def build_parser() -> argparse.ArgumentParser:
     _add_vault_arg(graph, role="graph")
     graph.set_defaults(func=cmd_graph)
 
-    # export (v0.4)
-    exp2 = sub.add_parser(
-        "export",
-        help="Export AI-consumable formats: llms-txt, llms-full-txt, jsonld, sitemap, rss, robots, ai-readme, marp (or 'all')",
-    )
-    exp2.add_argument(
-        "format",
-        choices=["llms-txt", "llms-full-txt", "jsonld", "sitemap", "rss", "robots", "ai-readme", "marp", "all"],
-        help="Export format",
-    )
-    exp2.add_argument("--out", type=Path, default=None, help="Output directory (default: site/)")
-    exp2.add_argument("--topic", type=str, default="", help="Topic filter for marp slide generation")
-    _add_vault_arg(exp2, role="export")
-    exp2.set_defaults(func=cmd_export)
-
     # lint (v1.0, #155) — live count via the rule registry (currently 15)
     lint = sub.add_parser(
         "lint",
@@ -1786,19 +1673,6 @@ def build_parser() -> argparse.ArgumentParser:
                       help="Exit non-zero if any error-severity issues found")
     _add_vault_arg(lint, role="synthesize")
     lint.set_defaults(func=cmd_lint)
-
-    # reindex (#71) — deterministic wiki/index.md ↔ disk reconciliation
-    reidx = sub.add_parser(
-        "reindex",
-        help="Rewrite wiki/index.md catalog sections from the pages on disk "
-             "(adds unlisted pages, drops dead links, refreshes counts)",
-    )
-    reidx.add_argument("--wiki-dir", type=Path, default=None,
-                       help="Wiki directory (default: the vault's wiki/)")
-    reidx.add_argument("--dry-run", action="store_true",
-                       help="Print the adds/removes and write nothing")
-    _add_vault_arg(reidx, role="reindex")
-    reidx.set_defaults(func=cmd_reindex)
 
     queue_p = sub.add_parser("queue", help="Manage unified llmwiki queue")
     queue_p.add_argument("queue_action", nargs="?", default="status", choices=["status", "run", "enqueue"])
@@ -2024,15 +1898,15 @@ def build_parser() -> argparse.ArgumentParser:
     ver = sub.add_parser("version", help="Print version")
     ver.set_defaults(func=cmd_version)
 
-    # all — run build + graph + export all + lint in sequence
+    # all — [sync?] → [synthesize?] → build → graph → lint
     all_p = sub.add_parser(
         "all",
-        help="Run the full pipeline: build → graph → export all → lint "
-             "(add --with-synth to run synthesize first)",
+        help="Run the full pipeline: build → graph → lint "
+             "(add --with-sync / --with-synth; AI exports are part of build)",
     )
     all_p.add_argument(
         "--out", type=Path, default=REPO_ROOT / "site",
-        help="Output dir for build + export (default: site/)",
+        help="Output dir for build (default: site/, or <vault>/site with --vault)",
     )
     all_p.add_argument(
         "--search-mode", choices=["auto", "tree", "flat"], default="auto",
@@ -2053,6 +1927,11 @@ def build_parser() -> argparse.ArgumentParser:
     all_p.add_argument(
         "--strict", action="store_true",
         help="Exit 2 if lint reports any errors/warnings",
+    )
+    all_p.add_argument(
+        "--with-sync", action="store_true",
+        help="Run `sync --no-auto-build` before synthesize/build "
+             "(convert agent sessions first)",
     )
     all_p.add_argument(
         "--with-synth", action="store_true",

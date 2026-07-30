@@ -54,7 +54,7 @@ python3 -m llmwiki init
 
 ## `sync` — convert `.jsonl` sessions to markdown
 
-The workhorse. Walks every configured adapter, converts new sessions into `raw/sessions/`, then (by default) auto-builds and auto-lints.
+The workhorse. Walks every configured adapter, converts new sessions into `raw/sessions/`, reconciles `wiki/index.md` against pages on disk, then (by default) auto-builds and auto-lints.
 
 ```bash
 python3 -m llmwiki sync
@@ -166,7 +166,7 @@ A selector that matches nothing is a clean no-op with a message. Without `--dry-
 
 ## `build` — compile the static HTML site
 
-Turns `wiki/` markdown into `site/` HTML.
+Turns `wiki/` markdown into `site/` HTML. Also writes AI-consumable exports (`llms.txt`, `llms-full.txt`, `sitemap.xml`, `rss.xml`, `robots.txt`, `graph.jsonld`, `ai-readme.md`) into the output directory — there is no separate `export` subcommand.
 
 ```bash
 python3 -m llmwiki build
@@ -316,42 +316,6 @@ python3 -m llmwiki graph --format html
 
 ---
 
-## `export` — AI-consumable site exports
-
-Single positional argument picks the format.
-
-```bash
-python3 -m llmwiki export llms-txt
-python3 -m llmwiki export llms-full-txt
-python3 -m llmwiki export jsonld
-python3 -m llmwiki export sitemap
-python3 -m llmwiki export rss
-python3 -m llmwiki export robots
-python3 -m llmwiki export ai-readme
-python3 -m llmwiki export all --out ~/custom-site
-```
-
-### Positional
-
-| Value | Writes |
-|---|---|
-| `llms-txt` | `site/llms.txt` — llmstxt.org spec |
-| `llms-full-txt` | `site/llms-full.txt` — flattened plain-text corpus (≤ 5 MB) |
-| `jsonld` | `site/graph.jsonld` — schema.org entity graph |
-| `sitemap` | `site/sitemap.xml` |
-| `rss` | `site/rss.xml` |
-| `robots` | `site/robots.txt` |
-| `ai-readme` | `site/ai-readme.md` |
-| `all` | all of the above |
-
-### Flags
-
-| Flag | What |
-|---|---|
-| `--out PATH` | Output directory. Default: `./site/`. |
-
----
-
 ## `lint` — run 17 wiki-quality rules
 
 ```bash
@@ -390,56 +354,6 @@ python3 -m llmwiki lint --wiki-dir ~/another-wiki
 ## link_integrity (22)
   [warning] entities/GPT5.md: broken wikilink [[MultimodalModels]]
   ...
-```
-
----
-
-## `reindex` — reconcile `wiki/index.md` with the pages on disk (#71)
-
-Rewrites the catalog sections of `wiki/index.md` from what is actually in `wiki/`: pages with no entry get listed, entries whose page is gone get dropped, and every section heading's `(count)` is refreshed. Deterministic — a filesystem reconciliation, no LLM and no token spend.
-
-```bash
-python3 -m llmwiki reindex --dry-run        # print the adds/removes, write nothing
-python3 -m llmwiki reindex                  # write the reconciled index
-python3 -m llmwiki reindex --wiki-dir ~/another-vault/wiki
-```
-
-### Flags
-
-| Flag | What |
-|---|---|
-| `--wiki-dir PATH` | Wiki dir. Default: the configured vault's `wiki/`. |
-| `--dry-run` | Print the adds/removes and change nothing. |
-| `--vault PATH` | Reconcile this vault's `wiki/index.md` instead of the repo's. |
-
-### What it preserves
-
-- **Existing entries, verbatim.** The description after a link is human- or agent-authored prose, so a page that already has a bullet keeps the bullet it had — including its title. Only pages being listed for the first time get a generated bullet (frontmatter `title`, plus `description:` when present; session sources fall back to `project · date`).
-- **Everything that isn't a catalog section.** The preamble, `## Overview`, and any hand-written section pass through untouched.
-- **Page bodies.** `reindex` only ever writes `index.md`.
-
-An entry filed under the wrong heading moves to the section that owns its folder rather than being dropped and re-added. Duplicate headings for the same section are collapsed into one.
-
-### Sections
-
-`sources`, `entities`, `projects`, `concepts`, `syntheses` come first, in that order. Any other folder holding pages (`comparisons/`, `questions/`, `archive/`, …) gets a section named after it, and loose `wiki/*.md` pages that aren't navigation files land under `## Pages` — so a page type added later is listed instead of becoming permanent `index_sync` lint noise. `_context.md` files and empty folders are skipped.
-
-### When to run it
-
-`sync` runs it automatically after the auto-build that seeds `wiki/projects/<slug>.md` stubs, and `synthesize` / `remove` reconcile through the same code, so routine use should not drift. Run it by hand after editing `wiki/` yourself, or to repair a vault that drifted before this command existed:
-
-```bash
-python3 -m llmwiki reindex && python3 -m llmwiki lint --rules index_sync
-```
-
-### Expected output
-
-```
-  index: /path/to/vault/wiki/index.md
-    Sources          651 pages  +3 added
-    Projects          29 pages  +29 added
-    - entities/Anthropic.md (dead link)
-  wrote index.md
 ```
 
 ---
@@ -685,10 +599,13 @@ Requires Graphify (`pip install llm-notebook[graph]`). Run `llmwiki graph` first
 
 ## `all` — run the full pipeline
 
-Convenience entry point that runs `build` → `graph` → `export all` → `lint` in order. This is the one command to run after `sync` to produce a CI-ready site.
+Convenience entry point that runs `[sync?]` → `[synthesize?]` → `build` → `graph` → `lint` in order. AI-consumable exports (`llms.txt`, `sitemap.xml`, etc.) are written by `build`, not a separate step. This is the one command to run after agent sessions land to produce a CI-ready site.
 
 ```bash
 python3 -m llmwiki all
+python3 -m llmwiki all --with-sync              # convert sessions first
+python3 -m llmwiki all --with-synth             # synthesize wiki/sources/ before build
+python3 -m llmwiki all --with-sync --with-synth # full refresh from agent stores
 python3 -m llmwiki all --graph-engine builtin   # skip optional graphify
 python3 -m llmwiki all --skip-graph --strict    # fail CI on any lint issue
 ```
@@ -697,12 +614,16 @@ python3 -m llmwiki all --skip-graph --strict    # fail CI on any lint issue
 
 | Flag | What |
 |---|---|
-| `--out DIR` | Output dir for build + export. Default: `site/`. |
+| `--out DIR` | Output dir for `build`. Default: `site/`. |
 | `--search-mode {auto,tree,flat}` | Forwarded to `build`. Default: `auto`. |
 | `--graph-engine {builtin,graphify}` | Forwarded to `graph`. Default: `graphify`. |
 | `--skip-graph` | Skip the graph step entirely (useful when graphify is not installed). |
 | `--fail-fast` | Stop at the first non-zero step. Default: continue, report the worst exit code. |
 | `--strict` | Exit `2` if `lint` reports any errors/warnings. |
+| `--with-sync` | Run `sync --no-auto-build` before synthesize/build (convert agent sessions first). |
+| `--with-synth` | Run `synthesize` before build (fills `wiki/sources/` from `raw/`; may invoke an LLM — default off for cost discipline, #383). |
+| `--synth-force` | With `--with-synth`: pass `--force` to synthesize (re-synthesize all sessions). |
+| `--vault PATH` | Run every step against this vault instead of the repo. |
 
 Exit codes:
 

@@ -270,9 +270,7 @@ Press `Cmd+K` (macOS) or `Ctrl+K` (Linux/Windows). Try:
 
 ```bash
 llmwiki sync --vault ~/Documents/"Obsidian Vault"   # vault sync (replaces removed export-obsidian)
-llmwiki export llms-full-txt                          # paste into any LLM
-llmwiki export jsonld                                 # schema.org graph
-llmwiki export rss                                    # RSS 2.0 feed
+llmwiki build                                         # HTML site + AI exports (llms.txt, llms-full.txt, graph.jsonld, sitemap.xml, rss.xml, robots.txt, ai-readme.md)
 ```
 
 > The `export-obsidian`, `export-qmd`, and `export-marp` subcommands were removed in v1.2.0. See `docs/UPGRADING.md` for migration paths.

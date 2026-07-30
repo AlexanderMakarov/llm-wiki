@@ -353,7 +353,7 @@ Claude will pass `--host 0.0.0.0`.
 
 ### `/wiki-all`
 
-**What:** run the full pipeline end-to-end — build → graph → export all → lint.
+**What:** run the full pipeline end-to-end — optional sync/synth → build → graph → lint. AI-consumable exports (`llms.txt`, `sitemap.xml`, etc.) are written by `build`, not a separate step.
 
 **Wraps:** `python3 -m llmwiki all`.
 
@@ -364,13 +364,16 @@ instead of chaining `/wiki-build` + `/wiki-graph` + `/wiki-lint` yourself.
 
 ```
 /wiki-all
+/wiki-all --with-sync --with-synth
 /wiki-all --graph-engine builtin
 /wiki-all --skip-graph --strict
 ```
 
 Pass `--strict` to turn any lint warning into a non-zero exit, which is
 exactly what CI wants. Pass `--skip-graph` or `--graph-engine builtin`
-when the optional Graphify backend is not installed.
+when the optional Graphify backend is not installed. Pass `--with-sync` or
+`--with-synth` when you want session conversion or synthesis folded into
+the same run.
 
 ---
 

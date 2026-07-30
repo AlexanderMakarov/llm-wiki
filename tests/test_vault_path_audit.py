@@ -2,7 +2,7 @@
 
 `REPO_ROOT` is the code checkout; the user's content lives in a vault
 resolved from `--vault` or `config.json` `vault.default_path`. `lint`,
-`export`, and `graph` used their module-level `REPO_ROOT / "wiki"|"site"`
+`lint` and `graph` used their module-level `REPO_ROOT / "wiki"|"site"`
 defaults, so with a vault configured they silently read/wrote the git
 clone's seed demo content instead of the user's wiki.
 """
@@ -69,10 +69,10 @@ def test_graph_writes_under_the_configured_vault(tmp_path, capsys):
     assert (vault / "graph" / "graph.json").is_file()
 
 
-# ── export ──────────────────────────────────────────────────────────────
+# ── build ───────────────────────────────────────────────────────────────
 
-def test_export_reads_and_writes_the_configured_vault(tmp_path, capsys):
-    """`export --vault` must read the vault's raw/sessions and write its site."""
+def test_build_reads_and_writes_the_configured_vault(tmp_path, capsys):
+    """`build --vault` must read the vault's raw/sessions and write its site."""
     vault = tmp_path / "vault"
     sessions = vault / "raw" / "sessions"
     sessions.mkdir(parents=True)
@@ -81,8 +81,10 @@ def test_export_reads_and_writes_the_configured_vault(tmp_path, capsys):
         '---\n\n## Summary\n\nA demo session.\n',
         encoding="utf-8",
     )
+    (vault / "wiki").mkdir(parents=True)
+    (vault / "wiki" / "index.md").write_text("# Wiki Index\n", encoding="utf-8")
     args = cli_mod.build_parser().parse_args(
-        ["export", "llms-txt", "--vault", str(vault)]
+        ["build", "--vault", str(vault), "--out", str(vault / "site")]
     )
     rc = args.func(args)
     capsys.readouterr()
@@ -134,14 +136,14 @@ def test_content_root_errors_when_configured_vault_is_unusable(tmp_path, monkeyp
 
 
 def test_unusable_vault_does_not_write_into_the_repo(tmp_path, monkeypatch):
-    """Regression: `export --vault /typo` must not mkdir+write REPO_ROOT/site."""
+    """Regression: `build --vault /typo` must not mkdir+write REPO_ROOT/site."""
     missing = tmp_path / "gone"
     monkeypatch.setattr(
         "llmwiki.config_schedule.load_default_vault_path", lambda: missing
     )
-    args = cli_mod.build_parser().parse_args(["export", "llms-txt"])
+    args = cli_mod.build_parser().parse_args(["build"])
     with pytest.raises(SystemExit) as exc:
-        args.func(args)
+        cli_mod._content_root(args)
     assert exc.value.code == 2
 
 

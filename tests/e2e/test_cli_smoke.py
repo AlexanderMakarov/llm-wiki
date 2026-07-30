@@ -15,7 +15,7 @@ This module fills that gap. For every subcommand we:
 2. For pure / no-side-effect subcommands (``version``, ``adapters``)
    we run the real command and assert on the output shape.
 3. For subcommands that need a workspace (``build``, ``graph``,
-   ``export``, ``lint``) we drive them in-process via the public Python
+   ``lint``) we drive them in-process via the public Python
    API used by the conftest fixture, against a tmp workspace seeded
    with the same synthetic corpus used by the rest of the e2e suite.
    Going in-process is faster than spawning a subprocess per test and
@@ -83,15 +83,22 @@ ALL_SUBCOMMANDS = (
     "sync",
     "build",
     "serve",
+    "usage",
     "adapters",
     "graph",
-    "export",
     "lint",
-    "reindex",
+    "queue",
+    "migrate-state",
+    "migrate-raw-redaction",
+    "migrate-tools-used",
     "candidates",
     "synthesize",
+    "add",
+    "remove",
+    "consolidate-topics",
     "query",
     "version",
+    "all",
 )
 
 
@@ -215,7 +222,7 @@ def test_adapters_wide_disables_truncation() -> None:
     )
 
 
-# ─── build / lint / graph / export against a tmp workspace ──────────────
+# ─── build / lint / graph against a tmp workspace ─────────────────────
 
 
 @pytest.fixture()
@@ -227,7 +234,7 @@ def tmp_workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
     We seed only enough content to make ``discover_sources`` find one
     session — this keeps the test fast while still exercising the full
-    build → graph → export → lint pipeline.
+    build → graph → lint pipeline.
     """
     raw = tmp_path / "raw"
     raw_sessions = raw / "sessions" / "cli-smoke"
@@ -295,7 +302,7 @@ Hello.
         encoding="utf-8",
     )
 
-    # Monkeypatch the module-level constants the build/graph/export
+    # Monkeypatch the module-level constants the build/graph
     # codepaths read from. Same trick as conftest.py uses for the e2e
     # session fixture, just folded into a per-test fixture so each CLI
     # subcommand test gets its own clean workspace.
@@ -373,7 +380,7 @@ def test_lint_runs_and_reports(tmp_workspace: Path) -> None:
 
 
 def test_export_all_writes_expected_artifacts(tmp_workspace: Path) -> None:
-    """``cmd_export`` ``all`` writes every AI-consumable export. This
+    """``export_all`` (invoked by ``build``) writes every AI-consumable export. This
     guards the contract that the static-site CDN-ables (sitemap, RSS,
     llms.txt) all show up in one pass — a regression where one of the
     writers silently no-ops would slip through unit tests but breaks

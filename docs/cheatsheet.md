@@ -41,12 +41,12 @@ From Claude Code, run these slash commands in order:
 |---|---|
 | `init` | Scaffold `raw/` `wiki/` `site/` + seed 9 nav files |
 | `sync` | Convert `.jsonl` sessions -> markdown -> wiki -> site |
-| `build` | Compile `wiki/` markdown into `site/` HTML |
+| `build` | Compile `wiki/` markdown into `site/` HTML + AI exports (`llms.txt`, `sitemap.xml`, …) |
 | `serve` | Start local HTTP server (default `:8765`) |
 | `adapters` | List every adapter + its status |
 | `graph` | Build the knowledge graph (Graphify default, builtin fallback) |
 | `query` | Search the knowledge graph with a question |
-| `export` | AI-consumable exports (llms-txt, jsonld, sitemap, rss, marp, ...) |
+| `all` | Full pipeline: optional sync/synth → build → graph → lint |
 | `lint` | Run 14 wiki-quality rules |
 | `candidates` | Approval workflow (list / promote / merge / discard) |
 | `synthesize` | LLM-backed source-page synthesis with auto-tagging |
@@ -66,17 +66,12 @@ Install Graphify: `pip install llm-notebook[graph]`
 Graphify outputs to `graphify-out/`: `graph.json`, `graph.html`, `GRAPH_REPORT.md`.
 Features: tree-sitter AST extraction, semantic analysis, community detection, confidence-scored edges.
 
-## Exports
+## AI-consumable exports
+
+`llmwiki build` writes every AI-consumable export into the output directory (default `site/`). There is no separate `export` subcommand — replace `llmwiki export all` with `llmwiki build`.
 
 ```bash
-llmwiki export all                     # all 7 formats at once
-llmwiki export llms-txt                # llmstxt.org spec
-llmwiki export llms-full-txt           # full plain-text corpus (<= 5 MB)
-llmwiki export jsonld                  # schema.org entity graph
-llmwiki export sitemap                 # sitemap.xml
-llmwiki export rss                     # rss.xml
-llmwiki export robots                  # robots.txt
-llmwiki export ai-readme               # ai-readme.md
+llmwiki build                          # HTML site + llms.txt, llms-full.txt, graph.jsonld, sitemap.xml, rss.xml, robots.txt, ai-readme.md
 ```
 
 ## Quality
@@ -232,8 +227,8 @@ llmwiki lint --json --fail-on-errors
 # Export wiki to Obsidian vault
 llmwiki sync --vault "~/Documents/Obsidian Vault/my-wiki"
 
-# Full site rebuild with AI synthesis
-llmwiki build --synthesize && llmwiki export all
+# Full site rebuild with AI synthesis (exports included)
+llmwiki build --synthesize
 ```
 
 ## Exit codes

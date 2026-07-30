@@ -89,14 +89,15 @@ Python 3.12 or later. The only runtime dependency is the `markdown` package. Eve
 
 ## Can I export to other formats?
 
-Yes. llmwiki supports several export formats:
+Yes. `llmwiki build` writes AI-consumable exports into the site output directory:
 
-- `llmwiki export llms-txt` -- llms.txt format for AI consumption
-- `llmwiki export jsonld` -- JSON-LD knowledge graph
-- `llmwiki export sitemap` -- XML sitemap
-- `llmwiki export rss` -- RSS feed
-- `llmwiki sync --vault PATH` -- write through to an Obsidian vault as part of the regular sync (replaces the removed `export-obsidian` subcommand)
+- `llms.txt` — llms.txt format for AI consumption
+- `llms-full.txt` — full plain-text corpus
+- `graph.jsonld` — JSON-LD knowledge graph
+- `sitemap.xml` — XML sitemap
+- `rss.xml` — RSS feed
+- `robots.txt` / `ai-readme.md` — crawl + agent hints
 
-Run `llmwiki export all` to generate everything at once.
+`llmwiki sync --vault PATH` writes through to an Obsidian vault as part of the regular sync (replaces the removed `export-obsidian` subcommand).
 
-> The `export-obsidian`, `export-qmd`, `export-marp`, and `watch` subcommands were removed in v1.2.0. See `docs/UPGRADING.md` for the migration path.
+> The standalone `export` / `export-obsidian` / `export-qmd` / `export-marp` CLIs are gone — run `llmwiki build` instead. See `docs/UPGRADING.md`.

@@ -92,7 +92,7 @@ Check for:
 - **Missing entity pages** — entities mentioned in 3+ sources but no dedicated page.
 - **Data gaps** — questions the wiki can't answer.
 
-Do not hand-repair the catalog: `python3 -m llmwiki reindex` (#71) relists `wiki/index.md` from the pages on disk — adding unlisted pages, dropping dead links, refreshing every `(count)` — and preserves existing descriptions. Run it with `--dry-run` first.
+Do not hand-repair the catalog: `sync`, `synthesize`, and `remove` reconcile `wiki/index.md` with the pages on disk (#71) — adding unlisted pages, dropping dead links, refreshing every `(count)` — and preserve existing descriptions. Run `llmwiki lint --rules index_sync` to verify.
 
 Output a report. Offer to save it to `wiki/lint-report.md`.
 

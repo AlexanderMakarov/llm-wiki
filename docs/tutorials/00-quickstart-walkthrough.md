@@ -154,18 +154,12 @@ Run `/wiki-query "what is the architecture of llm-wiki?"`. Claude reads the rele
 
 ---
 
-## 9. Exports
+## 9. AI-consumable exports
 
-All AI-consumable formats are built automatically with `/wiki-build`. You can also export individually:
+All AI-consumable formats are written by `/wiki-build` (or `llmwiki build`) into `site/`. There is no separate `export` subcommand — replace `llmwiki export all` with `llmwiki build`.
 
 ```
-llmwiki export llms-txt        # machine-readable index
-llmwiki export llms-full-txt   # full text corpus (2.2 MB)
-llmwiki export jsonld           # schema.org graph
-llmwiki export sitemap          # sitemap.xml (1,276 URLs)
-llmwiki export rss              # RSS feed (50 items)
-llmwiki export marp             # slide deck
-llmwiki export all              # everything
+llmwiki build                  # HTML site + llms.txt, llms-full.txt, graph.jsonld, sitemap.xml, rss.xml, robots.txt, ai-readme.md
 ```
 
 ---
