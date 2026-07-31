@@ -10,14 +10,14 @@ from llmwiki.references import find_stale_references
 class StaleReferenceDetection(LintRule):
     """Dated claims about a target older than the target (G-17 · #303).
 
-    A page with ``last_updated: 2026-01-01`` links to ``[[RAG]]`` and
-    says ``"RAG is <100ms as of 2026-01-01"``. The ``RAG`` page is
+    A living page with ``last_updated: 2026-01-01`` links to ``[[RAG]]``
+    and says ``"RAG is <100ms as of 2026-01-01"``. The ``RAG`` page is
     later updated to ``2026-04-19`` — the old 100ms claim is probably
     no longer true, but the linter couldn't tell before.
 
-    This rule flags the pair. Pairs naturally with the ``llmwiki
-    references`` CLI (``llmwiki references RAG`` enumerates every page
-    that still cites it).
+    This rule flags the pair. ``wiki/sources/`` and ``type: source``
+    pages are skipped (#87) — they are dated session records whose
+    ``last_updated`` cannot be refreshed without rewriting history.
     """
 
     name = "stale_reference_detection"
