@@ -99,6 +99,8 @@ ALL_SUBCOMMANDS = (
     "query",
     "version",
     "all",
+    "watch",
+    "install-automation",
 )
 
 

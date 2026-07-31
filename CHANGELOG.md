@@ -12,6 +12,8 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 - **`llmwiki all --with-sync`** — optional first step converts new agent sessions (equivalent to `sync`'s conversion, with auto-build off since `all` builds right after) before `--with-synth` / `build`, refreshes the synth-pending backlog, and reconciles `wiki/index.md` unconditionally. Combine with `--with-synth` for a single command that goes from raw agent session stores to a rebuilt site.
 - **`sync` always reconciles `wiki/index.md`** — reconciliation used to run only inside the auto-build branch (and only when it changed something); it now runs after every successful `sync` regardless of `--no-auto-build`, so a sync-only workflow can't drift the catalog between builds.
+- **`llmwiki watch`** — restored near-real-time maintain daemon: polls adapter session stores, gates on per-adapter turn-complete heuristics (Claude `stop_reason`, Cursor last role / `tool-call`, Codex structure), waits while mid-tool, and for adapters without a finished-signal triggers after a 2s mtime settle (not a multi-minute quiesce). Default pipeline is sync → synthesize → build; single-flight with a dirty-flag retry. Sync may time out (~180s); synthesize and build do not.
+- **`llmwiki install-automation`** — interactive (or `--yes`) installer for daily OS schedulers (systemd / launchd / Task Scheduler), optional agent SessionStart hooks (default skip — Enter installs nothing), profiles A/B/C, daily time prompt (default 08:00), Persistent catch-up, truncated log under `$XDG_STATE_HOME/llmwiki/` (or `~/.local/state/llmwiki/`), and `.llmwiki/automation-status.json` for the Home Automation panel. `./setup.sh` can offer the same wizard on a TTY.
 
 ### Changed
 

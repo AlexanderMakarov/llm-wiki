@@ -16,6 +16,8 @@ Subcommands:
     candidates        List / promote / merge / discard candidate pages
     synthesize        Synthesize wiki source pages from raw sessions via LLM
     all               Run the full pipeline: [sync?] → [synthesize?] → build → graph → lint
+    watch             Near-real-time sync→synthesize→build when sessions finish
+    install-automation  Interactive OS schedulers / hooks / synth backend setup
     version           Print version and exit
 """
 
@@ -43,6 +45,7 @@ from llmwiki.adapters import REGISTRY, discover_adapters
 # for any caller still importing from llmwiki.cli.
 from llmwiki.adapters.status import adapter_status as _adapter_status  # noqa: F401
 from llmwiki.add_doc import add_sources, expected_source_page, remove_raw_docs
+from llmwiki.automation_install import run_install
 from llmwiki.build import RAW_DIR, RAW_SESSIONS, build_site
 from llmwiki.cache import MODEL_PRICING, resolve_pricing_model
 from llmwiki.candidates import (
@@ -54,7 +57,11 @@ from llmwiki.candidates import (
 from llmwiki.candidates import (
     merge as merge_candidate,
 )
-from llmwiki.config_schedule import _load_sessions_config
+from llmwiki.config_schedule import (
+    _load_sessions_config,
+    load_default_vault_path,
+    load_synthesis_backend,
+)
 
 # #691 / #arch-h8: extracted business logic moves out of cli.py.
 # cli.py keeps thin re-export wrappers for back-compat with anyone
@@ -112,6 +119,7 @@ from llmwiki.topics_consolidate import (
 )
 from llmwiki.usage import UNATTRIBUTED
 from llmwiki.vault import describe_vault, resolve_vault
+from llmwiki.watch import watch as watch_loop
 
 
 def _content_root(args: argparse.Namespace) -> Path:
@@ -660,6 +668,120 @@ def cmd_lint(args: argparse.Namespace) -> int:
         lambda s: (s.setdefault("ops", {}).__setitem__("last_lint_run_at", now) or s),
         resolve_state_file(),
     )
+    return 0
+
+
+def cmd_watch(args: argparse.Namespace) -> int:
+    """Near-real-time maintain when sessions finish."""
+    _apply_default_vault(args)
+    vault = getattr(args, "vault", None)
+    vault_path = Path(vault) if vault else None
+    return watch_loop(
+        adapters=getattr(args, "adapter", None),
+        interval=getattr(args, "interval", 5.0),
+        settle=getattr(args, "settle", 2.0),
+        dry_run=getattr(args, "dry_run", False),
+        vault=vault_path,
+        with_synthesize=not getattr(args, "no_synthesize", False),
+        with_build=not getattr(args, "no_build", False),
+    )
+
+
+def cmd_install_automation(args: argparse.Namespace) -> int:
+    """Interactive (or --yes non-interactive) automation installer."""
+    _apply_default_vault(args)
+
+    vault = getattr(args, "vault", None)
+    vault_root = Path(vault) if vault else (
+        load_default_vault_path() or REPO_ROOT
+    )
+    if vault_root is None:
+        vault_root = REPO_ROOT
+
+    profile = (getattr(args, "profile", None) or "A").upper()
+    hour = int(getattr(args, "hour", 8))
+    minute = int(getattr(args, "minute", 0))
+    yes = bool(getattr(args, "yes", False))
+
+    if not yes:
+        print("llmwiki install-automation")
+        print("  Hooks are NOT recommended (Enter skips). Prefer OS scheduler or watch.")
+        print("  Daily runs with no new sessions are a no-op.")
+        print()
+        backend = input(
+            f"Synth backend [dummy/ollama/claude] "
+            f"(default {load_synthesis_backend()}): "
+        ).strip() or load_synthesis_backend()
+        hooks_ans = input(
+            "Install agent sync hooks? Type 'install' to opt in "
+            "(Enter = skip, not recommended): "
+        ).strip()
+        install_hooks = hooks_ans.lower() == "install"
+        prof = input(
+            "Scheduler profile A=sync  B=sync+synth+build  "
+            "C=all --with-sync --with-synth  [A]: "
+        ).strip().upper() or "A"
+        if prof in ("A", "B", "C"):
+            profile = prof
+        time_s = input("Daily time HH:MM [08:00]: ").strip() or "08:00"
+        try:
+            hh, mm = time_s.split(":", 1)
+            hour, minute = int(hh), int(mm)
+        except ValueError:
+            print("error: bad time; use HH:MM", file=sys.stderr)
+            return 2
+        watch_ans = input("Also document watch as enabled? [y/N]: ").strip().lower()
+        watch_enabled = watch_ans in ("y", "yes")
+        units = input(
+            f"Write unit files under directory "
+            f"(Enter = {REPO_ROOT / '.llmwiki' / 'units'}): "
+        ).strip()
+        write_dir = Path(units) if units else (REPO_ROOT / ".llmwiki" / "units")
+    else:
+        backend = getattr(args, "synth_backend", None) or load_synthesis_backend()
+        install_hooks = False
+        watch_enabled = bool(getattr(args, "watch_enabled", False))
+        write_dir = Path(
+            getattr(args, "units_dir", None)
+            or (REPO_ROOT / ".llmwiki" / "units")
+        )
+
+    # Optionally merge synth backend into config.json
+    if not yes:
+        cfg_path = REPO_ROOT / "config.json"
+        cfg: dict[str, Any] = {}
+        if cfg_path.is_file():
+            try:
+                cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                cfg = {}
+        synth = cfg.setdefault("synthesis", {})
+        if isinstance(synth, dict):
+            synth["backend"] = backend
+        cfg_path.write_text(json.dumps(cfg, indent=2) + "\n", encoding="utf-8")
+        print(f"  wrote synthesis.backend={backend!r} → config.json")
+
+    status = run_install({
+        "profile": profile,
+        "hour": hour,
+        "minute": minute,
+        "working_dir": REPO_ROOT,
+        "python_bin": sys.executable,
+        "vault_root": vault_root,
+        "write_units_dir": write_dir,
+        "watch_enabled": watch_enabled if not yes else watch_enabled,
+        "hooks": ["claude", "cursor"] if (not yes and install_hooks) else [],
+        "synth_backend": backend if not yes else (
+            getattr(args, "synth_backend", None) or load_synthesis_backend()
+        ),
+        "force_platform": getattr(args, "force_platform", None),
+    })
+    print(f"  automation status → {vault_root / '.llmwiki' / 'automation-status.json'}")
+    print(f"  log path: {status.get('log_path')}")
+    for u in status.get("units_written") or []:
+        print(f"  wrote {u}")
+    print("  Enable the timer/plist using your OS instructions; "
+          "idle days are a no-op.")
     return 0
 
 
@@ -1489,6 +1611,10 @@ def _add_vault_arg(parser: argparse.ArgumentParser, *, role: str) -> None:
                      "engine (graphify is repo-anchored).",
             "candidates": "Triage candidate pages under this vault's wiki/, "
                           "instead of the repo's.",
+            "watch": "Watch agent session stores and maintain this vault "
+                     "(sync → synthesize → build) when sessions finish.",
+            "install-automation": "Write automation status and schedulers "
+                                  "for this vault.",
         }[role],
     )
 
@@ -1944,6 +2070,44 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_vault_arg(all_p, role="all")
     all_p.set_defaults(func=cmd_all)
+
+    watch_p = sub.add_parser(
+        "watch",
+        help="Near-real-time sync→synthesize→build when sessions finish "
+             "(turn-complete gates; unsupported adapters settle 2s then run)",
+    )
+    watch_p.add_argument("--adapter", nargs="*", default=None,
+                         help="Adapter name(s) to watch")
+    watch_p.add_argument("--interval", type=float, default=5.0,
+                         help="Poll interval seconds (default 5)")
+    watch_p.add_argument("--settle", type=float, default=2.0,
+                         help="Mtime settle seconds before ready check (default 2)")
+    watch_p.add_argument("--dry-run", action="store_true",
+                         help="Detect only; do not run maintain")
+    watch_p.add_argument("--no-synthesize", action="store_true",
+                         help="Skip synthesize")
+    watch_p.add_argument("--no-build", action="store_true",
+                         help="Skip build")
+    _add_vault_arg(watch_p, role="watch")
+    watch_p.set_defaults(func=cmd_watch)
+
+    auto_p = sub.add_parser(
+        "install-automation",
+        help="Install OS schedulers / optional hooks; write automation status "
+             "for the site Home panel (hooks default skip)",
+    )
+    auto_p.add_argument("--yes", action="store_true",
+                        help="Non-interactive: use flags / defaults (no hooks)")
+    auto_p.add_argument("--profile", choices=["A", "B", "C"], default="A")
+    auto_p.add_argument("--hour", type=int, default=8)
+    auto_p.add_argument("--minute", type=int, default=0)
+    auto_p.add_argument("--synth-backend", default=None)
+    auto_p.add_argument("--units-dir", type=Path, default=None)
+    auto_p.add_argument("--watch-enabled", action="store_true")
+    auto_p.add_argument("--force-platform", choices=["linux", "macos", "windows"],
+                        default=None)
+    _add_vault_arg(auto_p, role="install-automation")
+    auto_p.set_defaults(func=cmd_install_automation)
 
     return p
 

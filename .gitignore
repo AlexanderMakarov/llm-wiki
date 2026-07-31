@@ -233,5 +233,8 @@ usage/
 .cursor/*
 !.cursor/rules/
 .cursor/rules/*
-!.cursor/rules/read-contributing.mdc
+!.cursor/rules/contributing.mdc
 !.cursor/rules/no-local-vault-in-prs.mdc
+
+# Local automation status / generated unit files (install-automation)
+.llmwiki/

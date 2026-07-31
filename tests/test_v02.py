@@ -24,7 +24,7 @@ from llmwiki.mcp.server import (
     tool_wiki_read_page,
 )
 from llmwiki.obsidian_output import _add_source_backlink, _build_readme, export_to_vault
-from llmwiki.watch import run_sync, scan_mtimes, watch
+from llmwiki.watch import run_maintain, scan_mtimes, watch
 from tests.conftest import REPO_ROOT
 
 # ─── adapter registry v0.2 ────────────────────────────────────────────────
@@ -176,7 +176,7 @@ def test_mcp_tool_wiki_read_page_path_traversal_guard():
 def test_watch_module_imports():
     assert callable(watch)
     assert callable(scan_mtimes)
-    assert callable(run_sync)
+    assert callable(run_maintain)
 
 
 def test_watch_scan_mtimes_returns_dict():

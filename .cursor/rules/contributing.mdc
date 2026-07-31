@@ -34,6 +34,10 @@ A committed `pre-push` hook in `.githooks/` lints the Python files in your push 
 
 Local green is not enough. After every `git push` that creates or updates a PR, **wait for GitHub Actions on that head SHA**, report green/red to the user, and if anything failed: read logs (`gh run view <id> --log-failed`), fix, push, wait again. Prefer `gh pr checks <n> --watch`. Do not call the PR ready while required checks are pending (unless the user says not to wait). Full detail: CONTRIBUTING *After you push*.
 
+## PR checklist boxes
+
+When writing or updating a PR body, include only the Pre-merge checks that apply to *this* PR — not a fixed dump of the template. Mark `- [x]` for what you verified this session (or N/A with a one-line waiver). Leave `- [ ]` only for what you cannot verify yourself. When new evidence arrives (e.g. CI goes green), update the PR body (`gh pr edit`).
+
 ## Do not confuse with AGENTS.md / CLAUDE.md
 
 [`AGENTS.md`](../../AGENTS.md) and [`CLAUDE.md`](../../CLAUDE.md) in this repo are **vault wiki schemas** (how agents maintain `raw/` → `wiki/` → `site/` for a user's knowledge base). They are **not** contribution guides for developing llmwiki itself. Do not put repo/PR/process rules into them.
