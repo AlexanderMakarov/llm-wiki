@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Any
 
 from llmwiki import REPO_ROOT
-from llmwiki.adapters import REGISTRY, discover_adapters
+from llmwiki.adapters import REGISTRY, discover_all
 from llmwiki.config_schedule import load_default_vault_path
 from llmwiki.session_ready import Ready, session_ready_for_adapter
 
@@ -39,8 +39,14 @@ _STARTUP_BANNER = f"""\
 
 
 def scan_mtimes(adapters: list[str] | None) -> dict[str, float]:
-    """Return ``{path: mtime}`` for every session file visible to adapters."""
-    discover_adapters()
+    """Return ``{path: mtime}`` for every session file visible to adapters.
+
+    Uses ``discover_all`` — not ``discover_adapters`` — so contrib stores
+    (Cursor, OpenClaw, …) are watched too. ``sync`` loads contrib the same
+    way, and a store watch can't see is a store watch can never trigger on.
+    Opt-in adapters stay excluded: ``is_available()`` already gates those.
+    """
+    discover_all()
     selected_cls = []
     if adapters:
         for name in adapters:
@@ -61,7 +67,7 @@ def scan_mtimes(adapters: list[str] | None) -> dict[str, float]:
 
 
 def _adapter_for_path(path: str) -> str:
-    discover_adapters()
+    discover_all()
     p = Path(path)
     for name, cls in REGISTRY.items():
         try:
@@ -76,7 +82,7 @@ def _adapter_for_path(path: str) -> str:
 
 def _load_records_for_ready(adapter_name: str, path: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Return (records, messages) for session_ready dispatch."""
-    discover_adapters()
+    discover_all()
     cls = REGISTRY.get(adapter_name)
     if cls is None:
         return [], []
@@ -168,7 +174,7 @@ def watch(
     if adapters:
         print(f"    adapters: {', '.join(adapters)}")
     else:
-        discover_adapters()
+        discover_all()
         avail = [n for n, c in REGISTRY.items() if c.is_available()]
         print(f"    adapters: {', '.join(avail) or '(none available)'}")
     print("    Ctrl+C to stop.\n")

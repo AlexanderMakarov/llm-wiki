@@ -65,6 +65,11 @@ def test_alias_collision_with_canonical_name_raises():
     with pytest.raises(ValueError, match="would shadow existing"):
         register("dummy_x", aliases=["claude_code"])(_DummyAdapter)
 
+    # Registration is all-or-nothing: a rejected adapter must not leave a
+    # canonical entry behind, or every consumer that walks REGISTRY.values()
+    # trips over a half-registered class.
+    assert "dummy_x" not in REGISTRY
+
 
 # ─── Fix #2 — build_site per-source copy isolation ───────────────────
 
