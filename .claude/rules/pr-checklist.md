@@ -1,0 +1,58 @@
+---
+paths:
+  - "llmwiki/**"
+  - "tests/**"
+  - "scripts/**"
+  - "docs/**"
+  - "integrations/**"
+  - ".github/**"
+  - ".githooks/**"
+  - "pyproject.toml"
+  - "CHANGELOG.md"
+  - "CONTRIBUTING.md"
+  - "README.md"
+---
+
+# PR pre-merge checklist — check what you verified
+
+When you create or update a pull request that uses [`.github/PULL_REQUEST_TEMPLATE.md`](../../.github/PULL_REQUEST_TEMPLATE.md), treat the **Pre-merge checklist** as work for you, not a blank form for the user.
+
+## Rules
+
+1. **Mark `- [x]`** for every item you have personally verified in this session (or that does not apply, with a one-line waiver next to the item).
+2. **Leave `- [ ]` only** for items you cannot verify yourself (human eyes, GPG key, reviewer role).
+3. **After the PR body is up**, tell the user which boxes remain unchecked and ask them to confirm those specifically — do not dump the whole checklist back at them.
+4. **Never check a box you did not verify.** Running nothing and checking "All CI checks green" is worse than leaving it open.
+5. **Update the PR body when evidence changes** — e.g. after CI goes green, edit the PR to check that box (`gh pr edit`).
+
+## What the agent can usually check
+
+| Checklist item | How you verify |
+|---|---|
+| One intent | You authored the diff; one concern |
+| All CI checks green | After push: `gh pr checks <n> --watch` (or equivalent); green on head SHA |
+| Linked issue | Body/title has `Closes #N`, or write a one-line waiver |
+| Conventional-commit title | Matches CONTRIBUTING type table |
+| Tests added or updated | Diff includes tests, or waiver for docs/chore-only |
+| CHANGELOG.md updated | Unreleased entry present, or waiver for non-user-visible |
+| Breaking changes flagged | Label + heading if breaking; else N/A waiver |
+| No new runtime dependencies | Diff / `pyproject.toml` — stdlib + `markdown` only |
+| No real session data | No personal `raw/sessions/` or vault content in the commit |
+| No machine-specific paths / secrets | Grep diff for home paths, usernames, `.env`, keys |
+| Docs updated | Matching docs/reference / README / tutorials if user-visible |
+| Release notes drafted | One-line bullet in CHANGELOG Unreleased or PR body |
+
+## What to leave for the user (ask explicitly)
+
+| Checklist item | Why the agent usually cannot check it |
+|---|---|
+| UI verified (light AND dark) | Needs human (or screenshots you actually captured and attached) |
+| A11y verified | Needs human pass / axe run you did not perform |
+| Commits GPG-signed by the repo author | Signing key is the user's; you may only confirm "no AI co-author trailers" in the log |
+| Reviewer has read every changed line | Reviewer role — not the author agent |
+
+If you *did* run UI/a11y checks (e.g. Playwright screenshots attached, axe clean in this session), check those boxes and note how in **Screenshots / output**.
+
+## Example ask to the user
+
+> PR checklist is filled except: **UI light/dark**, **A11y**, **GPG-signed commits**, **reviewer read**. Please confirm those (or say which to waive).

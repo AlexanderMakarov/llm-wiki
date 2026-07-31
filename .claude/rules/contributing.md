@@ -58,6 +58,10 @@ Prefer `ruff check --fix --select …` for safe rule families — never bare `ru
 
 Local green is not enough. After every `git push` that creates or updates a PR, **wait for GitHub Actions on that head SHA**, report green/red to the user, and if anything failed: read logs (`gh run view <id> --log-failed`), fix, push, wait again. Prefer `gh pr checks <n> --watch`. Do not call the PR ready while required checks are pending (unless the user says not to wait). Full detail: CONTRIBUTING *After you push*.
 
+## PR checklist boxes
+
+When filling `.github/PULL_REQUEST_TEMPLATE.md`, mark every Pre-merge checkbox you verified; leave unchecked only what you cannot (UI/a11y eyes, GPG, reviewer read) and ask the user for those. See [`pr-checklist.md`](pr-checklist.md).
+
 ## Python conventions
 
 - Imports belong at the top of the module. Deferring one inside a function is acceptable **only** for an optional extra (`trafilatura`, `markitdown`, `graphifyy`, `networkx`) or to break a proven import cycle — and the reason goes in a `# noqa: PLC0415` comment on the line. Stdlib is never deferred. `PLC0415` is enforced everywhere except `scripts/**`.
