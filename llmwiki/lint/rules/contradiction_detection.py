@@ -24,8 +24,8 @@ _FILLER_MARKUP_RE = re.compile(
 
 # Synonyms that mean "nothing to record" after `none`.
 _NONE_SYNONYMS = (
-    r"identified|detected|found|noted|apparent|known|observed|recorded|"
-    r"applicable|seen|introduced"
+    r"identified|identifiable|detected|found|noted|apparent|known|observed|"
+    r"recorded|applicable|seen|introduced|flagged|raised|surfaced|spotted"
 )
 
 # Exact short placeholder lines (after normalize).
@@ -75,10 +75,40 @@ _AFFIRMATIVE_CUE_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Negators that cancel an affirmative cue in the same clause (#86).
+# `\bno\b` does not match inside `None` (single word token).
+_NEGATOR_RE = re.compile(
+    r"\b(?:no|not|never|nor|without|\w+n't)\b",
+    re.IGNORECASE,
+)
+
+# Max chars to look back for a negator before an affirmative cue. Bounds
+# run-on clauses so a distant "does not …" cannot suppress a later real cue.
+_NEGATOR_LOOKBACK = 60
+
 
 def _normalize_filler_line(line: str) -> str:
     text = _FILLER_MARKUP_RE.sub("", line)
     return " ".join(text.split()).strip()
+
+
+def _has_unnegated_affirmative_cue(text: str) -> bool:
+    """True when a conflict cue appears outside a negated clause.
+
+    Synthesis filler often embeds cue vocabulary inside negation
+    ("does not conflict with prior…", "no claims that conflict…").
+    Those must not defeat the filler-opening check (#86).
+    """
+    for match in _AFFIRMATIVE_CUE_RE.finditer(text):
+        clause_start = 0
+        for i in range(match.start() - 1, -1, -1):
+            if text[i] in ".!?;":
+                clause_start = i + 1
+                break
+        window_start = max(clause_start, match.start() - _NEGATOR_LOOKBACK)
+        if not _NEGATOR_RE.search(text[window_start:match.start()]):
+            return True
+    return False
 
 
 def _is_filler_contradictions_body(section: str) -> bool:
@@ -88,7 +118,8 @@ def _is_filler_contradictions_body(section: str) -> bool:
     if not lines:
         return True
     whole = " ".join(lines)
-    if _AFFIRMATIVE_CUE_RE.search(whole):
+    # Affirmative cues only defeat filler when they sit outside negation.
+    if _has_unnegated_affirmative_cue(whole):
         return False
     if _FILLER_OPENING_RE.match(whole):
         return True

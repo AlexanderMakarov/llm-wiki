@@ -602,6 +602,14 @@ def test_contradiction_detects_section():
     "None against existing wiki content. (Internal note only.)",
     "None introduced by this session itself; it inherits an open question.",
     "None identified. The design balances unrestricted vs. restricted modes.",
+    # Verbatim synthesis filler from a real vault (#86) — cues sit inside negation,
+    # or open with none <synonym> variants the earlier synonym list missed.
+    "None identified — session is self-contained and does not conflict with prior wiki content.",
+    "- None identified; this session is additive and does not conflict with prior wiki content.",
+    "None identified — the session surfaces no claims that conflict with prior wiki content.",
+    "None identified — no existing wiki page covers this project or contradicts the claims above.",
+    "- None flagged as conflicting with existing wiki content; this session refines/extends [[Foo]]",
+    "None identifiable — this fragment has no substantive content to compare against existing wiki claims.",
 ])
 def test_contradiction_skips_filler(body: str):
     pages = {
@@ -627,6 +635,20 @@ def test_contradiction_keeps_contradicts_earlier():
             {"title": "A"},
             "## Contradictions\n- Contradicts earlier framing of build --synthesize\n",
         ),
+    }
+    assert len(ContradictionDetection().run(pages)) == 1
+
+
+@pytest.mark.parametrize("body", [
+    # Real vault conflicts (#86 acceptance) — must still flag.
+    "- [[AWOS]] is described in the wiki as an internal system, but this CV lists it as a technology used during work.",
+    '- Contradicts project CLAUDE.md: schema states "No docstrings on public helpers."',
+    # Unnegated cue after a distant negated clause must still flag.
+    "Earlier notes do not apply here. Contradicts earlier framing of the build flag.",
+])
+def test_contradiction_keeps_real_conflicts(body: str):
+    pages = {
+        "a.md": _mk_page({"title": "A"}, f"## Contradictions\n{body}\n"),
     }
     assert len(ContradictionDetection().run(pages)) == 1
 
