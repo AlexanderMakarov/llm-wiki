@@ -36,7 +36,7 @@ Local green is not enough. After every `git push` that creates or updates a PR, 
 
 ## PR checklist boxes
 
-When filling `.github/PULL_REQUEST_TEMPLATE.md`, mark every Pre-merge checkbox you verified; leave unchecked only what you cannot (UI/a11y eyes, GPG, reviewer read) and ask the user for those. See [`pr-checklist.mdc`](pr-checklist.mdc).
+When writing or updating a PR body, include only the Pre-merge checks that apply to *this* PR — not a fixed dump of the template. Mark `- [x]` for what you verified this session (or N/A with a one-line waiver). Leave `- [ ]` only for what you cannot verify yourself. When new evidence arrives (e.g. CI goes green), update the PR body (`gh pr edit`).
 
 ## Do not confuse with AGENTS.md / CLAUDE.md
 

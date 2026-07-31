@@ -98,7 +98,7 @@ This repo is two things at once, and the instruction files split along that seam
 | Surface | Tool | Loads when |
 |---|---|---|
 | `.claude/rules/contributing.md` | Claude Code | agent reads a file under `llmwiki/`, `tests/`, `scripts/`, `docs/`, or the root build files (`paths:` frontmatter) |
-| `.cursor/rules/read-contributing.mdc` | Cursor | every session (`alwaysApply: true`) |
+| `.cursor/rules/contributing.mdc` | Cursor | every session (`alwaysApply: true`) |
 | `.kiro/steering/contributing-rules.md` | Kiro | every session (`load: always`) |
 
 Plus a short pointer block at the top of `CLAUDE.md` and `AGENTS.md`, so an agent that only ever reads the root schema still finds its way here.
