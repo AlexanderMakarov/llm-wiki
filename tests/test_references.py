@@ -6,8 +6,9 @@ Covers:
 * ``build_index``: target resolution, broken links, self-link, unicode,
   no-body / empty-body, multiple links per page.
 * ``find_references_to``: empty hits, matching hits.
-* ``find_stale_references``: needs all three (dated claim + older source
-  + newer target); missing any produces empty; unparseable dates skipped.
+* ``find_stale_references``: needs all three (dated claim + older living
+  page + newer target); missing any produces empty; unparseable dates
+  skipped; ``wiki/sources/`` and ``type: source`` pages never stale (#87).
 * ``format_references_table``: empty + sort order.
 * Lint rule wired + fires on a synthetic corpus.
 * CLI ``llmwiki references`` end-to-end.
@@ -208,22 +209,48 @@ def test_stale_detected_when_all_conditions_met():
             meta={"last_updated": "2026-04-01"},
         ),
         _p(
-            "sources/a.md",
-            meta={"last_updated": "2026-01-01"},
+            "concepts/Latency.md",
+            meta={"type": "concept", "last_updated": "2026-01-01"},
             body="[[RAG]] latency is <100ms as of 2026-01-01.",
         ),
     ])
     stale = r.find_stale_references(pages)
     assert len(stale) == 1
-    assert stale[0].source == "sources/a.md"
+    assert stale[0].source == "concepts/Latency.md"
     assert stale[0].target == "RAG"
+
+
+def test_no_stale_when_referrer_is_source_page():
+    """wiki/sources/ pages are dated session records — not re-verifiable (#87)."""
+    pages = dict([
+        _p("entities/RAG.md", meta={"last_updated": "2026-04-01"}),
+        _p(
+            "sources/a.md",
+            meta={"type": "source", "last_updated": "2026-01-01"},
+            body="[[RAG]] latency is <100ms as of 2026-01-01.",
+        ),
+    ])
+    assert r.find_stale_references(pages) == []
+
+
+def test_no_stale_when_frontmatter_type_is_source():
+    """type: source skips even outside sources/ (#87)."""
+    pages = dict([
+        _p("entities/RAG.md", meta={"last_updated": "2026-04-01"}),
+        _p(
+            "archive/old-session.md",
+            meta={"type": "source", "last_updated": "2026-01-01"},
+            body="[[RAG]] latency is <100ms as of 2026-01-01.",
+        ),
+    ])
+    assert r.find_stale_references(pages) == []
 
 
 def test_no_stale_when_source_is_newer():
     pages = dict([
         _p("entities/RAG.md", meta={"last_updated": "2026-01-01"}),
         _p(
-            "sources/a.md",
+            "concepts/Latency.md",
             meta={"last_updated": "2026-04-01"},
             body="[[RAG]] as of 2026-04-01.",
         ),
@@ -235,7 +262,7 @@ def test_no_stale_without_dated_claim():
     pages = dict([
         _p("entities/RAG.md", meta={"last_updated": "2026-04-01"}),
         _p(
-            "sources/a.md",
+            "concepts/Latency.md",
             meta={"last_updated": "2026-01-01"},
             body="[[RAG]] is interesting.",  # no dated claim
         ),
@@ -247,7 +274,7 @@ def test_no_stale_without_target_last_updated():
     pages = dict([
         _p("entities/RAG.md"),  # no last_updated
         _p(
-            "sources/a.md",
+            "concepts/Latency.md",
             meta={"last_updated": "2026-01-01"},
             body="[[RAG]] as of 2026-01-01",
         ),
@@ -259,7 +286,7 @@ def test_no_stale_without_source_last_updated():
     pages = dict([
         _p("entities/RAG.md", meta={"last_updated": "2026-04-01"}),
         _p(
-            "sources/a.md",
+            "concepts/Latency.md",
             meta={},  # no last_updated
             body="[[RAG]] as of 2026-01-01",
         ),
@@ -271,7 +298,7 @@ def test_malformed_date_tolerated():
     pages = dict([
         _p("entities/RAG.md", meta={"last_updated": "garbage"}),
         _p(
-            "sources/a.md",
+            "concepts/Latency.md",
             meta={"last_updated": "2026-01-01"},
             body="[[RAG]] as of 2026-01-01",
         ),
@@ -283,7 +310,7 @@ def test_malformed_date_tolerated():
 def test_broken_link_never_stale():
     pages = dict([
         _p(
-            "sources/a.md",
+            "concepts/Latency.md",
             meta={"last_updated": "2026-01-01"},
             body="[[Nonexistent]] as of 2026-01-01",
         ),
@@ -296,7 +323,7 @@ def test_stale_populates_excerpt():
     pages = dict([
         _p("entities/RAG.md", meta={"last_updated": "2026-04-01"}),
         _p(
-            "sources/a.md",
+            "concepts/Latency.md",
             meta={"last_updated": "2026-01-01"},
             body="Context. [[RAG]] latency <100ms as of 2026-01-01. Trailing.",
         ),
@@ -339,7 +366,7 @@ def test_lint_rule_fires_on_stale_pair():
     pages = dict([
         _p("entities/RAG.md", meta={"last_updated": "2026-04-01"}),
         _p(
-            "sources/a.md",
+            "concepts/Latency.md",
             meta={"last_updated": "2026-01-01"},
             body="[[RAG]] is <100ms as of 2026-01-01.",
         ),
@@ -350,13 +377,27 @@ def test_lint_rule_fires_on_stale_pair():
     assert "2026-01-01" in issues[0]["message"]
 
 
+def test_lint_rule_silent_on_source_page():
+    """Source-page residue must not become lint noise (#87)."""
+    rule = REGISTRY["stale_reference_detection"]()
+    pages = dict([
+        _p("entities/RAG.md", meta={"last_updated": "2026-04-01"}),
+        _p(
+            "sources/a.md",
+            meta={"type": "source", "last_updated": "2026-01-01"},
+            body="[[RAG]] is <100ms as of 2026-01-01.",
+        ),
+    ])
+    assert rule.run(pages) == []
+
+
 def test_lint_rule_silent_on_fresh_pair():
 
     rule = REGISTRY["stale_reference_detection"]()
     pages = dict([
         _p("entities/RAG.md", meta={"last_updated": "2026-01-01"}),
         _p(
-            "sources/a.md",
+            "concepts/Latency.md",
             meta={"last_updated": "2026-04-01"},
             body="[[RAG]] as of 2026-04-01",
         ),

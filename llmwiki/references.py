@@ -1,15 +1,19 @@
 """Reverse-reference index for wiki pages (G-17 · #303).
 
-A wiki page carries an implicit contract with the pages it links to:
-if ``sources/a.md`` links to ``[[RAG]]`` and makes dated claims
+A living wiki page carries an implicit contract with the pages it links to:
+if ``concepts/Latency.md`` links to ``[[RAG]]`` and makes dated claims
 ("RAG latency is <100ms as of 2026-03"), the referring page may
 become **stale** when the target page is updated later (the 100ms
 number might no longer hold).
 
+``wiki/sources/`` pages (frontmatter ``type: source``) are dated session
+records — their ``last_updated`` is the session date and cannot be
+refreshed without misrepresenting history — so they are never stale (#87).
+
 This module:
 
 1. Builds a reverse-reference index — for every target, who links to it.
-2. Detects *stale references* — referring pages with a ``last_updated``
+2. Detects *stale references* — living referring pages with a ``last_updated``
    older than the target plus a dated claim about that target.
 3. Backs the ``llmwiki references <entity>`` CLI so operators can
    answer "who still claims something about RAG?"
@@ -167,18 +171,34 @@ def find_references_to(
     return idx.get(target, [])
 
 
+def _is_dated_source_record(rel: str, meta: dict) -> bool:
+    """True for session/document summaries that are true-as-of their date.
+
+    Pages under ``sources/`` or with frontmatter ``type: source`` are
+    dated records of one ingest — refreshing ``last_updated`` would
+    misrepresent when the session happened, so they are never "stale"
+    in the living-page sense (#87).
+    """
+    if meta.get("type") == "source":
+        return True
+    return rel.replace("\\", "/").startswith("sources/")
+
+
 def find_stale_references(
     pages: dict[str, dict],
 ) -> list[StaleReference]:
     """Return every (source, target) pair that looks stale.
 
-    Stale = source links to target AND source's last_updated < target's
-    last_updated AND source body contains at least one dated claim.
+    Stale = living page links to target AND page's last_updated < target's
+    last_updated AND page body contains at least one dated claim.
 
     The dated-claim guard is what keeps this rule from firing on every
     page that happens to link to something newer — without it every
     wikilink in a long-lived page would be "stale" the moment the
     target ever changes.
+
+    ``wiki/sources/`` and ``type: source`` pages are skipped (#87): they
+    are dated records, not living claims that can be re-verified.
     """
     idx = build_index(pages)
     out: list[StaleReference] = []
@@ -194,6 +214,8 @@ def find_stale_references(
             if not ref.dated_claims:
                 continue
             source_meta = pages.get(ref.source, {}).get("meta", {})
+            if _is_dated_source_record(ref.source, source_meta):
+                continue
             source_updated = _parse_date(source_meta.get("last_updated"))
             if source_updated is None:
                 continue
