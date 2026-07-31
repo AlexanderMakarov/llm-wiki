@@ -58,10 +58,14 @@ def register(name: str, aliases: list[str] | None = None):
     canonical adapter — e.g. ``register("copilot_chat",
     aliases=["claude_code"])`` would raise ValueError, not silently
     replace the real ``claude_code`` entry.
+
+    Registration is all-or-nothing: every alias is validated *before*
+    anything is written. An earlier version assigned ``REGISTRY[name]``
+    first and validated afterwards, so a rejected registration still
+    left its canonical entry behind — a half-registered class that then
+    broke every consumer walking ``REGISTRY.values()``.
     """
     def decorator(cls):
-        REGISTRY[name] = cls
-        cls.name = name
         for alias in aliases or ():
             if alias in REGISTRY:
                 raise ValueError(
@@ -74,6 +78,10 @@ def register(name: str, aliases: list[str] | None = None):
                     f"adapter alias {alias!r} already mapped to "
                     f"{existing!r}; cannot remap to {name!r}"
                 )
+
+        REGISTRY[name] = cls
+        cls.name = name
+        for alias in aliases or ():
             REGISTRY_ALIASES[alias] = name
         return cls
     return decorator

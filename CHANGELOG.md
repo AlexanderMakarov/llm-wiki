@@ -30,6 +30,8 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Fixed
 
+- **`llmwiki watch` ignored Cursor / OpenClaw (and other contrib) session stores** — `watch` called `discover_adapters()` (core only) while `sync` loads contrib via `discover_all()`. Contrib stores never entered `scan_mtimes`, so a finished Cursor session could not trigger maintain. `watch` now uses `discover_all()`. Separately, `register()` validates every alias before writing the registry, so a rejected collision no longer leaves a half-registered canonical entry that breaks consumers walking `REGISTRY.values()`.
+
 - **`llmwiki all` self-deadlocked** — `run_pipeline` dispatched to `cmd_build` (and, with `--with-synth`, effectively re-entered the same mutating pipeline) while already holding the vault's `pipeline_lock`; `pipeline_lock` is explicitly non-reentrant, so `llmwiki all` could hang waiting on a lock it already held itself. `run_pipeline` now acquires the lock exactly **once** and calls the library functions those `cmd_*` wrappers are thin shims over (`convert_all`, `synthesize_new_sessions`, `build_site`, lint's `load_pages`/`run_all`) directly, so no nested `pipeline_lock` acquisition is possible.
 
 - **Topic pages (and aliases) missing from Cmd+K search (#50)** — `build_search_index` never received topic-graph nodes (the graph was built *after* the index), so `topics/*.html` was reachable from the graph and `topics/index.html` but typing a topic name — or any of its alias spellings — into the palette returned nothing. Topic-graph construction now runs before the index; each node becomes a `type: "topic"` meta entry whose `body` carries aliases + session count, and the same payload rides the `#20` `.js` sidecar for `file://`.
