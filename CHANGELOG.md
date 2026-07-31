@@ -30,6 +30,8 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Fixed
 
+- **`contradiction_detection` filler guard leaks (#86)** — affirmative cues like `conflict with prior` / `contradicts the` matched inside negated phrasing (`does not conflict with prior…`, `no claims that conflict…`), so synthesis boilerplate still flagged. Cues now count only when unnegated in the same clause; synonym list gains `identifiable` / `flagged` / `raised` / `surfaced` / `spotted`. Real conflict bodies still flag.
+
 - **`llmwiki watch` ignored Cursor / OpenClaw (and other contrib) session stores** — `watch` called `discover_adapters()` (core only) while `sync` loads contrib via `discover_all()`. Contrib stores never entered `scan_mtimes`, so a finished Cursor session could not trigger maintain. `watch` now uses `discover_all()`. Separately, `register()` validates every alias before writing the registry, so a rejected collision no longer leaves a half-registered canonical entry that breaks consumers walking `REGISTRY.values()`.
 
 - **`llmwiki all` self-deadlocked** — `run_pipeline` dispatched to `cmd_build` (and, with `--with-synth`, effectively re-entered the same mutating pipeline) while already holding the vault's `pipeline_lock`; `pipeline_lock` is explicitly non-reentrant, so `llmwiki all` could hang waiting on a lock it already held itself. `run_pipeline` now acquires the lock exactly **once** and calls the library functions those `cmd_*` wrappers are thin shims over (`convert_all`, `synthesize_new_sessions`, `build_site`, lint's `load_pages`/`run_all`) directly, so no nested `pipeline_lock` acquisition is possible.
