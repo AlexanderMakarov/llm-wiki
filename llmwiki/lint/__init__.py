@@ -95,8 +95,11 @@ def load_pages(wiki_dir: Path | None = None) -> dict[str, dict[str, Any]]:
         return {}
     pages: dict[str, dict[str, Any]] = {}
     for p in sorted(root.rglob("*.md")):
-        # Skip README and archive
-        if p.name == "README.md":
+        rel_path = p.relative_to(root)
+        # Skip README and archive/ — the latter holds demoted and
+        # discarded pages, so linting it re-reports resolved issues and
+        # lets an archived slug keep satisfying [[wikilinks]].
+        if p.name == "README.md" or rel_path.parts[0] == "archive":
             continue
         try:
             text = p.read_text(encoding="utf-8")
@@ -107,7 +110,7 @@ def load_pages(wiki_dir: Path | None = None) -> dict[str, dict[str, Any]]:
         # used the legacy LF-only regex which would leave CRLF-prefixed
         # frontmatter intact in body output.
         meta, body = _parse_fm(text)
-        rel = str(p.relative_to(root))
+        rel = str(rel_path)
         pages[rel] = {
             "path": p,
             "rel": rel,

@@ -10,6 +10,12 @@ How to upgrade between `llmwiki` releases.  Most releases are drop-in (`pip inst
 
 The canonical per-release detail is [CHANGELOG.md](https://github.com/Pratiyush/llm-wiki/blob/master/CHANGELOG.md) — this guide focuses on "what might break".
 
+## Unreleased — lint skips `wiki/archive/`
+
+- **`llmwiki lint` no longer scans archived pages.** `wiki/archive/` is history — demoted pages and candidates you discarded — and it was being linted like the trusted layer.
+- **Your warning count may go up on the first lint after upgrading.** The archived copy of a discarded candidate used to satisfy `[[wikilinks]]` pointing at it, so those links were silently counted as resolving. They were already broken; lint just stopped hiding them. Fix them by promoting a real page, or leave them if the target genuinely should not exist.
+- Archived pages also stop counting toward `orphan_detection` and stop aging into `stale_candidates`, so those two rules get quieter.
+
 ## Unreleased — `llmwiki synth` rename (#90)
 
 - **`llmwiki synth` is the primary command.** Default: synthesize pending sources, then harvest entity/concept candidates. Prefer it over `synthesize`.
