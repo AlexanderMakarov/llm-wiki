@@ -35,6 +35,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TypedDict
 
+from llmwiki.reindex import reindex_wiki
+
 # ─── constants ─────────────────────────────────────────────────────────
 
 CANDIDATES_DIR_NAME = "candidates"
@@ -209,6 +211,20 @@ def apply_review_summary_to_pipeline(
     return out
 
 
+def _reconcile_catalog(wiki_dir: Path) -> None:
+    """Keep ``wiki/index.md`` in sync after candidate consume actions (#101).
+
+    Promote / merge / discard change which pages exist under ``candidates/``
+    and the trusted trees; idle sync/synth must not be required to clean up.
+    Failures are swallowed — catalog drift is recoverable on the next
+    successful reconcile, and must not undo a completed promote/discard.
+    """
+    try:
+        reindex_wiki(wiki_dir)
+    except (OSError, ValueError, RuntimeError):
+        pass
+
+
 def promote(
     slug: str,
     wiki_dir: Path,
@@ -219,7 +235,7 @@ def promote(
 
     If ``kind`` is omitted, infers from where the candidate lives. Rewrites
     the frontmatter ``status:`` from ``candidate`` → ``reviewed`` so the
-    lifecycle rule picks it up.
+    lifecycle rule picks it up. Reconciles ``wiki/index.md`` afterward (#101).
 
     Returns the new (promoted) path. Raises FileNotFoundError if the
     candidate does not exist.
@@ -234,6 +250,7 @@ def promote(
     text = _rewrite_status(text, old="candidate", new="reviewed")
     target.write_text(text, encoding="utf-8")
     candidate.unlink()
+    _reconcile_catalog(wiki_dir)
     return target
 
 
@@ -247,6 +264,8 @@ def merge(
     """Append the candidate's body under a ``## Candidate merge — <date>``
     heading into the existing wiki page ``<into_slug>.md``, then discard
     the candidate.
+
+    Reconciles ``wiki/index.md`` afterward (#101).
 
     Returns the path of the target page. Raises FileNotFoundError if either
     page is missing.
@@ -273,6 +292,7 @@ def merge(
 
     # Discard candidate by moving it to archive with a merge-reason file
     _archive_candidate(candidate, wiki_dir, reason=f"merged into {into_slug}")
+    _reconcile_catalog(wiki_dir)
     return target
 
 
@@ -286,10 +306,14 @@ def discard(
     """Move the candidate to ``wiki/archive/candidates/<timestamp>/<slug>.md``
     with an adjacent ``<slug>.reason.txt`` capturing why.
 
+    Reconciles ``wiki/index.md`` afterward (#101).
+
     Returns the archived path.
     """
     candidate = _find_candidate(slug, wiki_dir, kind)
-    return _archive_candidate(candidate, wiki_dir, reason=reason)
+    path = _archive_candidate(candidate, wiki_dir, reason=reason)
+    _reconcile_catalog(wiki_dir)
+    return path
 
 
 def stale_candidates(

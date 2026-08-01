@@ -21,28 +21,27 @@ Usage: `/wiki-candidates`
 
    - **promote** — candidate is legitimate and not a duplicate.
      Moves it into the trusted tree (`wiki/entities/` or `wiki/concepts/`)
-     and rewrites `status: candidate` → `status: reviewed`.
+     and rewrites `status: candidate` → `status: reviewed`. Also reconciles `wiki/index.md` (drops dead Candidates bullets; lists the trusted page).
      ```
      python3 -m llmwiki candidates promote --slug MyEntity
      ```
 
    - **merge** — candidate is essentially a duplicate of an existing page.
      Appends the candidate's body under a `## Candidate merge — <date>`
-     heading in the target page, then archives the candidate.
+     heading in the target page, then archives the candidate. Reconciles `wiki/index.md`.
      ```
      python3 -m llmwiki candidates merge --slug DuplicateFoo --into Foo
      ```
 
    - **discard** — candidate is a hallucination or noise.
      Moves it to `wiki/archive/candidates/<timestamp>/` with a
-     `.reason.txt` audit-trail file.
+     `.reason.txt` audit-trail file. Reconciles `wiki/index.md`.
      ```
      python3 -m llmwiki candidates discard --slug BogusEntity \
        --reason "not a real company; LLM hallucinated"
      ```
 
-3. After any promote/merge, run `/wiki-lint` to catch broken wikilinks
-   from pages that used to point at the candidate location.
+3. Prefer these CLI actions (same library as the site will use). Do **not** run idle `sync`/`synth` only to refresh the catalog after review — promote/merge/discard already reconcile `index.md`.
 
 4. Append to `wiki/log.md`:
    ```
@@ -51,7 +50,7 @@ Usage: `/wiki-candidates`
 
 ## Related
 
-- #51 — approval workflow; #84 — Home/Analytics observability; #90 — harvest produce side
-- `/wiki-lint` — finds stale candidates (age > 30 days) automatically
-- `llmwiki synthesize --candidates-only` — harvest stubs from synthesized sources
+- #51 — approval workflow; #84 — Home/Analytics observability; #90 — harvest; #101 — promote/merge/discard reconcile index.md
+- `/wiki-lint` — finds stale candidates (age > 30 days) and broken wikilinks after review
+- `llmwiki synth --candidates-only` — harvest stubs from synthesized sources
 - `/wiki-ingest` — optional enrichment / review discussion over candidates

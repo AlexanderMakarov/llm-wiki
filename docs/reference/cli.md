@@ -364,6 +364,8 @@ python3 -m llmwiki lint --wiki-dir ~/another-wiki
 
 Positional `action` picks `list` / `promote` / `merge` / `discard`.
 
+Successful `promote` / `merge` / `discard` reconcile `wiki/index.md` (#101): dead `candidates/…` bullets are dropped, an empty `## Candidates` section is removed, and newly trusted pages are listed under Entities/Concepts. `/wiki-candidates` should call these same actions — do not run idle `sync`/`synth` just to refresh the catalog after review.
+
 ```bash
 python3 -m llmwiki candidates list
 python3 -m llmwiki candidates list --stale --stale-days 60

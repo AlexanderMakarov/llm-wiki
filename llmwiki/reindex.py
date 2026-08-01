@@ -47,6 +47,11 @@ CANONICAL_FOLDERS: tuple[str, ...] = (
     "syntheses",
 )
 
+# Always managed even when empty so draining the last stub can prune a leftover
+# ``## Candidates`` section (#101). Not in CANONICAL_FOLDERS — an empty
+# Candidates section is dropped entirely rather than kept as ``(0)``.
+ALWAYS_MANAGED_FOLDERS: frozenset[str] = frozenset({"candidates"})
+
 # Section that collects loose ``wiki/*.md`` pages (a saved ``lint-report.md``,
 # say) which are neither system pages nor linked from anywhere else.
 ROOT_SECTION = "Pages"
@@ -331,9 +336,13 @@ def _managed_headings(pages: dict[str, list[str]]) -> dict[str, str]:
     """Map section key → heading text for every section reindex owns.
 
     Canonical folders are managed even when empty, so a stale ``## Sources``
-    still gets its count corrected and its duplicates collapsed.
+    still gets its count corrected and its duplicates collapsed. ``candidates``
+    is always managed (#101) so promote/discard can drop dead catalog bullets
+    after the folder is emptied.
     """
     managed = {key: _heading_for(key) for key in CANONICAL_FOLDERS}
+    for key in ALWAYS_MANAGED_FOLDERS:
+        managed.setdefault(key, _heading_for(key))
     for key in pages:
         managed.setdefault(key, _heading_for(key))
     return managed
@@ -344,9 +353,11 @@ def _section_order(managed: dict[str, str]) -> list[str]:
 
     A canonical section with no pages is emitted only when the index already
     has that heading — ``_render`` decides that; here it stays in the order so
-    its plan (count 0) exists either way.
+    its plan (count 0) exists either way. ``candidates`` is ordered with the
+    other non-canonical folders (alphabetically among extras).
     """
-    extra = sorted(k for k in managed if k not in CANONICAL_FOLDERS and k != "")
+    reserved = set(CANONICAL_FOLDERS) | {""}
+    extra = sorted(k for k in managed if k not in reserved)
     order = [*CANONICAL_FOLDERS, *extra]
     if "" in managed:
         order.append("")
@@ -456,7 +467,12 @@ def _render(
         if key in seen:
             continue
         seen.add(key)
-        chunks.append(sections[key].render().rstrip())
+        section = sections[key]
+        # Drop empty non-canonical sections (e.g. leftover ## Candidates after
+        # the last stub was promoted — #101). Canonical empties keep ``(0)``.
+        if not section.bullets and key not in CANONICAL_FOLDERS:
+            continue
+        chunks.append(section.render().rstrip())
     for key, section in sections.items():
         if key in seen or not section.bullets:
             continue
