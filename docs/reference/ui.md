@@ -16,7 +16,7 @@ Every page in the site carries the same header nav. Keyboard: `⌘K` opens the c
 
 | # | Label | URL | Surfaces |
 |---|---|---|---|
-| 1 | **Home** | `/index.html` | pipeline State widget (per-agent Raw→Synthesized table + collapsible backlog/timeline/commands) + recent raw docs |
+| 1 | **Home** | `/index.html` | pipeline State widget (Raw→To synthesize→Synthesized→To review + collapsible backlog/candidates/commands) + recent raw docs |
 | 2 | **Raw** | `/raw.html` | file tree browser of raw documents (wiki-add layer) |
 | 3 | **Graph** | `/graph.html` | interactive force-directed knowledge graph (vis-network) |
 | 4 | **Projects** | `/projects/index.html` | filterable card grid of every project + freshness badge |
@@ -39,10 +39,10 @@ URL: `/index.html`
 
 Queue-first landing page. Layout:
 
-1. **Pipeline state** — Home-only table mount (`#llmwiki-state-widget`, inlined on `index.html`) with columns Raw → To synthesize → Synthesized, one row per agent that has contributed at least one session (Claude / Cursor / OpenClaw / …) plus a Documents row. Each cell is a single count; the To synthesize cell adds estimated USD in parentheses when non-zero. The Total row also shows queue **queued** / **in progress** counts. Under the table, shared **collapse sections** (`llmwiki/render/collapse_section.py`: title + count badge + fold-out body) cover Timeline, not-synthesized sessions/docs, Commands (including `sync --project <slug>`, `synthesize --sessions-only` / `--docs-only`, and `synthesize --path raw/sessions/<file>.md` / `raw/docs/<file>.md`), and estimate warnings.
+1. **Pipeline state** — Home-only table mount (`#llmwiki-state-widget`, inlined on `index.html`) with columns Raw → To synthesize → Synthesized → **To review**, one row per agent that has contributed at least one session (Claude / Cursor / OpenClaw / …) plus a Documents row. Each cell is a single count; the To synthesize cell adds estimated USD in parentheses when non-zero. **To review** is vault-wide (pending pages under `wiki/candidates/`) and appears on the Total row — per-agent cells show `—` because candidates are not partitioned by agent. The Total row also shows queue **queued** / **in progress** counts. Under the table, shared **collapse sections** (`llmwiki/render/collapse_section.py`: title + count badge + fold-out body) cover Timeline, not-synthesized sessions/docs, **Candidates to review** (by kind + stale), Commands (sync / synthesize / `synthesize --candidates-only` / candidates triage + vault-cwd agent launchers for Claude Code, Codex, Cursor, Gemini), and estimate warnings.
 2. **Recent raw documents** — newest `raw/docs/` entries with title + source meta.
 
-Numbers come from `llmwiki-state.js` (`synth.pipeline` + `synth.pending` + `synth.estimate`), refreshed by `llmwiki sync` / `llmwiki synthesize --estimate`. `llmwiki build` also one-shot backfills `synth.pipeline` when the state snapshot predates that key (v1.4→v1.5 upgrade — #70) and copies the sidecar into `site/llmwiki-state.js` so a site-only HTTP root resolves it; later builds skip the refresh once the shape is present. The session-analytics content (heatmap, stats, project grid) lives on [Analytics](#analytics).
+Numbers come from `llmwiki-state.js` (`synth.pipeline` + `synth.pending` + `synth.estimate`), refreshed by `llmwiki sync` / `llmwiki synthesize --estimate`. Every `llmwiki build` also recounts pending/stale candidates into `synth.pipeline.to_review*` (cheap disk walk — #84) and copies the sidecar into `site/llmwiki-state.js`. `llmwiki build` still one-shot backfills `synth.pipeline` rows when the state snapshot predates that key (v1.4→v1.5 upgrade — #70). The session-analytics content (heatmap, stats, project grid) lives on [Analytics](#analytics).
 
 ---
 
@@ -173,14 +173,15 @@ Newest raw documents first, one row per logical document — chunked docs (`<slu
 
 URL: `/analytics.html`
 
-Session analytics plus usage-led wiki value (#52). The page opens with a hero line (main sessions · sub-agent runs · projects) and a row of stat cards — tokens (total + per-session average), best cache hit, heaviest project by tokens, and heaviest project by MCP usage.
+Session analytics plus usage-led wiki value (#52) and the candidates review gate (#84). The page opens with a hero line (main sessions · sub-agent runs · projects) and a row of stat cards — tokens (total + per-session average), best cache hit, heaviest project by tokens, and heaviest project by MCP usage.
 
 Below that, sections appear in this order:
 
-1. **Activity** — ~18-month GitHub-style heatmaps: **Agents Activity** (session counts), **Wiki MCP calls**, and — when telemetry carries signal — **Session-page reads** and **Doc-page reads** split from `wiki_read_page` hits.
-2. **Recent activity** — last entries from `wiki/log.md` (including producer breakdown lines such as `Processed: 2 Claude · 1 Cursor`).
-3. **Projects** — filterable card grid (session counts, date range, topic chips) linking to per-project detail pages.
-4. **LLM-Wiki MCP usage** — merged value block and MCP table in one section (MCP telemetry only, not `file://` browsing): retrievals · writes · answer rate · payoff-per-page · distinct attributed projects; optional synthesis cost line; sessions vs documents corpus/read mix; top-earning pages; **Dead stock** as a shared count-badge collapsible listing every unread synthesized source (`collapse_section`); per-tool calls, items returned, and zero-hit rate.
+1. **Candidates to review** — pending stubs under `wiki/candidates/` (total + by kind) and stale count (default ≥30d). Zero is intentional signal: synthesize-only vaults still show that the review gate exists and is empty.
+2. **Activity** — ~18-month GitHub-style heatmaps: **Agents Activity** (session counts), **Wiki MCP calls**, and — when telemetry carries signal — **Session-page reads** and **Doc-page reads** split from `wiki_read_page` hits.
+3. **Recent activity** — last entries from `wiki/log.md` (including producer breakdown lines such as `Processed: 2 Claude · 1 Cursor`).
+4. **Projects** — filterable card grid (session counts, date range, topic chips) linking to per-project detail pages.
+5. **LLM-Wiki MCP usage** — merged value block and MCP table in one section (MCP telemetry only, not `file://` browsing): retrievals · writes · answer rate · payoff-per-page · distinct attributed projects; optional synthesis cost line; sessions vs documents corpus/read mix; top-earning pages; **Dead stock** as a shared count-badge collapsible listing every unread synthesized source (`collapse_section`); per-tool calls, items returned, and zero-hit rate.
 
 There is no daily bar chart — trends are read from the heatmaps. Durable counts and series are described in [`reference/state-persistence.md`](state-persistence.md).
 

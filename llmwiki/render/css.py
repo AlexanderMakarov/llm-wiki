@@ -520,7 +520,7 @@ kbd { display: inline-block; padding: 2px 6px; font-family: var(--mono); font-si
 .queue-widget-content { margin: 14px 0; }
 .state-widget { margin: 14px 0; }
 .state-table-wrap { overflow-x: auto; margin-bottom: 14px; }
-.state-pipeline-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; min-width: 420px; }
+.state-pipeline-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; min-width: 520px; }
 .state-pipeline-table th, .state-pipeline-table td { border: 1px solid var(--border); padding: 10px 12px; vertical-align: top; text-align: left; }
 .state-pipeline-table th { background: var(--bg-alt); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); }
 .state-pipeline-table .state-cell-count { font-weight: 700; font-variant-numeric: tabular-nums; }

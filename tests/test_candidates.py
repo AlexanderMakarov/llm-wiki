@@ -16,7 +16,9 @@ from llmwiki.candidates import (
     _age_days,
     _parse_frontmatter,
     _rewrite_status,
+    apply_review_summary_to_pipeline,
     archive_dir,
+    candidate_review_summary,
     candidates_dir,
     discard,
     is_candidate,
@@ -75,6 +77,24 @@ def test_constants_defined():
     assert DEFAULT_STALE_DAYS == 30
     assert "entities" in MIRRORED_SUBDIRS
     assert "concepts" in MIRRORED_SUBDIRS
+
+
+def test_candidate_review_summary(tmp_path: Path):
+    wiki = _mk_wiki(tmp_path)
+    _write_candidate(wiki, "entities", "Alpha", date="2020-01-01")
+    _write_candidate(wiki, "concepts", "Beta", date="2026-04-17")
+    summary = candidate_review_summary(wiki, now=datetime(2026, 4, 20, tzinfo=UTC))
+    assert summary["to_review"] == 2
+    assert summary["to_review_by_kind"] == {"entities": 1, "concepts": 1}
+    assert summary["to_review_stale"] == 1
+    assert summary["stale_days"] == DEFAULT_STALE_DAYS
+    pipeline = apply_review_summary_to_pipeline(
+        {"stages": ["raw", "synthesized"], "rows": []},
+        wiki,
+        now=datetime(2026, 4, 20, tzinfo=UTC),
+    )
+    assert "to_review" in pipeline["stages"]
+    assert pipeline["to_review"] == 2
 
 
 # ─── is_candidate / dir helpers ──────────────────────────────────────

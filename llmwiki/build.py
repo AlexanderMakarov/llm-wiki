@@ -57,6 +57,7 @@ SOURCE_ROOT = PACKAGE_ROOT.parent
 from llmwiki import raw_docs_site
 from llmwiki.agent_label import detect_agent_label, render_agent_badge
 from llmwiki.automation_status import load_status
+from llmwiki.candidates import apply_review_summary_to_pipeline, candidate_review_summary
 from llmwiki.changelog_timeline import (
     extract_price_points,
     parse_changelog,
@@ -106,7 +107,7 @@ from llmwiki.search_tree import (
     decide_search_mode,
     search_index_footer_badge,
 )
-from llmwiki.state_store import read_state, resolve_state_file, synth_pipeline_shape_ok
+from llmwiki.state_store import read_state, resolve_state_file, synth_pipeline_shape_ok, update_state
 from llmwiki.synth.claude_cli import overview_argv
 from llmwiki.synth.pipeline import refresh_synth_pending
 from llmwiki.tag_utils import NOISE_TAGS
@@ -147,6 +148,7 @@ from llmwiki.viz_tools import (
     render_session_tool_chart,
 )
 from llmwiki.viz_wiki_value import (  # noqa: F401
+    render_candidates_review_section,
     render_mcp_heaviest_card,
     render_project_usage_block,
     render_wiki_value_section,
@@ -1868,6 +1870,12 @@ def render_analytics(
         estimate=wv.get("estimate"),
         docs_by_project=docs_by_project or {},
     )
+    candidates_block = render_candidates_review_section(
+        pending=int(wv.get("candidates_pending") or 0),
+        stale=int(wv.get("candidates_stale") or 0),
+        by_kind=wv.get("candidates_by_kind") or {},
+        stale_days=int(wv.get("candidates_stale_days") or 30),
+    )
 
     # Recently updated — show last 10 entries from the wiki's log.md. Read
     # from the vault's wiki_dir (falling back to REPO_ROOT for a repo build),
@@ -1925,6 +1933,7 @@ def render_analytics(
         )
 
     body = f"""{token_stats_block}
+{candidates_block}
 {heatmap_block}
 {recent_block}
 <section class="section">
@@ -2012,14 +2021,18 @@ def render_index(
     content_root: Path | None = None,
 ) -> Path:
     """Render ``index.html`` — queue/dashboard landing page."""
-    body = raw_docs_site.render_dashboard_body(doc_entries, doc_file_count)
+    body = raw_docs_site.render_dashboard_body(
+        doc_entries,
+        doc_file_count,
+        vault_root=content_root,
+    )
     auto = render_automation_panel(content_root)
     page = (
         page_head("LLM Wiki", "Karpathy-style knowledge base from Claude Code sessions", css_prefix="")
         + nav_bar("home", link_prefix="")
         + hero(
             "LLM Wiki",
-            "Pipeline state for sync and synthesis",
+            "Pipeline state for sync, synthesis, and candidate review",
         )
         + auto
         + body
@@ -2782,6 +2795,37 @@ def _ensure_synth_pipeline_snapshot(
     return True
 
 
+def _refresh_candidate_review_snapshot(
+    *,
+    content_root: Path,
+    wiki_dir: Path,
+) -> dict[str, object]:
+    """Cheap every-build recount of pending candidates into ``synth.pipeline`` (#84).
+
+    Unlike ``_ensure_synth_pipeline_snapshot``, this always runs — walking
+    ``wiki/candidates/`` is cheap and Home/Analytics must stay accurate after
+    promote / discard without forcing a full estimate refresh.
+    """
+    state_path = content_root / "llmwiki-state.json"
+    summary = candidate_review_summary(wiki_dir)
+
+    def _mut(s: dict[str, Any]) -> dict[str, Any]:
+        synth = s.setdefault("synth", {})
+        pipeline = synth.get("pipeline")
+        if not isinstance(pipeline, dict):
+            pipeline = {"stages": ["raw", "synthesized"], "rows": []}
+        synth["pipeline"] = apply_review_summary_to_pipeline(pipeline, wiki_dir)
+        return s
+
+    try:
+        update_state(_mut, state_path)
+    except OSError:
+        # Fresh vaults may lack a writable state file; Analytics still gets
+        # ``summary`` from the direct return below.
+        pass
+    return summary
+
+
 def build_site(
     out_dir: Path | None = None,
     synthesize: bool = False,
@@ -2964,6 +3008,10 @@ def build_site(
         raw_dir=raw_dir,
         wiki_sources=wiki_sources,
     )
+    review_summary = _refresh_candidate_review_snapshot(
+        content_root=content_root,
+        wiki_dir=wiki_dir,
+    )
     # Ship the Home State sidecar inside site/ so a site-only HTTP root
     # (e2e, GitHub Pages of site/) resolves {js_prefix}llmwiki-state.js.
     # Vault root still keeps its copy for sync/synthesize writers.
@@ -2996,6 +3044,10 @@ def build_site(
         "dead_stock_total": dead_total,
         "wiki_page_count": source_page_count or int(corpus_mix.get("total", 0) or 0),
         "estimate": estimate if isinstance(estimate, dict) else {},
+        "candidates_pending": int(review_summary.get("to_review") or 0),
+        "candidates_stale": int(review_summary.get("to_review_stale") or 0),
+        "candidates_by_kind": dict(review_summary.get("to_review_by_kind") or {}),
+        "candidates_stale_days": int(review_summary.get("stale_days") or 30),
     }
 
     for project, sessions in groups.items():

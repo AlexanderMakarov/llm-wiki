@@ -49,6 +49,7 @@ from llmwiki.automation_install import run_install
 from llmwiki.build import RAW_DIR, RAW_SESSIONS, build_site
 from llmwiki.cache import MODEL_PRICING, resolve_pricing_model
 from llmwiki.candidates import (
+    apply_review_summary_to_pipeline,
     discard,
     list_candidates,
     promote,
@@ -1061,6 +1062,7 @@ def _run_candidate_harvest(args: argparse.Namespace) -> int:
         )
     if written:
         print("  review with: llmwiki candidates list")
+    _refresh_review_counts(wiki_dir)
     return 0
 
 
@@ -1522,11 +1524,14 @@ def _synthesize_estimate(args: argparse.Namespace | None = None) -> int:
         if str(it.get("rel", "")).strip()
     ]
     stamp = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-    pipeline = {
-        "stages": list(report.get("pipeline_stages") or ["raw", "synthesized"]),
-        "rows": list(report.get("pipeline_rows") or []),
-        "updated_at": stamp,
-    }
+    pipeline = apply_review_summary_to_pipeline(
+        {
+            "stages": list(report.get("pipeline_stages") or ["raw", "synthesized"]),
+            "rows": list(report.get("pipeline_rows") or []),
+            "updated_at": stamp,
+        },
+        vault_root / "wiki",
+    )
 
     def _mut(s: dict[str, Any]) -> dict[str, Any]:
         synth = s.setdefault("synth", {})
@@ -1668,6 +1673,7 @@ def cmd_candidates(args: argparse.Namespace) -> int:
             return 2
         path = promote(args.slug, wiki_dir, kind=args.kind)
         print(f"  promoted → {path.relative_to(wiki_dir)}")
+        _refresh_review_counts(wiki_dir)
         return 0
 
     if action == "merge":
@@ -1676,6 +1682,7 @@ def cmd_candidates(args: argparse.Namespace) -> int:
             return 2
         path = merge_candidate(args.slug, wiki_dir, into_slug=args.into, kind=args.kind)
         print(f"  merged into → {path.relative_to(wiki_dir)}")
+        _refresh_review_counts(wiki_dir)
         return 0
 
     if action == "discard":
@@ -1684,10 +1691,28 @@ def cmd_candidates(args: argparse.Namespace) -> int:
             return 2
         path = discard(args.slug, wiki_dir, reason=args.reason, kind=args.kind)
         print(f"  discarded → {path.relative_to(wiki_dir)}")
+        _refresh_review_counts(wiki_dir)
         return 0
 
     print(f"error: unknown action {action!r}", file=sys.stderr)
     return 2
+
+
+def _refresh_review_counts(wiki_dir: Path) -> None:
+    """Keep ``synth.pipeline`` To-review counts accurate after queue mutations (#84)."""
+    state_file = wiki_dir.parent / "llmwiki-state.json"
+    if not state_file.is_file():
+        return
+
+    def _mut(s: dict[str, Any]) -> dict[str, Any]:
+        synth = s.setdefault("synth", {})
+        pipeline = synth.get("pipeline")
+        if not isinstance(pipeline, dict):
+            pipeline = {"stages": ["raw", "synthesized"], "rows": []}
+        synth["pipeline"] = apply_review_summary_to_pipeline(pipeline, wiki_dir)
+        return s
+
+    update_state(_mut, state_file)
 
 
 def _add_vault_arg(parser: argparse.ArgumentParser, *, role: str) -> None:

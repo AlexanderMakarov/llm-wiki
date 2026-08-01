@@ -19,16 +19,23 @@ def test_dashboard_inlines_state_mount_not_old_cards():
     assert 'id="llmwiki-state-widget"' in body
     assert "data-llmwiki-state-widget" in body
     assert "Pipeline state" in body
+    assert "To review" in body
     assert "Recent raw documents" in body
     assert "queue-home-content" not in body
     assert "Sync, synthesis, and queue status at a glance" not in body
     assert "<summary><h3" not in body  # commands now live in the JS widget
 
 
+def test_dashboard_mount_includes_vault_root_attr(tmp_path: Path):
+    body = render_dashboard_body([], 0, vault_root=tmp_path)
+    assert f'data-vault-root="{tmp_path}"' in body
+
 def test_state_widget_js_has_pipeline_table_and_collapsibles():
     assert "renderStateWidget" in js.JS
     assert "state-pipeline-table" in js.JS
     assert "To synthesize" in js.JS
+    assert "To review" in js.JS
+    assert "Candidates to review" in js.JS
     assert "Not synthesized sessions" in js.JS
     assert "Not synthesized docs" in js.JS
     assert "Estimate warnings" in js.JS
@@ -37,9 +44,15 @@ def test_state_widget_js_has_pipeline_table_and_collapsibles():
     assert "collapse-section-count" in js.JS
     assert "data-llmwiki-state-widget" in js.JS
     assert "llmwiki sync --project" in js.JS
-    assert "llmwiki synthesize --path raw/sessions/" in js.JS
-    assert "llmwiki synthesize --path raw/docs/" in js.JS
-    assert 'detailsSection("Commands", 8,' in js.JS
+    assert "llmwiki synthesize --candidates-only" in js.JS
+    assert "llmwiki candidates list" in js.JS
+    assert "llmwiki candidates promote --slug" in js.JS
+    assert "/wiki-candidates" in js.JS
+    assert " && claude" in js.JS
+    assert " && codex" in js.JS
+    assert " && cursor ." in js.JS
+    assert " && gemini" in js.JS
+    assert 'detailsSection("Commands", 13,' in js.JS
     assert "queued " in js.JS
     assert "in progress " in js.JS
     # Timeline must appear before the backlog lists in the render order.
@@ -53,7 +66,9 @@ def test_state_widget_js_has_pipeline_table_and_collapsibles():
     assert "previewLimit = 3" not in js.JS
     # Cost renders as ``42 ($1.2345)`` on one line, not ``$… → synth`` on a second.
     assert " → \" + escapeHtml(nextLabel" not in js.JS
-
+    # Path-specific synthesize rows were replaced by the review-gate Commands set (#84).
+    assert "llmwiki synthesize --path raw/sessions/" not in js.JS
+    assert "llmwiki synthesize --path raw/docs/" not in js.JS
 
 def test_synth_pipeline_shape_ok():
     assert synth_pipeline_shape_ok({"pipeline": {"rows": []}})
@@ -140,11 +155,40 @@ def test_refresh_synth_pending_stores_pipeline(tmp_path: Path):
     assert out["pending_total"] == 1
     assert out["pipeline"]["rows"]
     assert out["pipeline"]["rows"][0]["label"] == "OpenClaw"
+    assert "to_review" in out["pipeline"]["stages"]
+    assert out["pipeline"]["to_review"] == 0
 
     state = read_state(state_file)
     assert state["synth"]["pipeline"]["rows"][0]["label"] == "OpenClaw"
     assert state["synth"]["pending"][0]["agent"] == "OpenClaw"
+    assert state["synth"]["pipeline"]["to_review"] == 0
 
+
+def test_refresh_synth_pending_counts_candidates(tmp_path: Path):
+    vault = tmp_path / "vault"
+    raw = vault / "raw" / "sessions"
+    docs = vault / "raw" / "docs"
+    wiki = vault / "wiki"
+    (wiki / "sources").mkdir(parents=True)
+    cand = wiki / "candidates" / "entities"
+    cand.mkdir(parents=True)
+    (cand / "Foo.md").write_text(
+        "---\ntitle: Foo\nstatus: candidate\nlast_updated: 2020-01-01\n---\n\n# Foo\n",
+        encoding="utf-8",
+    )
+    raw.mkdir(parents=True)
+    docs.mkdir(parents=True)
+    out = refresh_synth_pending(
+        raw_dir=raw,
+        docs_dir=docs,
+        wiki_sources_dir=wiki / "sources",
+        state_file=vault / "llmwiki-state.json",
+        include_subagents="all",
+        exclude_headless=False,
+    )
+    assert out["pipeline"]["to_review"] == 1
+    assert out["pipeline"]["to_review_by_kind"]["entities"] == 1
+    assert out["pipeline"]["to_review_stale"] == 1
 
 def _seed_build_vault(tmp_path: Path) -> Path:
     """Minimal vault with one session so ``build_site`` has something to walk."""

@@ -117,16 +117,11 @@ that triggers auto-ingest of new pages into `wiki/`.
 
 ### `/wiki-ingest <path>`
 
-**What:** ingest **one** source document or folder into `wiki/`. Reads
-the file, creates / updates the matching `wiki/sources/<slug>.md`,
-extracts entities into `wiki/entities/`, creates candidates in
-`wiki/candidates/` for anything it hasn't seen before.
+**What:** ingest **one** source document or folder into `wiki/`, or enrich / discuss pending candidates during review. Reads the file, creates / updates the matching `wiki/sources/<slug>.md`, and may propose entity/concept candidates. **Trusted hubs still require review** (`/wiki-candidates` or `llmwiki candidates promote|merge|discard`) — ingest is not an auto-promote escape hatch.
 
-**Wraps:** the Ingest Workflow in `CLAUDE.md` (no single CLI — it's a
-slash-command-driven workflow that the model orchestrates).
+**Wraps:** the Ingest Workflow in `CLAUDE.md` (no single CLI — it's a slash-command-driven workflow that the model orchestrates).
 
-**When to use:** you dropped a source file manually (a PDF, a Jira
-ticket export, a meeting transcript) and want it in the wiki.
+**When to use:** you dropped a source file manually (a PDF, a Jira ticket export, a meeting transcript), or Home / Analytics show a **To review** backlog and you want agent-led discussion over candidates. For bulk stub generation from already-synthesized sources, prefer `llmwiki synthesize --candidates-only`.
 
 **Examples:**
 
@@ -248,8 +243,7 @@ to produce `wiki/sources/<slug>.md`.
 
 **Wraps:** `python3 -m llmwiki candidates list` + follow-ups.
 
-**When to use:** `/wiki-lint` reported a `stale_candidates` info line,
-or `/wiki-sync` produced new `wiki/candidates/*.md` files.
+**When to use:** Home **To review** / Analytics **Candidates to review** is non-zero, `/wiki-lint` reported `stale_candidates`, or you just ran `llmwiki synthesize --candidates-only`.
 
 **Example:**
 
@@ -257,8 +251,7 @@ or `/wiki-sync` produced new `wiki/candidates/*.md` files.
 /wiki-candidates
 ```
 
-Claude will walk the queue one at a time and offer actions per
-candidate.
+Claude will walk the queue one at a time and offer actions per candidate.
 
 ---
 

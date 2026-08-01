@@ -68,7 +68,7 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
       '<div class="collapse-section-body">' + bodyHtml + "</div></details>"
     );
   }
-  function commandsBody() {
+  function commandsBody(vaultRoot) {
     function copyBtn(cmd) {
       // aria-label survives collapsed/hidden sections where innerText is empty.
       return (
@@ -76,21 +76,45 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
         '" aria-label="Copy command: ' + cmd + '" title="Copy command">Copy</button>'
       );
     }
+    var vault = vaultRoot ? String(vaultRoot) : "<vault>";
+    var cdClaude = "cd " + vault + " && claude";
+    var cdCodex = "cd " + vault + " && codex";
+    var cdCursor = "cd " + vault + " && cursor .";
+    var cdGemini = "cd " + vault + " && gemini";
     return (
+      '<p class="muted">Two lists: synthesize sources, then harvest candidates. Approval is agent-led (<code>/wiki-candidates</code> or <code>/wiki-ingest</code>) — not a TUI.</p>' +
       '<table class="queue-commands-table">' +
       "<thead><tr><th>Command</th><th>Purpose</th><th></th></tr></thead><tbody>" +
       '<tr><td><code>llmwiki sync</code></td><td>Convert new agent sessions into <code>raw/sessions/</code>.</td><td>' + copyBtn("llmwiki sync") + "</td></tr>" +
-      '<tr><td><code>llmwiki sync --project &lt;slug&gt;</code></td><td>Sync only one project&apos;s sessions (replace <code>&lt;slug&gt;</code> with the project id).</td><td>' + copyBtn("llmwiki sync --project &lt;slug&gt;") + "</td></tr>" +
-      '<tr><td><code>llmwiki synthesize</code></td><td>Drain the unsynthesized backlog into <code>wiki/sources/</code>.</td><td>' + copyBtn("llmwiki synthesize") + "</td></tr>" +
-      '<tr><td><code>llmwiki synthesize --sessions-only</code></td><td>Synthesize pending sessions only (skip <code>raw/docs/</code>).</td><td>' + copyBtn("llmwiki synthesize --sessions-only") + "</td></tr>" +
-      '<tr><td><code>llmwiki synthesize --docs-only</code></td><td>Synthesize pending docs only (skip <code>raw/sessions/</code>).</td><td>' + copyBtn("llmwiki synthesize --docs-only") + "</td></tr>" +
-      '<tr><td><code>llmwiki synthesize --path raw/sessions/&lt;file&gt;.md</code></td><td>Synthesize one raw session (replace <code>&lt;file&gt;</code>; repeatable).</td><td>' + copyBtn("llmwiki synthesize --path raw/sessions/&lt;file&gt;.md") + "</td></tr>" +
-      '<tr><td><code>llmwiki synthesize --path raw/docs/&lt;file&gt;.md</code></td><td>Synthesize one raw document (replace <code>&lt;file&gt;</code>; repeatable).</td><td>' + copyBtn("llmwiki synthesize --path raw/docs/&lt;file&gt;.md") + "</td></tr>" +
-      '<tr><td><code>llmwiki synthesize --estimate</code></td><td>Refresh the cost estimate + pipeline table without calling the model.</td><td>' + copyBtn("llmwiki synthesize --estimate") + "</td></tr>" +
-      '<tr><td><code>llmwiki queue run --limit 20</code></td><td>Process pending queue tasks (including synthesize when enqueued).</td><td>' + copyBtn("llmwiki queue run --limit 20") + "</td></tr>" +
-      '<tr><td><code>llmwiki build</code></td><td>Rebuild the static site from raw/ + wiki/.</td><td>' + copyBtn("llmwiki build") + "</td></tr>" +
+      '<tr><td><code>llmwiki sync --project &lt;slug&gt;</code></td><td>Sync only one project&apos;s sessions.</td><td>' + copyBtn("llmwiki sync --project &lt;slug&gt;") + "</td></tr>" +
+      '<tr><td><code>llmwiki synthesize</code></td><td>Drain unsynthesized backlog into <code>wiki/sources/</code>.</td><td>' + copyBtn("llmwiki synthesize") + "</td></tr>" +
+      '<tr><td><code>llmwiki synthesize --candidates-only</code></td><td>Harvest entity/concept candidates into <code>wiki/candidates/</code> from synthesized sources.</td><td>' + copyBtn("llmwiki synthesize --candidates-only") + "</td></tr>" +
+      '<tr><td><code>llmwiki synthesize --estimate</code></td><td>Refresh cost estimate + pipeline table (sources + candidate backlog preview).</td><td>' + copyBtn("llmwiki synthesize --estimate") + "</td></tr>" +
+      '<tr><td><code>llmwiki candidates list</code></td><td>Show pending review stubs.</td><td>' + copyBtn("llmwiki candidates list") + "</td></tr>" +
+      '<tr><td><code>llmwiki candidates list --stale</code></td><td>Show candidates older than the stale threshold (default 30d).</td><td>' + copyBtn("llmwiki candidates list --stale") + "</td></tr>" +
+      '<tr><td><code>llmwiki candidates promote --slug &lt;Name&gt;</code></td><td>Promote one stub into trusted <code>wiki/entities/</code> or <code>concepts/</code>.</td><td>' + copyBtn("llmwiki candidates promote --slug &lt;Name&gt;") + "</td></tr>" +
+      '<tr><td><code>' + escapeHtml(cdClaude) + '</code></td><td>Open Claude Code in the vault, then run <code>/wiki-candidates</code> or <code>/wiki-ingest</code>.</td><td>' + copyBtn(cdClaude) + "</td></tr>" +
+      '<tr><td><code>' + escapeHtml(cdCodex) + '</code></td><td>Open Codex CLI in the vault for the same review loop (install wiki skills under <code>.codex/skills/</code>).</td><td>' + copyBtn(cdCodex) + "</td></tr>" +
+      '<tr><td><code>' + escapeHtml(cdCursor) + '</code></td><td>Open Cursor on the vault folder for agent review.</td><td>' + copyBtn(cdCursor) + "</td></tr>" +
+      '<tr><td><code>' + escapeHtml(cdGemini) + '</code></td><td>Open Gemini CLI in the vault (copy wiki skills into the agent skills dir).</td><td>' + copyBtn(cdGemini) + "</td></tr>" +
+      '<tr><td><code>llmwiki build</code></td><td>Rebuild the static site (refreshes To review counts).</td><td>' + copyBtn("llmwiki build") + "</td></tr>" +
       "</tbody></table>"
     );
+  }
+  function reviewBreakdownHtml(pipeline) {
+    var byKind = (pipeline && pipeline.to_review_by_kind) ? pipeline.to_review_by_kind : {};
+    var keys = Object.keys(byKind).sort();
+    if (!keys.length) {
+      return '<p class="muted">No pending candidates under <code>wiki/candidates/</code>. Harvest with <code>llmwiki synthesize --candidates-only</code>.</p>';
+    }
+    var stale = Number(pipeline && pipeline.to_review_stale || 0);
+    var staleDays = Number(pipeline && pipeline.stale_days || 30);
+    var items = keys.map(function (k) {
+      return "<li><strong>" + escapeHtml(k) + ":</strong> " + Number(byKind[k] || 0) + "</li>";
+    });
+    items.push("<li><strong>Stale (≥" + staleDays + "d):</strong> " + stale + "</li>");
+    return "<ul class=\"queue-type-list\">" + items.join("") + "</ul>" +
+      '<p class="muted">Review focus: identity / naming / kind / duplicates — not primarily <code>## Contradictions</code>. Approve via agent <code>/wiki-candidates</code> or <code>llmwiki candidates promote|merge|discard</code>.</p>';
   }
   function renderStateWidget(root, snapshot) {
     if (!root) return;
@@ -122,6 +146,8 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
     var pendingSessions = pendingList.filter(function (it) { return !(it && it.is_doc); });
     var pendingDocs = pendingList.filter(function (it) { return !!(it && it.is_doc); });
     var warnings = Array.isArray(estimate.warnings) ? estimate.warnings : [];
+    var toReview = Number(pipeline.to_review || 0);
+    var vaultRoot = root.getAttribute("data-vault-root") || "";
 
     var totalRaw = 0;
     var totalSynth = 0;
@@ -139,20 +165,21 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
       totalPending += pending;
       totalNext += nextUsd;
       var badge = '<span class="agent-badge ' + escapeHtml(css) + '">' + escapeHtml(label) + "</span>";
-      // Columns left→right: Raw → To synthesize → Synthesized
+      // Columns: Raw → To synthesize → Synthesized → To review (vault-level on Total)
       return (
         "<tr>" +
         '<td class="state-row-label">' + badge + "</td>" +
         "<td>" + stageCell(raw, 0) + "</td>" +
         "<td>" + stageCell(pending, nextUsd) + "</td>" +
         "<td>" + stageCell(synthesized, 0) + "</td>" +
+        '<td class="muted">—</td>' +
         "</tr>"
       );
     }).join("");
 
     var footHtml = "";
     if (!bodyRows) {
-      bodyRows = '<tr><td colspan="4" class="muted">No pipeline rows yet — run <code>llmwiki sync</code> then <code>llmwiki synthesize --estimate</code>. Rows appear per agent that has contributed at least one session.</td></tr>';
+      bodyRows = '<tr><td colspan="5" class="muted">No pipeline rows yet — run <code>llmwiki sync</code> then <code>llmwiki synthesize --estimate</code>. Rows appear per agent that has contributed at least one session.</td></tr>';
     } else {
       footHtml =
         "<tfoot><tr>" +
@@ -162,13 +189,14 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
         "<td>" + stageCell(totalRaw, 0) + "</td>" +
         "<td>" + stageCell(totalPending, totalNext) + "</td>" +
         "<td>" + stageCell(totalSynth, 0) + "</td>" +
+        "<td>" + stageCell(toReview, 0) + "</td>" +
         "</tr></tfoot>";
     }
 
     var tableHtml =
       '<div class="state-table-wrap" tabindex="0" role="region" aria-label="Pipeline state">' +
       '<table class="state-pipeline-table">' +
-      "<thead><tr><th>Source</th><th>Raw</th><th>To synthesize</th><th>Synthesized</th></tr></thead>" +
+      "<thead><tr><th>Source</th><th>Raw</th><th>To synthesize</th><th>Synthesized</th><th>To review</th></tr></thead>" +
       "<tbody>" + bodyRows + "</tbody>" + footHtml + "</table></div>";
 
     var timelineBody =
@@ -201,7 +229,8 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
       detailsSection("Timeline", 5, timelineBody) +
       detailsSection("Not synthesized sessions", pendingSessions.length, pendingListHtml(pendingSessions)) +
       detailsSection("Not synthesized docs", pendingDocs.length, pendingListHtml(pendingDocs)) +
-      detailsSection("Commands", 8, commandsBody()) +
+      detailsSection("Candidates to review", toReview, reviewBreakdownHtml(pipeline)) +
+      detailsSection("Commands", 13, commandsBody(vaultRoot)) +
       detailsSection("Estimate warnings", warnings.length, warningsBody) +
       "</div>";
   }
