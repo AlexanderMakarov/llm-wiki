@@ -1,10 +1,10 @@
 Review and triage candidate wiki pages — promote, merge, or discard.
 
-Candidate pages live under `wiki/candidates/<kind>/<slug>.md` and were
-created by `/wiki-ingest` for new entities/concepts the LLM detected. They
-are **not** part of the trusted wiki layer until a human approves them.
+Candidate pages live under `wiki/candidates/<kind>/<slug>.md`. They are usually created by `llmwiki synthesize --candidates-only` (harvest from `wiki/sources/` wikilinks) and sometimes by `/wiki-ingest`. They are **not** part of the trusted wiki layer until a human or agent approves them.
 
-Usage: `/wiki-review`
+Home **To review** and Analytics **Candidates to review** show the backlog after `llmwiki build` — that is the signal that review is waiting, not “run `/wiki-ingest` again so pages appear.”
+
+Usage: `/wiki-candidates`
 
 ## Workflow
 
@@ -51,6 +51,7 @@ Usage: `/wiki-review`
 
 ## Related
 
-- #51 — the issue that added this workflow
+- #51 — approval workflow; #84 — Home/Analytics observability; #90 — harvest produce side
 - `/wiki-lint` — finds stale candidates (age > 30 days) automatically
-- `/wiki-ingest` — routes new pages to `candidates/` instead of direct
+- `llmwiki synthesize --candidates-only` — harvest stubs from synthesized sources
+- `/wiki-ingest` — optional enrichment / review discussion over candidates

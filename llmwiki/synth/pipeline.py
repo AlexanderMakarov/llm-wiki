@@ -32,6 +32,7 @@ from llmwiki import REPO_ROOT
 # imports; the parser sits cleanly in _frontmatter.py with no deps.
 from llmwiki._frontmatter import is_headless, is_subagent, parse_frontmatter
 from llmwiki.agent_label import detect_agent_label
+from llmwiki.candidates import apply_review_summary_to_pipeline
 from llmwiki.config_schedule import _load_sessions_config
 
 # Same matcher the graph builder uses, so "a link" means the same thing to
@@ -513,11 +514,16 @@ def refresh_synth_pending(
         )
 
     stamp = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-    pipeline = {
-        "stages": list(report.get("pipeline_stages") or ["raw", "synthesized"]),
-        "rows": list(report.get("pipeline_rows") or []),
-        "updated_at": stamp,
-    }
+    # wiki_sources_dir points at wiki/sources/; review stubs live under wiki/.
+    wiki_dir = sources_out.parent
+    pipeline = apply_review_summary_to_pipeline(
+        {
+            "stages": list(report.get("pipeline_stages") or ["raw", "synthesized"]),
+            "rows": list(report.get("pipeline_rows") or []),
+            "updated_at": stamp,
+        },
+        wiki_dir,
+    )
 
     def _mut(s: dict[str, Any]) -> dict[str, Any]:
         synth = s.setdefault("synth", {})

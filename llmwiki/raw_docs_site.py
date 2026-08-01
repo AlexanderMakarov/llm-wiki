@@ -300,6 +300,10 @@ def render_sidebar(
 def render_dashboard_body(
     entries: list[DocEntry],
     doc_file_count: int,
+    *,
+    vault_root: Path | None = None,
+    repo_root: Path | None = None,
+    automation_html: str = "",
 ) -> str:
     """Body of index.html — pipeline State table mount + recent raw docs."""
     if not entries:
@@ -315,12 +319,18 @@ def render_dashboard_body(
                 "</li>"
             )
         recent_block = '<ol class="recent-docs">' + "".join(rows) + "</ol>"
+    attrs = ""
+    if vault_root is not None:
+        attrs += f' data-vault-root="{html.escape(str(vault_root))}"'
+    if repo_root is not None:
+        attrs += f' data-repo-root="{html.escape(str(repo_root))}"'
+    auto_block = automation_html or ""
     return f"""<section class="section doctree-section">
   <div class="container">
     <div class="queue-widget">
+      {auto_block}
       <h2>Pipeline state</h2>
-      <p class="muted">Raw → synthesized counts by agent, with cost to drain the backlog.</p>
-      <div id="llmwiki-state-widget" class="state-widget" data-llmwiki-state-widget>
+      <div id="llmwiki-state-widget" class="state-widget" data-llmwiki-state-widget{attrs}>
         <p class="muted">Loading pipeline state…</p>
       </div>
       <h3>Recent raw documents</h3>

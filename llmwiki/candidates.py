@@ -151,6 +151,64 @@ def list_candidates(
     return out
 
 
+def _count_trusted_pages(wiki_dir: Path, kind: str) -> int:
+    """Count ``*.md`` pages under ``wiki/<kind>/`` (skip ``_context.md``)."""
+    root = wiki_dir / kind
+    if not root.is_dir():
+        return 0
+    return sum(
+        1
+        for path in root.glob("*.md")
+        if path.is_file() and path.name != "_context.md"
+    )
+
+
+def candidate_review_summary(
+    wiki_dir: Path,
+    *,
+    stale_days: int = DEFAULT_STALE_DAYS,
+    now: datetime | None = None,
+) -> dict[str, object]:
+    """Counts for the Home / Analytics review-gate widgets (#84).
+
+    Pending stubs live under ``wiki/candidates/`` until promote / merge /
+    discard. Stale uses the same threshold as ``stale_candidates`` / the
+    ``stale_candidates`` lint rule (default 30 days). Trusted
+    ``entities`` / ``concepts`` counts are vault-wide final-layer sizes
+    (not partitioned by agent, and not the same as raw session rows).
+    """
+    items = list_candidates(wiki_dir, now=now)
+    by_kind: dict[str, int] = {}
+    for cand in items:
+        by_kind[cand["kind"]] = by_kind.get(cand["kind"], 0) + 1
+    stale = stale_candidates(wiki_dir, threshold_days=stale_days, now=now)
+    return {
+        "to_review": len(items),
+        "to_review_by_kind": by_kind,
+        "to_review_stale": len(stale),
+        "stale_days": int(stale_days),
+        "trusted_entities": _count_trusted_pages(wiki_dir, "entities"),
+        "trusted_concepts": _count_trusted_pages(wiki_dir, "concepts"),
+    }
+
+
+def apply_review_summary_to_pipeline(
+    pipeline: dict[str, object] | None,
+    wiki_dir: Path,
+    *,
+    stale_days: int = DEFAULT_STALE_DAYS,
+    now: datetime | None = None,
+) -> dict[str, object]:
+    """Merge review counts into a ``synth.pipeline`` dict (mutates a copy)."""
+    out: dict[str, object] = dict(pipeline or {})
+    stages = list(out.get("stages") or ["raw", "synthesized"])  # type: ignore[arg-type]
+    if "to_review" not in stages:
+        stages.append("to_review")
+    out["stages"] = stages
+    out.update(candidate_review_summary(wiki_dir, stale_days=stale_days, now=now))
+    return out
+
+
 def promote(
     slug: str,
     wiki_dir: Path,

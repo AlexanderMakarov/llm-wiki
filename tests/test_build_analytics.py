@@ -2,6 +2,7 @@ from pathlib import Path
 
 from llmwiki.build import render_analytics
 from llmwiki.viz_wiki_value import (
+    render_candidates_review_section,
     render_mcp_heaviest_card,
     render_mcp_usage_section,
     render_project_usage_block,
@@ -228,11 +229,35 @@ def test_analytics_section_order_activity_recent_projects_wiki_usage(tmp_path: P
         },
     )
     pos_token = html_out.index("token-stats-section")
+    pos_candidates = html_out.index("candidates-review-section")
     pos_activity = html_out.index('<h2>Activity</h2>')
     pos_recent = html_out.index("recently-updated-section")
     pos_projects = html_out.index("<h2>Projects</h2>")
     pos_wiki_usage = html_out.index("wiki-usage-section")
-    assert pos_token < pos_activity < pos_recent < pos_projects < pos_wiki_usage
+    assert pos_token < pos_candidates < pos_activity < pos_recent < pos_projects < pos_wiki_usage
+    assert "Candidates to review" in html_out
+    assert "Pending candidates" in html_out
+
+
+def test_candidates_review_section_shows_zeros_and_kinds():
+    html_out = render_candidates_review_section(
+        pending=3,
+        stale=1,
+        by_kind={"entities": 2, "concepts": 1},
+        stale_days=30,
+    )
+    assert "candidates-review-section" in html_out
+    assert ">3</div>" in html_out
+    assert ">1</div>" in html_out
+    assert "entities 2" in html_out
+    assert "concepts 1" in html_out
+    assert "llmwiki candidates list --stale" in html_out
+
+
+def test_candidates_review_section_empty_kinds_copy():
+    html_out = render_candidates_review_section(pending=0, stale=0)
+    assert "no stubs under wiki/candidates/" in html_out
+    assert ">0</div>" in html_out
 
 
 def test_analytics_mcp_heatmap_when_mcp_days_provided(tmp_path: Path):

@@ -16,7 +16,9 @@ from llmwiki.candidates import (
     _age_days,
     _parse_frontmatter,
     _rewrite_status,
+    apply_review_summary_to_pipeline,
     archive_dir,
+    candidate_review_summary,
     candidates_dir,
     discard,
     is_candidate,
@@ -75,6 +77,42 @@ def test_constants_defined():
     assert DEFAULT_STALE_DAYS == 30
     assert "entities" in MIRRORED_SUBDIRS
     assert "concepts" in MIRRORED_SUBDIRS
+
+
+def test_candidate_review_summary(tmp_path: Path):
+    wiki = _mk_wiki(tmp_path)
+    _write_candidate(wiki, "entities", "Alpha", date="2020-01-01")
+    _write_candidate(wiki, "concepts", "Beta", date="2026-04-17")
+    (wiki / "entities").mkdir(parents=True, exist_ok=True)
+    (wiki / "concepts").mkdir(parents=True, exist_ok=True)
+    (wiki / "entities" / "TrustedEnt.md").write_text(
+        "---\ntitle: TrustedEnt\nstatus: reviewed\n---\n\n# TrustedEnt\n",
+        encoding="utf-8",
+    )
+    (wiki / "concepts" / "_context.md").write_text(
+        "---\ntitle: Concepts\ntype: context\n---\n\nFolder context.\n",
+        encoding="utf-8",
+    )
+    (wiki / "concepts" / "TrustedConcept.md").write_text(
+        "---\ntitle: TrustedConcept\nstatus: reviewed\n---\n\n# TrustedConcept\n",
+        encoding="utf-8",
+    )
+    summary = candidate_review_summary(wiki, now=datetime(2026, 4, 20, tzinfo=UTC))
+    assert summary["to_review"] == 2
+    assert summary["to_review_by_kind"] == {"entities": 1, "concepts": 1}
+    assert summary["to_review_stale"] == 1
+    assert summary["stale_days"] == DEFAULT_STALE_DAYS
+    assert summary["trusted_entities"] == 1
+    assert summary["trusted_concepts"] == 1  # _context.md excluded
+    pipeline = apply_review_summary_to_pipeline(
+        {"stages": ["raw", "synthesized"], "rows": []},
+        wiki,
+        now=datetime(2026, 4, 20, tzinfo=UTC),
+    )
+    assert "to_review" in pipeline["stages"]
+    assert pipeline["to_review"] == 2
+    assert pipeline["trusted_entities"] == 1
+    assert pipeline["trusted_concepts"] == 1
 
 
 # ─── is_candidate / dir helpers ──────────────────────────────────────

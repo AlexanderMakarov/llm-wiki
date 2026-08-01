@@ -25,10 +25,24 @@ def test_dashboard_inlines_state_mount_not_old_cards():
     assert "<summary><h3" not in body  # commands now live in the JS widget
 
 
+def test_dashboard_mount_includes_vault_root_attr(tmp_path: Path):
+    body = render_dashboard_body([], 0, vault_root=tmp_path, repo_root=tmp_path / "repo")
+    assert f'data-vault-root="{tmp_path}"' in body
+    assert f'data-repo-root="{tmp_path / "repo"}"' in body
+
+
 def test_state_widget_js_has_pipeline_table_and_collapsibles():
     assert "renderStateWidget" in js.JS
     assert "state-pipeline-table" in js.JS
+    assert "state-knowledge-table" in js.JS
     assert "To synthesize" in js.JS
+    assert "Files layer:" in js.JS
+    assert "Handled by shell commands." in js.JS
+    assert "Knowledge layer: Candidates → Entities / Concepts." in js.JS
+    assert "Review runs in the agent Commands below." in js.JS
+    assert "trusted_entities" in js.JS
+    assert "trusted_concepts" in js.JS
+    assert "Candidates to review" in js.JS
     assert "Not synthesized sessions" in js.JS
     assert "Not synthesized docs" in js.JS
     assert "Estimate warnings" in js.JS
@@ -37,11 +51,33 @@ def test_state_widget_js_has_pipeline_table_and_collapsibles():
     assert "collapse-section-count" in js.JS
     assert "data-llmwiki-state-widget" in js.JS
     assert "llmwiki sync --project" in js.JS
-    assert "llmwiki synthesize --path raw/sessions/" in js.JS
-    assert "llmwiki synthesize --path raw/docs/" in js.JS
-    assert 'detailsSection("Commands", 8,' in js.JS
+    assert "llmwiki synthesize --candidates-only" in js.JS
+    assert "llmwiki candidates list" in js.JS
+    assert "llmwiki candidates promote --slug" in js.JS
+    assert "escapeHtml(cmd)" in js.JS
+    assert "code.textContent" in js.JS
+    assert "Prefer the Command cell text" in js.JS
+    assert "/wiki-candidates" in js.JS
+    assert "data-repo-root" in js.JS
+    assert "llmwiki checkout" in js.JS
+    # One-shot agent launchers (prompt starts /wiki-candidates).
+    assert 'agentReview("claude")' in js.JS
+    assert 'agentReview("agent")' in js.JS
+    assert 'agentReview("codex")' in js.JS
+    # Gemini CLI adapter is still scaffold — no Home launcher.
+    assert 'agentReview("gemini")' not in js.JS
+    assert "' \"/wiki-candidates\"'" in js.JS or ' "/wiki-candidates"' in js.JS
+    assert "Review/edit pending candidates" in js.JS
+    assert "</span> sessions" in js.JS
+    assert "state-source-docs" in js.JS
+    # Vault is wrong cwd for slash commands — do not advertise opening agents there.
+    assert "Open Claude Code in the vault" not in js.JS
+    assert " && cursor ." not in js.JS
+    assert 'detailsSection("Commands", 12,' in js.JS
     assert "queued " in js.JS
     assert "in progress " in js.JS
+    # Knowledge layer is a second table — not dashes on per-agent rows.
+    assert 'class="muted">—</td>' not in js.JS
     # Timeline must appear before the backlog lists in the render order.
     timeline_idx = js.JS.index('detailsSection("Timeline"')
     sessions_idx = js.JS.index('detailsSection("Not synthesized sessions"')
@@ -53,8 +89,12 @@ def test_state_widget_js_has_pipeline_table_and_collapsibles():
     assert "previewLimit = 3" not in js.JS
     # Cost renders as ``42 ($1.2345)`` on one line, not ``$… → synth`` on a second.
     assert " → \" + escapeHtml(nextLabel" not in js.JS
-
-
+    # Path-specific synthesize rows were replaced by the review-gate Commands set (#84).
+    assert "llmwiki synthesize --path raw/sessions/" not in js.JS
+    assert "llmwiki synthesize --path raw/docs/" not in js.JS
+    # Combined static blurb moved into per-table captions in JS.
+    assert "Knowledge layer: To review → Entities / Concepts (vault-wide)." not in js.JS
+    assert "vault-wide — not split by agent" not in js.JS
 def test_synth_pipeline_shape_ok():
     assert synth_pipeline_shape_ok({"pipeline": {"rows": []}})
     assert synth_pipeline_shape_ok({"pipeline": {"stages": ["raw"], "rows": [{"label": "Claude"}]}})
@@ -140,11 +180,40 @@ def test_refresh_synth_pending_stores_pipeline(tmp_path: Path):
     assert out["pending_total"] == 1
     assert out["pipeline"]["rows"]
     assert out["pipeline"]["rows"][0]["label"] == "OpenClaw"
+    assert "to_review" in out["pipeline"]["stages"]
+    assert out["pipeline"]["to_review"] == 0
 
     state = read_state(state_file)
     assert state["synth"]["pipeline"]["rows"][0]["label"] == "OpenClaw"
     assert state["synth"]["pending"][0]["agent"] == "OpenClaw"
+    assert state["synth"]["pipeline"]["to_review"] == 0
 
+
+def test_refresh_synth_pending_counts_candidates(tmp_path: Path):
+    vault = tmp_path / "vault"
+    raw = vault / "raw" / "sessions"
+    docs = vault / "raw" / "docs"
+    wiki = vault / "wiki"
+    (wiki / "sources").mkdir(parents=True)
+    cand = wiki / "candidates" / "entities"
+    cand.mkdir(parents=True)
+    (cand / "Foo.md").write_text(
+        "---\ntitle: Foo\nstatus: candidate\nlast_updated: 2020-01-01\n---\n\n# Foo\n",
+        encoding="utf-8",
+    )
+    raw.mkdir(parents=True)
+    docs.mkdir(parents=True)
+    out = refresh_synth_pending(
+        raw_dir=raw,
+        docs_dir=docs,
+        wiki_sources_dir=wiki / "sources",
+        state_file=vault / "llmwiki-state.json",
+        include_subagents="all",
+        exclude_headless=False,
+    )
+    assert out["pipeline"]["to_review"] == 1
+    assert out["pipeline"]["to_review_by_kind"]["entities"] == 1
+    assert out["pipeline"]["to_review_stale"] == 1
 
 def _seed_build_vault(tmp_path: Path) -> Path:
     """Minimal vault with one session so ``build_site`` has something to walk."""

@@ -255,6 +255,39 @@ def render_wiki_value_section(
     )
 
 
+def render_candidates_review_section(
+    *,
+    pending: int = 0,
+    stale: int = 0,
+    by_kind: dict[str, int] | None = None,
+    stale_days: int = 30,
+) -> str:
+    """Analytics cards for the candidates review queue (#84).
+
+    Always rendered (including zeros) so a synthesize-only vault still shows
+    that the review gate exists and is empty — not missing.
+    """
+    by_kind = by_kind or {}
+    kind_bits = " · ".join(f"{k} {n}" for k, n in sorted(by_kind.items()) if n)
+    kind_sub = kind_bits or "no stubs under wiki/candidates/"
+    return (
+        '<section class="section candidates-review-section"><div class="container">'
+        "<h2>Candidates to review</h2>"
+        '<p class="muted">Pending entity/concept stubs waiting for agent-led '
+        "promote / merge / discard. Synthesis alone does not finish the "
+        "trusted knowledge layer.</p>"
+        '<div class="token-stat-grid wiki-value-stats wiki-candidates-stats">'
+        '<div class="token-stat"><div class="token-stat-label muted">Pending candidates</div>'
+        f'<div class="token-stat-value">{int(pending)}</div>'
+        f'<div class="token-stat-sub muted">{html.escape(kind_sub)}</div></div>'
+        '<div class="token-stat"><div class="token-stat-label muted">Stale candidates</div>'
+        f'<div class="token-stat-value">{int(stale)}</div>'
+        f'<div class="token-stat-sub muted">age ≥ {int(stale_days)}d · '
+        "<code>llmwiki candidates list --stale</code></div></div>"
+        "</div></div></section>"
+    )
+
+
 def render_mcp_usage_section(
     usage_totals: dict[str, Any],
     docs_by_project: dict[str, int],
