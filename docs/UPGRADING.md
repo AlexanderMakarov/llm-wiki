@@ -14,7 +14,7 @@ The canonical per-release detail is [CHANGELOG.md](https://github.com/Pratiyush/
 
 - **`llmwiki synth` is the primary command.** Default: synthesize pending sources, then harvest entity/concept candidates. Prefer it over `synthesize`.
 - **`llmwiki synthesize` is deprecated.** It still runs (scripts keep working) but prints a warning and defaults to sources-only — the old behaviour — so upgrading does not silently write ~80 candidate stubs. Prefer `llmwiki synth` (or `synth --sources-only` / `synth --candidates-only`).
-- **`all --with-synth` / `watch`** call `synth` (sources + candidates). If candidate classification fails on your backend, pass `--allow-unclassified` on a one-shot `synth --candidates-only` run, or use a backend that returns `name: entity|concept` lines.
+- **`all --with-synth` / `watch`** call `synth` (sources + candidates). Classification retries omitted names once; if still incomplete, the run fails closed (writes nothing) unless you pass `--allow-unclassified` on a one-shot harvest, or use a backend that returns `name: entity|concept` lines.
 - Slash: `/wiki-synth` preferred; `/wiki-synthesize` remains as a deprecated wrapper.
 
 ## Unreleased — candidates review gate on Home / Analytics (#84)

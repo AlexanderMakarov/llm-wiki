@@ -483,7 +483,7 @@ def _print_usage_report(consumption: dict[str, Any], cost: dict[str, Any]) -> No
             line += f"   incremental: ${cost['incremental_usd']:,.2f}"
         print(line)
     else:
-        print("synthesis cost: unknown (run `llmwiki synthesize --estimate`)")
+        print("synthesis cost: unknown (run `llmwiki synth --estimate`)")
 
 
 def cmd_adapters(args: argparse.Namespace) -> int:
@@ -1623,7 +1623,7 @@ def _synthesize_estimate(args: argparse.Namespace | None = None) -> int:
         f"{n}:{count}" for n, count in sorted(backlog["distribution"].items())
     )
     print(f"  by --min-refs:   {shape}")
-    print("  generate with:   llmwiki synthesize --candidates-only")
+    print("  generate with:   llmwiki synth --candidates-only")
     return 0
 
 
