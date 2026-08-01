@@ -229,14 +229,18 @@ def write_stubs(
     tree stays a human-or-agent decision via ``llmwiki candidates promote``.
     """
     targets = list(targets)
-    kinds = classify([t.name for t in targets]) if classify else {}
+    # A stub that already exists keeps its folder — the reviewer may have
+    # refiled it, and that decision outranks the model's. Resolve those first
+    # so classification is only asked about genuinely new names: re-runs
+    # otherwise pay for an answer they then discard.
+    filed = {t.name: _existing_subdir(wiki_dir, t.name) for t in targets}
+    unfiled = [name for name, subdir in filed.items() if subdir is None]
+    kinds = classify(unfiled) if classify else {}
     today = datetime.now(UTC).date().isoformat()
 
     written: list[Path] = []
     for target in targets:
-        # A stub the reviewer already refiled keeps its folder. Re-classifying
-        # every run would fight the human the queue exists to serve.
-        subdir = _existing_subdir(wiki_dir, target.name)
+        subdir = filed[target.name]
         if subdir is None:
             subdir = _KIND_DIRS.get(kinds.get(target.name, "entity"), "entities")
         kind = _DIR_KINDS.get(subdir, "entity")

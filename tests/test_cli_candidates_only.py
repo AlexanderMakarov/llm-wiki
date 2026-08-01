@@ -175,7 +175,7 @@ def test_unclassified_targets_are_reported_not_silent(
     cmd_synthesize(_args(candidates_only=True, vault=vault))
 
     err = capsys.readouterr().err
-    assert "1 of 1 target(s) not classified" in err
+    assert "1 of 1 candidate(s) filed as entity_type: unknown" in err
     assert "offline" in err
 
 
@@ -197,4 +197,18 @@ def test_fully_classified_run_reports_no_warning(
 
     cmd_synthesize(_args(candidates_only=True, vault=vault))
 
-    assert "not classified" not in capsys.readouterr().err
+    assert "entity_type: unknown" not in capsys.readouterr().err
+
+
+def test_rerun_still_reports_unknown_stubs(tmp_path: Path, monkeypatch, capsys) -> None:
+    """A re-run re-asks nothing, so the count must come from disk, not the call."""
+    vault = _mk_vault(tmp_path, {s: ["Recurring"] for s in ("a", "b", "c")})
+    monkeypatch.setattr(
+        "llmwiki.cli.resolve_backend", lambda cfg: _UnavailableBackend()
+    )
+
+    cmd_synthesize(_args(candidates_only=True, vault=vault))
+    capsys.readouterr()
+    cmd_synthesize(_args(candidates_only=True, vault=vault))
+
+    assert "1 of 1 candidate(s) filed as entity_type: unknown" in capsys.readouterr().err

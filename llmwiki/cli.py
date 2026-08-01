@@ -1015,27 +1015,29 @@ def _run_candidate_harvest(args: argparse.Namespace) -> int:
         print(f"  ! backend unavailable ({exc})", file=sys.stderr)
         backend = None
 
-    classified: dict[str, str] = {}
-
-    def _classify(names: list[str]) -> dict[str, str]:
-        classified.update(classify_names(names, backend))
-        return classified
-
-    written = write_stubs(wiki_dir, targets, classify=_classify)
+    written = write_stubs(
+        wiki_dir, targets, classify=lambda names: classify_names(names, backend)
+    )
     print(
         f"Candidates: {len(written)} stub(s) at --min-refs {min_refs} "
         f"→ {wiki_dir / 'candidates'}"
     )
     # Never let a classification failure look like a clean run: an operator
     # reading "82 stubs" must be able to tell filed-by-the-model from
-    # filed-by-fallback.
-    unclassified = len(targets) - len(classified)
-    if targets and unclassified:
+    # filed-by-fallback. Counted from the stubs on disk rather than from what
+    # the backend answered, so a re-run (which deliberately re-asks nothing)
+    # still reports the queue's real state.
+    unknown = sum(
+        1
+        for p in written
+        if "entity_type: unknown" in p.read_text(encoding="utf-8", errors="replace")
+    )
+    if unknown:
         backend_name = getattr(backend, "name", "none")
         print(
-            f"  ! {unclassified} of {len(targets)} target(s) not classified "
-            f"(backend: {backend_name}) — filed as entity_type: unknown; "
-            "re-file during review or re-run once the backend is reachable",
+            f"  ! {unknown} of {len(written)} candidate(s) filed as "
+            f"entity_type: unknown (backend: {backend_name}) — re-file during "
+            "review, or delete the stub and re-run once the backend is reachable",
             file=sys.stderr,
         )
     if written:

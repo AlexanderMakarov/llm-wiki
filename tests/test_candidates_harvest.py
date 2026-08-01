@@ -360,3 +360,23 @@ def test_classification_reports_what_it_could_not_classify() -> None:
     kinds = classify_names(["Known", "Unknown"], backend)
 
     assert kinds == {"Known": "entity"}
+
+
+def test_rerun_does_not_reclassify_already_filed_candidates(tmp_path: Path) -> None:
+    """Re-runs must not pay to re-decide a question already answered.
+
+    A stub's folder is fixed once it exists (reviewer's call), so asking the
+    backend about it again buys nothing and costs a call.
+    """
+    wiki, targets = _harvest_one(tmp_path, "Settled")
+    asked: list[list[str]] = []
+
+    def _classify(names):
+        asked.append(list(names))
+        return {}
+
+    write_stubs(wiki, targets, classify=_classify)
+    write_stubs(wiki, harvest_targets(wiki), classify=_classify)
+
+    assert asked[0] == ["Settled"]
+    assert asked[1] == []
