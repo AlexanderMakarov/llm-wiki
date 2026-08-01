@@ -24,6 +24,8 @@ Usage: `/wiki-review`
      and rewrites `status: candidate` → `status: reviewed`.
      ```
      python3 -m llmwiki candidates promote --slug MyEntity
+     python3 -m llmwiki candidates promote --slug A --slug B
+     python3 -m llmwiki candidates promote --min-refs 5
      ```
 
    - **merge** — candidate is essentially a duplicate of an existing page.

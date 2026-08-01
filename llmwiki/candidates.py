@@ -17,6 +17,8 @@ Public API:
   - ``discard(slug, wiki_dir, reason)`` → move to archive/
   - ``stale_candidates(wiki_dir, threshold_days=30)`` → list pages flagged stale
   - ``is_candidate(page_path)`` → bool
+  - ``candidate_source_refs(path)`` → int (distinct sources in frontmatter)
+  - ``slugs_for_promote(wiki_dir, slugs=…, min_refs=…)`` → ordered slug list
 
 Design choices:
   - Separate ``candidates/`` mirror tree (vs status field only) so the
@@ -245,6 +247,62 @@ def stale_candidates(
         c for c in list_candidates(wiki_dir, now=now)
         if c["age_days"] >= threshold_days
     ]
+
+
+def candidate_source_refs(path: Path) -> int:
+    """Count distinct source pages named in a candidate's ``sources:`` list.
+
+    Harvested stubs carry ``sources: [slug-a, slug-b, …]`` — the same
+    page-counted evidence that justified the candidate. Used by
+    ``candidates promote --min-refs N`` so bulk promotion shares the
+    harvest threshold semantics without re-walking ``wiki/sources/``.
+    """
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return 0
+    meta, _ = _parse_frontmatter(text)
+    raw = meta.get("sources", "").strip()
+    if not raw:
+        return 0
+    # Frontmatter parser leaves list literals as a single string.
+    inner = raw.strip("[]").strip()
+    if not inner:
+        return 0
+    return len([part for part in inner.split(",") if part.strip()])
+
+
+def slugs_for_promote(
+    wiki_dir: Path,
+    *,
+    slugs: list[str] | None = None,
+    min_refs: int | None = None,
+    kind: str | None = None,
+) -> list[str]:
+    """Build the ordered slug list for a promote run (#90 PR 2).
+
+    Explicit ``--slug`` values come first (preserving CLI order). When
+    ``min_refs`` is set, every pending candidate whose ``sources:`` count
+    meets the threshold is appended (deduped). ``kind`` narrows the
+    ``--min-refs`` scan the same way ``promote(..., kind=)`` does.
+    """
+    ordered: list[str] = []
+    seen: set[str] = set()
+    for slug in slugs or []:
+        if slug not in seen:
+            ordered.append(slug)
+            seen.add(slug)
+    if min_refs is not None:
+        for cand in list_candidates(wiki_dir):
+            if kind and cand["kind"] != kind:
+                continue
+            if candidate_source_refs(cand["abs_path"]) < min_refs:
+                continue
+            if cand["slug"] in seen:
+                continue
+            ordered.append(cand["slug"])
+            seen.add(cand["slug"])
+    return ordered
 
 
 # ─── internals ─────────────────────────────────────────────────────────

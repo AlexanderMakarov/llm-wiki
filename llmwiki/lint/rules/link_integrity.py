@@ -15,9 +15,21 @@ def _norm_slug(s: str) -> str:
     return _NORM_RE.sub("", s.lower())
 
 
+def _is_candidate_rel(rel: str) -> bool:
+    """True when ``rel`` lives under ``wiki/candidates/`` (any OS separator)."""
+    return "candidates/" in rel.replace("\\", "/")
+
+
 @register
 class LinkIntegrity(LintRule):
-    """[[wikilinks]] must resolve to existing pages."""
+    """[[wikilinks]] must resolve to existing **trusted** pages.
+
+    Pending candidates under ``wiki/candidates/`` do **not** satisfy
+    inbound links (#90). The review queue exists so approval means
+    something — a metric that clears itself at generation time undercuts
+    that gate. Harvesting already refuses to treat candidates as resolved
+    (otherwise re-runs are no-ops); this rule matches that answer.
+    """
 
     name = "link_integrity"
     severity = "warning"
@@ -26,7 +38,9 @@ class LinkIntegrity(LintRule):
     def run(self, pages, *, llm_callback=None):
         del llm_callback  # unused — reserved / legacy kwarg
         # Exact slugs + normalized alias map (first page wins per key).
-        slugs = {_page_slug(rel) for rel in pages}
+        # Candidates are loaded by lint but do not close the gap until promoted.
+        trusted = [rel for rel in pages if not _is_candidate_rel(rel)]
+        slugs = {_page_slug(rel) for rel in trusted}
         by_norm: dict[str, str] = {}
         for slug in slugs:
             key = _norm_slug(slug)

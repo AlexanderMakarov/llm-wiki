@@ -77,7 +77,7 @@ llmwiki build                          # HTML site + llms.txt, llms-full.txt, gr
 ## Quality
 
 ```bash
-llmwiki lint                           # 17 structural rules
+llmwiki lint                           # 18 structural rules
 llmwiki lint --json --fail-on-errors   # CI-friendly
 llmwiki lint --rules link_integrity,orphan_detection
 ```
@@ -88,6 +88,8 @@ llmwiki lint --rules link_integrity,orphan_detection
 llmwiki candidates list                # show all candidates
 llmwiki candidates list --stale        # only stale (>30 days)
 llmwiki candidates promote --slug Foo  # promote to wiki
+llmwiki candidates promote --slug A --slug B
+llmwiki candidates promote --min-refs 5  # bulk above confidence line
 llmwiki candidates merge --slug A --into B
 llmwiki candidates discard --slug X --reason "hallucinated"
 ```

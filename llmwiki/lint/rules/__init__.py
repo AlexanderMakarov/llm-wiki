@@ -20,6 +20,7 @@ Post-v1.0 rules:
   15. frontmatter_count_consistency  (v1.2 · issues.md #2)
   16. tools_consistency              (v1.2 · issues.md #4)
   17. stub_source_pages              (#24)
+  18. hollow_reviewed_stubs          (#90)
 
 Import order matters — every per-rule module's top-level ``@register``
 decorator runs at import time and inserts its rule into the
@@ -58,6 +59,7 @@ from llmwiki.lint.rules.entity_consistency import EntityConsistency  # noqa: F40
 from llmwiki.lint.rules.frontmatter_completeness import FrontmatterCompleteness  # noqa: F401
 from llmwiki.lint.rules.frontmatter_count_consistency import FrontmatterCountConsistency  # noqa: F401
 from llmwiki.lint.rules.frontmatter_validity import FrontmatterValidity  # noqa: F401
+from llmwiki.lint.rules.hollow_reviewed_stubs import HollowReviewedStubs  # noqa: F401
 from llmwiki.lint.rules.index_sync import IndexSync  # noqa: F401
 from llmwiki.lint.rules.link_integrity import LinkIntegrity  # noqa: F401
 from llmwiki.lint.rules.orphan_detection import OrphanDetection  # noqa: F401

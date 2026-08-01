@@ -50,8 +50,9 @@ def test_all_14_rules_registered():
     # + frontmatter_count_consistency (issues.md #2)
     # + tools_consistency (issues.md #4)
     # + stub_source_pages (#24)
+    # + hollow_reviewed_stubs (#90)
     # cache_tier_consistency removed (cache_tiers module deleted)
-    assert len(REGISTRY) == 17
+    assert len(REGISTRY) == 18
 
 
 def test_registered_rule_names():
@@ -73,6 +74,7 @@ def test_registered_rule_names():
         "frontmatter_count_consistency", # issues.md #2
         "tools_consistency",             # issues.md #4
         "stub_source_pages",             # #24
+        "hollow_reviewed_stubs",         # #90
     }
     assert set(REGISTRY.keys()) == expected
 
@@ -261,6 +263,37 @@ def test_link_no_substring_alias():
     issues = LinkIntegrity().run(pages)
     assert len(issues) == 1
     assert "kbbuilder" in issues[0]["message"]
+
+
+def test_link_integrity_ignores_pending_candidates():
+    """A pending candidate must not satisfy inbound links (#90).
+
+    Generation used to quiet link_integrity before anyone promoted; the
+    review gate only means something if the metric stays red until then.
+    """
+    pages = {
+        "sources/a.md": _mk_page({"title": "A"}, "See [[NewEntity]]"),
+        "candidates/entities/NewEntity.md": _mk_page(
+            {"title": "NewEntity", "status": "candidate"},
+            "# NewEntity\n\n## Key Facts\n\n",
+        ),
+    }
+    issues = LinkIntegrity().run(pages)
+    assert len(issues) == 1
+    assert "NewEntity" in issues[0]["message"]
+    assert issues[0]["page"] == "sources/a.md"
+
+
+def test_link_integrity_trusted_page_still_resolves():
+    """Promoted (trusted) pages continue to close the gap."""
+    pages = {
+        "sources/a.md": _mk_page({"title": "A"}, "See [[NewEntity]]"),
+        "entities/NewEntity.md": _mk_page(
+            {"title": "NewEntity", "status": "reviewed"},
+            "# NewEntity\n\n## Key Facts\n\n- real fact\n",
+        ),
+    }
+    assert LinkIntegrity().run(pages) == []
 
 
 # ─── 4. OrphanDetection ──────────────────────────────────────────────

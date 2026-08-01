@@ -10,6 +10,23 @@ How to upgrade between `llmwiki` releases.  Most releases are drop-in (`pip inst
 
 The canonical per-release detail is [CHANGELOG.md](https://github.com/Pratiyush/llm-wiki/blob/master/CHANGELOG.md) — this guide focuses on "what might break".
 
+## Unreleased — candidate harvest + drainable queue (#90)
+
+After upgrading, existing vaults still have a hollow entity/concept layer until you opt in:
+
+```bash
+llmwiki synthesize --estimate --vault <vault>          # preview backlog shape
+llmwiki synthesize --candidates-only --vault <vault>   # write wiki/candidates/
+llmwiki candidates list --vault <vault>
+llmwiki candidates promote --min-refs 5 --vault <vault>   # or repeated --slug
+llmwiki lint --vault <vault> --rules link_integrity,hollow_reviewed_stubs
+```
+
+Behaviour flips to know about:
+
+- **`link_integrity` no longer treats pending candidates as resolved.** A stub under `wiki/candidates/` does not close inbound `[[wikilinks]]` — the gap stays until promote. If you previously harvested under PR #93 and saw broken-link counts drop without promoting, re-lint after this upgrade and expect those warnings back until you promote.
+- **`hollow_reviewed_stubs`** flags promoted pages that are still empty skeletons. Thin is fine while pending; after promote, enrich Key Facts (or expect the lint warning).
+
 ## Unreleased — pipeline reshape: export/reindex CLI removed, `all` extended
 
 - **`llmwiki export` is gone.** AI-consumable files (`llms.txt`, `llms-full.txt`, `sitemap.xml`, `rss.xml`, `robots.txt`, `graph.jsonld`, `ai-readme.md`, etc.) are written by `build` into `--out` (default `site/`). Replace `llmwiki export all` with `llmwiki build`. The library module `llmwiki.exporters` (`export_all`, …) remains — only the standalone CLI entry point is removed.

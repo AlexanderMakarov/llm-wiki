@@ -52,6 +52,7 @@ from llmwiki.candidates import (
     discard,
     list_candidates,
     promote,
+    slugs_for_promote,
     stale_candidates,
 )
 from llmwiki.candidates import (
@@ -1663,28 +1664,61 @@ def cmd_candidates(args: argparse.Namespace) -> int:
         return 0
 
     if action == "promote":
-        if not args.slug:
-            print("error: --slug is required for promote", file=sys.stderr)
-            return 2
-        path = promote(args.slug, wiki_dir, kind=args.kind)
-        print(f"  promoted → {path.relative_to(wiki_dir)}")
-        return 0
+        # Repeated --slug and/or --min-refs (#90): a default harvest yields
+        # ~80 pending stubs; one invocation per stub is not a drainable queue.
+        slugs = slugs_for_promote(
+            wiki_dir,
+            slugs=args.slug,
+            min_refs=args.min_refs,
+            kind=args.kind,
+        )
+        if not slugs:
+            if not args.slug and args.min_refs is None:
+                print(
+                    "error: --slug or --min-refs is required for promote",
+                    file=sys.stderr,
+                )
+                return 2
+            print("  0 candidate(s) promoted")
+            return 0
+        errors = 0
+        for slug in slugs:
+            try:
+                path = promote(slug, wiki_dir, kind=args.kind)
+            except FileNotFoundError as exc:
+                print(f"error: {exc}", file=sys.stderr)
+                errors += 1
+                continue
+            print(f"  promoted → {path.relative_to(wiki_dir)}")
+        return 2 if errors else 0
 
     if action == "merge":
-        if not args.slug or not args.into:
-            print("error: both --slug and --into are required for merge", file=sys.stderr)
+        slugs = args.slug or []
+        if len(slugs) != 1 or not args.into:
+            print(
+                "error: exactly one --slug and --into are required for merge",
+                file=sys.stderr,
+            )
             return 2
-        path = merge_candidate(args.slug, wiki_dir, into_slug=args.into, kind=args.kind)
+        path = merge_candidate(slugs[0], wiki_dir, into_slug=args.into, kind=args.kind)
         print(f"  merged into → {path.relative_to(wiki_dir)}")
         return 0
 
     if action == "discard":
-        if not args.slug:
+        slugs = args.slug or []
+        if not slugs:
             print("error: --slug is required for discard", file=sys.stderr)
             return 2
-        path = discard(args.slug, wiki_dir, reason=args.reason, kind=args.kind)
-        print(f"  discarded → {path.relative_to(wiki_dir)}")
-        return 0
+        errors = 0
+        for slug in slugs:
+            try:
+                path = discard(slug, wiki_dir, reason=args.reason, kind=args.kind)
+            except FileNotFoundError as exc:
+                print(f"error: {exc}", file=sys.stderr)
+                errors += 1
+                continue
+            print(f"  discarded → {path.relative_to(wiki_dir)}")
+        return 2 if errors else 0
 
     print(f"error: unknown action {action!r}", file=sys.stderr)
     return 2
@@ -1999,8 +2033,10 @@ def build_parser() -> argparse.ArgumentParser:
         "action", choices=["list", "promote", "merge", "discard"],
         help="What to do with candidates",
     )
-    cand.add_argument("--slug", type=str, default=None,
-                      help="Candidate slug (required for promote/merge/discard)")
+    cand.add_argument(
+        "--slug", action="append", default=None, metavar="NAME",
+        help="Candidate slug (repeatable for promote/discard; exactly one for merge)",
+    )
     cand.add_argument("--into", type=str, default=None,
                       help="For merge: slug of the page to merge into")
     cand.add_argument("--reason", type=str, default="",
@@ -2008,6 +2044,13 @@ def build_parser() -> argparse.ArgumentParser:
     cand.add_argument("--kind", type=str, default=None,
                       choices=["entities", "concepts", "sources", "syntheses"],
                       help="Subtree (auto-detected if omitted)")
+    cand.add_argument(
+        "--min-refs", type=int, default=None, metavar="N",
+        help=(
+            "For promote: also promote every pending candidate named by N+ "
+            "distinct source pages (same page-counted evidence as harvest)"
+        ),
+    )
     cand.add_argument("--wiki-dir", type=Path, default=None,
                       help="Wiki directory (default: ./wiki)")
     cand.add_argument("--stale", action="store_true",

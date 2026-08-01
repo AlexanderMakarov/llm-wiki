@@ -316,7 +316,7 @@ python3 -m llmwiki graph --format html
 
 ---
 
-## `lint` — run 17 wiki-quality rules
+## `lint` — run wiki-quality rules
 
 ```bash
 python3 -m llmwiki lint
@@ -337,13 +337,15 @@ python3 -m llmwiki lint --wiki-dir ~/another-wiki
 
 ### Rules
 
-17 structural rules (all deterministic — no LLM): `frontmatter_completeness`, `frontmatter_validity`, `link_integrity`, `orphan_detection`, `content_freshness`, `entity_consistency`, `duplicate_detection`, `index_sync`, `contradiction_detection`, `claim_verification`, `summary_accuracy`, `stale_candidates`, `tags_topics_convention`, `stale_reference_detection`, `frontmatter_count_consistency`, `tools_consistency`, `stub_source_pages`.
+18 structural rules (all deterministic — no LLM): `frontmatter_completeness`, `frontmatter_validity`, `link_integrity`, `orphan_detection`, `content_freshness`, `entity_consistency`, `duplicate_detection`, `index_sync`, `contradiction_detection`, `claim_verification`, `summary_accuracy`, `stale_candidates`, `tags_topics_convention`, `stale_reference_detection`, `frontmatter_count_consistency`, `tools_consistency`, `stub_source_pages`, `hollow_reviewed_stubs`.
 
 `contradiction_detection`, `claim_verification`, and `summary_accuracy` used to hide behind `--include-llm` and advertise an LLM callback that was never wired. As of #72 they always run as structural checks: non-filler `## Contradictions` sections, entity/concept claims without sources, and empty `summary:` frontmatter. Filler bodies like `None identified.`, `None detected.`, and multi-sentence `None identified. …` elaborations are not findings (unless the section also contains an *unnegated* affirmative conflict cue such as `Contradicts earlier…`). Cues that appear only inside negation (`does not conflict with prior…`, `no claims that conflict…`) stay filler (#86).
 
-`orphan_detection` counts inbound `[[wikilinks]]` and catalog markdown links (`[title](path.md)` that resolve to a wiki page), so pages listed only from `index.md` are not orphans. `link_integrity` resolves targets case- and punctuation-insensitively (`[[LLM-Wiki]]` → `llm-wiki.md`) but does not do substring matching.
+`orphan_detection` counts inbound `[[wikilinks]]` and catalog markdown links (`[title](path.md)` that resolve to a wiki page), so pages listed only from `index.md` are not orphans. `link_integrity` resolves targets case- and punctuation-insensitively (`[[LLM-Wiki]]` → `llm-wiki.md`) but does not do substring matching. Pending candidates under `wiki/candidates/` do **not** satisfy inbound links (#90) — the gap stays reported until promotion.
 
 `stub_source_pages` (#24) flags pages under `wiki/sources/` whose body is machine-generated filler — a pending sentinel (`<!-- llmwiki-pending: … -->`) or the dummy backend's `Auto-synthesized from session` body. Those sources still count as unsynthesized backlog; refill them with `llmwiki synthesize` on a real backend.
+
+`hollow_reviewed_stubs` (#90) flags promoted (`status: reviewed`) entity/concept pages that still have no prose above `## Connections` — the harvest skeleton after `candidates promote`. Pending stubs under `wiki/candidates/` are exempt (thin is correct while awaiting review).
 
 `stale_reference_detection` (#303 / #87) flags living pages (entities, concepts, …) whose dated claim about a target predates that target's `last_updated`. Pages under `wiki/sources/` and pages with frontmatter `type: source` are skipped — they are dated session records and cannot be "un-staled" without rewriting history.
 
@@ -369,16 +371,20 @@ python3 -m llmwiki candidates list
 python3 -m llmwiki candidates list --stale --stale-days 60
 python3 -m llmwiki candidates list --json
 python3 -m llmwiki candidates promote --slug NewEntity
+python3 -m llmwiki candidates promote --slug A --slug B --slug C
+python3 -m llmwiki candidates promote --min-refs 5
 python3 -m llmwiki candidates promote --slug NewEntity --kind concepts
 python3 -m llmwiki candidates merge --slug DuplicateFoo --into Foo
 python3 -m llmwiki candidates discard --slug BogusEntity --reason "LLM hallucinated"
+python3 -m llmwiki candidates discard --slug X --slug Y --reason "noise"
 ```
 
 ### Flags
 
 | Flag | What |
 |---|---|
-| `--slug NAME` | Candidate slug. **Required** for `promote` / `merge` / `discard`. |
+| `--slug NAME` | Candidate slug. **Repeatable** for `promote` / `discard`; exactly one for `merge`. For `promote`, combine with or replace by `--min-refs`. |
+| `--min-refs N` | For `promote`: also promote every pending candidate named by **N or more** distinct source pages (same page-counted `sources:` evidence harvest wrote). Opt-in — no default. |
 | `--into NAME` | For `merge`: target slug. |
 | `--reason TEXT` | For `discard`: why (written to archive's `.reason.txt`). |
 | `--kind {entities,concepts,sources,syntheses}` | Subtree. Auto-detected if omitted. |

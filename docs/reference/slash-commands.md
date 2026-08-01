@@ -182,7 +182,7 @@ want to re-run sync.
 
 ### `/wiki-lint`
 
-**What:** run every registered lint rule (17 at last count — all structural / deterministic). The live number is printed by `llmwiki lint --help`.
+**What:** run every registered lint rule (18 at last count — all structural / deterministic). The live number is printed by `llmwiki lint --help`.
 
 **Wraps:** `python3 -m llmwiki lint`.
 
@@ -205,6 +205,7 @@ want to re-run sync.
 15. `frontmatter_count_consistency`
 16. `tools_consistency`
 17. `stub_source_pages`
+18. `hollow_reviewed_stubs` *(#90)*
 
 **Example:**
 

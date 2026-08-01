@@ -17,12 +17,14 @@ from llmwiki.candidates import (
     _parse_frontmatter,
     _rewrite_status,
     archive_dir,
+    candidate_source_refs,
     candidates_dir,
     discard,
     is_candidate,
     list_candidates,
     merge,
     promote,
+    slugs_for_promote,
     stale_candidates,
 )
 from llmwiki.cli import build_parser
@@ -30,6 +32,7 @@ from llmwiki.lint import (
     REGISTRY,
     rules,  # noqa: F401
 )
+from llmwiki.lint.rules.hollow_reviewed_stubs import HollowReviewedStubs
 
 # ─── Fixtures ──────────────────────────────────────────────────────────
 
@@ -51,6 +54,7 @@ def _write_candidate(
     body: str = "",
     date: str = "2026-04-17",
     title: str | None = None,
+    sources: list[str] | None = None,
 ) -> Path:
     path = wiki / "candidates" / kind / f"{slug}.md"
     title = title or slug
@@ -58,8 +62,12 @@ def _write_candidate(
     # the default body first and interpolate via a plain name.
     default_body = f"# {title}\n\nCandidate body."
     body_text = body or default_body
+    sources_line = ""
+    if sources is not None:
+        sources_line = f"sources: [{', '.join(sources)}]\n"
     path.write_text(
         f'---\ntitle: "{title}"\ntype: {kind[:-1]}\nstatus: candidate\n'
+        f'{sources_line}'
         f'last_updated: {date}\n---\n\n{body_text}\n',
         encoding="utf-8",
     )
@@ -363,3 +371,124 @@ def test_cli_candidates_subcommand_registered():
             break
     assert sub_action is not None
     assert "candidates" in sub_action.choices
+
+
+# ─── #90 PR 2 — drainable queue ──────────────────────────────────────
+
+
+def test_candidate_source_refs_counts_frontmatter_list(tmp_path: Path):
+    wiki = _mk_wiki(tmp_path)
+    path = _write_candidate(
+        wiki, "entities", "Foo", sources=["a", "b", "c"]
+    )
+    assert candidate_source_refs(path) == 3
+
+
+def test_candidate_source_refs_empty_list(tmp_path: Path):
+    wiki = _mk_wiki(tmp_path)
+    path = _write_candidate(wiki, "entities", "Foo", sources=[])
+    assert candidate_source_refs(path) == 0
+
+
+def test_slugs_for_promote_min_refs(tmp_path: Path):
+    wiki = _mk_wiki(tmp_path)
+    _write_candidate(wiki, "entities", "Hot", sources=["a", "b", "c", "d", "e"])
+    _write_candidate(wiki, "entities", "Warm", sources=["a", "b", "c"])
+    _write_candidate(wiki, "entities", "Cool", sources=["a", "b"])
+    assert slugs_for_promote(wiki, min_refs=5) == ["Hot"]
+    assert set(slugs_for_promote(wiki, min_refs=3)) == {"Hot", "Warm"}
+
+
+def test_slugs_for_promote_merges_explicit_and_min_refs(tmp_path: Path):
+    wiki = _mk_wiki(tmp_path)
+    _write_candidate(wiki, "entities", "Hot", sources=["a", "b", "c", "d", "e"])
+    _write_candidate(wiki, "entities", "Cool", sources=["a"])
+    # Explicit first; min-refs appends without duplicating.
+    assert slugs_for_promote(
+        wiki, slugs=["Cool", "Hot"], min_refs=5
+    ) == ["Cool", "Hot"]
+
+
+def test_cli_promote_accepts_repeated_slug(tmp_path: Path):
+    wiki = _mk_wiki(tmp_path)
+    _write_candidate(wiki, "entities", "A")
+    _write_candidate(wiki, "entities", "B")
+    parser = build_parser()
+    args = parser.parse_args([
+        "candidates", "promote",
+        "--slug", "A", "--slug", "B",
+        "--wiki-dir", str(wiki),
+    ])
+    assert args.func(args) == 0
+    assert (wiki / "entities" / "A.md").is_file()
+    assert (wiki / "entities" / "B.md").is_file()
+
+
+def test_cli_promote_min_refs(tmp_path: Path):
+    wiki = _mk_wiki(tmp_path)
+    _write_candidate(wiki, "entities", "Hot", sources=["a", "b", "c", "d", "e"])
+    _write_candidate(wiki, "entities", "Cool", sources=["a", "b"])
+    parser = build_parser()
+    args = parser.parse_args([
+        "candidates", "promote",
+        "--min-refs", "5",
+        "--wiki-dir", str(wiki),
+    ])
+    assert args.func(args) == 0
+    assert (wiki / "entities" / "Hot.md").is_file()
+    assert (wiki / "candidates" / "entities" / "Cool.md").is_file()
+
+
+def test_cli_discard_accepts_repeated_slug(tmp_path: Path):
+    wiki = _mk_wiki(tmp_path)
+    _write_candidate(wiki, "entities", "X")
+    _write_candidate(wiki, "entities", "Y")
+    parser = build_parser()
+    args = parser.parse_args([
+        "candidates", "discard",
+        "--slug", "X", "--slug", "Y",
+        "--reason", "noise",
+        "--wiki-dir", str(wiki),
+    ])
+    assert args.func(args) == 0
+    assert not (wiki / "candidates" / "entities" / "X.md").exists()
+    assert not (wiki / "candidates" / "entities" / "Y.md").exists()
+
+
+def test_hollow_reviewed_stubs_flags_empty_promoted():
+    pages = {
+        "entities/Foo.md": {
+            "path": Path("x"),
+            "rel": "entities/Foo.md",
+            "text": "",
+            "meta": {"title": "Foo", "status": "reviewed"},
+            "body": "# Foo\n\n## Key Facts\n\n## Connections\n\n- [[a]]\n",
+        },
+    }
+    issues = HollowReviewedStubs().run(pages)
+    assert len(issues) == 1
+    assert issues[0]["rule"] == "hollow_reviewed_stubs"
+
+
+def test_hollow_reviewed_stubs_skips_candidates_and_filled():
+    pages = {
+        "candidates/entities/Foo.md": {
+            "path": Path("x"),
+            "rel": "candidates/entities/Foo.md",
+            "text": "",
+            "meta": {"title": "Foo", "status": "candidate"},
+            "body": "# Foo\n\n## Key Facts\n\n",
+        },
+        "entities/Bar.md": {
+            "path": Path("x"),
+            "rel": "entities/Bar.md",
+            "text": "",
+            "meta": {"title": "Bar", "status": "reviewed"},
+            "body": "# Bar\n\n## Key Facts\n\n- shipped in v1\n",
+        },
+    }
+    assert HollowReviewedStubs().run(pages) == []
+
+
+def test_hollow_reviewed_stubs_registered():
+    assert "hollow_reviewed_stubs" in REGISTRY
