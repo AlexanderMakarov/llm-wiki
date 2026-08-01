@@ -30,6 +30,7 @@ from typing import Any
 
 from llmwiki import REPO_ROOT
 from llmwiki.build import RAW_DIR, RAW_SESSIONS, build_site
+from llmwiki.candidates_harvest import DEFAULT_MIN_REFS, run_harvest
 from llmwiki.config_schedule import _load_sessions_config
 from llmwiki.convert import convert_all
 from llmwiki.graph import build_and_report
@@ -207,7 +208,7 @@ def run_pipeline(args: argparse.Namespace) -> int:
                       f"-{len(plan.removed)} dead link(s)")
 
         if getattr(args, "with_synth", False):
-            print("\n==> llmwiki synthesize")
+            print("\n==> llmwiki synth")
             config: dict[str, Any] = _load_sessions_config()
             backend = resolve_backend(config)
             print(f"Backend: {backend.name}")
@@ -219,7 +220,7 @@ def run_pipeline(args: argparse.Namespace) -> int:
                 )
                 overall_rc = _merge_rc(overall_rc, 1)
                 if args.fail_fast:
-                    print("error: step 'synthesize' exited 1; stopping (--fail-fast).", file=sys.stderr)
+                    print("error: step 'synth' exited 1; stopping (--fail-fast).", file=sys.stderr)
                     return overall_rc
             else:
                 summary = synthesize_new_sessions(
@@ -237,7 +238,26 @@ def run_pipeline(args: argparse.Namespace) -> int:
                         print(f"  ! {err}", file=sys.stderr)
                     overall_rc = _merge_rc(overall_rc, 1)
                     if args.fail_fast:
-                        print("error: step 'synthesize' exited 1; stopping (--fail-fast).", file=sys.stderr)
+                        print("error: step 'synth' exited 1; stopping (--fail-fast).", file=sys.stderr)
+                        return overall_rc
+                # Default synth also harvests candidates (#90).
+                harvest_rc = run_harvest(
+                    wiki_dir,
+                    min_refs=DEFAULT_MIN_REFS,
+                    allow_unclassified=bool(
+                        getattr(args, "allow_unclassified", False)
+                    ),
+                    backend=backend,
+                    require_sources=False,
+                )
+                if harvest_rc != 0:
+                    overall_rc = _merge_rc(overall_rc, harvest_rc)
+                    if args.fail_fast:
+                        print(
+                            "error: step 'synth' (candidates) exited "
+                            f"{harvest_rc}; stopping (--fail-fast).",
+                            file=sys.stderr,
+                        )
                         return overall_rc
 
         search_mode = args.search_mode or "auto"

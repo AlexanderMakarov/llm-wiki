@@ -49,7 +49,8 @@ From Claude Code, run these slash commands in order:
 | `all` | Full pipeline: optional sync/synth → build → graph → lint |
 | `lint` | Run 14 wiki-quality rules |
 | `candidates` | Approval workflow (list / promote / merge / discard) |
-| `synthesize` | LLM-backed source-page synthesis with auto-tagging |
+| `synth` | Synthesize sources + harvest entity/concept candidates |
+| `synthesize` | *(deprecated)* alias for `synth --sources-only` |
 | `version` | Print version |
 
 ## Knowledge graph
@@ -95,10 +96,12 @@ llmwiki candidates discard --slug X --reason "hallucinated"
 ## LLM synthesis
 
 ```bash
-llmwiki synthesize                     # synthesize source pages
-llmwiki synthesize --check             # probe backend (exit 0 if ok)
-llmwiki synthesize --estimate          # cost preview, no API calls
-llmwiki synthesize --force             # re-synth everything
+llmwiki synth                          # sources + candidates
+llmwiki synth --sources-only           # legacy: sources only
+llmwiki synth --check                  # probe backend (exit 0 if ok)
+llmwiki synth --estimate               # cost + candidate backlog preview
+llmwiki synth --force                  # re-synth everything, then harvest
+llmwiki synthesize                     # deprecated → sources-only + warning
 ```
 
 Auto-tags pages (up to 5 AI tags per page, near-dup rejection, stop-word filter).

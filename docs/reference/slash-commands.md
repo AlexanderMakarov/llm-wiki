@@ -11,11 +11,11 @@ what it does, what it runs under the hood, and a realistic invocation
 example. Use these inside **Claude Code** — Codex CLI picks the same
 files up via `install-skills`.
 
-Summary of **18 commands in 4 groups**:
+Summary of **19 commands in 4 groups**:
 
 | Group | Commands |
 |---|---|
-| **Wiki pipeline** (14) | `/wiki-init` `/wiki-sync` `/wiki-ingest` `/wiki-query` `/wiki-update` `/wiki-lint` `/wiki-candidates` `/wiki-synthesize` `/wiki-graph` `/wiki-reflect` `/wiki-build` `/wiki-serve` `/wiki-export-marp` `/wiki-all` |
+| **Wiki pipeline** (15) | `/wiki-init` `/wiki-sync` `/wiki-ingest` `/wiki-query` `/wiki-update` `/wiki-lint` `/wiki-candidates` `/wiki-synth` `/wiki-synthesize` `/wiki-graph` `/wiki-reflect` `/wiki-build` `/wiki-serve` `/wiki-export-marp` `/wiki-all` |
 | **Governance / maintainer** (4) | `/maintainer` `/release` `/review-pr` `/triage-issue` |
 
 ---
@@ -210,30 +210,24 @@ want to re-run sync.
 
 ---
 
-### `/wiki-synthesize`
+### `/wiki-synth`
 
-**What:** call the configured LLM backend on every new `raw/sessions/*.md`
-to produce `wiki/sources/<slug>.md`.
+**What:** synthesize pending raw sessions/docs into `wiki/sources/`, then harvest entity/concept candidates into `wiki/candidates/` (default). Use `--sources-only` for the legacy sources-only path.
 
-**Wraps:** `python3 -m llmwiki synthesize` (respects the
-`synthesis.backend` key in `config.json` / `sessions_config.json` —
-`dummy` / `ollama` / `claude`).
-
-**Natural-language flags Claude translates:**
-
-| You say | Runs |
-|---|---|
-| "just show me what it would cost" | `synthesize --estimate` |
-| "check the backend is reachable" | `synthesize --check` |
-| "re-synthesize everything" | `synthesize --force` |
+**Wraps:** `python3 -m llmwiki synth`.
 
 **Example:**
 
 ```
-/wiki-synthesize
-/wiki-synthesize with a cost estimate
-/wiki-synthesize force a re-run of every source
+/wiki-synth
+/wiki-synth with a cost estimate
+/wiki-synth force a re-run of every source
+/wiki-synth sources only
 ```
+
+### `/wiki-synthesize`
+
+**Deprecated** alias for `/wiki-synth`. Prefer `/wiki-synth`. Still wraps `python3 -m llmwiki synthesize` (sources-only + deprecation warning).
 
 ---
 
