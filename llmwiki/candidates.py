@@ -13,6 +13,7 @@ not land in the trusted wiki layer without human review.
 Public API:
   - ``list_candidates(wiki_dir)`` → list of Candidate dicts
   - ``promote(slug, wiki_dir, dest)`` → move candidate into trusted area
+  - ``fill_key_facts_from_evidence(text, wiki_dir, name=…)`` → enrich empty Key Facts
   - ``merge(slug, wiki_dir, into_slug)`` → fold candidate into an existing page
   - ``discard(slug, wiki_dir, reason)`` → move to archive/
   - ``stale_candidates(wiki_dir, threshold_days=30)`` → list pages flagged stale
@@ -25,6 +26,8 @@ Design choices:
     callers run `llmwiki lint` afterward to catch any stale pointers.
   - Discard is non-destructive: pages move to ``wiki/archive/candidates/``
     with a timestamped reason file so you can recover them later.
+  - Promote fills an empty ``## Key Facts`` from harvest evidence (#103);
+    non-empty reviewer facts are never overwritten.
 """
 
 from __future__ import annotations
@@ -36,6 +39,7 @@ from pathlib import Path
 from typing import TypedDict
 
 from llmwiki.reindex import reindex_wiki
+from llmwiki.synth.base import BaseSynthesizer
 
 # ─── constants ─────────────────────────────────────────────────────────
 
@@ -49,7 +53,30 @@ MIRRORED_SUBDIRS = ["entities", "concepts", "sources", "syntheses"]
 # Default staleness threshold (days)
 DEFAULT_STALE_DAYS = 30
 
+# Cap attributable Key Facts bullets written on promote (#103).
+_MAX_KEY_FACTS = 5
+_KEY_FACT_CLIP = 160
+
+# Evidence digest budget: how much of the sources the model gets to read.
+_MAX_EVIDENCE_SOURCES = 12
+_MAX_MENTION_LINES = 4
+_EVIDENCE_LINE_CLIP = 300
+
+KEY_FACTS_PROMPT_PATH = Path(__file__).parent / "synth" / "prompts" / "key_facts.md"
+
+
+class KeyFactsBackendError(RuntimeError):
+    """Raised when Key Facts need writing but no LLM backend can write them.
+
+    Promote refuses rather than degrading to string-slicing: a Key Facts
+    section assembled by regex reads like prose but states whatever happened
+    to sit near a wikilink, which is worse than an empty section because
+    nothing downstream can tell the two apart.
+    """
+
 FRONTMATTER_RE = re.compile(r"^---\n(.*?)\n---\n(.*)$", re.DOTALL)
+_WIKILINK_TARGET_RE = re.compile(r"\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|[^\]]*)?\]\]")
+_HEADING_RE = re.compile(r"^##\s+(.+?)\s*$", re.MULTILINE)
 
 
 # ─── types ─────────────────────────────────────────────────────────────
@@ -225,20 +252,290 @@ def _reconcile_catalog(wiki_dir: Path) -> None:
         pass
 
 
+# ─── Key Facts from evidence (#103) ────────────────────────────────────
+
+
+def _parse_sources_field(raw: str) -> list[str]:
+    """Parse a frontmatter ``sources: [a, b]`` (or bare ``a, b``) value."""
+    text = (raw or "").strip()
+    if not text:
+        return []
+    if text.startswith("[") and text.endswith("]"):
+        text = text[1:-1]
+    return [
+        part.strip().strip('"').strip("'")
+        for part in text.split(",")
+        if part.strip().strip('"').strip("'")
+    ]
+
+
+def _section_span(body: str, heading: str) -> tuple[int, int] | None:
+    """Return ``(content_start, content_end)`` for ``## <heading>``, if present."""
+    for match in _HEADING_RE.finditer(body):
+        if match.group(1).strip().lower() != heading.lower():
+            continue
+        start = match.end()
+        next_h = _HEADING_RE.search(body, start)
+        end = next_h.start() if next_h else len(body)
+        return start, end
+    return None
+
+
+def _section_has_substantive_content(section: str) -> bool:
+    """True when Key Facts (or similar) already has bullets or prose."""
+    for line in section.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if stripped.startswith(("-", "*", "+")):
+            if stripped.lstrip("-*+ ").strip():
+                return True
+            continue
+        if not stripped.startswith("#"):
+            return True
+    return False
+
+
+def _key_facts_needs_fill(body: str) -> bool:
+    """True when ``## Key Facts`` is missing or empty (heading only)."""
+    span = _section_span(body, "Key Facts")
+    if span is None:
+        return True
+    start, end = span
+    return not _section_has_substantive_content(body[start:end])
+
+
+def _resolve_source_page(wiki_dir: Path, slug: str) -> Path | None:
+    """Locate ``wiki/sources/**/<slug>.md`` (flat or nested)."""
+    sources = wiki_dir / "sources"
+    if not sources.is_dir() or not slug:
+        return None
+    direct = sources / f"{slug}.md"
+    if direct.is_file():
+        return direct
+    matches = sorted(sources.rglob(f"{slug}.md"))
+    return matches[0] if matches else None
+
+
+def _evidence_source_slugs(
+    meta: dict[str, str],
+    body: str,
+    wiki_dir: Path,
+) -> list[str]:
+    """Evidence sources from frontmatter ``sources:`` and Connections links."""
+    ordered: list[str] = []
+    seen: set[str] = set()
+
+    def _add(slug: str) -> None:
+        key = slug.casefold()
+        if not slug or key in seen:
+            return
+        seen.add(key)
+        ordered.append(slug)
+
+    for slug in _parse_sources_field(meta.get("sources", "")):
+        _add(slug)
+
+    span = _section_span(body, "Connections")
+    if span is not None:
+        start, end = span
+        for raw in _WIKILINK_TARGET_RE.findall(body[start:end]):
+            name = raw.split("#", 1)[0].strip()
+            if _resolve_source_page(wiki_dir, name) is not None:
+                _add(name)
+    return ordered
+
+
+def _clip_fact(text: str, limit: int = _KEY_FACT_CLIP) -> str:
+    cleaned = re.sub(r"\s+", " ", text).strip()
+    if len(cleaned) <= limit:
+        return cleaned
+    cut = cleaned[: limit - 1].rsplit(" ", 1)[0]
+    return (cut or cleaned[: limit - 1]).rstrip(".,;: ") + "…"
+
+
+def _mention_lines(body: str, name: str) -> list[str]:
+    """Every line naming ``[[Name]]``, in document order.
+
+    A source usually names an entity more than once, and the line that
+    actually *describes* it is rarely the first — a session summary tends to
+    mention it in passing before the Connections section states what it is.
+    Handing the model every mention lets it pick; handing it only the first
+    guarantees passing mentions win.
+    """
+    if not name:
+        return []
+    pattern = re.compile(
+        rf"\[\[{re.escape(name)}(?:#[^\]|]*)?(?:\|[^\]]*)?\]\]",
+        re.IGNORECASE,
+    )
+    lines: list[str] = []
+    seen: set[str] = set()
+    for raw_line in body.splitlines():
+        if not pattern.search(raw_line):
+            continue
+        cleaned = re.sub(r"^[-*+]\s+", "", raw_line.strip()).strip()
+        if not cleaned or cleaned in seen:
+            continue
+        # A line that is nothing but wikilinks and punctuation — a bare
+        # Connections bullet — states no fact, so it is not evidence.
+        if not re.sub(r"[^\w]", "", _WIKILINK_TARGET_RE.sub("", cleaned)):
+            continue
+        seen.add(cleaned)
+        lines.append(_clip_fact(cleaned, _EVIDENCE_LINE_CLIP))
+        if len(lines) >= _MAX_MENTION_LINES:
+            break
+    return lines
+
+
+def _source_evidence(path: Path, name: str, slug: str) -> str | None:
+    """One source's contribution to the evidence digest, or None if silent."""
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    meta, body = _parse_frontmatter(text)
+    lines = _mention_lines(body, name)
+    if not lines:
+        return None
+    title = (meta.get("title") or slug).strip().strip('"')
+    quoted = "\n".join(f"  > {line}" for line in lines)
+    return f"- [[{slug}]] — {title}\n{quoted}"
+
+
+def _evidence_digest(wiki_dir: Path, slugs: list[str], name: str) -> str:
+    """Assemble the evidence block the model writes Key Facts from."""
+    blocks: list[str] = []
+    for slug in slugs:
+        path = _resolve_source_page(wiki_dir, slug)
+        if path is None:
+            continue
+        block = _source_evidence(path, name, slug)
+        if block is None:
+            continue
+        blocks.append(block)
+        if len(blocks) >= _MAX_EVIDENCE_SOURCES:
+            break
+    return "\n".join(blocks)
+
+
+def _bullets_from_completion(completion: str) -> list[str]:
+    """Keep the model's bullet lines, drop any preamble or trailing chatter."""
+    bullets: list[str] = []
+    for raw_line in (completion or "").splitlines():
+        stripped = raw_line.strip()
+        if not stripped.startswith(("-", "*", "+")):
+            continue
+        fact = stripped.lstrip("-*+ ").strip()
+        if not fact:
+            continue
+        bullets.append(fact)
+        if len(bullets) >= _MAX_KEY_FACTS:
+            break
+    return bullets
+
+
+def _key_facts_prompt_template(wiki_dir: Path) -> str:
+    """Load ``prompts/key_facts.md``, preferring the vault's own override."""
+    override = wiki_dir / "prompts" / "key_facts.md"
+    if override.is_file():
+        return override.read_text(encoding="utf-8")
+    return KEY_FACTS_PROMPT_PATH.read_text(encoding="utf-8")
+
+
+def _inject_key_facts(body: str, bullets: list[str]) -> str:
+    """Write ``## Key Facts`` bullets, replacing an empty section if present."""
+    block = "## Key Facts\n\n" + "\n".join(f"- {b}" for b in bullets) + "\n"
+    for match in _HEADING_RE.finditer(body):
+        if match.group(1).strip().lower() != "key facts":
+            continue
+        start = match.start()
+        content_start = match.end()
+        next_h = _HEADING_RE.search(body, content_start)
+        end = next_h.start() if next_h else len(body)
+        return body[:start] + block + "\n" + body[end:].lstrip("\n")
+    conn = re.search(r"^## Connections\b", body, re.MULTILINE)
+    if conn:
+        return body[: conn.start()] + block + "\n" + body[conn.start() :]
+    return body.rstrip() + "\n\n" + block + "\n"
+
+
+def fill_key_facts_from_evidence(
+    text: str,
+    wiki_dir: Path,
+    *,
+    name: str | None = None,
+    synthesizer: BaseSynthesizer | None = None,
+) -> str:
+    """Fill an empty ``## Key Facts`` from harvest evidence sources (#103).
+
+    Resolves ``sources:`` frontmatter and Connections wikilinks that point at
+    ``wiki/sources/`` pages, collects every line where they name the page, and
+    asks ``synthesizer`` to write declarative facts from that evidence.
+
+    Non-empty Key Facts are left untouched — same ownership rule as reviewer
+    prose above ``## Connections`` on re-harvest. A page whose sources never
+    say anything about it is left alone too: there is nothing to write from.
+
+    Raises ``KeyFactsBackendError`` when evidence exists but ``synthesizer``
+    is missing, unavailable, or not LLM-backed.
+    """
+    meta, body = _parse_frontmatter(text)
+    page_name = (name or meta.get("title") or "").strip().strip('"')
+    if not page_name or not _key_facts_needs_fill(body):
+        return text
+
+    slugs = _evidence_source_slugs(meta, body, wiki_dir)
+    evidence = _evidence_digest(wiki_dir, slugs, page_name)
+    if not evidence:
+        return text
+
+    if synthesizer is None or not getattr(synthesizer, "is_llm", False):
+        raise KeyFactsBackendError(
+            f"{page_name}: writing Key Facts needs an LLM backend — set "
+            'synthesis.backend to "claude" or "ollama" in config.json'
+        )
+    if not synthesizer.is_available():
+        raise KeyFactsBackendError(
+            f"{page_name}: synthesis backend {synthesizer.name} is not available"
+        )
+
+    completion = synthesizer.synthesize_key_facts(
+        evidence,
+        {"title": page_name, "type": meta.get("type", "entity")},
+        _key_facts_prompt_template(wiki_dir),
+    )
+    bullets = _bullets_from_completion(completion)
+    if not bullets:
+        raise KeyFactsBackendError(
+            f"{page_name}: {synthesizer.name} returned no usable Key Facts"
+        )
+
+    new_body = _inject_key_facts(body, bullets)
+    fm_match = FRONTMATTER_RE.match(text)
+    if fm_match:
+        return f"---\n{fm_match.group(1)}\n---\n{new_body}"
+    return new_body
+
+
 def promote(
     slug: str,
     wiki_dir: Path,
     *,
     kind: str | None = None,
+    synthesizer: BaseSynthesizer | None = None,
 ) -> Path:
     """Move ``wiki/candidates/<kind>/<slug>.md`` → ``wiki/<kind>/<slug>.md``.
 
     If ``kind`` is omitted, infers from where the candidate lives. Rewrites
     the frontmatter ``status:`` from ``candidate`` → ``reviewed`` so the
-    lifecycle rule picks it up. Reconciles ``wiki/index.md`` afterward (#101).
+    lifecycle rule picks it up. Has ``synthesizer`` write an empty
+    ``## Key Facts`` from evidence sources (#103). Reconciles
+    ``wiki/index.md`` afterward (#101).
 
     Returns the new (promoted) path. Raises FileNotFoundError if the
-    candidate does not exist.
+    candidate does not exist, or ``KeyFactsBackendError`` when the page needs
+    Key Facts and no LLM backend is configured.
     """
     candidate = _find_candidate(slug, wiki_dir, kind)
     inferred_kind = candidate.parent.name
@@ -248,10 +545,103 @@ def promote(
 
     text = candidate.read_text(encoding="utf-8")
     text = _rewrite_status(text, old="candidate", new="reviewed")
+    text = fill_key_facts_from_evidence(
+        text, wiki_dir, name=candidate.stem, synthesizer=synthesizer
+    )
     target.write_text(text, encoding="utf-8")
     candidate.unlink()
     _reconcile_catalog(wiki_dir)
     return target
+
+
+# ─── merge helpers (#103) ──────────────────────────────────────────────
+
+_HARVEST_BOILERPLATE_RE = re.compile(
+    r"Named by \d+ source page\(s\).*?justified this candidate:",
+    re.DOTALL,
+)
+
+
+def _split_frontmatter_text(text: str) -> tuple[str, str]:
+    """Split raw page text into (frontmatter-with-delimiters, body)."""
+    match = FRONTMATTER_RE.match(text)
+    if not match:
+        return "", text
+    return f"---\n{match.group(1)}\n---\n", match.group(2)
+
+
+def _reviewer_prose(body: str) -> str:
+    """Whatever a human wrote into a candidate, minus harvest scaffolding.
+
+    Empty for a harvest stub: its H1, empty Key Facts, boilerplate sentence
+    and evidence link list are all machine-generated and belong to the
+    target page's own sections, not to a pasted block.
+    """
+    text = re.sub(r"^#\s+.*$", "", body, count=1, flags=re.MULTILINE)
+    for heading in ("Key Facts", "Connections"):
+        span = _section_span(text, heading)
+        if span is None:
+            continue
+        start, end = span
+        section = text[start:end]
+        if heading == "Connections":
+            section = _HARVEST_BOILERPLATE_RE.sub("", section)
+            section = re.sub(r"^\s*[-*+]\s*\[\[[^\]]+\]\]\s*$", "", section,
+                             flags=re.MULTILINE)
+        if _section_has_substantive_content(section):
+            continue
+        heading_start = text.rfind("## ", 0, start)
+        text = text[:heading_start] + text[end:]
+    return text.strip()
+
+
+def _union_sources_frontmatter(text: str, slugs: list[str]) -> str:
+    """Add ``slugs`` to the page's ``sources:`` frontmatter list."""
+    if not slugs:
+        return text
+    meta, _ = _parse_frontmatter(text)
+    existing = _parse_sources_field(meta.get("sources", ""))
+    seen = {s.casefold() for s in existing}
+    merged = existing + [s for s in slugs if s.casefold() not in seen]
+    if merged == existing:
+        return text
+    line = f"sources: [{', '.join(merged)}]"
+    if "sources" in meta:
+        return re.sub(r"^sources:.*$", line, text, count=1, flags=re.MULTILINE)
+    head, body = _split_frontmatter_text(text)
+    if not head:
+        return text
+    return head.replace("\n---\n", f"\n{line}\n---\n", 1) + body
+
+
+def _union_connections(body: str, slugs: list[str]) -> str:
+    """Append missing ``[[slug]]`` bullets to the ``## Connections`` list."""
+    if not slugs:
+        return body
+    span = _section_span(body, "Connections")
+    if span is None:
+        return body.rstrip() + "\n\n## Connections\n\n" + "\n".join(
+            f"- [[{s}]]" for s in slugs
+        ) + "\n"
+    start, end = span
+    section = body[start:end]
+    present = {t.split("#", 1)[0].strip().casefold()
+               for t in _WIKILINK_TARGET_RE.findall(section)}
+    missing = [s for s in slugs if s.casefold() not in present]
+    if not missing:
+        return body
+    addition = "\n".join(f"- [[{s}]]" for s in missing)
+    return body[:end].rstrip() + "\n" + addition + "\n" + body[end:]
+
+
+def _record_alias(body: str, alias: str, source_count: int, today: str) -> str:
+    """Note the merged-away name under ``## Aliases``."""
+    entry = f"- {alias} — merged {today} ({source_count} source pages)"
+    span = _section_span(body, "Aliases")
+    if span is None:
+        return body.rstrip() + f"\n\n## Aliases\n\n{entry}\n"
+    _, end = span
+    return body[:end].rstrip() + f"\n{entry}\n" + body[end:]
 
 
 def merge(
@@ -261,9 +651,18 @@ def merge(
     into_slug: str,
     kind: str | None = None,
 ) -> Path:
-    """Append the candidate's body under a ``## Candidate merge — <date>``
-    heading into the existing wiki page ``<into_slug>.md``, then discard
-    the candidate.
+    """Fold the candidate into the existing wiki page ``<into_slug>.md``,
+    then archive the candidate.
+
+    A harvest stub carries no prose worth keeping — only the evidence that
+    justified it — so its sources are unioned into the target's ``sources:``
+    frontmatter and ``## Connections`` list and it is recorded under
+    ``## Aliases``. Pasting the stub verbatim instead would nest a second
+    H1, a second empty Key Facts, and a link list the page's own Connections
+    section never learns about.
+
+    A candidate a reviewer actually wrote in still gets its prose appended
+    under ``## Candidate merge — <date>``.
 
     Reconciles ``wiki/index.md`` afterward (#101).
 
@@ -279,16 +678,23 @@ def merge(
         )
 
     candidate_text = candidate.read_text(encoding="utf-8")
-    _, candidate_body = _parse_frontmatter(candidate_text)
-
+    candidate_meta, candidate_body = _parse_frontmatter(candidate_text)
+    evidence = _evidence_source_slugs(candidate_meta, candidate_body, wiki_dir)
+    prose = _reviewer_prose(candidate_body)
     today = datetime.now(UTC).strftime("%Y-%m-%d")
-    appended = (
-        target.read_text(encoding="utf-8").rstrip() +
-        f"\n\n## Candidate merge — {today}\n\n" +
-        f"Merged from `{candidate.relative_to(wiki_dir)}`:\n\n" +
-        candidate_body.strip() + "\n"
-    )
-    target.write_text(appended, encoding="utf-8")
+
+    merged = _union_sources_frontmatter(target.read_text(encoding="utf-8"), evidence)
+    meta_text, body = _split_frontmatter_text(merged)
+    body = _union_connections(body, evidence)
+    body = _record_alias(body, slug, len(evidence), today)
+    if prose:
+        body = (
+            body.rstrip() +
+            f"\n\n## Candidate merge — {today}\n\n" +
+            f"Merged from `{candidate.relative_to(wiki_dir)}`:\n\n" +
+            prose + "\n"
+        )
+    target.write_text(meta_text + body, encoding="utf-8")
 
     # Discard candidate by moving it to archive with a merge-reason file
     _archive_candidate(candidate, wiki_dir, reason=f"merged into {into_slug}")

@@ -50,6 +50,7 @@ from llmwiki.automation_install import run_install
 from llmwiki.build import RAW_DIR, RAW_SESSIONS, build_site
 from llmwiki.cache import MODEL_PRICING, resolve_pricing_model
 from llmwiki.candidates import (
+    KeyFactsBackendError,
     apply_review_summary_to_pipeline,
     discard,
     list_candidates,
@@ -1659,7 +1660,14 @@ def cmd_candidates(args: argparse.Namespace) -> int:
         if not args.slug:
             print("error: --slug is required for promote", file=sys.stderr)
             return 2
-        path = promote(args.slug, wiki_dir, kind=args.kind)
+        try:
+            path = promote(
+                args.slug, wiki_dir, kind=args.kind,
+                synthesizer=resolve_backend(_load_sessions_config()),
+            )
+        except KeyFactsBackendError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
         print(f"  promoted → {path.relative_to(wiki_dir)}")
         _refresh_review_counts(wiki_dir)
         return 0

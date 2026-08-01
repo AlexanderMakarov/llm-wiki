@@ -239,6 +239,8 @@ want to re-run sync.
 
 **When to use:** Home **Candidates** / Analytics **Candidates to review** is non-zero, `/wiki-lint` reported `stale_candidates`, or you just ran `llmwiki synth --candidates-only`.
 
+Promote has the configured synthesis backend write an empty `## Key Facts` from harvest evidence sources, and fails rather than guessing when no LLM backend is configured (#103). Prefer the CLI action over hand-editing Key Facts for the common case.
+
 **Example:**
 
 ```

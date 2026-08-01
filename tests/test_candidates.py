@@ -13,6 +13,7 @@ from llmwiki.candidates import (
     CANDIDATES_DIR_NAME,
     DEFAULT_STALE_DAYS,
     MIRRORED_SUBDIRS,
+    KeyFactsBackendError,
     _age_days,
     _parse_frontmatter,
     _rewrite_status,
@@ -21,6 +22,7 @@ from llmwiki.candidates import (
     candidate_review_summary,
     candidates_dir,
     discard,
+    fill_key_facts_from_evidence,
     is_candidate,
     list_candidates,
     merge,
@@ -32,6 +34,7 @@ from llmwiki.lint import (
     REGISTRY,
     rules,  # noqa: F401
 )
+from llmwiki.synth.base import BaseSynthesizer, DummySynthesizer
 
 # ─── Fixtures ──────────────────────────────────────────────────────────
 
@@ -43,6 +46,23 @@ def _mk_wiki(tmp_path: Path) -> Path:
         (wiki / sub).mkdir(parents=True, exist_ok=True)
         (wiki / "candidates" / sub).mkdir(parents=True, exist_ok=True)
     return wiki
+
+
+class _FakeSynthesizer(BaseSynthesizer):
+    """LLM stand-in that records its prompt and returns a canned completion."""
+
+    def __init__(self, response: str = "- [[alpha]]: a real fact.\n"):
+        self.response = response
+        self.calls: list[dict] = []
+
+    def synthesize_source_page(self, raw_body, meta, prompt_template):
+        self.calls.append(
+            {"body": raw_body, "meta": meta, "template": prompt_template}
+        )
+        return self.response
+
+    def is_available(self) -> bool:
+        return True
 
 
 def _write_candidate(
@@ -229,6 +249,163 @@ def test_promote_raises_when_candidate_missing(tmp_path: Path):
         promote("Ghost", wiki)
 
 
+def _write_subject_with_evidence(wiki: Path) -> Path:
+    """A harvest stub whose two sources each name it twice."""
+    (wiki / "sources").mkdir(parents=True, exist_ok=True)
+    (wiki / "sources" / "alpha.md").write_text(
+        "---\ntitle: Alpha session\ntype: source\n---\n\n"
+        "## Summary\n[[Other]] work landed alongside [[Subject]]\n\n"
+        "## Connections\n- [[Subject]] — built the auth layer\n",
+        encoding="utf-8",
+    )
+    (wiki / "sources" / "beta.md").write_text(
+        "---\ntitle: Beta session\ntype: source\n---\n\n"
+        "## Summary\nDiscussed [[Subject]] for rollout planning.\n",
+        encoding="utf-8",
+    )
+    path = wiki / "candidates" / "entities" / "Subject.md"
+    path.write_text(
+        '---\ntitle: "Subject"\ntype: entity\nstatus: candidate\n'
+        "sources: [alpha, beta]\nlast_updated: 2026-08-01\n---\n\n"
+        "# Subject\n\n## Key Facts\n\n## Connections\n\n"
+        "Named by 2 source page(s):\n\n- [[alpha]]\n- [[beta]]\n",
+        encoding="utf-8",
+    )
+    return path
+
+
+def test_promote_writes_llm_authored_key_facts(tmp_path: Path):
+    """#103: the backend writes Key Facts; promote only places them."""
+    wiki = _mk_wiki(tmp_path)
+    _write_subject_with_evidence(wiki)
+    fake = _FakeSynthesizer(
+        "- Serves as the auth layer for the platform. [[alpha]]\n"
+        "- Was scheduled for staged rollout. [[beta]]\n"
+    )
+
+    text = promote("Subject", wiki, synthesizer=fake).read_text(encoding="utf-8")
+    assert "status: reviewed" in text
+    assert "- Serves as the auth layer for the platform. [[alpha]]" in text
+    assert "- Was scheduled for staged rollout. [[beta]]" in text
+
+
+def test_key_facts_evidence_includes_every_mention_line(tmp_path: Path):
+    """The line that describes an entity is often not its first mention."""
+    wiki = _mk_wiki(tmp_path)
+    _write_subject_with_evidence(wiki)
+    fake = _FakeSynthesizer("- A fact. [[alpha]]\n")
+
+    promote("Subject", wiki, synthesizer=fake)
+    evidence = fake.calls[0]["body"]
+    assert "work landed alongside" in evidence
+    assert "built the auth layer" in evidence
+    assert "rollout planning" in evidence
+
+
+def test_promote_raises_without_llm_backend(tmp_path: Path):
+    """#103: no backend means no Key Facts — never regex-assembled prose."""
+    wiki = _mk_wiki(tmp_path)
+    candidate = _write_subject_with_evidence(wiki)
+
+    with pytest.raises(KeyFactsBackendError):
+        promote("Subject", wiki)
+    assert candidate.exists(), "failed promote must leave the candidate in place"
+
+
+def test_promote_rejects_dummy_backend(tmp_path: Path):
+    """The canned offline backend must not author knowledge-layer prose."""
+    wiki = _mk_wiki(tmp_path)
+    _write_subject_with_evidence(wiki)
+
+    with pytest.raises(KeyFactsBackendError):
+        promote("Subject", wiki, synthesizer=DummySynthesizer())
+
+
+def test_promote_raises_when_backend_returns_no_bullets(tmp_path: Path):
+    wiki = _mk_wiki(tmp_path)
+    _write_subject_with_evidence(wiki)
+
+    with pytest.raises(KeyFactsBackendError):
+        promote("Subject", wiki, synthesizer=_FakeSynthesizer("I cannot help.\n"))
+
+
+def test_promote_key_facts_drop_preamble_and_cap_at_five(tmp_path: Path):
+    wiki = _mk_wiki(tmp_path)
+    _write_subject_with_evidence(wiki)
+    fake = _FakeSynthesizer(
+        "Here are the facts:\n\n" +
+        "".join(f"- Fact {i}. [[alpha]]\n" for i in range(8)) +
+        "\nHope that helps!\n"
+    )
+
+    text = promote("Subject", wiki, synthesizer=fake).read_text(encoding="utf-8")
+    assert "Here are the facts" not in text
+    assert "Hope that helps" not in text
+    assert text.count("- Fact ") == 5
+
+
+def test_promote_needs_no_backend_when_sources_are_silent(tmp_path: Path):
+    """No evidence to write from is not a backend problem."""
+    wiki = _mk_wiki(tmp_path)
+    (wiki / "sources").mkdir(parents=True, exist_ok=True)
+    (wiki / "sources" / "quiet.md").write_text(
+        "---\ntitle: Quiet\ntype: source\n---\n\n## Summary\nNothing relevant.\n",
+        encoding="utf-8",
+    )
+    (wiki / "candidates" / "entities" / "Unmentioned.md").write_text(
+        '---\ntitle: "Unmentioned"\ntype: entity\nstatus: candidate\n'
+        "sources: [quiet]\n---\n\n# Unmentioned\n\n## Key Facts\n\n"
+        "## Connections\n\n- [[quiet]]\n",
+        encoding="utf-8",
+    )
+
+    text = promote("Unmentioned", wiki).read_text(encoding="utf-8")
+    assert "status: reviewed" in text
+
+
+def test_promote_preserves_nonempty_key_facts(tmp_path: Path):
+    """#103: reviewer-authored Key Facts must survive promote."""
+    wiki = _mk_wiki(tmp_path)
+    (wiki / "sources").mkdir(parents=True, exist_ok=True)
+    (wiki / "sources" / "alpha.md").write_text(
+        "---\ntitle: Alpha\ntype: source\n---\n\n"
+        "## Connections\n- [[Foo]] — should not overwrite\n",
+        encoding="utf-8",
+    )
+    path = wiki / "candidates" / "entities" / "Foo.md"
+    path.write_text(
+        '---\ntitle: "Foo"\ntype: entity\nstatus: candidate\n'
+        "sources: [alpha]\n---\n\n"
+        "# Foo\n\n## Key Facts\n\n- Reviewer wrote this.\n\n"
+        "## Connections\n\n- [[alpha]]\n",
+        encoding="utf-8",
+    )
+
+    text = promote("Foo", wiki).read_text(encoding="utf-8")
+    assert "- Reviewer wrote this." in text
+    assert "should not overwrite" not in text
+
+
+def test_fill_key_facts_is_a_no_op_for_bare_mentions(tmp_path: Path):
+    """A source that only lists the name carries no fact to state."""
+    wiki = _mk_wiki(tmp_path)
+    (wiki / "sources").mkdir(parents=True, exist_ok=True)
+    (wiki / "sources" / "solo.md").write_text(
+        "---\ntitle: Solo notes\ntype: source\n---\n\n"
+        "## Connections\n- [[Bare]]\n",
+        encoding="utf-8",
+    )
+    text = (
+        '---\ntitle: "Bare"\ntype: entity\nstatus: candidate\n'
+        "sources: [solo]\n---\n\n# Bare\n\n## Key Facts\n\n"
+        "## Connections\n\n- [[solo]]\n"
+    )
+    fake = _FakeSynthesizer("- Invented. [[solo]]\n")
+    out = fill_key_facts_from_evidence(text, wiki, name="Bare", synthesizer=fake)
+    assert "Invented" not in out
+    assert fake.calls == []
+
+
 # ─── merge ──────────────────────────────────────────────────────────
 
 
@@ -247,6 +424,65 @@ def test_merge_appends_body_to_target(tmp_path: Path):
     assert "Original content" in text
     assert "## Candidate merge" in text
     assert "Extra info" in text
+
+
+def _write_merge_pair(tmp_path: Path) -> tuple[Path, Path]:
+    """A trusted page plus a harvest-stub duplicate of it."""
+    wiki = _mk_wiki(tmp_path)
+    target = wiki / "entities" / "Tailscale.md"
+    target.write_text(
+        '---\ntitle: "Tailscale"\ntype: entity\nsources: [s1, s2]\n---\n\n'
+        "# Tailscale\n\n## Key Facts\n\n- Provides the network layer. [[s1]]\n\n"
+        "## Connections\n\n- [[s1]]\n- [[s2]]\n",
+        encoding="utf-8",
+    )
+    (wiki / "candidates" / "entities" / "Tailnet.md").write_text(
+        '---\ntitle: "Tailnet"\ntype: entity\nstatus: candidate\n'
+        "sources: [s2, s3]\n---\n\n# Tailnet\n\n## Key Facts\n\n## Connections\n\n"
+        "Named by 2 source page(s), which is the evidence that\n"
+        "justified this candidate:\n\n- [[s2]]\n- [[s3]]\n",
+        encoding="utf-8",
+    )
+    return wiki, target
+
+
+def test_merge_unions_evidence_into_target(tmp_path: Path):
+    """#103: a stub's value is its evidence, so the evidence must survive."""
+    wiki, target = _write_merge_pair(tmp_path)
+    merge("Tailnet", wiki, into_slug="Tailscale")
+    text = target.read_text(encoding="utf-8")
+
+    assert "sources: [s1, s2, s3]" in text
+    connections = text.split("## Connections", 1)[1]
+    assert "- [[s3]]" in connections
+    assert connections.count("- [[s2]]") == 1, "no duplicate evidence links"
+
+
+def test_merge_drops_harvest_boilerplate(tmp_path: Path):
+    """The stub's scaffolding must not land in a trusted page."""
+    wiki, target = _write_merge_pair(tmp_path)
+    merge("Tailnet", wiki, into_slug="Tailscale")
+    text = target.read_text(encoding="utf-8")
+
+    assert "# Tailnet" not in text
+    assert "Named by 2 source page(s)" not in text
+    assert "## Candidate merge" not in text
+    assert text.count("## Key Facts") == 1
+
+
+def test_merge_records_the_alias(tmp_path: Path):
+    wiki, target = _write_merge_pair(tmp_path)
+    merge("Tailnet", wiki, into_slug="Tailscale")
+    text = target.read_text(encoding="utf-8")
+
+    assert "## Aliases" in text
+    assert "- Tailnet — merged " in text
+
+
+def test_merge_preserves_target_key_facts(tmp_path: Path):
+    wiki, target = _write_merge_pair(tmp_path)
+    merge("Tailnet", wiki, into_slug="Tailscale")
+    assert "- Provides the network layer. [[s1]]" in target.read_text(encoding="utf-8")
 
 
 def test_merge_archives_candidate_after(tmp_path: Path):
@@ -384,6 +620,7 @@ def test_wiki_candidates_slash_command_exists():
     assert "promote" in text
     assert "merge" in text
     assert "discard" in text
+    assert "Key Facts" in text  # #103: promote fills empty Key Facts
     # And the old name must be gone so docs can't regress.
     old = REPO_ROOT / ".claude" / "commands" / "wiki-review.md"
     assert not old.exists(), "old /wiki-review name should be removed"

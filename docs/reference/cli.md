@@ -366,6 +366,12 @@ Positional `action` picks `list` / `promote` / `merge` / `discard`.
 
 Successful `promote` / `merge` / `discard` reconcile `wiki/index.md` (#101): dead `candidates/…` bullets are dropped, an empty `## Candidates` section is removed, and newly trusted pages are listed under Entities/Concepts. `/wiki-candidates` should call these same actions — do not run idle `sync`/`synth` just to refresh the catalog after review.
 
+`promote` also writes an empty (or heading-only) `## Key Facts` (#103). It builds an evidence digest — every line where each source listed in frontmatter `sources:` / Connections names the subject, capped at 12 sources and 4 lines each — and hands it to the backend named by `synthesis.backend`, which returns 3–5 attributed bullets. Non-empty reviewer Key Facts are left alone.
+
+Because those bullets become trusted-layer prose, promote refuses to write them without a model: with `synthesis.backend` unset or `dummy` it exits 2 with `KeyFactsBackendError` and leaves the candidate pending. Override the prompt per vault at `wiki/prompts/key_facts.md`.
+
+`merge` folds a harvest stub into the target by unioning its `sources:` and Connections links and recording the name under `## Aliases`; a candidate containing reviewer prose still has that prose appended under `## Candidate merge — <date>`.
+
 ```bash
 python3 -m llmwiki candidates list
 python3 -m llmwiki candidates list --stale --stale-days 60
