@@ -342,66 +342,80 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
       });
     } catch (e) { /* old Safari uses addListener */ }
   }
+  // What the OS is asking for, independent of anything we pinned.
+  function systemTheme() {
+    return (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches)
+      ? "dark" : "light";
+  }
+  // What the user is actually looking at right now.
+  function effectiveTheme() {
+    const pinned = root.getAttribute("data-theme");
+    return (pinned === "dark" || pinned === "light") ? pinned : systemTheme();
+  }
+  function storedTheme() {
+    let stored = null;
+    try { stored = localStorage.getItem("llmwiki-theme"); } catch (e) { /* private mode */ }
+    return (stored === "dark" || stored === "light") ? stored : null;
+  }
+  // Next position in the tri-state cycle: system → pinned → pinned → system.
+  // `null` means "follow the OS".
+  //
+  // The first step pins the OPPOSITE of what is on screen. The pre-paint
+  // script in the page head always resolves data-theme to a concrete
+  // value, so a cycle that started by pinning "dark" unconditionally was
+  // a no-op whenever the resolved theme was already dark — the click
+  // registered, localStorage changed, but nothing moved on screen, and
+  // the theme only appeared to work from the second click onward.
+  function nextTheme() {
+    const stored = storedTheme();
+    if (stored === null) return effectiveTheme() === "dark" ? "light" : "dark";
+    // Pinned to the non-OS value → pin the OS value; from there → back to system.
+    return stored !== systemTheme() ? systemTheme() : null;
+  }
+  // Advance one step and tell every mounted toggle to re-label itself.
+  function cycleTheme() {
+    const next = nextTheme();
+    if (next === null) {
+      root.removeAttribute("data-theme");
+      try { localStorage.removeItem("llmwiki-theme"); } catch (e) { /* private mode */ }
+      // The pre-paint script re-pins on the next page load; keep this
+      // page showing the OS value in the meantime.
+      root.setAttribute("data-theme", systemTheme());
+    } else {
+      root.setAttribute("data-theme", next);
+      try { localStorage.setItem("llmwiki-theme", next); } catch (e) { /* private mode */ }
+    }
+    syncHljsTheme();
+    document.dispatchEvent(new CustomEvent("llmwiki:themechange"));
+  }
+  // Label describing where the cycle stands and what the next press does,
+  // shared by the desktop and mobile buttons (#568: aria-pressed alone
+  // collapses the three states into a binary signal).
+  function themeLabel(verb) {
+    const stored = storedTheme();
+    const upcoming = nextTheme();
+    const state = stored === null ? "follows system" : stored;
+    return "Theme: " + state + " — " + verb + " for " +
+      (upcoming === null ? "system default" : upcoming);
+  }
+  window.__llmwikiCycleTheme = cycleTheme;
+  window.__llmwikiThemeLabel = themeLabel;
+  window.__llmwikiEffectiveTheme = effectiveTheme;
+
   document.addEventListener("DOMContentLoaded", function () {
     syncHljsTheme();
     const btn = document.getElementById("theme-toggle");
     if (!btn) return;
-    // #ui-h8 (#568): aria state mirrors the current cycle position so
-    // assistive tech announces what's pinned, not just "pressed".
-    // #v1378-review: aria-pressed collapses 3 states (system / dark /
-    // light) to 2 (true|false) — both "system" and "light" mapped to
-    // "false", so a screen-reader user couldn't tell which state they
-    // were in. Switched to a dynamic aria-label describing the
-    // current theme + the next-tap action. aria-pressed is also kept
-    // for back-compat with anything reading the binary signal.
+    // aria-pressed is kept for anything reading the binary signal; the
+    // label carries the full tri-state.
     function syncAriaState() {
-      let stored = null;
-      try { stored = localStorage.getItem("llmwiki-theme"); } catch (e) {}
-      const isDark = (root.getAttribute("data-theme") || (
-        (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) ? "dark" : "light"
-      )) === "dark";
-      btn.setAttribute("aria-pressed", isDark ? "true" : "false");
-      const labels = {
-        dark: "Theme: dark — click for light",
-        light: "Theme: light — click for system default",
-      };
-      const systemLabel = "Theme: follows system — click for dark";
-      btn.setAttribute(
-        "aria-label",
-        labels[stored] || systemLabel,
-      );
+      btn.setAttribute("aria-pressed", effectiveTheme() === "dark" ? "true" : "false");
+      btn.setAttribute("aria-label", themeLabel("click"));
     }
     const syncAriaPressed = syncAriaState; // alias kept for older call sites
     syncAriaPressed();
-    btn.addEventListener("click", function () {
-      // #ui-h6 (#567): tri-state toggle. The cycle is:
-      //   system → dark → light → system → ...
-      // `system` means: data-theme attribute removed, palette follows
-      // @media (prefers-color-scheme). Pinning a value moves out of
-      // system mode; clicking back to system clears the localStorage
-      // entry so a fresh tab also follows the OS.
-      let stored = null;
-      try { stored = localStorage.getItem("llmwiki-theme"); } catch (e) {}
-      let next;
-      if (stored !== "dark" && stored !== "light") {
-        // Currently following system → pin to dark.
-        next = "dark";
-      } else if (stored === "dark") {
-        next = "light";
-      } else {
-        // stored === "light" → return to system.
-        next = null;
-      }
-      if (next === null) {
-        root.removeAttribute("data-theme");
-        try { localStorage.removeItem("llmwiki-theme"); } catch (e) {}
-      } else {
-        root.setAttribute("data-theme", next);
-        try { localStorage.setItem("llmwiki-theme", next); } catch (e) {}
-      }
-      syncHljsTheme();
-      syncAriaPressed();
-    });
+    document.addEventListener("llmwiki:themechange", syncAriaState);
+    btn.addEventListener("click", cycleTheme);
   });
   // Also respond to the mobile bottom nav theme button (bound later in script.js).
   window.__llmwikiSyncHljsTheme = syncHljsTheme;
@@ -604,52 +618,21 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
     // Wire the theme button to toggle
     const themeBtn = document.getElementById("mbn-theme");
     if (themeBtn) {
-      // #v1378-review: same dynamic aria-label treatment as the
-      // desktop button — aria-pressed alone collapses the tri-state
-      // (system / dark / light) into a binary signal. The label
-      // describes the current state plus the next-tap action.
+      // Desktop and mobile share one cycle implementation (see the theme
+      // IIFE above) so the two buttons can never drift apart in either
+      // the state machine or the announced label.
       function _mbnSyncPressed() {
-        let stored = null;
-        try { stored = localStorage.getItem("llmwiki-theme"); } catch (e) { /* private mode */ }
-        const isDark = (document.documentElement.getAttribute("data-theme") || (
-          (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) ? "dark" : "light"
-        )) === "dark";
-        themeBtn.setAttribute("aria-pressed", isDark ? "true" : "false");
-        const labels = {
-          dark: "Theme: dark — tap for light",
-          light: "Theme: light — tap for system default",
-        };
-        const systemLabel = "Theme: follows system — tap for dark";
-        themeBtn.setAttribute("aria-label", labels[stored] || systemLabel);
+        if (!window.__llmwikiThemeLabel) return;
+        themeBtn.setAttribute(
+          "aria-pressed",
+          window.__llmwikiEffectiveTheme() === "dark" ? "true" : "false",
+        );
+        themeBtn.setAttribute("aria-label", window.__llmwikiThemeLabel("tap"));
       }
       _mbnSyncPressed();
+      document.addEventListener("llmwiki:themechange", _mbnSyncPressed);
       themeBtn.addEventListener("click", function () {
-        // Post-final-review: mirror the desktop tri-state cycle
-        // (system → dark → light → system) instead of a binary
-        // dark/light flip. The old binary path would silently move
-        // the user out of "system" mode on the first tap and there
-        // was no way back from the mobile menu — desktop and mobile
-        // diverged behaviorally. Cycle source-of-truth is desktop.
-        const root = document.documentElement;
-        let stored = null;
-        try { stored = localStorage.getItem("llmwiki-theme"); } catch (e) { /* private mode */ }
-        let next;
-        if (stored !== "dark" && stored !== "light") {
-          next = "dark";
-        } else if (stored === "dark") {
-          next = "light";
-        } else {
-          next = null; // back to system
-        }
-        if (next === null) {
-          root.removeAttribute("data-theme");
-          try { localStorage.removeItem("llmwiki-theme"); } catch (e) { /* private mode */ }
-        } else {
-          root.setAttribute("data-theme", next);
-          try { localStorage.setItem("llmwiki-theme", next); } catch (e) { /* private mode */ }
-        }
-        if (window.__llmwikiSyncHljsTheme) window.__llmwikiSyncHljsTheme();
-        _mbnSyncPressed();
+        if (window.__llmwikiCycleTheme) window.__llmwikiCycleTheme();
       });
     }
   });
