@@ -8,7 +8,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from llmwiki.candidates_harvest import harvest_targets, write_stubs
+from llmwiki.candidates_harvest import (
+    classify_names,
+    harvest_targets,
+    summarize_backlog,
+    write_stubs,
+)
 
 # ─── Fixtures ──────────────────────────────────────────────────────────
 
@@ -220,3 +225,114 @@ def test_rerun_preserves_reviewer_prose(tmp_path: Path) -> None:
     text = path.read_text(encoding="utf-8")
     assert "- Reviewer added this by hand." in text
     assert "[[d]]" in text
+
+
+# ─── Classification ────────────────────────────────────────────────────
+
+
+class _RecordingBackend:
+    """Minimal stand-in for a synthesis backend."""
+
+    def __init__(self, reply: str = "", *, available: bool = True) -> None:
+        self.reply = reply
+        self._available = available
+        self.calls: list[str] = []
+
+    def is_available(self) -> bool:
+        return self._available
+
+    def synthesize_source_page(self, raw_body, meta, prompt_template) -> str:
+        self.calls.append(raw_body)
+        return self.reply
+
+
+def test_classification_uses_one_call_for_every_name() -> None:
+    """Cost must scale with the candidate count, not the corpus size."""
+    backend = _RecordingBackend("Tailscale: entity\nCompounding: concept\n")
+
+    kinds = classify_names(["Tailscale", "Compounding"], backend)
+
+    assert len(backend.calls) == 1
+    assert kinds == {"Tailscale": "entity", "Compounding": "concept"}
+
+
+def test_classification_is_skipped_when_backend_is_unavailable() -> None:
+    """Harvesting must never be blocked by an unreachable backend."""
+    backend = _RecordingBackend("Tailscale: entity\n", available=False)
+
+    assert classify_names(["Tailscale"], backend) == {}
+    assert backend.calls == []
+
+
+def test_classification_survives_unparseable_output() -> None:
+    """A confused backend costs us precision, never the run."""
+    backend = _RecordingBackend("I'm not sure what you're asking for.")
+
+    assert classify_names(["Tailscale"], backend) == {}
+
+
+def test_classification_ignores_names_it_was_not_asked_about() -> None:
+    """Guards against a backend inventing targets that were never harvested."""
+    backend = _RecordingBackend("Tailscale: entity\nHallucinated: concept\n")
+
+    assert classify_names(["Tailscale"], backend) == {"Tailscale": "entity"}
+
+
+def test_no_backend_means_no_classification() -> None:
+    assert classify_names(["Tailscale"], None) == {}
+
+
+# ─── Re-runs respect the reviewer's filing ─────────────────────────────
+
+
+def test_rerun_keeps_a_candidate_the_reviewer_refiled(tmp_path: Path) -> None:
+    """If a reviewer moves a stub to concepts/, harvest must not drag it back.
+
+    Re-classifying every run would fight the human the queue exists to serve.
+    """
+    wiki, targets = _harvest_one(tmp_path, "Refiled")
+    [original] = write_stubs(wiki, targets)
+    moved = wiki / "candidates" / "concepts" / "Refiled.md"
+    moved.parent.mkdir(parents=True, exist_ok=True)
+    moved.write_text(original.read_text(encoding="utf-8"), encoding="utf-8")
+    original.unlink()
+
+    write_stubs(wiki, harvest_targets(wiki))
+
+    assert moved.is_file()
+    assert not (wiki / "candidates" / "entities" / "Refiled.md").exists()
+
+
+# ─── Estimate: the second backlog ──────────────────────────────────────
+
+
+def test_backlog_summary_reports_adjacent_thresholds(tmp_path: Path) -> None:
+    """--estimate must let an operator pick --min-refs before committing.
+
+    A single total at one threshold hides whether the choice was sensible.
+    """
+    wiki = tmp_path / "wiki"
+    for slug in ("a", "b", "c", "d", "e"):
+        _mk_source(wiki, slug, ["Wide"])
+    for slug in ("a", "b", "c"):
+        _mk_source(wiki, f"{slug}2", ["Mid"])
+    _mk_source(wiki, "solo", ["Narrow"])
+
+    summary = summarize_backlog(wiki, min_refs=3)
+
+    assert summary["min_refs"] == 3
+    assert summary["candidates"] == 2          # Wide + Mid
+    assert summary["distribution"][5] == 1     # Wide only
+    assert summary["distribution"][1] == 3     # all three
+    assert summary["broken_targets"] == 3
+
+
+def test_backlog_summary_on_a_vault_with_no_sources(tmp_path: Path) -> None:
+    """An empty or unsynthesized vault reports zero, not a crash."""
+    wiki = tmp_path / "wiki"
+    wiki.mkdir()
+
+    summary = summarize_backlog(wiki)
+
+    assert summary["candidates"] == 0
+    assert summary["broken_targets"] == 0

@@ -59,10 +59,30 @@ def test_min_refs_defaults_to_three() -> None:
 # ─── Behaviour ─────────────────────────────────────────────────────────
 
 
-def test_candidates_only_writes_stubs_without_a_backend(tmp_path: Path) -> None:
-    """The whole point: a caught-up vault, no synthesis, no backend needed."""
+class _UnavailableBackend:
+    """A backend that is configured but unreachable."""
+
+    name = "offline"
+
+    def is_available(self) -> bool:
+        return False
+
+    def synthesize_source_page(self, raw_body, meta, prompt_template):
+        raise AssertionError("must not call an unavailable backend")
+
+
+def test_candidates_only_writes_stubs_without_a_backend(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """The whole point: a caught-up vault, no synthesis, backend unreachable.
+
+    Classification degrades to ``unknown``; the harvest still lands.
+    """
     vault = _mk_vault(
         tmp_path, {s: ["Recurring"] for s in ("a", "b", "c")}
+    )
+    monkeypatch.setattr(
+        "llmwiki.cli.resolve_backend", lambda cfg: _UnavailableBackend()
     )
 
     rc = cmd_synthesize(_args(candidates_only=True, vault=vault))
@@ -73,10 +93,13 @@ def test_candidates_only_writes_stubs_without_a_backend(tmp_path: Path) -> None:
     assert "status: candidate" in stub.read_text(encoding="utf-8")
 
 
-def test_candidates_only_honours_min_refs(tmp_path: Path) -> None:
+def test_candidates_only_honours_min_refs(tmp_path: Path, monkeypatch) -> None:
     vault = _mk_vault(
         tmp_path,
         {"a": ["Pair"], "b": ["Pair"], "c": ["Trio"], "d": ["Trio"], "e": ["Trio"]},
+    )
+    monkeypatch.setattr(
+        "llmwiki.cli.resolve_backend", lambda cfg: _UnavailableBackend()
     )
 
     cmd_synthesize(_args(candidates_only=True, vault=vault, min_refs=3))
@@ -85,13 +108,56 @@ def test_candidates_only_honours_min_refs(tmp_path: Path) -> None:
     assert written == {"Trio"}
 
 
-def test_candidates_only_makes_no_synthesis_calls(tmp_path: Path, monkeypatch) -> None:
-    """Guards the contract that this mode costs nothing to run."""
+def test_candidates_only_makes_no_per_source_synthesis_calls(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Cost must scale with the candidate count, not the corpus.
+
+    Classification is one batched call; synthesizing sources is what this
+    mode exists to avoid.
+    """
     vault = _mk_vault(tmp_path, {s: ["Recurring"] for s in ("a", "b", "c")})
 
     def _explode(*a, **kw):  # pragma: no cover - must never run
-        raise AssertionError("candidates-only must not synthesize")
+        raise AssertionError("candidates-only must not synthesize sources")
 
     monkeypatch.setattr("llmwiki.cli.synthesize_new_sessions", _explode)
+    monkeypatch.setattr(
+        "llmwiki.cli.resolve_backend", lambda cfg: _UnavailableBackend()
+    )
 
     assert cmd_synthesize(_args(candidates_only=True, vault=vault)) == 0
+
+
+def test_candidates_only_classifies_via_the_backend(tmp_path: Path, monkeypatch) -> None:
+    """The CLI must actually route classification through the backend."""
+    vault = _mk_vault(tmp_path, {s: ["Compounding"] for s in ("a", "b", "c")})
+
+    class _Backend:
+        name = "stub"
+
+        def is_available(self):
+            return True
+
+        def synthesize_source_page(self, raw_body, meta, prompt_template):
+            return "Compounding: concept\n"
+
+    monkeypatch.setattr("llmwiki.cli.resolve_backend", lambda cfg: _Backend())
+
+    assert cmd_synthesize(_args(candidates_only=True, vault=vault)) == 0
+    assert (vault / "wiki" / "candidates" / "concepts" / "Compounding.md").is_file()
+
+
+def test_candidates_only_survives_backend_resolution_failure(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """A broken backend config must not cost us the harvest."""
+    vault = _mk_vault(tmp_path, {s: ["Recurring"] for s in ("a", "b", "c")})
+
+    def _boom(cfg):
+        raise RuntimeError("no backend configured")
+
+    monkeypatch.setattr("llmwiki.cli.resolve_backend", _boom)
+
+    assert cmd_synthesize(_args(candidates_only=True, vault=vault)) == 0
+    assert (vault / "wiki" / "candidates" / "entities" / "Recurring.md").is_file()

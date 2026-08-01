@@ -59,7 +59,9 @@ from llmwiki.candidates import (
 )
 from llmwiki.candidates_harvest import (
     DEFAULT_MIN_REFS,
+    classify_names,
     harvest_targets,
+    summarize_backlog,
     write_stubs,
 )
 from llmwiki.config_schedule import (
@@ -1001,7 +1003,20 @@ def _run_candidate_harvest(args: argparse.Namespace) -> int:
 
     min_refs = getattr(args, "min_refs", DEFAULT_MIN_REFS)
     targets = harvest_targets(wiki_dir, min_refs=min_refs)
-    written = write_stubs(wiki_dir, targets)
+
+    # Classification is the one part a grep cannot do, and the only part that
+    # touches a backend. Best-effort: a missing or misconfigured backend costs
+    # precision (everything files as entity_type: unknown for a reviewer to
+    # correct), never the harvest itself.
+    try:
+        backend = resolve_backend(_load_sessions_config())
+    except Exception as exc:  # noqa: BLE001 - see above
+        print(f"  ! classification unavailable ({exc}) — filing as unknown")
+        backend = None
+
+    written = write_stubs(
+        wiki_dir, targets, classify=lambda names: classify_names(names, backend)
+    )
     print(
         f"Candidates: {len(written)} stub(s) at --min-refs {min_refs} "
         f"→ {wiki_dir / 'candidates'}"
@@ -1556,6 +1571,28 @@ def _synthesize_estimate(args: argparse.Namespace | None = None) -> int:
         f"Full re-synth:     ${report['full_force_usd']:.4f}  "
         f"(--force — {report['corpus']} source(s), one call each)"
     )
+
+    # #90: --estimate previews both backlogs. Sources are only half the work;
+    # a vault can be fully synthesized and still have an empty trusted layer.
+    backlog = summarize_backlog(
+        vault_root / "wiki", min_refs=getattr(args, "min_refs", DEFAULT_MIN_REFS)
+    )
+    print()
+    if not backlog["broken_targets"]:
+        print("Candidates:        0  (no unresolved wikilinks in wiki/sources/)")
+        return 0
+    covered = backlog["covered_links"] / backlog["broken_links"]
+    print(
+        f"Candidates:        {backlog['candidates']} stub(s) at "
+        f"--min-refs {backlog['min_refs']}  "
+        f"(closes {covered:.0%} of {backlog['broken_links']} broken link(s) "
+        f"over {backlog['broken_targets']} target(s))"
+    )
+    shape = "  ".join(
+        f"{n}:{count}" for n, count in sorted(backlog["distribution"].items())
+    )
+    print(f"  by --min-refs:   {shape}")
+    print("  generate with:   llmwiki synthesize --candidates-only")
     return 0
 
 
