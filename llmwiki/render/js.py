@@ -68,7 +68,7 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
       '<div class="collapse-section-body">' + bodyHtml + "</div></details>"
     );
   }
-  function commandsBody(vaultRoot) {
+  function commandsBody(repoRoot) {
     function copyBtn(cmd) {
       // aria-label survives collapsed/hidden sections where innerText is empty.
       return (
@@ -76,13 +76,10 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
         '" aria-label="Copy command: ' + cmd + '" title="Copy command">Copy</button>'
       );
     }
-    var vault = vaultRoot ? String(vaultRoot) : "<vault>";
-    var cdClaude = "cd " + vault + " && claude";
-    var cdCodex = "cd " + vault + " && codex";
-    var cdCursor = "cd " + vault + " && cursor .";
-    var cdGemini = "cd " + vault + " && gemini";
+    var repo = repoRoot ? String(repoRoot) : "<llm-wiki-checkout>";
+    var cdClaude = "cd " + repo + " && claude";
     return (
-      '<p class="muted">Two lists: synthesize sources, then harvest candidates. Approval is agent-led (<code>/wiki-candidates</code> or <code>/wiki-ingest</code>) — not a TUI.</p>' +
+      '<p class="muted">Two lists: <code>synthesize</code> (sources) then <code>synthesize --candidates-only</code> (stubs). CLI rows below are copy-paste runnable. Agent review uses slash commands that ship in the <strong>llmwiki checkout</strong> (<code>.claude/commands/</code>) — not the vault folder. Open Claude from that checkout (vault path already comes from <code>config.json</code>), then type <code>/wiki-candidates</code>.</p>' +
       '<table class="queue-commands-table">' +
       "<thead><tr><th>Command</th><th>Purpose</th><th></th></tr></thead><tbody>" +
       '<tr><td><code>llmwiki sync</code></td><td>Convert new agent sessions into <code>raw/sessions/</code>.</td><td>' + copyBtn("llmwiki sync") + "</td></tr>" +
@@ -90,13 +87,10 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
       '<tr><td><code>llmwiki synthesize</code></td><td>Drain unsynthesized backlog into <code>wiki/sources/</code>.</td><td>' + copyBtn("llmwiki synthesize") + "</td></tr>" +
       '<tr><td><code>llmwiki synthesize --candidates-only</code></td><td>Harvest entity/concept candidates into <code>wiki/candidates/</code> from synthesized sources.</td><td>' + copyBtn("llmwiki synthesize --candidates-only") + "</td></tr>" +
       '<tr><td><code>llmwiki synthesize --estimate</code></td><td>Refresh cost estimate + pipeline table (sources + candidate backlog preview).</td><td>' + copyBtn("llmwiki synthesize --estimate") + "</td></tr>" +
-      '<tr><td><code>llmwiki candidates list</code></td><td>Show pending review stubs.</td><td>' + copyBtn("llmwiki candidates list") + "</td></tr>" +
+      '<tr><td><code>llmwiki candidates list</code></td><td>Show pending review stubs (runnable output).</td><td>' + copyBtn("llmwiki candidates list") + "</td></tr>" +
       '<tr><td><code>llmwiki candidates list --stale</code></td><td>Show candidates older than the stale threshold (default 30d).</td><td>' + copyBtn("llmwiki candidates list --stale") + "</td></tr>" +
       '<tr><td><code>llmwiki candidates promote --slug &lt;Name&gt;</code></td><td>Promote one stub into trusted <code>wiki/entities/</code> or <code>concepts/</code>.</td><td>' + copyBtn("llmwiki candidates promote --slug &lt;Name&gt;") + "</td></tr>" +
-      '<tr><td><code>' + escapeHtml(cdClaude) + '</code></td><td>Open Claude Code in the vault, then run <code>/wiki-candidates</code> or <code>/wiki-ingest</code>.</td><td>' + copyBtn(cdClaude) + "</td></tr>" +
-      '<tr><td><code>' + escapeHtml(cdCodex) + '</code></td><td>Open Codex CLI in the vault for the same review loop (install wiki skills under <code>.codex/skills/</code>).</td><td>' + copyBtn(cdCodex) + "</td></tr>" +
-      '<tr><td><code>' + escapeHtml(cdCursor) + '</code></td><td>Open Cursor on the vault folder for agent review.</td><td>' + copyBtn(cdCursor) + "</td></tr>" +
-      '<tr><td><code>' + escapeHtml(cdGemini) + '</code></td><td>Open Gemini CLI in the vault (copy wiki skills into the agent skills dir).</td><td>' + copyBtn(cdGemini) + "</td></tr>" +
+      '<tr><td><code>' + escapeHtml(cdClaude) + '</code></td><td>Open Claude Code in the llmwiki checkout (where <code>/wiki-*</code> slashes load). Then type <code>/wiki-candidates</code> (or <code>/wiki-ingest</code>). Do not use the vault as cwd for slash commands.</td><td>' + copyBtn(cdClaude) + "</td></tr>" +
       '<tr><td><code>llmwiki build</code></td><td>Rebuild the static site (refreshes To review counts).</td><td>' + copyBtn("llmwiki build") + "</td></tr>" +
       "</tbody></table>"
     );
@@ -147,7 +141,7 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
     var pendingDocs = pendingList.filter(function (it) { return !!(it && it.is_doc); });
     var warnings = Array.isArray(estimate.warnings) ? estimate.warnings : [];
     var toReview = Number(pipeline.to_review || 0);
-    var vaultRoot = root.getAttribute("data-vault-root") || "";
+    var repoRoot = root.getAttribute("data-repo-root") || "";
 
     var totalRaw = 0;
     var totalSynth = 0;
@@ -230,7 +224,7 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
       detailsSection("Not synthesized sessions", pendingSessions.length, pendingListHtml(pendingSessions)) +
       detailsSection("Not synthesized docs", pendingDocs.length, pendingListHtml(pendingDocs)) +
       detailsSection("Candidates to review", toReview, reviewBreakdownHtml(pipeline)) +
-      detailsSection("Commands", 13, commandsBody(vaultRoot)) +
+      detailsSection("Commands", 10, commandsBody(repoRoot)) +
       detailsSection("Estimate warnings", warnings.length, warningsBody) +
       "</div>";
   }

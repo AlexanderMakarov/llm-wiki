@@ -27,8 +27,10 @@ def test_dashboard_inlines_state_mount_not_old_cards():
 
 
 def test_dashboard_mount_includes_vault_root_attr(tmp_path: Path):
-    body = render_dashboard_body([], 0, vault_root=tmp_path)
+    body = render_dashboard_body([], 0, vault_root=tmp_path, repo_root=tmp_path / "repo")
     assert f'data-vault-root="{tmp_path}"' in body
+    assert f'data-repo-root="{tmp_path / "repo"}"' in body
+
 
 def test_state_widget_js_has_pipeline_table_and_collapsibles():
     assert "renderStateWidget" in js.JS
@@ -48,11 +50,15 @@ def test_state_widget_js_has_pipeline_table_and_collapsibles():
     assert "llmwiki candidates list" in js.JS
     assert "llmwiki candidates promote --slug" in js.JS
     assert "/wiki-candidates" in js.JS
+    assert "data-repo-root" in js.JS
+    assert "llmwiki checkout" in js.JS
     assert " && claude" in js.JS
-    assert " && codex" in js.JS
-    assert " && cursor ." in js.JS
-    assert " && gemini" in js.JS
-    assert 'detailsSection("Commands", 13,' in js.JS
+    # Vault is wrong cwd for slash commands — do not advertise opening agents there.
+    assert "Open Claude Code in the vault" not in js.JS
+    assert " && codex" not in js.JS
+    assert " && cursor ." not in js.JS
+    assert " && gemini" not in js.JS
+    assert 'detailsSection("Commands", 10,' in js.JS
     assert "queued " in js.JS
     assert "in progress " in js.JS
     # Timeline must appear before the backlog lists in the render order.

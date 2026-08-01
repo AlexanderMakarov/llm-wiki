@@ -2025,6 +2025,7 @@ def render_index(
         doc_entries,
         doc_file_count,
         vault_root=content_root,
+        repo_root=SOURCE_ROOT,
     )
     auto = render_automation_panel(content_root)
     page = (
