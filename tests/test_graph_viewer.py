@@ -309,13 +309,18 @@ def test_html_template_escapes_user_html():
 
 
 def test_html_template_size_budget():
-    # Guardrail — the template shouldn't balloon. Raised to 36 kB for the
-    # #54 topic-first viewer (dual-mode node/edge build, contextual side
-    # panel, double-click + edge-click handlers). If it grows much past
-    # this, split the <script> into an external .js asset instead.
-    assert len(HTML_TEMPLATE) < 36_000, (
+    # Guardrail — the template shouldn't balloon. 41 kB covers the #54
+    # topic-first viewer (dual-mode node/edge build, contextual side panel,
+    # double-click + edge-click handlers) plus kind-aware clustering
+    # (per-kind legend, cluster labels, on-page error reporting).
+    #
+    # This is the ceiling, not headroom: the inline <script> is most of the
+    # template and every byte ships on every graph page load. The next
+    # feature that needs real space should move it to an external .js asset
+    # rather than raise this number again.
+    assert len(HTML_TEMPLATE) < 41_000, (
         f"HTML template is {len(HTML_TEMPLATE)} bytes — "
-        "keep it under 36 kB or split into an external .js asset"
+        "split the <script> into an external .js asset instead of raising this"
     )
 
 

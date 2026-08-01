@@ -14,8 +14,9 @@ Design brief (inherited from the brand-system doc #115):
 - Single purple accent (#7C3AED) — same through-line as the rest of the
   site. Neutral off-white (#FAFAF9) background, deep ink (#0F172A) body.
 - Hairline borders (1 px), zero drop shadows on content.
-- Generous vertical rhythm: 96 px section padding, 48 px between
-  h2 → h3 → p.
+- Vertical rhythm: the shell opens close under the nav bar, and section
+  breaks carry 48 px + a hairline rule so they read as divisions rather
+  than dead space.
 - Callouts: Trusted (emerald) / Warning (amber) / Result (violet) as the
   only editorial chrome.
 
@@ -35,7 +36,7 @@ DOCS_SHELL_CSS = """
 .docs-shell {
   max-width: 760px;
   margin: 0 auto;
-  padding: 64px 32px 128px;
+  padding: 28px 32px 96px;
   font-family: var(--font);
   font-size: 1.0625rem;
   line-height: 1.75;
@@ -49,7 +50,7 @@ DOCS_SHELL_CSS = """
   font-weight: 700;
   letter-spacing: -0.02em;
   line-height: 1.15;
-  margin: 48px 0 20px;
+  margin: 8px 0 20px;
   color: var(--text);
 }
 
@@ -58,8 +59,8 @@ DOCS_SHELL_CSS = """
   font-weight: 650;
   letter-spacing: -0.02em;
   line-height: 1.25;
-  margin: 72px 0 20px;
-  padding-top: 32px;
+  margin: 48px 0 20px;
+  padding-top: 24px;
   border-top: 1px solid var(--border-subtle);
   color: var(--text);
 }
@@ -67,7 +68,7 @@ DOCS_SHELL_CSS = """
 .docs-shell h2:first-of-type {
   border-top: none;
   padding-top: 0;
-  margin-top: 48px;
+  margin-top: 32px;
 }
 
 .docs-shell h3 {

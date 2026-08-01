@@ -526,7 +526,7 @@ __SITE_NAV__
       <option value="tight">tight</option>
     </select>
   </label>
-  <button class="control" id="cluster-toggle" title="Group nodes by project / type">
+  <button class="control" id="cluster-toggle" title="Group nodes by kind (entities, concepts, …)">
     Cluster: <b id="cluster-mode">off</b>
   </button>
   <!-- #456: removed the standalone back-to-site link and theme toggle —
@@ -621,6 +621,21 @@ function main() {
     topic: () => cssVar('--g-node-topic'),
   };
   const orphanColor = () => cssVar('--g-orphan');
+  // Human labels for the wiki folders a node can belong to. Used by the
+  // legend and by the Cluster control's collapsed-node captions.
+  const KIND_LABELS = {
+    entities: 'Entities', concepts: 'Concepts', projects: 'Projects',
+    questions: 'Questions', comparisons: 'Comparisons',
+    syntheses: 'Syntheses', sources: 'Sources', other: 'Other',
+  };
+  const kindLabel = k => KIND_LABELS[k] || k;
+  const kindColor = k => (colors[k] || colors.topic)();
+  // Surface viewer failures on the page, not just in the console —
+  // script.js owns the banner, so fall back if it hasn't loaded yet.
+  const reportGraphError = (context, err) => {
+    if (window.__llmwikiReportError) window.__llmwikiReportError(context, err);
+    else if (window.console) console.error('[llmwiki] ' + context, err);
+  };
 
   // #54: topic-first mode. Nodes are topics (never sessions); edges are
   // topic↔topic co-occurrences bridged by sessions. Drives sizing, the
@@ -637,8 +652,13 @@ function main() {
       (stats.total_edges ?? GRAPH.edges.length) + ' connections · ' +
       (stats.total_sessions ?? 0) + ' sessions';
     const lg = document.getElementById('legend');
+    // One row per kind actually present — a wiki with no concept pages
+    // shouldn't advertise a concept swatch.
+    const presentKinds = [...new Set(GRAPH.nodes.map(n => n.kind || 'other'))].sort();
     if (lg) lg.innerHTML =
-      '<div class="row"><span class="dot" style="background: var(--g-node-topic)"></span>topic</div>' +
+      presentKinds.map(k =>
+        '<div class="row"><span class="dot" style="background: ' + kindColor(k) +
+        '"></span>' + escapeHtml(kindLabel(k)) + '</div>').join('') +
       '<div class="row"><span class="dot" style="background: var(--g-edge)"></span>shared sessions</div>' +
       '<div class="row" style="color:var(--g-muted)">size = #sessions</div>';
   } else {
@@ -671,13 +691,19 @@ function main() {
         id: n.id,
         label: n.label,
         color: {
-          background: colors.topic(),
-          border: colors.topic(),
+          // Topics inherit the colour of the wiki folder they resolve to,
+          // so entities and concepts stay distinguishable both loose and
+          // collapsed into clusters.
+          background: kindColor(n.kind),
+          border: kindColor(n.kind),
           highlight: { background: cssVar('--g-highlight'), border: cssVar('--g-highlight') },
         },
         borderWidth: 1,
         value: Math.max(n.session_count || 1, 1),
-        group: 'topic',
+        // Deliberately no `group`: vis owns that key and re-applies its own
+        // automatic group palette when a cluster reopens, overwriting the
+        // per-kind colours above. `kind` is ours, so it survives.
+        kind: n.kind || 'other',
         title: n.label + ' · ' + (n.session_count || 0) + ' sessions · ' +
           (n.degree || 0) + ' connected\nClick to focus · double-click to open',
         site_url: n.site_url,
@@ -698,7 +724,7 @@ function main() {
       },
       borderWidth: isOrphan ? 3 : 1,
       value: Math.max(n.in_degree, 1),
-      group: n.type,
+      kind: n.type,
       title:
         n.type + ' · ' + n.in_degree + ' inbound, ' + n.out_degree + ' outbound' +
         (n.path ? '\nClick to open ' + n.path : ''),
@@ -791,17 +817,26 @@ function main() {
   // #21: switch layout density live, then re-freeze + fit. Fitting here is
   // intentional — the #9 no-yank rule guards incidental clicks; a deliberate
   // layout change repositions every node, so framing it is expected.
-  function applyLayout(mode) {
-    if (!LAYOUTS[mode]) return;
-    layoutMode = mode;
-    try { localStorage.setItem('llmwiki-graph-layout', mode); } catch (e) {}
+  // Re-run the layout after a change that moves every node, then re-freeze
+  // and frame the result. Physics is frozen the rest of the time, so
+  // without this a structural change (a layout switch, or collapsing the
+  // graph into clusters) leaves every node stacked at whatever position it
+  // was created at, reading as one merged dot in the middle of the canvas.
+  function restabilize() {
     freezeWhenStable(true);
-    network.setOptions({ physics: Object.assign({ enabled: true }, LAYOUTS[mode]) });
+    network.setOptions({ physics: Object.assign({ enabled: true }, LAYOUTS[layoutMode]) });
     // setOptions re-enables *live* physics but does NOT emit
     // stabilizationIterationsDone, so the freeze handler above would never
     // fire and the new layout would shake forever (#9). Kick an explicit
     // stabilization run to drive it to a settled, frozen state.
     network.stabilize();
+  }
+
+  function applyLayout(mode) {
+    if (!LAYOUTS[mode]) return;
+    layoutMode = mode;
+    try { localStorage.setItem('llmwiki-graph-layout', mode); } catch (e) {}
+    restabilize();
   }
   const layoutSelect = document.getElementById('layout-select');
   if (layoutSelect) {
@@ -964,11 +999,16 @@ function main() {
   }
 
   network.on('oncontext', params => {
-    params.event.preventDefault();
     const nodeId = network.getNodeAt(params.pointer.DOM);
     if (nodeId) {
+      // Only swallow the native menu where we actually replace it.
+      params.event.preventDefault();
       showContextMenu(nodeId, params.event.clientX, params.event.clientY);
     } else {
+      // Right-click on empty canvas belongs to the browser: the native
+      // context menu, and mouse-gesture extensions that drive navigation
+      // from a held right button. Preventing it unconditionally made the
+      // graph page the one place on the site where those stop working.
       hideContextMenu();
     }
   });
@@ -1100,32 +1140,71 @@ function main() {
   if (searchInput) searchInput.addEventListener('input', e => applyFilter(e.target.value));
 
   // ─── Cluster toggle ──────────────────────────────────────────────────
+  // Groups on `kind` (the wiki folder a node resolves to), not `type`: in
+  // topic mode every node's type is literally 'topic', so a type-keyed
+  // cluster collapses the whole graph into one dot and hides every edge.
+  const nodeKind = n => n.kind || n.type || 'other';
+  const clusterKinds = [...new Set(GRAPH.nodes.map(nodeKind))].sort();
   let clusterMode = 'off';
   const clusterBtn = document.getElementById('cluster-toggle');
-  if (clusterBtn) clusterBtn.addEventListener('click', () => {
-    clusterMode = clusterMode === 'off' ? 'type' : 'off';
-    document.getElementById('cluster-mode').textContent = clusterMode;
-    if (clusterMode === 'type') {
-      const types = [...new Set(GRAPH.nodes.map(n => n.type))];
-      types.forEach(t => {
-        try {
-          network.cluster({
-            joinCondition: n => n.group === t,
-            clusterNodeProperties: {
-              id: 'cluster:' + t,
-              label: t + ' (' + GRAPH.nodes.filter(x => x.type === t).length + ')',
-              color: { background: (colors[t] || colors.root)() },
-            },
-          });
-        } catch (_) { /* empty type */ }
-      });
-    } else {
-      GRAPH.nodes.forEach(n => {
-        const id = 'cluster:' + n.type;
-        if (network.isCluster(id)) network.openCluster(id);
-      });
-    }
-  });
+  const clusterModeEl = document.getElementById('cluster-mode');
+  if (clusterBtn && clusterKinds.length < 2) {
+    // One kind means one cluster means a single dot — say so rather than
+    // offer a control that can only make the graph less useful.
+    clusterBtn.disabled = true;
+    clusterBtn.title = 'Nothing to cluster: every node is "' +
+      kindLabel(clusterKinds[0] || 'other') + '". Clusters appear once the ' +
+      'wiki has pages in more than one folder (entities, concepts, …).';
+    if (clusterModeEl) clusterModeEl.textContent = 'n/a';
+  } else if (clusterBtn) {
+    clusterBtn.title = 'Group nodes by kind (' +
+      clusterKinds.map(kindLabel).join(' · ') + ')';
+    clusterBtn.addEventListener('click', () => {
+      clusterMode = clusterMode === 'off' ? 'kind' : 'off';
+      if (clusterModeEl) clusterModeEl.textContent = clusterMode;
+      if (clusterMode === 'kind') {
+        clusterKinds.forEach(k => {
+          const size = GRAPH.nodes.filter(n => nodeKind(n) === k).length;
+          // vis refuses to wrap a single node (and logs its own error
+          // trying). A lone node already reads as itself.
+          if (size < 2) return;
+          try {
+            network.cluster({
+              // joinCondition re-runs over what's on the canvas, which now
+              // includes clusters from earlier passes. A cluster node only
+              // carries the properties we gave it, so without this guard
+              // the `kind` fallback sorts every existing cluster into the
+              // kind being built and nests them inside it.
+              joinCondition: n => !n.isKindCluster && nodeKind(n) === k,
+              clusterNodeProperties: {
+                id: 'cluster:' + k,
+                label: kindLabel(k) + ' (' + size + ')',
+                color: { background: kindColor(k), border: kindColor(k) },
+                value: size,
+                kind: k,
+                isKindCluster: true,
+              },
+            });
+          } catch (err) {
+            reportGraphError('Could not cluster "' + kindLabel(k) + '"', err);
+          }
+        });
+      } else {
+        clusterKinds.forEach(k => {
+          const id = 'cluster:' + k;
+          try {
+            if (network.isCluster(id)) network.openCluster(id);
+          } catch (err) {
+            reportGraphError('Could not expand "' + kindLabel(k) + '"', err);
+          }
+        });
+      }
+      // Clustering and expanding both create nodes at a single point with
+      // physics frozen. Re-run the layout so they spread out and the view
+      // reframes on what is now on screen.
+      restabilize();
+    });
+  }
 }
 
 function escapeHtml(s) {

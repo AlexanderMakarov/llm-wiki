@@ -31,8 +31,15 @@ CSS = """/* llmwiki — god-level docs style */
   --shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.1), 0 8px 10px -6px rgba(15, 23, 42, 0.04);
   --shadow-card: 0 1px 3px rgba(15, 23, 42, 0.08), 0 1px 2px rgba(15, 23, 42, 0.04);  /* v1.0 #119: card shadow */
   --shadow-card-hover: 0 4px 12px rgba(15, 23, 42, 0.12), 0 2px 4px rgba(15, 23, 42, 0.06);
-  --section-y: 20px 0 24px;
+  --section-y: 16px 0 24px;
   --block-gap: 16px;
+  /* Vertical rhythm of the page masthead, in one place so every page
+     family (hero, hero-sm, project hero) scales from the same tokens.
+     The hero is a title + one subtitle line; it does not need to cost
+     ~150px of chrome before the first row of real content. */
+  --hero-y: 28px 0 22px;
+  --hero-y-sm: 20px 0 16px;
+  --hero-gap: 0px;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -94,7 +101,9 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 kbd { display: inline-block; padding: 2px 6px; font-family: var(--mono); font-size: 0.72rem; color: var(--text-secondary); background: var(--bg-code); border: 1px solid var(--border); border-radius: 4px; line-height: 1; }
 
 /* Reading progress bar */
-.progress-bar { position: fixed; top: 0; left: 0; height: 3px; width: 0%; background: var(--accent); z-index: 200; transition: width 0.1s; }
+/* Decorative only — never let the strip eat clicks (or the start of a
+   mouse gesture) aimed at the nav underneath it. */
+.progress-bar { position: fixed; top: 0; left: 0; height: 3px; width: 0%; background: var(--accent); z-index: 200; pointer-events: none; transition: width 0.1s; }
 
 /* Nav */
 /* v1.0 #119: add a subtle shadow + stronger blur so the nav stays grounded on light backgrounds */
@@ -135,8 +144,8 @@ kbd { display: inline-block; padding: 2px 6px; font-family: var(--mono); font-si
 }
 
 /* Hero */
-.hero { padding: 56px 0 40px; margin-bottom: 20px; background: var(--bg-alt); border-bottom: 1px solid var(--border); }
-.hero-sm { padding: 32px 0 24px; margin-bottom: 12px; }
+.hero { padding: var(--hero-y); margin-bottom: var(--hero-gap); background: var(--bg-alt); border-bottom: 1px solid var(--border); }
+.hero-sm { padding: var(--hero-y-sm); margin-bottom: var(--hero-gap); }
 .hero h1 { font-size: 2rem; font-weight: 700; letter-spacing: -0.02em; color: var(--text); margin-bottom: 8px; overflow-wrap: break-word; }
 .hero .hero-sub { color: var(--text-secondary); font-size: 0.9rem; line-height: 1.6; overflow-wrap: break-word; }
 .hero .hero-sub code { font-family: var(--mono); background: var(--bg-card); padding: 1px 6px; border-radius: 4px; font-size: 0.82rem; border: 1px solid var(--border); }
@@ -199,7 +208,7 @@ kbd { display: inline-block; padding: 2px 6px; font-family: var(--mono); font-si
 /* #36 follow-up: project pages stack many thin strips (topics, disk
    paths, heatmap, charts, sessions) — tighten via --section-y once. */
 .project-page { --section-y: 8px 0 12px; }
-.project-page > .hero { padding: 32px 0 16px; margin-bottom: 4px; }
+.project-page > .hero { --hero-y: 20px 0 14px; }
 .project-page .section h2 { margin: 12px 0 10px; }
 .project-page .project-topics-section { padding-top: 4px; padding-bottom: 4px; }
 .project-page .project-topics-section .container { padding-top: 4px; padding-bottom: 0; }
@@ -492,14 +501,14 @@ kbd { display: inline-block; padding: 2px 6px; font-family: var(--mono); font-si
 .help-modal td:first-child { width: 130px; }
 
 /* Footer */
-.footer { padding: 32px 0; border-top: 1px solid var(--border); margin-top: 48px; background: var(--bg-alt); }
+.footer { padding: 24px 0; border-top: 1px solid var(--border); margin-top: 32px; background: var(--bg-alt); }
 .footer p { font-size: 0.85rem; color: var(--text-muted); text-align: center; }
 .footer a { text-decoration: underline; text-underline-offset: 2px; }
 
 .container.narrow { max-width: 860px; }
 
 /* Documents tree browser (Home + documents/ pages) */
-.doctree-section { padding: 32px 0 64px; }
+.doctree-section { padding: 16px 0 48px; }
 .doctree-layout { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 32px; align-items: start; }
 .doctree-sidebar { position: sticky; top: 88px; max-height: calc(100vh - 120px); overflow-y: auto; padding: 14px 16px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); font-size: 0.88rem; }
 .doctree-title { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); font-weight: 600; margin-bottom: 8px; }

@@ -3197,6 +3197,7 @@ def build_site(
             md_to_html=md_to_html,
             page_head=page_head,
             nav_builder=_docs_nav,
+            page_foot=lambda prefix: page_foot(js_prefix=prefix),
         )
         if docs_written:
             print(

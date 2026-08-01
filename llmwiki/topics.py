@@ -184,6 +184,49 @@ def _load_consolidation_cache(wiki_dir: Path | None):
         return None
 
 
+# `wiki/` subfolders whose name is a meaningful node kind. Topics resolve to
+# one of these; everything else groups under KIND_OTHER. The names match the
+# viewer's per-type colour map so a clustered graph keeps its palette.
+TOPIC_KIND_FOLDERS = frozenset({
+    "entities", "concepts", "projects", "questions",
+    "comparisons", "syntheses", "sources",
+})
+KIND_OTHER = "other"
+
+
+def topic_kind_lookup(wiki_dir: Path | None = None) -> dict[str, str]:
+    """Map every wiki page's slug and title (lowercased) → its folder kind.
+
+    Topics are wikilink targets, so a topic spelled ``Hazel`` is whatever
+    ``wiki/entities/Hazel.md`` says it is. The folder a page lives in is
+    the only kind signal the wiki schema carries, so that is what we key on.
+    """
+    lookup: dict[str, str] = {}
+    for slug, page in scan_pages(wiki_dir).items():
+        kind = str(page.get("type", ""))
+        if kind not in TOPIC_KIND_FOLDERS:
+            continue
+        lookup.setdefault(slug.strip().lower(), kind)
+        title = str(page.get("title", "")).strip().lower()
+        if title:
+            lookup.setdefault(title, kind)
+    return lookup
+
+
+def resolve_topic_kind(topic: Topic, lookup: dict[str, str]) -> str:
+    """Kind for one topic — canonical spelling wins, then any alias.
+
+    Aliases matter: the canonical spelling is whichever variant appeared in
+    the most sessions, which is not necessarily the one that matches a page
+    filename.
+    """
+    for name in (topic.canonical, *sorted(topic.aliases)):
+        kind = lookup.get(str(name).strip().lower())
+        if kind:
+            return kind
+    return KIND_OTHER
+
+
 def build_topic_graph(
     wiki_dir: Path | None = None,
     *,
@@ -258,12 +301,17 @@ def build_topic_graph(
         degree[e["source"]] += 1
         degree[e["target"]] += 1
 
+    kind_lookup = topic_kind_lookup(wiki_dir)
     nodes = []
     for t in kept:
         nodes.append({
             "id": t.canonical,
             "label": t.canonical,
             "type": "topic",
+            # Which wiki folder this topic's page lives in. Every node is a
+            # `topic`, so `type` alone can't group the graph — `kind` is what
+            # the viewer's Cluster control partitions on.
+            "kind": resolve_topic_kind(t, kind_lookup),
             "site_url": f"topics/{t.slug}.html",
             "session_count": t.count,
             "degree": degree.get(t.canonical, 0),
@@ -273,10 +321,14 @@ def build_topic_graph(
         })
 
     nodes.sort(key=lambda n: (-n["session_count"], n["id"].lower()))
+    kind_counts: dict[str, int] = defaultdict(int)
+    for n in nodes:
+        kind_counts[n["kind"]] += 1
     stats = {
         "total_topics": len(nodes),
         "total_edges": len(edges),
         "total_sessions": len(pages),
+        "kinds": dict(sorted(kind_counts.items())),
         "top_topics": [
             {"id": n["id"], "count": n["session_count"], "degree": n["degree"]}
             for n in nodes[:8]

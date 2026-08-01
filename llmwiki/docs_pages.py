@@ -401,6 +401,7 @@ def compile_docs_site(
     md_to_html=None,
     page_head=None,
     nav_builder=None,
+    page_foot=None,
 ) -> list[Path]:
     """Compile every opt-in page under ``docs_dir`` into ``site_dir/docs/``.
 
@@ -409,6 +410,13 @@ def compile_docs_site(
     is a callable ``(link_prefix: str) -> str`` that produces the site-
     wide navigation with the right href prefix for the current page's
     directory depth. If ``None`` we omit the nav (useful for tests).
+
+    ``page_foot`` is the same shape — ``(link_prefix: str) -> str`` — and
+    supplies the shared site footer, mobile bottom nav, search-palette
+    markup, and ``script.js``. The nav bar these pages already render is
+    inert without it: the theme toggle, the ⌘K palette, and the hamburger
+    drawer are all wired by ``script.js``. When ``None`` we emit a bare
+    document close so tests can render markup without the runtime.
 
     Returns the list of files written (absolute paths).
     """
@@ -499,7 +507,8 @@ def compile_docs_site(
             + _breadcrumb(page)
             + body_html
             + footer_html
-            + "</main>\n</body>\n</html>\n"
+            + "</main>\n"
+            + (page_foot(css_prefix) if page_foot else "</body>\n</html>\n")
         )
 
         out_path = out_root / page.out_rel
