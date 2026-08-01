@@ -14,6 +14,10 @@ import pytest
 
 from llmwiki.state_store import configure_state_file
 
+# Autouse guard (#91): fails any test that leaves a tracked file modified.
+# Imported for its side effect of registering the fixture.
+from tests.tracked_files import tracked_file_guard  # noqa: F401
+
 # Ensure the repo root (which contains the `llmwiki/` package dir) is on
 # sys.path when pytest is run from anywhere.
 REPO_ROOT = Path(__file__).resolve().parent.parent

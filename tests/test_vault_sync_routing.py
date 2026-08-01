@@ -98,7 +98,14 @@ def test_default_no_vault_behaviour_unchanged(tmp_path: Path):
     """Without --vault, default paths must be honoured unchanged."""
 
     captured, fake_convert_all = _capture_convert_all_kwargs()
-    with patch("llmwiki.cli.convert_all", side_effect=fake_convert_all):
+    # The routing under test is entirely in convert_all's kwargs. Left to run,
+    # the post-sync reindex would rebuild the clone's own tracked
+    # wiki/index.md from whatever pages sit on disk (#91) — a real write into
+    # the working copy, and not what this test is asserting.
+    with (
+        patch("llmwiki.cli.convert_all", side_effect=fake_convert_all),
+        patch("llmwiki.cli.plan_reindex", return_value=None),
+    ):
         cmd_sync(_make_args())
 
     assert captured.get("out_dir") == DEFAULT_OUT_DIR
