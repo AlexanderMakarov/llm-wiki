@@ -243,7 +243,7 @@ to produce `wiki/sources/<slug>.md`.
 
 **Wraps:** `python3 -m llmwiki candidates list` + follow-ups.
 
-**When to use:** Home **To review** / Analytics **Candidates to review** is non-zero, `/wiki-lint` reported `stale_candidates`, or you just ran `llmwiki synthesize --candidates-only`.
+**When to use:** Home **Candidates** / Analytics **Candidates to review** is non-zero, `/wiki-lint` reported `stale_candidates`, or you just ran `llmwiki synthesize --candidates-only`.
 
 **Example:**
 

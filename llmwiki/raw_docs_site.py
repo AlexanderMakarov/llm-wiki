@@ -303,6 +303,7 @@ def render_dashboard_body(
     *,
     vault_root: Path | None = None,
     repo_root: Path | None = None,
+    automation_html: str = "",
 ) -> str:
     """Body of index.html — pipeline State table mount + recent raw docs."""
     if not entries:
@@ -323,11 +324,12 @@ def render_dashboard_body(
         attrs += f' data-vault-root="{html.escape(str(vault_root))}"'
     if repo_root is not None:
         attrs += f' data-repo-root="{html.escape(str(repo_root))}"'
+    auto_block = automation_html or ""
     return f"""<section class="section doctree-section">
   <div class="container">
     <div class="queue-widget">
+      {auto_block}
       <h2>Pipeline state</h2>
-      <p class="muted">Raw → To synthesize → Synthesized → To review. Trusted entity/concept hubs need agent review of candidates.</p>
       <div id="llmwiki-state-widget" class="state-widget" data-llmwiki-state-widget{attrs}>
         <p class="muted">Loading pipeline state…</p>
       </div>

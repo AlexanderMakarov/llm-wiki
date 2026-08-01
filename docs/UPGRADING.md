@@ -12,8 +12,9 @@ The canonical per-release detail is [CHANGELOG.md](https://github.com/Pratiyush/
 
 ## Unreleased — candidates review gate on Home / Analytics (#84)
 
-- **Home pipeline** gains a **To review** column after Synthesized. The count is vault-wide pending pages under `wiki/candidates/` (shown on the Total row). Per-agent rows show `—` for that column.
-- **Every `llmwiki build`** recounts pending/stale candidates into `synth.pipeline.to_review*` before copying `llmwiki-state.js` into `site/` — promote/discard no longer leave a stale Home table until the next estimate.
+- **Home** shows a **Files layer** table (Raw → To synthesize → Synthesized; shell-handled) and a **Knowledge layer** table (Candidates → Entities / Concepts; review via agent Commands). Candidates = pending `wiki/candidates/` pages (not the estimate harvestable-stub preview). Entities/Concepts = trusted pages after promote.
+- **Every `llmwiki build`** recounts pending/stale candidates and trusted entity/concept counts into `synth.pipeline` before copying `llmwiki-state.js` into `site/` — promote/discard no longer leave a stale Home table until the next estimate.
+- **Commands** agent rows are one-shot: `cd <llm-wiki-checkout> && claude|agent|codex "/wiki-candidates"` (Purpose: review/edit candidates). Slash commands load from the checkout, not the vault. Gemini CLI stays adapter-scaffold — no Home launcher.
 - **Analytics** adds a **Candidates to review** section (pending + stale). Zeros are intentional: a synthesize-only vault still shows that the review gate exists.
 - **No auto-promote.** Trusted hubs still require `llmwiki candidates promote|merge|discard` or agent `/wiki-candidates` / `/wiki-ingest`.
 

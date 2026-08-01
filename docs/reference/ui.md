@@ -16,7 +16,7 @@ Every page in the site carries the same header nav. Keyboard: `⌘K` opens the c
 
 | # | Label | URL | Surfaces |
 |---|---|---|---|
-| 1 | **Home** | `/index.html` | pipeline State widget (Raw→To synthesize→Synthesized→To review + collapsible backlog/candidates/commands) + recent raw docs |
+| 1 | **Home** | `/index.html` | pipeline State widget (Files layer Raw→To synthesize→Synthesized + Knowledge layer Candidates/Entities/Concepts + collapsible backlog/candidates/commands) + recent raw docs |
 | 2 | **Raw** | `/raw.html` | file tree browser of raw documents (wiki-add layer) |
 | 3 | **Graph** | `/graph.html` | interactive force-directed knowledge graph (vis-network) |
 | 4 | **Projects** | `/projects/index.html` | filterable card grid of every project + freshness badge |
@@ -39,10 +39,10 @@ URL: `/index.html`
 
 Queue-first landing page. Layout:
 
-1. **Pipeline state** — Home-only table mount (`#llmwiki-state-widget`, inlined on `index.html`) with columns Raw → To synthesize → Synthesized → **To review**, one row per agent that has contributed at least one session (Claude / Cursor / OpenClaw / …) plus a Documents row. Each cell is a single count; the To synthesize cell adds estimated USD in parentheses when non-zero. **To review** is vault-wide (pending pages under `wiki/candidates/`) and appears on the Total row — per-agent cells show `—` because candidates are not partitioned by agent. The Total row also shows queue **queued** / **in progress** counts. Under the table, shared **collapse sections** (`llmwiki/render/collapse_section.py`: title + count badge + fold-out body) cover Timeline, not-synthesized sessions/docs, **Candidates to review** (by kind + stale), Commands (runnable `llmwiki …` CLI rows + one honest Claude launcher: `cd <llm-wiki-checkout> && claude`, then type `/wiki-candidates` — slashes load from the checkout, not the vault), and estimate warnings.
+1. **Pipeline state** — Home-only table mount (`#llmwiki-state-widget`, inlined on `index.html`) with two captioned tables: **Files layer** (`Raw → To synthesize → Synthesized`, handled by shell commands — agent chips say `… sessions`; Documents is plain text, not a chip) and **Knowledge layer** (`Candidates → Entities / Concepts`, review via agent Commands). Each Files-layer cell is a single count; To synthesize adds estimated USD in parentheses when non-zero. **Candidates** counts pending stubs already under `wiki/candidates/` (not the harvestable-stub preview from `synthesize --estimate`). **Entities** / **Concepts** count trusted pages after promote. The Files-layer Total row also shows queue **queued** / **in progress** counts. Under the tables, shared **collapse sections** (`llmwiki/render/collapse_section.py`) cover Timeline, not-synthesized sessions/docs, **Candidates to review** (by kind + stale), Commands (runnable `llmwiki …` CLI rows + one-shot `cd <llm-wiki-checkout> && claude|agent|codex "/wiki-candidates"` — Gemini CLI is adapter-scaffold only, so no Home launcher), and estimate warnings.
 2. **Recent raw documents** — newest `raw/docs/` entries with title + source meta.
 
-Numbers come from `llmwiki-state.js` (`synth.pipeline` + `synth.pending` + `synth.estimate`), refreshed by `llmwiki sync` / `llmwiki synthesize --estimate`. Every `llmwiki build` also recounts pending/stale candidates into `synth.pipeline.to_review*` (cheap disk walk — #84) and copies the sidecar into `site/llmwiki-state.js`. `llmwiki build` still one-shot backfills `synth.pipeline` rows when the state snapshot predates that key (v1.4→v1.5 upgrade — #70). The session-analytics content (heatmap, stats, project grid) lives on [Analytics](#analytics).
+Numbers come from `llmwiki-state.js` (`synth.pipeline` + `synth.pending` + `synth.estimate`), refreshed by `llmwiki sync` / `llmwiki synthesize --estimate`. Every `llmwiki build` also recounts pending/stale candidates and trusted entity/concept page counts into `synth.pipeline.to_review*` / `trusted_entities` / `trusted_concepts` (cheap disk walk — #84) and copies the sidecar into `site/llmwiki-state.js`. `llmwiki build` still one-shot backfills `synth.pipeline` rows when the state snapshot predates that key (v1.4→v1.5 upgrade — #70). The session-analytics content (heatmap, stats, project grid) lives on [Analytics](#analytics).
 
 ---
 

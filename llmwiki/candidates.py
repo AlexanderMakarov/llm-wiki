@@ -151,6 +151,18 @@ def list_candidates(
     return out
 
 
+def _count_trusted_pages(wiki_dir: Path, kind: str) -> int:
+    """Count ``*.md`` pages under ``wiki/<kind>/`` (skip ``_context.md``)."""
+    root = wiki_dir / kind
+    if not root.is_dir():
+        return 0
+    return sum(
+        1
+        for path in root.glob("*.md")
+        if path.is_file() and path.name != "_context.md"
+    )
+
+
 def candidate_review_summary(
     wiki_dir: Path,
     *,
@@ -161,7 +173,9 @@ def candidate_review_summary(
 
     Pending stubs live under ``wiki/candidates/`` until promote / merge /
     discard. Stale uses the same threshold as ``stale_candidates`` / the
-    ``stale_candidates`` lint rule (default 30 days).
+    ``stale_candidates`` lint rule (default 30 days). Trusted
+    ``entities`` / ``concepts`` counts are vault-wide final-layer sizes
+    (not partitioned by agent, and not the same as raw session rows).
     """
     items = list_candidates(wiki_dir, now=now)
     by_kind: dict[str, int] = {}
@@ -173,6 +187,8 @@ def candidate_review_summary(
         "to_review_by_kind": by_kind,
         "to_review_stale": len(stale),
         "stale_days": int(stale_days),
+        "trusted_entities": _count_trusted_pages(wiki_dir, "entities"),
+        "trusted_concepts": _count_trusted_pages(wiki_dir, "concepts"),
     }
 
 

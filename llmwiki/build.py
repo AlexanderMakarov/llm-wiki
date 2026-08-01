@@ -1975,12 +1975,12 @@ def render_automation_panel(content_root: Path | None) -> str:
 
     if not status:
         return (
-            '<section class="automation-panel" aria-label="Automation">'
+            '<div class="automation-panel" aria-label="Automation">'
             "<h2>Automation</h2>"
             "<p class=\"muted\">No automation configured. Run "
             "<code>llmwiki install-automation</code> or <code>./setup.sh</code> "
             "to set a daily scheduler, optional watch, and synth backend.</p>"
-            "</section>"
+            "</div>"
         )
 
     profile = status.get("profile") or "none"
@@ -1996,7 +1996,7 @@ def render_automation_panel(content_root: Path | None) -> str:
         "Scheduled runs with no new sessions are a no-op."
     )))
     return (
-        '<section class="automation-panel" aria-label="Automation">'
+        '<div class="automation-panel" aria-label="Automation">'
         "<h2>Automation</h2>"
         "<ul>"
         f"<li>Scheduler profile: <strong>{html.escape(str(profile))}</strong> "
@@ -2008,7 +2008,7 @@ def render_automation_panel(content_root: Path | None) -> str:
         f"<li class=\"muted\">Updated: {updated}</li>"
         "</ul>"
         f"<p class=\"muted\">{note}</p>"
-        "</section>"
+        "</div>"
     )
 
 
@@ -2026,8 +2026,8 @@ def render_index(
         doc_file_count,
         vault_root=content_root,
         repo_root=SOURCE_ROOT,
+        automation_html=render_automation_panel(content_root),
     )
-    auto = render_automation_panel(content_root)
     page = (
         page_head("LLM Wiki", "Karpathy-style knowledge base from Claude Code sessions", css_prefix="")
         + nav_bar("home", link_prefix="")
@@ -2035,7 +2035,6 @@ def render_index(
             "LLM Wiki",
             "Pipeline state for sync, synthesis, and candidate review",
         )
-        + auto
         + body
         + page_foot(js_prefix="")
     )

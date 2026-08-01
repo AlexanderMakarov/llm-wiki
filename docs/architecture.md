@@ -24,7 +24,7 @@ site/          GENERATED static HTML
                (llmwiki builds here via `llmwiki build`)
 ```
 
-Trusted entity/concept hubs require human-or-agent review of candidates. Synthesis alone can leave Home looking “finished” (Raw → Synthesized) while the knowledge layer is still empty — Home’s **To review** column and Analytics **Candidates to review** make that backlog visible (#84).
+Trusted entity/concept hubs require human-or-agent review of candidates. Synthesis alone can leave Home looking “finished” (Raw → Synthesized) while the knowledge layer is still empty — Home’s **Knowledge layer** table (**Candidates | Entities | Concepts**) and Analytics **Candidates to review** make that backlog visible (#84).
 
 ### raw/ — immutable layer
 

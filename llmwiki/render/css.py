@@ -527,6 +527,10 @@ kbd { display: inline-block; padding: 2px 6px; font-family: var(--mono); font-si
 .state-pipeline-table .state-cell-cost { font-size: 0.85em; color: var(--text-muted); white-space: nowrap; }
 .state-pipeline-table .state-queue-meta { font-weight: 400; font-size: 0.85em; }
 .state-pipeline-table .state-row-label { font-weight: 600; }
+.state-pipeline-table .state-source-docs { font-weight: 600; color: var(--text); }
+.automation-panel { margin-bottom: 18px; padding-bottom: 14px; border-bottom: 1px solid var(--border); }
+.automation-panel h2 { margin: 0 0 8px; font-size: 1.1rem; }
+.automation-panel ul { margin: 8px 0; padding-left: 18px; }
 .state-pipeline-table tfoot td { background: var(--bg-alt); font-weight: 600; }
 .collapse-sections { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
 .collapse-section { border: 1px solid var(--border); border-radius: 8px; background: var(--bg-alt); }

@@ -19,7 +19,6 @@ def test_dashboard_inlines_state_mount_not_old_cards():
     assert 'id="llmwiki-state-widget"' in body
     assert "data-llmwiki-state-widget" in body
     assert "Pipeline state" in body
-    assert "To review" in body
     assert "Recent raw documents" in body
     assert "queue-home-content" not in body
     assert "Sync, synthesis, and queue status at a glance" not in body
@@ -35,8 +34,14 @@ def test_dashboard_mount_includes_vault_root_attr(tmp_path: Path):
 def test_state_widget_js_has_pipeline_table_and_collapsibles():
     assert "renderStateWidget" in js.JS
     assert "state-pipeline-table" in js.JS
+    assert "state-knowledge-table" in js.JS
     assert "To synthesize" in js.JS
-    assert "To review" in js.JS
+    assert "Files layer:" in js.JS
+    assert "Handled by shell commands." in js.JS
+    assert "Knowledge layer: Candidates → Entities / Concepts." in js.JS
+    assert "Review runs in the agent Commands below." in js.JS
+    assert "trusted_entities" in js.JS
+    assert "trusted_concepts" in js.JS
     assert "Candidates to review" in js.JS
     assert "Not synthesized sessions" in js.JS
     assert "Not synthesized docs" in js.JS
@@ -49,18 +54,30 @@ def test_state_widget_js_has_pipeline_table_and_collapsibles():
     assert "llmwiki synthesize --candidates-only" in js.JS
     assert "llmwiki candidates list" in js.JS
     assert "llmwiki candidates promote --slug" in js.JS
+    assert "escapeHtml(cmd)" in js.JS
+    assert "code.textContent" in js.JS
+    assert "Prefer the Command cell text" in js.JS
     assert "/wiki-candidates" in js.JS
     assert "data-repo-root" in js.JS
     assert "llmwiki checkout" in js.JS
-    assert " && claude" in js.JS
+    # One-shot agent launchers (prompt starts /wiki-candidates).
+    assert 'agentReview("claude")' in js.JS
+    assert 'agentReview("agent")' in js.JS
+    assert 'agentReview("codex")' in js.JS
+    # Gemini CLI adapter is still scaffold — no Home launcher.
+    assert 'agentReview("gemini")' not in js.JS
+    assert "' \"/wiki-candidates\"'" in js.JS or ' "/wiki-candidates"' in js.JS
+    assert "Review/edit pending candidates" in js.JS
+    assert "</span> sessions" in js.JS
+    assert "state-source-docs" in js.JS
     # Vault is wrong cwd for slash commands — do not advertise opening agents there.
     assert "Open Claude Code in the vault" not in js.JS
-    assert " && codex" not in js.JS
     assert " && cursor ." not in js.JS
-    assert " && gemini" not in js.JS
-    assert 'detailsSection("Commands", 10,' in js.JS
+    assert 'detailsSection("Commands", 12,' in js.JS
     assert "queued " in js.JS
     assert "in progress " in js.JS
+    # Knowledge layer is a second table — not dashes on per-agent rows.
+    assert 'class="muted">—</td>' not in js.JS
     # Timeline must appear before the backlog lists in the render order.
     timeline_idx = js.JS.index('detailsSection("Timeline"')
     sessions_idx = js.JS.index('detailsSection("Not synthesized sessions"')
@@ -75,7 +92,9 @@ def test_state_widget_js_has_pipeline_table_and_collapsibles():
     # Path-specific synthesize rows were replaced by the review-gate Commands set (#84).
     assert "llmwiki synthesize --path raw/sessions/" not in js.JS
     assert "llmwiki synthesize --path raw/docs/" not in js.JS
-
+    # Combined static blurb moved into per-table captions in JS.
+    assert "Knowledge layer: To review → Entities / Concepts (vault-wide)." not in js.JS
+    assert "vault-wide — not split by agent" not in js.JS
 def test_synth_pipeline_shape_ok():
     assert synth_pipeline_shape_ok({"pipeline": {"rows": []}})
     assert synth_pipeline_shape_ok({"pipeline": {"stages": ["raw"], "rows": [{"label": "Claude"}]}})
