@@ -62,7 +62,7 @@ def test_bash_includes_every_subcommand():
     # All key subcommands must appear in the WORD list
     for sub in ["sync", "build", "serve", "init", "version",
                 "adapters", "graph", "lint",
-                "candidates", "synthesize"]:
+                "candidates", "synth", "synthesize"]:
         assert sub in script, f"missing subcommand: {sub}"
 
 
@@ -107,7 +107,7 @@ def test_fish_has_flag_completions():
 def test_fish_includes_every_subcommand():
     script = fish_script()
     for sub in ["sync", "build", "serve", "init", "lint",
-                "candidates", "synthesize"]:
+                "candidates", "synth", "synthesize"]:
         assert f"-a '{sub}'" in script
 
 

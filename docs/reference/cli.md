@@ -391,21 +391,25 @@ See [`guides/existing-vault.md`](../guides/existing-vault.md) for the round-trip
 
 ---
 
-## `synthesize` — LLM-backed source-page synthesis
+## `synth` — synthesize sources + harvest candidates
+
+Primary command (#90). Default runs **both** lists: pending sources → `wiki/sources/`, then entity/concept candidates → `wiki/candidates/`.
 
 ```bash
-python3 -m llmwiki synthesize --check            # probe the backend
-python3 -m llmwiki synthesize --estimate         # cost preview, no API calls
-python3 -m llmwiki synthesize --force            # re-synth everything
-python3 -m llmwiki synthesize --sessions-only    # all pending sessions (skip docs)
-python3 -m llmwiki synthesize --docs-only        # all pending docs (skip sessions)
-python3 -m llmwiki synthesize --candidates-only   # entity/concept candidates, no backend
-python3 -m llmwiki synthesize --candidates-only --min-refs 5
-python3 -m llmwiki synthesize --candidates-only --allow-unclassified  # backend offline
-python3 -m llmwiki synthesize --path raw/sessions/<file>.md
-python3 -m llmwiki synthesize --path raw/docs/<file>.md --path raw/sessions/<other>.md
-python3 -m llmwiki synthesize                    # real run (whole backlog)
+python3 -m llmwiki synth --check            # probe the backend
+python3 -m llmwiki synth --estimate         # cost + candidate backlog preview
+python3 -m llmwiki synth --force            # re-synth everything, then harvest
+python3 -m llmwiki synth --sources-only     # legacy: sources only
+python3 -m llmwiki synth --sessions-only    # all pending sessions (skip docs)
+python3 -m llmwiki synth --docs-only        # all pending docs (skip sessions)
+python3 -m llmwiki synth --candidates-only   # entity/concept candidates only
+python3 -m llmwiki synth --candidates-only --min-refs 5
+python3 -m llmwiki synth --candidates-only --allow-unclassified  # backend offline
+python3 -m llmwiki synth --path raw/sessions/<file>.md
+python3 -m llmwiki synth                    # real run (sources + candidates)
 ```
+
+`llmwiki synthesize` is a **deprecated** alias: it warns and defaults to `--sources-only` so existing scripts do not suddenly write candidate stubs. Prefer `synth`.
 
 ### Flags
 
@@ -413,13 +417,14 @@ python3 -m llmwiki synthesize                    # real run (whole backlog)
 |---|---|
 | `--check` | Probe backend availability + exit (0 if reachable). |
 | `--force` | Ignore state, re-synth every source. |
-| `--estimate` | Print cached-vs-fresh token + dollar estimate (#50). |
+| `--estimate` | Print cached-vs-fresh token + dollar estimate, plus candidate backlog shape (#50 / #90). |
+| `--sources-only` | Synthesize `wiki/sources/` only — skip candidate harvest (legacy `synthesize` behaviour). Mutually exclusive with `--candidates-only` / `--check` / `--estimate`. |
 | `--sessions-only` | Synthesize only `raw/sessions/` — skip `raw/docs/`. Mutually exclusive with `--docs-only`. Combinable with `--path` / `--force` (paths under `raw/docs/` then exit 2). Incompatible with `--check` / `--estimate`. |
 | `--docs-only` | Synthesize only `raw/docs/` — skip `raw/sessions/`. Mutually exclusive with `--sessions-only`. Combinable with `--path` / `--force` (paths under `raw/sessions/` then exit 2). Incompatible with `--check` / `--estimate`. |
 | `--path PATH` | Synthesize only this raw session or doc under `raw/sessions/` or `raw/docs/` (repeatable; relative to the vault root, or absolute under it) (#62). Exit 2 if the path is missing or outside the vault. Still honours `filters.include_subagents` / `exclude_headless` (ineligible files are skipped even when named). Incompatible with `--check` / `--estimate`. |
-| `--candidates-only` | Harvest entity/concept **candidates** from already-synthesized `wiki/sources/` into `wiki/candidates/`, then exit (#90). Reads the source layer only — never `raw/` — so it runs no per-source synthesis; cost is at most **one batched call** to classify the harvested names as entity vs concept, regardless of corpus size. If the backend is unreachable or misconfigured, the harvest still completes and everything files as `entity_type: unknown` for a reviewer to correct. This is the mode for a vault with nothing left to synthesize, which is exactly the vault with the largest candidate backlog. Mutually exclusive with `--check` / `--estimate`. |
-| `--allow-unclassified` | With `--candidates-only`: file targets the backend could not classify as `entity_type: unknown` instead of failing. **Without it, a partial classification fails the run and writes nothing** — a half-classified queue is not a good queue, and refusing after writing would leave exactly the mess the refusal prevents. Use this when you want the harvest despite an offline backend and are willing to re-file during review. |
-| `--min-refs N` | Candidate threshold for `--candidates-only`: a `[[wikilink]]` target becomes a candidate when **N or more distinct source pages** name it (default: `3`). Counted per page, so one document naming a target repeatedly still votes once. The default matches the lint rule that defines a missing entity page as one "mentioned in 3+ source pages". |
+| `--candidates-only` | Harvest entity/concept **candidates** from already-synthesized `wiki/sources/` into `wiki/candidates/`, then exit (#90). Reads the source layer only — never `raw/` — so it runs no per-source synthesis; cost is at most **one batched call** to classify the harvested names as entity vs concept, regardless of corpus size. Mutually exclusive with `--sources-only` / `--check` / `--estimate`. |
+| `--allow-unclassified` | When harvesting candidates: file targets the backend could not classify as `entity_type: unknown` instead of failing. **Without it, a partial classification fails the run and writes nothing**. |
+| `--min-refs N` | Candidate threshold: a `[[wikilink]]` target becomes a candidate when **N or more distinct source pages** name it (default: `3`). |
 | `--vault PATH` | Read/write under the vault root; configures the active `llmwiki-state.json`. |
 
 Backend is picked from `synthesis.backend` in `config.json` / `sessions_config.json` (`dummy` by default, `ollama` for local, `claude` for synchronous `claude -p`). See [`configuration.md`](../configuration.md#synthesis-backend).
@@ -438,6 +443,20 @@ Every `synthesize` call now produces **topical** tags alongside the deterministi
 - **Near-dup rejection** — `prompt-cache` is blocked when `prompt-caching` is already on the page (threshold 0.80 + prefix check).
 
 No extra API round-trip — rides the existing synthesis call, so cost estimates from `--estimate` are unchanged.  If the backend returns no suggested-tags block (dummy backend, malformed output), the page still ships with baseline tags.
+
+---
+
+## `synthesize` — deprecated alias for `synth --sources-only`
+
+Kept so existing scripts do not break. Always prints a deprecation warning and defaults to sources-only (does **not** harvest candidates unless you pass `--candidates-only`). Prefer `llmwiki synth`.
+
+```bash
+python3 -m llmwiki synthesize --check
+python3 -m llmwiki synthesize --estimate
+python3 -m llmwiki synthesize --candidates-only   # still works; prefer synth
+```
+
+Same flags as [`synth`](#synth--synthesize-sources--harvest-candidates).
 
 ---
 

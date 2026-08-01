@@ -511,3 +511,4 @@ def test_synthesize_subcommand_registered():
             break
     assert sub_action is not None
     assert "synthesize" in sub_action.choices
+    assert "synth" in sub_action.choices

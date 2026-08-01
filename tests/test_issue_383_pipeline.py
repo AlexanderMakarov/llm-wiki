@@ -32,7 +32,7 @@ def test_synthesis_status_hint_for_ollama_backend():
     hint = synthesis_status_hint("ollama")
     assert hint is not None
     assert "ollama" in hint
-    assert "llmwiki synthesize" in hint
+    assert "llmwiki synth" in hint
 
 
 def test_cmd_all_with_synth_runs_synthesize_first():
@@ -52,6 +52,8 @@ def test_cmd_all_with_synth_runs_synthesize_first():
                     "total_scanned": 0, "new_files": 0,
                     "synthesized": 0, "skipped": 0, "errors": [],
                 }
+            if name == "harvest":
+                return 0
             return 0
         return _stub
 
@@ -70,13 +72,15 @@ def test_cmd_all_with_synth_runs_synthesize_first():
 
     with patch.object(pipeline, "resolve_backend", return_value=backend):
         with patch.object(pipeline, "synthesize_new_sessions", side_effect=track("synth")):
-            with patch.object(pipeline, "build_site", side_effect=track("build")):
-                with patch.object(pipeline, "_run_lint_step", side_effect=track("lint")):
-                    rc = cli.cmd_all(args)
+            with patch.object(pipeline, "run_harvest", side_effect=track("harvest")):
+                with patch.object(pipeline, "build_site", side_effect=track("build")):
+                    with patch.object(pipeline, "_run_lint_step", side_effect=track("lint")):
+                        rc = cli.cmd_all(args)
 
     assert rc == 0
     assert order[0] == "synth"
-    assert order[1:] == ["build", "lint"]
+    assert order[1] == "harvest"
+    assert order[2:] == ["build", "lint"]
 
 
 def test_cmd_all_with_synth_fail_fast_stops_after_synth_failure():

@@ -10,6 +10,13 @@ How to upgrade between `llmwiki` releases.  Most releases are drop-in (`pip inst
 
 The canonical per-release detail is [CHANGELOG.md](https://github.com/Pratiyush/llm-wiki/blob/master/CHANGELOG.md) — this guide focuses on "what might break".
 
+## Unreleased — `llmwiki synth` rename (#90)
+
+- **`llmwiki synth` is the primary command.** Default: synthesize pending sources, then harvest entity/concept candidates. Prefer it over `synthesize`.
+- **`llmwiki synthesize` is deprecated.** It still runs (scripts keep working) but prints a warning and defaults to sources-only — the old behaviour — so upgrading does not silently write ~80 candidate stubs. Prefer `llmwiki synth` (or `synth --sources-only` / `synth --candidates-only`).
+- **`all --with-synth` / `watch`** call `synth` (sources + candidates). If candidate classification fails on your backend, pass `--allow-unclassified` on a one-shot `synth --candidates-only` run, or use a backend that returns `name: entity|concept` lines.
+- Slash: `/wiki-synth` preferred; `/wiki-synthesize` remains as a deprecated wrapper.
+
 ## Unreleased — pipeline reshape: export/reindex CLI removed, `all` extended
 
 - **`llmwiki export` is gone.** AI-consumable files (`llms.txt`, `llms-full.txt`, `sitemap.xml`, `rss.xml`, `robots.txt`, `graph.jsonld`, `ai-readme.md`, etc.) are written by `build` into `--out` (default `site/`). Replace `llmwiki export all` with `llmwiki build`. The library module `llmwiki.exporters` (`export_all`, …) remains — only the standalone CLI entry point is removed.

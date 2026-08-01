@@ -14,7 +14,8 @@ Subcommands:
     graph             Build the knowledge graph (graph/graph.json + graph.html)
     lint              Run lint rules against the wiki
     candidates        List / promote / merge / discard candidate pages
-    synthesize        Synthesize wiki source pages from raw sessions via LLM
+    synthesize        (deprecated) alias for synth --sources-only
+    synth             Synthesize wiki sources + harvest entity/concept candidates
     all               Run the full pipeline: [sync?] → [synthesize?] → build → graph → lint
     watch             Near-real-time sync→synthesize→build when sessions finish
     install-automation  Interactive OS schedulers / hooks / synth backend setup
@@ -59,11 +60,8 @@ from llmwiki.candidates import (
 )
 from llmwiki.candidates_harvest import (
     DEFAULT_MIN_REFS,
-    classify_names,
-    harvest_targets,
+    run_harvest,
     summarize_backlog,
-    unfiled_names,
-    write_stubs,
 )
 from llmwiki.config_schedule import (
     _load_sessions_config,
@@ -995,89 +993,56 @@ def _run_candidate_harvest(args: argparse.Namespace) -> int:
             print(f"error: {exc}", file=sys.stderr)
             return 2
 
-    sources_dir = wiki_dir / "sources"
-    if not sources_dir.is_dir():
+    try:
+        backend = resolve_backend(_load_sessions_config())
+    except Exception as exc:  # noqa: BLE001 - harvest still proceeds
+        print(f"  ! backend unavailable ({exc})", file=sys.stderr)
+        backend = None
+
+    return run_harvest(
+        wiki_dir,
+        min_refs=getattr(args, "min_refs", DEFAULT_MIN_REFS),
+        allow_unclassified=bool(getattr(args, "allow_unclassified", False)),
+        backend=backend,
+        require_sources=True,
+    )
+
+
+def cmd_synthesize(args: argparse.Namespace) -> int:
+    """Synthesize wiki source pages and/or harvest candidates (#90 · #35).
+
+    Primary CLI name is ``llmwiki synth``. ``synthesize`` remains as a
+    deprecated alias that defaults to sources-only (legacy behaviour) and
+    always prints a removal warning.
+    """
+    _apply_default_vault(args)
+
+    deprecated = bool(getattr(args, "deprecated_synthesize", False))
+    if deprecated:
         print(
-            f"error: no synthesized sources to harvest at {sources_dir}",
+            "warning: `llmwiki synthesize` is deprecated — it does not complete "
+            "ingestion (no entity/concept candidates). Use `llmwiki synth` "
+            "(default: sources + candidates). `synthesize` will be removed in a "
+            "future release; today it behaves like `synth --sources-only` unless "
+            "you pass --candidates-only.",
+            file=sys.stderr,
+        )
+
+    candidates_only = bool(getattr(args, "candidates_only", False))
+    sources_only = bool(getattr(args, "sources_only", False))
+    if candidates_only and sources_only:
+        print(
+            "error: --sources-only and --candidates-only are mutually exclusive",
             file=sys.stderr,
         )
         return 2
 
-    min_refs = getattr(args, "min_refs", DEFAULT_MIN_REFS)
-    targets = harvest_targets(wiki_dir, min_refs=min_refs)
+    # Legacy `synthesize` with no restrict flag: keep sources-only so existing
+    # scripts do not suddenly write dozens of candidate stubs.
+    if deprecated and not candidates_only and not sources_only:
+        sources_only = True
 
-    # Classification is the one part a grep cannot do, and the only part that
-    # touches a backend. Best-effort: a missing or misconfigured backend costs
-    # precision (targets file as entity_type: unknown for a reviewer to
-    # correct), never the harvest itself.
-    try:
-        backend = resolve_backend(_load_sessions_config())
-    except Exception as exc:  # noqa: BLE001 - see above
-        print(f"  ! backend unavailable ({exc})", file=sys.stderr)
-        backend = None
-
-    # Only names without a stub are worth asking about: an existing stub's
-    # folder is the reviewer's decision, so re-runs neither pay to re-decide it
-    # nor fail over a question already answered.
-    pending = unfiled_names(wiki_dir, targets)
-    kinds = classify_names(pending, backend)
-    missing = [name for name in pending if name not in kinds]
-
-    # Refuse a half-classified queue by default, and refuse it *before*
-    # writing — failing after the fact would leave exactly the mess the
-    # refusal exists to prevent.
-    if missing and not getattr(args, "allow_unclassified", False):
-        backend_name = getattr(backend, "name", "none")
-        print(
-            f"error: {len(missing)} of {len(pending)} new target(s) could not "
-            f"be classified as entity or concept (backend: {backend_name}). "
-            "Nothing was written. Fix the backend and re-run, or pass "
-            "--allow-unclassified to file them as entity_type: unknown for "
-            "review.",
-            file=sys.stderr,
-        )
-        print(f"  unclassified: {', '.join(missing[:10])}"
-              f"{' …' if len(missing) > 10 else ''}", file=sys.stderr)
-        return 1
-
-    written = write_stubs(wiki_dir, targets, classify=lambda _names: kinds)
-    print(
-        f"Candidates: {len(written)} stub(s) at --min-refs {min_refs} "
-        f"→ {wiki_dir / 'candidates'}"
-    )
-    # Counted from the stubs on disk, not from what the backend answered, so a
-    # re-run (which deliberately re-asks nothing) still reports the real state
-    # of the queue rather than looking like a clean run.
-    unknown = sum(
-        1
-        for p in written
-        if "entity_type: unknown" in p.read_text(encoding="utf-8", errors="replace")
-    )
-    if unknown:
-        print(
-            f"  ! {unknown} of {len(written)} candidate(s) are filed as "
-            "entity_type: unknown — re-file them during review",
-            file=sys.stderr,
-        )
-    if written:
-        print("  review with: llmwiki candidates list")
-    return 0
-
-
-def cmd_synthesize(args: argparse.Namespace) -> int:
-    """Synthesize wiki source pages from raw sessions (v1.1.0 · #35).
-
-    Uses the backend selected via ``synthesis.backend`` in
-    ``sessions_config.json`` (dummy | ollama). ``--check`` prints backend
-    availability without running synthesis — useful for diagnosing Ollama
-    connectivity before a long sync. ``--estimate`` prints a cached-vs-fresh
-    token + dollar breakdown before spending money (#50). ``--path`` limits
-    the run to one or more raw session/doc files (#62). ``--sessions-only`` /
-    ``--docs-only`` restrict the corpus without naming individual files.
-    """
-    _apply_default_vault(args)
-
-    if getattr(args, "candidates_only", False):
+    if candidates_only:
         return _run_candidate_harvest(args)
 
     config: dict = _load_sessions_config()
@@ -1179,7 +1144,25 @@ def cmd_synthesize(args: argparse.Namespace) -> int:
         for err in summary["errors"]:
             print(f"  ! {err}", file=sys.stderr)
         return 1
-    return 0
+
+    # Default `synth`: harvest candidates after sources. `--sources-only` and
+    # the deprecated `synthesize` alias (without --candidates-only) skip this.
+    if sources_only:
+        return 0
+    harvest_wiki = (
+        wiki_sources_dir.parent if wiki_sources_dir is not None else (REPO_ROOT / "wiki")
+    )
+    return run_harvest(
+        harvest_wiki,
+        min_refs=getattr(args, "min_refs", DEFAULT_MIN_REFS),
+        allow_unclassified=bool(getattr(args, "allow_unclassified", False)),
+        backend=backend,
+        require_sources=False,
+    )
+
+
+# Alias used by docs / tests that prefer the new name.
+cmd_synth = cmd_synthesize
 
 
 def cmd_add(args: argparse.Namespace) -> int:
@@ -2018,85 +2001,86 @@ def build_parser() -> argparse.ArgumentParser:
     _add_vault_arg(cand, role="candidates")
     cand.set_defaults(func=cmd_candidates)
 
-    # synthesize (v1.1, #35) — LLM-backed wiki page synthesis
+    # synth (#90) — primary; synthesize kept as deprecated alias
+    def _add_synth_arguments(parser: argparse.ArgumentParser) -> None:
+        """Flags shared by ``synth`` and the deprecated ``synthesize`` alias."""
+        syn_mode = parser.add_mutually_exclusive_group()
+        syn_mode.add_argument(
+            "--check", action="store_true",
+            help="Probe backend availability and exit (exit 0 if reachable)",
+        )
+        syn_mode.add_argument(
+            "--estimate", action="store_true",
+            help="Print cached-vs-fresh token + dollar estimate without calling a backend (#50)",
+        )
+        syn_mode.add_argument(
+            "--candidates-only", action="store_true",
+            help=(
+                "Harvest entity/concept candidates from wiki/sources/ into "
+                "wiki/candidates/ without synthesizing sources"
+            ),
+        )
+        syn_mode.add_argument(
+            "--sources-only", action="store_true",
+            help=(
+                "Synthesize wiki/sources/ only — skip candidate harvest "
+                "(legacy synthesize behaviour)"
+            ),
+        )
+        parser.add_argument(
+            "--allow-unclassified", action="store_true",
+            help=(
+                "When harvesting candidates: file targets the backend could not "
+                "classify as entity_type: unknown instead of failing the run"
+            ),
+        )
+        parser.add_argument(
+            "--min-refs", type=int, default=DEFAULT_MIN_REFS, metavar="N",
+            help=(
+                "Candidate threshold: a wikilink target becomes a candidate when "
+                f"N or more distinct source pages name it (default: {DEFAULT_MIN_REFS})"
+            ),
+        )
+        parser.add_argument(
+            "--force", action="store_true",
+            help="Ignore state file, re-synthesize all sessions",
+        )
+        parser.add_argument(
+            "--path",
+            action="append",
+            dest="paths",
+            metavar="PATH",
+            help=(
+                "Synthesize only this raw session/doc under raw/sessions/ or "
+                "raw/docs/ (repeatable; relative to vault root) (#62)"
+            ),
+        )
+        syn_corpus = parser.add_mutually_exclusive_group()
+        syn_corpus.add_argument(
+            "--sessions-only",
+            action="store_true",
+            help="Synthesize only raw/sessions/ (skip raw/docs/)",
+        )
+        syn_corpus.add_argument(
+            "--docs-only",
+            action="store_true",
+            help="Synthesize only raw/docs/ (skip raw/sessions/)",
+        )
+        _add_vault_arg(parser, role="synthesize")
+
     syn = sub.add_parser(
+        "synth",
+        help="Synthesize wiki sources and harvest entity/concept candidates (#90)",
+    )
+    _add_synth_arguments(syn)
+    syn.set_defaults(func=cmd_synthesize, deprecated_synthesize=False)
+
+    syn_legacy = sub.add_parser(
         "synthesize",
-        help="Synthesize wiki source pages from raw sessions via LLM backend",
+        help="(deprecated) alias for synth --sources-only — use llmwiki synth",
     )
-    # #arch-h7 (#610): mutually-exclusive synth mode flags
-    # used to be independently set-able. argparse silently honoured the
-    # first one in `cmd_synthesize`'s if/elif chain, so e.g.
-    # `synthesize --check --estimate` ran --check and silently dropped
-    # --estimate. Use a mutually-exclusive group so the parser rejects
-    # the combination loudly with a useful error.
-    syn_mode = syn.add_mutually_exclusive_group()
-    syn_mode.add_argument(
-        "--check", action="store_true",
-        help="Probe backend availability and exit (exit 0 if reachable)",
-    )
-    syn_mode.add_argument(
-        "--estimate", action="store_true",
-        help="Print cached-vs-fresh token + dollar estimate without calling a backend (#50)",
-    )
-    # #90: generate entity/concept candidates from already-synthesized
-    # sources. Mode-exclusive with --check/--estimate because it neither
-    # probes nor prices a backend — it does not use one.
-    syn_mode.add_argument(
-        "--candidates-only", action="store_true",
-        help=(
-            "Harvest entity/concept candidates from wiki/sources/ into "
-            "wiki/candidates/ without synthesizing (no backend needed)"
-        ),
-    )
-    syn.add_argument(
-        "--allow-unclassified", action="store_true",
-        help=(
-            "With --candidates-only: file targets the backend could not "
-            "classify as entity_type: unknown instead of failing the run"
-        ),
-    )
-    syn.add_argument(
-        "--min-refs", type=int, default=DEFAULT_MIN_REFS, metavar="N",
-        help=(
-            "Candidate threshold: a wikilink target becomes a candidate when "
-            f"N or more distinct source pages name it (default: {DEFAULT_MIN_REFS})"
-        ),
-    )
-    # --force is orthogonal (modifies the default re-synthesize-all flow)
-    # and stays outside the exclusion group so callers can pass
-    # `synthesize --force` for a forced full re-run.
-    syn.add_argument(
-        "--force", action="store_true",
-        help="Ignore state file, re-synthesize all sessions",
-    )
-    # #62: drain one backlog item without synthesizing the whole vault.
-    # Repeatable; resolved relative to the vault root (or absolute under it).
-    syn.add_argument(
-        "--path",
-        action="append",
-        dest="paths",
-        metavar="PATH",
-        help=(
-            "Synthesize only this raw session/doc under raw/sessions/ or "
-            "raw/docs/ (repeatable; relative to vault root) (#62)"
-        ),
-    )
-    # Corpus scope: default is both sessions and docs. Mutually exclusive
-    # with each other; combinable with --path / --force (not --check /
-    # --estimate).
-    syn_corpus = syn.add_mutually_exclusive_group()
-    syn_corpus.add_argument(
-        "--sessions-only",
-        action="store_true",
-        help="Synthesize only raw/sessions/ (skip raw/docs/)",
-    )
-    syn_corpus.add_argument(
-        "--docs-only",
-        action="store_true",
-        help="Synthesize only raw/docs/ (skip raw/sessions/)",
-    )
-    _add_vault_arg(syn, role="synthesize")
-    syn.set_defaults(func=cmd_synthesize)
+    _add_synth_arguments(syn_legacy)
+    syn_legacy.set_defaults(func=cmd_synthesize, deprecated_synthesize=True)
 
     # add — ingest a document into the wiki (#16)
     add_p = sub.add_parser(
