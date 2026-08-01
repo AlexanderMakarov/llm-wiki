@@ -57,7 +57,7 @@ State is **one active file per process**, configured at CLI entry from `--vault`
 }
 ```
 
-With `vault.default_path` set, **`sync` / `build` / `synthesize` / `queue` / `lint`** target the vault automatically — no `--vault` flag needed. Personal overrides merge over `examples/sessions_config.json` without editing tracked files.
+With `vault.default_path` set, **`sync` / `build` / `synth` / `queue` / `lint`** target the vault automatically — no `--vault` flag needed. Personal overrides merge over `examples/sessions_config.json` without editing tracked files.
 
 ### 2. MCP and agents read the vault via `config.json`
 
@@ -128,7 +128,7 @@ The built-in graph is **topic-centric**, not a page mesh:
 Pipeline:
 
 ```bash
-llmwiki synthesize              # fills wiki/sources/ with wikilinks
+llmwiki synth                   # sources + candidate harvest
 llmwiki consolidate-topics      # one-time LLM pass → .llmwiki-topics.json (merge duplicates)
 llmwiki build                   # writes site/graph.html + site/topics/
 ```
@@ -189,7 +189,7 @@ Enable a contrib adapter permanently in `config.json`:
 ```bash
 llmwiki init                    # scaffold raw/ wiki/ site/ (repo or vault)
 llmwiki sync                    # convert new sessions → vault raw/sessions/
-llmwiki synthesize              # LLM summaries → vault wiki/sources/
+llmwiki synth                   # LLM summaries → wiki/sources/ + harvest candidates
 llmwiki consolidate-topics      # optional: dedupe topic vocabulary
 llmwiki build                   # vault raw/ + wiki/ → vault site/
 llmwiki serve --dir /path/to/your-vault/site
@@ -203,11 +203,11 @@ llmwiki all --with-synth --graph-engine builtin
 
 Useful flags:
 
-- `--vault PATH` — override `config.json` default for one run (`sync` / `build` / `synthesize` / `add` / `queue` / `all`)
+- `--vault PATH` — override `config.json` default for one run (`sync` / `build` / `synth` / `add` / `queue` / `all`)
 - `--adapter <name>` — limit sync to one source
 - `--force` — re-convert / re-synthesize even if unchanged
 - `--force-resync` (`sync`) — override the newer-schema / corrupt-state guard (#29) and reconvert from scratch; implies `--force`
-- `llmwiki serve --dir PATH` — serve a built `site/` (no `--vault` on serve)
+- `llmwiki serve --dir PATH` — serve a built `site/` (no `--vault` on serve; default is `./site` under the cwd)
 - `llmwiki lint` — broken wikilinks, orphans, stale pages
 
 ---
@@ -223,9 +223,10 @@ Useful flags:
 ┌────────────────────────────┐
 │  vault/raw/sessions/       │  immutable markdown (layer 1)
 └─────────────┬──────────────┘
-              ▼  llmwiki synthesize + agent ingest
+              ▼  llmwiki synth  (sources + harvest; then review candidates)
 ┌────────────────────────────┐
 │  vault/wiki/sources/       │  summaries with [[wikilinks]] (layer 2)
+│  vault/wiki/candidates/    │  pending entity/concept stubs (review gate)
 │  vault/wiki/index.md       │
 └─────────────┬──────────────┘
               ▼  llmwiki build
@@ -237,6 +238,8 @@ Useful flags:
 │  └── llms.txt, …           │
 └────────────────────────────┘
 ```
+
+Canonical loop: `sync / add → synth → review candidates → build`. `synth` does **not** rebuild the site — run `llmwiki build` (or `all --with-synth`) when you want Home/Analytics counts refreshed. Serve the vault site with `llmwiki serve --dir <vault>/site`.
 
 Agent workflows (`/wiki-sync`, `/wiki-ingest`, `/wiki-query`) are defined in [CLAUDE.md](CLAUDE.md) and [AGENTS.md](AGENTS.md).
 
@@ -250,13 +253,14 @@ llmwiki sync [--adapter NAME] [--vault PATH] [--force] [--force-resync] [--statu
 llmwiki add <url|file|folder>... [--vault PATH] [--no-synthesize] [--no-build]
 llmwiki build [--vault PATH] [--out PATH]      # also writes llms.txt, sitemap.xml, etc. (AI exports)
 llmwiki serve [--dir PATH] [--port N]          # serve a built site/; no --vault
-llmwiki synthesize [--vault PATH] [--check] [--estimate] [--force]
+llmwiki synth [--vault PATH] [--check] [--estimate] [--force] [--sources-only] [--candidates-only]
+llmwiki synthesize […]                        # deprecated alias for synth --sources-only
 llmwiki consolidate-topics [--complete reply.json] [--vault PATH]
 llmwiki queue {status|enqueue|run} [--vault PATH] [--state-file PATH]
 llmwiki migrate-state [--state-file PATH]
 llmwiki migrate-raw-redaction --vault PATH [--dry-run]  # #56: USER-mask encoded paths in raw/
 llmwiki graph [--engine builtin|graphify]
-llmwiki lint [--wiki-dir PATH]                 # #71: wiki/index.md is reconciled automatically by sync/synthesize
+llmwiki lint [--wiki-dir PATH]                 # #71: wiki/index.md is reconciled automatically by sync/synth
 llmwiki all [--with-sync] [--with-synth] [--vault PATH]
 llmwiki watch [--adapter NAME...] [--vault PATH]   # near-real-time sync→build when sessions finish
 llmwiki install-automation [--yes] [--profile A|B|C]  # OS scheduler + optional agent hooks

@@ -29,7 +29,7 @@ files + `synthesize --list-pending` / `--complete`) was **removed in v1.4.0**.
 }
 ```
 
-Then run `llmwiki synthesize` (or `llmwiki add` / `llmwiki all --with-synth`).
+Then run `llmwiki synth` (or `llmwiki add` / `llmwiki all --with-synth`).
 One configured backend serves every command.
 
 ## Setup
@@ -51,7 +51,7 @@ Claude: (runs python3 -m llmwiki sync, ingests new pages)
 You: /wiki-query when did I last change the convert pipeline?
 Claude: (reads wiki/index.md + the relevant source pages, synthesizes)
 
-You: llmwiki synthesize   # or /wiki-all --with-synth
+You: llmwiki synth   # or /wiki-all --with-synth
 ```
 
 ## Read next

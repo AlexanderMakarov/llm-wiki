@@ -121,7 +121,7 @@ that triggers auto-ingest of new pages into `wiki/`.
 
 **Wraps:** the Ingest Workflow in `CLAUDE.md` (no single CLI — it's a slash-command-driven workflow that the model orchestrates).
 
-**When to use:** you dropped a source file manually (a PDF, a Jira ticket export, a meeting transcript), or Home / Analytics show a **To review** backlog and you want agent-led discussion over candidates. For bulk stub generation from already-synthesized sources, prefer `llmwiki synthesize --candidates-only`.
+**When to use:** you dropped a source file manually (a PDF, a Jira ticket export, a meeting transcript), or Home / Analytics show a **To review** backlog and you want agent-led discussion over candidates. For bulk stub generation from already-synthesized sources, prefer `llmwiki synth --candidates-only`.
 
 **Examples:**
 
@@ -237,7 +237,7 @@ want to re-run sync.
 
 **Wraps:** `python3 -m llmwiki candidates list` + follow-ups.
 
-**When to use:** Home **Candidates** / Analytics **Candidates to review** is non-zero, `/wiki-lint` reported `stale_candidates`, or you just ran `llmwiki synthesize --candidates-only`.
+**When to use:** Home **Candidates** / Analytics **Candidates to review** is non-zero, `/wiki-lint` reported `stale_candidates`, or you just ran `llmwiki synth --candidates-only`.
 
 **Example:**
 

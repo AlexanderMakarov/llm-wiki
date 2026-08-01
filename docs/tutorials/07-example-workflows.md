@@ -118,7 +118,7 @@ whether to enable Ollama or a cloud synthesis backend.
      llmwiki sync
 
 2. Preview what an Anthropic-backed re-synthesis would cost:
-     llmwiki synthesize --estimate
+     llmwiki synth --estimate
 
    Output (numbers vary):
      627 new sessions, prefix 3,944 tok
@@ -133,7 +133,7 @@ whether to enable Ollama or a cloud synthesis backend.
 3. If the number is acceptable, configure a real backend:
      # For local / free: install Ollama + set synthesis.backend = "ollama"
      # For Anthropic: set synthesis.backend = "anthropic" (v1.2+)
-     llmwiki synthesize
+     llmwiki synth
 
 4. If the number is too high, stay on the DummySynthesizer. Your wiki
    still works end-to-end — pages are just seeded with canned prose

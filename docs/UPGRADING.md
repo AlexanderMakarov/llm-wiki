@@ -28,7 +28,7 @@ The canonical per-release detail is [CHANGELOG.md](https://github.com/Pratiyush/
 ## Unreleased — pipeline reshape: export/reindex CLI removed, `all` extended
 
 - **`llmwiki export` is gone.** AI-consumable files (`llms.txt`, `llms-full.txt`, `sitemap.xml`, `rss.xml`, `robots.txt`, `graph.jsonld`, `ai-readme.md`, etc.) are written by `build` into `--out` (default `site/`). Replace `llmwiki export all` with `llmwiki build`. The library module `llmwiki.exporters` (`export_all`, …) remains — only the standalone CLI entry point is removed.
-- **`llmwiki reindex` is gone.** Catalog reconciliation (`wiki/index.md` ↔ pages on disk) runs automatically inside `sync` and `synthesize`. After hand-editing `wiki/`, run `llmwiki sync --no-auto-build` or `llmwiki synthesize` to reconcile, then `llmwiki lint --rules index_sync` to verify. The library module `llmwiki.reindex` (`reindex_wiki`, `plan_reindex`) remains for internal callers.
+- **`llmwiki reindex` is gone.** Catalog reconciliation (`wiki/index.md` ↔ pages on disk) runs automatically inside `sync` and `synth`. After hand-editing `wiki/`, run `llmwiki sync --no-auto-build` or `llmwiki synth --sources-only` to reconcile, then `llmwiki lint --rules index_sync` to verify. The library module `llmwiki.reindex` (`reindex_wiki`, `plan_reindex`) remains for internal callers.
 - **`sync` always reconciles `wiki/index.md`.** Reconciliation used to run only inside the auto-build branch; it now runs after every successful `sync` regardless of `--no-auto-build`, so a sync-only workflow can't drift the catalog between builds.
 - **`llmwiki all` pipeline order** — `[sync?]` → `[synthesize?]` → `build` → `[graph?]` → `lint`. Optional `--with-sync` converts new agent sessions (auto-build off — `all` builds next), refreshes the synth-pending backlog, and reconciles the catalog. Optional `--with-synth` fills `wiki/sources/` from `raw/`. `build` already calls `export_all`, so there is no separate export step. `graph` is skipped with `--skip-graph`.
 
@@ -226,10 +226,10 @@ The migration resolves each legacy `.llmwiki-pending-prompts/<uuid>.md` against 
 `agent`, `agent-delegate`, and `agent_delegate` were **removed** in v1.4.0. `resolve_backend()` reads them as a typo and silently falls back to `dummy`, which writes stub pages (`Auto-synthesized from session`) into `wiki/sources/`. `migrate-state` prints a `WARNING:` when your `config.json` still names one — set `synthesis.backend` to `claude`, `ollama`, or `dummy`, then re-synthesize:
 
 ```bash
-llmwiki synthesize --vault /path/to/vault
+llmwiki synth --vault /path/to/vault
 ```
 
-Stub pages left behind by the dummy backend count as **unsynthesized** backlog (#24): `llmwiki queue status` reports them under `unsynth_total`, `llmwiki lint` flags them with the `stub_source_pages` rule, and `llmwiki synthesize` refills them with a real backend.
+Stub pages left behind by the dummy backend count as **unsynthesized** backlog (#24): `llmwiki queue status` reports them under `unsynth_total`, `llmwiki lint` flags them with the `stub_source_pages` rule, and `llmwiki synth` refills them with a real backend.
 
 ## v1.3.83+ — unified queue preview (superseded by v1.4.0)
 

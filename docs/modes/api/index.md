@@ -19,7 +19,7 @@ production backends. v1.4.0 supports:
 | `claude` | `synthesis.backend: claude` | [Agent / Claude CLI](../agent/) |
 
 Cost estimates still use the rate card in `model_pricing.csv` /
-`llmwiki synthesize --estimate`. Prompt-caching helpers in
+`llmwiki synth --estimate`. Prompt-caching helpers in
 `llmwiki/cache.py` remain for estimate math; there is no
 `sync --batch` or `.llmwiki-batch-state.json` path.
 
@@ -35,9 +35,9 @@ Cost estimates still use the rate card in `model_pricing.csv` /
 ```
 
 ```bash
-llmwiki synthesize --check
-llmwiki synthesize --estimate
-llmwiki synthesize
+llmwiki synth --check
+llmwiki synth --estimate
+llmwiki synth
 ```
 
 ## Read next

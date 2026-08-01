@@ -50,7 +50,7 @@ The cache header lives on the *last* block you want cached, so
 ## Estimate cost before you spend
 
 ```
-$ llmwiki synthesize --estimate
+$ llmwiki synth --estimate
 627 new sessions, prefix 3,944 tok
 Model: claude-sonnet-4-6 (first write)
   Prefix:   3,944 tok  $0.0148
@@ -108,7 +108,7 @@ save_batch_state(repo, state)
 
 The batch-state helpers and `.llmwiki-batch-state.json` path were
 **removed in v1.4.0**. Cost estimates still use `model_pricing.csv` via
-`llmwiki synthesize --estimate`; there is no `sync --batch` command.
+`llmwiki synth --estimate`; there is no `sync --batch` command.
 
 ## Rate card
 

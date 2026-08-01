@@ -28,7 +28,7 @@ Optional: `claude_path` (binary path), `timeout` (seconds, default 180).
 
 ## How it works
 
-1. `llmwiki synthesize` (or `add` / `all --with-synth`) resolves the backend.
+1. `llmwiki synth` (or `add` / `all --with-synth`) resolves the backend.
 2. For each new/changed raw file, the pipeline renders the source-page prompt.
 3. `ClaudeCLISynthesizer` shells out to `claude -p -` with the prompt on stdin.
 4. The wiki page is written immediately under `wiki/sources/`.
@@ -36,10 +36,10 @@ Optional: `claude_path` (binary path), `timeout` (seconds, default 180).
 ## CLI
 
 ```bash
-python3 -m llmwiki synthesize --check      # is claude available?
-python3 -m llmwiki synthesize --estimate   # cost preview
-python3 -m llmwiki synthesize              # run
-python3 -m llmwiki synthesize --force      # re-synth everything
+python3 -m llmwiki synth --check      # is claude available?
+python3 -m llmwiki synth --estimate   # cost preview
+python3 -m llmwiki synth              # run (sources + candidates)
+python3 -m llmwiki synth --force      # re-synth everything
 ```
 
 ## Removed (v1.4.0)

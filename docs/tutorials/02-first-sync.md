@@ -81,7 +81,7 @@ Open that URL. You'll see:
 ## Step 4 — (Optional) Cost preview before running synthesis
 
 ```bash
-python3 -m llmwiki synthesize --estimate
+python3 -m llmwiki synth --estimate
 ```
 
 Output (numbers vary):
@@ -123,7 +123,7 @@ code block is syntax-highlighted, every `[[wikilink]]` resolves.
 
 **Site loads but is empty** — you may have only run `sync --status`, or
 synthesis hasn't filled `wiki/sources/` yet. Run `llmwiki sync` then
-`llmwiki synthesize` (or `llmwiki all --with-synth`).
+`llmwiki synth` (or `llmwiki all --with-synth`).
 
 **Port 8765 already in use** — `python3 -m llmwiki serve --port 9000` picks a different port.
 
