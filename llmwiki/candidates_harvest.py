@@ -20,6 +20,7 @@ from pathlib import Path
 
 from llmwiki.lint import WIKILINK_RE
 from llmwiki.lint.rules.link_integrity import _norm_slug
+from llmwiki.reindex import reindex_wiki
 
 #: Default significance threshold. Matches the Lint Workflow's definition of a
 #: missing entity page ("mentioned in 3+ source pages") so the producer and the
@@ -402,5 +403,10 @@ def run_harvest(
             file=sys.stderr,
         )
     if written:
+        # List new stubs under ## Candidates (and drop stale bullets) (#101).
+        try:
+            reindex_wiki(wiki_dir)
+        except (OSError, ValueError, RuntimeError):
+            pass
         print("  review with: llmwiki candidates list")
     return 0

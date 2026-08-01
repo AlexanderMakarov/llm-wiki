@@ -8,6 +8,10 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Candidates consume actions reconcile `wiki/index.md` (#101)** — `promote` / `merge` / `discard` (and harvest when it writes stubs) call catalog reconciliation so dead `## Candidates` bullets are dropped and trusted pages are listed. An empty Candidates section is removed rather than left unmanaged. Idle sync/synth are not required to clean the index after review.
+
 ### Added
 
 - **`llmwiki synth` (#90)** — primary command for source synthesis **and** candidate harvest. Default runs both: fill `wiki/sources/`, then write/update stubs under `wiki/candidates/`. `--sources-only` keeps the legacy sources-only path; `--candidates-only` is unchanged. `llmwiki synthesize` remains as a deprecated alias that warns and defaults to `--sources-only` so existing scripts do not suddenly write dozens of stubs. Classification retries omitted names once before fail-closed (exit ≠ 0, write nothing) unless `--allow-unclassified`. `all --with-synth`, `watch`, and status hints call `synth`. `synth --estimate` previews both the sources backlog and the harvestable-candidate distribution. Docs / README / `CLAUDE.md` / `AGENTS.md` teach the canonical loop `sync → synth → review → build` (`synth` does not rebuild the site).

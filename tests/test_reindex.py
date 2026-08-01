@@ -13,6 +13,7 @@ import argparse
 from pathlib import Path
 from unittest.mock import patch
 
+from llmwiki.candidates import promote
 from llmwiki.cli import cmd_sync
 from llmwiki.lint import load_pages, run_all
 from llmwiki.reindex import plan_reindex, reindex_wiki, seed_index_text
@@ -318,6 +319,61 @@ def test_missing_index_is_seeded_from_disk(tmp_path: Path) -> None:
     text = _index(wiki)
     assert "# Wiki Index" in text
     assert "## Entities (1)" in text
+
+
+def test_empty_candidates_section_pruned_when_folder_empty(tmp_path: Path) -> None:
+    """#101: leftover ## Candidates with dead bullets is dropped when empty."""
+    wiki = _seed_wiki(
+        tmp_path,
+        index=(
+            "# Wiki Index\n\n"
+            "## Sources (0)\n\n"
+            "## Entities (0)\n\n"
+            "## Candidates (2)\n"
+            "- [Gone](candidates/entities/Gone.md)\n"
+            "- [AlsoGone](candidates/concepts/AlsoGone.md)\n\n"
+            "## Concepts (0)\n"
+        ),
+    )
+
+    plan = plan_reindex(wiki)
+    assert plan is not None
+    assert plan.changed
+    assert any("Gone" in href or "AlsoGone" in href for href in plan.removed)
+    reindex_wiki(wiki)
+    text = _index(wiki)
+    assert "## Candidates" not in text
+    assert "candidates/entities/Gone.md" not in text
+    assert run_all(load_pages(wiki), selected=["index_sync"]) == []
+
+
+def test_promote_reconciles_stale_candidates_section(tmp_path: Path) -> None:
+    """#101: promote of the last stub clears dead Candidates catalog bullets."""
+    wiki = _seed_wiki(
+        tmp_path,
+        index=(
+            "# Wiki Index\n\n"
+            "## Sources (0)\n\n"
+            "## Entities (0)\n\n"
+            "## Candidates (1)\n"
+            "- [KeepMe](candidates/entities/KeepMe.md)\n\n"
+            "## Concepts (0)\n"
+        ),
+    )
+    _page(
+        wiki / "candidates" / "entities" / "KeepMe.md",
+        "KeepMe",
+        type="entity",
+        status="candidate",
+    )
+
+    promote("KeepMe", wiki)
+
+    text = _index(wiki)
+    assert "## Candidates" not in text
+    assert "candidates/entities/KeepMe.md" not in text
+    assert "entities/KeepMe.md" in text
+    assert run_all(load_pages(wiki), selected=["index_sync"]) == []
 
 
 def test_sync_leaves_no_index_error_for_a_new_project(tmp_path: Path) -> None:
