@@ -102,36 +102,66 @@ Do not add commentary. Names to classify:
 """
 
 
-def classify_names(names: list[str], backend) -> dict[str, str]:
+#: Names per classification call. One prompt listing every harvested name
+#: would, at a low ``--min-refs`` on a large vault, ask for hundreds of output
+#: lines — and a reply truncated at the limit loses the tail silently. Chunking
+#: bounds each call while keeping total cost proportional to the candidate
+#: count rather than the corpus.
+DEFAULT_CLASSIFY_BATCH = 100
+
+
+def classify_names(
+    names: list[str],
+    backend,
+    *,
+    batch_size: int = DEFAULT_CLASSIFY_BATCH,
+) -> dict[str, str]:
     """Ask ``backend`` to sort ``names`` into entities and concepts.
 
-    Best-effort by contract. An unreachable backend, a refusal, or unparseable
-    output all yield ``{}`` — callers fall back to an ``unknown`` entity stub.
-    Harvesting must never be blocked by classification, because the vault that
-    most needs harvesting is the one whose backend has nothing left to do.
+    Best-effort by contract: an unreachable backend, a refusal, or unparseable
+    output yield no entry for the affected names, and callers fall back to an
+    ``unknown`` entity stub. Harvesting must never be blocked by
+    classification, because the vault that most needs harvesting is the one
+    whose backend has nothing left to do.
+
+    Callers are expected to compare the returned size against the number of
+    names they passed and tell the user what went unclassified — degrading
+    quietly is the failure mode this must not have.
     """
     if backend is None or not names:
         return {}
     try:
         if not backend.is_available():
             return {}
-        reply = backend.synthesize_source_page(
-            "\n".join(names),
-            {"slug": "candidate-classification"},
-            _CLASSIFY_PROMPT,
-        )
-    except Exception:  # noqa: BLE001 - a classifier failure must not abort
+    except Exception:  # noqa: BLE001 - treat a broken probe as unavailable
         return {}
 
-    wanted = {name.lower(): name for name in names}
+    kinds: dict[str, str] = {}
+    for start in range(0, len(names), max(1, batch_size)):
+        chunk = names[start : start + max(1, batch_size)]
+        try:
+            reply = backend.synthesize_source_page(
+                "\n".join(chunk),
+                {"slug": "candidate-classification"},
+                _CLASSIFY_PROMPT,
+            )
+        except Exception:  # noqa: BLE001 - one bad chunk must not lose the rest
+            continue
+        kinds.update(_parse_classification(reply, chunk))
+    return kinds
+
+
+def _parse_classification(reply: str | None, asked: list[str]) -> dict[str, str]:
+    """Extract ``name: kind`` lines, keeping only names we asked about."""
+    wanted = {name.lower(): name for name in asked}
     kinds: dict[str, str] = {}
     for line in (reply or "").splitlines():
         raw_name, sep, raw_kind = line.rpartition(":")
         if not sep:
             continue
         kind = raw_kind.strip().lower()
-        # Only names we asked about: a backend that invents targets must not
-        # be able to smuggle them past the threshold check.
+        # A backend that invents targets must not be able to smuggle them
+        # past the threshold check.
         original = wanted.get(raw_name.strip().lower())
         if original is not None and kind in _KIND_DIRS:
             kinds[original] = kind

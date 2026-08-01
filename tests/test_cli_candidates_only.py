@@ -161,3 +161,40 @@ def test_candidates_only_survives_backend_resolution_failure(
 
     assert cmd_synthesize(_args(candidates_only=True, vault=vault)) == 0
     assert (vault / "wiki" / "candidates" / "entities" / "Recurring.md").is_file()
+
+
+def test_unclassified_targets_are_reported_not_silent(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    """An operator must be able to tell model-filed from fallback-filed."""
+    vault = _mk_vault(tmp_path, {s: ["Recurring"] for s in ("a", "b", "c")})
+    monkeypatch.setattr(
+        "llmwiki.cli.resolve_backend", lambda cfg: _UnavailableBackend()
+    )
+
+    cmd_synthesize(_args(candidates_only=True, vault=vault))
+
+    err = capsys.readouterr().err
+    assert "1 of 1 target(s) not classified" in err
+    assert "offline" in err
+
+
+def test_fully_classified_run_reports_no_warning(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    vault = _mk_vault(tmp_path, {s: ["Compounding"] for s in ("a", "b", "c")})
+
+    class _Backend:
+        name = "stub"
+
+        def is_available(self):
+            return True
+
+        def synthesize_source_page(self, raw_body, meta, prompt_template):
+            return "Compounding: concept\n"
+
+    monkeypatch.setattr("llmwiki.cli.resolve_backend", lambda cfg: _Backend())
+
+    cmd_synthesize(_args(candidates_only=True, vault=vault))
+
+    assert "not classified" not in capsys.readouterr().err

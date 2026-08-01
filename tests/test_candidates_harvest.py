@@ -336,3 +336,27 @@ def test_backlog_summary_on_a_vault_with_no_sources(tmp_path: Path) -> None:
 
     assert summary["candidates"] == 0
     assert summary["broken_targets"] == 0
+
+
+def test_classification_chunks_large_batches() -> None:
+    """One prompt for 600 names risks a truncated reply and silent loss.
+
+    Chunking bounds each call while keeping cost proportional to the
+    candidate count.
+    """
+    names = [f"Name{i}" for i in range(250)]
+    backend = _RecordingBackend("")
+
+    classify_names(names, backend, batch_size=100)
+
+    assert len(backend.calls) == 3
+    assert sum(len(c.splitlines()) for c in backend.calls) == 250
+
+
+def test_classification_reports_what_it_could_not_classify() -> None:
+    """Silent degradation is the failure mode this must not have."""
+    backend = _RecordingBackend("Known: entity\n")
+
+    kinds = classify_names(["Known", "Unknown"], backend)
+
+    assert kinds == {"Known": "entity"}

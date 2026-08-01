@@ -978,11 +978,12 @@ def _validate_synthesize_path_kinds(
 def _run_candidate_harvest(args: argparse.Namespace) -> int:
     """Harvest entity/concept candidates from synthesized sources (#90).
 
-    Deliberately runs before any backend is resolved: the extraction already
-    happened during synthesis, so this reads ``wiki/sources/`` and costs no
-    LLM calls. A vault with nothing left to synthesize is exactly the vault
-    with the largest candidate backlog, so this must work when the backend is
-    unreachable.
+    Reads ``wiki/sources/``, never ``raw/``: the extraction already happened
+    during synthesis, so there is no per-source synthesis here. The only
+    backend work is classifying the harvested names, batched. A vault with
+    nothing left to synthesize is exactly the vault with the largest candidate
+    backlog, so this must still work when the backend is unreachable — and
+    must say so rather than quietly filing everything as unknown.
     """
     wiki_dir = REPO_ROOT / "wiki"
     vault_path = getattr(args, "vault", None)
@@ -1006,21 +1007,37 @@ def _run_candidate_harvest(args: argparse.Namespace) -> int:
 
     # Classification is the one part a grep cannot do, and the only part that
     # touches a backend. Best-effort: a missing or misconfigured backend costs
-    # precision (everything files as entity_type: unknown for a reviewer to
+    # precision (targets file as entity_type: unknown for a reviewer to
     # correct), never the harvest itself.
     try:
         backend = resolve_backend(_load_sessions_config())
     except Exception as exc:  # noqa: BLE001 - see above
-        print(f"  ! classification unavailable ({exc}) — filing as unknown")
+        print(f"  ! backend unavailable ({exc})", file=sys.stderr)
         backend = None
 
-    written = write_stubs(
-        wiki_dir, targets, classify=lambda names: classify_names(names, backend)
-    )
+    classified: dict[str, str] = {}
+
+    def _classify(names: list[str]) -> dict[str, str]:
+        classified.update(classify_names(names, backend))
+        return classified
+
+    written = write_stubs(wiki_dir, targets, classify=_classify)
     print(
         f"Candidates: {len(written)} stub(s) at --min-refs {min_refs} "
         f"→ {wiki_dir / 'candidates'}"
     )
+    # Never let a classification failure look like a clean run: an operator
+    # reading "82 stubs" must be able to tell filed-by-the-model from
+    # filed-by-fallback.
+    unclassified = len(targets) - len(classified)
+    if targets and unclassified:
+        backend_name = getattr(backend, "name", "none")
+        print(
+            f"  ! {unclassified} of {len(targets)} target(s) not classified "
+            f"(backend: {backend_name}) — filed as entity_type: unknown; "
+            "re-file during review or re-run once the backend is reachable",
+            file=sys.stderr,
+        )
     if written:
         print("  review with: llmwiki candidates list")
     return 0
