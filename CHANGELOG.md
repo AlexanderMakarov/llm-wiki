@@ -33,6 +33,8 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Fixed
 
+- **Lint no longer scans `wiki/archive/`** — `load_pages()` promised to skip archived pages but only ever skipped `README.md`, so every demoted or discarded page was linted like a live one. The visible symptom was `link_integrity` under-reporting: `candidates discard` moves a stub to `wiki/archive/candidates/<timestamp>/`, the archived copy stayed in the resolvable-slug set, and every `[[wikilink]]` that pointed at the discarded candidate kept resolving — so a vault that had just archived candidates looked cleaner than it was. Archived pages also aged into `stale_candidates` and counted toward `orphan_detection`. Expect a **higher** warning count on the first lint after upgrading if you have ever discarded a candidate; the newly-reported links were already broken.
+
 - **Home Commands Copy button** — agent launchers with quoted prompts (`… claude "/wiki-candidates"`) broke the `data-copy` attribute at the first `"`, so Copy pasted a truncated command. Buttons now escape the attribute and prefer the Command cell’s `<code>` text so clipboard matches what you see.
 
 - **`stale_reference_detection` flags unfixable source pages (#87)** — `wiki/sources/` pages (and any page with frontmatter `type: source`) are dated session records; refreshing their `last_updated` would misrepresent when the session happened. The rule now skips them and only reports living pages (entities, concepts, …) whose dated claim about a target predates that target's update.

@@ -745,6 +745,48 @@ def test_load_pages_reads_markdown(tmp_path: Path):
     assert pages["entities/Foo.md"]["meta"]["type"] == "entity"
 
 
+def test_load_pages_skips_archive(tmp_path: Path):
+    """``wiki/archive/`` holds demoted and discarded pages — history, not
+    the trusted layer. Linting it re-reports issues the reviewer already
+    resolved, and its slugs pollute the resolvable-page set.
+    """
+    (tmp_path / "entities").mkdir()
+    (tmp_path / "entities" / "Foo.md").write_text(
+        '---\ntitle: "Foo"\ntype: entity\n---\n\n# Foo\n', encoding="utf-8"
+    )
+    archived = tmp_path / "archive" / "candidates" / "2026-08-01T13-22-06"
+    archived.mkdir(parents=True)
+    (archived / "Bogus.md").write_text(
+        '---\ntitle: "Bogus"\ntype: entity\n---\n\n# Bogus\n', encoding="utf-8"
+    )
+
+    pages = load_pages(tmp_path)
+
+    assert "entities/Foo.md" in pages
+    assert not [rel for rel in pages if rel.startswith("archive")]
+
+
+def test_discarded_candidate_stops_resolving_wikilinks(tmp_path: Path):
+    """Regression: ``candidates discard`` moves a stub into ``archive/``,
+    but the archived copy stayed in the linted page set — so every
+    ``[[Bogus]]`` that justified the candidate kept resolving and
+    link_integrity under-reported the real broken-link backlog.
+    """
+    (tmp_path / "sources").mkdir()
+    (tmp_path / "sources" / "s1.md").write_text(
+        '---\ntitle: "S1"\ntype: source\n---\n\nSee [[Bogus]].\n', encoding="utf-8"
+    )
+    archived = tmp_path / "archive" / "candidates" / "2026-08-01T13-22-06"
+    archived.mkdir(parents=True)
+    (archived / "Bogus.md").write_text(
+        '---\ntitle: "Bogus"\ntype: entity\n---\n\n# Bogus\n', encoding="utf-8"
+    )
+
+    issues = LinkIntegrity().run(load_pages(tmp_path))
+
+    assert [i["message"] for i in issues] == ["broken wikilink [[Bogus]]"]
+
+
 # ─── frontmatter_count_consistency (issues.md #2) ───────────────────────
 
 
