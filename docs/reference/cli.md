@@ -399,6 +399,8 @@ python3 -m llmwiki synthesize --estimate         # cost preview, no API calls
 python3 -m llmwiki synthesize --force            # re-synth everything
 python3 -m llmwiki synthesize --sessions-only    # all pending sessions (skip docs)
 python3 -m llmwiki synthesize --docs-only        # all pending docs (skip sessions)
+python3 -m llmwiki synthesize --candidates-only   # entity/concept candidates, no backend
+python3 -m llmwiki synthesize --candidates-only --min-refs 5
 python3 -m llmwiki synthesize --path raw/sessions/<file>.md
 python3 -m llmwiki synthesize --path raw/docs/<file>.md --path raw/sessions/<other>.md
 python3 -m llmwiki synthesize                    # real run (whole backlog)
@@ -414,6 +416,8 @@ python3 -m llmwiki synthesize                    # real run (whole backlog)
 | `--sessions-only` | Synthesize only `raw/sessions/` — skip `raw/docs/`. Mutually exclusive with `--docs-only`. Combinable with `--path` / `--force` (paths under `raw/docs/` then exit 2). Incompatible with `--check` / `--estimate`. |
 | `--docs-only` | Synthesize only `raw/docs/` — skip `raw/sessions/`. Mutually exclusive with `--sessions-only`. Combinable with `--path` / `--force` (paths under `raw/sessions/` then exit 2). Incompatible with `--check` / `--estimate`. |
 | `--path PATH` | Synthesize only this raw session or doc under `raw/sessions/` or `raw/docs/` (repeatable; relative to the vault root, or absolute under it) (#62). Exit 2 if the path is missing or outside the vault. Still honours `filters.include_subagents` / `exclude_headless` (ineligible files are skipped even when named). Incompatible with `--check` / `--estimate`. |
+| `--candidates-only` | Harvest entity/concept **candidates** from already-synthesized `wiki/sources/` into `wiki/candidates/`, then exit (#90). Reads the source layer only — never `raw/` — so it makes no LLM calls and needs no reachable backend. This is the mode for a vault with nothing left to synthesize, which is exactly the vault with the largest candidate backlog. Mutually exclusive with `--check` / `--estimate`. |
+| `--min-refs N` | Candidate threshold for `--candidates-only`: a `[[wikilink]]` target becomes a candidate when **N or more distinct source pages** name it (default: `3`). Counted per page, so one document naming a target repeatedly still votes once. The default matches the lint rule that defines a missing entity page as one "mentioned in 3+ source pages". |
 | `--vault PATH` | Read/write under the vault root; configures the active `llmwiki-state.json`. |
 
 Backend is picked from `synthesis.backend` in `config.json` / `sessions_config.json` (`dummy` by default, `ollama` for local, `claude` for synchronous `claude -p`). See [`configuration.md`](../configuration.md#synthesis-backend).

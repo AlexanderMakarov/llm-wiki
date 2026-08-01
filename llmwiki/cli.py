@@ -57,6 +57,11 @@ from llmwiki.candidates import (
 from llmwiki.candidates import (
     merge as merge_candidate,
 )
+from llmwiki.candidates_harvest import (
+    DEFAULT_MIN_REFS,
+    harvest_targets,
+    write_stubs,
+)
 from llmwiki.config_schedule import (
     _load_sessions_config,
     load_default_vault_path,
@@ -968,6 +973,44 @@ def _validate_synthesize_path_kinds(
             raise ValueError(f"--sessions-only cannot target a doc: {rel.as_posix()}")
 
 
+def _run_candidate_harvest(args: argparse.Namespace) -> int:
+    """Harvest entity/concept candidates from synthesized sources (#90).
+
+    Deliberately runs before any backend is resolved: the extraction already
+    happened during synthesis, so this reads ``wiki/sources/`` and costs no
+    LLM calls. A vault with nothing left to synthesize is exactly the vault
+    with the largest candidate backlog, so this must work when the backend is
+    unreachable.
+    """
+    wiki_dir = REPO_ROOT / "wiki"
+    vault_path = getattr(args, "vault", None)
+    if vault_path:
+        try:
+            wiki_dir = resolve_vault(vault_path).root / "wiki"
+        except (FileNotFoundError, NotADirectoryError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+
+    sources_dir = wiki_dir / "sources"
+    if not sources_dir.is_dir():
+        print(
+            f"error: no synthesized sources to harvest at {sources_dir}",
+            file=sys.stderr,
+        )
+        return 2
+
+    min_refs = getattr(args, "min_refs", DEFAULT_MIN_REFS)
+    targets = harvest_targets(wiki_dir, min_refs=min_refs)
+    written = write_stubs(wiki_dir, targets)
+    print(
+        f"Candidates: {len(written)} stub(s) at --min-refs {min_refs} "
+        f"→ {wiki_dir / 'candidates'}"
+    )
+    if written:
+        print("  review with: llmwiki candidates list")
+    return 0
+
+
 def cmd_synthesize(args: argparse.Namespace) -> int:
     """Synthesize wiki source pages from raw sessions (v1.1.0 · #35).
 
@@ -980,6 +1023,9 @@ def cmd_synthesize(args: argparse.Namespace) -> int:
     ``--docs-only`` restrict the corpus without naming individual files.
     """
     _apply_default_vault(args)
+
+    if getattr(args, "candidates_only", False):
+        return _run_candidate_harvest(args)
 
     config: dict = _load_sessions_config()
     path_args = getattr(args, "paths", None) or None
@@ -1916,6 +1962,23 @@ def build_parser() -> argparse.ArgumentParser:
     syn_mode.add_argument(
         "--estimate", action="store_true",
         help="Print cached-vs-fresh token + dollar estimate without calling a backend (#50)",
+    )
+    # #90: generate entity/concept candidates from already-synthesized
+    # sources. Mode-exclusive with --check/--estimate because it neither
+    # probes nor prices a backend — it does not use one.
+    syn_mode.add_argument(
+        "--candidates-only", action="store_true",
+        help=(
+            "Harvest entity/concept candidates from wiki/sources/ into "
+            "wiki/candidates/ without synthesizing (no backend needed)"
+        ),
+    )
+    syn.add_argument(
+        "--min-refs", type=int, default=DEFAULT_MIN_REFS, metavar="N",
+        help=(
+            "Candidate threshold: a wikilink target becomes a candidate when "
+            f"N or more distinct source pages name it (default: {DEFAULT_MIN_REFS})"
+        ),
     )
     # --force is orthogonal (modifies the default re-synthesize-all flow)
     # and stays outside the exclusion group so callers can pass
