@@ -401,6 +401,7 @@ python3 -m llmwiki synthesize --sessions-only    # all pending sessions (skip do
 python3 -m llmwiki synthesize --docs-only        # all pending docs (skip sessions)
 python3 -m llmwiki synthesize --candidates-only   # entity/concept candidates, no backend
 python3 -m llmwiki synthesize --candidates-only --min-refs 5
+python3 -m llmwiki synthesize --candidates-only --allow-unclassified  # backend offline
 python3 -m llmwiki synthesize --path raw/sessions/<file>.md
 python3 -m llmwiki synthesize --path raw/docs/<file>.md --path raw/sessions/<other>.md
 python3 -m llmwiki synthesize                    # real run (whole backlog)
@@ -417,6 +418,7 @@ python3 -m llmwiki synthesize                    # real run (whole backlog)
 | `--docs-only` | Synthesize only `raw/docs/` — skip `raw/sessions/`. Mutually exclusive with `--sessions-only`. Combinable with `--path` / `--force` (paths under `raw/sessions/` then exit 2). Incompatible with `--check` / `--estimate`. |
 | `--path PATH` | Synthesize only this raw session or doc under `raw/sessions/` or `raw/docs/` (repeatable; relative to the vault root, or absolute under it) (#62). Exit 2 if the path is missing or outside the vault. Still honours `filters.include_subagents` / `exclude_headless` (ineligible files are skipped even when named). Incompatible with `--check` / `--estimate`. |
 | `--candidates-only` | Harvest entity/concept **candidates** from already-synthesized `wiki/sources/` into `wiki/candidates/`, then exit (#90). Reads the source layer only — never `raw/` — so it runs no per-source synthesis; cost is at most **one batched call** to classify the harvested names as entity vs concept, regardless of corpus size. If the backend is unreachable or misconfigured, the harvest still completes and everything files as `entity_type: unknown` for a reviewer to correct. This is the mode for a vault with nothing left to synthesize, which is exactly the vault with the largest candidate backlog. Mutually exclusive with `--check` / `--estimate`. |
+| `--allow-unclassified` | With `--candidates-only`: file targets the backend could not classify as `entity_type: unknown` instead of failing. **Without it, a partial classification fails the run and writes nothing** — a half-classified queue is not a good queue, and refusing after writing would leave exactly the mess the refusal prevents. Use this when you want the harvest despite an offline backend and are willing to re-file during review. |
 | `--min-refs N` | Candidate threshold for `--candidates-only`: a `[[wikilink]]` target becomes a candidate when **N or more distinct source pages** name it (default: `3`). Counted per page, so one document naming a target repeatedly still votes once. The default matches the lint rule that defines a missing entity page as one "mentioned in 3+ source pages". |
 | `--vault PATH` | Read/write under the vault root; configures the active `llmwiki-state.json`. |
 

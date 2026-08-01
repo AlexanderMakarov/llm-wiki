@@ -62,6 +62,7 @@ from llmwiki.candidates_harvest import (
     classify_names,
     harvest_targets,
     summarize_backlog,
+    unfiled_names,
     write_stubs,
 )
 from llmwiki.config_schedule import (
@@ -1015,29 +1016,47 @@ def _run_candidate_harvest(args: argparse.Namespace) -> int:
         print(f"  ! backend unavailable ({exc})", file=sys.stderr)
         backend = None
 
-    written = write_stubs(
-        wiki_dir, targets, classify=lambda names: classify_names(names, backend)
-    )
+    # Only names without a stub are worth asking about: an existing stub's
+    # folder is the reviewer's decision, so re-runs neither pay to re-decide it
+    # nor fail over a question already answered.
+    pending = unfiled_names(wiki_dir, targets)
+    kinds = classify_names(pending, backend)
+    missing = [name for name in pending if name not in kinds]
+
+    # Refuse a half-classified queue by default, and refuse it *before*
+    # writing — failing after the fact would leave exactly the mess the
+    # refusal exists to prevent.
+    if missing and not getattr(args, "allow_unclassified", False):
+        backend_name = getattr(backend, "name", "none")
+        print(
+            f"error: {len(missing)} of {len(pending)} new target(s) could not "
+            f"be classified as entity or concept (backend: {backend_name}). "
+            "Nothing was written. Fix the backend and re-run, or pass "
+            "--allow-unclassified to file them as entity_type: unknown for "
+            "review.",
+            file=sys.stderr,
+        )
+        print(f"  unclassified: {', '.join(missing[:10])}"
+              f"{' …' if len(missing) > 10 else ''}", file=sys.stderr)
+        return 1
+
+    written = write_stubs(wiki_dir, targets, classify=lambda _names: kinds)
     print(
         f"Candidates: {len(written)} stub(s) at --min-refs {min_refs} "
         f"→ {wiki_dir / 'candidates'}"
     )
-    # Never let a classification failure look like a clean run: an operator
-    # reading "82 stubs" must be able to tell filed-by-the-model from
-    # filed-by-fallback. Counted from the stubs on disk rather than from what
-    # the backend answered, so a re-run (which deliberately re-asks nothing)
-    # still reports the queue's real state.
+    # Counted from the stubs on disk, not from what the backend answered, so a
+    # re-run (which deliberately re-asks nothing) still reports the real state
+    # of the queue rather than looking like a clean run.
     unknown = sum(
         1
         for p in written
         if "entity_type: unknown" in p.read_text(encoding="utf-8", errors="replace")
     )
     if unknown:
-        backend_name = getattr(backend, "name", "none")
         print(
-            f"  ! {unknown} of {len(written)} candidate(s) filed as "
-            f"entity_type: unknown (backend: {backend_name}) — re-file during "
-            "review, or delete the stub and re-run once the backend is reachable",
+            f"  ! {unknown} of {len(written)} candidate(s) are filed as "
+            "entity_type: unknown — re-file them during review",
             file=sys.stderr,
         )
     if written:
@@ -2027,6 +2046,13 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Harvest entity/concept candidates from wiki/sources/ into "
             "wiki/candidates/ without synthesizing (no backend needed)"
+        ),
+    )
+    syn.add_argument(
+        "--allow-unclassified", action="store_true",
+        help=(
+            "With --candidates-only: file targets the backend could not "
+            "classify as entity_type: unknown instead of failing the run"
         ),
     )
     syn.add_argument(

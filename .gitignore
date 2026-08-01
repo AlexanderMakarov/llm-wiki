@@ -93,9 +93,9 @@ llmwiki-state.json.tmp
 .codex/skills/
 .agents/skills/
 
-# Local working notes and implementation plans. Scratch space for whoever is
-# at the keyboard — not framework files, never shipped.
-/notes/
+# Local scratch space: working notes, implementation plans, throwaway output.
+# Not framework files, never shipped.
+/tmp/
 
 # Local config (user-specific).
 config.json

@@ -302,3 +302,13 @@ def summarize_backlog(
             n: sum(1 for t in every if t.refs >= n) for n in _REPORTED_THRESHOLDS
         },
     }
+
+
+def unfiled_names(wiki_dir: Path, targets: Iterable[HarvestedTarget]) -> list[str]:
+    """Names with no candidate stub yet — the only ones worth classifying.
+
+    A stub that exists has a settled folder (the reviewer may have refiled it),
+    so callers can both skip paying to re-decide it and avoid failing a re-run
+    over a question that was already answered.
+    """
+    return [t.name for t in targets if _existing_subdir(wiki_dir, t.name) is None]
