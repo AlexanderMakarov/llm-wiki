@@ -54,23 +54,39 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -e '.[e2e]'
 
+      # Cache must track the *installed* Playwright package version. Keying only
+      # on pyproject.toml is wrong: `[e2e]` pins `pytest-playwright>=…` and pip
+      # can resolve a newer `playwright` wheel that expects a different browser
+      # revision (e.g. chromium_headless_shell-1234) while restore-keys still
+      # serve an older ~/.cache/ms-playwright tree. On a stale hit we used to
+      # skip `playwright install` and only run install-deps → 218 launch errors.
+      - name: Resolve Playwright version for cache key
+        id: pw-ver
+        run: |
+          echo "version=$(python -c 'import importlib.metadata as m; print(m.version(\"playwright\"))')" >> "$GITHUB_OUTPUT"
+
       - name: Cache Playwright browsers
         id: playwright-cache
         uses: actions/cache@v5
         with:
           # Playwright on Linux installs browsers under ~/.cache/ms-playwright
           path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-chromium-${{ hashFiles('pyproject.toml') }}
+          key: ${{ runner.os }}-playwright-${{ steps.pw-ver.outputs.version }}-chromium
           restore-keys: |
-            ${{ runner.os }}-playwright-chromium-
+            ${{ runner.os }}-playwright-${{ steps.pw-ver.outputs.version }}-
+            ${{ runner.os }}-playwright-
 
       - name: Install Chromium + OS deps
         if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: python -m playwright install --with-deps chromium
 
-      - name: Install Playwright OS deps (cache hit branch)
+      - name: Ensure Chromium matches installed Playwright (cache hit)
         if: steps.playwright-cache.outputs.cache-hit == 'true'
-        run: python -m playwright install-deps chromium
+        run: |
+          python -m playwright install-deps chromium
+          # Idempotent: fills any revision the restored cache is missing
+          # (including chromium-headless-shell after Playwright ≥1.49).
+          python -m playwright install chromium
 
       - name: Run E2E suite
         run: |

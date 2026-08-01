@@ -32,6 +32,8 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Fixed
 
+- **E2E Playwright browser cache mismatch** — `e2e.yml` keyed the browser cache on `pyproject.toml` and skipped `playwright install` on cache hits. Pip could still pull a newer `playwright` wheel (e.g. 1.62 needing `chromium_headless_shell-1234`) against an older cache → mass `BrowserType.launch` failures. Cache key now includes the installed Playwright version, and cache hits still run `playwright install chromium` (idempotent) so missing revisions are filled.
+
 - **`stale_reference_detection` flags unfixable source pages (#87)** — `wiki/sources/` pages (and any page with frontmatter `type: source`) are dated session records; refreshing their `last_updated` would misrepresent when the session happened. The rule now skips them and only reports living pages (entities, concepts, …) whose dated claim about a target predates that target's update.
 
 - **`contradiction_detection` filler guard leaks (#86)** — affirmative cues like `conflict with prior` / `contradicts the` matched inside negated phrasing (`does not conflict with prior…`, `no claims that conflict…`), so synthesis boilerplate still flagged. Cues now count only when unnegated in the same clause; synonym list gains `identifiable` / `flagged` / `raised` / `surfaced` / `spotted`. Real conflict bodies still flag.
