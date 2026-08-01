@@ -95,14 +95,15 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
       );
     }
     return (
-      '<p class="muted">CLI rows are copy-paste runnable. Agent rows start <code>/wiki-candidates</code> from the <strong>llmwiki checkout</strong> (slash commands load from <code>.claude/commands/</code>; vault path comes from <code>config.json</code>). Harvest stubs with <code>synthesize --candidates-only</code> before review — estimate&apos;s &quot;Candidates: N stub(s)&quot; is a preview, not the Home <strong>Candidates</strong> count.</p>' +
+      '<p class="muted">CLI rows are copy-paste runnable. Agent rows start <code>/wiki-candidates</code> from the <strong>llmwiki checkout</strong> (slash commands load from <code>.claude/commands/</code>; vault path comes from <code>config.json</code>). Harvest stubs with <code>llmwiki synth</code> (or <code>synth --candidates-only</code>) before review — estimate&apos;s &quot;Candidates: N stub(s)&quot; is a preview, not the Home <strong>Candidates</strong> count.</p>' +
       '<table class="queue-commands-table">' +
       "<thead><tr><th>Command</th><th>Purpose</th><th></th></tr></thead><tbody>" +
       commandRow("llmwiki sync", "Convert new agent sessions into <code>raw/sessions/</code>.") +
       commandRow("llmwiki sync --project <slug>", "Sync only one project&apos;s sessions.") +
-      commandRow("llmwiki synthesize", "Drain unsynthesized backlog into <code>wiki/sources/</code>.") +
-      commandRow("llmwiki synthesize --candidates-only", "Harvest entity/concept candidates into <code>wiki/candidates/</code>.") +
-      commandRow("llmwiki synthesize --estimate", "Refresh cost estimate + pipeline table (sources + harvestable-stub preview).") +
+      commandRow("llmwiki synth", "Synthesize pending sources, then harvest entity/concept candidates.") +
+      commandRow("llmwiki synth --sources-only", "Drain unsynthesized backlog into <code>wiki/sources/</code> only.") +
+      commandRow("llmwiki synth --candidates-only", "Harvest entity/concept candidates into <code>wiki/candidates/</code>.") +
+      commandRow("llmwiki synth --estimate", "Refresh cost estimate + pipeline table (sources + harvestable-stub preview).") +
       commandRow("llmwiki candidates list", "Show pending review stubs (runnable output).") +
       commandRow("llmwiki candidates list --stale", "Show candidates older than the stale threshold (default 30d).") +
       commandRow("llmwiki candidates promote --slug <Name>", "Promote one stub into trusted <code>wiki/entities/</code> or <code>concepts/</code>.") +
@@ -117,7 +118,7 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
     var byKind = (pipeline && pipeline.to_review_by_kind) ? pipeline.to_review_by_kind : {};
     var keys = Object.keys(byKind).sort();
     if (!keys.length) {
-      return '<p class="muted">No pending candidates under <code>wiki/candidates/</code>. Harvest with <code>llmwiki synthesize --candidates-only</code>.</p>';
+      return '<p class="muted">No pending candidates under <code>wiki/candidates/</code>. Harvest with <code>llmwiki synth</code> (or <code>synth --candidates-only</code>).</p>';
     }
     var stale = Number(pipeline && pipeline.to_review_stale || 0);
     var staleDays = Number(pipeline && pipeline.stale_days || 30);
@@ -196,7 +197,7 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
 
     var footHtml = "";
     if (!bodyRows) {
-      bodyRows = '<tr><td colspan="4" class="muted">No pipeline rows yet — run <code>llmwiki sync</code> then <code>llmwiki synthesize --estimate</code>. Rows appear per agent that has contributed at least one session.</td></tr>';
+      bodyRows = '<tr><td colspan="4" class="muted">No pipeline rows yet — run <code>llmwiki sync</code> then <code>llmwiki synth --estimate</code>. Rows appear per agent that has contributed at least one session.</td></tr>';
     } else {
       footHtml =
         "<tfoot><tr>" +
@@ -259,7 +260,7 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
       detailsSection("Not synthesized sessions", pendingSessions.length, pendingListHtml(pendingSessions)) +
       detailsSection("Not synthesized docs", pendingDocs.length, pendingListHtml(pendingDocs)) +
       detailsSection("Candidates to review", toReview, reviewBreakdownHtml(pipeline)) +
-      detailsSection("Commands", 12, commandsBody(repoRoot)) +
+      detailsSection("Commands", 13, commandsBody(repoRoot)) +
       detailsSection("Estimate warnings", warnings.length, warningsBody) +
       "</div>";
   }

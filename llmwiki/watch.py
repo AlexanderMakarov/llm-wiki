@@ -142,7 +142,7 @@ def run_maintain(
         return sync_rc
 
     if with_synthesize:
-        synth_cmd = [py, "-m", "llmwiki", "synthesize", *vault_args]
+        synth_cmd = [py, "-m", "llmwiki", "synth", *vault_args]
         print(f"==> running: {' '.join(synth_cmd)}")
         synth_rc = subprocess.run(synth_cmd, cwd=cwd).returncode  # no timeout
         if synth_rc != 0:
@@ -169,7 +169,7 @@ def watch(
     """Main watch loop (single-flight)."""
     print(_STARTUP_BANNER)
     print(f"    interval: {interval}s  settle: {settle}s")
-    print(f"    synthesize: {'on' if with_synthesize else 'off'}  "
+    print(f"    synth: {'on' if with_synthesize else 'off'}  "
           f"build: {'on' if with_build else 'off'}")
     if adapters:
         print(f"    adapters: {', '.join(adapters)}")

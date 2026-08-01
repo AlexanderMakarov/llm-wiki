@@ -1,6 +1,6 @@
 # Synthesis cost — what you pay per page, and why
 
-`llmwiki synthesize` calls an LLM once per source page. This page explains what a call actually costs, which parts of the bill are your data and which are overhead, and how the shipped defaults were chosen.
+`llmwiki synth` calls an LLM once per source page. This page explains what a call actually costs, which parts of the bill are your data and which are overhead, and how the shipped defaults were chosen.
 
 Everything below is measured against the real `source_page.md` prompt via `claude -p - --output-format json`, which returns a `usage` block. Reproduce any row yourself with the recipe at the bottom.
 
@@ -136,7 +136,7 @@ Haiku's headline rate is ~3x cheaper than Sonnet's, but with thinking left on it
 
 **Recommendation:** keep `claude_model: "sonnet"` (the default). The lean flags already removed the dominant cost, and what remains buys measurably better graph structure. If your corpus is large and you accept weaker `Connections`, set `claude_model` to a Haiku id *and* `MAX_THINKING_TOKENS=0` — otherwise you pay for reasoning you did not want.
 
-## What `synthesize --estimate` prices
+## What `synth --estimate` prices
 
 `--estimate` prices exactly what the backend sends, per page:
 
@@ -192,4 +192,4 @@ Re-run with the lean flags from the table above to see the difference on your ow
 - [`configuration.md` § Synthesis backend](../configuration.md#synthesis-backend) — selecting and configuring a backend
 - [`configuration-reference.md`](../configuration-reference.md) — every `synthesis.*` key
 - [`reference/prompt-caching.md`](prompt-caching.md) — the cache-block plumbing and the batch API
-- [`reference/cli.md`](cli.md) — `synthesize --check` / `--estimate`
+- [`reference/cli.md`](cli.md) — `synth --check` / `--estimate`

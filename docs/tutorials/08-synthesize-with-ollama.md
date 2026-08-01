@@ -64,7 +64,7 @@ Defaults if omitted: `llama3.1:8b` at `127.0.0.1:11434`, 60s timeout,
 ### 4. Check the backend
 
 ```bash
-llmwiki synthesize --check
+llmwiki synth --check
 ```
 
 Expected:
@@ -79,7 +79,7 @@ If `Available: False`, Ollama isn't running — `ollama serve &`.
 ### 5. Estimate cost (dry-run math)
 
 ```bash
-llmwiki synthesize --estimate
+llmwiki synth --estimate
 ```
 
 Ollama backend cost is $0 — the estimator still shows token counts
@@ -96,7 +96,7 @@ Prefix: 3,944 tok  Model: llama3.1:8b  (local, $0)
 ### 6. Run synthesize
 
 ```bash
-llmwiki synthesize
+llmwiki synth
 ```
 
 Each new raw session becomes a `wiki/sources/<project>/<YYYY-MM-DD>-<slug>.md`.

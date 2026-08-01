@@ -111,7 +111,7 @@ Minimal config:
 
 ## Synthesis backend
 
-`llmwiki synthesize` turns each raw session/document into a
+`llmwiki synth` turns each raw session/document into a
 `wiki/sources/` page. Which LLM (if any) writes those pages is picked by
 `synthesis.backend` in `config.json`:
 
@@ -138,10 +138,10 @@ The old `agent` / `agent_delegate` backend (pending-prompt files + `--list-pendi
 Sanity-check what's active and what a run would cost:
 
 ```bash
-llmwiki synthesize --check      # prints the resolved backend + availability
-llmwiki synthesize --estimate   # cached-vs-fresh token + dollar estimate
-llmwiki synthesize --sessions-only   # pending sessions only (skip docs)
-llmwiki synthesize --docs-only       # pending docs only (skip sessions)
+llmwiki synth --check      # prints the resolved backend + availability
+llmwiki synth --estimate   # cached-vs-fresh token + dollar estimate (+ candidate backlog)
+llmwiki synth --sessions-only   # pending sessions only (skip docs)
+llmwiki synth --docs-only       # pending docs only (skip sessions)
 ```
 
 **Synthesis is incremental.** `<vault>/llmwiki-state.json` (`synth.files`)
@@ -194,7 +194,7 @@ corpus still converts. Pass `--fail-on-errors` for a hard gate (CI,
 scripted pipelines that must not proceed past a partial sync).
 
 There is **no** `sync --dry-run` — use `add --dry-run` for document intake
-previews, or inspect with `sync --status` / `synthesize --estimate`.
+previews, or inspect with `sync --status` / `synth --estimate`.
 
 ### `llmwiki build`
 

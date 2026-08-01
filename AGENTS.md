@@ -21,12 +21,15 @@ wiki/          LLM-maintained. Pages you write that summarise and cross-referenc
   SOUL.md          Wiki identity and writing voice.
   CRITICAL_FACTS.md Must-know facts (<120 tokens).
   sources/         One page per raw source.
+  candidates/      Pending entity/concept stubs from harvest — review before promote.
   entities/        People, companies, projects, products.
   concepts/        Ideas, frameworks, methods.
   syntheses/       Saved query answers.
 
 site/          GENERATED. Static HTML from `python3 -m llmwiki build`. Do not edit.
 ```
+
+Canonical loop: `sync / add → synth (sources + harvest) → review candidates → build`. `synth` does not rebuild `site/` — run `build` when you want Home/Analytics refreshed. Serve with `llmwiki serve --dir <vault>/site` (bare `serve` defaults to `./site` under cwd).
 
 ## Session stores by agent
 
@@ -47,8 +50,9 @@ Run from inside the repo:
 
 ```bash
 python3 -m llmwiki sync           # convert new .jsonl → raw/sessions/*.md
+python3 -m llmwiki synth          # wiki/sources/ + harvest wiki/candidates/
 python3 -m llmwiki build          # compile site/ from raw/ + wiki/
-python3 -m llmwiki serve          # local HTTP server on 127.0.0.1:8765
+python3 -m llmwiki serve --dir <vault>/site   # local HTTP server (default ./site is cwd-relative)
 python3 -m llmwiki init           # scaffold raw/, wiki/, site/ directories
 ```
 
@@ -92,7 +96,7 @@ Check for:
 - **Missing entity pages** — entities mentioned in 3+ sources but no dedicated page.
 - **Data gaps** — questions the wiki can't answer.
 
-Do not hand-repair the catalog: `sync`, `synthesize`, and `remove` reconcile `wiki/index.md` with the pages on disk (#71) — adding unlisted pages, dropping dead links, refreshing every `(count)` — and preserve existing descriptions. Run `llmwiki lint --rules index_sync` to verify.
+Do not hand-repair the catalog: `sync`, `synth`, and `remove` reconcile `wiki/index.md` with the pages on disk (#71) — adding unlisted pages, dropping dead links, refreshing every `(count)` — and preserve existing descriptions. Run `llmwiki lint --rules index_sync` to verify.
 
 Output a report. Offer to save it to `wiki/lint-report.md`.
 

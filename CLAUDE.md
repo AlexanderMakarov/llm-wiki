@@ -17,6 +17,7 @@ wiki/          YOU OWN THIS. LLM-generated pages that summarise, cross-reference
   log.md           Append-only chronological record of every operation.
   overview.md      Living synthesis across all sources.
   sources/         One summary page per raw source (kebab-case slug).
+  candidates/      Pending entity/concept stubs from harvest — review before promote (#90).
   entities/        People, companies, projects, products (TitleCase.md).
   concepts/        Ideas, frameworks, methods, theories (TitleCase.md).
   syntheses/       Saved query answers (kebab-case slug).
@@ -27,12 +28,16 @@ wiki/          YOU OWN THIS. LLM-generated pages that summarise, cross-reference
 site/          GENERATED. Static HTML from `python3 -m llmwiki build`. Do not edit by hand.
 ```
 
+Canonical loop: `sync / add → synth (sources + harvest) → review candidates → build`. `synth` does not rebuild `site/` — run `build` after harvest (or review) when you want Home/Analytics counts refreshed.
+
 ## Slash commands (and what they do)
 
 | Command | Intent | Workflow |
 |---|---|---|
 | `/wiki-sync` | Convert new `.jsonl` sessions into `raw/sessions/` AND ingest them into `wiki/` | Runs `python3 -m llmwiki sync`, then executes the Ingest Workflow below for each new file |
 | `/wiki-ingest <path>` | Ingest one source or folder | Executes the Ingest Workflow for the given path |
+| `/wiki-synth` | Synthesize pending raw → `wiki/sources/`, then harvest candidates | Runs `python3 -m llmwiki synth` (prefer over deprecated `/wiki-synthesize`) |
+| `/wiki-candidates` | Review pending stubs under `wiki/candidates/` | Promote / flip+promote / merge / discard via CLI library |
 | `/wiki-query <question>` | Answer a question from the wiki | Executes the Query Workflow below |
 | `/wiki-lint` | Find orphans, broken links, stale pages | Executes the Lint Workflow below |
 | `/wiki-build` | Regenerate the static HTML site | Runs `python3 -m llmwiki build` |
@@ -151,7 +156,7 @@ Use Grep and Read to find:
 6. **Data gaps** — questions the wiki can't answer; suggest new sources or queries.
 7. **(v0.5, #60) Uncontexted folders** — any `wiki/` subfolder containing >10 `.md` files that lacks a `_context.md` stub. Large knowledge folders without a context description make deep queries more expensive per call — suggest creating a stub that describes what lives there. Use `python3 -c "from llmwiki.context_md import find_uncontexted_folders; from pathlib import Path; print(list(find_uncontexted_folders(Path('wiki'))))"` or load the helper directly.
 
-Do not hand-repair the catalog. Unlisted pages, dead index links, and stale `(count)` headings are reconciled automatically during `sync`, `synthesize`, and `remove` (#71) — do not edit `wiki/index.md` bullet by bullet. Run `llmwiki lint --rules index_sync` to verify the catalog matches disk.
+Do not hand-repair the catalog. Unlisted pages, dead index links, and stale `(count)` headings are reconciled automatically during `sync`, `synth`, and `remove` (#71) — do not edit `wiki/index.md` bullet by bullet. Run `llmwiki lint --rules index_sync` to verify the catalog matches disk.
 
 Output a report to the chat. Ask the user if they want it saved to `wiki/lint-report.md`.
 

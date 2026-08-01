@@ -51,7 +51,10 @@ def test_state_widget_js_has_pipeline_table_and_collapsibles():
     assert "collapse-section-count" in js.JS
     assert "data-llmwiki-state-widget" in js.JS
     assert "llmwiki sync --project" in js.JS
-    assert "llmwiki synthesize --candidates-only" in js.JS
+    assert "llmwiki synth" in js.JS
+    assert "llmwiki synth --sources-only" in js.JS
+    assert "llmwiki synth --candidates-only" in js.JS
+    assert "llmwiki synth --estimate" in js.JS
     assert "llmwiki candidates list" in js.JS
     assert "llmwiki candidates promote --slug" in js.JS
     assert "escapeHtml(cmd)" in js.JS
@@ -73,7 +76,7 @@ def test_state_widget_js_has_pipeline_table_and_collapsibles():
     # Vault is wrong cwd for slash commands — do not advertise opening agents there.
     assert "Open Claude Code in the vault" not in js.JS
     assert " && cursor ." not in js.JS
-    assert 'detailsSection("Commands", 12,' in js.JS
+    assert 'detailsSection("Commands", 13,' in js.JS
     assert "queued " in js.JS
     assert "in progress " in js.JS
     # Knowledge layer is a second table — not dashes on per-agent rows.
@@ -92,6 +95,8 @@ def test_state_widget_js_has_pipeline_table_and_collapsibles():
     # Path-specific synthesize rows were replaced by the review-gate Commands set (#84).
     assert "llmwiki synthesize --path raw/sessions/" not in js.JS
     assert "llmwiki synthesize --path raw/docs/" not in js.JS
+    # Prefer synth over the deprecated synthesize alias in Home Commands.
+    assert "llmwiki synthesize --candidates-only" not in js.JS
     # Combined static blurb moved into per-table captions in JS.
     assert "Knowledge layer: To review → Entities / Concepts (vault-wide)." not in js.JS
     assert "vault-wide — not split by agent" not in js.JS

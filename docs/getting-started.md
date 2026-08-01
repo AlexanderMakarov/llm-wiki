@@ -66,7 +66,7 @@ JSON
 llmwiki init          # scaffolds raw/ wiki/ site/ INTO the vault
 ```
 
-With `vault.default_path` set, `sync` / `build` / `synthesize` / `queue` / `lint` / `init` all target the vault automatically — no `--vault` flag needed. Override it for a single run with `--vault PATH`.
+With `vault.default_path` set, `sync` / `build` / `synth` / `queue` / `lint` / `init` all target the vault automatically — no `--vault` flag needed. Override it for a single run with `--vault PATH`.
 
 ### Checking detected agents
 
@@ -99,6 +99,7 @@ With `vault.default_path` set (step 2 above), these all read and write the vault
 
 ```bash
 llmwiki sync     # pull new sessions from your agent store → <vault>/raw/sessions/<project>/*.md
+llmwiki synth    # fill wiki/sources/ and harvest wiki/candidates/ (then review)
 llmwiki build    # compile <vault>/raw/ + <vault>/wiki/ → <vault>/site/
 llmwiki serve --dir <vault>/site   # serve at http://127.0.0.1:8765/
 ```
@@ -127,6 +128,7 @@ Everything lands in your **vault** directory (the `vault.default_path` from step
 │   ├── log.md
 │   ├── overview.md
 │   ├── sources/
+│   ├── candidates/
 │   ├── entities/
 │   └── concepts/
 ├── site/                     # generated static HTML

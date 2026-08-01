@@ -15,13 +15,13 @@ From the [original LLM Wiki gist](https://gist.github.com/karpathy/442a6bf555914
 raw/           IMMUTABLE source documents
     ↓          (llmwiki converts .jsonl → .md here)
 wiki/sources/  synthesized session summaries (LLM)
-    ↓          (llmwiki synthesize; harvest stubs with --candidates-only)
+    ↓          (llmwiki synth — default also harvests candidates)
 wiki/candidates/  PENDING review stubs for entities/concepts
-    ↓          (agent /wiki-candidates or /wiki-ingest → promote|merge|discard)
+    ↓          (agent /wiki-candidates → promote|merge|discard; site UI in #97)
 wiki/entities/ concepts/   TRUSTED hubs (after review — never auto-promoted)
     ↓
 site/          GENERATED static HTML
-               (llmwiki builds here via `llmwiki build`)
+               (llmwiki builds here via `llmwiki build` — not part of `synth`)
 ```
 
 Trusted entity/concept hubs require human-or-agent review of candidates. Synthesis alone can leave Home looking “finished” (Raw → Synthesized) while the knowledge layer is still empty — Home’s **Knowledge layer** table (**Candidates | Entities | Concepts**) and Analytics **Candidates to review** make that backlog visible (#84).
@@ -42,6 +42,7 @@ wiki/
 ├── log.md            append-only chronological record
 ├── overview.md       living synthesis across all sources
 ├── sources/          one summary page per raw source (kebab-case slug)
+├── candidates/       pending entity/concept stubs (harvest; review before promote)
 ├── entities/         people, projects, tools (TitleCase.md)
 ├── concepts/         ideas, frameworks, patterns (TitleCase.md)
 └── syntheses/        saved query answers (kebab-case slug)

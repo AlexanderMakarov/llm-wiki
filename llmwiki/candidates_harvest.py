@@ -11,6 +11,7 @@ during synthesis, so this is a pass over ``wiki/sources/`` — never over
 
 from __future__ import annotations
 
+import sys
 from collections import defaultdict
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
@@ -115,18 +116,19 @@ def classify_names(
     backend,
     *,
     batch_size: int = DEFAULT_CLASSIFY_BATCH,
+    retry_missing: bool = True,
 ) -> dict[str, str]:
     """Ask ``backend`` to sort ``names`` into entities and concepts.
 
-    Best-effort by contract: an unreachable backend, a refusal, or unparseable
-    output yield no entry for the affected names, and callers fall back to an
-    ``unknown`` entity stub. Harvesting must never be blocked by
-    classification, because the vault that most needs harvesting is the one
-    whose backend has nothing left to do.
+    Returns only names the backend classified as ``entity`` or ``concept``.
+    Omitted / unparseable names are absent from the result — callers decide
+    whether to fail closed (``run_harvest`` default) or file as ``unknown``
+    (``--allow-unclassified``).
 
-    Callers are expected to compare the returned size against the number of
-    names they passed and tell the user what went unclassified — degrading
-    quietly is the failure mode this must not have.
+    When ``retry_missing`` is true (default), names absent from the first
+    reply get one small follow-up call before giving up (#90). Truncation and
+    flaky backends often omit a short tail; a second pass recovers those
+    without teaching ``unknown`` as the happy path.
     """
     if backend is None or not names:
         return {}
@@ -137,8 +139,25 @@ def classify_names(
         return {}
 
     kinds: dict[str, str] = {}
-    for start in range(0, len(names), max(1, batch_size)):
-        chunk = names[start : start + max(1, batch_size)]
+    kinds.update(_classify_chunks(names, backend, batch_size=batch_size))
+    if retry_missing:
+        missing = [name for name in names if name not in kinds]
+        if missing:
+            kinds.update(_classify_chunks(missing, backend, batch_size=batch_size))
+    return kinds
+
+
+def _classify_chunks(
+    names: list[str],
+    backend,
+    *,
+    batch_size: int,
+) -> dict[str, str]:
+    """One pass of batched classify calls; skips chunks that raise."""
+    kinds: dict[str, str] = {}
+    size = max(1, batch_size)
+    for start in range(0, len(names), size):
+        chunk = names[start : start + size]
         try:
             reply = backend.synthesize_source_page(
                 "\n".join(chunk),
@@ -312,3 +331,76 @@ def unfiled_names(wiki_dir: Path, targets: Iterable[HarvestedTarget]) -> list[st
     over a question that was already answered.
     """
     return [t.name for t in targets if _existing_subdir(wiki_dir, t.name) is None]
+
+
+def run_harvest(
+    wiki_dir: Path,
+    *,
+    min_refs: int = DEFAULT_MIN_REFS,
+    allow_unclassified: bool = False,
+    backend=None,
+    require_sources: bool = True,
+) -> int:
+    """Harvest + write candidates. Returns a process-style exit code (0/1/2).
+
+    Shared by ``llmwiki synth`` and ``all --with-synth`` so both paths agree
+    on classification refusal and messaging (#90).
+
+    ``require_sources=False`` treats a missing ``wiki/sources/`` as an empty
+    harvest (exit 0) — used when harvest follows a sources pass that wrote
+    nothing on a fresh vault. ``--candidates-only`` keeps ``require_sources``
+    True so an operator who asked for harvest gets a clear error.
+    """
+    sources_dir = wiki_dir / "sources"
+    if not sources_dir.is_dir():
+        if require_sources:
+            print(
+                f"error: no synthesized sources to harvest at {sources_dir}",
+                file=sys.stderr,
+            )
+            return 2
+        print("Candidates: 0 stub(s) (no wiki/sources/ yet)")
+        return 0
+
+    targets = harvest_targets(wiki_dir, min_refs=min_refs)
+    pending = unfiled_names(wiki_dir, targets)
+    kinds = classify_names(pending, backend)
+    missing = [name for name in pending if name not in kinds]
+
+    if missing and not allow_unclassified:
+        backend_name = getattr(backend, "name", "none")
+        print(
+            f"error: {len(missing)} of {len(pending)} new target(s) could not "
+            f"be classified as entity or concept after retry "
+            f"(backend: {backend_name}). "
+            "Nothing was written. Fix the backend and re-run, or pass "
+            "--allow-unclassified to file them as entity_type: unknown for "
+            "review.",
+            file=sys.stderr,
+        )
+        print(
+            f"  unclassified: {', '.join(missing[:10])}"
+            f"{' …' if len(missing) > 10 else ''}",
+            file=sys.stderr,
+        )
+        return 1
+
+    written = write_stubs(wiki_dir, targets, classify=lambda _names: kinds)
+    print(
+        f"Candidates: {len(written)} stub(s) at --min-refs {min_refs} "
+        f"→ {wiki_dir / 'candidates'}"
+    )
+    unknown = sum(
+        1
+        for p in written
+        if "entity_type: unknown" in p.read_text(encoding="utf-8", errors="replace")
+    )
+    if unknown:
+        print(
+            f"  ! {unknown} of {len(written)} candidate(s) are filed as "
+            "entity_type: unknown — re-file them during review",
+            file=sys.stderr,
+        )
+    if written:
+        print("  review with: llmwiki candidates list")
+    return 0

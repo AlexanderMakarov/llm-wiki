@@ -265,10 +265,42 @@ def test_classification_is_skipped_when_backend_is_unavailable() -> None:
 
 
 def test_classification_survives_unparseable_output() -> None:
-    """A confused backend costs us precision, never the run."""
+    """A confused backend costs us precision, never a crash."""
     backend = _RecordingBackend("I'm not sure what you're asking for.")
 
     assert classify_names(["Tailscale"], backend) == {}
+    # First pass + one retry of the omitted name.
+    assert len(backend.calls) == 2
+
+
+def test_classification_retries_omitted_names() -> None:
+    """A truncated first reply must get one follow-up for the missing tail (#90)."""
+
+    class _PartialThenComplete(_RecordingBackend):
+        def synthesize_source_page(self, raw_body, meta, prompt_template) -> str:
+            self.calls.append(raw_body)
+            if len(self.calls) == 1:
+                return "Tailscale: entity\n"
+            return "Compounding: concept\n"
+
+    backend = _PartialThenComplete("")
+    kinds = classify_names(["Tailscale", "Compounding"], backend)
+
+    assert kinds == {"Tailscale": "entity", "Compounding": "concept"}
+    assert len(backend.calls) == 2
+    assert backend.calls[1] == "Compounding"
+
+
+def test_classification_retry_still_leaves_gaps() -> None:
+    """Retry is one shot — persistent gaps stay absent for fail-closed harvest."""
+    backend = _RecordingBackend("Tailscale: entity\n")
+
+    kinds = classify_names(["Tailscale", "Missing"], backend)
+
+    assert kinds == {"Tailscale": "entity"}
+    assert "Missing" not in kinds
+    assert len(backend.calls) == 2
+    assert backend.calls[1] == "Missing"
 
 
 def test_classification_ignores_names_it_was_not_asked_about() -> None:
@@ -347,7 +379,7 @@ def test_classification_chunks_large_batches() -> None:
     names = [f"Name{i}" for i in range(250)]
     backend = _RecordingBackend("")
 
-    classify_names(names, backend, batch_size=100)
+    classify_names(names, backend, batch_size=100, retry_missing=False)
 
     assert len(backend.calls) == 3
     assert sum(len(c.splitlines()) for c in backend.calls) == 250
@@ -357,7 +389,7 @@ def test_classification_reports_what_it_could_not_classify() -> None:
     """Silent degradation is the failure mode this must not have."""
     backend = _RecordingBackend("Known: entity\n")
 
-    kinds = classify_names(["Known", "Unknown"], backend)
+    kinds = classify_names(["Known", "Unknown"], backend, retry_missing=False)
 
     assert kinds == {"Known": "entity"}
 
