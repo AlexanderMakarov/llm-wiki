@@ -57,6 +57,14 @@ from llmwiki.candidates import (
 from llmwiki.candidates import (
     merge as merge_candidate,
 )
+from llmwiki.candidates_harvest import (
+    DEFAULT_MIN_REFS,
+    classify_names,
+    harvest_targets,
+    summarize_backlog,
+    unfiled_names,
+    write_stubs,
+)
 from llmwiki.config_schedule import (
     _load_sessions_config,
     load_default_vault_path,
@@ -968,6 +976,94 @@ def _validate_synthesize_path_kinds(
             raise ValueError(f"--sessions-only cannot target a doc: {rel.as_posix()}")
 
 
+def _run_candidate_harvest(args: argparse.Namespace) -> int:
+    """Harvest entity/concept candidates from synthesized sources (#90).
+
+    Reads ``wiki/sources/``, never ``raw/``: the extraction already happened
+    during synthesis, so there is no per-source synthesis here. The only
+    backend work is classifying the harvested names, batched. A vault with
+    nothing left to synthesize is exactly the vault with the largest candidate
+    backlog, so this must still work when the backend is unreachable — and
+    must say so rather than quietly filing everything as unknown.
+    """
+    wiki_dir = REPO_ROOT / "wiki"
+    vault_path = getattr(args, "vault", None)
+    if vault_path:
+        try:
+            wiki_dir = resolve_vault(vault_path).root / "wiki"
+        except (FileNotFoundError, NotADirectoryError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+
+    sources_dir = wiki_dir / "sources"
+    if not sources_dir.is_dir():
+        print(
+            f"error: no synthesized sources to harvest at {sources_dir}",
+            file=sys.stderr,
+        )
+        return 2
+
+    min_refs = getattr(args, "min_refs", DEFAULT_MIN_REFS)
+    targets = harvest_targets(wiki_dir, min_refs=min_refs)
+
+    # Classification is the one part a grep cannot do, and the only part that
+    # touches a backend. Best-effort: a missing or misconfigured backend costs
+    # precision (targets file as entity_type: unknown for a reviewer to
+    # correct), never the harvest itself.
+    try:
+        backend = resolve_backend(_load_sessions_config())
+    except Exception as exc:  # noqa: BLE001 - see above
+        print(f"  ! backend unavailable ({exc})", file=sys.stderr)
+        backend = None
+
+    # Only names without a stub are worth asking about: an existing stub's
+    # folder is the reviewer's decision, so re-runs neither pay to re-decide it
+    # nor fail over a question already answered.
+    pending = unfiled_names(wiki_dir, targets)
+    kinds = classify_names(pending, backend)
+    missing = [name for name in pending if name not in kinds]
+
+    # Refuse a half-classified queue by default, and refuse it *before*
+    # writing — failing after the fact would leave exactly the mess the
+    # refusal exists to prevent.
+    if missing and not getattr(args, "allow_unclassified", False):
+        backend_name = getattr(backend, "name", "none")
+        print(
+            f"error: {len(missing)} of {len(pending)} new target(s) could not "
+            f"be classified as entity or concept (backend: {backend_name}). "
+            "Nothing was written. Fix the backend and re-run, or pass "
+            "--allow-unclassified to file them as entity_type: unknown for "
+            "review.",
+            file=sys.stderr,
+        )
+        print(f"  unclassified: {', '.join(missing[:10])}"
+              f"{' …' if len(missing) > 10 else ''}", file=sys.stderr)
+        return 1
+
+    written = write_stubs(wiki_dir, targets, classify=lambda _names: kinds)
+    print(
+        f"Candidates: {len(written)} stub(s) at --min-refs {min_refs} "
+        f"→ {wiki_dir / 'candidates'}"
+    )
+    # Counted from the stubs on disk, not from what the backend answered, so a
+    # re-run (which deliberately re-asks nothing) still reports the real state
+    # of the queue rather than looking like a clean run.
+    unknown = sum(
+        1
+        for p in written
+        if "entity_type: unknown" in p.read_text(encoding="utf-8", errors="replace")
+    )
+    if unknown:
+        print(
+            f"  ! {unknown} of {len(written)} candidate(s) are filed as "
+            "entity_type: unknown — re-file them during review",
+            file=sys.stderr,
+        )
+    if written:
+        print("  review with: llmwiki candidates list")
+    return 0
+
+
 def cmd_synthesize(args: argparse.Namespace) -> int:
     """Synthesize wiki source pages from raw sessions (v1.1.0 · #35).
 
@@ -980,6 +1076,9 @@ def cmd_synthesize(args: argparse.Namespace) -> int:
     ``--docs-only`` restrict the corpus without naming individual files.
     """
     _apply_default_vault(args)
+
+    if getattr(args, "candidates_only", False):
+        return _run_candidate_harvest(args)
 
     config: dict = _load_sessions_config()
     path_args = getattr(args, "paths", None) or None
@@ -1510,6 +1609,28 @@ def _synthesize_estimate(args: argparse.Namespace | None = None) -> int:
         f"Full re-synth:     ${report['full_force_usd']:.4f}  "
         f"(--force — {report['corpus']} source(s), one call each)"
     )
+
+    # #90: --estimate previews both backlogs. Sources are only half the work;
+    # a vault can be fully synthesized and still have an empty trusted layer.
+    backlog = summarize_backlog(
+        vault_root / "wiki", min_refs=getattr(args, "min_refs", DEFAULT_MIN_REFS)
+    )
+    print()
+    if not backlog["broken_targets"]:
+        print("Candidates:        0  (no unresolved wikilinks in wiki/sources/)")
+        return 0
+    covered = backlog["covered_links"] / backlog["broken_links"]
+    print(
+        f"Candidates:        {backlog['candidates']} stub(s) at "
+        f"--min-refs {backlog['min_refs']}  "
+        f"(closes {covered:.0%} of {backlog['broken_links']} broken link(s) "
+        f"over {backlog['broken_targets']} target(s))"
+    )
+    shape = "  ".join(
+        f"{n}:{count}" for n, count in sorted(backlog["distribution"].items())
+    )
+    print(f"  by --min-refs:   {shape}")
+    print("  generate with:   llmwiki synthesize --candidates-only")
     return 0
 
 
@@ -1916,6 +2037,30 @@ def build_parser() -> argparse.ArgumentParser:
     syn_mode.add_argument(
         "--estimate", action="store_true",
         help="Print cached-vs-fresh token + dollar estimate without calling a backend (#50)",
+    )
+    # #90: generate entity/concept candidates from already-synthesized
+    # sources. Mode-exclusive with --check/--estimate because it neither
+    # probes nor prices a backend — it does not use one.
+    syn_mode.add_argument(
+        "--candidates-only", action="store_true",
+        help=(
+            "Harvest entity/concept candidates from wiki/sources/ into "
+            "wiki/candidates/ without synthesizing (no backend needed)"
+        ),
+    )
+    syn.add_argument(
+        "--allow-unclassified", action="store_true",
+        help=(
+            "With --candidates-only: file targets the backend could not "
+            "classify as entity_type: unknown instead of failing the run"
+        ),
+    )
+    syn.add_argument(
+        "--min-refs", type=int, default=DEFAULT_MIN_REFS, metavar="N",
+        help=(
+            "Candidate threshold: a wikilink target becomes a candidate when "
+            f"N or more distinct source pages name it (default: {DEFAULT_MIN_REFS})"
+        ),
     )
     # --force is orthogonal (modifies the default re-synthesize-all flow)
     # and stays outside the exclusion group so callers can pass
