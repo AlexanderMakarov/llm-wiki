@@ -635,7 +635,20 @@ def _button_has_aria_label(page: Page, selector: str) -> None:
 
 @when("I click the document body")
 def _click_body(page: Page) -> None:
-    page.locator("body").first.click()
+    """Reset focus to the document start without activating mid-page controls.
+
+    A geometric ``body.click()`` hits the viewport center. On Home that often
+    lands on ``.state-table-wrap[tabindex=0]`` (or another main-content
+    control), so later Tab presses never enter ``header.nav``. Blur first,
+    then click the top-left padding of ``body`` where chrome is non-interactive.
+    """
+    page.evaluate(
+        """() => {
+          const a = document.activeElement;
+          if (a && a !== document.body && typeof a.blur === 'function') a.blur();
+        }"""
+    )
+    page.locator("body").first.click(position={"x": 1, "y": 1}, force=True)
 
 
 @when(parsers.parse('I press "{key}" {n:d} times'))

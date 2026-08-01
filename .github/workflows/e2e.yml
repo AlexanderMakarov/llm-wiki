@@ -63,7 +63,7 @@ jobs:
       - name: Resolve Playwright version for cache key
         id: pw-ver
         run: |
-          echo "version=$(python -c 'import importlib.metadata as m; print(m.version(\"playwright\"))')" >> "$GITHUB_OUTPUT"
+          python -c 'import importlib.metadata as m; print("version=" + m.version("playwright"))' >> "$GITHUB_OUTPUT"
 
       - name: Cache Playwright browsers
         id: playwright-cache
@@ -74,7 +74,6 @@ jobs:
           key: ${{ runner.os }}-playwright-${{ steps.pw-ver.outputs.version }}-chromium
           restore-keys: |
             ${{ runner.os }}-playwright-${{ steps.pw-ver.outputs.version }}-
-            ${{ runner.os }}-playwright-
 
       - name: Install Chromium + OS deps
         if: steps.playwright-cache.outputs.cache-hit != 'true'
