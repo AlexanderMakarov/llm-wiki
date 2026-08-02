@@ -14,6 +14,8 @@ Public API:
   - ``list_candidates(wiki_dir)`` → list of Candidate dicts
   - ``promote(slug, wiki_dir, dest)`` → move candidate into trusted area
   - ``fill_key_facts_from_evidence(text, wiki_dir, name=…)`` → enrich empty Key Facts
+  - ``rewrite_key_facts(slug, wiki_dir, synthesizer=…)`` → rewrite Key Facts on a trusted page
+  - ``strip_harvest_merge_sections(text)`` → drop pasted harvest-stub merge blocks
   - ``merge(slug, wiki_dir, into_slug)`` → fold candidate into an existing page
   - ``discard(slug, wiki_dir, reason)`` → move to archive/
   - ``stale_candidates(wiki_dir, threshold_days=30)`` → list pages flagged stale
@@ -27,7 +29,9 @@ Design choices:
   - Discard is non-destructive: pages move to ``wiki/archive/candidates/``
     with a timestamped reason file so you can recover them later.
   - Promote fills an empty ``## Key Facts`` from harvest evidence (#103);
-    non-empty reviewer facts are never overwritten.
+    non-empty reviewer facts are never overwritten on promote. Use
+    ``rewrite_key_facts`` to replace machine-assembled bullets on a page
+    that is already trusted.
 """
 
 from __future__ import annotations
@@ -460,12 +464,34 @@ def _inject_key_facts(body: str, bullets: list[str]) -> str:
     return body.rstrip() + "\n\n" + block + "\n"
 
 
+_HARVEST_BOILERPLATE_RE = re.compile(
+    r"Named by \d+ source page\(s\).*?justified this candidate:",
+    re.DOTALL,
+)
+
+#: Inner headings inside a pasted harvest stub under ``## Candidate merge``.
+_STUB_INNER_HEADINGS = frozenset({"key facts", "connections"})
+
+
+def _clear_key_facts_content(body: str) -> str:
+    """Empty an existing ``## Key Facts`` section so a rewrite can refill it."""
+    span = _section_span(body, "Key Facts")
+    if span is None:
+        return body
+    start, end = span
+    for match in _HEADING_RE.finditer(body):
+        if match.group(1).strip().lower() == "key facts":
+            return body[: match.end()] + "\n\n" + body[end:].lstrip("\n")
+    return body
+
+
 def fill_key_facts_from_evidence(
     text: str,
     wiki_dir: Path,
     *,
     name: str | None = None,
     synthesizer: BaseSynthesizer | None = None,
+    force: bool = False,
 ) -> str:
     """Fill an empty ``## Key Facts`` from harvest evidence sources (#103).
 
@@ -473,22 +499,32 @@ def fill_key_facts_from_evidence(
     ``wiki/sources/`` pages, collects every line where they name the page, and
     asks ``synthesizer`` to write declarative facts from that evidence.
 
-    Non-empty Key Facts are left untouched — same ownership rule as reviewer
-    prose above ``## Connections`` on re-harvest. A page whose sources never
-    say anything about it is left alone too: there is nothing to write from.
+    Non-empty Key Facts are left untouched unless ``force=True`` (rewrite path
+    for pages promoted by the earlier regex assembler). A page whose sources
+    never say anything about it is left alone too: there is nothing to write
+    from.
 
     Raises ``KeyFactsBackendError`` when evidence exists but ``synthesizer``
     is missing, unavailable, or not LLM-backed.
     """
     meta, body = _parse_frontmatter(text)
     page_name = (name or meta.get("title") or "").strip().strip('"')
-    if not page_name or not _key_facts_needs_fill(body):
+    if not page_name:
+        return text
+    if force:
+        body = _clear_key_facts_content(body)
+    elif not _key_facts_needs_fill(body):
         return text
 
     slugs = _evidence_source_slugs(meta, body, wiki_dir)
     evidence = _evidence_digest(wiki_dir, slugs, page_name)
     if not evidence:
-        return text
+        if not force:
+            return text
+        fm_match = FRONTMATTER_RE.match(text)
+        if fm_match:
+            return f"---\n{fm_match.group(1)}\n---\n{body}"
+        return body
 
     if synthesizer is None or not getattr(synthesizer, "is_llm", False):
         raise KeyFactsBackendError(
@@ -556,11 +592,6 @@ def promote(
 
 # ─── merge helpers (#103) ──────────────────────────────────────────────
 
-_HARVEST_BOILERPLATE_RE = re.compile(
-    r"Named by \d+ source page\(s\).*?justified this candidate:",
-    re.DOTALL,
-)
-
 
 def _split_frontmatter_text(text: str) -> tuple[str, str]:
     """Split raw page text into (frontmatter-with-delimiters, body)."""
@@ -568,6 +599,92 @@ def _split_frontmatter_text(text: str) -> tuple[str, str]:
     if not match:
         return "", text
     return f"---\n{match.group(1)}\n---\n", match.group(2)
+
+
+def strip_harvest_merge_sections(text: str) -> str:
+    """Remove ``## Candidate merge`` blocks that are pasted harvest stubs.
+
+    Pre-#103 ``merge`` appended the whole stub (second H1, empty Key Facts,
+    "Named by N source page(s)…" boilerplate). Those blocks are not reviewer
+    prose — drop them. Merges that carry real reviewer writing are kept.
+    """
+    fm, body = _split_frontmatter_text(text)
+    matches = list(_HEADING_RE.finditer(body))
+    if not matches:
+        return text
+    remove: list[tuple[int, int]] = []
+    i = 0
+    while i < len(matches):
+        heading = matches[i].group(1).strip()
+        if not heading.lower().startswith("candidate merge"):
+            i += 1
+            continue
+        start = matches[i].start()
+        j = i + 1
+        while (
+            j < len(matches)
+            and matches[j].group(1).strip().lower() in _STUB_INNER_HEADINGS
+        ):
+            j += 1
+        end = matches[j].start() if j < len(matches) else len(body)
+        section = body[start:end]
+        if _HARVEST_BOILERPLATE_RE.search(section):
+            remove.append((start, end))
+        i = max(j, i + 1)
+    if not remove:
+        return text
+    out = body
+    for start, end in reversed(remove):
+        out = out[:start].rstrip() + "\n\n" + out[end:].lstrip("\n")
+    return fm + out
+
+
+def _find_trusted_page(
+    slug: str,
+    wiki_dir: Path,
+    kind: str | None,
+) -> Path:
+    """Locate ``wiki/<kind>/<slug>.md`` (entities/concepts by default)."""
+    subs = [kind] if kind else ["entities", "concepts"]
+    for sub in subs:
+        path = wiki_dir / sub / f"{slug}.md"
+        if path.is_file():
+            return path
+    raise FileNotFoundError(
+        f"trusted page not found: {slug!r} under {wiki_dir}"
+        + (f" (kind={kind})" if kind else " (entities|concepts)")
+    )
+
+
+def rewrite_key_facts(
+    slug: str,
+    wiki_dir: Path,
+    *,
+    kind: str | None = None,
+    synthesizer: BaseSynthesizer | None = None,
+    strip_merges: bool = True,
+) -> Path:
+    """Rewrite ``## Key Facts`` on an already-trusted entity/concept page (#103).
+
+    Promote only fills empty Key Facts on the way out of ``candidates/``.
+    Pages promoted by the earlier regex assembler still carry clipped
+    fragments; this is the recovery path — force-fill from evidence via the
+    LLM backend, and optionally drop pasted harvest-stub ``## Candidate
+    merge`` blocks left by the old merge behaviour.
+    """
+    path = _find_trusted_page(slug, wiki_dir, kind)
+    text = path.read_text(encoding="utf-8")
+    if strip_merges:
+        text = strip_harvest_merge_sections(text)
+    text = fill_key_facts_from_evidence(
+        text,
+        wiki_dir,
+        name=path.stem,
+        synthesizer=synthesizer,
+        force=True,
+    )
+    path.write_text(text, encoding="utf-8")
+    return path
 
 
 def _reviewer_prose(body: str) -> str:

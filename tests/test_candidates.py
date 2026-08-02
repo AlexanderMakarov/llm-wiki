@@ -27,7 +27,9 @@ from llmwiki.candidates import (
     list_candidates,
     merge,
     promote,
+    rewrite_key_facts,
     stale_candidates,
+    strip_harvest_merge_sections,
 )
 from llmwiki.cli import build_parser
 from llmwiki.lint import (
@@ -404,6 +406,67 @@ def test_fill_key_facts_is_a_no_op_for_bare_mentions(tmp_path: Path):
     out = fill_key_facts_from_evidence(text, wiki, name="Bare", synthesizer=fake)
     assert "Invented" not in out
     assert fake.calls == []
+
+
+def test_strip_harvest_merge_sections_drops_stub_paste():
+    text = (
+        '---\ntitle: "Tailscale"\ntype: entity\n---\n\n'
+        "# Tailscale\n\n## Key Facts\n\n- Real fact. [[a]]\n\n"
+        "## Connections\n\n- [[a]]\n\n"
+        "## Candidate merge — 2026-08-01\n\n"
+        "Merged from `candidates/entities/Tailnet.md`:\n\n"
+        "# Tailnet\n\n## Key Facts\n\n## Connections\n\n"
+        "Named by 4 source page(s), which is the evidence that\n"
+        "justified this candidate:\n\n- [[b]]\n"
+    )
+    out = strip_harvest_merge_sections(text)
+    assert "## Candidate merge" not in out
+    assert "- Real fact. [[a]]" in out
+    assert "Tailnet" not in out
+
+
+def test_strip_harvest_merge_keeps_reviewer_prose():
+    text = (
+        '---\ntitle: "Main"\ntype: entity\n---\n\n# Main\n\n'
+        "## Candidate merge — 2026-08-01\n\n"
+        "Merged from `candidates/entities/Dup.md`:\n\n"
+        "Reviewer added context about the duplicate.\n"
+    )
+    out = strip_harvest_merge_sections(text)
+    assert "## Candidate merge" in out
+    assert "Reviewer added context" in out
+
+
+def test_rewrite_key_facts_replaces_regex_bullets(tmp_path: Path):
+    wiki = _mk_wiki(tmp_path)
+    (wiki / "sources").mkdir(parents=True, exist_ok=True)
+    (wiki / "sources" / "alpha.md").write_text(
+        "---\ntitle: Alpha\ntype: source\n---\n\n"
+        "## Connections\n- [[Foo]] — the auth gateway\n",
+        encoding="utf-8",
+    )
+    page = wiki / "entities" / "Foo.md"
+    page.write_text(
+        '---\ntitle: "Foo"\ntype: entity\nstatus: reviewed\n'
+        "sources: [alpha]\n---\n\n# Foo\n\n"
+        "## Key Facts\n\n- [[alpha]]: [[Other]] sat near the link\n\n"
+        "## Connections\n\n- [[alpha]]\n\n"
+        "## Candidate merge — 2026-08-01\n\n"
+        "Merged from `candidates/entities/FooAlias.md`:\n\n"
+        "# FooAlias\n\n## Key Facts\n\n## Connections\n\n"
+        "Named by 1 source page(s), which is the evidence that\n"
+        "justified this candidate:\n\n- [[alpha]]\n",
+        encoding="utf-8",
+    )
+    fake = _FakeSynthesizer(
+        "- Serves as the auth gateway for the stack. [[alpha]]\n"
+    )
+
+    out = rewrite_key_facts("Foo", wiki, synthesizer=fake).read_text(encoding="utf-8")
+    assert "sat near the link" not in out
+    assert "Serves as the auth gateway" in out
+    assert "## Candidate merge" not in out
+    assert fake.calls, "rewrite must call the backend"
 
 
 # ─── merge ──────────────────────────────────────────────────────────

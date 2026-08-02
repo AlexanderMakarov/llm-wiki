@@ -11,6 +11,7 @@ Versions below 1.0 are pre-production — API and file formats may change.
 ### Added
 
 - **Promote writes Key Facts with the synthesis backend (#103)** — `llmwiki candidates promote` (and `/wiki-candidates`) fill an empty or heading-only `## Key Facts` by handing the configured LLM backend an evidence digest: every line where each `sources:` / Connections source page names the subject, capped at 12 sources and 4 lines each. The model returns 3–5 attributed, declarative bullets; preamble and over-cap bullets are dropped. Non-empty reviewer Key Facts are preserved, and a page whose sources never say anything about it is left untouched.
+- **`llmwiki candidates rewrite-key-facts` (#103)** — recovery for trusted pages that still carry machine-assembled Key Facts (or pasted harvest-stub `## Candidate merge` blocks). `--slug` one page, or `--all` for every entity/concept. Same LLM backend requirement as promote.
 - **`prompts/key_facts.md`** — the new prompt template, overridable per vault at `wiki/prompts/key_facts.md`.
 - **`BaseSynthesizer.synthesize_key_facts()`** — new backend entry point, defaulting to the source-page call path so existing backends need no change. `BaseSynthesizer.is_llm` marks backends that actually call a model.
 

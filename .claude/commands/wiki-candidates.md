@@ -47,6 +47,11 @@ Usage: `/wiki-candidates`
      ```
 
 3. Prefer these CLI actions (same library as the site will use). Do **not** run idle `sync`/`synth` only to refresh the catalog after review — promote/merge/discard already reconcile `index.md`. Do **not** hand-fill empty Key Facts on promote when the CLI already does it (#103).
+   Trusted pages that still have clipped regex Key Facts (or pasted harvest-stub `## Candidate merge` blocks) are fixed with:
+   ```
+   python3 -m llmwiki candidates rewrite-key-facts --slug MyEntity
+   ```
+   or `--all` for the whole knowledge layer (costs one LLM call per page).
 
 4. Append to `wiki/log.md`:
    ```

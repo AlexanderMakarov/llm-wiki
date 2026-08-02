@@ -362,7 +362,7 @@ python3 -m llmwiki lint --wiki-dir ~/another-wiki
 
 ## `candidates` — approval workflow
 
-Positional `action` picks `list` / `promote` / `merge` / `discard`.
+Positional `action` picks `list` / `promote` / `merge` / `discard` / `rewrite-key-facts`.
 
 Successful `promote` / `merge` / `discard` reconcile `wiki/index.md` (#101): dead `candidates/…` bullets are dropped, an empty `## Candidates` section is removed, and newly trusted pages are listed under Entities/Concepts. `/wiki-candidates` should call these same actions — do not run idle `sync`/`synth` just to refresh the catalog after review.
 
@@ -372,6 +372,8 @@ Because those bullets become trusted-layer prose, promote refuses to write them 
 
 `merge` folds a harvest stub into the target by unioning its `sources:` and Connections links and recording the name under `## Aliases`; a candidate containing reviewer prose still has that prose appended under `## Candidate merge — <date>`.
 
+Already-trusted pages that still carry machine-assembled (regex) Key Facts, or pasted harvest-stub `## Candidate merge` blocks from the old merge path, are fixed with `rewrite-key-facts`:
+
 ```bash
 python3 -m llmwiki candidates list
 python3 -m llmwiki candidates list --stale --stale-days 60
@@ -380,13 +382,16 @@ python3 -m llmwiki candidates promote --slug NewEntity
 python3 -m llmwiki candidates promote --slug NewEntity --kind concepts
 python3 -m llmwiki candidates merge --slug DuplicateFoo --into Foo
 python3 -m llmwiki candidates discard --slug BogusEntity --reason "LLM hallucinated"
+python3 -m llmwiki candidates rewrite-key-facts --slug ExistingEntity
+python3 -m llmwiki candidates rewrite-key-facts --all
 ```
 
 ### Flags
 
 | Flag | What |
 |---|---|
-| `--slug NAME` | Candidate slug. **Required** for `promote` / `merge` / `discard`. |
+| `--slug NAME` | Page slug. **Required** for `promote` / `merge` / `discard`; or with `rewrite-key-facts`. |
+| `--all` | For `rewrite-key-facts`: every entity/concept page. |
 | `--into NAME` | For `merge`: target slug. |
 | `--reason TEXT` | For `discard`: why (written to archive's `.reason.txt`). |
 | `--kind {entities,concepts,sources,syntheses}` | Subtree. Auto-detected if omitted. |
