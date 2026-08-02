@@ -51,6 +51,26 @@ def split_prompt_template(template: str) -> tuple[str, str]:
 class BaseSynthesizer(ABC):
     """Interface for LLM-backed wiki-page synthesizers."""
 
+    #: False on backends that return canned text. Callers that must not
+    #: publish machine-assembled prose (candidates.promote) check this
+    #: instead of pattern-matching on class names.
+    is_llm = True
+
+    def synthesize_key_facts(
+        self,
+        evidence: str,
+        meta: dict[str, Any],
+        prompt_template: str,
+    ) -> str:
+        """Given an evidence digest for one entity/concept, return its
+        ``## Key Facts`` bullets as markdown (#103).
+
+        The call shape is identical to a source page — render the template
+        with ``{body}`` / ``{meta}`` and return the completion — so backends
+        get this for free and only override to special-case the output.
+        """
+        return self.synthesize_source_page(evidence, meta, prompt_template)
+
     @abstractmethod
     def synthesize_source_page(
         self,
@@ -92,6 +112,8 @@ class DummySynthesizer(BaseSynthesizer):
     mentions as plain text in ``## Raw Mentions`` so the information
     isn't lost but ``check-links`` doesn't cry wolf.
     """
+
+    is_llm = False
 
     def _title_case_project(self, project: str) -> str:
         """``ai-newsletter`` → ``AiNewsletter`` (matches entity filenames)."""

@@ -10,6 +10,13 @@ How to upgrade between `llmwiki` releases.  Most releases are drop-in (`pip inst
 
 The canonical per-release detail is [CHANGELOG.md](https://github.com/Pratiyush/llm-wiki/blob/master/CHANGELOG.md) — this guide focuses on "what might break".
 
+## Unreleased — promote writes Key Facts with an LLM (#103)
+
+- **`llmwiki candidates promote` now needs a synthesis backend.** Promoting a page with an empty `## Key Facts` fails with `KeyFactsBackendError` unless `synthesis.backend` is `claude` or `ollama` in `config.json`. The candidate stays in `wiki/candidates/` so you can retry after configuring one. Pages that already have Key Facts, and pages whose sources never describe them, promote without any backend.
+- **`llmwiki candidates merge` no longer pastes the candidate body** when the candidate is a harvest stub. Its `sources:` and Connections links are unioned into the target page and the name goes under `## Aliases`. Reviewer-written candidates still get their prose appended under `## Candidate merge — <date>`.
+- **`/wiki-candidates` should use the CLI promote path** for this — do not invent a separate free-text enhance pass for the common empty-Key-Facts case.
+- **Pages promoted by an earlier build carry machine-assembled Key Facts.** Those bullets were clipped from the line nearest a wikilink, so some state a fact about a different subject. Rewrite them with `llmwiki candidates rewrite-key-facts --slug <Name>` (or `--all` for every entity/concept). That also drops pasted harvest-stub `## Candidate merge` blocks left by the old merge behaviour.
+
 ## Unreleased — lint skips `wiki/archive/`
 
 - **`llmwiki lint` no longer scans archived pages.** `wiki/archive/` is history — demoted pages and candidates you discarded — and it was being linted like the trusted layer.

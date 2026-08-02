@@ -8,6 +8,18 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ## [Unreleased]
 
+### Added
+
+- **Promote writes Key Facts with the synthesis backend (#103)** — `llmwiki candidates promote` (and `/wiki-candidates`) fill an empty or heading-only `## Key Facts` by handing the configured LLM backend an evidence digest: every line where each `sources:` / Connections source page names the subject, capped at 12 sources and 4 lines each. The model returns 3–5 attributed, declarative bullets; preamble and over-cap bullets are dropped. Non-empty reviewer Key Facts are preserved, and a page whose sources never say anything about it is left untouched.
+- **`llmwiki candidates rewrite-key-facts` (#103)** — recovery for trusted pages that still carry machine-assembled Key Facts (or pasted harvest-stub `## Candidate merge` blocks). `--slug` one page, or `--all` for every entity/concept. Same LLM backend requirement as promote.
+- **`prompts/key_facts.md`** — the new prompt template, overridable per vault at `wiki/prompts/key_facts.md`.
+- **`BaseSynthesizer.synthesize_key_facts()`** — new backend entry point, defaulting to the source-page call path so existing backends need no change. `BaseSynthesizer.is_llm` marks backends that actually call a model.
+
+### Changed
+
+- **`candidates promote` requires an LLM backend (#103)** — when a page needs Key Facts written and `synthesis.backend` is unset or `dummy`, promote now fails with `KeyFactsBackendError` and leaves the candidate in place instead of assembling bullets by string-slicing. Set `synthesis.backend` to `claude` or `ollama` in `config.json`.
+- **`candidates merge` unions evidence instead of pasting the stub (#103)** — a harvest stub's `sources:` and Connections links are merged into the target page and the merged-away name is recorded under `## Aliases`. Pasting the stub body verbatim nested a second H1 and a second empty `## Key Facts` into the target and stranded the evidence links outside its own Connections list. Candidates carrying reviewer prose still get that prose appended under `## Candidate merge — <date>`.
+
 ### Fixed
 
 - **Docs pages share the site runtime** — every page under `site/docs/` rendered the site nav (theme toggle, ⌘K search button, hamburger drawer) but never emitted the shared page footer, so `script.js` was absent and none of those controls did anything. `compile_docs_site` now takes the same injected `page_foot` that `render_document_pages` already used, which also brings the footer, mobile bottom nav, and search-palette markup to the docs section. The palette's index URL is prefixed per page depth, so nested pages resolve `search-index.json` correctly.

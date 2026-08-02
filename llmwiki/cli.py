@@ -50,10 +50,12 @@ from llmwiki.automation_install import run_install
 from llmwiki.build import RAW_DIR, RAW_SESSIONS, build_site
 from llmwiki.cache import MODEL_PRICING, resolve_pricing_model
 from llmwiki.candidates import (
+    KeyFactsBackendError,
     apply_review_summary_to_pipeline,
     discard,
     list_candidates,
     promote,
+    rewrite_key_facts,
     stale_candidates,
 )
 from llmwiki.candidates import (
@@ -1659,10 +1661,51 @@ def cmd_candidates(args: argparse.Namespace) -> int:
         if not args.slug:
             print("error: --slug is required for promote", file=sys.stderr)
             return 2
-        path = promote(args.slug, wiki_dir, kind=args.kind)
+        try:
+            path = promote(
+                args.slug, wiki_dir, kind=args.kind,
+                synthesizer=resolve_backend(_load_sessions_config()),
+            )
+        except KeyFactsBackendError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
         print(f"  promoted → {path.relative_to(wiki_dir)}")
         _refresh_review_counts(wiki_dir)
         return 0
+
+    if action == "rewrite-key-facts":
+        backend = resolve_backend(_load_sessions_config())
+        slugs: list[str]
+        if getattr(args, "all", False):
+            kinds = [args.kind] if args.kind else ["entities", "concepts"]
+            slugs = []
+            for sub in kinds:
+                root = wiki_dir / sub
+                if not root.is_dir():
+                    continue
+                for path in sorted(root.glob("*.md")):
+                    if path.name != "_context.md":
+                        slugs.append(path.stem)
+        elif args.slug:
+            slugs = [args.slug]
+        else:
+            print(
+                "error: --slug or --all is required for rewrite-key-facts",
+                file=sys.stderr,
+            )
+            return 2
+        ok = 0
+        for slug in slugs:
+            try:
+                path = rewrite_key_facts(
+                    slug, wiki_dir, kind=args.kind, synthesizer=backend,
+                )
+            except (FileNotFoundError, KeyFactsBackendError) as exc:
+                print(f"error: {exc}", file=sys.stderr)
+                continue
+            print(f"  rewrote Key Facts → {path.relative_to(wiki_dir)}")
+            ok += 1
+        return 0 if ok == len(slugs) else 2
 
     if action == "merge":
         if not args.slug or not args.into:
@@ -2006,14 +2049,18 @@ def build_parser() -> argparse.ArgumentParser:
     # candidates (v1.1, #51) — approval workflow
     cand = sub.add_parser(
         "candidates",
-        help="List / promote / merge / discard candidate wiki pages (approval workflow)",
+        help="List / promote / merge / discard / rewrite-key-facts (approval workflow)",
     )
     cand.add_argument(
-        "action", choices=["list", "promote", "merge", "discard"],
-        help="What to do with candidates",
+        "action",
+        choices=["list", "promote", "merge", "discard", "rewrite-key-facts"],
+        help="What to do with candidates / trusted Key Facts",
     )
     cand.add_argument("--slug", type=str, default=None,
-                      help="Candidate slug (required for promote/merge/discard)")
+                      help="Page slug (required for promote/merge/discard; "
+                           "or with rewrite-key-facts)")
+    cand.add_argument("--all", action="store_true",
+                      help="For rewrite-key-facts: every entity/concept page")
     cand.add_argument("--into", type=str, default=None,
                       help="For merge: slug of the page to merge into")
     cand.add_argument("--reason", type=str, default="",
