@@ -67,6 +67,7 @@ from llmwiki.candidates_harvest import (
     run_harvest,
     summarize_backlog,
 )
+from llmwiki.candidates_site import apply_candidate_actions
 from llmwiki.config_schedule import (
     _load_sessions_config,
     load_default_vault_path,
@@ -1658,6 +1659,49 @@ def cmd_candidates(args: argparse.Namespace) -> int:
                 print(f"    [{c['kind']:9}] {c['slug']}  ({age})  — {c['title']}")
         return 0
 
+    if action == "apply":
+        raw = getattr(args, "actions", None)
+        if not raw:
+            print(
+                "error: --actions JSON array is required for apply "
+                '(e.g. \'[{"action":"promote","slug":"Foo","kind":"entities"}]\')',
+                file=sys.stderr,
+            )
+            return 2
+        if raw.strip() == "-":
+            raw = sys.stdin.read()
+        try:
+            parsed = _json.loads(raw)
+        except json.JSONDecodeError as exc:
+            print(f"error: --actions is not valid JSON: {exc}", file=sys.stderr)
+            return 2
+        if not isinstance(parsed, list) or not parsed:
+            print(
+                "error: --actions must be a non-empty JSON array",
+                file=sys.stderr,
+            )
+            return 2
+        backend = resolve_backend(_load_sessions_config())
+        results = apply_candidate_actions(
+            wiki_dir, parsed, synthesizer=backend,
+        )
+        any_ok = False
+        for r in results:
+            slug = r.get("slug") or "?"
+            act = r.get("action") or "?"
+            if r.get("ok"):
+                any_ok = True
+                rel = r.get("path") or ""
+                print(f"  ok  {act} {slug}" + (f" → {rel}" if rel else ""))
+            else:
+                print(
+                    f"  fail {act} {slug}: {r.get('error') or 'unknown error'}",
+                    file=sys.stderr,
+                )
+        if any_ok:
+            _refresh_review_counts(wiki_dir)
+        return 0 if all(r.get("ok") for r in results) else 2
+
     if action == "promote":
         if not args.slug:
             print("error: --slug is required for promote", file=sys.stderr)
@@ -2072,12 +2116,13 @@ def build_parser() -> argparse.ArgumentParser:
     # candidates (v1.1, #51) — approval workflow
     cand = sub.add_parser(
         "candidates",
-        help="List / promote / flip-promote / merge / discard / rewrite-key-facts",
+        help="List / promote / flip-promote / merge / discard / apply / rewrite-key-facts",
     )
     cand.add_argument(
         "action",
         choices=[
-            "list", "promote", "flip-promote", "merge", "discard", "rewrite-key-facts",
+            "list", "promote", "flip-promote", "merge", "discard", "apply",
+            "rewrite-key-facts",
         ],
         help="What to do with candidates / trusted Key Facts",
     )
@@ -2100,6 +2145,11 @@ def build_parser() -> argparse.ArgumentParser:
     cand.add_argument("--stale-days", type=int, default=30,
                       help="Staleness threshold in days (default 30)")
     cand.add_argument("--json", action="store_true", help="JSON output for list")
+    cand.add_argument(
+        "--actions", type=str, default=None, metavar="JSON",
+        help="For apply: JSON array of {action,slug,kind?,into?,reason?} "
+             "(same shape as POST /api/candidates); pass - to read stdin",
+    )
     _add_vault_arg(cand, role="candidates")
     cand.set_defaults(func=cmd_candidates)
 

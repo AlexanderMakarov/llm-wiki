@@ -362,15 +362,24 @@ python3 -m llmwiki lint --wiki-dir ~/another-wiki
 
 ## `candidates` — approval workflow
 
-Positional `action` picks `list` / `promote` / `flip-promote` / `merge` / `discard` / `rewrite-key-facts`.
+Positional `action` picks `list` / `promote` / `flip-promote` / `merge` / `discard` / `apply` / `rewrite-key-facts`.
 
-Successful `promote` / `flip-promote` / `merge` / `discard` reconcile `wiki/index.md` (#101): dead `candidates/…` bullets are dropped, an empty `## Candidates` section is removed, and newly trusted pages are listed under Entities/Concepts. `/wiki-candidates` should call these same actions — do not run idle `sync`/`synth` just to refresh the catalog after review. Site UI: open `/candidates.html` under `llmwiki serve` for the same drain actions with buttons (#97).
+Successful `promote` / `flip-promote` / `merge` / `discard` / `apply` reconcile `wiki/index.md` (#101): dead `candidates/…` bullets are dropped, an empty `## Candidates` section is removed, and newly trusted pages are listed under Entities/Concepts. `/wiki-candidates` should call these same actions — do not run idle `sync`/`synth` just to refresh the catalog after review. Site UI: open `/candidates.html` — per-row decisions + Apply; batch API under `llmwiki serve`, or one pasteable `candidates apply --actions '…'` command when static (#97).
 
 `promote` also writes an empty (or heading-only) `## Key Facts` (#103). It builds an evidence digest — every line where each source listed in frontmatter `sources:` / Connections names the subject, capped at 12 sources and 4 lines each — and hands it to the backend named by `synthesis.backend`, which returns 3–5 attributed bullets. Non-empty reviewer Key Facts are left alone.
 
 Because those bullets become trusted-layer prose, promote refuses to write them without a model: with `synthesis.backend` unset or `dummy` it exits 2 with `KeyFactsBackendError` and leaves the candidate pending. Override the prompt per vault at `wiki/prompts/key_facts.md`.
 
 `merge` folds a harvest stub into the target by unioning its `sources:` and Connections links and recording the name under `## Aliases`; a candidate containing reviewer prose still has that prose appended under `## Candidate merge — <date>`. Target may be a trusted page or another pending stub in the same kind.
+
+`apply` runs a **batch** of the same intents in one process (same JSON shape as `POST /api/candidates`):
+
+```bash
+python3 -m llmwiki candidates apply --actions '[{"action":"promote","slug":"Foo","kind":"entities"},{"action":"promote","slug":"Prompt Caching","kind":"concepts"}]'
+python3 -m llmwiki candidates apply --actions - <<'EOF'
+[{"action":"discard","slug":"Bogus","kind":"entities","reason":"noise"}]
+EOF
+```
 
 Already-trusted pages that still carry machine-assembled (regex) Key Facts, or pasted harvest-stub `## Candidate merge` blocks from the old merge path, are fixed with `rewrite-key-facts`:
 
@@ -400,6 +409,7 @@ python3 -m llmwiki candidates rewrite-key-facts --all
 | `--stale` | With `list`: only stale candidates. |
 | `--stale-days N` | Staleness threshold. Default: 30. |
 | `--json` | JSON output for `list`. |
+| `--actions JSON` | For `apply`: JSON array of `{action,slug,kind?,into?,reason?}`. Pass `-` to read the array from stdin. |
 
 See [`guides/existing-vault.md`](../guides/existing-vault.md) for the round-trip semantics when a candidate lives inside a vault.
 

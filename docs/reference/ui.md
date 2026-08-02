@@ -17,8 +17,8 @@ Every page in the site carries the same header nav. Keyboard: `⌘K` opens the c
 | # | Label | URL | Surfaces |
 |---|---|---|---|
 | 1 | **Home** | `/index.html` | pipeline State widget (Files layer Raw→To synthesize→Synthesized + Knowledge layer Candidates/Entities/Concepts + collapsible backlog/candidates/commands) + recent raw docs |
-| — | **Candidates** | `/candidates.html` | pending entity/concept review tables (Promote · Flip and promote · Discard · Merge) — actions need `llmwiki serve` |
 | 2 | **Raw** | `/raw.html` | file tree browser of raw documents (wiki-add layer) |
+| — | **Candidates** | `/candidates.html` | pending entity/concept review (per-row decision + Apply); batch API under serve, or copy-CLI when static |
 | 3 | **Graph** | `/graph.html` | interactive force-directed knowledge graph (vis-network) |
 | 4 | **Projects** | `/projects/index.html` | filterable card grid of every project + freshness badge |
 | 5 | **Sessions** | `/sessions/index.html` | sortable table of every session, agent badge, project, model, tool-call count |
@@ -51,16 +51,17 @@ Numbers come from `llmwiki-state.js` (`synth.pipeline` + `synth.pending` + `synt
 
 URL: `/candidates.html`
 
-Review gate for pending stubs under `wiki/candidates/` (#97). Two tables — **Entities (pending)** and **Concepts (pending)** — with Name, Description, and Actions:
+Review gate for pending stubs under `wiki/candidates/` (#97). Two tables — **Entities (pending)** and **Concepts (pending)** — with Name, Description, and Decision:
 
-| Action | Effect |
+| Decision | Effect |
 |---|---|
+| **Skip** | Leave pending (default) |
 | **Promote** | Move into trusted `wiki/entities/` or `wiki/concepts/`; `status: reviewed` |
 | **Flip and promote** | Wrong kind → promote into the opposite trusted folder and rewrite `type:` (do not hand-`mv` stubs between candidate folders) |
 | **Discard** | Archive under `wiki/archive/candidates/` |
-| **Merge with…** | Dropdown of other pending names in the **same table**; merges body then archives the source stub (CLI `merge` can also target a trusted same-kind page) |
+| **Merge with…** | Pick another pending name in the **same table**; merges then archives the source stub (CLI `merge` can also target a trusted same-kind page) |
 
-Buttons POST to `/api/candidates` when the site is opened via `llmwiki serve` with vault layout (`…/site` beside `…/wiki`). Opening `candidates.html` as `file://` (or any server that does not host that API) shows an on-page error with the exact command: `llmwiki serve`, then `http://127.0.0.1:8765/candidates.html`. After a successful action the page reloads; run `llmwiki build` for a cold-open Home/Analytics recount. Same four actions are available from `/wiki-candidates` and `llmwiki candidates …`.
+Set decisions per row, then **Apply**. Under `llmwiki serve` (vault `…/site` beside `…/wiki`), Apply POSTs a **batch** to `/api/candidates`. On a static or `file://` open, Apply shows one pasteable `llmwiki candidates apply --actions '[{…}]'` line (Copy CLI) — same JSON shape as the API. After a successful served Apply the page reloads; run `llmwiki build` for a cold-open Home/Analytics recount. One-off CLI actions and `/wiki-candidates` remain available.
 
 ---
 

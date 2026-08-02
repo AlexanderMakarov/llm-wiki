@@ -274,10 +274,12 @@ def render_candidates_review_section(
         '<section class="section candidates-review-section"><div class="container">'
         '<h2><a href="candidates.html">Candidates to review</a></h2>'
         '<p class="muted">Pending entity/concept stubs. Drain via the Candidates page '
-        "(under <code>llmwiki serve</code>), "
+        "(batch Apply under <code>llmwiki serve</code>, or copy "
+        "<code>llmwiki candidates apply --actions</code> when static), "
         "agent <code>/wiki-candidates</code>, or CLI "
-        "<code>promote</code> / <code>flip-promote</code> / <code>merge</code> / "
-        "<code>discard</code>. Synthesis alone does not finish the trusted layer.</p>"
+        "<code>apply</code> / <code>promote</code> / <code>flip-promote</code> / "
+        "<code>merge</code> / <code>discard</code>. Synthesis alone does not "
+        "finish the trusted layer.</p>"
         '<div class="token-stat-grid wiki-value-stats wiki-candidates-stats">'
         '<div class="token-stat"><div class="token-stat-label muted">'
         '<a href="candidates.html">Pending candidates</a></div>'

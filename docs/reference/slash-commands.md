@@ -233,9 +233,9 @@ want to re-run sync.
 
 ### `/wiki-candidates`
 
-**What:** triage pending candidates — `promote`, `flip-promote`, `merge`, or `discard`.
+**What:** triage pending candidates — `promote`, `flip-promote`, `merge`, `discard`, or batch `apply --actions`.
 
-**Wraps:** `python3 -m llmwiki candidates list` + follow-ups. Same four actions as `/candidates.html` under `llmwiki serve`.
+**Wraps:** `python3 -m llmwiki candidates list` + follow-ups (`apply --actions` for batches). Same intents as `/candidates.html` (batch Apply under serve, or copy one `apply --actions` CLI line when static).
 
 **When to use:** Home **Candidates** / Analytics **Candidates to review** is non-zero, `/wiki-lint` reported `stale_candidates`, or you just ran `llmwiki synth` / `synth --candidates-only`.
 

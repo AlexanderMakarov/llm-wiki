@@ -2,7 +2,7 @@ Review and triage candidate wiki pages — promote, flip and promote, merge, or 
 
 Candidate pages live under `wiki/candidates/<kind>/<slug>.md`. They are usually created by `llmwiki synth` (default harvest after sources) or `llmwiki synth --candidates-only`. They are **not** part of the trusted wiki layer until a human or agent approves them.
 
-Home **Candidates** (Knowledge layer) and Analytics **Candidates to review** show the backlog after `llmwiki build`. Open `/candidates.html` on the served site for the same four actions with buttons.
+Home **Candidates** (Knowledge layer) and Analytics **Candidates to review** show the backlog after `llmwiki build`. Open `/candidates.html` (header: Home → Raw → **Candidates** …) for the same intents: per-row decisions + **Apply**. Under `llmwiki serve` Apply POSTs a batch; on a static / `file://` open it shows one pasteable `llmwiki candidates apply --actions '…'` command.
 
 Usage: `/wiki-candidates`
 
@@ -47,7 +47,12 @@ Usage: `/wiki-candidates`
        --reason "not a real company; LLM hallucinated"
      ```
 
-3. Prefer these CLI actions (same library as `/candidates.html`). Do **not** run idle `sync`/`synth` only to refresh the catalog after review — promote/merge/discard already reconcile `index.md`. Do **not** hand-fill empty Key Facts on promote when the CLI already does it (#103). After promote/merge, run `/wiki-lint` to catch broken wikilinks and `llmwiki build` so Home/Analytics counts refresh.
+   - **apply** — batch several intents in one process (same JSON as `POST /api/candidates` / the static Copy CLI line):
+     ```
+     python3 -m llmwiki candidates apply --actions '[{"action":"promote","slug":"MyEntity","kind":"entities"}]'
+     ```
+
+3. Prefer these CLI actions (same library as `/candidates.html`). Do **not** run idle `sync`/`synth` only to refresh the catalog after review — promote/merge/discard/apply already reconcile `index.md`. Do **not** hand-fill empty Key Facts on promote when the CLI already does it (#103). After promote/merge, run `/wiki-lint` to catch broken wikilinks and `llmwiki build` so Home/Analytics counts refresh.
    Trusted pages that still have clipped regex Key Facts (or pasted harvest-stub `## Candidate merge` blocks) are fixed with:
    ```
    python3 -m llmwiki candidates rewrite-key-facts --slug MyEntity
@@ -61,7 +66,7 @@ Usage: `/wiki-candidates`
 
 ## Related
 
-- #51 — approval workflow; #84 — Home/Analytics observability; #90 — harvest; #97 — `/candidates.html` review UI; #101 — promote/merge/discard reconcile index.md; #103 — promote fills empty Key Facts from evidence
+- #51 — approval workflow; #84 — Home/Analytics observability; #90 — harvest; #97 — `/candidates.html` decision+Apply UI (serve batch API / static `apply --actions`); #101 — promote/merge/discard/apply reconcile index.md; #103 — promote fills empty Key Facts from evidence
 - `/wiki-lint` — finds stale candidates (age > 30 days) and broken wikilinks after review
 - `llmwiki synth` / `synth --candidates-only` — harvest stubs from synthesized sources
 - `/wiki-ingest` — optional enrichment / review discussion over candidates

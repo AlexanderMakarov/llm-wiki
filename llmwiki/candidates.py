@@ -2,10 +2,10 @@
 
 New entity/concept pages created by `/wiki-ingest` land in
 ``wiki/candidates/`` first with ``status: candidate`` frontmatter.
-A human then runs `/wiki-candidates` to promote, merge, or discard each
-one. Promoted pages move into ``wiki/entities/`` or ``wiki/concepts/``.
-Discarded candidates are archived under ``wiki/archive/candidates/``
-for audit.
+A human then runs `/wiki-candidates` (or `/candidates.html` / ``candidates apply``)
+to promote, merge, or discard each one. Promoted pages move into
+``wiki/entities/`` or ``wiki/concepts/``. Discarded candidates are archived
+under ``wiki/archive/candidates/`` for audit.
 
 Rationale: hallucinated entities ("CompanyX" that doesn't exist) should
 not land in the trusted wiki layer without human review.

@@ -14,7 +14,7 @@ The landing page for a built llmwiki. Within 5 seconds a visitor must understand
 - Page `<title>` contains "LLM Wiki".
 - A visible hero heading with text "LLM Wiki" (h1).
 - A subtitle paragraph mentioning "sessions".
-- Top nav has links: Home, Projects, Sessions, Graph, Docs, Changelog.
+- Top nav has links: Home, Raw, Candidates, Graph, Projects, Sessions, Analytics, Docs (plus Search / theme).
 - Active link in the nav is "Home" (carries `class="active"`).
 - A 365-day activity heatmap section below the hero.
 - A token-stats grid block (`.token-stat-grid`) below the heatmap.

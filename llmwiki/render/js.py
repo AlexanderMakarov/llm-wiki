@@ -127,7 +127,7 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
     });
     items.push("<li><strong>Stale (≥" + staleDays + "d):</strong> " + stale + "</li>");
     return "<ul class=\"queue-type-list\">" + items.join("") + "</ul>" +
-      '<p class="muted">Review focus: identity / naming / kind / duplicates — not primarily <code>## Contradictions</code>. Approve via agent <code>/wiki-candidates</code> or <code>llmwiki candidates promote|merge|discard</code>.</p>';
+      '<p class="muted">Review focus: identity / naming / kind / duplicates — not primarily <code>## Contradictions</code>. Approve via the Candidates page, agent <code>/wiki-candidates</code>, or <code>llmwiki candidates apply|promote|merge|discard</code>.</p>';
   }
   function renderStateWidget(root, snapshot) {
     if (!root) return;

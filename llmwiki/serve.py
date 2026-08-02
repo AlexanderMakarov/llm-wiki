@@ -3,9 +3,10 @@
 Uses only Python stdlib. Binds to 127.0.0.1 by default so nothing is exposed
 to the network unless the user explicitly passes --host 0.0.0.0.
 
-Also hosts ``POST /api/candidates`` for the #97 review UI — same library
-paths as ``llmwiki candidates …``. Wiki root is inferred as
-``<site>/../wiki`` (vault layout).
+Also hosts ``POST /api/candidates`` for the #97 review UI — batch of
+promote / flip-promote / merge / discard via the same library paths as
+``llmwiki candidates apply --actions`` (and the one-off subcommands).
+Wiki root is inferred as ``<site>/../wiki`` (vault layout).
 """
 
 from __future__ import annotations
@@ -19,15 +20,8 @@ from typing import Any
 from urllib.parse import urlparse
 
 from llmwiki.build import render_candidates_page
-from llmwiki.candidates import (
-    KeyFactsBackendError,
-    apply_review_summary_to_pipeline,
-    discard,
-    flip_and_promote,
-    merge,
-    promote,
-)
-from llmwiki.candidates_site import candidates_payload
+from llmwiki.candidates import apply_review_summary_to_pipeline
+from llmwiki.candidates_site import apply_candidate_actions, candidates_payload
 from llmwiki.config_schedule import _load_sessions_config
 from llmwiki.state_store import update_state
 from llmwiki.synth.pipeline import resolve_backend
@@ -112,75 +106,50 @@ class _QuietHandler(SimpleHTTPRequestHandler):
             self._json_response(400, {"error": "JSON object required"})
             return
 
-        action = str(data.get("action") or "").strip()
-        slug = str(data.get("slug") or "").strip()
-        kind = data.get("kind")
-        kind_s = str(kind).strip() if kind else None
-        into = str(data.get("into") or "").strip()
-        reason = str(data.get("reason") or "").strip()
-
-        try:
-            backend = resolve_backend(_load_sessions_config())
-            if action == "promote":
-                if not slug:
-                    raise ValueError("--slug is required")
-                path = promote(slug, wiki_dir, kind=kind_s, synthesizer=backend)
-            elif action == "flip-promote":
-                if not slug:
-                    raise ValueError("--slug is required")
-                path = flip_and_promote(
-                    slug, wiki_dir, kind=kind_s, synthesizer=backend,
-                )
-            elif action == "discard":
-                if not slug:
-                    raise ValueError("--slug is required")
-                path = discard(slug, wiki_dir, reason=reason, kind=kind_s)
-            elif action == "merge":
-                if not slug or not into:
-                    raise ValueError("both slug and into are required")
-                path = merge(slug, wiki_dir, into_slug=into, kind=kind_s)
-            else:
-                self._json_response(400, {"error": f"unknown action {action!r}"})
-                return
-        except FileNotFoundError as exc:
-            self._json_response(404, {"error": str(exc)})
+        raw_actions = data.get("actions")
+        if raw_actions is None:
+            self._json_response(
+                400,
+                {"error": "actions array required (batch-only API)"},
+            )
             return
-        except KeyFactsBackendError as exc:
-            self._json_response(400, {"error": str(exc)})
+        if not isinstance(raw_actions, list):
+            self._json_response(400, {"error": "actions must be an array"})
             return
-        except (ValueError, FileExistsError) as exc:
-            self._json_response(400, {"error": str(exc)})
-            return
-        except OSError as exc:
-            self._json_response(500, {"error": str(exc)})
-            return
-
-        _refresh_review_counts_for_wiki(wiki_dir)
-        site_dir = Path(getattr(self, "directory", ".") or ".")
-        try:
-            render_candidates_page(wiki_dir, site_dir)
-        except Exception as exc:  # noqa: BLE001 — still return ok; UI can rebuild
+        # Empty list is a probe from the review page (API present?).
+        if not raw_actions:
             self._json_response(
                 200,
-                {
-                    "ok": True,
-                    "path": str(path),
-                    "rewrote_page": False,
-                    "warning": f"could not rewrite candidates.html: {exc}",
-                    **candidates_payload(wiki_dir),
-                },
+                {"ok": True, "results": [], **candidates_payload(wiki_dir)},
             )
             return
 
-        self._json_response(
-            200,
-            {
-                "ok": True,
-                "path": str(path),
-                "rewrote_page": True,
-                **candidates_payload(wiki_dir),
-            },
+        backend = resolve_backend(_load_sessions_config())
+        results = apply_candidate_actions(
+            wiki_dir, raw_actions, synthesizer=backend,
         )
+        any_ok = any(r.get("ok") for r in results)
+        if any_ok:
+            _refresh_review_counts_for_wiki(wiki_dir)
+
+        site_dir = Path(getattr(self, "directory", ".") or ".")
+        rewrote = False
+        warning = None
+        try:
+            render_candidates_page(wiki_dir, site_dir)
+            rewrote = True
+        except Exception as exc:  # noqa: BLE001 — still return results
+            warning = f"could not rewrite candidates.html: {exc}"
+
+        payload: dict[str, Any] = {
+            "ok": all(r.get("ok") for r in results),
+            "results": results,
+            "rewrote_page": rewrote,
+            **candidates_payload(wiki_dir),
+        }
+        if warning:
+            payload["warning"] = warning
+        self._json_response(200, payload)
 
 
 def _refresh_review_counts_for_wiki(wiki_dir: Path) -> None:

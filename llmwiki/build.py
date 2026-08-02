@@ -881,11 +881,11 @@ def nav_bar(active: str, link_prefix: str = "") -> str:
     nav_drawer_html = f"""<div id="nav-drawer" class="nav-drawer" hidden aria-label="Main navigation">
 {drawer_link("index.html", "Home", "home")}
 {drawer_link("raw.html", "Raw", "raw")}
+{drawer_link("candidates.html", "Candidates", "candidates")}
 {drawer_link("graph.html", "Graph", "graph")}
 {drawer_link("projects/index.html", "Projects", "projects")}
 {drawer_link("sessions/index.html", "Sessions", "sessions")}
 {drawer_link("analytics.html", "Analytics", "analytics")}
-{drawer_link("candidates.html", "Candidates", "candidates")}
 {drawer_link("docs/index.html", "Docs", "docs")}
 </div>"""
     return f"""<header class="nav">
@@ -902,11 +902,11 @@ def nav_bar(active: str, link_prefix: str = "") -> str:
     <nav class="nav-links">
       {link("index.html", "Home", "home")}
       {link("raw.html", "Raw", "raw")}
+      {link("candidates.html", "Candidates", "candidates")}
       {link("graph.html", "Graph", "graph")}
       {link("projects/index.html", "Projects", "projects")}
       {link("sessions/index.html", "Sessions", "sessions")}
       {link("analytics.html", "Analytics", "analytics")}
-      {link("candidates.html", "Candidates", "candidates")}
       {link("docs/index.html", "Docs", "docs")}
       <button class="nav-search-btn" id="open-palette"
               aria-label="Open command palette"

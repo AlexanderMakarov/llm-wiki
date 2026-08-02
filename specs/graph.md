@@ -11,7 +11,7 @@ Interactive force-directed knowledge graph of every wiki page and its `[[wikilin
 ## Must
 
 - Page `<title>` contains "Graph" (e.g. "llmwiki — Knowledge Graph").
-- The site nav bar (Home/Projects/Sessions/Graph/Docs/Changelog) is present and the "Graph" link carries `class="active"` (closes #456 — graph used to be standalone with no nav chrome).
+- The site nav bar (Home / Raw / Candidates / Graph / Projects / Sessions / Analytics / Docs) is present and the "Graph" link carries `class="active"` (closes #456 — graph used to be standalone with no nav chrome).
 - A `<div id="network">` containing the rendered graph canvas.
 - vis-network loads from a CDN-pinned URL with SHA-384 SRI integrity attribute.
 - Clicking a node triggers focus (color/size change, edges highlighted).

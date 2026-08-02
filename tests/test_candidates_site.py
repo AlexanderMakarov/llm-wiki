@@ -1,4 +1,4 @@
-"""#97 candidates review page + serve API."""
+"""#97 candidates review page + serve batch API."""
 
 from __future__ import annotations
 
@@ -13,7 +13,13 @@ import time
 from pathlib import Path
 
 from llmwiki.build import render_candidates_page
-from llmwiki.candidates_site import candidates_payload, render_candidates_body
+from llmwiki.candidates_site import (
+    apply_candidate_actions,
+    candidates_payload,
+    cli_command_for_action,
+    cli_command_for_actions,
+    render_candidates_body,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -54,7 +60,7 @@ def _wait_until_accepting(port: int, timeout: float = 5.0) -> bool:
     return False
 
 
-def test_render_candidates_body_two_tables(tmp_path: Path) -> None:
+def test_render_candidates_body_intent_and_apply(tmp_path: Path) -> None:
     wiki = _mk_wiki(tmp_path)
     _write_candidate(wiki, "entities", "Alpha")
     _write_candidate(wiki, "concepts", "Beta")
@@ -63,17 +69,92 @@ def test_render_candidates_body_two_tables(tmp_path: Path) -> None:
 
     assert "cand-table-entities" in html_out
     assert "cand-table-concepts" in html_out
+    assert "cand-decision" in html_out
+    assert 'id="cand-apply"' in html_out
     assert "Flip and promote" in html_out
-    assert 'data-action="promote"' in html_out
-    assert 'data-action="flip-promote"' in html_out
-    assert 'data-action="discard"' in html_out
-    assert "cand-merge" in html_out
+    assert "cand-merge-into" in html_out
     assert "/api/candidates" in html_out
+    assert "Copy CLI" in html_out
     assert "Alpha" in html_out
     assert "Beta" in html_out
+    # No per-row action buttons anymore.
+    assert 'data-action="promote"' not in html_out
     payload = candidates_payload(wiki)
     assert payload["summary"]["to_review"] == 2
-    assert any(r["slug"] == "Alpha" for r in payload["candidates"])
+
+
+def test_cli_command_for_action_shapes() -> None:
+    assert cli_command_for_action({
+        "action": "promote", "slug": "Foo", "kind": "entities",
+    }) == "llmwiki candidates promote --slug 'Foo' --kind entities"
+    assert "flip-promote" in cli_command_for_action({
+        "action": "flip-promote", "slug": "Bar", "kind": "concepts",
+    })
+    assert "--into 'Baz'" in cli_command_for_action({
+        "action": "merge", "slug": "Dup", "into": "Baz", "kind": "entities",
+    })
+
+
+def test_cli_command_for_actions_batch_one_line() -> None:
+    cmd = cli_command_for_actions([
+        {"action": "promote", "slug": "Obsidian", "kind": "entities"},
+        {"action": "promote", "slug": "Prompt Caching", "kind": "concepts"},
+    ])
+    assert cmd.startswith("llmwiki candidates apply --actions '")
+    assert "Prompt Caching" in cmd
+    assert "\n" not in cmd
+    # Payload is valid JSON when unquoted.
+    start = cmd.index("'") + 1
+    end = cmd.rindex("'")
+    payload = json.loads(cmd[start:end])
+    assert len(payload) == 2
+    assert payload[0]["slug"] == "Obsidian"
+
+
+def test_apply_candidate_actions_batch(tmp_path: Path) -> None:
+    wiki = _mk_wiki(tmp_path)
+    _write_candidate(wiki, "entities", "Keep")
+    _write_candidate(wiki, "entities", "Drop")
+    results = apply_candidate_actions(wiki, [
+        {"action": "promote", "slug": "Keep", "kind": "entities"},
+        {"action": "discard", "slug": "Drop", "kind": "entities"},
+    ])
+    assert all(r["ok"] for r in results)
+    assert (wiki / "entities" / "Keep.md").is_file()
+    assert not (wiki / "candidates" / "entities" / "Keep.md").exists()
+    assert not (wiki / "candidates" / "entities" / "Drop.md").exists()
+
+
+def test_cli_candidates_apply_batch(tmp_path: Path) -> None:
+    wiki = _mk_wiki(tmp_path)
+    _write_candidate(wiki, "entities", "Keep")
+    _write_candidate(wiki, "entities", "Drop")
+    payload = json.dumps([
+        {"action": "promote", "slug": "Keep", "kind": "entities"},
+        {"action": "discard", "slug": "Drop", "kind": "entities"},
+    ])
+    proc = subprocess.run(
+        [
+            sys.executable, "-m", "llmwiki", "candidates", "apply",
+            "--actions", payload,
+            "--wiki-dir", str(wiki),
+        ],
+        cwd=str(REPO_ROOT),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert (wiki / "entities" / "Keep.md").is_file()
+    assert not (wiki / "candidates" / "entities" / "Drop.md").exists()
+
+
+def test_render_candidates_body_emits_apply_actions_cli(tmp_path: Path) -> None:
+    wiki = _mk_wiki(tmp_path)
+    _write_candidate(wiki, "entities", "Alpha")
+    html_out = render_candidates_body(wiki)
+    assert "candidates apply --actions" in html_out
+    assert "cliForBatch" in html_out
 
 
 def test_candidate_description_truncates(tmp_path: Path) -> None:
@@ -95,12 +176,12 @@ def test_render_candidates_page_writes_html(tmp_path: Path) -> None:
     assert path == out / "candidates.html"
     text = path.read_text(encoding="utf-8")
     assert "Gamma" in text
-    assert "Promote" in text
+    assert "cand-apply" in text
     assert 'class="nav' in text or "candidates.html" in text
 
 
-def test_serve_api_promote_round_trip(tmp_path: Path) -> None:
-    """POST /api/candidates promote with sibling wiki/ next to site/."""
+def test_serve_api_batch_promote_round_trip(tmp_path: Path) -> None:
+    """POST /api/candidates with actions[] promote with sibling wiki/."""
     wiki = _mk_wiki(tmp_path)
     _write_candidate(wiki, "entities", "PromoMe")
     site = tmp_path / "site"
@@ -123,9 +204,9 @@ def test_serve_api_promote_round_trip(tmp_path: Path) -> None:
     try:
         assert _wait_until_accepting(port), f"serve did not bind :{port}"
         body = json.dumps({
-            "action": "promote",
-            "slug": "PromoMe",
-            "kind": "entities",
+            "actions": [
+                {"action": "promote", "slug": "PromoMe", "kind": "entities"},
+            ],
         }).encode("utf-8")
         conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
         conn.request(
@@ -140,6 +221,7 @@ def test_serve_api_promote_round_trip(tmp_path: Path) -> None:
         assert resp.status == 200, raw
         data = json.loads(raw)
         assert data.get("ok") is True
+        assert data["results"][0]["ok"] is True
         assert data["summary"]["to_review"] == 0
         assert (wiki / "entities" / "PromoMe.md").is_file()
         assert not (wiki / "candidates" / "entities" / "PromoMe.md").exists()
