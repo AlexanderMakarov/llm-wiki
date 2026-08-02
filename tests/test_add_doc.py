@@ -5,6 +5,7 @@ from __future__ import annotations
 import email.message
 import io
 import subprocess
+import sys
 import urllib.response
 from pathlib import Path
 
@@ -174,8 +175,12 @@ def test_pdf_without_markitdown_errors(tmp_path, monkeypatch):
     monkeypatch.setattr(m, "_markitdown_convert", None)
     p = tmp_path / "doc.pdf"
     p.write_bytes(b"%PDF-1.4 fake")
-    with pytest.raises(AddError, match=r"llm-wiki\[add\]"):
+    with pytest.raises(AddError, match=r"\[add\]") as excinfo:
         convert_path(str(p))
+    # The hint must install into the interpreter that raised it — a bare
+    # `pip` may belong to a different Python, where the install silently
+    # succeeds and the import keeps failing.
+    assert sys.executable in str(excinfo.value)
 
 
 def test_folder_walk(tmp_path):
@@ -795,7 +800,7 @@ def test_convert_url_records_trafilatura_extractor(monkeypatch):
     doc = convert_url("https://ex.com/t", fetch=fetch)
     assert doc.extractor == "trafilatura"
     assert doc.html_title == "Doc - Site"
-    assert not any("llm-wiki[add]" in w for w in doc.warnings)
+    assert not any("[add]" in w for w in doc.warnings)
 
 
 def test_convert_url_stdlib_extractor_and_loud_warning_when_trafilatura_absent(monkeypatch):
@@ -804,7 +809,7 @@ def test_convert_url_stdlib_extractor_and_loud_warning_when_trafilatura_absent(m
                                   content_type="text/html", body=HTML_DOC)])
     doc = convert_url("https://ex.com/nav", fetch=fetch, render="never")
     assert doc.extractor == "stdlib"
-    assert any("llm-wiki[add]" in w and "trafilatura" in w for w in doc.warnings)
+    assert any("[add]" in w and "trafilatura" in w for w in doc.warnings)
 
 
 def test_write_raw_doc_records_extractor_in_frontmatter(tmp_path):
