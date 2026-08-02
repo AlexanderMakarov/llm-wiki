@@ -105,7 +105,7 @@ def render_candidates_body(wiki_dir: Path | None) -> str:
     payload_json = json.dumps(payload, ensure_ascii=False)
     return f"""<section class="section">
   <div class="container">
-    <p class="muted" id="cand-status">{n} pending candidate(s). Actions require <code>llmwiki serve</code> (not <code>file://</code>). After a successful action the tables reload; run <code>llmwiki build</code> when you want a cold-open Home/Analytics recount.</p>
+    <p class="muted" id="cand-status">{n} pending candidate(s). Review buttons call <code>POST /api/candidates</code>, which only exists under <code>llmwiki serve</code>. Opening this HTML as a file or via a plain static server cannot promote. Run <code>llmwiki serve</code>, then use <code>http://127.0.0.1:8765/candidates.html</code>. After a successful action the tables reload; run <code>llmwiki build</code> when you want a cold-open Home/Analytics recount.</p>
     <p id="cand-error" class="error-banner" hidden role="alert"></p>
     <h2>Entities (pending)</h2>
     <div class="state-table-wrap" tabindex="0" role="region" aria-label="Pending entity candidates">
@@ -127,6 +127,9 @@ def render_candidates_body(wiki_dir: Path | None) -> str:
 window.LLMWIKI_CANDIDATES = {payload_json};
 (function () {{
   var errEl = document.getElementById("cand-error");
+  var SERVE_HINT =
+    "Promote/discard need llmwiki serve (this page has no /api/candidates). " +
+    "In a terminal: llmwiki serve — then open http://127.0.0.1:8765/candidates.html";
   function showError(msg) {{
     if (!errEl) return;
     errEl.hidden = !msg;
@@ -138,17 +141,27 @@ window.LLMWIKI_CANDIDATES = {payload_json};
   async function postAction(body) {{
     showError("");
     if (fileMode()) {{
-      showError("Open this page via llmwiki serve to run review actions.");
+      showError(SERVE_HINT);
       return null;
     }}
-    var res = await fetch("/api/candidates", {{
-      method: "POST",
-      headers: {{ "Content-Type": "application/json" }},
-      body: JSON.stringify(body),
-    }});
+    var res;
+    try {{
+      res = await fetch("/api/candidates", {{
+        method: "POST",
+        headers: {{ "Content-Type": "application/json" }},
+        body: JSON.stringify(body),
+      }});
+    }} catch (e) {{
+      showError(SERVE_HINT);
+      return null;
+    }}
     var data = null;
     try {{ data = await res.json(); }} catch (e) {{ data = null; }}
     if (!res.ok) {{
+      if (res.status === 404 || res.status === 405) {{
+        showError(SERVE_HINT);
+        return null;
+      }}
       showError((data && data.error) || ("Request failed (" + res.status + ")"));
       return null;
     }}

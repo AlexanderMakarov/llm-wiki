@@ -60,7 +60,7 @@ Review gate for pending stubs under `wiki/candidates/` (#97). Two tables — **E
 | **Discard** | Archive under `wiki/archive/candidates/` |
 | **Merge with…** | Dropdown of other pending names in the **same table**; merges body then archives the source stub (CLI `merge` can also target a trusted same-kind page) |
 
-Buttons POST to `/api/candidates` when the site is opened via `llmwiki serve` with vault layout (`…/site` beside `…/wiki`). Opening `candidates.html` as `file://` shows an on-page error instead of a silent console failure. After a successful action the page reloads; run `llmwiki build` for a cold-open Home/Analytics recount. Same four actions are available from `/wiki-candidates` and `llmwiki candidates …`.
+Buttons POST to `/api/candidates` when the site is opened via `llmwiki serve` with vault layout (`…/site` beside `…/wiki`). Opening `candidates.html` as `file://` (or any server that does not host that API) shows an on-page error with the exact command: `llmwiki serve`, then `http://127.0.0.1:8765/candidates.html`. After a successful action the page reloads; run `llmwiki build` for a cold-open Home/Analytics recount. Same four actions are available from `/wiki-candidates` and `llmwiki candidates …`.
 
 ---
 
