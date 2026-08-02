@@ -53,6 +53,7 @@ from llmwiki.candidates import (
     KeyFactsBackendError,
     apply_review_summary_to_pipeline,
     discard,
+    flip_and_promote,
     list_candidates,
     promote,
     rewrite_key_facts,
@@ -1673,6 +1674,22 @@ def cmd_candidates(args: argparse.Namespace) -> int:
         _refresh_review_counts(wiki_dir)
         return 0
 
+    if action == "flip-promote":
+        if not args.slug:
+            print("error: --slug is required for flip-promote", file=sys.stderr)
+            return 2
+        try:
+            path = flip_and_promote(
+                args.slug, wiki_dir, kind=args.kind,
+                synthesizer=resolve_backend(_load_sessions_config()),
+            )
+        except (ValueError, KeyFactsBackendError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        print(f"  flip-promoted → {path.relative_to(wiki_dir)}")
+        _refresh_review_counts(wiki_dir)
+        return 0
+
     if action == "rewrite-key-facts":
         backend = resolve_backend(_load_sessions_config())
         slugs: list[str]
@@ -1711,7 +1728,13 @@ def cmd_candidates(args: argparse.Namespace) -> int:
         if not args.slug or not args.into:
             print("error: both --slug and --into are required for merge", file=sys.stderr)
             return 2
-        path = merge_candidate(args.slug, wiki_dir, into_slug=args.into, kind=args.kind)
+        try:
+            path = merge_candidate(
+                args.slug, wiki_dir, into_slug=args.into, kind=args.kind
+            )
+        except ValueError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
         print(f"  merged into → {path.relative_to(wiki_dir)}")
         _refresh_review_counts(wiki_dir)
         return 0
@@ -2049,15 +2072,17 @@ def build_parser() -> argparse.ArgumentParser:
     # candidates (v1.1, #51) — approval workflow
     cand = sub.add_parser(
         "candidates",
-        help="List / promote / merge / discard / rewrite-key-facts (approval workflow)",
+        help="List / promote / flip-promote / merge / discard / rewrite-key-facts",
     )
     cand.add_argument(
         "action",
-        choices=["list", "promote", "merge", "discard", "rewrite-key-facts"],
+        choices=[
+            "list", "promote", "flip-promote", "merge", "discard", "rewrite-key-facts",
+        ],
         help="What to do with candidates / trusted Key Facts",
     )
     cand.add_argument("--slug", type=str, default=None,
-                      help="Page slug (required for promote/merge/discard; "
+                      help="Page slug (required for promote/flip-promote/merge/discard; "
                            "or with rewrite-key-facts)")
     cand.add_argument("--all", action="store_true",
                       help="For rewrite-key-facts: every entity/concept page")

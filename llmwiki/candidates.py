@@ -13,10 +13,12 @@ not land in the trusted wiki layer without human review.
 Public API:
   - ``list_candidates(wiki_dir)`` → list of Candidate dicts
   - ``promote(slug, wiki_dir, dest)`` → move candidate into trusted area
+  - ``flip_and_promote(slug, wiki_dir)`` → flip entity↔concept then promote (#97)
   - ``fill_key_facts_from_evidence(text, wiki_dir, name=…)`` → enrich empty Key Facts
   - ``rewrite_key_facts(slug, wiki_dir, synthesizer=…)`` → rewrite Key Facts on a trusted page
   - ``strip_harvest_merge_sections(text)`` → drop pasted harvest-stub merge blocks
   - ``merge(slug, wiki_dir, into_slug)`` → fold candidate into an existing page
+    (trusted or another pending stub of the same kind)
   - ``discard(slug, wiki_dir, reason)`` → move to archive/
   - ``stale_candidates(wiki_dir, threshold_days=30)`` → list pages flagged stale
   - ``is_candidate(page_path)`` → bool
@@ -53,6 +55,10 @@ ARCHIVED_CANDIDATES_SUBDIR = "candidates"
 
 # Subfolders mirrored under wiki/candidates/
 MIRRORED_SUBDIRS = ["entities", "concepts", "sources", "syntheses"]
+
+# Entity ↔ concept flip map for review (#97). Only these two kinds flip.
+_FLIP_KIND = {"entities": "concepts", "concepts": "entities"}
+_TYPE_FOR_KIND = {"entities": "entity", "concepts": "concept"}
 
 # Default staleness threshold (days)
 DEFAULT_STALE_DAYS = 30
@@ -559,28 +565,40 @@ def promote(
     wiki_dir: Path,
     *,
     kind: str | None = None,
+    dest_kind: str | None = None,
     synthesizer: BaseSynthesizer | None = None,
 ) -> Path:
-    """Move ``wiki/candidates/<kind>/<slug>.md`` → ``wiki/<kind>/<slug>.md``.
+    """Move ``wiki/candidates/<kind>/<slug>.md`` → ``wiki/<dest>/<slug>.md``.
 
-    If ``kind`` is omitted, infers from where the candidate lives. Rewrites
-    the frontmatter ``status:`` from ``candidate`` → ``reviewed`` so the
-    lifecycle rule picks it up. Has ``synthesizer`` write an empty
-    ``## Key Facts`` from evidence sources (#103). Reconciles
+    If ``kind`` is omitted, infers from where the candidate lives. ``dest_kind``
+    defaults to that same folder (plain promote). Pass the opposite kind for
+    flip-and-promote (#97). Rewrites ``status: candidate`` → ``reviewed`` and
+    aligns ``type:`` with the destination folder. Has ``synthesizer`` write an
+    empty ``## Key Facts`` from evidence sources (#103). Reconciles
     ``wiki/index.md`` afterward (#101).
 
     Returns the new (promoted) path. Raises FileNotFoundError if the
-    candidate does not exist, or ``KeyFactsBackendError`` when the page needs
-    Key Facts and no LLM backend is configured.
+    candidate does not exist, ``ValueError`` if ``dest_kind`` is invalid, or
+    ``KeyFactsBackendError`` when the page needs Key Facts and no LLM backend
+    is configured.
     """
     candidate = _find_candidate(slug, wiki_dir, kind)
     inferred_kind = candidate.parent.name
-    target_dir = wiki_dir / inferred_kind
+    target_kind = dest_kind or inferred_kind
+    if target_kind not in MIRRORED_SUBDIRS:
+        raise ValueError(f"invalid dest_kind: {target_kind!r}")
+    target_dir = wiki_dir / target_kind
     target_dir.mkdir(parents=True, exist_ok=True)
     target = target_dir / candidate.name
+    if target.is_file():
+        raise FileExistsError(f"trusted page already exists: {target}")
 
     text = candidate.read_text(encoding="utf-8")
     text = _rewrite_status(text, old="candidate", new="reviewed")
+    if target_kind != inferred_kind:
+        text = _rewrite_type(
+            text, new=_TYPE_FOR_KIND.get(target_kind, target_kind.rstrip("s"))
+        )
     text = fill_key_facts_from_evidence(
         text, wiki_dir, name=candidate.stem, synthesizer=synthesizer
     )
@@ -588,6 +606,34 @@ def promote(
     candidate.unlink()
     _reconcile_catalog(wiki_dir)
     return target
+
+
+def flip_and_promote(
+    slug: str,
+    wiki_dir: Path,
+    *,
+    kind: str | None = None,
+    synthesizer: BaseSynthesizer | None = None,
+) -> Path:
+    """Promote into the opposite trusted folder (entity↔concept) (#97).
+
+    Only ``entities`` and ``concepts`` candidates flip. Raises ValueError for
+    other kinds. Equivalent to ``promote(..., dest_kind=<opposite>)``.
+    """
+    candidate = _find_candidate(slug, wiki_dir, kind)
+    inferred_kind = candidate.parent.name
+    dest = _FLIP_KIND.get(inferred_kind)
+    if dest is None:
+        raise ValueError(
+            f"cannot flip kind {inferred_kind!r} — only entities↔concepts"
+        )
+    return promote(
+        slug,
+        wiki_dir,
+        kind=inferred_kind,
+        dest_kind=dest,
+        synthesizer=synthesizer,
+    )
 
 
 # ─── merge helpers (#103) ──────────────────────────────────────────────
@@ -768,8 +814,11 @@ def merge(
     into_slug: str,
     kind: str | None = None,
 ) -> Path:
-    """Fold the candidate into the existing wiki page ``<into_slug>.md``,
-    then archive the candidate.
+    """Fold the candidate into ``<into_slug>.md``, then archive the candidate.
+
+    Target resolution (#97): prefer a trusted page at
+    ``wiki/<kind>/<into_slug>.md``; otherwise accept another pending stub at
+    ``wiki/candidates/<kind>/<into_slug>.md`` (same-table merge).
 
     A harvest stub carries no prose worth keeping — only the evidence that
     justified it — so its sources are unioned into the target's ``sources:``
@@ -784,14 +833,23 @@ def merge(
     Reconciles ``wiki/index.md`` afterward (#101).
 
     Returns the path of the target page. Raises FileNotFoundError if either
-    page is missing.
+    page is missing. Raises ValueError if merging a stub into itself.
     """
+    if slug == into_slug:
+        raise ValueError("cannot merge a candidate into itself")
+
     candidate = _find_candidate(slug, wiki_dir, kind)
     inferred_kind = candidate.parent.name
-    target = wiki_dir / inferred_kind / f"{into_slug}.md"
-    if not target.is_file():
+    trusted = wiki_dir / inferred_kind / f"{into_slug}.md"
+    pending = wiki_dir / CANDIDATES_DIR_NAME / inferred_kind / f"{into_slug}.md"
+    if trusted.is_file():
+        target = trusted
+    elif pending.is_file():
+        target = pending
+    else:
         raise FileNotFoundError(
-            f"merge target not found: {target} (candidate={candidate})"
+            f"merge target not found: {into_slug!r} under "
+            f"{inferred_kind}/ or candidates/{inferred_kind}/"
         )
 
     candidate_text = candidate.read_text(encoding="utf-8")
@@ -885,6 +943,18 @@ def _rewrite_status(text: str, *, old: str, new: str) -> str:
     m = FRONTMATTER_RE.match(text)
     if m:
         new_fm = m.group(1) + f"\nstatus: {new}"
+        return f"---\n{new_fm}\n---\n{m.group(2)}"
+    return text
+
+
+def _rewrite_type(text: str, *, new: str) -> str:
+    """Replace or insert frontmatter ``type:`` for flip-and-promote (#97)."""
+    pattern = re.compile(r"^(type:\s*)\S+(\s*)$", re.MULTILINE)
+    if pattern.search(text):
+        return pattern.sub(rf"\g<1>{new}\g<2>", text, count=1)
+    m = FRONTMATTER_RE.match(text)
+    if m:
+        new_fm = m.group(1) + f"\ntype: {new}"
         return f"---\n{new_fm}\n---\n{m.group(2)}"
     return text
 

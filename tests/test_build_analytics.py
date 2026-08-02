@@ -247,17 +247,20 @@ def test_candidates_review_section_shows_zeros_and_kinds():
         stale_days=30,
     )
     assert "candidates-review-section" in html_out
-    assert ">3</div>" in html_out
+    assert 'href="candidates.html">3</a>' in html_out
     assert ">1</div>" in html_out
     assert "entities 2" in html_out
     assert "concepts 1" in html_out
     assert "llmwiki candidates list --stale" in html_out
+    assert "flip-promote" in html_out
+    assert 'href="candidates.html">Candidates to review</a>' in html_out
 
 
 def test_candidates_review_section_empty_kinds_copy():
     html_out = render_candidates_review_section(pending=0, stale=0)
     assert "no stubs under wiki/candidates/" in html_out
-    assert ">0</div>" in html_out
+    assert 'href="candidates.html">0</a>' in html_out
+    assert 'Drain via <a href="candidates.html">' not in html_out
 
 
 def test_analytics_mcp_heatmap_when_mcp_days_provided(tmp_path: Path):

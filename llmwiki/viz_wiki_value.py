@@ -272,13 +272,16 @@ def render_candidates_review_section(
     kind_sub = kind_bits or "no stubs under wiki/candidates/"
     return (
         '<section class="section candidates-review-section"><div class="container">'
-        "<h2>Candidates to review</h2>"
-        '<p class="muted">Pending entity/concept stubs waiting for agent-led '
-        "promote / merge / discard. Synthesis alone does not finish the "
-        "trusted knowledge layer.</p>"
+        '<h2><a href="candidates.html">Candidates to review</a></h2>'
+        '<p class="muted">Pending entity/concept stubs. Drain via the Candidates page '
+        "(under <code>llmwiki serve</code>), "
+        "agent <code>/wiki-candidates</code>, or CLI "
+        "<code>promote</code> / <code>flip-promote</code> / <code>merge</code> / "
+        "<code>discard</code>. Synthesis alone does not finish the trusted layer.</p>"
         '<div class="token-stat-grid wiki-value-stats wiki-candidates-stats">'
-        '<div class="token-stat"><div class="token-stat-label muted">Pending candidates</div>'
-        f'<div class="token-stat-value">{int(pending)}</div>'
+        '<div class="token-stat"><div class="token-stat-label muted">'
+        '<a href="candidates.html">Pending candidates</a></div>'
+        f'<div class="token-stat-value"><a href="candidates.html">{int(pending)}</a></div>'
         f'<div class="token-stat-sub muted">{html.escape(kind_sub)}</div></div>'
         '<div class="token-stat"><div class="token-stat-label muted">Stale candidates</div>'
         f'<div class="token-stat-value">{int(stale)}</div>'

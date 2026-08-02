@@ -562,6 +562,15 @@ kbd { display: inline-block; padding: 2px 6px; font-family: var(--mono); font-si
 .queue-commands-table th, .queue-commands-table td { border: 1px solid var(--border); padding: 8px 10px; vertical-align: top; }
 .queue-commands-table th { background: var(--bg-alt); text-align: left; }
 .queue-copy-btn { white-space: nowrap; }
+/* #97 candidates review page */
+.cand-review-table .cand-actions { white-space: normal; min-width: 14rem; }
+.cand-review-table .cand-action, .cand-review-table .cand-merge {
+  margin: 2px 4px 2px 0; font: inherit; font-size: 0.85rem; padding: 4px 8px;
+  border: 1px solid var(--border); border-radius: 4px; background: var(--bg-alt); color: var(--text); cursor: pointer;
+}
+.cand-review-table .cand-action:hover, .cand-review-table .cand-merge:hover { border-color: var(--accent); }
+.cand-review-table .cand-action:disabled, .cand-review-table .cand-merge:disabled { opacity: 0.5; cursor: wait; }
+.error-banner { color: var(--danger, #b91c1c); background: color-mix(in srgb, var(--danger, #b91c1c) 12%, transparent); border: 1px solid var(--danger, #b91c1c); padding: 10px 12px; border-radius: 6px; margin: 12px 0; }
 @media (max-width: 860px) {
   .doctree-layout { grid-template-columns: 1fr; }
   .doctree-sidebar { position: static; max-height: none; }
