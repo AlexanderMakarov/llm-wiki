@@ -127,7 +127,7 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
     });
     items.push("<li><strong>Stale (≥" + staleDays + "d):</strong> " + stale + "</li>");
     return "<ul class=\"queue-type-list\">" + items.join("") + "</ul>" +
-      '<p class="muted">Review focus: identity / naming / kind / duplicates — not primarily <code>## Contradictions</code>. Approve via agent <code>/wiki-candidates</code> or <code>llmwiki candidates promote|merge|discard</code>.</p>';
+      '<p class="muted">Review focus: identity / naming / kind / duplicates — not primarily <code>## Contradictions</code>. Approve via the Candidates page, agent <code>/wiki-candidates</code>, or <code>llmwiki candidates apply|promote|merge|discard</code>.</p>';
   }
   function renderStateWidget(root, snapshot) {
     if (!root) return;
@@ -219,11 +219,11 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
 
     var knowledgeHtml =
       '<div class="state-table-wrap" tabindex="0" role="region" aria-label="Knowledge layer">' +
-      '<p class="muted">Knowledge layer: Candidates → Entities / Concepts. Review runs in the agent Commands below.</p>' +
+      '<p class="muted">Knowledge layer: Candidates → Entities / Concepts. Review on the Candidates page (header/count below) or via agent Commands below.</p>' +
       '<table class="state-pipeline-table state-knowledge-table">' +
-      "<thead><tr><th>Candidates</th><th>Entities</th><th>Concepts</th></tr></thead>" +
+      '<thead><tr><th><a href="candidates.html">Candidates</a></th><th>Entities</th><th>Concepts</th></tr></thead>' +
       "<tbody><tr>" +
-      "<td>" + stageCell(toReview, 0) + "</td>" +
+      '<td><a href="candidates.html">' + stageCell(toReview, 0) + "</a></td>" +
       "<td>" + stageCell(trustedEntities, 0) + "</td>" +
       "<td>" + stageCell(trustedConcepts, 0) + "</td>" +
       "</tr></tbody></table></div>";

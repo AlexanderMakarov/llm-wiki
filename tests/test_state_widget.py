@@ -39,7 +39,8 @@ def test_state_widget_js_has_pipeline_table_and_collapsibles():
     assert "Files layer:" in js.JS
     assert "Handled by shell commands." in js.JS
     assert "Knowledge layer: Candidates → Entities / Concepts." in js.JS
-    assert "Review runs in the agent Commands below." in js.JS
+    assert "Review on the Candidates page (header/count below) or via agent Commands below." in js.JS
+    assert "candidates.html" in js.JS
     assert "trusted_entities" in js.JS
     assert "trusted_concepts" in js.JS
     assert "Candidates to review" in js.JS

@@ -23,6 +23,7 @@ from llmwiki.candidates import (
     candidates_dir,
     discard,
     fill_key_facts_from_evidence,
+    flip_and_promote,
     is_candidate,
     list_candidates,
     merge,
@@ -681,12 +682,62 @@ def test_wiki_candidates_slash_command_exists():
     assert cmd.is_file()
     text = cmd.read_text(encoding="utf-8")
     assert "promote" in text
+    assert "flip-promote" in text
     assert "merge" in text
     assert "discard" in text
     assert "Key Facts" in text  # #103: promote fills empty Key Facts
+    assert "candidates.html" in text
+    assert "mv " not in text.lower() or "Do **not** hand-`mv`" in text
     # And the old name must be gone so docs can't regress.
     old = REPO_ROOT / ".claude" / "commands" / "wiki-review.md"
     assert not old.exists(), "old /wiki-review name should be removed"
+
+
+# ─── Flip + promote / same-table merge (#97) ───────────────────────────
+
+
+def test_flip_and_promote_entity_to_concept(tmp_path: Path) -> None:
+    wiki = _mk_wiki(tmp_path)
+    _write_candidate(wiki, "entities", "Misfiled")
+
+    dest = flip_and_promote("Misfiled", wiki)
+
+    assert dest == wiki / "concepts" / "Misfiled.md"
+    assert not (wiki / "candidates" / "entities" / "Misfiled.md").exists()
+    text = dest.read_text(encoding="utf-8")
+    assert "status: reviewed" in text
+    assert "type: concept" in text
+
+
+def test_flip_and_promote_concept_to_entity(tmp_path: Path) -> None:
+    wiki = _mk_wiki(tmp_path)
+    _write_candidate(wiki, "concepts", "Toolish")
+
+    dest = flip_and_promote("Toolish", wiki)
+
+    assert dest == wiki / "entities" / "Toolish.md"
+    assert "type: entity" in dest.read_text(encoding="utf-8")
+
+
+def test_merge_into_pending_same_table(tmp_path: Path) -> None:
+    """#97: merge dropdown is same-table — target may still be a candidate."""
+    wiki = _mk_wiki(tmp_path)
+    _write_candidate(wiki, "entities", "Dup", body="# Dup\n\nextra.")
+    _write_candidate(wiki, "entities", "Canonical", body="# Canonical\n\nkeep.")
+
+    dest = merge("Dup", wiki, into_slug="Canonical")
+
+    assert dest == wiki / "candidates" / "entities" / "Canonical.md"
+    text = dest.read_text(encoding="utf-8")
+    assert "## Candidate merge" in text
+    assert "extra." in text
+    assert not (wiki / "candidates" / "entities" / "Dup.md").exists()
+
+
+def test_cli_flip_promote_action_registered() -> None:
+    parser = build_parser()
+    args = parser.parse_args(["candidates", "flip-promote", "--slug", "X"])
+    assert args.action == "flip-promote"
 
 
 # ─── CLI integration ────────────────────────────────────────────────

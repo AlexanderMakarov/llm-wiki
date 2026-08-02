@@ -37,7 +37,7 @@ Canonical loop: `sync / add → synth (sources + harvest) → review candidates 
 | `/wiki-sync` | Convert new `.jsonl` sessions into `raw/sessions/` AND ingest them into `wiki/` | Runs `python3 -m llmwiki sync`, then executes the Ingest Workflow below for each new file |
 | `/wiki-ingest <path>` | Ingest one source or folder | Executes the Ingest Workflow for the given path |
 | `/wiki-synth` | Synthesize pending raw → `wiki/sources/`, then harvest candidates | Runs `python3 -m llmwiki synth` (prefer over deprecated `/wiki-synthesize`) |
-| `/wiki-candidates` | Review pending stubs under `wiki/candidates/` | Promote / flip+promote / merge / discard via CLI library |
+| `/wiki-candidates` | Review pending stubs under `wiki/candidates/` | Promote / flip+promote / merge / discard / `apply --actions`; site `/candidates.html` |
 | `/wiki-query <question>` | Answer a question from the wiki | Executes the Query Workflow below |
 | `/wiki-lint` | Find orphans, broken links, stale pages | Executes the Lint Workflow below |
 | `/wiki-build` | Regenerate the static HTML site | Runs `python3 -m llmwiki build` |

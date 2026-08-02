@@ -233,13 +233,13 @@ want to re-run sync.
 
 ### `/wiki-candidates`
 
-**What:** triage pending candidates — `promote`, `merge`, or `discard`.
+**What:** triage pending candidates — `promote`, `flip-promote`, `merge`, `discard`, or batch `apply --actions`.
 
-**Wraps:** `python3 -m llmwiki candidates list` + follow-ups.
+**Wraps:** `python3 -m llmwiki candidates list` + follow-ups (`apply --actions` for batches). Same intents as `/candidates.html` (batch Apply under serve, or copy one `apply --actions` CLI line when static).
 
-**When to use:** Home **Candidates** / Analytics **Candidates to review** is non-zero, `/wiki-lint` reported `stale_candidates`, or you just ran `llmwiki synth --candidates-only`.
+**When to use:** Home **Candidates** / Analytics **Candidates to review** is non-zero, `/wiki-lint` reported `stale_candidates`, or you just ran `llmwiki synth` / `synth --candidates-only`.
 
-Promote has the configured synthesis backend write an empty `## Key Facts` from harvest evidence sources, and fails rather than guessing when no LLM backend is configured (#103). Prefer the CLI action over hand-editing Key Facts for the common case. Already-trusted pages that still have regex-era Key Facts (or pasted harvest-stub `## Candidate merge` blocks) are recovered with `llmwiki candidates rewrite-key-facts --slug <Name>` (or `--all`).
+Promote has the configured synthesis backend write an empty `## Key Facts` from harvest evidence sources, and fails rather than guessing when no LLM backend is configured (#103). Prefer the CLI action over hand-editing Key Facts for the common case. Already-trusted pages that still have regex-era Key Facts (or pasted harvest-stub `## Candidate merge` blocks) are recovered with `llmwiki candidates rewrite-key-facts --slug <Name>` (or `--all`). Prefer `flip-promote` over hand-moving stubs between `candidates/entities` and `candidates/concepts`.
 
 **Example:**
 

@@ -58,6 +58,7 @@ from llmwiki import raw_docs_site
 from llmwiki.agent_label import detect_agent_label, render_agent_badge
 from llmwiki.automation_status import load_status
 from llmwiki.candidates import apply_review_summary_to_pipeline, candidate_review_summary
+from llmwiki.candidates_site import render_candidates_body
 from llmwiki.changelog_timeline import (
     extract_price_points,
     parse_changelog,
@@ -880,6 +881,7 @@ def nav_bar(active: str, link_prefix: str = "") -> str:
     nav_drawer_html = f"""<div id="nav-drawer" class="nav-drawer" hidden aria-label="Main navigation">
 {drawer_link("index.html", "Home", "home")}
 {drawer_link("raw.html", "Raw", "raw")}
+{drawer_link("candidates.html", "Candidates", "candidates")}
 {drawer_link("graph.html", "Graph", "graph")}
 {drawer_link("projects/index.html", "Projects", "projects")}
 {drawer_link("sessions/index.html", "Sessions", "sessions")}
@@ -900,6 +902,7 @@ def nav_bar(active: str, link_prefix: str = "") -> str:
     <nav class="nav-links">
       {link("index.html", "Home", "home")}
       {link("raw.html", "Raw", "raw")}
+      {link("candidates.html", "Candidates", "candidates")}
       {link("graph.html", "Graph", "graph")}
       {link("projects/index.html", "Projects", "projects")}
       {link("sessions/index.html", "Sessions", "sessions")}
@@ -2087,6 +2090,28 @@ def render_recent(
     return out_path
 
 
+def render_candidates_page(wiki_dir: Path | None, out_dir: Path) -> Path:
+    """Render ``candidates.html`` — pending entity/concept review tables (#97)."""
+    body = render_candidates_body(wiki_dir)
+    page = (
+        page_head(
+            "Candidates — LLM Wiki",
+            "Review pending entity and concept candidates",
+            css_prefix="",
+        )
+        + nav_bar("candidates", link_prefix="")
+        + hero(
+            "Candidates",
+            "Promote, flip and promote, merge, or discard pending stubs",
+        )
+        + body
+        + page_foot(js_prefix="")
+    )
+    out_path = out_dir / "candidates.html"
+    out_path.write_text(page, encoding="utf-8")
+    return out_path
+
+
 def _render_root_md_page(
     src_name: str,
     out_name: str,
@@ -2500,6 +2525,11 @@ def build_search_index(
         {"id": "analytics", "url": "analytics.html", "title": "Analytics",
          "type": "page", "project": "", "date": "", "model": "",
          "body": "activity heatmap token stats projects overview"}
+    )
+    meta_entries.append(
+        {"id": "candidates", "url": "candidates.html", "title": "Candidates",
+         "type": "page", "project": "", "date": "", "model": "",
+         "body": "review pending entity concept candidates promote flip merge discard"}
     )
     meta_entries.append(
         {"id": "projects-index", "url": "projects/index.html", "title": "Projects",
@@ -3083,6 +3113,7 @@ def build_site(
         wiki_dir=wiki_dir,
         wiki_value=wiki_value,
     )
+    render_candidates_page(wiki_dir, out_dir)
     doc_pages = raw_docs_site.render_document_pages(
         doc_files,
         docs_root,
@@ -3106,7 +3137,7 @@ def build_site(
     render_contributing_page(out_dir)
     print(
         "  wrote index.html, raw.html, recent.html, analytics.html, "
-        "projects/index.html, sessions/index.html, 404.html"
+        "candidates.html, projects/index.html, sessions/index.html, 404.html"
     )
 
     # #50: build the topic graph *before* the search index so topic pages
@@ -3143,6 +3174,7 @@ def build_site(
             ("raw.html", None, "0.9"),
             ("recent.html", None, "0.9"),
             ("analytics.html", None, "0.8"),
+            ("candidates.html", None, "0.8"),
         ] + [
             (doc.out_rel, doc.date or None, "0.7") for doc in doc_files
         ]

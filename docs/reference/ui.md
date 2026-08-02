@@ -18,6 +18,7 @@ Every page in the site carries the same header nav. Keyboard: `⌘K` opens the c
 |---|---|---|---|
 | 1 | **Home** | `/index.html` | pipeline State widget (Files layer Raw→To synthesize→Synthesized + Knowledge layer Candidates/Entities/Concepts + collapsible backlog/candidates/commands) + recent raw docs |
 | 2 | **Raw** | `/raw.html` | file tree browser of raw documents (wiki-add layer) |
+| — | **Candidates** | `/candidates.html` | pending entity/concept review (per-row decision + Apply); batch API under serve, or copy-CLI when static |
 | 3 | **Graph** | `/graph.html` | interactive force-directed knowledge graph (vis-network) |
 | 4 | **Projects** | `/projects/index.html` | filterable card grid of every project + freshness badge |
 | 5 | **Sessions** | `/sessions/index.html` | sortable table of every session, agent badge, project, model, tool-call count |
@@ -39,10 +40,28 @@ URL: `/index.html`
 
 Queue-first landing page. Layout:
 
-1. **Pipeline state** — Home-only table mount (`#llmwiki-state-widget`, inlined on `index.html`) with two captioned tables: **Files layer** (`Raw → To synthesize → Synthesized`, handled by shell commands — agent chips say `… sessions`; Documents is plain text, not a chip) and **Knowledge layer** (`Candidates → Entities / Concepts`, review via agent Commands). Each Files-layer cell is a single count; To synthesize adds estimated USD in parentheses when non-zero. **Candidates** counts pending stubs already under `wiki/candidates/` (not the harvestable-stub preview from `synth --estimate`). **Entities** / **Concepts** count trusted pages after promote. The Files-layer Total row also shows queue **queued** / **in progress** counts. Under the tables, shared **collapse sections** (`llmwiki/render/collapse_section.py`) cover Timeline, not-synthesized sessions/docs, **Candidates to review** (by kind + stale), Commands (runnable `llmwiki …` CLI rows + one-shot `cd <llm-wiki-checkout> && claude|agent|codex "/wiki-candidates"` — Gemini CLI is adapter-scaffold only, so no Home launcher), and estimate warnings.
+1. **Pipeline state** — Home-only table mount (`#llmwiki-state-widget`, inlined on `index.html`) with two captioned tables: **Files layer** (`Raw → To synthesize → Synthesized`, handled by shell commands — agent chips say `… sessions`; Documents is plain text, not a chip) and **Knowledge layer** (`Candidates → Entities / Concepts`). The **Candidates** header and count link to [`/candidates.html`](#candidates). Each Files-layer cell is a single count; To synthesize adds estimated USD in parentheses when non-zero. **Candidates** counts pending stubs already under `wiki/candidates/` (not the harvestable-stub preview from `synth --estimate`). **Entities** / **Concepts** count trusted pages after promote. The Files-layer Total row also shows queue **queued** / **in progress** counts. Under the tables, shared **collapse sections** (`llmwiki/render/collapse_section.py`) cover Timeline, not-synthesized sessions/docs, **Candidates to review** (by kind + stale), Commands (runnable `llmwiki …` CLI rows + one-shot `cd <llm-wiki-checkout> && claude|agent|codex "/wiki-candidates"` — Gemini CLI is adapter-scaffold only, so no Home launcher), and estimate warnings.
 2. **Recent raw documents** — newest `raw/docs/` entries with title + source meta.
 
 Numbers come from `llmwiki-state.js` (`synth.pipeline` + `synth.pending` + `synth.estimate`), refreshed by `llmwiki sync` / `llmwiki synth --estimate`. Every `llmwiki build` also recounts pending/stale candidates and trusted entity/concept page counts into `synth.pipeline.to_review*` / `trusted_entities` / `trusted_concepts` (cheap disk walk — #84) and copies the sidecar into `site/llmwiki-state.js`. `llmwiki build` still one-shot backfills `synth.pipeline` rows when the state snapshot predates that key (v1.4→v1.5 upgrade — #70). The session-analytics content (heatmap, stats, project grid) lives on [Analytics](#analytics).
+
+---
+
+## Candidates
+
+URL: `/candidates.html`
+
+Review gate for pending stubs under `wiki/candidates/` (#97). Two tables — **Entities (pending)** and **Concepts (pending)** — with Name, Description, and Decision:
+
+| Decision | Effect |
+|---|---|
+| **Skip** | Leave pending (default) |
+| **Promote** | Move into trusted `wiki/entities/` or `wiki/concepts/`; `status: reviewed` |
+| **Flip and promote** | Wrong kind → promote into the opposite trusted folder and rewrite `type:` (do not hand-`mv` stubs between candidate folders) |
+| **Discard** | Archive under `wiki/archive/candidates/` |
+| **Merge with…** | Pick another pending name in the **same table**; merges then archives the source stub (CLI `merge` can also target a trusted same-kind page) |
+
+Set decisions per row, then **Apply**. Under `llmwiki serve` (vault `…/site` beside `…/wiki`), Apply POSTs a **batch** to `/api/candidates`. On a static or `file://` open, Apply shows one pasteable `llmwiki candidates apply --actions '[{…}]'` line (Copy CLI) — same JSON shape as the API. After a successful served Apply the page reloads; run `llmwiki build` for a cold-open Home/Analytics recount. One-off CLI actions and `/wiki-candidates` remain available.
 
 ---
 
@@ -177,7 +196,7 @@ Session analytics plus usage-led wiki value (#52) and the candidates review gate
 
 Below that, sections appear in this order:
 
-1. **Candidates to review** — pending stubs under `wiki/candidates/` (total + by kind) and stale count (default ≥30d). Zero is intentional signal: synthesize-only vaults still show that the review gate exists and is empty.
+1. **Candidates to review** — pending stubs under `wiki/candidates/` (total + by kind) and stale count (default ≥30d). Heading / pending count link to [`/candidates.html`](#candidates). Zero is intentional signal: synthesize-only vaults still show that the review gate exists and is empty.
 2. **Activity** — ~18-month GitHub-style heatmaps: **Agents Activity** (session counts), **Wiki MCP calls**, and — when telemetry carries signal — **Session-page reads** and **Doc-page reads** split from `wiki_read_page` hits.
 3. **Recent activity** — last entries from `wiki/log.md` (including producer breakdown lines such as `Processed: 2 Claude · 1 Cursor`).
 4. **Projects** — filterable card grid (session counts, date range, topic chips) linking to per-project detail pages.
