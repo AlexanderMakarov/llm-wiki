@@ -286,6 +286,15 @@ python3 -m venv .venv
 .venv/bin/pip install -e '.[add]'
 ```
 
+With [uv](https://docs.astral.sh/uv/) instead — note that a uv-created venv ships **no `pip`**, so `.venv/bin/pip` will not exist there:
+
+```bash
+uv venv
+uv pip install -e '.[add]'
+```
+
+Whichever you use, the extras must land in the interpreter that runs `llmwiki`. If a converter is missing at runtime, the error prints the exact command for *that* interpreter — follow it rather than a remembered `pip install`.
+
 To call them from **any terminal and any folder**, put the scripts on PATH — either add `.venv/bin` to PATH, or drop two-line wrappers into `~/.local/bin`:
 
 ```bash

@@ -31,6 +31,7 @@ from llmwiki import __version__
 from llmwiki._frontmatter import parse_frontmatter
 from llmwiki.claude_path import resolve_claude_path as _resolve_claude_path
 from llmwiki.htmlmd import html_to_markdown
+from llmwiki.install_hint import install_hint, python_module_command
 from llmwiki.slugs import derive_title, first_heading, slugify
 from llmwiki.synth.pipeline import _normalise_slug
 
@@ -324,11 +325,15 @@ _MARKITDOWN_EXT = {".pdf", ".docx", ".pptx", ".xlsx", ".epub"}
 _IMAGE_EXT = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic", ".heif",
               ".tif", ".tiff", ".bmp"}
 
-_SUPPORTED_FORMATS_HINT = (
-    "supported: markdown/plain-text/code files, "
-    "PDF/DOCX/PPTX/XLSX/EPUB via markitdown (pip install 'llm-wiki[add]'), "
-    "and images via claude-CLI vision OCR"
-)
+
+def _supported_formats_hint() -> str:
+    """List the convertible formats, naming the command that unlocks markitdown."""
+    return (
+        "supported: markdown/plain-text/code files, "
+        f"PDF/DOCX/PPTX/XLSX/EPUB via markitdown ({install_hint('add')}), "
+        "and images via claude-CLI vision OCR"
+    )
+
 
 # The image path is NEVER interpolated into this prompt — a
 # user/queue-supplied filename is untrusted text (the module fetches
@@ -369,7 +374,7 @@ def _ocr_image(path: Path, timeout: int = 300) -> str:
     if claude is None:
         raise AddError(
             f"cannot OCR {path.name!r}: claude CLI not found on PATH — "
-            f"images need it for vision OCR; {_SUPPORTED_FORMATS_HINT}"
+            f"images need it for vision OCR; {_supported_formats_hint()}"
         )
     ext = path.suffix.lower() or ".img"
     safe_name = f"{_OCR_IMAGE_NAME}{ext}"
@@ -523,7 +528,7 @@ def convert_path(value: str, note: str | None = None) -> ConvertedDoc:
         if _markitdown_convert is None:
             raise AddError(
                 f"converting {ext} needs markitdown — install the optional extra: "
-                "pip install 'llm-wiki[add]'"
+                f"{install_hint('add')}"
             )
         text = _markitdown_convert(real)
         return ConvertedDoc(title=real.stem, markdown=_note_header(note) + text.strip() + "\n",
@@ -540,7 +545,7 @@ def convert_path(value: str, note: str | None = None) -> ConvertedDoc:
         head = fh.read(65536)
     if _looks_binary(head):
         raise AddError(
-            f"unsupported binary file {real.name!r} — {_SUPPORTED_FORMATS_HINT}"
+            f"unsupported binary file {real.name!r} — {_supported_formats_hint()}"
         )
     text = real.read_text(encoding="utf-8", errors="replace")
     body = _fence_code(text, ext or ".txt")
@@ -649,17 +654,23 @@ def _default_renderer() -> object | None:
     return render
 
 
-_RENDER_HINT = ("content may be a JS shell — install the render layer: "
-                "pip install 'llm-notebook[e2e]' && playwright install chromium, "
-                "or re-run with --render")
+def _render_hint() -> str:
+    """Point at the render layer, installed into the interpreter that loads it."""
+    return ("content may be a JS shell — install the render layer: "
+            f"{install_hint('e2e')} && "
+            f"{python_module_command('playwright', 'install', 'chromium')}, "
+            "or re-run with --render")
+
 
 # trafilatura absent ⇒ div-soup sites fall through to the stdlib tag-strip,
 # which keeps only nav/header/footer boilerplate. Distinct from the JS-shell
 # render hint: this is a missing-converter problem, not a JS-render one.
-_TRAFILATURA_HINT = ("trafilatura not installed — site boilerplate "
-                     "(nav/header/footer) was NOT stripped and this doc may be "
-                     "mostly navigation junk; install the extractor for clean "
-                     "extraction: pip install 'llm-wiki[add]'")
+def _trafilatura_hint() -> str:
+    """Warn that boilerplate survived, naming the command that installs the extractor."""
+    return ("trafilatura not installed — site boilerplate "
+            "(nav/header/footer) was NOT stripped and this doc may be "
+            "mostly navigation junk; install the extractor for clean "
+            f"extraction: {install_hint('add')}")
 
 
 def convert_url(
@@ -712,13 +723,13 @@ def convert_url(
     needs_render = render == "force" or (render == "auto" and not _quality_ok(md, html))
     if needs_render and render != "never":
         active_renderer = renderer if renderer is not None else _default_renderer()
-        render_hint = _RENDER_HINT
+        render_hint = _render_hint()
         if active_renderer is not None:
             try:
                 rendered_html = active_renderer(url)
             except Exception as exc:  # noqa: BLE001 — a broken renderer degrades to a warning, not a crash
                 active_renderer = None
-                render_hint = f"renderer failed: {exc} — {_RENDER_HINT}"
+                render_hint = f"renderer failed: {exc} — {_render_hint()}"
             else:
                 r_title, r_md, r_extractor = _extract_html(rendered_html)
                 if len(r_md.strip()) > len(md.strip()):
@@ -728,12 +739,12 @@ def convert_url(
         if active_renderer is None:
             warnings.append(render_hint)
     elif not _quality_ok(md, html):
-        warnings.append(_RENDER_HINT)
+        warnings.append(_render_hint())
 
     # A stdlib extraction when trafilatura is genuinely absent (not just an
     # empty-output fallback) means boilerplate was never stripped — warn loudly.
     if extractor == "stdlib" and not _has_trafilatura():
-        warnings.append(_TRAFILATURA_HINT)
+        warnings.append(_trafilatura_hint())
 
     # Shell signature: substantial markup but no article text. That is a
     # stale/renamed URL serving the site's shell, or a client-side-rendered
