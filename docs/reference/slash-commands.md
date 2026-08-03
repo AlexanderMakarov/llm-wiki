@@ -11,12 +11,13 @@ what it does, what it runs under the hood, and a realistic invocation
 example. Use these inside **Claude Code** — Codex CLI picks the same
 files up via `install-skills`.
 
-Summary of **19 commands in 4 groups**:
+Summary of **21 commands in 5 groups**:
 
 | Group | Commands |
 |---|---|
 | **Wiki pipeline** (15) | `/wiki-init` `/wiki-sync` `/wiki-ingest` `/wiki-query` `/wiki-update` `/wiki-lint` `/wiki-candidates` `/wiki-synth` `/wiki-synthesize` `/wiki-graph` `/wiki-reflect` `/wiki-build` `/wiki-serve` `/wiki-export-marp` `/wiki-all` |
 | **Governance / maintainer** (4) | `/maintainer` `/release` `/review-pr` `/triage-issue` |
+| **AWOS delivery** (2) | `/fix-bug` `/implement-feature` |
 
 ---
 
@@ -405,6 +406,32 @@ llmwiki triage rules.
 
 ```
 /triage-issue 280
+```
+
+---
+
+## AWOS delivery
+
+Hired via `/awos-hire` (#114). Decisions and stages live under `context/product/` (especially `delivery-flow.md`). Prefer Cursor `/awos-flow` / Claude `/awos:flow` when changing those decisions.
+
+### `/fix-bug`
+
+Drive one bug (GitHub Issue) through diagnosis → scoped fix + regression test → verify → PR. Subagent-heavy; keeps the owning AWOS spec honest when behavior changes.
+
+**Example:**
+
+```
+/fix-bug 114
+```
+
+### `/implement-feature`
+
+Drive one feature (spec / issue) through implement → test → review → PR per `context/product/delivery-flow.md`.
+
+**Example:**
+
+```
+/implement-feature <spec-or-issue>
 ```
 
 ---
