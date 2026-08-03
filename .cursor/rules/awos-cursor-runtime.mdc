@@ -1,0 +1,43 @@
+---
+description: Map AWOS Claude tool names to Cursor equivalents when running /awos-* commands
+alwaysApply: true
+---
+
+# AWOS on Cursor — runtime tool mapping
+
+When following prompts under `.awos/commands/` (via `.cursor/commands/awos-*.md` or `.claude/commands/awos/*`), translate Claude-oriented tool names to Cursor:
+
+| AWOS / Claude prompt says | Use in Cursor |
+|---|---|
+| `AskUserQuestion` | **`AskQuestion` (required first choice)** — see below |
+| `Agent(subagent_type=…)` | `Task(subagent_type=…)` |
+| `subagent_type="general-purpose"` | `subagent_type="generalPurpose"` |
+| Project agents under `.claude/agents/<name>.md` | Keep the kebab-case name as `subagent_type` (e.g. `python-backend`) |
+| Plugin agents `plugin-name:agent` | Only if that plugin is loaded in this Cursor session; otherwise hire a project-local agent via `/awos-hire` / recruitment CLI |
+| MCP tool `search` on `awos-recruitment` | Call `search_capabilities` (that is the real tool name) |
+| Slash `/awos:product` (Claude) | Cursor project command `/awos-product` (flat `.cursor/commands/awos-product.md` — Agent CLI does not scan command subfolders) |
+
+## `AskUserQuestion` → `AskQuestion` (strict)
+
+When an AWOS prompt says to use `AskUserQuestion` for multiple-choice questions:
+
+1. **Call the `AskQuestion` tool** if it appears in your available tools for this turn. Prefer one structured questionnaire (multiple questions / options) over chat prose. Do **not** open with a numbered list in the assistant message when `AskQuestion` is available.
+2. **Prose fallback only if `AskQuestion` is absent** from your tool list for this session/turn (host did not inject it). Then ask the same choices as a numbered Markdown list and wait for the reply. AWOS skip→default still applies when the user declines to answer.
+3. Never call a tool named `AskUserQuestion` — that name does not exist in Cursor.
+
+## Package runner
+
+Prefer `bunx` for AWOS installers and recruitment CLI in this repo; fall back to `npx` only when `bun`/`bunx` is unavailable:
+
+```text
+bunx @provectusinc/awos
+bunx @provectusinc/awos-recruitment skill|agent|mcp <names...>
+```
+
+## Plugins
+
+Ignore Claude-only `/plugin install …` steps when the equivalent capability is already on disk under `.claude/skills/` / `.claude/agents/` or installed via Cursor's own plugin path. Full install matrix: [`docs/maintainers/AWOS-CURSOR.md`](../../docs/maintainers/AWOS-CURSOR.md).
+
+## Do not edit Layer A sources
+
+Never hand-edit `.awos/commands/`, `.awos/templates/`, or `.awos/scripts/` — re-running the installer overwrites them. Customize Claude wrappers under `.claude/commands/awos/` (preserve-on-update). Regenerate Cursor wrappers with `./scripts/sync-awos-cursor-commands.sh` (or `./scripts/update-awos.sh`) — do not hand-maintain nested `.cursor/commands/awos/`.

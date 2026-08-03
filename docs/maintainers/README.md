@@ -9,6 +9,8 @@ first — it has the short version of what this folder covers in detail.
 | File | What it's for |
 |---|---|
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | One-page system diagram + layer boundaries + what NOT to add |
+| [`AWOS-CURSOR.md`](AWOS-CURSOR.md) | Cursor-compatible AWOS install (Layers A–C, recruitment MCP, companion plugins) |
+| [`AGENT-WORKFLOW-ALTERNATIVES.md`](AGENT-WORKFLOW-ALTERNATIVES.md) | Cursor-ready SDD alternatives vs AWOS — #114 pitfalls, features, learning curve |
 | [`REVIEW_CHECKLIST.md`](REVIEW_CHECKLIST.md) | Canonical code-review criteria — apply to every incoming PR |
 | [`RELEASE_PROCESS.md`](RELEASE_PROCESS.md) | Version bump → CHANGELOG → tag → build → publish checklist |
 | [`TRIAGE.md`](TRIAGE.md) | Label taxonomy + triage rules + stale-issue policy |
