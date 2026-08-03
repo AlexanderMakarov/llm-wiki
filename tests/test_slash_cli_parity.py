@@ -38,6 +38,8 @@ NON_WRAPPER_SLASHES = {
     "release",         # orchestration
     "review-pr",       # prompt-driven
     "triage-issue",    # prompt-driven
+    "fix-bug",         # AWOS delivery orchestration (#114)
+    "implement-feature",  # AWOS delivery orchestration (#114)
 }
 
 # Slash files whose CLI subcommand was removed. They're excluded from
@@ -80,7 +82,10 @@ def test_slash_dir_exists():
 
 
 def test_every_slash_has_wiki_prefix_or_is_governance():
-    governance = {"maintainer", "release", "review-pr", "triage-issue"}
+    governance = {
+        "maintainer", "release", "review-pr", "triage-issue",
+        "fix-bug", "implement-feature",  # AWOS delivery (#114)
+    }
     for p in _all_slash_files():
         assert p.stem.startswith("wiki-") or p.stem in governance, (
             f"slash file {p.name!r} must either start with 'wiki-' or be a "

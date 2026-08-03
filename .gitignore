@@ -211,11 +211,11 @@ wiki/help.md
 # One-shot fix scripts that modify raw/wiki — output is local, scripts are committed.
 
 # ─── Stale planning docs (removed, keep ignored) ─────────────────────────
-gaps.md
-_marketing-playbook.md
-_progress.md
-idea-brief.md
-tasks.md
+/gaps.md
+/_marketing-playbook.md
+/_progress.md
+/idea-brief.md
+/tasks.md
 
 
 # ─── Playwright Test Agents (#464) ────────────────────────────────────────
@@ -230,15 +230,31 @@ test-results/
 usage/
 
 # ─── Cursor IDE ──────────────────────────────────────────────────────────
-# Cursor scratch/state stays local. The shared project rules under
-# .cursor/rules/ are committed so every contributor's Cursor session gets the
-# same guardrails — allowlisted one file at a time, because a rule that names a
-# personal vault path or machine layout must stay on the machine it describes.
+# Cursor scratch/state stays local by default (`.cursor/*`). Shared team surfaces
+# are un-ignored below so every clone gets the same Agent slash commands, MCP
+# entries, and non-personal rules. A rule that names a personal vault path or
+# machine layout must stay machine-local — do not allowlist those.
 .cursor/*
 !.cursor/rules/
 .cursor/rules/*
 !.cursor/rules/contributing.mdc
 !.cursor/rules/no-local-vault-in-prs.mdc
+!.cursor/rules/awos-cursor-runtime.mdc
+# Project slash commands (including flat AWOS `/awos-*` wrappers) must ship —
+# without them other developers cannot run the Cursor AWOS loop (#114).
+!.cursor/commands/
+!.cursor/commands/**
+!.cursor/mcp.json
+!.cursor/skills/
+!.cursor/skills/**
+!.cursor/agents/
+!.cursor/agents/**
 
 # Local automation status / generated unit files (install-automation)
 .llmwiki/
+
+# Transient acplugin dumps at repo root (sync-awos-plugin-cursor.sh relocates into .cursor/)
+/commands/
+/skills/
+/agents/
+/.cursor-plugin/

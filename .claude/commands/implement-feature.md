@@ -1,0 +1,195 @@
+---
+description: Implements one feature end-to-end — fetches its requirements, runs the AWOS chain, and delivers per the team's flow.
+argument-hint: '[feature — ticket ID, link, or file path]'
+---
+
+# Implement a Feature End-to-End
+
+Takes one feature — its requirements from a GitHub Issue, plain prompt, local file, or pre-written `context/spec/` directory — and drives it through spec, implementation, verification, local review, PR, and merge until Definition of Done. Decisions live in `context/product/delivery-flow.md`; re-run `/awos:flow` (Cursor: `/awos-flow`) to change them.
+
+## Notifications
+
+On each of these transitions, post a short status to the open pull request with `gh pr comment` (skip until a PR exists — then catch up on "PR opened"):
+
+- change request opened
+- blocked-and-waiting (CI red or ~30m max-wait hit)
+- gates passed
+- merged (include minimal try-steps from the ticket/spec — e.g. install/commit SHA / CLI notes; no cloud deploy URL)
+
+## Arguments
+
+`$ARGUMENTS` — a GitHub Issue number or URL, a local requirements file path, or free-text requirements. If empty, resume from the next incomplete item in `context/product/roadmap.md` (first unchecked `- [ ]`, as `/awos:spec` does); if the roadmap is missing or fully complete, ask the user.
+
+## Context Discipline
+
+A flow this long degrades in one context window — judgment is worst exactly where it matters most, at review time. Per §8 of delivery-flow.md:
+
+- Run every isolatable stage in a subagent (a subagent can invoke `/awos:*` commands via the Skill tool; its context is discarded on completion). Subagent reports must be terse — paths, verdicts, counts — never full document or review content.
+- After each completed stage, append an entry to `context/spec/{SPEC_NAME}/flow-log.md`: the stage name, what was produced and where (paths, branch, commit), any decisions taken along the way, and which stage comes next. The log is the flow's memory outside the context window — a fresh session (after a restart, a crash, or an unattended hand-off between sessions) resumes by reading this one small file instead of re-deriving state from the whole repo. That is what keeps the window small across a long flow: nothing needs to stay in context once it is in the log. The log is committed with the work (Step 9 stages it alongside the code), so it must never become an uncommittable leftover: **once the change request is opened — or the change is merged — stop writing to the tracked log**, since a commit adding log lines is unwelcome on a change request under review and impossible once it merges, so a late append would strand a change that can never reach it. From that point report late-stage progress to the user and via §9 notifications, and resume the remote stages from remote state (the open/merged change request and the ticket status), which the resume-detection stage already inspects. The close stage leaves a clean working tree and never writes a final entry it cannot commit.
+- Never launch a nested headless session (`claude -p`) from this command — permission modes, PATH, and timeouts differ per machine. Unattended chaining belongs to the trigger setup (§6), outside this command.
+- Tell every dispatched subagent: tools are functional — do not test them or make exploratory calls; every call needs a purpose. Run each delegated stage on the model tier recorded in §8 — the fast tier for mechanical transport work, the strongest for judgment.
+
+## Self-Improvement Loop
+
+When this run hits a defect in this command or in `context/product/delivery-flow.md` that blocks progress or forces a workaround:
+
+1. **Flow defect** (disproven recorded fact, missing step, or instruction that forces a workaround) — fix the affected stage in this file and/or record a §10 Local Customization in `context/product/delivery-flow.md` in the same run; note the correction in the flow log; include the correction in the same change request while still pre-PR.
+2. **Delivery decision change** (anything in §1–§9) — do not rewrite the decision record on your own; stop and tell the flow owner to re-run `/awos:flow`.
+3. **Generator / AWOS framework defect** — do not silently patch around it; report it to the user as feedback for the AWOS repo.
+
+Do not widen into unrelated flow refactors.
+
+<!-- awos:flow:stage=fetch-ticket -->
+
+### Step 1: Fetch & Normalize the Ticket
+
+Use the fast model tier. Prefer the `gh` CLI; fall back to GitHub MCP only if `gh` is missing.
+
+- **GitHub Issue** (`N`, `#N`, or `https://github.com/AlexanderMakarov/llm-wiki/issues/N`): `gh issue view N --repo AlexanderMakarov/llm-wiki --json number,title,body,labels,url,state,comments`. Also pull linked issues and follow URLs/attachments referenced in the body/comments (`gh api` / `gh issue view` as needed). If a link is unreachable, list it as unreachable — do not silently skip.
+- **Local file:** read the path; normalize title + body.
+- **Plain prompt:** treat `$ARGUMENTS` as the requirements text.
+
+Extract and keep: `TICKET_ID` (issue number or `prompt`/`file`), title, description, acceptance hints, link (issue URL or `n/a`).
+
+<!-- /awos:flow:stage -->
+
+<!-- awos:flow:stage=resume-detection -->
+
+### Step 2: Detect the Entry Point
+
+Start with a cheap preflight on the fast model tier (per §8): is this feature **already done**? Check before doing any work — if the GitHub Issue is `closed`, or the owning AWOS spec is already `Completed` (or all its `tasks.md` items are `[x]`), or a merged pull request exists for the same work, report that and stop. Don't re-run the chain over work that is already delivered. Then: if `context/spec/{SPEC_NAME}/flow-log.md` exists, read it first — it names the last completed stage and carries the branch, commit, and change-request state. The log is a convenience, not ground truth: for the spec-generation stages the on-disk artifacts win when they disagree with the log (a manual or partial rerun can leave it stale) — cross-check `context/spec/` and, if they differ, resume from the first missing artifact and repair the log to match before continuing. Past spec generation there is no such artifact to scan, so the log is the only resume signal. Specs may already exist under `context/spec/`: inspect the matching directory and resume from the first missing artifact — skip `/awos:spec` if `functional-spec.md` exists, skip `/awos:tech` if `technical-considerations.md` exists, skip `/awos:tasks` if `tasks.md` exists, and so on.
+
+<!-- /awos:flow:stage -->
+
+<!-- awos:flow:stage=workspace -->
+
+### Step 3: Prepare the Workspace
+
+Verify `context/` is reachable from the repo root (`context/product/architecture.md` readable). Warn on a dirty working tree; create branch `feat/<issue>-<short-slug>` from `origin/main` in this working tree (main-repo-only — no worktrees). Store the branch name as `BRANCH` and the ticket ID as `TICKET_ID`. Uncommitted AWOS artifacts — `context/product/delivery-flow.md` and this command file, left by `/awos:flow` — are an expected dirty-tree cause; surface them as such rather than treating them as a blocker. No submodules.
+
+<!-- /awos:flow:stage -->
+
+<!-- awos:flow:stage=specs -->
+
+### Step 4: Generate Specs and Tasks
+
+Run the AWOS commands sequentially in the **main context** (each interviews the user via `AskUserQuestion`), passing the normalized ticket + surrounding context bundle:
+
+1. `/awos:spec` — **approval gate:** stop and wait for the user to accept `functional-spec.md` before continuing.
+2. `/awos:tech` — **approval gate:** stop and wait for the user to accept `technical-considerations.md` before continuing.
+3. `/awos:tasks` — no document gate; proceed straight to implementation. The task list stays revisable by re-running `/awos:tasks`.
+
+Store the spec directory name (e.g. `007-tasks-api`) as `SPEC_NAME`.
+
+<!-- /awos:flow:stage -->
+
+<!-- awos:flow:stage=commit-specs -->
+
+### Step 5: Commit Specs
+
+Stage `context/spec/{SPEC_NAME}/` and commit on `BRANCH` with a conventional message referencing the issue when present, e.g. `docs: add spec for #<TICKET_ID> <title>`. Do not push yet.
+
+<!-- /awos:flow:stage -->
+
+<!-- awos:flow:stage=implement -->
+
+### Step 6: Implement via Subagents
+
+Run `/awos:implement` in the **main context** (it dispatches coding subagents — do not nest it inside another subagent). It delegates all coding and tracks progress — do not implement tasks in the main context. Wait for all tasks to complete. Prefer specialists from `context/product/hired-agents.md` when markers name them; fall back to `general-purpose` when none match.
+
+<!-- /awos:flow:stage -->
+
+<!-- awos:flow:stage=verify -->
+
+### Step 7: Verify
+
+Run `/awos:verify` in the main context when criteria need `AskUserQuestion`; otherwise a subagent may drive evidence collection and return the verdict + gaps. Address gaps before proceeding.
+
+Running the app to verify is the flow's job, not the user's. For CLI/acceptance criteria use `pytest` and `llmwiki` against a **tmp vault** when a vault is required — do not mutate the operator's live Obsidian vault. For UI criteria: `llmwiki build` then Playwright against generated `site/`; reclaim a conflicting local serve port rather than handing the user a `run` command. Manual confirmation is only for a criterion the agent genuinely cannot render here.
+
+<!-- /awos:flow:stage -->
+
+<!-- awos:flow:stage=local-review -->
+
+### Step 8: Local Review
+
+**Smoke confirm first.** Ask the user to confirm the feature works as expected. Do not start review until they confirm. A skipped confirmation means stop and report verified-but-unconfirmed.
+
+The review must stay independent of this conversation's authorship bias:
+
+- Do not add run-time focus areas drawn from what you implemented or suspect — the author framing the review is the bias.
+- Reviewers write findings to files and return only the verdict, the finding count by severity, and those file paths — never the full review body in the subagent report.
+- **Lead the review presentation to the user with the path(s) on their own lines** — e.g. `Review file: context/spec/{SPEC_NAME}/review.md` — before the verdict and findings summary. Record the same paths in this stage's flow-log entry.
+- The agent that applies accepted findings reads the review files and the diff fresh — relay the user's keep/drop decisions, not your own summary of the findings.
+
+**Dual local review (pre-push, branch diff `origin/main...HEAD`):**
+
+1. **Checklist review (compose `/review-pr`)** — In a dedicated subagent on the strongest tier, load `docs/maintainers/REVIEW_CHECKLIST.md`, `docs/maintainers/ARCHITECTURE.md`, `docs/maintainers/DECLINED.md`, `CONTRIBUTING.md`, and `SECURITY.md`. Apply every checklist section to `git diff origin/main...HEAD` (not `gh pr diff`). Write the full review to `context/spec/{SPEC_NAME}/review.md` using the same blocker/nit structure as `/review-pr`. Do **not** call `/review-pr <n>` — that command remains for reviewing someone else's open PR by number.
+2. **Cursor `code-reviewer`** — Dispatch `Agent(subagent_type="code-reviewer", …)` (Cursor: `Task`) with a **fixed** prompt: review `git diff origin/main...HEAD` for bugs, logic errors, security issues, and CONTRIBUTING violations; write findings to `context/spec/{SPEC_NAME}/review-code-reviewer.md`; return only verdict, counts by severity, and path. Pass the prompt verbatim — no author-supplied focus list.
+
+Present both reviews to the user for keep/drop. Apply accepted findings before anything is pushed. Then run the static gate:
+
+```bash
+ruff check llmwiki tests scripts
+python3 -m pytest tests/ -q
+```
+
+Do not push until both reviews are processed and the static gate is green.
+
+<!-- /awos:flow:stage -->
+
+<!-- awos:flow:stage=commit-push -->
+
+### Step 9: Commit & Push
+
+Write this stage's flow-log entry **before** staging so the log rides in this commit — this is the flow-log's last committed state (see Context Discipline). Then stage all changed files, excluding `.env`, credentials, and secrets. Commit with conventional commits (`feat`/`fix`/`docs`/… per CONTRIBUTING), referencing `#<TICKET_ID>` when an issue exists. If `.githooks/pre-push` is active and rejects the push, fix ruff findings and create a new commit (do not `--no-verify` unless the user explicitly allows it). Push `BRANCH` to `origin`.
+
+<!-- /awos:flow:stage -->
+
+<!-- awos:flow:stage=remote-gates -->
+
+### Step 10: Remote Gates
+
+From here the change request is open — **do not append to the tracked flow-log** (Context Discipline): a commit adding log lines is unwelcome on a change request under review, and impossible once it merges. Report gate progress to the user and via Notifications instead; resume relies on the remote state, not the log.
+
+Before opening the PR: `git fetch origin main` and rebase onto `origin/main`. On conflicts: delegate resolution to a subagent, re-run `ruff` + `pytest`, confirm non-trivial resolutions with the user, then push.
+
+Open the pull request with `gh pr create` against `main` (fill Summary + applicable Pre-merge checklist boxes from `.github/PULL_REQUEST_TEMPLATE.md`). Post the "PR opened" notification comment.
+
+Then wait on required GitHub Actions with `gh pr checks --watch` (Monitor-style polling, interval ≥30s, timeout ~30 minutes). On failure: use the `gha-diagnosis` skill plus `gh run view <id> --log-failed`, delegate the fix to a subagent, push, re-watch until green — or escalate to the user if the ~30m window expires (ask whether to keep watching or hand off). Do **not** block on the soft-fail Claude Code Review Action. Do **not** poll CODEOWNERS human approval. Ticket state transitions are off — do not comment-close the GitHub Issue from this stage.
+
+<!-- /awos:flow:stage -->
+
+<!-- awos:flow:stage=merge -->
+
+### Step 11: Merge
+
+Re-check mergeability against current `origin/main` (fetch + rebase dry-run / `gh pr view`). If the branch no longer rebases cleanly: sync per §2, push, and return to Step 10 — remote gates run again on the new commit before any merge.
+
+When every waited gate is green, show that status and ask the user for explicit merge confirmation in this run. Merge only on yes, via `gh pr merge` (merge commit or squash per repo defaults / user preference if stated). A skipped or unanswered confirmation means do not merge — report ready-to-merge and stop.
+
+After merge: watch post-merge Actions on `main`; if they fail because of this change, diagnose (`gha-diagnosis`), fix forward on a follow-up commit or hotfix branch, and re-watch until green.
+
+<!-- /awos:flow:stage -->
+
+<!-- awos:flow:stage=delivery -->
+
+### Step 12: Deliver
+
+No auto-deploy and no `/release` invocation from this flow. Optionally print that a release remains a separate `/release` + tag when the maintainer chooses. Stop here for packaging.
+
+<!-- /awos:flow:stage -->
+
+<!-- awos:flow:stage=close-ticket -->
+
+### Step 13: Close the Loop
+
+Definition of Done: PR merged and post-merge required checks green. Report to the user: PR URL, merge commit, and local-review evidence (verdict, finding counts by severity, review file paths, that keep/drop ran). Do **not** close or transition the GitHub Issue.
+
+Leave a clean working tree: do not write a closing flow-log entry (the log was finalized at commit-push and the change request is now open or merged — a new entry could never be committed into it). If any flow-created artifact is still uncommitted, surface it in the report rather than leaving it behind — an uncommitted leftover after a merged or in-review change request is a bug, not a record.
+
+<!-- /awos:flow:stage -->
+
+---
+
+<!-- awos:flow:generated date=2026-08-03 version=2.4.3 source=context/product/delivery-flow.md -->

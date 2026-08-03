@@ -108,6 +108,10 @@ Two rules for maintaining them:
 1. **They are pointers, not copies.** Each one distils the same handful of non-negotiables and links back here. An earlier version of the Kiro file restated the rules in full and drifted — it ended up mandating commit types this guide doesn't accept and a branch name that no longer matched. Process rules change here first; the pointers only change when the *summary* is wrong.
 2. **Keep them free of machine-specific detail.** `.cursor/` is gitignored except for an explicit allowlist in `.gitignore`, so a local rule naming your own vault path or directory layout stays on your machine. Add a new shared Cursor rule by allowlisting it there deliberately.
 
+### Optional: AWOS (spec → hire → implement)
+
+Maintainers who want the [AWOS](https://github.com/provectus/awos) loop in Cursor or Claude Code: see [`docs/maintainers/AWOS-CURSOR.md`](docs/maintainers/AWOS-CURSOR.md). Install/update with `./scripts/update-awos.sh` (Layer A); add `--plugin` for marketplace extras as `/awos-flow` etc. This is contributor tooling, not the llmwiki product schema.
+
 ## Commit + PR rules
 
 Adapted from the parent [Open Source Project Framework](docs/framework.md):

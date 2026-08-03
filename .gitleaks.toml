@@ -1,0 +1,9 @@
+# Allowlist for AWOS Layer C ai-readiness-audit test fixtures (#114).
+# Those tests intentionally contain sk-/API_KEY-shaped strings to assert the
+# "hardcoded secrets" detector; they are not live credentials.
+title = "llmwiki gitleaks"
+
+[allowlist]
+paths = [
+  '''(?i)^\.?cursor/skills/awos-ai-readiness-audit/tests/''',
+]
