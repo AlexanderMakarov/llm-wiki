@@ -96,11 +96,11 @@ Store `BRANCH`, `WT`, `TMP_VAULT`, and `TICKET_ID`. Always invoke `python3 -m ll
 
 ### Step 4: Generate Specs and Tasks
 
-Run the AWOS commands sequentially in the **main context** (each interviews the user via `AskUserQuestion`), passing the normalized ticket + surrounding context bundle:
+Run the AWOS commands sequentially in the **main context**, passing the normalized ticket + surrounding context bundle:
 
 1. `/awos:spec` — **approval gate:** stop and wait for the user to accept `functional-spec.md` before continuing.
 2. `/awos:tech` — **approval gate:** stop and wait for the user to accept `technical-considerations.md` before continuing.
-3. `/awos:tasks` — no document gate; proceed straight to implementation. The task list stays revisable by re-running `/awos:tasks`.
+3. `/awos:tasks` — **no document gate** and **no draft Approve ask** under this command (Local Customization / §4). Upstream `/awos:tasks` Step 4 normally presents the slice plan and iterates until the user is satisfied — **suppress that Approve / AskUserQuestion loop here**. Draft the vertical slices, write `tasks.md` immediately, report a short chat summary of slices + agent assignments (informational only — not a blocking approval), then continue. Still ask for the other `/awos:tasks` decisions that are not draft approval (e.g. skip-tests intent when unclear, QA-agent hire choices). If the user objects in chat after seeing the summary, revise and rewrite `tasks.md`. Standalone `/awos:tasks` outside this flow keeps its full draft loop. The task list stays revisable by re-running `/awos:tasks`.
 
 Store the spec directory name (e.g. `007-tasks-api`) as `SPEC_NAME`.
 
