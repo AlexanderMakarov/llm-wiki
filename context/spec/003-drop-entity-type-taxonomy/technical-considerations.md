@@ -1,7 +1,7 @@
 # Technical Specification: Drop the entity-type taxonomy, make Project a page kind, unify wiki search
 
 - **Functional Specification:** [`functional-spec.md`](./functional-spec.md) (Status: Approved)
-- **Status:** Approved
+- **Status:** Completed
 - **Author(s):** AWOS `/implement-feature`
 - **Ticket:** [#102](https://github.com/AlexanderMakarov/llm-wiki/issues/102)
 
@@ -9,10 +9,10 @@
 
 ## 1. High-Level Technical Approach
 
-Five independent edits to the stdlib-only Python package, plus a docs/test sweep. No new dependencies, no new modules, no data store — the vault is files, so the "migration" is a committed diff over seventeen markdown pages.
+Five independent edits to the stdlib-only Python package, plus a docs/test sweep. No new dependencies, no new modules, no data store — the vault is files, so the "migration" is a committed diff over the project pages tracked in this repository.
 
 1. **Delete the taxonomy.** Remove `ENTITY_TYPES` / `validate_entity_type` from `llmwiki/schema.py`, its enforcement in `frontmatter_validity`, and the `entity_consistency` rule that existed only to demand the field. Stop both writers (`candidates_harvest`, `build.ensure_project_stubs`).
-2. **Promote `project` to a page kind.** Add it to `frontmatter_validity.VALID_TYPES`, extend the two `("entity", "concept")` gates that would otherwise drop project pages silently, and migrate the seventeen vault pages.
+2. **Promote `project` to a page kind.** Add it to `frontmatter_validity.VALID_TYPES`, extend the two `("entity", "concept")` gates that would otherwise drop project pages silently, and migrate the tracked project pages.
 3. **Merge the two MCP search tools** into one `wiki_search` with a `kind` filter and page-level results, preserving the existing scan hardening.
 4. **Make classification fail closed** — withdraw `--allow-unclassified`, replace the misleading warning with a cause-specific error.
 5. **Sweep** facets, docs, templates, CHANGELOG, tests.
@@ -63,7 +63,7 @@ Replace two tools with one. `wiki_entity_search` is deleted outright — no alia
 | `kind` | string, optional | one of `entity`, `concept`, `project`, `source`, `synthesis`, `comparison`, `question`, `navigation`, `context` — the `VALID_TYPES` set, matched against frontmatter `type` |
 | `include_raw` | boolean, optional, default `false` | also scan `raw/sessions/` |
 
-`kind` + `include_raw` together is a **request error** with an explanation (raw transcripts carry no page kind), not a silent precedence rule.
+The two are **orthogonal and compose**. `include_raw` is a corpus selector — it decides whether `raw/sessions/` is scanned at all. `kind` is a filter on frontmatter `type`, applied to every file scanned in every selected corpus. Raw session files do carry a page kind: the converter stamps `type: source` on each one, so `kind=source` + `include_raw=true` returns matching wiki source pages *and* the matching raw transcripts behind them. A kind no raw file declares (`kind=project`) simply gets no contribution from the raw corpus — an empty contribution, not an error and not a warning. The raw scan reads each candidate's frontmatter with `llmwiki._frontmatter.parse_frontmatter` out of the text it already read, so no second read and no local regex (#495).
 
 **Result shape** — page-level, replacing both the bare `file:line` list and the `[entity_type] path — title` list:
 
@@ -121,13 +121,13 @@ Lint registry · candidate harvest · site build (project stubs, search payload)
 
 | Risk | Mitigation |
 | --- | --- |
-| **Silent coverage loss.** Project pages drop out of claim verification and graph ranking with no error — the change looks green while quality checks quietly stop covering seventeen pages. | Explicit acceptance criteria in R3; assert in tests that a `type: project` page is claim-checked and carries graph bonus. |
+| **Silent coverage loss.** Project pages drop out of claim verification and graph ranking with no error — the change looks green while quality checks quietly stop covering every project page. | Explicit acceptance criteria in R3; assert in tests that a `type: project` page is claim-checked and carries graph bonus. |
 | **Graph hubs wrongly boosted** by a naive `"project"` addition, changing query results silently. | Gate on non-empty `file` as well as kind (§2.2); test both a project page and a synthetic hub. |
 | **Confusing `entity_kind` with `entity_type`** — one character apart, and `entity_kind` drives the live AI-model index. | Named out-of-scope in the functional spec and §2.1; `tests/test_schema_entity_types.py` and the model-index tests must both still pass. |
 | **Merged-search regression of #413/#483 hardening** — easy to lose when rewriting the scan. | §2.3 lists both explicitly; keep/extend existing cap and budget tests rather than rewriting them. |
 | **`tests/test_reader_api_doc.py` imports `ENTITY_TYPES`** and asserts the doc's enum matches code — it fails at import once the constant is deleted. | Update the doc and the test together; drop the entity_type invariant assertion. |
 | **Lint rule deletion breaks enumeration order** relied on by tests/consumers. | Remove only the one import line in `rules/__init__.py`; do not reorder. |
-| **Vault migration touches committed pages** — a bad rewrite corrupts seventeen real pages. | Frontmatter-only edit (two lines per page); `llmwiki lint` over the vault after migration must be clean of new errors. |
+| **Vault migration touches committed pages** — a bad rewrite corrupts real pages. | Frontmatter-only edit (two lines per page); `llmwiki lint` over the vault after migration must be clean of new errors. |
 | **Silent no-op on `--rules` typos** pre-exists and would mask the removed rule. | §2.1 adds validation; test that an unknown rule name exits non-zero. |
 
 ---
@@ -141,7 +141,7 @@ Gates: `ruff check llmwiki tests scripts` and `python3 -m pytest tests/ -q`. **R
 - **R1** — a page with an arbitrary `entity_type` value lints clean; an entity page with none lints clean; `lint --rules entity_consistency` exits non-zero as an unknown rule.
 - **R2** — a harvested candidate stub contains no `entity_type`; a seeded project stub contains none.
 - **R3** — `type: project` passes `frontmatter_validity`; a project page is claim-checked; a project *page* gets the graph bonus and a project *hub* does not; the catalog still lists projects.
-- **R4** — one search tool registered and no `wiki_entity_search`; unfiltered search spans kinds; `kind` narrows; title match outranks body-only match; `kind` + `include_raw` is refused; caps/budget behaviour preserved (extend existing tests, do not replace).
+- **R4** — one search tool registered and no `wiki_entity_search`; unfiltered search spans kinds; `kind` narrows; title match outranks body-only match; `kind` + `include_raw` compose across both corpora, including the empty-raw-contribution case; caps/budget behaviour preserved (extend existing tests, do not replace).
 - **R5** — unreachable backend, incomplete reply, and unreadable sources each exit non-zero with their own message and write **nothing** (assert the candidates directory is untouched); no bypass flag in `--help`; a fully classified run writes stubs and prints no unknown warning; `write_stubs` raises when a supplied classifier omits a name, and still defaults when no classifier was supplied.
 - **R6** — facet payload has no `entity_type` key; `filter_entries` no longer accepts the parameter.
 - **R7** — `tests/test_reader_api_doc.py` and `tests/test_obsidian_templates.py` updated and passing.

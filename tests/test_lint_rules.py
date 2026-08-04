@@ -9,6 +9,7 @@ import pytest
 
 from llmwiki.lint import (
     REGISTRY,
+    UnknownRuleError,
     load_pages,
     rules,  # noqa: F401
     run_all,
@@ -19,7 +20,6 @@ from llmwiki.lint.rules import (
     ContentFreshness,
     ContradictionDetection,
     DuplicateDetection,
-    EntityConsistency,
     FrontmatterCompleteness,
     FrontmatterValidity,
     IndexSync,
@@ -44,14 +44,15 @@ def _mk_page(meta: dict, body: str) -> dict:
 # ─── Registry ──────────────────────────────────────────────────────────
 
 
-def test_all_14_rules_registered():
-    # 11 v1.0 + stale_candidates (v1.1 #51)
+def test_all_16_rules_registered():
+    # 10 v1.0 + stale_candidates (v1.1 #51)
     # + tags_topics_convention (G-16 · #302) + stale_reference_detection (G-17 · #303)
     # + frontmatter_count_consistency (issues.md #2)
     # + tools_consistency (issues.md #4)
     # + stub_source_pages (#24)
     # cache_tier_consistency removed (cache_tiers module deleted)
-    assert len(REGISTRY) == 17
+    # entity_consistency removed (#102 — entity-type taxonomy dropped)
+    assert len(REGISTRY) == 16
 
 
 def test_registered_rule_names():
@@ -61,7 +62,6 @@ def test_registered_rule_names():
         "link_integrity",
         "orphan_detection",
         "content_freshness",
-        "entity_consistency",
         "duplicate_detection",
         "index_sync",
         "contradiction_detection",
@@ -77,7 +77,68 @@ def test_registered_rule_names():
     assert set(REGISTRY.keys()) == expected
 
 
-# ─── 12. StaleCandidates — regression for Path import (#51 follow-up) ─
+def test_entity_consistency_rule_is_gone():
+    assert "entity_consistency" not in REGISTRY
+
+
+# ─── Unknown rule names fail loudly (#102) ────────────────────────────
+
+
+def test_run_all_rejects_unknown_rule_name():
+    pages = {"a.md": _mk_page({"title": "A", "type": "entity"}, "")}
+    with pytest.raises(UnknownRuleError) as excinfo:
+        run_all(pages, selected=["entity_consistency"])
+    msg = str(excinfo.value)
+    assert "entity_consistency" in msg
+    assert "frontmatter_validity" in msg  # lists the valid rules
+
+
+def test_run_all_rejects_unknown_name_mixed_with_valid_one():
+    """A typo alongside a real rule must not pass silently."""
+    pages = {"a.md": _mk_page({"title": "A", "type": "entity"}, "")}
+    with pytest.raises(UnknownRuleError):
+        run_all(pages, selected=["frontmatter_validity", "no_such_rule"])
+
+
+def test_run_all_accepts_known_rule_names():
+    pages = {"a.md": _mk_page({"title": "A", "type": "entity"}, "")}
+    assert run_all(pages, selected=["frontmatter_validity"]) == []
+
+
+def _tmp_wiki(tmp_path: Path) -> Path:
+    wiki = tmp_path / "wiki"
+    (wiki / "entities").mkdir(parents=True)
+    (wiki / "entities" / "Foo.md").write_text(
+        "---\ntitle: Foo\ntype: entity\n---\n\nBody.\n", encoding="utf-8"
+    )
+    return wiki
+
+
+def test_cli_lint_exits_non_zero_on_unknown_rule(tmp_path: Path, capsys):
+    from llmwiki.cli import build_parser  # noqa: PLC0415 — CLI import kept local to the test
+
+    wiki = _tmp_wiki(tmp_path)
+    args = build_parser().parse_args(
+        ["lint", "--wiki-dir", str(wiki), "--rules", "entity_consistency"]
+    )
+    rc = args.func(args)
+    err = capsys.readouterr().err
+    assert rc != 0
+    assert "entity_consistency" in err
+    assert "frontmatter_validity" in err  # lists the valid rules
+
+
+def test_cli_lint_accepts_a_known_rule(tmp_path: Path):
+    from llmwiki.cli import build_parser  # noqa: PLC0415 — CLI import kept local to the test
+
+    wiki = _tmp_wiki(tmp_path)
+    args = build_parser().parse_args(
+        ["lint", "--wiki-dir", str(wiki), "--rules", "frontmatter_validity"]
+    )
+    assert args.func(args) == 0
+
+
+# ─── 11. StaleCandidates — regression for Path import (#51 follow-up) ─
 
 
 def test_stale_candidates_rule_runs_without_nameerror(tmp_path: Path):
@@ -179,6 +240,12 @@ def test_validity_good_values():
     assert issues == []
 
 
+def test_validity_accepts_project_type():
+    """#102 R3: `project` is a first-class page kind, not an entity subtype."""
+    pages = {"projects/alpha.md": _mk_page({"title": "alpha", "type": "project"}, "")}
+    assert FrontmatterValidity().run(pages) == []
+
+
 def test_validity_bad_type():
     pages = {"a.md": _mk_page({"title": "A", "type": "dinosaur"}, "")}
     issues = FrontmatterValidity().run(pages)
@@ -192,11 +259,23 @@ def test_validity_bad_lifecycle():
     assert any("invalid lifecycle" in i["message"] for i in issues)
 
 
-def test_validity_bad_entity_type():
+def test_validity_ignores_arbitrary_entity_type():
+    """#102: `entity_type` is no longer a checked taxonomy — any leftover
+    value on an existing page must lint clean."""
     pages = {"a.md": _mk_page({"title": "A", "type": "entity",
-                                "entity_type": "dinosaur"}, "")}
-    issues = FrontmatterValidity().run(pages)
-    assert any("invalid entity_type" in i["message"] for i in issues)
+                                "entity_type": "banana"}, "")}
+    assert FrontmatterValidity().run(pages) == []
+
+
+def test_validity_ignores_unknown_entity_type_value():
+    pages = {"a.md": _mk_page({"title": "A", "type": "entity",
+                                "entity_type": "unknown"}, "")}
+    assert FrontmatterValidity().run(pages) == []
+
+
+def test_validity_entity_page_without_entity_type_is_clean():
+    pages = {"entities/Foo.md": _mk_page({"title": "Foo", "type": "entity"}, "")}
+    assert FrontmatterValidity().run(pages) == []
 
 
 def test_validity_confidence_out_of_range():
@@ -336,34 +415,7 @@ def test_no_date_no_issue():
     assert issues == []
 
 
-# ─── 6. EntityConsistency ────────────────────────────────────────────
-
-
-def test_entity_with_type():
-    pages = {"entities/Foo.md": _mk_page({
-        "title": "Foo", "type": "entity", "entity_type": "tool"
-    }, "")}
-    issues = EntityConsistency().run(pages)
-    assert issues == []
-
-
-def test_entity_missing_entity_type():
-    pages = {"entities/Foo.md": _mk_page({
-        "title": "Foo", "type": "entity"
-    }, "")}
-    issues = EntityConsistency().run(pages)
-    assert len(issues) == 1
-
-
-def test_non_entity_pages_skipped():
-    pages = {"concepts/Idea.md": _mk_page({
-        "title": "Idea", "type": "concept"
-    }, "")}
-    issues = EntityConsistency().run(pages)
-    assert issues == []
-
-
-# ─── 7. DuplicateDetection ───────────────────────────────────────────
+# ─── 6. DuplicateDetection ───────────────────────────────────────────
 
 
 def test_no_duplicates():
@@ -411,7 +463,7 @@ def test_similar_titles():
     assert len(issues) >= 1
 
 
-# ─── 8. IndexSync ────────────────────────────────────────────────────
+# ─── 7. IndexSync ────────────────────────────────────────────────────
 
 
 def test_index_listed_page_exists():
@@ -561,7 +613,7 @@ def test_resolve_index_href_unit():
     assert _resolve_index_href("./a/./b.md") == "a/b.md"
 
 
-# ─── 9-11. Structural contradiction / claim / summary rules (#72) ────
+# ─── 8-10. Structural contradiction / claim / summary rules (#72) ────
 
 
 def test_contradiction_empty_page_is_clean():
@@ -667,6 +719,28 @@ def test_claim_verification_detects_unsourced():
     }
     issues = ClaimVerification().run(pages)
     assert len(issues) == 1
+
+
+def test_claim_verification_covers_project_pages():
+    """#102 R3: project pages are claim-checked like entities and concepts."""
+    pages = {
+        "projects/alpha.md": _mk_page(
+            {"title": "alpha", "type": "project"},
+            "## Key Facts\n- Some claim with no source\n",
+        ),
+    }
+    issues = ClaimVerification().run(pages)
+    assert [i["page"] for i in issues] == ["projects/alpha.md"]
+
+
+def test_claim_verification_sourced_project_page_is_clean():
+    pages = {
+        "projects/alpha.md": _mk_page(
+            {"title": "alpha", "type": "project"},
+            "## Key Facts\n- Claim\n\n## Sessions\n- [[s]]\n",
+        ),
+    }
+    assert ClaimVerification().run(pages) == []
 
 
 def test_summary_accuracy_missing_field_is_clean():

@@ -27,7 +27,7 @@ def test_user_edit_visible_to_load_pages(tmp_path: Path):
     # llmwiki creates the page
     page = wiki / "entities" / "Foo.md"
     page.write_text(
-        '---\ntitle: "Foo"\ntype: entity\nentity_type: tool\n---\n\n# Foo\n',
+        '---\ntitle: "Foo"\ntype: entity\ntags: [tool]\n---\n\n# Foo\n',
         encoding="utf-8",
     )
 

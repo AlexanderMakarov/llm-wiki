@@ -76,7 +76,7 @@ llmwiki/              # Python package
 ├── render/           # emitted site assets (css.py, js.py, data.py)
 ├── serve.py          # localhost HTTP server
 ├── adapters/         # session-store adapters (one per agent)
-└── mcp/              # MCP server (13 tools, stdio transport)
+└── mcp/              # MCP server (12 tools, stdio transport)
 
 .claude/              # Claude Code plugin surface (commands, skills, rules)
 .claude-plugin/       # plugin.json + marketplace.json

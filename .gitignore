@@ -199,6 +199,9 @@ playwright-report/
 # ─── Claude Code worktrees + plans ───────────────────────────────────────
 .claude/worktrees/
 .claude/plans/
+# Throwaway vault the AWOS flow recipe scaffolds inside a worktree — it fills
+# with real MCP session telemetry, which must never reach a public repo.
+.worktree-vault/
 
 # ─── Wiki helper pages (generated locally) ───────────────────────────────
 wiki/help.md

@@ -442,6 +442,24 @@ def export_to_obsidian(vault_path: Path) -> Path:
     return vault_path
 
 
+#: Page kinds whose nodes outrank raw sources in `query_graph` scoring.
+_RANKED_PAGE_TYPES = ("entity", "concept", "project")
+_TYPE_BONUS = 0.5
+
+
+def node_type_bonus(ndata: dict) -> float:
+    """Relevance bonus for a graph node, preferring real wiki pages.
+
+    Only nodes backed by a file on disk qualify: synthetic project hubs
+    and unresolved wikilink targets carry ``type`` values but an empty
+    ``file``, and they are navigational aggregates rather than pages, so
+    they must not be boosted above the pages they group.
+    """
+    if not ndata.get("file"):
+        return 0.0
+    return _TYPE_BONUS if ndata.get("type") in _RANKED_PAGE_TYPES else 0.0
+
+
 def query_graph(question: str, *, depth: int = 3, token_budget: int = 2000) -> str:
     """Query the knowledge graph with a natural language question.
 
@@ -471,9 +489,8 @@ def query_graph(question: str, *, depth: int = 3, token_budget: int = 2000) -> s
             # Boost well-connected nodes (log scale to avoid domination)
             degree = G.degree(nid)
             connectivity_bonus = min(degree / 10.0, 2.0)
-            # Prefer entity/concept pages over raw sources
-            type_bonus = 0.5 if ndata.get("type") in ("entity", "concept") else 0
-            total = keyword_score + connectivity_bonus + type_bonus
+            # Prefer entity/concept/project pages over raw sources
+            total = keyword_score + connectivity_bonus + node_type_bonus(ndata)
             scored.append((total, nid))
     scored.sort(reverse=True)
 

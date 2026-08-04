@@ -6,20 +6,19 @@ Structural rules (all deterministic — no LLM):
   3. link_integrity             — [[wikilinks]] resolve
   4. orphan_detection           — pages with zero inbound links
   5. content_freshness          — last_updated > 90 days → warning
-  6. entity_consistency         — entities in body match frontmatter
-  7. duplicate_detection        — same-project + title + body similarity
-  8. index_sync                 — pages in index.md ↔ pages on disk
-  9. contradiction_detection    — non-filler ## Contradictions sections
-  10. claim_verification        — entity/concept claims without sources
-  11. summary_accuracy          — empty summary: frontmatter field
+  6. duplicate_detection        — same-project + title + body similarity
+  7. index_sync                 — pages in index.md ↔ pages on disk
+  8. contradiction_detection    — non-filler ## Contradictions sections
+  9. claim_verification         — entity/concept claims without sources
+  10. summary_accuracy          — empty summary: frontmatter field
 
 Post-v1.0 rules:
-  12. stale_candidates            (v1.1 · #51)
-  13. tags_topics_convention      (G-16 · #302)
-  14. stale_reference_detection   (G-17 · #303)
-  15. frontmatter_count_consistency  (v1.2 · issues.md #2)
-  16. tools_consistency              (v1.2 · issues.md #4)
-  17. stub_source_pages              (#24)
+  11. stale_candidates            (v1.1 · #51)
+  12. tags_topics_convention      (G-16 · #302)
+  13. stale_reference_detection   (G-17 · #303)
+  14. frontmatter_count_consistency  (v1.2 · issues.md #2)
+  15. tools_consistency              (v1.2 · issues.md #4)
+  16. stub_source_pages              (#24)
 
 Import order matters — every per-rule module's top-level ``@register``
 decorator runs at import time and inserts its rule into the
@@ -51,7 +50,6 @@ from llmwiki.lint.rules.claim_verification import ClaimVerification  # noqa: F40
 from llmwiki.lint.rules.content_freshness import ContentFreshness  # noqa: F401
 from llmwiki.lint.rules.contradiction_detection import ContradictionDetection  # noqa: F401
 from llmwiki.lint.rules.duplicate_detection import DuplicateDetection  # noqa: F401
-from llmwiki.lint.rules.entity_consistency import EntityConsistency  # noqa: F401
 
 # Rule classes — order matches the pre-split file so REGISTRY enumeration
 # is stable. Each module's top-level @register call runs at import time.

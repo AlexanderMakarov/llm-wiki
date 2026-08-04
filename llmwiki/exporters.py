@@ -460,7 +460,7 @@ If you have MCP access, the llmwiki MCP server exposes 7 tools
 (v0.4 adds `wiki_export`):
 
 - `wiki_query(question, max_pages)` — keyword search + page content
-- `wiki_search(term, include_raw)` — raw grep
+- `wiki_search(term, kind, include_raw, format)` — page-level search by name and body text
 - `wiki_list_sources(project)` — list sources with metadata
 - `wiki_read_page(path)` — read one page
 - `wiki_lint()` — orphans + broken wikilinks report

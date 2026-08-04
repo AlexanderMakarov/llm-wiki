@@ -42,8 +42,8 @@ def test_ensure_project_stubs_creates_missing(tmp_path: Path):
         assert stub.is_file()
         content = stub.read_text()
         assert f'title: "{slug}"' in content
-        assert "type: entity" in content
-        assert "entity_type: project" in content
+        assert "type: project" in content
+        assert "entity_type" not in content
         assert "topics: []" in content
         assert 'description: ""' in content
         assert 'homepage: ""' in content
@@ -59,8 +59,7 @@ def test_ensure_project_stubs_never_clobbers_existing(tmp_path: Path):
     curated_text = (
         "---\n"
         'title: "alpha"\n'
-        "type: entity\n"
-        "entity_type: project\n"
+        "type: project\n"
         "project: alpha\n"
         "topics: [python, api]\n"
         'description: "real description"\n'
@@ -201,7 +200,7 @@ def test_build_site_default_preserves_existing_stubs(tmp_path: Path, monkeypatch
     projects_dir.mkdir(parents=True)
     curated = projects_dir / "newproj.md"
     curated_text = (
-        "---\ntitle: \"newproj\"\ntype: entity\nentity_type: project\n"
+        "---\ntitle: \"newproj\"\ntype: project\n"
         "project: newproj\ntopics: [hand-edited]\n"
         'description: "real"\nhomepage: ""\n---\n\n# newproj\n\nDo not touch.\n'
     )

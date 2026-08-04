@@ -376,8 +376,7 @@ def ensure_project_stubs(
         stub = (
             "---\n"
             f'title: "{slug}"\n'
-            "type: entity\n"
-            "entity_type: project\n"
+            "type: project\n"
             f"project: {slug}\n"
             f"topics: {_format_topics_yaml(topics)}\n"
             f'description: "{description_safe}"\n'

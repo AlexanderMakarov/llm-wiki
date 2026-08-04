@@ -201,8 +201,7 @@ Create `wiki/projects/my-project.md`:
 ```markdown
 ---
 title: "my-project"
-type: entity
-entity_type: project
+type: project
 project: my-project
 topics: [python, api, fastapi]
 description: "My FastAPI CRUD service"
@@ -220,7 +219,6 @@ llmwiki ships structured model schemas. Create `wiki/entities/MyModel.md`:
 ---
 title: "MyModel"
 type: entity
-entity_type: tool
 entity_kind: ai-model
 provider: MyProvider
 model: {"context_window": 200000, "license": "proprietary", "released": "2026-04-01"}

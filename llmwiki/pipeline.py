@@ -248,9 +248,6 @@ def run_pipeline(args: argparse.Namespace) -> int:
                 harvest_rc = run_harvest(
                     wiki_dir,
                     min_refs=DEFAULT_MIN_REFS,
-                    allow_unclassified=bool(
-                        getattr(args, "allow_unclassified", False)
-                    ),
                     backend=backend,
                     require_sources=False,
                 )

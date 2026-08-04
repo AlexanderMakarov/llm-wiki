@@ -22,8 +22,9 @@ wiki/          LLM-maintained. Pages you write that summarise and cross-referenc
   CRITICAL_FACTS.md Must-know facts (<120 tokens).
   sources/         One page per raw source.
   candidates/      Pending entity/concept stubs from harvest — review before promote.
-  entities/        People, companies, projects, products.
+  entities/        People, companies, products.
   concepts/        Ideas, frameworks, methods.
+  projects/        Codebases and work streams (seeded from session metadata).
   syntheses/       Saved query answers.
 
 site/          GENERATED. Static HTML from `python3 -m llmwiki build`. Do not edit.
@@ -67,11 +68,12 @@ Triggered when the user says "ingest this", "sync the wiki", or runs `/wiki-sync
 3. For each source, write `wiki/sources/<slug>.md` using the Source Page Format below.
 4. Update `wiki/index.md` — add the new source under `## Sources`.
 5. Update `wiki/overview.md` if the source adds substantial new information.
-6. Create/update `wiki/entities/<Name>.md` for any people, companies, projects, tools, or libraries mentioned.
+6. Create/update `wiki/entities/<Name>.md` for any people, companies, products, tools, or libraries mentioned.
 7. Create/update `wiki/concepts/<Name>.md` for any ideas or patterns discussed.
-8. Cross-link everything with `[[wikilinks]]` under `## Connections`.
-9. Flag contradictions under `## Contradictions` — keep both claims visible.
-10. Append to `wiki/log.md`: `## [YYYY-MM-DD] ingest | <title>`
+8. Create/update `wiki/projects/<slug>.md` with `type: project` for any codebase or work stream mentioned — never file a project as an entity.
+9. Cross-link everything with `[[wikilinks]]` under `## Connections`.
+10. Flag contradictions under `## Contradictions` — keep both claims visible.
+11. Append to `wiki/log.md`: `## [YYYY-MM-DD] ingest | <title>`
 
 ## Query Workflow
 
@@ -129,12 +131,12 @@ project: <project-slug>
 - [[Concept]] — how it connects
 ```
 
-### Entity / Concept page
+### Entity / Concept / Project page
 
 ```markdown
 ---
 title: "Name"
-type: entity   # or: concept
+type: entity   # or: concept, project
 tags: []
 sources: [slug-1, slug-2]
 last_updated: YYYY-MM-DD
@@ -171,6 +173,9 @@ One paragraph.
 ## Concepts
 - [Name](concepts/Name.md) — one-line description
 
+## Projects
+- [project-slug](projects/project-slug.md) — one-line description
+
 ## Syntheses
 - [Title](syntheses/slug.md) — the question it answers
 ```
@@ -201,11 +206,11 @@ wiki_path: ~/Desktop/2026/production-draft/llm-wiki
 
 Then read `wiki/index.md` first, navigate from there.
 
-## Entity types
+## Page kinds
 
-Every entity page should declare `entity_type` in frontmatter:
+Every page declares its kind in the `type` frontmatter field:
 
-`person` | `org` | `tool` | `concept` | `api` | `library` | `project`
+`source` | `entity` | `concept` | `project` | `synthesis` | `comparison` | `question` | `navigation` | `context`
 
 ## Confidence & lifecycle
 
@@ -217,5 +222,5 @@ Every entity page should declare `entity_type` in frontmatter:
 1. `raw/` is immutable. Never edit files there.
 2. No silent overwrites. Record contradictions, don't hide them.
 3. Cross-link everything — every page has a `## Connections` section.
-4. Frontmatter is authoritative. Always populate `title`, `type`, `tags`, `sources`, `last_updated`, `confidence`, `lifecycle`, `entity_type`.
+4. Frontmatter is authoritative. Always populate `title`, `type`, `tags`, `sources`, `last_updated`, `confidence`, `lifecycle`.
 5. Do not ingest raw `.jsonl` files directly — only ingest the markdown under `raw/`.

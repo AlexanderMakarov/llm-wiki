@@ -2,7 +2,7 @@
 
 For every topic node in :func:`llmwiki.topics.build_topic_graph` we emit
 ``site/topics/<slug>.html`` — the static equivalent of the MCP
-``wiki_entity_search`` tool: the sessions that mention the topic (linked to
+``wiki_search`` tool: the sessions that mention the topic (linked to
 their compiled session pages) plus the topics it co-occurs with. A
 ``topics/index.html`` lists every topic by reach.
 

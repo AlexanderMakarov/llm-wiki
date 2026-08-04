@@ -7,7 +7,7 @@ last_updated: ""
 # Wiki Dashboard
 
 Live overview of the wiki. Open in Obsidian with the Dataview plugin enabled.
-All queries read YAML frontmatter across `wiki/sources/`, `wiki/entities/`, `wiki/concepts/`, `wiki/syntheses/`.
+All queries read YAML frontmatter across `wiki/sources/`, `wiki/entities/`, `wiki/concepts/`, `wiki/projects/`, `wiki/syntheses/`.
 
 ## Recently Updated (last 14 days)
 
@@ -92,13 +92,13 @@ GROUP BY project
 SORT length(rows) DESC
 ```
 
-## By Entity Type
+## By Page Kind
 
 ```dataview
 TABLE length(rows) AS count
-FROM "entities"
-WHERE entity_type
-GROUP BY entity_type
+FROM "sources" OR "entities" OR "concepts" OR "projects" OR "syntheses"
+WHERE type
+GROUP BY type
 SORT length(rows) DESC
 ```
 

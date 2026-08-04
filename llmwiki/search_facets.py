@@ -1,12 +1,11 @@
 """Search facet enrichment (v1.0 · #161).
 
-Adds confidence-weighted ranking and facet filters (entity_type,
-lifecycle) to the static-site search index.
+Adds confidence-weighted ranking and facet filters (lifecycle, tags)
+to the static-site search index.
 
 Builds on the chunked search index from #47. Each entry gains:
   - ``confidence``: float 0.0-1.0 (from page frontmatter)
   - ``lifecycle``: state string (draft/reviewed/verified/stale/archived)
-  - ``entity_type``: person/org/tool/concept/api/library/project
   - ``tags``: list[str] (filtered to non-noise tags)
 
 The facet summary (counts per value) is written alongside the index
@@ -40,7 +39,6 @@ def enrich_entry(entry: dict[str, Any], meta: dict[str, Any]) -> dict[str, Any]:
     """
     entry["confidence"] = _parse_confidence(meta.get("confidence"))
     entry["lifecycle"] = str(meta.get("lifecycle", "")).lower()
-    entry["entity_type"] = str(meta.get("entity_type", "")).lower()
     entry["tags"] = _parse_tags_field(meta.get("tags", ""))
     return entry
 
@@ -49,23 +47,17 @@ def aggregate_facets(entries: list[dict[str, Any]]) -> dict[str, dict[str, int]]
     """Count entries by each facet value. Returns::
 
         {
-            "entity_type": {"tool": 12, "concept": 8, ...},
             "lifecycle":   {"draft": 5, "verified": 20, ...},
             "tags":        {"flutter": 3, "python": 7, ...},
             "confidence":  {"high": N, "medium": N, "low": N, "none": N},
         }
     """
     counts = {
-        "entity_type": {},
         "lifecycle": {},
         "tags": {},
         "confidence": {},
     }
     for entry in entries:
-        et = entry.get("entity_type", "")
-        if et:
-            counts["entity_type"][et] = counts["entity_type"].get(et, 0) + 1
-
         lc = entry.get("lifecycle", "")
         if lc:
             counts["lifecycle"][lc] = counts["lifecycle"].get(lc, 0) + 1
@@ -125,7 +117,6 @@ def rank_by_confidence(
 def filter_entries(
     entries: list[dict[str, Any]],
     *,
-    entity_types: list[str] | None = None,
     lifecycles: list[str] | None = None,
     tags: list[str] | None = None,
     min_confidence: float = 0.0,
@@ -134,8 +125,6 @@ def filter_entries(
     """Filter entries by facet values. Empty filter lists = no filter."""
     result = []
     for entry in entries:
-        if entity_types and entry.get("entity_type", "") not in entity_types:
-            continue
         if lifecycles and entry.get("lifecycle", "") not in lifecycles:
             continue
         if tags:

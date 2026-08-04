@@ -57,8 +57,9 @@ For GitHub Pages, see [deploy/github-pages.md](deploy/github-pages.md).
 The wiki layer implements layer 2 of [Karpathy's LLM Wiki spec](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f). While `raw/` holds immutable session transcripts and `site/` holds generated HTML, `wiki/` is maintained by your coding agent:
 
 - `wiki/sources/` -- one summary page per raw session
-- `wiki/entities/` -- people, projects, tools, libraries
+- `wiki/entities/` -- people, products, tools, libraries
 - `wiki/concepts/` -- ideas, patterns, decisions
+- `wiki/projects/` -- codebases and work streams
 - `wiki/syntheses/` -- saved query answers
 
 Pages interlink via `[[wikilinks]]` and compound over time. The wiki layer is optional; the site builds from `raw/` alone.

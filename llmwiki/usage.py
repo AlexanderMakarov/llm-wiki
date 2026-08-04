@@ -72,9 +72,15 @@ _QUERY_KEYS = ("term", "question", "path", "query", "project")
 # Tools whose result is a set of retrievable entities/answers. Only these
 # contribute to "items returned" — lint/sync/lifecycle/dashboard perform an
 # action or report status rather than returning corpus items.
+#
+# This set classifies *persisted records*, not the live tool surface, so it
+# names every tool that has ever written one. A name the server no longer
+# serves matches nothing new; dropping it would instead relabel already-
+# reported history and change figures a user has already read.
 ENTITY_TOOLS = frozenset({
     "wiki_query", "wiki_search", "wiki_list_sources", "wiki_read_page",
-    "wiki_entity_search", "wiki_category_browse", "wiki_export", "wiki_confidence",
+    "wiki_category_browse", "wiki_export", "wiki_confidence",
+    "wiki_entity_search",
 })
 
 # Consumption tools for the value headline / daily retrievals counter (#52).

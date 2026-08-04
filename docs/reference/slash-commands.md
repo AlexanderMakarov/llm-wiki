@@ -178,7 +178,7 @@ want to re-run sync.
 
 ### `/wiki-lint`
 
-**What:** run every registered lint rule (17 at last count — all structural / deterministic). The live number is printed by `llmwiki lint --help`.
+**What:** run every registered lint rule (16 at last count — all structural / deterministic). The live number is printed by `llmwiki lint --help`.
 
 **Wraps:** `python3 -m llmwiki lint`.
 
@@ -189,18 +189,17 @@ want to re-run sync.
 3. `link_integrity`
 4. `orphan_detection`
 5. `content_freshness`
-6. `entity_consistency`
-7. `duplicate_detection`
-8. `index_sync`
-9. `contradiction_detection` — non-filler `## Contradictions` sections
-10. `claim_verification` — entity/concept claims without sources
-11. `summary_accuracy` — empty `summary:` frontmatter
-12. `stale_candidates`
-13. `tags_topics_convention` *(G-16 · #302)*
-14. `stale_reference_detection` *(G-17 · #303)*
-15. `frontmatter_count_consistency`
-16. `tools_consistency`
-17. `stub_source_pages`
+6. `duplicate_detection`
+7. `index_sync`
+8. `contradiction_detection` — non-filler `## Contradictions` sections
+9. `claim_verification` — entity/concept claims without sources
+10. `summary_accuracy` — empty `summary:` frontmatter
+11. `stale_candidates`
+12. `tags_topics_convention` *(G-16 · #302)*
+13. `stale_reference_detection` *(G-17 · #303)*
+14. `frontmatter_count_consistency`
+15. `tools_consistency`
+16. `stub_source_pages`
 
 **Example:**
 

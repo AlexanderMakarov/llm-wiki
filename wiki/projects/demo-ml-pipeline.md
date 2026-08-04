@@ -1,7 +1,6 @@
 ---
 title: "demo-ml-pipeline"
-type: entity
-entity_type: project
+type: project
 project: demo-ml-pipeline
 topics: [python, machine-learning, distilbert, transformers, huggingface, wandb, training, fine-tuning]
 description: "DistilBERT fine-tuning pipeline — data preparation, HuggingFace Trainer loop, W&B logging, and evaluation. Uses the classic transformers + datasets stack."

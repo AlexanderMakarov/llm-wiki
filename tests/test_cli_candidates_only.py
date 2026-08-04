@@ -2,13 +2,19 @@
 
 ``--candidates-only`` must work on a vault whose sources are already
 synthesized — that is precisely the vault with the largest candidate
-backlog — and must not need a synthesis backend to do it.
+backlog — without re-synthesizing a single source.
+
+Classification is fail-closed (#102): every new target must be labelled
+entity or concept, and a run that cannot get there stops with a
+cause-specific error having written nothing.
 """
 
 from __future__ import annotations
 
 import argparse
 from pathlib import Path
+
+import pytest
 
 from llmwiki.cli import build_parser, cmd_synthesize
 
@@ -39,7 +45,6 @@ def _args(**overrides) -> argparse.Namespace:
         "docs_only": False,
         "candidates_only": False,
         "min_refs": 3,
-        "allow_unclassified": False,
         "vault": None,
     }
     base.update(overrides)
@@ -57,7 +62,16 @@ def test_min_refs_defaults_to_three() -> None:
     assert args.candidates_only is True
 
 
-# ─── Behaviour ─────────────────────────────────────────────────────────
+def test_no_bypass_flag_for_unclassified_targets() -> None:
+    """#102: proceeding on a guess is withdrawn — the flag must be gone."""
+    parser = build_parser()
+
+    assert "--allow-unclassified" not in parser.format_help()
+    with pytest.raises(SystemExit):
+        parser.parse_args(["synth", "--candidates-only", "--allow-unclassified"])
+
+
+# ─── Backends ──────────────────────────────────────────────────────────
 
 
 class _UnavailableBackend:
@@ -72,28 +86,73 @@ class _UnavailableBackend:
         raise AssertionError("must not call an unavailable backend")
 
 
-def test_candidates_only_writes_stubs_without_a_backend(
+class _ClassifyingBackend:
+    """A reachable backend that labels every name it is asked about."""
+
+    name = "stub"
+
+    def __init__(self, kind: str = "entity", *, omit: tuple[str, ...] = ()) -> None:
+        self.kind = kind
+        self.omit = set(omit)
+
+    def is_available(self) -> bool:
+        return True
+
+    def synthesize_source_page(self, raw_body, meta, prompt_template) -> str:
+        return "".join(
+            f"{name}: {self.kind}\n"
+            for name in raw_body.splitlines()
+            if name not in self.omit
+        )
+
+
+# ─── A fully classified run ────────────────────────────────────────────
+
+
+def test_candidates_only_writes_stubs_from_synthesized_sources(
     tmp_path: Path, monkeypatch
 ) -> None:
-    """The whole point: a caught-up vault, no synthesis, backend unreachable.
-
-    Classification degrades to ``unknown``; the harvest still lands.
-    """
-    vault = _mk_vault(
-        tmp_path, {s: ["Recurring"] for s in ("a", "b", "c")}
-    )
+    """The whole point: a caught-up vault whose sources are already
+    synthesized is exactly the vault with the largest candidate backlog."""
+    vault = _mk_vault(tmp_path, {s: ["Recurring"] for s in ("a", "b", "c")})
     monkeypatch.setattr(
-        "llmwiki.cli.resolve_backend", lambda cfg: _UnavailableBackend()
+        "llmwiki.cli.resolve_backend", lambda cfg: _ClassifyingBackend()
     )
 
-    rc = cmd_synthesize(
-        _args(candidates_only=True, vault=vault, allow_unclassified=True)
-    )
+    rc = cmd_synthesize(_args(candidates_only=True, vault=vault))
 
     assert rc == 0
     stub = vault / "wiki" / "candidates" / "entities" / "Recurring.md"
-    assert stub.is_file()
     assert "status: candidate" in stub.read_text(encoding="utf-8")
+
+
+def test_written_stub_carries_no_entity_type(tmp_path: Path, monkeypatch) -> None:
+    """#102 R2: nothing creates the taxonomy field any more."""
+    vault = _mk_vault(tmp_path, {s: ["Recurring"] for s in ("a", "b", "c")})
+    monkeypatch.setattr(
+        "llmwiki.cli.resolve_backend", lambda cfg: _ClassifyingBackend()
+    )
+
+    cmd_synthesize(_args(candidates_only=True, vault=vault))
+
+    stub = vault / "wiki" / "candidates" / "entities" / "Recurring.md"
+    assert "entity_type" not in stub.read_text(encoding="utf-8")
+
+
+def test_fully_classified_run_reports_no_unknown_warning(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    """#102 R5: a clean run says nothing about unknown or unclassified pages."""
+    vault = _mk_vault(tmp_path, {s: ["Compounding"] for s in ("a", "b", "c")})
+    monkeypatch.setattr(
+        "llmwiki.cli.resolve_backend", lambda cfg: _ClassifyingBackend("concept")
+    )
+
+    assert cmd_synthesize(_args(candidates_only=True, vault=vault)) == 0
+
+    err = capsys.readouterr().err
+    assert "unknown" not in err
+    assert "unclassified" not in err
 
 
 def test_candidates_only_honours_min_refs(tmp_path: Path, monkeypatch) -> None:
@@ -102,12 +161,10 @@ def test_candidates_only_honours_min_refs(tmp_path: Path, monkeypatch) -> None:
         {"a": ["Pair"], "b": ["Pair"], "c": ["Trio"], "d": ["Trio"], "e": ["Trio"]},
     )
     monkeypatch.setattr(
-        "llmwiki.cli.resolve_backend", lambda cfg: _UnavailableBackend()
+        "llmwiki.cli.resolve_backend", lambda cfg: _ClassifyingBackend()
     )
 
-    cmd_synthesize(
-        _args(candidates_only=True, vault=vault, min_refs=3, allow_unclassified=True)
-    )
+    cmd_synthesize(_args(candidates_only=True, vault=vault, min_refs=3))
 
     written = {p.stem for p in (vault / "wiki" / "candidates").rglob("*.md")}
     assert written == {"Trio"}
@@ -128,108 +185,46 @@ def test_candidates_only_makes_no_per_source_synthesis_calls(
 
     monkeypatch.setattr("llmwiki.cli.synthesize_new_sessions", _explode)
     monkeypatch.setattr(
-        "llmwiki.cli.resolve_backend", lambda cfg: _UnavailableBackend()
+        "llmwiki.cli.resolve_backend", lambda cfg: _ClassifyingBackend()
     )
 
-    assert cmd_synthesize(
-        _args(candidates_only=True, vault=vault, allow_unclassified=True)
-    ) == 0
+    assert cmd_synthesize(_args(candidates_only=True, vault=vault)) == 0
 
 
 def test_candidates_only_classifies_via_the_backend(tmp_path: Path, monkeypatch) -> None:
     """The CLI must actually route classification through the backend."""
     vault = _mk_vault(tmp_path, {s: ["Compounding"] for s in ("a", "b", "c")})
-
-    class _Backend:
-        name = "stub"
-
-        def is_available(self):
-            return True
-
-        def synthesize_source_page(self, raw_body, meta, prompt_template):
-            return "Compounding: concept\n"
-
-    monkeypatch.setattr("llmwiki.cli.resolve_backend", lambda cfg: _Backend())
+    monkeypatch.setattr(
+        "llmwiki.cli.resolve_backend", lambda cfg: _ClassifyingBackend("concept")
+    )
 
     assert cmd_synthesize(_args(candidates_only=True, vault=vault)) == 0
     assert (vault / "wiki" / "candidates" / "concepts" / "Compounding.md").is_file()
 
 
-def test_candidates_only_survives_backend_resolution_failure(
-    tmp_path: Path, monkeypatch
-) -> None:
-    """A broken backend config must not cost us the harvest."""
+def test_rerun_with_nothing_new_succeeds(tmp_path: Path, monkeypatch) -> None:
+    """Already-filed stubs are settled, so a re-run asks nothing of the
+    backend and must not fail over an unreachable one."""
     vault = _mk_vault(tmp_path, {s: ["Recurring"] for s in ("a", "b", "c")})
+    monkeypatch.setattr(
+        "llmwiki.cli.resolve_backend", lambda cfg: _ClassifyingBackend()
+    )
+    assert cmd_synthesize(_args(candidates_only=True, vault=vault)) == 0
 
-    def _boom(cfg):
-        raise RuntimeError("no backend configured")
-
-    monkeypatch.setattr("llmwiki.cli.resolve_backend", _boom)
-
-    assert cmd_synthesize(
-        _args(candidates_only=True, vault=vault, allow_unclassified=True)
-    ) == 0
-    assert (vault / "wiki" / "candidates" / "entities" / "Recurring.md").is_file()
-
-
-def test_unclassified_targets_are_reported_not_silent(
-    tmp_path: Path, monkeypatch, capsys
-) -> None:
-    """An operator must be able to tell model-filed from fallback-filed."""
-    vault = _mk_vault(tmp_path, {s: ["Recurring"] for s in ("a", "b", "c")})
     monkeypatch.setattr(
         "llmwiki.cli.resolve_backend", lambda cfg: _UnavailableBackend()
     )
 
-    cmd_synthesize(_args(candidates_only=True, vault=vault, allow_unclassified=True))
-
-    err = capsys.readouterr().err
-    assert "1 of 1 candidate(s) are filed as entity_type: unknown" in err
+    assert cmd_synthesize(_args(candidates_only=True, vault=vault)) == 0
 
 
-def test_fully_classified_run_reports_no_warning(
+# ─── Failure causes: each names itself and writes nothing ──────────────
+
+
+def test_unreachable_backend_fails_the_run(
     tmp_path: Path, monkeypatch, capsys
 ) -> None:
-    vault = _mk_vault(tmp_path, {s: ["Compounding"] for s in ("a", "b", "c")})
-
-    class _Backend:
-        name = "stub"
-
-        def is_available(self):
-            return True
-
-        def synthesize_source_page(self, raw_body, meta, prompt_template):
-            return "Compounding: concept\n"
-
-    monkeypatch.setattr("llmwiki.cli.resolve_backend", lambda cfg: _Backend())
-
-    cmd_synthesize(_args(candidates_only=True, vault=vault))
-
-    assert "entity_type: unknown" not in capsys.readouterr().err
-
-
-def test_rerun_still_reports_unknown_stubs(tmp_path: Path, monkeypatch, capsys) -> None:
-    """A re-run re-asks nothing, so the count must come from disk, not the call."""
-    vault = _mk_vault(tmp_path, {s: ["Recurring"] for s in ("a", "b", "c")})
-    monkeypatch.setattr(
-        "llmwiki.cli.resolve_backend", lambda cfg: _UnavailableBackend()
-    )
-
-    cmd_synthesize(_args(candidates_only=True, vault=vault, allow_unclassified=True))
-    capsys.readouterr()
-    cmd_synthesize(_args(candidates_only=True, vault=vault))
-
-    assert (
-        "1 of 1 candidate(s) are filed as entity_type: unknown"
-        in capsys.readouterr().err
-    )
-
-
-# ─── Unclassified targets are a failure by default ─────────────────────
-
-
-def test_unclassified_targets_fail_the_run(tmp_path: Path, monkeypatch) -> None:
-    """Default is refusal: a half-classified queue is not a good queue."""
+    """Cause (a): the backend was never reached, so there is no reply to blame."""
     vault = _mk_vault(tmp_path, {s: ["Recurring"] for s in ("a", "b", "c")})
     monkeypatch.setattr(
         "llmwiki.cli.resolve_backend", lambda cfg: _UnavailableBackend()
@@ -237,63 +232,69 @@ def test_unclassified_targets_fail_the_run(tmp_path: Path, monkeypatch) -> None:
 
     rc = cmd_synthesize(_args(candidates_only=True, vault=vault))
 
+    err = capsys.readouterr().err
     assert rc == 1
-
-
-def test_failed_run_writes_nothing(tmp_path: Path, monkeypatch) -> None:
-    """Refusing after writing would leave the mess the refusal exists to avoid."""
-    vault = _mk_vault(tmp_path, {s: ["Recurring"] for s in ("a", "b", "c")})
-    monkeypatch.setattr(
-        "llmwiki.cli.resolve_backend", lambda cfg: _UnavailableBackend()
-    )
-
-    cmd_synthesize(_args(candidates_only=True, vault=vault))
-
+    assert "unreachable" in err
+    assert "offline" in err
+    assert "Nothing was written" in err
+    assert "Recurring" in err
     assert not (vault / "wiki" / "candidates").exists()
 
 
-def test_allow_unclassified_opts_into_unknown_stubs(tmp_path: Path, monkeypatch) -> None:
+def test_backend_resolution_failure_fails_the_run(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    """Cause (a) again: a backend that cannot even be constructed is
+    unreachable, and harvest must not fall back to guessing."""
     vault = _mk_vault(tmp_path, {s: ["Recurring"] for s in ("a", "b", "c")})
+
+    def _boom(cfg):
+        raise RuntimeError("no backend configured")
+
+    monkeypatch.setattr("llmwiki.cli.resolve_backend", _boom)
+
+    rc = cmd_synthesize(_args(candidates_only=True, vault=vault))
+
+    assert rc == 1
+    assert "unreachable" in capsys.readouterr().err
+    assert not (vault / "wiki" / "candidates").exists()
+
+
+def test_incomplete_reply_fails_the_run(tmp_path: Path, monkeypatch, capsys) -> None:
+    """Cause (b): the backend answered, but one name never came back — a
+    different problem from an unreachable backend, and it must read as one."""
+    vault = _mk_vault(tmp_path, {f"s{i}": ["Known", "Unknown"] for i in range(3)})
     monkeypatch.setattr(
-        "llmwiki.cli.resolve_backend", lambda cfg: _UnavailableBackend()
+        "llmwiki.cli.resolve_backend",
+        lambda cfg: _ClassifyingBackend(omit=("Unknown",)),
     )
 
-    rc = cmd_synthesize(
-        _args(candidates_only=True, vault=vault, allow_unclassified=True)
-    )
+    rc = cmd_synthesize(_args(candidates_only=True, vault=vault))
 
-    assert rc == 0
-    stub = vault / "wiki" / "candidates" / "entities" / "Recurring.md"
-    assert "entity_type: unknown" in stub.read_text(encoding="utf-8")
-
-
-def test_partial_classification_also_fails(tmp_path: Path, monkeypatch) -> None:
-    """One unclassified name out of many is still a partial result."""
-    vault = _mk_vault(
-        tmp_path,
-        {f"s{i}": ["Known", "Unknown"] for i in range(3)},
-    )
-
-    class _Partial:
-        name = "partial"
-
-        def is_available(self):
-            return True
-
-        def synthesize_source_page(self, raw_body, meta, prompt_template):
-            return "Known: entity\n"
-
-    monkeypatch.setattr("llmwiki.cli.resolve_backend", lambda cfg: _Partial())
-
-    assert cmd_synthesize(_args(candidates_only=True, vault=vault)) == 1
+    err = capsys.readouterr().err
+    assert rc == 1
+    assert "incomplete or unparseable" in err
+    assert "unreachable" not in err
+    assert "Unknown" in err
+    assert "Nothing was written" in err
+    assert not (vault / "wiki" / "candidates").exists()
 
 
-def test_rerun_with_nothing_new_succeeds(tmp_path: Path, monkeypatch) -> None:
-    """Already-filed stubs are settled; a re-run must not fail over them."""
+def test_unreadable_sources_fail_the_run(tmp_path: Path, monkeypatch, capsys) -> None:
+    """Cause (c): a file problem must not be reported as a classifier problem."""
     vault = _mk_vault(tmp_path, {s: ["Recurring"] for s in ("a", "b", "c")})
+    # A directory named like a page: the scan finds it and cannot read it.
+    (vault / "wiki" / "sources" / "broken.md").mkdir()
     monkeypatch.setattr(
-        "llmwiki.cli.resolve_backend", lambda cfg: _UnavailableBackend()
+        "llmwiki.cli.resolve_backend", lambda cfg: _ClassifyingBackend()
     )
-    cmd_synthesize(_args(candidates_only=True, vault=vault, allow_unclassified=True))
 
-    assert cmd_synthesize(_args(candidates_only=True, vault=vault)) == 0
+    rc = cmd_synthesize(_args(candidates_only=True, vault=vault))
+
+    err = capsys.readouterr().err
+    assert rc == 2
+    assert "could not be read" in err
+    assert "sources/broken.md" in err
+    assert "not a classifier problem" in err
+    assert "Nothing was written" in err
+    assert not (vault / "wiki" / "candidates").exists()

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from llmwiki.search_facets import (
     _parse_confidence,
     _parse_tags_field,
@@ -64,14 +66,19 @@ def test_enrich_entry_adds_all_facet_fields():
     meta = {
         "confidence": "0.8",
         "lifecycle": "verified",
-        "entity_type": "tool",
         "tags": "[flutter, mobile]",
     }
     result = enrich_entry(entry, meta)
     assert result["confidence"] == 0.8
     assert result["lifecycle"] == "verified"
-    assert result["entity_type"] == "tool"
     assert result["tags"] == ["flutter", "mobile"]
+
+
+def test_enrich_entry_ignores_leftover_entity_type():
+    """#102: `entity_type` is no longer a facet — leftover frontmatter is not copied."""
+    entry = {"id": "x"}
+    enrich_entry(entry, {"entity_type": "tool"})
+    assert "entity_type" not in entry
 
 
 def test_enrich_entry_defaults_when_meta_empty():
@@ -79,7 +86,6 @@ def test_enrich_entry_defaults_when_meta_empty():
     enrich_entry(entry, {})
     assert entry["confidence"] == 0.0
     assert entry["lifecycle"] == ""
-    assert entry["entity_type"] == ""
     assert entry["tags"] == []
 
 
@@ -92,15 +98,11 @@ def test_enrich_entry_lowercases_lifecycle():
 # ─── aggregate_facets ────────────────────────────────────────────────
 
 
-def test_aggregate_entity_types():
-    entries = [
-        {"entity_type": "tool"},
-        {"entity_type": "tool"},
-        {"entity_type": "concept"},
-    ]
-    result = aggregate_facets(entries)
-    assert result["entity_type"]["tool"] == 2
-    assert result["entity_type"]["concept"] == 1
+def test_aggregate_has_no_entity_type_facet():
+    """#102: the facet payload no longer carries an `entity_type` key."""
+    result = aggregate_facets([{"entity_type": "tool", "lifecycle": "draft"}])
+    assert "entity_type" not in result
+    assert set(result) == {"lifecycle", "tags", "confidence"}
 
 
 def test_aggregate_lifecycles():
@@ -141,16 +143,15 @@ def test_aggregate_confidence_buckets():
 
 def test_aggregate_empty():
     result = aggregate_facets([])
-    assert result["entity_type"] == {}
     assert result["lifecycle"] == {}
     assert result["tags"] == {}
     assert result["confidence"] == {}
 
 
 def test_aggregate_skips_empty_fields():
-    entries = [{"entity_type": ""}]
+    entries = [{"lifecycle": ""}]
     result = aggregate_facets(entries)
-    assert result["entity_type"] == {}
+    assert result["lifecycle"] == {}
 
 
 # ─── rank_by_confidence ──────────────────────────────────────────────
@@ -193,14 +194,10 @@ def test_rank_empty_list():
 # ─── filter_entries ──────────────────────────────────────────────────
 
 
-def test_filter_by_entity_type():
-    entries = [
-        {"entity_type": "tool"},
-        {"entity_type": "concept"},
-    ]
-    result = filter_entries(entries, entity_types=["tool"])
-    assert len(result) == 1
-    assert result[0]["entity_type"] == "tool"
+def test_filter_rejects_entity_types_argument():
+    """#102: the `entity_types` filter is gone from the contract."""
+    with pytest.raises(TypeError):
+        filter_entries([], entity_types=["tool"])
 
 
 def test_filter_by_lifecycle():
@@ -235,14 +232,11 @@ def test_filter_by_confidence_range():
 
 def test_filter_combines_all():
     entries = [
-        {"entity_type": "tool", "lifecycle": "verified",
-         "tags": ["flutter"], "confidence": 0.9},
-        {"entity_type": "tool", "lifecycle": "draft",
-         "tags": ["flutter"], "confidence": 0.9},
+        {"lifecycle": "verified", "tags": ["flutter"], "confidence": 0.9},
+        {"lifecycle": "draft", "tags": ["flutter"], "confidence": 0.9},
     ]
     result = filter_entries(
         entries,
-        entity_types=["tool"],
         lifecycles=["verified"],
         tags=["flutter"],
         min_confidence=0.5,

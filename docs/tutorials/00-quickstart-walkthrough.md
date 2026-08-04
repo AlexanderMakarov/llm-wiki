@@ -41,7 +41,7 @@ Run `/wiki-init` in Claude Code. This creates:
 ```
 raw/sessions/     <- immutable session transcripts
 wiki/sources/     <- one summary per source
-wiki/entities/    <- people, projects, tools
+wiki/entities/    <- people, products, tools
 wiki/concepts/    <- ideas, patterns, decisions
 wiki/syntheses/   <- saved query answers
 site/             <- generated HTML

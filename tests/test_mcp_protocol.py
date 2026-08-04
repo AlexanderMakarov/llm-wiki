@@ -100,7 +100,7 @@ def test_initialize_returns_protocol_version() -> None:
     assert "protocolVersion" in resp["result"]
 
 
-def test_tools_list_returns_thirteen_tools() -> None:
+def test_tools_list_returns_twelve_tools() -> None:
     proc = _spawn()
     try:
         resp = _exchange(proc, {
@@ -110,7 +110,7 @@ def test_tools_list_returns_thirteen_tools() -> None:
         _shutdown(proc)
     assert resp is not None
     tools = resp.get("result", {}).get("tools") or []
-    assert len(tools) == 13, f"expected 13 tools, got {len(tools)}"
+    assert len(tools) == 12, f"expected 12 tools, got {len(tools)}"
     # Each tool must carry name + inputSchema.
     for t in tools:
         assert "name" in t

@@ -10,6 +10,38 @@ How to upgrade between `llmwiki` releases.  Most releases are drop-in (`pip inst
 
 The canonical per-release detail is [CHANGELOG.md](https://github.com/Pratiyush/llm-wiki/blob/master/CHANGELOG.md) — this guide focuses on "what might break".
 
+## Unreleased — entity-type taxonomy dropped, `project` page kind, one search tool (#102)
+
+Four breaking changes ship together. Three need nothing from you; the fourth is the only one with a data decision, and it is optional.
+
+- **Lint rule `entity_consistency` is gone, and an unknown `--rules` name now fails the run.** `llmwiki lint --rules entity_consistency` exits non-zero naming the unknown rule, where before it ran zero rules and reported a clean vault. Drop the rule from any script that pins it; plain `llmwiki lint` needs no change. The rule only ever demanded an `entity_type` value from a fixed seven-value list — removing it removes errors, not coverage.
+- **`synth --allow-unclassified` is gone.** Harvest now always fails closed: an incomplete classification exits non-zero, names the pages it could not classify, distinguishes an unreachable backend from an incomplete reply from unreadable source pages, and writes nothing. Drop the flag and configure a backend that returns `name: entity|concept` lines (`synthesis.backend` set to `claude` or `ollama` in `config.json`).
+- **MCP tool `wiki_entity_search` is gone; `wiki_search` absorbs it.** There is no alias — an agent config or script naming `wiki_entity_search` gets an unknown-tool error, so re-read the tool list. `wiki_search` takes `term` (required), an optional `kind` (one of `source`, `entity`, `concept`, `project`, `synthesis`, `comparison`, `question`, matched against frontmatter `type`; the internal `navigation` and `context` kinds are not offered as a filter, and an unfiltered search still reaches those pages), an optional `format`, and the existing optional `include_raw`. The two compose independently: `include_raw` decides whether `raw/sessions/` is scanned at all, `kind` filters frontmatter `type` in every corpus that is scanned. Raw transcripts declare `type: source`, so `kind=source` with `include_raw` returns matching source pages *and* the transcripts behind them, while a kind no transcript declares (`kind=project`) simply contributes nothing from the raw corpus rather than erroring. Results are page-level (`path — title` with matching lines indented beneath) instead of bare `file:line`, and pages matching by title or path sort above pages matching only in the body. The default response is prose, not JSON: a client that did `json.loads(text)["matches"]` should pass `format: "json"`, which returns `{term, kind, include_raw, pages: [{path, title, name_match, lines: [{line, text}]}], truncated, budget_exhausted, skipped_oversize_files}`. Both renderings report completeness in two fields — `truncated` when an output cap dropped matches, `budget_exhausted` when the byte budget stopped the scan short of the corpus.
+- **`project` is a first-class page kind.** `type: project` is now accepted alongside `entity` and `concept`, new project stubs are written as `type: project` with no `entity_type`, and project pages are covered by claim verification and the graph relevance bonus.
+
+### What needs no action
+
+- **Pages that still carry `entity_type` keep it as inert metadata.** Nothing validates it, nothing reads it, and no migration ships. Leave the field or delete it — either way the vault lints the same.
+- **`entity_kind: ai-model` is untouched.** It is a different field with a similar name and it still drives the AI-model index and info-cards. Do not sweep it away while cleaning up `entity_type`.
+- **Project pages written by an earlier build stay valid.** `type: entity` on a page under `wiki/projects/` is still an accepted kind, the catalog's Projects section keys off the folder rather than the frontmatter, and claim verification and the graph bonus already covered `entity`. Nothing errors and nothing is dropped.
+
+### Optional: re-stamp existing project pages
+
+`ensure_project_stubs` only writes *missing* stubs, so project pages created before this change keep `type: entity` + `entity_type: project` indefinitely. That is valid but inconsistent with what the build writes today, and it has one visible effect: those pages answer `wiki_search kind=entity` rather than `wiki_search kind=project`. If you want the whole folder to declare its kind, edit the frontmatter of each file under `wiki/projects/` — set `type: project` and delete the `entity_type:` line, leaving the body alone:
+
+```bash
+sed -i.bak -e 's/^type: entity$/type: project/' -e '/^entity_type: project$/d' <vault>/wiki/projects/*.md
+rm <vault>/wiki/projects/*.md.bak
+llmwiki lint --vault <vault>          # expect no new errors
+llmwiki build --vault <vault>         # refresh the site and search index
+```
+
+Frontmatter only — a project page whose body you have written by hand is not otherwise touched.
+
+### Built search index
+
+`site/search-index.json` (and its sharded siblings) no longer carry an `entity_type` key per entry or an `entity_type` bucket under `_facets`. The shipped site reads neither, so the browsable site is unaffected; only a client that reads the index file directly needs to adjust. `docs/reference/reader-api.md` drops the matching invariant from its data-model list, and the surviving invariants renumbered — cite an invariant by the field it constrains, not by its position in the list.
+
 ## Unreleased — honest estimate Candidates (#113)
 
 - **`synth --estimate` Candidates is pre-run state**, not a preview of what the next run will harvest. The block is labelled `Candidates (pre-run state):` and notes that pending sources are not yet reflected.
@@ -33,7 +65,7 @@ The canonical per-release detail is [CHANGELOG.md](https://github.com/Pratiyush/
 
 - **`llmwiki synth` is the primary command.** Default: synthesize pending sources, then harvest entity/concept candidates. Prefer it over `synthesize`.
 - **`llmwiki synthesize` is deprecated.** It still runs (scripts keep working) but prints a warning and defaults to sources-only — the old behaviour — so upgrading does not silently write a large candidate backlog. Prefer `llmwiki synth` (or `synth --sources-only` / `synth --candidates-only`).
-- **`all --with-synth` / `watch`** call `synth` (sources + candidates). Classification retries omitted names once; if still incomplete, the run fails closed (writes nothing) unless you pass `--allow-unclassified` on a one-shot harvest, or use a backend that returns `name: entity|concept` lines.
+- **`all --with-synth` / `watch`** call `synth` (sources + candidates). Classification retries omitted names once; if still incomplete, the run fails closed (writes nothing) and names the cause. Use a backend that returns `name: entity|concept` lines.
 - Slash: `/wiki-synth` preferred; `/wiki-synthesize` remains as a deprecated wrapper.
 
 ## Unreleased — candidates review gate on Home / Analytics (#84)

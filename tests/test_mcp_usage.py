@@ -14,6 +14,13 @@ from llmwiki.mcp import server
 from llmwiki.usage import ENTITY_TOOLS, aggregate, is_entity_tool, merge_aggregates
 
 
+def test_entity_tools_keeps_names_the_server_no_longer_serves():
+    """``ENTITY_TOOLS`` classifies persisted records, not the live tool
+    surface. Dropping a name that appears in stored logs would relabel
+    already-reported history and move figures a user has already read."""
+    assert is_entity_tool("wiki_entity_search")
+
+
 def _read_lines(p: Path) -> list[dict]:
     return [json.loads(ln) for ln in p.read_text().splitlines() if ln.strip()]
 

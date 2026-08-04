@@ -42,12 +42,30 @@ class HarvestedTarget:
         return len(self.sources)
 
 
+class SourceReadError(OSError):
+    """One or more ``wiki/sources/`` pages could not be read.
+
+    Carries every failing page so a caller can report the whole set at once
+    instead of surfacing whichever page happened to be walked first.
+    """
+
+    def __init__(self, failures: Iterable[tuple[str, str]]) -> None:
+        self.failures: list[tuple[str, str]] = list(failures)
+        detail = "; ".join(f"{rel} ({reason})" for rel, reason in self.failures)
+        super().__init__(f"unreadable source page(s): {detail}")
+
+
 def harvest_targets(
     wiki_dir: Path,
     *,
     min_refs: int = DEFAULT_MIN_REFS,
 ) -> list[HarvestedTarget]:
-    """Return unresolved wikilink targets named by ``min_refs``+ source pages."""
+    """Return unresolved wikilink targets named by ``min_refs``+ source pages.
+
+    Raises :class:`SourceReadError` when any page under ``wiki/sources/``
+    cannot be read: a partial scan would under-count evidence and silently
+    drop targets below the threshold.
+    """
     # A pending candidate does not resolve its own inbound links — if it did,
     # the first run would make every later run a no-op and evidence could
     # never be refreshed.
@@ -59,15 +77,23 @@ def harvest_targets(
     }
 
     by_target: dict[str, set[str]] = defaultdict(set)
+    unreadable: list[tuple[str, str]] = []
     sources_dir = wiki_dir / "sources"
     for page in sorted(sources_dir.rglob("*.md")):
         rel = page.relative_to(wiki_dir).as_posix()
-        text = page.read_text(encoding="utf-8", errors="replace")
+        try:
+            text = page.read_text(encoding="utf-8", errors="replace")
+        except OSError as exc:
+            unreadable.append((rel, exc.strerror or str(exc)))
+            continue
         # set() per page: repeated mentions in one document are one signal.
         for raw in set(WIKILINK_RE.findall(text)):
             name = raw.split("#")[0].strip()
             if name:
                 by_target[name].add(rel)
+
+    if unreadable:
+        raise SourceReadError(unreadable)
 
     return [
         HarvestedTarget(name=name, sources=tuple(sorted(pages)))
@@ -76,9 +102,9 @@ def harvest_targets(
     ]
 
 
-#: Maps harvested names to ``"entity"`` or ``"concept"``. Names it omits fall
-#: back to an entity stub tagged ``unknown`` — misfiling is recoverable by a
-#: reviewer, silently dropping a target is not.
+#: Maps harvested names to ``"entity"`` or ``"concept"``. A classifier must
+#: answer for every name it is given: ``write_stubs`` refuses to guess on its
+#: behalf, because a misfiled stub looks identical to a reviewed one.
 Classifier = Callable[[list[str]], dict[str, str]]
 
 _KIND_DIRS = {"entity": "entities", "concept": "concepts"}
@@ -118,25 +144,28 @@ def classify_names(
     *,
     batch_size: int = DEFAULT_CLASSIFY_BATCH,
     retry_missing: bool = True,
+    check_available: bool = True,
 ) -> dict[str, str]:
     """Ask ``backend`` to sort ``names`` into entities and concepts.
 
     Returns only names the backend classified as ``entity`` or ``concept``.
-    Omitted / unparseable names are absent from the result — callers decide
-    whether to fail closed (``run_harvest`` default) or file as ``unknown``
-    (``--allow-unclassified``).
+    Omitted / unparseable names are absent from the result, and an
+    unavailable backend yields an empty mapping — the two look alike here, so
+    callers that need to tell them apart probe availability themselves (see
+    ``run_harvest``).
+
+    ``check_available=False`` skips the availability probe. A probe can shell
+    out or make a network round-trip, so a caller that has just run one passes
+    its answer in rather than paying for a second — and a backend that dies
+    between two probes cannot be misreported as answering incompletely.
 
     When ``retry_missing`` is true (default), names absent from the first
     reply get one small follow-up call before giving up (#90). Truncation and
-    flaky backends often omit a short tail; a second pass recovers those
-    without teaching ``unknown`` as the happy path.
+    flaky backends often omit a short tail; a second pass recovers those.
     """
     if backend is None or not names:
         return {}
-    try:
-        if not backend.is_available():
-            return {}
-    except Exception:  # noqa: BLE001 - treat a broken probe as unavailable
+    if check_available and not _backend_is_reachable(backend):
         return {}
 
     kinds: dict[str, str] = {}
@@ -217,14 +246,12 @@ def _stub_text(
     """Render a candidate stub: frontmatter, reviewer prose, evidence."""
     slugs = [Path(rel).stem for rel in target.sources]
     evidence = "\n".join(f"- [[{slug}]]" for slug in slugs)
-    entity_type = "entity_type: unknown\n" if kind == "entity" else ""
     sources = ", ".join(slugs)
     return (
         f"---\n"
         f'title: "{target.name}"\n'
         f"type: {kind}\n"
         f"status: candidate\n"
-        f"{entity_type}"
         f"tags: []\n"
         f"sources: [{sources}]\n"
         f"last_updated: {today}\n"
@@ -247,6 +274,11 @@ def write_stubs(
 
     Stubs land under ``wiki/candidates/`` only. Promotion into the trusted
     tree stays a human-or-agent decision via ``llmwiki candidates promote``.
+
+    ``classify=None`` is the explicit no-classifier mode: every new name is
+    filed as an entity. Supplying a ``classify`` asserts that it decides, so a
+    name it leaves out raises :class:`ValueError` rather than being guessed —
+    a guessed stub is indistinguishable from a classified one on disk.
     """
     targets = list(targets)
     # A stub that already exists keeps its folder — the reviewer may have
@@ -255,7 +287,15 @@ def write_stubs(
     # otherwise pay for an answer they then discard.
     filed = {t.name: _existing_subdir(wiki_dir, t.name) for t in targets}
     unfiled = [name for name, subdir in filed.items() if subdir is None]
-    kinds = classify(unfiled) if classify else {}
+    kinds: dict[str, str] = {}
+    if classify is not None:
+        kinds = classify(unfiled)
+        unclassified = [n for n in unfiled if kinds.get(n) not in _KIND_DIRS]
+        if unclassified:
+            raise ValueError(
+                "classifier returned no entity/concept kind for "
+                f"{len(unclassified)} name(s): {', '.join(unclassified)}"
+            )
     today = datetime.now(UTC).date().isoformat()
 
     written: list[Path] = []
@@ -335,11 +375,34 @@ def unfiled_names(wiki_dir: Path, targets: Iterable[HarvestedTarget]) -> list[st
     return [t.name for t in targets if _existing_subdir(wiki_dir, t.name) is None]
 
 
+def _backend_is_reachable(backend) -> bool:
+    """Probe ``backend`` the way ``classify_names`` does, but report the answer.
+
+    ``classify_names`` returns an empty mapping both for an unreachable
+    backend and for a reply it could not parse. Harvest has to tell an
+    operator which of the two happened, so it asks the question separately.
+    """
+    if backend is None:
+        return False
+    try:
+        return bool(backend.is_available())
+    except Exception:  # noqa: BLE001 - a broken probe is an unreachable backend
+        return False
+
+
+def _print_unclassified(names: list[str]) -> None:
+    """List the names harvest refused to guess at, capped for readability."""
+    print(
+        f"  unclassified: {', '.join(names[:10])}"
+        f"{' …' if len(names) > 10 else ''}",
+        file=sys.stderr,
+    )
+
+
 def run_harvest(
     wiki_dir: Path,
     *,
     min_refs: int = DEFAULT_MIN_REFS,
-    allow_unclassified: bool = False,
     backend=None,
     require_sources: bool = True,
 ) -> int:
@@ -347,6 +410,11 @@ def run_harvest(
 
     Shared by ``llmwiki synth`` and ``all --with-synth`` so both paths agree
     on classification refusal and messaging (#90).
+
+    Classification is fail-closed: any new target the backend does not label
+    entity or concept stops the run before anything is written, with a message
+    naming the cause — unreachable backend, incomplete reply, or unreadable
+    source pages.
 
     ``require_sources=False`` treats a missing ``wiki/sources/`` as an empty
     harvest (exit 0) — used when harvest follows a sources pass that wrote
@@ -364,45 +432,66 @@ def run_harvest(
         print("Candidates: 0 stub(s) (no wiki/sources/ yet)")
         return 0
 
-    targets = harvest_targets(wiki_dir, min_refs=min_refs)
-    pending = unfiled_names(wiki_dir, targets)
-    kinds = classify_names(pending, backend)
-    missing = [name for name in pending if name not in kinds]
-
-    if missing and not allow_unclassified:
-        backend_name = getattr(backend, "name", "none")
+    try:
+        targets = harvest_targets(wiki_dir, min_refs=min_refs)
+    except SourceReadError as exc:
         print(
-            f"error: {len(missing)} of {len(pending)} new target(s) could not "
-            f"be classified as entity or concept after retry "
-            f"(backend: {backend_name}). "
-            "Nothing was written. Fix the backend and re-run, or pass "
-            "--allow-unclassified to file them as entity_type: unknown for "
-            "review.",
+            f"error: {len(exc.failures)} source page(s) under {sources_dir} "
+            "could not be read, so the evidence behind every candidate is "
+            "incomplete. Nothing was written. This is a file problem, not a "
+            "classifier problem: fix the permissions or remove the "
+            "unreadable page(s), then re-run.",
             file=sys.stderr,
         )
+        for rel, reason in exc.failures[:10]:
+            print(f"  unreadable: {rel} ({reason})", file=sys.stderr)
+        return 2
+
+    pending = unfiled_names(wiki_dir, targets)
+    backend_name = getattr(backend, "name", "none")
+
+    if pending and not _backend_is_reachable(backend):
         print(
-            f"  unclassified: {', '.join(missing[:10])}"
-            f"{' …' if len(missing) > 10 else ''}",
+            f"error: the synthesis backend ({backend_name}) is unreachable, so "
+            f"{len(pending)} new target(s) cannot be classified as entity or "
+            "concept. Nothing was written. Configure a reachable backend "
+            "under `synthesis.backend` and re-run.",
+            file=sys.stderr,
+        )
+        _print_unclassified(pending)
+        return 1
+
+    # Availability is already settled above — a second probe would cost
+    # another round-trip and could disagree with the first.
+    kinds = classify_names(pending, backend, check_available=False)
+    missing = [name for name in pending if name not in kinds]
+    if missing:
+        print(
+            f"error: the synthesis backend ({backend_name}) answered but left "
+            f"{len(missing)} of {len(pending)} new target(s) unclassified "
+            "after retry — the reply was incomplete or unparseable. Nothing "
+            "was written. Re-run to retry, or use a backend that answers with "
+            "one `<name>: entity|concept` line per name.",
+            file=sys.stderr,
+        )
+        _print_unclassified(missing)
+        return 1
+
+    try:
+        written = write_stubs(wiki_dir, targets, classify=lambda _names: kinds)
+    except ValueError as exc:
+        print(
+            f"error: classification is incomplete for the targets being "
+            f"written ({exc}). Nothing was written. Re-run to retry, or use a "
+            "backend that answers with one `<name>: entity|concept` line per "
+            "name.",
             file=sys.stderr,
         )
         return 1
-
-    written = write_stubs(wiki_dir, targets, classify=lambda _names: kinds)
     print(
         f"Candidates: {len(written)} stub(s) at --min-refs {min_refs} "
         f"→ {wiki_dir / 'candidates'}"
     )
-    unknown = sum(
-        1
-        for p in written
-        if "entity_type: unknown" in p.read_text(encoding="utf-8", errors="replace")
-    )
-    if unknown:
-        print(
-            f"  ! {unknown} of {len(written)} candidate(s) are filed as "
-            "entity_type: unknown — re-file them during review",
-            file=sys.stderr,
-        )
     if written:
         # List new stubs under ## Candidates (and drop stale bullets) (#101).
         try:

@@ -15,7 +15,7 @@ _Stop misleading users; then systematically decide what fork residue to revive v
   - [ ] **Honest `--estimate` candidate preview (#113):** Do not present a pre-synth candidate snapshot as if it forecasts the upcoming synth run.
 
 - [ ] **Fork / migration residue cleanup (known)**
-  - [ ] **Drop hardcoded entity_type taxonomy (#102):** Stop validating the old seven-value enum that harvest stamps as `unknown` and then fails lint after promote.
+  - [x] **Drop hardcoded entity_type taxonomy (#102):** Stop validating the old seven-value enum that harvest stamps as `unknown` and then fails lint after promote.
   - [ ] **Fix broken docs links and link-check hygiene (#107):** Repair real 404s, exclude build-time placeholders, and make link-check fire on `main` so regressions do not wait for weekly cron.
 
 - [ ] **Migration inventory & keep/cut/revive log**

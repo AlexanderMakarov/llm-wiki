@@ -126,7 +126,6 @@ HTML parsing entirely.
   "confidence": 0.75,
   "lifecycle": "reviewed",
   "cache_tier": "L3",
-  "entity_type": null,
   "tags": ["claude-code", "refactor"],
   "breadcrumbs": [
     { "label": "Home",     "href": "/" },
@@ -180,7 +179,6 @@ matches the palette would surface.
     }
   ],
   "facets": {
-    "entity_type": { },
     "lifecycle":   { },
     "tags":        { },
     "confidence":  { "none": 647 }
@@ -229,7 +227,7 @@ build finished (its `generated_at` advances).
 
 ## Data model invariants
 
-Anything a client can depend on:
+Anything a client can depend on. Cite an invariant by the field it constrains, not by its position — the list renumbers whenever an item is added or removed.
 
 1. **Slugs are stable.** A page's slug is set at ingest and never
    changes on rebuild. Renames produce a new slug and a redirect stub.
@@ -239,11 +237,9 @@ Anything a client can depend on:
 4. **`lifecycle` is always one of** `draft`, `reviewed`, `verified`,
    `stale`, `archived` (#11).
 5. **`confidence` is always in `[0, 1]`** or missing. Never percent.
-6. **`entity_type` (when set) is one of** `person`, `org`, `tool`,
-   `concept`, `api`, `library`, `project` (#137).
-7. **Wikilinks resolve to slugs, not URLs.** `[[Karpathy]]` → `"Karpathy"`
+6. **Wikilinks resolve to slugs, not URLs.** `[[Karpathy]]` → `"Karpathy"`
    — the client resolves to a URL via the index.
-8. **Frontmatter is authoritative** for metadata. The body is authoritative
+7. **Frontmatter is authoritative** for metadata. The body is authoritative
    for prose.
 
 ## Versioning
