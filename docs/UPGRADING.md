@@ -10,6 +10,12 @@ How to upgrade between `llmwiki` releases.  Most releases are drop-in (`pip inst
 
 The canonical per-release detail is [CHANGELOG.md](https://github.com/Pratiyush/llm-wiki/blob/master/CHANGELOG.md) — this guide focuses on "what might break".
 
+## Unreleased — honest estimate Candidates (#113)
+
+- **`synth --estimate` Candidates is pre-run state**, not a preview of what the next run will harvest. The block is labelled `Candidates (pre-run state):` and notes that pending sources are not yet reflected.
+- **After a successful real `synth`**, the CLI prints an end-of-run summary: `Synthesized:`, `Duration:`, optional `Tokens:` / `Cost:` when known. Harvest still prints Candidates once; the end summary does not repeat that line.
+- Home Knowledge-layer **Candidates** still counts pending pages under `wiki/candidates/` — distinct from the estimate pre-run harvestable figure.
+
 ## Unreleased — promote writes Key Facts with an LLM (#103)
 
 - **`llmwiki candidates promote` now needs a synthesis backend.** Promoting a page with an empty `## Key Facts` fails with `KeyFactsBackendError` unless `synthesis.backend` is `claude` or `ollama` in `config.json`. The candidate stays in `wiki/candidates/` so you can retry after configuring one. Pages that already have Key Facts, and pages whose sources never describe them, promote without any backend.
@@ -32,7 +38,7 @@ The canonical per-release detail is [CHANGELOG.md](https://github.com/Pratiyush/
 
 ## Unreleased — candidates review gate on Home / Analytics (#84)
 
-- **Home** shows a **Files layer** table (Raw → To synthesize → Synthesized; shell-handled) and a **Knowledge layer** table (Candidates → Entities / Concepts; review via agent Commands). Candidates = pending `wiki/candidates/` pages (not the estimate harvestable-stub preview). Entities/Concepts = trusted pages after promote.
+- **Home** shows a **Files layer** table (Raw → To synthesize → Synthesized; shell-handled) and a **Knowledge layer** table (Candidates → Entities / Concepts; review via agent Commands). Candidates = pending `wiki/candidates/` pages (not the estimate `Candidates (pre-run state):` harvestable figure). Entities/Concepts = trusted pages after promote.
 - **Every `llmwiki build`** recounts pending/stale candidates and trusted entity/concept counts into `synth.pipeline` before copying `llmwiki-state.js` into `site/` — promote/discard no longer leave a stale Home table until the next estimate.
 - **Commands** agent rows are one-shot: `cd <llm-wiki-checkout> && claude|agent|codex "/wiki-candidates"` (Purpose: review/edit candidates). Slash commands load from the checkout, not the vault. Gemini CLI stays adapter-scaffold — no Home launcher.
 - **Analytics** adds a **Candidates to review** section (pending + stale). Zeros are intentional: a synthesize-only vault still shows that the review gate exists.

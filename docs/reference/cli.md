@@ -421,7 +421,7 @@ Primary command (#90). Default runs **both** lists: pending sources → `wiki/so
 
 ```bash
 python3 -m llmwiki synth --check            # probe the backend
-python3 -m llmwiki synth --estimate         # cost + candidate backlog preview
+python3 -m llmwiki synth --estimate         # cost + Candidates (pre-run state)
 python3 -m llmwiki synth --force            # re-synth everything, then harvest
 python3 -m llmwiki synth --sources-only     # legacy: sources only
 python3 -m llmwiki synth --sessions-only    # all pending sessions (skip docs)
@@ -435,13 +435,15 @@ python3 -m llmwiki synth                    # real run (sources + candidates)
 
 `llmwiki synthesize` is a **deprecated** alias: it warns and defaults to `--sources-only` so existing scripts do not suddenly write candidate stubs. Prefer `synth`.
 
+`--estimate` prints the sources cost estimate and a `Candidates (pre-run state):` block — the harvestable shape of `wiki/sources/` **as it exists now**, with a note that pending sources are not yet reflected. It is not a forecast of what the next run will harvest (#113). After a successful real `synth` (not estimate), the CLI prints an end-of-run summary: `Synthesized:`, `Duration:`, optional `Tokens:` / `Cost:` when known. Harvest still prints its Candidates line once; the end summary does not repeat Candidates.
+
 ### Flags
 
 | Flag | What |
 |---|---|
 | `--check` | Probe backend availability + exit (0 if reachable). |
 | `--force` | Ignore state, re-synth every source. |
-| `--estimate` | Print cached-vs-fresh token + dollar estimate, plus candidate backlog shape (#50 / #90). |
+| `--estimate` | Print cached-vs-fresh token + dollar estimate for pending sources, plus `Candidates (pre-run state):` (current `wiki/sources/` shape — not a forecast of the next harvest) (#50 / #90 / #113). |
 | `--sources-only` | Synthesize `wiki/sources/` only — skip candidate harvest (legacy `synthesize` behaviour). Mutually exclusive with `--candidates-only` / `--check` / `--estimate`. |
 | `--sessions-only` | Synthesize only `raw/sessions/` — skip `raw/docs/`. Mutually exclusive with `--docs-only`. Combinable with `--path` / `--force` (paths under `raw/docs/` then exit 2). Incompatible with `--check` / `--estimate`. |
 | `--docs-only` | Synthesize only `raw/docs/` — skip `raw/sessions/`. Mutually exclusive with `--sessions-only`. Combinable with `--path` / `--force` (paths under `raw/sessions/` then exit 2). Incompatible with `--check` / `--estimate`. |
