@@ -24,3 +24,26 @@
 ## specs (tasks)
 - Saved: `context/spec/003-awos-context-ci-gate/tasks.md`
 - Next: commit-specs, then `/awos:implement`
+
+## implement
+- All tasks complete (100%) — slices 1–4
+- Artifacts: `tests/awos_context_gate.py`, `tests/test_awos_context_gate.py`, `tests/test_awos_context_gate_acceptance.py`, `pr-lint.yml` job, docs + CHANGELOG
+- Next: `/awos:verify`
+
+## verify
+- Functional + technical Status → Completed; all ACs `[x]` with CLI/docs evidence
+- Roadmap: no #117 checklist item to tick
+- Next: user smoke confirm (local-review Step 8)
+
+## local-review
+- Smoke confirmed by user
+- Dual review: `review.md` (request-changes; 2B/4M/9N), `review-code-reviewer.md` (CHANGES REQUESTED; 1 important)
+- Keep/drop: apply blockers + majors (+ code-reviewer Important); skip nits
+- Applied: `.worktree-vault/` gitignore; CLI coverage; CalledProcessError handling; stdout ::error::; CONTRIBUTING branch-protection note; pr-lint header armed paths + acceptance tighten
+- Next: commit-push (explicit paths — never `git add -A` while vault exists)
+
+## commit-push
+- Final committed flow-log state before open PR
+- Static gate: ruff clean; full `pytest tests/ -q` green; `.worktree-vault/` ignored
+- Will stage explicit paths only (implementation + docs + reviews + gitignore + updated specs)
+- After this entry: open PR; stop writing tracked flow-log

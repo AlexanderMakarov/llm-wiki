@@ -23,6 +23,7 @@ Copy the relevant section into the PR review comment. Run the
       regression test that fails on master and passes on the branch.
 - [ ] **CI is green** — lint-and-test (3.12), performance-budget,
       scan (privacy grep). No merging red PRs.
+- [ ] **AWOS context** — if the PR touches `llmwiki/`, `integrations/`, `tests/`, `.github/workflows/`, `docs/maintainers/`, or `docs/reference/`, it must also change something under `context/`. No label bypass; path filters alone separate exempt areas (tutorials, scripts, packaging, etc.).
 
 ## Layer boundaries (see ARCHITECTURE.md)
 

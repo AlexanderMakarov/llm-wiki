@@ -42,6 +42,7 @@ Every box below must be checked (or have a one-line waiver explaining why it doe
 - [ ] **CHANGELOG.md updated** — new entry under `## [Unreleased]` (skip for doc-only PRs that don't change behavior)
 - [ ] **Breaking changes flagged** — PR labeled `breaking` and announced in the body under a clear heading
 - [ ] **No new runtime dependencies** — stdlib + `markdown` only; new dev/test deps need justification + license check (no AGPL/GPL into MIT)
+- [ ] **AWOS context updated** — when this PR changes `llmwiki/`, `integrations/`, `tests/`, `.github/workflows/`, `docs/maintainers/`, or `docs/reference/`, something under `context/` must also change. Path filters alone decide; there is no label bypass. Tutorials, scripts, packaging, and similar exempt paths do not arm the check.
 - [ ] **No real session data** — no personal sessions under `raw/sessions/` or in test fixtures; `wiki/` user content stays gitignored
 - [ ] **No machine-specific paths** or secrets in committed files (check `.env`, `*.key`, home paths, usernames)
 - [ ] **Docs updated** — `README.md`, `docs/tutorials/*`, `docs/reference/*` (CLI / slash / UI tables), inline `--help`, design docs — every user-visible change reflected. PRs adding a new CLI subcommand / slash / config key / lint rule MUST grow the matching `docs/reference/*.md` row in the same PR.

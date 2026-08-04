@@ -5,6 +5,9 @@ name: PR lint
 #   1. Conventional-commit title prefix
 #   2. CHANGELOG.md updated (skipped for chore/docs/test-only PRs)
 #   3. No new runtime dependencies in pyproject.toml
+#   4. AWOS context/ updated when armed product paths change
+#      (llmwiki/, integrations/, tests/, .github/workflows/,
+#       docs/maintainers/, docs/reference/; path filters; no label bypass)
 #
 # The main tests + lint + privacy scan live in `ci.yml` — this workflow
 # is just the governance gate.
@@ -89,3 +92,19 @@ jobs:
           fi
           # Never fail — this is a heads-up, not a block. The human
           # reviewer decides. But we surface the warning loudly.
+
+  awos-context:
+    name: AWOS context updated
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Require context/ when armed paths change
+        run: |
+          set -e
+          base="${{ github.event.pull_request.base.sha }}"
+          head="${{ github.event.pull_request.head.sha }}"
+          mb=$(git merge-base "$base" "$head")
+          python3 tests/awos_context_gate.py --base "$mb" --head "$head"

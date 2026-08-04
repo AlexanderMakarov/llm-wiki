@@ -60,6 +60,13 @@ def test_template_checklist_blocks_new_runtime_deps():
     assert "No new runtime dependencies" in text
 
 
+def test_template_checklist_requires_awos_context():
+    text = TEMPLATE.read_text(encoding="utf-8")
+    assert "AWOS context updated" in text
+    assert "no label bypass" in text
+    assert "context/" in text
+
+
 def test_template_checklist_protects_privacy():
     text = TEMPLATE.read_text(encoding="utf-8")
     assert "No real session data" in text

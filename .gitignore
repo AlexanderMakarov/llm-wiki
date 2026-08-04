@@ -256,6 +256,9 @@ usage/
 # Local automation status / generated unit files (install-automation)
 .llmwiki/
 
+# Agent worktree throwaway vaults (never stage)
+.worktree-vault/
+
 # Transient acplugin dumps at repo root (sync-awos-plugin-cursor.sh relocates into .cursor/)
 /commands/
 /skills/

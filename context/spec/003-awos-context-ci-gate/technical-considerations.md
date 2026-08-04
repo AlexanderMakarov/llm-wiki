@@ -6,7 +6,7 @@ It is NOT a copy-paste implementation guide.
 # Technical Specification: Spec-first gate for product changes
 
 - **Functional Specification:** [functional-spec.md](./functional-spec.md)
-- **Status:** Approved
+- **Status:** Completed
 - **Author(s):** AWOS /implement-feature (from #117 + interview)
 
 ---

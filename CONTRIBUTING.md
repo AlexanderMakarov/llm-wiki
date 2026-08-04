@@ -32,8 +32,9 @@ Thanks for wanting to contribute. This project follows strict rules about commit
 10. **No personal vault details in PR text.** Absolute home paths, OS usernames, vault roots, and personal session examples stay out of PR bodies / commits / CHANGELOG — use placeholders. See [Privacy rules](#privacy-rules).
 11. **Lint before you push.** `ruff check llmwiki tests scripts`. A committed `pre-push` hook checks the Python files in your push; see [Linting](#linting).
 12. **Wait for CI after every push.** Local green is not enough — after `git push` (new PR or update), watch GitHub Actions on that head SHA, report the result, and fix/repush if anything failed. See [After you push](#after-you-push).
+13. **Product PRs update AWOS notes.** When a PR changes `llmwiki/`, `integrations/`, `tests/`, `.github/workflows/`, `docs/maintainers/`, or `docs/reference/`, it must also change something under `context/`. Path filters alone decide when notes are required — there is no label escape hatch. Tutorials, scripts, packaging, guides, examples, and similar areas stay exempt. CI enforces this on every PR.
 
-That's it. If you follow those twelve rules your PR is 90% of the way through review.
+That's it. If you follow those thirteen rules your PR is 90% of the way through review.
 
 ## Code of conduct
 
@@ -145,7 +146,7 @@ Conventional Commits. Types we accept:
 
 Optionally scope with a version: `feat(v0.8): tool chart`. Include the issue number: `Closes #65` in the body.
 
-### PR body — 16-box pre-merge checklist
+### PR body — 17-box pre-merge checklist
 
 Every box must be checked (or have a one-line waiver). [`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md) is the authoritative list; it covers:
 
@@ -157,19 +158,21 @@ Every box must be checked (or have a one-line waiver). [`.github/PULL_REQUEST_TE
 6. CHANGELOG under Unreleased
 7. Breaking changes flagged + labeled `breaking`
 8. No new runtime deps (stdlib + `markdown` only)
-9. No real session data in `raw/` or fixtures
-10. No machine-specific paths or secrets
-11. Docs updated for user-visible changes
-12. Release notes drafted — one line fit for the next `gh release create --notes`
-13. **UI verified in light AND dark mode** (for CSS/UI changes) — screenshots attached
-14. **A11y verified** — keyboard nav, focus rings, WCAG 2.1 AA (≥ 4.5:1 contrast)
-15. Commits GPG-signed, no AI co-author trailers, atomic
-16. Reviewer has read every changed line (no rubber-stamping)
+9. AWOS context updated — PRs that change `llmwiki/`, `integrations/`, `tests/`, `.github/workflows/`, `docs/maintainers/`, or `docs/reference/` must also change something under `context/` (no label bypass; tutorials, scripts, and similar paths exempt)
+10. No real session data in `raw/` or fixtures
+11. No machine-specific paths or secrets
+12. Docs updated for user-visible changes
+13. Release notes drafted — one line fit for the next `gh release create --notes`
+14. **UI verified in light AND dark mode** (for CSS/UI changes) — screenshots attached
+15. **A11y verified** — keyboard nav, focus rings, WCAG 2.1 AA (≥ 4.5:1 contrast)
+16. Commits GPG-signed, no AI co-author trailers, atomic
+17. Reviewer has read every changed line (no rubber-stamping)
 
 ### Branch protection
 
 - Default branch is `main`; never push directly — PR required.
 - CI must pass before merge.
+- Required check display name `AWOS context updated` (job in `.github/workflows/pr-lint.yml`) must be added once in repo settings → branch protection so a red gate blocks merge — maintainers do this after the job ships.
 - Signed commits required.
 - Branch must be up-to-date with `main` before merge.
 
