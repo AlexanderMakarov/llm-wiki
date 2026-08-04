@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from llmwiki import REPO_ROOT
 
 WORKFLOW = REPO_ROOT / ".github" / "workflows" / "wiki-checks.yml"
@@ -84,11 +86,12 @@ def test_has_read_only_permissions():
 
 
 def test_pinned_setup_python_version():
-    """Verify actions/setup-python@v6 (from the dependency bundle #189)."""
+    """Workflow pins actions/setup-python to a floating major (@vN), not a branch tip."""
     text = WORKFLOW.read_text(encoding="utf-8")
-    assert "actions/setup-python@v6" in text
+    assert re.search(r"actions/setup-python@v\d+", text)
 
 
 def test_pinned_checkout_version():
+    """Workflow pins actions/checkout to a floating major (@vN), not a branch tip."""
     text = WORKFLOW.read_text(encoding="utf-8")
-    assert "actions/checkout@v4" in text
+    assert re.search(r"actions/checkout@v\d+", text)

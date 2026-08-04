@@ -192,7 +192,7 @@ Before opening the PR: `git fetch origin main` and rebase onto `origin/main`. On
 
 Open the pull request with `gh pr create` against `main` (fill Summary + applicable Pre-merge checklist boxes from `.github/PULL_REQUEST_TEMPLATE.md`). Do **not** post a "PR opened" notification comment.
 
-Then wait on required GitHub Actions with `gh pr checks --watch` (Monitor-style polling, interval ≥30s, timeout ~30 minutes). On failure: use the `gha-diagnosis` skill plus `gh run view <id> --log-failed`, delegate the fix to a subagent, push, re-watch until green — or escalate to the user in chat if the ~30m window expires (ask whether to keep watching or hand off). Do **not** PR-comment on CI red or max-wait. Do **not** block on the soft-fail Claude Code Review Action. Do **not** poll CODEOWNERS human approval. Ticket state transitions are off — do not comment-close the GitHub Issue from this stage.
+Then wait on required GitHub Actions with `gh pr checks --watch` (Monitor-style polling, interval ≥30s, timeout ~30 minutes). On failure: use the `gha-diagnosis` skill plus `gh run view <id> --log-failed`, delegate the fix to a subagent, push, re-watch until green — or escalate to the user in chat if the ~30m window expires (ask whether to keep watching or hand off). Do **not** PR-comment on CI red or max-wait. Claude-in-CI workflows were removed (#116); do not wait on a Claude Code Review check. Do **not** poll CODEOWNERS human approval. Ticket state transitions are off — do not comment-close the GitHub Issue from this stage.
 
 <!-- /awos:flow:stage -->
 

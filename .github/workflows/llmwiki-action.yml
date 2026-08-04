@@ -43,10 +43,10 @@ jobs:
 
     steps:
       - name: Checkout calling repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Python ${{ inputs.python-version }}
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ inputs.python-version }}
 
@@ -67,7 +67,7 @@ jobs:
         run: echo "site-dir=$(pwd)/site" >> "$GITHUB_OUTPUT"
 
       - name: Upload site artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: llmwiki-site
           path: site/

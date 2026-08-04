@@ -26,3 +26,27 @@
 ## specs — tasks
 - Approved tasks.md (skip Feature Testing)
 - Next: commit-specs then /awos:implement
+
+## commit-specs
+- Commit f105dea docs: add spec for #116
+- Next: implement
+
+## implement
+- All 3 slices complete; tasks.md fully checked
+- Next: verify → user smoke confirm → local dual review
+
+## verify
+- Local rg audits pass; smoke confirmed by user
+- Next: local-review
+
+## local-review
+- review.md: request changes (2 blocker / 5 major / 5 nit)
+- review-code-reviewer.md: request_changes (2 critical / 4 important)
+- User accepted CI/GH setup fixes incl. pages+docker+bootstrap+tests; revert action.yml to setup-python@v6
+- Static gate: ruff clean; pytest 3448 passed
+- Branch protection: removed required context `lint-and-test (3.13)` (now 3.12 only)
+- Next: commit-push (last flow-log write)
+
+## commit-push
+- Committing implementation + reviews + accepted fixes; push `feat/116-ci-refactor-ci`; open PR with `chore(ci):` title
+- FINAL committed flow-log state — no further appends after PR opens

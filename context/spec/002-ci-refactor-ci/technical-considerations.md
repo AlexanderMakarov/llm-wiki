@@ -27,17 +27,24 @@ Use floating major tags (`@vN`), not SHA pins (except for existing SHA-pinned th
 | Action | From | To |
 | --- | --- | --- |
 | `actions/checkout` | `@v4` | `@v7` |
-| `actions/setup-python` | `@v5` / `@v6` | `@v7` (all occurrences) |
+| `actions/setup-python` | `@v5` / `@v6` | `@v7` (workflow pins; see `action.yml` exception below) |
 | `actions/setup-node` | `@v4` | `@v7` |
 | `actions/upload-artifact` | `@v4` | `@v7` |
 | `actions/download-artifact` | `@v4` | `@v8` |
 | `actions/configure-pages` | `@v5` | `@v6` |
+| `actions/upload-pages-artifact` | `@v4` | `@v5` (composite that nested Node-20 `upload-artifact@v4`; `@v5` nests Node-24 `@v7`) |
 | `peter-evans/create-pull-request` | `@v7` | `@v8` |
 | `gitleaks/gitleaks-action` | `@v2` | `@v3` |
+| `docker/metadata-action` | `@v5` | `@v6` |
+| `docker/login-action` | `@v3` | `@v4` |
+| `docker/setup-buildx-action` | `@v3` | `@v4` |
+| `docker/setup-qemu-action` | `@v3` | `@v4` |
 
 **Artifact pairing:** every `upload-artifact` and `download-artifact` use in the repo must move together. `release.yml` builds in one job and downloads in `publish` / `sign` / `github-release` — keep `@v7` / `@v8` as a matched pair. Inputs used today are `name` and `path` only (compatible).
 
-**Out of scope (do not bump):** actions already verified `node24` or composite/non-Node per issue #116 (e.g. `actions/cache@v5`, `actions/github-script@v9`, `actions/deploy-pages@v5`, `upload-pages-artifact`, `lychee-action`, `docker/*`, SHA-pinned PyPI publish).
+**Published composite (`action.yml`):** leave `actions/setup-python@v6` — already `node24`, and bumping to `@v7` would change the published consumer surface (self-hosted runners older than Actions Runner v2.327.1) without serving this PR's Node-20 goal. Out of the approved CI plan.
+
+**Out of scope (do not bump):** actions already verified `node24` with no Nested Node-20 children, or third parties we are not refreshing now (e.g. `actions/cache@v5`, `actions/github-script@v9`, `actions/deploy-pages@v5`, `lychee-action` composite with no Node child, SHA-pinned PyPI publish, `docker/build-push-action@v7` already node24). Earlier drafts wrongly treated "composite" and `docker/*` as node24-safe without checking nested/`runs.using` — composite actions inherit whatever their nested `uses:` declare; several `docker/*` majors at the old pins were still `node20`. Those are now in the bump table above for this PR.
 
 ### Workflow deletions
 
@@ -59,9 +66,13 @@ Leave `ANTHROPIC_API_KEY` / synthesis-backend docs alone. Do not rewrite histori
 
 ### Files touched (inventory)
 
-- All `.github/workflows/*.yml` that still pin the table above (including but not limited to `ci.yml`, `e2e.yml`, `gitleaks.yml`, `pr-lint.yml`, `link-check.yml`, `release.yml`, `agents-e2e.yml`, `agents-healer.yml`, `pages.yml`, `regen-screenshots.yml`, plus any other matches from `rg`).
+- All `.github/workflows/*.yml` that still pin the table above (including but not limited to `ci.yml`, `e2e.yml`, `gitleaks.yml`, `pr-lint.yml`, `link-check.yml`, `release.yml`, `agents-e2e.yml`, `agents-healer.yml`, `pages.yml`, `docker-publish.yml`, `regen-screenshots.yml`, plus any other matches from `rg`).
 - Delete the two Claude workflow files.
 - `pyproject.toml`, `CHANGELOG.md`, and the four doc paths above.
+- Version-pin tests: `tests/test_ci_workflow.py`, `tests/test_editorconfig_lychee.py` (assert floating `@vN`, not a hardcoded major).
+- Embedded YAML in `docs/maintainers/playwright-agents-bootstrap.md` (keep aligned with agents workflows).
+- Do **not** bump `action.yml`'s `setup-python` past `@v6` (see exception above).
+- Process-doc nits: `context/product/delivery-flow.md` and aligned `.claude/commands/implement-feature.md` / `fix-bug.md` (Claude-in-CI removed).
 
 ---
 
