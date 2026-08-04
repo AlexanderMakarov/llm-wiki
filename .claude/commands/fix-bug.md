@@ -9,12 +9,13 @@ Takes one bug — a GitHub Issue — and drives it through diagnosis, a scoped f
 
 ## Notifications
 
-On each of these transitions, post a short status to the open pull request with `gh pr comment` (skip until a PR exists — then catch up on "PR opened"):
+Post to the open pull request with `gh pr comment` **only for exceptions** (skip entirely until a PR exists). Do **not** comment for routine open / CI / gates-passed / merged / blocked-waiting — report those in chat to the user.
 
-- change request opened
-- blocked-and-waiting (CI red or ~30m max-wait hit)
-- gates passed
-- merged (include minimal try-steps from the issue/spec)
+Comment when:
+
+1. **Implementation divergence** — for a divergence classification, or when the fix approach differs materially from the owning spec (what changed and why)
+2. **Major post-implementation issue** — verify failure forcing scope/approach change, or a serious review finding that alters behavior
+3. **Parallel / overlapping work** — rebase or review surfaces functional overlap with another change; describe overlap and resolution
 
 ## Arguments
 
@@ -25,7 +26,7 @@ On each of these transitions, post a short status to the open pull request with 
 A flow degrades in one long context window. Per §8 of delivery-flow.md:
 
 - Run every isolatable stage in a subagent (a subagent can invoke `/awos:*` commands via the Skill tool; its context is discarded on completion). Subagent reports must be terse — paths, verdicts, counts — never full diff, log, or review content.
-- After each completed stage, append an entry to `context/spec/{SPEC_NAME}/flow-log.md` (or `context/fix-log-{BUG_ID}.md` when the bug maps to no spec): the stage name, what was produced and where (paths, branch, commit), the classification verdict once known, any decisions taken, and which stage comes next. The log is the flow's memory outside the context window — a fresh session resumes by reading this one small file. It is committed with the work (commit-push stages it alongside the code), so it must never become an uncommittable leftover: **once the change request is opened — or the change is merged — stop writing to the tracked log.** New commits are unwelcome on a change request under review or already merged, so a late append would strand a change that can never reach it. From that point, report late-stage progress (gate results, merge, close-out evidence) to the user and via §9 notifications, and resume the remote stages from remote state — the open/merged change request and the ticket status, which the resume-detection stage already inspects. The close stage leaves a clean working tree and never writes a final entry it cannot commit.
+- After each completed stage, append an entry to `context/spec/{SPEC_NAME}/flow-log.md` (or `context/fix-log-{BUG_ID}.md` when the bug maps to no spec): the stage name, what was produced and where (paths, branch, commit), the classification verdict once known, any decisions taken, and which stage comes next. The log is the flow's memory outside the context window — a fresh session resumes by reading this one small file. It is committed with the work (commit-push stages it alongside the code), so it must never become an uncommittable leftover: **once the change request is opened — or the change is merged — stop writing to the tracked log.** New commits are unwelcome on a change request under review or already merged, so a late append would strand a change that can never reach it. From that point, report late-stage progress (gate results, merge, close-out evidence) to the user and via §9 notifications (exceptions only), and resume the remote stages from remote state — the open/merged change request and the ticket status, which the resume-detection stage already inspects. The close stage leaves a clean working tree and never writes a final entry it cannot commit.
 - Never launch a nested headless session (`claude -p`) from this command — permission modes, PATH, and timeouts differ per machine. Unattended chaining belongs to the trigger setup (§6), outside this command.
 - Tell every dispatched subagent: tools are functional — do not test them or make exploratory calls; every call needs a purpose. Run each delegated stage on the model tier recorded in §8 — the fast tier for mechanical transport work, the strongest for judgment (diagnosis, classification, review).
 
@@ -63,7 +64,27 @@ Start with a cheap preflight on the fast model tier (per §8): is this bug **alr
 
 ### Step 3: Prepare the Workspace
 
-Verify `context/` is reachable (`context/product/architecture.md` readable). Warn on a dirty working tree (uncommitted AWOS artifacts left by `/awos:flow` are an expected cause, not a blocker). Create branch `fix/<issue>-<short-slug>` from `origin/main` in this working tree (main-repo-only). Store the branch name as `BRANCH`. No submodules.
+Verify `context/` is reachable (`context/product/architecture.md` readable). Warn on a dirty working tree (uncommitted AWOS artifacts left by `/awos:flow` are an expected cause, not a blocker). No submodules.
+
+Create an isolated worktree + throwaway vault from `origin/main`:
+
+```bash
+git fetch origin main
+BRANCH="fix/<issue>-<short-slug>"
+WT_SLUG=$(echo "$BRANCH" | tr '/' '-')
+WT=".claude/worktrees/$WT_SLUG"
+git worktree add -b "$BRANCH" "$WT" origin/main
+cd "$WT"
+LLMWIKI_SKIP_AUTOMATION=1 ./setup.sh
+TMP_VAULT="$WT/.worktree-vault"
+mkdir -p "$TMP_VAULT"
+printf '%s\n' "{\"vault\":{\"default_path\":\"$TMP_VAULT\"}}" > config.json
+python3 -m llmwiki init --vault "$TMP_VAULT"
+```
+
+If already inside a matching worktree on `BRANCH`, reuse it and ensure `$WT/.worktree-vault` + worktree `config.json` still isolate from the live vault (never copy primary `config.json`).
+
+Store `BRANCH`, `WT`, `TMP_VAULT`, and `BUG_ID`. Always `python3 -m llmwiki` from `$WT` — never PATH `llmwiki`. Agent mutating commands → `$TMP_VAULT` only; read-only live-vault probes allowed; serve prefers non-8765 when needed.
 
 <!-- /awos:flow:stage -->
 
@@ -71,7 +92,7 @@ Verify `context/` is reachable (`context/product/architecture.md` readable). War
 
 ### Step 4: Diagnose
 
-Reproduce the bug and find the root cause. Delegate the investigation to the built-in `Explore` subagent or a debugging specialist via **[Agent: name]** (strongest tier) — the orchestrator does not read the whole codebase or write code itself. The subagent returns terse: the reproduction, the root-cause location (file/function), and a proposed minimal fix shape. If the bug cannot be reproduced, report that and stop rather than guessing at a fix.
+Reproduce the bug and find the root cause. Delegate the investigation to the built-in `Explore` subagent or a debugging specialist via **[Agent: name]** (strongest tier) — the orchestrator does not read the whole codebase or write code itself. Prefer reproducing against `$TMP_VAULT` or synthetic fixtures; read-only live probes are OK. The subagent returns terse: the reproduction, the root-cause location (file/function), and a proposed minimal fix shape. If the bug cannot be reproduced, report that and stop rather than guessing at a fix.
 
 <!-- /awos:flow:stage -->
 
@@ -82,7 +103,7 @@ Reproduce the bug and find the root cause. Delegate the investigation to the bui
 This gate decides whether the spec gets amended later, so it runs **before** any fix touches behavior. Locate the owning `context/spec/NNN-*/` for the affected behavior (read its `functional-spec.md`), then classify:
 
 - **Conformance bug** — the code violates a _correct_ spec. The acceptance criteria were right; the code was wrong. → Fix the code and add a regression test; **do not** amend the spec.
-- **Divergence** — the spec was wrong or incomplete, or the fix intentionally changes documented behavior. → Fix, add a regression test, and **amend** the owning spec in the `amend-spec` stage.
+- **Divergence** — the spec was wrong or incomplete, or the fix intentionally changes documented behavior. → Fix, add a regression test, and **amend** the owning spec in the `amend-spec` stage. Once a PR exists, post a §9 divergence exception comment.
 
 If the bug maps to **no** existing spec (legacy or cross-cutting behavior), do not fabricate one — record "no owning spec" and proceed without amendment. Record the verdict and the owning spec dir (or "none") in the flow log; later stages read it.
 
@@ -92,7 +113,7 @@ If the bug maps to **no** existing spec (legacy or cross-cutting behavior), do n
 
 ### Step 6: Fix
 
-Delegate the code change to a specialist via **[Agent: name]** (chosen from `context/product/hired-agents.md` / available agents for the affected area) — the orchestrator never edits code itself. Prefer `testing-expert` only for test work; coding uses the best matching specialist or `general-purpose`. Keep the change scope-disciplined: a flat task list targeting the root cause, no vertical slicing, no opportunistic refactors beyond what the fix needs. Pass the subagent the root-cause findings from Step 4 and the classification, not a re-derivation.
+Delegate the code change to a specialist via **[Agent: name]** (chosen from `context/product/hired-agents.md` / available agents for the affected area) — the orchestrator never edits code itself. Prefer `testing-expert` only for test work; coding uses the best matching specialist or `general-purpose`. Keep the change scope-disciplined: a flat task list targeting the root cause, no vertical slicing, no opportunistic refactors beyond what the fix needs. Pass the subagent the root-cause findings from Step 4, the classification, and vault rules (`$TMP_VAULT` for writes), not a re-derivation.
 
 <!-- /awos:flow:stage -->
 
@@ -108,11 +129,11 @@ Add one test that fails on the old code and passes on the fix, capturing the bug
 
 ### Step 8: Verify the Touched Criteria
 
-Re-check **only** the acceptance criteria the bug touched, with `/awos:verify`'s evidence discipline — drive the CLI/API/UI for real, and `AskUserQuestion` only when a criterion has no agent-driven render path at all. This is scoped: it does not re-run the whole acceptance set, does not flip the spec's Status, and honors `<!-- skip-tests: true -->` (look-and-feel walk-through only, no test suites). Report the criteria checked and their evidence.
+Re-check **only** the acceptance criteria the bug touched, with `/awos:verify`'s evidence discipline — drive the CLI/API/UI for real against `$TMP_VAULT`, and `AskUserQuestion` only when a criterion has no agent-driven render path at all. This is scoped: it does not re-run the whole acceptance set, does not flip the spec's Status, and honors `<!-- skip-tests: true -->` (look-and-feel walk-through only, no test suites). Report the criteria checked and their evidence.
 
-Running the app to verify is the flow's job, not the user's. Prefer tmp vaults and `llmwiki build` + Playwright for site criteria; reclaim conflicting local ports. Do not hand the user a `run` command to execute, and do not defer a drivable criterion to a later manual deploy — the manual `AskUserQuestion` fallback is only for a criterion the agent genuinely cannot render here.
+Automated verify is the flow's job on `$TMP_VAULT` (`python3 -m llmwiki build`, Playwright, free serve port). Read-only live probes are allowed. Do not mutate the live vault. Manual `AskUserQuestion` is only for criteria the agent genuinely cannot render here.
 
-**Smoke confirm:** ask the user to confirm the fix works as expected before local review. Skipped confirmation → stop.
+**Smoke confirm:** ask the user to confirm the fix works as expected before local review. Include ready-to-paste live-vault commands using worktree code (`cd "$WT" && python3 -m llmwiki … --vault "$LIVE"`); do not run the mutating ones yourself. Skipped confirmation → stop.
 
 <!-- /awos:flow:stage -->
 
@@ -123,7 +144,7 @@ Running the app to verify is the flow's job, not the user's. Prefer tmp vaults a
 Conditional on the Step 5 verdict:
 
 - **Conformance** — nothing to amend; the spec was already correct. Skip to the next stage.
-- **Divergence** — invoke `/awos:spec` in update mode for the owning spec, passing the spec directory and a description of the behavior change (e.g. `/awos:spec amend spec NNN: <what changed and why>`). `/awos:spec`'s Mode Detection routes this to its Update Mode, which edits the affected acceptance criteria in place and appends a dated `## Change Log` entry — no new spec index is allocated, and a `Completed` Status is left untouched. Do not duplicate the amendment prose here; the amendment capability lives in core `/awos:spec`.
+- **Divergence** — invoke `/awos:spec` in update mode for the owning spec, passing the spec directory and a description of the behavior change (e.g. `/awos:spec amend spec NNN: <what changed and why>`). `/awos:spec`'s Mode Detection routes this to its Update Mode, which edits the affected acceptance criteria in place and appends a dated `## Change Log` entry — no new spec index is allocated, and a `Completed` Status is left untouched. Do not duplicate the amendment prose here; the amendment capability lives in core `/awos:spec`. §9 exception comment once a PR exists.
 
 In either case, if the fix revealed that `product-definition.md` or `architecture.md` also drifted, surface the same `/awos:product <…>` / `/awos:architecture <…>` suggestions `/awos:verify` Step 5 emits — as suggestions, never auto-edits.
 
@@ -145,7 +166,7 @@ ruff check llmwiki tests scripts
 python3 -m pytest tests/ -q
 ```
 
-Lead the presentation with review file paths on their own lines. Do not call `/review-pr <n>` (reserved for reviewing others' open PRs).
+Lead the presentation with review file paths on their own lines. Do not call `/review-pr <n>` (reserved for reviewing others' open PRs). Serious findings that alter behavior → §9 exception after PR open.
 
 <!-- /awos:flow:stage -->
 
@@ -153,7 +174,7 @@ Lead the presentation with review file paths on their own lines. Do not call `/r
 
 ### Step 10: Commit & Push
 
-Write this stage's flow-log entry **before** staging so the log rides in this commit — this is the flow-log's last committed state (see Context Discipline). Then stage all changed files, excluding `.env`, credentials, and secrets. Commit with conventional commits referencing `#<BUG_ID>`; if pre-push ruff rejects, fix and create a new commit (no `--no-verify` unless the user allows). Push `BRANCH` to `origin`.
+Write this stage's flow-log entry **before** staging so the log rides in this commit — this is the flow-log's last committed state (see Context Discipline). Then stage all changed files, excluding `.env`, credentials, secrets, and local vault/config (`config.json`, `.worktree-vault/`). Commit with conventional commits referencing `#<BUG_ID>`; if pre-push ruff rejects, fix and create a new commit (no `--no-verify` unless the user allows). Push `BRANCH` to `origin`.
 
 <!-- /awos:flow:stage -->
 
@@ -161,11 +182,11 @@ Write this stage's flow-log entry **before** staging so the log rides in this co
 
 ### Step 11: Remote Gates
 
-From here the change request is open — **do not append to the tracked flow-log** (Context Discipline). Report gate progress to the user and via Notifications instead; resume relies on the remote state, not the log.
+From here the change request is open — **do not append to the tracked flow-log** (Context Discipline). Report routine gate progress in chat only; §9 PR comments only for exceptions.
 
-Before opening the PR: fetch and rebase onto `origin/main`. On conflicts: subagent resolution, re-run local gates, user confirm for non-trivial resolutions, push.
+Before opening the PR: fetch and rebase onto `origin/main`. On conflicts: subagent resolution, re-run local gates, user confirm for non-trivial resolutions, push. Functional overlap → §9 comment after open.
 
-Open the PR with `gh pr create` against `main`. Wait on required checks with `gh pr checks --watch` (~30m max-wait, then ask). On CI failure: `gha-diagnosis` + log-failed → fix subagent → push → re-watch. Do not block on soft-fail Claude Code Review; do not poll CODEOWNERS; do not transition the GitHub Issue.
+Open the PR with `gh pr create` against `main`. Do **not** post a "PR opened" comment. Wait on required checks with `gh pr checks --watch` (~30m max-wait, then ask in chat). On CI failure: `gha-diagnosis` + log-failed → fix subagent → push → re-watch. Do not PR-comment on CI red/max-wait. Do not block on soft-fail Claude Code Review; do not poll CODEOWNERS; do not transition the GitHub Issue.
 
 <!-- /awos:flow:stage -->
 
@@ -175,7 +196,7 @@ Open the PR with `gh pr create` against `main`. Wait on required checks with `gh
 
 Re-check mergeability against current `origin/main`. If dirty: rebase, push, return to Step 11.
 
-When gates are green, ask for explicit merge confirmation in this run. On yes: `gh pr merge`. Skipped/unanswered → do not merge; report ready-to-merge.
+When gates are green, ask for explicit merge confirmation in this run. On yes: `gh pr merge`. Skipped/unanswered → do not merge; report ready-to-merge in chat. No "merged"/"gates passed" PR comments.
 
 After merge: watch post-merge Actions on `main` and fix forward if this change broke them.
 
@@ -185,7 +206,7 @@ After merge: watch post-merge Actions on `main` and fix forward if this change b
 
 ### Step 13: Close the Loop
 
-Definition of Done: PR merged and post-merge required checks green. Report evidence: PR URL, merge commit, local-review verdict/counts/paths, classification verdict, and (on divergence) that the owning spec was amended. Do **not** close or transition the GitHub Issue.
+Definition of Done: PR merged and post-merge required checks green. Report evidence in chat: PR URL, merge commit, local-review verdict/counts/paths, classification verdict, and (on divergence) that the owning spec was amended. Do **not** close or transition the GitHub Issue.
 
 Leave a clean working tree: do not write a closing flow-log entry. If any flow-created artifact is still uncommitted, surface it in the report.
 
@@ -193,4 +214,4 @@ Leave a clean working tree: do not write a closing flow-log entry. If any flow-c
 
 ---
 
-<!-- awos:flow:generated date=2026-08-03 version=2.4.3 source=context/product/delivery-flow.md -->
+<!-- awos:flow:generated date=2026-08-04 version=2.4.3 source=context/product/delivery-flow.md -->
