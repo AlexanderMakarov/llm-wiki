@@ -1,4 +1,4 @@
-"""claim_verification — entity/concept pages with claims should cite sources."""
+"""claim_verification — entity/concept/project pages with claims should cite sources."""
 
 from __future__ import annotations
 
@@ -9,19 +9,22 @@ from llmwiki.lint import LintRule, register
 
 @register
 class ClaimVerification(LintRule):
-    """Flag entity/concept pages that make claims but cite no sources."""
+    """Flag entity/concept/project pages that make claims but cite no sources."""
 
     name = "claim_verification"
     severity = "info"
 
+    CHECKED_TYPES = ("entity", "concept", "project")
+
     def run(self, pages, *, llm_callback=None):  # llm_callback kept for back-compat
         del llm_callback  # unused — reserved / legacy kwarg
-        # Structural: entity/concept pages with ## Key Facts / ## Key Claims
-        # should also cite sources (frontmatter, ## Sessions, or ## Sources).
+        # Structural: entity/concept/project pages with ## Key Facts /
+        # ## Key Claims should also cite sources (frontmatter, ## Sessions,
+        # or ## Sources).
         issues = []
         for rel, page in pages.items():
             meta = page["meta"]
-            if meta.get("type") not in ("entity", "concept"):
+            if meta.get("type") not in self.CHECKED_TYPES:
                 continue
             has_claims = bool(re.search(r"## Key (Facts|Claims)", page["body"]))
             has_sources = bool(meta.get("sources")) or \

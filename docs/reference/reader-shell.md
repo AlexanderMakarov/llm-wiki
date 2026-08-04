@@ -69,7 +69,6 @@ From `llmwiki/reader_shell.py :: INFOBOX_FIELDS_IN_ORDER`:
 | Frontmatter key | Label |
 |---|---|
 | `type` | Type |
-| `entity_type` | Entity type |
 | `project` | Project |
 | `model` | Model |
 | `lifecycle` | Lifecycle |

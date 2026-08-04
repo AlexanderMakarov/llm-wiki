@@ -91,7 +91,7 @@ from llmwiki.convert import DEFAULT_OUT_DIR, convert_all
 from llmwiki.graph import build_and_report
 from llmwiki.graphify_bridge import build_graphify_graph, is_available, query_graph
 from llmwiki.lint import REGISTRY as _LINT_REG
-from llmwiki.lint import load_pages, run_all, summarize
+from llmwiki.lint import UnknownRuleError, load_pages, run_all, summarize
 from llmwiki.lint import rules as _lint_rules  # noqa: F401 — force registration
 from llmwiki.pipeline import run_pipeline as _run_pipeline
 from llmwiki.pipeline_lock import pipeline_lock
@@ -211,7 +211,10 @@ def cmd_init(args: argparse.Namespace) -> int:
             return 2
         print(f"==> scaffolding into vault: {base}")
 
-    for name in ("raw/sessions", "wiki/sources", "wiki/entities", "wiki/concepts", "wiki/syntheses", "site"):
+    # The wiki/ folders here are the page-kind homes reindex.CANONICAL_FOLDERS
+    # catalogs — a fresh vault has somewhere to file every kind it can write.
+    for name in ("raw/sessions", "wiki/sources", "wiki/entities", "wiki/concepts",
+                 "wiki/projects", "wiki/syntheses", "site"):
         p = base / name
         p.mkdir(parents=True, exist_ok=True)
         keep = p / ".gitkeep"
@@ -642,8 +645,12 @@ def cmd_lint(args: argparse.Namespace) -> int:
         print(f"  no pages found in {wiki_dir}")
         return 0
 
-    selected = args.rules.split(",") if args.rules else None
-    issues = run_all(pages, selected=selected)
+    selected = [r.strip() for r in args.rules.split(",") if r.strip()] if args.rules else None
+    try:
+        issues = run_all(pages, selected=selected)
+    except UnknownRuleError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
 
     summary = summarize(issues)
 
@@ -1009,7 +1016,6 @@ def _run_candidate_harvest(args: argparse.Namespace) -> int:
     rc = run_harvest(
         wiki_dir,
         min_refs=getattr(args, "min_refs", DEFAULT_MIN_REFS),
-        allow_unclassified=bool(getattr(args, "allow_unclassified", False)),
         backend=backend,
         require_sources=True,
     )
@@ -1174,7 +1180,6 @@ def cmd_synthesize(args: argparse.Namespace) -> int:
     rc = run_harvest(
         harvest_wiki,
         min_refs=min_refs,
-        allow_unclassified=bool(getattr(args, "allow_unclassified", False)),
         backend=backend,
         require_sources=False,
     )
@@ -2183,13 +2188,6 @@ def build_parser() -> argparse.ArgumentParser:
             help=(
                 "Synthesize wiki/sources/ only — skip candidate harvest "
                 "(legacy synthesize behaviour)"
-            ),
-        )
-        parser.add_argument(
-            "--allow-unclassified", action="store_true",
-            help=(
-                "When harvesting candidates: file targets the backend could not "
-                "classify as entity_type: unknown instead of failing the run"
             ),
         )
         parser.add_argument(

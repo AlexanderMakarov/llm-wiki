@@ -203,8 +203,9 @@ llmwiki sync --adapter obsidian
 raw/     IMMUTABLE transcripts (source of truth, never modify)
 wiki/    LLM-generated pages (you own this)
   sources/      one summary per raw source
-  entities/     people, projects, tools (TitleCase.md)
+  entities/     people, products, tools (TitleCase.md)
   concepts/     ideas, patterns, decisions (TitleCase.md)
+  projects/     codebases and work streams (kebab-case slug)
   syntheses/    saved query answers
   comparisons/  side-by-side diffs
   questions/    first-class open questions

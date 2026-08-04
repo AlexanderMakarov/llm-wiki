@@ -14,6 +14,7 @@ import pytest
 
 import llmwiki.config_schedule as config_schedule_mod
 from llmwiki.cli import cmd_init
+from llmwiki.reindex import CANONICAL_FOLDERS
 
 
 @pytest.fixture(autouse=True)
@@ -34,6 +35,17 @@ def test_init_scaffolds_into_vault(tmp_path: Path):
     assert (vault / "site").is_dir()
     # The seed content lands in the vault, not the repo.
     assert "# Wiki Index" in (vault / "wiki" / "index.md").read_text(encoding="utf-8")
+
+
+def test_init_scaffolds_a_folder_for_every_catalogued_page_kind(tmp_path: Path):
+    """A fresh vault needs a home for every kind the catalog files, projects
+    included — otherwise the first agent to write one has nowhere to put it."""
+    vault = tmp_path / "vault"
+    rc = cmd_init(argparse.Namespace(vault=vault))
+
+    assert rc == 0
+    for folder in CANONICAL_FOLDERS:
+        assert (vault / "wiki" / folder).is_dir(), folder
 
 
 def test_init_bootstraps_a_missing_vault_dir(tmp_path: Path):

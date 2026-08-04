@@ -43,9 +43,16 @@ def test_dashboard_has_by_project():
     assert "By Project" in text
 
 
-def test_dashboard_has_entity_type_breakdown():
+def test_dashboard_has_page_kind_breakdown():
     text = DASHBOARD_TEMPLATE.read_text(encoding="utf-8")
-    assert "entity_type" in text
+    assert "By Page Kind" in text
+    assert "GROUP BY type" in text
+
+
+def test_dashboard_does_not_group_by_entity_type():
+    """#102: the entity-type taxonomy is gone — the dashboard must not teach it."""
+    text = DASHBOARD_TEMPLATE.read_text(encoding="utf-8")
+    assert "entity_type" not in text
 
 
 def test_dashboard_has_open_questions():

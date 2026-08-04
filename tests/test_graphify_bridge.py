@@ -15,6 +15,7 @@ from llmwiki.graphify_bridge import (
     build_graphify_graph,
     export_to_obsidian,
     is_available,
+    node_type_bonus,
     query_graph,
 )
 
@@ -122,6 +123,40 @@ def test_query_graph_no_graph_file(tmp_path):
     with patch("llmwiki.graphify_bridge.GRAPHIFY_OUT", tmp_path):
         result = query_graph("test question")
     assert "No graph found" in result
+
+
+# ─── query_graph relevance bonus (#102) ──────────────────────────────
+
+
+@pytest.mark.parametrize("kind", ["entity", "concept", "project"])
+def test_node_type_bonus_boosts_backed_pages(kind):
+    """Project pages rank alongside entities and concepts (#102 R3)."""
+    node = {"type": kind, "file": f"wiki/{kind}s/Alpha.md"}
+    assert node_type_bonus(node) == 0.5
+
+
+def test_node_type_bonus_skips_synthetic_project_hub():
+    """Hubs carry `type: project` but no file — navigational aggregates
+    must not outrank the pages they group."""
+    hub = {"type": "project", "file": ""}
+    assert node_type_bonus(hub) == 0.0
+
+
+def test_node_type_bonus_hub_matches_extracted_shape(tmp_path):
+    """The hub the extractor emits is the shape the bonus must reject."""
+    (tmp_path / "alpha.md").write_text(
+        '---\ntitle: "alpha"\ntype: source\nproject: test-proj\n---\n\n# alpha\n',
+        encoding="utf-8",
+    )
+    nodes = _extract_wiki_nodes(tmp_path)["nodes"]
+    hub = next(n for n in nodes if n["id"] == "project__test-proj")
+    assert hub["type"] == "project"
+    assert node_type_bonus(hub) == 0.0
+
+
+def test_node_type_bonus_skips_sources_and_unresolved():
+    assert node_type_bonus({"type": "source", "file": "wiki/sources/s.md"}) == 0.0
+    assert node_type_bonus({"type": "reference", "file": ""}) == 0.0
 
 
 # ─── project-based edge enrichment ──────────────────────────────────

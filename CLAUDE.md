@@ -18,8 +18,9 @@ wiki/          YOU OWN THIS. LLM-generated pages that summarise, cross-reference
   overview.md      Living synthesis across all sources.
   sources/         One summary page per raw source (kebab-case slug).
   candidates/      Pending entity/concept stubs from harvest — review before promote (#90).
-  entities/        People, companies, projects, products (TitleCase.md).
+  entities/        People, companies, products (TitleCase.md).
   concepts/        Ideas, frameworks, methods, theories (TitleCase.md).
+  projects/        Codebases and work streams, seeded from session metadata (kebab-case slug).
   syntheses/       Saved query answers (kebab-case slug).
   comparisons/     Side-by-side diffs of two or more entities/concepts (kebab-case slug). [v0.2+]
   questions/       First-class open questions with state tracking (kebab-case slug). [v0.2+]
@@ -55,11 +56,12 @@ Triggered by `/wiki-ingest <path>` or `/wiki-sync`.
 3. **For each source file**, write `wiki/sources/<slug>.md` using the Source Page Format below. `<slug>` comes from the YAML frontmatter's `slug` field when present, otherwise from the filename.
 4. **Update `wiki/index.md`** — add the new source under `## Sources`.
 5. **Update `wiki/overview.md`** — revise the synthesis if the new source adds substantial new information. Don't rewrite for trivia.
-6. **Create/update entity pages** (`wiki/entities/<Name>.md`) for any people, companies, projects, products, tools, libraries mentioned. TitleCase filename.
+6. **Create/update entity pages** (`wiki/entities/<Name>.md`) for any people, companies, products, tools, libraries mentioned. TitleCase filename.
 7. **Create/update concept pages** (`wiki/concepts/<Name>.md`) for any ideas, patterns, frameworks, or decisions mentioned.
-8. **Cross-link** everything with `[[wikilinks]]` under `## Connections` on every page.
-9. **Flag contradictions** — if a new source contradicts existing wiki content, add a `## Contradictions` section to the affected page and leave BOTH claims visible. Do not silently overwrite.
-10. **Append to `wiki/log.md`** with the format: `## [YYYY-MM-DD] ingest | <title>`
+8. **Create/update project pages** (`wiki/projects/<slug>.md`, `type: project`) for any codebase or work stream mentioned. Kebab-case filename matching the session `project` slug. A project is never an entity page.
+9. **Cross-link** everything with `[[wikilinks]]` under `## Connections` on every page.
+10. **Flag contradictions** — if a new source contradicts existing wiki content, add a `## Contradictions` section to the affected page and leave BOTH claims visible. Do not silently overwrite.
+11. **Append to `wiki/log.md`** with the format: `## [YYYY-MM-DD] ingest | <title>`
 
 ### Session-derived source specifics
 
@@ -67,10 +69,10 @@ Files under `raw/sessions/<YYYY-MM-DDTHH-MM>-<project>-<slug>.md` are auto-gener
 
 - **Trust the frontmatter** — don't re-infer metadata from the body
 - **Do NOT copy the Conversation section verbatim** — treat it as raw material to summarize
-- **Create or update a project entity page** at `wiki/entities/<ProjectSlug>.md` with a bulleted session list under `## Sessions`
+- **Create or update the project page** at `wiki/projects/<project-slug>.md` (`type: project`, slug taken from the frontmatter `project` field) with a bulleted session list under `## Sessions`
 - **Extract decisions** — anything the user explicitly locked ("decision locked", "let's go with", "I decided...") goes into `wiki/concepts/`
 - **Extract tools + libraries** — every `tools_used` entry and every library mentioned in code previews becomes a potential entity page
-- **If `is_subagent: true`** — link the page as a child of its parent session rather than a standalone entity
+- **If `is_subagent: true`** — link the page as a child of its parent session rather than a standalone page
 
 ## Source Page Format
 
@@ -104,12 +106,12 @@ model: <model-id>
 - Contradicts [[OtherPage]] on: ...
 ```
 
-## Entity / Concept Page Format
+## Entity / Concept / Project Page Format
 
 ```markdown
 ---
 title: "Entity Name"
-type: entity  # or: concept
+type: entity  # or: concept, project
 tags: []
 sources: [source-slug-1, source-slug-2]
 last_updated: YYYY-MM-DD
@@ -165,6 +167,7 @@ Output a report to the chat. Ask the user if they want it saved to `wiki/lint-re
 - **Source slugs**: `kebab-case` (matches the raw filename without `.md`)
 - **Entity pages**: `TitleCase.md` (e.g., `OpenAI.md`, `AndrejKarpathy.md`)
 - **Concept pages**: `TitleCase.md` (e.g., `ReinforcementLearning.md`, `RAG.md`)
+- **Project pages**: `kebab-case.md` (matches the session frontmatter's `project` slug)
 - **Synthesis pages**: `kebab-case.md`
 
 ## Index Format

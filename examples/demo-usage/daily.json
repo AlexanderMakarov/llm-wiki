@@ -50,14 +50,14 @@
     },
     "2026-07-25": {
       "mcp_calls": 2,
-      "retrievals": 1,
+      "retrievals": 2,
       "writes": 0,
       "session_reads": 0,
       "doc_reads": 0,
       "other_reads": 0,
       "by_tool": {
         "wiki_query": 1,
-        "wiki_entity_search": 1
+        "wiki_search": 1
       },
       "attributed_projects": 2,
       "unattributed_calls": 0

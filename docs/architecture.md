@@ -43,8 +43,9 @@ wiki/
 ├── overview.md       living synthesis across all sources
 ├── sources/          one summary page per raw source (kebab-case slug)
 ├── candidates/       pending entity/concept stubs (harvest; review before promote)
-├── entities/         people, projects, tools (TitleCase.md)
+├── entities/         people, products, tools (TitleCase.md)
 ├── concepts/         ideas, frameworks, patterns (TitleCase.md)
+├── projects/         codebases and work streams (kebab-case slug)
 └── syntheses/        saved query answers (kebab-case slug)
 ```
 

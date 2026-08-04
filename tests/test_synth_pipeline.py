@@ -476,7 +476,7 @@ def test_rebuild_index_lists_projects(tmp_path: Path):
     projects = wiki_dir / "projects"
     projects.mkdir()
     (projects / "llm-wiki.md").write_text(
-        "---\ntitle: llm-wiki\ntype: entity\nentity_type: project\n---\n# llm-wiki\n",
+        "---\ntitle: llm-wiki\ntype: project\n---\n# llm-wiki\n",
         encoding="utf-8",
     )
     (wiki_dir / "index.md").write_text(

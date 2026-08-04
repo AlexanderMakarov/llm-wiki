@@ -7,7 +7,8 @@ desktop, etc.) can call directly.
 Seven production tools:
 
     - wiki_query(question)       — keyword search + page content
-    - wiki_search(term)          — raw grep over wiki/ (+ optional raw/)
+    - wiki_search(term, kind?, include_raw?, format?)
+                                 — page-level search over wiki/ (+ optional raw/)
     - wiki_list_sources(project) — list raw source files with metadata
     - wiki_read_page(path)       — read one page (path-traversal guarded)
     - wiki_lint()                — orphans + broken-wikilinks report

@@ -8,9 +8,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
+from llmwiki import candidates_harvest
 from llmwiki.candidates_harvest import (
+    SourceReadError,
     classify_names,
     harvest_targets,
+    run_harvest,
     summarize_backlog,
     write_stubs,
 )
@@ -102,6 +107,22 @@ def test_section_anchors_are_stripped(tmp_path: Path) -> None:
     assert [t.name for t in harvest_targets(wiki)] == ["Target"]
 
 
+def test_unreadable_source_page_raises_rather_than_under_counting(
+    tmp_path: Path,
+) -> None:
+    """A page that cannot be read is missing evidence, not zero evidence —
+    scanning past it would silently drop targets below the threshold."""
+    wiki = tmp_path / "wiki"
+    _mk_source(wiki, "a", ["Subject"])
+    # A directory named like a page: rglob finds it, reading it raises OSError.
+    (wiki / "sources" / "broken.md").mkdir()
+
+    with pytest.raises(SourceReadError) as excinfo:
+        harvest_targets(wiki, min_refs=1)
+
+    assert [rel for rel, _ in excinfo.value.failures] == ["sources/broken.md"]
+
+
 def test_only_source_pages_vote(tmp_path: Path) -> None:
     """Links from elsewhere in the wiki are not evidence of a source gap.
 
@@ -180,14 +201,42 @@ def test_classifier_routes_concepts_to_their_own_folder(tmp_path: Path) -> None:
     assert "type: concept" in path.read_text(encoding="utf-8")
 
 
-def test_unclassifiable_target_is_kept_not_dropped(tmp_path: Path) -> None:
-    """Losing a target because a classifier shrugged is worse than misfiling it."""
+def test_stub_carries_no_entity_type(tmp_path: Path) -> None:
+    """#102: the taxonomy field is gone — nothing stamps it any more."""
     wiki, targets = _harvest_one(tmp_path)
 
-    [path] = write_stubs(wiki, targets, classify=lambda names: {})
+    [path] = write_stubs(wiki, targets)
 
-    assert path.exists()
-    assert "entity_type: unknown" in path.read_text(encoding="utf-8")
+    assert "entity_type" not in path.read_text(encoding="utf-8")
+
+
+def test_no_classifier_defaults_to_entity(tmp_path: Path) -> None:
+    """``classify=None`` is the explicit no-classifier mode used by callers
+    that deliberately do not want a backend decision."""
+    wiki, targets = _harvest_one(tmp_path)
+
+    [path] = write_stubs(wiki, targets, classify=None)
+
+    assert path == wiki / "candidates" / "entities" / "Subject.md"
+
+
+def test_supplied_classifier_omitting_a_name_raises(tmp_path: Path) -> None:
+    """A supplied classifier owns the decision; guessing on its behalf would
+    write a misfiled stub indistinguishable from a classified one."""
+    wiki, targets = _harvest_one(tmp_path)
+
+    with pytest.raises(ValueError, match="Subject"):
+        write_stubs(wiki, targets, classify=lambda names: {})
+
+    assert not (wiki / "candidates").exists()
+
+
+def test_supplied_classifier_returning_a_bogus_kind_raises(tmp_path: Path) -> None:
+    """Only entity/concept route a stub; anything else is not a decision."""
+    wiki, targets = _harvest_one(tmp_path)
+
+    with pytest.raises(ValueError, match="Subject"):
+        write_stubs(wiki, targets, classify=lambda names: {"Subject": "banana"})
 
 
 def test_rerun_merges_new_evidence_without_duplicating(tmp_path: Path) -> None:
@@ -405,10 +454,59 @@ def test_rerun_does_not_reclassify_already_filed_candidates(tmp_path: Path) -> N
 
     def _classify(names):
         asked.append(list(names))
-        return {}
+        return dict.fromkeys(names, "entity")
 
     write_stubs(wiki, targets, classify=_classify)
     write_stubs(wiki, harvest_targets(wiki), classify=_classify)
 
     assert asked[0] == ["Settled"]
     assert asked[1] == []
+
+
+# ─── run_harvest failure surfaces ──────────────────────────────────────
+
+
+def test_run_harvest_probes_the_backend_once(tmp_path: Path) -> None:
+    """One probe per run: it can shell out or make a network round-trip, and
+    two probes can disagree, which reports the wrong cause to the operator.
+    """
+
+    class _CountingBackend(_RecordingBackend):
+        def __init__(self, reply: str) -> None:
+            super().__init__(reply)
+            self.probes = 0
+
+        def is_available(self) -> bool:
+            self.probes += 1
+            return super().is_available()
+
+    wiki = tmp_path / "wiki"
+    for slug in ("a", "b"):
+        _mk_source(wiki, slug, ["Tailscale"])
+    backend = _CountingBackend("Tailscale: entity\n")
+
+    rc = run_harvest(wiki, min_refs=2, backend=backend)
+
+    assert rc == 0
+    assert backend.probes == 1
+
+
+def test_run_harvest_reports_incomplete_classification_without_a_traceback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture,
+) -> None:
+    """``write_stubs`` refuses to guess a kind it was not given. The whole
+    point of the surrounding rework was cause-specific failure, so that
+    refusal has to reach the operator as a message, not a stack trace.
+    """
+    wiki = tmp_path / "wiki"
+    for slug in ("a", "b"):
+        _mk_source(wiki, slug, ["Tailscale"])
+    # The two name sets agree today; force them apart so the guard fires.
+    monkeypatch.setattr(
+        candidates_harvest, "unfiled_names", lambda *_a, **_k: [])
+
+    rc = run_harvest(wiki, min_refs=2, backend=_RecordingBackend())
+
+    assert rc == 1
+    assert "classification is incomplete" in capsys.readouterr().err
+    assert not (wiki / "candidates").exists()

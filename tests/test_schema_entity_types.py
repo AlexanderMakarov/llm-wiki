@@ -1,46 +1,44 @@
-"""Tests for entity type taxonomy (v1.0, #137)."""
+"""The entity-type taxonomy is gone; `entity_kind` is not (#102).
+
+`entity_type` and `entity_kind` are one character apart. The taxonomy
+was removed, while `entity_kind: ai-model` still drives the model index
+and info-cards — these tests pin both halves of that distinction.
+"""
 
 from __future__ import annotations
 
-import pytest
-
-from llmwiki.schema import ENTITY_TYPES, validate_entity_type
-
-
-def test_entity_types_has_7_values():
-    assert len(ENTITY_TYPES) == 7
+import llmwiki.schema as schema
+from llmwiki.schema import ENTITY_KIND_AI_MODEL, is_model_entity, parse_model_profile
 
 
-def test_entity_types_contains_all_spec_values():
-    expected = {"person", "org", "tool", "concept", "api", "library", "project"}
-    assert set(ENTITY_TYPES) == expected
+def test_entity_type_taxonomy_is_gone():
+    assert not hasattr(schema, "ENTITY_TYPES")
+    assert not hasattr(schema, "validate_entity_type")
 
 
-@pytest.mark.parametrize("value", ENTITY_TYPES)
-def test_validate_entity_type_valid(value):
-    valid, msg = validate_entity_type(value)
-    assert valid is True
-    assert "valid" in msg
+def test_entity_kind_ai_model_survives():
+    assert ENTITY_KIND_AI_MODEL == "ai-model"
 
 
-def test_validate_entity_type_case_insensitive():
-    valid, _ = validate_entity_type("PERSON")
-    assert valid is True
+def test_is_model_entity_still_recognises_model_pages():
+    assert is_model_entity({"type": "entity", "entity_kind": "ai-model"})
+    assert not is_model_entity({"type": "entity", "entity_kind": "tool"})
 
 
-def test_validate_entity_type_with_whitespace():
-    valid, _ = validate_entity_type("  tool  ")
-    assert valid is True
+def test_is_model_entity_ignores_entity_type():
+    """A leftover `entity_type` value must not affect model detection."""
+    assert is_model_entity(
+        {"type": "entity", "entity_kind": "ai-model", "entity_type": "banana"}
+    )
 
 
-def test_validate_entity_type_invalid():
-    valid, msg = validate_entity_type("dinosaur")
-    assert valid is False
-    assert "not valid" in msg
-    assert "person" in msg  # lists valid options
-
-
-def test_validate_entity_type_empty():
-    valid, msg = validate_entity_type("")
-    assert valid is False
-    assert "empty" in msg
+def test_parse_model_profile_still_parses():
+    profile, warnings = parse_model_profile({
+        "title": "Test Model",
+        "provider": "ACME",
+        "model": '{"context_window": 200000}',
+    })
+    assert profile["title"] == "Test Model"
+    assert profile["provider"] == "ACME"
+    assert profile["model"]["context_window"] == 200000
+    assert warnings == []

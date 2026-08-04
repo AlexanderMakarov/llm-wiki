@@ -22,6 +22,8 @@ from unittest.mock import patch
 import pytest
 
 from llmwiki.mcp.server import (
+    _SEARCH_PAGE_CAP,
+    _iter_scan_files,
     tool_wiki_list_sources,
     tool_wiki_query,
     tool_wiki_search,
@@ -36,6 +38,20 @@ def _result_text(result: dict) -> str:
 
 def _result_json(result: dict):
     return json.loads(_result_text(result))
+
+
+def _match_lines(result: dict) -> list[str]:
+    """Every matching line in a ``wiki_search`` result, across all pages.
+
+    The rendering is page-level (``path — title`` with the matching lines
+    indented beneath it), so the hit cap is counted over the indented
+    ``  :<line>: <text>`` rows.
+    """
+    return _re.findall(r"^  :\d+: .*$", _result_text(result), _re.MULTILINE)
+
+
+def _is_truncated(result: dict) -> bool:
+    return "truncated: true" in _result_text(result)
 
 
 def _seed_wiki(root: Path, n_files: int, hits_per_file: int, term: str = "needle") -> None:
@@ -63,9 +79,9 @@ def test_search_caps_at_200_hits(tmp_path: Path):
     _seed_wiki(tmp_path, n_files=20, hits_per_file=50)  # 1000 potential
     with patch("llmwiki.mcp.server.REPO_ROOT", tmp_path):
         result = tool_wiki_search({"term": "needle"})
-    payload = _result_json(result)
-    assert len(payload["matches"]) == 200, payload["matches"][:3]
-    assert payload["truncated"] is True
+    lines = _match_lines(result)
+    assert len(lines) == 200, lines[:3]
+    assert _is_truncated(result)
 
 
 def test_search_with_include_raw_still_caps_at_200(tmp_path: Path):
@@ -76,11 +92,9 @@ def test_search_with_include_raw_still_caps_at_200(tmp_path: Path):
     _seed_raw_sessions(tmp_path, n_files=20, hits_per_file=50)
     with patch("llmwiki.mcp.server.REPO_ROOT", tmp_path):
         result = tool_wiki_search({"term": "needle", "include_raw": True})
-    payload = _result_json(result)
-    assert len(payload["matches"]) == 200, (
-        f"expected ≤200 hits, got {len(payload['matches'])}"
-    )
-    assert payload["truncated"] is True
+    lines = _match_lines(result)
+    assert len(lines) == 200, f"expected ≤200 hits, got {len(lines)}"
+    assert _is_truncated(result)
 
 
 def test_search_under_cap_returns_all(tmp_path: Path):
@@ -88,9 +102,8 @@ def test_search_under_cap_returns_all(tmp_path: Path):
     _seed_wiki(tmp_path, n_files=3, hits_per_file=10)  # 30 hits total
     with patch("llmwiki.mcp.server.REPO_ROOT", tmp_path):
         result = tool_wiki_search({"term": "needle"})
-    payload = _result_json(result)
-    assert len(payload["matches"]) == 30
-    assert payload["truncated"] is False
+    assert len(_match_lines(result)) == 30
+    assert not _is_truncated(result)
 
 
 def test_search_term_case_insensitive(tmp_path: Path):
@@ -99,8 +112,7 @@ def test_search_term_case_insensitive(tmp_path: Path):
     _seed_wiki(tmp_path, n_files=2, hits_per_file=5, term="NeEdLe")
     with patch("llmwiki.mcp.server.REPO_ROOT", tmp_path):
         result = tool_wiki_search({"term": "needle"})
-    payload = _result_json(result)
-    assert len(payload["matches"]) == 10
+    assert len(_match_lines(result)) == 10
 
 
 def test_search_empty_term_errors(tmp_path: Path):
@@ -128,8 +140,7 @@ def test_search_term_with_regex_metacharacters_treated_literally(tmp_path: Path)
     )
     with patch("llmwiki.mcp.server.REPO_ROOT", tmp_path):
         result = tool_wiki_search({"term": "[a literal]"})
-    payload = _result_json(result)
-    assert len(payload["matches"]) == 1
+    assert len(_match_lines(result)) == 1
 
 
 def test_search_unicode_term(tmp_path: Path):
@@ -139,10 +150,10 @@ def test_search_unicode_term(tmp_path: Path):
     (wiki / "p.md").write_text("café 🚀 中文\n", encoding="utf-8")
     with patch("llmwiki.mcp.server.REPO_ROOT", tmp_path):
         result = tool_wiki_search({"term": "🚀"})
-    assert len(_result_json(result)["matches"]) == 1
+    assert len(_match_lines(result)) == 1
     with patch("llmwiki.mcp.server.REPO_ROOT", tmp_path):
         result = tool_wiki_search({"term": "中文"})
-    assert len(_result_json(result)["matches"]) == 1
+    assert len(_match_lines(result)) == 1
 
 
 def test_search_one_file_with_many_hits_caps(tmp_path: Path):
@@ -154,9 +165,64 @@ def test_search_one_file_with_many_hits_caps(tmp_path: Path):
                                   encoding="utf-8")
     with patch("llmwiki.mcp.server.REPO_ROOT", tmp_path):
         result = tool_wiki_search({"term": "needle"})
-    payload = _result_json(result)
-    assert len(payload["matches"]) == 200
-    assert payload["truncated"] is True
+    assert len(_match_lines(result)) == 200
+    assert _is_truncated(result)
+
+
+#: Files it takes to exhaust the 200-line hit cap when each holds 10 hits.
+_SEARCH_HIT_CAP_FILES = 20
+
+
+def test_search_name_match_survives_an_exhausted_hit_cap(tmp_path: Path):
+    """The hit cap must stop body-line collection, not the walk.
+
+    ``wiki_search`` promises that a page whose title or path names the term
+    is listed before pages matching only in the body. If the cap ends the
+    walk, a name match sitting late in the corpus is never opened, so it
+    cannot rank at all — the promise holds only for the prefix that fit.
+    """
+    _seed_wiki(tmp_path, n_files=300, hits_per_file=10)  # 3000 potential hits
+    deep = tmp_path / "wiki" / "zzz-deep"
+    deep.mkdir()
+    (deep / "needle-brief.md").write_text(
+        '---\ntitle: "Brief"\ntype: concept\n---\n\nNo body match at all.\n',
+        encoding="utf-8",
+    )
+    # Pin the premise: rglob yields a directory's own files before recursing,
+    # so this page really is reached long after the 200th hit. Without this
+    # the test could pass for the wrong reason on a different walk order.
+    walked = [p.name for p in _iter_scan_files([tmp_path / "wiki"])]
+    assert walked.index("needle-brief.md") > _SEARCH_HIT_CAP_FILES
+
+    with patch("llmwiki.mcp.server.REPO_ROOT", tmp_path):
+        result = tool_wiki_search({"term": "needle"})
+
+    body = _result_text(result)
+    # First page rendered — name matches rank above every body-only match.
+    assert body.splitlines()[2] == "wiki/zzz-deep/needle-brief.md — Brief"
+    # ...and #413 is untouched: still 200 matching lines, still truncated.
+    assert len(_match_lines(result)) == 200
+    assert _is_truncated(result)
+
+
+def test_search_caps_pages_when_every_page_is_a_name_match(tmp_path: Path):
+    """Name matches keep the walk alive, so they need a cap of their own.
+
+    A page matched by name renders as a header with no body lines, so the
+    matching-line cap does not bound it — without a page cap a one-letter
+    term against a large vault would render the whole vault.
+    """
+    wiki = tmp_path / "wiki"
+    wiki.mkdir(parents=True)
+    for i in range(_SEARCH_PAGE_CAP + 50):
+        (wiki / f"needle-{i:03d}.md").write_text("nothing here\n", encoding="utf-8")
+
+    with patch("llmwiki.mcp.server.REPO_ROOT", tmp_path):
+        result = tool_wiki_search({"term": "needle"})
+
+    text = _result_text(result)
+    assert text.startswith(f"{_SEARCH_PAGE_CAP} page(s) matching")
+    assert _is_truncated(result)
 
 
 # ─── #431: wiki_list_sources project= filter safety ─────────────────

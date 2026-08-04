@@ -11,7 +11,7 @@ Turns a source (file, folder, URL, or PDF) into wiki content following the Karpa
 
 - **Documents** (files, folders, URLs, PDFs that are not `raw/sessions/` transcripts) route through the `llmwiki add` CLI, which converts, lands the raw doc, synthesizes the `wiki/sources/<slug>.md` page, and rebuilds — you do not hand-write the source page yourself.
 - **Session transcripts** already under `raw/sessions/` are summarized by hand per the existing workflow (they were already converted by `llmwiki sync`; there's nothing left to "add").
-- **Entity and concept pages**, for either path, are written manually by you.
+- **Entity, concept, and project pages**, for either path, are written manually by you.
 
 ## When to use
 
@@ -30,18 +30,19 @@ Anything that isn't already a `raw/sessions/` transcript is a **document**. Do n
    `<src>` may be a URL, a file path, or a folder (repeatable — pass several sources in one invocation to batch the synthesize/build pass). `--project <slug>` groups the doc under `raw/docs/<slug>/` instead of letting it derive its own slug; pick a slug that matches the topic/project being ingested. Useful extra flags: `--title` (override title derivation, single source only), `--tag` (repeatable), `--note` (blockquote prepended to the body), `--dry-run` (convert and report, write nothing), `--no-synthesize` / `--no-build` (skip those passes if you intend to batch several `add` calls before a final build).
 2. `llmwiki add` resolves the vault itself (see the warning below), writes the converted doc under `raw/docs/`, records synth state, synthesizes the `wiki/sources/<slug>.md` page, updates `wiki/index.md` / `wiki/overview.md`, and rebuilds the site — that's the whole document pipeline in one command.
 3. Read the resulting `wiki/sources/<slug>.md` page (in the resolved vault, not necessarily this repo) to see what was synthesized.
-4. Create/update entity pages (`wiki/entities/<TitleCase>.md`) for any people, companies, projects, tools, libraries mentioned in the synthesized page.
+4. Create/update entity pages (`wiki/entities/<TitleCase>.md`) for any people, companies, products, tools, libraries mentioned in the synthesized page.
 5. Create/update concept pages (`wiki/concepts/<TitleCase>.md`) for any ideas, patterns, or decisions discussed.
-6. Cross-link everything with `[[wikilinks]]` under `## Connections`.
-7. Flag contradictions under `## Contradictions` if the new source conflicts with existing wiki content.
-8. Append to `wiki/log.md`: `## [YYYY-MM-DD] ingest | <title>`
+6. Create/update project pages (`wiki/projects/<kebab-case>.md`, `type: project`) for any codebase or work stream mentioned — a project is its own page kind, never an entity page.
+7. Cross-link everything with `[[wikilinks]]` under `## Connections`.
+8. Flag contradictions under `## Contradictions` if the new source conflicts with existing wiki content.
+9. Append to `wiki/log.md`: `## [YYYY-MM-DD] ingest | <title>`
 
 ### ⚠️ Vault resolution — read before writing anything by hand
 
-`llmwiki add` resolves the target vault itself (`--vault`, else `config.json` → `vault.default_path`), so step 1 is always safe as written. But everything you write **by hand** in steps 4–7 (entity pages, concept pages, index/log edits) must land in that **same resolved vault**, not in this repo's own `wiki/` directory:
+`llmwiki add` resolves the target vault itself (`--vault`, else `config.json` → `vault.default_path`), so step 1 is always safe as written. But everything you write **by hand** in steps 4–8 (entity pages, concept pages, project pages, index/log edits) must land in that **same resolved vault**, not in this repo's own `wiki/` directory:
 
 - Check `config.json` → `vault.default_path` at the repo root (or whatever `--vault` you passed to `add`) before writing any manual page.
-- This repo's own `wiki/` is seed demo content, not the user's real vault. Never write entity/concept pages there when a vault is configured.
+- This repo's own `wiki/` is seed demo content, not the user's real vault. Never write entity/concept/project pages there when a vault is configured.
 - If no vault is configured (`vault.default_path` unset/absent and no `--vault` given), the CLI falls back to `REPO_ROOT/wiki` — only then is writing into this repo's `wiki/` correct.
 
 ## Workflow — session transcripts (`raw/sessions/`)
@@ -55,9 +56,10 @@ Session transcripts are already produced by `llmwiki sync`; there's no `add` ste
 5. Update `wiki/overview.md` if substantial new info
 6. Create/update entity pages (`wiki/entities/<TitleCase>.md`)
 7. Create/update concept pages (`wiki/concepts/<TitleCase>.md`)
-8. Cross-link with `[[wikilinks]]` under `## Connections`
-9. Flag contradictions under `## Contradictions`
-10. Append to `wiki/log.md`: `## [YYYY-MM-DD] ingest | <title>`
+8. Create/update the project page (`wiki/projects/<kebab-case>.md`, `type: project`)
+9. Cross-link with `[[wikilinks]]` under `## Connections`
+10. Flag contradictions under `## Contradictions`
+11. Append to `wiki/log.md`: `## [YYYY-MM-DD] ingest | <title>`
 
 ### Session-specific rules
 
@@ -65,10 +67,10 @@ When the source is under `raw/sessions/` (a session transcript converted by the 
 
 - **Trust the frontmatter** as authoritative (project, started, model, tools_used, etc.)
 - **Do not copy the `## Conversation` section verbatim** — use it as raw material to summarise
-- **Create a project entity page** at `wiki/entities/<ProjectSlug>.md` with a `## Sessions` list
+- **Create the project page** at `wiki/projects/<project-slug>.md` (`type: project`, slug from the frontmatter `project` field) with a `## Sessions` list
 - **Extract decisions** into `wiki/concepts/` — anything the user explicitly locked
 - **Extract tools used** — every entry in `tools_used` is a candidate entity
-- **If `is_subagent: true`** — link to the parent session rather than creating a new project entity
+- **If `is_subagent: true`** — link to the parent session rather than creating a new project page
 
 ## Hard rules
 

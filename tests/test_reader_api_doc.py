@@ -7,7 +7,7 @@ test a server that doesn't exist, but we CAN keep the doc honest:
   emission target (grep the source, not the `site/` output — the build
   shouldn't have to have been run for the tests to pass).
 - Every invariant it locks in (cache_tier enum, lifecycle enum,
-  confidence range, entity_type enum) must still match the code.
+  confidence range) must still match the code.
 - Every cross-referenced doc must exist.
 """
 
@@ -20,7 +20,6 @@ import pytest
 
 from llmwiki import REPO_ROOT
 from llmwiki.lifecycle import LifecycleState
-from llmwiki.schema import ENTITY_TYPES
 
 CACHE_TIERS = ("L1", "L2", "L3", "L4")
 
@@ -145,12 +144,10 @@ def test_confidence_range_invariant_matches_module(doc: str):
     assert "percent" in doc.lower()
 
 
-def test_entity_type_invariant_matches_module(doc: str):
-    # All seven entity types must appear in the doc invariant list.
-    for et in ENTITY_TYPES:
-        assert f"`{et}`" in doc, (
-            f"reader-api doc should list entity_type '{et}'"
-        )
+def test_doc_does_not_document_entity_type(doc: str):
+    # The entity-type taxonomy is gone (#102) — the contract must not
+    # advertise a field no page carries and nothing validates.
+    assert "entity_type" not in doc
 
 
 # ─── Cross-links ──────────────────────────────────────────────────────

@@ -1,7 +1,6 @@
 ---
 title: "demo-todo-api"
-type: entity
-entity_type: project
+type: project
 project: demo-todo-api
 topics: [python, fastapi, rest, oauth2, sqlite, api, crud, web]
 description: "FastAPI CRUD service for a to-do app — bootstrap, SQLite persistence layer, then OAuth2 authentication with the Authorization Code flow. Small and real."

@@ -30,7 +30,6 @@ from llmwiki.lifecycle import (
     parse_lifecycle,
     transition,
 )
-from llmwiki.schema import ENTITY_TYPES, validate_entity_type
 from llmwiki.synth.pipeline import _append_log, _auto_archive_log
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -243,44 +242,6 @@ class TestLifecycleEdgeCases:
         for state in LifecycleState:
             assert isinstance(state.value, str)
             assert state.value == str(state.value)
-
-
-# ═══════════════════════════════════════════════════════════════════════
-#  SCHEMA (entity types) — edge cases
-# ═══════════════════════════════════════════════════════════════════════
-
-
-class TestEntityTypeEdgeCases:
-    """Edge cases for entity type validation."""
-
-    def test_unicode_entity_type(self):
-        valid, msg = validate_entity_type("人物")  # Chinese for "person"
-        assert valid is False
-
-    def test_entity_type_with_numbers(self):
-        valid, _ = validate_entity_type("tool2")
-        assert valid is False
-
-    def test_entity_type_with_special_chars(self):
-        valid, _ = validate_entity_type("per-son")
-        assert valid is False
-
-    def test_entity_type_substring_match_rejected(self):
-        """'per' is not 'person' — no partial matching."""
-        valid, _ = validate_entity_type("per")
-        assert valid is False
-
-    def test_entity_type_with_trailing_newline(self):
-        # strip() handles \n — "tool\n" is valid after stripping
-        valid, _ = validate_entity_type("tool\n")
-        assert valid is True
-
-    def test_entity_types_tuple_is_immutable(self):
-        with pytest.raises(TypeError):
-            ENTITY_TYPES[0] = "hacked"  # type: ignore[index]
-
-    def test_entity_types_no_duplicates(self):
-        assert len(ENTITY_TYPES) == len(set(ENTITY_TYPES))
 
 
 # ═══════════════════════════════════════════════════════════════════════

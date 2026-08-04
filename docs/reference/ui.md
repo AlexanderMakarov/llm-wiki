@@ -171,7 +171,7 @@ Review-ready UI states for UX iteration **before** larger UI changes touch the l
 |---|---|
 | `page-shell` | layout skeleton — nav + footer + breadcrumb, empty content slot |
 | `article-anatomy` | annotated session page with orange callouts on every slot (frontmatter, summary, transcript, connections, related) |
-| `drawer-browse` | faceted project-browse drawer open (by project / entity_type / lifecycle / cache_tier) |
+| `drawer-browse` | faceted project-browse drawer open (by project / lifecycle / cache_tier) |
 | `search-results` | command palette mid-query, 10+ results |
 | `empty-search` | no-match state with escape-hatch links |
 | `references-rail` | article with sticky right-hand `## Connections` rail |

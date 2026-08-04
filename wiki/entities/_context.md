@@ -5,9 +5,10 @@ title: Entities
 
 # Entities
 
-People, companies, projects, products, tools, and libraries the wiki
+People, companies, products, tools, and libraries the wiki
 tracks. Pages here use `type: entity` frontmatter and live as
-`TitleCase.md` files (e.g. `OpenAI.md`, `ReactJS.md`).
+`TitleCase.md` files (e.g. `OpenAI.md`, `ReactJS.md`). Codebases and
+work streams are not entities — they live in `wiki/projects/`.
 
 **When to walk this folder in a query:**
 - The user asks "who" (person), "what product", "what library", "which

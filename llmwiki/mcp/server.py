@@ -8,7 +8,8 @@ v0.2 tool surface (6 production tools):
 
 - `wiki_query(question)` — search the wiki's index and return relevant
   content from the matching pages
-- `wiki_search(term)` — raw grep over the whole wiki (no synthesis)
+- `wiki_search(term, kind?, include_raw?)` — page-level search over the
+  wiki by name and body text, narrowable to one page kind
 - `wiki_list_sources(project?)` — list raw source files, optionally filtered
 - `wiki_read_page(path)` — return the full content of a single wiki page
 - `wiki_lint()` — run the lint workflow and return the report
@@ -30,16 +31,19 @@ import subprocess
 import sys
 import tempfile
 import time
+from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import Any
 
 from llmwiki import REPO_ROOT as SOURCE_ROOT
 from llmwiki import __version__
 from llmwiki import usage as _usage
+from llmwiki._frontmatter import parse_frontmatter_dict
 from llmwiki.add_doc import add_sources
 from llmwiki.categories import scan_tags
 from llmwiki.config_schedule import resolve_content_root
 from llmwiki.lint import load_pages
+from llmwiki.schema import PAGE_KINDS
 
 CONTENT_ROOT = resolve_content_root()
 # Back-compat test seam: many MCP tests monkeypatch llmwiki.mcp.server.REPO_ROOT.
@@ -216,6 +220,9 @@ def _record_usage(
 
 # ─── Tool definitions ─────────────────────────────────────────────────────
 
+#: Rendering modes for wiki_search: prose for a reader, JSON for a parser.
+_SEARCH_FORMATS = ("text", "json")
+
 TOOLS = [
     {
         "name": "wiki_query",
@@ -244,21 +251,51 @@ TOOLS = [
     {
         "name": "wiki_search",
         "description": (
-            "Raw grep search across wiki/ and raw/sessions/. No synthesis — "
-            "just returns file:line matches. Use when you want the literal "
-            "text without LLM interpretation."
+            "Search the wiki for a term by page name and page text. Results "
+            "are page-level — `path — title` with the matching lines beneath "
+            "it — and pages whose title or path matches are listed before "
+            "pages that match only in their body. `include_raw` widens the "
+            "scan to raw session transcripts and `kind` filters on frontmatter "
+            "`type`; the two compose, so `kind=source` with `include_raw` "
+            "returns source pages and the raw transcripts behind them. The "
+            "result reports `truncated` when output caps dropped matches and "
+            "`budget_exhausted` when the scan stopped short of the corpus."
         ),
         "inputSchema": {
             "type": "object",
             "properties": {
                 "term": {
                     "type": "string",
-                    "description": "Search term (literal substring match).",
+                    "description": "Search term (literal, case-insensitive substring match).",
+                },
+                "kind": {
+                    "type": "string",
+                    "enum": list(PAGE_KINDS),
+                    "description": (
+                        "Only return files whose frontmatter `type` is this kind. "
+                        "Applies to every corpus scanned, raw sessions included; "
+                        "raw session files carry `type: source`. Omit it to search "
+                        "every page, generated navigation and folder context "
+                        "pages included."
+                    ),
                 },
                 "include_raw": {
                     "type": "boolean",
-                    "description": "Also search raw/sessions/ (default false — only wiki/).",
+                    "description": (
+                        "Also search raw/sessions/ (default false — only wiki/). "
+                        "Combines with kind, which then filters both corpora."
+                    ),
                     "default": False,
+                },
+                "format": {
+                    "type": "string",
+                    "enum": list(_SEARCH_FORMATS),
+                    "description": (
+                        "`text` (default) renders the prose listing; `json` "
+                        "returns the same result as a parseable payload with "
+                        "`pages[].lines[]` and the completeness flags."
+                    ),
+                    "default": "text",
                 },
             },
             "required": ["term"],
@@ -361,8 +398,8 @@ TOOLS = [
             "required": ["format"],
         },
     },
-    # v1.0 (#159) — 5 new MCP tools for confidence, lifecycle, dashboard,
-    # entity search, and category browse.
+    # v1.0 (#159) — MCP tools for confidence, lifecycle, dashboard and
+    # category browse.
     {
         "name": "wiki_confidence",
         "description": (
@@ -413,27 +450,6 @@ TOOLS = [
         "inputSchema": {
             "type": "object",
             "properties": {},
-        },
-    },
-    {
-        "name": "wiki_entity_search",
-        "description": (
-            "Search entities by name or entity_type. Returns matching "
-            "entity pages with their metadata."
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "name": {
-                    "type": "string",
-                    "description": "Entity name substring (case-insensitive).",
-                },
-                "entity_type": {
-                    "type": "string",
-                    "enum": ["person", "org", "tool", "concept", "api", "library", "project"],
-                    "description": "Filter by entity type.",
-                },
-            },
         },
     },
     # #37 A3: the one write tool other than wiki_sync — MCP-only agents
@@ -681,6 +697,10 @@ def _extract_snippet(content: str, tokens: list[str], max_chars: int = 400) -> s
 
 _SEARCH_HIT_CAP = 200
 
+# A page rendered without any body line still costs one output row, so the
+# matching-line cap alone does not bound the response. Cap the pages too.
+_SEARCH_PAGE_CAP = 200
+
 # #483: per-file + aggregate byte caps for wiki_search / wiki_query.
 # Without these, a single large file (e.g. a 100MB Obsidian transcript
 # with embedded video, or a malicious user-supplied .md) gets fully
@@ -726,67 +746,172 @@ def _read_capped(p: Path, *, remaining_budget: int) -> tuple[str, int]:
         return "", 0
 
 
+def _iter_scan_files(roots: Iterable[Path]) -> Iterator[Path]:
+    """Yield every ``.md`` file under the given roots as one flat sequence.
+
+    A single iterator gives the caller a single termination check, so one
+    hit cap applies across all roots instead of once per root (#413).
+    Missing roots are skipped silently.
+    """
+    for root in roots:
+        if not root.exists():
+            continue
+        yield from root.rglob("*.md")
+
+
 def tool_wiki_search(args: dict[str, Any]) -> dict[str, Any]:
-    # #413: the old loop had three nested terminators (`for line`,
-    # `for p`, `for root`) but only the inner two had a 200-cap break.
-    # With include_raw=True the cap was effectively per-root, so we
-    # could return up to 400 hits when the schema implies 200, while
-    # still scanning the entire raw/ tree after the wiki/ tree had
-    # already capped. Restructured as a single iterator with one
-    # termination check, and the search term is lowercased once.
+    """Search wiki pages (and optionally raw sessions) for a literal term.
+
+    Results are page-level: ``path — title`` with the matching lines
+    indented beneath it. Pages whose title or path matches the term sort
+    above pages that match only in the body, and each group sorts by path
+    so repeated calls return the same order. A title/path match with no
+    body hit still returns its page.
+
+    ``include_raw`` selects the corpora to scan; ``kind`` filters on
+    frontmatter ``type`` within whatever is scanned. They compose:
+    ``kind="source"`` with ``include_raw`` returns wiki source pages and
+    the raw session files behind them (raw sessions carry
+    ``type: source``), while a kind no raw file declares simply gets no
+    contribution from the raw corpus.
+
+    ``format="json"`` returns the same result as a machine-readable
+    payload for callers that parse rather than read.
+
+    Completeness is reported explicitly: ``truncated`` when output caps
+    dropped matches, ``budget_exhausted`` when the scan stopped short of
+    the corpus because the byte budget ran out (#483).
+    """
     term = (args.get("term") or "").strip()
+    kind = str(args.get("kind") or "").strip().lower()
     include_raw = bool(args.get("include_raw", False))
+    fmt = str(args.get("format") or "text").strip().lower()
     if not term:
         return _err("term is required")
+    if fmt not in _SEARCH_FORMATS:
+        return _err(f"unknown format {fmt!r} (expected one of {_SEARCH_FORMATS})")
+    if kind and kind not in PAGE_KINDS:
+        return _err(f"unknown kind {kind!r} (expected one of {list(PAGE_KINDS)})")
 
     roots = [REPO_ROOT / "wiki"]
     if include_raw:
         roots.append(REPO_ROOT / "raw" / "sessions")
 
     term_lower = term.lower()
-    hits: list[dict[str, Any]] = []
-    truncated = False
-    # #483: aggregate byte budget across all roots, plus per-file cap
-    # via _read_capped. Output cap (_SEARCH_HIT_CAP) is unchanged.
+    # Two buckets so the documented ranking is a property of collection,
+    # not a sort over whatever survived: name/path matches keep their own
+    # capacity and cannot be crowded out by body matches (#413 starvation).
+    name_pages: list[dict[str, Any]] = []
+    body_pages: list[dict[str, Any]] = []
+    hit_count = 0
+    line_cap_reached = False
+    dropped_pages = False
+    # #483: aggregate byte budget across all roots, plus a per-file cap
+    # via _read_capped. Output is capped by _SEARCH_HIT_CAP matching lines
+    # and _SEARCH_PAGE_CAP pages across every root (#413).
     budget = _MCP_SCAN_AGGREGATE_BYTES
     skipped_oversize = 0
-    for root in roots:
-        if truncated or budget <= 0:
+    budget_exhausted = False
+    for p in _iter_scan_files(roots):
+        if budget <= 0:
+            budget_exhausted = True
             break
-        if not root.exists():
-            continue
-        for p in root.rglob("*.md"):
-            if truncated or budget <= 0:
-                break
-            text, consumed = _read_capped(p, remaining_budget=budget)
-            if consumed == 0:
-                try:
-                    if p.stat().st_size > _MCP_SCAN_PER_FILE_BYTES:
-                        skipped_oversize += 1
-                except OSError:
-                    pass
+        # With the line cap reached, only a name match can still add
+        # output; once those are capped too, nothing more can be collected.
+        if line_cap_reached and len(name_pages) >= _SEARCH_PAGE_CAP:
+            break
+        text, consumed = _read_capped(p, remaining_budget=budget)
+        if consumed == 0:
+            try:
+                size = p.stat().st_size
+            except OSError:
                 continue
-            budget -= consumed
+            if size > _MCP_SCAN_PER_FILE_BYTES:
+                skipped_oversize += 1
+            elif size > budget:
+                # In-spec file the call no longer has the budget to read.
+                budget_exhausted = True
+            continue
+        # Charge the budget before filtering: a file we read and then drop
+        # still consumed its bytes, in every corpus (#483).
+        budget -= consumed
+        meta = parse_frontmatter_dict(text)
+        if kind and str(meta.get("type", "")).strip().lower() != kind:
+            continue
+        rel = str(p.relative_to(REPO_ROOT))
+        title = str(meta.get("title", "") or "").strip()
+        name_match = term_lower in title.lower() or term_lower in rel.lower()
+        lines: list[tuple[int, str]] = []
+        # The hit cap stops body-line collection, not the walk — a page
+        # named for the term is still worth returning after the cap.
+        if not line_cap_reached:
             for i, line in enumerate(text.splitlines(), start=1):
                 if term_lower in line.lower():
-                    hits.append(
-                        {
-                            "path": str(p.relative_to(REPO_ROOT)),
-                            "line": i,
-                            "text": line.strip()[:200],
-                        }
-                    )
-                    if len(hits) >= _SEARCH_HIT_CAP:
-                        truncated = True
+                    lines.append((i, line.strip()[:200]))
+                    hit_count += 1
+                    if hit_count >= _SEARCH_HIT_CAP:
+                        line_cap_reached = True
                         break
-    # #483: surface skipped-oversize count so callers know we didn't
-    # silently miss content from huge files.
-    return _ok(json.dumps({
-        "term": term,
-        "matches": hits,
-        "truncated": truncated,
-        "skipped_oversize_files": skipped_oversize,
-    }, indent=2))
+        if not (lines or name_match):
+            continue
+        bucket = name_pages if name_match else body_pages
+        if len(bucket) >= _SEARCH_PAGE_CAP:
+            dropped_pages = True
+            continue
+        bucket.append({"path": rel, "title": title,
+                       "name_match": name_match, "lines": lines})
+
+    # Name matches first, then body-only matches; path order inside each
+    # group so the same corpus always renders the same way.
+    name_pages.sort(key=lambda pg: pg["path"])
+    body_pages.sort(key=lambda pg: pg["path"])
+    pages = name_pages + body_pages
+    if len(pages) > _SEARCH_PAGE_CAP:
+        pages = pages[:_SEARCH_PAGE_CAP]
+        dropped_pages = True
+    truncated = line_cap_reached or dropped_pages
+
+    if fmt == "json":
+        result = _ok(json.dumps({
+            "term": term,
+            "kind": kind or None,
+            "include_raw": include_raw,
+            "pages": [
+                {
+                    "path": pg["path"],
+                    "title": pg["title"],
+                    "name_match": pg["name_match"],
+                    "lines": [{"line": n, "text": t} for n, t in pg["lines"]],
+                }
+                for pg in pages
+            ],
+            "truncated": truncated,
+            "budget_exhausted": budget_exhausted,
+            "skipped_oversize_files": skipped_oversize,
+        }, indent=2))
+    else:
+        scope = f" (kind: {kind})" if kind else ""
+        out = [f"{len(pages)} page(s) matching {term!r}{scope}:", ""]
+        for pg in pages:
+            header = f"{pg['path']} — {pg['title']}" if pg["title"] else pg["path"]
+            out.append(header)
+            out.extend(f"  :{num}: {text_}" for num, text_ in pg["lines"])
+            out.append("")
+        out.append(f"truncated: {str(truncated).lower()}")
+        # A scan that ran out of budget never reached the rest of the
+        # corpus — say so instead of implying the result is complete.
+        out.append(f"budget_exhausted: {str(budget_exhausted).lower()}")
+        # #483: surface the skipped-oversize count so callers know we didn't
+        # silently miss content from huge files.
+        out.append(f"skipped_oversize_files: {skipped_oversize}")
+        result = _ok("\n".join(out))
+
+    # `hits` is one number across the whole persisted usage series, so keep
+    # it in the unit that series already uses: result rows returned. Every
+    # row is a matching line, except a page matched by name alone, which
+    # renders as its header (#26).
+    result["_hits"] = sum(len(pg["lines"]) or 1 for pg in pages)
+    return result
 
 
 def tool_wiki_list_sources(args: dict[str, Any]) -> dict[str, Any]:
@@ -1176,42 +1301,6 @@ def tool_wiki_dashboard(args: dict[str, Any]) -> dict[str, Any]:
     return _ok("\n".join(lines))
 
 
-def tool_wiki_entity_search(args: dict[str, Any]) -> dict[str, Any]:
-    """Search entities by name or entity_type (v1.0 · #159)."""
-
-    name_q = (args.get("name") or "").strip().lower()
-    etype_q = (args.get("entity_type") or "").strip().lower()
-
-    wiki = REPO_ROOT / "wiki"
-    pages = load_pages(wiki)
-
-    matches: list[dict[str, Any]] = []
-    for rel, page in pages.items():
-        meta = page["meta"]
-        if meta.get("type") != "entity":
-            continue
-        title = meta.get("title", "")
-        etype = meta.get("entity_type", "").lower()
-        if name_q and name_q not in title.lower() and name_q not in rel.lower():
-            continue
-        if etype_q and etype_q != etype:
-            continue
-        matches.append({
-            "path": rel,
-            "title": title,
-            "entity_type": etype,
-            "confidence": meta.get("confidence", ""),
-        })
-
-    matches.sort(key=lambda m: m["title"])
-    text = f"{len(matches)} matching entities:\n\n"
-    for m in matches[:50]:
-        text += f"  [{m['entity_type']:10}] {m['path']}  — {m['title']}\n"
-    if len(matches) > 50:
-        text += f"\n  ... and {len(matches) - 50} more\n"
-    return _ok(text)
-
-
 def tool_wiki_category_browse(args: dict[str, Any]) -> dict[str, Any]:
     """Browse tags / categories (v1.0 · #159)."""
 
@@ -1254,7 +1343,6 @@ TOOL_IMPLS = {
     "wiki_confidence": tool_wiki_confidence,
     "wiki_lifecycle": tool_wiki_lifecycle,
     "wiki_dashboard": tool_wiki_dashboard,
-    "wiki_entity_search": tool_wiki_entity_search,
     "wiki_category_browse": tool_wiki_category_browse,
 }
 

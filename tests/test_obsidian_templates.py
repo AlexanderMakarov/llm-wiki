@@ -34,12 +34,17 @@ def test_source_template_has_required_fields():
         assert field in text, f"missing frontmatter field: {field}"
 
 
-def test_entity_template_has_entity_type():
+def test_entity_template_has_required_fields():
     text = (TEMPLATES_DIR / "entity-template.md").read_text(encoding="utf-8")
-    assert "entity_type:" in text
-    # Templater prompts for one of the 7 valid types
-    for etype in ["person", "org", "tool", "concept", "api", "library", "project"]:
-        assert etype in text
+    for field in ["type: entity", "tags:", "sources:", "confidence:",
+                  "lifecycle:", "last_updated:"]:
+        assert field in text, f"missing frontmatter field: {field}"
+
+
+def test_entity_template_does_not_prompt_for_entity_type():
+    """#102: the entity-type taxonomy is gone — the template must not ask for one."""
+    text = (TEMPLATES_DIR / "entity-template.md").read_text(encoding="utf-8")
+    assert "entity_type" not in text
 
 
 def test_entity_template_has_inline_dataview():

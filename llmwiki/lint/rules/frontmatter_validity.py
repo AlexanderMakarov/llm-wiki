@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from llmwiki.lifecycle import LifecycleState
 from llmwiki.lint import LintRule, register
-from llmwiki.schema import ENTITY_TYPES
+from llmwiki.schema import ALL_PAGE_KINDS
 
 
 @register
@@ -14,8 +14,9 @@ class FrontmatterValidity(LintRule):
     name = "frontmatter_validity"
     severity = "error"
 
-    VALID_TYPES = {"source", "entity", "concept", "synthesis",
-                   "comparison", "question", "navigation", "context"}
+    #: The page-kind vocabulary is owned by :mod:`llmwiki.schema`; this rule
+    #: enforces it rather than defining it.
+    VALID_TYPES = set(ALL_PAGE_KINDS)
     VALID_LIFECYCLES = {s.value for s in LifecycleState}
 
     def run(self, pages, *, llm_callback=None):
@@ -39,15 +40,6 @@ class FrontmatterValidity(LintRule):
                     "severity": "error",
                     "page": rel,
                     "message": f"invalid lifecycle {lc!r} (expected one of {sorted(self.VALID_LIFECYCLES)})",
-                })
-
-            et = meta.get("entity_type", "").lower()
-            if et and et not in ENTITY_TYPES:
-                issues.append({
-                    "rule": self.name,
-                    "severity": "error",
-                    "page": rel,
-                    "message": f"invalid entity_type {et!r} (expected one of {list(ENTITY_TYPES)})",
                 })
 
             conf = meta.get("confidence", "")

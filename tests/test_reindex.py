@@ -59,8 +59,8 @@ def test_seeded_index_matches_the_reindex_header(tmp_path: Path) -> None:
 
 def test_unlisted_pages_are_added_with_refreshed_counts(tmp_path: Path) -> None:
     wiki = _seed_wiki(tmp_path)
-    _page(wiki / "projects" / "awos-audit.md", "awos-audit", entity_type="project")
-    _page(wiki / "projects" / "code-hops.md", "code-hops", entity_type="project")
+    _page(wiki / "projects" / "awos-audit.md", "awos-audit", type="project")
+    _page(wiki / "projects" / "code-hops.md", "code-hops", type="project")
     _page(wiki / "entities" / "Anthropic.md", "Anthropic")
     _page(
         wiki / "sources" / "proj" / "2026-07-01-hello.md",
@@ -94,7 +94,7 @@ def test_reindex_brings_index_sync_to_zero(tmp_path: Path) -> None:
     """The acceptance criterion: a drifted vault lints clean afterwards."""
     wiki = _seed_wiki(tmp_path)
     for slug in ("awos-audit", "code-hops", "evrika-1"):
-        _page(wiki / "projects" / f"{slug}.md", slug, entity_type="project")
+        _page(wiki / "projects" / f"{slug}.md", slug, type="project")
     _page(wiki / "concepts" / "RAG.md", "RAG")
     _page(wiki / "syntheses" / "why-caching.md", "Why caching")
 

@@ -17,7 +17,7 @@ All templates produce pages matching the exact format documented in
 
 - Obsidian callouts (`> [!info]`) for helper notes
 - Dataview inline queries on entity/concept pages (show citing sources)
-- Templater prompts for interactive fields (title, slug, project, entity_type)
+- Templater prompts for interactive fields (title, slug, project)
 - Seeded confidence (0.5) + lifecycle (draft) + last_updated (today)
 
 ## Installation

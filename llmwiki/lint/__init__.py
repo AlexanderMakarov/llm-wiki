@@ -60,6 +60,18 @@ class LintRule:
         raise NotImplementedError
 
 
+class UnknownRuleError(ValueError):
+    """Raised when a caller selects a lint rule name that is not registered."""
+
+    def __init__(self, unknown: list[str], valid: list[str]) -> None:
+        self.unknown = list(unknown)
+        self.valid = list(valid)
+        super().__init__(
+            f"unknown lint rule(s): {', '.join(self.unknown)}. "
+            f"Valid rules: {', '.join(self.valid)}"
+        )
+
+
 REGISTRY: dict[str, type[LintRule]] = {}
 
 
@@ -141,9 +153,21 @@ def run_all(
     Extra keyword arguments (``include_llm``, ``llm_callback``) are accepted
     and ignored for back-compat with callers written before #72 removed the
     unused LLM lint gate.
+
+    Raises
+    ------
+    UnknownRuleError
+        If ``selected`` names a rule that is not in :data:`REGISTRY`. A
+        misspelled or removed rule name must fail loudly — skipping it
+        would report a clean vault while running nothing.
     """
     # Import all rule modules so they register themselves
     from llmwiki.lint import rules  # noqa: F401, PLC0415 — lazy package rules registry
+
+    if selected:
+        unknown = [name for name in selected if name not in REGISTRY]
+        if unknown:
+            raise UnknownRuleError(unknown, sorted(REGISTRY))
 
     issues: list[dict[str, Any]] = []
     for name, rule_cls in REGISTRY.items():

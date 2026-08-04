@@ -23,13 +23,14 @@ python3 -m llmwiki add <src> --project <slug>
 After it runs:
 
 1. Read the synthesized `wiki/sources/<slug>.md` page (in the resolved vault) to see what was produced.
-2. Create or update `wiki/entities/<Name>.md` for any people, companies, projects, tools, libraries mentioned.
+2. Create or update `wiki/entities/<Name>.md` for any people, companies, products, tools, libraries mentioned.
 3. Create or update `wiki/concepts/<Name>.md` for any ideas, patterns, or frameworks discussed.
-4. Cross-link everything with `[[wikilinks]]` under `## Connections`.
-5. Flag any contradictions with existing wiki content under `## Contradictions`.
-6. Append to `wiki/log.md`: `## [YYYY-MM-DD] ingest | <title>`
+4. Create or update `wiki/projects/<slug>.md` with `type: project` for any codebase or work stream mentioned — projects are their own page kind, never entity pages.
+5. Cross-link everything with `[[wikilinks]]` under `## Connections`.
+6. Flag any contradictions with existing wiki content under `## Contradictions`.
+7. Append to `wiki/log.md`: `## [YYYY-MM-DD] ingest | <title>`
 
-**Vault resolution warning**: `llmwiki add` resolves the vault for you, but every page you write by hand in steps 2–6 must go into that *same* resolved vault (check `config.json` → `vault.default_path`, or the `--vault` you passed). This repo's own `wiki/` is seed demo content — never write entity/concept pages, index, or log entries there when a real vault is configured. Only fall back to this repo's `wiki/` when no vault is configured at all.
+**Vault resolution warning**: `llmwiki add` resolves the vault for you, but every page you write by hand in steps 2–6 must go into that *same* resolved vault (check `config.json` → `vault.default_path`, or the `--vault` you passed). This repo's own `wiki/` is seed demo content — never write entity/concept/project pages, index, or log entries there when a real vault is configured. Only fall back to this repo's `wiki/` when no vault is configured at all.
 
 ## Session transcripts (already under `raw/sessions/`)
 
@@ -40,17 +41,18 @@ These were already converted by `llmwiki sync` — there's no `add` step. Follow
 3. Write `wiki/sources/<slug>.md` per the Source Page Format in `CLAUDE.md`
 4. Update `wiki/index.md` — add the new source under `## Sources`
 5. Update `wiki/overview.md` if the source adds substantial new information
-6. Create or update `wiki/entities/<Name>.md` for any people, companies, projects, tools, libraries mentioned
+6. Create or update `wiki/entities/<Name>.md` for any people, companies, products, tools, libraries mentioned
 7. Create or update `wiki/concepts/<Name>.md` for any ideas, patterns, or frameworks discussed
-8. Cross-link everything with `[[wikilinks]]` under `## Connections`
-9. Flag any contradictions with existing wiki content under `## Contradictions`
-10. Append to `wiki/log.md`: `## [YYYY-MM-DD] ingest | <title>`
+8. Create or update `wiki/projects/<slug>.md` with `type: project` for any codebase or work stream mentioned
+9. Cross-link everything with `[[wikilinks]]` under `## Connections`
+10. Flag any contradictions with existing wiki content under `## Contradictions`
+11. Append to `wiki/log.md`: `## [YYYY-MM-DD] ingest | <title>`
 
 Also apply the session-specific rules from `CLAUDE.md` §"Session-derived source specifics":
 
 - Trust the frontmatter as authoritative metadata
 - Do not copy the `## Conversation` section verbatim
-- Create or update the project entity page
+- Create or update the project page at `wiki/projects/<project-slug>.md` (`type: project`, slug from the frontmatter `project` field)
 - Extract any explicit decisions into `wiki/concepts/`
 - If there are more than ~20 files, ask the user before processing all of them
 
