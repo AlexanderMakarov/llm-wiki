@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -40,6 +41,7 @@ from llmwiki.pipeline_lock import pipeline_lock
 from llmwiki.reindex import reindex_wiki
 from llmwiki.state_store import resolve_state_file, update_state
 from llmwiki.synth.pipeline import refresh_synth_pending, resolve_backend, synthesize_new_sessions
+from llmwiki.synth.reporting import print_synth_run_summary
 from llmwiki.vault import describe_vault, resolve_vault
 
 
@@ -223,6 +225,8 @@ def run_pipeline(args: argparse.Namespace) -> int:
                     print("error: step 'synth' exited 1; stopping (--fail-fast).", file=sys.stderr)
                     return overall_rc
             else:
+                # Wall clock for this synth+harvest segment (#113).
+                t0 = time.monotonic()
                 summary = synthesize_new_sessions(
                     backend=backend,
                     force=getattr(args, "synth_force", False),
@@ -259,6 +263,13 @@ def run_pipeline(args: argparse.Namespace) -> int:
                             file=sys.stderr,
                         )
                         return overall_rc
+                elif not summary["errors"]:
+                    print_synth_run_summary(
+                        synthesized=summary["synthesized"],
+                        duration_s=time.monotonic() - t0,
+                        tokens=summary.get("tokens"),
+                        cost_usd=summary.get("cost_usd"),
+                    )
 
         search_mode = args.search_mode or "auto"
         print(f"\n==> llmwiki build --out {out_dir} --search-mode {search_mode}")

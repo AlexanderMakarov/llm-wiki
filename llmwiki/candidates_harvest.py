@@ -294,10 +294,11 @@ def summarize_backlog(
 ) -> dict:
     """Describe the candidate backlog without writing anything.
 
-    ``--estimate`` has two lists to preview: sources still to synthesize, and
-    candidates still to generate. Reporting a single count at one threshold
-    hides whether that threshold was a sensible choice, so this returns the
-    distribution across neighbouring values too.
+    Returns harvestable-stub counts for ``wiki/sources/`` as it exists now —
+    a pre-run snapshot, not a forecast of what the next synthesize will
+    harvest. Reporting a single count at one threshold hides whether that
+    threshold was a sensible choice, so this returns the distribution across
+    neighbouring values too.
     """
     if not (wiki_dir / "sources").is_dir():
         return {

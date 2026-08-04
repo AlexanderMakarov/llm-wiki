@@ -9,6 +9,7 @@ Covers:
 * Custom model + custom output_tokens override pricing.
 * CLI subprocess prints the expected layout.
 * Money numbers are non-negative and full_force ≥ incremental.
+* #113: Candidates block uses pre-run label + pending-sources note; no post-run summary.
 """
 
 from __future__ import annotations
@@ -419,3 +420,38 @@ def test_cli_estimate_full_force_not_less_than_incremental(estimate_vault):
     full = re.search(r"Full re-synth:\s+\$([\d.]+)", cp.stdout)
     assert incr is not None and full is not None, cp.stdout
     assert float(full.group(1)) >= float(incr.group(1)) - 1e-6
+
+
+# ─── #113: Candidates labelled as pre-run state on estimate ─────────────
+
+
+_PENDING_SOURCES_NOTE = (
+    "note: pending sources are not yet reflected in this figure"
+)
+
+
+def test_cli_estimate_labels_candidates_as_pre_run_state(estimate_vault):
+    """Candidates on estimate must read as a snapshot, not a harvest forecast."""
+    cp = _run_cli("synthesize", "--estimate", "--vault", str(estimate_vault))
+    assert cp.returncode == 0, cp.stderr
+    assert "Candidates (pre-run state):" in cp.stdout
+    # Bare ``Candidates:`` was the pre-#113 forecast-flavoured header.
+    assert re.search(r"(?m)^Candidates:\s", cp.stdout) is None
+
+
+def test_cli_estimate_prints_pending_sources_note(estimate_vault):
+    cp = _run_cli("synthesize", "--estimate", "--vault", str(estimate_vault))
+    assert cp.returncode == 0, cp.stderr
+    assert _PENDING_SOURCES_NOTE in cp.stdout
+
+
+def test_cli_estimate_does_not_print_post_run_summary(estimate_vault):
+    """Estimate-only mode must not emit a completed-synth / post-harvest summary."""
+    cp = _run_cli("synthesize", "--estimate", "--vault", str(estimate_vault))
+    assert cp.returncode == 0, cp.stderr
+    # Real synthesize progress / one-liner (never an estimate concern).
+    assert "Scanned " not in cp.stdout
+    assert "Synthesizing with backend:" not in cp.stdout
+    # Slice 2 end-of-run summary markers (must stay off the estimate path).
+    assert "Candidates (post-run" not in cp.stdout
+    assert "backlog now" not in cp.stdout.lower()

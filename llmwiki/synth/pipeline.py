@@ -1093,6 +1093,10 @@ def synthesize_new_sessions(
             "backend": backend.name,
         }
 
+    reset_usage = getattr(backend, "reset_usage", None)
+    if callable(reset_usage):
+        reset_usage()
+
     sources_out = wiki_sources_dir or WIKI_SOURCES
     # #30: resolve the subagent policy once. In "only-raw" (the default),
     # subagent transcripts are skipped here even under --force — the flag means
@@ -1393,5 +1397,13 @@ def synthesize_new_sessions(
             _rebuild_index(sources_out.parent)
         except (OSError, ValueError, RuntimeError) as e:
             summary["errors"].append(f"index rebuild: {e}")
+
+    take_usage = getattr(backend, "take_usage", None)
+    if callable(take_usage):
+        tokens, cost_usd = take_usage()
+        if tokens is not None:
+            summary["tokens"] = tokens
+        if cost_usd is not None:
+            summary["cost_usd"] = cost_usd
 
     return summary

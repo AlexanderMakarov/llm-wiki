@@ -21,6 +21,7 @@ dodges argv limits and injection-via-argv).
 
 from __future__ import annotations
 
+import json
 import subprocess
 from typing import Any
 
@@ -136,6 +137,77 @@ class ClaudeCLIError(RuntimeError):
     """One page failed to synthesize via the claude CLI."""
 
 
+def _usage_token_total(usage: dict[str, Any]) -> int:
+    """Sum token fields from a ``claude --output-format json`` usage block."""
+    keys = (
+        "input_tokens",
+        "output_tokens",
+        "cache_creation_input_tokens",
+        "cache_read_input_tokens",
+    )
+    total = 0
+    for key in keys:
+        val = usage.get(key)
+        if isinstance(val, (int, float)):
+            total += int(val)
+    return total
+
+
+def _parse_claude_print_stdout(stdout: str) -> tuple[str, int | None, float | None]:
+    """Return (page_text, tokens, cost_usd) from ``claude -p`` stdout.
+
+    Prefer ``--output-format json`` payloads (``result`` + ``usage`` +
+    ``total_cost_usd``). Fall back to plain text when the CLI (or a test
+    stub) ignores the format flag — then tokens/cost stay unknown.
+
+    Raises ``ClaudeCLIError`` when stdout parses as a JSON object but is
+    not a usable success payload (missing/empty ``result``, ``is_error``,
+    or a non-success ``subtype``). Never returns the raw JSON envelope as
+    page text.
+    """
+    text = (stdout or "").strip()
+    if not text:
+        return "", None, None
+    if not text.startswith("{"):
+        return text, None, None
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError:
+        return text, None, None
+    if not isinstance(payload, dict):
+        return text, None, None
+
+    if payload.get("is_error") is True:
+        detail = payload.get("result")
+        if not isinstance(detail, str) or not detail.strip():
+            detail = "is_error without detail"
+        raise ClaudeCLIError(f"claude CLI reported an error: {detail.strip()}")
+
+    subtype = payload.get("subtype")
+    if isinstance(subtype, str) and subtype and subtype != "success":
+        detail = payload.get("result")
+        suffix = f": {detail.strip()}" if isinstance(detail, str) and detail.strip() else ""
+        raise ClaudeCLIError(
+            f"claude CLI JSON subtype {subtype!r} is not success{suffix}"
+        )
+
+    result = payload.get("result")
+    if not isinstance(result, str) or not result.strip():
+        raise ClaudeCLIError(
+            "claude CLI JSON response missing a non-empty result field"
+        )
+
+    tokens: int | None = None
+    usage = payload.get("usage")
+    if isinstance(usage, dict):
+        tokens = _usage_token_total(usage)
+    cost: float | None = None
+    raw_cost = payload.get("total_cost_usd")
+    if isinstance(raw_cost, (int, float)):
+        cost = float(raw_cost)
+    return result.strip(), tokens, cost
+
+
 class ClaudeCLISynthesizer(BaseSynthesizer):
     """Shell out to ``claude -p -`` once per page. No pending files,
     no HTTP — the answer comes back in-process before the next page."""
@@ -153,16 +225,35 @@ class ClaudeCLISynthesizer(BaseSynthesizer):
         self.timeout = timeout
         self.lean = lean
         self.effort = effort
+        self._run_tokens = 0
+        self._run_cost_usd = 0.0
+        self._run_has_usage = False
+
+    def reset_usage(self) -> None:
+        """Clear accumulated usage before a multi-page synth run."""
+        self._run_tokens = 0
+        self._run_cost_usd = 0.0
+        self._run_has_usage = False
+
+    def take_usage(self) -> tuple[int | None, float | None]:
+        """Return accumulated (tokens, cost_usd) for this run, or Nones."""
+        if not self._run_has_usage:
+            return None, None
+        # Known zeros are still known — do not collapse them to "unknown".
+        return self._run_tokens, self._run_cost_usd
 
     def _argv(self, claude: str, system_prompt: str) -> list[str]:
         """Build the `claude` command line for one page."""
-        return lean_argv(
+        argv = lean_argv(
             claude,
             system_prompt=system_prompt,
             model=self.model,
             lean=self.lean,
             effort=self.effort,
         )
+        # JSON carries result text plus usage / total_cost_usd (#113).
+        argv += ["--output-format", "json"]
+        return argv
 
     @property
     def name(self) -> str:
@@ -215,7 +306,13 @@ class ClaudeCLISynthesizer(BaseSynthesizer):
             raise ClaudeCLIError(
                 f"claude CLI exited {result.returncode}: {detail}"
             )
-        text = result.stdout.strip()
+        text, tokens, cost = _parse_claude_print_stdout(result.stdout)
+        if tokens is not None or cost is not None:
+            self._run_has_usage = True
+            if tokens is not None:
+                self._run_tokens += tokens
+            if cost is not None:
+                self._run_cost_usd += cost
         if not text:
             raise ClaudeCLIError("claude CLI returned an empty completion")
         return text

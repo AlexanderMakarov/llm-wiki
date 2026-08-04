@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from llmwiki.synth.base import split_prompt_template
@@ -101,6 +103,11 @@ def _argv_of(tmp_path, name, template=TEMPLATE, **kwargs):
     return out.split(_ARGV_SEP)[:-1]
 
 
+def test_claude_forwards_output_format_json(tmp_path):
+    argv = _argv_of(tmp_path, "claude-json-fmt")
+    assert argv[argv.index("--output-format") + 1] == "json"
+
+
 def test_lean_flags_present_by_default(tmp_path):
     argv = _argv_of(tmp_path, "claude-lean")
     # Each flag drops one source of per-call scaffolding overhead.
@@ -109,6 +116,87 @@ def test_lean_flags_present_by_default(tmp_path):
     assert argv[argv.index("--tools") + 1] == ""
     assert argv[argv.index("--setting-sources") + 1] == ""
     assert argv[argv.index("--system-prompt") + 1].startswith("You synthesize")
+    assert argv[argv.index("--output-format") + 1] == "json"
+
+
+def test_claude_parses_json_result_and_accumulates_usage(tmp_path):
+    payload = {
+        "result": "## Summary\n\nDone.\n",
+        "subtype": "success",
+        "usage": {
+            "input_tokens": 100,
+            "output_tokens": 50,
+            "cache_read_input_tokens": 10,
+        },
+        "total_cost_usd": 0.0123,
+    }
+    script = _script(
+        tmp_path,
+        "claude-json",
+        "#!/bin/sh\ncat > /dev/null\n"
+        f"printf '%s\\n' '{json.dumps(payload)}'\n",
+    )
+    backend = ClaudeCLISynthesizer(claude_path=str(script))
+    backend.reset_usage()
+    out = backend.synthesize_source_page("b", {}, TEMPLATE)
+    assert out.startswith("## Summary")
+    tokens, cost = backend.take_usage()
+    assert tokens == 160
+    assert cost == pytest.approx(0.0123)
+
+
+def test_claude_json_missing_result_raises(tmp_path):
+    payload = {"usage": {"input_tokens": 1}, "total_cost_usd": 0.0}
+    script = _script(
+        tmp_path,
+        "claude-json-empty",
+        "#!/bin/sh\ncat > /dev/null\n"
+        f"printf '%s\\n' '{json.dumps(payload)}'\n",
+    )
+    backend = ClaudeCLISynthesizer(claude_path=str(script))
+    with pytest.raises(ClaudeCLIError, match="missing a non-empty result"):
+        backend.synthesize_source_page("b", {}, TEMPLATE)
+
+
+def test_claude_json_is_error_raises(tmp_path):
+    payload = {"is_error": True, "result": "provider overloaded", "subtype": "error"}
+    script = _script(
+        tmp_path,
+        "claude-json-err",
+        "#!/bin/sh\ncat > /dev/null\n"
+        f"printf '%s\\n' '{json.dumps(payload)}'\n",
+    )
+    backend = ClaudeCLISynthesizer(claude_path=str(script))
+    with pytest.raises(ClaudeCLIError, match="provider overloaded"):
+        backend.synthesize_source_page("b", {}, TEMPLATE)
+
+
+def test_claude_json_zero_usage_is_reported(tmp_path):
+    payload = {
+        "result": "ok",
+        "subtype": "success",
+        "usage": {"input_tokens": 0, "output_tokens": 0},
+        "total_cost_usd": 0.0,
+    }
+    script = _script(
+        tmp_path,
+        "claude-json-zero",
+        "#!/bin/sh\ncat > /dev/null\n"
+        f"printf '%s\\n' '{json.dumps(payload)}'\n",
+    )
+    backend = ClaudeCLISynthesizer(claude_path=str(script))
+    backend.reset_usage()
+    assert backend.synthesize_source_page("b", {}, TEMPLATE) == "ok"
+    assert backend.take_usage() == (0, 0.0)
+
+
+def test_claude_plain_text_stdout_still_works_without_usage(tmp_path):
+    """Test stubs (and atypical CLIs) that ignore --output-format stay usable."""
+    script = _script(tmp_path, "claude-plain", "#!/bin/sh\nprintf 'PAGE\\n'\n")
+    backend = ClaudeCLISynthesizer(claude_path=str(script))
+    backend.reset_usage()
+    assert backend.synthesize_source_page("b", {}, TEMPLATE) == "PAGE"
+    assert backend.take_usage() == (None, None)
 
 
 def test_lean_tools_flag_is_followed_by_a_flag(tmp_path):
@@ -119,7 +207,9 @@ def test_lean_tools_flag_is_followed_by_a_flag(tmp_path):
 
 def test_lean_can_be_disabled(tmp_path):
     argv = _argv_of(tmp_path, "claude-fat", lean=False)
-    assert argv == ["-p", "-"]
+    assert argv[:2] == ["-p", "-"]
+    assert "--strict-mcp-config" not in argv
+    assert argv[argv.index("--output-format") + 1] == "json"
 
 
 def test_lean_composes_with_model_flag(tmp_path):

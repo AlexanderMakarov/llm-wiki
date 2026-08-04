@@ -31,6 +31,7 @@ import json as _json
 import shutil as _shutil
 import sys
 import sys as _sys
+import time
 from contextlib import ExitStack
 from datetime import UTC, datetime
 from datetime import date as _date
@@ -123,6 +124,7 @@ from llmwiki.synth.pipeline import (
     resolve_include_subagents,
     synthesize_new_sessions,
 )
+from llmwiki.synth.reporting import print_candidates_pre_run, print_synth_run_summary
 from llmwiki.topics_consolidate import (
     cache_path,
     parse_and_cache,
@@ -1135,6 +1137,8 @@ def cmd_synthesize(args: argparse.Namespace) -> int:
             print(f"error: {exc}", file=sys.stderr)
             return 2
 
+    # Wall clock for the real run only (#113) — estimate/check return above.
+    t0 = time.monotonic()
     summary = synthesize_new_sessions(
         backend=backend,
         force=args.force,
@@ -1156,19 +1160,32 @@ def cmd_synthesize(args: argparse.Namespace) -> int:
     # Default `synth`: harvest candidates after sources. `--sources-only` and
     # the deprecated `synthesize` alias (without --candidates-only) skip this.
     if sources_only:
+        print_synth_run_summary(
+            synthesized=summary["synthesized"],
+            duration_s=time.monotonic() - t0,
+            tokens=summary.get("tokens"),
+            cost_usd=summary.get("cost_usd"),
+        )
         return 0
     harvest_wiki = (
         wiki_sources_dir.parent if wiki_sources_dir is not None else (REPO_ROOT / "wiki")
     )
+    min_refs = getattr(args, "min_refs", DEFAULT_MIN_REFS)
     rc = run_harvest(
         harvest_wiki,
-        min_refs=getattr(args, "min_refs", DEFAULT_MIN_REFS),
+        min_refs=min_refs,
         allow_unclassified=bool(getattr(args, "allow_unclassified", False)),
         backend=backend,
         require_sources=False,
     )
     if rc == 0:
         _refresh_review_counts(harvest_wiki)
+        print_synth_run_summary(
+            synthesized=summary["synthesized"],
+            duration_s=time.monotonic() - t0,
+            tokens=summary.get("tokens"),
+            cost_usd=summary.get("cost_usd"),
+        )
     return rc
 
 
@@ -1607,27 +1624,13 @@ def _synthesize_estimate(args: argparse.Namespace | None = None) -> int:
         f"(--force — {report['corpus']} source(s), one call each)"
     )
 
-    # #90: --estimate previews both backlogs. Sources are only half the work;
-    # a vault can be fully synthesized and still have an empty trusted layer.
+    # #90 / #113: surface the current candidate backlog as pre-run state.
+    # Sources are only half the work; a vault can be fully synthesized and
+    # still have an empty trusted layer. Candidates here are not a forecast.
     backlog = summarize_backlog(
         vault_root / "wiki", min_refs=getattr(args, "min_refs", DEFAULT_MIN_REFS)
     )
-    print()
-    if not backlog["broken_targets"]:
-        print("Candidates:        0  (no unresolved wikilinks in wiki/sources/)")
-        return 0
-    covered = backlog["covered_links"] / backlog["broken_links"]
-    print(
-        f"Candidates:        {backlog['candidates']} stub(s) at "
-        f"--min-refs {backlog['min_refs']}  "
-        f"(closes {covered:.0%} of {backlog['broken_links']} broken link(s) "
-        f"over {backlog['broken_targets']} target(s))"
-    )
-    shape = "  ".join(
-        f"{n}:{count}" for n, count in sorted(backlog["distribution"].items())
-    )
-    print(f"  by --min-refs:   {shape}")
-    print("  generate with:   llmwiki synth --candidates-only")
+    print_candidates_pre_run(backlog)
     return 0
 
 
@@ -2163,7 +2166,10 @@ def build_parser() -> argparse.ArgumentParser:
         )
         syn_mode.add_argument(
             "--estimate", action="store_true",
-            help="Print cached-vs-fresh token + dollar estimate without calling a backend (#50)",
+            help=(
+                "Print cached-vs-fresh token + dollar estimate without calling "
+                "a backend (#50); Candidates shown as pre-run state (#113)"
+            ),
         )
         syn_mode.add_argument(
             "--candidates-only", action="store_true",
