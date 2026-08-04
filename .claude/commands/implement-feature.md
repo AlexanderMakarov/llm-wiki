@@ -9,12 +9,13 @@ Takes one feature — its requirements from a GitHub Issue, plain prompt, local 
 
 ## Notifications
 
-On each of these transitions, post a short status to the open pull request with `gh pr comment` (skip until a PR exists — then catch up on "PR opened"):
+Post to the open pull request with `gh pr comment` **only for exceptions** (skip entirely until a PR exists). Do **not** comment for routine open / CI / gates-passed / merged / blocked-waiting — report those in chat to the user.
 
-- change request opened
-- blocked-and-waiting (CI red or ~30m max-wait hit)
-- gates passed
-- merged (include minimal try-steps from the ticket/spec — e.g. install/commit SHA / CLI notes; no cloud deploy URL)
+Comment when:
+
+1. **Implementation divergence** — the delivered approach differs materially from the approved spec/tech (what changed and why)
+2. **Major post-implementation issue** — verify failure forcing scope/approach change, or a serious review finding that alters behavior
+3. **Parallel / overlapping work** — rebase or review surfaces functional overlap with another change; describe overlap and resolution
 
 ## Arguments
 
@@ -25,7 +26,7 @@ On each of these transitions, post a short status to the open pull request with 
 A flow this long degrades in one context window — judgment is worst exactly where it matters most, at review time. Per §8 of delivery-flow.md:
 
 - Run every isolatable stage in a subagent (a subagent can invoke `/awos:*` commands via the Skill tool; its context is discarded on completion). Subagent reports must be terse — paths, verdicts, counts — never full document or review content.
-- After each completed stage, append an entry to `context/spec/{SPEC_NAME}/flow-log.md`: the stage name, what was produced and where (paths, branch, commit), any decisions taken along the way, and which stage comes next. The log is the flow's memory outside the context window — a fresh session (after a restart, a crash, or an unattended hand-off between sessions) resumes by reading this one small file instead of re-deriving state from the whole repo. That is what keeps the window small across a long flow: nothing needs to stay in context once it is in the log. The log is committed with the work (Step 9 stages it alongside the code), so it must never become an uncommittable leftover: **once the change request is opened — or the change is merged — stop writing to the tracked log**, since a commit adding log lines is unwelcome on a change request under review and impossible once it merges, so a late append would strand a change that can never reach it. From that point report late-stage progress to the user and via §9 notifications, and resume the remote stages from remote state (the open/merged change request and the ticket status), which the resume-detection stage already inspects. The close stage leaves a clean working tree and never writes a final entry it cannot commit.
+- After each completed stage, append an entry to `context/spec/{SPEC_NAME}/flow-log.md`: the stage name, what was produced and where (paths, branch, commit), any decisions taken along the way, and which stage comes next. The log is the flow's memory outside the context window — a fresh session (after a restart, a crash, or an unattended hand-off between sessions) resumes by reading this one small file instead of re-deriving state from the whole repo. That is what keeps the window small across a long flow: nothing needs to stay in context once it is in the log. The log is committed with the work (Step 9 stages it alongside the code), so it must never become an uncommittable leftover: **once the change request is opened — or the change is merged — stop writing to the tracked log**, since a commit adding log lines is unwelcome on a change request under review and impossible once it merges, so a late append would strand a change that can never reach it. From that point report late-stage progress to the user and via §9 notifications (exceptions only), and resume the remote stages from remote state (the open/merged change request and the ticket status), which the resume-detection stage already inspects. The close stage leaves a clean working tree and never writes a final entry it cannot commit.
 - Never launch a nested headless session (`claude -p`) from this command — permission modes, PATH, and timeouts differ per machine. Unattended chaining belongs to the trigger setup (§6), outside this command.
 - Tell every dispatched subagent: tools are functional — do not test them or make exploratory calls; every call needs a purpose. Run each delegated stage on the model tier recorded in §8 — the fast tier for mechanical transport work, the strongest for judgment.
 
@@ -65,7 +66,29 @@ Start with a cheap preflight on the fast model tier (per §8): is this feature *
 
 ### Step 3: Prepare the Workspace
 
-Verify `context/` is reachable from the repo root (`context/product/architecture.md` readable). Warn on a dirty working tree; create branch `feat/<issue>-<short-slug>` from `origin/main` in this working tree (main-repo-only — no worktrees). Store the branch name as `BRANCH` and the ticket ID as `TICKET_ID`. Uncommitted AWOS artifacts — `context/product/delivery-flow.md` and this command file, left by `/awos:flow` — are an expected dirty-tree cause; surface them as such rather than treating them as a blocker. No submodules.
+Verify `context/` is reachable from the repo root (`context/product/architecture.md` readable). Warn on a dirty working tree. Uncommitted AWOS artifacts — `context/product/delivery-flow.md` and this command file, left by `/awos:flow` — are an expected dirty-tree cause; surface them as such rather than treating them as a blocker. No submodules.
+
+Create an isolated worktree + throwaway vault from `origin/main` (do **not** stay on the primary checkout for implementation). Execute the §2 recipe verbatim:
+
+```bash
+git fetch origin main
+BRANCH="feat/<issue>-<short-slug>"
+WT_SLUG=$(echo "$BRANCH" | tr '/' '-')
+WT=".claude/worktrees/$WT_SLUG"
+git worktree add -b "$BRANCH" "$WT" origin/main
+cd "$WT"
+LLMWIKI_SKIP_AUTOMATION=1 ./setup.sh
+TMP_VAULT="$WT/.worktree-vault"
+mkdir -p "$TMP_VAULT"
+printf '%s\n' "{\"vault\":{\"default_path\":\"$TMP_VAULT\"}}" > config.json
+python3 -m llmwiki init --vault "$TMP_VAULT"
+```
+
+If already inside a matching worktree on `BRANCH`, reuse it and ensure `$WT/.worktree-vault` + worktree `config.json` still point at the throwaway vault (never copy the primary checkout's `config.json`).
+
+Store `BRANCH`, `WT`, `TMP_VAULT`, and `TICKET_ID`. Always invoke `python3 -m llmwiki` from `$WT` — never PATH `llmwiki` (loads primary package/config).
+
+**Vault rules for the rest of the run:** agent-driven mutating `llmwiki` commands target `$TMP_VAULT` only. Read-only probes against the live vault path (from primary `config.json` `vault.default_path`) are allowed (`lint`, `synth --estimate`, status/read helpers). Never write `raw/`, `wiki/`, or `site/` under the live vault from the agent. If serving, prefer `--port 8766` when `8765` may host the live site.
 
 <!-- /awos:flow:stage -->
 
@@ -95,7 +118,7 @@ Stage `context/spec/{SPEC_NAME}/` and commit on `BRANCH` with a conventional mes
 
 ### Step 6: Implement via Subagents
 
-Run `/awos:implement` in the **main context** (it dispatches coding subagents — do not nest it inside another subagent). It delegates all coding and tracks progress — do not implement tasks in the main context. Wait for all tasks to complete. Prefer specialists from `context/product/hired-agents.md` when markers name them; fall back to `general-purpose` when none match.
+Run `/awos:implement` in the **main context** (it dispatches coding subagents — do not nest it inside another subagent). It delegates all coding and tracks progress — do not implement tasks in the main context. Wait for all tasks to complete. Prefer specialists from `context/product/hired-agents.md` when markers name them; fall back to `general-purpose` when none match. Tell coding subagents the vault rules from Step 3 (`$TMP_VAULT` for writes; no live-vault mutation).
 
 <!-- /awos:flow:stage -->
 
@@ -105,7 +128,9 @@ Run `/awos:implement` in the **main context** (it dispatches coding subagents �
 
 Run `/awos:verify` in the main context when criteria need `AskUserQuestion`; otherwise a subagent may drive evidence collection and return the verdict + gaps. Address gaps before proceeding.
 
-Running the app to verify is the flow's job, not the user's. For CLI/acceptance criteria use `pytest` and `llmwiki` against a **tmp vault** when a vault is required — do not mutate the operator's live Obsidian vault. For UI criteria: `llmwiki build` then Playwright against generated `site/`; reclaim a conflicting local serve port rather than handing the user a `run` command. Manual confirmation is only for a criterion the agent genuinely cannot render here.
+Running automated verify is the flow's job. For CLI/acceptance criteria use `pytest` and `python3 -m llmwiki` against `$TMP_VAULT` when a vault is required — do not mutate the operator's live Obsidian vault. For UI criteria: `python3 -m llmwiki build --vault "$TMP_VAULT"` then Playwright against `$TMP_VAULT/site`; reclaim or pick a free serve port (`--port 8766`) rather than handing the user a routine `run` command. Manual confirmation is only for a criterion the agent genuinely cannot render here.
+
+Read-only live-vault probes (`lint`, `synth --estimate`, etc.) are allowed when they help evidence. If verify forces a scope/approach change relative to the approved documents, that is a §9 exception — comment on the PR once one exists (or remember to comment after open).
 
 <!-- /awos:flow:stage -->
 
@@ -113,7 +138,18 @@ Running the app to verify is the flow's job, not the user's. For CLI/acceptance 
 
 ### Step 8: Local Review
 
-**Smoke confirm first.** Ask the user to confirm the feature works as expected. Do not start review until they confirm. A skipped confirmation means stop and report verified-but-unconfirmed.
+**Smoke confirm first.** Ask the user to confirm the feature works as expected. Include a ready-to-paste **live vault** command block using worktree code (resolve `LIVE` from the primary checkout's gitignored `config.json` `vault.default_path` — never commit that path). Example shape:
+
+```bash
+cd "$WT"
+LIVE="<path-from-primary-config.json>"
+python3 -m llmwiki lint --vault "$LIVE"
+# Mutating checks — you run these:
+python3 -m llmwiki build --vault "$LIVE" --out "$LIVE/site"
+python3 -m llmwiki serve --dir "$LIVE/site" --port 8766
+```
+
+Do **not** execute the mutating live-vault commands yourself. Do not start review until the user confirms. A skipped confirmation means stop and report verified-but-unconfirmed.
 
 The review must stay independent of this conversation's authorship bias:
 
@@ -134,7 +170,7 @@ ruff check llmwiki tests scripts
 python3 -m pytest tests/ -q
 ```
 
-Do not push until both reviews are processed and the static gate is green.
+Do not push until both reviews are processed and the static gate is green. Serious findings that alter delivered behavior → §9 exception PR comment after the PR exists.
 
 <!-- /awos:flow:stage -->
 
@@ -142,7 +178,7 @@ Do not push until both reviews are processed and the static gate is green.
 
 ### Step 9: Commit & Push
 
-Write this stage's flow-log entry **before** staging so the log rides in this commit — this is the flow-log's last committed state (see Context Discipline). Then stage all changed files, excluding `.env`, credentials, and secrets. Commit with conventional commits (`feat`/`fix`/`docs`/… per CONTRIBUTING), referencing `#<TICKET_ID>` when an issue exists. If `.githooks/pre-push` is active and rejects the push, fix ruff findings and create a new commit (do not `--no-verify` unless the user explicitly allows it). Push `BRANCH` to `origin`.
+Write this stage's flow-log entry **before** staging so the log rides in this commit — this is the flow-log's last committed state (see Context Discipline). Then stage all changed files, excluding `.env`, credentials, secrets, and local vault/config (`config.json`, `.worktree-vault/`). Commit with conventional commits (`feat`/`fix`/`docs`/… per CONTRIBUTING), referencing `#<TICKET_ID>` when an issue exists. If `.githooks/pre-push` is active and rejects the push, fix ruff findings and create a new commit (do not `--no-verify` unless the user explicitly allows it). Push `BRANCH` to `origin`.
 
 <!-- /awos:flow:stage -->
 
@@ -150,13 +186,13 @@ Write this stage's flow-log entry **before** staging so the log rides in this co
 
 ### Step 10: Remote Gates
 
-From here the change request is open — **do not append to the tracked flow-log** (Context Discipline): a commit adding log lines is unwelcome on a change request under review, and impossible once it merges. Report gate progress to the user and via Notifications instead; resume relies on the remote state, not the log.
+From here the change request is open — **do not append to the tracked flow-log** (Context Discipline): a commit adding log lines is unwelcome on a change request under review, and impossible once it merges. Report routine gate progress to the user in chat only; resume relies on the remote state, not the log. Post §9 exception comments only when an exception fires.
 
-Before opening the PR: `git fetch origin main` and rebase onto `origin/main`. On conflicts: delegate resolution to a subagent, re-run `ruff` + `pytest`, confirm non-trivial resolutions with the user, then push.
+Before opening the PR: `git fetch origin main` and rebase onto `origin/main`. On conflicts: delegate resolution to a subagent, re-run `ruff` + `pytest`, confirm non-trivial resolutions with the user, then push. If the conflict or competing PR shows **functional overlap**, post a §9 overlap exception comment after the PR is open.
 
-Open the pull request with `gh pr create` against `main` (fill Summary + applicable Pre-merge checklist boxes from `.github/PULL_REQUEST_TEMPLATE.md`). Post the "PR opened" notification comment.
+Open the pull request with `gh pr create` against `main` (fill Summary + applicable Pre-merge checklist boxes from `.github/PULL_REQUEST_TEMPLATE.md`). Do **not** post a "PR opened" notification comment.
 
-Then wait on required GitHub Actions with `gh pr checks --watch` (Monitor-style polling, interval ≥30s, timeout ~30 minutes). On failure: use the `gha-diagnosis` skill plus `gh run view <id> --log-failed`, delegate the fix to a subagent, push, re-watch until green — or escalate to the user if the ~30m window expires (ask whether to keep watching or hand off). Do **not** block on the soft-fail Claude Code Review Action. Do **not** poll CODEOWNERS human approval. Ticket state transitions are off — do not comment-close the GitHub Issue from this stage.
+Then wait on required GitHub Actions with `gh pr checks --watch` (Monitor-style polling, interval ≥30s, timeout ~30 minutes). On failure: use the `gha-diagnosis` skill plus `gh run view <id> --log-failed`, delegate the fix to a subagent, push, re-watch until green — or escalate to the user in chat if the ~30m window expires (ask whether to keep watching or hand off). Do **not** PR-comment on CI red or max-wait. Do **not** block on the soft-fail Claude Code Review Action. Do **not** poll CODEOWNERS human approval. Ticket state transitions are off — do not comment-close the GitHub Issue from this stage.
 
 <!-- /awos:flow:stage -->
 
@@ -164,9 +200,9 @@ Then wait on required GitHub Actions with `gh pr checks --watch` (Monitor-style 
 
 ### Step 11: Merge
 
-Re-check mergeability against current `origin/main` (fetch + rebase dry-run / `gh pr view`). If the branch no longer rebases cleanly: sync per §2, push, and return to Step 10 — remote gates run again on the new commit before any merge.
+Re-check mergeability against current `origin/main` (fetch + rebase dry-run / `gh pr view`). If the branch no longer rebases cleanly: sync per §2, push, and return to Step 10 — remote gates run again on the new commit before any merge. Functional overlap surfaced here → §9 exception comment.
 
-When every waited gate is green, show that status and ask the user for explicit merge confirmation in this run. Merge only on yes, via `gh pr merge` (merge commit or squash per repo defaults / user preference if stated). A skipped or unanswered confirmation means do not merge — report ready-to-merge and stop.
+When every waited gate is green, show that status and ask the user for explicit merge confirmation in this run. Merge only on yes, via `gh pr merge` (merge commit or squash per repo defaults / user preference if stated). A skipped or unanswered confirmation means do not merge — report ready-to-merge in chat and stop. Do **not** post a "merged" or "gates passed" PR comment.
 
 After merge: watch post-merge Actions on `main`; if they fail because of this change, diagnose (`gha-diagnosis`), fix forward on a follow-up commit or hotfix branch, and re-watch until green.
 
@@ -184,7 +220,7 @@ No auto-deploy and no `/release` invocation from this flow. Optionally print tha
 
 ### Step 13: Close the Loop
 
-Definition of Done: PR merged and post-merge required checks green. Report to the user: PR URL, merge commit, and local-review evidence (verdict, finding counts by severity, review file paths, that keep/drop ran). Do **not** close or transition the GitHub Issue.
+Definition of Done: PR merged and post-merge required checks green. Report to the user in chat: PR URL, merge commit, local-review evidence (verdict, finding counts by severity, review file paths, that keep/drop ran), and any try-steps. Do **not** close or transition the GitHub Issue. Do **not** post a closing/merged PR comment unless a §9 exception still needs recording.
 
 Leave a clean working tree: do not write a closing flow-log entry (the log was finalized at commit-push and the change request is now open or merged — a new entry could never be committed into it). If any flow-created artifact is still uncommitted, surface it in the report rather than leaving it behind — an uncommitted leftover after a merged or in-review change request is a bug, not a record.
 
@@ -192,4 +228,4 @@ Leave a clean working tree: do not write a closing flow-log entry (the log was f
 
 ---
 
-<!-- awos:flow:generated date=2026-08-03 version=2.4.3 source=context/product/delivery-flow.md -->
+<!-- awos:flow:generated date=2026-08-04 version=2.4.3 source=context/product/delivery-flow.md -->
