@@ -186,7 +186,7 @@ From here the change request is open — **do not append to the tracked flow-log
 
 Before opening the PR: fetch and rebase onto `origin/main`. On conflicts: subagent resolution, re-run local gates, user confirm for non-trivial resolutions, push. Functional overlap → §9 comment after open.
 
-Open the PR with `gh pr create` against `main`. Do **not** post a "PR opened" comment. Wait on required checks with `gh pr checks --watch` (~30m max-wait, then ask in chat). On CI failure: `gha-diagnosis` + log-failed → fix subagent → push → re-watch. Do not PR-comment on CI red/max-wait. Do not block on soft-fail Claude Code Review; do not poll CODEOWNERS; do not transition the GitHub Issue.
+Open the PR with `gh pr create` against `main`. Do **not** post a "PR opened" comment. Wait on required checks with `gh pr checks --watch` (~30m max-wait, then ask in chat). On CI failure: `gha-diagnosis` + log-failed → fix subagent → push → re-watch. Do not PR-comment on CI red/max-wait. Claude-in-CI workflows were removed (#116) — do not wait on a Claude Code Review check; do not poll CODEOWNERS; do not transition the GitHub Issue.
 
 <!-- /awos:flow:stage -->
 

@@ -78,7 +78,7 @@ Which commands `/awos:flow` generated and their names — re-runs reconcile exac
 2. **Local dual review (pre-push, on branch)** — (a) apply `docs/maintainers/REVIEW_CHECKLIST.md` and the same governance docs `/review-pr` loads, against `git diff origin/main...HEAD` (and write findings to `context/spec/{SPEC_NAME}/review.md`); (b) dispatch Cursor `code-reviewer` (`Agent`/`Task` `subagent_type="code-reviewer"`) on the same branch diff independently. Present both reviews; keep/drop decisions; apply accepted findings before push. Do **not** invoke `/review-pr <n>` here — that command stays for reviewing someone else's open PR by number
 3. **Local static gate** — `ruff check llmwiki tests scripts` and `python3 -m pytest tests/ -q` before push
 4. **CI on the pull request** — wait for required GitHub Actions and fix failures in a loop (diagnose failed job logs via `gha-diagnosis` skill + `gh run view --log-failed` → fix → push → re-check). Typical CI job ~1–2 minutes; path-filtered E2E/browser jobs up to ~8–15 minutes
-5. **Not in the automated wait set** — Claude Code Review Action is soft-fail/advisory (do not block the flow on it); CODEOWNERS human approval is not polled by the flow (maintainer may still review out-of-band)
+5. **Not in the automated wait set** — Claude-in-CI workflows were removed (#116); do not wait on a Claude Code Review check. CODEOWNERS human approval is not polled by the flow (maintainer may still review out-of-band)
 
 - **Approval gates:** Two pauses — stop after `/awos:spec` and again after `/awos:tech` for document review. `tasks.md` has no gate — `/awos:implement` starts right after `/awos:tasks`
 - **Change-request timing:** Open the PR only after local dual review + static gate succeed

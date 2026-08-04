@@ -21,7 +21,7 @@ Copy the relevant section into the PR review comment. Run the
       under `## [Unreleased]`. Doc-only PRs can skip.
 - [ ] **Tests added or updated** — new feature = new tests. Bug fix =
       regression test that fails on master and passes on the branch.
-- [ ] **CI is green** — lint-and-test (3.9 + 3.12), performance-budget,
+- [ ] **CI is green** — lint-and-test (3.12), performance-budget,
       scan (privacy grep). No merging red PRs.
 
 ## Layer boundaries (see ARCHITECTURE.md)

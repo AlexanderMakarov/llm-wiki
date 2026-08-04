@@ -183,7 +183,7 @@ Everything else (record parsing, filtering, redaction, rendering) is shared in `
 
 Owner: `.github/workflows/` + `tests/`
 
-- `ci.yml` — lint + tests + build smoke on every push + PR (Python 3.12 and 3.13 matrix)
+- `ci.yml` — lint + tests + build smoke on every push + PR (Python 3.12 only)
 - `gitleaks.yml` — secret scan
 - `pages.yml` — build + deploy to GitHub Pages on tag push (Phase 6.5 Self-Demo)
 - `tests/fixtures/<agent>/` — synthetic fixtures
