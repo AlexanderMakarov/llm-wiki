@@ -115,3 +115,12 @@ Resume state for `/implement-feature`. Newest entry last.
 - Follow-up filed during this stage: **#122** (link-following traceability, `entity → sources: → source page → source_file: → raw`).
 
 - **Next stage:** commit, rebase, push, open the change request.
+
+## 2026-08-04 — commit-push
+
+- Resumed in Cursor from Claude Code session `02facf8a-0d1d-4a15-9721-73242c951f53` worktree `.claude/worktrees/chore-102-remove-entity-type-taxonomy`.
+- Smoke confirm: operator chose proceed (already verified in Claude Code run).
+- Review files remain deliberately untracked: `review.md`, `review-code-reviewer.md`.
+- Static gate re-run green before push: `ruff check llmwiki tests scripts`, `python3 -m pytest tests/ -q`.
+- Existing commits: `849416b` (spec), `c322843` (implementation). This entry is the last committed flow-log update; no further appends after the change request opens.
+- **Next stage:** rebase onto `origin/main`, push `chore/102-remove-entity-type-taxonomy`, open PR, remote gates (Step 10). After PR open, resume from remote state only.
