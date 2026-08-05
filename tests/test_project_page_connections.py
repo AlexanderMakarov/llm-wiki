@@ -136,6 +136,12 @@ def test_dates_come_from_the_oldest_and_newest_session():
     assert project_session_dates(sessions) == ("2026-01-05", "2026-03-14")
 
 
+def test_dates_do_not_depend_on_the_input_order():
+    sessions = [_session("s2", "2026-03-14"), _session("s0", "2026-01-05"),
+                _session("s1", "2026-02-09")]
+    assert project_session_dates(sessions) == ("2026-01-05", "2026-03-14")
+
+
 def test_undated_sessions_are_skipped_rather_than_blanking_the_range():
     sessions = [_session("s0", None), _session("s1", "2026-02-09"),
                 _session("s2", "")]

@@ -63,12 +63,12 @@ Every slice leaves the vault buildable and the site browsable. Run `ruff check l
   - [x] Unit tests: the connected-topics parameter defaults empty and emits no section; project dates derive from the correct sessions; a project whose sessions carry no dates shows none. **[Agent: general-purpose]**
   - [x] Verify: build the throwaway vault and confirm a project page shows Connected topics directly above its session list and created/updated dates in the hero. Then build a vault below `_TOPIC_GRAPH_MIN_NODES` and confirm it completes with no topic pages and no Connected topics section — not an empty one. Delete the fixture output afterwards. **[Agent: general-purpose]**
 
-- [ ] **Slice 7: Every kind is a different colour in the map**
+- [x] **Slice 7: Every kind is a different colour in the map**
 
   > FR6. Codebases currently share a colour with topics nothing describes — the two least similar things in the map.
-  - [ ] Add `--g-node-projects` `#db2777`, `--g-node-questions` `#0891b2`, `--g-node-comparisons` `#b45309` and `--g-node-other` `#65a30d` to **both** theme blocks (`llmwiki/graph.py:310` dark, `:328` light), and the matching four entries to the `colors` map (`graph.py:615`). Keep `colors.topic` as the last-resort fallback for unknown strings. **[Agent: general-purpose]**
-  - [ ] Tests over the generated `graph.html`: all four variables present in both theme blocks; the `colors` map has an entry for every kind in `TOPIC_KIND_FOLDERS` plus `other`; no two kind colours are equal; and no kind colour equals `--g-orphan` or `--g-search-match` in either theme — red stays reserved for those two signal states. **[Agent: general-purpose]**
-  - [ ] Verify: build the throwaway vault, open `graph.html`, and confirm the legend shows one distinct swatch per kind present with no two alike, in both light and dark themes. Delete any screenshots produced during the check. **[Agent: general-purpose]**
+  - [x] Add `--g-node-projects` `#db2777`, `--g-node-questions` `#0891b2`, `--g-node-comparisons` `#b45309` and `--g-node-other` `#65a30d` to **both** theme blocks (`llmwiki/graph.py:310` dark, `:328` light), and the matching four entries to the `colors` map (`graph.py:615`). Keep `colors.topic` as the last-resort fallback for unknown strings. **[Agent: general-purpose]**
+  - [x] Tests over the generated `graph.html`: all four variables present in both theme blocks; the `colors` map has an entry for every kind in `TOPIC_KIND_FOLDERS` plus `other`; no two kind colours are equal; and no kind colour equals `--g-orphan` or `--g-search-match` in either theme — red stays reserved for those two signal states. **[Agent: general-purpose]**
+  - [x] Verify: build the throwaway vault, open `graph.html`, and confirm the legend shows one distinct swatch per kind present with no two alike, in both light and dark themes. Delete any screenshots produced during the check. **[Agent: general-purpose]**
 
 - [ ] **Slice 8: The map's side panel says what the page says**
 

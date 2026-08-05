@@ -337,6 +337,10 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     --g-node-entities: #2563eb;
     --g-node-concepts: #059669;
     --g-node-syntheses: #d97706;
+    --g-node-projects: #db2777;
+    --g-node-questions: #0891b2;
+    --g-node-comparisons: #b45309;
+    --g-node-other: #65a30d;
     --g-node-root: #64748b;
     --g-node-topic: #7c3aed;
     --g-orphan: #ef4444;
@@ -355,6 +359,10 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     --g-node-entities: #2563eb;
     --g-node-concepts: #059669;
     --g-node-syntheses: #d97706;
+    --g-node-projects: #db2777;
+    --g-node-questions: #0891b2;
+    --g-node-comparisons: #b45309;
+    --g-node-other: #65a30d;
     --g-node-root: #64748b;
     --g-node-topic: #7c3aed;
     --g-orphan: #dc2626;
@@ -636,6 +644,10 @@ function main() {
     entities: () => cssVar('--g-node-entities'),
     concepts: () => cssVar('--g-node-concepts'),
     syntheses: () => cssVar('--g-node-syntheses'),
+    projects: () => cssVar('--g-node-projects'),
+    questions: () => cssVar('--g-node-questions'),
+    comparisons: () => cssVar('--g-node-comparisons'),
+    other: () => cssVar('--g-node-other'),
     root: () => cssVar('--g-node-root'),
     topic: () => cssVar('--g-node-topic'),
   };

@@ -1415,15 +1415,16 @@ def project_session_dates(
 
     Project stubs carry no date of their own, so freshness is derived from the
     sessions every build and stays correct as new ones arrive (#108, FR2).
-    ``sessions`` arrives sorted oldest → newest by ``group_by_project``; sessions
-    with no date of their own are skipped, and a project whose sessions carry no
-    dates at all yields ``("", "")`` so the page shows none.
+    The earliest and latest date are taken as the minimum and maximum, so the
+    result holds whatever order ``sessions`` arrives in; sessions with no date
+    of their own are skipped, and a project whose sessions carry no dates at all
+    yields ``("", "")`` so the page shows none.
     """
     dates = [str(meta.get("date") or "").strip() for _p, meta, _b in sessions]
     dated = [d for d in dates if d]
     if not dated:
         return "", ""
-    return dated[0], dated[-1]
+    return min(dated), max(dated)
 
 
 def render_project_page(
