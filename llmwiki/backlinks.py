@@ -39,6 +39,7 @@ from pathlib import Path
 from typing import Any
 
 from llmwiki import REPO_ROOT
+from llmwiki.wikilinks import wikilink_targets
 
 _START = "<!-- BACKLINKS:START -->"
 _END = "<!-- BACKLINKS:END -->"
@@ -97,10 +98,6 @@ def _collect_pages(wiki_dir: Path) -> dict[str, dict[str, Any]]:
     return out
 
 
-# Match `[[wikilink]]` or `[[wikilink|display]]` targets.
-_WIKILINK_RE = re.compile(r"\[\[([^\]|]+)(?:\|[^\]]*)?\]\]")
-
-
 def build_reverse_index(pages: dict[str, dict[str, Any]]) -> dict[str, list[BacklinkEntry]]:
     """Return ``{target_slug: [BacklinkEntry(referrer)]}``.
 
@@ -112,9 +109,8 @@ def build_reverse_index(pages: dict[str, dict[str, Any]]) -> dict[str, list[Back
     rev: dict[str, list[BacklinkEntry]] = {}
     for slug, page in pages.items():
         body = page["body"]
-        for target in set(_WIKILINK_RE.findall(body)):
-            t = target.split("#")[0].strip()
-            if not t or t == slug:
+        for t in wikilink_targets(body):
+            if t == slug:
                 continue
             rev.setdefault(t, []).append(
                 BacklinkEntry(

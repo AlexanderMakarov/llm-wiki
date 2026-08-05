@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import re
 
-from llmwiki.lint import WIKILINK_RE, LintRule, register
+from llmwiki.lint import LintRule, register
 from llmwiki.lint.rules._helpers import _page_slug
+from llmwiki.wikilinks import WIKILINK_RE, strip_anchor
 
 _NORM_RE = re.compile(r"[^a-z0-9]")
 
@@ -35,9 +36,10 @@ class LinkIntegrity(LintRule):
 
         issues = []
         for rel, page in pages.items():
+            # The raw target — anchor included — is what the message quotes,
+            # so the operator can find the link they need to fix.
             for target in set(WIKILINK_RE.findall(page["body"])):
-                # Strip any embedded section anchors
-                t = target.split("#")[0].strip()
+                t = strip_anchor(target)
                 if not t:
                     continue
                 if t in slugs or _norm_slug(t) in by_norm:

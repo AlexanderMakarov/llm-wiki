@@ -5,8 +5,9 @@ from __future__ import annotations
 import re
 
 from llmwiki._system_pages import SYSTEM_PAGE_SLUGS
-from llmwiki.lint import WIKILINK_RE, LintRule, register
+from llmwiki.lint import LintRule, register
 from llmwiki.lint.rules._helpers import _page_slug, _resolve_index_href
+from llmwiki.wikilinks import wikilink_targets
 
 # Markdown catalog links — index.md (and other pages) list sources as
 # `[title](sources/….md)` rather than `[[wikilinks]]`.
@@ -25,10 +26,8 @@ class OrphanDetection(LintRule):
         # Collect inbound from [[wikilinks]] and markdown [text](path.md) hrefs.
         inbound: dict[str, int] = {}
         for _rel, page in pages.items():
-            for target in set(WIKILINK_RE.findall(page["body"])):
-                t = target.split("#")[0].strip()
-                if t:
-                    inbound[t] = inbound.get(t, 0) + 1
+            for t in wikilink_targets(page["body"]):
+                inbound[t] = inbound.get(t, 0) + 1
             for match in _MD_LINK_RE.finditer(page["body"]):
                 href = match.group(2)
                 if href.startswith(("http://", "https://", "mailto:")):

@@ -63,6 +63,7 @@ Replace the ad-hoc title regex (`graph.py:176`) with `parse_frontmatter()` from 
 | --- | --- | --- |
 | `wiki_slug` | matched page's stem | no page describes the topic |
 | `wiki_path` | matched page's path | ditto |
+| `wiki_site_url` | matched page's compiled URL | no page, or the page compiles to none |
 | `last_updated` | matched page's review date | no page, or page records none |
 | `first_seen` | earliest `date` among the topic's sessions | no session carries a date |
 | `last_seen` | latest `date` among the topic's sessions | ditto |
@@ -77,7 +78,7 @@ New public function in `llmwiki/topics.py`:
 resolve_project_topic_urls(graph, built_project_slugs) -> int
 ```
 
-For every node with `kind == "projects"`, adopt the backing page's already-computed `site_url` (§2.2) **when `wiki_slug` is in `built_project_slugs`**. Returns the count rewritten. Nodes whose project has no built page keep `topics/<slug>.html` — FR4's fallback, which fires when a `wiki/projects/*.md` page exists but no session was recorded against it.
+For every node with `kind == "projects"`, adopt the backing page's already-computed URL — carried on the node as `wiki_site_url`, kept distinct from the node's own `site_url` so the topic-page URL is never clobbered — **when `wiki_slug` is in `built_project_slugs`**. Returns the count rewritten. Nodes whose project has no built page keep `topics/<slug>.html` — FR4's fallback, which fires when a `wiki/projects/*.md` page exists but no session was recorded against it.
 
 The membership test is the whole job: the URL is already correct, but `wiki/projects/` is written by `ensure_project_stubs()` while `site/projects/` is written from session groups, so the two sets can differ. This mirrors `_verify_site_url()` (`graph.py:193`), which exists for exactly this class of "don't offer a link that 404s" problem (#328) — but keys on the built project set rather than probing the filesystem, since `build.py` already holds `groups`.
 
@@ -132,7 +133,10 @@ So the duplication is not only the pattern — it is the same anchor-stripping s
 | Export | Contract |
 | --- | --- |
 | `WIKILINK_RE` | the canonical pattern — the byte-identical form the three agreeing declarations use |
-| `wikilink_targets(text)` | set of link targets with anchors stripped and whitespace trimmed |
+| `strip_anchor(target)` | one already-extracted target without its `#section` anchor, trimmed |
+| `wikilink_targets(text)` | set of link targets from markdown, anchors stripped, empty targets excluded |
+
+Two levels because not every consumer holds the markdown text or wants a set. Three of the seven hand-rolled sites need `strip_anchor` rather than `wikilink_targets`: `topics.py:140` and `topics.py:258` iterate `page["out_links"]`, which `scan_pages` already extracted; `graphify_bridge` iterates `findall` as a **list** because it emits one edge per occurrence, so collapsing to a set would drop edges from `graph.json`; and `lint/rules/link_integrity.py` quotes the **raw** target in its operator-facing message and dedups on raw, so a set of stripped targets would change both the message text and the issue count. Only sites that genuinely want distinct page names take `wikilink_targets`.
 
 A dedicated leaf module rather than promoting one of the existing homes: `graph` and `lint` are each imported by different consumers of this pattern, so electing either as owner creates an import edge between subsystems that do not otherwise depend on one another. Nothing imports back out of `wikilinks`, so no cycle is possible.
 

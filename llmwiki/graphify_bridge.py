@@ -21,12 +21,12 @@ Usage from Python:
 from __future__ import annotations
 
 import json
-import re
 import sys
 from pathlib import Path
 from typing import Any
 
 from llmwiki import REPO_ROOT
+from llmwiki.wikilinks import WIKILINK_RE, strip_anchor
 
 WIKI_DIR = REPO_ROOT / "wiki"
 GRAPH_DIR = REPO_ROOT / "graph"
@@ -74,8 +74,6 @@ def _extract_wiki_nodes(wiki_dir: Path) -> dict[str, Any]:
     are connected via project hub nodes and date-proximity edges to
     reduce graph orphans.
     """
-    WIKILINK_RE = re.compile(r"\[\[([^\]|#]+?)(?:#[^\]]*)?(?:\|[^\]]+)?\]\]")
-
     nodes: list[dict] = []
     edges: list[dict] = []
     seen_ids: set[str] = set()
@@ -134,9 +132,9 @@ def _extract_wiki_nodes(wiki_dir: Path) -> dict[str, Any]:
         seen_ids.add(node_id)
 
         # Extract wikilink edges
-        for target in WIKILINK_RE.findall(text):
-            target = target.strip()
-            if len(target) > 120:
+        for raw_target in WIKILINK_RE.findall(text):
+            target = strip_anchor(raw_target)
+            if not target or len(target) > 120:
                 continue  # Skip malformed / absurdly long wikilinks
             target_id = target.replace(" ", "_").replace("/", "_")
             edges.append({

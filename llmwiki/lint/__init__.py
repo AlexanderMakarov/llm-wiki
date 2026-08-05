@@ -20,7 +20,6 @@ Rule severity levels: ``error``, ``warning``, ``info``.
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 from typing import Any
 
@@ -33,7 +32,6 @@ from llmwiki import REPO_ROOT
 from llmwiki._frontmatter import parse_frontmatter as _parse_fm
 
 WIKI_DIR = REPO_ROOT / "wiki"
-WIKILINK_RE = re.compile(r"\[\[([^\]|]+)(?:\|[^\]]*)?\]\]")
 
 
 class LintRule:

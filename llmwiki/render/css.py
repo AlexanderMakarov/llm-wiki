@@ -825,6 +825,27 @@ a.topic-chip:hover {
 .topic-chip-more { opacity: 0.7; }
 .card-topics { margin-top: 8px; }
 .card-topics .topic-chip { font-size: 0.68rem; padding: 2px 8px; }
+/* Topic-page identity line (#108) — the chip naming what kind of thing
+   the topic is. Same pill shape as .topic-chip, sized for the hero
+   subtitle it sits in. Topics no wiki page describes render no chip. */
+.topic-kind-chip {
+  display: inline-block;
+  padding: 2px 9px;
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  vertical-align: baseline;
+}
+/* Two different facts, two different labels: "Active" is derived from the
+   sessions that mention the topic, "Reviewed" is the backing page's own
+   date. Either is dropped entirely when its dates are absent. */
+.topic-activity, .topic-reviewed { font-variant-numeric: tabular-nums; }
+.topic-reviewed { font-style: italic; }
+
 .project-topics-section { padding-top: 12px; padding-bottom: 8px; }
 .project-topics-section .container { padding-top: 16px; padding-bottom: 4px; }
 .project-description { margin: 0 0 10px; font-size: 0.92rem; line-height: 1.5; max-width: 680px; }

@@ -23,11 +23,12 @@ from pathlib import Path
 from typing import Any
 
 from llmwiki import REPO_ROOT
+from llmwiki._frontmatter import parse_frontmatter
+from llmwiki.wikilinks import WIKILINK_RE
 
 WIKI_DIR = REPO_ROOT / "wiki"
 GRAPH_DIR = REPO_ROOT / "graph"
 
-WIKILINK_RE = re.compile(r"\[\[([^\]|]+)(?:\|[^\]]*)?\]\]")
 # Wiki sources often use ``YYYY-MM-DD-<raw-stem>`` filenames while raw/
 # sessions/ and site/sessions/ use ``<raw-stem>`` (wiki-add, #54).
 _DATE_WIKI_STEM = re.compile(r"^\d{4}-\d{2}-\d{2}-(.+)$")
@@ -144,8 +145,26 @@ def _compute_site_url(text: str, rel_parts: tuple[str, ...],
     return None
 
 
+def _frontmatter_str(meta: dict[str, Any], key: str) -> str | None:
+    """Return one frontmatter field as a trimmed string, or ``None``.
+
+    ``_parse_scalar`` coerces bare ints/floats, so values are normalised back
+    to text. Absent, empty, and whitespace-only all collapse to ``None`` — no
+    fallback to another field is invented here (#108, FR2).
+    """
+    value = meta.get(key)
+    if value is None or isinstance(value, list | dict):
+        return None
+    return str(value).strip() or None
+
+
 def scan_pages(wiki_dir: Path | None = None) -> dict[str, dict[str, Any]]:
-    """Return a dict {slug: {path, type, title, out_links, site_url}}.
+    """Return a dict {slug: {path, type, title, out_links, site_url,
+    last_updated, date}}.
+
+    ``last_updated`` is the page's own review date and ``date`` is the date the
+    page records for itself — on a source page that is the session's date, not
+    the time synth ran. Both are ``None`` when the frontmatter omits them.
 
     ``wiki_dir`` defaults to the module ``WIKI_DIR`` (repo mode). Pass a
     vault's ``wiki/`` here so ``build --vault`` graphs the vault's pages
@@ -168,15 +187,13 @@ def scan_pages(wiki_dir: Path | None = None) -> dict[str, dict[str, Any]]:
             type_ = rel.parts[0] if len(rel.parts) > 1 else "root"
         except ValueError:
             type_ = "root"
-        title = slug
         try:
             text = p.read_text(encoding="utf-8")
         except OSError:
             continue
-        # Extract title from frontmatter if present
-        title_match = re.search(r'^title:\s*"?([^"\n]+)', text, re.MULTILINE)
-        if title_match:
-            title = title_match.group(1).strip('"')
+        # One frontmatter parse feeds title, review date, and page date.
+        meta, _body = parse_frontmatter(text)
+        title = _frontmatter_str(meta, "title") or slug
         # Extract wikilinks
         out_links = set(WIKILINK_RE.findall(text))
         site_url = _compute_site_url(text, rel.parts, slug, type_)
@@ -186,6 +203,8 @@ def scan_pages(wiki_dir: Path | None = None) -> dict[str, dict[str, Any]]:
             "title": title,
             "out_links": out_links,
             "site_url": site_url,
+            "last_updated": _frontmatter_str(meta, "last_updated"),
+            "date": _frontmatter_str(meta, "date"),
         }
     return pages
 
