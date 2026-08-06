@@ -1,7 +1,7 @@
 # Technical Specification: Topic pages show what the wiki knows about a topic
 
 - **Functional Specification:** [`functional-spec.md`](functional-spec.md) (approved)
-- **Status:** Draft
+- **Status:** Completed
 - **Author(s):** AWOS `/implement-feature` (issue #108)
 
 ---

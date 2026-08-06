@@ -664,10 +664,11 @@ function main() {
   const kindLabel = k => KIND_LABELS[k] || k;
   // Singular form of the same label, naming one topic in the side panel as
   // the static page's chip does (topics_page.py `_KIND_LABELS`). Derived from
-  // KIND_LABELS so the forms can't drift. 'other' gets none: no page describes
-  // the topic, so the row is dropped rather than filled (#108 FR8).
+  // KIND_LABELS so the forms can't drift. 'other' takes the label injected
+  // from topics_page.KIND_OTHER_LABEL: no page describes the topic, and that
+  // absence is itself worth naming rather than leaving the row out (#108 FR8).
   const kindLabelOne = k => {
-    if (!k || k === 'other') return '';
+    if (!k || k === 'other') return __KIND_OTHER_LABEL__;
     const s = kindLabel(k);
     if (s.endsWith('ies')) return s.slice(0, -3) + 'y';
     if (s.endsWith('ses')) return s.slice(0, -3) + 'sis';
@@ -948,7 +949,7 @@ function main() {
       const m = SESS[s] || {};
       const t = escapeHtml(m.title || s);
       return m.url
-        ? '<a class="panel-link" href="' + escapeHtml(m.url) + '" target="_blank" rel="noopener">' + t + '</a>'
+        ? '<a class="panel-link" href="' + escapeHtml(m.url) + '">' + t + '</a>'
         : '<span class="panel-muted">' + t + '</span>';
     });
     const extra = (slugs || []).length - rows.length;
@@ -967,13 +968,12 @@ function main() {
     return first === last ? first : first + ' – ' + last;
   }
   // Kind and freshness — the facts the topic page names, so the map can be
-  // triaged without opening pages (#108 FR7). Active comes from sessions,
-  // Reviewed from the page's own curation date: two facts, two rows, each
-  // dropped when the node lacks its field.
+  // triaged without opening pages (#108 FR7). Kind always renders, naming the
+  // unclassified state when no page describes the topic. Active comes from
+  // sessions, Reviewed from the page's own curation date: two facts, two rows,
+  // each dropped when the node lacks its field.
   function topicIdentityRows(node) {
-    let h = '';
-    const kind = kindLabelOne(node.kind);
-    if (kind) h += statRow('Kind', kind);
+    let h = statRow('Kind', kindLabelOne(node.kind));
     const active = topicActivity(node);
     if (active) h += statRow('Active', active);
     if (node.last_updated) h += statRow('Reviewed', String(node.last_updated));
@@ -989,7 +989,9 @@ function main() {
     } catch (err) {
       reportGraphError('Could not read details for "' + node.label + '"', err);
     }
-    if (node.site_url) h += '<a class="panel-open" href="' + escapeHtml(node.site_url) + '" target="_blank" rel="noopener">Open page →</a>';
+    // Current tab, like every other link in the site: only double-clicking a
+    // node is the deliberate "take this elsewhere" gesture (#108 FR10).
+    if (node.site_url) h += '<a class="panel-open" href="' + escapeHtml(node.site_url) + '">Open page →</a>';
     if (neigh.length) {
       h += '<h3 style="margin-top:10px">Top connections</h3>';
       h += neigh.slice(0, 6).map(p =>
@@ -1149,9 +1151,10 @@ function main() {
     switch (action) {
       case 'open': {
         // #328: use precomputed site_url so nodes without a compiled
-        // page degrade gracefully instead of 404.
+        // page degrade gracefully instead of 404. Navigates in the current
+        // tab — only double-click opens a new one (#108 FR10).
         if (node.site_url) {
-          window.open(node.site_url, '_blank', 'noopener');
+          window.location.href = node.site_url;
         } else {
           alert(node.label + ' — no compiled page exists for this node. '
             + 'Entities, concepts, and nav files live in wiki/ but aren\u2019t rendered as standalone site pages.');
@@ -1311,6 +1314,11 @@ def write_html(graph: dict[str, Any], out_path: Path) -> None:
     # dead end. Imported lazily to avoid a top-level circular dependency
     # (build.py imports graph.copy_to_site).
     from llmwiki.build import nav_bar, search_palette_markup  # noqa: PLC0415 — cycle: graph↔build
+
+    # The panel names an undescribed topic exactly as the static page's chip
+    # does, so the label has one definition (#108 FR7).
+    from llmwiki.topics_page import KIND_OTHER_LABEL  # noqa: PLC0415 — cycle: graph↔topics↔graph
+
     site_nav_html = nav_bar(active="graph", link_prefix="")
     # The nav renders a search button and script.js binds Cmd+K, but both
     # no-op unless the dialog they open is on the page too — graph.html
@@ -1320,6 +1328,7 @@ def write_html(graph: dict[str, Any], out_path: Path) -> None:
         .replace("__GRAPH_JSON__", payload)
         .replace("__SITE_NAV__", site_nav_html)
         .replace("__SITE_PALETTE__", search_palette_markup(js_prefix=""))
+        .replace("__KIND_OTHER_LABEL__", json.dumps(KIND_OTHER_LABEL))
     )
     out_path.write_text(html, encoding="utf-8")
 

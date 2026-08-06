@@ -20,7 +20,12 @@ from llmwiki.topics import (
     topic_slug,
 )
 from llmwiki.topics_consolidate import parse_and_cache, render_consolidation_prompt
-from llmwiki.topics_page import _display_aliases, _identity_line, build_topic_pages
+from llmwiki.topics_page import (
+    KIND_OTHER_LABEL,
+    _display_aliases,
+    _identity_line,
+    build_topic_pages,
+)
 
 
 def _session(
@@ -275,12 +280,13 @@ def test_identity_line_renders_only_the_elements_present():
         '<span class="topic-kind-chip">Entity</span> · 3 connected topics'
         " · 4 sessions · <code>hazel</code>"
     )
-    # No backing page → no chip, and nothing in its place.
+    # No backing page → the chip names that state rather than disappearing.
+    unfiled = f'<span class="topic-kind-chip">{KIND_OTHER_LABEL}</span>'
     assert _identity_line({"id": "Unfiled", "kind": "other"}, 0) == (
-        "0 connected topics · <code>unfiled</code>"
+        f"{unfiled} · 0 connected topics · <code>unfiled</code>"
     )
     # A node missing `kind` entirely behaves the same way.
-    assert "topic-kind-chip" not in _identity_line({"id": "Unfiled"}, 1)
+    assert unfiled in _identity_line({"id": "Unfiled"}, 1)
 
 
 # ─── FR2: activity vs review dates ────────────────────────────────────
@@ -386,7 +392,10 @@ def test_identity_line_omits_each_date_independently():
 
     # Neither — no date, no placeholder, no dangling separator.
     neither = _identity_line({"id": "Unfiled"}, 0)
-    assert neither == "0 connected topics · <code>unfiled</code>"
+    assert neither == (
+        f'<span class="topic-kind-chip">{KIND_OTHER_LABEL}</span>'
+        " · 0 connected topics · <code>unfiled</code>"
+    )
 
 
 def test_topic_page_alias_note_uses_hover_not_inline_explanation(tmp_path: Path):

@@ -41,6 +41,11 @@ _KIND_LABELS = {
     "syntheses": "Synthesis",
     "sources": "Source",
 }
+# What a topic no wiki page describes is called. The absence of a page is
+# itself a fact worth showing: a reader seeing no chip cannot tell whether the
+# topic is unclassified or whether the page simply failed to render one, so the
+# chip is always present and names that state (FR1, FR8).
+KIND_OTHER_LABEL = "Unclassified topic"
 _ALIAS_TOOLTIP = (
     "Alternate spellings or related names sessions used in [[wikilinks]] "
     "before consolidation merged them under this topic."
@@ -101,15 +106,26 @@ def _session_links(slugs: list[str], sessions_meta: dict[str, dict[str, str]]) -
     return '<ul class="topic-session-list">\n' + "\n".join(rows) + "\n</ul>"
 
 
-def _kind_label(kind: str) -> str:
-    """Human-readable singular name for a wiki folder, ``""`` when there is none.
+def kind_label(kind: str) -> str:
+    """Human-readable singular name for a wiki folder.
 
-    A topic no page describes carries ``KIND_OTHER`` and gets no label — the
-    chip is dropped rather than filled with a placeholder (FR8).
+    A topic carrying ``KIND_OTHER``, or no kind at all, is described by no wiki
+    page and is named :data:`KIND_OTHER_LABEL` (FR1, FR8). Every other folder
+    gets its entry in :data:`_KIND_LABELS`, falling back to a de-pluralised
+    form of the folder name so an unrecognised kind still reads sensibly.
     """
     if not kind or kind == KIND_OTHER:
-        return ""
+        return KIND_OTHER_LABEL
     return _KIND_LABELS.get(kind) or kind.removesuffix("s").capitalize()
+
+
+def kind_chip(kind: str) -> str:
+    """Render the identity-line kind chip for a wiki folder kind.
+
+    Shared with the project page, which shows the same chip so a reader routed
+    there from the map sees the label the topic page would have shown (FR5).
+    """
+    return f'<span class="topic-kind-chip">{html.escape(kind_label(kind))}</span>'
 
 
 def _activity_span(node: dict[str, Any]) -> str:
@@ -144,14 +160,12 @@ def _reviewed_span(node: dict[str, Any]) -> str:
 def _identity_line(node: dict[str, Any], neighbor_count: int) -> str:
     """Render the topic page's identity line: kind chip, dates, counts, slug.
 
-    The activity dates and the review date are two different facts and are
-    labelled as such. Every element is omitted entirely when the node lacks
-    its field — no labels without values, no placeholder text (FR1, FR2, FR8).
+    The kind chip always renders, naming the unclassified state when no wiki
+    page describes the topic. The activity dates and the review date are two
+    different facts and are labelled as such; each is omitted entirely when the
+    node lacks its field — no labels without values (FR1, FR2, FR8).
     """
-    parts: list[str] = []
-    label = _kind_label(str(node.get("kind") or ""))
-    if label:
-        parts.append(f'<span class="topic-kind-chip">{html.escape(label)}</span>')
+    parts: list[str] = [kind_chip(str(node.get("kind") or ""))]
     for span in (_activity_span(node), _reviewed_span(node)):
         if span:
             parts.append(span)

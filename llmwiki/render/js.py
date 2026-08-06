@@ -1026,7 +1026,9 @@ document.addEventListener("DOMContentLoaded", function () {
     ul.innerHTML = results.map(function (r, i) {
       const meta = [r.project, r.date, r.model].filter(Boolean).join(" · ");
       return '<li data-i="' + i + '" class="' + (i === 0 ? 'active' : '') + '">' +
-        '<span class="result-type">' + (r.type || 'page') + '</span>' +
+        // #108: a topic entry carries the kind the map and its page name
+        // (Entity, Concept, …); everything else badges its type.
+        '<span class="result-type">' + escapeHtml(r.kind || r.type || 'page') + '</span>' +
         '<span class="result-title">' + escapeHtml(r.title) + '</span>' +
         (meta ? '<div class="result-meta">' + escapeHtml(meta) + '</div>' : '') +
         '</li>';

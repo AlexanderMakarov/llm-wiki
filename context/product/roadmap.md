@@ -43,7 +43,7 @@ _Newcomers should understand benefits and the canonical loop without fork histor
 _Humans see knowledge on topic pages; Cursor becomes a real session source (product definition)._
 
 - [ ] **Visual knowledge depth**
-  - [ ] **Topic pages show kind, freshness, and Key Facts (#108):** Entity/concept content reaches readers; project topics route to project pages; graph panel shows the same metadata.
+  - [x] **Topic pages show kind, freshness, and Key Facts (#108):** Entity/concept content reaches readers; project topics route to project pages; graph panel shows the same metadata.
 
 - [ ] **Cursor as a real session source**
   - [ ] **Parse Cursor session state (#2):** Stop silently filtering all Cursor sessions after discovering the store.

@@ -22,6 +22,7 @@ from llmwiki.build import (
     render_project_page,
 )
 from llmwiki.topics import build_topic_graph
+from llmwiki.topics_page import kind_chip, kind_label
 
 _HEADING = "<h2>Connected topics</h2>"
 _HERO_SUB = re.compile(r'<p class="hero-sub">(.*?)</p>', re.S)
@@ -151,6 +152,20 @@ def test_undated_sessions_are_skipped_rather_than_blanking_the_range():
 def test_a_project_with_no_dated_session_has_no_dates():
     assert project_session_dates([_session("s0", None)]) == ("", "")
     assert project_session_dates([]) == ("", "")
+
+
+def test_project_hero_opens_with_a_project_kind_chip(tmp_path: Path):
+    """FR5: a project topic routes here, so this page carries the kind chip.
+
+    The reader never sees the topic page's chip, and the label comes from the
+    topic page's own helper rather than a literal, so the two cannot drift.
+    """
+    page = render_project_page("demo", [_session("s0")], tmp_path).read_text(
+        encoding="utf-8"
+    )
+    sub = _hero_sub(page)
+    assert sub.startswith(kind_chip("projects"))
+    assert f'<span class="topic-kind-chip">{kind_label("projects")}</span>' in sub
 
 
 def test_project_hero_shows_the_derived_dates(tmp_path: Path):

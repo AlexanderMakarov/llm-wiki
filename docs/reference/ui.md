@@ -82,7 +82,7 @@ Clicking a card navigates to `/projects/<slug>.html` — the project detail page
 
 ### Project detail (`/projects/<slug>.html`)
 
-- Hero — display name plus `slug`, `created`, `updated`, main-session and sub-agent counts. The two dates are the earliest and latest `date` across the project's own sessions, recomputed every build: project stubs carry no date of their own, so nothing is hand-maintained, and a project whose sessions all lack a date shows neither.
+- Hero — display name plus a `Project` kind chip, `slug`, `created`, `updated`, main-session and sub-agent counts. The chip is the same one a [topic page](#topic-pages) carries, shown here because a project topic routes to this page instead, so the reader sees the kind either way. The two dates are the earliest and latest `date` across the project's own sessions, recomputed every build: project stubs carry no date of their own, so nothing is hand-maintained, and a project whose sessions all lack a date shows neither.
 - Project summary (auto-synthesised from sessions)
 - **Connected topics** — the topics this project co-occurs with, immediately above the session tables. Same list shape as on a [topic page](#topic-pages) (topic name · shared-session count), linking to `../topics/<slug>.html`. The whole section is omitted — heading included — when the project's topic node has no connections, or when the vault has too few topics for the topic graph to be used at all.
 - Sorted session table (date desc)
@@ -145,7 +145,7 @@ Interactive force-directed knowledge graph. Details in [`reference/reader-api.md
 
 - Pan / zoom (mouse / trackpad)
 - Click a node → focuses its 1-hop neighbourhood; in topic mode it also opens the side panel, in page mode it opens the node's compiled page in a new tab
-- Double-click a node → opens its page in a new tab — the [topic page](#topic-pages), or the project page for a topic that routes to one
+- Double-click a node → opens its page in a new tab — the [topic page](#topic-pages), or the project page for a topic that routes to one. Double-click is the only gesture that opens a new tab: the side panel's `Open page →`, its session links, and the right-click menu's **Open** all navigate in the current tab like every other link in the site
 - Search input in the top-right → highlights matching nodes, dims the rest
 - Orphan highlighting — nodes with zero inbound links get a red border
 - Cluster toggle — group nodes by kind (the `wiki/` folder behind each topic)
@@ -167,7 +167,7 @@ Interactive force-directed knowledge graph. Details in [`reference/reader-api.md
 
 Red is deliberately not a kind colour: the map already spends it on two states — the orphan border and a live search match — and a kind sharing it would read as an error.
 
-**Side panel** (topic mode, single click) — topic name, `Sessions`, `Connected topics`, then the same identity facts the topic page carries: `Kind`, `Active`, `Reviewed`. Each of those three rows is omitted when the node lacks the field, so a topic with no backing wiki page shows the counts alone rather than empty rows. `Open page →` follows, then the top connections and the bridging sessions.
+**Side panel** (topic mode, single click) — topic name, `Sessions`, `Connected topics`, then the same identity facts the topic page carries: `Kind`, `Active`, `Reviewed`. `Kind` always renders, reading `Unclassified topic` when no wiki page describes the node; the two date rows are omitted when the node lacks the field, so a topic with no dates shows the counts and the kind rather than empty rows. `Open page →` follows, then the top connections and the bridging sessions.
 
 **Offline fallback:** if the vis-network CDN can't load, the viewer shows an inline notice instead of a blank screen.
 
@@ -185,11 +185,11 @@ Two thresholds decide which topics get a page: a topic mentioned by fewer than 2
 
 ### Layout
 
-The title, then an **identity line** of ` · `-separated parts in this order — each part dropped entirely when its source is absent, never filled with a placeholder:
+The title, then an **identity line** of ` · `-separated parts in this order — each date part dropped entirely when its source is absent, never filled with a placeholder:
 
 `Entity` chip · `Active 2026-01-09 – 2026-07-30` · `Reviewed 2026-08-01` · `7 connected topics` · `12 sessions` · `<slug>`
 
-The kind chip names the singular kind — Entity, Concept, Project, Question, Comparison, Synthesis, Source. Below the identity line:
+The kind chip names the singular kind — Entity, Concept, Project, Question, Comparison, Synthesis, Source — or `Unclassified topic` when no wiki page describes it. The chip is never dropped: the absence of a backing page is itself a fact, and a missing chip would leave a reader unable to tell an unclassified topic from a page that failed to render one. Below the identity line:
 
 - **Also tagged as** — the alternative spellings sessions used before clustering merged them under this name.
 - **Page content** — the backing wiki page's body (see below). Absent when no page backs the topic or the page records nothing.
@@ -205,11 +205,11 @@ This is the distinction to keep straight: **sessions supply reach and activity, 
 | `Active <first> – <last>` | the `date` frontmatter of the sessions that mention the topic — oldest to newest, collapsing to one date when they agree | at least one such session carries a date |
 | `N sessions` + the Sessions list | the same set of sessions | always |
 | `N connected topics` + the Connected topics list | co-occurrence: two topics share an edge when a session mentions both | always (the count can be `0`) |
-| Kind chip | the `wiki/` folder holding the page that backs the topic — `entities/` → Entity, `concepts/` → Concept, and so on. The folder is the only kind signal the schema carries; frontmatter `type` is not consulted | a page's slug or title matches the topic's canonical spelling or one of its aliases |
+| Kind chip | the `wiki/` folder holding the page that backs the topic — `entities/` → Entity, `concepts/` → Concept, and so on. The folder is the only kind signal the schema carries; frontmatter `type` is not consulted | always — `Unclassified topic` when no page's slug or title matches the topic's canonical spelling or one of its aliases |
 | `Reviewed <date>` | that page's `last_updated` frontmatter | the page records one |
 | Page content | that page's body | the page has a body left after the omissions below |
 
-A topic with no backing page therefore shows no chip, no review date and no content — and one whose page omits `last_updated` shows no review date even while sessions supply activity dates.
+A topic with no backing page therefore shows no review date and no content, and its chip reads `Unclassified topic` — and one whose page omits `last_updated` shows no review date even while sessions supply activity dates.
 
 ### Page content
 
@@ -285,11 +285,12 @@ There is no daily bar chart — trends are read from the heatmaps. Durable count
 Press `⌘K` (or `Ctrl+K` on Linux/Windows) from any page.
 
 - Fuzzy match over **every** page title + body — including topic pages (`type: topic`) and their alias spellings (#50).
+- The badge on each result reads its `kind` when the entry carries one and its `type` otherwise, so a topic result says `Entity`, `Concept`, `Project` … — or `Unclassified topic` — matching what the map and the topic page call it (#108). The underlying `type` is unchanged.
 - Top result on Enter navigates.
 - Shows facet chips: `Project`, `Entity type`, `Lifecycle`, `Confidence`, `Tags` — click a facet to filter.
 - Footer shows the current mode (`flat` / `tree`) from `search-index.json._mode` and the deep-page ratio (see [`reference/cache-tiers.md`](cache-tiers.md) for the tree-mode heuristic).
 - Keyboard: `↑ / ↓` navigate, `Enter` open, `Esc` close.
-- Filter by type: `type:topic` / `type:session` / `type:project` / `type:docs` / `type:document` / `type:slash` / `type:page`.
+- Filter by type: `type:topic` / `type:session` / `type:project` / `type:docs` / `type:document` / `type:slash` / `type:page`. `type:topic` still matches every topic result whatever its badge says — the badge reads `kind`, the filter reads `type`.
 
 ---
 
@@ -300,7 +301,7 @@ Two levels:
 - `site/search-index.json` — ~7 KB meta index (projects, static pages, documents, docs, slash commands, **topics**) + chunk manifest + facet counts + mode badge.
 - `site/search-chunks/<project>.json` — per-project session entries with `title`, `url`, `type`, `project`, `date`, `model`, `body`, `heading_max_depth`, `heading_count_by_depth`.
 
-Topic entries (`type: "topic"`) point at `topics/<slug>.html` — or at `projects/<slug>.html` for a topic that [routes to a project page](#project-topics-route-to-the-project-page); their `body` includes session count plus `also: …` aliases so a query using any non-canonical spelling still hits the right page. The same payloads ship as `.js` sidecars for `file://` (#20).
+Topic entries (`type: "topic"`) point at `topics/<slug>.html` — or at `projects/<slug>.html` for a topic that [routes to a project page](#project-topics-route-to-the-project-page); their `body` includes session count plus `also: …` aliases so a query using any non-canonical spelling still hits the right page, and their `kind` carries the human-readable singular label the palette badge shows (`Entity`, `Concept`, `Project`, … or `Unclassified topic`). `kind` is present on topic entries only. The same payloads ship as `.js` sidecars for `file://` (#20).
 
 The palette lazy-loads chunks as the query narrows. See [`reference/reader-api.md`](reader-api.md) for the stable shape.
 

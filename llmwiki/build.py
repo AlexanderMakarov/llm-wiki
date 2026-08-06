@@ -113,7 +113,7 @@ from llmwiki.synth.claude_cli import overview_argv
 from llmwiki.synth.pipeline import refresh_synth_pending
 from llmwiki.tag_utils import NOISE_TAGS
 from llmwiki.topics import build_topic_graph, resolve_project_topic_urls, topic_slug
-from llmwiki.topics_page import _neighbors, build_topic_pages
+from llmwiki.topics_page import _neighbors, build_topic_pages, kind_chip, kind_label
 from llmwiki.usage import (
     combined_totals as _mcp_combined_totals,
 )
@@ -1597,7 +1597,13 @@ def render_project_page(
     # Filename stays `<slug>.html` for stable URLs; the hero title is
     # the restored local cwd. Slug stays in the subtitle for search.
     display_name = primary_cwd or project_slug
-    hero_sub_bits = [f"slug <code>{html.escape(project_slug)}</code>"]
+    # #108 FR5: a project topic routes here instead of to its topic page, so
+    # the reader never sees that page's chip — the project page carries the
+    # same one.
+    hero_sub_bits = [
+        kind_chip("projects"),
+        f"slug <code>{html.escape(project_slug)}</code>",
+    ]
     # #108 FR2: dates come from the sessions, never from the project stub —
     # a project whose sessions carry none shows none.
     created, updated = project_session_dates(sessions)
@@ -2531,7 +2537,8 @@ def build_search_index(
 
     `topics` is the ``nodes`` list from :func:`build_topic_graph` (#50). Each
     node becomes a ``type: "topic"`` meta entry whose ``body`` carries aliases
-    so non-canonical spellings match in the Cmd+K palette.
+    so non-canonical spellings match in the Cmd+K palette, and whose ``kind``
+    carries the human-readable name the palette badge shows (#108).
     """
     # ── session entries grouped by project ──
     chunks: dict[str, list[dict[str, Any]]] = {}
@@ -2693,6 +2700,11 @@ def build_search_index(
             "url": str(node.get("site_url") or f"topics/{slug}.html"),
             "title": name,
             "type": "topic",
+            # #108 FR11: the palette badge names the kind the map and the
+            # topic page name. `type` stays "topic" — it is the documented
+            # `type:topic` palette filter and part of the frozen index shape,
+            # so the kind is added alongside it rather than replacing it.
+            "kind": kind_label(str(node.get("kind") or "")),
             "project": "",
             "date": "",
             "model": "",

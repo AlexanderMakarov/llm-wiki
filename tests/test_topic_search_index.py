@@ -13,7 +13,9 @@ from pathlib import Path
 
 from llmwiki import build as build_mod
 from llmwiki.build import build_search_index, build_site
-from llmwiki.topics import build_topic_graph, topic_slug
+from llmwiki.render.js import JS
+from llmwiki.topics import KIND_OTHER, build_topic_graph, topic_slug
+from llmwiki.topics_page import KIND_OTHER_LABEL
 
 
 def _tiny_sources(tmp_path: Path) -> tuple[list, dict]:
@@ -69,6 +71,44 @@ def test_build_search_index_includes_topic_entries(tmp_path: Path):
     lw = by_title["LLM-Wiki"]
     assert lw["url"] == "topics/llm-wiki.html"
     assert "llmwiki" in lw["body"].lower()
+
+
+def test_topic_entries_carry_the_kind_the_badge_shows(tmp_path: Path):
+    """#108 FR11: a result names its kind, not the generic "topic".
+
+    ``type`` is a documented palette filter and part of the frozen index
+    shape, so the kind rides alongside it in ``kind`` rather than replacing
+    it — every topic entry keeps ``type: "topic"`` and ``type:topic`` keeps
+    matching all of them.
+    """
+    sources, groups = _tiny_sources(tmp_path)
+    out = tmp_path / "site"
+    out.mkdir()
+    topics = [
+        {"id": "Hazel", "site_url": "topics/hazel.html", "session_count": 2,
+         "kind": "entities"},
+        {"id": "Batching", "site_url": "topics/batching.html", "session_count": 2,
+         "kind": "concepts"},
+        {"id": "toolkit", "site_url": "projects/toolkit.html", "session_count": 2,
+         "kind": "projects"},
+        {"id": "Unfiled", "site_url": "topics/unfiled.html", "session_count": 2,
+         "kind": KIND_OTHER},
+    ]
+    build_search_index(sources, groups, out, topics=topics)
+    data = json.loads((out / "search-index.json").read_text(encoding="utf-8"))
+    topic_entries = [e for e in data["entries"] if e.get("type") == "topic"]
+    assert len(topic_entries) == len(topics)
+    assert {e["title"]: e["kind"] for e in topic_entries} == {
+        "Hazel": "Entity",
+        "Batching": "Concept",
+        "toolkit": "Project",
+        "Unfiled": KIND_OTHER_LABEL,
+    }
+
+
+def test_palette_badge_prefers_the_kind_over_the_type():
+    """The rendered badge reads the kind when the entry carries one (FR11)."""
+    assert "escapeHtml(r.kind || r.type || 'page')" in JS
 
 
 def test_topic_entries_ride_js_sidecar(tmp_path: Path):

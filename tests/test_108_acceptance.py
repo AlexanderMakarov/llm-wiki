@@ -287,14 +287,21 @@ def test_last_updated_quoted_and_bare_render_identically(tmp_path: Path, monkeyp
 
 def test_search_index_topic_entries_carry_only_the_frozen_keys(tmp_path: Path):
     """Topic entries in ``site/search-index.json`` must carry exactly the
-    keys ``docs/reference/reader-api.md`` freezes for the reader contract.
+    keys the reader contract freezes, plus the one #108 FR11 deliberately
+    adds.
 
-    #108 adds several new fields to a graph *node* (``kind``, ``first_seen``,
+    #108 adds several new fields to a graph *node* (``first_seen``,
     ``last_seen``, ``last_updated``, ``wiki_slug``, ``wiki_path``,
-    ``wiki_site_url``). ``build_search_index`` hand-constructs each topic
-    entry rather than copying the node, so none of those fields should ever
-    reach the index — this guardrail fails first if a future edit switches
-    to copying the node wholesale.
+    ``wiki_site_url``, ``degree``). ``build_search_index`` hand-constructs
+    each topic entry rather than copying the node, so none of those fields
+    should ever reach the index — this guardrail exists to fail first if a
+    future edit switches to copying the node wholesale, and stays an exact-set
+    assertion for that reason.
+
+    ``kind`` is the one intentional addition (FR11): it carries the
+    human-readable label the palette badge shows, *not* the node's raw folder
+    name, so this also pins the value apart from the node field it is named
+    after. Additive changes are explicitly safe under the reader contract.
     """
     # @regression
     src = tmp_path / "sessions" / "demo" / "one.md"
@@ -326,12 +333,18 @@ def test_search_index_topic_entries_carry_only_the_frozen_keys(tmp_path: Path):
     data = json.loads((out / "search-index.json").read_text(encoding="utf-8"))
     topic_entries = [e for e in data["entries"] if e.get("type") == "topic"]
     assert len(topic_entries) == 1
-    frozen_keys = {"id", "url", "title", "type", "project", "date", "model", "body"}
+    frozen_keys = {
+        "id", "url", "title", "type", "project", "date", "model", "body", "kind",
+    }
     assert set(topic_entries[0].keys()) == frozen_keys, (
         f"topic entry keys drifted from the frozen reader contract: "
         f"{sorted(topic_entries[0].keys())}"
     )
-    for leaked in ("kind", "first_seen", "last_seen", "last_updated",
+    # The label, not the node's folder name — and `type` is untouched, so the
+    # documented `type:topic` palette filter keeps matching.
+    assert topic_entries[0]["kind"] == "Entity"
+    assert topic_entries[0]["type"] == "topic"
+    for leaked in ("first_seen", "last_seen", "last_updated",
                    "wiki_slug", "wiki_path", "wiki_site_url", "degree"):
         assert leaked not in topic_entries[0]
 

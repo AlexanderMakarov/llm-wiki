@@ -3,7 +3,9 @@
 `showTopicPanel()` used to show session and connection counts only, so
 triaging a bubble meant opening its page. It now names the topic's kind and
 its freshness, with activity (session-derived) kept distinct from review (the
-backing page's own date), and every row dropped when the node lacks its field.
+backing page's own date), each freshness row dropped when the node lacks its
+field, and the kind row always present — naming the unclassified state when no
+wiki page describes the topic.
 
 The rows are built by JS at click time, so a substring assertion on
 `graph.html` would prove the code is present, not that it renders. These tests
@@ -24,7 +26,7 @@ import pytest
 
 from llmwiki.graph import write_html
 from llmwiki.topics import KIND_OTHER, TOPIC_KIND_FOLDERS
-from llmwiki.topics_page import _kind_label
+from llmwiki.topics_page import KIND_OTHER_LABEL, kind_label
 
 needs_node = pytest.mark.skipif(
     shutil.which("node") is None, reason="node not on PATH"
@@ -102,10 +104,17 @@ def test_a_topic_seen_once_shows_a_single_date_not_a_range(
 
 
 @needs_node
-def test_a_topic_no_page_describes_gets_no_kind_row(rendered: str, tmp_path: Path):
+def test_a_topic_no_page_describes_is_labelled_unclassified(
+    rendered: str, tmp_path: Path
+):
+    """The panel names the unclassified state as the topic page's chip does.
+
+    Dropping the row would leave a reader unable to tell an unclassified topic
+    from a panel that failed to render its kind (FR7).
+    """
     node = {"kind": KIND_OTHER, "first_seen": "2026-01-02", "last_seen": "2026-01-02"}
     (rows,) = _panel_rows(rendered, [node], tmp_path)
-    assert [label for label, _ in rows] == ["Active"]
+    assert rows == [("Kind", KIND_OTHER_LABEL), ("Active", "2026-01-02")]
 
 
 @needs_node
@@ -116,13 +125,14 @@ def test_each_freshness_row_is_omitted_independently(rendered: str, tmp_path: Pa
         {"kind": "projects"},
         {"kind": KIND_OTHER},
     ]
-    reviewed_only, active_only, kind_only, nothing = _panel_rows(
+    reviewed_only, active_only, kind_only, unclassified = _panel_rows(
         rendered, nodes, tmp_path
     )
     assert [label for label, _ in reviewed_only] == ["Kind", "Reviewed"]
     assert [label for label, _ in active_only] == ["Kind", "Active"]
     assert [label for label, _ in kind_only] == ["Kind"]
-    assert nothing == []
+    # Kind survives every freshness field going missing — only the dates drop.
+    assert unclassified == [("Kind", KIND_OTHER_LABEL)]
 
 
 @needs_node
@@ -137,13 +147,13 @@ def test_panel_kind_labels_match_the_static_topic_page(rendered: str, tmp_path: 
     """The panel and the page must name a kind identically (FR7).
 
     The viewer derives its singular labels from the legend's plural ones, so
-    this pins the derivation against `topics_page._kind_label()` — the static
+    this pins the derivation against `topics_page.kind_label()` — the static
     page's authority — for every kind a node can carry.
     """
     kinds = sorted(TOPIC_KIND_FOLDERS | {KIND_OTHER})
     rows = _panel_rows(rendered, [{"kind": k} for k in kinds], tmp_path)
     got = {k: (r[0][1] if r else "") for k, r in zip(kinds, rows, strict=True)}
-    assert got == {k: _kind_label(k) for k in kinds}
+    assert got == {k: kind_label(k) for k in kinds}
 
 
 def test_freshness_fields_survive_the_vis_node_mapping(rendered: str):

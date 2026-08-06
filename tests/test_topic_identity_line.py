@@ -1,8 +1,9 @@
 """Topic pages open with an identity line naming the kind (#108, FR1 + FR8).
 
 Builds a fixture vault holding an entity, a concept, a project and a topic
-that no wiki page describes, then asserts the first three render a kind chip
-and the fourth renders none — with no empty heading and no dangling label.
+that no wiki page describes, then asserts the first three render their kind
+chip and the fourth renders the unclassified one — with no empty heading and
+no dangling label.
 """
 
 from __future__ import annotations
@@ -13,6 +14,7 @@ from pathlib import Path
 import llmwiki.build as build_mod
 from llmwiki.build import build_site
 from llmwiki.topics import build_topic_graph
+from llmwiki.topics_page import KIND_OTHER_LABEL
 
 # Distinct enough that the vocabulary's near-duplicate clustering keeps them apart.
 _TOPICS = ["Hazel", "Batching", "toolkit", "Unfiled", "Gamma"]
@@ -100,12 +102,17 @@ def test_described_topics_show_a_kind_chip(tmp_path: Path, monkeypatch):
         assert f"<code>{slug}</code>" in page
 
 
-def test_undescribed_topic_shows_no_chip_and_no_dangling_label(
-    tmp_path: Path, monkeypatch
-):
+def test_undescribed_topic_is_labelled_unclassified(tmp_path: Path, monkeypatch):
+    """No backing page is itself a fact, so the chip names it (FR1, FR8).
+
+    A missing chip would leave the reader unable to tell an unclassified topic
+    from a page that failed to render one.
+    """
     site = _build_fixture_vault(tmp_path, monkeypatch)
     page = (site / "topics" / "unfiled.html").read_text(encoding="utf-8")
-    assert "topic-kind-chip" not in page
+    assert (
+        f'<span class="topic-kind-chip">{KIND_OTHER_LABEL}</span>' in page
+    )
     # The rest of the identity line still renders.
     assert "connected topics" in page
     assert "<code>unfiled</code>" in page
