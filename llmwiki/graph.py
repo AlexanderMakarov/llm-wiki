@@ -432,8 +432,12 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     text-transform: uppercase; letter-spacing: 0.04em;
     color: var(--g-muted);
   }
-  #stats-overlay .stat { display: flex; justify-content: space-between; padding: 2px 0; }
-  #stats-overlay .stat b { color: var(--g-text); }
+  /* Rows carry dates as well as counts (#108 FR7): a value too wide to sit
+     beside its label wraps under it rather than colliding with it. */
+  #stats-overlay .stat {
+    display: flex; flex-wrap: wrap; gap: 2px 12px;
+    justify-content: space-between; padding: 2px 0; }
+  #stats-overlay .stat b { color: var(--g-text); margin-left: auto; white-space: nowrap; }
   #stats-overlay .hub-item { font-family: ui-monospace, monospace; font-size: 0.75rem; color: var(--g-muted); }
   #stats-overlay .hub-item b { color: var(--g-accent); }
   /* #54 topic-mode side panel: per-topic / per-edge content can run long, so
@@ -652,14 +656,23 @@ function main() {
     topic: () => cssVar('--g-node-topic'),
   };
   const orphanColor = () => cssVar('--g-orphan');
-  // Human labels for the wiki folders a node can belong to. Used by the
-  // legend and by the Cluster control's collapsed-node captions.
   const KIND_LABELS = {
     entities: 'Entities', concepts: 'Concepts', projects: 'Projects',
     questions: 'Questions', comparisons: 'Comparisons',
     syntheses: 'Syntheses', sources: 'Sources', other: 'Other',
   };
   const kindLabel = k => KIND_LABELS[k] || k;
+  // Singular form of the same label, naming one topic in the side panel as
+  // the static page's chip does (topics_page.py `_KIND_LABELS`). Derived from
+  // KIND_LABELS so the forms can't drift. 'other' gets none: no page describes
+  // the topic, so the row is dropped rather than filled (#108 FR8).
+  const kindLabelOne = k => {
+    if (!k || k === 'other') return '';
+    const s = kindLabel(k);
+    if (s.endsWith('ies')) return s.slice(0, -3) + 'y';
+    if (s.endsWith('ses')) return s.slice(0, -3) + 'sis';
+    return s.replace(/s$/, '');
+  };
   const kindColor = k => (colors[k] || colors.topic)();
   // Surface viewer failures on the page, not just in the console —
   // script.js owns the banner, so fall back if it hasn't loaded yet.
@@ -741,6 +754,11 @@ function main() {
         session_count: n.session_count,
         degree: n.degree,
         sessions: n.sessions || [],
+        // A node keeps only the keys named here, and the panel reads freshness
+        // off the vis node — so these must be forwarded (#108 FR7).
+        first_seen: n.first_seen,
+        last_seen: n.last_seen,
+        last_updated: n.last_updated,
         type: 'topic',
       };
     }
@@ -936,11 +954,41 @@ function main() {
     const extra = (slugs || []).length - rows.length;
     return rows.join('') + (extra > 0 ? '<span class="panel-muted">+' + extra + ' more…</span>' : '');
   }
+  function statRow(label, value) {
+    return '<div class="stat"><span>' + escapeHtml(label) + '</span><b>' +
+      escapeHtml(value) + '</b></div>';
+  }
+  // Session-derived dates, one date or a range. Empty when no session carries
+  // one — never a placeholder (#108 FR2).
+  function topicActivity(node) {
+    const seen = [node.first_seen, node.last_seen].filter(Boolean).map(String);
+    if (!seen.length) return '';
+    const first = seen[0], last = seen[seen.length - 1];
+    return first === last ? first : first + ' – ' + last;
+  }
+  // Kind and freshness — the facts the topic page names, so the map can be
+  // triaged without opening pages (#108 FR7). Active comes from sessions,
+  // Reviewed from the page's own curation date: two facts, two rows, each
+  // dropped when the node lacks its field.
+  function topicIdentityRows(node) {
+    let h = '';
+    const kind = kindLabelOne(node.kind);
+    if (kind) h += statRow('Kind', kind);
+    const active = topicActivity(node);
+    if (active) h += statRow('Active', active);
+    if (node.last_updated) h += statRow('Reviewed', String(node.last_updated));
+    return h;
+  }
   function showTopicPanel(node) {
     const neigh = topicNeighbors(node.id);
     let h = '<h3>' + escapeHtml(node.label) + '</h3>';
     h += '<div class="stat"><span>Sessions</span><b>' + (node.session_count || 0) + '</b></div>';
     h += '<div class="stat"><span>Connected topics</span><b>' + (node.degree || 0) + '</b></div>';
+    try {
+      h += topicIdentityRows(node);
+    } catch (err) {
+      reportGraphError('Could not read details for "' + node.label + '"', err);
+    }
     if (node.site_url) h += '<a class="panel-open" href="' + escapeHtml(node.site_url) + '" target="_blank" rel="noopener">Open page →</a>';
     if (neigh.length) {
       h += '<h3 style="margin-top:10px">Top connections</h3>';

@@ -70,12 +70,12 @@ Every slice leaves the vault buildable and the site browsable. Run `ruff check l
   - [x] Tests over the generated `graph.html`: all four variables present in both theme blocks; the `colors` map has an entry for every kind in `TOPIC_KIND_FOLDERS` plus `other`; no two kind colours are equal; and no kind colour equals `--g-orphan` or `--g-search-match` in either theme — red stays reserved for those two signal states. **[Agent: general-purpose]**
   - [x] Verify: build the throwaway vault, open `graph.html`, and confirm the legend shows one distinct swatch per kind present with no two alike, in both light and dark themes. Delete any screenshots produced during the check. **[Agent: general-purpose]**
 
-- [ ] **Slice 8: The map's side panel says what the page says**
+- [x] **Slice 8: The map's side panel says what the page says**
 
   > FR7 — triage without opening every page.
-  - [ ] Extend `showTopicPanel()` (`llmwiki/graph.py:908`) with a kind row and a freshness row after the existing session and connection stats, each omitted when the node lacks the field. Pass every interpolated value through the existing `escapeHtml()`. Route any new failure path through `reportGraphError()` (`graph.py:632`) so it surfaces on the page via `window.__llmwikiReportError` rather than only in the console. **[Agent: general-purpose]**
-  - [ ] Tests over the generated `graph.html`: the panel emits kind and freshness rows, and omits them for a node carrying neither. **[Agent: general-purpose]**
-  - [ ] Verify: build the throwaway vault, open `graph.html`, select a described topic and an undescribed one, and confirm the panel shows kind and freshness for the first and neither — with no empty rows — for the second. Delete any screenshots produced during the check. **[Agent: general-purpose]**
+  - [x] Extend `showTopicPanel()` (`llmwiki/graph.py:908`) with a kind row and a freshness row after the existing session and connection stats, each omitted when the node lacks the field. Pass every interpolated value through the existing `escapeHtml()`. Route any new failure path through `reportGraphError()` (`graph.py:632`) so it surfaces on the page via `window.__llmwikiReportError` rather than only in the console. **[Agent: general-purpose]**
+  - [x] Tests over the generated `graph.html`: the panel emits kind and freshness rows, and omits them for a node carrying neither. **[Agent: general-purpose]**
+  - [x] Verify: build the throwaway vault, open `graph.html`, select a described topic and an undescribed one, and confirm the panel shows kind and freshness for the first and neither — with no empty rows — for the second. Delete any screenshots produced during the check. **[Agent: general-purpose]**
 
 - [ ] **Slice 9: Documentation**
 
