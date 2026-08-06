@@ -77,12 +77,12 @@ Every slice leaves the vault buildable and the site browsable. Run `ruff check l
   - [x] Tests over the generated `graph.html`: the panel emits kind and freshness rows, and omits them for a node carrying neither. **[Agent: general-purpose]**
   - [x] Verify: build the throwaway vault, open `graph.html`, select a described topic and an undescribed one, and confirm the panel shows kind and freshness for the first and neither — with no empty rows — for the second. Delete any screenshots produced during the check. **[Agent: general-purpose]**
 
-- [ ] **Slice 9: Documentation**
+- [x] **Slice 9: Documentation**
 
   > FR9. `docs/reference/ui.md` documents every site surface except topic pages.
-  - [ ] Add a topic-pages section to `docs/reference/ui.md` covering the identity line, the content block, and the project routing; update its Projects and Graph sections for the connections list and the per-kind colours. State which information comes from sessions and which from the topic's own page. **[Agent: general-purpose]**
-  - [ ] Add a `CHANGELOG.md` entry under `## [Unreleased]` describing the user-visible change and noting that existing vaults need no migration or re-sync. **[Agent: general-purpose]**
-  - [ ] Verify: link-check the touched docs and confirm no relative link 404s. **[Agent: general-purpose]**
+  - [x] Add a topic-pages section to `docs/reference/ui.md` covering the identity line, the content block, and the project routing; update its Projects and Graph sections for the connections list and the per-kind colours. State which information comes from sessions and which from the topic's own page. **[Agent: general-purpose]**
+  - [x] Add a `CHANGELOG.md` entry under `## [Unreleased]` describing the user-visible change and noting that existing vaults need no migration or re-sync. **[Agent: general-purpose]**
+  - [x] Verify: link-check the touched docs and confirm no relative link 404s. **[Agent: general-purpose]**
 
 - [ ] **Slice 10: Feature Testing & Regression**
 
