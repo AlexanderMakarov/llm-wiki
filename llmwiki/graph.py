@@ -23,11 +23,12 @@ from pathlib import Path
 from typing import Any
 
 from llmwiki import REPO_ROOT
+from llmwiki._frontmatter import parse_frontmatter
+from llmwiki.wikilinks import WIKILINK_RE
 
 WIKI_DIR = REPO_ROOT / "wiki"
 GRAPH_DIR = REPO_ROOT / "graph"
 
-WIKILINK_RE = re.compile(r"\[\[([^\]|]+)(?:\|[^\]]*)?\]\]")
 # Wiki sources often use ``YYYY-MM-DD-<raw-stem>`` filenames while raw/
 # sessions/ and site/sessions/ use ``<raw-stem>`` (wiki-add, #54).
 _DATE_WIKI_STEM = re.compile(r"^\d{4}-\d{2}-\d{2}-(.+)$")
@@ -144,8 +145,26 @@ def _compute_site_url(text: str, rel_parts: tuple[str, ...],
     return None
 
 
+def _frontmatter_str(meta: dict[str, Any], key: str) -> str | None:
+    """Return one frontmatter field as a trimmed string, or ``None``.
+
+    ``_parse_scalar`` coerces bare ints/floats, so values are normalised back
+    to text. Absent, empty, and whitespace-only all collapse to ``None`` — no
+    fallback to another field is invented here (#108, FR2).
+    """
+    value = meta.get(key)
+    if value is None or isinstance(value, list | dict):
+        return None
+    return str(value).strip() or None
+
+
 def scan_pages(wiki_dir: Path | None = None) -> dict[str, dict[str, Any]]:
-    """Return a dict {slug: {path, type, title, out_links, site_url}}.
+    """Return a dict {slug: {path, type, title, out_links, site_url,
+    last_updated, date}}.
+
+    ``last_updated`` is the page's own review date and ``date`` is the date the
+    page records for itself — on a source page that is the session's date, not
+    the time synth ran. Both are ``None`` when the frontmatter omits them.
 
     ``wiki_dir`` defaults to the module ``WIKI_DIR`` (repo mode). Pass a
     vault's ``wiki/`` here so ``build --vault`` graphs the vault's pages
@@ -168,15 +187,13 @@ def scan_pages(wiki_dir: Path | None = None) -> dict[str, dict[str, Any]]:
             type_ = rel.parts[0] if len(rel.parts) > 1 else "root"
         except ValueError:
             type_ = "root"
-        title = slug
         try:
             text = p.read_text(encoding="utf-8")
         except OSError:
             continue
-        # Extract title from frontmatter if present
-        title_match = re.search(r'^title:\s*"?([^"\n]+)', text, re.MULTILINE)
-        if title_match:
-            title = title_match.group(1).strip('"')
+        # One frontmatter parse feeds title, review date, and page date.
+        meta, _body = parse_frontmatter(text)
+        title = _frontmatter_str(meta, "title") or slug
         # Extract wikilinks
         out_links = set(WIKILINK_RE.findall(text))
         site_url = _compute_site_url(text, rel.parts, slug, type_)
@@ -186,6 +203,8 @@ def scan_pages(wiki_dir: Path | None = None) -> dict[str, dict[str, Any]]:
             "title": title,
             "out_links": out_links,
             "site_url": site_url,
+            "last_updated": _frontmatter_str(meta, "last_updated"),
+            "date": _frontmatter_str(meta, "date"),
         }
     return pages
 
@@ -318,6 +337,10 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     --g-node-entities: #2563eb;
     --g-node-concepts: #059669;
     --g-node-syntheses: #d97706;
+    --g-node-projects: #db2777;
+    --g-node-questions: #0891b2;
+    --g-node-comparisons: #b45309;
+    --g-node-other: #65a30d;
     --g-node-root: #64748b;
     --g-node-topic: #7c3aed;
     --g-orphan: #ef4444;
@@ -336,6 +359,10 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     --g-node-entities: #2563eb;
     --g-node-concepts: #059669;
     --g-node-syntheses: #d97706;
+    --g-node-projects: #db2777;
+    --g-node-questions: #0891b2;
+    --g-node-comparisons: #b45309;
+    --g-node-other: #65a30d;
     --g-node-root: #64748b;
     --g-node-topic: #7c3aed;
     --g-orphan: #dc2626;
@@ -405,8 +432,12 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     text-transform: uppercase; letter-spacing: 0.04em;
     color: var(--g-muted);
   }
-  #stats-overlay .stat { display: flex; justify-content: space-between; padding: 2px 0; }
-  #stats-overlay .stat b { color: var(--g-text); }
+  /* Rows carry dates as well as counts (#108 FR7): a value too wide to sit
+     beside its label wraps under it rather than colliding with it. */
+  #stats-overlay .stat {
+    display: flex; flex-wrap: wrap; gap: 2px 12px;
+    justify-content: space-between; padding: 2px 0; }
+  #stats-overlay .stat b { color: var(--g-text); margin-left: auto; white-space: nowrap; }
   #stats-overlay .hub-item { font-family: ui-monospace, monospace; font-size: 0.75rem; color: var(--g-muted); }
   #stats-overlay .hub-item b { color: var(--g-accent); }
   /* #54 topic-mode side panel: per-topic / per-edge content can run long, so
@@ -617,18 +648,32 @@ function main() {
     entities: () => cssVar('--g-node-entities'),
     concepts: () => cssVar('--g-node-concepts'),
     syntheses: () => cssVar('--g-node-syntheses'),
+    projects: () => cssVar('--g-node-projects'),
+    questions: () => cssVar('--g-node-questions'),
+    comparisons: () => cssVar('--g-node-comparisons'),
+    other: () => cssVar('--g-node-other'),
     root: () => cssVar('--g-node-root'),
     topic: () => cssVar('--g-node-topic'),
   };
   const orphanColor = () => cssVar('--g-orphan');
-  // Human labels for the wiki folders a node can belong to. Used by the
-  // legend and by the Cluster control's collapsed-node captions.
   const KIND_LABELS = {
     entities: 'Entities', concepts: 'Concepts', projects: 'Projects',
     questions: 'Questions', comparisons: 'Comparisons',
     syntheses: 'Syntheses', sources: 'Sources', other: 'Other',
   };
   const kindLabel = k => KIND_LABELS[k] || k;
+  // Singular form of the same label, naming one topic in the side panel as
+  // the static page's chip does (topics_page.py `_KIND_LABELS`). Derived from
+  // KIND_LABELS so the forms can't drift. 'other' takes the label injected
+  // from topics_page.KIND_OTHER_LABEL: no page describes the topic, and that
+  // absence is itself worth naming rather than leaving the row out (#108 FR8).
+  const kindLabelOne = k => {
+    if (!k || k === 'other') return __KIND_OTHER_LABEL__;
+    const s = kindLabel(k);
+    if (s.endsWith('ies')) return s.slice(0, -3) + 'y';
+    if (s.endsWith('ses')) return s.slice(0, -3) + 'sis';
+    return s.replace(/s$/, '');
+  };
   const kindColor = k => (colors[k] || colors.topic)();
   // Surface viewer failures on the page, not just in the console —
   // script.js owns the banner, so fall back if it hasn't loaded yet.
@@ -658,7 +703,8 @@ function main() {
     if (lg) lg.innerHTML =
       presentKinds.map(k =>
         '<div class="row"><span class="dot" style="background: ' + kindColor(k) +
-        '"></span>' + escapeHtml(kindLabel(k)) + '</div>').join('') +
+        // 'other' reads as the panel and page chip do, not as 'Other'.
+        '"></span>' + escapeHtml(k === 'other' ? kindLabelOne(k) : kindLabel(k)) + '</div>').join('') +
       '<div class="row"><span class="dot" style="background: var(--g-edge)"></span>shared sessions</div>' +
       '<div class="row" style="color:var(--g-muted)">size = #sessions</div>';
   } else {
@@ -710,6 +756,11 @@ function main() {
         session_count: n.session_count,
         degree: n.degree,
         sessions: n.sessions || [],
+        // A node keeps only the keys named here, and the panel reads freshness
+        // off the vis node — so these must be forwarded (#108 FR7).
+        first_seen: n.first_seen,
+        last_seen: n.last_seen,
+        last_updated: n.last_updated,
         type: 'topic',
       };
     }
@@ -899,18 +950,49 @@ function main() {
       const m = SESS[s] || {};
       const t = escapeHtml(m.title || s);
       return m.url
-        ? '<a class="panel-link" href="' + escapeHtml(m.url) + '" target="_blank" rel="noopener">' + t + '</a>'
+        ? '<a class="panel-link" href="' + escapeHtml(m.url) + '">' + t + '</a>'
         : '<span class="panel-muted">' + t + '</span>';
     });
     const extra = (slugs || []).length - rows.length;
     return rows.join('') + (extra > 0 ? '<span class="panel-muted">+' + extra + ' more…</span>' : '');
+  }
+  function statRow(label, value) {
+    return '<div class="stat"><span>' + escapeHtml(label) + '</span><b>' +
+      escapeHtml(value) + '</b></div>';
+  }
+  // Session-derived dates, one date or a range. Empty when no session carries
+  // one — never a placeholder (#108 FR2).
+  function topicActivity(node) {
+    const seen = [node.first_seen, node.last_seen].filter(Boolean).map(String);
+    if (!seen.length) return '';
+    const first = seen[0], last = seen[seen.length - 1];
+    return first === last ? first : first + ' – ' + last;
+  }
+  // Kind and freshness — the facts the topic page names, so the map can be
+  // triaged without opening pages (#108 FR7). Kind always renders, naming the
+  // unclassified state when no page describes the topic. Active comes from
+  // sessions, Reviewed from the page's own curation date: two facts, two rows,
+  // each dropped when the node lacks its field.
+  function topicIdentityRows(node) {
+    let h = statRow('Kind', kindLabelOne(node.kind));
+    const active = topicActivity(node);
+    if (active) h += statRow('Active', active);
+    if (node.last_updated) h += statRow('Reviewed', String(node.last_updated));
+    return h;
   }
   function showTopicPanel(node) {
     const neigh = topicNeighbors(node.id);
     let h = '<h3>' + escapeHtml(node.label) + '</h3>';
     h += '<div class="stat"><span>Sessions</span><b>' + (node.session_count || 0) + '</b></div>';
     h += '<div class="stat"><span>Connected topics</span><b>' + (node.degree || 0) + '</b></div>';
-    if (node.site_url) h += '<a class="panel-open" href="' + escapeHtml(node.site_url) + '" target="_blank" rel="noopener">Open page →</a>';
+    try {
+      h += topicIdentityRows(node);
+    } catch (err) {
+      reportGraphError('Could not read details for "' + node.label + '"', err);
+    }
+    // Current tab, like every other link in the site: only double-clicking a
+    // node is the deliberate "take this elsewhere" gesture (#108 FR10).
+    if (node.site_url) h += '<a class="panel-open" href="' + escapeHtml(node.site_url) + '">Open page →</a>';
     if (neigh.length) {
       h += '<h3 style="margin-top:10px">Top connections</h3>';
       h += neigh.slice(0, 6).map(p =>
@@ -1070,9 +1152,10 @@ function main() {
     switch (action) {
       case 'open': {
         // #328: use precomputed site_url so nodes without a compiled
-        // page degrade gracefully instead of 404.
+        // page degrade gracefully instead of 404. Navigates in the current
+        // tab — only double-click opens a new one (#108 FR10).
         if (node.site_url) {
-          window.open(node.site_url, '_blank', 'noopener');
+          window.location.href = node.site_url;
         } else {
           alert(node.label + ' — no compiled page exists for this node. '
             + 'Entities, concepts, and nav files live in wiki/ but aren\u2019t rendered as standalone site pages.');
@@ -1232,15 +1315,24 @@ def write_html(graph: dict[str, Any], out_path: Path) -> None:
     # dead end. Imported lazily to avoid a top-level circular dependency
     # (build.py imports graph.copy_to_site).
     from llmwiki.build import nav_bar, search_palette_markup  # noqa: PLC0415 — cycle: graph↔build
+
+    # The panel names an undescribed topic exactly as the static page's chip
+    # does, so the label has one definition (#108 FR7).
+    from llmwiki.topics_page import KIND_OTHER_LABEL  # noqa: PLC0415 — cycle: graph↔topics↔graph
+
     site_nav_html = nav_bar(active="graph", link_prefix="")
     # The nav renders a search button and script.js binds Cmd+K, but both
     # no-op unless the dialog they open is on the page too — graph.html
     # shipped the button without the dialog until this was wired up.
+    # `__GRAPH_JSON__` goes in last: it is the only substitution carrying wiki
+    # text, so a page titled `__SITE_NAV__` cannot have its own title replaced
+    # once the payload is already in place.
     html = (
         HTML_TEMPLATE
-        .replace("__GRAPH_JSON__", payload)
         .replace("__SITE_NAV__", site_nav_html)
         .replace("__SITE_PALETTE__", search_palette_markup(js_prefix=""))
+        .replace("__KIND_OTHER_LABEL__", json.dumps(KIND_OTHER_LABEL))
+        .replace("__GRAPH_JSON__", payload)
     )
     out_path.write_text(html, encoding="utf-8")
 

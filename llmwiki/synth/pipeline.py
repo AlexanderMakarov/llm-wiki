@@ -34,10 +34,6 @@ from llmwiki._frontmatter import is_headless, is_subagent, parse_frontmatter
 from llmwiki.agent_label import detect_agent_label
 from llmwiki.candidates import apply_review_summary_to_pipeline
 from llmwiki.config_schedule import _load_sessions_config
-
-# Same matcher the graph builder uses, so "a link" means the same thing to
-# the de-duplicator and to the thing that consumes the links.
-from llmwiki.graph import WIKILINK_RE
 from llmwiki.reindex import reindex_wiki
 from llmwiki.state_store import mtime_from_state, mtime_to_iso
 from llmwiki.state_store import read_state as _read_unified_state
@@ -52,6 +48,10 @@ from llmwiki.synth.estimate import synthesize_estimate_report
 from llmwiki.synth.ollama import OllamaSynthesizer, load_ollama_config
 from llmwiki.tags import TagEntry, near_duplicate_tags
 from llmwiki.topics import build_topic_graph
+
+# Same matcher every other link consumer uses, so "a link" means the same thing
+# to the de-duplicator and to the thing that consumes the links.
+from llmwiki.wikilinks import WIKILINK_RE
 
 # G-21 (#307): shell- and URL-unsafe chars we scrub from slugs at
 # synthesize-time. Spaces → hyphens; filesystem-reserved + Windows-

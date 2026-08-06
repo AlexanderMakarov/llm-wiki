@@ -18,9 +18,9 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
-from llmwiki.lint import WIKILINK_RE
 from llmwiki.lint.rules.link_integrity import _norm_slug
 from llmwiki.reindex import reindex_wiki
+from llmwiki.wikilinks import wikilink_targets
 
 #: Default significance threshold. Matches the Lint Workflow's definition of a
 #: missing entity page ("mentioned in 3+ source pages") so the producer and the
@@ -86,11 +86,10 @@ def harvest_targets(
         except OSError as exc:
             unreadable.append((rel, exc.strerror or str(exc)))
             continue
-        # set() per page: repeated mentions in one document are one signal.
-        for raw in set(WIKILINK_RE.findall(text)):
-            name = raw.split("#")[0].strip()
-            if name:
-                by_target[name].add(rel)
+        # Distinct targets per page: repeated mentions in one document are one
+        # signal.
+        for name in wikilink_targets(text):
+            by_target[name].add(rel)
 
     if unreadable:
         raise SourceReadError(unreadable)

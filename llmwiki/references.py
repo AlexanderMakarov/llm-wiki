@@ -18,9 +18,8 @@ This module:
 3. Backs the ``llmwiki references <entity>`` CLI so operators can
    answer "who still claims something about RAG?"
 
-Reuses the same wikilink parser as ``llmwiki/graph.py`` (via
-``llmwiki.lint.WIKILINK_RE``) so the graph viewer and lint rule
-agree on what counts as a link.
+Reuses the canonical wikilink parser (``llmwiki.wikilinks``) so the
+graph viewer and lint rule agree on what counts as a link.
 
 Stdlib-only.  Fast enough to run on every build (O(pages × links)).
 """
@@ -32,7 +31,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Any
 
-from llmwiki.lint import WIKILINK_RE
+from llmwiki.wikilinks import wikilink_targets
 
 # Dated-claim detection: human prose that commits to a specific moment
 # in time. Captures the date so we can compare to the target's
@@ -146,10 +145,7 @@ def build_index(pages: dict[str, dict]) -> dict[str, list[Reference]]:
     for rel, page in pages.items():
         body = page.get("body") or ""
         dated = _extract_dated_claims(body)
-        for raw_target in set(WIKILINK_RE.findall(body)):
-            target = raw_target.split("#")[0].strip()
-            if not target:
-                continue
+        for target in wikilink_targets(body):
             target_rel = slug_to_rel.get(target)
             idx.setdefault(target, []).append(
                 Reference(

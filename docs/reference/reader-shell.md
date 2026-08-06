@@ -163,7 +163,7 @@ under `.reader-shell`:
 - **Automatic `see_also` extraction from `## Connections`.** Callers
   pass the list in explicitly; the parser landing with #112 is scope
   creep. (Parsed on the caller side, using `WIKILINK_RE` from
-  `llmwiki/lint/__init__.py`.)
+  `llmwiki/wikilinks.py`.)
 - **Converting all 647 session pages.** The scaffold ships opt-in so
   the first real adopter is a maintainer-chosen page. Bulk migration is
   a follow-up.

@@ -17,9 +17,38 @@ import re
 from pathlib import Path
 from typing import Any
 
-from llmwiki.topics import topic_slug
+from llmwiki._frontmatter import parse_frontmatter
+from llmwiki.topics import KIND_OTHER, topic_slug
+from llmwiki.wikilinks import WIKILINK_RE, strip_anchor
 
 _ALIAS_NORM = re.compile(r"[\s\-_]+")
+
+# Fenced blocks suspend heading detection: a ``##`` inside one is code, not a
+# section boundary.
+_FENCE_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
+_HEADING_RE = re.compile(r"^ {0,3}(#{1,6})\s+(.*)$")
+# Rendered code the reader is meant to read literally. `<pre>` comes first so a
+# fenced block's nested `<code>` is covered by the outer match.
+_CODE_BLOCK_RE = re.compile(r"<pre\b.*?</pre>|<code\b.*?</code>", re.DOTALL | re.IGNORECASE)
+# The two sections the topic page renders itself, from the graph.
+_OMITTED_SECTIONS = frozenset({"connections", "sessions"})
+
+# Human-readable singular name per wiki folder, for the identity-line chip.
+# Keys mirror `llmwiki.topics.TOPIC_KIND_FOLDERS`.
+_KIND_LABELS = {
+    "entities": "Entity",
+    "concepts": "Concept",
+    "projects": "Project",
+    "questions": "Question",
+    "comparisons": "Comparison",
+    "syntheses": "Synthesis",
+    "sources": "Source",
+}
+# What a topic no wiki page describes is called. The absence of a page is
+# itself a fact worth showing: a reader seeing no chip cannot tell whether the
+# topic is unclassified or whether the page simply failed to render one, so the
+# chip is always present and names that state (FR1, FR8).
+KIND_OTHER_LABEL = "Unclassified topic"
 _ALIAS_TOOLTIP = (
     "Alternate spellings or related names sessions used in [[wikilinks]] "
     "before consolidation merged them under this topic."
@@ -50,8 +79,12 @@ def _display_aliases(canonical: str, aliases: list[str]) -> list[str]:
     return sorted(best.values(), key=str.lower)
 
 
-def _neighbors(topic_id: str, edges: list[dict[str, Any]]) -> list[tuple[str, int]]:
-    """Return ``[(other_topic, weight), ...]`` sorted by weight desc."""
+def neighbors(topic_id: str, edges: list[dict[str, Any]]) -> list[tuple[str, int]]:
+    """Return ``[(other_topic, weight), ...]`` sorted by weight desc.
+
+    Shared with :mod:`llmwiki.build`, which renders the same co-occurrence list
+    on project pages (#108, FR5).
+    """
     out: list[tuple[str, int]] = []
     for e in edges:
         if e["source"] == topic_id:
@@ -80,25 +113,305 @@ def _session_links(slugs: list[str], sessions_meta: dict[str, dict[str, str]]) -
     return '<ul class="topic-session-list">\n' + "\n".join(rows) + "\n</ul>"
 
 
-def _topic_links(neighbors: list[tuple[str, int]]) -> str:
+def kind_label(kind: str) -> str:
+    """Human-readable singular name for a wiki folder.
 
+    A topic carrying ``KIND_OTHER``, or no kind at all, is described by no wiki
+    page and is named :data:`KIND_OTHER_LABEL` (FR1, FR8). Every other folder
+    gets its entry in :data:`_KIND_LABELS`, falling back to a de-pluralised
+    form of the folder name so an unrecognised kind still reads sensibly.
+    """
+    if not kind or kind == KIND_OTHER:
+        return KIND_OTHER_LABEL
+    return _KIND_LABELS.get(kind) or kind.removesuffix("s").capitalize()
+
+
+def kind_chip(kind: str) -> str:
+    """Render the identity-line kind chip for a wiki folder kind.
+
+    Shared with the project page, which shows the same chip so a reader routed
+    there from the map sees the label the topic page would have shown (FR5).
+    """
+    return f'<span class="topic-kind-chip">{html.escape(kind_label(kind))}</span>'
+
+
+def _activity_span(node: dict[str, Any]) -> str:
+    """Render the session-derived activity dates, ``""`` when there are none.
+
+    ``first_seen`` / ``last_seen`` come from the sessions that mention the
+    topic, so this says when the topic was actually worked on. A topic seen in
+    one session — or on one day — shows a single date rather than a range.
+    """
+    seen = [str(d) for d in (node.get("first_seen"), node.get("last_seen")) if d]
+    if not seen:
+        return ""
+    text = seen[0] if seen[0] == seen[-1] else f"{seen[0]} – {seen[-1]}"
+    return f'<span class="topic-activity">Active {html.escape(text)}</span>'
+
+
+def _reviewed_span(node: dict[str, Any]) -> str:
+    """Render the backing page's own review date, ``""`` when it records none.
+
+    Distinct from :func:`_activity_span`: this is when a human or agent last
+    curated the page, not when sessions touched the topic.
+    """
+    reviewed = node.get("last_updated")
+    if not reviewed:
+        return ""
+    return (
+        '<span class="topic-reviewed">Reviewed '
+        f"{html.escape(str(reviewed))}</span>"
+    )
+
+
+def _count(n: int, singular: str) -> str:
+    """Return ``"1 session"`` / ``"3 sessions"`` — never ``"1 sessions"``."""
+    return f"{n} {singular}" if n == 1 else f"{n} {singular}s"
+
+
+def _identity_line(node: dict[str, Any], neighbor_count: int) -> str:
+    """Render the topic page's identity line: kind chip, dates, counts, slug.
+
+    The kind chip always renders, naming the unclassified state when no wiki
+    page describes the topic. The activity dates and the review date are two
+    different facts and are labelled as such; each is omitted entirely when the
+    node lacks its field — no labels without values (FR1, FR2, FR8).
+    """
+    parts: list[str] = [kind_chip(str(node.get("kind") or ""))]
+    for span in (_activity_span(node), _reviewed_span(node)):
+        if span:
+            parts.append(span)
+    parts.append(_count(neighbor_count, "connected topic"))
+    session_count = node.get("session_count")
+    if session_count is not None:
+        parts.append(_count(session_count, "session"))
+    slug = topic_slug(str(node.get("id", "")))
+    if slug:
+        parts.append(f"<code>{html.escape(slug)}</code>")
+    return " · ".join(parts)
+
+
+def topic_node_urls(nodes: list[dict[str, Any]]) -> dict[str, str]:
+    """Map every topic id → the ``site_url`` its node resolved to.
+
+    Shared with :mod:`llmwiki.build`, so a project page's connected-topics list
+    routes each neighbour exactly as the topic pages do (#108, FR4).
+    """
+    return {str(n.get("id", "")): str(n.get("site_url") or "") for n in nodes}
+
+
+def topic_url(name: str, node_urls: dict[str, str]) -> str:
+    """Site-root-relative page a topic resolves to.
+
+    Normally the topic's own ``topics/<slug>.html``, but a project topic
+    resolves to its project page instead (#108, FR4). A topic missing from
+    ``node_urls`` falls back to its own page.
+    """
+    return node_urls.get(name) or f"topics/{topic_slug(name)}.html"
+
+
+def _topic_href(name: str, node_urls: dict[str, str]) -> str:
+    """Link from one topic page to another topic, relative to ``topics/``.
+
+    Topic pages live in ``topics/``, so a sibling topic is ``<slug>.html``
+    while anything else needs a ``../`` prefix.
+    """
+    url = topic_url(name, node_urls)
+    if url.startswith("topics/"):
+        return url.removeprefix("topics/")
+    return f"../{url}"
+
+
+def _topic_links(
+    neighbors: list[tuple[str, int]], node_urls: dict[str, str]
+) -> str:
+    """Render the connected-topics list, honouring each node's resolved URL."""
     if not neighbors:
         return '<p class="muted">No connected topics.</p>'
     rows = []
     for name, weight in neighbors:
+        href = html.escape(_topic_href(name, node_urls), quote=True)
         rows.append(
-            f'<li><a href="{html.escape(topic_slug(name))}.html">{html.escape(name)}</a>'
+            f'<li><a href="{href}">{html.escape(name)}</a>'
             f' <span class="muted">· {weight} shared</span></li>'
         )
     return '<ul class="topic-neighbor-list">\n' + "\n".join(rows) + "\n</ul>"
 
 
-def build_topic_pages(graph: dict[str, Any], out_dir: Path) -> list[Path]:
+def page_content(text: str) -> str | None:
+    """Return the markdown a topic page should render from its backing page.
+
+    Frontmatter, the page's own leading ``# H1``, and the ``## Connections`` /
+    ``## Sessions`` sections are dropped — the topic page already shows the
+    title and renders both of those lists itself, from the graph. Everything
+    else survives exactly as written, whatever the curator called it, so a
+    renamed or newly added section still reaches the reader.
+
+    A heading left with nothing under it is dropped too, so a page recording an
+    empty section shows no heading for it. Returns ``None`` when nothing but
+    whitespace is left, so the caller emits no section at all rather than an
+    empty one (FR3, FR8).
+    """
+    _meta, body = parse_frontmatter(text)
+    # (line, heading level) — the level is ``None`` for anything that is not a
+    # heading, including a ``##`` inside a fenced block.
+    kept: list[tuple[str, int | None]] = []
+    in_fence = False
+    fence_char = ""
+    skipping = False
+    seen_content = False
+    for line in body.splitlines():
+        level: int | None = None
+        fence = _FENCE_RE.match(line)
+        if fence:
+            char = fence.group(1)[0]
+            if not in_fence:
+                in_fence, fence_char = True, char
+            elif char == fence_char:
+                in_fence = False
+        elif not in_fence:
+            heading = _HEADING_RE.match(line)
+            if heading:
+                level = len(heading.group(1))
+                title = heading.group(2).strip().rstrip("#").strip().lower()
+                # Only a heading at `##` or above closes a section; a `###`
+                # subsection belongs to whichever section encloses it. The
+                # reset runs before the title is dropped, so a page whose own
+                # `# H1` follows an omitted section still closes that section
+                # and keeps everything after it.
+                if level <= 2:
+                    skipping = title in _OMITTED_SECTIONS
+                if level == 1 and not seen_content:
+                    continue  # the page's own title — the hero already shows it
+        if skipping:
+            continue
+        kept.append((line, level))
+        if line.strip():
+            seen_content = True
+    return "\n".join(_drop_empty_sections(kept)).strip() or None
+
+
+def _drop_empty_sections(lines: list[tuple[str, int | None]]) -> list[str]:
+    """Drop every heading that has no content under it, innermost first.
+
+    Walking backwards, ``covered`` is the heading level that the content seen
+    so far is available to: prose serves any heading, while a heading that
+    survives serves only headings shallower than itself. A heading reached with
+    nothing available to it is an empty section and goes.
+    """
+    out: list[str] = []
+    covered: int | None = None
+    for line, level in reversed(lines):
+        if level is not None:
+            if covered is None or covered <= level:
+                continue
+            covered = level
+        elif line.strip():
+            covered = 7  # deeper than any heading — serves whatever encloses it
+        out.append(line)
+    out.reverse()
+    return out
+
+
+def _backing_page_markdown(node: dict[str, Any], wiki_root: Path | None) -> str | None:
+    """Content of the wiki page describing ``node``, or ``None``.
+
+    ``wiki_path`` is relative to the wiki root's parent, as ``scan_pages``
+    records it. A vault can change between graph construction and page
+    rendering, so an unreadable or vanished file yields no content instead of
+    failing the build.
+    """
+    rel = str(node.get("wiki_path") or "")
+    if not rel or wiki_root is None:
+        return None
+    try:
+        text = (wiki_root / rel).read_text(encoding="utf-8")
+    except OSError:
+        return None
+    return page_content(text)
+
+
+def _topic_link_index(nodes: list[dict[str, Any]]) -> dict[str, str]:
+    """Map every topic name and alias (lowercased) → its canonical topic id."""
+    index: dict[str, str] = {}
+    for node in nodes:
+        canonical = str(node.get("id", ""))
+        if not canonical:
+            continue
+        index.setdefault(canonical.strip().lower(), canonical)
+        for alias in node.get("aliases", []):
+            key = str(alias).strip().lower()
+            if key:
+                index.setdefault(key, canonical)
+    return index
+
+
+def _resolve_wikilinks(
+    rendered: str,
+    topic_index: dict[str, str],
+    sessions_meta: dict[str, dict[str, str]],
+    node_urls: dict[str, str] | None = None,
+) -> str:
+    """Turn ``[[wikilinks]]`` in rendered page content into working links.
+
+    A target naming a topic links to wherever that topic resolved — its own
+    page, or the project page a project topic routes to (FR4) — a target naming
+    a session with a compiled page links to it, and anything else degrades to
+    the plain text it wrapped rather than a dead link (FR3).
+
+    Code spans and fenced blocks are left alone: a page documenting wikilink
+    syntax means its example literally, so rewriting it there would edit what
+    the curator wrote verbatim.
+
+    Runs on ``md_to_html`` output, where the link text has already been escaped
+    by the markdown renderer — escaping it a second time would double-encode
+    it. Only the ``href``, which this function constructs from graph data that
+    never passed through markdown, is escaped here.
+    """
+    sessions_lower = {str(k).strip().lower(): v for k, v in sessions_meta.items()}
+
+    def resolve(match: re.Match[str]) -> str:
+        raw_target, _, display = match.group(0)[2:-2].partition("|")
+        label = display.strip() or raw_target.strip()
+        key = strip_anchor(html.unescape(raw_target)).lower()
+        canonical = topic_index.get(key)
+        if canonical is not None:
+            href = _topic_href(canonical, node_urls or {})
+        else:
+            url = str(sessions_lower.get(key, {}).get("url") or "")
+            href = f"../{url}" if url else ""
+        if not href:
+            return label
+        return f'<a href="{html.escape(href, quote=True)}">{label}</a>'
+
+    out: list[str] = []
+    pos = 0
+    for block in _CODE_BLOCK_RE.finditer(rendered):
+        out.append(WIKILINK_RE.sub(resolve, rendered[pos : block.start()]))
+        out.append(block.group(0))
+        pos = block.end()
+    out.append(WIKILINK_RE.sub(resolve, rendered[pos:]))
+    return "".join(out)
+
+
+def build_topic_pages(
+    graph: dict[str, Any], out_dir: Path, wiki_dir: Path | None = None
+) -> list[Path]:
     """Write ``topics/<slug>.html`` for every node + a ``topics/index.html``.
+
+    ``wiki_dir`` is the vault's ``wiki/`` directory. Pass it to render each
+    topic's backing page content on its topic page; omit it and the pages carry
+    the identity line and the link lists only.
 
     Returns the list of files written.
     """
-    from llmwiki.build import hero, nav_bar, page_foot, page_head  # noqa: PLC0415 — cycle: topics_page↔build
+    from llmwiki.build import (  # noqa: PLC0415 — cycle: topics_page↔build
+        hero,
+        md_to_html,
+        nav_bar,
+        page_foot,
+        page_head,
+    )
 
     nodes = graph.get("nodes", [])
     edges = graph.get("edges", [])
@@ -106,14 +419,19 @@ def build_topic_pages(graph: dict[str, Any], out_dir: Path) -> list[Path]:
     if not nodes:
         return []
 
+    # `wiki_path` is recorded relative to the wiki root's parent.
+    wiki_root = wiki_dir.parent if wiki_dir is not None else None
+    topic_index = _topic_link_index(nodes)
+    node_urls = topic_node_urls(nodes)
+
     topics_dir = out_dir / "topics"
     topics_dir.mkdir(parents=True, exist_ok=True)
     written: list[Path] = []
 
     for node in nodes:
         name = node["id"]
-        neighbors = _neighbors(name, edges)
-        subtitle = f"{node['session_count']} sessions · {len(neighbors)} connected topics"
+        connected = neighbors(name, edges)
+        subtitle = _identity_line(node, len(connected))
         aliases = _display_aliases(name, node.get("aliases", []))
         alias_note = ""
         if aliases:
@@ -125,26 +443,48 @@ def build_topic_pages(graph: dict[str, Any], out_dir: Path) -> list[Path]:
                 + ", ".join(html.escape(a) for a in aliases)
                 + "</p>"
             )
+        # The curated content is the payload; the link lists are context, so it
+        # sits above them. Nothing at all is emitted when the page records none.
+        # `content` is the site-wide prose scope — it carries the overflow
+        # guards for wide tables and code blocks and the copy-code / deep-link
+        # JS hooks, both of which the rendered markdown needs.
+        content_block = ""
+        page_md = _backing_page_markdown(node, wiki_root)
+        if page_md:
+            content_block = (
+                '<div class="content topic-page-content">\n'
+                + _resolve_wikilinks(
+                    md_to_html(page_md), topic_index, sessions_meta, node_urls
+                )
+                + "\n</div>\n"
+            )
         body = (
             page_head(name, f"Sessions and connections for {name}", css_prefix="../")
             + nav_bar(active="graph", link_prefix="../")
-            + hero(name, subtitle)
+            + hero(name, subtitle, subtitle_is_html=True)
             + '<section class="container topic-page">\n'
             + alias_note
-            + "<h2>Connected topics</h2>\n" + _topic_links(neighbors)
+            + content_block
+            + "<h2>Connected topics</h2>\n" + _topic_links(connected, node_urls)
             + "<h2>Sessions</h2>\n" + _session_links(node.get("sessions", []), sessions_meta)
             + "</section>\n</main>\n"
             + page_foot(js_prefix="../")
         )
+        # Every node gets a topic page, including one that routes elsewhere: it
+        # is FR4's fallback surface for a project whose site page was never
+        # built, so the routed URL always has a real file behind it.
         path = topics_dir / f"{topic_slug(name)}.html"
         path.write_text(body, encoding="utf-8")
         written.append(path)
 
-    # Index page — every topic by reach.
+    # Index page — every topic by reach. `topics/index.html` sits in the same
+    # directory as the topic pages, so it uses the same href rules and routes a
+    # project topic to its project page like every other link does (FR4).
     rows = []
     for node in nodes:
+        href = html.escape(_topic_href(str(node["id"]), node_urls), quote=True)
         rows.append(
-            f'<li><a href="{html.escape(topic_slug(node["id"]))}.html">{html.escape(node["id"])}</a>'
+            f'<li><a href="{href}">{html.escape(node["id"])}</a>'
             f' <span class="muted">· {node["session_count"]} sessions · {node["degree"]} links</span></li>'
         )
     index_body = (

@@ -82,7 +82,9 @@ Clicking a card navigates to `/projects/<slug>.html` — the project detail page
 
 ### Project detail (`/projects/<slug>.html`)
 
+- Hero — display name plus a `Project` kind chip, `slug`, `created`, `updated`, main-session and sub-agent counts. The chip is the same one a [topic page](#topic-pages) carries, shown here because a project topic routes to this page instead, so the reader sees the kind either way. The two dates are the earliest and latest `date` across the project's own sessions, recomputed every build: project stubs carry no date of their own, so nothing is hand-maintained, and a project whose sessions all lack a date shows neither.
 - Project summary (auto-synthesised from sessions)
+- **Connected topics** — the topics this project co-occurs with, immediately above the session tables. Same list shape as on a [topic page](#topic-pages) (topic name · shared-session count), and each entry routes exactly as it does everywhere else: `../topics/<slug>.html` normally, `../projects/<slug>.html` for a neighbour that is itself a project. The whole section is omitted — heading included — when the project's topic node has no connections, or when the vault has too few topics for the topic graph to be used at all.
 - Sorted session table (date desc)
 - Per-project activity heatmap
 - Linked entities + concepts that appear across sessions
@@ -142,14 +144,86 @@ Interactive force-directed knowledge graph. Details in [`reference/reader-api.md
 **What works:**
 
 - Pan / zoom (mouse / trackpad)
-- Click a node → opens the wiki page in a new tab
+- Click a node → focuses its 1-hop neighbourhood; in topic mode it also opens the side panel, in page mode it opens the node's compiled page in a new tab
+- Double-click a node → opens its page in a new tab — the [topic page](#topic-pages), or the project page for a topic that routes to one. Double-click is the only gesture that opens a new tab: the side panel's `Open page →`, its session links, and the right-click menu's **Open** all navigate in the current tab like every other link in the site
 - Search input in the top-right → highlights matching nodes, dims the rest
 - Orphan highlighting — nodes with zero inbound links get a red border
-- Cluster toggle — group nodes by type (sources / entities / concepts / syntheses)
+- Cluster toggle — group nodes by kind (the `wiki/` folder behind each topic)
 - Stats overlay (bottom-right) — total pages, edges, orphans, avg connections, top-5 hubs
 - Dark / light theme mirrors the main site
 
+**Node colours.** One colour per kind, at equal saturation — a topic no wiki page describes is a normal citizen of the map, not a faded placeholder. The legend renders one swatch per kind actually present in the graph, so a vault with no comparisons advertises no comparison swatch.
+
+| Kind | Colour | |
+|---|---|---|
+| Sources | violet | `#7c3aed` |
+| Entities | blue | `#2563eb` |
+| Concepts | green | `#059669` |
+| Syntheses | amber | `#d97706` |
+| Projects | magenta | `#db2777` |
+| Questions | cyan | `#0891b2` |
+| Comparisons | brown | `#b45309` |
+| Other (no wiki page describes the topic) | lime | `#65a30d` |
+
+Red is deliberately not a kind colour: the map already spends it on two states — the orphan border and a live search match — and a kind sharing it would read as an error.
+
+**Side panel** (topic mode, single click) — topic name, `Sessions`, `Connected topics`, then the same identity facts the topic page carries: `Kind`, `Active`, `Reviewed`. `Kind` always renders, reading `Unclassified topic` when no wiki page describes the node; the two date rows are omitted when the node lacks the field, so a topic with no dates shows the counts and the kind rather than empty rows. `Open page →` follows, then the top connections and the bridging sessions.
+
 **Offline fallback:** if the vis-network CDN can't load, the viewer shows an inline notice instead of a blank screen.
+
+---
+
+## Topic pages
+
+URLs: `/topics/<slug>.html`, `/topics/index.html`
+
+A **topic** is a `[[wikilink]]` target found in `wiki/sources/*.md`, with spelling variants clustered into one canonical name. Topics are therefore *not* wiki pages: a topic exists because sessions cited the name, and a topic page renders whether or not any page under `wiki/` describes it — an un-promoted candidate, or a name a reviewer declined, keeps its page indefinitely. Reach them by double-clicking a node in the [Graph](#graph), from `⌘K` (`type:topic`), from `topics/index.html`, or from the Connected topics list on any other topic or project page.
+
+`/topics/index.html` lists every topic by reach — session count and link count per row.
+
+Two thresholds decide which topics get a page: a topic mentioned by fewer than 2 sessions is dropped from the graph, and a vault yielding fewer than 5 topic nodes falls back to the page graph, in which case `build` writes no topic pages at all.
+
+### Layout
+
+The title, then an **identity line** of ` · `-separated parts in this order — each date part dropped entirely when its source is absent, never filled with a placeholder:
+
+`Entity` chip · `Active 2026-01-09 – 2026-07-30` · `Reviewed 2026-08-01` · `7 connected topics` · `12 sessions` · `<slug>`
+
+The kind chip names the singular kind — Entity, Concept, Project, Question, Comparison, Synthesis, Source — or `Unclassified topic` when no wiki page describes it. The chip is never dropped: the absence of a backing page is itself a fact, and a missing chip would leave a reader unable to tell an unclassified topic from a page that failed to render one. Below the identity line:
+
+- **Also tagged as** — the alternative spellings sessions used before clustering merged them under this name.
+- **Page content** — the backing wiki page's body (see below). Absent when no page backs the topic or the page records nothing.
+- **Connected topics** — topics sharing at least one session, strongest first, each with its shared-session count. Renders `No connected topics.` rather than disappearing.
+- **Sessions** — every session mentioning the topic, linked to its compiled session page; a session with no compiled page is listed as text marked `(no page)`.
+
+### Where each fact comes from
+
+This is the distinction to keep straight: **sessions supply reach and activity, the topic's own wiki page supplies kind, review date and content.** Neither substitutes for the other, and neither is invented.
+
+| On the page | Comes from | Present when |
+|---|---|---|
+| `Active <first> – <last>` | the `date` frontmatter of the sessions that mention the topic — oldest to newest, collapsing to one date when they agree | at least one such session carries a date |
+| `N sessions` + the Sessions list | the same set of sessions | always |
+| `N connected topics` + the Connected topics list | co-occurrence: two topics share an edge when a session mentions both | always (the count can be `0`) |
+| Kind chip | the `wiki/` folder holding the page that backs the topic — `entities/` → Entity, `concepts/` → Concept, and so on. The folder is the only kind signal the schema carries; frontmatter `type` is not consulted | always — `Unclassified topic` when no page's slug or title matches the topic's canonical spelling or one of its aliases |
+| `Reviewed <date>` | that page's `last_updated` frontmatter | the page records one |
+| Page content | that page's body | the page has a body left after the omissions below |
+
+A topic with no backing page therefore shows no review date and no content, and its chip reads `Unclassified topic` — and one whose page omits `last_updated` shows no review date even while sessions supply activity dates.
+
+### Page content
+
+The topic page is the only browsable surface for entity and concept pages, so it renders their content above the link lists. What survives is everything after the page's own leading `# H1`, minus `## Connections` and `## Sessions` — the topic page renders both of those itself, from the graph, so the page's hand-written versions would only duplicate them.
+
+- **Heading-agnostic.** Nothing is keyed to `## Key Facts`; a renamed, reordered, or newly added section reaches the reader as written, as does introductory prose sitting above the first heading.
+- **No empty sections.** A heading with nothing under it is dropped rather than rendered as a bare heading — innermost first, so a `##` whose only child `###` was itself empty goes too.
+- **`[[wikilinks]]` resolve.** A target naming a topic links to wherever that topic resolved (its topic page, or the project page a project topic routes to); a target naming a session with a compiled page links to it; anything else degrades to the plain text it wrapped rather than a dead link. Code spans and fenced blocks are left exactly as written — a page documenting wikilink syntax keeps its example.
+
+### Project topics route to the project page
+
+A topic backed by a page under `wiki/projects/` links to `/projects/<slug>.html` — the full [project detail page](#project-detail-projectsslughtml) with its heatmap, session cards and charts — rather than to a thin topic page. The rewrite is applied once at build time and every surface honours it: the map's double-click target, the search index entry, Connected topics lists on topic pages and on project pages, `topics/index.html`, and `[[wikilinks]]` cited inside page content.
+
+The match itself identifies which project it is, so an alias spelling routes as correctly as the canonical one. The rewrite is skipped when the build wrote no page for that project: `wiki/projects/` is seeded from stubs while `site/projects/` comes from session groups, so a project page with no recorded sessions keeps its ordinary topic page rather than being handed a link that 404s.
 
 ---
 
@@ -211,11 +285,12 @@ There is no daily bar chart — trends are read from the heatmaps. Durable count
 Press `⌘K` (or `Ctrl+K` on Linux/Windows) from any page.
 
 - Fuzzy match over **every** page title + body — including topic pages (`type: topic`) and their alias spellings (#50).
+- The badge on each result reads its `kind` when the entry carries one and its `type` otherwise, so a topic result says `Entity`, `Concept`, `Project` … — or `Unclassified topic` — matching what the map and the topic page call it (#108). The underlying `type` is unchanged.
 - Top result on Enter navigates.
 - Shows facet chips: `Project`, `Entity type`, `Lifecycle`, `Confidence`, `Tags` — click a facet to filter.
 - Footer shows the current mode (`flat` / `tree`) from `search-index.json._mode` and the deep-page ratio (see [`reference/cache-tiers.md`](cache-tiers.md) for the tree-mode heuristic).
 - Keyboard: `↑ / ↓` navigate, `Enter` open, `Esc` close.
-- Filter by type: `type:topic` / `type:session` / `type:project` / `type:docs` / `type:document` / `type:slash` / `type:page`.
+- Filter by type: `type:topic` / `type:session` / `type:project` / `type:docs` / `type:document` / `type:slash` / `type:page`. `type:topic` still matches every topic result whatever its badge says — the badge reads `kind`, the filter reads `type`.
 
 ---
 
@@ -226,7 +301,7 @@ Two levels:
 - `site/search-index.json` — ~7 KB meta index (projects, static pages, documents, docs, slash commands, **topics**) + chunk manifest + facet counts + mode badge.
 - `site/search-chunks/<project>.json` — per-project session entries with `title`, `url`, `type`, `project`, `date`, `model`, `body`, `heading_max_depth`, `heading_count_by_depth`.
 
-Topic entries (`type: "topic"`) point at `topics/<slug>.html`; their `body` includes session count plus `also: …` aliases so a query using any non-canonical spelling still hits the canonical topic page. The same payloads ship as `.js` sidecars for `file://` (#20).
+Topic entries (`type: "topic"`) point at `topics/<slug>.html` — or at `projects/<slug>.html` for a topic that [routes to a project page](#project-topics-route-to-the-project-page); their `body` includes session count plus `also: …` aliases so a query using any non-canonical spelling still hits the right page, and their `kind` carries the human-readable singular label the palette badge shows (`Entity`, `Concept`, `Project`, … or `Unclassified topic`). `kind` is present on topic entries only. The same payloads ship as `.js` sidecars for `file://` (#20).
 
 The palette lazy-loads chunks as the query narrows. See [`reference/reader-api.md`](reader-api.md) for the stable shape.
 

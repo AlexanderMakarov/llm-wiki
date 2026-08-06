@@ -112,8 +112,15 @@ from llmwiki.state_store import read_state, resolve_state_file, synth_pipeline_s
 from llmwiki.synth.claude_cli import overview_argv
 from llmwiki.synth.pipeline import refresh_synth_pending
 from llmwiki.tag_utils import NOISE_TAGS
-from llmwiki.topics import build_topic_graph, topic_slug
-from llmwiki.topics_page import build_topic_pages
+from llmwiki.topics import build_topic_graph, resolve_project_topic_urls, topic_slug
+from llmwiki.topics_page import (
+    build_topic_pages,
+    kind_chip,
+    kind_label,
+    neighbors,
+    topic_node_urls,
+    topic_url,
+)
 from llmwiki.usage import (
     combined_totals as _mcp_combined_totals,
 )
@@ -1369,13 +1376,88 @@ def render_session(
     return out_path
 
 
+def project_connected_topics(
+    graph: dict[str, Any] | None, project_slug: str
+) -> list[tuple[str, int, str]]:
+    """Topics co-occurring with a project, strongest first (#108, FR5).
+
+    Each entry is ``(topic, shared_sessions, href)``, where ``href`` is the
+    neighbour's resolved page relative to ``projects/`` — a neighbour that is
+    itself a project routes to its project page, exactly as it does on every
+    other surface (FR4).
+
+    The project's own topic node is the one whose backing page is
+    ``wiki/projects/<slug>.md`` — ``kind == "projects"`` with a matching
+    ``wiki_slug``. Returns an empty list when the graph is absent, too sparse to
+    use, or holds no node for this project, so the page emits no section.
+    """
+    if not graph:
+        return []
+    nodes = graph.get("nodes") or []
+    edges = graph.get("edges") or []
+    for node in nodes:
+        if node.get("kind") == "projects" and node.get("wiki_slug") == project_slug:
+            urls = topic_node_urls(list(nodes))
+            return [
+                (name, weight, f"../{topic_url(name, urls)}")
+                for name, weight in neighbors(str(node.get("id", "")), edges)
+            ]
+    return []
+
+
+def render_connected_topics(topics: list[tuple[str, int, str]]) -> str:
+    """Render a project page's connected-topics list, ``""`` when empty (FR5).
+
+    Same shape as the list on topic pages so a reader recognises it. Each
+    ``href`` arrives already resolved and relative to ``projects/``.
+    """
+    if not topics:
+        return ""
+    rows = [
+        f'<li><a href="{html.escape(href, quote=True)}">'
+        f"{html.escape(name)}</a>"
+        f' <span class="muted">· {int(weight)} shared</span></li>'
+        for name, weight, href in topics
+    ]
+    return (
+        "<h2>Connected topics</h2>\n"
+        '<ul class="topic-neighbor-list">\n' + "\n".join(rows) + "\n</ul>\n"
+    )
+
+
+def project_session_dates(
+    sessions: list[tuple[Path, dict[str, Any], str]],
+) -> tuple[str, str]:
+    """Created / updated dates for a project, from its oldest and newest session.
+
+    Project stubs carry no date of their own, so freshness is derived from the
+    sessions every build and stays correct as new ones arrive (#108, FR2).
+    The earliest and latest date are taken as the minimum and maximum, so the
+    result holds whatever order ``sessions`` arrives in; sessions with no date
+    of their own are skipped, and a project whose sessions carry no dates at all
+    yields ``("", "")`` so the page shows none.
+    """
+    dates = [str(meta.get("date") or "").strip() for _p, meta, _b in sessions]
+    dated = [d for d in dates if d]
+    if not dated:
+        return "", ""
+    return min(dated), max(dated)
+
+
 def render_project_page(
     project_slug: str,
     sessions: list[tuple[Path, dict[str, Any], str]],
     out_dir: Path,
     usage_totals: dict[str, Any] | None = None,
     doc_count: int = 0,
+    connected_topics: list[tuple[str, int, str]] | None = None,
 ) -> Path:
+    """Write ``projects/<slug>.html`` for one project and return its path.
+
+    ``connected_topics`` is ``[(topic, shared_sessions, href), ...]`` as
+    :func:`project_connected_topics` returns it; omit it (or pass an empty
+    list) and the page carries no connected-topics section at all.
+    """
     main_sessions = [s for s in sessions if not _is_subagent(s[1], s[0])]
     subagent_sessions = [s for s in sessions if s not in main_sessions]
 
@@ -1503,6 +1585,11 @@ def render_project_page(
             '</section>\n'
         )
 
+    # #108 FR5: the co-occurrence list a reader would have seen on the topic
+    # page they were routed away from. Distinct from the hero topic chips
+    # above, which come from the project's own frontmatter.
+    connected_block = render_connected_topics(connected_topics or [])
+
     body = f"""{topics_strip}
 {disk_path_strip}
 {heatmap_block}
@@ -1512,6 +1599,7 @@ def render_project_page(
 <section class="section">
   <div class="container">
     {crumbs}
+    {connected_block}
     <h2>Main sessions ({len(main_sessions)})</h2>
     <div class="card-grid">
 {cards_main}
@@ -1526,8 +1614,21 @@ def render_project_page(
     # Filename stays `<slug>.html` for stable URLs; the hero title is
     # the restored local cwd. Slug stays in the subtitle for search.
     display_name = primary_cwd or project_slug
+    # #108 FR5: a project topic routes here instead of to its topic page, so
+    # the reader never sees that page's chip — the project page carries the
+    # same one.
     hero_sub_bits = [
+        kind_chip("projects"),
         f"slug <code>{html.escape(project_slug)}</code>",
+    ]
+    # #108 FR2: dates come from the sessions, never from the project stub —
+    # a project whose sessions carry none shows none.
+    created, updated = project_session_dates(sessions)
+    if created:
+        hero_sub_bits.append(f"created {html.escape(created)}")
+    if updated:
+        hero_sub_bits.append(f"updated {html.escape(updated)}")
+    hero_sub_bits += [
         f"{len(main_sessions)} main sessions",
         f"{len(subagent_sessions)} sub-agent runs",
     ]
@@ -2453,7 +2554,8 @@ def build_search_index(
 
     `topics` is the ``nodes`` list from :func:`build_topic_graph` (#50). Each
     node becomes a ``type: "topic"`` meta entry whose ``body`` carries aliases
-    so non-canonical spellings match in the Cmd+K palette.
+    so non-canonical spellings match in the Cmd+K palette, and whose ``kind``
+    carries the human-readable name the palette badge shows (#108).
     """
     # ── session entries grouped by project ──
     chunks: dict[str, list[dict[str, Any]]] = {}
@@ -2615,6 +2717,11 @@ def build_search_index(
             "url": str(node.get("site_url") or f"topics/{slug}.html"),
             "title": name,
             "type": "topic",
+            # #108 FR11: the palette badge names the kind the map and the
+            # topic page name. `type` stays "topic" — it is the documented
+            # `type:topic` palette filter and part of the frozen index shape,
+            # so the kind is added alongside it rather than replacing it.
+            "kind": kind_label(str(node.get("kind") or "")),
             "project": "",
             "date": "",
             "model": "",
@@ -3079,11 +3186,32 @@ def build_site(
         "candidates_stale_days": int(review_summary.get("stale_days") or 30),
     }
 
+    # #50: build the topic graph *before* the pages that consume it — the
+    # project pages below (#108 FR5), the search index and the topic pages
+    # further down. Graph HTML / topic pages still render below; only the
+    # CPU-side construction, which writes nothing, is hoisted.
+    _TOPIC_GRAPH_MIN_NODES = 5
+    topic_graph: dict[str, Any] | None = None
+    try:
+        topic_graph = build_topic_graph(wiki_dir)
+    except Exception as e:  # noqa: BLE001 — never fail the build over the graph
+        print(f"  warning: topic graph build failed: {e}", file=sys.stderr)
+    topic_nodes = (topic_graph or {}).get("nodes") or []
+    use_topic_graph = bool(topic_graph) and len(topic_nodes) >= _TOPIC_GRAPH_MIN_NODES
+    # #108 FR4: a topic backed by a wiki project page routes to that project's
+    # own page. Resolved once here so the search index below, the viewer's
+    # double-click target, and the topic pages all agree on one URL.
+    if topic_graph is not None:
+        resolve_project_topic_urls(topic_graph, set(groups))
+
     for project, sessions in groups.items():
         render_project_page(
             project, sessions, out_dir,
             usage_totals=usage_totals,
             doc_count=docs_by_project.get(project, 0),
+            connected_topics=project_connected_topics(
+                topic_graph if use_topic_graph else None, project
+            ),
         )
     print(f"  wrote {len(groups)} project pages")
 
@@ -3139,18 +3267,6 @@ def build_site(
         "candidates.html, projects/index.html, sessions/index.html, 404.html"
     )
 
-    # #50: build the topic graph *before* the search index so topic pages
-    # (and their aliases) can be indexed. Graph HTML / topic pages still
-    # render below — we only hoist the CPU-side construction.
-    _TOPIC_GRAPH_MIN_NODES = 5
-    topic_graph: dict[str, Any] | None = None
-    try:
-        topic_graph = build_topic_graph(wiki_dir)
-    except Exception as e:  # noqa: BLE001 — never fail the build over the graph
-        print(f"  warning: topic graph build failed: {e}", file=sys.stderr)
-    topic_nodes = (topic_graph or {}).get("nodes") or []
-    use_topic_graph = bool(topic_graph) and len(topic_nodes) >= _TOPIC_GRAPH_MIN_NODES
-
     # Search index (chunked — #47) + tree/flat auto-routing (#53) + topics (#50)
     build_search_index(
         sources,
@@ -3194,7 +3310,7 @@ def build_site(
         # Prefer the full page graph until the vocabulary is rich enough.
         if use_topic_graph and topic_graph is not None:
             write_graph_html(topic_graph, out_dir / "graph.html")
-            tpages = build_topic_pages(topic_graph, out_dir)
+            tpages = build_topic_pages(topic_graph, out_dir, wiki_dir=wiki_dir)
             print(f"  wrote graph.html (topic graph: {len(topic_graph['nodes'])} topics, "
                   f"{len(topic_graph['edges'])} connections) + {len(tpages)} topic pages")
         else:

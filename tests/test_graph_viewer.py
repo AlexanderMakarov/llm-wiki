@@ -77,6 +77,63 @@ def test_scan_pages_excludes_readme(tmp_path: Path, monkeypatch):
     assert "Keep" in pages
 
 
+def test_scan_pages_carries_the_frontmatter_dates(tmp_path: Path):
+    """#108 FR2: the review date and the page's own date reach the caller."""
+    wiki = tmp_path / "wiki"
+    (wiki / "sources").mkdir(parents=True)
+    (wiki / "sources" / "s1.md").write_text(
+        '---\ntitle: "S One"\nlast_updated: 2026-07-30\ndate: 2026-01-09\n---\n\nBody.\n',
+        encoding="utf-8",
+    )
+    page = scan_pages(wiki)["s1"]
+    assert page["last_updated"] == "2026-07-30"
+    assert page["date"] == "2026-01-09"
+    assert page["title"] == "S One"
+
+
+def test_scan_pages_reports_missing_dates_as_none(tmp_path: Path):
+    wiki = tmp_path / "wiki"
+    (wiki / "entities").mkdir(parents=True)
+    (wiki / "entities" / "Hazel.md").write_text(
+        '---\ntitle: "Hazel"\ntype: entity\n---\n\n# Hazel\n', encoding="utf-8"
+    )
+    page = scan_pages(wiki)["Hazel"]
+    assert page["last_updated"] is None
+    assert page["date"] is None
+
+
+def test_scan_pages_parses_quoted_and_bare_last_updated_identically(tmp_path: Path):
+    """Synth writes both spellings; a vault can hold either."""
+    wiki = tmp_path / "wiki"
+    (wiki / "entities").mkdir(parents=True)
+    (wiki / "entities" / "Quoted.md").write_text(
+        '---\ntitle: "Quoted"\nlast_updated: "2026-08-05"\n---\n\nBody.\n',
+        encoding="utf-8",
+    )
+    (wiki / "entities" / "Bare.md").write_text(
+        '---\ntitle: "Bare"\nlast_updated: 2026-08-05\n---\n\nBody.\n',
+        encoding="utf-8",
+    )
+    pages = scan_pages(wiki)
+    assert pages["Quoted"]["last_updated"] == pages["Bare"]["last_updated"]
+    assert pages["Bare"]["last_updated"] == "2026-08-05"
+
+
+def test_scan_pages_title_falls_back_to_the_slug_without_frontmatter(tmp_path: Path):
+    wiki = tmp_path / "wiki"
+    (wiki / "entities").mkdir(parents=True)
+    (wiki / "entities" / "Hazel.md").write_text(
+        "# Hazel\n\nNo frontmatter at all.\n", encoding="utf-8"
+    )
+    (wiki / "entities" / "Empty.md").write_text(
+        "---\ntitle:\n---\n\nBlank title.\n", encoding="utf-8"
+    )
+    pages = scan_pages(wiki)
+    assert pages["Hazel"]["title"] == "Hazel"
+    assert pages["Hazel"]["last_updated"] is None
+    assert pages["Empty"]["title"] == "Empty"
+
+
 def test_build_graph_computes_in_degree(seeded_graph):
     nodes = {n["id"]: n for n in seeded_graph["nodes"]}
     # Bar has 1 inbound (Foo → Bar), Rag has 1 inbound (Bar → Rag)
@@ -309,18 +366,20 @@ def test_html_template_escapes_user_html():
 
 
 def test_html_template_size_budget():
-    # Guardrail — the template shouldn't balloon. 41 kB covers the #54
+    # Guardrail — the template shouldn't balloon. 43.5 kB covers the #54
     # topic-first viewer (dual-mode node/edge build, contextual side panel,
-    # double-click + edge-click handlers) plus kind-aware clustering
-    # (per-kind legend, cluster labels, on-page error reporting).
+    # double-click + edge-click handlers), kind-aware clustering (per-kind
+    # legend, cluster labels, on-page error reporting) and the side panel's
+    # kind + freshness rows (#108 FR7).
     #
     # This is the ceiling, not headroom: the inline <script> is most of the
-    # template and every byte ships on every graph page load. The next
-    # feature that needs real space should move it to an external .js asset
-    # rather than raise this number again.
-    assert len(HTML_TEMPLATE) < 41_000, (
-        f"HTML template is {len(HTML_TEMPLATE)} bytes — "
-        "split the <script> into an external .js asset instead of raising this"
+    # template and every byte ships on every graph page load. #108 FR7 took
+    # the last of the space this number can be stretched to cover — the next
+    # feature that needs room must move the <script> to an external .js asset
+    # instead of raising it again. #127 tracks that work.
+    assert len(HTML_TEMPLATE) < 43_500, (
+        f"HTML template is {len(HTML_TEMPLATE)} bytes — split the <script> "
+        "into an external .js asset (#127) instead of raising this"
     )
 
 

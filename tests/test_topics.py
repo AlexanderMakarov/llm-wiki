@@ -10,26 +10,50 @@ from __future__ import annotations
 from pathlib import Path
 
 from llmwiki.synth.pipeline import _inject_vocabulary
-from llmwiki.topics import build_topic_graph, derive_vocabulary, topic_slug
+from llmwiki.topics import (
+    Topic,
+    TopicPage,
+    build_topic_graph,
+    derive_vocabulary,
+    resolve_topic_page,
+    topic_kind_lookup,
+    topic_slug,
+)
 from llmwiki.topics_consolidate import parse_and_cache, render_consolidation_prompt
-from llmwiki.topics_page import _display_aliases, build_topic_pages
+from llmwiki.topics_page import (
+    KIND_OTHER_LABEL,
+    _display_aliases,
+    _identity_line,
+    build_topic_pages,
+)
 
 
-def _session(body_links: list[str], *, stem: str, project: str = "proj") -> str:
+def _session(
+    body_links: list[str], *, stem: str, project: str = "proj", date: str = ""
+) -> str:
     links = " ".join(f"[[{t}]]" for t in body_links)
+    date_line = f"date: {date}\n" if date else ""
     return (
-        f"---\ntitle: {stem}\nproject: {project}\n"
+        f"---\ntitle: {stem}\nproject: {project}\n{date_line}"
         f"source_file: raw/sessions/2026-01-01T00-00-{project}-{stem}.md\n"
         f"---\n\n## Summary\n{links}\n"
     )
 
 
-def _make_wiki(tmp_path: Path, sessions: dict[str, list[str]]) -> Path:
+def _make_wiki(
+    tmp_path: Path,
+    sessions: dict[str, list[str]],
+    *,
+    dates: dict[str, str] | None = None,
+) -> Path:
     wiki = tmp_path / "wiki"
     src = wiki / "sources" / "proj"
     src.mkdir(parents=True)
     for stem, links in sessions.items():
-        (src / f"{stem}.md").write_text(_session(links, stem=stem), encoding="utf-8")
+        (src / f"{stem}.md").write_text(
+            _session(links, stem=stem, date=(dates or {}).get(stem, "")),
+            encoding="utf-8",
+        )
     return wiki
 
 
@@ -173,6 +197,205 @@ def test_display_aliases_collapse_spelling_variants():
          "Bilingual Education"],
     )
     assert out == ["Armenian Language", "Bilingual Education"]
+
+
+def _page(kind: str, slug: str) -> TopicPage:
+    return TopicPage(kind=kind, slug=slug, path=f"wiki/{kind}/{slug}.md")
+
+
+def test_resolve_topic_page_prefers_canonical_spelling():
+    lookup = {"hazel": _page("entities", "Hazel"),
+              "batching": _page("concepts", "Batching")}
+    topic = Topic(canonical="Hazel", aliases={"Hazel", "Batching"})
+    found = resolve_topic_page(topic, lookup)
+    assert found is not None
+    assert (found.kind, found.slug) == ("entities", "Hazel")
+
+
+def test_resolve_topic_page_falls_back_to_aliases_in_sorted_order():
+    lookup = {"alpha": _page("concepts", "Alpha"), "zeta": _page("entities", "Zeta")}
+    topic = Topic(canonical="Unlisted", aliases={"Zeta", "Alpha"})
+    found = resolve_topic_page(topic, lookup)
+    assert found is not None
+    assert found.slug == "Alpha"  # sorted() puts Alpha before Zeta
+
+
+def test_resolve_topic_page_returns_none_when_nothing_matches():
+    topic = Topic(canonical="Unfiled", aliases={"unfiled"})
+    assert resolve_topic_page(topic, {"hazel": _page("entities", "Hazel")}) is None
+
+
+def test_topic_kind_lookup_derives_kind_from_the_folder_not_frontmatter(
+    tmp_path: Path,
+):
+    """Pre-#102 project pages carry `type: entity`; the folder still wins."""
+    wiki = tmp_path / "wiki"
+    (wiki / "projects").mkdir(parents=True)
+    (wiki / "projects" / "legacy-app.md").write_text(
+        '---\ntitle: "legacy-app"\ntype: entity\nentity_type: project\n---\n\n'
+        "# legacy-app\n",
+        encoding="utf-8",
+    )
+    lookup = topic_kind_lookup(wiki)
+    record = lookup["legacy-app"]
+    assert record.kind == "projects"
+    assert record.slug == "legacy-app"
+    assert record.path == "wiki/projects/legacy-app.md"
+    assert record.site_url == "projects/legacy-app.html"
+    # The page records no review date, so none is invented.
+    assert record.last_updated is None
+
+
+def test_nodes_carry_the_backing_page_and_omit_it_when_undescribed(tmp_path: Path):
+    wiki = _make_wiki(tmp_path, {
+        "s1": ["Hazel", "Unfiled"],
+        "s2": ["Hazel", "Unfiled"],
+    })
+    (wiki / "entities").mkdir(parents=True)
+    (wiki / "entities" / "Hazel.md").write_text(
+        '---\ntitle: "Hazel"\ntype: entity\n---\n\n# Hazel\n', encoding="utf-8"
+    )
+    g = build_topic_graph(wiki, min_sessions=2)
+    hazel = next(n for n in g["nodes"] if n["id"] == "Hazel")
+    assert hazel["kind"] == "entities"
+    assert hazel["wiki_slug"] == "Hazel"
+    assert hazel["wiki_path"] == "wiki/entities/Hazel.md"
+    # Entity pages compile to no site page, so no backing URL is carried.
+    assert "wiki_site_url" not in hazel
+    # The node's own site_url still points at the generated topic page.
+    assert hazel["site_url"] == "topics/hazel.html"
+
+    unfiled = next(n for n in g["nodes"] if n["id"] == "Unfiled")
+    assert unfiled["kind"] == "other"
+    assert "wiki_slug" not in unfiled
+    assert "wiki_path" not in unfiled
+    assert "wiki_site_url" not in unfiled
+
+
+def test_identity_line_renders_only_the_elements_present():
+    full = _identity_line(
+        {"id": "Hazel", "kind": "entities", "session_count": 4}, 3
+    )
+    assert full == (
+        '<span class="topic-kind-chip">Entity</span> · 3 connected topics'
+        " · 4 sessions · <code>hazel</code>"
+    )
+    # No backing page → the chip names that state rather than disappearing.
+    unfiled = f'<span class="topic-kind-chip">{KIND_OTHER_LABEL}</span>'
+    assert _identity_line({"id": "Unfiled", "kind": "other"}, 0) == (
+        f"{unfiled} · 0 connected topics · <code>unfiled</code>"
+    )
+    # A node missing `kind` entirely behaves the same way.
+    assert unfiled in _identity_line({"id": "Unfiled"}, 1)
+
+
+# ─── FR2: activity vs review dates ────────────────────────────────────
+
+
+def test_nodes_derive_first_and_last_seen_from_the_session_dates(tmp_path: Path):
+    wiki = _make_wiki(
+        tmp_path,
+        {"s1": ["Hazel"], "s2": ["Hazel"], "s3": ["Hazel"]},
+        dates={"s1": "2026-03-04", "s2": "2026-01-09", "s3": "2026-02-17"},
+    )
+    g = build_topic_graph(wiki, min_sessions=2)
+    hazel = next(n for n in g["nodes"] if n["id"] == "Hazel")
+    assert hazel["first_seen"] == "2026-01-09"
+    assert hazel["last_seen"] == "2026-03-04"
+    # The per-session date is carried so nothing has to re-scan the wiki.
+    assert g["sessions"]["s2"]["date"] == "2026-01-09"
+
+
+def test_nodes_derive_activity_only_from_the_sessions_mentioning_the_topic(
+    tmp_path: Path,
+):
+    wiki = _make_wiki(
+        tmp_path,
+        {"s1": ["Hazel"], "s2": ["Hazel"], "s3": ["Batching"], "s4": ["Batching"]},
+        dates={"s1": "2026-01-09", "s2": "2026-02-17",
+               "s3": "2026-05-01", "s4": "2026-06-02"},
+    )
+    g = build_topic_graph(wiki, min_sessions=2)
+    nodes = {n["id"]: n for n in g["nodes"]}
+    assert (nodes["Hazel"]["first_seen"], nodes["Hazel"]["last_seen"]) == (
+        "2026-01-09", "2026-02-17")
+    assert (nodes["Batching"]["first_seen"], nodes["Batching"]["last_seen"]) == (
+        "2026-05-01", "2026-06-02")
+
+
+def test_nodes_omit_activity_dates_when_no_session_carries_one(tmp_path: Path):
+    wiki = _make_wiki(tmp_path, {"s1": ["Hazel"], "s2": ["Hazel"]})
+    g = build_topic_graph(wiki, min_sessions=2)
+    hazel = next(n for n in g["nodes"] if n["id"] == "Hazel")
+    assert "first_seen" not in hazel
+    assert "last_seen" not in hazel
+    assert g["sessions"]["s1"]["date"] == ""
+
+
+def test_node_review_date_comes_from_the_backing_page_not_the_sessions(
+    tmp_path: Path,
+):
+    wiki = _make_wiki(
+        tmp_path,
+        {"s1": ["Hazel", "Unfiled"], "s2": ["Hazel", "Unfiled"]},
+        dates={"s1": "2026-01-09", "s2": "2026-02-17"},
+    )
+    (wiki / "entities").mkdir(parents=True)
+    (wiki / "entities" / "Hazel.md").write_text(
+        '---\ntitle: "Hazel"\ntype: entity\nlast_updated: 2026-07-30\n---\n\n# Hazel\n',
+        encoding="utf-8",
+    )
+    g = build_topic_graph(wiki, min_sessions=2)
+    nodes = {n["id"]: n for n in g["nodes"]}
+    assert nodes["Hazel"]["last_updated"] == "2026-07-30"
+    assert nodes["Hazel"]["last_seen"] == "2026-02-17"  # activity is separate
+    # No backing page → no review date, and none borrowed from the sessions.
+    assert "last_updated" not in nodes["Unfiled"]
+    assert nodes["Unfiled"]["last_seen"] == "2026-02-17"
+
+
+def test_identity_line_labels_activity_and_review_as_different_facts():
+    line = _identity_line(
+        {"id": "Hazel", "kind": "entities", "session_count": 4,
+         "first_seen": "2026-01-09", "last_seen": "2026-02-17",
+         "last_updated": "2026-07-30"},
+        3,
+    )
+    assert line == (
+        '<span class="topic-kind-chip">Entity</span>'
+        ' · <span class="topic-activity">Active 2026-01-09 – 2026-02-17</span>'
+        ' · <span class="topic-reviewed">Reviewed 2026-07-30</span>'
+        " · 3 connected topics · 4 sessions · <code>hazel</code>"
+    )
+
+
+def test_identity_line_collapses_a_single_day_of_activity():
+    line = _identity_line(
+        {"id": "Hazel", "first_seen": "2026-01-09", "last_seen": "2026-01-09"}, 0
+    )
+    assert '<span class="topic-activity">Active 2026-01-09</span>' in line
+    assert "–" not in line
+
+
+def test_identity_line_omits_each_date_independently():
+    # Activity only — no review date, and no label standing in for one.
+    activity_only = _identity_line(
+        {"id": "Hazel", "first_seen": "2026-01-09", "last_seen": "2026-02-17"}, 1
+    )
+    assert "topic-activity" in activity_only
+    assert "Reviewed" not in activity_only
+
+    # Review only — the page was curated but no session carries a date.
+    review_only = _identity_line({"id": "Hazel", "last_updated": "2026-07-30"}, 1)
+    assert "topic-reviewed" in review_only
+    assert "Active" not in review_only
+
+    # Neither — no date, no placeholder, no dangling separator.
+    neither = _identity_line({"id": "Unfiled"}, 0)
+    assert neither == (
+        f'<span class="topic-kind-chip">{KIND_OTHER_LABEL}</span>'
+        " · 0 connected topics · <code>unfiled</code>"
+    )
 
 
 def test_topic_page_alias_note_uses_hover_not_inline_explanation(tmp_path: Path):
