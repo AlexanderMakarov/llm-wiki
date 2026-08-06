@@ -189,7 +189,7 @@ Values are the palette recorded in FR6. Red is excluded because `--g-orphan` and
 | Project pages predating #102 (`type: entity` + `entity_type: project`) | Unaffected — kind comes from the folder, never from frontmatter. See §2.2 |
 | `last_updated` written quoted vs bare | Both forms exist in real vaults (`synth/pipeline.py:631` quoted, `:1042` bare); `_parse_scalar` strips quotes |
 | A stale `graph/graph.json` written by an older llmwiki | Cannot affect anything — the file is write-only. Nothing reads it back, and `build` reconstructs the graph in memory every run |
-| `site/search-index.json`, whose shape `docs/reference/reader-api.md` freezes | Untouched. Topic entries are hand-constructed (`build.py:2613`), not a copy of node keys, so new node fields do not leak into the index and no version bump is triggered |
+| `site/search-index.json`, whose shape `docs/reference/reader-api.md` freezes | Additive only, and deliberately so. Topic entries are hand-constructed (`build.py:2613`), not a copy of node keys, so no node field leaks in by accident. FR11 then adds exactly one field by hand — `kind`, carrying the same singular label the chip uses. That is additive-safe: `reader-api.md` is a contract preview that never enumerates topic-entry keys, `type` stays `topic` so the documented `type:topic` filter still matches every topic result, and a reader that does not know the field ignores it. No version bump is triggered |
 | Other `build_topic_graph` consumers — `synth/pipeline.py:297` (vocabulary prompt), `topics_consolidate.py:54` (merge candidates) | Both read named keys only and never iterate or serialize whole nodes; added keys are inert to them |
 | Other commands | `sync`, `synth`, `lint`, `candidates` and the MCP server are untouched except by the §2.7 consolidation, which is behaviour-preserving. MCP does not read the topic graph at all |
 
@@ -251,7 +251,7 @@ Existing suites to extend: `tests/test_topics.py`, `tests/test_graph_viewer.py`,
 - A vault whose pages carry none of the optional frontmatter — no `last_updated`, no `date` — builds and renders every topic page, with no date shown and no empty heading.
 - A project page written in the pre-#102 shape (`type: entity` + `entity_type: project` under `wiki/projects/`) still resolves to `kind == "projects"` and routes to its project page.
 - `last_updated` parses identically whether written quoted or bare.
-- Topic entries in `site/search-index.json` carry exactly the keys they carry today — a guardrail against node fields leaking into the frozen reader contract.
+- Topic entries in `site/search-index.json` carry the keys they carry today plus the single `kind` field FR11 specifies, and nothing else — a guardrail against node fields leaking into the frozen reader contract on top of the one addition that was decided. `type` stays `topic`, so the documented `type:topic` filter is unaffected.
 
 **Viewer (string assertions on generated `graph.html`, as existing graph tests do)**
 

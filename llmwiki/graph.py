@@ -703,7 +703,8 @@ function main() {
     if (lg) lg.innerHTML =
       presentKinds.map(k =>
         '<div class="row"><span class="dot" style="background: ' + kindColor(k) +
-        '"></span>' + escapeHtml(kindLabel(k)) + '</div>').join('') +
+        // 'other' reads as the panel and page chip do, not as 'Other'.
+        '"></span>' + escapeHtml(k === 'other' ? kindLabelOne(k) : kindLabel(k)) + '</div>').join('') +
       '<div class="row"><span class="dot" style="background: var(--g-edge)"></span>shared sessions</div>' +
       '<div class="row" style="color:var(--g-muted)">size = #sessions</div>';
   } else {
@@ -1323,12 +1324,15 @@ def write_html(graph: dict[str, Any], out_path: Path) -> None:
     # The nav renders a search button and script.js binds Cmd+K, but both
     # no-op unless the dialog they open is on the page too — graph.html
     # shipped the button without the dialog until this was wired up.
+    # `__GRAPH_JSON__` goes in last: it is the only substitution carrying wiki
+    # text, so a page titled `__SITE_NAV__` cannot have its own title replaced
+    # once the payload is already in place.
     html = (
         HTML_TEMPLATE
-        .replace("__GRAPH_JSON__", payload)
         .replace("__SITE_NAV__", site_nav_html)
         .replace("__SITE_PALETTE__", search_palette_markup(js_prefix=""))
         .replace("__KIND_OTHER_LABEL__", json.dumps(KIND_OTHER_LABEL))
+        .replace("__GRAPH_JSON__", payload)
     )
     out_path.write_text(html, encoding="utf-8")
 

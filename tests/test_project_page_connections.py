@@ -60,7 +60,45 @@ def _graph() -> dict[str, Any]:
 
 
 def test_project_topics_come_from_its_own_node_strongest_first():
-    assert project_connected_topics(_graph(), "shipped") == [("Batching", 5), ("Hazel", 3)]
+    assert project_connected_topics(_graph(), "shipped") == [
+        ("Batching", 5, "../topics/batching.html"),
+        ("Hazel", 3, "../topics/hazel.html"),
+    ]
+
+
+def test_a_neighbour_that_is_itself_a_project_routes_to_its_project_page():
+    """FR4: every surface honours the project rewrite, this list included.
+
+    Two projects sharing a session co-occur in the graph, so project A's page
+    lists project B — and must send the reader to B's project page, not to the
+    thin topic page the rewrite exists to route away from.
+    """
+    graph = {
+        "nodes": [
+            {"id": "shipped", "kind": "projects", "wiki_slug": "shipped",
+             "site_url": "projects/shipped.html"},
+            {"id": "legacy-app", "kind": "projects", "wiki_slug": "legacy-app",
+             "site_url": "projects/legacy-app.html"},
+        ],
+        "edges": [{"source": "shipped", "target": "legacy-app", "weight": 2}],
+    }
+    topics = project_connected_topics(graph, "shipped")
+    assert topics == [("legacy-app", 2, "../projects/legacy-app.html")]
+    assert 'href="../projects/legacy-app.html"' in render_connected_topics(topics)
+
+
+def test_a_project_topic_with_no_built_page_keeps_its_topic_page():
+    """FR4's fallback: an unresolved project node still links somewhere real."""
+    graph = {
+        "nodes": [
+            {"id": "shipped", "kind": "projects", "wiki_slug": "shipped"},
+            {"id": "legacy-app", "kind": "projects", "wiki_slug": "legacy-app"},
+        ],
+        "edges": [{"source": "shipped", "target": "legacy-app", "weight": 2}],
+    }
+    assert project_connected_topics(graph, "shipped") == [
+        ("legacy-app", 2, "../topics/legacy-app.html")
+    ]
 
 
 def test_a_project_with_no_node_in_the_graph_has_no_topics():
@@ -85,7 +123,7 @@ def test_no_graph_at_all_yields_no_topics():
 
 
 def test_topic_links_climb_out_of_the_projects_directory():
-    out = render_connected_topics([("Some Topic", 4)])
+    out = render_connected_topics([("Some Topic", 4, "../topics/some-topic.html")])
     assert _HEADING in out
     assert 'href="../topics/some-topic.html"' in out
     assert ">Some Topic</a>" in out
@@ -93,7 +131,7 @@ def test_topic_links_climb_out_of_the_projects_directory():
 
 
 def test_topic_names_are_escaped():
-    out = render_connected_topics([("A & B <x>", 1)])
+    out = render_connected_topics([("A & B <x>", 1, "../topics/a-b-x.html")])
     assert "A &amp; B &lt;x&gt;" in out
     assert "<x>" not in out
 
@@ -122,7 +160,8 @@ def test_project_page_omits_the_section_for_an_empty_list(tmp_path: Path):
 
 def test_project_page_puts_connected_topics_above_the_sessions(tmp_path: Path):
     page = render_project_page(
-        "demo", [_session("s0")], tmp_path, connected_topics=[("Hazel", 2)]
+        "demo", [_session("s0")], tmp_path,
+        connected_topics=[("Hazel", 2, "../topics/hazel.html")],
     ).read_text(encoding="utf-8")
     assert page.index(_HEADING) < page.index("<h2>Main sessions (1)</h2>")
     assert 'href="../topics/hazel.html"' in page

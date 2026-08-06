@@ -88,6 +88,32 @@ def test_extraction_keeps_prose_only_pages():
     assert page_content(text) == "Just prose."
 
 
+def test_a_title_after_an_omitted_section_still_closes_that_section():
+    """A curator who puts `## Connections` first must not lose the page.
+
+    Dropping the title used to happen before the section state was updated, so
+    the omitted section stayed open past the `# H1` and swallowed everything
+    until the next `##`.
+    """
+    text = (
+        "---\nt: 1\n---\n## Connections\n- [[X]]\n\n# Hazel\n\n"
+        "Important prose.\n\n## Key Facts\n- a\n"
+    )
+    out = page_content(text)
+    assert out == "Important prose.\n\n## Key Facts\n- a"
+    assert "[[X]]" not in out
+
+
+def test_a_second_h1_after_an_omitted_section_keeps_the_prose_under_it():
+    text = (
+        "---\nt: 1\n---\n# Hazel\n\n## Connections\n- [[X]]\n\n"
+        "# Related Work\n\nImportant prose.\n"
+    )
+    out = page_content(text)
+    assert "Important prose." in out
+    assert "[[X]]" not in out
+
+
 # --- wikilink resolution ---------------------------------------------------
 
 _TOPIC_INDEX = {"hazel": "Hazel", "hazelnut": "Hazel"}
@@ -121,6 +147,25 @@ def test_wikilink_display_text_is_what_the_reader_sees():
         "[[Hazel|the shrub]] and [[Nowhere|nothing]]", _TOPIC_INDEX, _SESSIONS
     )
     assert out == '<a href="hazel.html">the shrub</a> and nothing'
+
+
+def test_a_wikilink_inside_a_fenced_block_survives_verbatim():
+    """A page documenting the syntax means its example literally."""
+    rendered = (
+        "<p>Cite a fact like this:</p>\n"
+        "<pre><code>- Fact ([[Hazel]])\n</code></pre>\n"
+        "<p>as in [[Hazel]].</p>"
+    )
+    out = _resolve_wikilinks(rendered, _TOPIC_INDEX, _SESSIONS)
+    assert "<pre><code>- Fact ([[Hazel]])\n</code></pre>" in out
+    assert '<p>as in <a href="hazel.html">Hazel</a>.</p>' in out
+
+
+def test_a_wikilink_inside_a_code_span_survives_verbatim():
+    out = _resolve_wikilinks(
+        "write <code>[[Nowhere]]</code> to cite it", _TOPIC_INDEX, _SESSIONS
+    )
+    assert out == "write <code>[[Nowhere]]</code> to cite it"
 
 
 # --- built fixture vault ---------------------------------------------------

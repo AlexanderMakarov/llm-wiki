@@ -84,7 +84,7 @@ Clicking a card navigates to `/projects/<slug>.html` — the project detail page
 
 - Hero — display name plus a `Project` kind chip, `slug`, `created`, `updated`, main-session and sub-agent counts. The chip is the same one a [topic page](#topic-pages) carries, shown here because a project topic routes to this page instead, so the reader sees the kind either way. The two dates are the earliest and latest `date` across the project's own sessions, recomputed every build: project stubs carry no date of their own, so nothing is hand-maintained, and a project whose sessions all lack a date shows neither.
 - Project summary (auto-synthesised from sessions)
-- **Connected topics** — the topics this project co-occurs with, immediately above the session tables. Same list shape as on a [topic page](#topic-pages) (topic name · shared-session count), linking to `../topics/<slug>.html`. The whole section is omitted — heading included — when the project's topic node has no connections, or when the vault has too few topics for the topic graph to be used at all.
+- **Connected topics** — the topics this project co-occurs with, immediately above the session tables. Same list shape as on a [topic page](#topic-pages) (topic name · shared-session count), and each entry routes exactly as it does everywhere else: `../topics/<slug>.html` normally, `../projects/<slug>.html` for a neighbour that is itself a project. The whole section is omitted — heading included — when the project's topic node has no connections, or when the vault has too few topics for the topic graph to be used at all.
 - Sorted session table (date desc)
 - Per-project activity heatmap
 - Linked entities + concepts that appear across sessions
@@ -217,11 +217,11 @@ The topic page is the only browsable surface for entity and concept pages, so it
 
 - **Heading-agnostic.** Nothing is keyed to `## Key Facts`; a renamed, reordered, or newly added section reaches the reader as written, as does introductory prose sitting above the first heading.
 - **No empty sections.** A heading with nothing under it is dropped rather than rendered as a bare heading — innermost first, so a `##` whose only child `###` was itself empty goes too.
-- **`[[wikilinks]]` resolve.** A target naming a topic links to wherever that topic resolved (its topic page, or the project page a project topic routes to); a target naming a session with a compiled page links to it; anything else degrades to the plain text it wrapped rather than a dead link.
+- **`[[wikilinks]]` resolve.** A target naming a topic links to wherever that topic resolved (its topic page, or the project page a project topic routes to); a target naming a session with a compiled page links to it; anything else degrades to the plain text it wrapped rather than a dead link. Code spans and fenced blocks are left exactly as written — a page documenting wikilink syntax keeps its example.
 
 ### Project topics route to the project page
 
-A topic backed by a page under `wiki/projects/` links to `/projects/<slug>.html` — the full [project detail page](#project-detail-projectsslughtml) with its heatmap, session cards and charts — rather than to a thin topic page. The rewrite is applied once at build time and every surface honours it: the map's double-click target, the search index entry, Connected topics lists on other topic pages, `topics/index.html`, and `[[wikilinks]]` cited inside page content.
+A topic backed by a page under `wiki/projects/` links to `/projects/<slug>.html` — the full [project detail page](#project-detail-projectsslughtml) with its heatmap, session cards and charts — rather than to a thin topic page. The rewrite is applied once at build time and every surface honours it: the map's double-click target, the search index entry, Connected topics lists on topic pages and on project pages, `topics/index.html`, and `[[wikilinks]]` cited inside page content.
 
 The match itself identifies which project it is, so an alias spelling routes as correctly as the canonical one. The rewrite is skipped when the build wrote no page for that project: `wiki/projects/` is seeded from stubs while `site/projects/` comes from session groups, so a project page with no recorded sessions keeps its ordinary topic page rather than being handed a link that 404s.
 

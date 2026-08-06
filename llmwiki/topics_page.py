@@ -27,6 +27,9 @@ _ALIAS_NORM = re.compile(r"[\s\-_]+")
 # section boundary.
 _FENCE_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
 _HEADING_RE = re.compile(r"^ {0,3}(#{1,6})\s+(.*)$")
+# Rendered code the reader is meant to read literally. `<pre>` comes first so a
+# fenced block's nested `<code>` is covered by the outer match.
+_CODE_BLOCK_RE = re.compile(r"<pre\b.*?</pre>|<code\b.*?</code>", re.DOTALL | re.IGNORECASE)
 # The two sections the topic page renders itself, from the graph.
 _OMITTED_SECTIONS = frozenset({"connections", "sessions"})
 
@@ -76,8 +79,12 @@ def _display_aliases(canonical: str, aliases: list[str]) -> list[str]:
     return sorted(best.values(), key=str.lower)
 
 
-def _neighbors(topic_id: str, edges: list[dict[str, Any]]) -> list[tuple[str, int]]:
-    """Return ``[(other_topic, weight), ...]`` sorted by weight desc."""
+def neighbors(topic_id: str, edges: list[dict[str, Any]]) -> list[tuple[str, int]]:
+    """Return ``[(other_topic, weight), ...]`` sorted by weight desc.
+
+    Shared with :mod:`llmwiki.build`, which renders the same co-occurrence list
+    on project pages (#108, FR5).
+    """
     out: list[tuple[str, int]] = []
     for e in edges:
         if e["source"] == topic_id:
@@ -157,6 +164,11 @@ def _reviewed_span(node: dict[str, Any]) -> str:
     )
 
 
+def _count(n: int, singular: str) -> str:
+    """Return ``"1 session"`` / ``"3 sessions"`` — never ``"1 sessions"``."""
+    return f"{n} {singular}" if n == 1 else f"{n} {singular}s"
+
+
 def _identity_line(node: dict[str, Any], neighbor_count: int) -> str:
     """Render the topic page's identity line: kind chip, dates, counts, slug.
 
@@ -169,32 +181,42 @@ def _identity_line(node: dict[str, Any], neighbor_count: int) -> str:
     for span in (_activity_span(node), _reviewed_span(node)):
         if span:
             parts.append(span)
-    parts.append(f"{neighbor_count} connected topics")
+    parts.append(_count(neighbor_count, "connected topic"))
     session_count = node.get("session_count")
     if session_count is not None:
-        parts.append(f"{session_count} sessions")
+        parts.append(_count(session_count, "session"))
     slug = topic_slug(str(node.get("id", "")))
     if slug:
         parts.append(f"<code>{html.escape(slug)}</code>")
     return " · ".join(parts)
 
 
-def _node_urls(nodes: list[dict[str, Any]]) -> dict[str, str]:
-    """Map every topic id → the ``site_url`` its node resolved to."""
+def topic_node_urls(nodes: list[dict[str, Any]]) -> dict[str, str]:
+    """Map every topic id → the ``site_url`` its node resolved to.
+
+    Shared with :mod:`llmwiki.build`, so a project page's connected-topics list
+    routes each neighbour exactly as the topic pages do (#108, FR4).
+    """
     return {str(n.get("id", "")): str(n.get("site_url") or "") for n in nodes}
+
+
+def topic_url(name: str, node_urls: dict[str, str]) -> str:
+    """Site-root-relative page a topic resolves to.
+
+    Normally the topic's own ``topics/<slug>.html``, but a project topic
+    resolves to its project page instead (#108, FR4). A topic missing from
+    ``node_urls`` falls back to its own page.
+    """
+    return node_urls.get(name) or f"topics/{topic_slug(name)}.html"
 
 
 def _topic_href(name: str, node_urls: dict[str, str]) -> str:
     """Link from one topic page to another topic, relative to ``topics/``.
 
-    A node's ``site_url`` is site-root-relative and normally names the topic's
-    own page, but a project topic resolves to its project page instead (#108,
-    FR4). Since topic pages live in ``topics/``, a sibling topic is
-    ``<slug>.html`` while anything else needs a ``../`` prefix.
+    Topic pages live in ``topics/``, so a sibling topic is ``<slug>.html``
+    while anything else needs a ``../`` prefix.
     """
-    url = node_urls.get(name) or ""
-    if not url:
-        return f"{topic_slug(name)}.html"
+    url = topic_url(name, node_urls)
     if url.startswith("topics/"):
         return url.removeprefix("topics/")
     return f"../{url}"
@@ -252,12 +274,15 @@ def page_content(text: str) -> str | None:
             if heading:
                 level = len(heading.group(1))
                 title = heading.group(2).strip().rstrip("#").strip().lower()
-                if level == 1 and not seen_content:
-                    continue  # the page's own title — the hero already shows it
                 # Only a heading at `##` or above closes a section; a `###`
-                # subsection belongs to whichever section encloses it.
+                # subsection belongs to whichever section encloses it. The
+                # reset runs before the title is dropped, so a page whose own
+                # `# H1` follows an omitted section still closes that section
+                # and keeps everything after it.
                 if level <= 2:
                     skipping = title in _OMITTED_SECTIONS
+                if level == 1 and not seen_content:
+                    continue  # the page's own title — the hero already shows it
         if skipping:
             continue
         kept.append((line, level))
@@ -334,6 +359,10 @@ def _resolve_wikilinks(
     a session with a compiled page links to it, and anything else degrades to
     the plain text it wrapped rather than a dead link (FR3).
 
+    Code spans and fenced blocks are left alone: a page documenting wikilink
+    syntax means its example literally, so rewriting it there would edit what
+    the curator wrote verbatim.
+
     Runs on ``md_to_html`` output, where the link text has already been escaped
     by the markdown renderer — escaping it a second time would double-encode
     it. Only the ``href``, which this function constructs from graph data that
@@ -355,7 +384,14 @@ def _resolve_wikilinks(
             return label
         return f'<a href="{html.escape(href, quote=True)}">{label}</a>'
 
-    return WIKILINK_RE.sub(resolve, rendered)
+    out: list[str] = []
+    pos = 0
+    for block in _CODE_BLOCK_RE.finditer(rendered):
+        out.append(WIKILINK_RE.sub(resolve, rendered[pos : block.start()]))
+        out.append(block.group(0))
+        pos = block.end()
+    out.append(WIKILINK_RE.sub(resolve, rendered[pos:]))
+    return "".join(out)
 
 
 def build_topic_pages(
@@ -386,7 +422,7 @@ def build_topic_pages(
     # `wiki_path` is recorded relative to the wiki root's parent.
     wiki_root = wiki_dir.parent if wiki_dir is not None else None
     topic_index = _topic_link_index(nodes)
-    node_urls = _node_urls(nodes)
+    node_urls = topic_node_urls(nodes)
 
     topics_dir = out_dir / "topics"
     topics_dir.mkdir(parents=True, exist_ok=True)
@@ -394,8 +430,8 @@ def build_topic_pages(
 
     for node in nodes:
         name = node["id"]
-        neighbors = _neighbors(name, edges)
-        subtitle = _identity_line(node, len(neighbors))
+        connected = neighbors(name, edges)
+        subtitle = _identity_line(node, len(connected))
         aliases = _display_aliases(name, node.get("aliases", []))
         alias_note = ""
         if aliases:
@@ -409,11 +445,14 @@ def build_topic_pages(
             )
         # The curated content is the payload; the link lists are context, so it
         # sits above them. Nothing at all is emitted when the page records none.
+        # `content` is the site-wide prose scope — it carries the overflow
+        # guards for wide tables and code blocks and the copy-code / deep-link
+        # JS hooks, both of which the rendered markdown needs.
         content_block = ""
         page_md = _backing_page_markdown(node, wiki_root)
         if page_md:
             content_block = (
-                '<div class="topic-page-content">\n'
+                '<div class="content topic-page-content">\n'
                 + _resolve_wikilinks(
                     md_to_html(page_md), topic_index, sessions_meta, node_urls
                 )
@@ -426,11 +465,14 @@ def build_topic_pages(
             + '<section class="container topic-page">\n'
             + alias_note
             + content_block
-            + "<h2>Connected topics</h2>\n" + _topic_links(neighbors, node_urls)
+            + "<h2>Connected topics</h2>\n" + _topic_links(connected, node_urls)
             + "<h2>Sessions</h2>\n" + _session_links(node.get("sessions", []), sessions_meta)
             + "</section>\n</main>\n"
             + page_foot(js_prefix="../")
         )
+        # Every node gets a topic page, including one that routes elsewhere: it
+        # is FR4's fallback surface for a project whose site page was never
+        # built, so the routed URL always has a real file behind it.
         path = topics_dir / f"{topic_slug(name)}.html"
         path.write_text(body, encoding="utf-8")
         written.append(path)

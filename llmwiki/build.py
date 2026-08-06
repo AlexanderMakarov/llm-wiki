@@ -113,7 +113,14 @@ from llmwiki.synth.claude_cli import overview_argv
 from llmwiki.synth.pipeline import refresh_synth_pending
 from llmwiki.tag_utils import NOISE_TAGS
 from llmwiki.topics import build_topic_graph, resolve_project_topic_urls, topic_slug
-from llmwiki.topics_page import _neighbors, build_topic_pages, kind_chip, kind_label
+from llmwiki.topics_page import (
+    build_topic_pages,
+    kind_chip,
+    kind_label,
+    neighbors,
+    topic_node_urls,
+    topic_url,
+)
 from llmwiki.usage import (
     combined_totals as _mcp_combined_totals,
 )
@@ -1371,8 +1378,13 @@ def render_session(
 
 def project_connected_topics(
     graph: dict[str, Any] | None, project_slug: str
-) -> list[tuple[str, int]]:
+) -> list[tuple[str, int, str]]:
     """Topics co-occurring with a project, strongest first (#108, FR5).
+
+    Each entry is ``(topic, shared_sessions, href)``, where ``href`` is the
+    neighbour's resolved page relative to ``projects/`` — a neighbour that is
+    itself a project routes to its project page, exactly as it does on every
+    other surface (FR4).
 
     The project's own topic node is the one whose backing page is
     ``wiki/projects/<slug>.md`` — ``kind == "projects"`` with a matching
@@ -1381,26 +1393,31 @@ def project_connected_topics(
     """
     if not graph:
         return []
+    nodes = graph.get("nodes") or []
     edges = graph.get("edges") or []
-    for node in graph.get("nodes") or ():
+    for node in nodes:
         if node.get("kind") == "projects" and node.get("wiki_slug") == project_slug:
-            return _neighbors(str(node.get("id", "")), edges)
+            urls = topic_node_urls(list(nodes))
+            return [
+                (name, weight, f"../{topic_url(name, urls)}")
+                for name, weight in neighbors(str(node.get("id", "")), edges)
+            ]
     return []
 
 
-def render_connected_topics(topics: list[tuple[str, int]]) -> str:
+def render_connected_topics(topics: list[tuple[str, int, str]]) -> str:
     """Render a project page's connected-topics list, ``""`` when empty (FR5).
 
-    Same shape as the list on topic pages so a reader recognises it. Project
-    pages live in ``projects/``, so every link climbs out to ``../topics/``.
+    Same shape as the list on topic pages so a reader recognises it. Each
+    ``href`` arrives already resolved and relative to ``projects/``.
     """
     if not topics:
         return ""
     rows = [
-        f'<li><a href="../topics/{html.escape(topic_slug(name), quote=True)}.html">'
+        f'<li><a href="{html.escape(href, quote=True)}">'
         f"{html.escape(name)}</a>"
         f' <span class="muted">· {int(weight)} shared</span></li>'
-        for name, weight in topics
+        for name, weight, href in topics
     ]
     return (
         "<h2>Connected topics</h2>\n"
@@ -1433,12 +1450,12 @@ def render_project_page(
     out_dir: Path,
     usage_totals: dict[str, Any] | None = None,
     doc_count: int = 0,
-    connected_topics: list[tuple[str, int]] | None = None,
+    connected_topics: list[tuple[str, int, str]] | None = None,
 ) -> Path:
     """Write ``projects/<slug>.html`` for one project and return its path.
 
-    ``connected_topics`` is ``[(topic, shared_sessions), ...]`` as
-    :func:`llmwiki.topics_page._neighbors` returns it; omit it (or pass an empty
+    ``connected_topics`` is ``[(topic, shared_sessions, href), ...]`` as
+    :func:`project_connected_topics` returns it; omit it (or pass an empty
     list) and the page carries no connected-topics section at all.
     """
     main_sessions = [s for s in sessions if not _is_subagent(s[1], s[0])]

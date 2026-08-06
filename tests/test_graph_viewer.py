@@ -376,10 +376,10 @@ def test_html_template_size_budget():
     # template and every byte ships on every graph page load. #108 FR7 took
     # the last of the space this number can be stretched to cover — the next
     # feature that needs room must move the <script> to an external .js asset
-    # instead of raising it again.
+    # instead of raising it again. #127 tracks that work.
     assert len(HTML_TEMPLATE) < 43_500, (
-        f"HTML template is {len(HTML_TEMPLATE)} bytes — "
-        "split the <script> into an external .js asset instead of raising this"
+        f"HTML template is {len(HTML_TEMPLATE)} bytes — split the <script> "
+        "into an external .js asset (#127) instead of raising this"
     )
 
 
