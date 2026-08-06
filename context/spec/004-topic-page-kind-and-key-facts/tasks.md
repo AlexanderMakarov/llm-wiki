@@ -84,11 +84,11 @@ Every slice leaves the vault buildable and the site browsable. Run `ruff check l
   - [x] Add a `CHANGELOG.md` entry under `## [Unreleased]` describing the user-visible change and noting that existing vaults need no migration or re-sync. **[Agent: general-purpose]**
   - [x] Verify: link-check the touched docs and confirm no relative link 404s. **[Agent: general-purpose]**
 
-- [ ] **Slice 10: Feature Testing & Regression**
+- [x] **Slice 10: Feature Testing & Regression**
 
   > Verifies the whole feature end-to-end against functional-spec.md, run after all implementation slices are complete.
-  - [ ] Read functional-spec.md acceptance criteria in full. Generate acceptance-level tests that verify the entire feature as a whole — not individual slices. Cover applicable layers (unit for pure logic, integration for service interactions, e2e for user flows) based on the project's testing stack. Write tests with RED validation (must fail before implementation is confirmed done). Annotate each test with `@spec: 004-topic-page-kind-and-key-facts` and `@regression` if suitable for long-term regression. Include the backward-compatibility criteria from technical-considerations.md §3: a vault carrying none of the optional frontmatter, a pre-#102 project page (`type: entity` + `entity_type: project` under `wiki/projects/`), quoted vs bare `last_updated`, and a guardrail that topic entries in `site/search-index.json` carry exactly the keys they carry today. **[Agent: testing-expert]**
-  - [ ] Run all generated tests. All must pass. Fix any failures before proceeding. **[Agent: testing-expert]**
+  - [x] Read functional-spec.md acceptance criteria in full. Generate acceptance-level tests that verify the entire feature as a whole — not individual slices. Cover applicable layers (unit for pure logic, integration for service interactions, e2e for user flows) based on the project's testing stack. Write tests with RED validation (must fail before implementation is confirmed done). Annotate each test with `@spec: 004-topic-page-kind-and-key-facts` and `@regression` if suitable for long-term regression. Include the backward-compatibility criteria from technical-considerations.md §3: a vault carrying none of the optional frontmatter, a pre-#102 project page (`type: entity` + `entity_type: project` under `wiki/projects/`), quoted vs bare `last_updated`, and a guardrail that topic entries in `site/search-index.json` carry exactly the keys they carry today. **[Agent: testing-expert]**
+  - [x] Run all generated tests. All must pass. Fix any failures before proceeding. **[Agent: testing-expert]**
 
 ---
 
