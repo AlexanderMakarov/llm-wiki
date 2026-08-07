@@ -1565,9 +1565,14 @@ def synthesize_new_sessions(
         projects_touched: dict[str, int] = {}
         for it in new_items:
             projects_touched[it["project"]] = projects_touched.get(it["project"], 0) + 1
+        # The entry belongs to the wiki whose pages this run wrote, which is
+        # the one `sources_out` points into — the same directory the index
+        # rebuild below reconciles. Callers that scope a run to a vault pass
+        # `wiki_sources_dir` and nothing else, so deriving the log from it is
+        # what keeps a vault's history inside that vault.
         _append_log(
             f"{summary['synthesized']} sessions across {len(projects_touched)} projects",
-            log_path=log_path,
+            log_path=log_path or (sources_out.parent / "log.md"),
             operation="synthesize",
             details={
                 "processed": _format_producer_breakdown(producers) or summary["synthesized"],

@@ -776,3 +776,60 @@ def test_an_interrupt_records_the_pages_that_reached_disk(
 
     assert resumed["new_files"] == 0
     assert resumed["synthesized"] == 0
+
+
+# ─── log entry stays inside the vault it describes ───────────────────────
+
+
+def test_the_log_entry_lands_in_the_vault_that_was_synthesized(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A vault-scoped run records its history in that vault, not the fallback.
+
+    Callers scope a run by passing ``wiki_sources_dir`` alone, so a log path
+    taken from the module-level fallback would file every vault's entry into
+    whichever wiki the package happens to sit next to.
+    """
+    fallback = tmp_path / "fallback-wiki"
+    (fallback / "sources").mkdir(parents=True)
+    monkeypatch.setattr(pipeline, "WIKI_LOG", fallback / "log.md")
+    monkeypatch.setattr(pipeline, "WIKI_SOURCES", fallback / "sources")
+
+    vault = _mk_vault(tmp_path)
+    _seed_docs(vault, ("alpha", "beta"))
+
+    summary = synthesize_new_sessions(
+        backend=_RealPageBackend(),
+        raw_dir=vault / "raw" / "sessions",
+        docs_dir=vault / "raw" / "docs",
+        wiki_sources_dir=vault / "wiki" / "sources",
+        state_file=vault / "state.json",
+        concurrency=2,
+    )
+
+    assert summary["synthesized"] == 2
+    vault_log = vault / "wiki" / "log.md"
+    assert vault_log.exists()
+    assert "] synthesize | " in vault_log.read_text(encoding="utf-8")
+    assert not (fallback / "log.md").exists()
+
+
+def test_an_explicit_log_path_still_wins(tmp_path: Path) -> None:
+    """The override callers already pass keeps taking precedence."""
+    vault = _mk_vault(tmp_path)
+    _seed_docs(vault, ("alpha",))
+    chosen = tmp_path / "chosen-wiki"
+    chosen.mkdir()
+
+    synthesize_new_sessions(
+        backend=_RealPageBackend(),
+        raw_dir=vault / "raw" / "sessions",
+        docs_dir=vault / "raw" / "docs",
+        wiki_sources_dir=vault / "wiki" / "sources",
+        state_file=vault / "state.json",
+        log_path=chosen / "log.md",
+        concurrency=1,
+    )
+
+    assert "] synthesize | " in (chosen / "log.md").read_text(encoding="utf-8")
+    assert not (vault / "wiki" / "log.md").exists()
