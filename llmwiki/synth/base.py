@@ -85,6 +85,13 @@ class BaseSynthesizer(ABC):
 
         `prompt_template` is the contents of `prompts/source_page.md`
         with `{body}` and `{meta}` placeholders.
+
+        Thread-safety contract: the caller may invoke this method
+        concurrently on one backend instance from several threads, one call
+        per page. Implementations must be thread-safe — keep per-call state
+        in local variables, and guard any instance attribute that
+        accumulates across calls (usage counters, caches) with a lock held
+        only for the mutation, never across the provider call itself.
         """
         ...
 

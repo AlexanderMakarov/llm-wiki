@@ -46,6 +46,29 @@ def print_candidates_pre_run(backlog: Mapping[str, Any]) -> None:
     print(_PENDING_SOURCES_NOTE)
 
 
+def print_synth_run_start(
+    *,
+    total: int,
+    backend_name: str,
+    concurrency: int | None = None,
+) -> None:
+    """Announce the batch size before the first page result line is printed.
+
+    Gives the operator the scale of the run up front instead of leaving them
+    to infer it from result lines as they trickle in. An empty backlog says
+    so plainly rather than printing a zero.
+
+    ``concurrency`` — how many pages the run synthesizes at once. Rendered as
+    a suffix so result lines arriving out of order read as the run working in
+    parallel rather than as a fault. Omitted when the caller leaves it unset.
+    """
+    if total <= 0:
+        print("Nothing to synthesize — every source is already up to date.")
+        return
+    suffix = f" ({concurrency} at a time)" if concurrency is not None else ""
+    print(f"Synthesizing {total} source(s) with {backend_name}{suffix}")
+
+
 def print_synth_run_summary(
     *,
     synthesized: int,

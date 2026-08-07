@@ -115,6 +115,8 @@ from llmwiki.sync.status import (  # noqa: F401
 )
 from llmwiki.synth.estimate import synthesize_estimate_report  # noqa: F401
 from llmwiki.synth.pipeline import (
+    DEFAULT_SYNTH_CONCURRENCY,
+    MAX_SYNTH_CONCURRENCY,
     _discover_raw_sessions,
     _load_state,
     discover_synth_source_keys,
@@ -1053,6 +1055,18 @@ def cmd_synthesize(args: argparse.Namespace) -> int:
         )
         return 2
 
+    # #118: a hand-typed --concurrency is refused rather than normalized, so a
+    # value the run cannot honour never passes silently. The config key stays
+    # tolerant, since a typo there must not break automated runs.
+    concurrency = getattr(args, "concurrency", None)
+    if concurrency is not None and not 1 <= concurrency <= MAX_SYNTH_CONCURRENCY:
+        print(
+            f"error: --concurrency must be between 1 and {MAX_SYNTH_CONCURRENCY} "
+            f"(got {concurrency})",
+            file=sys.stderr,
+        )
+        return 2
+
     # Legacy `synthesize` with no restrict flag: keep sources-only so existing
     # scripts do not suddenly write dozens of candidate stubs.
     if deprecated and not candidates_only and not sources_only:
@@ -1153,6 +1167,7 @@ def cmd_synthesize(args: argparse.Namespace) -> int:
         only_paths=only_paths,
         include_sessions=include_sessions,
         include_docs=include_docs,
+        concurrency=concurrency,
     )
     print(
         f"Scanned {summary['total_scanned']}, new {summary['new_files']}, "
@@ -2200,6 +2215,15 @@ def build_parser() -> argparse.ArgumentParser:
         parser.add_argument(
             "--force", action="store_true",
             help="Ignore state file, re-synthesize all sessions",
+        )
+        parser.add_argument(
+            "--concurrency", type=int, default=None, metavar="N",
+            help=(
+                "Synthesize N source pages at once, overriding "
+                "synthesis.concurrency in config (default: "
+                f"{DEFAULT_SYNTH_CONCURRENCY}; range 1-{MAX_SYNTH_CONCURRENCY}; "
+                "1 runs strictly sequentially)"
+            ),
         )
         parser.add_argument(
             "--path",

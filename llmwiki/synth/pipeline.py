@@ -21,6 +21,13 @@ import glob
 import logging
 import re
 import sys
+import threading
+from concurrent.futures import (
+    CancelledError,
+    Future,
+    ThreadPoolExecutor,
+    as_completed,
+)
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -46,6 +53,7 @@ from llmwiki.synth.claude_cli import (
 )
 from llmwiki.synth.estimate import synthesize_estimate_report
 from llmwiki.synth.ollama import OllamaSynthesizer, load_ollama_config
+from llmwiki.synth.reporting import print_synth_run_start
 from llmwiki.tags import TagEntry, near_duplicate_tags
 from llmwiki.topics import build_topic_graph
 
@@ -228,6 +236,46 @@ def resolve_exclude_headless(cfg: dict[str, Any] | None = None) -> bool:
     if isinstance(raw, str):
         return raw.strip().lower() not in ("false", "no", "0", "off")
     return DEFAULT_EXCLUDE_HEADLESS
+
+
+# #118: how many source pages are synthesized at once. The number bounds
+# concurrent `claude -p` subprocesses, so it is capped — an unbounded value
+# on a large backlog would fork one process per worker.
+DEFAULT_SYNTH_CONCURRENCY = 2
+MAX_SYNTH_CONCURRENCY = 16
+
+
+def resolve_synth_concurrency(cfg: dict[str, Any] | None = None) -> int:
+    """Read ``cfg["synthesis"]["concurrency"]`` (default 2, max 16) (#118).
+
+    Missing, non-integer, boolean, or sub-1 values fall back to the default
+    with a warning and values above the cap are clamped to it, rather than
+    crashing an automated sync/synth on one typo in config.json — the same
+    tolerance ``resolve_backend`` gives a bad ``synthesis.backend``.
+    """
+    synth_cfg = (cfg or {}).get("synthesis", {}) or {}
+    if "concurrency" not in synth_cfg:
+        return DEFAULT_SYNTH_CONCURRENCY
+    raw = synth_cfg.get("concurrency")
+    logger = logging.getLogger(__name__)
+    # bool is an int subclass: True would otherwise resolve to 1 worker.
+    if isinstance(raw, bool) or not isinstance(raw, int) or raw < 1:
+        logger.warning(
+            "Invalid synthesis.concurrency %r — must be an integer in "
+            "1..%d; falling back to %d",
+            raw,
+            MAX_SYNTH_CONCURRENCY,
+            DEFAULT_SYNTH_CONCURRENCY,
+        )
+        return DEFAULT_SYNTH_CONCURRENCY
+    if raw > MAX_SYNTH_CONCURRENCY:
+        logger.warning(
+            "synthesis.concurrency %d exceeds the maximum of %d — clamping",
+            raw,
+            MAX_SYNTH_CONCURRENCY,
+        )
+        return MAX_SYNTH_CONCURRENCY
+    return raw
 
 
 RAW_SESSIONS = REPO_ROOT / "raw" / "sessions"
@@ -1046,6 +1094,142 @@ def _build_source_page(
     return "\n".join(fm) + clean_body
 
 
+def _synthesize_one(
+    item: dict[str, Any],
+    *,
+    backend: BaseSynthesizer,
+    prompt_template: str,
+    sources_out: Path,
+    chunk_max: int,
+    write_lock: threading.Lock,
+) -> dict[str, Any]:
+    """Synthesize one raw source into its wiki page(s) and report what happened.
+
+    Runs on a worker thread (#118), so it touches nothing the run shares:
+    state, summary counters, producer tallies and stdout all belong to the
+    caller, which applies them from the record returned here::
+
+        {rel, mtime, project, is_doc, meta, slug,
+         written, protected, protected_pages, error}
+
+    ``written`` and ``protected_pages`` name the pages this source wrote and
+    the ones a real page kept it from overwriting. Any failure lands in
+    ``error`` rather than propagating, so one bad source cannot end the run —
+    including a failure to derive the slug, the page filename or the chunks,
+    which is why that derivation happens inside the guard rather than before it.
+
+    ``write_lock`` serializes the read-existing → decide → write sequence on
+    each page, and only that: two sources in one batch can derive the same
+    target filename, and the tag-preserving read plus the stub guard's read
+    must not interleave with another thread's write of the same file. The
+    backend call is deliberately outside it — that is the work being overlapped.
+    """
+    p, meta, body = item["path"], item["meta"], item["body"]
+    project = item["project"]
+    result: dict[str, Any] = {
+        "rel": item["rel"],
+        "mtime": None,
+        "project": project,
+        "is_doc": bool(item["is_doc"]),
+        "meta": meta,
+        "slug": p.stem,
+        "written": [],
+        "protected": 0,
+        "protected_pages": [],
+        "error": None,
+    }
+
+    try:
+        # G-21 (#307): slug is normalised (spaces → hyphens, filesystem-unsafe
+        # chars stripped) and G-06 (#292): date-prefixed so Claude Code's
+        # 3-word auto-slugs can't silently collide. Output path is
+        # `wiki/sources/<project>/<YYYY-MM-DD>-<slug>.md`.
+        raw_slug = meta.get("slug", p.stem)
+        result["slug"] = _normalise_slug(
+            raw_slug if isinstance(raw_slug, str) else p.stem
+        )
+        filename = synth_page_filename(meta, p.stem)
+        # #1: oversized docs are split on headings into part-pages so each
+        # chunk fits one backend call. Sessions are never chunked.
+        chunks = _chunk_markdown(body, chunk_max) if item["is_doc"] else [body]
+        multi = len(chunks) > 1
+        out_dir = sources_out / project
+        out_dir.mkdir(parents=True, exist_ok=True)
+        for idx, chunk in enumerate(chunks, start=1):
+            # #py-h7 (#585): pass the raw template — backends own
+            # rendering. The pipeline hands over the unrendered
+            # template; each backend renders it with the format it was
+            # designed against (textual vs JSON meta).
+            synthesized = backend.synthesize_source_page(
+                chunk, meta, prompt_template
+            )
+            name = f"{filename}--part-{idx:02d}" if multi else filename
+            out_path = out_dir / f"{name}.md"
+            with write_lock:
+                # #351: pass the existing path so maintainer-curated tags
+                # are preserved on re-synthesize.
+                page_content = _build_source_page(
+                    meta, synthesized, existing_page_path=out_path
+                )
+                # Stub output (dummy backend, agent-delegate pending
+                # sentinel) must never replace a real synthesized page —
+                # not even under --force. A stub carries no link data,
+                # so the swap silently destroys the knowledge graph.
+                if _is_stub_page(page_content) and out_path.exists():
+                    try:
+                        existing = out_path.read_text(encoding="utf-8")
+                    except OSError:
+                        existing = ""
+                    if existing and not _is_stub_page(existing):
+                        result["protected"] += 1
+                        result["protected_pages"].append(name)
+                        continue
+                out_path.write_text(page_content, encoding="utf-8")
+            result["written"].append(name)
+
+        # Read once per source, after all parts succeed: the caller stores it
+        # as this source's state entry.
+        result["mtime"] = p.stat().st_mtime
+    except Exception as e:
+        result["error"] = str(e)
+    return result
+
+
+def _record_abandoned_pages(
+    futures: list[Future[dict[str, Any]]],
+    state: dict[str, Any],
+    state_file: Path | None,
+) -> None:
+    """Persist the sources whose pages landed but were never drained (#118).
+
+    Called when the drain is abandoned. A worker that already wrote its page
+    is invisible to the run's bookkeeping — it has no state entry, so the next
+    run pays the backend for that page a second time. Cancelled futures never
+    ran and are ignored; every other future is awaited (the executor's
+    shutdown joins those threads anyway) and each error-free result is
+    recorded, so a resume picks up exactly the remainder.
+
+    Never raises: it runs while another exception is propagating, and masking
+    that exception would hide why the run stopped.
+    """
+    recorded = False
+    for future in futures:
+        if future.cancelled():
+            continue
+        try:
+            res = future.result()
+        except (Exception, CancelledError):
+            continue
+        if res["error"] is None and res["mtime"] is not None:
+            state[str(res["rel"])] = res["mtime"]
+            recorded = True
+    if recorded:
+        try:
+            _save_state(state, state_file)
+        except Exception:
+            pass
+
+
 def synthesize_new_sessions(
     backend: BaseSynthesizer | None = None,
     raw_dir: Path | None = None,
@@ -1061,6 +1245,7 @@ def synthesize_new_sessions(
     only_paths: set[Path] | set[str] | None = None,
     include_subagents: str | None = None,
     exclude_headless: bool | None = None,
+    concurrency: int | None = None,
 ) -> dict[str, Any]:
     """Main entry point. Returns a summary dict:
 
@@ -1079,6 +1264,9 @@ def synthesize_new_sessions(
     ``only_paths`` — when set, only synthesize these raw files (resolved
     paths). Used by ``llmwiki add`` so a single add does not drain the
     whole unsynthesized backlog.
+
+    ``concurrency`` — how many source pages to synthesize at once; falls
+    back to ``synthesis.concurrency`` in config when None.
     """
     if backend is None:
         backend = DummySynthesizer()
@@ -1113,6 +1301,12 @@ def synthesize_new_sessions(
         exclude_headless = resolve_exclude_headless(_load_sessions_config())
     else:
         exclude_headless = bool(exclude_headless)
+    # #118: an explicit value goes through the same helper as the saved one,
+    # so a library caller cannot inject an out-of-range worker count.
+    if concurrency is None:
+        concurrency = resolve_synth_concurrency(_load_sessions_config())
+    else:
+        concurrency = resolve_synth_concurrency({"synthesis": {"concurrency": concurrency}})
     prompt_template = _load_prompt_template()
     # #54: feed the auto-derived topic vocabulary back into the prompt so the
     # model reuses canonical spellings instead of coining new variants. Filled
@@ -1272,91 +1466,97 @@ def synthesize_new_sessions(
             print(f"  {it['meta'].get('slug', it['path'].stem)}")
         return summary
 
+    print_synth_run_start(
+        total=len(new_items), backend_name=backend.name, concurrency=concurrency
+    )
+
     # #27: tally what each successful synthesis produced (raw doc vs which
     # agent's session) so the log entry carries a producer breakdown the
     # Analytics "Recent activity" widget renders verbatim.
     producers: dict[str, int] = {}
 
-    for it in new_items:
-        p, meta, body = it["path"], it["meta"], it["body"]
-        project, rel = it["project"], it["rel"]
-        # G-21 (#307): slug is normalised (spaces → hyphens, filesystem-unsafe
-        # chars stripped) and G-06 (#292): date-prefixed so Claude Code's
-        # 3-word auto-slugs can't silently collide. Output path is
-        # `wiki/sources/<project>/<YYYY-MM-DD>-<slug>.md`.
-        raw_slug = meta.get("slug", p.stem)
-        slug = _normalise_slug(raw_slug if isinstance(raw_slug, str) else p.stem)
-        filename = synth_page_filename(meta, p.stem)
-
-        # #1: oversized docs are split on headings into part-pages so each
-        # chunk fits one backend call. Sessions are never chunked.
-        chunks = _chunk_markdown(body, chunk_max) if it["is_doc"] else [body]
-        multi = len(chunks) > 1
-
-        try:
-            out_dir = sources_out / project
-            out_dir.mkdir(parents=True, exist_ok=True)
-            for idx, chunk in enumerate(chunks, start=1):
-                # #py-h7 (#585): pass the raw template — backends own
-                # rendering. The pipeline hands over the unrendered
-                # template; each backend renders it with the format it was
-                # designed against (textual vs JSON meta).
-                synthesized = backend.synthesize_source_page(
-                    chunk, meta, prompt_template
+    # #118: pages are synthesized `concurrency` at a time, but every shared
+    # mutation — state, summary, producers, stdout — happens here in the
+    # draining thread, so none of them needs a lock. `write_lock` guards only
+    # the per-page read-modify-write inside the workers.
+    total = len(new_items)
+    if new_items:
+        write_lock = threading.Lock()
+        completed = 0
+        with ThreadPoolExecutor(max_workers=concurrency) as pool:
+            futures = [
+                pool.submit(
+                    _synthesize_one,
+                    it,
+                    backend=backend,
+                    prompt_template=prompt_template,
+                    sources_out=sources_out,
+                    chunk_max=chunk_max,
+                    write_lock=write_lock,
                 )
-                name = f"{filename}--part-{idx:02d}" if multi else filename
-                # #351: pass the existing path so maintainer-curated tags
-                # are preserved on re-synthesize.
-                out_path = out_dir / f"{name}.md"
-                page_content = _build_source_page(
-                    meta, synthesized, existing_page_path=out_path
-                )
-                # Stub output (dummy backend, agent-delegate pending
-                # sentinel) must never replace a real synthesized page —
-                # not even under --force. A stub carries no link data,
-                # so the swap silently destroys the knowledge graph.
-                if _is_stub_page(page_content) and out_path.exists():
-                    try:
-                        existing = out_path.read_text(encoding="utf-8")
-                    except OSError:
-                        existing = ""
-                    if existing and not _is_stub_page(existing):
-                        summary["protected"] += 1
+                for it in new_items
+            ]
+            try:
+                for future in as_completed(futures):
+                    res = future.result()
+                    completed += 1
+                    # Position counts completed SOURCES, so a chunked doc's
+                    # part-pages share one and the last one is always N/N.
+                    pos = f"[{completed}/{total}]"
+                    for name in res["written"]:
+                        # G-08 (#294): clean separator so slugs with spaces
+                        # don't break awk/sed parsing. See G-20/#306 for the
+                        # batched summary emitted after the drain.
+                        print(f"  {pos} synthesized: {res['project']} → {name}")
+                    summary["protected"] += res["protected"]
+                    for name in res["protected_pages"]:
                         print(
-                            f"  protected: {project} → {name} "
+                            f"  {pos} protected: {res['project']} → {name} "
                             "(kept real page; stub not written)"
                         )
+                    if res["error"] is not None:
+                        summary["errors"].append(f"{res['slug']}: {res['error']}")
+                        summary["skipped"] += 1
+                        print(f"  {pos} error: {res['slug']}: {res['error']}")
                         continue
-                out_path.write_text(page_content, encoding="utf-8")
-                # G-08 (#294): clean separator so slugs with spaces don't
-                # break awk/sed parsing. See G-20/#306 for the batched
-                # summary emitted after the loop.
-                print(f"  synthesized: {project} → {name}")
 
-            # Update state once per source (after all parts succeed).
-            state[rel] = p.stat().st_mtime
-            _save_state(state, state_file)
-            try:
-                target_state = _resolve_state_file(state_file)
-                def _drop_pending(s: dict[str, Any], rel=rel) -> dict[str, Any]:
-                    synth = s.setdefault("synth", {})
-                    rows = synth.setdefault("pending", [])
-                    if isinstance(rows, list):
-                        rows = [r for r in rows if not (isinstance(r, dict) and str(r.get("rel", "")) == rel)]
-                        synth["pending"] = rows
-                        synth["pending_total"] = len(rows)
-                    return s
-                _update_unified_state(_drop_pending, target_state)
-            except Exception:
-                pass
-            summary["synthesized"] += 1
-            key = "docs" if it["is_doc"] else detect_agent_label(meta)[0]
-            producers[key] = producers.get(key, 0) + 1
-
-        except Exception as e:
-            summary["errors"].append(f"{slug}: {e}")
-            summary["skipped"] += 1
-            print(f"  error: {slug}: {e}")
+                    # State is updated once per source, after all its parts
+                    # succeeded, so an interrupted run resumes at the remainder.
+                    rel = str(res["rel"])
+                    state[rel] = res["mtime"]
+                    _save_state(state, state_file)
+                    try:
+                        target_state = _resolve_state_file(state_file)
+                        def _drop_pending(s: dict[str, Any], rel=rel) -> dict[str, Any]:
+                            synth = s.setdefault("synth", {})
+                            rows = synth.setdefault("pending", [])
+                            if isinstance(rows, list):
+                                rows = [r for r in rows if not (isinstance(r, dict) and str(r.get("rel", "")) == rel)]
+                                synth["pending"] = rows
+                                synth["pending_total"] = len(rows)
+                            return s
+                        _update_unified_state(_drop_pending, target_state)
+                    except Exception:
+                        pass
+                    summary["synthesized"] += 1
+                    key = "docs" if res["is_doc"] else detect_agent_label(res["meta"])[0]
+                    producers[key] = producers.get(key, 0) + 1
+            except BaseException as exc:
+                # Any escape from the drain abandons the queue — Ctrl-C, an
+                # OSError saving state, a closed stdout. Leaving it to the
+                # executor's `__exit__` would instead run every remaining page
+                # through the backend, at full provider cost, before the
+                # traceback ever surfaced. Queued pages are dropped; the ones
+                # already running cannot be killed.
+                pool.shutdown(wait=False, cancel_futures=True)
+                if isinstance(exc, KeyboardInterrupt):
+                    in_flight = sum(1 for f in futures if f.running())
+                    print(
+                        f"\nInterrupted after {completed}/{total} source(s) — "
+                        f"waiting for {in_flight} page(s) already in flight."
+                    )
+                _record_abandoned_pages(futures, state, state_file)
+                raise
 
     # G-20 (#306): emit ONE summary log entry per invocation, not one
     # per page. Includes project counts + error count. The old per-page
@@ -1365,9 +1565,14 @@ def synthesize_new_sessions(
         projects_touched: dict[str, int] = {}
         for it in new_items:
             projects_touched[it["project"]] = projects_touched.get(it["project"], 0) + 1
+        # The entry belongs to the wiki whose pages this run wrote, which is
+        # the one `sources_out` points into — the same directory the index
+        # rebuild below reconciles. Callers that scope a run to a vault pass
+        # `wiki_sources_dir` and nothing else, so deriving the log from it is
+        # what keeps a vault's history inside that vault.
         _append_log(
             f"{summary['synthesized']} sessions across {len(projects_touched)} projects",
-            log_path=log_path,
+            log_path=log_path or (sources_out.parent / "log.md"),
             operation="synthesize",
             details={
                 "processed": _format_producer_breakdown(producers) or summary["synthesized"],
