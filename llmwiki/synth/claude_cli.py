@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import threading
 from typing import Any
 
 from llmwiki.claude_path import resolve_claude_path as _resolve_claude_path
@@ -228,19 +229,27 @@ class ClaudeCLISynthesizer(BaseSynthesizer):
         self._run_tokens = 0
         self._run_cost_usd = 0.0
         self._run_has_usage = False
+        # Pages are synthesized from several threads, so the `+=` on the
+        # counters below is a read-modify-write that would drop updates and
+        # under-report the operator's tokens and dollars. Guard the counter
+        # arithmetic only — never a subprocess call, which would serialize
+        # the pages this backend is meant to overlap.
+        self._usage_lock = threading.Lock()
 
     def reset_usage(self) -> None:
         """Clear accumulated usage before a multi-page synth run."""
-        self._run_tokens = 0
-        self._run_cost_usd = 0.0
-        self._run_has_usage = False
+        with self._usage_lock:
+            self._run_tokens = 0
+            self._run_cost_usd = 0.0
+            self._run_has_usage = False
 
     def take_usage(self) -> tuple[int | None, float | None]:
         """Return accumulated (tokens, cost_usd) for this run, or Nones."""
-        if not self._run_has_usage:
-            return None, None
-        # Known zeros are still known — do not collapse them to "unknown".
-        return self._run_tokens, self._run_cost_usd
+        with self._usage_lock:
+            if not self._run_has_usage:
+                return None, None
+            # Known zeros are still known — do not collapse them to "unknown".
+            return self._run_tokens, self._run_cost_usd
 
     def _argv(self, claude: str, system_prompt: str) -> list[str]:
         """Build the `claude` command line for one page."""
@@ -308,11 +317,12 @@ class ClaudeCLISynthesizer(BaseSynthesizer):
             )
         text, tokens, cost = _parse_claude_print_stdout(result.stdout)
         if tokens is not None or cost is not None:
-            self._run_has_usage = True
-            if tokens is not None:
-                self._run_tokens += tokens
-            if cost is not None:
-                self._run_cost_usd += cost
+            with self._usage_lock:
+                self._run_has_usage = True
+                if tokens is not None:
+                    self._run_tokens += tokens
+                if cost is not None:
+                    self._run_cost_usd += cost
         if not text:
             raise ClaudeCLIError("claude CLI returned an empty completion")
         return text

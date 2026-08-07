@@ -65,3 +65,47 @@ Memory of the `/implement-feature` run outside the context window. One entry per
 - **Agents:** implementation/verify → `general-purpose` (no Python specialist in this session's roster; the repo's `.claude/rules/contributing.md` auto-loads on `llmwiki/`/`tests/`/`scripts/`/`docs/` edits, so conventions still reach it). QA slice → project-local `testing-expert`. Recorded in the tasks.md Recommendations table.
 - **Note on Slice 1 → Slice 4:** `print_synth_run_start` takes an optional `concurrency` arg it does not render until Slice 4, so the intermediate state never prints a number it isn't honoring.
 - **Next:** commit specs, then `/awos:implement`.
+
+## implement
+
+- All 6 slices, 27/27 tasks complete. Production diff: 5 files, +303/−87 (inside the ≤500 target). Docs +5 lines across 3 files. Tests: `test_synth_parallel.py` (49) and `test_synth_parallel_acceptance.py` (20) added, `test_synth_run_summary.py` +155.
+- **Interruption and recovery:** the Slice 4 implementation agent died mid-run on an API spend limit. It had completed tasks 1–5 (worker extraction, write lock, executor drain, Ctrl-C handling, start-line suffix) but not the existing-assertion sweep. Recovered in the main context: swept the two stale regexes in `test_synth_run_summary.py` (`_START_LINE` gained the ` (N at a time)` suffix, `_PAGE_LINE` the `[k/N]` prefix — those were the only two assertions in the whole suite affected), reviewed the drain and worker by hand, then wrote the nine parallel-execution tests.
+- **Do not run two agents in one worktree.** Concurrent edits trip the repo's working-copy mutation guard mid-`pytest`, producing teardown ERRORs that name files the running agent never touched. Slices 1 and 3 were dispatched in parallel on disjoint files and still hit it. Everything after was serialized.
+- **Tests were mutation-checked, not just run.** A naive threading stress test is vacuous on CPython 3.12 — the interpreter does not switch threads inside a straight-line `self._run_tokens += tokens`, so the unlocked accumulator produced exact totals every run and the test passed with the lock deleted. It needed a `_YieldingCounters` subclass exposing the counters as properties that read then yield the GIL. Likewise, forcing `ThreadPoolExecutor(max_workers=1)` was used to confirm the two overlap tests can actually fail; the QA agent ran 10 further perturbations, each reddening its intended tests before being reverted.
+- **Deliberate deviation kept:** a *missing* `synthesis.concurrency` key falls back to the default with no warning (only present-but-unusable values warn), matching `resolve_backend`'s treatment of a missing `synthesis.backend`. Warning on absence would print a stderr WARNING for every operator who never touched the setting.
+- **Next:** `/awos:verify`.
+
+## verify
+
+- Spec Status → `Completed` on both `functional-spec.md` and `technical-considerations.md`; all 24 acceptance criteria marked verified.
+- Live CLI evidence on a scratch vault (deleted after): start line before results with backend and concurrency; out-of-order completion visible (`[1/4] a2` before `a1`) proving real overlap; flag 3 beating config 7; `--concurrency 1`; range rejection exiting 2 for both `0` and `99`; the empty-queue line after rewriting pages as non-stub; stub protection under `--force` leaving pages byte-identical; harvest running after all sources on a default `synth`. Gate: `ruff` clean, 3784 passed / 46 skipped.
+- **Pre-existing defect found, deliberately NOT fixed here** (one concern per PR): `cmd_synthesize` forwards `wiki_sources_dir` but not `log_path` / `state_file` to `synthesize_new_sessions`, so a `--vault` run writes pages into the target vault while appending its log entry to the module-level `WIKI_LOG` fallback. Unrelated to concurrency. Worth a follow-up issue.
+- Roadmap left untouched: #118 is not itself a roadmap line item (it is a follow-up to #113 under "Honest pipeline reporting"), so there was nothing to tick.
+- **Next:** user smoke confirm, then local dual review.
+
+## scope addition — vault-scoped log path
+
+- At the smoke-confirm gate the user reviewed the pre-existing "always the repo's `wiki/log.md`" defect and **explicitly asked for it in scope of this PR**. Raised the one-concern-per-PR concern; user reaffirmed. Included, and called out as a scope addition in the PR body.
+- **Diagnosis corrected one assumption:** `state_file` is *not* affected. `_apply_default_vault` already calls `configure_state_file(args.vault)`, so `resolve_state_file(None)` returns the vault's state file. Only `log_path` was wrong.
+- **Four callers shared the bug** — `cli.py` `cmd_synthesize` and `cmd_add`, `pipeline.py` `run_pipeline` (`all --with-synth`), and `queue_ops.py` — each passing `wiki_sources_dir` and no `log_path`. Fixed at the source instead of in four places: the log target now falls back to `sources_out.parent / "log.md"`, the same directory `_rebuild_index(sources_out.parent)` already reconciles. An explicit `log_path` still wins.
+- **Default behaviour provably unchanged:** with no vault, `WIKI_SOURCES.parent / "log.md" == WIKI_LOG` (asserted at the console before making the change).
+- Two regression tests added; the vault-scoped one was mutation-checked (reverting the fix reddens it, and the explicit-`log_path` test stays green, so it is targeted rather than over-asserting).
+- **Side effect confirming the diagnosis:** the worktree's own `wiki/log.md` held at 1070 lines across a full suite run. Before the fix the suite appended to it — the same leak the QA agent had worked around with an autouse fixture.
+- Gate after the fix: `ruff` clean, 3786 passed / 46 skipped.
+- **Next:** local dual review.
+
+## local review
+
+- **Review files:** `context/spec/005-synth-parallel-and-batch-count/review.md` (checklist, composed from `REVIEW_CHECKLIST.md` + `ARCHITECTURE.md` + `DECLINED.md` + `CONTRIBUTING.md` + `SECURITY.md`) and `context/spec/005-synth-parallel-and-batch-count/review-code-reviewer.md` (independent `code-reviewer`, fixed prompt, no author-supplied focus list).
+- **Verdicts:** checklist — changes-requested (1 blocker · 2 important · 9 nits); code-reviewer — approve-with-follow-ups (0 critical · 3 important · 5 below threshold).
+- **Both reviews converged on the exception path** — the region with no happy-path signal, where every test, the smoke run, and the byte-identical equivalence check all stayed green because none of them exercises a failure *during* the drain. Two distinct defects, each reproduced at the console before being accepted:
+  - Only `KeyboardInterrupt` was caught, so any other escape fell through to `ThreadPoolExecutor.__exit__` → `shutdown(wait=True)`, which drains the whole queue. Reproduced: a failure on completion 2 of 50 still made **all 50** backend calls before the traceback surfaced.
+  - `cancel_futures=True` cancels only *queued* futures, so completed-but-undrained ones had written their page with no state entry — re-synthesized and re-billed on the next run. Reproduced: 3 pages written, 1 recorded. Broader than the finding stated (not just in-flight futures), which was relayed to the applying agent.
+- **Accepted and applied:** both exception-path defects (unified into one handler + `_record_abandoned_pages`, with 3 regression tests, each mutation-checked red-then-green); the stale `_isolate_synth_log` docstring that described the log-path defect as still open; and spec drift where `technical-considerations.md` §2.1/§4 and `tasks.md` Slice 2 claimed a *missing* `synthesis.concurrency` key warns — the code is right, the documents were amended to match.
+- **Declined by the maintainer:** checklist nits 4–10 and 12 (dead optional `concurrency` branch, warning-source label, argparse-vs-body validation placement, `protected:`/`synthesized:` ordering note, `add`'s doubled start line, subprocess-level log-path guard) and every below-threshold code-reviewer item. Recorded here so a later reader knows they were seen and dismissed, not missed.
+- Gate after applying: `ruff` clean, **3789 passed / 46 skipped**.
+
+## commit-push
+
+- Per the maintainer's decision at the review gate, the branch is split into two commits so the CHANGELOG's `### Added` and `### Fixed` entries each trace to one: `feat:` for #118's parallel synthesis, `fix:` for the vault-scoped log path. Both reviews raised the bundling; splitting is cheap before push and impossible after merge.
+- This is the flow log's last committed state. Everything past this point — PR, CI, merge — is reported in chat and recoverable from the remote state.

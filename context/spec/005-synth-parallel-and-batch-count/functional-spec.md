@@ -1,7 +1,7 @@
 # Functional Specification: Synth batch count and parallel page synthesis
 
 - **Roadmap Item:** Phase 1 — Honest pipeline reporting (follow-up to "Honest `--estimate` candidate preview (#113)"); GitHub Issue [#118](https://github.com/AlexanderMakarov/llm-wiki/issues/118)
-- **Status:** Draft
+- **Status:** Completed
 - **Author:** AWOS `/implement-feature` (agent), for AlexanderMakarov
 
 ---
@@ -29,19 +29,19 @@ The desired outcome is that a catch-up run tells the operator up front how much 
   - The count is the final work queue — the sources that will actually be synthesized this run, after every source that is up to date, ineligible, or already claimed by an existing page has been excluded.
   - The line also names which synthesizer is being used and how many pages are being worked on at once, so the operator can tell at a glance whether the run is configured the way they expect.
   - **Acceptance Criteria:**
-    - [ ] Given a vault with pending sources, when the operator runs a real synth, then a line stating how many sources will be synthesized appears **before** any per-page result line.
-    - [ ] Given the same run, when the start line appears, then it also names the synthesizer in use and how many pages are being worked on at once.
-    - [ ] Given a run where every source is already up to date, when the operator runs synth, then the operator sees a clear statement that there is nothing to synthesize, rather than silence.
-    - [ ] Given a run where some sources are skipped because an existing page already claims them, when the start line is printed, then the count excludes those skipped sources — it states only what will actually be synthesized.
+    - [x] Given a vault with pending sources, when the operator runs a real synth, then a line stating how many sources will be synthesized appears **before** any per-page result line.
+    - [x] Given the same run, when the start line appears, then it also names the synthesizer in use and how many pages are being worked on at once.
+    - [x] Given a run where every source is already up to date, when the operator runs synth, then the operator sees a clear statement that there is nothing to synthesize, rather than silence.
+    - [x] Given a run where some sources are skipped because an existing page already claims them, when the start line is printed, then the count excludes those skipped sources — it states only what will actually be synthesized.
 
 ### FR2 — Several pages are synthesized at once
 
 - **As an** operator with a backlog of pending sources, **I want** synth to work on several pages at the same time, **so that** a catch-up run finishes in a fraction of the time it takes today.
   - By default, synth works on **two pages at a time**. This applies to every synthesizer — the Claude command-line synthesizer and a locally-run model alike.
   - **Acceptance Criteria:**
-    - [ ] Given a vault with several pending sources and default settings, when the operator runs synth, then more than one page is being worked on at the same time.
-    - [ ] Given the same batch run one page at a time versus at the default setting, when both runs finish, then the default-setting run takes noticeably less wall-clock time.
-    - [ ] Given a batch of pending sources, when the run finishes, then the set of pages written, their contents, and the recorded end-of-run totals match what the same batch produces one page at a time.
+    - [x] Given a vault with several pending sources and default settings, when the operator runs synth, then more than one page is being worked on at the same time.
+    - [x] Given the same batch run one page at a time versus at the default setting, when both runs finish, then the default-setting run takes noticeably less wall-clock time.
+    - [x] Given a batch of pending sources, when the run finishes, then the set of pages written, their contents, and the recorded end-of-run totals match what the same batch produces one page at a time.
 
 ### FR3 — The operator can change how many pages run at once
 
@@ -49,12 +49,12 @@ The desired outcome is that a catch-up run tells the operator up front how much 
   - The setting can be given **for a single run** as an option on the synth command, and **saved as a preference** so it also applies to scheduled and automatic runs.
   - When both are present, the option given on the command wins for that run.
   - **Acceptance Criteria:**
-    - [ ] Given no saved preference and no option on the command, when the operator runs synth, then two pages are worked on at once and the start line says so.
-    - [ ] Given the operator passes an option on the synth command, when the run starts, then that number of pages is worked on at once and the start line reflects it.
-    - [ ] Given a saved preference exists and no option is given on the command, when the operator runs synth, then the saved preference is used and the start line reflects it.
-    - [ ] Given both a saved preference and an option on the command, when the run starts, then the option on the command is used.
-    - [ ] Given the operator sets the number to one, when the run executes, then pages are synthesized strictly one after another, exactly as they are today.
-    - [ ] Given the operator sets a number below one or a value that is not a whole number, when they run synth, then they see a clear message explaining the accepted range instead of an unexplained failure or a silently ignored setting.
+    - [x] Given no saved preference and no option on the command, when the operator runs synth, then two pages are worked on at once and the start line says so.
+    - [x] Given the operator passes an option on the synth command, when the run starts, then that number of pages is worked on at once and the start line reflects it.
+    - [x] Given a saved preference exists and no option is given on the command, when the operator runs synth, then the saved preference is used and the start line reflects it.
+    - [x] Given both a saved preference and an option on the command, when the run starts, then the option on the command is used.
+    - [x] Given the operator sets the number to one, when the run executes, then pages are synthesized strictly one after another, exactly as they are today.
+    - [x] Given the operator sets a number below one or a value that is not a whole number, when they run synth, then they see a clear message explaining the accepted range instead of an unexplained failure or a silently ignored setting.
 
 ### FR4 — Progress is visible as pages finish
 
@@ -62,28 +62,28 @@ The desired outcome is that a catch-up run tells the operator up front how much 
   - Each per-page result line is prefixed with its position in the batch and the batch total.
   - Because several pages are in flight at once, they finish in whatever order the language model returns them; the position number counts completions, not queue order.
   - **Acceptance Criteria:**
-    - [ ] Given a batch of several sources, when each page finishes, then its result line shows how many pages have completed so far out of the batch total.
-    - [ ] Given a batch of several sources, when the run finishes, then the last completed page's position equals the batch total announced at the start.
-    - [ ] Given a page that fails, when its error line is printed, then it also carries a position so the operator can see the run is progressing.
+    - [x] Given a batch of several sources, when each page finishes, then its result line shows how many pages have completed so far out of the batch total.
+    - [x] Given a batch of several sources, when the run finishes, then the last completed page's position equals the batch total announced at the start.
+    - [x] Given a page that fails, when its error line is printed, then it also carries a position so the operator can see the run is progressing.
 
 ### FR5 — Nothing else about the result changes
 
 - **As an** operator, **I want** parallel synthesis to change only speed and progress reporting, **so that** I can adopt it without re-checking my wiki for damage.
   - Specifically preserved: a source is only marked done once its page is successfully written; a placeholder page never replaces a real one; sources already claimed by an existing page are still skipped with the same message; the candidate harvest still runs only after all pages are done; a failing page does not stop the rest of the batch; and every failure is still reported.
   - **Acceptance Criteria:**
-    - [ ] Given a run where one page fails, when the run finishes, then the remaining pages still complete, the failure is reported in the run's errors, and the failed source is **not** recorded as done.
-    - [ ] Given a run interrupted partway through, when the operator runs synth again, then only the sources that did not complete are synthesized again — completed ones are not redone.
-    - [ ] Given a source whose synthesizer returns placeholder content and whose page already exists as a real page, when the run finishes, then the existing real page is left untouched and the operator sees the same "kept real page" message as today.
-    - [ ] Given a completed run, when the candidate harvest reports its results, then it accounts for every page written by that run.
-    - [ ] Given a completed run, when the operator inspects the wiki log entry and the end-of-run summary, then the counts, the per-producer breakdown, and the total pages match the pages actually written.
+    - [x] Given a run where one page fails, when the run finishes, then the remaining pages still complete, the failure is reported in the run's errors, and the failed source is **not** recorded as done.
+    - [x] Given a run interrupted partway through, when the operator runs synth again, then only the sources that did not complete are synthesized again — completed ones are not redone.
+    - [x] Given a source whose synthesizer returns placeholder content and whose page already exists as a real page, when the run finishes, then the existing real page is left untouched and the operator sees the same "kept real page" message as today.
+    - [x] Given a completed run, when the candidate harvest reports its results, then it accounts for every page written by that run.
+    - [x] Given a completed run, when the operator inspects the wiki log entry and the end-of-run summary, then the counts, the per-producer breakdown, and the total pages match the pages actually written.
 
 ### FR6 — The new setting is discoverable
 
 - **As an** operator, **I want** the new option and preference documented where I already look, **so that** I can find it without reading the source.
   - **Acceptance Criteria:**
-    - [ ] Given the operator asks the synth command for help, when the help text is shown, then the new option appears with a description and its default.
-    - [ ] Given the operator reads the command reference documentation, when they look up synth, then the new option and the saved preference are listed with their default.
-    - [ ] Given the operator reads the release notes, when they look at the unreleased section, then this change is described.
+    - [x] Given the operator asks the synth command for help, when the help text is shown, then the new option appears with a description and its default.
+    - [x] Given the operator reads the command reference documentation, when they look up synth, then the new option and the saved preference are listed with their default.
+    - [x] Given the operator reads the release notes, when they look at the unreleased section, then this change is described.
 
 ---
 

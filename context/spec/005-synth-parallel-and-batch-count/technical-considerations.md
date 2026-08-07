@@ -1,7 +1,7 @@
 # Technical Specification: Synth batch count and parallel page synthesis
 
 - **Functional Specification:** [`functional-spec.md`](./functional-spec.md) (approved) — GitHub Issue [#118](https://github.com/AlexanderMakarov/llm-wiki/issues/118)
-- **Status:** Draft
+- **Status:** Completed
 - **Author(s):** AWOS `/implement-feature` (agent)
 
 ---
@@ -36,7 +36,7 @@ Resolved by a new `resolve_synth_concurrency(cfg) -> int` in `llmwiki/synth/pipe
 
 **Validation split** (deliberate, matching existing precedent):
 
-- **Config values are tolerant.** A missing, non-integer, or out-of-range value falls back to the default and emits a `logging` warning naming the accepted range — the same tolerance `resolve_backend` applies to a bad `synthesis.backend`, so a typo in `config.json` can never crash an automated `sync`/`synth`.
+- **Config values are tolerant.** A non-integer or out-of-range value falls back to the default and emits a `logging` warning naming the accepted range — the same tolerance `resolve_backend` applies to a bad `synthesis.backend`, so a typo in `config.json` can never crash an automated `sync`/`synth`. A **missing** key falls back to the default silently: the key is absent from every stock config, and llmwiki calls no `logging.basicConfig`, so `logging.lastResort` would put that warning on the stderr of every operator who never touched the setting.
 - **CLI values are strict.** `--concurrency` is validated at parse time and a bad value exits `2` with a message naming the accepted range, because a hand-typed flag that was silently ignored is worse than a refusal.
 
 **Accepted range:** `1 … MAX_SYNTH_CONCURRENCY` (16). The ceiling exists because the number bounds concurrent `claude -p` **subprocesses**; an unbounded value on a large backlog would fork a process per worker. Values above it are clamped with a warning (config) or rejected (CLI).
@@ -158,7 +158,7 @@ Two ordering notes:
 New module `tests/test_synth_parallel.py`, plus additions to `tests/test_synth_run_summary.py` for the start line. All tests use `DummySynthesizer` or purpose-built fakes against a `tmp_path` vault — no live vault, no real LLM call.
 
 **Unit — configuration resolution**
-- Default with no config; a valid value; `0` / `-1` / `"two"` / `2.5` / missing → default plus a warning; a value above the ceiling → clamped plus a warning.
+- Default with no config; a valid value; a missing key → default with **no** warning; `0` / `-1` / `"two"` / `2.5` → default plus a warning; a value above the ceiling → clamped plus a warning.
 
 **Unit — CLI**
 - `--concurrency 0` and a non-integer exit `2` with a message naming the range.

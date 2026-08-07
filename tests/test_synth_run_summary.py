@@ -1,6 +1,8 @@
-"""CLI/integration tests for post-synth end-of-run summary (#113 Slice 2).
+"""CLI/integration tests for the synth run summary lines.
 
-Covers ``print_synth_run_summary`` via ``cmd_synthesize`` on a tmp vault.
+Covers ``print_synth_run_summary`` via ``cmd_synthesize`` on a tmp vault
+(#113 Slice 2) and ``print_synth_run_start`` — the batch-size line printed
+before the first page result — via ``synthesize_new_sessions`` (#118).
 Synthesis backends are faked — no Claude/Ollama network calls.
 """
 
@@ -13,6 +15,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from llmwiki.cli import build_parser, cmd_synthesize
+from llmwiki.synth.base import DummySynthesizer
+from llmwiki.synth.pipeline import synthesize_new_sessions
 
 
 def _mk_vault(tmp_path: Path, links: dict[str, list[str]] | None = None) -> Path:
@@ -180,3 +184,152 @@ def test_estimate_skips_end_of_run_summary(
     assert "backlog now" not in out.lower()
     # Pre-run Candidates block is still allowed on estimate.
     assert "Candidates (pre-run state):" in out
+
+
+# ─── start-of-run batch count (#118 Slice 1) ─────────────────────────────
+
+_START_LINE = re.compile(r"(?m)^Synthesizing (\d+) source\(s\) with (\S+) \((\d+) at a time\)$")
+_NOTHING_LINE = "Nothing to synthesize — every source is already up to date."
+_PAGE_LINE = re.compile(r"(?m)^  \[\d+/\d+\] synthesized: ")
+
+_DOC = """---
+title: "{slug} notes"
+slug: {slug}
+---
+
+# {slug}
+
+Synthetic fixture body for the start-of-run count tests.
+"""
+
+_CLAIMING_PAGE = """---
+title: "Hand-written notes"
+type: source
+tags: [manual]
+source_file: raw/docs/{slug}.md
+project: manual
+---
+
+## Summary
+
+A real page with link data, filed outside the derived slug scheme.
+
+## Connections
+
+- [[Synthesis]] — the pipeline that would otherwise duplicate this page
+"""
+
+
+def _seed_docs(vault: Path, slugs: tuple[str, ...]) -> None:
+    """Write one synthetic raw doc per slug into ``<vault>/raw/docs``."""
+    for slug in slugs:
+        (vault / "raw" / "docs" / f"{slug}.md").write_text(
+            _DOC.format(slug=slug), encoding="utf-8"
+        )
+
+
+def _claim_source(vault: Path, slug: str) -> None:
+    """Add a real source page claiming ``raw/docs/<slug>.md`` (dedup guard)."""
+    page = vault / "wiki" / "sources" / "manual" / f"{slug}-notes.md"
+    page.parent.mkdir(parents=True, exist_ok=True)
+    page.write_text(_CLAIMING_PAGE.format(slug=slug), encoding="utf-8")
+
+
+def _run_synth(vault: Path, *, dry_run: bool = False) -> dict:
+    """Run the real pipeline against a tmp vault on the dummy backend."""
+    return synthesize_new_sessions(
+        backend=DummySynthesizer(),
+        raw_dir=vault / "raw" / "sessions",
+        docs_dir=vault / "raw" / "docs",
+        wiki_sources_dir=vault / "wiki" / "sources",
+        log_path=vault / "wiki" / "log.md",
+        state_file=vault / "state.json",
+        dry_run=dry_run,
+    )
+
+
+def test_run_start_line_precedes_first_page_line(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The batch size is announced before any page result trickles in."""
+    vault = _mk_vault(tmp_path)
+    _seed_docs(vault, ("alpha", "beta"))
+
+    assert _run_synth(vault)["synthesized"] == 2
+
+    out = capsys.readouterr().out
+    start = _START_LINE.search(out)
+    first_page = _PAGE_LINE.search(out)
+    assert start is not None, out
+    assert first_page is not None, out
+    assert start.start() < first_page.start(), out
+
+
+def test_run_start_count_matches_queue_size(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The announced count equals the number of sources actually queued."""
+    vault = _mk_vault(tmp_path)
+    _seed_docs(vault, ("alpha", "beta", "gamma"))
+
+    summary = _run_synth(vault)
+
+    out = capsys.readouterr().out
+    start = _START_LINE.search(out)
+    assert start is not None, out
+    assert int(start.group(1)) == summary["new_files"] == 3
+    assert start.group(2) == DummySynthesizer().name
+
+
+def test_run_start_count_excludes_dedup_skipped_sources(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A source dropped by the dedup guard is not counted in the batch.
+
+    The guard runs while the queue is still being built, so its
+    ``skipped:`` line legitimately prints before the start line — what
+    matters is that the announced count covers only real work.
+    """
+    vault = _mk_vault(tmp_path)
+    _seed_docs(vault, ("alpha", "beta", "gamma"))
+    _claim_source(vault, "gamma")
+
+    summary = _run_synth(vault)
+
+    out = capsys.readouterr().out
+    start = _START_LINE.search(out)
+    assert start is not None, out
+    assert summary["skipped"] == 1
+    assert int(start.group(1)) == summary["new_files"] == 2
+    assert out.count("not duplicating)") == 1
+    assert len(_PAGE_LINE.findall(out)) == 2
+
+
+def test_empty_queue_reports_nothing_to_synthesize(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """An up-to-date corpus says so plainly instead of announcing zero."""
+    vault = _mk_vault(tmp_path)
+
+    summary = _run_synth(vault)
+
+    out = capsys.readouterr().out
+    assert summary["new_files"] == 0
+    assert _NOTHING_LINE in out
+    assert _START_LINE.search(out) is None, out
+
+
+def test_dry_run_omits_run_start_line(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """``--dry-run`` keeps its own preview line and adds no start line."""
+    vault = _mk_vault(tmp_path)
+    _seed_docs(vault, ("alpha", "beta"))
+
+    summary = _run_synth(vault, dry_run=True)
+
+    out = capsys.readouterr().out
+    assert summary["synthesized"] == 0
+    assert f"[dry-run] Would synthesize 2 new sources using {DummySynthesizer().name}" in out
+    assert _START_LINE.search(out) is None, out
+    assert _NOTHING_LINE not in out
