@@ -36,8 +36,21 @@ def test_state_widget_js_has_pipeline_table_and_collapsibles():
     assert "state-pipeline-table" in js.JS
     assert "state-knowledge-table" in js.JS
     assert "To synthesize" in js.JS
-    assert "Files layer:" in js.JS
-    assert "Handled by shell commands." in js.JS
+    assert (
+        "Eligible sources: Raw → To synthesize → Synthesized (by agent). "
+        "On disk can exceed Raw (filtered/orphan pages). "
+        "Handled by shell commands."
+    ) in js.JS
+    assert 'aria-label="Eligible sources"' in js.JS
+    # Caption unit is eligible sources — not "Files layer" as the measure.
+    assert "Files layer:" not in js.JS
+    assert 'aria-label="Files layer"' not in js.JS
+    # #81 smoke redesign: On disk column (file counts); no under-table note.
+    assert "<th>On disk</th>" in js.JS
+    assert "sourcePagesNote" not in js.JS
+    assert "Source pages (current state):" not in js.JS
+    assert 'kind === "stubs"' in js.JS
+    assert "totalOnDisk" in js.JS
     assert "Knowledge layer: Candidates → Entities / Concepts." in js.JS
     assert "Review on the Candidates page (header/count below) or via agent Commands below." in js.JS
     assert "candidates.html" in js.JS
@@ -80,8 +93,9 @@ def test_state_widget_js_has_pipeline_table_and_collapsibles():
     assert 'detailsSection("Commands", 13,' in js.JS
     assert "queued " in js.JS
     assert "in progress " in js.JS
-    # Knowledge layer is a second table — not dashes on per-agent rows.
-    assert 'class="muted">—</td>' not in js.JS
+    # Stubs/Other disk-only rows use muted dashes; Knowledge layer stays numeric.
+    assert 'var dash = \'<td class="muted">—</td>\';' in js.JS
+    assert "diskOnly" in js.JS
     # Timeline must appear before the backlog lists in the render order.
     timeline_idx = js.JS.index('detailsSection("Timeline"')
     sessions_idx = js.JS.index('detailsSection("Not synthesized sessions"')
@@ -101,6 +115,18 @@ def test_state_widget_js_has_pipeline_table_and_collapsibles():
     # Combined static blurb moved into per-table captions in JS.
     assert "Knowledge layer: To review → Entities / Concepts (vault-wide)." not in js.JS
     assert "vault-wide — not split by agent" not in js.JS
+
+
+def test_state_widget_js_on_disk_column_no_under_table_note():
+    """#81 redesign: On disk column in table; no under-table Source pages note."""
+    assert "<th>On disk</th>" in js.JS
+    assert "sourcePagesNote" not in js.JS
+    assert "Source pages (current state):" not in js.JS
+    assert js.JS.index("tableHtml +") < js.JS.index("knowledgeHtml +")
+    # Eligible-sources table embeds On disk before Knowledge layer.
+    assert js.JS.index("<th>On disk</th>") < js.JS.index("knowledgeHtml")
+
+
 def test_synth_pipeline_shape_ok():
     assert synth_pipeline_shape_ok({"pipeline": {"rows": []}})
     assert synth_pipeline_shape_ok({"pipeline": {"stages": ["raw"], "rows": [{"label": "Claude"}]}})
@@ -132,6 +158,24 @@ def test_estimate_pipeline_rows_by_agent(tmp_path: Path):
         "---\ntitle: Note\nproject: docs\n---\n\ndoc body\n",
         encoding="utf-8",
     )
+    # On-disk wiki pages: synth-like frontmatter (no agent:) — join via source_file.
+    (wiki / "claude-page.md").write_text(
+        "---\ntitle: C\ntype: source\ntags: [claude-code, session-transcript]\n"
+        "date: 2026-07-01\nsource_file: raw/sessions/2026-07-01-claude.md\n"
+        "project: p\nmodel: claude-opus-4-20250514\nlast_updated: 2026-07-01\n"
+        "---\n\n## Summary\n\nC.\n",
+        encoding="utf-8",
+    )
+    (wiki / "doc-page.md").write_text(
+        "---\ntitle: D\ntype: source\ntags: [raw-doc]\n---\n\n## Summary\n\nD.\n",
+        encoding="utf-8",
+    )
+    (wiki / "stub-page.md").write_text(
+        "---\ntitle: S\ntype: source\n"
+        "source_file: raw/sessions/missing.md\n---\n\n"
+        "<!-- llmwiki-pending: abc -->\n\n*Pending*\n",
+        encoding="utf-8",
+    )
 
     report = synthesize_estimate_report(
         raw_sessions=_discover_raw_sessions(raw),
@@ -148,19 +192,100 @@ def test_estimate_pipeline_rows_by_agent(tmp_path: Path):
     assert "Claude" in labels
     assert "Cursor" in labels
     assert "Documents" in labels
+    assert "Stubs" in labels
     assert report["pipeline_stages"] == ["raw", "synthesized"]
     by_label = {r["label"]: r for r in report["pipeline_rows"]}
     assert by_label["Claude"]["raw"] == 1
     assert by_label["Claude"]["pending"] == 1
     assert by_label["Claude"]["synthesized"] == 0
     assert by_label["Claude"]["next_usd"] > 0
+    assert by_label["Claude"]["on_disk"] == 1
+    assert by_label["Cursor"]["on_disk"] == 0
     assert by_label["Documents"]["raw"] == 1
     assert by_label["Documents"]["pending"] == 1
+    assert by_label["Documents"]["on_disk"] == 1
+    stubs_row = by_label["Stubs"]
+    assert stubs_row["kind"] == "stubs"
+    assert stubs_row["on_disk"] == 1
+    assert stubs_row["raw"] == 0
+    assert stubs_row["pending"] == 0
+    assert stubs_row["synthesized"] == 0
+    # File counts, not unique source_file keys.
+    assert report["source_pages_on_disk"] == 3
+    assert report["source_pages_sessions"] == 1
+    assert report["source_pages_docs"] == 1
+    assert report["source_page_stubs"] == 1
     agents = {it["agent"] for it in report["unsynth_items"]}
     assert "Claude" in agents
     assert "Cursor" in agents
     assert "Documents" in agents
 
+
+def test_on_disk_joins_raw_agent_not_page_model(tmp_path: Path):
+    """#81 C1: Cursor/OpenClaw page with Claude model must not mint a Claude on_disk row."""
+    raw = tmp_path / "raw" / "sessions"
+    wiki = tmp_path / "wiki" / "sources"
+    raw.mkdir(parents=True)
+    wiki.mkdir(parents=True)
+    (tmp_path / "raw" / "docs").mkdir(parents=True)
+
+    (raw / "2026-07-01-openclaw.md").write_text(
+        "---\ntitle: o\nproject: p\nagent: openclaw\n"
+        "model: claude-opus-4-20250514\n---\n\nhello openclaw\n",
+        encoding="utf-8",
+    )
+    # Real synth frontmatter: model looks Claude-ish, no agent: on the page.
+    (wiki / "openclaw-page.md").write_text(
+        "---\ntitle: O\ntype: source\ntags: [openclaw, session-transcript]\n"
+        "date: 2026-07-01\n"
+        "source_file: raw/sessions/2026-07-01-openclaw.md\n"
+        "project: p\nmodel: claude-opus-4-20250514\nlast_updated: 2026-07-01\n"
+        "---\n\n## Summary\n\nJoined via raw agent.\n",
+        encoding="utf-8",
+    )
+
+    report = synthesize_estimate_report(
+        raw_sessions=_discover_raw_sessions(raw),
+        raw_root=raw,
+        docs_root=tmp_path / "raw" / "docs",
+        wiki_sources_dir=wiki,
+        state_keys=set(),
+        synthesized_source_keys=set(),
+        prefix_tokens=2000,
+        include_subagents="all",
+        exclude_headless=False,
+    )
+    by_label = {r["label"]: r for r in report["pipeline_rows"]}
+    assert "OpenClaw" in by_label
+    assert by_label["OpenClaw"]["on_disk"] == 1
+    assert by_label["OpenClaw"]["raw"] == 1
+    assert "Claude" not in by_label
+    assert "Stubs" not in by_label
+
+
+def test_empty_vault_pipeline_has_no_zero_stubs_row(tmp_path: Path):
+    """#81 N1: empty vault → rows=[] (no disk-only Stubs with on_disk=0)."""
+    raw = tmp_path / "raw" / "sessions"
+    docs = tmp_path / "raw" / "docs"
+    wiki = tmp_path / "wiki" / "sources"
+    raw.mkdir(parents=True)
+    docs.mkdir(parents=True)
+    wiki.mkdir(parents=True)
+
+    report = synthesize_estimate_report(
+        raw_sessions=[],
+        raw_root=raw,
+        docs_root=docs,
+        wiki_sources_dir=wiki,
+        state_keys=set(),
+        synthesized_source_keys=set(),
+        prefix_tokens=2000,
+        include_subagents="all",
+        exclude_headless=False,
+    )
+    assert report["pipeline_rows"] == []
+    assert report["source_page_stubs"] == 0
+    assert report["source_pages_on_disk"] == 0
 
 def test_refresh_synth_pending_stores_pipeline(tmp_path: Path):
     vault = tmp_path / "vault"
@@ -193,6 +318,50 @@ def test_refresh_synth_pending_stores_pipeline(tmp_path: Path):
     assert state["synth"]["pipeline"]["rows"][0]["label"] == "OpenClaw"
     assert state["synth"]["pending"][0]["agent"] == "OpenClaw"
     assert state["synth"]["pipeline"]["to_review"] == 0
+    # #81: refresh writes current-state page/stub counts onto synth.estimate
+    assert state["synth"]["estimate"]["source_pages_on_disk"] == 0
+    assert state["synth"]["estimate"]["source_page_stubs"] == 0
+    assert out["source_pages_on_disk"] == 0
+    assert out["source_page_stubs"] == 0
+    # No zero-count Stubs row — keeps Home onboarding hint for empty disk.
+    assert all(r["label"] != "Stubs" for r in out["pipeline"]["rows"])
+
+
+def test_refresh_synth_pending_stores_source_page_counts(tmp_path: Path):
+    """#81: refresh recomputes on-disk page + stub counts into synth.estimate."""
+    vault = tmp_path / "vault"
+    raw = vault / "raw" / "sessions"
+    docs = vault / "raw" / "docs"
+    wiki = vault / "wiki" / "sources"
+    raw.mkdir(parents=True)
+    docs.mkdir(parents=True)
+    wiki.mkdir(parents=True)
+    (wiki / "real.md").write_text(
+        "---\ntitle: Real\ntype: source\n"
+        "source_file: raw/sessions/a.md\n---\n\n## Summary\n\nReal.\n",
+        encoding="utf-8",
+    )
+    (wiki / "stub.md").write_text(
+        "---\ntitle: Stub\ntype: source\n"
+        "source_file: raw/sessions/b.md\n---\n\n"
+        "<!-- llmwiki-pending: abc -->\n\n*Pending*\n",
+        encoding="utf-8",
+    )
+    state_file = vault / "llmwiki-state.json"
+    out = refresh_synth_pending(
+        raw_dir=raw,
+        docs_dir=docs,
+        wiki_sources_dir=wiki,
+        state_file=state_file,
+        include_subagents="all",
+        exclude_headless=False,
+    )
+    assert out["source_pages_on_disk"] == 2
+    assert out["source_page_stubs"] == 1
+    state = read_state(state_file)
+    est = state["synth"]["estimate"]
+    assert est["source_pages_on_disk"] == 2
+    assert est["source_page_stubs"] == 1
 
 
 def test_refresh_synth_pending_counts_candidates(tmp_path: Path):
@@ -282,9 +451,12 @@ def test_build_backfills_missing_pipeline(tmp_path: Path, monkeypatch):
     state = read_state(state_path)
     assert isinstance(state["synth"]["pipeline"]["rows"], list)
     assert state["synth"]["pipeline"]["rows"]
+    # #81: build pipeline backfill also writes page/stub counts via refresh.
+    assert "source_pages_on_disk" in state["synth"]["estimate"]
+    assert "source_page_stubs" in state["synth"]["estimate"]
     sidecar = (vault / "llmwiki-state.js").read_text(encoding="utf-8")
     assert "pipeline" in sidecar
-
+    assert "source_pages_on_disk" in sidecar
 
 def test_build_skips_pipeline_refresh_when_shape_ok(tmp_path: Path, monkeypatch):
     """#70: once pipeline shape exists, build must not re-run the estimate walk."""

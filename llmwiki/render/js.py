@@ -168,36 +168,52 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
     var totalSynth = 0;
     var totalPending = 0;
     var totalNext = 0;
+    var totalOnDisk = 0;
     var bodyRows = rows.map(function (row) {
       var label = row && row.label ? String(row.label) : "Unknown";
       var css = row && row.css ? String(row.css) : "agent-unknown";
+      var kind = row && row.kind ? String(row.kind) : "";
       var raw = Number(row && row.raw || 0);
       var synthesized = Number(row && row.synthesized || 0);
       var pending = Number(row && row.pending || 0);
       var nextUsd = Number(row && row.next_usd || 0);
-      totalRaw += raw;
-      totalSynth += synthesized;
-      totalPending += pending;
-      totalNext += nextUsd;
-      var isDocs = (row && row.kind === "docs") || label === "Documents";
-      var sourceLabel = isDocs
-        ? '<span class="state-source-docs">' + escapeHtml(label) + "</span>"
-        : ('<span class="agent-badge ' + escapeHtml(css) + '">' + escapeHtml(label) +
-           "</span> sessions");
-      // Files layer: Raw → To synthesize → Synthesized (shell-handled)
+      var onDisk = Number(row && row.on_disk || 0);
+      var diskOnly = kind === "stubs" || kind === "other";
+      if (!diskOnly) {
+        totalRaw += raw;
+        totalSynth += synthesized;
+        totalPending += pending;
+        totalNext += nextUsd;
+      }
+      totalOnDisk += onDisk;
+      var isDocs = kind === "docs" || label === "Documents";
+      var sourceLabel;
+      if (kind === "stubs") {
+        sourceLabel = '<span class="muted">' + escapeHtml(label) + "</span>";
+      } else if (kind === "other") {
+        sourceLabel = '<span class="muted">' + escapeHtml(label) + "</span>";
+      } else if (isDocs) {
+        sourceLabel = '<span class="state-source-docs">' + escapeHtml(label) + "</span>";
+      } else {
+        sourceLabel = '<span class="agent-badge ' + escapeHtml(css) + '">' + escapeHtml(label) +
+           "</span> sessions";
+      }
+      var dash = '<td class="muted">—</td>';
+      // Eligible sources: Raw → To synthesize → Synthesized; On disk = wiki/sources files
       return (
         "<tr>" +
         '<td class="state-row-label">' + sourceLabel + "</td>" +
-        "<td>" + stageCell(raw, 0) + "</td>" +
-        "<td>" + stageCell(pending, nextUsd) + "</td>" +
-        "<td>" + stageCell(synthesized, 0) + "</td>" +
+        (diskOnly ? dash : ("<td>" + stageCell(raw, 0) + "</td>")) +
+        (diskOnly ? dash : ("<td>" + stageCell(pending, nextUsd) + "</td>")) +
+        (diskOnly ? dash : ("<td>" + stageCell(synthesized, 0) + "</td>")) +
+        "<td>" + stageCell(onDisk, 0) + "</td>" +
         "</tr>"
       );
     }).join("");
 
     var footHtml = "";
     if (!bodyRows) {
-      bodyRows = '<tr><td colspan="4" class="muted">No pipeline rows yet — run <code>llmwiki sync</code> then <code>llmwiki synth --estimate</code>. Rows appear per agent that has contributed at least one session.</td></tr>';
+      bodyRows = '<tr><td colspan="5" class="muted">No pipeline rows yet — run <code>llmwiki sync</code> then <code>llmwiki synth --estimate</code>. Rows appear per agent that has contributed at least one session.</td></tr>';
     } else {
       footHtml =
         "<tfoot><tr>" +
@@ -207,14 +223,15 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
         "<td>" + stageCell(totalRaw, 0) + "</td>" +
         "<td>" + stageCell(totalPending, totalNext) + "</td>" +
         "<td>" + stageCell(totalSynth, 0) + "</td>" +
+        "<td>" + stageCell(totalOnDisk, 0) + "</td>" +
         "</tr></tfoot>";
     }
 
     var tableHtml =
-      '<div class="state-table-wrap" tabindex="0" role="region" aria-label="Files layer">' +
-      '<p class="muted">Files layer: Raw → To synthesize → Synthesized (by agent). Handled by shell commands.</p>' +
+      '<div class="state-table-wrap" tabindex="0" role="region" aria-label="Eligible sources">' +
+      '<p class="muted">Eligible sources: Raw → To synthesize → Synthesized (by agent). On disk can exceed Raw (filtered/orphan pages). Handled by shell commands.</p>' +
       '<table class="state-pipeline-table">' +
-      "<thead><tr><th>Source</th><th>Raw</th><th>To synthesize</th><th>Synthesized</th></tr></thead>" +
+      "<thead><tr><th>Source</th><th>Raw</th><th>To synthesize</th><th>Synthesized</th><th>On disk</th></tr></thead>" +
       "<tbody>" + bodyRows + "</tbody>" + footHtml + "</table></div>";
 
     var knowledgeHtml =

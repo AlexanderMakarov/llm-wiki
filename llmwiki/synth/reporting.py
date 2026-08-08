@@ -46,6 +46,29 @@ def print_candidates_pre_run(backlog: Mapping[str, Any]) -> None:
     print(_PENDING_SOURCES_NOTE)
 
 
+def print_source_pages_current_state(
+    *,
+    pages_on_disk: int,
+    sessions: int = 0,
+    docs: int = 0,
+    stubs: int = 0,
+    other: int = 0,
+) -> None:
+    """Print on-disk wiki/sources/ file counts labelled as current state (#81).
+
+    Same labelling convention as :func:`print_candidates_pre_run`: a snapshot
+    of the wiki right now, not a forecast of what this estimate's run will
+    write. Counts are ``.md`` files (excluding ``_``-prefixed names), split
+    into sessions / docs / stubs (+ other when present) — not unique
+    ``source_file`` keys.
+    """
+    parts = [f"{sessions} sessions", f"{docs} docs", f"{stubs} stubs"]
+    if other > 0:
+        parts.append(f"{other} other")
+    mix = " + ".join(parts)
+    print(f"Source pages (current state): {pages_on_disk} on disk ({mix})")
+
+
 def print_synth_run_start(
     *,
     total: int,

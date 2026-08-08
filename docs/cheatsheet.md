@@ -99,7 +99,7 @@ llmwiki candidates discard --slug X --reason "hallucinated"
 llmwiki synth                          # sources + candidates
 llmwiki synth --sources-only           # legacy: sources only
 llmwiki synth --check                  # probe backend (exit 0 if ok)
-llmwiki synth --estimate               # cost + Candidates (pre-run state)
+llmwiki synth --estimate               # cost (eligible sources) + Candidates (pre-run state)
 llmwiki synth --force                  # re-synth everything, then harvest
 llmwiki synthesize                     # deprecated → sources-only + warning
 ```

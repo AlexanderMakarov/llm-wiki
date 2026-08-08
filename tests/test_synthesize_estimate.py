@@ -10,6 +10,7 @@ Covers:
 * CLI subprocess prints the expected layout.
 * Money numbers are non-negative and full_force ≥ incremental.
 * #113: Candidates block uses pre-run label + pending-sources note; no post-run summary.
+* #81: Corpus / Already synthesized use eligible-source units; Source pages current-state line; no ``pages in wiki/sources/``.
 """
 
 from __future__ import annotations
@@ -28,6 +29,7 @@ import llmwiki.cli as cli_mod
 from llmwiki.cache import CACHE_WRITE_1H_MULTIPLIER, MODEL_PRICING, TRANSCRIPT_CHARS_PER_TOKEN
 from llmwiki.cli import synthesize_estimate_report
 from llmwiki.synth.estimate import BODY_CHAR_CAP, DEFAULT_OUTPUT_TOKENS, LEAN_OVERHEAD_TOKENS
+from llmwiki.synth.pipeline import _discover_raw_sessions
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -455,3 +457,114 @@ def test_cli_estimate_does_not_print_post_run_summary(estimate_vault):
     # Slice 2 end-of-run summary markers (must stay off the estimate path).
     assert "Candidates (post-run" not in cp.stdout
     assert "backlog now" not in cp.stdout.lower()
+
+
+# ─── #81: Honest Corpus / Already synthesized / Source pages ────────────
+
+
+def test_cli_estimate_corpus_uses_eligible_sources_and_mix(estimate_vault):
+    """Corpus must count eligible sources and show the sessions + docs split."""
+    cp = _run_cli("synthesize", "--estimate", "--vault", str(estimate_vault))
+    assert cp.returncode == 0, cp.stderr
+    assert re.search(
+        r"Corpus:\s+\d+ eligible sources \(\d+ sessions \+ \d+ docs\)",
+        cp.stdout,
+    ), cp.stdout
+
+
+def test_cli_estimate_already_synthesized_uses_of_eligible(estimate_vault):
+    cp = _run_cli("synthesize", "--estimate", "--vault", str(estimate_vault))
+    assert cp.returncode == 0, cp.stderr
+    assert re.search(
+        r"Already synthesized:\s+\d+ of \d+ eligible sources",
+        cp.stdout,
+    ), cp.stdout
+
+
+def test_report_exposes_source_pages_on_disk_and_stubs(tmp_path):
+    """When wiki/sources has pages, estimate reports on-disk file counts."""
+    sources = tmp_path / "wiki" / "sources"
+    raw = tmp_path / "raw" / "sessions"
+    sources.mkdir(parents=True)
+    raw.mkdir(parents=True)
+    (tmp_path / "raw" / "docs").mkdir(parents=True)
+    (raw / "a.md").write_text(
+        "---\ntitle: a\nproject: p\nagent: claude-code\n---\n\nbody a\n",
+        encoding="utf-8",
+    )
+    # Synth-like pages (no agent:) — on_disk joins via raw session agent.
+    (sources / "real.md").write_text(
+        "---\ntitle: Real\ntype: source\ntags: [claude-code, session-transcript]\n"
+        "date: 2026-07-01\nsource_file: raw/sessions/a.md\n"
+        "project: p\nmodel: claude-opus-4-20250514\nlast_updated: 2026-07-01\n"
+        "---\n\n## Summary\n\nReal.\n",
+        encoding="utf-8",
+    )
+    (sources / "stub.md").write_text(
+        "---\ntitle: Stub\ntype: source\n"
+        "source_file: raw/sessions/b.md\n---\n\n"
+        "<!-- llmwiki-pending: abc -->\n\n*Pending*\n",
+        encoding="utf-8",
+    )
+    # Same source_file on two real pages would have counted as 1 unique key;
+    # file counts must still report both .md files.
+    (sources / "real-dup.md").write_text(
+        "---\ntitle: Real Dup\ntype: source\ntags: [claude-code, session-transcript]\n"
+        "date: 2026-07-01\nsource_file: raw/sessions/a.md\n"
+        "project: p\nmodel: claude-opus-4-20250514\nlast_updated: 2026-07-01\n"
+        "---\n\n## Summary\n\nDup.\n",
+        encoding="utf-8",
+    )
+    (sources / "_context.md").write_text(
+        "---\ntitle: Context\n---\n\nIgnore me.\n",
+        encoding="utf-8",
+    )
+    rpt = synthesize_estimate_report(
+        raw_sessions=_discover_raw_sessions(raw),
+        raw_root=raw,
+        docs_root=tmp_path / "raw" / "docs",
+        state_keys=set(),
+        wiki_sources_dir=sources,
+        prefix_tokens=2000,
+        include_subagents="all",
+        exclude_headless=False,
+    )
+    assert "source_pages_on_disk" in rpt
+    assert "source_page_stubs" in rpt
+    assert rpt["source_pages_on_disk"] == 3  # two reals + stub; not _context
+    assert rpt["source_page_stubs"] == 1
+    assert rpt["source_pages_sessions"] == 2
+    assert rpt["source_pages_docs"] == 0
+    by = {r["label"]: r for r in rpt["pipeline_rows"]}
+    assert by["Stubs"]["kind"] == "stubs"
+    assert by["Stubs"]["on_disk"] == 1
+    assert by["Claude"]["on_disk"] == 2
+    # Forbid unique-key regression: two files sharing one source_file → 2 on disk.
+    assert rpt["source_pages_on_disk"] != 2 or rpt["source_pages_sessions"] == 2
+
+
+def test_cli_estimate_prints_source_pages_current_state(estimate_vault):
+    sources = estimate_vault / "wiki" / "sources"
+    # No agent: on the page — CLI mix line counts files, not per-agent join.
+    (sources / "s.md").write_text(
+        "---\ntitle: S\ntype: source\n"
+        "source_file: raw/sessions/x.md\n"
+        "model: claude-opus-4-20250514\n"
+        "---\n\n## Summary\n\nS.\n",
+        encoding="utf-8",
+    )
+    (sources / "d.md").write_text(
+        "---\ntitle: D\ntype: source\ntags: [raw-doc]\n---\n\n## Summary\n\nD.\n",
+        encoding="utf-8",
+    )
+    cp = _run_cli("synthesize", "--estimate", "--vault", str(estimate_vault))
+    assert cp.returncode == 0, cp.stderr
+    assert "Source pages (current state):" in cp.stdout
+    assert "2 on disk" in cp.stdout
+    assert "1 sessions + 1 docs + 0 stubs" in cp.stdout
+
+def test_cli_estimate_does_not_print_pages_in_wiki_sources(estimate_vault):
+    """Pre-#81 wording that framed synthesized counts as wiki/sources pages."""
+    cp = _run_cli("synthesize", "--estimate", "--vault", str(estimate_vault))
+    assert cp.returncode == 0, cp.stderr
+    assert "pages in wiki/sources/" not in cp.stdout

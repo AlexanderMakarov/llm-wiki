@@ -121,7 +121,8 @@ def synthesize_estimate_report(
     the numbers without parsing stdout. Keys:
 
     * ``corpus`` — total raw sessions discovered under ``raw/sessions/``
-    * ``synthesized`` — count already synthesized (from state file)
+    * ``synthesized`` — eligible sources already covered (state keys,
+      existing non-stub wiki pages, or injected ``synthesized_source_keys``)
     * ``new`` — ``corpus - synthesized``
     * ``incremental_usd`` — dollars to synthesize the ``new`` bucket
     * ``full_force_usd`` — dollars to re-synthesize the **whole** corpus
@@ -135,6 +136,12 @@ def synthesize_estimate_report(
     * ``model`` — model id used for pricing
     * ``warnings`` — list of human-readable warnings
     * ``unsynth_items`` — list of unsynthesized session descriptors
+    * ``source_pages_on_disk`` — count of ``.md`` files under ``wiki/sources/``
+      (excluding ``_``-prefixed names), from one ``scan_wiki_sources_disk`` pass
+    * ``source_page_stubs`` / ``source_pages_sessions`` / ``source_pages_docs`` —
+      exclusive file-category subsets of that same scan
+    * ``pipeline_rows[*].on_disk`` — per-row file counts; Stubs/Other rows
+      carry on-disk only
 
     Any of the args can be injected for tests; the default reads from
     disk and is what the CLI invokes.
@@ -145,9 +152,8 @@ def synthesize_estimate_report(
         _discover_raw_docs,
         _discover_raw_sessions,
         _load_state,
-        discover_stub_source_keys,
-        discover_synth_source_keys,
         page_is_stub,
+        scan_wiki_sources_disk,
         synth_page_filename,
     )
     from llmwiki.synth.pipeline import (  # noqa: PLC0415 — cycle: synth.pipeline↔synth.estimate
@@ -226,17 +232,38 @@ def synthesize_estimate_report(
             if not _is_headless(m if isinstance(m, dict) else {})
         ]
         excluded_headless = before - len(raw_sessions)
+    sources_root = Path(wiki_sources_dir) if wiki_sources_dir is not None else _WIKI_SOURCES
+    raw_root_path = Path(raw_root) if raw_root is not None else _RAW_DEFAULT
+    docs_root_path = Path(docs_root) if docs_root is not None else _RAW_DOCS_DEFAULT
+    # Map each eligible raw session's source_file key → agent label/css so
+    # on-disk wiki/sources pages (which omit agent:) join correctly (#81 C1).
+    agent_by_source: dict[str, tuple[str, str]] = {}
+    for p, _meta, _body in raw_sessions:
+        meta = _meta if isinstance(_meta, dict) else {}
+        name = getattr(p, "name", str(p))
+        if hasattr(p, "relative_to"):
+            try:
+                source_rel = str(p.relative_to(raw_root_path))
+            except (ValueError, AttributeError):
+                source_rel = name
+        else:
+            source_rel = name
+        source_key = ("raw/sessions/" + source_rel).replace("\\", "/")
+        agent_by_source[source_key] = detect_agent_label(meta)
+    # One wiki/sources walk: real keys feed discovered-synth matching when
+    # the caller did not inject synthesized_source_keys; stub keys mark
+    # backlog (#24). File-category counts (On disk column + CLI snapshot)
+    # reuse this same scan — counts are .md files, not unique source_file keys.
+    disk_scan = scan_wiki_sources_disk(
+        sources_root, agent_by_source=agent_by_source
+    )
+    real_source_keys = set(disk_scan["real_keys"])
+    stub_source_keys = set(disk_scan["stub_keys"])
     discovered_source_keys = (
         synthesized_source_keys
         if synthesized_source_keys is not None
-        else discover_synth_source_keys()
+        else real_source_keys
     )
-    sources_root = Path(wiki_sources_dir) if wiki_sources_dir is not None else _WIKI_SOURCES
-    # #24: a source whose page is a stub is backlog. The page names its own
-    # source, so this holds for pages a derived filename would not find.
-    stub_source_keys = discover_stub_source_keys(sources_root)
-    raw_root_path = Path(raw_root) if raw_root is not None else _RAW_DEFAULT
-    docs_root_path = Path(docs_root) if docs_root is not None else _RAW_DOCS_DEFAULT
     if state_keys is None:
         state_keys = set(_load_state().keys())
 
@@ -279,6 +306,7 @@ def synthesize_estimate_report(
                 "synthesized": 0,
                 "pending": 0,
                 "next_usd": 0.0,
+                "on_disk": 0,
             }
             pipeline_buckets[label] = row
         return row
@@ -464,17 +492,72 @@ def synthesize_estimate_report(
                 }
             )
 
-    # Session agents first (most pending, then label); Documents last.
+    # Merge on-disk file counts into agent / Documents buckets (stubs exclusive).
+    for label, info in disk_scan["files_by_agent"].items():
+        css = str(info.get("css") or "")
+        row = _bucket(label, kind="session", css=css)
+        if css and not row.get("css"):
+            row["css"] = css
+        row["on_disk"] = int(info.get("count") or 0)
+    docs_row["on_disk"] = int(disk_scan["files_docs"] or 0)
+
+    files_total = int(disk_scan["files_total"] or 0)
+    files_stubs = int(disk_scan["files_stubs"] or 0)
+    files_sessions = int(disk_scan["files_sessions"] or 0)
+    files_docs = int(disk_scan["files_docs"] or 0)
+    files_other = int(disk_scan["files_other"] or 0)
+
+    # Session agents first (most pending, then label); Documents last when present.
+    # Include a row when the eligible corpus OR the on-disk file column is non-zero.
     session_rows = [
-        row for row in pipeline_buckets.values() if row["kind"] == "session" and row["raw"] > 0
+        row
+        for row in pipeline_buckets.values()
+        if row["kind"] == "session"
+        and (int(row["raw"]) > 0 or int(row.get("on_disk") or 0) > 0)
     ]
-    session_rows.sort(key=lambda r: (-int(r["pending"]), -int(r["raw"]), str(r["label"])))
+    session_rows.sort(
+        key=lambda r: (-int(r["pending"]), -int(r["raw"]), -int(r.get("on_disk") or 0), str(r["label"]))
+    )
     docs_rows = [
-        row for row in pipeline_buckets.values() if row["kind"] == "docs" and row["raw"] > 0
+        row
+        for row in pipeline_buckets.values()
+        if row["kind"] == "docs"
+        and (int(row["raw"]) > 0 or int(row.get("on_disk") or 0) > 0)
     ]
     pipeline_rows = session_rows + docs_rows
+    # Stubs row only when present (on-disk only; input columns blank in widget).
+    # Mirror the Other-row guard so an empty vault keeps rows=[] for onboarding.
+    if files_stubs > 0:
+        pipeline_rows.append(
+            {
+                "id": "stubs",
+                "label": "Stubs",
+                "kind": "stubs",
+                "css": "",
+                "raw": 0,
+                "synthesized": 0,
+                "pending": 0,
+                "next_usd": 0.0,
+                "on_disk": files_stubs,
+            }
+        )
+    if files_other > 0:
+        pipeline_rows.append(
+            {
+                "id": "other",
+                "label": "Other",
+                "kind": "other",
+                "css": "",
+                "raw": 0,
+                "synthesized": 0,
+                "pending": 0,
+                "next_usd": 0.0,
+                "on_disk": files_other,
+            }
+        )
     for row in pipeline_rows:
         row["next_usd"] = round(float(row["next_usd"]), 6)
+        row["on_disk"] = int(row.get("on_disk") or 0)
 
     return {
         "corpus": corpus + synthed_docs + new_docs,
@@ -506,4 +589,9 @@ def synthesize_estimate_report(
         "unsynth_items": unsynth_items,
         "pipeline_rows": pipeline_rows,
         "pipeline_stages": ["raw", "synthesized"],
+        "source_pages_on_disk": files_total,
+        "source_page_stubs": files_stubs,
+        "source_pages_sessions": files_sessions,
+        "source_pages_docs": files_docs,
+        "source_pages_other": files_other,
     }

@@ -11,7 +11,7 @@ _Backlog source of truth: open GitHub issues, plus migration/fork leftovers call
 _Stop misleading users; then systematically decide what fork residue to revive vs remove._
 
 - [ ] **Honest pipeline reporting**
-  - [ ] **Honest "already synthesized" counts (#81):** Report corpus and synthesized totals in real units (eligible sources vs pages), not labels that imply `wiki/sources/` file counts when the number is state/union-based — same honesty on the Home pipeline widget.
+  - [x] **Honest "already synthesized" counts (#81):** Report corpus and synthesized totals in real units (eligible sources vs pages), not labels that imply `wiki/sources/` file counts when the number is state/union-based — same honesty on the Home pipeline widget.
   - [ ] **Honest `--estimate` candidate preview (#113):** Do not present a pre-synth candidate snapshot as if it forecasts the upcoming synth run.
 
 - [ ] **Fork / migration residue cleanup (known)**

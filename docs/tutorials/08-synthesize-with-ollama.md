@@ -86,9 +86,10 @@ Ollama backend cost is $0 — the estimator still shows token counts
 so you can compare against an API run later:
 
 ```
-Corpus:                785 sessions in raw/sessions/
-Synthesized (history): 714 already in wiki/sources/
-New since last run:    71
+Corpus:                785 eligible sources (785 sessions + 0 docs)
+Already synthesized:   714 of 785 eligible sources
+Source pages (current state): 700 on disk (700 sessions + 0 docs + 0 stubs)
+New since last run:     71
 
 Prefix: 3,944 tok  Model: llama3.1:8b  (local, $0)
 ```

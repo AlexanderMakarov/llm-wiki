@@ -436,7 +436,7 @@ python3 -m llmwiki synth                    # real run (sources + candidates)
 
 Before the first page is synthesized, a real run announces the batch: `Synthesizing 11 source(s) with ClaudeCLISynthesizer (2 at a time)` — the count is the work queue after up-to-date, ineligible, and already-claimed sources are excluded, so it is what the run will actually do. An empty queue says `Nothing to synthesize — every source is already up to date.` instead. Each result line then carries its position, `  [3/11] synthesized: <project> → <page>`, counting completed **sources** against that total; pages finish in whatever order the backend returns them, so the positions arrive out of order while the last one is always `N/N`.
 
-`--estimate` prints the sources cost estimate and a `Candidates (pre-run state):` block — the harvestable shape of `wiki/sources/` **as it exists now**, with a note that pending sources are not yet reflected. It is not a forecast of what the next run will harvest (#113). After a successful real `synth` (not estimate), the CLI prints an end-of-run summary: `Synthesized:`, `Duration:`, optional `Tokens:` / `Cost:` when known. Harvest still prints its Candidates line once; the end summary does not repeat Candidates.
+`--estimate` prints the sources cost estimate with honest input units (#81): **Corpus: N eligible sources (S sessions + D docs)** and **Already synthesized: N of M eligible sources** (not page/file counts under `wiki/sources/`), then a separate **Source pages (current state): T on disk (Sess sessions + D docs + X stubs)** line for on-disk `.md` file counts. It also prints a `Candidates (pre-run state):` block — the harvestable shape of `wiki/sources/` **as it exists now**, with a note that pending sources are not yet reflected. It is not a forecast of what the next run will harvest (#113). After a successful real `synth` (not estimate), the CLI prints an end-of-run summary: `Synthesized:`, `Duration:`, optional `Tokens:` / `Cost:` when known. Harvest still prints its Candidates line once; the end summary does not repeat Candidates.
 
 ### Flags
 
@@ -444,7 +444,7 @@ Before the first page is synthesized, a real run announces the batch: `Synthesiz
 |---|---|
 | `--check` | Probe backend availability + exit (0 if reachable). |
 | `--force` | Ignore state, re-synth every source. |
-| `--estimate` | Print cached-vs-fresh token + dollar estimate for pending sources, plus `Candidates (pre-run state):` (current `wiki/sources/` shape — not a forecast of the next harvest) (#50 / #90 / #113). |
+| `--estimate` | Print cached-vs-fresh token + dollar estimate for pending sources in eligible-source units (Corpus / Already synthesized), plus `Source pages (current state): T on disk (sessions + docs + stubs)` and `Candidates (pre-run state):` (current `wiki/sources/` shape — not a forecast of the next harvest) (#50 / #90 / #81 / #113). |
 | `--sources-only` | Synthesize `wiki/sources/` only — skip candidate harvest (legacy `synthesize` behaviour). Mutually exclusive with `--candidates-only` / `--check` / `--estimate`. |
 | `--sessions-only` | Synthesize only `raw/sessions/` — skip `raw/docs/`. Mutually exclusive with `--docs-only`. Combinable with `--path` / `--force` (paths under `raw/docs/` then exit 2). Incompatible with `--check` / `--estimate`. |
 | `--docs-only` | Synthesize only `raw/docs/` — skip `raw/sessions/`. Mutually exclusive with `--sessions-only`. Combinable with `--path` / `--force` (paths under `raw/sessions/` then exit 2). Incompatible with `--check` / `--estimate`. |
