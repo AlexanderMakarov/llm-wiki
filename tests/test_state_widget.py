@@ -9,7 +9,11 @@ from llmwiki import build as build_mod
 from llmwiki.build import build_site
 from llmwiki.raw_docs_site import render_dashboard_body
 from llmwiki.render import js
-from llmwiki.state_store import read_state, synth_pipeline_shape_ok
+from llmwiki.state_store import (
+    pipeline_rows_missing_on_disk,
+    read_state,
+    synth_pipeline_shape_ok,
+)
 from llmwiki.synth.estimate import synthesize_estimate_report
 from llmwiki.synth.pipeline import _discover_raw_sessions, refresh_synth_pending
 
@@ -135,6 +139,31 @@ def test_synth_pipeline_shape_ok():
     assert not synth_pipeline_shape_ok({"pipeline": {"rows": "bad"}})
     assert not synth_pipeline_shape_ok({"pipeline": None})
     assert not synth_pipeline_shape_ok(None)
+
+
+def test_pipeline_rows_missing_on_disk():
+    """Pre-#81 rows lack on_disk; empty rows + pages on disk also need refresh."""
+    assert not pipeline_rows_missing_on_disk({"pipeline": {"rows": []}})
+    assert not pipeline_rows_missing_on_disk(
+        {"pipeline": {"rows": [{"label": "Claude", "on_disk": 1}]}}
+    )
+    assert pipeline_rows_missing_on_disk(
+        {"pipeline": {"rows": [{"label": "Claude", "raw": 1, "pending": 0, "synthesized": 0}]}}
+    )
+    assert pipeline_rows_missing_on_disk(
+        {
+            "pipeline": {"rows": []},
+            "estimate": {"source_pages_on_disk": 3},
+        }
+    )
+    assert not pipeline_rows_missing_on_disk(
+        {
+            "pipeline": {"rows": [{"label": "Stubs", "on_disk": 0}]},
+            "estimate": {"source_pages_on_disk": 0},
+        }
+    )
+    assert not pipeline_rows_missing_on_disk({})
+    assert not pipeline_rows_missing_on_disk(None)
 
 
 def test_estimate_pipeline_rows_by_agent(tmp_path: Path):
@@ -362,6 +391,56 @@ def test_refresh_synth_pending_stores_source_page_counts(tmp_path: Path):
     est = state["synth"]["estimate"]
     assert est["source_pages_on_disk"] == 2
     assert est["source_page_stubs"] == 1
+    # Home reads pipeline.rows[*].on_disk — not only estimate aggregates.
+    rows = state["synth"]["pipeline"]["rows"]
+    assert rows
+    assert all("on_disk" in r for r in rows)
+    by_label = {r["label"]: r for r in rows}
+    assert by_label["Stubs"]["on_disk"] == 1
+    # Session page with no joinable raw → Other (or agent if attributed).
+    non_stub = [r for r in rows if r.get("kind") != "stubs"]
+    assert sum(int(r["on_disk"]) for r in non_stub) == 1
+
+
+def test_refresh_synth_pending_persists_pipeline_on_disk(tmp_path: Path):
+    """#81: after refresh, each agent/docs pipeline row in state carries on_disk."""
+    vault = tmp_path / "vault"
+    raw = vault / "raw" / "sessions"
+    docs = vault / "raw" / "docs"
+    wiki = vault / "wiki" / "sources"
+    raw.mkdir(parents=True)
+    docs.mkdir(parents=True)
+    wiki.mkdir(parents=True)
+    (raw / "2026-07-01-claude.md").write_text(
+        "---\ntitle: c\nproject: p\nagent: claude-code\n---\n\nhello\n",
+        encoding="utf-8",
+    )
+    (docs / "note.md").write_text("# Note\n\nbody\n", encoding="utf-8")
+    (wiki / "claude-page.md").write_text(
+        "---\ntitle: C\ntype: source\n"
+        "source_file: raw/sessions/2026-07-01-claude.md\n"
+        "project: p\n---\n\n## Summary\n\nClaude.\n",
+        encoding="utf-8",
+    )
+    (wiki / "doc-page.md").write_text(
+        "---\ntitle: D\ntype: source\n"
+        "source_file: raw/docs/note.md\n---\n\n## Summary\n\nDoc.\n",
+        encoding="utf-8",
+    )
+    state_file = vault / "llmwiki-state.json"
+    refresh_synth_pending(
+        raw_dir=raw,
+        docs_dir=docs,
+        wiki_sources_dir=wiki,
+        state_file=state_file,
+        include_subagents="all",
+        exclude_headless=False,
+    )
+    rows = read_state(state_file)["synth"]["pipeline"]["rows"]
+    by_label = {r["label"]: r for r in rows}
+    assert by_label["Claude"]["on_disk"] == 1
+    assert by_label["Documents"]["on_disk"] == 1
+    assert all("on_disk" in r for r in rows)
 
 
 def test_refresh_synth_pending_counts_candidates(tmp_path: Path):
@@ -494,3 +573,84 @@ def test_build_skips_pipeline_refresh_when_shape_ok(tmp_path: Path, monkeypatch)
     )
     assert rc == 0
     assert calls == []
+
+
+def test_build_backfills_pipeline_rows_missing_on_disk(tmp_path: Path, monkeypatch):
+    """#81: pre-on_disk pipeline rows look shape-ok but Home would show 0 — build refreshes."""
+
+    vault = _seed_build_vault(tmp_path)
+    wiki = vault / "wiki" / "sources"
+    (wiki / "claude-page.md").write_text(
+        "---\ntitle: C\ntype: source\n"
+        "source_file: raw/sessions/demo/2026-07-01T10-00-demo-x.md\n"
+        "project: demo\n---\n\n## Summary\n\nSeeded.\n",
+        encoding="utf-8",
+    )
+    state_path = vault / "llmwiki-state.json"
+    # Shape-ok pre-#81 snapshot: raw/pending/synthesized present, on_disk absent.
+    state_path.write_text(
+        json.dumps(
+            {
+                "queue": {"items": [], "legacy_pending_paths": []},
+                "sync": {"files": {}, "meta": {}, "counters": {}},
+                "synth": {
+                    "files": {},
+                    "pending": [],
+                    "pending_total": 0,
+                    "pending_updated_at": "2026-07-01T00:00:00Z",
+                    "estimate": {
+                        "updated_at": "2026-07-01T00:00:00Z",
+                        "source_pages_on_disk": 1,
+                    },
+                    "pipeline": {
+                        "stages": ["raw", "synthesized"],
+                        "rows": [
+                            {
+                                "id": "claude",
+                                "label": "Claude",
+                                "kind": "session",
+                                "raw": 1,
+                                "pending": 1,
+                                "synthesized": 0,
+                                "next_usd": 0.0,
+                            }
+                        ],
+                        "updated_at": "2026-07-01T00:00:00Z",
+                    },
+                },
+                "quarantine": {"entries": []},
+                "ops": {
+                    "last_queue_run_at": "",
+                    "last_lint_run_at": "",
+                    "last_reflect_run_at": "",
+                },
+                "meta": {"schema_version": 1, "updated_at": "", "revision": 1},
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    seeded = json.loads(state_path.read_text(encoding="utf-8"))
+    assert "on_disk" not in seeded["synth"]["pipeline"]["rows"][0]
+    assert synth_pipeline_shape_ok(seeded["synth"])
+    assert pipeline_rows_missing_on_disk(seeded["synth"])
+
+    monkeypatch.setattr(build_mod, "REPO_ROOT", vault)
+    monkeypatch.setattr(build_mod, "RAW_DIR", vault / "raw")
+    monkeypatch.setattr(build_mod, "RAW_SESSIONS", vault / "raw" / "sessions")
+    monkeypatch.setattr(build_mod, "DEFAULT_OUT_DIR", vault / "site")
+
+    rc = build_site(
+        out_dir=vault / "site",
+        raw_sessions=vault / "raw" / "sessions",
+        raw_dir=vault / "raw",
+        wiki_dir=vault / "wiki",
+    )
+    assert rc == 0
+    state = read_state(state_path)
+    rows = state["synth"]["pipeline"]["rows"]
+    assert rows
+    assert all("on_disk" in r for r in rows)
+    by_label = {r["label"]: r for r in rows}
+    assert by_label["Claude"]["on_disk"] == 1
+    assert not pipeline_rows_missing_on_disk(state["synth"])

@@ -108,7 +108,13 @@ from llmwiki.search_tree import (
     decide_search_mode,
     search_index_footer_badge,
 )
-from llmwiki.state_store import read_state, resolve_state_file, synth_pipeline_shape_ok, update_state
+from llmwiki.state_store import (
+    pipeline_rows_missing_on_disk,
+    read_state,
+    resolve_state_file,
+    synth_pipeline_shape_ok,
+    update_state,
+)
 from llmwiki.synth.claude_cli import overview_argv
 from llmwiki.synth.pipeline import refresh_synth_pending
 from llmwiki.tag_utils import NOISE_TAGS
@@ -120,6 +126,11 @@ from llmwiki.topics_page import (
     neighbors,
     topic_node_urls,
     topic_url,
+)
+from llmwiki.trace import (
+    build_source_file_index,
+    format_sources_html,
+    provenance_links_for_raw,
 )
 from llmwiki.usage import (
     combined_totals as _mcp_combined_totals,
@@ -1231,6 +1242,9 @@ def render_session(
     body: str,
     out_dir: Path,
     project_slug: str,
+    *,
+    vault: Path | None = None,
+    source_file_index: dict[str, Path] | None = None,
 ) -> Path:
     slug = meta.get("slug", path.stem)
     date = meta.get("date", "")
@@ -1328,6 +1342,24 @@ def render_session(
 </div>
 {resume_html}"""
 
+    # #122 FR2: wiki-summary / Sources links (prefer HTML; else raw new-tab).
+    sources_block = ""
+    if vault is not None:
+        try:
+            raw_rel = path.resolve().relative_to(Path(vault).resolve()).as_posix()
+        except ValueError:
+            raw_rel = ""
+        if raw_rel:
+            session_href = f"sessions/{project_slug}/{html_stem}.html"
+            links = provenance_links_for_raw(
+                vault,
+                raw_rel,
+                project=project_slug,
+                exclude_href=session_href,
+                index=source_file_index,
+            )
+            sources_block = format_sources_html(links, link_prefix="../../")
+
     crumbs = [
         ("Home", "index.html"),
         ("Projects", "projects/index.html"),
@@ -1361,7 +1393,7 @@ def render_session(
             f'<div class="container session-description"><p>{html.escape(str(meta["description"]))}</p></div>'
             if meta.get("description") else ""
         )
-        + f'<section class="section">\n  <div class="container">\n{breadcrumbs}\n{tools_preview}\n{actions_html}\n{tool_chart_block}\n{token_card_block}\n    <article class="content" itemscope itemtype="https://schema.org/Article">\n'
+        + f'<section class="section">\n  <div class="container">\n{breadcrumbs}\n{tools_preview}\n{actions_html}\n{tool_chart_block}\n{token_card_block}\n{sources_block}    <article class="content" itemscope itemtype="https://schema.org/Article">\n'
         + f'<meta itemprop="headline" content="{html.escape(str(title_raw))}">\n'
         + f'<meta itemprop="datePublished" content="{html.escape(str(meta.get("started") or date))}">\n'
         + '<meta itemprop="inLanguage" content="en">\n'
@@ -2905,13 +2937,14 @@ def _ensure_synth_pipeline_snapshot(
     raw_dir: Path,
     wiki_sources: Path,
 ) -> bool:
-    """Backfill ``synth.pipeline`` once when state predates the Home widget (#70).
+    """Backfill ``synth.pipeline`` when state predates the Home widget (#70 / #81).
 
-    Returns True when ``refresh_synth_pending`` ran. Only fires on a shape
-    mismatch (missing / non-dict ``pipeline``, or ``rows`` not a list) — not
-    when the snapshot is merely stale vs newest raw. Sync / add / estimate
-    already refresh on content changes; paying estimate cost on every build
-    would be a permanent tax for a one-time v1.4→v1.5 migration.
+    Returns True when ``refresh_synth_pending`` ran. Fires on a shape mismatch
+    (missing / non-dict ``pipeline``, or ``rows`` not a list) **or** when rows
+    lack ``on_disk`` (pre-#81 snapshots that otherwise look shape-ok). Does not
+    re-run when the snapshot is merely stale vs newest raw — sync / add /
+    estimate already refresh on content changes; paying estimate cost on every
+    build would be a permanent tax for a one-time migration.
     """
 
     state_path = content_root / "llmwiki-state.json"
@@ -2919,12 +2952,12 @@ def _ensure_synth_pipeline_snapshot(
         synth = read_state(state_path).get("synth") or {}
     except (OSError, ValueError, TypeError):
         synth = {}
-    if synth_pipeline_shape_ok(synth):
+    if synth_pipeline_shape_ok(synth) and not pipeline_rows_missing_on_disk(synth):
         return False
     print("  backfilling synth.pipeline for Home State widget...")
     # refresh_synth_pending also merges source_pages_on_disk / source_page_stubs
     # onto synth.estimate (#81) so Home gets current-state page counts without
-    # waiting for an explicit synth --estimate.
+    # waiting for an explicit synth --estimate. Pipeline rows include on_disk.
     refresh_synth_pending(
         raw_dir=raw_dir / "sessions",
         docs_dir=raw_dir / "docs",
@@ -3077,12 +3110,23 @@ def build_site(
     # Render session HTML + nest the .md copy for agents in one pass.
     # Per-page .txt / .json siblings were dropped: agents use
     # sources/<project>/<stem>.md (and site-level llms.txt / llms-full.txt).
+    # #122: index wiki/sources source_file: once — O(1) provenance per session.
+    vault_root = raw_dir.parent
+    source_file_index = build_source_file_index(vault_root)
     n_sessions = 0
     n_md_sources = 0
     md_copy_failures: list[tuple[str, BaseException]] = []
     for path, meta, body in sources:
         project = str(meta.get("project") or path.parent.name)
-        render_session(path, meta, body, out_dir, project)
+        render_session(
+            path,
+            meta,
+            body,
+            out_dir,
+            project,
+            vault=vault_root,
+            source_file_index=source_file_index,
+        )
         n_sessions += 1
         dest = sources_out / project / path.name
         try:
@@ -3253,6 +3297,8 @@ def build_site(
         nav_builder=lambda prefix: nav_bar("raw", link_prefix=prefix),
         page_foot=lambda prefix: page_foot(js_prefix=prefix),
         breadcrumbs_bar=breadcrumbs_bar,
+        vault=content_root,
+        source_file_index=source_file_index,
     )
     if doc_pages:
         print(f"  wrote {len(doc_pages)} document pages under documents/")

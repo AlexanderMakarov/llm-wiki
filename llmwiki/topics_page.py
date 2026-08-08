@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from llmwiki._frontmatter import parse_frontmatter
+from llmwiki.render.collapse_section import collapse_section, collapse_sections_wrap
 from llmwiki.topics import KIND_OTHER, topic_slug
 from llmwiki.wikilinks import WIKILINK_RE, strip_anchor
 
@@ -30,8 +31,9 @@ _HEADING_RE = re.compile(r"^ {0,3}(#{1,6})\s+(.*)$")
 # Rendered code the reader is meant to read literally. `<pre>` comes first so a
 # fenced block's nested `<code>` is covered by the outer match.
 _CODE_BLOCK_RE = re.compile(r"<pre\b.*?</pre>|<code\b.*?</code>", re.DOTALL | re.IGNORECASE)
-# The two sections the topic page renders itself, from the graph.
-_OMITTED_SECTIONS = frozenset({"connections", "sessions"})
+# The sections the topic page renders itself (Connected topics + Sources
+# evidence). Wiki-body ``## Sources`` would duplicate the graph list.
+_OMITTED_SECTIONS = frozenset({"connections", "sessions", "sources"})
 
 # Human-readable singular name per wiki folder, for the identity-line chip.
 # Keys mirror `llmwiki.topics.TOPIC_KIND_FOLDERS`.
@@ -95,22 +97,83 @@ def neighbors(topic_id: str, edges: list[dict[str, Any]]) -> list[tuple[str, int
     return out
 
 
-def _session_links(slugs: list[str], sessions_meta: dict[str, dict[str, str]]) -> str:
-    """Render a session list; link to the compiled page when one exists."""
-    if not slugs:
-        return '<p class="muted">No sessions.</p>'
-    rows = []
+def _evidence_item_html(slug: str, sessions_meta: dict[str, dict[str, str]]) -> str:
+    """One evidence list item; link when a compiled page URL exists."""
+    meta = sessions_meta.get(slug, {})
+    title = meta.get("title") or slug
+    url = meta.get("url") or ""
+    if url:
+        return (
+            f'<li><a href="../{html.escape(url)}">{html.escape(title)}</a></li>'
+        )
+    return f'<li>{html.escape(title)} <span class="muted">(no page)</span></li>'
+
+
+def _evidence_list_html(
+    slugs: list[str], sessions_meta: dict[str, dict[str, str]], *, list_class: str
+) -> str:
+    """Render a ``<ul>`` of evidence links (sessions or documents)."""
+    rows = [_evidence_item_html(s, sessions_meta) for s in slugs]
+    return f'<ul class="{html.escape(list_class)}">\n' + "\n".join(rows) + "\n</ul>"
+
+
+def _partition_evidence_slugs(
+    slugs: list[str], sessions_meta: dict[str, dict[str, str]]
+) -> tuple[list[str], list[str]]:
+    """Split graph evidence into session vs document lists by compiled URL.
+
+    ``documents/…`` URLs are Documents; ``sessions/…``, missing URLs, and any
+    other transcript-like URL stay under Sessions (including “(no page)”).
+    """
+    sessions: list[str] = []
+    documents: list[str] = []
     for s in slugs:
-        meta = sessions_meta.get(s, {})
-        title = meta.get("title") or s
-        url = meta.get("url") or ""
-        if url:
-            rows.append(
-                f'<li><a href="../{html.escape(url)}">{html.escape(title)}</a></li>'
-            )
+        url = sessions_meta.get(s, {}).get("url") or ""
+        if url.startswith("documents/"):
+            documents.append(s)
         else:
-            rows.append(f"<li>{html.escape(title)} <span class=\"muted\">(no page)</span></li>")
-    return '<ul class="topic-session-list">\n' + "\n".join(rows) + "\n</ul>"
+            sessions.append(s)
+    return sessions, documents
+
+
+def _sources_section(
+    slugs: list[str], sessions_meta: dict[str, dict[str, str]]
+) -> str:
+    """Collapsible Sources block: Sessions and/or Documents subsections.
+
+    Outer chrome matches Home/Analytics via :func:`collapse_section`. Empty
+    subsections are omitted entirely; an empty evidence list still yields a
+    Sources fold-out with a muted note (never a duplicate provenance panel).
+    """
+    session_slugs, document_slugs = _partition_evidence_slugs(slugs, sessions_meta)
+    parts: list[str] = []
+    if session_slugs:
+        parts.append(
+            "<h3>Sessions</h3>\n"
+            + _evidence_list_html(
+                session_slugs, sessions_meta, list_class="collapse-section-list"
+            )
+        )
+    if document_slugs:
+        parts.append(
+            "<h3>Documents</h3>\n"
+            + _evidence_list_html(
+                document_slugs, sessions_meta, list_class="collapse-section-list"
+            )
+        )
+    body = (
+        "\n".join(parts)
+        if parts
+        else '<p class="muted">No sources.</p>'
+    )
+    return collapse_sections_wrap(
+        collapse_section(
+            "Sources",
+            len(slugs),
+            body,
+            extra_class="topic-sources",
+        )
+    )
 
 
 def kind_label(kind: str) -> str:
@@ -165,7 +228,7 @@ def _reviewed_span(node: dict[str, Any]) -> str:
 
 
 def _count(n: int, singular: str) -> str:
-    """Return ``"1 session"`` / ``"3 sessions"`` — never ``"1 sessions"``."""
+    """Return ``"1 source"`` / ``"3 sources"`` — never ``"1 sources"``."""
     return f"{n} {singular}" if n == 1 else f"{n} {singular}s"
 
 
@@ -184,7 +247,7 @@ def _identity_line(node: dict[str, Any], neighbor_count: int) -> str:
     parts.append(_count(neighbor_count, "connected topic"))
     session_count = node.get("session_count")
     if session_count is not None:
-        parts.append(_count(session_count, "session"))
+        parts.append(_count(session_count, "source"))
     slug = topic_slug(str(node.get("id", "")))
     if slug:
         parts.append(f"<code>{html.escape(slug)}</code>")
@@ -235,17 +298,24 @@ def _topic_links(
             f'<li><a href="{href}">{html.escape(name)}</a>'
             f' <span class="muted">· {weight} shared</span></li>'
         )
-    return '<ul class="topic-neighbor-list">\n' + "\n".join(rows) + "\n</ul>"
+    # Sit under ``.content`` so the list inherits site-wide ``ul`` indent
+    # (same as Key Facts inside ``topic-page-content``).
+    return (
+        '<div class="content">\n<ul>\n'
+        + "\n".join(rows)
+        + "\n</ul>\n</div>"
+    )
 
 
 def page_content(text: str) -> str | None:
     """Return the markdown a topic page should render from its backing page.
 
     Frontmatter, the page's own leading ``# H1``, and the ``## Connections`` /
-    ``## Sessions`` sections are dropped — the topic page already shows the
-    title and renders both of those lists itself, from the graph. Everything
-    else survives exactly as written, whatever the curator called it, so a
-    renamed or newly added section still reaches the reader.
+    ``## Sessions`` / ``## Sources`` sections are dropped — the topic page
+    already shows the title and renders Connected topics plus its own Sources
+    evidence list from the graph. Everything else survives exactly as written,
+    whatever the curator called it, so a renamed or newly added section still
+    reaches the reader.
 
     A heading left with nothing under it is dropped too, so a page recording an
     empty section shows no heading for it. Returns ``None`` when nothing but
@@ -458,15 +528,16 @@ def build_topic_pages(
                 )
                 + "\n</div>\n"
             )
+        sources_block = _sources_section(node.get("sessions", []), sessions_meta)
         body = (
-            page_head(name, f"Sessions and connections for {name}", css_prefix="../")
+            page_head(name, f"Sources and connections for {name}", css_prefix="../")
             + nav_bar(active="graph", link_prefix="../")
             + hero(name, subtitle, subtitle_is_html=True)
             + '<section class="container topic-page">\n'
             + alias_note
             + content_block
             + "<h2>Connected topics</h2>\n" + _topic_links(connected, node_urls)
-            + "<h2>Sessions</h2>\n" + _session_links(node.get("sessions", []), sessions_meta)
+            + sources_block
             + "</section>\n</main>\n"
             + page_foot(js_prefix="../")
         )
@@ -485,7 +556,7 @@ def build_topic_pages(
         href = html.escape(_topic_href(str(node["id"]), node_urls), quote=True)
         rows.append(
             f'<li><a href="{href}">{html.escape(node["id"])}</a>'
-            f' <span class="muted">· {node["session_count"]} sessions · {node["degree"]} links</span></li>'
+            f' <span class="muted">· {node["session_count"]} sources · {node["degree"]} links</span></li>'
         )
     index_body = (
         page_head("Topics", "Every topic in the wiki by reach", css_prefix="../")

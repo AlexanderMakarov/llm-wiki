@@ -117,11 +117,63 @@ def test_build_topic_pages_writes_pages_and_index(tmp_path: Path):
     assert (out / "topics" / "openclaw.html").is_file()
     assert (out / "topics" / "index.html").is_file()
     page = (out / "topics" / "openclaw.html").read_text(encoding="utf-8")
-    assert "Connected topics" in page and "Sessions" in page
+    assert "Connected topics" in page
+    assert '<h2>Connected topics</h2>\n<div class="content">\n<ul>' in page
+    assert 'class="collapse-section topic-sources"' in page
+    assert 'summary>Sources<span class="collapse-section-count"' in page
+    assert "<h3>Sessions</h3>" in page
+    assert "topic-neighbor-list" not in page
+    assert "provenance-sources" not in page
     # Links to the connected topic's page + the bridging sessions.
     assert f'{topic_slug("Bun")}.html' in page
     assert "sessions/proj/" in page
     assert len(written) == len(g["nodes"]) + 1  # + index
+
+
+def test_topic_page_sources_splits_sessions_and_documents(tmp_path: Path):
+    """Graph evidence under Sources partitions by compiled URL (#122 UX)."""
+    graph = {
+        "nodes": [
+            {
+                "id": "Mixed",
+                "kind": "concepts",
+                "session_count": 2,
+                "degree": 0,
+                "sessions": ["sess-a", "doc-b"],
+                "aliases": [],
+                "site_url": "topics/mixed.html",
+            }
+        ],
+        "edges": [],
+        "sessions": {
+            "sess-a": {
+                "title": "Chat session",
+                "url": "sessions/demo/sess-a.html",
+                "date": "2026-01-01",
+            },
+            "doc-b": {
+                "title": "Spec doc",
+                "url": "documents/demo/doc-b.html",
+                "date": "2026-01-02",
+            },
+        },
+        "stats": {"total_sessions": 2},
+    }
+    out = tmp_path / "site"
+    written = build_topic_pages(graph, out)
+    page = (out / "topics" / "mixed.html").read_text(encoding="utf-8")
+    assert 'class="collapse-section topic-sources"' in page
+    assert 'summary>Sources<span class="collapse-section-count">2</span>' in page
+    assert "<h3>Sessions</h3>" in page
+    assert "<h3>Documents</h3>" in page
+    assert 'class="collapse-section-list"' in page
+    assert "topic-session-list" not in page
+    assert "topic-document-list" not in page
+    assert 'href="../sessions/demo/sess-a.html"' in page
+    assert 'href="../documents/demo/doc-b.html"' in page
+    assert "provenance-sources" not in page
+    assert "<h2>Sources</h2>" not in page
+    assert (out / "topics" / "index.html") in written
 
 
 def test_synth_prompt_injects_vocabulary(tmp_path: Path):
@@ -278,7 +330,7 @@ def test_identity_line_renders_only_the_elements_present():
     )
     assert full == (
         '<span class="topic-kind-chip">Entity</span> · 3 connected topics'
-        " · 4 sessions · <code>hazel</code>"
+        " · 4 sources · <code>hazel</code>"
     )
     # No backing page → the chip names that state rather than disappearing.
     unfiled = f'<span class="topic-kind-chip">{KIND_OTHER_LABEL}</span>'
@@ -365,7 +417,7 @@ def test_identity_line_labels_activity_and_review_as_different_facts():
         '<span class="topic-kind-chip">Entity</span>'
         ' · <span class="topic-activity">Active 2026-01-09 – 2026-02-17</span>'
         ' · <span class="topic-reviewed">Reviewed 2026-07-30</span>'
-        " · 3 connected topics · 4 sessions · <code>hazel</code>"
+        " · 3 connected topics · 4 sources · <code>hazel</code>"
     )
 
 

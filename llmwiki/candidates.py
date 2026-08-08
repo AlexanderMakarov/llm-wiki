@@ -265,9 +265,18 @@ def _reconcile_catalog(wiki_dir: Path) -> None:
 # ─── Key Facts from evidence (#103) ────────────────────────────────────
 
 
-def _parse_sources_field(raw: str) -> list[str]:
-    """Parse a frontmatter ``sources: [a, b]`` (or bare ``a, b``) value."""
-    text = (raw or "").strip()
+def parse_sources_field(raw: str | list[object] | None) -> list[str]:
+    """Parse a frontmatter ``sources:`` value into ordered slugs.
+
+    Accepts the string forms used by this module's local frontmatter parser
+    (``[a, b]`` or bare ``a, b``) and the list form returned by the canonical
+    :func:`llmwiki._frontmatter.parse_frontmatter` parser.
+    """
+    if raw is None:
+        return []
+    if isinstance(raw, list):
+        return [str(part).strip() for part in raw if str(part).strip()]
+    text = str(raw).strip()
     if not text:
         return []
     if text.startswith("[") and text.endswith("]"):
@@ -277,6 +286,10 @@ def _parse_sources_field(raw: str) -> list[str]:
         for part in text.split(",")
         if part.strip().strip('"').strip("'")
     ]
+
+
+# Backward-compatible private alias (#122 promote for trace / lint reuse).
+_parse_sources_field = parse_sources_field
 
 
 def _section_span(body: str, heading: str) -> tuple[int, int] | None:
@@ -315,7 +328,7 @@ def _key_facts_needs_fill(body: str) -> bool:
     return not _section_has_substantive_content(body[start:end])
 
 
-def _resolve_source_page(wiki_dir: Path, slug: str) -> Path | None:
+def resolve_source_page(wiki_dir: Path, slug: str) -> Path | None:
     """Locate ``wiki/sources/**/<slug>.md`` (flat or nested)."""
     sources = wiki_dir / "sources"
     if not sources.is_dir() or not slug:
@@ -325,6 +338,10 @@ def _resolve_source_page(wiki_dir: Path, slug: str) -> Path | None:
         return direct
     matches = sorted(sources.rglob(f"{slug}.md"))
     return matches[0] if matches else None
+
+
+# Backward-compatible private alias (#122 promote for trace / lint reuse).
+_resolve_source_page = resolve_source_page
 
 
 def _evidence_source_slugs(

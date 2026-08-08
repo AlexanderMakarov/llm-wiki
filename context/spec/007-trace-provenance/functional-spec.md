@@ -1,7 +1,7 @@
 # Functional Specification: Trace wiki pages back to raw transcripts
 
 - **Roadmap Item:** GitHub Issue #122 — expose the encoded chain from a wiki page down to its raw session material (defensible claims)
-- **Status:** Approved
+- **Status:** Completed
 - **Author:** AWOS `/implement-feature` (issue #122)
 
 ---
@@ -15,7 +15,7 @@ Concretely: someone reading a person or idea page who asks "where did this come 
 **Desired outcome:** humans can click every listed Sources entry on the browsable site (preferring a built page, otherwise the raw file in a new tab). Operators and scripts can print the full downward chain with one command. Lint reports broken hops as errors; healing those problems is owned by `doctor` (#110), not this change.
 
 **Success measures:**
-- On topic and session/document pages, every Sources entry is a working link (HTML when available; otherwise raw, clearly marked, new tab).
+- Topic pages list evidence under a Sources collapsible (sessions + documents from the graph). Session/document pages link every provenance Sources entry (HTML when available; otherwise raw, clearly marked, new tab). CLI `trace` prints the full chain.
 - `llmwiki trace` prints the full downward chain (titles and locations; missing hops marked) without body excerpts.
 - Lint fails with **errors** on broken provenance hops; docs point operators to #110 for guided fixes.
 
@@ -39,11 +39,14 @@ The command accepts a page path or name. It prints the full downward chain: the 
 
 - **As a** reader on the static site, **I want** every Sources reference to open evidence in one click, **so that** I never stare at a dead label when the raw file still exists.
 
-Links attach to the pages people already open: **topic pages** (browse surface for people/ideas/codebases) and **session / document pages**. For each Sources entry: prefer a built HTML page when one exists; otherwise link to the raw file, clearly marked as raw, opening in a **new browser tab**.
+**Topic pages** expose graph evidence under a single collapsible **Sources** section (count badge), split into **Sessions** vs **Documents** by compiled URL (`sessions/…` vs `documents/…`). That list is the topic's evidence — not a separate frontmatter provenance panel. Prefer linking each item to its built HTML page when the graph recorded a URL; items without a page still list with “(no page)”.
+
+**Session and document pages** (plus the CLI `trace` command) carry the provenance chain links: for each Sources / wiki-summary hop prefer a built HTML page when one exists; otherwise link to the raw file, clearly marked as raw, opening in a **new browser tab**.
 
 - **Acceptance Criteria:**
-  - [ ] Given a topic whose backing wiki page lists Sources that have built HTML (session or document), when I open the topic page, then each such Sources entry is a working link to that HTML.
-  - [ ] Given a Sources entry with no built HTML but an existing raw file, when I open the page, then that entry links to the raw file, is marked as raw, and opens in a new tab.
+  - [ ] Given a topic whose graph node lists both a session URL and a document URL, when I open the topic page, then Sources contains Sessions and Documents subsections with working links, and no `provenance-sources` / duplicate frontmatter Sources panel appears.
+  - [ ] Given a topic with only session evidence, when I open the topic page, then Sources shows Sessions and omits an empty Documents heading.
+  - [ ] Given a Sources entry on a session or document page with no built HTML but an existing raw file, when I open the page, then that entry links to the raw file, is marked as raw, and opens in a new tab.
   - [ ] Given a session or document page with a matching wiki source summary and/or listed Sources, when I open it, then those entries follow the same prefer-HTML-else-raw(new-tab) rule.
   - [ ] Given a built page with no Sources information, when I open it, then no empty Sources section or broken placeholder appears.
 
@@ -88,7 +91,7 @@ Healing (suggested fix commands, pruning stale pointers, guided repair) is **not
 
 - Shared provenance walker used by CLI and lint (and by build for link targets).
 - Thin CLI `trace` (downward full chain; titles and locations; missing markers; no body excerpts).
-- Site: every Sources entry is a link — prefer HTML; else raw marked “(raw)”, new tab — on topic and session/document pages.
+- Site: topic pages list graph evidence under Sources (Sessions / Documents); session/document pages link every provenance Sources entry — prefer HTML; else raw marked “(raw)”, new tab — plus CLI `trace`.
 - Lint rule: full-chain provenance integrity as **errors**; docs point to #110 for fixes.
 - Support for any wiki page kind that already carries provenance metadata.
 
