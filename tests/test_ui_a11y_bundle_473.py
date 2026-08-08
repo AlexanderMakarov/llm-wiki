@@ -7,7 +7,7 @@ HTML adjustments that share the same render code path):
   - #566 (#ui-h4): localStorage access wrapped in try/catch
   - #568 (#ui-h8): aria-expanded + aria-controls on #open-palette;
                    aria-pressed on #theme-toggle
-  - #571 (#ui-h14): vis-network pinned to @9.1.9 with SRI hash
+  - #571 (#ui-h14): vis-network vendored locally (#127) — no CDN / SRI
   - #564 (#ui-c5): viewport-fit=cover already in meta (verified)
 
 Each fix gets its own focused assertion below.
@@ -97,27 +97,27 @@ def test_open_palette_aria_expanded_flips_on_open() -> None:
     assert "__syncTriggerAriaExpanded(dialog, false)" in close_block
 
 
-# ─── #571 — vis-network pinned + SRI ───────────────────────────────────
+# ─── #571 / #127 — vis-network vendored locally ────────────────────────
 
 
-def test_vis_network_version_pinned() -> None:
-    """The bare `unpkg.com/vis-network/standalone/...` URL pulls latest
-    on every load — a malicious or accidental upstream change ships
-    JS to every site visitor. Pin to an explicit version."""
+def test_vis_network_uses_local_relative_src() -> None:
+    """CDN + SRI was replaced by a pinned vendor bundle emitted beside
+    graph.html (#127). A relative ``src`` keeps file:// and offline
+    builds working without a network fetch."""
     assert "unpkg.com/vis-network/" not in HTML_TEMPLATE, (
-        "vis-network is loaded without a version pin; supply-chain risk"
+        "vis-network must not load from unpkg; use the vendored bundle"
     )
-    assert re.search(r"vis-network@\d+\.\d+\.\d+/standalone", HTML_TEMPLATE), (
+    assert 'src="vis-network.min.js"' in HTML_TEMPLATE
+    assert 'integrity="sha384-' not in HTML_TEMPLATE
+    assert 'crossorigin="anonymous"' not in HTML_TEMPLATE
+
+
+def test_vis_network_version_pinned_in_template_comment() -> None:
+    """The vendored bundle tracks an explicit @x.y.z pin documented in
+    the template comment so upgrades are deliberate, not accidental."""
+    assert re.search(r"vis-network@\d+\.\d+\.\d+", HTML_TEMPLATE), (
         "vis-network must be pinned to a specific @x.y.z version"
     )
-
-
-def test_vis_network_has_sri_integrity() -> None:
-    """SRI hash gates the load — wrong hash → browser refuses to
-    execute. Combined with the version pin this prevents an attacker
-    who compromises the registry from running code in the browser."""
-    assert 'integrity="sha384-' in HTML_TEMPLATE
-    assert 'crossorigin="anonymous"' in HTML_TEMPLATE
 
 
 # ─── #564 — viewport-fit=cover ─────────────────────────────────────────

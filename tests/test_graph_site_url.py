@@ -18,11 +18,11 @@ from pathlib import Path
 
 import llmwiki.graph as graph_mod
 from llmwiki.graph import (
-    HTML_TEMPLATE,
     _compute_site_url,
     _verify_site_url,
     build_graph,
 )
+from llmwiki.render.graph_viewer import GRAPH_VIEWER_JS
 
 # ─── _compute_site_url ────────────────────────────────────────────────────
 
@@ -217,24 +217,24 @@ def test_build_graph_verify_site_dir_nulls_missing(tmp_path, monkeypatch):
 
 
 def test_template_click_handler_uses_site_url():
-    assert "node.site_url" in HTML_TEMPLATE
+    assert "node.site_url" in GRAPH_VIEWER_JS
     # Old broken rewrite path must be gone.
-    assert "replace(/^wiki\\//, '')" not in HTML_TEMPLATE
-    assert "_flashNoSiteTooltip" in HTML_TEMPLATE
+    assert "replace(/^wiki\\//, '')" not in GRAPH_VIEWER_JS
+    assert "_flashNoSiteTooltip" in GRAPH_VIEWER_JS
 
 
 def test_template_context_menu_open_uses_site_url():
     # Find the `case 'open':` block and assert it uses site_url.
-    idx = HTML_TEMPLATE.index("case 'open':")
-    end = HTML_TEMPLATE.index("break", idx)
-    block = HTML_TEMPLATE[idx:end]
+    idx = GRAPH_VIEWER_JS.index("case 'open':")
+    end = GRAPH_VIEWER_JS.index("break", idx)
+    block = GRAPH_VIEWER_JS[idx:end]
     assert "node.site_url" in block
 
 
 def test_template_renders_no_page_alert():
-    idx = HTML_TEMPLATE.index("case 'open':")
-    end = HTML_TEMPLATE.index("break", idx)
-    block = HTML_TEMPLATE[idx:end]
+    idx = GRAPH_VIEWER_JS.index("case 'open':")
+    end = GRAPH_VIEWER_JS.index("break", idx)
+    block = GRAPH_VIEWER_JS[idx:end]
     assert "no compiled page" in block
 
 
