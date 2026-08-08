@@ -1,0 +1,18 @@
+Third-party software vendored for offline Knowledge Graph rendering
+====================================================================
+
+vis-network (standalone UMD bundle)
+-----------------------------------
+
+Project:  vis-network (includes bundled vis-data and vis-util)
+Version:  9.1.9
+License:  Apache-2.0 OR MIT (vis-network); Apache-2.0 (vis-data); MIT (vis-util)
+Homepage: https://visjs.github.io/vis-network/
+Source:   https://unpkg.com/vis-network@9.1.9/standalone/umd/vis-network.min.js
+Repository: https://github.com/visjs/vis-network
+
+This file accompanies `vis-network.min.js`, a pinned copy of the upstream
+standalone UMD build used by llmwiki's interactive graph viewer. The upstream
+project is maintained by the vis.js community.
+
+Copyright notices and full license texts are available in the upstream repository.

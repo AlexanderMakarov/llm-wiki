@@ -169,7 +169,7 @@ Red is deliberately not a kind colour: the map already spends it on two states �
 
 **Side panel** (topic mode, single click) — topic name, `Sessions`, `Connected topics`, then the same identity facts the topic page carries: `Kind`, `Active`, `Reviewed`. `Kind` always renders, reading `Unclassified topic` when no wiki page describes the node; the two date rows are omitted when the node lacks the field, so a topic with no dates shows the counts and the kind rather than empty rows. `Open page →` follows, then the top connections and the bridging sessions.
 
-**Offline fallback:** if the vis-network CDN can't load, the viewer shows an inline notice instead of a blank screen.
+**Built-in assets:** every `graph.html` ships with sibling `graph-viewer.js` and `vis-network.min.js` (pinned **9.1.9**, vendored at build time and included in the installed package). The canvas works from the built static site over HTTP, `file://`, or fully offline — no unpkg fetch and no manual host step for vis-network. **Offline fallback:** if either companion script is missing or fails to load, the page shows an inline notice (`#offline-notice`) via script-tag `onerror`, a post-load watchdog when `graph-viewer.js` never runs, and a `typeof vis` check inside the viewer when the library alone is missing — not a blank canvas.
 
 ---
 

@@ -21,8 +21,8 @@ from pathlib import Path
 
 from llmwiki.build import page_foot
 from llmwiki.docs_pages import compile_docs_site
-from llmwiki.graph import HTML_TEMPLATE
 from llmwiki.render.css import CSS
+from llmwiki.render.graph_viewer import GRAPH_VIEWER_JS
 from llmwiki.render.js import JS
 from llmwiki.topics import build_topic_graph
 
@@ -92,8 +92,8 @@ def test_theme_cycle_is_shared_by_both_toggles():
 def test_graph_only_prevents_context_menu_over_a_node():
     # preventDefault must sit inside the `if (nodeId)` branch — unconditional
     # prevention kills mouse-gesture extensions on the whole canvas.
-    start = HTML_TEMPLATE.index("network.on('oncontext'")
-    handler = HTML_TEMPLATE[start:start + 600]
+    start = GRAPH_VIEWER_JS.index("network.on('oncontext'")
+    handler = GRAPH_VIEWER_JS[start:start + 600]
     prevent = handler.index("params.event.preventDefault();")
     guard = handler.index("if (nodeId) {")
     assert guard < prevent, (
@@ -106,29 +106,29 @@ def test_graph_only_prevents_context_menu_over_a_node():
 
 
 def test_cluster_groups_on_kind_not_type():
-    assert "const nodeKind = n => n.kind || n.type || 'other';" in HTML_TEMPLATE
-    assert "joinCondition: n => !n.isKindCluster && nodeKind(n) === k" in HTML_TEMPLATE
+    assert "const nodeKind = n => n.kind || n.type || 'other';" in GRAPH_VIEWER_JS
+    assert "joinCondition: n => !n.isKindCluster && nodeKind(n) === k" in GRAPH_VIEWER_JS
     # Existing clusters must be excluded or they nest inside the next one.
-    assert "isKindCluster: true" in HTML_TEMPLATE
+    assert "isKindCluster: true" in GRAPH_VIEWER_JS
 
 
 def test_cluster_nodes_carry_no_vis_group_key():
     # `group` is vis's own key: it re-applies an automatic palette when a
     # cluster reopens, overwriting our per-kind colours.
-    assert "group: n.kind" not in HTML_TEMPLATE
-    assert "group: 'topic'" not in HTML_TEMPLATE
+    assert "group: n.kind" not in GRAPH_VIEWER_JS
+    assert "group: 'topic'" not in GRAPH_VIEWER_JS
 
 
 def test_structural_graph_changes_restabilize():
     # Physics is frozen after the first layout; without a re-run every node
     # created by (un)clustering stacks at one point.
-    assert "function restabilize()" in HTML_TEMPLATE
-    assert HTML_TEMPLATE.count("restabilize();") >= 2  # applyLayout + cluster
+    assert "function restabilize()" in GRAPH_VIEWER_JS
+    assert GRAPH_VIEWER_JS.count("restabilize();") >= 2  # applyLayout + cluster
 
 
 def test_cluster_failures_surface_on_the_page():
-    assert "reportGraphError" in HTML_TEMPLATE
-    assert "window.__llmwikiReportError" in HTML_TEMPLATE
+    assert "reportGraphError" in GRAPH_VIEWER_JS
+    assert "window.__llmwikiReportError" in GRAPH_VIEWER_JS
 
 
 # ─── Topic kinds ──────────────────────────────────────────────────────────

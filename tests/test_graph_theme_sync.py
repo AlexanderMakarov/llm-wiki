@@ -19,6 +19,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from llmwiki.graph import HTML_TEMPLATE, write_html
+from llmwiki.render.graph_viewer import GRAPH_VIEWER_JS
 
 
 def test_graph_template_uses_llmwiki_theme_key():
@@ -81,5 +82,6 @@ def test_graph_template_toggle_writes_canonical_key(tmp_path):
     assert 'src="script.js"' in rendered
     # The nav exposes a unique #theme-toggle for that handler.
     assert rendered.count('id="theme-toggle"') == 1
-    # The local handler must be gone from the template.
+    # The local handler must be gone from the template and viewer (#127).
     assert "themeToggle.addEventListener" not in HTML_TEMPLATE
+    assert "themeToggle.addEventListener" not in GRAPH_VIEWER_JS
