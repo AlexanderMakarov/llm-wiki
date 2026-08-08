@@ -23,3 +23,15 @@
 - Slices: (1) extract+emit viewer (2) vendor vis (3) docs/changelog (4) testing-expert regression
 - Agents: general-purpose for impl; testing-expert for Slice 4
 - Next: commit-specs then `/awos:implement`
+
+## implement
+- All nested tasks `[x]` (100%)
+- Artifacts: `llmwiki/render/graph_viewer.py`, `llmwiki/vendor/vis-network.min.js`+NOTICE, graph.py emit, tests + `tests/test_127_acceptance.py`, CHANGELOG/docs
+- Suite: 3823 passed; ruff green
+- Next: `/awos:verify` then user smoke confirm
+
+## verify + smoke
+- Spec Status → Completed; live vault build by agent at user request; user confirmed works
+- Dual review written; accepted: package-data + wheel test, viewer onerror/watchdog + docs; drop soft-fail vendor; commit-all
+- Fixes applied; full suite green
+- Next: commit-push (this is last flow-log append before PR)

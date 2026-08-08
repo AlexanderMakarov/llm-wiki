@@ -5,7 +5,7 @@ The nightly synthetic monitoring workflow (`.github/workflows/synthetic.yml`) fa
 ## Possible causes
 
 - GitHub Pages publish lag or partial publish corruption — try a manual rebuild via the Pages workflow.
-- Third-party CDN failure (highlight.js, vis-network, axe-core, fonts.googleapis.com).
+- Third-party CDN failure (highlight.js, axe-core, fonts.googleapis.com). vis-network is vendored beside `graph.html` (#127) and is not CDN-loaded.
 - A browser update changed default behaviour for one of the tested features.
 - The deploy itself is broken — check the most recent `pages.yml` run.
 - Synthetic / Pages are still disabled (#69) — confirm Settings → Pages and that `pages.yml` has a `push` trigger again before treating a probe failure as a product bug.

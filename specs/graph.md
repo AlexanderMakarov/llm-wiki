@@ -13,7 +13,7 @@ Interactive force-directed knowledge graph of every wiki page and its `[[wikilin
 - Page `<title>` contains "Graph" (e.g. "llmwiki — Knowledge Graph").
 - The site nav bar (Home / Raw / Candidates / Graph / Projects / Sessions / Analytics / Docs) is present and the "Graph" link carries `class="active"` (closes #456 — graph used to be standalone with no nav chrome).
 - A `<div id="network">` containing the rendered graph canvas.
-- vis-network loads from a CDN-pinned URL with SHA-384 SRI integrity attribute.
+- vis-network loads from sibling `vis-network.min.js` (pinned **9.1.9**, emitted beside `graph.html` at build time — no CDN fetch).
 - Clicking a node triggers focus (color/size change, edges highlighted).
 - Theme toggle works on `/graph.html` exactly as on every other page.
 
@@ -30,5 +30,5 @@ Interactive force-directed knowledge graph of every wiki page and its `[[wikilin
 ## Cross-references
 
 - #456 (closed) — site nav restored on `/graph.html`
-- v1.3.67 (#679) — SHA-384 SRI for vis-network@9.1.9
+- v1.3.67 (#679) — SHA-384 SRI for vis-network@9.1.9 (superseded by local vendoring in #127)
 - `llmwiki/graph.py:copy_to_site`

@@ -6,7 +6,7 @@ It is NOT a copy-paste implementation guide.
 # Technical Specification: External graph viewer assets
 
 - **Functional Specification:** [`functional-spec.md`](./functional-spec.md)
-- **Status:** Approved
+- **Status:** Completed
 - **Author(s):** Auto (implement-feature #127)
 
 ---

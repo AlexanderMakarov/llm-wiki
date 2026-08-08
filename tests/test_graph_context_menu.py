@@ -20,6 +20,7 @@ from pathlib import Path
 
 import llmwiki.graph as graph_mod
 from llmwiki.graph import HTML_TEMPLATE, build_graph, write_html
+from llmwiki.render.graph_viewer import GRAPH_VIEWER_JS
 
 # ─── Template-level: ensure every piece is present ────────────────────────
 
@@ -63,48 +64,48 @@ def test_template_has_keyboard_accessible_menuitems():
 
 
 def test_template_registers_oncontext_handler():
-    assert "network.on('oncontext'" in HTML_TEMPLATE
-    assert "params.event.preventDefault()" in HTML_TEMPLATE
-    assert "getNodeAt" in HTML_TEMPLATE
+    assert "network.on('oncontext'" in GRAPH_VIEWER_JS
+    assert "params.event.preventDefault()" in GRAPH_VIEWER_JS
+    assert "getNodeAt" in GRAPH_VIEWER_JS
 
 
 def test_template_outside_click_closes_menu():
-    assert "document.addEventListener('click'" in HTML_TEMPLATE
-    assert "hideContextMenu" in HTML_TEMPLATE
+    assert "document.addEventListener('click'" in GRAPH_VIEWER_JS
+    assert "hideContextMenu" in GRAPH_VIEWER_JS
 
 
 def test_template_escape_closes_menu():
-    assert "document.addEventListener('keydown'" in HTML_TEMPLATE
-    assert "e.key === 'Escape'" in HTML_TEMPLATE
+    assert "document.addEventListener('keydown'" in GRAPH_VIEWER_JS
+    assert "e.key === 'Escape'" in GRAPH_VIEWER_JS
 
 
 def test_template_keyboard_shortcuts_map():
     """n → neighbours, c → copy-slug, Enter → open."""
-    assert "{ 'n': 'neighbours', 'c': 'copy-slug', 'Enter': 'open' }" in HTML_TEMPLATE
+    assert "{ 'n': 'neighbours', 'c': 'copy-slug', 'Enter': 'open' }" in GRAPH_VIEWER_JS
 
 
 def test_template_clamps_menu_to_viewport():
-    assert "window.innerWidth" in HTML_TEMPLATE
-    assert "window.innerHeight" in HTML_TEMPLATE
-    assert "Math.min" in HTML_TEMPLATE
+    assert "window.innerWidth" in GRAPH_VIEWER_JS
+    assert "window.innerHeight" in GRAPH_VIEWER_JS
+    assert "Math.min" in GRAPH_VIEWER_JS
 
 
 def test_template_highlight_neighbours_uses_edges():
-    assert "highlightNeighbours" in HTML_TEMPLATE
+    assert "highlightNeighbours" in GRAPH_VIEWER_JS
     # Walks GRAPH.edges to build neighbour set.
-    assert "GRAPH.edges.forEach" in HTML_TEMPLATE
+    assert "GRAPH.edges.forEach" in GRAPH_VIEWER_JS
 
 
 def test_template_clipboard_fallback_present():
     # Must support browsers without the async Clipboard API.
-    assert "execCommand('copy')" in HTML_TEMPLATE
-    assert "navigator.clipboard.writeText" in HTML_TEMPLATE
+    assert "execCommand('copy')" in GRAPH_VIEWER_JS
+    assert "navigator.clipboard.writeText" in GRAPH_VIEWER_JS
 
 
 def test_template_copy_copy_slug_escapes_quotes():
     """The CLI hint builds a command with double-quotes — quotes in
     the slug must not break out."""
-    assert "replace(/\"/g, '\\\\\"')" in HTML_TEMPLATE
+    assert "replace(/\"/g, '\\\\\"')" in GRAPH_VIEWER_JS
 
 
 # ─── CSS guardrails ──────────────────────────────────────────────────────
@@ -182,8 +183,10 @@ def test_rendered_html_graph_payload_still_works(tmp_path, monkeypatch):
     text = out.read_text(encoding="utf-8")
     # The GRAPH payload is injected.
     assert "const GRAPH =" in text
-    # Existing features must still work.
-    assert "network.on('click'" in text
+    # Viewer logic ships in the sibling asset (#127).
+    assert 'src="graph-viewer.js"' in text
+    viewer_js = (out.parent / "graph-viewer.js").read_text(encoding="utf-8")
+    assert "network.on('click'" in viewer_js
     assert "cluster-toggle" in text
 
 
