@@ -25,7 +25,7 @@ Comment when:
 
 A flow degrades in one long context window. Per §8 of delivery-flow.md:
 
-- Run every isolatable stage in a subagent (a subagent can invoke `/awos:*` commands via the Skill tool; its context is discarded on completion). Subagent reports must be terse — paths, verdicts, counts — never full diff, log, or review content.
+- Run every isolatable stage in a subagent (a subagent can invoke `/awos:*` commands via the Skill tool; its context is discarded on completion). Subagent reports must be terse — paths, verdicts, counts — never full diff or log content. Exception for local review: the **subagent** still returns only verdict/counts/path after writing the review file; the **orchestrator** then Reads that file and prints the full review body in chat for keep/drop (see Step 9b).
 - After each completed stage, append an entry to `context/spec/{SPEC_NAME}/flow-log.md` (or `context/fix-log-{BUG_ID}.md` when the bug maps to no spec): the stage name, what was produced and where (paths, branch, commit), the classification verdict once known, any decisions taken, and which stage comes next. The log is the flow's memory outside the context window — a fresh session resumes by reading this one small file. It is committed with the work (commit-push stages it alongside the code), so it must never become an uncommittable leftover: **once the change request is opened — or the change is merged — stop writing to the tracked log.** New commits are unwelcome on a change request under review or already merged, so a late append would strand a change that can never reach it. From that point, report late-stage progress (gate results, merge, close-out evidence) to the user and via §9 notifications (exceptions only), and resume the remote stages from remote state — the open/merged change request and the ticket status, which the resume-detection stage already inspects. The close stage leaves a clean working tree and never writes a final entry it cannot commit.
 - Never launch a nested headless session (`claude -p`) from this command — permission modes, PATH, and timeouts differ per machine. Unattended chaining belongs to the trigger setup (§6), outside this command.
 - Tell every dispatched subagent: tools are functional — do not test them or make exploratory calls; every call needs a purpose. Run each delegated stage on the model tier recorded in §8 — the fast tier for mechanical transport work, the strongest for judgment (diagnosis, classification, review).
@@ -154,19 +154,44 @@ In either case, if the fix revealed that `product-definition.md` or `architectur
 
 ### Step 9b: Local Review
 
-Same dual local review as the feature flow, after smoke confirm:
+After smoke confirm, run one independent local review (pre-push, `git diff origin/main...HEAD`).
 
-1. Checklist review composed from `/review-pr`'s docs against `git diff origin/main...HEAD` → `context/spec/{SPEC_NAME}/review.md` or `context/fix-log-{BUG_ID}-review.md` when there is no spec dir.
-2. Independent `Agent(subagent_type="code-reviewer")` → sibling review file.
+Independence rules:
 
-Present keep/drop; apply accepted findings. Then:
+- Do not add run-time focus areas drawn from what you fixed or suspect.
+- Dispatch exactly one independent reviewer on the strongest tier using the coding agent's own most suitable review skill, command, or subagent (do not hardcode a product-specific reviewer name). Pass the fixed prompt below (verbatim).
+- That reviewer writes the review file and returns only verdict, counts by severity, and path.
+- Then **Read the review file and print its full body in chat** (lead with `Review file: <path>`). Pause for keep/drop; apply accepted findings before push.
+
+Review output path: `context/spec/{SPEC_NAME}/review.md` when a spec dir exists, else `context/fix-log-{BUG_ID}-review.md`.
+
+Fixed prompt (replace the path placeholder before dispatch):
+
+```text
+Review git diff origin/main...HEAD (branch changes, not an open-PR number).
+
+Load and apply every section of these docs, in this priority order for attention:
+1. docs/maintainers/REVIEW_CHECKLIST.md — treat its Blocker vs Nit rule as the severity model (Security + Meta + broken layer boundaries / failing tests or build = Blocker; Code quality / Docs / Build+runtime smoke = Nit unless they trip Meta or Security). Use the checklist's Blocker shortlist.
+2. docs/maintainers/ARCHITECTURE.md
+3. docs/maintainers/DECLINED.md
+4. CONTRIBUTING.md
+5. SECURITY.md
+
+Also look for bugs, logic errors, and security issues the checklist does not name.
+
+Write the full review markdown to <REVIEW_PATH> with: Verdict (Approve | Request changes | Comment), counts by severity, findings grouped Blockers then Nits, each finding citing the relevant REVIEW_CHECKLIST section when applicable, and a concrete fix suggestion.
+
+Return only: verdict, counts by severity, and the review file path — never the full review body in your report.
+```
+
+Then:
 
 ```bash
 ruff check llmwiki tests scripts
 python3 -m pytest tests/ -q
 ```
 
-Lead the presentation with review file paths on their own lines. Do not call `/review-pr <n>` (reserved for reviewing others' open PRs). Serious findings that alter behavior → §9 exception after PR open.
+Do not push until keep/drop is done and the static gate is green. Serious findings that alter behavior → §9 exception after PR open.
 
 <!-- /awos:flow:stage -->
 
@@ -214,4 +239,4 @@ Leave a clean working tree: do not write a closing flow-log entry. If any flow-c
 
 ---
 
-<!-- awos:flow:generated date=2026-08-04 version=2.4.3 source=context/product/delivery-flow.md -->
+<!-- awos:flow:generated date=2026-08-08 version=2.4.3 source=context/product/delivery-flow.md -->

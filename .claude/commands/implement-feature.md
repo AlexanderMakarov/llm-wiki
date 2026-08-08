@@ -25,7 +25,7 @@ Comment when:
 
 A flow this long degrades in one context window — judgment is worst exactly where it matters most, at review time. Per §8 of delivery-flow.md:
 
-- Run every isolatable stage in a subagent (a subagent can invoke `/awos:*` commands via the Skill tool; its context is discarded on completion). Subagent reports must be terse — paths, verdicts, counts — never full document or review content.
+- Run every isolatable stage in a subagent (a subagent can invoke `/awos:*` commands via the Skill tool; its context is discarded on completion). Subagent reports must be terse — paths, verdicts, counts — never full document content. Exception for local review: the **subagent** still returns only verdict/counts/path after writing `review.md`; the **orchestrator** then Reads that file and prints the full review body in chat for keep/drop (see Step 8).
 - After each completed stage, append an entry to `context/spec/{SPEC_NAME}/flow-log.md`: the stage name, what was produced and where (paths, branch, commit), any decisions taken along the way, and which stage comes next. The log is the flow's memory outside the context window — a fresh session (after a restart, a crash, or an unattended hand-off between sessions) resumes by reading this one small file instead of re-deriving state from the whole repo. That is what keeps the window small across a long flow: nothing needs to stay in context once it is in the log. The log is committed with the work (Step 9 stages it alongside the code), so it must never become an uncommittable leftover: **once the change request is opened — or the change is merged — stop writing to the tracked log**, since a commit adding log lines is unwelcome on a change request under review and impossible once it merges, so a late append would strand a change that can never reach it. From that point report late-stage progress to the user and via §9 notifications (exceptions only), and resume the remote stages from remote state (the open/merged change request and the ticket status), which the resume-detection stage already inspects. The close stage leaves a clean working tree and never writes a final entry it cannot commit.
 - Never launch a nested headless session (`claude -p`) from this command — permission modes, PATH, and timeouts differ per machine. Unattended chaining belongs to the trigger setup (§6), outside this command.
 - Tell every dispatched subagent: tools are functional — do not test them or make exploratory calls; every call needs a purpose. Run each delegated stage on the model tier recorded in §8 — the fast tier for mechanical transport work, the strongest for judgment.
@@ -154,23 +154,41 @@ Do **not** execute the mutating live-vault commands yourself. Do not start revie
 The review must stay independent of this conversation's authorship bias:
 
 - Do not add run-time focus areas drawn from what you implemented or suspect — the author framing the review is the bias.
-- Reviewers write findings to files and return only the verdict, the finding count by severity, and those file paths — never the full review body in the subagent report.
-- **Lead the review presentation to the user with the path(s) on their own lines** — e.g. `Review file: context/spec/{SPEC_NAME}/review.md` — before the verdict and findings summary. Record the same paths in this stage's flow-log entry.
-- The agent that applies accepted findings reads the review files and the diff fresh — relay the user's keep/drop decisions, not your own summary of the findings.
+- Dispatch exactly one reviewer subagent with the **fixed** prompt below (verbatim). That subagent writes findings to a file and returns only the verdict, the finding count by severity, and the file path.
+- After the subagent returns: **Read the review file and print its full body in chat** (lead with `Review file: <path>` on its own line). Record the path in this stage's flow-log entry.
+- Pause for keep/drop. The agent that applies accepted findings reads the review file and the diff fresh — relay the user's keep/drop decisions, not your own summary of the findings.
 
-**Dual local review (pre-push, branch diff `origin/main...HEAD`):**
+**Single local review (pre-push, branch diff `origin/main...HEAD`):**
 
-1. **Checklist review (compose `/review-pr`)** — In a dedicated subagent on the strongest tier, load `docs/maintainers/REVIEW_CHECKLIST.md`, `docs/maintainers/ARCHITECTURE.md`, `docs/maintainers/DECLINED.md`, `CONTRIBUTING.md`, and `SECURITY.md`. Apply every checklist section to `git diff origin/main...HEAD` (not `gh pr diff`). Write the full review to `context/spec/{SPEC_NAME}/review.md` using the same blocker/nit structure as `/review-pr`. Do **not** call `/review-pr <n>` — that command remains for reviewing someone else's open PR by number.
-2. **Cursor `code-reviewer`** — Dispatch `Agent(subagent_type="code-reviewer", …)` (Cursor: `Task`) with a **fixed** prompt: review `git diff origin/main...HEAD` for bugs, logic errors, security issues, and CONTRIBUTING violations; write findings to `context/spec/{SPEC_NAME}/review-code-reviewer.md`; return only verdict, counts by severity, and path. Pass the prompt verbatim — no author-supplied focus list.
+On the strongest tier, dispatch **one** independent reviewer using the coding agent's own most suitable review skill, command, or subagent (do not hardcode a product-specific reviewer name). Pass this fixed prompt verbatim (no author-supplied focus list):
 
-Present both reviews to the user for keep/drop. Apply accepted findings before anything is pushed. Then run the static gate:
+```text
+Review git diff origin/main...HEAD (branch changes, not an open-PR number).
+
+Load and apply every section of these docs, in this priority order for attention:
+1. docs/maintainers/REVIEW_CHECKLIST.md — treat its Blocker vs Nit rule as the severity model (Security + Meta + broken layer boundaries / failing tests or build = Blocker; Code quality / Docs / Build+runtime smoke = Nit unless they trip Meta or Security). Use the checklist's Blocker shortlist.
+2. docs/maintainers/ARCHITECTURE.md
+3. docs/maintainers/DECLINED.md
+4. CONTRIBUTING.md
+5. SECURITY.md
+
+Also look for bugs, logic errors, and security issues the checklist does not name.
+
+Write the full review markdown to context/spec/{SPEC_NAME}/review.md with: Verdict (Approve | Request changes | Comment), counts by severity, findings grouped Blockers then Nits, each finding citing the relevant REVIEW_CHECKLIST section when applicable, and a concrete fix suggestion.
+
+Return only: verdict, counts by severity, and the review file path — never the full review body in your report.
+```
+
+Replace `{SPEC_NAME}` with the actual spec directory name before dispatch.
+
+Present the printed review for keep/drop. Apply accepted findings before anything is pushed. Then run the static gate:
 
 ```bash
 ruff check llmwiki tests scripts
 python3 -m pytest tests/ -q
 ```
 
-Do not push until both reviews are processed and the static gate is green. Serious findings that alter delivered behavior → §9 exception PR comment after the PR exists.
+Do not push until keep/drop is done and the static gate is green. Serious findings that alter delivered behavior → §9 exception PR comment after the PR exists.
 
 <!-- /awos:flow:stage -->
 
@@ -228,4 +246,4 @@ Leave a clean working tree: do not write a closing flow-log entry (the log was f
 
 ---
 
-<!-- awos:flow:generated date=2026-08-04 version=2.4.3 source=context/product/delivery-flow.md -->
+<!-- awos:flow:generated date=2026-08-08 version=2.4.3 source=context/product/delivery-flow.md -->
