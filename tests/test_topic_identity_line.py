@@ -98,7 +98,7 @@ def test_described_topics_show_a_kind_chip(tmp_path: Path, monkeypatch):
                         ("toolkit", "Project")):
         page = (site / "topics" / f"{slug}.html").read_text(encoding="utf-8")
         assert f'<span class="topic-kind-chip">{label}</span>' in page
-        assert "connected topics" in page and "sessions" in page
+        assert "connected topics" in page and "sources" in page
         assert f"<code>{slug}</code>" in page
 
 

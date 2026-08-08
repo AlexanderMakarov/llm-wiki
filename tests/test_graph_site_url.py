@@ -271,6 +271,19 @@ def test_raw_doc_source_file_under_raw_docs_maps_to_documents():
     assert url == "documents/citation-iso/iso-audit-overview-02.html"
 
 
+def test_raw_doc_flat_source_file_ignores_project():
+    """C1: flat ``raw/docs/note.md`` compiles to ``documents/note.html`` —
+    never ``documents/{project}/note.html`` even when ``project:`` is set."""
+    text = (
+        "---\ntitle: X\nproject: myproj\n"
+        "source_file: raw/docs/note.md\n---\n"
+    )
+    url = _compute_site_url(
+        text, ("sources", "note.md"), "note", "sources",
+    )
+    assert url == "documents/note.html"
+
+
 def test_raw_doc_tag_alone_is_enough():
     """`raw-doc` without `wiki-add` still identifies a document page."""
     text = "---\ntitle: X\nproject: proj\ntags: [raw-doc]\nslug: my-stem\n---\n"

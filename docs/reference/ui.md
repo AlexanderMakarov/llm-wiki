@@ -203,7 +203,7 @@ This is the distinction to keep straight: **sessions supply reach and activity, 
 | On the page | Comes from | Present when |
 |---|---|---|
 | `Active <first> – <last>` | the `date` frontmatter of the sessions that mention the topic — oldest to newest, collapsing to one date when they agree | at least one such session carries a date |
-| `N sessions` + the Sessions list | the same set of sessions | always |
+| `N sessions` + the Sources list (Sessions / Documents) | the same set of evidence pages from the graph, partitioned by compiled URL | always |
 | `N connected topics` + the Connected topics list | co-occurrence: two topics share an edge when a session mentions both | always (the count can be `0`) |
 | Kind chip | the `wiki/` folder holding the page that backs the topic — `entities/` → Entity, `concepts/` → Concept, and so on. The folder is the only kind signal the schema carries; frontmatter `type` is not consulted | always — `Unclassified topic` when no page's slug or title matches the topic's canonical spelling or one of its aliases |
 | `Reviewed <date>` | that page's `last_updated` frontmatter | the page records one |
@@ -213,7 +213,7 @@ A topic with no backing page therefore shows no review date and no content, and 
 
 ### Page content
 
-The topic page is the only browsable surface for entity and concept pages, so it renders their content above the link lists. What survives is everything after the page's own leading `# H1`, minus `## Connections` and `## Sessions` — the topic page renders both of those itself, from the graph, so the page's hand-written versions would only duplicate them.
+The topic page is the only browsable surface for entity and concept pages, so it renders their content above the link lists. What survives is everything after the page's own leading `# H1`, minus `## Connections`, `## Sessions`, and `## Sources` — the topic page renders Connected topics and a collapsible Sources evidence list (Sessions vs Documents) itself from the graph, so the page's hand-written versions would only duplicate them.
 
 - **Heading-agnostic.** Nothing is keyed to `## Key Facts`; a renamed, reordered, or newly added section reaches the reader as written, as does introductory prose sitting above the first heading.
 - **No empty sections.** A heading with nothing under it is dropped rather than rendered as a bare heading — innermost first, so a `##` whose only child `###` was itself empty goes too.

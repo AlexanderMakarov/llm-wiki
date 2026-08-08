@@ -16,6 +16,7 @@ Subcommands:
     candidates        List / promote / merge / discard candidate pages
     synthesize        (deprecated) alias for synth --sources-only
     synth             Synthesize wiki sources + harvest entity/concept candidates
+    trace             Print downward provenance (wiki page → sources → raw)
     all               Run the full pipeline: [sync?] → [synthesize?] → build → graph → lint
     watch             Near-real-time sync→synthesize→build when sessions finish
     install-automation  Interactive OS schedulers / hooks / synth backend setup
@@ -136,6 +137,7 @@ from llmwiki.topics_consolidate import (
     parse_and_cache,
     render_consolidation_prompt,
 )
+from llmwiki.trace import TraceError, TraceResult, trace_page
 from llmwiki.usage import UNATTRIBUTED
 from llmwiki.vault import describe_vault, resolve_vault
 from llmwiki.watch import watch as watch_loop
@@ -580,6 +582,34 @@ def cmd_query(args: argparse.Namespace) -> int:
     question = " ".join(args.question)
     result = query_graph(question, depth=args.depth, token_budget=args.budget)
     print(result)
+    return 0
+
+
+def _format_trace_result(result: TraceResult) -> str:
+    """Human-readable provenance chain for stdout (no body excerpts)."""
+    lines: list[str] = []
+    for hop in result.hops:
+        title = hop.title or "(untitled)"
+        miss = "  (missing)" if hop.status == "missing" else ""
+        lines.append(f"{hop.role:<8}{title}  {hop.location}{miss}")
+    if len(result.hops) == 1:
+        lines.append("(no further provenance)")
+    return "\n".join(lines)
+
+
+def cmd_trace(args: argparse.Namespace) -> int:
+    """Print downward provenance: wiki page → source summaries → raw (#122).
+
+    Exit non-zero only when the starting page cannot be resolved
+    (:class:`TraceError`). Partial missing hops still exit 0.
+    """
+    root = _content_root(args)
+    try:
+        result = trace_page(root, args.page)
+    except TraceError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    print(_format_trace_result(result))
     return 0
 
 
@@ -1901,6 +1931,8 @@ def _add_vault_arg(parser: argparse.ArgumentParser, *, role: str) -> None:
                      "engine (graphify is repo-anchored).",
             "candidates": "Triage candidate pages under this vault's wiki/, "
                           "instead of the repo's.",
+            "trace": "Trace provenance under this vault's wiki/ → sources → "
+                     "raw/, instead of the repo's.",
             "watch": "Watch agent session stores and maintain this vault "
                      "(sync → synthesize → build) when sessions finish.",
             "install-automation": "Write automation status and schedulers "
@@ -2351,6 +2383,19 @@ def build_parser() -> argparse.ArgumentParser:
     qry.add_argument("--depth", type=int, default=3, help="BFS traversal depth (default: 3)")
     qry.add_argument("--budget", type=int, default=2000, help="Max output tokens (default: 2000)")
     qry.set_defaults(func=cmd_query)
+
+    # trace — downward provenance (#122)
+    trc = sub.add_parser(
+        "trace",
+        help="Print downward provenance: wiki page → source summaries → raw",
+    )
+    trc.add_argument(
+        "page",
+        metavar="PAGE",
+        help="Vault-relative wiki path (wiki/entities/Foo.md) or page name/stem",
+    )
+    _add_vault_arg(trc, role="trace")
+    trc.set_defaults(func=cmd_trace)
 
     # version
     ver = sub.add_parser("version", help="Print version")

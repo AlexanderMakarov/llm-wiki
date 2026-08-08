@@ -337,13 +337,15 @@ python3 -m llmwiki lint --wiki-dir ~/another-wiki
 
 ### Rules
 
-16 structural rules (all deterministic — no LLM): `frontmatter_completeness`, `frontmatter_validity`, `link_integrity`, `orphan_detection`, `content_freshness`, `duplicate_detection`, `index_sync`, `contradiction_detection`, `claim_verification`, `summary_accuracy`, `stale_candidates`, `tags_topics_convention`, `stale_reference_detection`, `frontmatter_count_consistency`, `tools_consistency`, `stub_source_pages`.
+17 structural rules (all deterministic — no LLM): `frontmatter_completeness`, `frontmatter_validity`, `link_integrity`, `orphan_detection`, `content_freshness`, `duplicate_detection`, `index_sync`, `contradiction_detection`, `claim_verification`, `summary_accuracy`, `stale_candidates`, `tags_topics_convention`, `stale_reference_detection`, `frontmatter_count_consistency`, `tools_consistency`, `stub_source_pages`, `provenance_integrity`.
 
 `contradiction_detection`, `claim_verification`, and `summary_accuracy` used to hide behind `--include-llm` and advertise an LLM callback that was never wired. As of #72 they always run as structural checks: non-filler `## Contradictions` sections, entity/concept claims without sources, and empty `summary:` frontmatter. Filler bodies like `None identified.`, `None detected.`, and multi-sentence `None identified. …` elaborations are not findings (unless the section also contains an *unnegated* affirmative conflict cue such as `Contradicts earlier…`). Cues that appear only inside negation (`does not conflict with prior…`, `no claims that conflict…`) stay filler (#86).
 
 `orphan_detection` counts inbound `[[wikilinks]]` and catalog markdown links (`[title](path.md)` that resolve to a wiki page), so pages listed only from `index.md` are not orphans. `link_integrity` resolves targets case- and punctuation-insensitively (`[[LLM-Wiki]]` → `llm-wiki.md`) but does not do substring matching.
 
 `stub_source_pages` (#24) flags pages under `wiki/sources/` whose body is machine-generated filler — a pending sentinel (`<!-- llmwiki-pending: … -->`) or the dummy backend's `Auto-synthesized from session` body. Those sources still count as unsynthesized backlog; refill them with `llmwiki synth` on a real backend.
+
+`provenance_integrity` (#122) emits an **error** for each broken downward hop on pages that already carry `sources:` and/or `source_file:` — missing source-summary pages or missing raw files. Pages without those fields are skipped. Repair is guided by `doctor` (#110); this rule only reports.
 
 `stale_reference_detection` (#303 / #87) flags living pages (entities, concepts, …) whose dated claim about a target predates that target's `last_updated`. Pages under `wiki/sources/` and pages with frontmatter `type: source` are skipped — they are dated session records and cannot be "un-staled" without rewriting history.
 
@@ -648,6 +650,49 @@ python3 -m llmwiki query "Flutter mobile" --depth 2 --budget 1000
 | `--budget N` | Max output tokens. Default: `2000`. |
 
 Requires Graphify (`pip install llm-notebook[graph]`). Run `llmwiki graph` first to build the graph.
+
+---
+
+## `trace` — print downward provenance to raw transcripts (#122)
+
+Walk a wiki page’s encoded chain to its source summaries and raw files. Uses only frontmatter (`sources:`, `source_file:`) — no body excerpts. Missing hops are marked; the walk still succeeds.
+
+```bash
+python3 -m llmwiki trace Demo --vault /path/to/vault
+python3 -m llmwiki trace wiki/entities/Demo.md --vault /path/to/vault
+```
+
+### Positional
+
+| Arg | What |
+|---|---|
+| `PAGE` | Vault-relative wiki path (`wiki/entities/Foo.md`) or a resolvable page name/stem under `wiki/`. |
+
+### Flags
+
+| Flag | What |
+|---|---|
+| `--vault PATH` | Trace under this vault (reads `wiki/` + `raw/`). Without it, uses `config.json` `vault.default_path` or the repo demo content. |
+
+### Expected output
+
+One line per hop: `role`, title, location; missing hops append ` (missing)`. A page with no provenance prints the page line plus `(no further provenance)`.
+
+```
+page    Demo  wiki/entities/Demo.md
+source  Kickoff session  wiki/sources/kickoff.md
+raw     Kickoff transcript  raw/sessions/2026-01-01T12-00-demo-kickoff.md
+```
+
+### Exit codes
+
+| Code | Meaning |
+|---|---|
+| `0` | Walk completed (including chains with missing hops). |
+| `1` | Starting page could not be resolved (or locator unsafe / empty). |
+| `2` | Configured `--vault` / default vault path is unusable. |
+
+Guided repair of broken hops will live under `doctor` (#110); this command only prints the chain.
 
 ---
 

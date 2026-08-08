@@ -10,6 +10,13 @@ How to upgrade between `llmwiki` releases.  Most releases are drop-in (`pip inst
 
 The canonical per-release detail is [CHANGELOG.md](https://github.com/Pratiyush/llm-wiki/blob/master/CHANGELOG.md) — this guide focuses on "what might break".
 
+## Unreleased — trace provenance + lint `provenance_integrity` (#122)
+
+- **New CLI: `llmwiki trace <page>`.** Prints the downward provenance chain from a wiki page to its source summaries and raw files (`sources:` / `source_file:` only). Missing hops are labelled; the walk still exits 0 unless the starting page cannot be resolved. See `docs/reference/cli.md` → `## trace`.
+- **New lint rule `provenance_integrity` (errors).** After upgrading, `llmwiki lint` (and `llmwiki all`) may report **new errors** on pages whose `sources:` slugs or `source_file:` paths no longer resolve. Pages with no provenance fields are unchanged. The rule only reports — it does not prune or rewrite frontmatter. Guided repair ships with `doctor` (#110); until then, fix pointers by hand or leave the findings if the targets are truly gone.
+- **Site Sources links.** Session and document pages turn provenance Sources into clickable links: built HTML when the hop compiled, otherwise the raw (or site copy) in a new tab with a “(raw)” mark. Topic pages list graph evidence under a collapsible **Sources** section (Sessions / Documents), not a separate frontmatter provenance panel. Rebuild with `llmwiki build` to see them.
+- **No new MCP tool.** Agents that need the chain should call `llmwiki trace` (or read frontmatter via existing wiki tools). Do not expect a `wiki_trace` MCP entry.
+
 ## Unreleased — entity-type taxonomy dropped, `project` page kind, one search tool (#102)
 
 Four breaking changes ship together. Three need nothing from you; the fourth is the only one with a data decision, and it is optional.

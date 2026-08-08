@@ -18,6 +18,7 @@ from __future__ import annotations
 import html
 import json
 import re
+import shutil
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
@@ -25,6 +26,11 @@ from typing import Any
 
 from llmwiki._frontmatter import parse_frontmatter
 from llmwiki.render.data import write_js_sidecar
+from llmwiki.trace import (
+    build_source_file_index,
+    format_sources_html,
+    provenance_links_for_raw,
+)
 
 # Path-safe segment — same alphabet as build._safe_slug (#405). Files
 # whose relative path contains any other segment are skipped (they
@@ -422,6 +428,8 @@ def render_document_pages(
     nav_builder: Callable[[str], str],
     page_foot: Callable[[str], str],
     breadcrumbs_bar: Callable[..., str],
+    vault: Path | None = None,
+    source_file_index: dict[str, Path] | None = None,
 ) -> list[Path]:
     """Write one HTML page per raw doc file under ``site/documents/``.
 
@@ -430,8 +438,14 @@ def render_document_pages(
     :func:`write_documents_tree`). ``nav_builder(link_prefix)`` must return
     the nav with the Raw item active — document pages live under the Raw
     tree browser.
+
+    Pass ``source_file_index`` from :func:`llmwiki.trace.build_source_file_index`
+    when rendering many documents in one build (built once per batch).
     """
     written: list[Path] = []
+    index = source_file_index
+    if vault is not None and index is None:
+        index = build_source_file_index(vault)
     for f in files:
         prefix = "../" * f.depth
         crumbs = [("Home", "index.html")]
@@ -439,6 +453,20 @@ def render_document_pages(
             crumbs.append((f.rel.parts[0], ""))
         crumbs.append((clean_chunk_title(f.title) if len(f.rel.parts) == 1
                        else f.rel.stem, ""))
+        sources_block = ""
+        if vault is not None:
+            raw_rel = f"raw/docs/{f.rel.as_posix()}"
+            exclude = f.out_rel
+            # Top-level project folder when nested under raw/docs/<proj>/…
+            project = f.rel.parts[0] if len(f.rel.parts) > 1 else ""
+            links = provenance_links_for_raw(
+                vault,
+                raw_rel,
+                project=project,
+                exclude_href=exclude,
+                index=index,
+            )
+            sources_block = format_sources_html(links, link_prefix=prefix)
         body = f"""<main id="main-content">
 <section class="section doctree-section">
   <div class="container">
@@ -446,7 +474,7 @@ def render_document_pages(
     <div class="doctree-layout">
       {render_sidebar_mount(active_rel=f.rel, link_prefix=prefix)}
       <article class="article doc-article">
-        {md_to_html(f.body)}
+        {sources_block}{md_to_html(f.body)}
       </article>
     </div>
   </div>
@@ -467,4 +495,11 @@ def render_document_pages(
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text(page, encoding="utf-8")
         written.append(out_path)
+        # Sibling .md copy for FR2 (raw) Sources fallback when exclude_href
+        # is this page's HTML — mirrors session site/sources/… copies.
+        md_dest = out_path.with_suffix(".md")
+        try:
+            shutil.copy2(f.path, md_dest)
+        except OSError:
+            pass
     return written

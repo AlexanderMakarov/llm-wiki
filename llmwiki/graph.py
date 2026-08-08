@@ -121,10 +121,14 @@ def _compute_site_url(text: str, rel_parts: tuple[str, ...],
             # under documents/. Splitting it on raw/sessions/ used to raise
             # and return None, so those pages got no link at all.
             if "raw/docs/" in sf:
+                # Match raw_docs_site.RawDocFile.out_rel: documents/{rel}.html
+                # where rel is the path under raw/docs/ with .md stripped —
+                # never documents/{project}/… for flat files (project is
+                # unrelated to the on-disk tree).
                 rel = sf.split("raw/docs/", 1)[1].removesuffix(".md")
-                if "/" in rel:
-                    return f"documents/{rel}.html"
-                return f"documents/{project}/{rel}.html" if project else None
+                if not rel or ".." in Path(rel).parts:
+                    return None
+                return f"documents/{rel}.html"
             try:
                 rel = sf.split("raw/sessions/", 1)[1]
             except IndexError:

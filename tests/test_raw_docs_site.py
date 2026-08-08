@@ -148,6 +148,9 @@ def test_document_pages_use_mount_not_inline_tree(docs_dir: Path, tmp_path: Path
     assert 'data-active-rel="runbook/runbook-01.md"' in page
     assert "doctree-loading" in page
     assert "Body text." in page
+    # Sibling .md copy for FR2 (raw) Sources fallback (#122).
+    assert (out / "documents" / "runbook" / "runbook-01.md").is_file()
+    assert (out / "documents" / "standalone.md").is_file()
     # Must NOT inline every document link (that was the 350 MB blow-up).
     assert "runbook-02.html" not in page
     assert "standalone.html" not in page

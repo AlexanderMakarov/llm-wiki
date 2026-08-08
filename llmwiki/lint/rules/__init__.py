@@ -19,6 +19,7 @@ Post-v1.0 rules:
   14. frontmatter_count_consistency  (v1.2 · issues.md #2)
   15. tools_consistency              (v1.2 · issues.md #4)
   16. stub_source_pages              (#24)
+  17. provenance_integrity           (#122)
 
 Import order matters — every per-rule module's top-level ``@register``
 decorator runs at import time and inserts its rule into the
@@ -59,6 +60,7 @@ from llmwiki.lint.rules.frontmatter_validity import FrontmatterValidity  # noqa:
 from llmwiki.lint.rules.index_sync import IndexSync  # noqa: F401
 from llmwiki.lint.rules.link_integrity import LinkIntegrity  # noqa: F401
 from llmwiki.lint.rules.orphan_detection import OrphanDetection  # noqa: F401
+from llmwiki.lint.rules.provenance_integrity import ProvenanceIntegrity  # noqa: F401
 from llmwiki.lint.rules.stale_candidates import StaleCandidates  # noqa: F401
 from llmwiki.lint.rules.stale_reference_detection import StaleReferenceDetection  # noqa: F401
 from llmwiki.lint.rules.stub_source_pages import StubSourcePages  # noqa: F401

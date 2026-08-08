@@ -102,6 +102,37 @@ def synth_pipeline_shape_ok(synth: Any) -> bool:
     return isinstance(pipeline.get("rows"), list)
 
 
+def pipeline_rows_missing_on_disk(synth: Any) -> bool:
+    """Return True when persisted pipeline rows need an #81 ``on_disk`` backfill.
+
+    Home reads ``pipeline.rows[*].on_disk`` (not ``estimate.source_pages_*``).
+    Pre-#81 snapshots have valid shape but omit the key — JS coerces missing to
+    0. Also treat empty ``rows`` as stale when ``estimate.source_pages_on_disk``
+    is already > 0 (disk has pages the snapshot never attributed).
+    """
+    if not isinstance(synth, dict):
+        return False
+    pipeline = synth.get("pipeline")
+    if not isinstance(pipeline, dict):
+        return False
+    rows = pipeline.get("rows")
+    if not isinstance(rows, list):
+        return False
+    if not rows:
+        estimate = synth.get("estimate")
+        if not isinstance(estimate, dict):
+            return False
+        try:
+            pages = int(estimate.get("source_pages_on_disk") or 0)
+        except (TypeError, ValueError):
+            pages = 0
+        return pages > 0
+    for row in rows:
+        if isinstance(row, dict) and "on_disk" not in row:
+            return True
+    return False
+
+
 class IncompatibleStateError(RuntimeError):
     """A sync cannot safely reconcile with the on-disk state file.
 

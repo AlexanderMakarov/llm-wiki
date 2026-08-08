@@ -25,6 +25,7 @@ from llmwiki.lint.rules import (
     IndexSync,
     LinkIntegrity,
     OrphanDetection,
+    ProvenanceIntegrity,
     StaleCandidates,
     SummaryAccuracy,
     _normalise_tool_counts_keys,
@@ -44,15 +45,16 @@ def _mk_page(meta: dict, body: str) -> dict:
 # ─── Registry ──────────────────────────────────────────────────────────
 
 
-def test_all_16_rules_registered():
+def test_all_17_rules_registered():
     # 10 v1.0 + stale_candidates (v1.1 #51)
     # + tags_topics_convention (G-16 · #302) + stale_reference_detection (G-17 · #303)
     # + frontmatter_count_consistency (issues.md #2)
     # + tools_consistency (issues.md #4)
     # + stub_source_pages (#24)
+    # + provenance_integrity (#122)
     # cache_tier_consistency removed (cache_tiers module deleted)
     # entity_consistency removed (#102 — entity-type taxonomy dropped)
-    assert len(REGISTRY) == 16
+    assert len(REGISTRY) == 17
 
 
 def test_registered_rule_names():
@@ -73,6 +75,7 @@ def test_registered_rule_names():
         "frontmatter_count_consistency", # issues.md #2
         "tools_consistency",             # issues.md #4
         "stub_source_pages",             # #24
+        "provenance_integrity",          # #122
     }
     assert set(REGISTRY.keys()) == expected
 
@@ -1048,3 +1051,112 @@ def test_tools_consistency_unit_normalise_tool_counts_keys():
     assert _normalise_tool_counts_keys({"Read": 1}) == {"Read"}
     assert _normalise_tool_counts_keys('{"Read": 1, "Write": 2}') == {"Read", "Write"}
     assert _normalise_tool_counts_keys(42) == set()
+
+
+# ─── provenance_integrity (#122) ─────────────────────────────────────
+
+
+def _prov_vault(tmp_path: Path) -> Path:
+    vault = tmp_path / "vault"
+    (vault / "wiki").mkdir(parents=True)
+    (vault / "raw" / "sessions").mkdir(parents=True)
+    return vault
+
+
+def test_provenance_integrity_silent_on_clean_chain(tmp_path: Path):
+    vault = _prov_vault(tmp_path)
+    (vault / "raw" / "sessions" / "good.md").write_text(
+        "---\ntitle: Raw\n---\n\nx\n", encoding="utf-8"
+    )
+    src = vault / "wiki" / "sources" / "good.md"
+    src.parent.mkdir(parents=True)
+    src.write_text(
+        "---\ntitle: Good\ntype: source\n"
+        "source_file: raw/sessions/good.md\n---\n\n## Summary\nok\n",
+        encoding="utf-8",
+    )
+    ent = vault / "wiki" / "entities" / "Demo.md"
+    ent.parent.mkdir(parents=True)
+    ent.write_text(
+        "---\ntitle: Demo\ntype: entity\nsources: [good]\n---\n\n# Demo\n",
+        encoding="utf-8",
+    )
+    pages = load_pages(vault / "wiki")
+    issues = ProvenanceIntegrity().run(pages)
+    assert issues == []
+
+
+def test_provenance_integrity_flags_missing_source_slug(tmp_path: Path):
+    vault = _prov_vault(tmp_path)
+    ent = vault / "wiki" / "entities" / "Orphan.md"
+    ent.parent.mkdir(parents=True)
+    ent.write_text(
+        "---\ntitle: Orphan\ntype: entity\nsources: [gone-slug]\n---\n\n# Orphan\n",
+        encoding="utf-8",
+    )
+    pages = load_pages(vault / "wiki")
+    issues = ProvenanceIntegrity().run(pages)
+    assert len(issues) == 1
+    assert issues[0]["rule"] == "provenance_integrity"
+    assert issues[0]["severity"] == "error"
+    assert issues[0]["page"] == "entities/Orphan.md"
+    assert "gone-slug" in issues[0]["message"]
+    assert "doctor" in issues[0]["message"]
+    assert "#110" in issues[0]["message"]
+
+
+def test_provenance_integrity_flags_missing_raw(tmp_path: Path):
+    vault = _prov_vault(tmp_path)
+    src = vault / "wiki" / "sources" / "dangling.md"
+    src.parent.mkdir(parents=True)
+    src.write_text(
+        "---\ntitle: Dangling\ntype: source\n"
+        "source_file: raw/sessions/does-not-exist.md\n---\n\n## Summary\nx\n",
+        encoding="utf-8",
+    )
+    pages = load_pages(vault / "wiki")
+    issues = ProvenanceIntegrity().run(pages)
+    assert len(issues) == 1
+    assert issues[0]["severity"] == "error"
+    assert "does-not-exist.md" in issues[0]["message"]
+    assert "raw" in issues[0]["message"]
+
+
+def test_provenance_integrity_one_issue_per_broken_hop(tmp_path: Path):
+    vault = _prov_vault(tmp_path)
+    ent = vault / "wiki" / "entities" / "Mixed.md"
+    ent.parent.mkdir(parents=True)
+    ent.write_text(
+        "---\ntitle: Mixed\ntype: entity\n"
+        "sources: [gone-a, gone-b]\n---\n\n# Mixed\n",
+        encoding="utf-8",
+    )
+    pages = load_pages(vault / "wiki")
+    issues = ProvenanceIntegrity().run(pages)
+    assert len(issues) == 2
+    msgs = {i["message"] for i in issues}
+    assert any("gone-a" in m for m in msgs)
+    assert any("gone-b" in m for m in msgs)
+
+
+def test_provenance_integrity_skips_pages_without_provenance(tmp_path: Path):
+    vault = _prov_vault(tmp_path)
+    bare = vault / "wiki" / "entities" / "Bare.md"
+    bare.parent.mkdir(parents=True)
+    bare.write_text(
+        "---\ntitle: Bare\ntype: entity\n---\n\n# Bare\n",
+        encoding="utf-8",
+    )
+    pages = load_pages(vault / "wiki")
+    assert ProvenanceIntegrity().run(pages) == []
+
+
+def test_provenance_integrity_noop_without_vault_path():
+    """_mk_page fixtures lack a real wiki/ path — rule must stay silent."""
+    pages = {
+        "entities/Foo.md": _mk_page(
+            {"title": "Foo", "type": "entity", "sources": ["x"]},
+            "",
+        ),
+    }
+    assert ProvenanceIntegrity().run(pages) == []
