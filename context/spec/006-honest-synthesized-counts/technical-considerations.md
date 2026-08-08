@@ -58,7 +58,7 @@ Do not change cost lines, New/Breakdown, eligibility notes, or Candidates pre-ru
 
 ### Home Widget (`llmwiki/render/js.py`)
 
-- Caption stays eligible sources: `Eligible sources: Raw → To synthesize → Synthesized (by agent). Handled by shell commands.`
+- Caption stays eligible sources: `Eligible sources: Raw → To synthesize → Synthesized (by agent). On disk can exceed Raw (filtered/orphan pages). Handled by shell commands.`
 - Five columns: Source | Raw | To synthesize | Synthesized | On disk.
 - Stubs / Other rows: Raw / To synthesize / Synthesized render as muted "—"; On disk is numeric. Total On disk sums the file column (including stubs/other).
 - **Remove** the under-table `sourcePagesNote` / "Source pages (current state): …" block.

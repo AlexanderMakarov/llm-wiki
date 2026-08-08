@@ -38,6 +38,7 @@ def test_state_widget_js_has_pipeline_table_and_collapsibles():
     assert "To synthesize" in js.JS
     assert (
         "Eligible sources: Raw → To synthesize → Synthesized (by agent). "
+        "On disk can exceed Raw (filtered/orphan pages). "
         "Handled by shell commands."
     ) in js.JS
     assert 'aria-label="Eligible sources"' in js.JS

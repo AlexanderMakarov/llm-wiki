@@ -229,7 +229,7 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
 
     var tableHtml =
       '<div class="state-table-wrap" tabindex="0" role="region" aria-label="Eligible sources">' +
-      '<p class="muted">Eligible sources: Raw → To synthesize → Synthesized (by agent). Handled by shell commands.</p>' +
+      '<p class="muted">Eligible sources: Raw → To synthesize → Synthesized (by agent). On disk can exceed Raw (filtered/orphan pages). Handled by shell commands.</p>' +
       '<table class="state-pipeline-table">' +
       "<thead><tr><th>Source</th><th>Raw</th><th>To synthesize</th><th>Synthesized</th><th>On disk</th></tr></thead>" +
       "<tbody>" + bodyRows + "</tbody>" + footHtml + "</table></div>";
