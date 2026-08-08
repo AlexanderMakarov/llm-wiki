@@ -55,7 +55,7 @@ def test_sessions_index_renders_table(page: Page, base_url: str) -> None:
 def test_graph_page_loads_canvas(page: Page, base_url: str) -> None:
     """Canvas + vis-network behaviour varies by engine. Smoke checks
     that the canvas is at least attached + has nonzero size — full
-    graph render uses CDN-loaded vis-network which has its own engine
+    graph render uses vendored vis-network which has its own engine
     quirks."""
     resp = page.request.get(f"{base_url}/graph.html")
     if resp.status >= 400:

@@ -24,6 +24,7 @@ from llmwiki.graph import (
     write_html,
     write_json,
 )
+from llmwiki.render.graph_viewer import GRAPH_VIEWER_JS
 
 # ─── Fixtures ──────────────────────────────────────────────────────────
 
@@ -168,11 +169,11 @@ def test_template_has_search_input():
 
 
 def test_template_has_click_to_navigate_handler():
-    # #328: template now opens `node.site_url` (precomputed), not a
-    # client-side rewrite. Nodes with site_url=None trigger a tooltip.
-    assert "window.open(node.site_url" in HTML_TEMPLATE
-    assert "noopener" in HTML_TEMPLATE
-    assert "_flashNoSiteTooltip" in HTML_TEMPLATE
+    # #328: viewer opens `node.site_url` (precomputed), not a client-side
+    # rewrite. Nodes with site_url=None trigger a tooltip.
+    assert "window.open(node.site_url" in GRAPH_VIEWER_JS
+    assert "noopener" in GRAPH_VIEWER_JS
+    assert "_flashNoSiteTooltip" in GRAPH_VIEWER_JS
 
 
 def test_template_has_stats_overlay():
@@ -185,7 +186,7 @@ def test_template_has_stats_overlay():
 
 def test_template_has_cluster_toggle():
     assert 'id="cluster-toggle"' in HTML_TEMPLATE
-    assert "network.cluster(" in HTML_TEMPLATE
+    assert "network.cluster(" in GRAPH_VIEWER_JS
 
 
 def test_template_has_theme_toggle_and_localstorage(tmp_path: Path):
@@ -220,12 +221,15 @@ def test_template_uses_css_vars_for_theme():
 def test_template_has_orphan_highlighting():
     # Orphan nodes get --g-orphan as border color and borderWidth: 3
     assert "--g-orphan" in HTML_TEMPLATE
-    assert "isOrphan" in HTML_TEMPLATE
+    assert "isOrphan" in GRAPH_VIEWER_JS
 
 
 def test_template_has_offline_fallback_hook():
     assert 'id="offline-notice"' in HTML_TEMPLATE
-    assert "typeof vis === 'undefined'" in HTML_TEMPLATE
+    assert "typeof vis === 'undefined'" in GRAPH_VIEWER_JS
+    assert "__llmwikiShowGraphOfflineNotice" in HTML_TEMPLATE
+    assert 'onerror="__llmwikiShowGraphOfflineNotice()"' in HTML_TEMPLATE
+    assert "__llmwikiGraphViewerLoaded" in GRAPH_VIEWER_JS
 
 
 def test_template_has_legend():
@@ -235,8 +239,13 @@ def test_template_has_legend():
         assert kind in HTML_TEMPLATE
 
 
-def test_template_uses_vis_network_cdn():
-    assert "vis-network" in HTML_TEMPLATE
+def test_template_uses_local_vis_network_script():
+    assert 'src="vis-network.min.js"' in HTML_TEMPLATE
+    assert "unpkg.com/vis-network/" not in HTML_TEMPLATE
+
+
+def test_template_references_external_viewer_js():
+    assert 'src="graph-viewer.js"' in HTML_TEMPLATE
 
 
 # ─── write_html / write_json ──────────────────────────────────────────
@@ -253,6 +262,15 @@ def test_write_html_injects_graph_json(tmp_path: Path, seeded_graph):
     assert '"Bar"' in text
 
 
+def test_write_html_emits_vis_network_vendor(tmp_path: Path, seeded_graph):
+    out = tmp_path / "g.html"
+    write_html(seeded_graph, out)
+    vendor = out.parent / "vis-network.min.js"
+    assert vendor.is_file()
+    assert vendor.stat().st_size > 0
+    assert 'src="vis-network.min.js"' in out.read_text(encoding="utf-8")
+
+
 def test_write_html_escapes_closing_script_tag(tmp_path: Path):
     # Defensive: a malicious label containing </script> must not
     # break out of the embedded payload.
@@ -267,15 +285,16 @@ def test_write_html_escapes_closing_script_tag(tmp_path: Path):
     out = tmp_path / "g.html"
     write_html(g, out)
     text = out.read_text(encoding="utf-8")
-    # Five real </script> tags exist in the rendered output now: the
-    # #477 pre-paint inline block in <head>, the CDN loader, the
-    # search-index globals that come with the shared palette markup
-    # (#20 — the nav's search button needs the dialog it opens), the
-    # site script.js loader (#456 — graph isn't a dead end anymore),
-    # and the main inline graph script. A sixth would mean the
-    # </script> inside the label injected out of the payload — catch
-    # that.
-    assert text.count("</script>") == 5
+    # Eight real </script> tags exist in the rendered output now: the
+    # #477 pre-paint inline block in <head>, the offline-notice helper,
+    # the vendored vis-network loader, the search-index globals that come
+    # with the shared palette markup (#20 — the nav's search button needs
+    # the dialog it opens), the site script.js loader (#456 — graph isn't
+    # a dead end anymore), the inline GRAPH stub, the graph-viewer.js
+    # loader (#127), and the post-viewer load watchdog (#127).
+    # A ninth would mean the </script> inside the label injected out of
+    # the payload — catch that.
+    assert text.count("</script>") == 8
     # And the escaped form should be present inside the JSON payload.
     assert "<\\/script>" in text
 
@@ -297,7 +316,10 @@ def test_copy_to_site_writes_graph_html(tmp_path: Path, seeded_graph):
     assert out is not None
     assert out == site / "graph.html"
     assert out.is_file()
-    assert "vis-network" in out.read_text(encoding="utf-8")
+    assert 'src="vis-network.min.js"' in out.read_text(encoding="utf-8")
+    vendor = site / "vis-network.min.js"
+    assert vendor.is_file()
+    assert vendor.stat().st_size > 0
 
 
 def test_copy_to_site_returns_none_for_empty_wiki(tmp_path: Path):
@@ -361,25 +383,16 @@ def test_wikilink_with_alias_pipe_is_parsed(tmp_path: Path, monkeypatch):
 def test_html_template_escapes_user_html():
     # The stats panel uses escapeHtml() when rendering node IDs so a
     # title like "<script>" can't inject.
-    assert "escapeHtml" in HTML_TEMPLATE
-    assert "&amp;" in HTML_TEMPLATE  # part of the escape table
+    assert "escapeHtml" in GRAPH_VIEWER_JS
+    assert "&amp;" in GRAPH_VIEWER_JS  # part of the escape table
 
 
-def test_html_template_size_budget():
-    # Guardrail — the template shouldn't balloon. 43.5 kB covers the #54
-    # topic-first viewer (dual-mode node/edge build, contextual side panel,
-    # double-click + edge-click handlers), kind-aware clustering (per-kind
-    # legend, cluster labels, on-page error reporting) and the side panel's
-    # kind + freshness rows (#108 FR7).
-    #
-    # This is the ceiling, not headroom: the inline <script> is most of the
-    # template and every byte ships on every graph page load. #108 FR7 took
-    # the last of the space this number can be stretched to cover — the next
-    # feature that needs room must move the <script> to an external .js asset
-    # instead of raising it again. #127 tracks that work.
-    assert len(HTML_TEMPLATE) < 43_500, (
-        f"HTML template is {len(HTML_TEMPLATE)} bytes — split the <script> "
-        "into an external .js asset (#127) instead of raising this"
+def test_graph_viewer_js_size_budget():
+    # Guardrail — viewer logic lives in graph-viewer.js (#127). 32 kB is
+    # the CI ceiling; every byte ships on every graph page load.
+    assert len(GRAPH_VIEWER_JS) < 32_000, (
+        f"graph-viewer.js is {len(GRAPH_VIEWER_JS)} bytes — trim or split "
+        "the viewer (#127) instead of raising this"
     )
 
 
