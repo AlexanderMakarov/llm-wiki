@@ -42,6 +42,11 @@ Frontmatter only — a project page whose body you have written by hand is not o
 
 `site/search-index.json` (and its sharded siblings) no longer carry an `entity_type` key per entry or an `entity_type` bucket under `_facets`. The shipped site reads neither, so the browsable site is unaffected; only a client that reads the index file directly needs to adjust. `docs/reference/reader-api.md` drops the matching invariant from its data-model list, and the surviving invariants renumbered — cite an invariant by the field it constrains, not by its position in the list.
 
+## Unreleased — honest already-synthesized counts (#81)
+
+- **`synth --estimate` Corpus / Already synthesized count eligible sources**, not pages under `wiki/sources/`. Expect `Corpus: N eligible sources (S sessions + D docs)` and `Already synthesized: N of M eligible sources`. A separate `Source pages (current state): T on disk (Sess sessions + D docs + X stubs)` line is the on-disk `.md` file mix (not unique `source_file` keys) — it may differ from Already synthesized when bookkeeping and disk diverge.
+- **Home Pipeline** captions the input table **Eligible sources** (not Files layer as the unit of the input columns) and adds an **On disk** column (Stubs row; Other when needed). There is no under-table Source pages note.
+
 ## Unreleased — honest estimate Candidates (#113)
 
 - **`synth --estimate` Candidates is pre-run state**, not a preview of what the next run will harvest. The block is labelled `Candidates (pre-run state):` and notes that pending sources are not yet reflected.
@@ -70,7 +75,7 @@ Frontmatter only — a project page whose body you have written by hand is not o
 
 ## Unreleased — candidates review gate on Home / Analytics (#84)
 
-- **Home** shows a **Files layer** table (Raw → To synthesize → Synthesized; shell-handled) and a **Knowledge layer** table (Candidates → Entities / Concepts; review via agent Commands). Candidates = pending `wiki/candidates/` pages (not the estimate `Candidates (pre-run state):` harvestable figure). Entities/Concepts = trusted pages after promote.
+- **Home** shows an **Eligible sources** table (Raw → To synthesize → Synthesized → On disk; shell-handled input counts — see #81) and a **Knowledge layer** table (Candidates → Entities / Concepts; review via agent Commands). Candidates = pending `wiki/candidates/` pages (not the estimate `Candidates (pre-run state):` harvestable figure). Entities/Concepts = trusted pages after promote.
 - **Every `llmwiki build`** recounts pending/stale candidates and trusted entity/concept counts into `synth.pipeline` before copying `llmwiki-state.js` into `site/` — promote/discard no longer leave a stale Home table until the next estimate.
 - **Commands** agent rows are one-shot: `cd <llm-wiki-checkout> && claude|agent|codex "/wiki-candidates"` (Purpose: review/edit candidates). Slash commands load from the checkout, not the vault. Gemini CLI stays adapter-scaffold — no Home launcher.
 - **Analytics** adds a **Candidates to review** section (pending + stale). Zeros are intentional: a synthesize-only vault still shows that the review gate exists.

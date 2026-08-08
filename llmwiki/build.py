@@ -2922,6 +2922,9 @@ def _ensure_synth_pipeline_snapshot(
     if synth_pipeline_shape_ok(synth):
         return False
     print("  backfilling synth.pipeline for Home State widget...")
+    # refresh_synth_pending also merges source_pages_on_disk / source_page_stubs
+    # onto synth.estimate (#81) so Home gets current-state page counts without
+    # waiting for an explicit synth --estimate.
     refresh_synth_pending(
         raw_dir=raw_dir / "sessions",
         docs_dir=raw_dir / "docs",

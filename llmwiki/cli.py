@@ -126,7 +126,11 @@ from llmwiki.synth.pipeline import (
     resolve_include_subagents,
     synthesize_new_sessions,
 )
-from llmwiki.synth.reporting import print_candidates_pre_run, print_synth_run_summary
+from llmwiki.synth.reporting import (
+    print_candidates_pre_run,
+    print_source_pages_current_state,
+    print_synth_run_summary,
+)
 from llmwiki.topics_consolidate import (
     cache_path,
     parse_and_cache,
@@ -1581,6 +1585,11 @@ def _synthesize_estimate(args: argparse.Namespace | None = None) -> int:
             "new_docs": int(report.get("new_docs", 0) or 0),
             "incremental_usd": float(report.get("incremental_usd", 0.0) or 0.0),
             "full_force_usd": float(report.get("full_force_usd", 0.0) or 0.0),
+            "source_pages_on_disk": int(report.get("source_pages_on_disk", 0) or 0),
+            "source_page_stubs": int(report.get("source_page_stubs", 0) or 0),
+            "source_pages_sessions": int(report.get("source_pages_sessions", 0) or 0),
+            "source_pages_docs": int(report.get("source_pages_docs", 0) or 0),
+            "source_pages_other": int(report.get("source_pages_other", 0) or 0),
             "warnings": [str(w) for w in report.get("warnings", []) if str(w).strip()],
         }
         return s
@@ -1593,8 +1602,22 @@ def _synthesize_estimate(args: argparse.Namespace | None = None) -> int:
     if pricing_fallback_msg:
         print(f"warning: {pricing_fallback_msg}")
 
-    print(f"Corpus:                {report['corpus']:>6} sources (sessions + docs)")
-    print(f"Already synthesized:   {report['synthesized']:>6} pages in wiki/sources/")
+    print(
+        f"Corpus:                {report['corpus']:>6} eligible sources "
+        f"({report.get('corpus_sessions', 0)} sessions + "
+        f"{report.get('corpus_docs', 0)} docs)"
+    )
+    print(
+        f"Already synthesized:   {report['synthesized']:>6} of "
+        f"{report['corpus']} eligible sources"
+    )
+    print_source_pages_current_state(
+        pages_on_disk=int(report.get("source_pages_on_disk", 0) or 0),
+        sessions=int(report.get("source_pages_sessions", 0) or 0),
+        docs=int(report.get("source_pages_docs", 0) or 0),
+        stubs=int(report.get("source_page_stubs", 0) or 0),
+        other=int(report.get("source_pages_other", 0) or 0),
+    )
     print(f"New since last run:    {report['new']:>6}")
     print(
         f"Breakdown: sessions {report.get('new_sessions', 0)} new / "

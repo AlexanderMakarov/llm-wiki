@@ -22,6 +22,7 @@ import logging
 import re
 import sys
 import threading
+from collections.abc import Mapping
 from concurrent.futures import (
     CancelledError,
     Future,
@@ -418,13 +419,62 @@ def _save_state(state: dict[str, float], state_file: Path | None = None) -> None
     _update_unified_state(_mut, target)
 
 
-def _scan_source_page_keys(wiki_sources_dir: Path | None = None) -> tuple[set[str], set[str]]:
-    """``source_file`` keys claimed by wiki/sources pages, split real vs stub."""
+def _tags_contain(meta: dict[str, Any], needle: str) -> bool:
+    """True when frontmatter ``tags`` contains ``needle`` (case-insensitive)."""
+    tags = meta.get("tags", [])
+    if isinstance(tags, str):
+        return needle.lower() in tags.lower()
+    if isinstance(tags, list):
+        return any(needle.lower() == str(t).strip().lower() for t in tags)
+    return False
+
+
+def scan_wiki_sources_disk(
+    wiki_sources_dir: Path | None = None,
+    *,
+    agent_by_source: Mapping[str, tuple[str, str]] | None = None,
+) -> dict[str, Any]:
+    """One walk of ``wiki/sources/``: matching keys + on-disk file category counts.
+
+    Counts every ``.md`` file except ``_``-prefixed names (folder context stubs).
+    Categories are exclusive per file:
+
+    * **stubs** — body is machine-generated filler (#24)
+    * **sessions** — non-stub with ``source_file`` under ``raw/sessions/``
+    * **docs** — non-stub with ``source_file`` under ``raw/docs/`` or ``raw-doc`` in tags
+    * **other** — remaining non-stub pages
+
+    Session pages are attributed per agent via ``agent_by_source`` (keyed by
+    ``source_file``, e.g. ``raw/sessions/…`` → ``(label, css)`` from the raw
+    session). Synth pages do not carry ``agent:``, so page frontmatter alone
+    mis-buckets Cursor/OpenClaw when the model name looks like Claude. When
+    a page's ``source_file`` has no raw match (orphaned), fall back to
+    ``detect_agent_label`` on the page meta.
+
+    Matching keys still come from ``source_file`` claims (stubs already exclude
+    reals when the same key appears on both). File totals are **file counts**,
+    not unique ``source_file`` keys.
+    """
     roots = wiki_sources_dir or WIKI_SOURCES
     real: set[str] = set()
-    stub: set[str] = set()
+    stub_keys: set[str] = set()
+    files_by_agent: dict[str, dict[str, Any]] = {}
+    files_stubs = 0
+    files_sessions = 0
+    files_docs = 0
+    files_other = 0
+    files_total = 0
     if not roots.is_dir():
-        return real, stub
+        return {
+            "real_keys": real,
+            "stub_keys": stub_keys,
+            "files_total": 0,
+            "files_stubs": 0,
+            "files_sessions": 0,
+            "files_docs": 0,
+            "files_other": 0,
+            "files_by_agent": files_by_agent,
+        }
     for p in roots.rglob("*.md"):
         if p.name.startswith("_"):
             continue
@@ -432,16 +482,56 @@ def _scan_source_page_keys(wiki_sources_dir: Path | None = None) -> tuple[set[st
             text = p.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
             continue
+        files_total += 1
         meta, body = parse_frontmatter(text)
+        if not isinstance(meta, dict):
+            meta = {}
         src = str(meta.get("source_file", "")).strip()
-        if not src:
+        is_stub = _is_stub_page(body)
+        if src:
+            (stub_keys if is_stub else real).add(src)
+        if is_stub:
+            files_stubs += 1
             continue
-        (stub if _is_stub_page(body) else real).add(src)
+        src_norm = src.replace("\\", "/")
+        if src_norm.startswith("raw/sessions/"):
+            joined = None
+            if agent_by_source:
+                joined = agent_by_source.get(src_norm) or agent_by_source.get(src)
+            if joined is not None:
+                label, css = joined
+            else:
+                label, css = detect_agent_label(meta)
+            bucket = files_by_agent.get(label)
+            if bucket is None:
+                bucket = {"count": 0, "css": css}
+                files_by_agent[label] = bucket
+            bucket["count"] += 1
+            files_sessions += 1
+        elif src_norm.startswith("raw/docs/") or _tags_contain(meta, "raw-doc"):
+            files_docs += 1
+        else:
+            files_other += 1
     # Re-synthesis can file the real page under a different name than the stub
     # it replaces, leaving both on disk claiming the same source. One real page
     # is enough for that source to be synthesized; the stale stub is the lint
     # rule's business, not the backlog's.
-    return real, stub - real
+    return {
+        "real_keys": real,
+        "stub_keys": stub_keys - real,
+        "files_total": files_total,
+        "files_stubs": files_stubs,
+        "files_sessions": files_sessions,
+        "files_docs": files_docs,
+        "files_other": files_other,
+        "files_by_agent": files_by_agent,
+    }
+
+
+def _scan_source_page_keys(wiki_sources_dir: Path | None = None) -> tuple[set[str], set[str]]:
+    """``source_file`` keys claimed by wiki/sources pages, split real vs stub."""
+    scan = scan_wiki_sources_disk(wiki_sources_dir)
+    return set(scan["real_keys"]), set(scan["stub_keys"])
 
 
 def discover_synth_source_keys(wiki_sources_dir: Path | None = None) -> set[str]:
@@ -572,6 +662,13 @@ def refresh_synth_pending(
         },
         wiki_dir,
     )
+    # Current-state wiki/sources file counts (#81) — reuse the estimate
+    # report's scan_wiki_sources_disk pass (no second filesystem walk).
+    pages_on_disk = int(report.get("source_pages_on_disk", 0) or 0)
+    page_stubs = int(report.get("source_page_stubs", 0) or 0)
+    page_sessions = int(report.get("source_pages_sessions", 0) or 0)
+    page_docs = int(report.get("source_pages_docs", 0) or 0)
+    page_other = int(report.get("source_pages_other", 0) or 0)
 
     def _mut(s: dict[str, Any]) -> dict[str, Any]:
         synth = s.setdefault("synth", {})
@@ -579,6 +676,15 @@ def refresh_synth_pending(
         synth["pending_total"] = len(pending)
         synth["pending_updated_at"] = stamp
         synth["pipeline"] = pipeline
+        estimate = synth.get("estimate")
+        if not isinstance(estimate, dict):
+            estimate = {}
+        estimate["source_pages_on_disk"] = pages_on_disk
+        estimate["source_page_stubs"] = page_stubs
+        estimate["source_pages_sessions"] = page_sessions
+        estimate["source_pages_docs"] = page_docs
+        estimate["source_pages_other"] = page_other
+        synth["estimate"] = estimate
         return s
 
     _update_unified_state(_mut, _resolve_state_file(state_file))
@@ -587,6 +693,11 @@ def refresh_synth_pending(
         "pending": pending,
         "pipeline": pipeline,
         "updated_at": stamp,
+        "source_pages_on_disk": pages_on_disk,
+        "source_page_stubs": page_stubs,
+        "source_pages_sessions": page_sessions,
+        "source_pages_docs": page_docs,
+        "source_pages_other": page_other,
     }
 
 
