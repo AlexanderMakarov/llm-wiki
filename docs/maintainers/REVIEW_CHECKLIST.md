@@ -4,8 +4,7 @@
 > canonical bar — apply it every time so the review bar stays
 > consistent across reviewers.
 
-Copy the relevant section into the PR review comment. Run the
-`/review-pr <URL>` slash command for a guided pass.
+Copy the relevant section into the PR review comment. Local delivery flows (`/implement-feature`, `/fix-bug`) run one independent review pass that loads this checklist plus the companion maintainer docs against the branch diff before push — the coding agent chooses its own most suitable review skill or command for that pass.
 
 ## Meta
 

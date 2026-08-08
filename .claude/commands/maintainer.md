@@ -38,15 +38,15 @@ so every subsequent action in the session has the full bar in mind.
    - Any PR stuck > 7 days (escalation triggers per TRIAGE.md)
 
 4. **Offer the three sub-commands** — remind the user that they can:
-   - Run `/review-pr <N>` to review a specific PR against the
-     canonical checklist
+   - Apply `docs/maintainers/REVIEW_CHECKLIST.md` when reviewing a
+     stuck or open PR
    - Run `/triage-issue <N>` to apply the label taxonomy to an
      untriaged issue
    - Run `/release <version>` to walk the release process for a
      new version bump
 
 5. **Recommend the next action** — based on the status:
-   - If there's a stuck PR, recommend `/review-pr`
+   - If there's a stuck PR, recommend a human checklist review of it
    - If there's an untriaged issue, recommend `/triage-issue`
    - If the CHANGELOG has a coherent batch of `## [Unreleased]`
      entries and no blockers, recommend `/release`
@@ -80,9 +80,10 @@ Current state:
 - Master CI: 3/3 green
 
 Recommended next action:
-  1. `/review-pr 91` — stuck for 3 days, above the 7-day escalation
-     threshold? No, but it's the oldest open PR
+  1. Review PR #91 against `docs/maintainers/REVIEW_CHECKLIST.md`
+     — stuck for 3 days, above the 7-day escalation threshold? No,
+     but it's the oldest open PR
   2. `/triage-issue 87` — first of 7 untriaged issues
 
-> /review-pr 91
+> (opens PR #91 and walks REVIEW_CHECKLIST.md)
 ```

@@ -11,12 +11,12 @@ what it does, what it runs under the hood, and a realistic invocation
 example. Use these inside **Claude Code** — Codex CLI picks the same
 files up via `install-skills`.
 
-Summary of **21 commands in 5 groups**:
+Summary of **20 commands in 5 groups**:
 
 | Group | Commands |
 |---|---|
 | **Wiki pipeline** (15) | `/wiki-init` `/wiki-sync` `/wiki-ingest` `/wiki-query` `/wiki-update` `/wiki-lint` `/wiki-candidates` `/wiki-synth` `/wiki-synthesize` `/wiki-graph` `/wiki-reflect` `/wiki-build` `/wiki-serve` `/wiki-export-marp` `/wiki-all` |
-| **Governance / maintainer** (4) | `/maintainer` `/release` `/review-pr` `/triage-issue` |
+| **Governance / maintainer** (3) | `/maintainer` `/release` `/triage-issue` |
 | **AWOS delivery** (2) | `/fix-bug` `/implement-feature` |
 
 ---
@@ -382,20 +382,6 @@ Walk through the llmwiki release process step by step — tag, changelog
 cut, GitHub Release note, PyPI publish (via OIDC), Homebrew tap bump,
 Docker image push.
 
-### `/review-pr`
-
-Run the canonical llmwiki code review against a pull request and post
-findings.
-
-**Example:**
-
-```
-/review-pr 265
-```
-
-Reads the PR via `gh pr view` + `gh pr diff`, applies the review
-checklist from `docs/maintainers/`, posts inline comments.
-
 ### `/triage-issue`
 
 Apply labels + milestone + priority to a new GitHub issue using the
@@ -415,7 +401,7 @@ Hired via `/awos-hire` (#114). Decisions and stages live under `context/product/
 
 ### `/fix-bug`
 
-Drive one bug (GitHub Issue) through diagnosis → scoped fix + regression test → verify → PR. Subagent-heavy; keeps the owning AWOS spec honest when behavior changes.
+Drive one bug (GitHub Issue) through diagnosis → scoped fix + regression test → verify → independent review (full write-up printed in chat) → PR. Subagent-heavy; keeps the owning AWOS spec honest when behavior changes.
 
 **Example:**
 
@@ -425,7 +411,7 @@ Drive one bug (GitHub Issue) through diagnosis → scoped fix + regression test 
 
 ### `/implement-feature`
 
-Drive one feature (spec / issue) through implement → test → review → PR per `context/product/delivery-flow.md`.
+Drive one feature (spec / issue) through implement → test → independent review (full write-up printed in chat) → PR per `context/product/delivery-flow.md`.
 
 **Example:**
 

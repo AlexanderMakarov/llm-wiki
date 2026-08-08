@@ -19,17 +19,17 @@ first — it has the short version of what this folder covers in detail.
 
 ## Slash commands
 
-Four Claude Code slash commands automate the common maintainer ops.
+Three Claude Code slash commands automate the common maintainer ops.
 Each command loads the relevant governance doc as context and runs a
 guided pass:
 
-- `/review-pr <pr-number-or-url>` — applies `REVIEW_CHECKLIST.md`
-  and posts findings inline
 - `/triage-issue <issue-number>` — applies `TRIAGE.md` label
   taxonomy to a new issue
 - `/release <version>` — walks `RELEASE_PROCESS.md` step by step
 - `/maintainer` — meta-skill that loads every doc in this folder
-  and makes the other three commands available
+  and surfaces triage / release next actions
+
+Code review uses `REVIEW_CHECKLIST.md` directly (or via the single independent review stage inside `/implement-feature` / `/fix-bug`, where the coding agent picks its own most suitable review skill or command).
 
 See `.claude/commands/` in the repo root for the source of each
 command.
