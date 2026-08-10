@@ -14,8 +14,8 @@ Unlike `/wiki-lint` (which finds structural issues) or `/wiki-query` (which answ
 
 3. **Look for:**
    - **Recurring themes** that span multiple sources — candidates for new concept pages
-   - **Implicit comparisons** where two entities or concepts keep appearing together — candidates for `wiki/comparisons/` pages
-   - **Unanswered questions** mentioned in multiple sources — candidates for `wiki/questions/` pages
+   - **Implicit comparisons** where two entities or concepts keep appearing together — candidates for a `wiki/concepts/` page that names the trade-off
+   - **Unanswered questions** mentioned in multiple sources — candidates for a `wiki/syntheses/` page once answered
    - **Evolution over time** — how has the user's thinking on a concept changed?
    - **Contradiction clusters** — pages that disagree on the same point
    - **Orphan themes** — interesting ideas mentioned once then never again
