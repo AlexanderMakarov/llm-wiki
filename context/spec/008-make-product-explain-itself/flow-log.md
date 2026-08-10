@@ -97,3 +97,191 @@ Authoring decisions:
 Recommendations table in `tasks.md` records: the general-purpose fallback, the packaging-specialist gap (compensated by a distribution-content test), the Slice 9 backend prerequisite, and the errors-only CI gate leaving three warning-severity rules unenforced.
 
 Next: commit specs, then `/awos:implement`.
+
+## implement — Stage A (Slices 1–6) — 2026-08-09
+
+All six Stage A slices complete. Tests **3958 passed / 48 skipped** (baseline at branch start 3887/48; +71 net new tests). `ruff check llmwiki tests scripts` clean. `llmwiki build --vault demo` exits 0, 136 HTML files.
+
+Dispatched one subagent per slice rather than per task (deviation from `/awos:implement` step 3): slice tasks here are inseparable file-level operations, and splitting a `git mv` from its dependent path updates across two cold agents would leave the repo broken between calls.
+
+Slice outcomes:
+
+1. **Demo → `demo/`** — all moves via `git mv` (history preserved). `tests/fixtures/demo/` moved too: `demo/wiki/sources/demo-alpha|demo-beta` are pre-synthesized pages for exactly those sessions. `examples/demo-wiki/README.md` → `demo/README.md`, rewritten as a demo-vault README. `pages.yml`, `ci.yml`, `agents-e2e.yml` all repointed to `--vault demo`.
+2. **Repo-root guard** — `.llmwiki-source-checkout` marker + `llmwiki/source_checkout.py`. Guard sits at the single shared `apply_default_vault` border in `cli.py`, covering the 8 vault-writing subcommands (`init`, `sync`, `synth`, `synthesize`, `add`, `build`, `all`, `watch`). Read-only and in-place commands deliberately unguarded. 19 tests.
+3. **Dead assets** — `docs/videos/` removed; `specs/` → `docs/maintainers/surfaces/`. All three demo-recording scripts KEPT (none existed to produce the deleted videos) but two were repaired: they ran bare vault commands that Slice 2's guard now refuses.
+4. **Page-shape docs** — description-paragraph line removed from `CLAUDE.md` and `AGENTS.md` templates. Source-page `## Summary` deliberately preserved (it is a real produced field). Follow-up issue **#137** filed.
+5. **Kind hard-cut** — `question`/`comparison` removed from `PAGE_KINDS` and all real call sites. 27 tests.
+6. **Migration** — `migrate-page-kinds` subcommand, 25 tests. DECLINED.md entries dated 2026-08-09. Follow-up issue **#138** filed.
+
+### Findings that changed the plan
+
+- **SPIKE RESOLVED: wikilink resolution is name-based, not path-based.** `llmwiki/wikilinks.py` parses `[[Target]]` to a bare name; every consumer keys by filename stem. Folder determines only kind and site URL. The migration therefore does NOT rewrite inbound links. Risk row in `technical-considerations.md` updated with the evidence. Proven by `tests/test_page_kinds.py::test_wikilink_resolution_survives_a_move_between_wiki_folders`.
+- **`render_vs_section` is dead code** (`llmwiki/build.py:2470`) — zero production callers, only tests. The "Model comparisons" surface the tech spec ordered preserved never renders in any build; proven by an identical 136-file build-output diff before/after Slice 5. It also hardcodes `REPO_ROOT / "wiki" / "entities"`, now nonexistent. Filed as **#138**. The tech spec's "must survive untouched — a test must pin that it still renders" was wrong: reading a function does not establish that anything calls it.
+- **3 of the 14 tech-spec call sites were false positives**: `graphify_bridge.py:409` (graphify's `suggest_questions`), `categories.py:50` and `docs_pages.py:645` (already only surviving folders), `lint/rules/duplicate_detection.py` (English word). Editing them blindly would have broken graphify.
+- **`.gitignore` had three instances of the unanchored-pattern trap.** `raw/`, `usage/` and the collapsed `/wiki/` all match at any depth unless anchored; unfixed, each would have silently excluded part of `demo/` from git.
+- **`llmwiki build --vault demo` mutates tracked `demo/usage/daily.json`** (MCP read reclassification). Idempotent, but CI leaves a dirty checkout after every build — matters if Slice 10 adds a no-diff assertion.
+- **VERIFIED: plain `llmwiki lint` exits 0 even with error-severity findings** (probe: 2 errors, exit 0). Only `--fail-on-errors` exits non-zero (exit 1). Slice 10's gate MUST pass that flag or it enforces nothing.
+- **`lychee.toml` excludes `wiki/` and `raw/` as bare substrings**, which now also match `demo/wiki/` link targets; `link-check.yml` scans `docs/**` and `examples/**`, neither reaching `demo/**`. Demo link-checking is a hole with two independent causes — Slice 10 / R9.
+- Migration deliberately lives in the package, not `scripts/`: `pyproject.toml` packages only `llmwiki*`, so a `scripts/`-based migration cannot run from a pip or Homebrew install — exactly the users it exists for.
+- Migration needed one scope addition for R7: `reindex` cannot clear a catalog section whose backing folder was pruned, so the migration unlists those bullets itself. Without it the migrated vault reported 2 `index_sync` errors.
+- Pre-existing, left alone: `docs/modes/agent/{index,backend}.md` have a broken `../UPGRADING.md` link (needs one more `../`).
+
+Next: `/awos:verify` scoped to Stage A criteria (R1, R6, R7) — must NOT mark the whole spec Completed.
+
+## verify — Stage A (R1, R6, R7, R11-A) — 2026-08-09
+
+Verdict: **Stage A PASS.** Spec Status deliberately left `Approved`, NOT `Completed` — Stages B (R2–R5) and C (R8–R10) are not implemented. Gates after verification: ruff clean; pytest **3958 passed / 0 failed / 48 skipped**; `build --vault demo` exit 0.
+
+Per-criterion evidence:
+
+- **R1** — `demo/` holds `raw/`, `wiki/`, `usage/`, `README.md`; `demo/site/` ignored (confirmed via `git check-ignore demo/site/index.html`); state files ignored; nothing untracked under `demo/`. Bare `python3 -m llmwiki init` with `config.json` moved aside → **exit 2**, actionable message naming `--vault` and `demo`, and no `raw/`/`wiki/`/`site/` created. `docs/videos/` gone; `specs/` gone, 10 files under `docs/maintainers/surfaces/`. `context/` present. Top-level listing shows `demo/` plainly.
+- **R6** — Both agent templates now run `# Name` → `## Key Facts` with no description line. Issue **#137** confirmed OPEN via `gh`.
+- **R7** — `PAGE_KINDS == ('source','entity','concept','project','synthesis')`. Only residual references are `migrate_page_kinds.REMOVED_FOLDERS` (required by the migration) and graphify's unrelated `suggest_questions`. Two dated `## 2026-08-09` DECLINED entries present. Migration exercised on a realistic scratch vault (demo copy + a legacy `type: question` page): migrate exit 0, page relocated to `wiki/concepts/` with filename intact, folder pruned, `build` exit 0, `lint --fail-on-errors` exit 0, `link_integrity` clean.
+- **R11 Stage A** — R1/R6/R7 delivered together; repo buildable at slice granularity.
+
+### Three gaps found by verification and fixed in-stage
+
+1. **R6 reason was not actually recorded.** The spec deferred the description idea but never stated *why*. Out-of-Scope now records the reason (no step produces one; the prompt mandates bullets with no preamble; a harvested stub is a title plus an empty facts heading) and links #137.
+2. **`synthesis` was not honestly described.** Nothing said saved answers are agent/human-authored. `CLAUDE.md` and `AGENTS.md` now state "no pipeline step generates one."
+3. **`context/` was not named as contributor tooling.** `CONTRIBUTING.md` said AWOS tooling generally; it now names `context/` explicitly and states it is never shipped and never appears in a user's vault.
+
+### Honest qualification on one criterion
+
+R7's "the site's auto-generated model comparison view still works and is unaffected" is satisfied **only in the sense that nothing regressed**. `render_vs_section` has zero production callers, so the surface never rendered in any build — before or after. Proven by an identical 136-file build-output diff. Filed as **#138**. It must not be reported as a working feature.
+
+### Pre-existing defect confirmed, NOT introduced by Stage A — blocks Slice 10
+
+The demo vault is **not lint-clean and never has been**. Measured against a reconstruction of the `origin/main` demo (its own `wiki/` plus the `examples/demo-*` seeding `pages.yml` performed):
+
+| Rule | origin/main | Stage A |
+| --- | --- | --- |
+| `index_sync` (error) | 16 | 16 |
+| `provenance_integrity` (error) | 4 | **0** |
+| `link_integrity` (warning) | 32 | 32 |
+| `content_freshness` (warning) | 9 | 9 |
+
+Stage A removed 4 errors and introduced none. CI never caught this because `wiki-checks.yml` runs on a dead `master` trigger and calls a nonexistent `eval` subcommand. **Slice 9 must produce a clean demo before Slice 10 turns the gate on** — the existing task order already reflects this.
+
+Read-only probe of the operator's live vault: no `wiki/questions/`, no `wiki/comparisons/`, zero pages carrying a removed `type:`. The migration is a no-op there.
+
+Next: Step 8 — user smoke confirm, then single independent local review.
+
+## scope change — R12 added (remove the server) — 2026-08-10
+
+User directive during Stage A smoke confirm: cut the HTTP server entirely, static site only. Chosen option: **remove `serve`, move candidate review to the CLI.**
+
+Investigation that shaped it:
+
+- `llmwiki/serve.py` (225 lines) is not only a static file server — it hosts `POST /api/candidates`, the backend for the #97 review UI. `candidates.html` posts batch decisions to it. A naive delete would remove a shipped feature this epic's README rewrite is meant to advertise.
+- **The removal is not lossy.** `llmwiki candidates apply --actions JSON` already accepts the identical batch shape; its own help text reads "same shape as POST /api/candidates". The CLI is a complete substitute.
+- **The built site is already file-openable by design**: it loads data via `<script src="llmwiki-state.js">` (a `.js`, not a fetched `.json`) and uses no `type="module"` scripts. The only same-origin `fetch` is `candidates.html` → `/api/candidates`, removed by this work. A `highlight.js` CDN tag remains — syntax highlighting alone needs network. Pre-existing, out of scope, recorded not fixed.
+- **`serve` was never the idle cost.** It is foreground-only. Probing the operator's machine found 5 live `llmwiki.mcp` processes and one monthly `synthesize` cron entry — those are what persist. User elected to ignore the MCP processes.
+- That cron runs `python -m llmwiki synthesize` from the repo root with no `--vault`; it survives Stage A's guard only because the gitignored primary `config.json` sets `vault.default_path`. That config is now load-bearing.
+
+**Placement: R12 leads Stage C, not a new stage.** It edits README, `CLAUDE.md`, `AGENTS.md`, the agent kit, and `docs/**` — exactly the files Stage C already rewrites. A separate stage would edit all of them twice. Ordering it first means the documents written afterwards describe a static-file product. A naming collision with the tech spec's existing "Stage A2" sub-section was resolved by naming the new section **Stage C0**.
+
+Spec updates: `functional-spec.md` gains R12 and an amended R11 staging bullet; `technical-considerations.md` gains a Stage C0 section, an approach line, and a risk row; `tasks.md` gains Slice 11 and renumbers the old 11-14 to 12-15, with cross-references corrected.
+
+**Stage A is unaffected** — it stays as verified, and goes to review and PR as-is.
+
+## scope addition — vendor highlight.js (R12) — 2026-08-10
+
+User directive: load highlight.js from local files, as vis-network already is. Folded into R12 rather than made separate — same requirement (a site that works with nothing running and nothing fetched).
+
+Verified specifics:
+
+- The site pulls **three** files from `cdn.jsdelivr.net`, not one: `highlight.min.js`, `github.min.css`, `github-dark.min.css`, all pinned 11.9.0. After vendoring these, the built site references no `https://` script or stylesheet at all.
+- Precedent to copy exactly (#127): `llmwiki/vendor/vis-network.min.js` + `llmwiki/vendor/NOTICE`; constant `VIS_NETWORK_VENDOR` at `graph.py:31`; `shutil.copy2` into the output at `graph.py:681`; relative `<script src>` with an `onerror` offline notice at `graph.py:540`. NOTICE records project / version / license / homepage / source / repository.
+- **`pyproject.toml:109` packages `vendor/*.js` only.** Adding CSS without extending that glob would ship the JS and silently drop both themes — visible only to pip/Homebrew users, never in a source checkout. Task added, and the distribution-content test must assert it.
+- Degrading to unstyled code blocks is acceptable if highlighting fails; no offline notice needed (unlike the graph, which is unusable without its library).
+
+Also resolved this turn: the operator could not find `demo/site/index.html` because `demo/` exists only on the uncommitted feature branch inside the worktree — the primary checkout is on `main` and has no `demo/`. Build output confirmed present at `<worktree>/demo/site/index.html` (180 files).
+
+## implement — Slice 9 (demo corpus) — 2026-08-10
+
+User directive during smoke confirm: demo sessions are dummy; use real anonymised sessions (OpenClaw, not Gemini); projects are 4 months old and leak `/home/4ellendger`; graph too small with no entities or concepts; demo build must run `synth` via `claude -p` with haiku.
+
+**Privacy position taken and stated.** The live vault holds 1177 sessions: 1098 contain absolute `/home` paths, 142 contain `/mnt` paths, 163 distinct non-public hostnames appear. The `#56` redactor covers usernames and secret-token shapes only — not hostnames, neighbouring project names, or private infrastructure named in prose. The demo is published publicly and irreversibly, so a bulk export was rejected in favour of a **curated, auditable subset**.
+
+**False alarm resolved:** the `/home/4ellendger` the operator saw appears **only** in `demo/site/` (gitignored, rebuilt by CI). Source files carry zero. The `#56` redactor stores `USER` and *restores* the real username at build time for local viewing; CI builds under its own user. `origin/main` has zero occurrences under `wiki`/`examples`.
+
+**`scripts/curate_demo_sessions.py`** (new) — deterministic, re-runnable, auditable:
+
+- Selects by topic keyword score (CLI / site / adapters) so the corpus covers what the product does; prefers top-level sessions over subagent children (111 of 210 llm-wiki candidates were subagents, which read as fragments).
+- Scrubs: username literals, `/home`, `/Users`, `/mnt` paths, emails, and every non-public hostname (allowlist of public docs/package hosts). Session ids replaced with a deterministic digest, `cwd` and `source_file` neutralised.
+- **Scrubs neighbouring projects automatically** — every project in the source vault not being imported becomes `other-project` — plus `--scrub-term` for private infrastructure a pattern cannot infer.
+- Rewrites dates: two historical, the rest inside the last two weeks.
+- Names files by dominant topic plus a short digest, because real transcript titles are empty and the original names carried agent/subagent identifiers.
+- `--audit` re-scans the written corpus and is run automatically after every write.
+
+**Findings during curation:**
+
+- OpenClaw sessions live in project `openclaw-main`, not `llm-wiki` — so the demo now carries **two** projects and **two** adapters (9 `llm-wiki` claude_code + 3 `openclaw-main` openclaw), which also fixes the "projects all 4 months old" complaint.
+- First pass leaked `kbbuilder`, and context showed private infrastructure names (`openclaw-gateway`, `9router`, `openclaw-media-convert`). Generic project scrubbing plus `--scrub-term` added; second pass is clean.
+- The audit's own placeholder `internal.example.com` failed its allowlist anchor (`example\.com` did not match a subdomain). Fixed to `([A-Za-z0-9-]+\.)*example\.com`.
+
+**Verification:** script audit 0 findings; independent scan for `4ellendger`, `innerhdd`, `openclaw-obsidian`, `inecobank`, `kbbuilder`, `9router`, `openclaw-gateway`, `media-convert`, `cursor-34a82` — all 0 hits. Remaining hosts: `internal.example.com` (58), `github.com` (25), `localhost` (3). Remaining absolute paths: `/home/USER` only.
+
+**Synth backend:** worktree `config.json` (gitignored) set to `synthesis.backend = "claude"` — note the accepted value is `claude`, **not** `claude_cli`; the latter silently falls back to dummy with a warning. Model `haiku`, concurrency 4. `synth --check` reports `claude-cli / Available: True`. Estimate: **$0.18** for the 12 new sources.
+
+## implement — Slice 9 (synth + candidate review) — 2026-08-10
+
+Ran the real loop on the demo: `synth` (claude -p, haiku) → candidate review → `build` → `graph` → `lint`.
+
+**Synth:** 16 sources, 224s, 142,646 tokens, **$0.53**. Note the `--estimate` figure was $0.18 because it counted only the 12 new sessions and not the 4 docs — the estimate undercounts a mixed corpus.
+
+**Removed the fabricated content** #109 indicts: 8 hand-authored entity/concept pages (`ClaudeSonnet4.md` opened with exactly the prose paragraph the issue names, and all 8 were about AI models, not llmwiki) plus 12 source pages and 3 project pages for the fictional `demo-alpha/beta/blog-engine/ml-pipeline/todo-api`.
+
+**Candidate review, actually exercised** via `candidates apply --actions -` (the same CLI path that replaces the review UI under R12 — so this doubles as validation of that decision). At `--min-refs 3` only 1 candidate appeared, so harvested at 1 for 11, then: merged `wikilinks` + `ObsidianWikilinks` into `WikiLinks`, discarded `Hetzner` (unrelated project's hosting), promoted the remaining 8. Zero pending afterwards.
+
+**Promoted page shape verified correct** — `# Name` → `## Key Facts` (attributed bullets) → `## Connections`, no prose intro. This is the shape R6 ratifies.
+
+### Results
+
+| | before | after |
+| --- | --- | --- |
+| graph nodes / edges | 15 / 0 (site), no entities or concepts | **30 / 41** with 6 entities + 2 concepts |
+| broken graph edges | 3 | 4 (all from filed defects) |
+| lint issues | 73 (16 `index_sync` errors) | **2, both warnings** |
+| `lint --fail-on-errors` | exit 1 | **exit 0** |
+| projects | 3 fictional, all ~4 months old | 2 real, dates spread across 2 weeks |
+
+### Two product defects the rebuild exposed — filed
+
+- **#139 — merge records aliases nothing reads.** `candidates.py:818-822` writes `## Aliases` on merge; no resolver consults it (`graph.py`, `wikilinks.py`, `link_integrity.py`, `backlinks.py` all clean on grep). Resolution is by filename stem, so **every merge permanently dangles every existing inbound link** — 3 of the demo's 4 broken edges. Also folded in: `candidates_harvest.py:260` writes the evidence count at harvest time and a merge never recomputes it, so `WikiLinks.md` read "Named by 1 source page(s)" directly above a list of 2.
+- **#140 — `archive/` treated three different ways.** `reindex` catalogs it into `index.md`; `lint/__init__.py:112` deliberately excludes it; `graph` includes it as valid link targets. Consequence: `index_sync` reports its own catalog entries as dead links at **error** severity on a correct vault, which would fail Slice 10's gate for any user who has ever discarded or merged a candidate. Worked around here by deleting `demo/wiki/archive/` and pruning the index with the existing `_prune_index_links` helper.
+
+### Other findings
+
+- `demo/wiki/overview.md` was hand-authored, dated April, described the old demo and linked three deleted projects (the 3 original broken edges). Rewritten to describe the actual demo honestly — that it is real pipeline output, anonymised, two projects, two adapters, and that no page carries a synthesised description because nothing produces one.
+- Remaining 2 lint warnings and 4 broken edges are entirely attributable to #139 and one deliberate discard. Kept rather than papered over: a discarded candidate genuinely leaves its mention dangling, which is real product behaviour.
+- `entities/Karpathy Wiki.md` carries a space, against the documented TitleCase convention. `promote` does not normalise the slug. Not yet filed.
+
+## implement — Slice 9 rebuilt on synthetic sessions — 2026-08-10
+
+**Real transcripts abandoned.** Anonymisation failed three times on three different classes, each caught by a different mechanism and none by the purpose-built scrubber:
+
+1. Structural identifiers (paths, hosts, usernames) — caught by the scrubber.
+2. Unrelated private subject matter (therapy assessment instruments, another project) — caught by `lint`'s broken-wikilink report, because synth had extracted them as subjects with no page.
+3. Personal name, an app name, a channel handle — caught by **the operator**, after both the scrubber and the audit reported clean.
+
+The corpus is public and permanent, so pattern-matching against a space that cannot be enumerated was the wrong bet. User chose authored sessions.
+
+**`scripts/curate_demo_sessions.py` deleted.** Replaced by **`scripts/generate_demo_sessions.py`**: 25 authored transcripts, 7 projects, 4 agents. Deterministic apart from `--today`.
+
+**Three defects in the generator found by operator review, all mine:**
+
+- Emitted an `adapter:` frontmatter field that **nothing reads**. `detect_agent_label` reads `agent:`.
+- Gave every session a `claude-*` model — and the model check in `detect_agent_label` runs **before** the source and tag checks, so all 25 sessions rendered as "Claude" regardless of intent. Now Claude 15 / OpenClaw 4 / Cursor 4 / Codex 2, and Codex sessions run a Codex model.
+- Dates clustered in one week. Now decay across four months (Apr 2 · May 3 · Jun 3 · Jul 8 · Aug 9), one session at 120 days.
+
+**Docs corpus 4 → 70 documents (119 files after the product's chunking)**, ingested from real `docs/` excluding contributor-only `maintainers/` and the `i18n/` translation.
+
+- First attempt used `--project llm-wiki`, which put every file under one top-level folder. `group_documents` treats a shared top-level folder as **chunks of one document**, so Home's "Recent raw documents" showed a single entry with 119 parts. Re-ingested without `--project`: 70 entries.
+- **Filed #141** — `llmwiki add` writes the **absolute** source path into raw frontmatter unredacted, while `sync` redacts the same thing for sessions. 119 files carried the operator's home directory. Invisible in the UI; only a grep finds it. Stripped by hand for the demo.
+
+**Usage fixture regenerated** (`scripts/generate_demo_usage.py`): 82 records over 18 days with realistic misses, so Analytics' zero-hit column reports 23% / 19% / 12% / 14% / 20% instead of 0% everywhere. Reporting tools stay at 0% because they cannot miss. `daily.json` is folded by the product's own `refresh_daily()` rather than maintained separately, so the two cannot drift.
+
+**Spec additions this session:** R12 (remove the server, candidate review moves to the CLI — `candidates apply --actions` already accepts the identical batch shape); R13 (displayed local paths become an explicit `build` input rather than a reversal of import-time redaction, so builds are reproducible). Both land in Stage C, R12 first, because the documents written afterwards must describe the result.
+
+**Synth deliberately not run.** The operator holds that lever — it is the only step that spends money. Corpus is staged and priced at ~$1.57 for 144 sources.

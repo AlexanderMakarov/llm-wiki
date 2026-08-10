@@ -16,7 +16,7 @@ Three sequenced stages on one branch chain, matching R11. Each stage leaves the 
 
 **Stage B — regenerate the demo through the real pipeline.** Add `scripts/refresh_demo.py`, a maintainer-only script that reads git to decide which `docs/` pages changed, drives the existing CLI (`add` / `remove` / `synth` / `build` / `lint`) against `demo/`, and commits nothing itself. Repair `wiki-checks.yml` into a real gate, and repoint `pages.yml` at the demo folder.
 
-**Stage C — explain the result.** Add a page-kind reference, rewrite the README, and move the user-facing agent commands and skills into the installable package behind a new `install-agent-kit` subcommand.
+**Stage C — remove the server, then explain the result.** Delete `serve` and move candidate review to the command line first, so the docs written next describe a static-file product. Then add a page-kind reference, rewrite the README, and move the user-facing agent commands and skills into the installable package behind a new `install-agent-kit` subcommand.
 
 The guiding constraint throughout: **no new runtime dependency, and no new product surface that only makes sense inside this repository.** The refresh script is repo-only and therefore lives in `scripts/`, not in the CLI.
 
@@ -115,6 +115,45 @@ Repairs: trigger on `main`; delete the `eval` step; drop the seeding dance; run 
 
 `pages.yml` loses its entire `init` + copy block. It becomes: checkout → install → `python -m llmwiki build --vault demo --out ./site` → `.nojekyll` → upload → deploy. No AI model, no synth, no seeding. The README links the published URL.
 
+### Stage C0 — Remove the server, move review to the CLI (R12)
+
+`llmwiki/serve.py` (225 lines) is not only a static file server: it hosts `POST /api/candidates`, the backend for the #97 review UI, and `candidates.html` posts batch promote/discard/merge decisions to it.
+
+**Why the removal is not lossy.** `llmwiki candidates apply --actions JSON` already accepts *the same batch action shape* the endpoint consumes — its own help text says "same shape as POST /api/candidates". The command line is therefore a complete functional substitute, not a downgrade. `candidates` also offers `list`, `promote`, `flip-promote`, `merge`, `discard` and `rewrite-key-facts` individually.
+
+**Changes.**
+
+| Area | Change |
+| --- | --- |
+| `llmwiki/serve.py` | Deleted, together with its `serve` subcommand wiring in `cli.py` |
+| `serve.sh`, `serve.bat` | Deleted |
+| `candidates.html` (built page) | Becomes a read-only listing of pending candidates. Instead of controls that cannot work, it states the command to run and — ideally — renders the ready-made `--actions` JSON for the listed candidates so a reviewer can copy it straight into `candidates apply --actions -` |
+| `script.js` / page JS | Drop the `fetch("/api/candidates")` path |
+| Agent kit, docs, README, `CLAUDE.md`, `AGENTS.md` | Every "run the server to view your wiki" instruction becomes "open the site". The `/wiki-serve` slash command and `wiki-serve` skill go |
+| `docs/UPGRADING.md`, `CHANGELOG.md` | Record the removal and what to do instead |
+| Deploy docs | `docs/deploy/*` describe hosting the built output; check each for a local-serve instruction |
+
+**Vendoring the remaining CDN assets.** The site pulls three files from `cdn.jsdelivr.net`: `highlight.min.js` and two themes, `github.min.css` and `github-dark.min.css`, all pinned at 11.9.0. Vendor them exactly as #127 vendored vis-network:
+
+- Pinned copies under `llmwiki/vendor/`, with `llmwiki/vendor/NOTICE` extended to record project, version, license, homepage and upstream source for highlight.js (matching the existing entry's shape).
+- Emitted beside the page that needs them at build time, the way `graph.py:681` does `shutil.copy2(VIS_NETWORK_VENDOR, …)`, and referenced by relative path rather than absolute URL.
+- **`pyproject.toml:109` currently packages `vendor/*.js` only.** It must also carry `vendor/*.css`, or the themes are silently absent from an installed package while the JS ships — a failure that would only appear for pip/Homebrew users, never in a source checkout.
+- Consider the `onerror` offline-notice affordance `graph.py:540` uses; for highlighting, degrading to unstyled code blocks is acceptable and needs no notice.
+
+**Verified prerequisite for "open the file works".** The built site loads its data through `<script src="llmwiki-state.js">` rather than `fetch`, and uses no `type="module"` scripts — both of which would fail under `file://`. So the site is already file-openable by design. The two exceptions found: `candidates.html`'s API call (removed by this stage) and a `highlight.js` tag pointing at `cdn.jsdelivr.net`, which needs network for syntax highlighting only. The CDN dependency is pre-existing and out of scope here; note it rather than fix it.
+
+### Stage C0b — Displayed local paths become a build input (R13)
+
+`restore_local_path` (`llmwiki/convert.py:874`) reverses the username redaction applied at import, and `build.py:1130` and `build.py:1792` call it so project titles and session descriptions show a real path. Three defects follow:
+
+- **Builds are not reproducible.** The same vault renders `/home/<operator>/…` locally and the runner's path in CI. This is why the demo site displayed a username the committed corpus did not contain.
+- **Redaction and its reversal are permanently coupled.** Two functions must agree forever; the code comments on the drift risk itself.
+- **It rewrites prose.** `build.py:1792` applies it to session *descriptions*, so it edits arbitrary text rather than a path field.
+
+**Replacement.** Add a `--local-root` input to `build`. The substituted value is resolved once per run: from the current environment by default, or from the flag when given. `restore_local_path` and its dependence on the convert-time redaction config are removed from the build path. Substitution is restricted to path-shaped values — the `cwd` field — and no longer applied to descriptions.
+
+The demo build and `pages.yml` both pass an explicit fixed string, so published output is identical wherever it is produced.
+
 ### Stage C1 — Page-kind reference (R8)
 
 New `docs/reference/page-kinds.md`. For every surviving kind (`source`, `entity`, `concept`, `project`, `synthesis`, plus the system kinds `navigation` and `context`): what it is for, a real example linked into the rebuilt demo, and a frontmatter field table.
@@ -174,13 +213,14 @@ llmwiki/agent_kit/
 
 | Risk | Severity | Mitigation |
 | --- | --- | --- |
-| Migration moves a page between folders and breaks `[[wikilinks]]` | High | Filenames are preserved, and resolution is name-based rather than path-based. **Verify this explicitly before implementing** — if resolution turns out to be path-based, the migration must rewrite inbound links too. Covered by a dedicated test. |
+| Migration moves a page between folders and breaks `[[wikilinks]]` | Resolved — no longer a risk | **Resolution is name-based, not path-based, so Slice 6's migration must NOT rewrite inbound links — moving the file and keeping its filename is sufficient and complete.** Evidence: `llmwiki/wikilinks.py` parses `[[Target]]` into a bare name with no path handling, and every consumer keys pages by filename stem — `graph.scan_pages` (`pages[p.stem]`), `backlinks._collect_pages` (`out[p.stem]`), `references.build_index` (`_rel_to_slug(rel)`), `lint/rules/link_integrity` (`_page_slug(rel)` = basename), and `topics.topic_kind_lookup` (slug/title lookup). The folder is read only for a page's *kind* and its site URL, never for link resolution. Pinned by `tests/test_page_kinds.py::test_wikilink_resolution_survives_a_move_between_wiki_folders`, which moves a page from `wiki/questions/` to `wiki/concepts/` and asserts the graph edge, the backlink referrer, `link_integrity` and the reference index are all identical before and after, with the referring page untouched. |
 | Deleting `.claude/commands/wiki-*.md` removes commands our own contributors use | Medium | Source of truth becomes `llmwiki/agent_kit/`; `CONTRIBUTING.md` documents `install-agent-kit --dest .claude` for contributors who want them locally. |
 | Publishing breaks when `pages.yml` is repointed | High | Stage B changes the workflow and the demo folder together, and the repaired `wiki-checks.yml` builds the demo on every PR — so a broken demo fails before merge, not after deploy. |
 | Demo refresh needs a synth backend and costs money | Medium | `synth --check` preflight; `--dry-run` shows the work first; incremental selection keeps a routine refresh to the handful of docs that changed. |
 | Moving `specs/` breaks inbound documentation links | Medium | Grep for inbound references as part of the move; the link-check workflow covers the rest. Overlaps #107, which should land first. |
 | Stage A leaves the demo temporarily inconsistent | Medium | `git mv` rather than delete-and-recreate; content is replaced in Stage B, so each stage's tip is buildable. |
 | Hard cut surprises a user who skips the migration | Medium | Pages with a removed type produce a lint error naming `migrate-page-kinds`; documented in `docs/UPGRADING.md` and `CHANGELOG.md`. |
+| Removing `serve` strands a user who relied on the review UI | Medium | `candidates apply --actions` accepts the identical batch format, so no capability is lost. The candidates page states the replacement command, and `docs/UPGRADING.md` records the change. |
 | Errors-only gate lets a warning-severity defect reach the published demo | Medium | Accepted trade-off (amended R4). `link_integrity`, `stub_source_pages` and `duplicate_detection` are warning-severity and so would not fail CI. Mitigated by the refresh script printing the full lint report to the maintainer on every run, and by the follow-up issue for per-vault rule scoping. Lint itself is out of scope for this work. |
 
 ### Known constraint carried from the functional spec

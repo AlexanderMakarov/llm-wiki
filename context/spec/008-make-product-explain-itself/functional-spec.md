@@ -95,7 +95,7 @@ None of these can be fixed independently. A README written against a fabricated 
   - **Acceptance Criteria:**
     - [ ] Knowledge pages keep their current shape: attributed fact bullets under a facts heading, with no synthesised introductory paragraph.
     - [ ] This specification records that a synthesised description was considered and deliberately not adopted, with the reason.
-    - [ ] A follow-up issue exists proposing a description-generating step, so the idea is tracked rather than lost.
+    - [ ] A follow-up issue exists proposing a description-generating step, so the idea is tracked rather than lost — [#137](https://github.com/AlexanderMakarov/llm-wiki/issues/137).
 
 ### R7 — Only page kinds that can be filled are advertised
 
@@ -143,13 +143,37 @@ None of these can be fixed independently. A README written against a fabricated 
     - [ ] The user-facing commands make no reference to paths that only exist inside this repository.
     - [ ] The existing agent-plugin description files are either corrected to match reality or removed. They must not remain in the repository describing an author, a supported language version, and file locations that are all wrong.
 
+### R12 — The wiki is a static site with no server
+
+- **As a** user, **I want** my wiki to be plain files I can open, **so that** nothing has to be running for me to read it and nothing consumes resources when I am not using it.
+  - **Acceptance Criteria:**
+    - [ ] The product no longer ships a command that starts an HTTP server, and the one-click serve helper scripts are gone.
+    - [ ] A built site is fully usable by opening its home page as a file: navigation, project pages, session pages, topic pages, search and the graph all work with nothing running.
+    - [ ] A built site needs no network either. Every script and stylesheet it loads ships with the site, including the code-highlighting library and its light and dark themes. Opening the site offline gives the same result as opening it online.
+    - [ ] Reviewing candidates is possible entirely from the command line, and no review capability is lost — the batch action format the old review page posted is already accepted by the command line.
+    - [ ] The candidates page still lists what is pending and states plainly how to act on it, rather than offering controls that cannot work.
+    - [ ] No document, agent instruction, or built page tells a reader to start a server in order to view their wiki. Every such place says to open the site instead.
+    - [ ] A user who previously started a server is told what to do instead, in the upgrade notes.
+
+### R13 — What the site shows for a local path is an explicit choice
+
+- **As a** maintainer publishing a site, **I want** the paths it displays to be something I chose, **so that** the same knowledge base always produces the same pages no matter who builds it.
+  - **Acceptance Criteria:**
+    - [ ] Building the same knowledge base twice, on two different machines, produces the same displayed paths.
+    - [ ] The value shown in place of a stored home directory is a build-time input: taken from the current run by default, and replaceable with a fixed string.
+    - [ ] The demo and the automated publish both supply that fixed string, so a published page never shows whoever happened to build it.
+    - [ ] The displayed value is no longer worked out by undoing the redaction applied when the session was imported, so the two can no longer disagree.
+    - [ ] Only path-shaped values are substituted. Free prose carried over from a session is left alone.
+    - [ ] A person browsing their own site locally still sees paths they can act on, without extra configuration.
+
 ### R11 — Delivery order
 
 - **As a** reviewer, **I want** the work split so each review is tractable while the dependency order still holds.
   - **Acceptance Criteria:**
     - [ ] Stage A delivers R1, R6 and R7 — repository layout, page body decision, page kinds settled. These decide what the demo can contain.
     - [ ] Stage B delivers R2, R3, R4 and R5 — the rebuilt demo, its regeneration command, its quality gate, and its publication.
-    - [ ] Stage C delivers R8, R9 and R10 — the reference page, the README, and the user-facing command split.
+    - [ ] Stage C also delivers R13 — displayed local paths become an explicit build input — because the demo cannot be published deterministically until it does.
+    - [ ] Stage C delivers R12 first — the server is removed and candidate review moves to the command line — then R8, R9 and R10: the reference page, the README, and the user-facing command split. R12 leads because the documents written afterwards must describe a static-file product.
     - [ ] Each stage builds on the previous one on a single branch chain, preserving the issue's required ordering.
     - [ ] Stage C cites the demo produced in Stage B for its examples.
 
@@ -173,7 +197,7 @@ None of these can be fixed independently. A README written against a fabricated 
 
 ### Out-of-Scope
 
-- **A synthesised description on knowledge pages** — deliberately deferred to a follow-up issue (R6).
+- **A synthesised description on knowledge pages** — considered and deliberately not adopted. No step in llmwiki produces one: the summarising prompt mandates attributed bullets with no preamble, and a newly harvested page is seeded as a title plus an empty facts heading. Adding one would be a new AI-generated field with its own per-page cost and quality bar, so it is deferred to [#137](https://github.com/AlexanderMakarov/llm-wiki/issues/137) rather than folded into this epic (R6).
 - **Producers for open questions and comparisons** — those kinds are being removed instead.
 - **Link-check hygiene as a project (#107)** — a separate ticket that should land first; this work owns only the links in files it changes.
 - **The site's automatically generated model comparison view** — unrelated to the comparisons page kind, left alone.
