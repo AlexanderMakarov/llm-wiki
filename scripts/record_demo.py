@@ -4,8 +4,8 @@ Records a polished walkthrough of the live llmwiki site using
 Playwright's `page.video()` API, then optionally converts the WebM
 to an animated GIF via ffmpeg. The output lives at:
 
-  - ``docs/videos/llmwiki-demo.webm``  (raw recording)
-  - ``docs/demo.gif``                  (README-embeddable GIF)
+  - ``tmp/demo-recording/llmwiki-demo.webm``  (raw recording, gitignored)
+  - ``docs/demo.gif``                         (README-embeddable GIF)
 
 The walkthrough mirrors the manual flow from #248:
 
@@ -41,7 +41,7 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-VIDEO_DIR = REPO_ROOT / "docs" / "videos"
+VIDEO_DIR = REPO_ROOT / "tmp" / "demo-recording"
 GIF_PATH = REPO_ROOT / "docs" / "demo.gif"
 
 

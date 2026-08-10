@@ -7,8 +7,8 @@ emitted UI on every theme/CSS change.
 
 This script:
 
-  1. Spins up the same seeded e2e harness so we always have a known-
-     good corpus to screenshot (no dependency on the user's real
+  1. Builds the committed `demo/` vault so we always screenshot a
+     known-good corpus (no dependency on the user's real
      `~/.claude/projects/`).
   2. Walks a deterministic route through the site with Playwright,
      captures `docs/images/<name>.png` at 1280×800 in the dark theme.
@@ -73,9 +73,10 @@ def _serve(port: int) -> ThreadingHTTPServer:
 
 
 def _build_site() -> None:
-    """Force a fresh build into ./site so we screenshot the latest."""
+    """Force a fresh build of the demo vault into ./site."""
     subprocess.run(
-        [sys.executable, "-m", "llmwiki", "build"],
+        [sys.executable, "-m", "llmwiki", "build",
+         "--vault", "demo", "--out", str(SITE_DIR)],
         cwd=str(REPO_ROOT),
         check=True,
     )
