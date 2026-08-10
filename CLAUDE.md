@@ -21,9 +21,8 @@ wiki/          YOU OWN THIS. LLM-generated pages that summarise, cross-reference
   entities/        People, companies, products (TitleCase.md).
   concepts/        Ideas, frameworks, methods, theories (TitleCase.md).
   projects/        Codebases and work streams, seeded from session metadata (kebab-case slug).
-  syntheses/       Saved query answers (kebab-case slug).
-  comparisons/     Side-by-side diffs of two or more entities/concepts (kebab-case slug). [v0.2+]
-  questions/       First-class open questions with state tracking (kebab-case slug). [v0.2+]
+  syntheses/       Saved query answers (kebab-case slug). Written by an agent or a
+                   person answering a question — no pipeline step generates one.
   archive/         Deprecated / demoted pages preserved for history. [v0.2+]
 
 site/          GENERATED. Static HTML from `python3 -m llmwiki build`. Do not edit by hand.
@@ -118,8 +117,6 @@ last_updated: YYYY-MM-DD
 ---
 
 # Entity Name
-
-One-paragraph description.
 
 ## Key Facts
 - Fact 1

@@ -444,8 +444,6 @@ The wiki follows Karpathy's 3-layer pattern:
    - `entities/` — people, companies, projects, tools (TitleCase)
    - `concepts/` — ideas, patterns, frameworks (TitleCase)
    - `syntheses/` — saved query answers
-   - `comparisons/` — side-by-side diffs
-   - `questions/` — first-class open questions
 3. **Site layer** (`site/` or `https://...`) — generated static HTML
 
 ## Cross-linking

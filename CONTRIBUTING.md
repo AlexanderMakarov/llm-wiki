@@ -88,6 +88,10 @@ docs/                 # user-facing + framework docs
 tests/                # fixtures + snapshot tests
 ```
 
+**`context/` is contributor tooling.** It holds the AWOS product definition, roadmap, and the per-feature specifications and delivery records that drive `/awos:*`. It is not part of the llmwiki product, is not shipped in the package, and never appears in a user's vault.
+
+**The repository root is not a vault.** It carries a `.llmwiki-source-checkout` marker, and the vault-writing subcommands (`init`, `sync`, `synth`, `synthesize`, `add`, `build`, `all`, `watch`) refuse to run against a directory carrying it unless you name a vault — `--vault <path>` on the command line, or `vault.default_path` in your gitignored `config.json`. Use `--vault demo` for the example vault that ships with the repo, and a throwaway path such as `--vault .worktree-vault` for scratch runs. Installed packages carry no marker, so this never affects users.
+
 ## Agent instruction files
 
 This repo is two things at once, and the instruction files split along that seam. Getting the two confused is the most common way an agent goes wrong here.

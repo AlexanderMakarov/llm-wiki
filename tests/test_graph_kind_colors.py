@@ -1,11 +1,11 @@
 """Tests for #108 FR6 — every topic kind gets its own colour in the map.
 
-`projects`, `questions`, `comparisons` and `other` used to have no entry in
-the viewer's `colors` map, so all four fell through to `--g-node-topic` while
-the legend still listed them as separate rows. These tests pin the palette to
-`llmwiki.topics.TOPIC_KIND_FOLDERS` so adding a wiki folder later fails here
-rather than silently losing a colour, and keep red reserved for the two signal
-states (`--g-orphan`, `--g-search-match`).
+A kind the legend lists but the viewer's `colors` map omits falls through to
+`--g-node-topic`, so the row and the node disagree. These tests pin the
+palette to `llmwiki.topics.TOPIC_KIND_FOLDERS` — every kind is coloured, every
+colour the viewer asks for is declared in both themes, no two kinds share one,
+and red stays reserved for the two signal states (`--g-orphan`,
+`--g-search-match`).
 """
 
 from __future__ import annotations
@@ -21,12 +21,6 @@ from llmwiki.topics import KIND_OTHER, TOPIC_KIND_FOLDERS
 
 # Every kind the viewer can label, and therefore must colour.
 KINDS = frozenset(TOPIC_KIND_FOLDERS | {KIND_OTHER})
-NEW_VARS = (
-    "--g-node-projects",
-    "--g-node-questions",
-    "--g-node-comparisons",
-    "--g-node-other",
-)
 
 
 @pytest.fixture
@@ -64,10 +58,12 @@ def _kind_vars(viewer_js: str) -> dict[str, str]:
 
 
 @pytest.mark.parametrize("theme", ["dark", "light"])
-def test_both_theme_blocks_declare_the_new_kind_variables(rendered: str, theme: str):
+def test_both_theme_blocks_declare_every_variable_the_viewer_asks_for(
+    rendered: str, viewer_js: str, theme: str
+):
     declared = _theme_vars(rendered, theme)
-    for var in NEW_VARS:
-        assert var in declared, f"{var} missing from the {theme} theme block"
+    for kind, var in _kind_vars(viewer_js).items():
+        assert var in declared, f"{var} ({kind}) missing from the {theme} theme block"
 
 
 def test_every_kind_has_an_entry_in_the_colors_map(viewer_js: str):

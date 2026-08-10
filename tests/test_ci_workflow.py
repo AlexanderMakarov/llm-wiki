@@ -51,7 +51,7 @@ def test_installs_llmwiki():
 
 def test_seeds_from_demo_sessions():
     text = WORKFLOW.read_text(encoding="utf-8")
-    assert "examples/demo-sessions" in text
+    assert "demo/raw/sessions" in text
 
 
 def test_runs_eval():

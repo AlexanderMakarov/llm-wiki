@@ -33,8 +33,6 @@ function main() {
     concepts: () => cssVar('--g-node-concepts'),
     syntheses: () => cssVar('--g-node-syntheses'),
     projects: () => cssVar('--g-node-projects'),
-    questions: () => cssVar('--g-node-questions'),
-    comparisons: () => cssVar('--g-node-comparisons'),
     other: () => cssVar('--g-node-other'),
     root: () => cssVar('--g-node-root'),
     topic: () => cssVar('--g-node-topic'),
@@ -42,7 +40,6 @@ function main() {
   const orphanColor = () => cssVar('--g-orphan');
   const KIND_LABELS = {
     entities: 'Entities', concepts: 'Concepts', projects: 'Projects',
-    questions: 'Questions', comparisons: 'Comparisons',
     syntheses: 'Syntheses', sources: 'Sources', other: 'Other',
   };
   const kindLabel = k => KIND_LABELS[k] || k;

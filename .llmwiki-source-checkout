@@ -1,0 +1,1 @@
+This directory is the llmwiki source tree, not a knowledge vault: llmwiki commands that would scaffold, ingest, synthesise or build content here stop and ask for `--vault <path>` (the in-repo example vault is `demo/`), so the checkout never fills up with someone's `raw/`, `wiki/` and `site/` working folders.

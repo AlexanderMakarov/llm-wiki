@@ -25,7 +25,8 @@ wiki/          LLM-maintained. Pages you write that summarise and cross-referenc
   entities/        People, companies, products.
   concepts/        Ideas, frameworks, methods.
   projects/        Codebases and work streams (seeded from session metadata).
-  syntheses/       Saved query answers.
+  syntheses/       Saved query answers. Written by an agent or a person answering a
+                   question — no pipeline step generates one.
 
 site/          GENERATED. Static HTML from `python3 -m llmwiki build`. Do not edit.
 ```
@@ -143,8 +144,6 @@ last_updated: YYYY-MM-DD
 ---
 
 # Name
-
-One paragraph.
 
 ## Key Facts
 - Fact 1

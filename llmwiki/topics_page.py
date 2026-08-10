@@ -41,8 +41,6 @@ _KIND_LABELS = {
     "entities": "Entity",
     "concepts": "Concept",
     "projects": "Project",
-    "questions": "Question",
-    "comparisons": "Comparison",
     "syntheses": "Synthesis",
     "sources": "Source",
 }

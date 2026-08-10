@@ -39,7 +39,7 @@ from datetime import date as _date
 from pathlib import Path
 from typing import Any
 
-from llmwiki import REPO_ROOT, __version__, usage
+from llmwiki import REPO_ROOT, __version__, migrate_page_kinds, usage
 from llmwiki.adapters import REGISTRY, discover_adapters
 
 # #v1378-review (#691 follow-up): hoist these re-exports from mid-module
@@ -70,17 +70,15 @@ from llmwiki.candidates_harvest import (
     summarize_backlog,
 )
 from llmwiki.candidates_site import apply_candidate_actions
-from llmwiki.config_schedule import (
-    _load_sessions_config,
-    load_default_vault_path,
-    load_synthesis_backend,
-)
 
 # #691 / #arch-h8: extracted business logic moves out of cli.py.
 # cli.py keeps thin re-export wrappers for back-compat with anyone
 # doing `from llmwiki.cli import cmd_all, cmd_sync_status, ...`.
-from llmwiki.config_schedule import (  # noqa: F401
-    apply_default_vault as _apply_default_vault,
+from llmwiki.config_schedule import (
+    _load_sessions_config,
+    apply_default_vault,
+    load_default_vault_path,
+    load_synthesis_backend,
 )
 from llmwiki.config_schedule import (
     load_schedule_config as _load_schedule_config,
@@ -104,6 +102,7 @@ from llmwiki.reindex import (
 )
 from llmwiki.remove_doc import RemoveIncompleteError, build_remove_plan, execute_remove_plan, format_plan
 from llmwiki.serve import serve_site
+from llmwiki.source_checkout import SourceCheckoutError, ensure_not_source_checkout
 from llmwiki.state_store import (
     IncompatibleStateError,
     check_sync_state_compatible,
@@ -141,6 +140,42 @@ from llmwiki.trace import TraceError, TraceResult, trace_page
 from llmwiki.usage import UNATTRIBUTED
 from llmwiki.vault import describe_vault, resolve_vault
 from llmwiki.watch import watch as watch_loop
+
+#: Subcommands that write a vault's own content — ``raw/``, ``wiki/`` or
+#: ``site/`` — into whatever content root they resolve. With no vault named
+#: that root is ``REPO_ROOT``, so these are the commands the source-checkout
+#: guard covers: they are what turns a clone into a half-vault. ``add``,
+#: ``all`` and ``watch`` are compositions of ``sync`` / ``synth`` / ``build``
+#: and are guarded for the same reason. Reporting commands (``lint``,
+#: ``query``, ``trace``, ``usage``, ``serve``, ``adapters``) only read, and
+#: commands that edit an existing vault in place (``candidates``, ``remove``,
+#: ``consolidate-topics``, ``graph``) have nothing to edit in a checkout whose
+#: root can no longer become a vault.
+_SOURCE_CHECKOUT_GUARDED_COMMANDS = frozenset(
+    {"init", "sync", "synth", "synthesize", "add", "build", "all", "watch"}
+)
+
+
+def _apply_default_vault(args: argparse.Namespace) -> None:
+    """Resolve ``args.vault`` from config, then guard the source checkout.
+
+    Every vault-resolving command calls this before it picks a content root,
+    which makes it the one place where "no vault named" becomes "write into
+    ``REPO_ROOT``" — and therefore the place the guard belongs. The guard is
+    keyed on the parsed subcommand name, so it applies at the CLI border and
+    leaves direct library calls to the ``cmd_*`` functions alone.
+    """
+    apply_default_vault(args)
+    if getattr(args, "vault", None) is not None:
+        return
+    command = getattr(args, "cmd", None)
+    if command not in _SOURCE_CHECKOUT_GUARDED_COMMANDS:
+        return
+    try:
+        ensure_not_source_checkout(REPO_ROOT, command)
+    except SourceCheckoutError as exc:
+        print(str(exc), file=sys.stderr)
+        raise SystemExit(2) from exc
 
 
 def _content_root(args: argparse.Namespace) -> Path:
@@ -194,7 +229,9 @@ def cmd_init(args: argparse.Namespace) -> int:
 
     #29: scaffold into the configured vault (``--vault`` / ``config.json``
     ``vault.default_path``) so personal data lands outside the git clone.
-    Falls back to REPO_ROOT only when no vault is configured (demo/dev use).
+    With no vault configured the scaffold lands in REPO_ROOT, which
+    ``_apply_default_vault`` refuses when REPO_ROOT is an llmwiki source
+    checkout (#109).
     """
     _apply_default_vault(args)
     base = REPO_ROOT
@@ -968,6 +1005,21 @@ def cmd_migrate_tools_used(args: argparse.Namespace) -> int:
         config_file=getattr(args, "config", None),
     )
     mod.print_report(report)
+    return 1 if report["errors"] else 0
+
+
+def cmd_migrate_page_kinds(args: argparse.Namespace) -> int:
+    """Retype and relocate pages carrying a removed page kind (#109).
+
+    Unlike the other ``migrate-*`` commands this one lives in the package
+    rather than under ``scripts/``: only ``llmwiki*`` is packaged, and a user
+    upgrading from pip or Homebrew has no checkout to load a script from.
+    """
+    report = migrate_page_kinds.run_migration(
+        vault=Path(args.vault),
+        dry_run=bool(getattr(args, "dry_run", False)),
+    )
+    migrate_page_kinds.print_report(report)
     return 1 if report["errors"] else 0
 
 
@@ -2190,6 +2242,26 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional sessions_config.json override",
     )
     migrate_tools.set_defaults(func=cmd_migrate_tools_used)
+
+    migrate_kinds = sub.add_parser(
+        "migrate-page-kinds",
+        help=(
+            "Retype pages carrying the removed question/comparison kinds to "
+            "concept and move them into wiki/concepts/ (#109)"
+        ),
+    )
+    migrate_kinds.add_argument(
+        "--vault",
+        type=Path,
+        required=True,
+        help="Vault root containing wiki/",
+    )
+    migrate_kinds.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Report would-change files; write nothing",
+    )
+    migrate_kinds.set_defaults(func=cmd_migrate_page_kinds)
 
     # candidates (v1.1, #51) — approval workflow
     cand = sub.add_parser(

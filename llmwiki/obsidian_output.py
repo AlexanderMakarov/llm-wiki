@@ -37,7 +37,7 @@ WIKI_SOURCE = REPO_ROOT / "wiki"
 DEFAULT_SUBFOLDER = "LLM Wiki"
 
 # Directories under wiki/ that we export
-EXPORTED_DIRS = ["sources", "entities", "concepts", "syntheses", "comparisons", "questions"]
+EXPORTED_DIRS = ["sources", "entities", "concepts", "syntheses"]
 EXPORTED_ROOT_FILES = ["index.md", "overview.md", "log.md"]
 
 
@@ -185,8 +185,6 @@ transcripts.
 - `entities/` — people, projects, tools (TitleCase.md)
 - `concepts/` — ideas, patterns (TitleCase.md)
 - `syntheses/` — saved query answers
-- `comparisons/` — side-by-side diffs
-- `questions/` — open questions with state tracking
 
 ## How this works with Obsidian
 

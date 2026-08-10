@@ -91,6 +91,7 @@ ALL_SUBCOMMANDS = (
     "migrate-state",
     "migrate-raw-redaction",
     "migrate-tools-used",
+    "migrate-page-kinds",
     "candidates",
     "synthesize",
     "add",

@@ -190,8 +190,7 @@ def _load_consolidation_cache(wiki_dir: Path | None):
 # one of these; everything else groups under KIND_OTHER. The names match the
 # viewer's per-type colour map so a clustered graph keeps its palette.
 TOPIC_KIND_FOLDERS = frozenset({
-    "entities", "concepts", "projects", "questions",
-    "comparisons", "syntheses", "sources",
+    "entities", "concepts", "projects", "syntheses", "sources",
 })
 KIND_OTHER = "other"
 
