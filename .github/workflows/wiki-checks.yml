@@ -1,7 +1,7 @@
 name: Wiki checks
 
 # Runs llmwiki lint + build on PRs and pushes to verify wiki-related code
-# still produces valid output. Seeded from examples/demo-sessions/ so CI
+# still produces valid output. Seeded from the committed demo/ vault so CI
 # never touches personal data.
 
 on:
@@ -9,14 +9,12 @@ on:
     branches: ["master"]
     paths:
       - "llmwiki/**"
-      - "wiki/**"
-      - "examples/**"
+      - "demo/**"
       - ".github/workflows/wiki-checks.yml"
   pull_request:
     paths:
       - "llmwiki/**"
-      - "wiki/**"
-      - "examples/**"
+      - "demo/**"
       - ".github/workflows/wiki-checks.yml"
   workflow_dispatch:
 
@@ -40,12 +38,12 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e .
 
-      - name: Seed raw/ from example demo sessions
+      - name: Seed raw/ from the demo vault sessions
         run: |
           mkdir -p raw/sessions
-          if [ -d examples/demo-sessions ]; then
-            cp -r examples/demo-sessions/* raw/sessions/
-            echo "Seeded raw/sessions/ from examples/demo-sessions/"
+          if [ -d demo/raw/sessions ]; then
+            cp -r demo/raw/sessions/* raw/sessions/
+            echo "Seeded raw/sessions/ from demo/raw/sessions/"
           fi
 
       - name: llmwiki eval (structural quality checks)
@@ -64,7 +62,7 @@ jobs:
 
       - name: llmwiki build (smoke test)
         run: |
-          python -m llmwiki build --out /tmp/site-test
+          python -m llmwiki build --vault demo --out /tmp/site-test
           # Verify output exists
           test -f /tmp/site-test/index.html || {
             echo "::error::build did not produce index.html"

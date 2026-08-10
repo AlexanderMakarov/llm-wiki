@@ -122,7 +122,7 @@ export default defineConfig({
 
 A minimal smoke test that proves the harness works against a built
 demo site. Real specs come from #465 (already shipped under
-`specs/*.md`) once the Generator agent runs.
+`docs/maintainers/surfaces/*.md`) once the Generator agent runs.
 
 ```typescript
 import { test, expect } from "@playwright/test";

@@ -35,14 +35,16 @@ jobs:
         run: ruff check llmwiki tests scripts
 
       - name: CLI smoke tests
+        # The checkout carries .llmwiki-source-checkout, so vault-writing
+        # commands require an explicit --vault (#109). Scaffold a scratch one.
         run: |
           python -m llmwiki --version
           python -m llmwiki adapters
-          python -m llmwiki init
+          python -m llmwiki init --vault ./ci-vault
 
       - name: Build smoke test with fixtures
         run: |
-          python -m llmwiki build --out ./ci-site || true
+          python -m llmwiki build --vault demo --out ./ci-site || true
           test -f ./ci-site/style.css || echo "build produced no output (no fixtures yet — this is ok in v0.1)"
 
       - name: Run pytest
@@ -89,13 +91,10 @@ jobs:
       - name: Install deps
         run: python -m pip install markdown
 
-      - name: Build against fixtures (when present)
+      - name: Build the demo vault (when present)
         run: |
-          python -m llmwiki init
-          if [ -d tests/fixtures/demo ]; then
-            # Stage demo fixtures as if they'd been produced by `llmwiki sync`.
-            cp -a tests/fixtures/demo/. raw/sessions/
-            time python -m llmwiki build --out ./perf-site
+          if [ -d demo/raw/sessions ]; then
+            time python -m llmwiki build --vault demo --out ./perf-site
             if [ ! -d ./perf-site ]; then
               echo "ERROR: build produced no output directory" >&2
               exit 1
@@ -109,5 +108,5 @@ jobs:
               exit 1
             fi
           else
-            echo "no demo fixtures yet — skipping perf budget check"
+            echo "no demo vault yet — skipping perf budget check"
           fi

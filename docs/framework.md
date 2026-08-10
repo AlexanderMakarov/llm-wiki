@@ -316,12 +316,12 @@ Every dev tool that produces browsable output should publish its own dev history
 3. Every release updates the demo automatically.
 4. Visitors SEE the exact output they'd get. No screenshots, no "look here's what it looks like on my machine".
 
-For **privacy reasons**, llmwiki's self-demo uses a **synthetic corpus** under `tests/fixtures/demo/`, not the author's real session history. The fixtures are hand-curated, cover all UI states (short sessions, long sessions, sub-agents, code blocks, tool calls, errors), and are committed to the repo.
+For **privacy reasons**, llmwiki's self-demo uses a **synthetic corpus** under `demo/`, not the author's real session history. The fixtures are hand-curated, cover all UI states (short sessions, long sessions, sub-agents, code blocks, tool calls, errors), and are committed to the repo.
 
 ### Gate to Phase 7
 
 Self-demo is closed when:
-- [x] `tests/fixtures/demo/` has 10+ representative sessions
+- [x] `demo/raw/sessions/` has 10+ representative sessions
 - [ ] `.github/workflows/pages.yml` builds and publishes on tag push
 - [ ] The README's demo link is a working URL
 

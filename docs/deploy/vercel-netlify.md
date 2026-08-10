@@ -52,7 +52,7 @@ python-3.12
 If your sessions are not committed, seed from the demo data in the build command:
 
 ```
-pip install markdown && python3 -m llmwiki init && cp -r examples/demo-sessions/* raw/sessions/ 2>/dev/null; python3 -m llmwiki build --out ./site
+pip install markdown && python3 -m llmwiki build --vault demo --out ./site
 ```
 
 ## Netlify
@@ -134,7 +134,7 @@ pip install -e . && python3 -m llmwiki init && python3 -m llmwiki build --out ./
 
 Session data needs to be present at build time. Either:
 - Commit `raw/sessions/` to the repo
-- Seed from `examples/demo-sessions/` in the build command
+- Build the committed `demo/` vault with `llmwiki build --vault demo`
 - Run `llmwiki sync` as part of the build (requires agent session stores, unlikely in CI)
 
 ### Site loads but styles are missing

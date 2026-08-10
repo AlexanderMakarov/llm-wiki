@@ -152,7 +152,7 @@ Interactive force-directed knowledge graph. Details in [`reference/reader-api.md
 - Stats overlay (bottom-right) — total pages, edges, orphans, avg connections, top-5 hubs
 - Dark / light theme mirrors the main site
 
-**Node colours.** One colour per kind, at equal saturation — a topic no wiki page describes is a normal citizen of the map, not a faded placeholder. The legend renders one swatch per kind actually present in the graph, so a vault with no comparisons advertises no comparison swatch.
+**Node colours.** One colour per kind, at equal saturation — a topic no wiki page describes is a normal citizen of the map, not a faded placeholder. The legend renders one swatch per kind actually present in the graph, so a vault with no syntheses advertises no synthesis swatch.
 
 | Kind | Colour | |
 |---|---|---|
@@ -161,8 +161,6 @@ Interactive force-directed knowledge graph. Details in [`reference/reader-api.md
 | Concepts | green | `#059669` |
 | Syntheses | amber | `#d97706` |
 | Projects | magenta | `#db2777` |
-| Questions | cyan | `#0891b2` |
-| Comparisons | brown | `#b45309` |
 | Other (no wiki page describes the topic) | lime | `#65a30d` |
 
 Red is deliberately not a kind colour: the map already spends it on two states — the orphan border and a live search match — and a kind sharing it would read as an error.
@@ -189,7 +187,7 @@ The title, then an **identity line** of ` · `-separated parts in this order —
 
 `Entity` chip · `Active 2026-01-09 – 2026-07-30` · `Reviewed 2026-08-01` · `7 connected topics` · `12 sessions` · `<slug>`
 
-The kind chip names the singular kind — Entity, Concept, Project, Question, Comparison, Synthesis, Source — or `Unclassified topic` when no wiki page describes it. The chip is never dropped: the absence of a backing page is itself a fact, and a missing chip would leave a reader unable to tell an unclassified topic from a page that failed to render one. Below the identity line:
+The kind chip names the singular kind — Entity, Concept, Project, Synthesis, Source — or `Unclassified topic` when no wiki page describes it. The chip is never dropped: the absence of a backing page is itself a fact, and a missing chip would leave a reader unable to tell an unclassified topic from a page that failed to render one. Below the identity line:
 
 - **Also tagged as** — the alternative spellings sessions used before clustering merged them under this name.
 - **Page content** — the backing wiki page's body (see below). Absent when no page backs the topic or the page records nothing.

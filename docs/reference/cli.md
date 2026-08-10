@@ -603,6 +603,33 @@ Origin resolution prefers the vault's `llmwiki-state.json` sync keys (`adapter::
 
 ---
 
+## `migrate-page-kinds` — retype pages off the removed question/comparison kinds (#109)
+
+`llmwiki/schema.py` lists five knowledge kinds — `source`, `entity`, `concept`, `project`, `synthesis`. A hand-written page declaring `type: question` or `type: comparison` is a `frontmatter_validity` **error**, and this migration clears it: each such page is retyped to `concept` and moved into `wiki/concepts/` **keeping its filename**, then `wiki/questions/` and `wiki/comparisons/` lose their `_context.md` and are pruned once empty.
+
+Inbound links are left alone on purpose. `[[wikilinks]]` resolve by filename, never by folder, so a page that keeps its name keeps every inbound link and no referring page needs editing.
+
+Two safety rules: a page whose filename is already taken in `wiki/concepts/` is retyped where it stands and reported as a collision rather than overwriting anything, and a removed folder still holding other content is left in place and reported rather than deleted. A vault with no removed-kind page prints `nothing to migrate` and exits 0 without writing.
+
+Implementation: `llmwiki/migrate_page_kinds.py` — in the package rather than under `scripts/`, so it runs from a pip or Homebrew install with no checkout. After migrating, rebuild so `site/` picks up the new locations: `llmwiki build --vault PATH`.
+
+```bash
+python3 -m llmwiki migrate-page-kinds --vault /path/to/vault --dry-run
+python3 -m llmwiki migrate-page-kinds --vault /path/to/vault
+python3 -m llmwiki lint --vault /path/to/vault --rules frontmatter_validity
+```
+
+### Flags
+
+| Flag | What |
+|---|---|
+| `--vault PATH` | **Required.** Vault root containing `wiki/`. |
+| `--dry-run` | Report what would change; write nothing. |
+
+Idempotent: a second run finds nothing to migrate. On a run that changed something the command reconciles `wiki/index.md` and appends `## [YYYY-MM-DD] migrate | page kinds` to `wiki/log.md`.
+
+---
+
 ## `consolidate-topics` — dedupe + describe topics (#54)
 
 One-time LLM pass over the topic list (not the sessions) that merges duplicate topic spellings (`LLM-Wiki` / `LLMWiki` / `llm wiki`) into one canonical node and writes short descriptions, caching the result in `.llmwiki-topics.json` for `llmwiki graph` / `llmwiki build`.

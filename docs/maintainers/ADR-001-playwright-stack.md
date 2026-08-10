@@ -138,7 +138,8 @@ without a hard sunset; this trigger is the sunset.
   #464 must be deferred until the operator approves the install.
 - Even with Path A, **most of the value of #465 and #466 can be
   captured manually** without the agents bootstrap:
-  - #465 deliverable: `specs/*.md` plans for each page type. These
+  - #465 deliverable: `docs/maintainers/surfaces/*.md` plans for each
+    page type. These
     are documentation; the Generator consumes them but they're useful
     even without it.
   - #466 deliverable: Gherkin scenarios under
@@ -159,10 +160,12 @@ llm-wiki/
 │   └── agents/                 # NEW — TS Playwright Test Agents
 │       ├── seed.spec.ts
 │       └── *.spec.ts (generated)
-├── specs/                      # NEW — page-type spec markdown
-│   ├── home.md
-│   ├── projects-index.md
-│   ├── ...
+├── docs/
+│   └── maintainers/
+│       └── surfaces/           # page-type surface specs
+│           ├── home.md
+│           ├── projects-index.md
+│           ├── ...
 ├── playwright.config.ts        # NEW — TS runner config
 ├── package.json                # NEW — Node deps
 └── pyproject.toml              # unchanged — Python deps

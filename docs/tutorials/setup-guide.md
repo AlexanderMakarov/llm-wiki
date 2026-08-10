@@ -173,8 +173,8 @@ gh repo create my-llm-wiki --public --source=. --push
 
 The repo ships `.github/workflows/pages.yml`. On every push to `master`:
 
-1. Seeds `raw/sessions/` from `examples/demo-sessions/` (never your personal data)
-2. Runs `llmwiki build`
+1. Builds the committed `demo/` vault (never your personal data)
+2. Runs `llmwiki build --vault demo --out ./site`
 3. Uploads `site/` as a Pages artifact
 4. Deploys to `https://<user>.github.io/<repo>/`
 

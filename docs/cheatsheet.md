@@ -207,8 +207,6 @@ wiki/    LLM-generated pages (you own this)
   concepts/     ideas, patterns, decisions (TitleCase.md)
   projects/     codebases and work streams (kebab-case slug)
   syntheses/    saved query answers
-  comparisons/  side-by-side diffs
-  questions/    first-class open questions
 site/    GENERATED static HTML (don't edit by hand)
 ```
 

@@ -19,8 +19,8 @@
 │  wiki/                     LLM-MAINTAINED       │
 │    • sources/ entities/ concepts/ syntheses/   │
 │      projects/ vs/                              │
-│    • gitignored EXCEPT seed files listed in    │
-│      .gitignore `!wiki/...` exceptions          │
+│    • gitignored; the tracked example vault      │
+│      lives in demo/wiki/                        │
 │    • owned by Claude Code slash commands       │
 └───────────────────┬─────────────────────────────┘
                     ▼ reads
