@@ -217,10 +217,10 @@ User directive during smoke confirm: demo sessions are dummy; use real anonymise
 **Findings during curation:**
 
 - OpenClaw sessions live in project `openclaw-main`, not `llm-wiki` — so the demo now carries **two** projects and **two** adapters (9 `llm-wiki` claude_code + 3 `openclaw-main` openclaw), which also fixes the "projects all 4 months old" complaint.
-- First pass leaked `kbbuilder`, and context showed private infrastructure names (`openclaw-gateway`, `9router`, `openclaw-media-convert`). Generic project scrubbing plus `--scrub-term` added; second pass is clean.
+- First pass leaked a neighbouring project's name, and reading the context showed several private infrastructure service names alongside it. Generic project scrubbing plus an explicit term list was added; the second pass was clean. The specific literals are deliberately not recorded here — this file is committed.
 - The audit's own placeholder `internal.example.com` failed its allowlist anchor (`example\.com` did not match a subdomain). Fixed to `([A-Za-z0-9-]+\.)*example\.com`.
 
-**Verification:** script audit 0 findings; independent scan for `4ellendger`, `innerhdd`, `openclaw-obsidian`, `inecobank`, `kbbuilder`, `9router`, `openclaw-gateway`, `media-convert`, `cursor-34a82` — all 0 hits. Remaining hosts: `internal.example.com` (58), `github.com` (25), `localhost` (3). Remaining absolute paths: `/home/USER` only.
+**Verification:** script audit 0 findings; an independent scan over nine identifying literals (the operator's username, vault directory, neighbouring project names and private service names — not reproduced here) returned 0 hits each. Remaining hosts: `internal.example.com` (58), `github.com` (25), `localhost` (3). Remaining absolute paths: `/home/USER` only.
 
 **Synth backend:** worktree `config.json` (gitignored) set to `synthesis.backend = "claude"` — note the accepted value is `claude`, **not** `claude_cli`; the latter silently falls back to dummy with a warning. Model `haiku`, concurrency 4. `synth --check` reports `claude-cli / Available: True`. Estimate: **$0.18** for the 12 new sources.
 
