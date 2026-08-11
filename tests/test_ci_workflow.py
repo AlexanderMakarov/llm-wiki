@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 
 from llmwiki import REPO_ROOT
+from llmwiki.cli import build_parser
 
 WORKFLOW = REPO_ROOT / ".github" / "workflows" / "wiki-checks.yml"
 
@@ -49,14 +50,30 @@ def test_installs_llmwiki():
     assert "pip install -e ." in text
 
 
-def test_seeds_from_demo_sessions():
+def test_checks_the_demo_vault_by_name():
+    """The job names the vault rather than relying on a directory it seeded.
+
+    Seeding copied sessions into a root vault, which no longer exists — the
+    demo is self-contained at ``demo/`` and every step addresses it directly.
+    """
     text = WORKFLOW.read_text(encoding="utf-8")
-    assert "demo/raw/sessions" in text
+    assert "--vault demo" in text
+    assert "demo/raw/sessions" not in text
 
 
-def test_runs_eval():
-    text = WORKFLOW.read_text(encoding="utf-8")
-    assert "llmwiki eval" in text
+def test_every_llmwiki_command_it_runs_actually_exists():
+    """Guard against the job invoking a subcommand the CLI does not have.
+
+    This job previously called ``llmwiki eval`` and ``llmwiki check-links``,
+    neither of which is a subcommand, each swallowed by ``|| true``. The job
+    reported success while doing nothing, and no test noticed because the
+    assertions only checked that the strings were present.
+    """
+    known = set(build_parser()._subparsers._group_actions[0].choices)  # noqa: SLF001
+    # Same-line only: `\s` would span a newline and match the next YAML key.
+    invoked = set(re.findall(r"llmwiki[ \t]+([a-z][a-z-]*)", WORKFLOW.read_text(encoding="utf-8")))
+    unknown = invoked - known
+    assert not unknown, f"workflow invokes non-existent subcommand(s): {sorted(unknown)}"
 
 
 def test_runs_lint_with_fail_on_errors():
@@ -68,11 +85,6 @@ def test_runs_lint_with_fail_on_errors():
 def test_runs_build():
     text = WORKFLOW.read_text(encoding="utf-8")
     assert "llmwiki build" in text
-
-
-def test_runs_check_links():
-    text = WORKFLOW.read_text(encoding="utf-8")
-    assert "llmwiki check-links" in text
 
 
 def test_runs_adapters_listing():

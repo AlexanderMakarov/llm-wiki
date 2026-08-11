@@ -82,7 +82,6 @@ ALL_SUBCOMMANDS = (
     "init",
     "sync",
     "build",
-    "serve",
     "usage",
     "adapters",
     "graph",
@@ -423,19 +422,22 @@ def test_graph_subcommand_accepts_engine_flag() -> None:
 
 
 def test_graph_run_against_real_repo_produces_well_formed_json() -> None:
-    """Run ``llmwiki graph`` against the real repo and assert the
-    resulting ``graph/graph.json`` parses + has the right shape.
+    """Run ``llmwiki graph`` against the repo's ``demo/`` vault and
+    assert the resulting ``graph/graph.json`` parses + has the right
+    shape.
 
-    This is the only test in the suite that touches the real repo
-    (``graph/`` is gitignored, so this is safe — the file is
-    regenerated on every CI run anyway). The alternative — monkeypatching
-    REPO_ROOT — would require deep module surgery. Better to accept the
-    one-off side-effect on a gitignored output dir."""
-    result = _run_cli("graph", "--engine", "builtin", "--format", "json", timeout=60)
+    ``demo/`` is the example vault that ships with the checkout, so it
+    is the one vault a test can name without inventing a corpus. Its
+    ``demo/graph/`` output is gitignored, so the side-effect is safe —
+    the file is regenerated on every CI run anyway. The alternative —
+    monkeypatching REPO_ROOT — would require deep module surgery."""
+    result = _run_cli(
+        "graph", "--vault", "demo", "--engine", "builtin", "--format", "json", timeout=60
+    )
     assert result.returncode == 0, (
         f"`llmwiki graph --engine builtin` failed: {result.stderr[:400]}"
     )
-    graph_json = REPO_ROOT_FOR_CLI / "graph" / "graph.json"
+    graph_json = REPO_ROOT_FOR_CLI / "demo" / "graph" / "graph.json"
     if not graph_json.is_file():
         pytest.skip("graph/graph.json not produced — wiki may have no pages")
     data = json.loads(graph_json.read_text(encoding="utf-8"))
@@ -451,8 +453,13 @@ def test_graph_run_against_real_repo_produces_well_formed_json() -> None:
 def test_synthesize_check_runs_or_skips() -> None:
     """``llmwiki synthesize --check`` probes backend availability.
     With no backend configured it exits non-zero — we accept any exit
-    code as long as the command doesn't crash with a Python traceback."""
-    result = _run_cli("synthesize", "--check", timeout=20)
+    code as long as the command doesn't crash with a Python traceback.
+
+    ``synthesize`` writes vault content, so it needs a vault named:
+    ``demo/`` is the example vault that ships with the checkout. The
+    refusal that follows from *not* naming one is covered by
+    ``tests/test_source_checkout_guard.py``."""
+    result = _run_cli("synthesize", "--check", "--vault", "demo", timeout=20)
     # 0 (backend reachable), 1 (not reachable) — both fine. >1 means
     # an unhandled exception, which is what we're guarding against.
     assert result.returncode in (0, 1), (
