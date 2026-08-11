@@ -30,7 +30,6 @@ Same as macOS / Linux, but with `.bat`:
 ```cmd
 sync.bat
 build.bat
-serve.bat
 ```
 
 Or run the Python module directly:
@@ -38,7 +37,6 @@ Or run the Python module directly:
 ```cmd
 python -m llmwiki sync
 python -m llmwiki build
-python -m llmwiki serve
 ```
 
 Note: on Windows the command is `python`, not `python3`. The `.bat` files use `python`.
@@ -93,12 +91,13 @@ If PowerShell complains "cannot be loaded because running scripts is disabled on
 Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 ```
 
-## Opening the browser
+## Opening the site
 
-`serve.bat --open` will try to open your default browser automatically. If that doesn't work:
+The built site is plain files — nothing needs to be running.
 
-1. The server is running at http://127.0.0.1:8765
-2. Just paste that into your browser
+```cmd
+start site\index.html
+```
 
 ## Known limitations
 

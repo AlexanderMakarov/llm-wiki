@@ -39,15 +39,14 @@ setup.bat
 3. Ejecuta `llmwiki adapters` para mostrar qué Agents detectó
 4. Hace una ejecución en seco del primer sync para que veas qué se convertiría
 
-## Tres comandos después de la instalación
+## Dos comandos después de la instalación
 
 ```bash
 ./sync.sh        # Ingesta nuevas sesiones del almacén del Agent → raw/sessions/<project>/*.md
 ./build.sh       # Compila raw/ + wiki/ → site/
-./serve.sh       # Sirve site/ en http://127.0.0.1:8765/
 ```
 
-Abre [http://127.0.0.1:8765/](http://127.0.0.1:8765/) y prueba:
+Abre `site/index.html` en tu navegador — el sitio son archivos normales, no hace falta ejecutar ni descargar nada — y prueba:
 
 - **⌘K** o **Ctrl+K** — paleta de comandos
 - **/** — enfocar la barra de búsqueda

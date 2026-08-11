@@ -47,7 +47,7 @@ llmwiki runs two interchangeable ways. Pick one, start — you can switch later.
 
 ## Use it locally
 
-- **[Query your wiki](tutorials/05-querying-your-wiki.md)** — `/wiki-query`, `/wiki-graph`, `/wiki-lint`, `/wiki-candidates`, `/wiki-serve`.
+- **[Query your wiki](tutorials/05-querying-your-wiki.md)** — `/wiki-query`, `/wiki-graph`, `/wiki-lint`, `/wiki-candidates`.
 - **[Bring your existing Obsidian / Logseq vault](tutorials/06-bring-your-obsidian-vault.md)** — `llmwiki sync --vault <path>`, non-destructive by default.
 - **[Example workflows](tutorials/07-example-workflows.md)** — four real, end-to-end workflows.
 

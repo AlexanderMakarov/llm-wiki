@@ -174,6 +174,7 @@ python3 -m llmwiki build --out ~/public_html
 python3 -m llmwiki build --search-mode tree
 python3 -m llmwiki build --synthesize --claude /usr/local/bin/claude
 python3 -m llmwiki build --vault ~/my-vault --out ~/site
+python3 -m llmwiki build --vault demo --out ./site --local-root /home/user
 ```
 
 ### Flags
@@ -185,6 +186,8 @@ python3 -m llmwiki build --vault ~/my-vault --out ~/site
 | `--claude PATH` | Path to the `claude` binary. Default: `/usr/local/bin/claude`. |
 | `--search-mode {auto,tree,flat}` | Search routing mode (#53). `auto` picks tree vs flat from heading depth; `tree` / `flat` force the mode. Default: `auto`. |
 | `--vault PATH` | Vault-overlay mode — build from an existing Obsidian / Logseq vault. Output still lands at `--out`. |
+| `--local-root PATH` | Value shown in place of a session's stored home directory (#109). Default: this machine's home directory, so local paths stay usable. Pass a fixed string when publishing so the same vault renders identically anywhere. Substitution applies to the `cwd` field only. |
+| `--seed-project-stubs` | Create a `wiki/projects/<slug>.md` stub for any project without one (#414). Off by default — `build` is read-only on `wiki/`. |
 
 ### Expected output (final lines)
 
@@ -196,28 +199,6 @@ python3 -m llmwiki build --vault ~/my-vault --out ~/site
   wrote site/docs/ (94 editorial pages: hub + tutorials + style guide)
 ==> build complete: 703 HTML files, 61 MB
 ```
-
----
-
-## `serve` — start a local HTTP server
-
-```bash
-python3 -m llmwiki serve
-python3 -m llmwiki serve --port 9000
-python3 -m llmwiki serve --dir ~/public_html
-python3 -m llmwiki serve --open
-```
-
-### Flags
-
-| Flag | What |
-|---|---|
-| `--dir PATH` | Directory to serve. Default: `./site/`. |
-| `--port N` | Port. Default: `8765`. |
-| `--host ADDR` | Bind address. Default: `127.0.0.1`. Use `0.0.0.0` to share on LAN. |
-| `--open` | Open the browser at the root URL after starting. |
-
-**Stdlib only** — it's `http.server` underneath. Safe for local use; don't expose to the public internet.
 
 ---
 
@@ -366,7 +347,7 @@ python3 -m llmwiki lint --wiki-dir ~/another-wiki
 
 Positional `action` picks `list` / `promote` / `flip-promote` / `merge` / `discard` / `apply` / `rewrite-key-facts`.
 
-Successful `promote` / `flip-promote` / `merge` / `discard` / `apply` reconcile `wiki/index.md` (#101): dead `candidates/…` bullets are dropped, an empty `## Candidates` section is removed, and newly trusted pages are listed under Entities/Concepts. `/wiki-candidates` should call these same actions — do not run idle `sync`/`synth` just to refresh the catalog after review. Site UI: open `/candidates.html` — per-row decisions + Apply; batch API under `llmwiki serve`, or one pasteable `candidates apply --actions '…'` command when static (#97).
+Successful `promote` / `flip-promote` / `merge` / `discard` / `apply` reconcile `wiki/index.md` (#101): dead `candidates/…` bullets are dropped, an empty `## Candidates` section is removed, and newly trusted pages are listed under Entities/Concepts. `/wiki-candidates` should call these same actions — do not run idle `sync`/`synth` just to refresh the catalog after review. Site UI: open `site/candidates.html` — it lists everything pending and prints the `candidates apply --actions -` command plus a ready-made JSON batch to pipe into it (#97).
 
 `promote` also writes an empty (or heading-only) `## Key Facts` (#103). It builds an evidence digest — every line where each source listed in frontmatter `sources:` / Connections names the subject, capped at 12 sources and 4 lines each — and hands it to the backend named by `synthesis.backend`, which returns 3–5 attributed bullets. Non-empty reviewer Key Facts are left alone.
 
@@ -374,7 +355,7 @@ Because those bullets become trusted-layer prose, promote refuses to write them 
 
 `merge` folds a harvest stub into the target by unioning its `sources:` and Connections links and recording the name under `## Aliases`; a candidate containing reviewer prose still has that prose appended under `## Candidate merge — <date>`. Target may be a trusted page or another pending stub in the same kind.
 
-`apply` runs a **batch** of the same intents in one process (same JSON shape as `POST /api/candidates`):
+`apply` runs a **batch** of the same intents in one process (the JSON shape `site/candidates.html` prints):
 
 ```bash
 python3 -m llmwiki candidates apply --actions '[{"action":"promote","slug":"Foo","kind":"entities"},{"action":"promote","slug":"Prompt Caching","kind":"concepts"}]'

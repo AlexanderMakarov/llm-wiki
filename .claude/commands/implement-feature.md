@@ -128,7 +128,7 @@ Run `/awos:implement` in the **main context** (it dispatches coding subagents �
 
 Run `/awos:verify` in the main context when criteria need `AskUserQuestion`; otherwise a subagent may drive evidence collection and return the verdict + gaps. Address gaps before proceeding.
 
-Running automated verify is the flow's job. For CLI/acceptance criteria use `pytest` and `python3 -m llmwiki` against `$TMP_VAULT` when a vault is required — do not mutate the operator's live Obsidian vault. For UI criteria: `python3 -m llmwiki build --vault "$TMP_VAULT"` then Playwright against `$TMP_VAULT/site`; reclaim or pick a free serve port (`--port 8766`) rather than handing the user a routine `run` command. Manual confirmation is only for a criterion the agent genuinely cannot render here.
+Running automated verify is the flow's job. For CLI/acceptance criteria use `pytest` and `python3 -m llmwiki` against `$TMP_VAULT` when a vault is required — do not mutate the operator's live Obsidian vault. For UI criteria: `python3 -m llmwiki build --vault "$TMP_VAULT"` then Playwright against `$TMP_VAULT/site` — open the built files directly, or put a throwaway `python3 -m http.server` in front of them if the check needs an origin — rather than handing the user a routine `run` command. Manual confirmation is only for a criterion the agent genuinely cannot render here.
 
 Read-only live-vault probes (`lint`, `synth --estimate`, etc.) are allowed when they help evidence. If verify forces a scope/approach change relative to the approved documents, that is a §9 exception — comment on the PR once one exists (or remember to comment after open).
 
@@ -146,7 +146,7 @@ LIVE="<path-from-primary-config.json>"
 python3 -m llmwiki lint --vault "$LIVE"
 # Mutating checks — you run these:
 python3 -m llmwiki build --vault "$LIVE" --out "$LIVE/site"
-python3 -m llmwiki serve --dir "$LIVE/site" --port 8766
+# then open "$LIVE/site/index.html" in a browser
 ```
 
 Do **not** execute the mutating live-vault commands yourself. Do not start review until the user confirms. A skipped confirmation means stop and report verified-but-unconfirmed.

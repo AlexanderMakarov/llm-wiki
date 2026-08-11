@@ -22,7 +22,8 @@ git clone git@github.com:AlexanderMakarov/llm-wiki.git
 cd llm-wiki
 ./setup.sh
 # create config.json (see below), then:
-llmwiki sync && llmwiki build && llmwiki serve --dir /path/to/your-vault/site
+llmwiki sync && llmwiki build
+# then open /path/to/your-vault/site/index.html
 ```
 
 ---
@@ -191,7 +192,7 @@ llmwiki sync                    # convert new sessions → vault raw/sessions/
 llmwiki synth                   # LLM summaries → wiki/sources/ + harvest candidates
 llmwiki consolidate-topics      # optional: dedupe topic vocabulary
 llmwiki build                   # vault raw/ + wiki/ → vault site/
-llmwiki serve --dir /path/to/your-vault/site
+# then open /path/to/your-vault/site/index.html — the site is plain files
 ```
 
 One-shot:
@@ -206,7 +207,6 @@ Useful flags:
 - `--adapter <name>` — limit sync to one source
 - `--force` — re-convert / re-synthesize even if unchanged
 - `--force-resync` (`sync`) — override the newer-schema / corrupt-state guard (#29) and reconvert from scratch; implies `--force`
-- `llmwiki serve --dir PATH` — serve a built `site/` (no `--vault` on serve; default is `./site` under the cwd)
 - `llmwiki lint` — broken wikilinks, orphans, stale pages
 
 ---
@@ -238,7 +238,7 @@ Useful flags:
 └────────────────────────────┘
 ```
 
-Canonical loop: `sync / add → synth → review candidates → build`. `synth` does **not** rebuild the site — run `llmwiki build` (or `all --with-synth`) when you want Home/Analytics counts refreshed. Serve the vault site with `llmwiki serve --dir <vault>/site`.
+Canonical loop: `sync / add → synth → review candidates → build`. `synth` does **not** rebuild the site — run `llmwiki build` (or `all --with-synth`) when you want Home/Analytics counts refreshed. Then open `<vault>/site/index.html`; the site needs nothing running and nothing fetched.
 
 Agent workflows (`/wiki-sync`, `/wiki-ingest`, `/wiki-query`) are defined in [CLAUDE.md](CLAUDE.md) and [AGENTS.md](AGENTS.md).
 
@@ -250,8 +250,7 @@ Agent workflows (`/wiki-sync`, `/wiki-ingest`, `/wiki-query`) are defined in [CL
 llmwiki init [--vault PATH]
 llmwiki sync [--adapter NAME] [--vault PATH] [--force] [--force-resync] [--status]
 llmwiki add <url|file|folder>... [--vault PATH] [--no-synthesize] [--no-build]
-llmwiki build [--vault PATH] [--out PATH]      # also writes llms.txt, sitemap.xml, etc. (AI exports)
-llmwiki serve [--dir PATH] [--port N]          # serve a built site/; no --vault
+llmwiki build [--vault PATH] [--out PATH] [--local-root PATH]   # also writes llms.txt, sitemap.xml, etc. (AI exports)
 llmwiki synth [--vault PATH] [--check] [--estimate] [--force] [--sources-only] [--candidates-only]
 llmwiki synthesize […]                        # deprecated alias for synth --sources-only
 llmwiki consolidate-topics [--complete reply.json] [--vault PATH]
@@ -267,7 +266,7 @@ llmwiki adapters [--wide]
 llmwiki version
 ```
 
-Shell shortcuts: `./sync.sh`, `./build.sh`, `./serve.sh`. Full flag tables: [docs/reference/cli.md](docs/reference/cli.md).
+Shell shortcuts: `./sync.sh`, `./build.sh`. Full flag tables: [docs/reference/cli.md](docs/reference/cli.md).
 
 ## Adding documents
 
@@ -349,7 +348,7 @@ Per-adapter docs: [Claude Code](docs/adapters/claude-code.md) · [Codex CLI](doc
 - **Stdlib first** — runtime dep is `markdown` only; optional `[graph]`, `[dev]`, `[e2e]` extras
 - **Redact by default** — usernames, keys, tokens, emails stripped before wiki
 - **Idempotent** — re-running sync/build is safe
-- **Privacy by default** — localhost serve, no telemetry
+- **Privacy by default** — plain local files, nothing served, no telemetry
 - **Data outside git** — vault + gitignore, not "trust the contributor"
 
 ---

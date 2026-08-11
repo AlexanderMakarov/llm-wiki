@@ -147,7 +147,6 @@ How users install and run llmwiki:
 - `setup.sh` / `setup.bat` — one-click install
 - `sync.sh` / `sync.bat` — wrappers around `python3 -m llmwiki sync`
 - `build.sh` / `build.bat` — wrappers around `python3 -m llmwiki build`
-- `serve.sh` / `serve.bat` — wrappers around `python3 -m llmwiki serve`
 - `upgrade.sh` / `upgrade.bat` — `git pull` + re-run setup
 - `.claude-plugin/plugin.json` + `marketplace.json` — Claude Code plugin packaging
 - `.claude/commands/` — 7 slash commands

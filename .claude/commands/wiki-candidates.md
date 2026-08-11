@@ -2,7 +2,7 @@ Review and triage candidate wiki pages — promote, flip and promote, merge, or 
 
 Candidate pages live under `wiki/candidates/<kind>/<slug>.md`. They are usually created by `llmwiki synth` (default harvest after sources) or `llmwiki synth --candidates-only`. They are **not** part of the trusted wiki layer until a human or agent approves them.
 
-Home **Candidates** (Knowledge layer) and Analytics **Candidates to review** show the backlog after `llmwiki build`. Open `/candidates.html` (header: Home → Raw → **Candidates** …) for the same intents: per-row decisions + **Apply**. Under `llmwiki serve` Apply POSTs a batch; on a static / `file://` open it shows one pasteable `llmwiki candidates apply --actions '…'` command.
+Home **Candidates** (Knowledge layer) and Analytics **Candidates to review** show the backlog after `llmwiki build`. Open `site/candidates.html` (header: Home → Raw → **Candidates** …) to read what is pending: it lists every stub and prints the `llmwiki candidates apply --vault <vault> --actions -` command plus a ready-made JSON batch to pipe into it.
 
 Usage: `/wiki-candidates`
 
@@ -66,7 +66,7 @@ Usage: `/wiki-candidates`
 
 ## Related
 
-- #51 — approval workflow; #84 — Home/Analytics observability; #90 — harvest; #97 — `/candidates.html` decision+Apply UI (serve batch API / static `apply --actions`); #101 — promote/merge/discard/apply reconcile index.md; #103 — promote fills empty Key Facts from evidence
+- #51 — approval workflow; #84 — Home/Analytics observability; #90 — harvest; #97 — `candidates.html` pending listing + copyable `apply --actions` batch; #101 — promote/merge/discard/apply reconcile index.md; #103 — promote fills empty Key Facts from evidence
 - `/wiki-lint` — finds stale candidates (age > 30 days) and broken wikilinks after review
 - `llmwiki synth` / `synth --candidates-only` — harvest stubs from synthesized sources
 - `/wiki-ingest` — optional enrichment / review discussion over candidates

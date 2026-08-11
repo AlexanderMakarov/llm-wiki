@@ -1,6 +1,6 @@
 ---
 name: wiki-all
-description: Run the complete llmwiki pipeline from scratch — init, sync, graph, build, lint, and serve. Use when the user says "run everything", "full pipeline", "wiki-all", or wants to rebuild the entire wiki from session history.
+description: Run the complete llmwiki pipeline from scratch — init, sync, graph, build, and lint. Use when the user says "run everything", "full pipeline", "wiki-all", or wants to rebuild the entire wiki from session history.
 ---
 
 # wiki-all
@@ -14,7 +14,6 @@ Runs the complete llmwiki pipeline in the correct sequence:
 3. **graph** — build Graphify AI knowledge graph (communities, god nodes, hyperedges)
 4. **build** — compile `wiki/` markdown into `site/` HTML
 5. **lint** — run 14 quality rules, report issues
-6. **serve** — start local server at http://127.0.0.1:8765
 
 ## Steps
 
@@ -72,15 +71,9 @@ python3 -m llmwiki lint
 
 Report: total issues by severity (errors, warnings, info). Highlight any errors that need immediate attention.
 
-### Step 6: Serve
+### Step 6: Open the site
 
-Ask the user: **"Start the local server?"** If yes:
-
-```bash
-python3 -m llmwiki serve --open
-```
-
-Report the URL: http://127.0.0.1:8765
+Tell the user the site is ready and give them the path to open in a browser: `site/index.html` (or `<vault>/site/index.html` for a vault build). It is plain files — nothing needs to be running.
 
 ## After completion
 
@@ -93,4 +86,4 @@ Report a summary table:
 | graph | N nodes, M edges, K communities |
 | build | N HTML files, M MB |
 | lint | N issues (E errors, W warnings) |
-| serve | http://127.0.0.1:8765 |
+| open | site/index.html |

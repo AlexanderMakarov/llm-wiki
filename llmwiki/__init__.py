@@ -8,7 +8,6 @@ Public API:
     - llmwiki.cli.main()              — the command-line entry point
     - llmwiki.convert.convert_all()   — .jsonl → markdown
     - llmwiki.build.build_site()      — markdown → HTML
-    - llmwiki.serve.serve_site()      — local HTTP server
     - llmwiki.graph.build_and_report() — knowledge graph
     - llmwiki.exporters.export_all()  — AI-consumable exports
     - llmwiki.adapters.REGISTRY       — adapter registry
@@ -39,7 +38,6 @@ __all__ = [
     "main",
     "convert_all",
     "build_site",
-    "serve_site",
     "build_and_report",
     "export_all",
     "REGISTRY",
@@ -61,9 +59,6 @@ def __getattr__(name: str):
     if name == "build_site":
         from llmwiki.build import build_site  # noqa: PLC0415 — lazy package __getattr__
         return build_site
-    if name == "serve_site":
-        from llmwiki.serve import serve_site  # noqa: PLC0415 — lazy package __getattr__
-        return serve_site
     if name == "build_and_report":
         from llmwiki.graph import build_and_report  # noqa: PLC0415 — lazy package __getattr__
         return build_and_report

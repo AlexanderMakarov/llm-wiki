@@ -70,4 +70,4 @@ echo.
 echo Next steps:
 echo   sync.bat                    ^-^- convert new sessions to markdown
 echo   build.bat                   ^-^- generate the static HTML site
-echo   serve.bat                   ^-^- browse at http://127.0.0.1:8765/
+echo   start site\index.html       ^-^- browse the site ^-^- plain files, nothing to run

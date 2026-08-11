@@ -40,8 +40,7 @@ RUN chown -R app:app /wiki
 
 USER app
 
-# The serve command defaults to port 8765.
-EXPOSE 8765
-
 ENTRYPOINT ["llmwiki"]
-CMD ["serve", "--host", "0.0.0.0", "--port", "8765", "--dir", "site"]
+# The site is plain files: build it into the bind-mounted site/ and open
+# site/index.html on the host. The container hosts nothing.
+CMD ["build"]

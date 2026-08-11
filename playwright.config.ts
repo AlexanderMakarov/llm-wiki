@@ -36,9 +36,10 @@ export default defineConfig({
     // config. firefox + webkit are a #464 follow-up, not a blocker.
   ],
   webServer: {
-    // CI builds + serves before invoking `playwright test`; we don't
-    // auto-build here. Local dev: run `python3 -m llmwiki build &&
-    // python3 -m llmwiki serve` in another terminal first.
+    // CI builds the site and puts a stdlib HTTP server in front of it
+    // before invoking `playwright test`; we don't auto-build here. Local
+    // dev: run `python3 -m llmwiki build` then `python3 -m http.server 8765
+    // --directory site` in another terminal first.
     command: "true",
     url: baseURL,
     reuseExistingServer: true,

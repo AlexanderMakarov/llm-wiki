@@ -562,19 +562,13 @@ kbd { display: inline-block; padding: 2px 6px; font-family: var(--mono); font-si
 .queue-commands-table th, .queue-commands-table td { border: 1px solid var(--border); padding: 8px 10px; vertical-align: top; }
 .queue-commands-table th { background: var(--bg-alt); text-align: left; }
 .queue-copy-btn { white-space: nowrap; }
-/* #97 candidates review page — per-row intent + batch Apply */
-.cand-review-table .cand-actions { white-space: normal; min-width: 16rem; }
-.cand-review-table .cand-decision, .cand-review-table .cand-merge-into {
-  margin: 2px 4px 2px 0; font: inherit; font-size: 0.85rem; padding: 4px 8px;
-  border: 1px solid var(--border); border-radius: 4px; background: var(--bg-alt); color: var(--text);
-}
+/* #97 candidates review page — pending listing + copyable CLI batch */
 .cand-apply-bar { display: flex; gap: 8px; flex-wrap: wrap; margin: 16px 0 8px; }
 .cand-apply-btn {
   font: inherit; font-size: 0.9rem; padding: 6px 14px;
   border: 1px solid var(--border); border-radius: 4px; background: var(--bg-alt); color: var(--text); cursor: pointer;
 }
 .cand-apply-btn:hover { border-color: var(--accent); }
-.cand-apply-btn:disabled { opacity: 0.5; cursor: wait; }
 .cand-cli {
   margin: 8px 0 16px; padding: 12px; overflow-x: auto;
   background: var(--bg-alt); border: 1px solid var(--border); border-radius: 6px;

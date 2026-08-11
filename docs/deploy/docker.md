@@ -25,14 +25,14 @@ cd llm-wiki
 # 2. Pull the latest image
 docker compose pull
 
-# 3. Start the server
-docker compose up -d
+# 3. Compile the site
+docker compose run --rm llmwiki build
 
-# 4. Open http://localhost:8765
+# 4. Open ./site/index.html in a browser
 ```
 
-The server runs in the background with `restart: unless-stopped`, so
-it comes back after reboots / Docker restarts.
+The site is plain files. `site/` is bind-mounted, so the pages land on the
+host and open straight from disk — nothing keeps running afterwards.
 
 ## Running CLI commands in the container
 
@@ -61,19 +61,19 @@ If you're developing llmwiki itself or need unreleased changes:
 
 ```bash
 docker compose build
-docker compose up -d
+docker compose run --rm llmwiki build
 ```
 
-This uses the repo `Dockerfile` and re-builds on every code change.
+This uses the repo `Dockerfile` and re-builds the image on every code change.
 
 ## Image details
 
 - **Base:** `python:3.12-slim` (~45 MB)
 - **Runtime deps:** `markdown` only (stdlib + optional `graphifyy` extra)
 - **User:** non-root (`app`, UID 1000) — mounted volumes stay host-owned
-- **Port:** 8765 (exposed + mapped)
+- **Ports:** none — the container runs commands, it hosts nothing
 - **Entrypoint:** `python -m llmwiki`
-- **Default CMD:** `serve --host 0.0.0.0 --port 8765 --dir site`
+- **Default CMD:** `build`
 - **Labels:** OCI standard (title, description, source, licenses, authors)
 
 ## Volumes
@@ -123,20 +123,11 @@ you see 404s, the image hasn't been published yet — fall back to
 local build:
 
 ```bash
-docker compose build && docker compose up -d
-```
-
-### Port 8765 already in use
-
-Change the host port in `docker-compose.yml`:
-
-```yaml
-ports:
-  - "9999:8765"  # access at http://localhost:9999
+docker compose build && docker compose run --rm llmwiki build
 ```
 
 ## Related docs
 
-- [GitHub Pages deployment](github-pages.md) — static hosting instead of container
+- [GitHub Pages deployment](github-pages.md) — publish the built site to the web
 - [GitLab Pages deployment](gitlab-pages.md)
 - [Vercel / Netlify](vercel-netlify.md)

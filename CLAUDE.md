@@ -41,7 +41,6 @@ Canonical loop: `sync / add → synth (sources + harvest) → review candidates 
 | `/wiki-query <question>` | Answer a question from the wiki | Executes the Query Workflow below |
 | `/wiki-lint` | Find orphans, broken links, stale pages | Executes the Lint Workflow below |
 | `/wiki-build` | Regenerate the static HTML site | Runs `python3 -m llmwiki build` |
-| `/wiki-serve` | Start the local HTTP server | Runs `python3 -m llmwiki serve` |
 | `/wiki-update` | Update one wiki page in place (v0.2+) | Surgical edit of one page without re-ingest |
 | `/wiki-graph` | Build the knowledge graph (v0.2+) | Walks `[[wikilinks]]` → `graph/graph.json` + `graph.html` |
 | `/wiki-reflect` | Higher-order self-reflection over the wiki (v0.2+) | Finds gaps, patterns, and suggests new pages |

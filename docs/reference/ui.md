@@ -6,7 +6,7 @@ docs_shell: true
 
 # UI reference
 
-Every screen on the compiled site (`llmwiki build` → `site/`), what it shows, and how to reach it. Screens are what `llmwiki serve` exposes on `http://127.0.0.1:8765/`.
+Every screen on the compiled site (`llmwiki build` → `site/`), what it shows, and how to reach it. The site is plain files — open `site/index.html` in a browser, or publish `site/` to any static host.
 
 ---
 
@@ -18,7 +18,7 @@ Every page in the site carries the same header nav. Keyboard: `⌘K` opens the c
 |---|---|---|---|
 | 1 | **Home** | `/index.html` | pipeline State widget (Eligible sources Raw→To synthesize→Synthesized→On disk + Knowledge layer Candidates/Entities/Concepts + collapsible backlog/candidates/commands) + recent raw docs |
 | 2 | **Raw** | `/raw.html` | file tree browser of raw documents (wiki-add layer) |
-| — | **Candidates** | `/candidates.html` | pending entity/concept review (per-row decision + Apply); batch API under serve, or copy-CLI when static |
+| — | **Candidates** | `/candidates.html` | what is pending under `wiki/candidates/`, plus the `candidates apply` command and JSON batch to act on it |
 | 3 | **Graph** | `/graph.html` | interactive force-directed knowledge graph (vis-network) |
 | 4 | **Projects** | `/projects/index.html` | filterable card grid of every project + freshness badge |
 | 5 | **Sessions** | `/sessions/index.html` | sortable table of every session, agent badge, project, model, tool-call count |
@@ -51,17 +51,22 @@ Numbers come from `llmwiki-state.js` (`synth.pipeline` + `synth.pending` + `synt
 
 URL: `/candidates.html`
 
-Review gate for pending stubs under `wiki/candidates/` (#97). Two tables — **Entities (pending)** and **Concepts (pending)** — with Name, Description, and Decision:
+Read-only listing of pending stubs under `wiki/candidates/` (#97). Two tables — **Entities (pending)** and **Concepts (pending)** — with Name, Slug, Description and Age.
 
-| Decision | Effect |
+Below them the page prints the exact command to run and a ready-made JSON batch covering every listed candidate, each entry set to `promote`:
+
+```bash
+llmwiki candidates apply --vault <vault> --actions -
+```
+
+Edit the batch before piping it in: change `action` to `flip-promote`, `discard` (optional `"reason"`) or `merge` (add `"into": "<slug>"`), or delete an entry to leave that candidate pending. **Copy command** and **Copy JSON** put each block on the clipboard. Run `llmwiki build` afterwards for a cold-open Home/Analytics recount. One-off CLI actions and `/wiki-candidates` do the same work interactively.
+
+| Action | Effect |
 |---|---|
-| **Skip** | Leave pending (default) |
-| **Promote** | Move into trusted `wiki/entities/` or `wiki/concepts/`; `status: reviewed` |
-| **Flip and promote** | Wrong kind → promote into the opposite trusted folder and rewrite `type:` (do not hand-`mv` stubs between candidate folders) |
-| **Discard** | Archive under `wiki/archive/candidates/` |
-| **Merge with…** | Pick another pending name in the **same table**; merges then archives the source stub (CLI `merge` can also target a trusted same-kind page) |
-
-Set decisions per row, then **Apply**. Under `llmwiki serve` (vault `…/site` beside `…/wiki`), Apply POSTs a **batch** to `/api/candidates`. On a static or `file://` open, Apply shows one pasteable `llmwiki candidates apply --actions '[{…}]'` line (Copy CLI) — same JSON shape as the API. After a successful served Apply the page reloads; run `llmwiki build` for a cold-open Home/Analytics recount. One-off CLI actions and `/wiki-candidates` remain available.
+| **promote** | Move into trusted `wiki/entities/` or `wiki/concepts/`; `status: reviewed` |
+| **flip-promote** | Wrong kind → promote into the opposite trusted folder and rewrite `type:` (do not hand-`mv` stubs between candidate folders) |
+| **discard** | Archive under `wiki/archive/candidates/` |
+| **merge** | Fold into another page of the same kind, then archive the stub |
 
 ---
 

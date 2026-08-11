@@ -9,7 +9,6 @@ The `llmwiki` package exposes several functions that can be imported directly:
 ```python
 from llmwiki.convert import convert_all
 from llmwiki.build import build_site
-from llmwiki.serve import serve_site
 from llmwiki.graph import build_and_report
 from llmwiki.exporters import export_all
 from llmwiki.adapters import REGISTRY, discover_adapters
@@ -50,23 +49,6 @@ rc = build_site(
 ```
 
 Reads `raw/` (and `wiki/` if populated) and renders a complete static HTML site. Equivalent to `llmwiki build`.
-
-### `serve_site()` -- start local HTTP server
-
-```python
-from llmwiki.serve import serve_site
-from pathlib import Path
-
-rc = serve_site(
-    directory=Path("site"),  # Path -- directory to serve
-    port=8765,               # int -- port number
-    host="127.0.0.1",       # str -- host to bind
-    open_browser=False,      # bool -- open browser after starting
-)
-# Returns: 0 on success, non-zero on error
-```
-
-Starts a local HTTP server using Python's stdlib `http.server`. Binds to localhost by default.
 
 ### `build_and_report()` -- knowledge graph
 

@@ -60,7 +60,7 @@ def test_bash_defines_function():
 def test_bash_includes_every_subcommand():
     script = bash_script()
     # All key subcommands must appear in the WORD list
-    for sub in ["sync", "build", "serve", "init", "version",
+    for sub in ["sync", "build", "init", "version",
                 "adapters", "graph", "lint",
                 "candidates", "synth", "synthesize"]:
         assert sub in script, f"missing subcommand: {sub}"
@@ -87,7 +87,7 @@ def test_zsh_describes_subcommands():
 
 def test_zsh_includes_subcommands():
     script = zsh_script()
-    for sub in ["sync", "build", "serve", "lint"]:
+    for sub in ["sync", "build", "lint"]:
         assert sub in script
 
 
@@ -106,7 +106,7 @@ def test_fish_has_flag_completions():
 
 def test_fish_includes_every_subcommand():
     script = fish_script()
-    for sub in ["sync", "build", "serve", "init", "lint",
+    for sub in ["sync", "build", "init", "lint",
                 "candidates", "synth", "synthesize"]:
         assert f"-a '{sub}'" in script
 

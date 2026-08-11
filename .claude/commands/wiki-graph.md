@@ -26,7 +26,7 @@ The graph tool walks every file under `wiki/` looking for `[[wikilink]]` referen
    - Any orphan nodes (zero inbound edges)
    - Any broken edges (links to pages that don't exist) — cross-check with `/wiki-lint`
 
-4. If the user asked for `html` or `both`, offer to open `graph/graph.html` locally with `python3 -m llmwiki serve --dir graph --port 8766`.
+4. If the user asked for `html` or `both`, tell the user to open `graph/graph.html` in a browser — the viewer and its library are emitted beside it, so it works straight from disk.
 
 5. Append to `wiki/log.md`:
    ```

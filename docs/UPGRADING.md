@@ -10,6 +10,29 @@ How to upgrade between `llmwiki` releases.  Most releases are drop-in (`pip inst
 
 The canonical per-release detail is [CHANGELOG.md](https://github.com/Pratiyush/llm-wiki/blob/master/CHANGELOG.md) — this guide focuses on "what might break".
 
+## Unreleased — the server is gone; the site is files (#109)
+
+- **`llmwiki serve` no longer exists, and `serve.sh` / `serve.bat` are deleted.** A build already produced a site that works from disk, so **open `site/index.html`** (or `<vault>/site/index.html`) in a browser instead. Navigation, project and session pages, topic pages, search and the graph all work with nothing running. Anything scripted around `llmwiki serve` should either open the file or, when it genuinely needs an HTTP origin, use the stdlib stand-in: `python3 -m http.server 8765 --directory <vault>/site`.
+- **Publishing is unchanged.** `site/` is still a static tree — GitHub Pages, GitLab Pages, Netlify, Vercel and any web server serve it as before. See `docs/deploy/`.
+- **Docker: the image builds, it does not host.** `Dockerfile` drops `EXPOSE` and its default command is now `build`; `docker-compose.yml` drops `ports`, the healthcheck and the restart policy. Replace `docker compose up -d` with `docker compose run --rm llmwiki build`, then open `./site/index.html` on the host — `site/` is bind-mounted, so the pages land beside your other files.
+- **Reviewing candidates moved to the command line, and nothing was lost.** The `POST /api/candidates` endpoint lived inside the removed server, so the Apply controls on `candidates.html` are gone. `llmwiki candidates apply --actions` already accepted the identical batch shape. The page now lists what is pending and prints the exact command plus a ready-made JSON batch:
+
+  ```bash
+  llmwiki candidates apply --vault <vault> --actions -
+  ```
+
+  Paste the JSON from the page into that command. Each entry starts as `promote`; change `action` to `flip-promote`, `discard` (optional `"reason"`) or `merge` (add `"into"`), or delete an entry to leave that candidate pending. The one-off subcommands (`list`, `promote`, `flip-promote`, `merge`, `discard`, `rewrite-key-facts`) and `/wiki-candidates` are unchanged. **The printed command now carries `--vault`** — the old copy-CLI line omitted it, so it only ever acted on the default vault.
+- **`/wiki-serve` is deleted.** If you installed the slash commands into your own agent directory, remove `wiki-serve.md` from it.
+- **The site fetches nothing.** highlight.js and both of its themes are now copied into the site root at build time instead of loaded from a CDN. No action needed — the files appear on your next `llmwiki build`. If code blocks come out unstyled, re-run the build; if they still do, the installed package is missing its vendored assets and should be reinstalled.
+
+## Unreleased — the displayed local path is a build input (#109)
+
+- **`llmwiki build --local-root PATH` sets the value shown in place of a session's stored home directory.** Without the flag it resolves from the machine running the build, so browsing your own site locally still shows paths you can paste into a shell — no configuration needed, and nothing to do after upgrading.
+- **Pass a fixed string when you publish.** `llmwiki build --vault demo --out ./site --local-root /home/user` renders the same pages on every machine, so a published site never shows whoever ran the build. The repository's own Pages workflow does exactly this.
+- **The displayed path is no longer worked out by undoing the redaction applied at import.** It rewrites the home directory a stored `cwd` begins with, so it no longer depends on `redaction.real_username` / `replacement_username` in `config.json` matching what was written months ago. Those settings still control what `sync` writes into `raw/`; they simply no longer affect what the site displays.
+- **Only the `cwd` field is substituted.** A session description is prose from the first user turn and is now rendered exactly as imported — previously any path-shaped text inside it was rewritten too. Descriptions on `sessions/index.html` may therefore show `/home/USER/…` where they previously showed your username. That is the redacted value as stored; it is not a regression.
+- **`llmwiki.convert.restore_local_path` is removed.** Scripts importing it should call `llmwiki.build.display_cwd(cwd, local_root)` instead.
+
 ## Unreleased — page kinds `question` and `comparison` removed (#109)
 
 - **`type: question` and `type: comparison` are no longer valid frontmatter.** They are gone from the `type:` vocabulary, so `llmwiki lint` reports a `frontmatter_validity` **error** on any page still declaring one, and `wiki_search` no longer offers them as a `kind` filter. Nothing in the product ever created such a page — `init` never scaffolded `wiki/questions/` or `wiki/comparisons/`, and no synth, harvest, or promote path wrote into them — so for almost every vault this is a no-op.

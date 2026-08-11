@@ -24,8 +24,7 @@
     "commands/wiki-ingest.md",
     "commands/wiki-query.md",
     "commands/wiki-lint.md",
-    "commands/wiki-build.md",
-    "commands/wiki-serve.md"
+    "commands/wiki-build.md"
   ],
   "skills": [
     "skills/llmwiki-sync/SKILL.md",

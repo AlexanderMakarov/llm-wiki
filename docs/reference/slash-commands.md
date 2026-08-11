@@ -11,11 +11,11 @@ what it does, what it runs under the hood, and a realistic invocation
 example. Use these inside **Claude Code** — Codex CLI picks the same
 files up via `install-skills`.
 
-Summary of **20 commands in 5 groups**:
+Summary of **19 commands in 5 groups**:
 
 | Group | Commands |
 |---|---|
-| **Wiki pipeline** (15) | `/wiki-init` `/wiki-sync` `/wiki-ingest` `/wiki-query` `/wiki-update` `/wiki-lint` `/wiki-candidates` `/wiki-synth` `/wiki-synthesize` `/wiki-graph` `/wiki-reflect` `/wiki-build` `/wiki-serve` `/wiki-export-marp` `/wiki-all` |
+| **Wiki pipeline** (14) | `/wiki-init` `/wiki-sync` `/wiki-ingest` `/wiki-query` `/wiki-update` `/wiki-lint` `/wiki-candidates` `/wiki-synth` `/wiki-synthesize` `/wiki-graph` `/wiki-reflect` `/wiki-build` `/wiki-export-marp` `/wiki-all` |
 | **Governance / maintainer** (3) | `/maintainer` `/release` `/triage-issue` |
 | **AWOS delivery** (2) | `/fix-bug` `/implement-feature` |
 
@@ -31,7 +31,7 @@ Summary of **20 commands in 5 groups**:
 | …chain commands with `&&` / pipe to `jq` | **CLI** |
 | …have the model read output + take follow-up actions | **slash** (inside Claude Code / Codex) |
 | …answer a free-form question ("what did I decide about X?") | **slash** (`/wiki-query`) |
-| …do one-shot builds, serves, graph generation | either — slashes wrap the CLI |
+| …do one-shot builds, graph generation | either — slashes wrap the CLI |
 
 **Rule of thumb:** if the output is for *you* to read + act on manually,
 use the CLI. If the output should feed back into an LLM turn, use the
@@ -235,7 +235,7 @@ want to re-run sync.
 
 **What:** triage pending candidates — `promote`, `flip-promote`, `merge`, `discard`, or batch `apply --actions`.
 
-**Wraps:** `python3 -m llmwiki candidates list` + follow-ups (`apply --actions` for batches). Same intents as `/candidates.html` (batch Apply under serve, or copy one `apply --actions` CLI line when static).
+**Wraps:** `python3 -m llmwiki candidates list` + follow-ups (`apply --actions` for batches). Same intents `site/candidates.html` lists, whose copyable batch feeds the same command.
 
 **When to use:** Home **Candidates** / Analytics **Candidates to review** is non-zero, `/wiki-lint` reported `stale_candidates`, or you just ran `llmwiki synth` / `synth --candidates-only`.
 
@@ -265,7 +265,7 @@ Claude will walk the queue one at a time and offer actions per candidate.
 ```
 
 Then open `site/graph.html` (auto-copied from `graph/graph.html` during
-build) or the compiled URL in the served site.
+build) in a browser.
 
 ---
 
@@ -304,24 +304,6 @@ a fresh site without running the full sync pipeline.
 /wiki-build to ~/public_html
 /wiki-build in tree search mode
 ```
-
----
-
-### `/wiki-serve`
-
-**What:** start a local HTTP server for the built site.
-
-**Wraps:** `python3 -m llmwiki serve`.
-
-**Example:**
-
-```
-/wiki-serve
-/wiki-serve on port 9000
-```
-
-The server is local-only (`127.0.0.1`) by default. Say "on my LAN" and
-Claude will pass `--host 0.0.0.0`.
 
 ---
 

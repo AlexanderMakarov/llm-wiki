@@ -119,7 +119,7 @@ Run `/wiki-build`:
 
 ## 6. Browse the site
 
-Run `/wiki-serve`. Opens http://127.0.0.1:8765
+Open `site/index.html` in a browser — the site is plain files, nothing to start.
 
 **What to explore:**
 - **Home** — project cards with session counts and activity heatmap

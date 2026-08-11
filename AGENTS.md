@@ -31,7 +31,7 @@ wiki/          LLM-maintained. Pages you write that summarise and cross-referenc
 site/          GENERATED. Static HTML from `python3 -m llmwiki build`. Do not edit.
 ```
 
-Canonical loop: `sync / add → synth (sources + harvest) → review candidates → build`. `synth` does not rebuild `site/` — run `build` when you want Home/Analytics refreshed. Serve with `llmwiki serve --dir <vault>/site` (bare `serve` defaults to `./site` under cwd).
+Canonical loop: `sync / add → synth (sources + harvest) → review candidates → build`. `synth` does not rebuild `site/` — run `build` when you want Home/Analytics refreshed. Then open `<vault>/site/index.html` in a browser; the site is plain files.
 
 ## Session stores by agent
 
@@ -54,11 +54,10 @@ Run from inside the repo:
 python3 -m llmwiki sync           # convert new .jsonl → raw/sessions/*.md
 python3 -m llmwiki synth          # wiki/sources/ + harvest wiki/candidates/
 python3 -m llmwiki build          # compile site/ from raw/ + wiki/
-python3 -m llmwiki serve --dir <vault>/site   # local HTTP server (default ./site is cwd-relative)
 python3 -m llmwiki init           # scaffold raw/, wiki/, site/ directories
 ```
 
-Or use the one-click scripts: `./sync.sh`, `./build.sh`, `./serve.sh` (macOS/Linux); `sync.bat`, `build.bat`, `serve.bat` (Windows).
+Or use the one-click scripts: `./sync.sh`, `./build.sh` (macOS/Linux); `sync.bat`, `build.bat` (Windows).
 
 ## Ingest Workflow
 

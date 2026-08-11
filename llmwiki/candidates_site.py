@@ -1,10 +1,10 @@
 """Static candidates review page + JSON payload helpers (#97).
 
-Build emits ``site/candidates.html``. Each row picks an intent (skip / promote /
-flip-promote / discard / merge); **Apply** either POSTs a batch to
-``/api/candidates`` under ``llmwiki serve``, or shows one pasteable
-``llmwiki candidates apply --actions '…'`` command when the page is static /
-``file://``.
+Build emits ``site/candidates.html`` — a read-only listing of everything
+pending under ``wiki/candidates/``. Reviewing happens on the command line:
+the page prints the exact ``llmwiki candidates apply --vault … --actions -``
+line to run and a ready-made JSON batch covering the listed candidates, so a
+reviewer edits the actions and pipes the batch straight in.
 """
 
 from __future__ import annotations
@@ -104,11 +104,13 @@ def cli_command_for_action(item: dict[str, Any]) -> str:
     )
 
 
-def cli_command_for_actions(actions: list[dict[str, Any]]) -> str:
+def cli_command_for_actions(
+    actions: list[dict[str, Any]], *, vault: str | None = None,
+) -> str:
     """One pasteable ``candidates apply --actions`` line for a batch.
 
-    Matches ``POST /api/candidates`` JSON shape so static Apply and the served
-    API stay aligned. Empty list raises.
+    ``vault`` names the knowledge base the batch applies to; omit it only
+    when the caller has already selected one another way. Empty list raises.
     """
     if not actions:
         raise ValueError("actions must be non-empty")
@@ -125,7 +127,25 @@ def cli_command_for_actions(actions: list[dict[str, Any]]) -> str:
         if action == "merge" and not str(item.get("into") or "").strip():
             raise ValueError("merge requires into")
     payload = json.dumps(actions, ensure_ascii=False, separators=(",", ":"))
-    return f"llmwiki candidates apply --actions {_shell_single_quote(payload)}"
+    vault_flag = f" --vault {_shell_single_quote(vault)}" if vault else ""
+    return f"llmwiki candidates apply{vault_flag} --actions {_shell_single_quote(payload)}"
+
+
+def vault_display_path(wiki_dir: Path | None) -> str:
+    """The ``--vault`` value to print for the knowledge base holding ``wiki_dir``.
+
+    Relative to the current directory when the vault sits under it — that is
+    the form the operator typed (``--vault demo``) and it is identical on
+    every machine — and absolute otherwise.
+    """
+    if wiki_dir is None:
+        return "."
+    root = wiki_dir.parent
+    try:
+        rel = root.resolve().relative_to(Path.cwd().resolve())
+    except (ValueError, OSError):
+        return str(root)
+    return str(rel) if str(rel) != "." else "."
 
 
 def apply_candidate_actions(
@@ -186,36 +206,7 @@ def apply_candidate_actions(
     return results
 
 
-def _intent_controls_html(row: dict[str, Any], peers: list[str]) -> str:
-    slug = html.escape(row["slug"])
-    kind = html.escape(row["kind"])
-    merge_opts = ['<option value="">Choose peer…</option>']
-    for peer in peers:
-        if peer == row["slug"]:
-            continue
-        merge_opts.append(
-            f'<option value="{html.escape(peer)}">{html.escape(peer)}</option>'
-        )
-    return (
-        f'<div class="cand-intent" data-slug="{slug}" data-kind="{kind}">'
-        f'<label class="muted">Decision '
-        f'<select class="cand-decision" aria-label="Decision for {slug}">'
-        '<option value="">Skip</option>'
-        '<option value="promote">Promote</option>'
-        '<option value="flip-promote">Flip and promote</option>'
-        '<option value="discard">Discard</option>'
-        '<option value="merge">Merge with…</option>'
-        "</select></label> "
-        f'<label class="cand-merge-wrap muted" hidden>Into '
-        f'<select class="cand-merge-into" aria-label="Merge {slug} into">'
-        + "".join(merge_opts)
-        + "</select></label>"
-        "</div>"
-    )
-
-
 def _table_rows_html(rows: list[dict[str, Any]], kind: str) -> str:
-    peers = [r["slug"] for r in rows if r["kind"] == kind]
     kind_rows = [r for r in rows if r["kind"] == kind]
     if not kind_rows:
         return (
@@ -227,205 +218,121 @@ def _table_rows_html(rows: list[dict[str, Any]], kind: str) -> str:
         age = f'{r["age_days"]}d' if r.get("created") else "—"
         out.append(
             "<tr>"
-            f'<td><strong>{html.escape(r["title"])}</strong>'
-            f'<div class="muted"><code>{html.escape(r["slug"])}</code> · {html.escape(age)}</div></td>'
+            f'<td><strong>{html.escape(r["title"])}</strong></td>'
+            f'<td><code>{html.escape(r["slug"])}</code></td>'
             f'<td>{html.escape(r["description"])}</td>'
-            f'<td class="cand-actions">{_intent_controls_html(r, peers)}</td>'
+            f'<td>{html.escape(age)}</td>'
             "</tr>"
         )
     return "\n".join(out)
 
 
+def actions_template(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """A ``--actions`` batch covering every listed candidate, all set to promote.
+
+    The reviewer changes each ``action`` (or deletes the entry to skip that
+    candidate) before piping the batch into ``candidates apply``.
+    """
+    return [
+        {"action": "promote", "slug": r["slug"], "kind": r["kind"]}
+        for r in rows
+    ]
+
+
+_COPY_SCRIPT = """<script>
+(function () {
+  var errEl = document.getElementById("cand-error");
+  function showError(msg) {
+    if (!errEl) return;
+    errEl.hidden = !msg;
+    errEl.textContent = msg || "";
+  }
+  function copyFrom(btn) {
+    var src = document.getElementById(btn.getAttribute("data-copy-target"));
+    var text = src ? (src.textContent || "") : "";
+    if (!text) {
+      showError("Nothing to copy on this page.");
+      return;
+    }
+    if (!navigator.clipboard || !navigator.clipboard.writeText) {
+      showError("Clipboard unavailable — select the text below and copy manually.");
+      return;
+    }
+    var label = btn.textContent;
+    navigator.clipboard.writeText(text).then(function () {
+      showError("");
+      btn.textContent = "Copied";
+      setTimeout(function () { btn.textContent = label; }, 1500);
+    }).catch(function (e) {
+      showError("Could not copy — select the text below and copy manually.");
+      if (window.__llmwikiReportError) window.__llmwikiReportError("Candidates copy failed", e);
+    });
+  }
+  document.querySelectorAll("[data-copy-target]").forEach(function (btn) {
+    btn.addEventListener("click", function () { copyFrom(btn); });
+  });
+})();
+</script>
+"""
+
+
+def _apply_block_html(rows: list[dict[str, Any]], vault: str) -> str:
+    """The command + ready-made JSON batch a reviewer copies into a terminal."""
+    if not rows:
+        return (
+            '<p class="muted">Nothing pending. New stubs appear here after '
+            "<code>llmwiki synth</code> harvests them.</p>"
+        )
+    command = (
+        f"llmwiki candidates apply --vault {_shell_single_quote(vault)} --actions -"
+    )
+    batch = json.dumps(actions_template(rows), ensure_ascii=False, indent=2)
+    return f"""<h2>Apply your decisions</h2>
+    <p>Run this in a terminal and paste the batch below into it:</p>
+    <div class="cand-apply-bar">
+      <button type="button" class="cand-apply-btn" data-copy-target="cand-command">Copy command</button>
+      <button type="button" class="cand-apply-btn" data-copy-target="cand-actions">Copy JSON</button>
+    </div>
+    <pre class="cand-cli" id="cand-command">{html.escape(command)}</pre>
+    <pre class="cand-cli" id="cand-actions">{html.escape(batch)}</pre>
+    <p class="muted">Every entry starts as <code>promote</code>. Change <code>action</code> to
+      <code>flip-promote</code>, <code>discard</code> (optional <code>"reason"</code>) or
+      <code>merge</code> (add <code>"into": "&lt;slug&gt;"</code>), or delete an entry to leave that
+      candidate pending. Then run <code>llmwiki build --vault {html.escape(vault)}</code> to refresh
+      these counts.</p>"""
+
+
 def render_candidates_body(wiki_dir: Path | None) -> str:
-    """Inner HTML for ``candidates.html`` (tables + status + inline script)."""
+    """Inner HTML for ``candidates.html`` — pending tables + the CLI batch."""
     if wiki_dir and wiki_dir.is_dir():
         payload = candidates_payload(wiki_dir)
     else:
         payload = {"candidates": [], "summary": {"to_review": 0}}
     rows = payload["candidates"]
     n = int(payload["summary"].get("to_review") or 0)
+    vault = vault_display_path(wiki_dir)
     entities = _table_rows_html(rows, "entities")
     concepts = _table_rows_html(rows, "concepts")
-    payload_json = json.dumps(payload, ensure_ascii=False)
+    headers = "<tr><th>Name</th><th>Slug</th><th>Description</th><th>Age</th></tr>"
     return f"""<section class="section">
   <div class="container">
-    <p class="muted" id="cand-status">{n} pending candidate(s). Set a decision per row, then <strong>Apply</strong>. Under <code>llmwiki serve</code> Apply runs a batch API; on a static / <code>file://</code> open it shows one pasteable <code>llmwiki candidates apply --actions</code> command. Run <code>llmwiki build</code> after Apply when you want a cold-open Home/Analytics recount.</p>
-    <p id="cand-mode" class="muted" hidden></p>
+    <p class="muted" id="cand-status">{n} pending candidate(s). This page lists what is waiting; review runs on the command line with <code>llmwiki candidates</code>.</p>
     <p id="cand-error" class="error-banner" hidden role="alert"></p>
     <h2>Entities (pending)</h2>
     <div class="state-table-wrap" tabindex="0" role="region" aria-label="Pending entity candidates">
       <table class="state-pipeline-table cand-review-table" id="cand-table-entities">
-        <thead><tr><th>Name</th><th>Description</th><th>Decision</th></tr></thead>
+        <thead>{headers}</thead>
         <tbody>{entities}</tbody>
       </table>
     </div>
     <h2>Concepts (pending)</h2>
     <div class="state-table-wrap" tabindex="0" role="region" aria-label="Pending concept candidates">
       <table class="state-pipeline-table cand-review-table" id="cand-table-concepts">
-        <thead><tr><th>Name</th><th>Description</th><th>Decision</th></tr></thead>
+        <thead>{headers}</thead>
         <tbody>{concepts}</tbody>
       </table>
     </div>
-    <div class="cand-apply-bar">
-      <button type="button" id="cand-apply" class="cand-apply-btn">Apply</button>
-      <button type="button" id="cand-copy-cli" class="cand-apply-btn" hidden>Copy CLI</button>
-    </div>
-    <pre id="cand-cli" class="cand-cli" hidden></pre>
+    {_apply_block_html(rows, vault)}
   </div>
 </section>
-<script>
-window.LLMWIKI_CANDIDATES = {payload_json};
-(function () {{
-  var errEl = document.getElementById("cand-error");
-  var modeEl = document.getElementById("cand-mode");
-  var cliEl = document.getElementById("cand-cli");
-  var applyBtn = document.getElementById("cand-apply");
-  var copyBtn = document.getElementById("cand-copy-cli");
-  var apiAvailable = false;
-
-  function showError(msg) {{
-    if (!errEl) return;
-    errEl.hidden = !msg;
-    errEl.textContent = msg || "";
-  }}
-  function setMode(text) {{
-    if (!modeEl) return;
-    modeEl.hidden = !text;
-    modeEl.textContent = text || "";
-  }}
-  function fileMode() {{
-    return location.protocol === "file:";
-  }}
-  function shellSingleQuote(s) {{
-    return "'" + String(s).replace(/'/g, "'\\\\''") + "'";
-  }}
-  function collectActions() {{
-    var actions = [];
-    document.querySelectorAll(".cand-intent").forEach(function (wrap) {{
-      var decision = wrap.querySelector(".cand-decision");
-      var action = decision && decision.value;
-      if (!action) return;
-      var item = {{
-        action: action,
-        slug: wrap.getAttribute("data-slug"),
-        kind: wrap.getAttribute("data-kind"),
-      }};
-      if (action === "merge") {{
-        var intoSel = wrap.querySelector(".cand-merge-into");
-        var into = intoSel && intoSel.value;
-        if (!into) {{
-          throw new Error("Choose a merge peer for " + item.slug);
-        }}
-        item.into = into;
-      }}
-      actions.push(item);
-    }});
-    return actions;
-  }}
-  function cliForBatch(actions) {{
-    var payload = JSON.stringify(actions);
-    return "llmwiki candidates apply --actions " + shellSingleQuote(payload);
-  }}
-  function showCli(actions) {{
-    cliEl.hidden = false;
-    cliEl.textContent = cliForBatch(actions);
-    copyBtn.hidden = false;
-    setMode("Static mode — paste this one command in a terminal (or Copy CLI), then llmwiki build.");
-  }}
-  async function probeApi() {{
-    if (fileMode()) {{
-      apiAvailable = false;
-      setMode("Static / file open — Apply will show CLI commands to run locally.");
-      return;
-    }}
-    try {{
-      var res = await fetch("/api/candidates", {{
-        method: "POST",
-        headers: {{ "Content-Type": "application/json" }},
-        body: JSON.stringify({{ actions: [] }}),
-      }});
-      apiAvailable = res.status !== 404 && res.status !== 405;
-    }} catch (e) {{
-      apiAvailable = false;
-    }}
-    if (apiAvailable) {{
-      setMode("Served mode — Apply runs a batch on this vault via POST /api/candidates.");
-    }} else {{
-      setMode("No candidates API on this host — Apply will show CLI commands instead.");
-    }}
-  }}
-  document.addEventListener("change", function (ev) {{
-    var decision = ev.target.closest && ev.target.closest(".cand-decision");
-    if (!decision) return;
-    var wrap = decision.closest(".cand-intent");
-    var mergeWrap = wrap && wrap.querySelector(".cand-merge-wrap");
-    if (mergeWrap) mergeWrap.hidden = decision.value !== "merge";
-  }});
-  copyBtn.addEventListener("click", function () {{
-    var text = cliEl.textContent || "";
-    if (!text) return;
-    if (navigator.clipboard && navigator.clipboard.writeText) {{
-      navigator.clipboard.writeText(text).then(function () {{
-        copyBtn.textContent = "Copied";
-        setTimeout(function () {{ copyBtn.textContent = "Copy CLI"; }}, 1500);
-      }}).catch(function () {{
-        showError("Could not copy — select the commands below and copy manually.");
-      }});
-    }} else {{
-      showError("Clipboard unavailable — select the commands below and copy manually.");
-    }}
-  }});
-  applyBtn.addEventListener("click", async function () {{
-    showError("");
-    var actions;
-    try {{
-      actions = collectActions();
-    }} catch (e) {{
-      showError(e.message || String(e));
-      return;
-    }}
-    if (!actions.length) {{
-      showError("Set at least one decision before Apply.");
-      return;
-    }}
-    if (!apiAvailable) {{
-      showCli(actions);
-      return;
-    }}
-    applyBtn.disabled = true;
-    try {{
-      var res = await fetch("/api/candidates", {{
-        method: "POST",
-        headers: {{ "Content-Type": "application/json" }},
-        body: JSON.stringify({{ actions: actions }}),
-      }});
-      var data = null;
-      try {{ data = await res.json(); }} catch (e) {{ data = null; }}
-      if (res.status === 404 || res.status === 405) {{
-        apiAvailable = false;
-        showCli(actions);
-        return;
-      }}
-      if (!res.ok) {{
-        showError((data && data.error) || ("Request failed (" + res.status + ")"));
-        return;
-      }}
-      var failed = (data && data.results || []).filter(function (r) {{ return !r.ok; }});
-      if (failed.length) {{
-        showError(failed.map(function (r) {{
-          return (r.slug || "?") + ": " + (r.error || "failed");
-        }}).join(" · "));
-        return;
-      }}
-      location.reload();
-    }} catch (e) {{
-      apiAvailable = false;
-      showCli(actions);
-    }} finally {{
-      applyBtn.disabled = false;
-    }}
-  }});
-  probeApi();
-}})();
-</script>
-"""
+{_COPY_SCRIPT}"""

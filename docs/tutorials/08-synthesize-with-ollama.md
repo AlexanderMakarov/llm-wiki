@@ -116,10 +116,10 @@ LLM's prose (one-paragraph summary + key claims + connections).
 ## Verify
 
 ```bash
-llmwiki build && llmwiki serve --open
+llmwiki build
 ```
 
-Browse to a session page; the body should be an actual summary, not
+Open `site/index.html` and browse to a session page; the body should be an actual summary, not
 the canned "Auto-synthesis — replace with actual quotes from the
 session" placeholder.
 

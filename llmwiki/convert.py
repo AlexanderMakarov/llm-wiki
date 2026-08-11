@@ -136,9 +136,8 @@ def _ensure_real_username(cfg: dict[str, Any]) -> None:
     #56: also re-run after config overlay. ``examples/sessions_config.json``
     ships ``"real_username": ""`` as a "please auto-detect" placeholder;
     users who copy that block into root ``config.json`` would otherwise
-    wipe the value ``load_config`` already filled, leaving
-    ``restore_local_path`` a no-op and ``projects/index.html`` mixing
-    ``/Users/USER/…`` with never-redacted real paths.
+    wipe the value ``load_config`` already filled, so ``raw/`` would keep
+    the real username in some paths and not others.
     """
     red = cfg.setdefault("redaction", {})
     if red.get("real_username"):
@@ -751,6 +750,37 @@ _DEFAULT_TOKEN_PATTERNS = [
 ]
 
 
+# Regex fragments naming every shape where a home-directory username may
+# legally sit — macOS / Linux / Windows / WSL / Cygwin (#416, #485). They are
+# NOT path guesses: convert stores the absolute ``cwd`` from the transcript
+# and redaction only rewrites the *username segment* inside these shapes
+# (``/home/<you>/…`` → ``/home/USER/…``) so raw/ can be committed. The site
+# build reuses the same allowlist to find the head of a stored path it should
+# display against the local root.
+HOME_PATH_PREFIXES = (
+    r"/Users/",
+    r"/home/",
+    r"C:\\Users\\",
+    r"C:/Users/",
+    r"/mnt/[a-z]/Users/",
+    r"[A-Za-z]:\\Users\\",
+    r"[A-Za-z]:/Users/",
+    r"/cygdrive/[a-z]/Users/",
+    r"\\\\\?\\[A-Za-z]:\\Users\\",
+    r"\\\\wsl\.localhost\\[A-Za-z0-9_-]+\\home\\",
+    r"\\\\wsl\$\\[A-Za-z0-9_-]+\\home\\",
+)
+
+# #56: agent session stores flatten absolute paths into one segment
+# (``/Users/alice/code/x`` → ``-Users-alice-code-x``). Redacting only the
+# leading ``/Users/<u>/`` left the real name in the encoded segment —
+# cosmetic privacy. Same allowlist idea, dash-encoded.
+ENCODED_PATH_PREFIXES = (
+    r"-Users-",
+    r"-home-",
+)
+
+
 class Redactor:
     def __init__(self, config: dict[str, Any]):
         red = config.get("redaction", {})
@@ -786,38 +816,6 @@ class Redactor:
             text = pat.sub("<REDACTED>", text)
         return text
 
-    # Shared with restore_local_path (#36) so redact/unredact can't drift.
-    #
-    # These are NOT path guesses. Convert already stores the absolute
-    # ``cwd`` from the session transcript; redaction only rewrites the
-    # *username segment* inside known home-directory shapes
-    # (``/home/<you>/…`` → ``/home/USER/…``) so raw/ can be committed.
-    # ``restore_local_path`` reverses that same substitution at build
-    # time. The list is the allowlist of shapes where a username may
-    # legally sit — macOS / Linux / Windows / WSL / Cygwin (#416, #485).
-    _HOME_PATH_PREFIXES = (
-        r"/Users/",
-        r"/home/",
-        r"C:\\Users\\",
-        r"C:/Users/",
-        r"/mnt/[a-z]/Users/",
-        r"[A-Za-z]:\\Users\\",
-        r"[A-Za-z]:/Users/",
-        r"/cygdrive/[a-z]/Users/",
-        r"\\\\\?\\[A-Za-z]:\\Users\\",
-        r"\\\\wsl\.localhost\\[A-Za-z0-9_-]+\\home\\",
-        r"\\\\wsl\$\\[A-Za-z0-9_-]+\\home\\",
-    )
-
-    # #56: agent session stores flatten absolute paths into one segment
-    # (``/Users/alice/code/x`` → ``-Users-alice-code-x``). Redacting only
-    # the leading ``/Users/<u>/`` left the real name in the encoded
-    # segment — cosmetic privacy. Same allowlist idea, dash-encoded.
-    _ENCODED_PATH_PREFIXES = (
-        r"-Users-",
-        r"-home-",
-    )
-
     def _redact_username(self, text: str) -> str:
         """Replace the real username in home-directory paths.
 
@@ -846,67 +844,25 @@ class Redactor:
 
 
 def _substitute_path_username(text: str, *, from_user: str, to_user: str) -> str:
-    """Rewrite ``from_user`` → ``to_user`` in home-path and encoded shapes.
-
-    Shared by ``Redactor._redact_username`` and ``restore_local_path`` so
-    the two directions cannot drift (#36, #56).
-    """
+    """Rewrite ``from_user`` → ``to_user`` in home-path and encoded shapes (#36, #56)."""
     if not text or not from_user or from_user == to_user:
         return text
     u = re.escape(from_user)
     # Home-dir shapes: prefix + user + path boundary.
     home = re.compile(
-        r"(?P<prefix>" + "|".join(Redactor._HOME_PATH_PREFIXES) + r")"
+        r"(?P<prefix>" + "|".join(HOME_PATH_PREFIXES) + r")"
         + r"(?P<user>" + u + r")"
         + r"(?=$|[/\\])"
     )
     # Encoded shapes: ``-Users-alice-code-x`` — user ends at next ``-``
     # or end of segment (``/``, ``\``, whitespace, end).
     encoded = re.compile(
-        r"(?P<prefix>" + "|".join(Redactor._ENCODED_PATH_PREFIXES) + r")"
+        r"(?P<prefix>" + "|".join(ENCODED_PATH_PREFIXES) + r")"
         + r"(?P<user>" + u + r")"
         + r"(?=$|[-/\\\s])"
     )
     text = home.sub(lambda m: m.group("prefix") + to_user, text)
     return encoded.sub(lambda m: m.group("prefix") + to_user, text)
-
-
-def restore_local_path(
-    path: str,
-    *,
-    real_user: str | None = None,
-    repl_user: str | None = None,
-) -> str:
-    """Undo username redaction in an already-absolute path (#36, #56).
-
-    The absolute cwd was captured at convert time from the transcript.
-    Redaction then replaced the home-dir username
-    (``/home/alice/code/x`` → ``/home/USER/code/x``) and the matching
-    dash-encoded segment (``-Users-alice-…`` → ``-Users-USER-…``) so
-    ``raw/`` is safe to publish. This reverses those substitutions
-    using the same allowlists — it does not invent or look up the
-    project path.
-
-    When ``real_user`` / ``repl_user`` are omitted, reads them from the
-    same convert-time redaction config that wrote the redacted form.
-    """
-    if not path:
-        return path
-    if real_user is None or repl_user is None:
-        # Same merge convert uses for sync (#25): examples + root config.json.
-        cfg = _resolve_convert_config(None)
-        red = cfg.get("redaction", {})
-        if real_user is None:
-            real_user = str(red.get("real_username") or "")
-        if repl_user is None:
-            repl_user = str(red.get("replacement_username") or "USER")
-    real_user = (real_user or "").strip()
-    repl_user = (repl_user or "USER").strip() or "USER"
-    if not real_user or real_user == repl_user:
-        return path
-    return _substitute_path_username(
-        path, from_user=repl_user, to_user=real_user
-    )
 
 
 def _close_open_fence(text: str) -> str:

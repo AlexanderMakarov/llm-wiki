@@ -159,7 +159,6 @@ def test_known_wrappers_match_expected_set():
         "wiki-candidates": "candidates",
         "wiki-graph": "graph",
         "wiki-init": "init",
-        "wiki-serve": "serve",
     }
     for slash_stem, cli_sub in expected.items():
         p = SLASH_DIR / f"{slash_stem}.md"

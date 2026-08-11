@@ -13,10 +13,10 @@
 # for the full release flow.
 #
 # Users who install via Homebrew get:
-# - `llmwiki` command on PATH (all subcommands: init, sync, build, serve, …)
+# - `llmwiki` command on PATH (all subcommands: init, sync, synth, build, …)
 # - Python 3.12 as a dependency (Homebrew manages it)
 # - `markdown` pip package installed in the formula's virtualenv
-# - No other runtime deps — highlight.js loads from CDN at view time
+# - No other runtime deps — every site asset ships inside the package
 
 class Llmwiki < Formula
   include Language::Python::Virtualenv
@@ -46,7 +46,7 @@ class Llmwiki < Formula
         llmwiki init          # scaffold raw/ wiki/ site/
         llmwiki sync          # convert your agent sessions
         llmwiki build         # compile the static site
-        llmwiki serve         # browse at http://127.0.0.1:8765
+        # then open site/index.html in a browser
 
       Session stores are auto-detected:
         Claude Code:  ~/.claude/projects/

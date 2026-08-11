@@ -47,21 +47,7 @@ python3 -m llmwiki build [options]
 | `--out` | `path` | `./site` | Output directory |
 | `--synthesize` | flag | off | Call `claude` CLI to generate an Overview synthesis |
 | `--claude` | `path` | `/usr/local/bin/claude` | Path to the claude binary |
-
-### `llmwiki serve`
-
-Start a local HTTP server for the built site.
-
-```bash
-python3 -m llmwiki serve [options]
-```
-
-| Flag | Type | Default | Description |
-|---|---|---|---|
-| `--dir` | `path` | `./site` | Directory to serve |
-| `--port` | `int` | `8765` | Port number |
-| `--host` | `string` | `127.0.0.1` | Host to bind (use `0.0.0.0` to expose to network) |
-| `--open` | flag | off | Open browser after starting |
+| `--local-root` | `path` | this machine's home | Value shown in place of a session's stored home directory (#109) |
 
 ### `llmwiki adapters`
 

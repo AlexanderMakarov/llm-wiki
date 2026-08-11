@@ -1,24 +1,22 @@
-"""#97 candidates review page + serve batch API."""
+"""#97 candidates page + the command line it hands off to."""
 
 from __future__ import annotations
 
-import http.client
+import html
 import json
-import os
-import signal
-import socket
 import subprocess
 import sys
-import time
 from pathlib import Path
 
 from llmwiki.build import render_candidates_page
 from llmwiki.candidates_site import (
+    actions_template,
     apply_candidate_actions,
     candidates_payload,
     cli_command_for_action,
     cli_command_for_actions,
     render_candidates_body,
+    vault_display_path,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -43,24 +41,7 @@ def _write_candidate(wiki: Path, kind: str, slug: str, *, body: str = "") -> Pat
     return path
 
 
-def _free_port() -> int:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(("127.0.0.1", 0))
-        return s.getsockname()[1]
-
-
-def _wait_until_accepting(port: int, timeout: float = 5.0) -> bool:
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        try:
-            with socket.create_connection(("127.0.0.1", port), timeout=0.1):
-                return True
-        except OSError:
-            time.sleep(0.05)
-    return False
-
-
-def test_render_candidates_body_intent_and_apply(tmp_path: Path) -> None:
+def test_render_candidates_body_lists_pending_and_offers_the_batch(tmp_path: Path) -> None:
     wiki = _mk_wiki(tmp_path)
     _write_candidate(wiki, "entities", "Alpha")
     _write_candidate(wiki, "concepts", "Beta")
@@ -69,18 +50,62 @@ def test_render_candidates_body_intent_and_apply(tmp_path: Path) -> None:
 
     assert "cand-table-entities" in html_out
     assert "cand-table-concepts" in html_out
-    assert "cand-decision" in html_out
-    assert 'id="cand-apply"' in html_out
-    assert "Flip and promote" in html_out
-    assert "cand-merge-into" in html_out
-    assert "/api/candidates" in html_out
-    assert "Copy CLI" in html_out
     assert "Alpha" in html_out
     assert "Beta" in html_out
-    # No per-row action buttons anymore.
-    assert 'data-action="promote"' not in html_out
+    assert 'id="cand-command"' in html_out
+    assert 'id="cand-actions"' in html_out
     payload = candidates_payload(wiki)
     assert payload["summary"]["to_review"] == 2
+
+
+def test_render_candidates_body_offers_no_controls_it_cannot_honour(tmp_path: Path) -> None:
+    # @regression
+    """The page is a listing: no decision widgets, no requests of any kind."""
+    wiki = _mk_wiki(tmp_path)
+    _write_candidate(wiki, "entities", "Alpha")
+
+    html_out = render_candidates_body(wiki)
+
+    assert "fetch(" not in html_out
+    assert "/api/candidates" not in html_out
+    assert "cand-decision" not in html_out
+    assert "cand-merge-into" not in html_out
+    assert 'id="cand-apply"' not in html_out
+
+
+def test_render_candidates_body_command_names_the_vault(tmp_path: Path) -> None:
+    # @regression
+    """Without --vault the printed command only ever hits the default vault."""
+    wiki = _mk_wiki(tmp_path)
+    _write_candidate(wiki, "entities", "Alpha")
+
+    html_out = render_candidates_body(wiki)
+
+    vault = vault_display_path(wiki)
+    assert f"llmwiki candidates apply --vault &#x27;{vault}&#x27; --actions -" in html_out
+
+
+def test_actions_template_covers_every_listed_candidate(tmp_path: Path) -> None:
+    wiki = _mk_wiki(tmp_path)
+    _write_candidate(wiki, "entities", "Alpha")
+    _write_candidate(wiki, "concepts", "Beta")
+
+    rows = candidates_payload(wiki)["candidates"]
+    batch = actions_template(rows)
+
+    assert {a["slug"] for a in batch} == {"Alpha", "Beta"}
+    assert {a["action"] for a in batch} == {"promote"}
+    assert {a["kind"] for a in batch} == {"entities", "concepts"}
+
+
+def test_vault_display_path_is_relative_when_the_vault_is_under_cwd(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    """A relative value is what the operator typed and is machine-independent."""
+    vault = tmp_path / "demo"
+    (vault / "wiki").mkdir(parents=True)
+    monkeypatch.chdir(tmp_path)
+    assert vault_display_path(vault / "wiki") == "demo"
 
 
 def test_cli_command_for_action_shapes() -> None:
@@ -149,12 +174,17 @@ def test_cli_candidates_apply_batch(tmp_path: Path) -> None:
     assert not (wiki / "candidates" / "entities" / "Drop.md").exists()
 
 
-def test_render_candidates_body_emits_apply_actions_cli(tmp_path: Path) -> None:
+def test_render_candidates_body_emits_a_pasteable_json_batch(tmp_path: Path) -> None:
     wiki = _mk_wiki(tmp_path)
     _write_candidate(wiki, "entities", "Alpha")
     html_out = render_candidates_body(wiki)
-    assert "candidates apply --actions" in html_out
-    assert "cliForBatch" in html_out
+    assert "candidates apply" in html_out
+    assert "--actions -" in html_out
+    start = html_out.index('id="cand-actions">') + len('id="cand-actions">')
+    batch = json.loads(
+        html.unescape(html_out[start:html_out.index("</pre>", start)])
+    )
+    assert batch == [{"action": "promote", "slug": "Alpha", "kind": "entities"}]
 
 
 def test_candidate_description_truncates(tmp_path: Path) -> None:
@@ -176,61 +206,5 @@ def test_render_candidates_page_writes_html(tmp_path: Path) -> None:
     assert path == out / "candidates.html"
     text = path.read_text(encoding="utf-8")
     assert "Gamma" in text
-    assert "cand-apply" in text
+    assert "cand-actions" in text
     assert 'class="nav' in text or "candidates.html" in text
-
-
-def test_serve_api_batch_promote_round_trip(tmp_path: Path) -> None:
-    """POST /api/candidates with actions[] promote with sibling wiki/."""
-    wiki = _mk_wiki(tmp_path)
-    _write_candidate(wiki, "entities", "PromoMe")
-    site = tmp_path / "site"
-    site.mkdir()
-    (site / "index.html").write_text("<html><body>ok</body></html>", encoding="utf-8")
-    render_candidates_page(wiki, site)
-
-    port = _free_port()
-    proc = subprocess.Popen(
-        [
-            sys.executable, "-m", "llmwiki", "serve",
-            "--dir", str(site),
-            "--port", str(port),
-            "--host", "127.0.0.1",
-        ],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        cwd=str(REPO_ROOT),
-    )
-    try:
-        assert _wait_until_accepting(port), f"serve did not bind :{port}"
-        body = json.dumps({
-            "actions": [
-                {"action": "promote", "slug": "PromoMe", "kind": "entities"},
-            ],
-        }).encode("utf-8")
-        conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
-        conn.request(
-            "POST",
-            "/api/candidates",
-            body=body,
-            headers={"Content-Type": "application/json", "Content-Length": str(len(body))},
-        )
-        resp = conn.getresponse()
-        raw = resp.read().decode("utf-8")
-        conn.close()
-        assert resp.status == 200, raw
-        data = json.loads(raw)
-        assert data.get("ok") is True
-        assert data["results"][0]["ok"] is True
-        assert data["summary"]["to_review"] == 0
-        assert (wiki / "entities" / "PromoMe.md").is_file()
-        assert not (wiki / "candidates" / "entities" / "PromoMe.md").exists()
-    finally:
-        if os.name == "nt":
-            proc.terminate()
-        else:
-            proc.send_signal(signal.SIGTERM)
-        try:
-            proc.wait(timeout=3)
-        except subprocess.TimeoutExpired:
-            proc.kill()

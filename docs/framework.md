@@ -144,7 +144,6 @@ llmwiki/                      # Python package (renamed from tools/)
 ├── cli.py                    # argparse entry
 ├── convert.py                # .jsonl → markdown
 ├── build.py                  # markdown → HTML
-├── serve.py                  # HTTP server
 ├── adapters/
 │   ├── __init__.py           # registry
 │   ├── base.py               # BaseAdapter
@@ -275,8 +274,8 @@ Adapter-flow is met when the checklist above is automatable (a GitHub Actions wo
 Same as parent. For llmwiki specifically:
 
 - [ ] Run `./setup.sh` on a pristine git clone
-- [ ] Run `./sync.sh && ./build.sh && ./serve.sh`
-- [ ] Visit http://127.0.0.1:8765/ and click through 5 random session pages
+- [ ] Run `./sync.sh && ./build.sh`
+- [ ] Open `site/index.html` and click through 5 random session pages
 - [ ] Cmd+K opens the command palette
 - [ ] `/` focuses the search bar
 - [ ] Dark mode toggle works and persists

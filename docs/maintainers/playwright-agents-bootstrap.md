@@ -105,9 +105,10 @@ export default defineConfig({
     // is a #464 follow-up, not a blocker.
   ],
   webServer: {
-    // We don't auto-build here — CI builds + serves before invoking
-    // playwright test. Local dev: `python3 -m llmwiki build && python3
-    // -m llmwiki serve` in another terminal first.
+    // We don't auto-build here — CI builds the site and puts a stdlib
+    // HTTP server in front of it before invoking playwright test. Local
+    // dev: `python3 -m llmwiki build` then `python3 -m http.server 8765
+    // --directory site` in another terminal first.
     command: "true",
     url: baseURL,
     reuseExistingServer: true,
@@ -206,7 +207,7 @@ jobs:
 
       - name: Serve site in the background
         run: |
-          python3 -m llmwiki serve --port 8765 &
+          python3 -m http.server 8765 --bind 127.0.0.1 --directory site &
           for i in {1..30}; do
             curl -fsS http://127.0.0.1:8765/ > /dev/null && break
             sleep 1
@@ -291,7 +292,7 @@ arrangement:
 - **`.github/workflows/agents-e2e.yml`** — runs `npx playwright
   test` on every PR touching `llmwiki/build.py`, `llmwiki/render/`,
   `tests/agents/`, or the playwright config. Builds the demo site,
-  serves it on `localhost:8765`, runs Chromium scenarios, uploads
+  puts a stdlib HTTP server in front of it on `localhost:8765`, runs Chromium scenarios, uploads
   HTML report (14-day retention) + traces (failure only).
 - **`docs/maintainers/playwright-agents-bootstrap.md`** stays in
   the repo as the historical record of the bootstrap commands +

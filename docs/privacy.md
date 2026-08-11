@@ -7,7 +7,7 @@ llmwiki processes session transcripts that can contain PII, API keys, file paths
 These are non-negotiable and enforced in both code and CI:
 
 1. **Redaction is ON by default.** Username, API keys, tokens, passwords, and emails are redacted before anything hits `raw/`.
-2. **Localhost-only binding.** The HTTP server binds to `127.0.0.1` unless you explicitly pass `--host 0.0.0.0`.
+2. **Nothing listens.** llmwiki ships no server; the built site is files you open in a browser.
 3. **No telemetry, ever.** The tool never calls home. No usage counts, no adapter pings, no error uploads.
 4. **No network by default.** Everything runs offline after install. `--synthesize` is the one exception — it calls the local `claude` binary on your machine — and it's opt-in.
 5. **raw/, wiki/, site/, and .ingestion-state.json are gitignored.** They never enter version control.
@@ -37,7 +37,7 @@ All patterns live in `examples/sessions_config.json` under `redaction.extra_patt
 - **Tool arguments that aren't recognised.** Bash commands get the first line preserved; Read/Write paths get the path preserved.
 - **Text content inside user prompts** — because the prompt IS the signal. If you pasted a contract or a password into a prompt, it's in `raw/`.
 
-**This is why `raw/` is gitignored and the server is localhost-only.**
+**This is why `raw/` is gitignored and nothing llmwiki produces is served anywhere.**
 
 ## Adding your own redaction patterns
 
@@ -104,17 +104,11 @@ ai-newsletter/2026-04-04-secret-deal-*
 
 Even this is off by default. You have to pass `--synthesize` explicitly. If you don't want any external API calls, just don't pass the flag — the home page still renders with project cards and stats, just without the synthesis paragraph.
 
-## Localhost server
+## Nothing listens, nothing is fetched
 
-`llmwiki serve` binds to `127.0.0.1:8765` by default. This means **only processes on your machine** can reach the server. Other machines on your LAN **cannot** see it. The browser tab is the only client.
+llmwiki ships no server. The built site is a directory of files you open in a browser, and every script and stylesheet it loads — including the code-highlighting library and its themes — is written into `site/` at build time. Opening it offline gives the same result as opening it online, and no process of yours is reachable from the network.
 
-If you want to share with a colleague on the same network:
-
-```bash
-llmwiki serve --dir <vault>/site --host 0.0.0.0 --port 8765
-```
-
-Note: this exposes `site/` (which may contain redacted transcripts of your sessions) to anyone who can reach your machine. Don't do this on untrusted networks.
+If you want to share `<vault>/site` with a colleague, copy it or publish it to a static host you control. Note that it may contain redacted transcripts of your sessions — don't put it anywhere you wouldn't put those.
 
 ## GitHub Pages (Self-Demo)
 

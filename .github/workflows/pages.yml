@@ -1,8 +1,8 @@
 name: Deploy demo site to GitHub Pages
 
 # Builds the public demo site from the committed `demo/` vault (no personal
-# data) and publishes it to GitHub Pages. Highlight.js loads client-side from
-# CDN so no extra deps.
+# data) and publishes it to GitHub Pages. Every script and stylesheet the site
+# loads is emitted into the output, so there is nothing to fetch at view time.
 #
 # `demo/` carries its own `raw/`, `wiki/` and `usage/` trees, so the build is a
 # single command with nothing to seed. Auto push-deploy stays off (#69); use
@@ -36,7 +36,9 @@ jobs:
         run: python -m pip install markdown
 
       - name: Build demo site
-        run: python -m llmwiki build --vault demo --out ./site
+        # --local-root fixes the path shown in place of a session's stored
+        # home directory, so the published pages never carry the runner's own.
+        run: python -m llmwiki build --vault demo --out ./site --local-root /home/user
 
       - name: Ensure .nojekyll for Pages
         run: touch ./site/.nojekyll

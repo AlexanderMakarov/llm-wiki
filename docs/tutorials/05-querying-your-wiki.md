@@ -35,7 +35,6 @@ type `/`.
 | `/wiki-lint` | Run all structural lint rules |
 | `/wiki-graph` | Build the interactive knowledge graph |
 | `/wiki-build` | Regenerate `site/` |
-| `/wiki-serve` | Start the local HTTP server |
 | `/wiki-update <page>` | Surgically edit one wiki page |
 | `/wiki-reflect` | Higher-order pass — find gaps, suggest new pages |
 

@@ -609,11 +609,11 @@ __SITE_NAV__
     <button type="button" role="menuitem" data-action="view-references">View references (CLI hint)</button>
     <div class="ctx-separator" role="separator"></div>
     <button type="button" role="menuitem" data-action="mark-stale" disabled
-            title="Requires `llmwiki serve --edit` (not yet shipped)">
+            title="Not available from the site — edit the page under wiki/">
       Mark stale
     </button>
     <button type="button" role="menuitem" data-action="archive" disabled
-            title="Requires `llmwiki serve --edit` (not yet shipped)">
+            title="Not available from the site — edit the page under wiki/">
       Archive
     </button>
   </div>

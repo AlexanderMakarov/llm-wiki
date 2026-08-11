@@ -54,7 +54,7 @@ You should see:
 
 ```
 wiki-build.md      wiki-graph.md      wiki-ingest.md     wiki-lint.md
-wiki-query.md      wiki-candidates.md     wiki-serve.md      wiki-sync.md
+wiki-query.md      wiki-candidates.md wiki-sync.md
 wiki-update.md     wiki-reflect.md
 ```
 

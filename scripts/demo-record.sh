@@ -75,16 +75,13 @@ type_cmd "llmwiki candidates list --vault demo"
 python3 -m llmwiki candidates list --vault demo 2>&1 || echo "  (no candidates pending)"
 pause 2
 
-# 9. Start server
-type_cmd "llmwiki serve --dir demo/site --port 8765 &"
-python3 -m llmwiki serve --dir demo/site --port 8765 &
-SERVER_PID=$!
-sleep 1
-echo "→ Server running at http://localhost:8765"
+# 9. Open the site
+type_cmd "open demo/site/index.html"
+echo "→ The built site is plain files under demo/site/"
 pause 2
 
 # 10. Wrap up
-type_cmd "# Browse to localhost:8765 to explore your wiki!"
+type_cmd "# Open demo/site/index.html to explore your wiki!"
 echo "Features: heatmap, token stats, tool charts, model directory,"
 echo "          search (Cmd+K), dark mode, AI exports (llms.txt, JSON-LD),"
 echo "          interactive graph (Graph tab), candidates workflow,"
@@ -95,6 +92,3 @@ echo ""
 echo "★ Star the repo: github.com/Pratiyush/llm-wiki"
 echo "★ Live demo: pratiyush.github.io/llm-wiki"
 pause 2
-
-# Cleanup
-kill $SERVER_PID 2>/dev/null || true

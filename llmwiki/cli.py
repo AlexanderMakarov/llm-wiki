@@ -8,7 +8,6 @@ Subcommands:
     sync              Convert new .jsonl sessions to markdown
     add               Add documents: URL, file, or folder → raw/docs/ + synthesize + build
     build             Compile static HTML site from raw/ + wiki/
-    serve             Start local HTTP server
     usage             Report local MCP tool-usage telemetry vs synthesis cost
     adapters          List available session-store adapters
     graph             Build the knowledge graph (graph/graph.json + graph.html)
@@ -101,7 +100,6 @@ from llmwiki.reindex import (
     seed_index_text,
 )
 from llmwiki.remove_doc import RemoveIncompleteError, build_remove_plan, execute_remove_plan, format_plan
-from llmwiki.serve import serve_site
 from llmwiki.source_checkout import SourceCheckoutError, ensure_not_source_checkout
 from llmwiki.state_store import (
     IncompatibleStateError,
@@ -147,7 +145,7 @@ from llmwiki.watch import watch as watch_loop
 #: guard covers: they are what turns a clone into a half-vault. ``add``,
 #: ``all`` and ``watch`` are compositions of ``sync`` / ``synth`` / ``build``
 #: and are guarded for the same reason. Reporting commands (``lint``,
-#: ``query``, ``trace``, ``usage``, ``serve``, ``adapters``) only read, and
+#: ``query``, ``trace``, ``usage``, ``adapters``) only read, and
 #: commands that edit an existing vault in place (``candidates``, ``remove``,
 #: ``consolidate-topics``, ``graph``) have nothing to edit in a checkout whose
 #: root can no longer become a vault.
@@ -456,23 +454,8 @@ def cmd_build(args: argparse.Namespace) -> int:
             raw_sessions=raw_sessions,
             raw_dir=raw_dir,
             wiki_dir=wiki_dir,
+            local_root=getattr(args, "local_root", "") or None,
         )
-
-
-def cmd_serve(args: argparse.Namespace) -> int:
-    """Serve the built site via a local HTTP server.
-
-    ``build --vault`` writes to ``<vault>/site``, so serving the repo's
-    ``site/`` afterwards shows a stale or empty tree. Resolution is from
-    the configured vault only — ``serve --vault`` was dropped in v1.4.0 —
-    and an explicit ``--dir`` still wins.
-    """
-    directory = args.dir
-    if directory == REPO_ROOT / "site":
-        root = _content_root(args)
-        if root != REPO_ROOT:
-            directory = root / "site"
-    return serve_site(directory=directory, port=args.port, host=args.host, open_browser=args.open)
 
 
 def cmd_usage(args: argparse.Namespace) -> int:
@@ -2104,6 +2087,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--search-mode", choices=["auto", "tree", "flat"], default="auto",
         help="Search index mode (#53): auto picks tree vs flat from heading depth",
     )
+    build.add_argument(
+        "--local-root", type=str, default="", dest="local_root", metavar="PATH",
+        help="(#109) Value shown in place of a session's stored home "
+             "directory, e.g. /home/user. Defaults to this machine's home "
+             "directory so local paths stay usable; pass a fixed string when "
+             "publishing so the same vault renders identically anywhere.",
+    )
     _add_vault_arg(build, role="build")
     build.add_argument(
         "--seed-project-stubs", action="store_true", dest="seed_project_stubs",
@@ -2114,14 +2104,6 @@ def build_parser() -> argparse.ArgumentParser:
              "this flag to opt in from CI/scripts.",
     )
     build.set_defaults(func=cmd_build)
-
-    # serve
-    serve = sub.add_parser("serve", help="Start local HTTP server")
-    serve.add_argument("--dir", type=Path, default=REPO_ROOT / "site", help="Directory to serve (default: site/)")
-    serve.add_argument("--port", type=int, default=8765)
-    serve.add_argument("--host", type=str, default="127.0.0.1")
-    serve.add_argument("--open", action="store_true", help="Open browser after starting")
-    serve.set_defaults(func=cmd_serve)
 
     # usage (#26) — local MCP tool-usage telemetry
     usage_p = sub.add_parser(
@@ -2298,7 +2280,7 @@ def build_parser() -> argparse.ArgumentParser:
     cand.add_argument(
         "--actions", type=str, default=None, metavar="JSON",
         help="For apply: JSON array of {action,slug,kind?,into?,reason?} "
-             "(same shape as POST /api/candidates); pass - to read stdin",
+             "(the shape site/candidates.html prints); pass - to read stdin",
     )
     _add_vault_arg(cand, role="candidates")
     cand.set_defaults(func=cmd_candidates)

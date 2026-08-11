@@ -24,7 +24,7 @@ def test_part1_has_core_steps():
     assert "setup.bat" in text
     assert "llmwiki sync" in text
     assert "llmwiki build" in text
-    assert "llmwiki serve" in text
+    assert "site/index.html" in text
 
 
 def test_part2_explains_three_layers():

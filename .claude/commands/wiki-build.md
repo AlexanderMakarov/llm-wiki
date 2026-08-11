@@ -12,4 +12,4 @@ The `--synthesize` flag (optional) calls the `claude` CLI once to generate an Ov
 
 Report the output directory (default: `site/`), the total number of HTML files, and total size.
 
-Remind the user they can browse the result with `/wiki-serve` (starts a local HTTP server on port 8765).
+Remind the user they can browse the result by opening `site/index.html` in a browser — it is plain files, nothing needs to be running.

@@ -101,10 +101,9 @@ With `vault.default_path` set (step 2 above), these all read and write the vault
 llmwiki sync     # pull new sessions from your agent store → <vault>/raw/sessions/<project>/*.md
 llmwiki synth    # fill wiki/sources/ and harvest wiki/candidates/ (then review)
 llmwiki build    # compile <vault>/raw/ + <vault>/wiki/ → <vault>/site/
-llmwiki serve --dir <vault>/site   # serve at http://127.0.0.1:8765/
 ```
 
-Open [http://127.0.0.1:8765/](http://127.0.0.1:8765/) and click around. Try:
+Open `<vault>/site/index.html` in a browser — the site is plain files, so nothing has to be running and nothing is fetched — and click around. Try:
 
 - **⌘K** or **Ctrl+K** — command palette
 - **/** — focus the search bar

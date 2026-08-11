@@ -149,7 +149,8 @@ None of these can be fixed independently. A README written against a fabricated 
   - **Acceptance Criteria:**
     - [ ] The product no longer ships a command that starts an HTTP server, and the one-click serve helper scripts are gone.
     - [ ] A built site is fully usable by opening its home page as a file: navigation, project pages, session pages, topic pages, search and the graph all work with nothing running.
-    - [ ] A built site needs no network either. Every script and stylesheet it loads ships with the site, including the code-highlighting library and its light and dark themes. Opening the site offline gives the same result as opening it online.
+    - [ ] Every script and stylesheet carrying behaviour or layout ships with the site, including the code-highlighting library and its light and dark themes. No page fetches code or styling from a third party.
+    - [ ] **Known exception, accepted deliberately:** the site links two web fonts from a font service. An offline reader gets the same pages with the reader's own system fonts instead of the intended ones — layout and behaviour are unaffected. Vendoring them was considered and rejected as not worth several hundred kilobytes of binary assets in every published site. A test pins this as the only remaining outbound link, so a new one fails loudly rather than slipping in.
     - [ ] Reviewing candidates is possible entirely from the command line, and no review capability is lost — the batch action format the old review page posted is already accepted by the command line.
     - [ ] The candidates page still lists what is pending and states plainly how to act on it, rather than offering controls that cannot work.
     - [ ] No document, agent instruction, or built page tells a reader to start a server in order to view their wiki. Every such place says to open the site instead.
