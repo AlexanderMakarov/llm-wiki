@@ -285,3 +285,22 @@ The corpus is public and permanent, so pattern-matching against a space that can
 **Spec additions this session:** R12 (remove the server, candidate review moves to the CLI — `candidates apply --actions` already accepts the identical batch shape); R13 (displayed local paths become an explicit `build` input rather than a reversal of import-time redaction, so builds are reproducible). Both land in Stage C, R12 first, because the documents written afterwards must describe the result.
 
 **Synth deliberately not run.** The operator holds that lever — it is the only step that spends money. Corpus is staged and priced at ~$1.57 for 144 sources.
+
+## smoke confirm — passed — 2026-08-11
+
+Operator reviewed the rebuilt demo site and confirmed it. Satisfies the delivery-flow §4 user smoke-confirm gate for the work committed so far (Stage A plus the demo corpus).
+
+Reported and fixed during that review, all mine rather than product defects:
+
+- The generator emitted an `adapter:` frontmatter field that nothing reads; `detect_agent_label` reads `agent:`. Compounded by the model check running before the source and tag checks, so every session rendered as "Claude" despite four adapters being represented.
+- Session dates clustered inside one week instead of decaying across four months.
+- Docs ingested with `--project` collapsed into a single Home entry, because `group_documents` treats a shared top-level folder under `raw/docs` as chunks of one document.
+- The Analytics zero-hit column read 0% for every tool because the telemetry fixture contained no misses.
+
+## sequencing change — docs before synth — 2026-08-11
+
+Operator: no point synthesising the demo now, because the docs it is built from are about to be rewritten. Measured blast radius on the 70-document demo corpus: **19 mention `serve`**, 13 mention the server or its API, 2 mention the removed page kinds. Synthesising now would pay to summarise text that Stage C replaces, then pay again.
+
+Revised order: **Stage C docs and product changes first, then one synth at the end.** This inverts the spec's Stage B → Stage C order for the demo-content step only; the refresh script still belongs to Stage B and is what makes subsequent doc edits cheap.
+
+**Consequence for the PR plan (R11):** the branch now carries Stage A, the Stage B demo corpus, and Stage C work together, so the three-PR split recorded in R11 no longer matches reality. Raised with the operator rather than drifting silently.
