@@ -1,0 +1,126 @@
+---
+title: "llmwiki documentation"
+slug: llmwiki-documentation
+project: llmwiki-documentation
+type: source
+tags: [wiki-add, raw-doc]
+date: 2026-08-10
+source: "docs/index.md"
+content_sha256: 33a194286b437a50855c520ba8487797b5c74637c243712126174c75fd249ef0
+---
+
+---
+title: "llmwiki documentation"
+type: navigation
+docs_shell: true
+---
+
+# llmwiki documentation
+
+A local, stdlib-only Python knowledge base built from your AI-coding-agent session transcripts. Install in five minutes, then keep every session searchable, interlinked, and offline. No database, no account, no cloud.
+
+---
+
+## Pick your mode
+
+llmwiki runs two interchangeable ways. Pick one, start — you can switch later.
+
+| | [**API mode**](modes/api/) | [**Agent mode**](modes/agent/) |
+|---|---|---|
+| Who calls the LLM | Python + Anthropic API | Your running Claude Code / Codex CLI |
+| API key | Yes (`ANTHROPIC_API_KEY`) | No |
+| Cost | Per token (with cache) | Included in your agent subscription |
+| Concurrency | Batch + parallel | Serial |
+| Best for | Large corpora, cron, CI | Interactive, exploratory |
+
+→ **[Read the full comparison](modes/)** before picking.
+
+---
+
+## Getting started — 5 minutes
+
+| # | Tutorial | Time |
+|---|---|---|
+| 01 | [Installation](tutorials/01-installation.md) — macOS / Linux / Windows / Docker | 5 min |
+| 02 | [First sync](tutorials/02-first-sync.md) — from install to a browsable site | 5 min |
+
+*If it's not working in 10 minutes, [open an issue]({{__llmwiki_github__}}/issues/new) — that's a bug in the docs.*
+
+---
+
+## Use with your agent
+
+- **[Claude Code](tutorials/03-use-with-claude-code.md)** — slash commands, session metadata, `/wiki-ingest`, `/wiki-sync`, `/wiki-query`.
+- **[Codex CLI](tutorials/04-use-with-codex-cli.md)** — sync from `~/.codex/sessions/`, live-session filtering.
+- *Adapter reference:* [Claude Code](adapters/claude-code.md) · [Codex CLI](adapters/codex-cli.md) · [Cursor](adapters/cursor.md) · [Gemini CLI](adapters/gemini-cli.md) · [Copilot](adapters/copilot.md) · [Obsidian](adapters/obsidian.md) · [OpenCode / OpenClaw](adapters/opencode.md) · [ChatGPT](adapters/chatgpt.md).
+
+---
+
+## Use it locally
+
+- **[Query your wiki](tutorials/05-querying-your-wiki.md)** — `/wiki-query`, `/wiki-graph`, `/wiki-lint`, `/wiki-candidates`, `/wiki-serve`.
+- **[Bring your existing Obsidian / Logseq vault](tutorials/06-bring-your-obsidian-vault.md)** — `llmwiki sync --vault <path>`, non-destructive by default.
+- **[Example workflows](tutorials/07-example-workflows.md)** — four real, end-to-end workflows.
+
+---
+
+## Deploy
+
+| Target | Guide |
+|---|---|
+| GitHub Pages | [deploy/github-pages.md](deploy/github-pages.md) |
+| GitLab Pages | [deploy/gitlab-pages.md](deploy/gitlab-pages.md) |
+| Docker / GHCR | [deploy/docker.md](deploy/docker.md) |
+| Vercel / Netlify | [deploy/vercel-netlify.md](deploy/vercel-netlify.md) |
+| PyPI publishing | [deploy/pypi-publishing.md](deploy/pypi-publishing.md) |
+| Homebrew tap | [deploy/homebrew-setup.md](deploy/homebrew-setup.md) |
+
+---
+
+## Reference
+
+- **[CLI reference](reference/cli.md)** — every `python3 -m llmwiki <subcommand>` with every flag and realistic examples.
+- **[Slash commands reference](reference/slash-commands.md)** — every `/wiki-*` command used from Claude Code / Codex.
+- **[UI reference](reference/ui.md)** — every screen on the compiled site, how to reach it, what it shows.
+- **[Architecture](architecture.md)** — three layers (`raw/` / `wiki/` / `site/`).
+- **[State persistence](reference/state-persistence.md)** — vault usage logs, rollup, daily series, and state file.
+- **[Configuration](configuration.md)** · **[Full configuration reference](configuration-reference.md)**.
+- **[Cache tiers](reference/cache-tiers.md)** — L1 / L2 / L3 / L4 frontmatter.
+- **[Prompt caching + batch API](reference/prompt-caching.md)**.
+- **[Synthesis cost](reference/synthesis-cost.md)** — how LLM pricing works, what a page actually costs, why the defaults are what they are.
+- **[Reader API contract](reference/reader-api.md)** — stable shapes of every file `llmwiki build` writes.
+- **[Reader-first article shell](reference/reader-shell.md)** — opt-in Wikipedia-style layout.
+- **[Entity schema](reference/entity-schema.md)** — structured model-profile frontmatter.
+- **[Adapter authoring](adapter-authoring.md)** — write an adapter for a new agent.
+
+---
+
+## Operate
+
+- **[Command cheatsheet](cheatsheet.md)** — every slash + CLI command on one page.
+- **[Upgrade guide](UPGRADING.md)** — what changes between releases, migrations, opt-ins.
+- **[FAQ](faq.md)** · **[Troubleshooting](troubleshooting.md)** · **[Privacy](privacy.md)**.
+- **[Accessibility](accessibility.md)** (WCAG 2.1 AA).
+- **[Benchmarks](benchmarks.md)** · **[Competitor landscape](competitor-landscape.md)**.
+- **Maintainers** — governance docs at [`docs/maintainers/`]({{__llmwiki_github_blob__}}/docs/maintainers).
+
+---
+
+## Contributing
+
+- **[Style guide](style-guide.md)** — how to write docs that match this site's voice.
+- **[Adapter authoring](adapter-authoring.md)** — ship a new agent adapter.
+- **[Architecture](architecture.md)** — understand the three-layer model before changing code.
+- **[Roadmap](roadmap.md)** · **[Public roadmap](public-roadmap.md)**.
+
+---
+
+## What llmwiki is not
+
+It's not a vector database, not a RAG framework, not a hosted service. It compiles markdown from JSONL transcripts, writes a static site, and stays out of the way. The only third-party runtime dependency is `markdown`.
+
+## What's new
+
+See the **[CHANGELOG]({{__llmwiki_github_blob__}}/CHANGELOG.md)**. Latest tagged release: **v{{__llmwiki_version__}}**.
+
+> The version above is substituted from `llmwiki/__init__.py:__version__` at build time, so this hub stays current on every release without a manual edit (#457).
