@@ -562,17 +562,69 @@ kbd { display: inline-block; padding: 2px 6px; font-family: var(--mono); font-si
 .queue-commands-table th, .queue-commands-table td { border: 1px solid var(--border); padding: 8px 10px; vertical-align: top; }
 .queue-commands-table th { background: var(--bg-alt); text-align: left; }
 .queue-copy-btn { white-space: nowrap; }
-/* #97 candidates review page — pending listing + copyable CLI batch */
-.cand-apply-bar { display: flex; gap: 8px; flex-wrap: wrap; margin: 16px 0 8px; }
+/* #97 candidates review page — per-row decisions + the batch Apply assembles.
+   The Apply bar sticks under the 56px site nav so it stays reachable while the
+   reviewer scrolls the tables below it. */
+.cand-apply-panel { position: sticky; top: 56px; z-index: 90; background: var(--bg); padding: 8px 0; border-bottom: 1px solid var(--border); }
+.cand-apply-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.cand-apply-spacer { flex: 1 1 auto; }
 .cand-apply-btn {
   font: inherit; font-size: 0.9rem; padding: 6px 14px;
   border: 1px solid var(--border); border-radius: 4px; background: var(--bg-alt); color: var(--text); cursor: pointer;
 }
 .cand-apply-btn:hover { border-color: var(--accent); }
+.cand-apply-primary { border-color: var(--accent); font-weight: 600; }
+.cand-output { margin: 12px 0 4px; }
 .cand-cli {
-  margin: 8px 0 16px; padding: 12px; overflow-x: auto;
+  margin: 8px 0 12px; padding: 12px; overflow-x: auto;
   background: var(--bg-alt); border: 1px solid var(--border); border-radius: 6px;
   font-size: 0.85rem; white-space: pre-wrap;
+}
+.cand-batch { max-height: 45vh; overflow-y: auto; }
+.cand-intent { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; }
+.cand-intent label { display: inline-flex; gap: 6px; align-items: center; font-size: 0.82rem; }
+/* An authored display beats the hidden attribute, which only works through
+   the UA stylesheet. Without this the conditional Into and Reason fields
+   render on every row whatever the decision is. */
+.cand-intent label[hidden] { display: none; }
+.cand-decision, .cand-merge-into, .cand-discard-reason {
+  font: inherit; font-size: 0.85rem; padding: 4px 6px; color: var(--text);
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: 4px;
+}
+.cand-intent[data-decided="yes"] { font-weight: 600; }
+.cand-intent[data-decided="yes"] .cand-decision { border-color: var(--accent); }
+/* The merge wrap is a span, not a label, because it holds a combobox whose
+   listbox is not phrasing content — so it needs the same [hidden] guard. */
+.cand-intent .cand-merge-wrap { display: inline-flex; gap: 6px; align-items: center; font-size: 0.82rem; }
+.cand-intent .cand-merge-wrap[hidden] { display: none; }
+.cand-combo { position: relative; display: inline-flex; align-items: center; gap: 3px; }
+.cand-combo-open {
+  font: inherit; font-size: 0.7rem; line-height: 1; padding: 6px 7px; cursor: pointer;
+  color: var(--text); background: var(--bg-alt);
+  border: 1px solid var(--border); border-radius: 4px;
+}
+.cand-combo-open:hover { border-color: var(--accent); }
+/* The dropdown escapes its cell, so the candidates tables must not clip it;
+   the review table has three wrapping columns and fits narrow screens. */
+.cand-table-wrap { overflow: visible; }
+.cand-review-table { min-width: 0; }
+.cand-combo-list, .cand-combo-empty {
+  position: absolute; top: calc(100% + 3px); left: 0; z-index: 95;
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: 4px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.22);
+}
+.cand-combo-list {
+  margin: 0; padding: 3px; list-style: none;
+  min-width: 200px; max-width: 320px; max-height: 220px; overflow-y: auto;
+}
+.cand-combo-empty { padding: 6px 9px; font-size: 0.8rem; color: var(--text-muted); }
+.cand-combo-list[hidden], .cand-combo-empty[hidden] { display: none; }
+.cand-combo-option { padding: 4px 8px; border-radius: 3px; font-size: 0.85rem; font-weight: 400; white-space: nowrap; cursor: pointer; }
+.cand-combo-option:hover { background: var(--bg-alt); }
+.cand-combo-option[aria-selected="true"] { background: var(--accent); color: var(--bg); }
+.cand-merge-into[data-invalid="yes"], .cand-discard-reason[data-invalid="yes"] {
+  border-color: var(--danger, #b91c1c);
+  box-shadow: 0 0 0 1px var(--danger, #b91c1c);
 }
 .error-banner { color: var(--danger, #b91c1c); background: color-mix(in srgb, var(--danger, #b91c1c) 12%, transparent); border: 1px solid var(--danger, #b91c1c); padding: 10px 12px; border-radius: 6px; margin: 12px 0; }
 @media (max-width: 860px) {

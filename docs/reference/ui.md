@@ -18,7 +18,7 @@ Every page in the site carries the same header nav. Keyboard: `⌘K` opens the c
 |---|---|---|---|
 | 1 | **Home** | `/index.html` | pipeline State widget (Eligible sources Raw→To synthesize→Synthesized→On disk + Knowledge layer Candidates/Entities/Concepts + collapsible backlog/candidates/commands) + recent raw docs |
 | 2 | **Raw** | `/raw.html` | file tree browser of raw documents (wiki-add layer) |
-| — | **Candidates** | `/candidates.html` | what is pending under `wiki/candidates/`, plus the `candidates apply` command and JSON batch to act on it |
+| — | **Candidates** | `/candidates.html` | what is pending under `wiki/candidates/`, a per-row Decision control, and an Apply that assembles the `candidates apply` command + JSON batch for the rows you decided |
 | 3 | **Graph** | `/graph.html` | interactive force-directed knowledge graph (vis-network) |
 | 4 | **Projects** | `/projects/index.html` | filterable card grid of every project + freshness badge |
 | 5 | **Sessions** | `/sessions/index.html` | sortable table of every session, agent badge, project, model, tool-call count |
@@ -51,15 +51,21 @@ Numbers come from `llmwiki-state.js` (`synth.pipeline` + `synth.pending` + `synt
 
 URL: `/candidates.html`
 
-Read-only listing of pending stubs under `wiki/candidates/` (#97). Two tables — **Entities (pending)** and **Concepts (pending)** — with Name, Slug, Description and Age.
+The review gate for pending stubs under `wiki/candidates/` (#97). Two tables — **Entities (pending)** and **Concepts (pending)** — each with **Name** (title, slug and age), **Description**, and **Decision**.
 
-Below them the page prints the exact command to run and a ready-made JSON batch covering every listed candidate, each entry set to `promote`:
+**Decision** is a per-row select offering exactly the actions `llmwiki candidates apply` executes: *Promote*, *Flip and promote*, *Merge into…* and *Discard*. The last two reveal the field that action needs, and both fields are required before the row can be applied. Every row starts at **No decision** and stays there until you choose — deciding is browser state, so nothing runs and nothing is sent.
+
+**Apply** sits in a bar above the tables that stays pinned under the site nav while you scroll, so it is in reach from any row. It assembles the rows you decided — and only those — into the command to run and the JSON batch to pipe into it, shown directly below the bar with **Copy command** and **Copy JSON**:
 
 ```bash
 llmwiki candidates apply --vault <vault> --actions -
 ```
 
-Edit the batch before piping it in: change `action` to `flip-promote`, `discard` (optional `"reason"`) or `merge` (add `"into": "<slug>"`), or delete an entry to leave that candidate pending. **Copy command** and **Copy JSON** put each block on the clipboard. Run `llmwiki build` afterwards for a cold-open Home/Analytics recount. One-off CLI actions and `/wiki-candidates` do the same work interactively.
+*Merge into…* reveals a **filterable dropdown** of every page `merge --into` resolves for that table — the trusted pages under `wiki/<kind>/` first, then the same-table pending stubs. Press the ▾ button or `↓` to browse the whole list without typing, type any part of a name to narrow it (case-insensitive substring), `↑` / `↓` to move, `Enter` to choose, `Esc` to close. The list is the closed set of valid targets: text naming no page is marked as you type, and a row holding one is named on the page instead of going into a batch that would fail at the CLI.
+
+*Discard* reveals a **required reason**. `discard` files that reason beside the archived stub, so a blank one throws the decision away — a row set to *Discard* with no reason is held back the same way an unresolved merge target is.
+
+A row left at **No decision** is absent from the batch and stays pending, so a half-finished review can be applied and resumed. Apply refuses an empty batch; when a decided row is not yet executable it names the row, marks the field and moves focus to it, and emits nothing until you finish it. Run `llmwiki build` afterwards for a cold-open Home/Analytics recount. One-off CLI actions and `/wiki-candidates` do the same work interactively.
 
 | Action | Effect |
 |---|---|
