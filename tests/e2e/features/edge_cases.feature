@@ -4,7 +4,7 @@ Feature: Edge cases that break first in production
   So no future PR reintroduces a UX regression
 
   Background:
-    Given a built llmwiki site is served
+    Given a built llmwiki site on disk
 
   Scenario: Empty-query palette still renders the initial result set
     When I visit the homepage
@@ -27,9 +27,9 @@ Feature: Edge cases that break first in production
     And I press "Escape"
     Then the command palette is hidden
 
-  Scenario: 404 page does not exist and broken internal links return a real 404
+  Scenario: A path the build never emitted is not part of the site
     When I visit the path "/this-page-does-not-exist.html"
-    Then the response status is 404
+    Then the browser cannot open the page
 
   Scenario: Raw HTML tags inside session prose do not leak into the DOM
     When I open the session "e2e-demo/2026-04-09-e2e-python-demo"

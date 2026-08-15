@@ -1,14 +1,13 @@
 # Synthetic monitoring failure
 
-The nightly synthetic monitoring workflow (`.github/workflows/synthetic.yml`) failed against the deployed demo (default target: `https://alexandermakarov.github.io/llm-wiki/`).
+The nightly synthetic monitoring workflow (`.github/workflows/synthetic.yml`) failed while walking a freshly built demo site opened as files.
 
 ## Possible causes
 
-- GitHub Pages publish lag or partial publish corruption — try a manual rebuild via the Pages workflow.
-- Third-party CDN failure (highlight.js, axe-core, fonts.googleapis.com). vis-network is vendored beside `graph.html` (#127) and is not CDN-loaded.
+- The build itself emitted a broken or incomplete site — check the most recent `pages.yml` run for the same corpus.
+- A page asked for a file the build did not emit, so it loads only where something answers requests for it.
+- Third-party failure on the one accepted outbound link (fonts.googleapis.com) or on axe-core. highlight.js and vis-network ship beside the pages (#127) and are not CDN-loaded.
 - A browser update changed default behaviour for one of the tested features.
-- The deploy itself is broken — check the most recent `pages.yml` run.
-- Synthetic / Pages are still disabled (#69) — confirm Settings → Pages and that `pages.yml` has a `push` trigger again before treating a probe failure as a product bug.
 
 ## Debug
 
@@ -17,4 +16,4 @@ The nightly synthetic monitoring workflow (`.github/workflows/synthetic.yml`) fa
 
 ## Triage
 
-If the deployed demo is broken, file a fresh issue describing the user impact and link the failed workflow run. Resolve this tracking issue once the underlying cause is fixed.
+If the built demo is broken, file a fresh issue describing the user impact and link the failed workflow run. Resolve this tracking issue once the underlying cause is fixed.

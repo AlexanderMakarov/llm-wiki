@@ -8,13 +8,11 @@ Responsibilities:
   the same way `tests/test_highlightjs.py` does for its smoke test,
   so the harness never touches the user's real `raw/sessions/`.
 
-* **Serve the built site on a random free port** via Python's stdlib
-  `http.server` in a daemon thread. We pick the port ourselves so
-  parallel test runs don't collide.
-
-* **Expose a `base_url` fixture** that Playwright's built-in
-  `pytest-playwright` plugin uses automatically (it reads
-  `--base-url` or the `base_url` fixture at session scope).
+* **Expose a `site_root` fixture** holding the built site's directory,
+  and a `site_url` fixture holding the matching `file://` prefix.
+  Navigation is `page.goto(f"{site_url}/index.html")`, which is exactly
+  how a reader opens the site: no socket is opened anywhere in this
+  suite, and a page that only works when served fails here.
 
 * **Expose a `desktop_page` / `mobile_page` fixture** that configures
   the Playwright viewport so tests can pick the right layout without
@@ -33,53 +31,12 @@ so a step can drive the browser, read the DOM, and assert.
 
 from __future__ import annotations
 
-import socket
-import threading
-import time
-from collections.abc import Iterator
-from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
 
 from llmwiki import build as build_mod
-
-# ─── port + server helpers ──────────────────────────────────────────────
-
-
-def _free_port() -> int:
-    """Return a random free TCP port by binding to port 0 and reading
-    back the assigned port. Closes the socket immediately so the
-    returned port is available for the real server to claim."""
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(("127.0.0.1", 0))
-        return int(s.getsockname()[1])
-
-
-class _QuietHandler(SimpleHTTPRequestHandler):
-    """Suppress the default `log_message` spam so the pytest output
-    stays readable. Errors still print — we only silence the 200s."""
-
-    def log_message(self, format: str, *args: object) -> None:  # noqa: A002
-        pass
-
-
-def _serve_dir(root: Path, port: int) -> ThreadingHTTPServer:
-    """Start a daemon HTTP server serving `root` on `port`. Returns
-    the server so the caller can `shutdown()` it at teardown."""
-
-    class _RootedHandler(_QuietHandler):
-        def __init__(self, *args: object, **kwargs: object) -> None:
-            super().__init__(*args, directory=str(root), **kwargs)  # type: ignore[arg-type]
-
-    server = ThreadingHTTPServer(("127.0.0.1", port), _RootedHandler)
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
-    thread.start()
-    # Give the server a tick to bind — Playwright's first `goto` fails
-    # intermittently on CI if the port isn't live yet.
-    time.sleep(0.1)
-    return server
-
 
 # ─── synthetic wiki seed ────────────────────────────────────────────────
 
@@ -406,21 +363,29 @@ def site_root(tmp_path_factory: pytest.TempPathFactory) -> Path:
 
 
 @pytest.fixture(scope="session")
-def server(site_root: Path) -> Iterator[ThreadingHTTPServer]:
-    """Serve the built site on a random free port for the lifetime of
-    the test session. The `base_url` fixture below consumes this."""
-    port = _free_port()
-    srv = _serve_dir(site_root, port)
-    yield srv
-    srv.shutdown()
+def site_url(site_root: Path) -> str:
+    """`file://` prefix for every `page.goto(...)` call — the address a
+    reader uses when they double-click `index.html`.
+
+    Returned without a trailing slash so call sites read
+    `f"{site_url}/index.html"`. There is no directory index behind a
+    `file://` URL, so every path must name a file.
+    """
+    return site_root.as_uri().rstrip("/")
 
 
 @pytest.fixture(scope="session")
-def base_url(server: ThreadingHTTPServer) -> str:
-    """URL prefix for every `page.goto(...)` call. pytest-playwright
-    picks this up automatically via its own `base_url` fixture hook."""
-    host, port = server.server_address
-    return f"http://{host}:{port}"
+def site_has(site_root: Path) -> Callable[[str], bool]:
+    """Predicate over site paths: ``site_has("/graph.html")``.
+
+    Whether a page is part of the build is a fact about the output
+    directory, so tests that skip on an absent page ask the filesystem.
+    """
+
+    def _has(path: str) -> bool:
+        return (site_root / path.lstrip("/")).is_file()
+
+    return _has
 
 
 @pytest.fixture(scope="session")

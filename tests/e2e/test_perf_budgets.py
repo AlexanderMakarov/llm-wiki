@@ -21,6 +21,7 @@ demo when we have one.
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -52,15 +53,16 @@ def _capture_timings(page: Page) -> dict[str, float]:
 
 
 @pytest.mark.parametrize("path", list(BUDGETS.keys()))
-def test_page_meets_perf_budget(page: Page, base_url: str, path: str) -> None:
+def test_page_meets_perf_budget(
+    page: Page, site_url: str, site_has: Callable[[str], bool], path: str
+) -> None:
     """Load the page, wait for `load`, capture timing, compare to
     the budget for that path. Skip cleanly when the page isn't
     shipped on this build (e.g. graph.html on an empty wiki)."""
-    resp = page.request.get(f"{base_url}{path}")
-    if resp.status >= 400:
-        pytest.skip(f"{path} not shipped on this build (HTTP {resp.status})")
+    if not site_has(path):
+        pytest.skip(f"{path} not shipped on this build")
 
-    page.goto(f"{base_url}{path}", wait_until="load")
+    page.goto(f"{site_url}{path}", wait_until="load")
     timings = _capture_timings(page)
     budget = BUDGETS[path]
 

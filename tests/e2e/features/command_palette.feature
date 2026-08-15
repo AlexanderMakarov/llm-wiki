@@ -4,7 +4,7 @@ Feature: Command palette
   So I can jump between pages without clicking
 
   Background:
-    Given a built llmwiki site is served
+    Given a built llmwiki site on disk
 
   Scenario: Cmd+K opens the palette and focuses the input
     When I visit the homepage

@@ -49,8 +49,8 @@ def _rgb_close_to_black(rgb: str) -> bool:
     return r <= 50 and g <= 50 and b <= 50
 
 
-def test_print_hides_nav_header(page: Page, base_url: str) -> None:
-    page.goto(f"{base_url}/index.html", wait_until="domcontentloaded")
+def test_print_hides_nav_header(page: Page, site_url: str) -> None:
+    page.goto(f"{site_url}/index.html", wait_until="domcontentloaded")
     _flip_to_print(page)
     nav_display = page.evaluate(
         "() => { const n = document.querySelector('header.nav'); return n ? getComputedStyle(n).display : 'none'; }"
@@ -58,8 +58,8 @@ def test_print_hides_nav_header(page: Page, base_url: str) -> None:
     assert nav_display == "none", f"nav should be hidden in print, got display={nav_display!r}"
 
 
-def test_print_hides_palette_and_help_dialog(page: Page, base_url: str) -> None:
-    page.goto(f"{base_url}/index.html", wait_until="domcontentloaded")
+def test_print_hides_palette_and_help_dialog(page: Page, site_url: str) -> None:
+    page.goto(f"{site_url}/index.html", wait_until="domcontentloaded")
     _flip_to_print(page)
     pal = page.evaluate(
         "() => { const e = document.getElementById('palette'); return e ? getComputedStyle(e).display : 'none'; }"
@@ -71,8 +71,8 @@ def test_print_hides_palette_and_help_dialog(page: Page, base_url: str) -> None:
     assert helpd == "none", f"help-dialog should be hidden in print, got display={helpd!r}"
 
 
-def test_print_body_is_white_with_dark_text(page: Page, base_url: str) -> None:
-    page.goto(f"{base_url}/index.html", wait_until="domcontentloaded")
+def test_print_body_is_white_with_dark_text(page: Page, site_url: str) -> None:
+    page.goto(f"{site_url}/index.html", wait_until="domcontentloaded")
     _flip_to_print(page)
     bg = page.evaluate("() => getComputedStyle(document.body).backgroundColor")
     fg = page.evaluate("() => getComputedStyle(document.body).color")
@@ -80,10 +80,10 @@ def test_print_body_is_white_with_dark_text(page: Page, base_url: str) -> None:
     assert _rgb_close_to_black(fg), f"print body text should resolve to ~black, got {fg!r}"
 
 
-def test_print_hides_progress_bar(page: Page, base_url: str) -> None:
+def test_print_hides_progress_bar(page: Page, site_url: str) -> None:
     """The reading progress bar would otherwise print as a thin
     accent-coloured stripe at the top of every page."""
-    page.goto(f"{base_url}/index.html", wait_until="domcontentloaded")
+    page.goto(f"{site_url}/index.html", wait_until="domcontentloaded")
     _flip_to_print(page)
     bar = page.evaluate(
         "() => { const e = document.getElementById('progress-bar'); return e ? getComputedStyle(e).display : 'none'; }"

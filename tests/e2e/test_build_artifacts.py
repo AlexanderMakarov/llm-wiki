@@ -279,13 +279,13 @@ def test_index_html_lang_attribute(site_root: Path) -> None:
 
 
 def test_no_session_html_links_to_localhost_or_file_uri(site_root: Path) -> None:
-    """A real-world regression: paths leak into the built HTML when a
-    contributor previews on localhost and forgets to clean up. We
-    grep session and project pages for ``localhost`` / ``file://``.
+    """A real-world regression: a machine-specific address leaks into the
+    built HTML and the page only resolves on the machine that built it.
+    We grep session and project pages for ``localhost`` / ``file://`` —
+    every link between pages is relative, so an absolute one is a leak.
 
-    We exclude ``docs/`` because the deployment tutorials legitimately
-    reference ``http://localhost:8765`` (the local serve URL) — that's
-    documentation content, not a leak. Same for ``raw/`` if it appears.
+    We exclude ``docs/`` because the deployment guides quote such
+    addresses as prose. Same for ``raw/`` if it appears.
     """
     forbidden = ("http://localhost", "https://localhost", "file:///")
     # Surfaces that should never reference localhost.

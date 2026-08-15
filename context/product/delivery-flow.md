@@ -62,7 +62,7 @@ Which commands `/awos:flow` generated and their names — re-runs reconcile exac
   - **Read-only live vault:** the agent **may** run clearly non-mutating probes against the live vault path from the primary checkout's `vault.default_path` (examples: `lint`, `synth --estimate`, status/read helpers). Never write `raw/`, `wiki/`, or `site/` under the live vault from the agent.
   - **Operator live verification:** at the user smoke-confirm step, do **not** run mutating `llmwiki` against the live vault. Instead print ready-to-paste commands that use the **worktree code** against the live vault path (e.g. `cd $WT && python3 -m llmwiki build --vault <LIVE> --out <LIVE>/site`, then open `<LIVE>/site/index.html`). The operator runs those commands themselves.
   - **Cleanup (when discarding the worktree):** `git worktree remove "$WT"` (after commit/push or stash); delete throwaway vault with the directory.
-- **Sanctioned verification path:** Automated criteria — `pytest` + `python3 -m llmwiki` against `$TMP_VAULT`; UI — `python3 -m llmwiki build` then Playwright on `$TMP_VAULT/site`, opened as files or behind a throwaway `python3 -m http.server`. Live Obsidian vault mutation is never automated — only operator-pasted commands at smoke confirm. Prefer driving the built files yourself over asking the user to run routine verify.
+- **Sanctioned verification path:** Automated criteria — `pytest` + `python3 -m llmwiki` against `$TMP_VAULT`; UI — `python3 -m llmwiki build` then Playwright on `$TMP_VAULT/site`, opened as files. Live Obsidian vault mutation is never automated — only operator-pasted commands at smoke confirm. Prefer driving the built files yourself over asking the user to run routine verify.
 
 ## 3. Repository Topology
 

@@ -71,14 +71,12 @@ Pin both `package.json` AND `package-lock.json` in git.
 ## Step 2 — `playwright.config.ts`
 
 Drop this file at the repo root. It lays out the test directory under
-`tests/agents/` (per ADR-001 Path A), points at `localhost:8765`
-served by the existing build pipeline, and uploads HTML report +
-traces on failure.
+`tests/agents/` (per ADR-001 Path A) and uploads HTML report + traces
+on failure. Specs address pages by `file://` URL against a built site,
+so the config carries no origin of its own.
 
 ```typescript
 import { defineConfig, devices } from "@playwright/test";
-
-const baseURL = process.env.LLMWIKI_BASE_URL ?? "http://127.0.0.1:8765";
 
 export default defineConfig({
   testDir: "tests/agents",
@@ -91,7 +89,6 @@ export default defineConfig({
     ["list"],
   ],
   use: {
-    baseURL,
     trace: "on-first-retry",
     screenshot: "only-on-failure",
     video: "retain-on-failure",
@@ -104,18 +101,12 @@ export default defineConfig({
     // ADR-001 Path A: chromium only initially. Adding firefox/webkit
     // is a #464 follow-up, not a blocker.
   ],
-  webServer: {
-    // We don't auto-build here — CI builds the site and puts a stdlib
-    // HTTP server in front of it before invoking playwright test. Local
-    // dev: `python3 -m llmwiki build` then `python3 -m http.server 8765
-    // --directory site` in another terminal first.
-    command: "true",
-    url: baseURL,
-    reuseExistingServer: true,
-    timeout: 30000,
-  },
 });
 ```
+
+Local dev: `python3 -m llmwiki build --vault demo --out ./site`, then
+`npx playwright test`. Point `LLMWIKI_SITE_DIR` at another build to run
+the specs against it.
 
 ---
 
@@ -205,18 +196,10 @@ jobs:
           python3 -m llmwiki init
           python3 -m llmwiki build
 
-      - name: Serve site in the background
-        run: |
-          python3 -m http.server 8765 --bind 127.0.0.1 --directory site &
-          for i in {1..30}; do
-            curl -fsS http://127.0.0.1:8765/ > /dev/null && break
-            sleep 1
-          done
-
       - name: Run Playwright Test Agents
         run: npx playwright test
         env:
-          LLMWIKI_BASE_URL: http://127.0.0.1:8765
+          LLMWIKI_SITE_DIR: ${{ github.workspace }}/site
 
       - name: Upload HTML report
         if: always()
@@ -291,9 +274,9 @@ arrangement:
   Generator pass once this bootstrap is on master.
 - **`.github/workflows/agents-e2e.yml`** — runs `npx playwright
   test` on every PR touching `llmwiki/build.py`, `llmwiki/render/`,
-  `tests/agents/`, or the playwright config. Builds the demo site,
-  puts a stdlib HTTP server in front of it on `localhost:8765`, runs Chromium scenarios, uploads
-  HTML report (14-day retention) + traces (failure only).
+  `tests/agents/`, or the playwright config. Builds the demo site, runs
+  the Chromium scenarios against the built files, uploads HTML report
+  (14-day retention) + traces (failure only).
 - **`docs/maintainers/playwright-agents-bootstrap.md`** stays in
   the repo as the historical record of the bootstrap commands +
   config decisions.

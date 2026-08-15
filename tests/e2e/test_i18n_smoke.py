@@ -25,6 +25,7 @@ rebases real translations in.
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 
 import pytest
 from playwright.sync_api import Page
@@ -39,24 +40,28 @@ LOCALES = [
 
 
 @pytest.mark.parametrize("locale,_lang,_pat", LOCALES)
-def test_i18n_page_reachable(page: Page, base_url: str, locale: str, _lang, _pat) -> None:
-    resp = page.request.get(f"{base_url}/docs/i18n/{locale}/getting-started.html")
-    if resp.status >= 400:
-        pytest.skip(f"i18n page for {locale} not shipped (HTTP {resp.status})")
-    assert resp.status == 200
+def test_i18n_page_reachable(
+    page: Page, site_url: str, site_has: Callable[[str], bool],
+    locale: str, _lang, _pat,
+) -> None:
+    path = f"/docs/i18n/{locale}/getting-started.html"
+    if not site_has(path):
+        pytest.skip(f"i18n page for {locale} not shipped")
+    page.goto(f"{site_url}{path}", wait_until="domcontentloaded")
+    assert page.title().strip(), f"{locale} page rendered without a title"
 
 
 @pytest.mark.parametrize("locale,lang,pat", LOCALES)
 def test_i18n_page_contains_localized_script(
-    page: Page, base_url: str, locale: str, lang: str, pat: re.Pattern
+    page: Page, site_url: str, site_has: Callable[[str], bool],
+    locale: str, lang: str, pat: re.Pattern,
 ) -> None:
     """Skip-aware: if the file ships with English content (translation
     never landed), skip rather than fail. When real translations land
     this turns into a real assertion automatically."""
-    resp = page.request.get(f"{base_url}/docs/i18n/{locale}/getting-started.html")
-    if resp.status >= 400:
-        pytest.skip(f"i18n page for {locale} not shipped (HTTP {resp.status})")
-    page.goto(f"{base_url}/docs/i18n/{locale}/getting-started.html",
+    if not site_has(f"/docs/i18n/{locale}/getting-started.html"):
+        pytest.skip(f"i18n page for {locale} not shipped")
+    page.goto(f"{site_url}/docs/i18n/{locale}/getting-started.html",
               wait_until="domcontentloaded")
     article_text = page.evaluate(
         """() => {
@@ -73,15 +78,15 @@ def test_i18n_page_contains_localized_script(
 
 @pytest.mark.parametrize("locale,lang,_pat", LOCALES)
 def test_i18n_page_lang_attribute(
-    page: Page, base_url: str, locale: str, lang: str, _pat
+    page: Page, site_url: str, site_has: Callable[[str], bool],
+    locale: str, lang: str, _pat,
 ) -> None:
     """`<html lang="...">` should match the locale path. Currently fails
     in en — flagged as a finding, not blocking the smoke. We assert
     via xfail-aware skip so the test exists + tightens later."""
-    resp = page.request.get(f"{base_url}/docs/i18n/{locale}/getting-started.html")
-    if resp.status >= 400:
-        pytest.skip(f"i18n page for {locale} not shipped (HTTP {resp.status})")
-    page.goto(f"{base_url}/docs/i18n/{locale}/getting-started.html",
+    if not site_has(f"/docs/i18n/{locale}/getting-started.html"):
+        pytest.skip(f"i18n page for {locale} not shipped")
+    page.goto(f"{site_url}/docs/i18n/{locale}/getting-started.html",
               wait_until="domcontentloaded")
     actual = page.evaluate("() => document.documentElement.getAttribute('lang')")
     if actual == "en":

@@ -5,7 +5,7 @@ Feature: Theme toggle + highlight.js sync
   So the contrast stops burning my retinas
 
   Background:
-    Given a built llmwiki site is served
+    Given a built llmwiki site on disk
 
   Scenario: Desktop theme toggle flips the data-theme attribute
     When I visit the homepage

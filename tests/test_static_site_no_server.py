@@ -7,8 +7,9 @@
 Covers:
 
 * ``serve`` is not a subcommand and the helper scripts are gone.
-* The built candidates page is a listing — no call to the removed endpoint,
-  and the command it prints names a vault.
+* The built candidates page reviews without a backend: per-row decisions are
+  DOM state and Apply assembles a batch, with no call to any endpoint, and the
+  command it prints names a vault.
 * Candidate review still runs end to end from the command line.
 * ``--local-root`` makes the displayed path a build input, so two builds in
   different environments produce byte-identical output.
@@ -118,6 +119,30 @@ def test_cli_apply_performs_promote_discard_and_merge(tmp_path: Path):
     assert (wiki / "entities" / "Target.md").is_file()
     assert not (wiki / "candidates" / "entities" / "Drop.md").exists()
     assert not (wiki / "candidates" / "entities" / "Dupe.md").exists()
+
+
+def test_the_built_candidates_page_reviews_without_a_backend(tmp_path: Path):
+    # @regression
+    """Decisions are DOM state; only executing them is a command-line step."""
+    root = tmp_path / "vault"
+    _seed_raw(root)
+    for slug in ("Keep", "Dupe"):
+        _candidate(root / "wiki", "entities", slug)
+    _candidate(root / "wiki", "concepts", "Idea")
+
+    page = (_build_in(root, "/home/alice", "/home/user") / "candidates.html").read_text(
+        encoding="utf-8",
+    )
+
+    # Reviewing is possible …
+    assert page.count("<tr><th>Name</th><th>Description</th><th>Decision</th></tr>") == 2
+    assert page.count('class="cand-decision"') == 3
+    assert 'id="cand-apply"' in page
+    assert "llmwiki candidates apply --vault" in page
+    # … and reaches nothing.
+    assert "fetch(" not in page
+    assert "XMLHttpRequest" not in page
+    assert "/api/candidates" not in page
 
 
 # ─── the displayed local path is a build input ───────────────────────────

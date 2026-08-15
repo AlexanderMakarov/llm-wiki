@@ -1,14 +1,12 @@
 name: Nightly synthetic
 
-# Nightly Playwright run against the deployed demo. Catches post-deploy
-# breakage CI cannot see: Pages publish corruption, CDN issues, browser
-# update breakage, broken third-party scripts.
+# Nightly Playwright run over the committed demo corpus, built and then
+# opened as files exactly as a reader opens it. Catches breakage the unit
+# suites cannot see: a corrupt build, browser-update breakage, a page that
+# renders only when something answers requests for it.
 #
-# DISABLED (#69): this repo has no GitHub Pages demo, and the previous
-# base URL pointed at upstream `pratiyush.github.io/llm-wiki`. Restore
-# the cron below and set `QA_SYNTHETIC_BASE_URL` to our Pages URL once
-# `pages.yml` is re-enabled (Settings → Pages → GitHub Actions).
-# Manual `workflow_dispatch` kept for dry-runs after that.
+# DISABLED (#69): kept on manual `workflow_dispatch` until the nightly
+# cron is restored.
 
 on:
   workflow_dispatch:
@@ -19,7 +17,7 @@ permissions:
 
 jobs:
   synthetic:
-    name: Probe deployed demo
+    name: Probe the built demo
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
@@ -38,16 +36,15 @@ jobs:
       - name: Install chromium + OS deps
         run: python -m playwright install --with-deps chromium
 
-      - name: Run cross-browser smoke against the live demo
+      - name: Walk the built demo and smoke the page types
         id: probe
         run: |
+          # The walkthrough builds demo/ itself with the same fixed local
+          # root as pages.yml, then opens every reader surface from disk.
           mkdir -p synthetic-report
-          # Override base_url via env so the smoke probes the deployed
-          # site instead of spinning up its own local server.
-          # Set to this repo's Pages URL after pages.yml is live (#69).
-          export QA_SYNTHETIC_BASE_URL="${QA_SYNTHETIC_BASE_URL:-https://alexandermakarov.github.io/llm-wiki}"
-          python -m pytest tests/e2e/test_cross_browser_smoke.py \
-            --base-url="$QA_SYNTHETIC_BASE_URL" \
+          python -m pytest \
+            tests/e2e/test_demo_walkthrough.py \
+            tests/e2e/test_cross_browser_smoke.py \
             --browser=chromium \
             --tracing=retain-on-failure \
             --html=synthetic-report/index.html \

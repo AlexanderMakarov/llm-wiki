@@ -1,6 +1,6 @@
 """#634 (#pw-x6): Search-index JSON validation.
 
-Loads the built `/search-index.json` directly (without going through
+Reads the built `search-index.json` off disk (without going through
 the palette UI) and asserts:
 
   1. Schema sanity — required top-level keys present, every entry has
@@ -18,29 +18,32 @@ where a renamed field crashes the client search.
 """
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import pytest
 from playwright.sync_api import Page
 
 
-def _fetch_search_index(page: Page, base_url: str) -> dict:
-    resp = page.request.get(f"{base_url}/search-index.json")
-    if resp.status >= 400:
-        pytest.skip(f"search-index.json missing (HTTP {resp.status}) — empty corpus?")
-    return resp.json()
+def _read_search_index(site_root: Path) -> dict:
+    idx = site_root / "search-index.json"
+    if not idx.is_file():
+        pytest.skip("search-index.json missing — empty corpus?")
+    return json.loads(idx.read_text(encoding="utf-8"))
 
 
-def test_search_index_top_level_schema(page: Page, base_url: str) -> None:
+def test_search_index_top_level_schema(site_root: Path) -> None:
     """The JS client at render/js.py:392-460 reads `chunks` (or a flat
     array). Whatever shape ships, every entry must carry url + title."""
-    idx = _fetch_search_index(page, base_url)
+    idx = _read_search_index(site_root)
     # Accept either {chunks: [...]} or a bare list.
     entries = idx if isinstance(idx, list) else idx.get("chunks") or idx.get("entries") or []
     if not entries:
         # Some builds emit chunked indices — a sibling search-chunks/
-        # dir at /search-chunks/0.json etc. Probe for that shape too.
-        chunks_resp = page.request.get(f"{base_url}/search-chunks/0.json")
-        if chunks_resp.status < 400:
-            entries = chunks_resp.json()
+        # dir at search-chunks/0.json etc. Probe for that shape too.
+        chunk = site_root / "search-chunks" / "0.json"
+        if chunk.is_file():
+            entries = json.loads(chunk.read_text(encoding="utf-8"))
     assert entries, "search index has no entries — every wiki ships at least the index page"
     for e in entries[:50]:
         assert isinstance(e, dict), f"entry not an object: {type(e)}"
@@ -48,11 +51,11 @@ def test_search_index_top_level_schema(page: Page, base_url: str) -> None:
         assert "title" in e or "t" in e, f"entry missing title field: {sorted(e)}"
 
 
-def test_search_index_covers_every_page_type(page: Page, base_url: str) -> None:
+def test_search_index_covers_every_page_type(site_root: Path) -> None:
     """Coverage: at least one entry pointing at each page-type bucket
     (sources, projects, sessions). Catches the regression where a
     new emitter gets added but the indexer never picks it up."""
-    idx = _fetch_search_index(page, base_url)
+    idx = _read_search_index(site_root)
     entries = idx if isinstance(idx, list) else idx.get("chunks") or idx.get("entries") or []
     urls = " ".join(str(e.get("url") or e.get("u") or "") for e in entries)
     # The seeded harness ships projects + sessions + an index page.
@@ -64,7 +67,7 @@ def test_search_index_covers_every_page_type(page: Page, base_url: str) -> None:
     )
 
 
-def test_palette_uses_real_index_for_ranking(page: Page, base_url: str) -> None:
+def test_palette_uses_real_index_for_ranking(page: Page, site_url: str) -> None:
     """End-to-end: open the palette, type a query, assert results
     return in fewer than 1.5s and that the title-match outranks
     body-only matches.
@@ -72,7 +75,7 @@ def test_palette_uses_real_index_for_ranking(page: Page, base_url: str) -> None:
     The seeded harness has a project containing the literal token
     'demo' in titles. We type 'demo' and assert at least one result
     title contains 'demo' before any non-matching titles."""
-    page.goto(f"{base_url}/index.html", wait_until="domcontentloaded")
+    page.goto(f"{site_url}/index.html", wait_until="domcontentloaded")
     page.locator("body").click(position={"x": 1, "y": 1})
     page.keyboard.press("ControlOrMeta+k")
     page.wait_for_function(

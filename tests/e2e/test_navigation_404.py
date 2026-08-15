@@ -1,49 +1,49 @@
-"""Navigation + 404 behavior for the static site.
+"""Link integrity for a site opened as files.
 
-The static-site build relies on ``http.server.SimpleHTTPRequestHandler``
-which has a default 404 response that's an unstyled white page with no
-nav. A user who follows a stale wikilink lands on this page and has no
-way out — a real UX bug we want to catch in tests.
+A reader opens `index.html` from disk, so every link the build emits
+has to name a file that the build also emitted. There is nothing
+behind a `file://` URL to answer for a missing target: the browser
+refuses the navigation and the reader is stranded on the page they
+came from.
 
 This module asserts:
 
-* Hitting an unknown path returns 404 (not 200, not 500)
-* The body is a plain 404 with no JS exception
-* No console errors fire on the 404 page
-* Internal links from the homepage actually resolve
+* A path the build never emitted is absent from the output directory
+  and cannot be opened.
+* Every internal link on the homepage resolves to a file on disk,
+  including directory-shaped links, which have no index to fall back on.
+* No console errors fire on the home page.
 """
 
 from __future__ import annotations
 
+from pathlib import Path
+from urllib.parse import unquote, urlsplit
+
 import pytest
+from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import Page
 
 
-def test_unknown_path_returns_404(page: Page, base_url: str) -> None:
-    """Hitting a path that doesn't exist on disk returns 404 from the
-    bundled stdlib server. We don't try to assert on the body — the
-    plain 404 from ``http.server`` is intentionally minimal."""
-    resp = page.request.get(f"{base_url}/this-path-does-not-exist.html")
-    assert resp.status == 404, f"unknown path returned {resp.status}, expected 404"
+def test_unknown_path_is_absent_and_unopenable(
+    page: Page, site_url: str, site_root: Path
+) -> None:
+    """A path the build didn't emit has no file behind it, and opening
+    it fails at the browser rather than landing the reader anywhere."""
+    assert not (site_root / "this-path-does-not-exist.html").exists()
+    with pytest.raises(PlaywrightError):
+        page.goto(f"{site_url}/this-path-does-not-exist.html")
 
 
-def test_404_page_does_not_crash_javascript(page: Page, base_url: str) -> None:
-    """Loading the 404 path in a browser tab should not raise a JS
-    exception. We don't expect the navigation bar (the stdlib 404 is
-    server-rendered without our template), but the page must at least
-    not crash."""
-    errors: list[str] = []
-    page.on("pageerror", lambda exc: errors.append(str(exc)))
-    page.goto(f"{base_url}/this-path-does-not-exist.html", wait_until="domcontentloaded")
-    assert not errors, f"404 page raised JS errors: {errors}"
-
-
-def test_homepage_internal_links_resolve(page: Page, base_url: str) -> None:
-    """Every same-origin link on the homepage should resolve to a 2xx
-    or 3xx response. Catches the class of regression where a link
-    points to a path that the build didn't actually emit (e.g. a
-    project page deleted between builds)."""
-    page.goto(f"{base_url}/index.html", wait_until="domcontentloaded")
+def test_homepage_internal_links_resolve(
+    page: Page, site_url: str, site_root: Path
+) -> None:
+    """Every same-origin link on the homepage must name a file the build
+    emitted. Catches the class of regression where a link points to a
+    path the build didn't produce (e.g. a project page deleted between
+    builds), and the class where a link names a directory — which a
+    served site papers over with an index and a file URL does not."""
+    page.goto(f"{site_url}/index.html", wait_until="domcontentloaded")
 
     # Collect all hrefs that look local (start with / or . or are
     # bare ``foo.html`` paths). Skip mailto:, http(s):, and # fragments.
@@ -66,31 +66,26 @@ def test_homepage_internal_links_resolve(page: Page, base_url: str) -> None:
         # Synthetic corpus has very few links — skip cleanly rather than fail.
         pytest.skip("homepage has no internal links to verify")
 
-    broken: list[tuple[str, int]] = []
+    broken: list[str] = []
     for href in hrefs[:20]:  # cap at 20 to keep the test fast
-        # Resolve relative to base_url + /index.html
-        if href.startswith("/"):
-            url = f"{base_url}{href}"
-        else:
-            url = f"{base_url}/{href}"
-        # Strip fragment.
-        url = url.split("#", 1)[0]
-        resp = page.request.get(url)
-        if resp.status >= 400:
-            broken.append((href, resp.status))
+        rel = unquote(urlsplit(href).path).lstrip("/")
+        if not rel:
+            continue
+        if not (site_root / rel).is_file():
+            broken.append(href)
 
     assert not broken, (
-        f"{len(broken)} internal links return 4xx/5xx:\n  "
-        + "\n  ".join(f"{h} → {s}" for h, s in broken[:5])
+        f"{len(broken)} homepage links name no file in the build:\n  "
+        + "\n  ".join(broken[:5])
     )
 
 
-def test_homepage_renders_without_console_errors(page: Page, base_url: str) -> None:
+def test_homepage_renders_without_console_errors(page: Page, site_url: str) -> None:
     """The conftest auto-attaches a console listener that records
     every ``console.error``. The home page should produce zero — any
     error is a real bug that's been shipping silently because no
     other test asserts on this exact page in isolation."""
-    page.goto(f"{base_url}/index.html", wait_until="networkidle")
+    page.goto(f"{site_url}/index.html", wait_until="networkidle")
     errors = getattr(page, "_llmwiki_console_errors", [])
     # Filter out hljs / CDN noise and missing favicon (build does not emit one).
     real = [

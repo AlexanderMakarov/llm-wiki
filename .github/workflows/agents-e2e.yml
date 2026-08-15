@@ -48,26 +48,11 @@ jobs:
           # Build the committed demo/ vault into ./site (mirrors pages.yml).
           python3 -m llmwiki build --vault demo --out ./site --local-root /home/user
 
-      - name: Serve site in the background
-        run: |
-          # Playwright drives the site over HTTP; llmwiki itself ships no
-          # server, so a stdlib one stands in front of the built files.
-          # bash -e aborts on the first failing curl unless we gate it with `if`.
-          python3 -m http.server 8765 --bind 127.0.0.1 --directory site &
-          for i in {1..30}; do
-            if curl -fsS http://127.0.0.1:8765/ > /dev/null; then
-              echo "server up"
-              exit 0
-            fi
-            sleep 1
-          done
-          echo "server failed to start" >&2
-          exit 1
-
       - name: Run Playwright Test Agents
         run: npx playwright test
         env:
-          LLMWIKI_BASE_URL: http://127.0.0.1:8765
+          # The specs open the built files; nothing is served.
+          LLMWIKI_SITE_DIR: ${{ github.workspace }}/site
 
       - name: Upload HTML report
         if: always()

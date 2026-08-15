@@ -13,6 +13,8 @@ plus a dark-mode contrast scan. This module fills the long-tail:
 """
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import pytest
 from playwright.sync_api import Page
 
@@ -36,22 +38,21 @@ PAGES_TO_AUDIT = [
 
 @pytest.mark.parametrize("path", PAGES_TO_AUDIT)
 def test_long_tail_pages_have_no_critical_a11y_violations(
-    page: Page, base_url: str, path: str
+    page: Page, site_url: str, site_has: Callable[[str], bool], path: str
 ) -> None:
-    resp = page.request.get(f"{base_url}{path}")
-    if resp.status >= 400:
-        pytest.skip(f"{path} not shipped on this build (HTTP {resp.status})")
-    _scan(page, base_url, path)
+    if not site_has(path):
+        pytest.skip(f"{path} not shipped on this build")
+    _scan(page, site_url, path)
 
 
-def test_light_mode_passes_color_contrast(page: Page, base_url: str) -> None:
+def test_light_mode_passes_color_contrast(page: Page, site_url: str) -> None:
     """The seed module has a dark-mode contrast scan; pair it with a
     light-mode one so theme regressions in either direction are caught
     by axe in CI rather than via #459-style manual audits."""
     page.add_init_script(
         "try { localStorage.setItem('llmwiki-theme', 'light'); } catch (e) {}"
     )
-    page.goto(f"{base_url}/index.html", wait_until="domcontentloaded")
+    page.goto(f"{site_url}/index.html", wait_until="domcontentloaded")
     page.wait_for_load_state("networkidle", timeout=5000)
 
     try:
@@ -70,21 +71,21 @@ def test_light_mode_passes_color_contrast(page: Page, base_url: str) -> None:
         )
 
 
-def test_mobile_viewport_has_no_critical_a11y_violations(page: Page, base_url: str) -> None:
+def test_mobile_viewport_has_no_critical_a11y_violations(page: Page, site_url: str) -> None:
     """At 390×844 (iPhone 12) the desktop nav is hidden and the
     hamburger drawer / mobile bottom nav take over. Different rules
     fire — region landmarks, target-size, focus order through the
     drawer. Catches mobile-only regressions."""
     page.set_viewport_size({"width": 390, "height": 844})
-    _scan(page, base_url, "/index.html")
+    _scan(page, site_url, "/index.html")
 
 
-def test_focus_management_subset(page: Page, base_url: str) -> None:
+def test_focus_management_subset(page: Page, site_url: str) -> None:
     """Run a focused subset of axe rules dealing with keyboard
     accessibility: focus-order-semantics, focusable-content,
     interactive-supports-focus. Anything that breaks #460 / #479
     will surface here independently of the generic scan."""
-    page.goto(f"{base_url}/index.html", wait_until="domcontentloaded")
+    page.goto(f"{site_url}/index.html", wait_until="domcontentloaded")
     page.wait_for_load_state("networkidle", timeout=5000)
     _inject_and_run_axe(page)
     results = page.evaluate(

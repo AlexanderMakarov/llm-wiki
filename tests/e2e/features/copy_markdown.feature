@@ -4,7 +4,7 @@ Feature: Copy-as-markdown button
   So I don't have to open the .md sibling and select everything
 
   Background:
-    Given a built llmwiki site is served
+    Given a built llmwiki site on disk
     And clipboard permissions are granted
 
   Scenario: Copy button puts the session markdown on the clipboard
