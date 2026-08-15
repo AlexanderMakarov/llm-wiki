@@ -29,7 +29,7 @@ Promote (`llmwiki candidates promote`) is a human gate: it moves a harvest stub 
 
 One page per raw file, under `wiki/sources/<project>/`. Synth writes it from a session transcript or an added document. The body is a summary, claims, quotes, and `[[wikilinks]]` — not a copy of the transcript. The raw file is immutable; this page is the knowledge-layer stand-in.
 
-**Demo.** The committed demo has no `wiki/sources/` page yet. Those pages appear after `llmwiki synth`. The inputs that synth will summarise are already on disk: a session such as [`demo/raw/sessions/llm-wiki/2026-08-09T23-12-llm-wiki-wikilink-resolution.md`](../../demo/raw/sessions/llm-wiki/2026-08-09T23-12-llm-wiki-wikilink-resolution.md), and a document such as [`demo/raw/docs/01-installation/01-installation.md`](../../demo/raw/docs/01-installation/01-installation.md).
+**Demo.** [`demo/wiki/sources/01-installation/2026-08-10-01-installation.md`](../../demo/wiki/sources/01-installation/2026-08-10-01-installation.md) is a synthesised document page. A session-derived source is [`demo/wiki/sources/llm-wiki/2026-08-09-wikilink-resolution.md`](../../demo/wiki/sources/llm-wiki/2026-08-09-wikilink-resolution.md). The raw inputs remain [`demo/raw/docs/01-installation/01-installation.md`](../../demo/raw/docs/01-installation/01-installation.md) and [`demo/raw/sessions/llm-wiki/2026-08-09T23-12-llm-wiki-wikilink-resolution.md`](../../demo/raw/sessions/llm-wiki/2026-08-09T23-12-llm-wiki-wikilink-resolution.md).
 
 Raw files also carry `type: source`. That is the input layer (`raw/sessions/`, `raw/docs/`), not this wiki kind. Synth copies eight fields onto the wiki page and leaves the rest on the raw file.
 
@@ -62,7 +62,7 @@ Raw files also carry `type: source`. That is the input layer (`raw/sessions/`, `
 
 A person, company, product, tool, or library. Harvest writes a stub under `wiki/candidates/entities/` when the same `[[Name]]` appears on enough source pages (default three). A person then promotes it into `wiki/entities/`. The body is attributed fact bullets under `## Key Facts`; nothing in the pipeline writes a descriptive opening paragraph.
 
-**Demo.** No committed entity page. Stubs appear after `synth` (which harvests by default). Trusted pages appear after `llmwiki candidates promote`.
+**Demo.** [`demo/wiki/entities/Claude Code.md`](../../demo/wiki/entities/Claude Code.md) is a promoted entity. Pending harvest stubs remain under [`demo/wiki/candidates/entities/`](../../demo/wiki/candidates/entities/).
 
 ### Fields harvest writes
 
@@ -105,7 +105,7 @@ An entity with `entity_kind: ai-model` is picked up by the `/models/` index. Eve
 
 An idea, framework, method, or theory. Same producer as `entity`: harvest classifies a name as `concept` and writes `wiki/candidates/concepts/<Name>.md`. Promote moves it to `wiki/concepts/`. Flip-and-promote swaps entity ↔ concept and rewrites `type:` to match the destination folder.
 
-**Demo.** No committed concept page. Same path as entities: `synth` + harvest, then `candidates promote`.
+**Demo.** [`demo/wiki/concepts/Adapters.md`](../../demo/wiki/concepts/Adapters.md) is a promoted concept. A pending concept stub is [`demo/wiki/candidates/concepts/Wiki Synthesis.md`](../../demo/wiki/candidates/concepts/Wiki Synthesis.md).
 
 ### Fields
 

@@ -9,9 +9,7 @@ migration, refresh_demo planning, install-agent-kit, static-site no-server,
 wiki-checks lint gate). This file checks the feature as a whole against
 ``context/spec/008-make-product-explain-itself/functional-spec.md``.
 
-The operator deferred a full demo ``synth`` (Slice 9 wiki regeneration).
-These tests therefore assert the committed corpus, packaging, docs and
-CI shape — not that every ``demo/wiki/entities`` page is pipeline output.
+The operator committed the existing synthesized `demo/wiki/` layer so GitHub Pages has sources, entities, concepts and pending candidates to publish. A full `refresh_demo.py` regeneration (Slice 9) is still deferred — these tests pin that the knowledge layer is present, not that every page is the latest pipeline output.
 """
 
 from __future__ import annotations
@@ -75,6 +73,15 @@ def test_videos_and_top_level_specs_are_gone() -> None:
 
 
 # ─── R2 demo corpus (raw layer; wiki synth deferred) ─────────────────────
+
+
+def test_demo_wiki_has_a_knowledge_layer_for_pages() -> None:
+    sources = list((DEMO / "wiki" / "sources").rglob("*.md"))
+    assert len(sources) >= 20
+    assert (DEMO / "wiki" / "entities" / "Claude Code.md").is_file()
+    assert (DEMO / "wiki" / "concepts" / "Adapters.md").is_file()
+    candidates = list((DEMO / "wiki" / "candidates").rglob("*.md"))
+    assert candidates, "pending candidates should ship so the demo review UI is not empty"
 
 
 def test_demo_raw_docs_are_about_llmwiki() -> None:

@@ -84,12 +84,12 @@
 
 - [ ] **Slice 9: The demo content is genuine pipeline output about llmwiki**
 
-  > **Deferred 2026-08-15.** Operator chose not to run a full demo `synth` for this PR. The committed `demo/raw/` corpus (product docs + authored sessions) stays; untracked partial `demo/wiki/sources|candidates|entities` are local leftovers and must not be committed. `demo/.demo-source-rev` is not created. Revisit when someone runs `scripts/refresh_demo.py` locally.
+  > **2026-08-15.** A full `refresh_demo.py` run (and `demo/.demo-source-rev`) is still deferred. The operator required the existing synthesized `demo/wiki/` layer committed anyway so GitHub Pages publishes sources, entities, concepts and pending candidates rather than an empty catalog. `llmwiki lint --vault demo --fail-on-errors` exits 0 on that tree (warnings remain). Revisit a full regen when someone runs `scripts/refresh_demo.py` locally.
 
   - [x] Curate `demo/raw/docs/` so the demo corpus covers llmwiki's own subject matter — its commands, its static site, and how it reads agent sessions — sourced from the project's real `docs/`. Remove the inherited fictional projects (blog engine, to-do API, ML pipeline) and their pre-synthesized source pages. **[Agent: general-purpose]**
   - [ ] Run `python3 -m llmwiki synth --check` first. **If no backend is reachable, stop and report to the user** — this task needs a real AI backend and must not be faked, stubbed, or hand-written. That is the entire point of the requirement. **[Agent: general-purpose]**
-  - [ ] Regenerate the demo by running `scripts/refresh_demo.py`, and commit the produced `demo/raw/` and `demo/wiki/` content together with `demo/.demo-source-rev`. **[Agent: general-purpose]**
-  - [ ] Verify: confirm no page under `demo/wiki/entities/`, `demo/wiki/concepts/` or `demo/wiki/projects/` opens with a prose description paragraph, that every knowledge page body is attributed fact bullets, and that each bullet carries a source link. Confirm `llmwiki lint --vault demo --fail-on-errors` exits zero. **[Agent: general-purpose]**
+  - [ ] Regenerate the demo by running `scripts/refresh_demo.py`, and commit the produced `demo/raw/` and `demo/wiki/` content together with `demo/.demo-source-rev`. **[Agent: general-purpose]** *(partial wiki from an earlier synth is committed for Pages; this checkbox is the full regen)*
+  - [ ] Verify: confirm no page under `demo/wiki/entities/`, `demo/wiki/concepts/` or `demo/wiki/projects/` opens with a prose description paragraph, that every knowledge page body is attributed fact bullets, and that each bullet carries a source link. Confirm `llmwiki lint --vault demo --fail-on-errors` exits zero. **[Agent: general-purpose]** *(lint `--fail-on-errors` is green on the committed tree)*
 
 - [x] **Slice 10: CI proves the demo is clean**
 

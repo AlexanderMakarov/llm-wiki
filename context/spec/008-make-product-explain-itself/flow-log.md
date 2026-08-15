@@ -353,6 +353,12 @@ Mechanism to keep the demo current when `docs/` change, without putting a model 
 
 Demo site rebuilt locally with `build --vault demo --out demo/site --local-root /home/user` for inspection (119 document pages, 25 sessions, analytics, candidates).
 
+## Operator: commit the partial wiki for GitHub Pages — 2026-08-15
+
+The published demo is `pages.yml` building `--vault demo`. An empty `wiki/sources/` catalog meant Pages had sessions and docs HTML but no synthesized knowledge layer, no promoted topics, and an empty candidates queue.
+
+Committed the existing synth output: 99 source pages, 2 entities, 3 concepts, 10 pending candidates. Reconciled `wiki/index.md`. Rewrote `overview.md` Connections to pages that exist. `lint --vault demo --fail-on-errors` is 0 errors (warnings remain). Full `refresh_demo.py` + `demo/.demo-source-rev` still not done.
+
 ## `candidates apply` rebuilds the site by default — 2026-08-15
 
 Operator: after promotion/merge/discard the static candidates page still showed the old queue. `llmwiki candidates apply` now rebuilds `site/` after a successful batch; `--no-rebuild` opts out. One-off `promote` / `merge` / `discard` are unchanged. Spec R12b gained that acceptance criterion.
