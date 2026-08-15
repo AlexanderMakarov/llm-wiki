@@ -1,13 +1,9 @@
-"""Tests for #494 — README CLI table must list real subcommands only.
+"""Every `llmwiki <subcommand>` advertised in the README must exist.
 
-The bug: README.md advertised `llmwiki watch` and `llmwiki
-export-obsidian` long after both were removed in v1.2.0. New users
-ran them, hit `unrecognized arguments`, lost trust.
-
-This test parses the README's CLI fenced block, extracts every
-`llmwiki <subcommand>` line, and asserts each one is registered as
-a subparser in `cli.py:build_parser()`. CI will fail any future PR
-that adds a stale entry.
+#494 caught a README CLI table that listed removed commands. The README
+is now a product page (no ``## CLI reference`` table — that lives in
+``docs/reference/cli.md``). This still scans every ``llmwiki <name>``
+invocation in the README so a stale command cannot come back.
 """
 
 from __future__ import annotations
@@ -20,8 +16,9 @@ from llmwiki.cli import build_parser
 REPO_ROOT = Path(__file__).resolve().parents[1]
 README = REPO_ROOT / "README.md"
 
-# Match `llmwiki <name>` at start of a line inside the CLI fenced block.
-_LINE_RE = re.compile(r"^llmwiki\s+([a-z][a-z0-9-]*)\b", re.MULTILINE)
+_FENCE_RE = re.compile(r"```(?:bash|shell|text|cmd)?\n(.*?)```", re.DOTALL)
+_CMD_RE = re.compile(r"(?:^|\s)llmwiki\s+([a-z][a-z0-9-]*)\b")
+_INLINE_RE = re.compile(r"`llmwiki\s+([a-z][a-z0-9-]*)")
 
 
 def _collect_real_subcommands() -> set[str]:
@@ -35,12 +32,11 @@ def _collect_real_subcommands() -> set[str]:
 
 def _collect_readme_subcommands() -> set[str]:
     text = README.read_text(encoding="utf-8")
-    m = re.search(r"## CLI reference\b.*?(?=\n## |\Z)", text, re.DOTALL)
-    assert m, "could not find '## CLI reference' section in README"
-    block = m.group(0)
-    # Drop the `llmwiki version` line — it's a flag/subcommand convention,
-    # may not have its own subparser.
-    return {name for name in _LINE_RE.findall(block) if name != "version"}
+    names: set[str] = set()
+    for block in _FENCE_RE.findall(text):
+        names.update(_CMD_RE.findall(block))
+    names.update(_INLINE_RE.findall(text))
+    return {name for name in names if name != "version"}
 
 
 def test_every_readme_cli_line_maps_to_a_real_subparser():

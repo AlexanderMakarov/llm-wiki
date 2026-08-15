@@ -336,3 +336,25 @@ The Into field is now a combobox over the same `merge_targets()` list: the ▾ b
 Same pass, same page: **the discard reason is required**. `discard` writes `<slug>.reason.txt` beside the archived stub, so a blank reason loses the decision rather than merely being untidy. A row set to *Discard* with no reason is held back exactly the way an unresolved merge target is — one mechanism, one message, one marked field, focus moved to it — instead of silently producing a reasonless action or silently vanishing from the batch.
 
 Observed while doing it, and filed separately by the operator rather than fixed here: **nothing reads `.reason.txt`**. Harvest has no memory of what a reviewer rejected, so a discarded candidate is re-proposed on the next run.
+
+## Slice 12 — page-kind reference (R8) — 2026-08-15
+
+Wrote `docs/reference/page-kinds.md`. Provenance for every field taken from the producers: `_build_source_page`, `_stub_text`, `ensure_project_stubs`, `init` seeds, `_auto_archive_log`, `categories.py`, `context_md.py`. No committed demo entity/concept/project/source wiki pages — examples that exist (`overview.md`, `CRITICAL_FACTS.md`, two `_context.md` files, raw sessions/docs) are linked; the rest name the producer rather than inventing a path. `docs/reference/ui.md` Topic pages section left intact except one cross-link. `tasks.md` not edited.
+
+## Operator skip — no full demo synth — 2026-08-15
+
+Operator: do not run `llmwiki synth` against `demo/` for this PR. The review they want is the static site shape (raw docs, sessions, analytics) and the docs shape. A full wiki regeneration (Slice 9) is deferred; untracked partial `demo/wiki/sources|candidates|entities` stay local and are not committed. `demo/.demo-source-rev` is not created.
+
+Mechanism to keep the demo current when `docs/` change, without putting a model in CI:
+
+- `scripts/refresh_demo.py` (local, needs a backend) — Slices 7–8, follow-up in-place update is #151
+- pre-push reminder when product markdown under `docs/` (not `docs/maintainers/`) is in the push
+- wiki-checks path filter includes `docs/**`; if `demo/.demo-source-rev` is later committed, the job prints `refresh_demo.py --dry-run` (never synth)
+
+Demo site rebuilt locally with `build --vault demo --out demo/site --local-root /home/user` for inspection (119 document pages, 25 sessions, analytics, candidates).
+
+## `candidates apply` rebuilds the site by default — 2026-08-15
+
+Operator: after promotion/merge/discard the static candidates page still showed the old queue. `llmwiki candidates apply` now rebuilds `site/` after a successful batch; `--no-rebuild` opts out. One-off `promote` / `merge` / `discard` are unchanged. Spec R12b gained that acceptance criterion.
+
+

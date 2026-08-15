@@ -2,7 +2,7 @@ Ingest a source document (or folder) into the llmwiki.
 
 Usage: /wiki-ingest <path>
 
-`$ARGUMENTS` should be a path relative to the repo root, a folder, or a URL. Examples:
+`$ARGUMENTS` should be a path relative to the vault (or cwd), a folder, or a URL. Examples:
 
 - `/wiki-ingest raw/docs/some-article.md`
 - `/wiki-ingest https://example.com/some-article`
@@ -30,15 +30,15 @@ After it runs:
 6. Flag any contradictions with existing wiki content under `## Contradictions`.
 7. Append to `wiki/log.md`: `## [YYYY-MM-DD] ingest | <title>`
 
-**Vault resolution warning**: `llmwiki add` resolves the vault for you, but every page you write by hand in steps 2–6 must go into that *same* resolved vault (check `config.json` → `vault.default_path`, or the `--vault` you passed). This repo's own `wiki/` is seed demo content — never write entity/concept/project pages, index, or log entries there when a real vault is configured. Only fall back to this repo's `wiki/` when no vault is configured at all.
+**Vault resolution:** `llmwiki add` resolves the vault (`--vault`, else `config.json` → `vault.default_path`, else the current working directory). Every page you write by hand in steps 2–6 must go into that *same* vault.
 
 ## Session transcripts (already under `raw/sessions/`)
 
-These were already converted by `llmwiki sync` — there's no `add` step. Follow the **Ingest Workflow** exactly as defined in `CLAUDE.md`:
+These were already converted by `llmwiki sync` — there's no `add` step. Follow this **Ingest Workflow**:
 
 1. Read the source file (or every file in the folder) using the Read tool
 2. Read `wiki/index.md` and `wiki/overview.md` for current context
-3. Write `wiki/sources/<slug>.md` per the Source Page Format in `CLAUDE.md`
+3. Write `wiki/sources/<slug>.md` (title, type, tags, date, source_file, then Summary / Key Claims / Key Quotes / Connections)
 4. Update `wiki/index.md` — add the new source under `## Sources`
 5. Update `wiki/overview.md` if the source adds substantial new information
 6. Create or update `wiki/entities/<Name>.md` for any people, companies, products, tools, libraries mentioned
@@ -48,7 +48,7 @@ These were already converted by `llmwiki sync` — there's no `add` step. Follow
 10. Flag any contradictions with existing wiki content under `## Contradictions`
 11. Append to `wiki/log.md`: `## [YYYY-MM-DD] ingest | <title>`
 
-Also apply the session-specific rules from `CLAUDE.md` §"Session-derived source specifics":
+Also apply these session-specific rules:
 
 - Trust the frontmatter as authoritative metadata
 - Do not copy the `## Conversation` section verbatim

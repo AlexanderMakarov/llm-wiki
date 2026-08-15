@@ -10,6 +10,12 @@ How to upgrade between `llmwiki` releases.  Most releases are drop-in (`pip inst
 
 The canonical per-release detail is [CHANGELOG.md](https://github.com/Pratiyush/llm-wiki/blob/master/CHANGELOG.md) — this guide focuses on "what might break".
 
+## Unreleased — agent commands ship in the package (#109)
+
+- **`llmwiki install-agent-kit --dest PATH` copies the slash commands and skills into any agent directory you name.** A pip or Homebrew install now carries them; you do not need this repository. `--dest` is required — there is no auto-detection. Typical destinations: `.claude` in the project you are working in, or a user-level agent directory. Re-running after an upgrade refreshes the copies; a file you edited that now differs from the packaged version is saved as `<file>.bak` beside it before it is replaced. `--dry-run` prints the plan and writes nothing. See `docs/reference/cli.md` → `## install-agent-kit`.
+- **`.claude-plugin/` is gone.** The Claude Code plugin manifest could not work (wrong paths, wrong Python floor, incomplete command list). `install-agent-kit` is the supported delivery channel.
+- **Manual copy of `.claude/commands/wiki-*.md` is no longer the upgrade path.** Earlier notes that said to copy those files out of a clone (after `install-skills` was removed) are superseded: install the package and run `install-agent-kit`.
+
 ## Unreleased — the server is gone; the site is files (#109)
 
 - **`llmwiki serve` no longer exists, and `serve.sh` / `serve.bat` are deleted.** A build already produced a site that works from disk, so **open `site/index.html`** (or `<vault>/site/index.html`) in a browser instead. Navigation, project and session pages, topic pages, search and the graph all work with nothing running. Anything scripted around `llmwiki serve` should either open the file or, when it genuinely needs an HTTP origin, use the stdlib stand-in: `python3 -m http.server 8765 --directory <vault>/site`.
@@ -21,7 +27,7 @@ The canonical per-release detail is [CHANGELOG.md](https://github.com/Pratiyush/
   llmwiki candidates apply --vault <vault> --actions -
   ```
 
-  Paste the JSON the page prints into that command. Every row starts at **No decision** and only the rows you chose enter the batch, so an undecided row stays pending and a half-finished review can be applied and resumed. The one-off subcommands (`list`, `promote`, `flip-promote`, `merge`, `discard`, `rewrite-key-facts`) and `/wiki-candidates` are unchanged. **The printed command carries `--vault`** — the old copy-CLI line omitted it, so it only ever acted on the default vault.
+  Paste the JSON the page prints into that command. Every row starts at **No decision** and only the rows you chose enter the batch, so an undecided row stays pending and a half-finished review can be applied and resumed. The one-off subcommands (`list`, `promote`, `flip-promote`, `merge`, `discard`, `rewrite-key-facts`) and `/wiki-candidates` are unchanged. **The printed command carries `--vault`** — the old copy-CLI line omitted it, so it only ever acted on the default vault. A successful `apply` rebuilds `site/` so reload the candidates page (or reopen the file) to see the remaining queue; pass `--no-rebuild` to skip.
 - **`/wiki-serve` is deleted.** If you installed the slash commands into your own agent directory, remove `wiki-serve.md` from it.
 - **The site fetches nothing.** highlight.js and both of its themes are now copied into the site root at build time instead of loaded from a CDN. No action needed — the files appear on your next `llmwiki build`. If code blocks come out unstyled, re-run the build; if they still do, the installed package is missing its vendored assets and should be reinstalled.
 

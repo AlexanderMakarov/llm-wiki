@@ -1,11 +1,11 @@
 # Homebrew formula for llmwiki (v1.1 · #102)
 #
-# Install: brew install Pratiyush/tap/llmwiki
-# Or:      brew tap Pratiyush/tap && brew install llmwiki
+# Install: brew install AlexanderMakarov/tap/llmwiki
+# Or:      brew tap AlexanderMakarov/tap && brew install llmwiki
 #
 # This formula lives in the main repo under `homebrew/llmwiki.rb` as a
 # reference. To publish it for real, copy it into a Homebrew tap repo
-# at `https://github.com/Pratiyush/homebrew-tap/Formula/llmwiki.rb`
+# at `https://github.com/AlexanderMakarov/homebrew-tap/Formula/llmwiki.rb`
 # and update the `url` + `sha256` on every release.
 #
 # Use `scripts/bump-homebrew-formula.sh vX.Y.Z` to regenerate the `url`
@@ -22,11 +22,11 @@ class Llmwiki < Formula
   include Language::Python::Virtualenv
 
   desc "LLM-powered knowledge base from Claude Code, Codex CLI, Cursor, and Obsidian sessions"
-  homepage "https://github.com/Pratiyush/llm-wiki"
-  url "https://github.com/Pratiyush/llm-wiki/archive/refs/tags/v1.2.0.tar.gz"
+  homepage "https://github.com/AlexanderMakarov/llm-wiki"
+  url "https://github.com/AlexanderMakarov/llm-wiki/archive/refs/tags/v1.2.0.tar.gz"
   sha256 "bb4501ffac42329af40403c0c9827b64bb89750e1e6ab507a641488afee67b08"
   license "MIT"
-  head "https://github.com/Pratiyush/llm-wiki.git", branch: "master"
+  head "https://github.com/AlexanderMakarov/llm-wiki.git", branch: "main"
 
   depends_on "python@3.12"
 

@@ -106,7 +106,7 @@ def test_cli_apply_performs_promote_discard_and_merge(tmp_path: Path):
     proc = subprocess.run(
         [
             sys.executable, "-m", "llmwiki", "candidates", "apply",
-            "--actions", "-", "--wiki-dir", str(wiki),
+            "--actions", "-", "--wiki-dir", str(wiki), "--no-rebuild",
         ],
         input=batch,
         cwd=str(REPO_ROOT),
@@ -119,6 +119,66 @@ def test_cli_apply_performs_promote_discard_and_merge(tmp_path: Path):
     assert (wiki / "entities" / "Target.md").is_file()
     assert not (wiki / "candidates" / "entities" / "Drop.md").exists()
     assert not (wiki / "candidates" / "entities" / "Dupe.md").exists()
+
+
+def test_apply_rebuilds_candidates_html_by_default(tmp_path: Path) -> None:
+    """#109: after Apply, the static page must drop the rows that left the queue."""
+    root = tmp_path / "vault"
+    _seed_raw(root)
+    wiki = root / "wiki"
+    for kind in ("entities", "concepts"):
+        (wiki / kind).mkdir(parents=True)
+    _candidate(wiki, "entities", "Keep")
+    site = _build_in(root, "/home/alice", "/home/user")
+    before = (site / "candidates.html").read_text(encoding="utf-8")
+    assert before.count('class="cand-decision"') == 1
+
+    proc = subprocess.run(
+        [
+            sys.executable, "-m", "llmwiki", "candidates", "apply",
+            "--actions",
+            json.dumps([{"action": "promote", "slug": "Keep", "kind": "entities"}]),
+            "--wiki-dir", str(wiki),
+        ],
+        cwd=str(REPO_ROOT),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert "rebuilding site" in proc.stdout
+    after = (site / "candidates.html").read_text(encoding="utf-8")
+    assert after.count('class="cand-decision"') == 0
+    assert (wiki / "entities" / "Keep.md").is_file()
+
+
+def test_apply_no_rebuild_leaves_the_built_page_stale(tmp_path: Path) -> None:
+    root = tmp_path / "vault"
+    _seed_raw(root)
+    wiki = root / "wiki"
+    for kind in ("entities", "concepts"):
+        (wiki / kind).mkdir(parents=True)
+    _candidate(wiki, "entities", "Keep")
+    site = _build_in(root, "/home/alice", "/home/user")
+    before = (site / "candidates.html").read_text(encoding="utf-8")
+
+    proc = subprocess.run(
+        [
+            sys.executable, "-m", "llmwiki", "candidates", "apply",
+            "--actions",
+            json.dumps([{"action": "promote", "slug": "Keep", "kind": "entities"}]),
+            "--wiki-dir", str(wiki),
+            "--no-rebuild",
+        ],
+        cwd=str(REPO_ROOT),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert "rebuilding site" not in proc.stdout
+    assert (site / "candidates.html").read_text(encoding="utf-8") == before
+    assert (wiki / "entities" / "Keep.md").is_file()
 
 
 def test_the_built_candidates_page_reviews_without_a_backend(tmp_path: Path):

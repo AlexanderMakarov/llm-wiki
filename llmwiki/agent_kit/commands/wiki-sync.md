@@ -12,7 +12,7 @@ Steps (run in this order, report progress to the user):
 
 2. **If `N == 0`**: report "wiki is already up to date" and skip to step 5.
 
-3. **If `N > 0`**: for each newly written markdown file under `raw/sessions/`, follow the **Ingest Workflow** from `CLAUDE.md`. Process one project at a time. If there are more than 20 new files total, ask the user whether to process them all or a subset first.
+3. **If `N > 0`**: for each newly written markdown file under `raw/sessions/`, follow `/wiki-ingest`. Process one project at a time. If there are more than 20 new files total, ask the user whether to process them all or a subset first.
 
 4. **Append to `wiki/log.md`**:
    ```

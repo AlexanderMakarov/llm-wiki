@@ -388,6 +388,7 @@ def test_cli_candidates_apply_batch(tmp_path: Path) -> None:
             sys.executable, "-m", "llmwiki", "candidates", "apply",
             "--actions", payload,
             "--wiki-dir", str(wiki),
+            "--no-rebuild",
         ],
         cwd=str(REPO_ROOT),
         capture_output=True,

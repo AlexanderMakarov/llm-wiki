@@ -67,7 +67,7 @@ None of these can be fixed independently. A README written against a fabricated 
     - [ ] The command reports what it is about to redo before doing it, and offers a preview mode that changes nothing.
     - [ ] Refreshing is a local activity. The automated build never attempts it and never needs an AI model.
     - [ ] The documentation for the command states what the maintainer needs available beforehand, and what happens if it is missing.
-    - [ ] A follow-up issue records the underlying product gap — that llmwiki itself cannot update an already-ingested document in place, which is why the demo has to work around it.
+    - [ ] A follow-up issue records the underlying product gap — that llmwiki itself cannot update an already-ingested document in place, which is why the demo has to work around it — [#151](https://github.com/AlexanderMakarov/llm-wiki/issues/151).
 
   - **Known constraint this requirement works around:** adding an already-ingested document again does not update it. It lands a second copy under a new address and leaves the original in place; only removing the original first preserves the address. Verified by experiment. The demo refresh therefore has to remove and re-add each changed document rather than simply re-adding it. Nothing in this work changes that behaviour for user vaults.
 
@@ -175,6 +175,7 @@ None of these can be fixed independently. A README written against a fabricated 
     - [ ] The command and its batch are reachable without scrolling past the candidate tables.
     - [ ] Deciding requires nothing to be running. Only executing the decisions uses the command line.
     - [ ] No review capability is lost relative to the page that posted its decisions to a server.
+    - [ ] A successful `candidates apply` rebuilds the static site by default so the candidates page, Home, and Analytics match the wiki; `--no-rebuild` skips that rebuild.
 
   - **Why this is stated separately:** an earlier reading of "review moves to the command line" removed the page's controls altogether, on the grounds that they called an endpoint that no longer existed. Deciding is state held in the page; only executing ever needed a server. Conflating the two removed a working capability that the removal did not require.
 
@@ -231,7 +232,7 @@ None of these can be fixed independently. A README written against a fabricated 
 - **Rewriting the topic-pages section of the interface reference** — already delivered by #108.
 - **Regenerating the demo automatically** — explicitly rejected; regeneration stays a local maintainer activity.
 - **Changing how any user's knowledge base decides what is out of date** — explicitly rejected. The demo's version-history-based change detection applies to the demo alone; user vaults keep today's behaviour untouched.
-- **Giving the product a way to update an already-ingested document in place** — a real gap, worked around by the demo refresh and recorded as a follow-up issue (R3).
+- **Giving the product a way to update an already-ingested document in place** — a real gap, worked around by the demo refresh and recorded as a follow-up issue (R3) — [#151](https://github.com/AlexanderMakarov/llm-wiki/issues/151).
 - **Changing how sessions are read from any agent** — adapters are untouched.
 - Everything else on the roadmap: honest estimate preview (#113), migration inventory, CLI help as a lifecycle map (#112), health check (#110), Cursor session parsing (#2), Cursor-compatible AWOS (#114), MCP protocol upgrade (#78), Cowork ingest (#31), chat ingest (#32), project aggregation (#126).
 

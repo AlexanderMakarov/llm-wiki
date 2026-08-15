@@ -52,9 +52,9 @@ _FAVICON_PNG = bytes.fromhex(
 )
 
 # Repo-authored content (editorial docs/, README.md, CONTRIBUTING.md,
-# .claude/commands) ships with the tool's source checkout. Resolve it
-# from the package location, NOT REPO_ROOT — with LLMWIKI_ROOT set,
-# REPO_ROOT points at the user's vault, which has none of these files.
+# .claude/commands, llmwiki/agent_kit/commands) ships with the tool.
+# Resolve it from the package location, NOT REPO_ROOT — with LLMWIKI_ROOT
+# set, REPO_ROOT points at the user's vault, which has none of these files.
 SOURCE_ROOT = PACKAGE_ROOT.parent
 from llmwiki import raw_docs_site
 from llmwiki.agent_label import detect_agent_label, render_agent_badge
@@ -2763,11 +2763,22 @@ def build_search_index(
                 "body": _first_paragraph(page.body)[:300],
             })
 
-    # Slash commands — read the first non-empty line of each .md as
-    # the description so the palette shows what each /wiki-* does.
-    slash_dir = SOURCE_ROOT / ".claude" / "commands"
-    if slash_dir.is_dir():
+    # Slash commands — kit first (packaged /wiki-*), then remaining
+    # contributor commands under .claude/commands. Deduplicate by stem so
+    # `install-agent-kit --dest .claude` in a source checkout does not
+    # index the same /wiki-* twice.
+    slash_dirs = (
+        PACKAGE_ROOT / "agent_kit" / "commands",
+        SOURCE_ROOT / ".claude" / "commands",
+    )
+    seen_slashes: set[str] = set()
+    for slash_dir in slash_dirs:
+        if not slash_dir.is_dir():
+            continue
         for p in sorted(slash_dir.glob("*.md")):
+            if p.stem in seen_slashes:
+                continue
+            seen_slashes.add(p.stem)
             try:
                 text = p.read_text(encoding="utf-8")
             except OSError:

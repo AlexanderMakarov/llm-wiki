@@ -15,14 +15,14 @@ This skill runs the full sync pipeline:
 ~/.claude/projects/*/*.jsonl         (raw session transcripts)
         │
         ▼   python3 -m llmwiki sync
-llmwiki/raw/sessions/<proj>/*.md     (Karpathy layer 1 — immutable markdown)
+<vault>/raw/sessions/*.md            (Karpathy layer 1 — immutable markdown)
         │
-        ▼   /wiki-ingest              (Claude in the loop)
-llmwiki/wiki/sources, entities,      (Karpathy layer 2 — LLM-maintained wiki)
+        ▼   /wiki-ingest              (agent in the loop)
+<vault>/wiki/sources, entities,      (Karpathy layer 2 — LLM-maintained wiki)
               concepts, syntheses
         │
         ▼   python3 -m llmwiki build
-llmwiki/site/                         (Karpathy layer 3 — static HTML)
+<vault>/site/                         (Karpathy layer 3 — static HTML)
 ```
 
 ## When to use
@@ -37,28 +37,21 @@ Invoke this skill when the user:
 Do NOT invoke when:
 
 - The user is asking a question unrelated to their own work
-- The tool is not installed (check for `llmwiki/` directory first)
+- `llmwiki` is not installed (`python3 -m llmwiki version` fails)
 
 ## Workflow
 
-1. **Locate the llmwiki install.** Check the current working directory and common locations:
-   - `./` (if cwd contains `llmwiki/` package)
-   - `~/Desktop/2026/production-draft/llmwiki/`
-   - `~/llmwiki/`
-   - `config.json` → `vault.default_path` at the llm-wiki repo root
-
-   If you can't find it, tell the user and stop.
+1. **Resolve the vault.** Use `--vault` if the user named one, else `config.json` → `vault.default_path` in the current working directory, else a directory here that already contains `raw/` and `wiki/`. If you cannot resolve a vault, tell the user and stop.
 
 2. **Run the converter** (idempotent — safe to re-run):
    ```bash
-   cd <llmwiki-dir>
    python3 -m llmwiki sync
    ```
    Capture the summary line: `N converted, M unchanged, K live, J filtered, X errors`.
 
 3. **If N == 0**, report that the wiki is up to date and stop.
 
-4. **If N > 0**, ingest the new files into the wiki using the Ingest Workflow from the repo's `CLAUDE.md`. Process one project at a time. If more than 20 new files, ask the user whether to process all or a subset first.
+4. **If N > 0**, ingest the new files with `/wiki-ingest`. Process one project at a time. If more than 20 new files, ask the user whether to process all or a subset first.
 
 5. **Append to `wiki/log.md`**:
    ```
@@ -91,7 +84,7 @@ If the user wants the converter to run automatically on every Claude Code sessio
         "hooks": [
           {
             "type": "command",
-            "command": "(python3 /absolute/path/to/llmwiki/tools/sessions_to_markdown.py > /tmp/llmwiki-sync.log 2>&1 &) ; exit 0"
+            "command": "(python3 -m llmwiki sync > /tmp/llmwiki-sync.log 2>&1 &) ; exit 0"
           }
         ]
       }
@@ -100,11 +93,10 @@ If the user wants the converter to run automatically on every Claude Code sessio
 }
 ```
 
-The `( ... &) ; exit 0` pattern ensures the hook runs in the background and never blocks session start.
+The `( ... &) ; exit 0` pattern ensures the hook runs in the background and never blocks session start. The hook needs `llmwiki` on `PATH` (a pip or Homebrew install).
 
 ## Troubleshooting
 
-- **Permission errors on `raw/`**: the converter writes to `llmwiki/raw/sessions/`. Make sure the repo is writable.
+- **Permission errors on `raw/`**: the converter writes to `<vault>/raw/sessions/`. Make sure that vault is writable.
 - **Nothing converted, only "live"**: the default 60-minute live filter is skipping recent sessions. Pass `--include-current` to override, or wait an hour.
-- **Converter says "module 'tomllib' not found"**: stale source. Update to the current version (`tools/sessions_to_markdown.py` uses `json`, not `tomllib`).
-- **Privacy**: the converter redacts username, API keys, tokens, and emails by default. If you see unredacted PII, check `examples/sessions_config.json` → `redaction.real_username`.
+- **Privacy**: the converter redacts username, API keys, tokens, and emails by default. If you see unredacted PII, check `config.json` → `redaction.real_username`.

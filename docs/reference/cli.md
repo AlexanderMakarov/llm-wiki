@@ -347,7 +347,7 @@ python3 -m llmwiki lint --wiki-dir ~/another-wiki
 
 Positional `action` picks `list` / `promote` / `flip-promote` / `merge` / `discard` / `apply` / `rewrite-key-facts`.
 
-Successful `promote` / `flip-promote` / `merge` / `discard` / `apply` reconcile `wiki/index.md` (#101): dead `candidates/…` bullets are dropped, an empty `## Candidates` section is removed, and newly trusted pages are listed under Entities/Concepts. `/wiki-candidates` should call these same actions — do not run idle `sync`/`synth` just to refresh the catalog after review. Site UI: open `site/candidates.html` — it lists everything pending, takes a decision per row, and its **Apply** button prints the `candidates apply --vault … --actions -` command plus the JSON batch for the rows you decided (#97).
+Successful `promote` / `flip-promote` / `merge` / `discard` / `apply` reconcile `wiki/index.md` (#101): dead `candidates/…` bullets are dropped, an empty `## Candidates` section is removed, and newly trusted pages are listed under Entities/Concepts. `/wiki-candidates` should call these same actions — do not run idle `sync`/`synth` just to refresh the catalog after review. Site UI: open `site/candidates.html` — it lists everything pending, takes a decision per row, and its **Apply** button prints the `candidates apply --vault … --actions -` command plus the JSON batch for the rows you decided (#97). A successful `apply` then rebuilds `site/` so the open candidates page, Home, and Analytics match the wiki; pass `--no-rebuild` to skip that (for example when applying several batches before one `llmwiki build`).
 
 `promote` also writes an empty (or heading-only) `## Key Facts` (#103). It builds an evidence digest — every line where each source listed in frontmatter `sources:` / Connections names the subject, capped at 12 sources and 4 lines each — and hands it to the backend named by `synthesis.backend`, which returns 3–5 attributed bullets. Non-empty reviewer Key Facts are left alone.
 
@@ -393,6 +393,7 @@ python3 -m llmwiki candidates rewrite-key-facts --all
 | `--stale-days N` | Staleness threshold. Default: 30. |
 | `--json` | JSON output for `list`. |
 | `--actions JSON` | For `apply`: JSON array of `{action,slug,kind?,into?,reason?}`. Pass `-` to read the array from stdin. |
+| `--no-rebuild` | For `apply`: skip rebuilding `site/` after a successful batch. Default is to rebuild so `candidates.html` drops the rows that were just promoted, merged, or discarded. |
 
 See [`guides/existing-vault.md`](../guides/existing-vault.md) for the round-trip semantics when a candidate lives inside a vault.
 
@@ -608,6 +609,33 @@ python3 -m llmwiki lint --vault /path/to/vault --rules frontmatter_validity
 | `--dry-run` | Report what would change; write nothing. |
 
 Idempotent: a second run finds nothing to migrate. On a run that changed something the command reconciles `wiki/index.md` and appends `## [YYYY-MM-DD] migrate | page kinds` to `wiki/log.md`.
+
+---
+
+## `install-agent-kit` — copy packaged slash commands and skills (#109)
+
+A pip or Homebrew install carries the user-facing `/wiki-*` slash commands and skills inside the package (`llmwiki/agent_kit/`). This command copies `commands/` and `skills/` beneath a directory you name so Claude Code (or any agent that reads that layout) can see them. `--dest` is **required** — the command does not guess at agent directory conventions.
+
+Typical destinations: `.claude` in the project you are working in, or a user-level agent directory. Contributors working in this clone who want `/wiki-*` locally run `llmwiki install-agent-kit --dest .claude`.
+
+Re-running after an upgrade refreshes the copies. A destination file whose content already matches the kit is left alone. A destination file that differs is saved as `<filename>.bak` beside it before the kit version is written, and the backup is reported, so a customisation is never overwritten silently. `--dry-run` prints the same report and writes nothing.
+
+Contributor-only commands (`fix-bug`, `maintainer`, `release`, …) and skills (`docs-that-work`, `pytest-best-practices`, …) stay in this repository's `.claude/` tree and are not part of the kit.
+
+```bash
+python3 -m llmwiki install-agent-kit --dest .claude --dry-run
+python3 -m llmwiki install-agent-kit --dest .claude
+python3 -m llmwiki install-agent-kit --dest /path/to/agent-dir
+```
+
+### Flags
+
+| Flag | What |
+|---|---|
+| `--dest PATH` | **Required.** Directory that will receive `commands/` and `skills/`. |
+| `--dry-run` | Report what would be written; write nothing. |
+
+The command prints every path written, every `.bak` it created, and a count of identical files left untouched. Exit `0` on success, `1` if a file could not be read or written.
 
 ---
 

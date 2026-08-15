@@ -71,16 +71,15 @@ See [docs/architecture.md](docs/architecture.md) for the full breakdown. TL;DR:
 
 ```
 llmwiki/              # Python package
-├── cli.py            # argparse entry (19 subcommands — `llmwiki --help`)
+├── cli.py            # argparse entry (`llmwiki --help`)
 ├── convert.py        # .jsonl → markdown
-├── build.py          # markdown → HTML (god-level UI)
+├── build.py          # markdown → HTML
 ├── render/           # emitted site assets (css.py, js.py, data.py)
-├── serve.py          # localhost HTTP server
+├── agent_kit/        # packaged /wiki-* commands + user skills (`install-agent-kit`)
 ├── adapters/         # session-store adapters (one per agent)
 └── mcp/              # MCP server (12 tools, stdio transport)
 
-.claude/              # Claude Code plugin surface (commands, skills, rules)
-.claude-plugin/       # plugin.json + marketplace.json
+.claude/              # contributor commands, skills, rules (awos, maintainer, …)
 .cursor/rules/        # Cursor project rules
 .kiro/steering/       # always-loaded rules
 .githooks/            # committed git hooks (pre-push lint)
@@ -112,6 +111,14 @@ Two rules for maintaining them:
 
 1. **They are pointers, not copies.** Each one distils the same handful of non-negotiables and links back here. An earlier version of the Kiro file restated the rules in full and drifted — it ended up mandating commit types this guide doesn't accept and a branch name that no longer matched. Process rules change here first; the pointers only change when the *summary* is wrong.
 2. **Keep them free of machine-specific detail.** `.cursor/` is gitignored except for an explicit allowlist in `.gitignore`, so a local rule naming your own vault path or directory layout stays on your machine. Add a new shared Cursor rule by allowlisting it there deliberately.
+
+User-facing `/wiki-*` slash commands and skills live in `llmwiki/agent_kit/` and ship in the package. Contributors who want them locally (so Claude Code discovers `/wiki-sync` from this clone) run:
+
+```bash
+python3 -m llmwiki install-agent-kit --dest .claude
+```
+
+That copies `commands/` and `skills/` under `.claude/`. Re-run after pulling an upgrade; a file you edited that now differs from the packaged version is saved as `<file>.bak` beside it.
 
 ### Optional: AWOS (spec → hire → implement)
 

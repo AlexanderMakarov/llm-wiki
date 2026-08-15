@@ -83,6 +83,14 @@ if [ -s "$py_list" ]; then
   done | sort -u > "$py_filtered"
 fi
 
+docs_hit=$(sort -u "$py_list" 2>/dev/null | grep '^docs/' | grep '\.md$' | grep -v '^docs/maintainers/' || true)
+if [ -n "$docs_hit" ]; then
+  echo "Note: product docs changed in this push."
+  echo "  Preview a demo refresh (local, needs a synth backend to apply):"
+  echo "    python3 scripts/refresh_demo.py --dry-run"
+  echo "  CI lints and builds the committed demo; it never runs synth."
+fi
+
 if [ ! -s "$py_filtered" ]; then
   exit 0
 fi

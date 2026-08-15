@@ -2,7 +2,8 @@
 
 - Every CLI subcommand registered in ``llmwiki.cli.build_parser`` must
   appear as an ``## subcommand`` heading in ``docs/reference/cli.md``.
-- Every `.claude/commands/*.md` file must appear as an
+- Every user-facing ``llmwiki/agent_kit/commands/*.md`` file and every
+  contributor ``.claude/commands/*.md`` file must appear as a
   ``### /slash-command`` heading in ``docs/reference/slash-commands.md``.
 - Every top-level nav item in ``llmwiki/build.py`` must appear as a
   row in ``docs/reference/ui.md``.
@@ -22,6 +23,7 @@ CLI_REF = REPO_ROOT / "docs" / "reference" / "cli.md"
 SLASH_REF = REPO_ROOT / "docs" / "reference" / "slash-commands.md"
 UI_REF = REPO_ROOT / "docs" / "reference" / "ui.md"
 CLAUDE_CMDS_DIR = REPO_ROOT / ".claude" / "commands"
+AGENT_KIT_CMDS_DIR = REPO_ROOT / "llmwiki" / "agent_kit" / "commands"
 BUILD_PY = REPO_ROOT / "llmwiki" / "build.py"
 
 
@@ -86,9 +88,11 @@ def test_every_cli_subcommand_gets_an_example():
 
 
 def _all_slash_commands() -> set[str]:
-    if not CLAUDE_CMDS_DIR.is_dir():
-        return set()
-    return {p.stem for p in CLAUDE_CMDS_DIR.glob("*.md")}
+    names: set[str] = set()
+    for folder in (CLAUDE_CMDS_DIR, AGENT_KIT_CMDS_DIR):
+        if folder.is_dir():
+            names.update(p.stem for p in folder.glob("*.md"))
+    return names
 
 
 def test_slash_reference_covers_every_command():
@@ -127,7 +131,8 @@ def test_slash_reference_counts_correctly():
     claimed = int(m.group(1))
     assert claimed == live_count, (
         f"slash-commands.md says {claimed} commands but there are "
-        f"actually {live_count} .md files in .claude/commands/"
+        f"actually {live_count} .md files in llmwiki/agent_kit/commands/ "
+        f"+ .claude/commands/"
     )
 
 

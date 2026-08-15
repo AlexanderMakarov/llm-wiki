@@ -6,10 +6,9 @@ docs_shell: true
 
 # Slash commands reference
 
-Every `/wiki-*` (plus governance commands) in `.claude/commands/`,
+Every `/wiki-*` (plus governance commands),
 what it does, what it runs under the hood, and a realistic invocation
-example. Use these inside **Claude Code** — Codex CLI picks the same
-files up via `install-skills`.
+example. Use these inside **Claude Code**. User-facing `/wiki-*` files ship in the installable package and land in an agent directory via `llmwiki install-agent-kit --dest PATH`; governance commands stay in this repository's `.claude/commands/`.
 
 Summary of **19 commands in 5 groups**:
 

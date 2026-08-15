@@ -2,7 +2,7 @@ Lint the llmwiki — find orphans, broken wikilinks, contradictions, and stale p
 
 Usage: /wiki-lint
 
-Follow the **Lint Workflow** in `CLAUDE.md`. Use Grep and Read to check for:
+Use Grep and Read to check for:
 
 1. **Orphan pages** — wiki pages with no inbound `[[links]]` from any other page.
    ```

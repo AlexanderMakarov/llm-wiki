@@ -65,37 +65,39 @@
 
 ## Stage B — PR B: the demo is real, checked, and published
 
-- [ ] **Slice 7: Changed documents can be identified from git**
+- [x] **Slice 7: Changed documents can be identified from git**
 
-  - [ ] Implement the change-selection logic in `scripts/refresh_demo.py` as a pure function taking git's `diff --name-status` and `status --porcelain` output and returning an ordered action plan of `(action, path, slug)`. No file or vault access inside it. **[Agent: general-purpose]**
-  - [ ] Map git statuses to actions: `A` → add; `M` and `R` → remove-then-add; `D` → remove. Uncommitted working-tree edits from `status` are merged with committed changes from `diff`, de-duplicated by path. **[Agent: general-purpose]**
-  - [ ] Add unit tests over the pure function: added, modified, deleted, renamed, unchanged, an uncommitted edit, a file both committed and then further edited, and a no-change run producing an empty plan. Assert the remove-then-add ordering explicitly for the modified case. **[Agent: general-purpose]**
-  - [ ] Verify: run the new tests plus both gates. **[Agent: general-purpose]**
+  - [x] Implement the change-selection logic in `scripts/refresh_demo.py` as a pure function taking git's `diff --name-status` and `status --porcelain` output and returning an ordered action plan of `(action, path, slug)`. No file or vault access inside it. **[Agent: general-purpose]**
+  - [x] Map git statuses to actions: `A` → add; `M` and `R` → remove-then-add; `D` → remove. Uncommitted working-tree edits from `status` are merged with committed changes from `diff`, de-duplicated by path. **[Agent: general-purpose]**
+  - [x] Add unit tests over the pure function: added, modified, deleted, renamed, unchanged, an uncommitted edit, a file both committed and then further edited, and a no-change run producing an empty plan. Assert the remove-then-add ordering explicitly for the modified case. **[Agent: general-purpose]**
+  - [x] Verify: run the new tests plus both gates. **[Agent: general-purpose]**
 
-- [ ] **Slice 8: One command refreshes the demo**
+- [x] **Slice 8: One command refreshes the demo**
 
-  - [ ] Complete `scripts/refresh_demo.py`: read the base revision from `demo/.demo-source-rev`, collect git output, build the plan, then drive the existing CLI per action — `llmwiki add <path> --vault demo --no-build` and `llmwiki remove <slug> --vault demo --yes`. Then once per run: `synth --vault demo --docs-only` → `build --vault demo --out demo/site` → `lint --vault demo`. Finally write `HEAD` into `demo/.demo-source-rev`. **[Agent: general-purpose]**
-  - [ ] Add a code comment at the remove-then-add site explaining why the ordering is mandatory: re-adding an ingested document lands a second snapshot under a drifted slug and leaves the original, breaking inbound links. **[Agent: general-purpose]**
-  - [ ] Add a `llmwiki synth --check` preflight that fails early with an actionable message when no synth backend is reachable, rather than part-way through a run. **[Agent: general-purpose]**
-  - [ ] Add flags: `--dry-run` (print the plan, touch nothing), `--force` (treat every `docs/` file as changed), `--base <rev>` (override the recorded revision). Print the full lint report at the end of every run — under an errors-only CI gate this is the maintainer's only sight of warning-severity defects. **[Agent: general-purpose]**
-  - [ ] Document the command in `docs/maintainers/`: what it does, that it requires a working synth backend and a git working copy, that it cannot run from a release archive, and that it is local-only and never runs in CI. **[Agent: general-purpose]**
-  - [ ] File a follow-up GitHub issue for the product-level gap — llmwiki cannot update an already-ingested document in place (functional-spec R3) — and record its number next to the R3 criterion. **[Agent: general-purpose]**
-  - [ ] Verify: build a temporary git fixture with a seeded `docs/` tree and a scratch vault, then exercise `--dry-run` for added / modified / deleted / renamed / no-change and confirm the printed plan matches expectations and nothing is written. Delete the fixture afterwards. **[Agent: general-purpose]**
+  - [x] Complete `scripts/refresh_demo.py`: read the base revision from `demo/.demo-source-rev`, collect git output, build the plan, then drive the existing CLI per action — `llmwiki add <path> --vault demo --no-build` and `llmwiki remove <slug> --vault demo --yes`. Then once per run: `synth --vault demo --docs-only` → `build --vault demo --out demo/site` → `lint --vault demo`. Finally write `HEAD` into `demo/.demo-source-rev`. **[Agent: general-purpose]**
+  - [x] Add a code comment at the remove-then-add site explaining why the ordering is mandatory: re-adding an ingested document lands a second snapshot under a drifted slug and leaves the original, breaking inbound links. **[Agent: general-purpose]**
+  - [x] Add a `llmwiki synth --check` preflight that fails early with an actionable message when no synth backend is reachable, rather than part-way through a run. **[Agent: general-purpose]**
+  - [x] Add flags: `--dry-run` (print the plan, touch nothing), `--force` (treat every `docs/` file as changed), `--base <rev>` (override the recorded revision). Print the full lint report at the end of every run — under an errors-only CI gate this is the maintainer's only sight of warning-severity defects. **[Agent: general-purpose]**
+  - [x] Document the command in `docs/maintainers/`: what it does, that it requires a working synth backend and a git working copy, that it cannot run from a release archive, and that it is local-only and never runs in CI. **[Agent: general-purpose]**
+  - [x] File a follow-up GitHub issue for the product-level gap — llmwiki cannot update an already-ingested document in place (functional-spec R3) — and record its number next to the R3 criterion. **[Agent: general-purpose]**
+  - [x] Verify: build a temporary git fixture with a seeded `docs/` tree and a scratch vault, then exercise `--dry-run` for added / modified / deleted / renamed / no-change and confirm the printed plan matches expectations and nothing is written. Delete the fixture afterwards. **[Agent: general-purpose]**
 
 - [ ] **Slice 9: The demo content is genuine pipeline output about llmwiki**
 
-  - [ ] Curate `demo/raw/docs/` so the demo corpus covers llmwiki's own subject matter — its commands, its static site, and how it reads agent sessions — sourced from the project's real `docs/`. Remove the inherited fictional projects (blog engine, to-do API, ML pipeline) and their pre-synthesized source pages. **[Agent: general-purpose]**
+  > **Deferred 2026-08-15.** Operator chose not to run a full demo `synth` for this PR. The committed `demo/raw/` corpus (product docs + authored sessions) stays; untracked partial `demo/wiki/sources|candidates|entities` are local leftovers and must not be committed. `demo/.demo-source-rev` is not created. Revisit when someone runs `scripts/refresh_demo.py` locally.
+
+  - [x] Curate `demo/raw/docs/` so the demo corpus covers llmwiki's own subject matter — its commands, its static site, and how it reads agent sessions — sourced from the project's real `docs/`. Remove the inherited fictional projects (blog engine, to-do API, ML pipeline) and their pre-synthesized source pages. **[Agent: general-purpose]**
   - [ ] Run `python3 -m llmwiki synth --check` first. **If no backend is reachable, stop and report to the user** — this task needs a real AI backend and must not be faked, stubbed, or hand-written. That is the entire point of the requirement. **[Agent: general-purpose]**
   - [ ] Regenerate the demo by running `scripts/refresh_demo.py`, and commit the produced `demo/raw/` and `demo/wiki/` content together with `demo/.demo-source-rev`. **[Agent: general-purpose]**
   - [ ] Verify: confirm no page under `demo/wiki/entities/`, `demo/wiki/concepts/` or `demo/wiki/projects/` opens with a prose description paragraph, that every knowledge page body is attributed fact bullets, and that each bullet carries a source link. Confirm `llmwiki lint --vault demo --fail-on-errors` exits zero. **[Agent: general-purpose]**
 
-- [ ] **Slice 10: CI proves the demo is clean**
+- [x] **Slice 10: CI proves the demo is clean**
 
   - [x] Repair `.github/workflows/wiki-checks.yml`: change the push trigger from `master` to `main` (it currently never fires); delete the `python -m llmwiki eval` step, which invokes a subcommand that does not exist and is masked by `|| true`; drop the seeding block; run `python -m llmwiki build --vault demo --out demo/site` then `python -m llmwiki lint --vault demo --fail-on-errors`. **[Agent: general-purpose]**
   - [x] Do not add `--strict` and do not modify anything under `llmwiki/lint/`. Errors fail the build; warnings are printed and tolerated. Add a comment in the workflow recording why, so a future reader does not "fix" it: `content_freshness` fires on any committed demo once 90 days pass and would redden CI on a timer. **[Agent: general-purpose]**
   - [x] Add a test pinning the amended R4 boundary: `lint --vault <tmp> --fail-on-errors` exits non-zero on a seeded error and zero on a vault carrying only warnings — so reintroducing `--strict` later is a deliberate act, not an accident. **[Agent: general-purpose]**
   - [x] File a follow-up GitHub issue proposing per-vault lint rule scoping so the demo can enforce warnings once `content_freshness` can be excluded (amended R4), and record its number next to the R4 criterion. **[Agent: general-purpose]**
-  - [ ] Verify: run both gates, and confirm the built demo site opens and the lint command exits zero against `demo/`. **[Agent: general-purpose]**
+  - [x] Verify: run both gates, and confirm the built demo site opens and the lint command exits zero against `demo/`. **[Agent: general-purpose]** *(lint against the committed scaffold; a full-wiki lint-clean demo waits on Slice 9)*
 
 ---
 
@@ -117,42 +119,42 @@
   - [x] Add tests: `serve` is no longer a subcommand; the built page contains no `fetch`, no `XMLHttpRequest` and no endpoint reference; the Decision controls and Apply exist; a row with no decision is excluded from the batch; the generated batch is valid and shaped as `candidates apply` parses it; the CLI review path still performs promote / discard / merge end to end on a `tmp_path` vault. **[Agent: general-purpose]**
   - [x] Verify: build the demo, open it as files, and confirm every surface works with nothing running. Assert the built site references no `https://` script or stylesheet beyond the accepted web-font link. Delete any temp build afterwards. **[Agent: general-purpose]**
 
-- [ ] **Slice 12: A reference explains every page kind and where each field comes from**
+- [x] **Slice 12: A reference explains every page kind and where each field comes from**
 
-  - [ ] Write `docs/reference/page-kinds.md` covering every surviving kind — `source`, `entity`, `concept`, `project`, `synthesis`, plus the system kinds `navigation` and `context`. For each: what it is for, and a real example linked into the rebuilt demo. **[Agent: general-purpose]**
-  - [ ] For every frontmatter field on every kind, give a provenance value of **synth**, **harvest**, **build**, or **human**. Derive these from the code, not from assumption. **[Agent: general-purpose]**
-  - [ ] List conventionally-absent fields explicitly with the reason, including that `ensure_project_stubs()` (`llmwiki/build.py:340`) writes project stubs with no `last_updated`, so project freshness derives from sessions. **[Agent: general-purpose]**
-  - [ ] State plainly that saved answers are written by an agent or a person and are never generated automatically. **[Agent: general-purpose]**
-  - [ ] Verify only — do not rewrite — that `docs/reference/ui.md` already carries a complete `## Topic pages` section from #108 / PR #128. Link the new page from `docs/index.md`. **[Agent: general-purpose]**
-  - [ ] Verify: confirm every example in the new page resolves to a file that exists in the rebuilt demo, and that every field named in the code appears in the tables. **[Agent: general-purpose]**
+  - [x] Write `docs/reference/page-kinds.md` covering every surviving kind — `source`, `entity`, `concept`, `project`, `synthesis`, plus the system kinds `navigation` and `context`. For each: what it is for, and a real example linked into the rebuilt demo. **[Agent: general-purpose]**
+  - [x] For every frontmatter field on every kind, give a provenance value of **synth**, **harvest**, **build**, or **human**. Derive these from the code, not from assumption. **[Agent: general-purpose]**
+  - [x] List conventionally-absent fields explicitly with the reason, including that `ensure_project_stubs()` (`llmwiki/build.py:340`) writes project stubs with no `last_updated`, so project freshness derives from sessions. **[Agent: general-purpose]**
+  - [x] State plainly that saved answers are written by an agent or a person and are never generated automatically. **[Agent: general-purpose]**
+  - [x] Verify only — do not rewrite — that `docs/reference/ui.md` already carries a complete `## Topic pages` section from #108 / PR #128. Link the new page from `docs/index.md`. **[Agent: general-purpose]**
+  - [x] Verify: confirm every example in the new page resolves to a file that exists in the rebuilt demo, and that every field named in the code appears in the tables. **[Agent: general-purpose]**
 
-- [ ] **Slice 13: A packaged install carries the agent commands**
+- [x] **Slice 13: A packaged install carries the agent commands**
 
-  - [ ] Create `llmwiki/agent_kit/{commands,skills}/` and move the user-facing material into it: the `wiki-*.md` slash commands, and the `llmwiki-sync`, `llmwiki-ingest`, `llmwiki-query`, `wiki-all`, `wiki-add` skills. Leave contributor material in `.claude/` — `awos/`, `fix-bug.md`, `implement-feature.md`, `maintainer.md`, `release.md`, `triage-issue.md`, and the `docs-that-work`, `gha-diagnosis`, `modern-python-development`, `project-maintainer`, `pytest-best-practices`, `self-learn` skills. **[Agent: general-purpose]**
-  - [ ] Strip any reference to repository-only paths from the moved user-facing files — they will run from a user's own project. **[Agent: general-purpose]**
-  - [ ] Extend `package-data` for `llmwiki` in `pyproject.toml:108-109` to include `agent_kit/**/*.md` and any non-markdown skill assets. **[Agent: general-purpose]**
-  - [ ] Add an `install-agent-kit` subcommand with a **required** `--dest PATH` — no auto-detection. Copy `commands/` and `skills/` beneath the destination, report every path written, write a `.bak` beside any conflicting file whose content differs and report it, treat an identical file as a no-op, and support `--dry-run`. **[Agent: general-purpose]**
-  - [ ] Delete `.claude-plugin/` (`plugin.json`, `marketplace.json`). It declares `path: "."` with `commands/wiki-init.md`, resolving to a directory that does not exist; names the upstream author; and claims `python >=3.9` against an actual floor of 3.12. It cannot work, so nothing can depend on it. **[Agent: general-purpose]**
-  - [ ] Add tests: writes to `--dest`; missing `--dest` errors; conflicting file produces a `.bak` and a report; identical file is a no-op; `--dry-run` writes nothing. **[Agent: general-purpose]**
-  - [ ] **Add the test that actually proves the Homebrew fix:** build a distribution and assert it contains `llmwiki/agent_kit/commands/*.md` and the skill files. Inspecting `pyproject.toml` by eye would not catch a packaging mistake. **[Agent: general-purpose]**
-  - [ ] Verify: build a distribution, install it into a throwaway virtualenv, run `install-agent-kit --dest <tmp>` from outside the repository, and confirm the commands and skills land. Delete the virtualenv and temporary destination afterwards. **[Agent: general-purpose]**
+  - [x] Create `llmwiki/agent_kit/{commands,skills}/` and move the user-facing material into it: the `wiki-*.md` slash commands, and the `llmwiki-sync`, `llmwiki-ingest`, `llmwiki-query`, `wiki-all`, `wiki-add` skills. Leave contributor material in `.claude/` — `awos/`, `fix-bug.md`, `implement-feature.md`, `maintainer.md`, `release.md`, `triage-issue.md`, and the `docs-that-work`, `gha-diagnosis`, `modern-python-development`, `project-maintainer`, `pytest-best-practices`, `self-learn` skills. **[Agent: general-purpose]** *(wiki-add was not in this worktree — skipped)*
+  - [x] Strip any reference to repository-only paths from the moved user-facing files — they will run from a user's own project. **[Agent: general-purpose]**
+  - [x] Extend `package-data` for `llmwiki` in `pyproject.toml:108-109` to include `agent_kit/**/*.md` and any non-markdown skill assets. **[Agent: general-purpose]**
+  - [x] Add an `install-agent-kit` subcommand with a **required** `--dest PATH` — no auto-detection. Copy `commands/` and `skills/` beneath the destination, report every path written, write a `.bak` beside any conflicting file whose content differs and report it, treat an identical file as a no-op, and support `--dry-run`. **[Agent: general-purpose]**
+  - [x] Delete `.claude-plugin/` (`plugin.json`, `marketplace.json`). It declares `path: "."` with `commands/wiki-init.md`, resolving to a directory that does not exist; names the upstream author; and claims `python >=3.9` against an actual floor of 3.12. It cannot work, so nothing can depend on it. **[Agent: general-purpose]**
+  - [x] Add tests: writes to `--dest`; missing `--dest` errors; conflicting file produces a `.bak` and a report; identical file is a no-op; `--dry-run` writes nothing. **[Agent: general-purpose]**
+  - [x] **Add the test that actually proves the Homebrew fix:** build a distribution and assert it contains `llmwiki/agent_kit/commands/*.md` and the skill files. Inspecting `pyproject.toml` by eye would not catch a packaging mistake. **[Agent: general-purpose]**
+  - [x] Verify: build a distribution, install it into a throwaway virtualenv, run `install-agent-kit --dest <tmp>` from outside the repository, and confirm the commands and skills land. Delete the virtualenv and temporary destination afterwards. **[Agent: general-purpose]**
 
-- [ ] **Slice 14: The README is a product page**
+- [x] **Slice 14: The README is a product page**
 
-  - [ ] Rewrite `README.md` in this order: what you get → live demo link → install → the loop (`sync / add → synth → review candidates → build`, with candidate review described as a real human gate) → one merged agent table → configuration pointer → docs index → acknowledgements → license. Target roughly half of today's 364 lines. **[Agent: general-purpose]**
-  - [ ] Build one agent table with a row per agent and columns *Supplies sessions* / *Reads the wiki* / *Core or contrib*. Ground truth: core is `claude_code` and `codex_cli`; contrib is `chatgpt`, `copilot_chat`, `copilot_cli`, `cursor`, `cursor_cli`, `gemini_cli`, `obsidian`, `opencode`, `openclaw`. Today's README wrongly lists four contrib adapters as core and omits `chatgpt` and `opencode` entirely. **[Agent: general-purpose]**
-  - [ ] Correct the Python version against `pyproject.toml:10` (`>=3.12`) and the CI matrix (3.12, 3.13). **[Agent: general-purpose]**
-  - [ ] Remove the fork/lineage paragraph from the top; attribution stays only under Acknowledgements and License. **[Agent: general-purpose]**
-  - [ ] Move displaced detail into real pages under `docs/`: `Manual queue`, the per-path gitignore table (reduced to one sentence in the README), and the tutorial content that duplicates the quickstart, How it works and CLI reference. Every fact appears once. **[Agent: general-purpose]**
-  - [ ] Re-scope `CLAUDE.md` and `AGENTS.md` to contributors: state plainly they are for people working on llmwiki itself, and point users at `install-agent-kit`. Note `context/` as contributor tooling in `CONTRIBUTING.md`. **[Agent: general-purpose]**
-  - [ ] Retarget `homebrew/llmwiki.rb` at `AlexanderMakarov/llm-wiki` with branch `main`, replacing the stale upstream `Pratiyush` URL and `master` reference. **[Agent: general-purpose]**
-  - [ ] Verify: confirm every link in the README and in changed docs resolves; assert structurally that exactly one agent table exists, the Python version is correct, and no lineage paragraph appears above Acknowledgements. **[Agent: general-purpose]**
+  - [x] Rewrite `README.md` in this order: what you get → live demo link → install → the loop (`sync / add → synth → review candidates → build`, with candidate review described as a real human gate) → one merged agent table → configuration pointer → docs index → acknowledgements → license. Target roughly half of today's 364 lines. **[Agent: general-purpose]**
+  - [x] Build one agent table with a row per agent and columns *Supplies sessions* / *Reads the wiki* / *Core or contrib*. Ground truth: core is `claude_code` and `codex_cli`; contrib is `chatgpt`, `copilot_chat`, `copilot_cli`, `cursor`, `cursor_cli`, `gemini_cli`, `obsidian`, `opencode`, `openclaw`. Today's README wrongly lists four contrib adapters as core and omits `chatgpt` and `opencode` entirely. **[Agent: general-purpose]**
+  - [x] Correct the Python version against `pyproject.toml:10` (`>=3.12`) and the CI matrix (3.12, 3.13). **[Agent: general-purpose]**
+  - [x] Remove the fork/lineage paragraph from the top; attribution stays only under Acknowledgements and License. **[Agent: general-purpose]**
+  - [x] Move displaced detail into real pages under `docs/`: `Manual queue`, the per-path gitignore table (reduced to one sentence in the README), and the tutorial content that duplicates the quickstart, How it works and CLI reference. Every fact appears once. **[Agent: general-purpose]**
+  - [x] Re-scope `CLAUDE.md` and `AGENTS.md` to contributors: state plainly they are for people working on llmwiki itself, and point users at `install-agent-kit`. Note `context/` as contributor tooling in `CONTRIBUTING.md`. **[Agent: general-purpose]**
+  - [x] Retarget `homebrew/llmwiki.rb` at `AlexanderMakarov/llm-wiki` with branch `main`, replacing the stale upstream `Pratiyush` URL and `master` reference. **[Agent: general-purpose]**
+  - [x] Verify: confirm every link in the README and in changed docs resolves; assert structurally that exactly one agent table exists, the Python version is correct, and no lineage paragraph appears above Acknowledgements. **[Agent: general-purpose]**
 
-- [ ] **Slice 15: Feature Testing & Regression**
+- [x] **Slice 15: Feature Testing & Regression**
 
-  > Verifies the whole feature end-to-end against functional-spec.md, run after all implementation slices are complete.
-  - [ ] Read functional-spec.md acceptance criteria in full. Generate acceptance-level tests that verify the entire feature as a whole — not individual slices. Cover applicable layers (unit for pure logic, integration for service interactions, e2e for user flows) based on the project's testing stack. Write tests with RED validation (must fail before implementation is confirmed done). Annotate each test with `@spec: 008-make-product-explain-itself` and `@regression` if suitable for long-term regression. Place them in `tests/test_109_acceptance.py` per the project's `test_<issue>_acceptance.py` convention. **[Agent: testing-expert]**
-  - [ ] Run all generated tests. All must pass. Fix any failures before proceeding. **[Agent: testing-expert]**
+  > Verifies the whole feature end-to-end against functional-spec.md, run after all implementation slices are complete. Slice 9 wiki regeneration is deferred; acceptance tests cover the committed corpus, packaging, docs and CI shape.
+  - [x] Read functional-spec.md acceptance criteria in full. Generate acceptance-level tests that verify the entire feature as a whole — not individual slices. Cover applicable layers (unit for pure logic, integration for service interactions, e2e for user flows) based on the project's testing stack. Write tests with RED validation (must fail before implementation is confirmed done). Annotate each test with `@spec: 008-make-product-explain-itself` and `@regression` if suitable for long-term regression. Place them in `tests/test_109_acceptance.py` per the project's `test_<issue>_acceptance.py` convention. **[Agent: testing-expert]**
+  - [x] Run all generated tests. All must pass. Fix any failures before proceeding. **[Agent: testing-expert]**
 
 ---
 

@@ -1,8 +1,15 @@
 # llmwiki — Codex CLI / Agent Schema
 
-This file is the schema for **Codex CLI** and any other coding agent that reads `AGENTS.md` instead of `CLAUDE.md` (OpenCode, Gemini CLI, etc.). The workflows are identical to [CLAUDE.md](CLAUDE.md) — only the language is agent-agnostic.
+This file is for **people changing llmwiki itself**. Codex CLI and other agents that read `AGENTS.md` instead of `CLAUDE.md` (OpenCode, Gemini CLI, etc.) get the same vault schema; only the language is agent-agnostic.
 
-> **Changing llmwiki's own code or docs instead of a vault?** This file is the *product schema* — it tells you how to maintain a user's `raw/` → `wiki/` → `site/` knowledge base. It is not the contribution guide. For repo work (fixes, features, tests, PRs) read [`CONTRIBUTING.md`](CONTRIBUTING.md). Cursor loads the short form from [`.cursor/rules/`](.cursor/rules); Claude Code loads it from [`.claude/rules/contributing.md`](.claude/rules/contributing.md). Run `ruff check` and `python3 -m pytest tests/ -q` before pushing.
+If you *use* llmwiki on your own sessions, do not work inside this repository. Install the package and the agent kit, then run the wiki commands from your own project:
+
+```bash
+pip install llm-wiki
+llmwiki install-agent-kit --dest ~/.codex
+```
+
+> **Changing llmwiki's own code or docs?** Read [`CONTRIBUTING.md`](CONTRIBUTING.md). Cursor loads the short form from [`.cursor/rules/`](.cursor/rules); Claude Code loads it from [`.claude/rules/contributing.md`](.claude/rules/contributing.md). Run `ruff check` and `python3 -m pytest tests/ -q` before pushing.
 
 ## Three layers
 

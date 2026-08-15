@@ -5,16 +5,15 @@ wired up so badges don't silently rot:
 
 - Every workflow the badges point at exists in ``.github/workflows/``.
 - The version badge matches ``llmwiki.__version__``.
-- The CI + link-check + wiki-checks + docker badges are present (the
-  four key workflows the issue #129 asked to surface).
-- The demo GIF referenced from the README is checked into the repo.
+- The CI + link-check + wiki-checks badges are present. Docker and a
+  live test-count badge used to sit here too; the product README (#109)
+  dropped them so the page stays short. ``test_every_badge_workflow_file_exists``
+  still checks that any workflow badge that *is* listed points at a real file.
 """
 
 from __future__ import annotations
 
 import re
-import subprocess
-import sys
 
 import pytest
 
@@ -50,8 +49,9 @@ def test_wiki_checks_badge_present(readme_text: str):
     assert "actions/workflows/wiki-checks.yml/badge.svg" in readme_text
 
 
-def test_docker_badge_present(readme_text: str):
-    assert "actions/workflows/docker-publish.yml/badge.svg" in readme_text
+def test_docker_badge_not_required_on_product_readme(readme_text: str):
+    """#109: the product README is not a CI dashboard. Docker publish is documented in docs/deploy/."""
+    assert "actions/workflows/docker-publish.yml/badge.svg" not in readme_text
 
 
 # ─── Badges must point at workflows that actually exist ────────────────
@@ -104,64 +104,9 @@ def test_version_badge_matches_package_version(readme_text: str):
 TEST_COUNT_RE = re.compile(r"badge/tests-(\d+)%20passing")
 
 
-def test_test_count_badge_present(readme_text: str):
-    assert TEST_COUNT_RE.search(readme_text), (
-        "test-count badge missing; re-add shields.io badge pointing "
-        "at tests/ directory"
-    )
-
-
-def test_test_count_badge_is_a_reasonable_number(readme_text: str):
-    """The badge is manually maintained — this test just guards against
-    obvious rot (e.g. 0 passing, 1 passing) and over-claiming."""
-    m = TEST_COUNT_RE.search(readme_text)
-    assert m is not None
-    count = int(m.group(1))
-    # We currently ship well over 2000 tests. If the badge drifts below
-    # that threshold it's almost certainly stale or truncated.
-    assert count >= 2000, (
-        f"test-count badge reports {count} passing — that's suspiciously "
-        "low; refresh the badge from the latest pytest run"
-    )
-
-
-# #682: pin the badge within ±15% of the actually-collected test count
-# so it can't silently drift hundreds of tests behind reality (the bug
-# this audit caught: badge said 2363, real count was 2651).
-def test_test_count_badge_within_window_of_actual():
-    """Run pytest --collect-only and compare to the badge number.
-
-    Tolerance ±15% — we don't expect every PR to bump the badge, but a
-    drift of more than 15% means the badge has been stale through
-    multiple PR cycles. Refresh it.
-    """
-
-    badge_match = TEST_COUNT_RE.search(README.read_text(encoding="utf-8"))
-    assert badge_match is not None
-    badge_count = int(badge_match.group(1))
-
-    proc = subprocess.run(
-        [sys.executable, "-m", "pytest", "tests/", "--collect-only"],
-        cwd=REPO_ROOT,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    # Output contains a line like "<N> tests collected in <T>s"
-    text = proc.stdout + proc.stderr
-    m = re.search(r"(\d+) tests collected", text)
-    if m is None:
-        pytest.skip(f"could not parse pytest --collect-only output: {text[-200:]!r}")
-    actual = int(m.group(1))
-
-    # Allow ±15% drift before failing.
-    lower = int(actual * 0.85)
-    upper = int(actual * 1.15)
-    assert lower <= badge_count <= upper, (
-        f"test-count badge says {badge_count} but pytest currently "
-        f"collects {actual}; outside the ±15% drift window "
-        f"[{lower}, {upper}]. Refresh the badge."
-    )
+def test_test_count_badge_not_required_on_product_readme(readme_text: str):
+    """#109: a manually maintained passing-count badge is not a product-page fact."""
+    assert TEST_COUNT_RE.search(readme_text) is None
 
 
 # ─── #271: no hard-coded "11 lint rules" references in user-facing docs ─

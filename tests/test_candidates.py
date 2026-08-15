@@ -678,7 +678,7 @@ def test_stale_candidates_lint_rule_registered():
 def test_wiki_candidates_slash_command_exists():
     """#272: renamed from `wiki-review` → `wiki-candidates` so the slash
     matches the CLI subcommand (`llmwiki candidates …`)."""
-    cmd = REPO_ROOT / ".claude" / "commands" / "wiki-candidates.md"
+    cmd = REPO_ROOT / "llmwiki" / "agent_kit" / "commands" / "wiki-candidates.md"
     assert cmd.is_file()
     text = cmd.read_text(encoding="utf-8")
     assert "promote" in text
@@ -689,8 +689,9 @@ def test_wiki_candidates_slash_command_exists():
     assert "candidates.html" in text
     assert "mv " not in text.lower() or "Do **not** hand-`mv`" in text
     # And the old name must be gone so docs can't regress.
-    old = REPO_ROOT / ".claude" / "commands" / "wiki-review.md"
+    old = REPO_ROOT / "llmwiki" / "agent_kit" / "commands" / "wiki-review.md"
     assert not old.exists(), "old /wiki-review name should be removed"
+    assert not (REPO_ROOT / ".claude" / "commands" / "wiki-review.md").exists()
 
 
 # ─── Flip + promote / same-table merge (#97) ───────────────────────────

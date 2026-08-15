@@ -52,7 +52,7 @@ Usage: `/wiki-candidates`
      python3 -m llmwiki candidates apply --actions '[{"action":"promote","slug":"MyEntity","kind":"entities"}]'
      ```
 
-3. Prefer these CLI actions (same library as `/candidates.html`). Do **not** run idle `sync`/`synth` only to refresh the catalog after review — promote/merge/discard/apply already reconcile `index.md`. Do **not** hand-fill empty Key Facts on promote when the CLI already does it (#103). After promote/merge, run `/wiki-lint` to catch broken wikilinks and `llmwiki build` so Home/Analytics counts refresh.
+3. Prefer these CLI actions (same library as `/candidates.html`). Do **not** run idle `sync`/`synth` only to refresh the catalog after review — promote/merge/discard/apply already reconcile `index.md`. Do **not** hand-fill empty Key Facts on promote when the CLI already does it (#103). `candidates apply` rebuilds `site/` after a successful batch so reload `candidates.html`; pass `--no-rebuild` to skip. After one-off `promote` / `merge` / `discard`, run `llmwiki build` (those actions do not rebuild) and `/wiki-lint` to catch broken wikilinks.
    Trusted pages that still have clipped regex Key Facts (or pasted harvest-stub `## Candidate merge` blocks) are fixed with:
    ```
    python3 -m llmwiki candidates rewrite-key-facts --slug MyEntity

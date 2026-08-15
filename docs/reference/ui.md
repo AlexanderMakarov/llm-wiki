@@ -65,7 +65,7 @@ llmwiki candidates apply --vault <vault> --actions -
 
 *Discard* reveals a **required reason**. `discard` files that reason beside the archived stub, so a blank one throws the decision away — a row set to *Discard* with no reason is held back the same way an unresolved merge target is.
 
-A row left at **No decision** is absent from the batch and stays pending, so a half-finished review can be applied and resumed. Apply refuses an empty batch; when a decided row is not yet executable it names the row, marks the field and moves focus to it, and emits nothing until you finish it. Run `llmwiki build` afterwards for a cold-open Home/Analytics recount. One-off CLI actions and `/wiki-candidates` do the same work interactively.
+A row left at **No decision** is absent from the batch and stays pending, so a half-finished review can be applied and resumed. Apply refuses an empty batch; when a decided row is not yet executable it names the row, marks the field and moves focus to it, and emits nothing until you finish it. `llmwiki candidates apply` rebuilds `site/` after a successful batch, so reload the page (or reopen the file) to see the remaining queue. Pass `--no-rebuild` if you are applying several batches and will `llmwiki build` once at the end. One-off CLI actions and `/wiki-candidates` do the same wiki work; only `apply` rebuilds.
 
 | Action | Effect |
 |---|---|
@@ -233,6 +233,8 @@ The topic page is the only browsable surface for entity and concept pages, so it
 A topic backed by a page under `wiki/projects/` links to `/projects/<slug>.html` — the full [project detail page](#project-detail-projectsslughtml) with its heatmap, session cards and charts — rather than to a thin topic page. The rewrite is applied once at build time and every surface honours it: the map's double-click target, the search index entry, Connected topics lists on topic pages and on project pages, `topics/index.html`, and `[[wikilinks]]` cited inside page content.
 
 The match itself identifies which project it is, so an alias spelling routes as correctly as the canonical one. The rewrite is skipped when the build wrote no page for that project: `wiki/projects/` is seeded from stubs while `site/projects/` comes from session groups, so a project page with no recorded sessions keeps its ordinary topic page rather than being handed a link that 404s.
+
+The `type:` vocabulary on the backing wiki page, and the origin of every frontmatter field, is [Page kinds](page-kinds.md).
 
 ---
 

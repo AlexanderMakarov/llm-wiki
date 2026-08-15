@@ -74,7 +74,7 @@ def test_guide_uses_images():
 
 def test_readme_links_to_guide():
     readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
-    assert "docs/tutorials/setup-guide.md" in readme
+    assert "docs/getting-started.md" in readme
 
 
 def test_guide_mentions_privacy_boundary():

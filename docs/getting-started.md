@@ -20,7 +20,7 @@ That's it. No `npm`, no `brew`, no database, no account.
 
 ## Install
 
-The git clone holds **code + demo seeds only**. Your transcripts, wiki pages, and built site live in a separate **vault** directory *outside* the repo, so personal data never lands in git. (See [the README](../README.md#personal-data-stays-outside-the-repo) for the full rationale.)
+The git clone holds **code + demo seeds only**. Your transcripts, wiki pages, and built site live in a separate **vault** directory *outside* the repo, so personal data never lands in git. (See [the README](../README.md) for the product overview.)
 
 ### 1. Clone the code and set up a venv
 
@@ -138,7 +138,19 @@ Everything lands in your **vault** directory (the `vault.default_path` from step
 └── llmwiki-state.json        # unified sync + queue + synth + quarantine state
 ```
 
-The vault lives outside the repo, so it is never committed and never sent anywhere. The clone itself stays clean — only code and demo seeds.
+The vault lives outside the repo, so it is never committed and never sent anywhere. The clone itself stays clean — only code and demo seeds. `raw/`, `wiki/` (except the committed `demo/wiki/`), `site/`, `config.json`, and `llmwiki-state.json` are gitignored; the per-path table that used to live in the README is this tree.
+
+### Queue without auto-sync
+
+If you are not using SessionStart hooks, drive the unified queue by hand:
+
+```bash
+llmwiki queue status
+llmwiki queue run --limit 20
+llmwiki migrate-state   # one-time: merge legacy .llmwiki-* into llmwiki-state.json
+```
+
+Flags and output: [docs/reference/cli.md](reference/cli.md#queue--inspect-and-run-unified-queue).
 
 ## New in recent versions
 

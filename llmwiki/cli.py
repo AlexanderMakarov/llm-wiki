@@ -18,6 +18,7 @@ Subcommands:
     trace             Print downward provenance (wiki page → sources → raw)
     all               Run the full pipeline: [sync?] → [synthesize?] → build → graph → lint
     watch             Near-real-time sync→synthesize→build when sessions finish
+    install-agent-kit  Copy packaged slash commands and skills into --dest
     install-automation  Interactive OS schedulers / hooks / synth backend setup
     version           Print version and exit
 """
@@ -38,7 +39,7 @@ from datetime import date as _date
 from pathlib import Path
 from typing import Any
 
-from llmwiki import REPO_ROOT, __version__, migrate_page_kinds, usage
+from llmwiki import REPO_ROOT, __version__, install_agent_kit, migrate_page_kinds, usage
 from llmwiki.adapters import REGISTRY, discover_adapters
 
 # #v1378-review (#691 follow-up): hoist these re-exports from mid-module
@@ -991,6 +992,21 @@ def cmd_migrate_tools_used(args: argparse.Namespace) -> int:
     return 1 if report["errors"] else 0
 
 
+def cmd_install_agent_kit(args: argparse.Namespace) -> int:
+    """Copy packaged slash commands and skills into ``--dest`` (#109).
+
+    ``--dest`` is required: the command never guesses at agent directory
+    conventions. The kit ships inside the package, so this works from a
+    pip or Homebrew install with no checkout on disk.
+    """
+    report = install_agent_kit.run_install(
+        dest=Path(args.dest),
+        dry_run=bool(getattr(args, "dry_run", False)),
+    )
+    install_agent_kit.print_report(report)
+    return 1 if report["errors"] else 0
+
+
 def cmd_migrate_page_kinds(args: argparse.Namespace) -> int:
     """Retype and relocate pages carrying a removed page kind (#109).
 
@@ -1811,6 +1827,10 @@ def cmd_candidates(args: argparse.Namespace) -> int:
                 )
         if any_ok:
             _refresh_review_counts(wiki_dir)
+            if not getattr(args, "no_rebuild", False):
+                build_rc = _rebuild_vault_site(wiki_dir)
+                if build_rc:
+                    return build_rc
         return 0 if all(r.get("ok") for r in results) else 2
 
     if action == "promote":
@@ -1905,6 +1925,25 @@ def cmd_candidates(args: argparse.Namespace) -> int:
 
     print(f"error: unknown action {action!r}", file=sys.stderr)
     return 2
+
+
+def _rebuild_vault_site(wiki_dir: Path) -> int:
+    """Regenerate ``site/`` beside the wiki so a static candidates page matches disk.
+
+    ``candidates apply`` mutates ``wiki/`` only. After the server was removed
+    (#109) the open ``candidates.html`` no longer reloads itself, so a rebuild
+    is the step that drops promoted/merged/discarded rows from the page.
+    """
+    vault = wiki_dir.parent
+    raw_dir = vault / "raw"
+    print("  rebuilding site so candidates.html matches the wiki")
+    with pipeline_lock(vault):
+        return build_site(
+            out_dir=vault / "site",
+            raw_sessions=raw_dir / "sessions",
+            raw_dir=raw_dir,
+            wiki_dir=wiki_dir,
+        )
 
 
 def _refresh_review_counts(wiki_dir: Path) -> None:
@@ -2245,6 +2284,26 @@ def build_parser() -> argparse.ArgumentParser:
     )
     migrate_kinds.set_defaults(func=cmd_migrate_page_kinds)
 
+    kit = sub.add_parser(
+        "install-agent-kit",
+        help=(
+            "Copy packaged slash commands and skills into an agent directory "
+            "(#109)"
+        ),
+    )
+    kit.add_argument(
+        "--dest",
+        type=Path,
+        required=True,
+        help="Directory to receive commands/ and skills/ (e.g. .claude)",
+    )
+    kit.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Report would-write files; write nothing",
+    )
+    kit.set_defaults(func=cmd_install_agent_kit)
+
     # candidates (v1.1, #51) — approval workflow
     cand = sub.add_parser(
         "candidates",
@@ -2281,6 +2340,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--actions", type=str, default=None, metavar="JSON",
         help="For apply: JSON array of {action,slug,kind?,into?,reason?} "
              "(the shape site/candidates.html prints); pass - to read stdin",
+    )
+    cand.add_argument(
+        "--no-rebuild",
+        action="store_true",
+        help="For apply: skip rebuilding site/ after a successful batch "
+             "(default: rebuild so candidates.html matches the wiki)",
     )
     _add_vault_arg(cand, role="candidates")
     cand.set_defaults(func=cmd_candidates)

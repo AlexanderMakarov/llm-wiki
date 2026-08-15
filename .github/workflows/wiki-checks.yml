@@ -10,11 +10,15 @@ on:
     paths:
       - "llmwiki/**"
       - "demo/**"
+      - "docs/**"
+      - "scripts/refresh_demo.py"
       - ".github/workflows/wiki-checks.yml"
   pull_request:
     paths:
       - "llmwiki/**"
       - "demo/**"
+      - "docs/**"
+      - "scripts/refresh_demo.py"
       - ".github/workflows/wiki-checks.yml"
   workflow_dispatch:
 
@@ -64,3 +68,14 @@ jobs:
         run: |
           # Verify the adapter registry still enumerates correctly.
           python -m llmwiki adapters
+
+      - name: Demo refresh plan (no model)
+        run: |
+          # Local-only refresh must never run here. If a recorded revision
+          # exists, print the dry-run plan so a docs change that was not
+          # followed by a local refresh is visible. No synth, no vault write.
+          if [ -f demo/.demo-source-rev ]; then
+            python3 scripts/refresh_demo.py --dry-run
+          else
+            echo "demo/.demo-source-rev is not committed — skip staleness preview"
+          fi

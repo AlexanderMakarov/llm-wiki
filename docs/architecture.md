@@ -140,17 +140,16 @@ Zero dependencies. No bundler. No framework. One file.
 
 ### L4 — Distribution
 
-Owner: the repo root + `.claude-plugin/`
+Owner: the installable `llmwiki` package
 
 How users install and run llmwiki:
 
-- `setup.sh` / `setup.bat` — one-click install
+- `setup.sh` / `setup.bat` — one-click install from a source checkout
 - `sync.sh` / `sync.bat` — wrappers around `python3 -m llmwiki sync`
 - `build.sh` / `build.bat` — wrappers around `python3 -m llmwiki build`
 - `upgrade.sh` / `upgrade.bat` — `git pull` + re-run setup
-- `.claude-plugin/plugin.json` + `marketplace.json` — Claude Code plugin packaging
-- `.claude/commands/` — 7 slash commands
-- `.claude/skills/` — 5 auto-discoverable skills
+- `llmwiki/agent_kit/` — packaged `/wiki-*` slash commands and user skills; `llmwiki install-agent-kit --dest PATH` copies them into an agent directory
+- `.claude/` — contributor-only commands and skills (not shipped)
 - `llmwiki/mcp/` — MCP server stub
 
 ### L5 — Schema / docs

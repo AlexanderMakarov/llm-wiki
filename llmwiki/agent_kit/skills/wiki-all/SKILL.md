@@ -35,7 +35,7 @@ python3 -m llmwiki sync --no-auto-build --no-auto-lint
 
 Report: how many sessions converted, how many unchanged, any errors.
 
-If new sessions were converted, follow the **Ingest Workflow** from `CLAUDE.md` for each new file (create/update entity + concept pages, cross-link, update index).
+If new sessions were converted, follow `/wiki-ingest` for each new file (create/update entity + concept pages, cross-link, update index).
 
 ### Step 3: Graph
 

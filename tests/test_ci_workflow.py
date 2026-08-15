@@ -34,6 +34,9 @@ def test_workflow_dispatch_trigger():
 def test_path_filters_include_llmwiki():
     text = WORKFLOW.read_text(encoding="utf-8")
     assert "llmwiki/**" in text
+    assert "demo/**" in text
+    assert "docs/**" in text
+    assert "scripts/refresh_demo.py" in text
 
 
 def test_runs_on_ubuntu():
@@ -132,6 +135,23 @@ def test_fail_on_errors_exits_nonzero_on_a_seeded_error(tmp_path: Path, capsys) 
     ])
     assert args.func(args) == 1
     capsys.readouterr()
+
+
+def test_workflow_never_regenerates_the_demo() -> None:
+    """R3: refreshing is local. CI may print a dry-run plan; it must not synth."""
+    text = WORKFLOW.read_text(encoding="utf-8")
+    assert "llmwiki synth" not in text
+    assert "--docs-only" not in text
+    assert "refresh_demo.py --dry-run" in text
+    for line in text.splitlines():
+        if "refresh_demo.py" not in line:
+            continue
+        stripped = line.strip()
+        if stripped.startswith("- "):
+            continue  # path filter
+        if stripped.startswith("#"):
+            continue
+        assert "--dry-run" in line, f"CI must not run a real refresh: {line!r}"
 
 
 def test_fail_on_errors_exits_zero_on_warnings_only(tmp_path: Path, capsys) -> None:

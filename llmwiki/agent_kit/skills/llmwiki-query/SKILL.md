@@ -7,7 +7,7 @@ description: Answer a question by querying the user's llmwiki. Use when the user
 
 ## What this skill does
 
-Reads the user's local llmwiki (`llmwiki/wiki/`) and synthesises an answer to their question, with `[[wikilink]]` citations pointing to the source pages.
+Reads the user's local llmwiki (`wiki/` in the resolved vault) and synthesises an answer to their question, with `[[wikilink]]` citations pointing to the source pages.
 
 ## When to use
 
@@ -23,9 +23,9 @@ Do NOT invoke for questions that can be answered without the user's personal kno
 
 ## Workflow
 
-Follow the **Query Workflow** from the repo's `CLAUDE.md`:
+Follow this **Query Workflow**:
 
-1. **Locate the llmwiki install** (see `llmwiki-sync` skill for the fallback search order).
+1. **Resolve the vault** (see the `llmwiki-sync` skill).
 
 2. **Read `wiki/index.md`** to identify the set of pages that might be relevant.
 
@@ -41,7 +41,7 @@ Follow the **Query Workflow** from the repo's `CLAUDE.md`:
    ```markdown
    Would you like me to save this as wiki/syntheses/<slug>.md for future reference?
    ```
-   If yes, write it using the Synthesis Page Format from CLAUDE.md.
+   If yes, write it as a `type: synthesis` page with title, sources, Answer, and Sources consulted.
 
 8. **Append to `wiki/log.md`**:
    ```
