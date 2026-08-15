@@ -196,14 +196,20 @@ def test_dry_run_still_reports_a_conflict(tmp_path: Path) -> None:
 
 
 def _build_wheel(dist_dir: Path) -> Path:
-    """Build a wheel of this checkout. Prefer ``python -m build``."""
+    """Build a wheel of this checkout. Prefer ``python -m build``.
+
+    The pip fallback must use build isolation: CI's pytest env does not
+    install setuptools, so ``--no-build-isolation`` fails with
+    ``Cannot import 'setuptools.build_meta'``. Isolation lets pip fetch
+    the backend named in ``pyproject.toml``.
+    """
     dist_dir.mkdir(parents=True, exist_ok=True)
     build_cmd = [
         sys.executable, "-m", "build", "--wheel", "--outdir", str(dist_dir),
     ]
     pip_cmd = [
         sys.executable, "-m", "pip", "wheel", "--no-deps",
-        "--no-build-isolation", "-w", str(dist_dir), str(REPO_ROOT),
+        "-w", str(dist_dir), str(REPO_ROOT),
     ]
     proc = subprocess.run(
         build_cmd, cwd=REPO_ROOT, capture_output=True, text=True, check=False,
