@@ -204,17 +204,8 @@ python3 -m llmwiki build [options]
 --out <dir>               Output directory; default: ./site
 --synthesize              Call the `claude` CLI once to generate an Overview
 --claude <path>           Path to the claude binary; default: /usr/local/bin/claude
-```
-
-### `llmwiki serve`
-
-```bash
-python3 -m llmwiki serve [options]
-
---dir <dir>               Directory to serve; default: ./site
---port N                  Port number; default: 8765
---host H                  Host to bind; default: 127.0.0.1 (localhost only)
---open                    Open the browser after starting
+--local-root <path>       Value shown in place of a session's stored home directory;
+                          default: this machine's home directory
 ```
 
 ### `llmwiki init`

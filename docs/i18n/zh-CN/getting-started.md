@@ -39,15 +39,14 @@ setup.bat
 3. 运行 `llmwiki adapters` 显示检测到的 Agent
 4. 首次同步的 dry-run 预览，你可以看到将要转换哪些内容
 
-## 安装后的三个命令
+## 安装后的两个命令
 
 ```bash
 ./sync.sh        # 从 Agent 存储中拉取新会话 → raw/sessions/<project>/*.md
 ./build.sh       # 将 raw/ + wiki/ 编译为 site/
-./serve.sh       # 在 http://127.0.0.1:8765/ 启动本地服务器
 ```
 
-打开 [http://127.0.0.1:8765/](http://127.0.0.1:8765/) 并尝试：
+在浏览器中打开 `site/index.html` — 站点就是普通文件，无需启动任何服务，也不会请求网络 — 然后试试：
 
 - **⌘K** 或 **Ctrl+K** — 命令面板
 - **/** — 聚焦搜索栏

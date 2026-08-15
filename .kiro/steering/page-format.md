@@ -80,56 +80,6 @@ Synthesis of sources with [[wikilink]] citations.
 - [[source-2]]
 ```
 
-### Comparison pages (`wiki/comparisons/<slug>.md`)
-
-```markdown
-# A vs B
-
-## Summary
-One paragraph on the high-level difference.
-
-## Side-by-side
-
-| Dimension | A | B |
-|---|---|---|
-| ... | ... | ... |
-
-## When to pick A
-- ...
-
-## When to pick B
-- ...
-
-## Connections
-- [[A]] · [[B]]
-```
-
-### Question pages (`wiki/questions/<slug>.md`)
-
-```markdown
----
-title: "The open question"
-type: question
-status: open | answered | deferred
-tags: []
-last_updated: YYYY-MM-DD
----
-
-# The question in full
-
-## Why it matters
-- ...
-
-## Current best guess
-- ...
-
-## Related sources
-- [[source-slug]]
-
-## Resolution
-- Answered by [[synthesis-slug]] on YYYY-MM-DD (fill when closed)
-```
-
 ## Naming conventions
 
 | Page type | Directory | Slug format | Example |
@@ -138,8 +88,6 @@ last_updated: YYYY-MM-DD
 | Entity | `wiki/entities/` | `TitleCase` | `AndrejKarpathy.md` |
 | Concept | `wiki/concepts/` | `TitleCase` | `RetrievalAugmentedGeneration.md` |
 | Synthesis | `wiki/syntheses/` | `kebab-case` | `what-did-i-decide-about-quarkus.md` |
-| Comparison | `wiki/comparisons/` | `kebab-case` | `karpathy-llm-wiki-vs-rag.md` |
-| Question | `wiki/questions/` | `kebab-case` | `should-we-ship-obsidian-adapter.md` |
 | Archive | `wiki/archive/` | same as original | `deprecated-slug.md` |
 
 ## Hard rules

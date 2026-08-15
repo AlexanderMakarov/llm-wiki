@@ -4,7 +4,7 @@ This is the end-to-end tutorial for getting llmwiki running on your machine
 and deployed to GitHub Pages. By the end you'll have:
 
 - A local wiki of your Claude Code / Codex / Cursor / Gemini / Copilot sessions
-- A static HTML site you can browse at `http://127.0.0.1:8765`
+- A static HTML site you can browse by opening `site/index.html`
 - (Optional) A public GitHub Pages deploy at `https://<user>.github.io/llm-wiki/`
 - Your own project topics, model entities, and Obsidian view of the wiki
 
@@ -80,14 +80,15 @@ Output:
   wrote search-index.json (45 KB meta) + 12 chunks (220 KB total)
 ```
 
-### 1.6 First serve
+### 1.6 First look
 
 ```bash
-llmwiki serve
-# → http://127.0.0.1:8765
+open site/index.html        # macOS
+xdg-open site/index.html    # Linux
+start site\index.html       # Windows
 ```
 
-Open that URL in your browser. You should see:
+The site is plain files — nothing has to be running and nothing is fetched. You should see:
 
 ![llmwiki home page](../images/home.png)
 
@@ -173,8 +174,8 @@ gh repo create my-llm-wiki --public --source=. --push
 
 The repo ships `.github/workflows/pages.yml`. On every push to `master`:
 
-1. Seeds `raw/sessions/` from `examples/demo-sessions/` (never your personal data)
-2. Runs `llmwiki build`
+1. Builds the committed `demo/` vault (never your personal data)
+2. Runs `llmwiki build --vault demo --out ./site`
 3. Uploads `site/` as a Pages artifact
 4. Deploys to `https://<user>.github.io/<repo>/`
 

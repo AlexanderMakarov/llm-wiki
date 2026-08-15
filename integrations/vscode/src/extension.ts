@@ -2,7 +2,7 @@
  * llm-wiki VS Code extension — minimal scaffold.
  *
  * Provides:
- *  - "Open llm-wiki" command (opens localhost:8765 in the default browser)
+ *  - "Open llm-wiki" command (opens site/index.html in the default browser)
  *  - "Sync Sessions" command (runs `python3 -m llmwiki sync`)
  *  - "Build Site" command (runs `python3 -m llmwiki build`)
  *  - Sidebar tree view listing wiki pages by section
@@ -19,15 +19,25 @@ import { exec } from "child_process";
 
 export function activate(context: vscode.ExtensionContext) {
   const config = vscode.workspace.getConfiguration("llmwiki");
-  const port = config.get<number>("serverPort", 8765);
   const python = config.get<string>("pythonPath", "python3");
 
-  // Command: Open llm-wiki in browser
+  // Command: Open llm-wiki in browser. The built site is plain files, so
+  // it opens straight from disk with nothing running.
   context.subscriptions.push(
     vscode.commands.registerCommand("llmwiki.openSite", () => {
-      vscode.env.openExternal(
-        vscode.Uri.parse(`http://localhost:${port}`)
-      );
+      const root = vscode.workspace.workspaceFolders?.[0];
+      if (!root) {
+        vscode.window.showErrorMessage("llm-wiki: open a workspace folder first.");
+        return;
+      }
+      const home = vscode.Uri.joinPath(root.uri, "site", "index.html");
+      if (!fs.existsSync(home.fsPath)) {
+        vscode.window.showErrorMessage(
+          `llm-wiki: ${home.fsPath} not found — run "Build Site" first.`
+        );
+        return;
+      }
+      vscode.env.openExternal(home);
     })
   );
 

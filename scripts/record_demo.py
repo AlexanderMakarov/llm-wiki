@@ -1,11 +1,11 @@
 """#638 + #248: scripted demo recording for the README demo GIF.
 
-Records a polished walkthrough of the live llmwiki site using
+Records a polished walkthrough of a built llmwiki site using
 Playwright's `page.video()` API, then optionally converts the WebM
 to an animated GIF via ffmpeg. The output lives at:
 
-  - ``docs/videos/llmwiki-demo.webm``  (raw recording)
-  - ``docs/demo.gif``                  (README-embeddable GIF)
+  - ``tmp/demo-recording/llmwiki-demo.webm``  (raw recording, gitignored)
+  - ``docs/demo.gif``                         (README-embeddable GIF)
 
 The walkthrough mirrors the manual flow from #248:
 
@@ -18,10 +18,12 @@ The walkthrough mirrors the manual flow from #248:
   7. Knowledge graph — cluster toggle
   8. Theme toggle — dark → light
 
-Run locally (assumes a serving site at $QA_BASE_URL or 127.0.0.1:8765):
+The walkthrough opens the built files, so build a site first and point
+the script at its directory ($QA_SITE_DIR, or ./site by default):
 
+    python3 -m llmwiki build --vault demo --out ./site
     python3 scripts/record_demo.py
-    python3 scripts/record_demo.py --base-url http://127.0.0.1:8765
+    python3 scripts/record_demo.py --site path/to/site
 
 Run with --no-gif to skip the ffmpeg conversion (useful when ffmpeg
 is unavailable in the environment).
@@ -41,7 +43,8 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-VIDEO_DIR = REPO_ROOT / "docs" / "videos"
+DEFAULT_SITE_DIR = REPO_ROOT / "site"
+VIDEO_DIR = REPO_ROOT / "tmp" / "demo-recording"
 GIF_PATH = REPO_ROOT / "docs" / "demo.gif"
 
 
@@ -142,9 +145,12 @@ def move_and_click(page, sel: str, post_ms: int = 700) -> bool:  # type: ignore[
     return True
 
 
-def record(base_url: str) -> Path:
+def record(site_dir: Path) -> Path:
     """Run the walkthrough; return the path of the captured webm."""
     from playwright.sync_api import sync_playwright
+
+    def url(rel: str) -> str:
+        return (site_dir / rel).as_uri()
 
     VIDEO_DIR.mkdir(parents=True, exist_ok=True)
     with sync_playwright() as p:
@@ -157,7 +163,7 @@ def record(base_url: str) -> Path:
         page = ctx.new_page()
         try:
             # 1. Home
-            page.goto(f"{base_url}/index.html")
+            page.goto(url("index.html"))
             page.wait_for_load_state("networkidle")
             inject_overlays(page)
             subtitle(page, "llmwiki — your sessions, browsable", 1400)
@@ -170,7 +176,7 @@ def record(base_url: str) -> Path:
             page.wait_for_timeout(800)
 
             # 2. Projects index
-            page.goto(f"{base_url}/projects/index.html")
+            page.goto(url("projects/index.html"))
             page.wait_for_load_state("networkidle")
             inject_overlays(page)
             subtitle(page, "Projects index — freshness badges", 1400)
@@ -187,7 +193,7 @@ def record(base_url: str) -> Path:
             smooth_scroll(page, 350)
 
             # 4. Sessions index — filter
-            page.goto(f"{base_url}/sessions/index.html")
+            page.goto(url("sessions/index.html"))
             page.wait_for_load_state("networkidle")
             inject_overlays(page)
             subtitle(page, "Filter by slug", 800)
@@ -197,7 +203,7 @@ def record(base_url: str) -> Path:
             page.wait_for_timeout(400)
 
             # 5. Cmd+K palette
-            page.goto(f"{base_url}/index.html")
+            page.goto(url("index.html"))
             page.wait_for_load_state("networkidle")
             inject_overlays(page)
             subtitle(page, "Cmd+K palette", 700)
@@ -211,7 +217,7 @@ def record(base_url: str) -> Path:
             page.wait_for_timeout(500)
 
             # 6. Graph
-            page.goto(f"{base_url}/graph.html")
+            page.goto(url("graph.html"))
             page.wait_for_load_state("networkidle")
             page.wait_for_timeout(2000)
             inject_overlays(page)
@@ -219,7 +225,7 @@ def record(base_url: str) -> Path:
             move_and_click(page, "#cluster-toggle", post_ms=1200)
 
             # 7. Theme toggle
-            page.goto(f"{base_url}/index.html")
+            page.goto(url("index.html"))
             page.wait_for_load_state("networkidle")
             inject_overlays(page)
             subtitle(page, "Theme: dark → light", 800)
@@ -266,8 +272,9 @@ def to_gif(webm: Path, out: Path, *, fps: int = 12, width: int = 960) -> bool:
 
 def main() -> int:
     p = argparse.ArgumentParser(description="Record llmwiki demo walkthrough")
-    p.add_argument("--base-url",
-                   default=os.environ.get("QA_BASE_URL", "http://127.0.0.1:8765"))
+    p.add_argument("--site",
+                   default=os.environ.get("QA_SITE_DIR", str(DEFAULT_SITE_DIR)),
+                   help="Directory of a built site (default: ./site)")
     p.add_argument("--no-gif", action="store_true",
                    help="Skip the GIF conversion step")
     p.add_argument("--width", type=int, default=960,
@@ -275,9 +282,15 @@ def main() -> int:
     p.add_argument("--fps", type=int, default=12, help="GIF frames per second")
     args = p.parse_args()
 
-    print(f"Recording walkthrough against {args.base_url} …")
+    site_dir = Path(args.site).resolve()
+    if not (site_dir / "index.html").is_file():
+        print(f"error: no built site at {site_dir} — run `llmwiki build` first",
+              file=sys.stderr)
+        return 2
+
+    print(f"Recording walkthrough of {site_dir} …")
     try:
-        webm = record(args.base_url)
+        webm = record(site_dir)
     except Exception as e:
         print(f"recording failed: {e}", file=sys.stderr)
         return 1

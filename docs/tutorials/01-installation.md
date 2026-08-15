@@ -88,7 +88,7 @@ Until then the clone-and-run path above is authoritative.
 Zero-touch, no Python on your machine:
 
 ```bash
-docker run -p 8765:8765 -v $PWD/wiki:/wiki ghcr.io/pratiyush/llm-wiki:latest
+docker run -v $PWD:/wiki ghcr.io/pratiyush/llm-wiki:latest build
 ```
 
 See [deploy/docker.md](../deploy/docker.md) for the full Compose setup.

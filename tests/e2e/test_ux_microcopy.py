@@ -71,11 +71,11 @@ def _visible_text(page: Page) -> str:
     )
 
 
-def test_homepage_has_no_template_leaks(page: Page, base_url: str) -> None:
+def test_homepage_has_no_template_leaks(page: Page, site_url: str) -> None:
     """A failed format string leaves placeholders in the rendered
     output. Asserting this on the homepage catches the most common
     leak class — a missing variable in a header or hero subtitle."""
-    page.goto(f"{base_url}/index.html", wait_until="domcontentloaded")
+    page.goto(f"{site_url}/index.html", wait_until="domcontentloaded")
     text = _visible_text(page)
     leaks: list[str] = []
     for pattern in TEMPLATE_LEAK_PATTERNS:
@@ -92,7 +92,7 @@ def test_homepage_has_no_template_leaks(page: Page, base_url: str) -> None:
     )
 
 
-def test_session_page_chrome_has_no_template_leaks(page: Page, base_url: str) -> None:
+def test_session_page_chrome_has_no_template_leaks(page: Page, site_url: str) -> None:
     """Template-leak guard for the *chrome* of a session page — the
     breadcrumbs, hero h1, page title, sidebar, and footer. We do NOT
     scan the article body because session content legitimately
@@ -100,7 +100,7 @@ def test_session_page_chrome_has_no_template_leaks(page: Page, base_url: str) ->
     ``null`` etc. The chrome is what users perceive as "the site",
     so leaks there are the only ones that read as broken."""
     page.goto(
-        f"{base_url}/sessions/e2e-demo/2026-04-09-e2e-python-demo.html",
+        f"{site_url}/sessions/e2e-demo/2026-04-09-e2e-python-demo.html",
         wait_until="domcontentloaded",
     )
     chrome_selectors = (
@@ -132,11 +132,11 @@ def test_session_page_chrome_has_no_template_leaks(page: Page, base_url: str) ->
     )
 
 
-def test_no_debug_strings_in_rendered_pages(page: Page, base_url: str) -> None:
+def test_no_debug_strings_in_rendered_pages(page: Page, site_url: str) -> None:
     """TODO / FIXME / XXX in rendered prose are obvious "this wasn't
     finished" tells. We allow them inside code blocks (they're
     legitimate code comments) but never in the prose around them."""
-    page.goto(f"{base_url}/index.html", wait_until="domcontentloaded")
+    page.goto(f"{site_url}/index.html", wait_until="domcontentloaded")
     # Scrub code; whatever's left is human-facing prose.
     prose = page.evaluate(
         """() => {
@@ -159,12 +159,12 @@ def test_no_debug_strings_in_rendered_pages(page: Page, base_url: str) -> None:
     )
 
 
-def test_every_button_has_an_accessible_name(page: Page, base_url: str) -> None:
+def test_every_button_has_an_accessible_name(page: Page, site_url: str) -> None:
     """An icon-only button with no aria-label / title / inner-text is
     a screen-reader dead zone — it announces as "button" with no
     context. Catches the most common regression: someone adds a new
     icon button and forgets the label."""
-    page.goto(f"{base_url}/index.html", wait_until="domcontentloaded")
+    page.goto(f"{site_url}/index.html", wait_until="domcontentloaded")
     nameless = page.evaluate(
         """() => {
             const out = [];
@@ -189,11 +189,11 @@ def test_every_button_has_an_accessible_name(page: Page, base_url: str) -> None:
     )
 
 
-def test_no_empty_headings_on_homepage(page: Page, base_url: str) -> None:
+def test_no_empty_headings_on_homepage(page: Page, site_url: str) -> None:
     """An empty heading is a layout bug — usually a CSS class flipped
     to display:none on the wrong element, leaving an empty h1/h2/h3
     in the DOM. Crashes screen-reader heading navigation."""
-    page.goto(f"{base_url}/index.html", wait_until="domcontentloaded")
+    page.goto(f"{site_url}/index.html", wait_until="domcontentloaded")
     empty = page.evaluate(
         """() => {
             const out = [];
@@ -215,12 +215,12 @@ def test_no_empty_headings_on_homepage(page: Page, base_url: str) -> None:
     )
 
 
-def test_link_text_is_not_generic(page: Page, base_url: str) -> None:
+def test_link_text_is_not_generic(page: Page, site_url: str) -> None:
     """"Click here" / "Read more" / "Link" are accessibility
     anti-patterns — screen-reader users who navigate by link list
     see a list of "click here, click here, click here". Each link
     should describe its destination."""
-    page.goto(f"{base_url}/index.html", wait_until="domcontentloaded")
+    page.goto(f"{site_url}/index.html", wait_until="domcontentloaded")
     generic = {"click here", "read more", "link", "here", "more"}
     bad = page.evaluate(
         """(generic) => {
@@ -241,11 +241,11 @@ def test_link_text_is_not_generic(page: Page, base_url: str) -> None:
     )
 
 
-def test_homepage_has_a_top_level_heading(page: Page, base_url: str) -> None:
+def test_homepage_has_a_top_level_heading(page: Page, site_url: str) -> None:
     """Every page should have exactly one ``<h1>`` — multiple h1s
     confuse assistive tech and SEO crawlers; zero h1s leaves the
     page without a landmark heading."""
-    page.goto(f"{base_url}/index.html", wait_until="domcontentloaded")
+    page.goto(f"{site_url}/index.html", wait_until="domcontentloaded")
     count = page.locator("h1").count()
     assert count >= 1, "homepage has no <h1> at all"
     assert count <= 1, (
@@ -253,11 +253,11 @@ def test_homepage_has_a_top_level_heading(page: Page, base_url: str) -> None:
     )
 
 
-def test_meta_description_is_present_and_meaningful(page: Page, base_url: str) -> None:
+def test_meta_description_is_present_and_meaningful(page: Page, site_url: str) -> None:
     """``<meta name="description">`` is what search engines use as
     the snippet on a result page. Empty / missing means terrible
     SEO. We're permissive: any non-empty string is fine."""
-    page.goto(f"{base_url}/index.html", wait_until="domcontentloaded")
+    page.goto(f"{site_url}/index.html", wait_until="domcontentloaded")
     desc = page.evaluate(
         """() => {
             const m = document.querySelector('meta[name="description"]');
@@ -272,12 +272,12 @@ def test_meta_description_is_present_and_meaningful(page: Page, base_url: str) -
     )
 
 
-def test_session_page_breadcrumbs_make_sense_to_humans(page: Page, base_url: str) -> None:
+def test_session_page_breadcrumbs_make_sense_to_humans(page: Page, site_url: str) -> None:
     """Breadcrumbs should read like a path: e.g. "Home / Projects /
     e2e-demo / 2026-04-09". A regression where one crumb is a UUID
     or a kebab-case slug instead of a human label is a real UX bug."""
     page.goto(
-        f"{base_url}/sessions/e2e-demo/2026-04-09-e2e-python-demo.html",
+        f"{site_url}/sessions/e2e-demo/2026-04-09-e2e-python-demo.html",
         wait_until="domcontentloaded",
     )
     crumbs_text = page.evaluate(

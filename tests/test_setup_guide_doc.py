@@ -24,7 +24,7 @@ def test_part1_has_core_steps():
     assert "setup.bat" in text
     assert "llmwiki sync" in text
     assert "llmwiki build" in text
-    assert "llmwiki serve" in text
+    assert "site/index.html" in text
 
 
 def test_part2_explains_three_layers():
@@ -74,7 +74,7 @@ def test_guide_uses_images():
 
 def test_readme_links_to_guide():
     readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
-    assert "docs/tutorials/setup-guide.md" in readme
+    assert "docs/getting-started.md" in readme
 
 
 def test_guide_mentions_privacy_boundary():

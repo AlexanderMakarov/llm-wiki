@@ -2,8 +2,9 @@
 session pages; absolute disk paths as project names.
 
 Frontmatter stores home paths with the username redacted to ``USER``
-so ``raw/`` is safe to commit. The site restores the local username
-at build time so resume commands and project titles are usable.
+so ``raw/`` is safe to commit. The site displays them against the
+build's ``--local-root`` (R13, #109) so resume commands and project
+titles are usable.
 """
 from __future__ import annotations
 
@@ -25,23 +26,16 @@ from llmwiki.build import (
     resume_command,
     supports_resume,
 )
-from llmwiki.convert import restore_local_path
 
 REAL = "alice"
 REPL = "USER"
+LOCAL_ROOT = f"/Users/{REAL}"
 
 
 @pytest.fixture(autouse=True)
-def _fixed_restore_user(monkeypatch):
-    """Pin redaction reverse to alice/USER so tests don't depend on $USER."""
-    # build.py binds restore_local_path at import time (PLC0415 hoist);
-    # patch the name where callers use it, not convert's definition.
-    monkeypatch.setattr(
-        "llmwiki.build.restore_local_path",
-        lambda path, real_user=None, repl_user=None: restore_local_path(
-            path, real_user=REAL, repl_user=REPL
-        ),
-    )
+def _fixed_local_root(monkeypatch):
+    """Pin the displayed local root so tests don't depend on $HOME."""
+    monkeypatch.setattr(build_mod, "_LOCAL_ROOT", LOCAL_ROOT)
     yield
 
 
@@ -77,28 +71,26 @@ def _src(meta: dict | None = None, stem: str = "2026-07-20T12-00-demo-proj-abc12
 LOCAL_CWD = f"/Users/{REAL}/code/demo-proj"
 
 
-# ─── path restore ─────────────────────────────────────────────────────
+# ─── displayed local path ─────────────────────────────────────────────
 
 
-def test_restore_local_path_reverses_username():
+def test_display_cwd_rewrites_stored_home_to_local_root():
     assert (
-        restore_local_path(
-            f"/home/{REPL}/code/x", real_user=REAL, repl_user=REPL
-        )
+        build_mod.display_cwd(f"/home/{REPL}/code/x", f"/home/{REAL}")
         == f"/home/{REAL}/code/x"
     )
 
 
-def test_restore_local_path_noop_without_real_user():
-    assert (
-        restore_local_path(
-            f"/home/{REPL}/code/x", real_user="", repl_user=REPL
-        )
-        == f"/home/{REPL}/code/x"
-    )
+def test_display_cwd_leaves_paths_outside_a_home_directory_alone():
+    assert build_mod.display_cwd("/opt/tools/x", f"/home/{REAL}") == "/opt/tools/x"
 
 
-def test_local_cwd_restores_redacted_frontmatter():
+def test_resolve_local_root_defaults_to_this_machine():
+    assert build_mod.resolve_local_root(None) == str(Path.home())
+    assert build_mod.resolve_local_root(f"/home/{REAL}/") == f"/home/{REAL}"
+
+
+def test_local_cwd_uses_the_resolved_local_root():
     assert local_cwd(_meta()) == LOCAL_CWD
 
 
@@ -308,23 +300,21 @@ def test_search_index_includes_session_id(tmp_path: Path):
 # ─── #56: encoded segments + index pages ───────────────────────────────
 
 
-def test_restore_local_path_encoded_users_segment():
+def test_display_cwd_encoded_users_segment():
     assert (
-        restore_local_path(
+        build_mod.display_cwd(
             "/Users/USER/.claude/projects/-Users-USER-code-demo/x",
-            real_user=REAL,
-            repl_user=REPL,
+            f"/Users/{REAL}",
         )
         == f"/Users/{REAL}/.claude/projects/-Users-{REAL}-code-demo/x"
     )
 
 
-def test_restore_local_path_encoded_home_segment():
+def test_display_cwd_encoded_home_segment():
     assert (
-        restore_local_path(
+        build_mod.display_cwd(
             "/home/USER/.claude/projects/-home-USER-code-app/x",
-            real_user=REAL,
-            repl_user=REPL,
+            f"/home/{REAL}",
         )
         == f"/home/{REAL}/.claude/projects/-home-{REAL}-code-app/x"
     )
@@ -379,8 +369,9 @@ def test_sessions_index_shows_restored_cwd(tmp_path: Path):
     assert "/Users/USER/" not in html
 
 
-def test_sessions_index_restores_paths_in_description(tmp_path: Path):
-
+def test_sessions_index_leaves_description_prose_alone(tmp_path: Path):
+    """R13 (#109): only the ``cwd`` field is rewritten. A description is
+    prose from the session's first user turn and is rendered as imported."""
     sources = [
         _src(
             _meta(
@@ -392,5 +383,4 @@ def test_sessions_index_restores_paths_in_description(tmp_path: Path):
     ]
     out = render_sessions_index(sources, {"demo-proj": sources}, tmp_path)
     html = out.read_text(encoding="utf-8")
-    assert f"/Users/{REAL}/code/demo-proj" in html
-    assert "/Users/USER/" not in html
+    assert f"Review the repo at /Users/{REPL}/code/demo-proj" in html

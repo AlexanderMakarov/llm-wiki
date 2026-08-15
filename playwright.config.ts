@@ -6,8 +6,6 @@ import { defineConfig, devices } from "@playwright/test";
 // deprecation trigger is met (≥80% coverage parity + ≥50% healer
 // auto-patch acceptance, sustained one release cycle).
 
-const baseURL = process.env.LLMWIKI_BASE_URL ?? "http://127.0.0.1:8765";
-
 export default defineConfig({
   testDir: "tests/agents",
   fullyParallel: true,
@@ -22,7 +20,6 @@ export default defineConfig({
     ["json", { outputFile: "playwright-report/results.json" }],
   ],
   use: {
-    baseURL,
     trace: "on-first-retry",
     screenshot: "only-on-failure",
     video: "retain-on-failure",
@@ -35,13 +32,4 @@ export default defineConfig({
     // chromium only initially — matches the existing pytest-playwright
     // config. firefox + webkit are a #464 follow-up, not a blocker.
   ],
-  webServer: {
-    // CI builds + serves before invoking `playwright test`; we don't
-    // auto-build here. Local dev: run `python3 -m llmwiki build &&
-    // python3 -m llmwiki serve` in another terminal first.
-    command: "true",
-    url: baseURL,
-    reuseExistingServer: true,
-    timeout: 30000,
-  },
 });

@@ -14,6 +14,8 @@ a clickable `<div>` that traps Tab, a modal that swallows ESC.
 """
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import pytest
 from playwright.sync_api import Page
 
@@ -45,29 +47,27 @@ def _all_interactive_visible(page: Page) -> int:
 
 @pytest.mark.parametrize("path,label", PAGES_TO_AUDIT)
 def test_page_has_at_least_one_tabbable_element(
-    page: Page, base_url: str, path: str, label: str
+    page: Page, site_url: str, site_has: Callable[[str], bool], path: str, label: str
 ) -> None:
     """Smoke contract — every page must expose at least one interactive
     element to keyboard users (the nav itself, if nothing else)."""
-    resp = page.request.get(f"{base_url}{path}")
-    if resp.status >= 400:
-        pytest.skip(f"{path} not shipped on this build (HTTP {resp.status})")
-    page.goto(f"{base_url}{path}", wait_until="domcontentloaded")
+    if not site_has(path):
+        pytest.skip(f"{path} not shipped on this build")
+    page.goto(f"{site_url}{path}", wait_until="domcontentloaded")
     n = _all_interactive_visible(page)
     assert n >= 1, f"{label} ({path}) has no tabbable elements"
 
 
 @pytest.mark.parametrize("path,label", PAGES_TO_AUDIT[:3])
 def test_tab_reaches_first_focusable_within_5_presses(
-    page: Page, base_url: str, path: str, label: str
+    page: Page, site_url: str, site_has: Callable[[str], bool], path: str, label: str
 ) -> None:
     """Tab from the body root must reach a focusable element quickly.
     If the skip-link or a hidden trap eats the first 5 presses, we'd
     have a real keyboard-trap regression."""
-    resp = page.request.get(f"{base_url}{path}")
-    if resp.status >= 400:
-        pytest.skip(f"{path} not shipped (HTTP {resp.status})")
-    page.goto(f"{base_url}{path}", wait_until="domcontentloaded")
+    if not site_has(path):
+        pytest.skip(f"{path} not shipped on this build")
+    page.goto(f"{site_url}{path}", wait_until="domcontentloaded")
     page.evaluate("() => document.body.focus()")
     last = None
     for _ in range(5):
@@ -83,15 +83,14 @@ def test_tab_reaches_first_focusable_within_5_presses(
 
 @pytest.mark.parametrize("path,label", PAGES_TO_AUDIT[:3])
 def test_first_focused_element_has_visible_focus_style(
-    page: Page, base_url: str, path: str, label: str
+    page: Page, site_url: str, site_has: Callable[[str], bool], path: str, label: str
 ) -> None:
     """WCAG 2.4.7 — focused element must have a visible indicator.
     Site CSS sets `outline: 2px solid var(--accent)` on `:focus-visible`
     for every interactive selector. Read computed styles after focus."""
-    resp = page.request.get(f"{base_url}{path}")
-    if resp.status >= 400:
-        pytest.skip(f"{path} not shipped (HTTP {resp.status})")
-    page.goto(f"{base_url}{path}", wait_until="domcontentloaded")
+    if not site_has(path):
+        pytest.skip(f"{path} not shipped on this build")
+    page.goto(f"{site_url}{path}", wait_until="domcontentloaded")
     page.evaluate("() => document.body.focus()")
     # Tab past the skip-link to land on the first nav anchor.
     page.keyboard.press("Tab")
@@ -121,11 +120,11 @@ def test_first_focused_element_has_visible_focus_style(
     )
 
 
-def test_esc_closes_open_modal_and_restores_focus(page: Page, base_url: str) -> None:
+def test_esc_closes_open_modal_and_restores_focus(page: Page, site_url: str) -> None:
     """End-to-end the #479 contract once more from a kbd-only path —
     open the palette via Cmd+K, ESC, focus must land back on the
     trigger button (not the body)."""
-    page.goto(f"{base_url}/index.html", wait_until="domcontentloaded")
+    page.goto(f"{site_url}/index.html", wait_until="domcontentloaded")
     page.locator("body").click(position={"x": 1, "y": 1})
     # Move focus to the open-palette trigger via Tab so we have a known
     # restoration target. The button has id `open-palette` in the nav.

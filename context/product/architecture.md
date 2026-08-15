@@ -27,7 +27,7 @@
 - **Where it runs:** End-user machine (local install)
 - **Distribution:** pip / uv (PyPI) and optional Homebrew; source via GitHub
 - **CI / quality gate:** GitHub Actions on the repository (lint, tests, link-check hygiene as product phases land)
-- **Serving the site:** Local only — `llmwiki serve` / open generated `site/`; no multi-tenant cloud host as a product requirement
+- **Serving the site:** Nothing is served — the generated `site/` is opened as files, or published to any static host; no multi-tenant cloud host as a product requirement
 - **Contributor enablement:** Cursor-compatible AWOS and related maintainer tooling support shipping product work; not an end-user runtime dependency
 
 ---

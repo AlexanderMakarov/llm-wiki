@@ -267,7 +267,7 @@ simple.
 ## Migration path — static → hosted
 
 1. **Today:** `llmwiki build` writes HTML, nested `sources/*.md`, and site-level AI exports. External tools read them directly. (Done — #116 is this doc.)
-2. **v1.2:** Add a tiny `llmwiki serve --api` flag that wraps the same files behind `/api/v1/*` paths so the reader SPA can fetch them uniformly in dev. No new data, just routing.
+2. **Next:** a separate service could wrap the same files behind `/api/v1/*` paths so a reader SPA can fetch them uniformly. No new data, just routing — llmwiki itself stays a static-file generator.
 3. **v1.3+:** If a hosted multi-tenant reader ships, the server reuses the same routes with per-user auth. The content pipeline doesn't change.
 
 At no point does the contract require a rewrite of `llmwiki/build.py` — every endpoint maps to something build.py already emits.

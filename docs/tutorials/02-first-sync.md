@@ -8,7 +8,7 @@ docs_shell: true
 
 **Time:** 5 minutes
 **You'll need:** A working `llmwiki` CLI ([tutorial 01](01-installation.md)) and session history from at least one AI-coding agent.
-**Result:** A browsable static site at `http://127.0.0.1:8765` listing every session you've ever run.
+**Result:** A browsable static site under `site/` listing every session you've ever run.
 
 ---
 
@@ -58,19 +58,17 @@ Expected ending:
 `raw/` is immutable (never hand-edit). `wiki/` is where your agent's
 output lives. `site/` is the browsable static site.
 
-## Step 3 — Serve the site
+## Step 3 — Open the site
+
+The site is plain files. Open `site/index.html` in a browser:
 
 ```bash
-python3 -m llmwiki serve
+open site/index.html        # macOS
+xdg-open site/index.html    # Linux
+start site\index.html       # Windows
 ```
 
-Output:
-
-```
-Serving site/ at http://127.0.0.1:8765
-```
-
-Open that URL. You'll see:
+You'll see:
 
 - **Home** — project grid + activity heatmap
 - **Projects** — one card per project, freshness badge
@@ -107,7 +105,7 @@ From the terminal:
 ```bash
 ls wiki/sources | wc -l                        # ≥ 1
 ls site/sessions | wc -l                       # ≥ 1
-curl -sI http://127.0.0.1:8765/ | head -1      # HTTP/1.0 200 OK
+ls site/index.html site/highlight.min.js       # the home page and its assets
 ```
 
 From the browser: click into any project → any session → every inline
@@ -124,8 +122,6 @@ code block is syntax-highlighted, every `[[wikilink]]` resolves.
 **Site loads but is empty** — you may have only run `sync --status`, or
 synthesis hasn't filled `wiki/sources/` yet. Run `llmwiki sync` then
 `llmwiki synth` (or `llmwiki all --with-synth`).
-
-**Port 8765 already in use** — `python3 -m llmwiki serve --port 9000` picks a different port.
 
 ---
 

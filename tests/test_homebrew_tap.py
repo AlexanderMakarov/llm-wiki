@@ -67,7 +67,7 @@ def test_formula_url_points_at_llm_wiki_release_tarball(formula: str):
     assert m, "formula has no url line"
     url = m.group(1)
     assert url.startswith(
-        "https://github.com/Pratiyush/llm-wiki/archive/refs/tags/v"
+        "https://github.com/AlexanderMakarov/llm-wiki/archive/refs/tags/v"
     ), f"unexpected url {url!r}; bump-homebrew-formula.sh rewrites this"
     assert url.endswith(".tar.gz"), "formula url must be the .tar.gz archive"
 

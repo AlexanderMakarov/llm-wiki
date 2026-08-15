@@ -9,7 +9,7 @@ site under `site/` with:
 - Global search index (site/search-index.json) — client-side fuzzy matcher
 - Cmd+K command palette (vanilla JS, no framework)
 - Keyboard shortcuts: /, g h, g p, g s, j/k, ?
-- highlight.js client-side syntax highlighting (CDN, light + dark themes)
+- highlight.js client-side syntax highlighting (vendored, light + dark themes)
 - Collapsible tool-result sections (<details>) for long outputs
 - Copy-as-markdown + copy-code buttons (Clipboard API + execCommand fallback)
 - Breadcrumbs + reading progress bar
@@ -17,9 +17,11 @@ site under `site/` with:
 - Mobile-responsive, print-friendly
 - ARIA focus rings and prefers-reduced-motion support
 
-Stdlib + `markdown` (required). No optional deps — highlight.js loads from CDN.
+Stdlib + `markdown` (required). No optional deps; every script and stylesheet
+the site loads is emitted into the output, so it works offline and over
+`file://`.
 Usage:
-    python3 -m llmwiki build [--synthesize] [--out <dir>]
+    python3 -m llmwiki build [--synthesize] [--out <dir>] [--local-root <path>]
 """
 
 from __future__ import annotations
@@ -50,9 +52,9 @@ _FAVICON_PNG = bytes.fromhex(
 )
 
 # Repo-authored content (editorial docs/, README.md, CONTRIBUTING.md,
-# .claude/commands) ships with the tool's source checkout. Resolve it
-# from the package location, NOT REPO_ROOT — with LLMWIKI_ROOT set,
-# REPO_ROOT points at the user's vault, which has none of these files.
+# .claude/commands, llmwiki/agent_kit/commands) ships with the tool.
+# Resolve it from the package location, NOT REPO_ROOT — with LLMWIKI_ROOT
+# set, REPO_ROOT points at the user's vault, which has none of these files.
 SOURCE_ROOT = PACKAGE_ROOT.parent
 from llmwiki import raw_docs_site
 from llmwiki.agent_label import detect_agent_label, render_agent_badge
@@ -75,7 +77,7 @@ from llmwiki.compare import (
     render_comparisons_index,
 )
 from llmwiki.context_md import is_context_file
-from llmwiki.convert import restore_local_path
+from llmwiki.convert import ENCODED_PATH_PREFIXES, HOME_PATH_PREFIXES
 from llmwiki.docs_pages import (
     _first_paragraph,
     compile_docs_site,
@@ -599,7 +601,7 @@ def _md_to_html_uncached(body: str) -> str:
     body = normalize_markdown(body)
     # v0.5: highlight.js replaces server-side Pygments/codehilite. The
     # fenced_code extension emits `<pre><code class="language-xxx">` and
-    # highlight.js (loaded via CDN in page_head) picks it up client-side.
+    # highlight.js (loaded in page_foot) picks it up client-side.
     # Benefits: lighter builds, no optional dep, consistent look across pages,
     # and auto-detection for untagged blocks.
     extensions = ["fenced_code", "tables", "toc", "sane_lists"]
@@ -715,31 +717,41 @@ def render_freshness(meta: dict[str, Any]) -> str:
 # ─── html template helpers ─────────────────────────────────────────────────
 
 # v0.5: highlight.js for client-side syntax highlighting. Two themes so the
-# switcher can swap between light/dark without a network round-trip. Pinned
-# to a major version for stability, served from jsdelivr.
+# switcher can swap between light/dark without a network round-trip. The
+# library and both themes are vendored under llmwiki/vendor/ at this pinned
+# version and copied into the site root, so a built site loads them by
+# relative path and needs no network (R12, #109). A load failure degrades to
+# unstyled `<pre><code>` blocks, which is why there is no offline notice here.
 HLJS_VERSION = "11.9.0"
-HLJS_LIGHT_CSS = (
-    f"https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@{HLJS_VERSION}"
-    "/build/styles/github.min.css"
-)
-HLJS_DARK_CSS = (
-    f"https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@{HLJS_VERSION}"
-    "/build/styles/github-dark.min.css"
-)
-HLJS_SCRIPT = (
-    f"https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@{HLJS_VERSION}"
-    "/build/highlight.min.js"
-)
+HLJS_LIGHT_CSS = "github.min.css"
+HLJS_DARK_CSS = "github-dark.min.css"
+HLJS_SCRIPT = "highlight.min.js"
+HLJS_VENDOR_DIR = Path(__file__).resolve().parent / "vendor"
+HLJS_VENDOR_FILES = (HLJS_SCRIPT, HLJS_LIGHT_CSS, HLJS_DARK_CSS)
 
 
-def _hljs_head_tags() -> str:
+def copy_hljs_assets(out_dir: Path) -> list[Path]:
+    """Copy the vendored highlight.js library + both themes into ``out_dir``.
+
+    Every page references them by relative path, so they live beside
+    ``style.css`` at the site root. Returns the paths written.
+    """
+    written: list[Path] = []
+    for name in HLJS_VENDOR_FILES:
+        dest = out_dir / name
+        shutil.copy2(HLJS_VENDOR_DIR / name, dest)
+        written.append(dest)
+    return written
+
+
+def _hljs_head_tags(css_prefix: str = "") -> str:
     """Return the `<link>` tags for highlight.js themes. The dark theme is
     loaded with ``disabled`` and the light theme is the default — the runtime
     swaps the ``disabled`` flag when the theme toggles, so code blocks stay in
     sync with the rest of the page."""
     return (
-        f'  <link id="hljs-light" rel="stylesheet" href="{HLJS_LIGHT_CSS}">\n'
-        f'  <link id="hljs-dark" rel="stylesheet" href="{HLJS_DARK_CSS}" disabled>\n'
+        f'  <link id="hljs-light" rel="stylesheet" href="{css_prefix}{HLJS_LIGHT_CSS}">\n'
+        f'  <link id="hljs-dark" rel="stylesheet" href="{css_prefix}{HLJS_DARK_CSS}" disabled>\n'
     )
 
 
@@ -779,7 +791,7 @@ def page_head(title: str, description: str, css_prefix: str = "", lang: str = "e
   <!-- #ui-m14 (#577): async-load Google Fonts via media="print" + onload swap so it doesn't render-block first paint. <noscript> fallback for JS-disabled users. -->
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
   <noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"></noscript>
-{_hljs_head_tags()}  <link rel="stylesheet" href="{css_prefix}style.css">
+{_hljs_head_tags(css_prefix)}  <link rel="stylesheet" href="{css_prefix}style.css">
   <!-- Inline SVG favicon so browsers never 404 /favicon.ico on a static tree. -->
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%237C3AED'/%3E%3Cpath d='M8 22V10l8 6 8-6v12' fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 </head>
@@ -826,7 +838,7 @@ def page_head_article(
   <!-- #ui-m14 (#577): async-load Google Fonts via media="print" + onload swap so it doesn't render-block first paint. <noscript> fallback for JS-disabled users. -->
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
   <noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"></noscript>
-{_hljs_head_tags()}  <link rel="stylesheet" href="{css_prefix}style.css">
+{_hljs_head_tags(css_prefix)}  <link rel="stylesheet" href="{css_prefix}style.css">
   <!-- Inline SVG favicon so browsers never 404 /favicon.ico on a static tree. -->
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%237C3AED'/%3E%3Cpath d='M8 22V10l8 6 8-6v12' fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 </head>
@@ -1071,11 +1083,11 @@ def page_foot(js_prefix: str = "") -> str:
 </nav>
 {search_palette_markup(js_prefix)}
 <script src="{js_prefix}llmwiki-state.js"></script>
-<script src="{HLJS_SCRIPT}" defer></script>
+<script src="{js_prefix}{HLJS_SCRIPT}" defer></script>
 <script>
-  // v0.5: Run highlight.js once the CDN script lands. Defer keeps it out of
-  // the critical path; the DOMContentLoaded fallback covers the case where
-  // hljs arrives before/after DOM ready depending on cache state.
+  // v0.5: Run highlight.js once the vendored script lands. Defer keeps it
+  // out of the critical path; the DOMContentLoaded fallback covers the case
+  // where hljs arrives before/after DOM ready depending on cache state.
   function __llmwikiHljsInit() {{
     if (window.hljs) {{ window.hljs.highlightAll(); }}
     else {{ window.addEventListener('load', function() {{ if (window.hljs) window.hljs.highlightAll(); }}); }}
@@ -1118,16 +1130,66 @@ def calc_reading_time(body: str, wpm: int = 225) -> int:
 RESUME_RETENTION_DAYS = 30
 
 
-def local_cwd(meta: dict[str, Any]) -> str:
-    """Session cwd with username redaction reversed for local use (#36).
+# R13 (#109): the path a session page displays is a build input. A stored
+# ``cwd`` begins with a home directory belonging to whoever ran the agent;
+# the site shows that head rewritten to this build's local root, so the same
+# vault renders identically on every machine and a publish never leaks the
+# identity of whoever built it. Only the ``cwd`` field is rewritten — prose
+# carried over from a session is left exactly as imported.
+_LOCAL_ROOT: str | None = None
 
-    Convert already wrote the absolute cwd into frontmatter — then
-    redacted the home-dir username to ``USER`` so ``raw/`` is safe to
-    commit. Build reverses that single substitution so resume / project
-    titles show a real path. See ``restore_local_path``.
+_HOME_HEAD_RE = re.compile(
+    r"^(?P<prefix>" + "|".join(HOME_PATH_PREFIXES) + r")(?P<user>[^/\\]+)"
+)
+_ENCODED_PREFIX_GROUP = "(?:" + "|".join(ENCODED_PATH_PREFIXES) + ")"
+
+
+def resolve_local_root(local_root: str | None = None) -> str:
+    """The value displayed in place of a session's stored home directory.
+
+    Defaults to this run's own home directory, so someone browsing their own
+    site locally gets paths they can paste into a shell with no configuration.
     """
+    value = (local_root or "").strip()
+    if not value:
+        return str(Path.home())
+    return value.rstrip("/\\") or value
 
-    return restore_local_path(str(meta.get("cwd") or "").strip())
+
+def _leaf(path: str) -> str:
+    """Last segment of ``path``, treating both separators as separators."""
+    return re.split(r"[/\\]", path.rstrip("/\\"))[-1]
+
+
+def display_cwd(cwd: str, local_root: str) -> str:
+    """Rewrite the home directory a stored ``cwd`` starts with to ``local_root``.
+
+    Agent stores flatten a project path into one dash-encoded segment
+    (``~/.claude/projects/-Users-<user>-code-x``), so the same user name is
+    rewritten there too — otherwise the displayed path names two different
+    people. Paths with no recognised home-directory head are returned
+    untouched.
+    """
+    cwd = (cwd or "").strip()
+    match = _HOME_HEAD_RE.match(cwd)
+    if not match:
+        return cwd
+    stored_user = match.group("user")
+    local_user = _leaf(local_root)
+    out = local_root + cwd[match.end():]
+    if stored_user == local_user:
+        return out
+    encoded = re.compile(
+        r"(" + _ENCODED_PREFIX_GROUP + r")" + re.escape(stored_user)
+        + r"(?=$|[-/\\\s])"
+    )
+    return encoded.sub(lambda m: m.group(1) + local_user, out)
+
+
+def local_cwd(meta: dict[str, Any]) -> str:
+    """Session ``cwd`` displayed against this build's local root (#36, R13)."""
+    root = _LOCAL_ROOT if _LOCAL_ROOT is not None else resolve_local_root()
+    return display_cwd(str(meta.get("cwd") or ""), root)
 
 
 def supports_resume(meta: dict[str, Any], path: Path | None = None) -> bool:
@@ -1787,11 +1849,10 @@ def render_sessions_index(
         # if frontmatter carries one, render it as a small muted line
         # below the slug. Falls back to no second line for older
         # sessions without the field.
-        # #56: descriptions were redacted at convert time; restore local
-        # paths so the index matches session detail / resume paths.
-        description = restore_local_path(
-            str(meta.get("description") or "").strip()
-        )
+        # R13 (#109): the description is prose from the session's first user
+        # turn and is rendered exactly as imported. Path substitution applies
+        # to the `cwd` field only.
+        description = str(meta.get("description") or "").strip()
         desc_line = (
             f'<div class="session-cell-desc muted">{html.escape(description)}</div>'
             if description else ""
@@ -2301,10 +2362,9 @@ def _render_root_md_page(
 
 def render_404(out_dir: Path) -> Path:
     """Emit ``site/404.html`` with the standard site chrome and a "Page not
-    found" panel. Closes #387 U8 — without this, ``llmwiki serve`` falls
-    back to the stdlib ``http.server`` default 404 (an unstyled error string
-    with no nav). The page itself is not linked from the index, but
-    ``serve.py`` injects it as the body of every 404 response.
+    found" panel. Closes #387 U8. The page is not linked from the index —
+    static hosts (GitHub Pages, GitLab Pages, Netlify) pick it up by name
+    and return it as the body of any 404 response.
     """
     head = page_head(
         title="Page not found · llmwiki",
@@ -2703,11 +2763,22 @@ def build_search_index(
                 "body": _first_paragraph(page.body)[:300],
             })
 
-    # Slash commands — read the first non-empty line of each .md as
-    # the description so the palette shows what each /wiki-* does.
-    slash_dir = SOURCE_ROOT / ".claude" / "commands"
-    if slash_dir.is_dir():
+    # Slash commands — kit first (packaged /wiki-*), then remaining
+    # contributor commands under .claude/commands. Deduplicate by stem so
+    # `install-agent-kit --dest .claude` in a source checkout does not
+    # index the same /wiki-* twice.
+    slash_dirs = (
+        PACKAGE_ROOT / "agent_kit" / "commands",
+        SOURCE_ROOT / ".claude" / "commands",
+    )
+    seen_slashes: set[str] = set()
+    for slash_dir in slash_dirs:
+        if not slash_dir.is_dir():
+            continue
         for p in sorted(slash_dir.glob("*.md")):
+            if p.stem in seen_slashes:
+                continue
+            seen_slashes.add(p.stem)
             try:
                 text = p.read_text(encoding="utf-8")
             except OSError:
@@ -3007,7 +3078,12 @@ def build_site(
     raw_sessions: Path | None = None,
     raw_dir: Path | None = None,
     wiki_dir: Path | None = None,
+    local_root: str | None = None,
 ) -> int:
+    # R13 (#109): resolve the displayed local root once for the whole run,
+    # from the flag when given and from this machine otherwise.
+    global _LOCAL_ROOT
+    _LOCAL_ROOT = resolve_local_root(local_root)
     # #54 vault-overlay: resolved here (not as param defaults, which are
     # captured at def time) so monkeypatched module constants take effect.
     out_dir = DEFAULT_OUT_DIR if out_dir is None else out_dir
@@ -3041,7 +3117,8 @@ def build_site(
         if stubs_written:
             print(f"  seeded {len(stubs_written)} new wiki/projects/ stubs")
 
-    # Reset output dir (clear contents only — the HTTP server may be cwd'd here)
+    # Reset output dir (clear contents only — keep the directory itself so an
+    # open file browser or editor keeps its handle on it)
     # #py-m12 (#598): drop ignore_errors=True. A failure to remove a
     # site/ subtree means we'll write a corrupted partial site on top
     # of stale files; users have hit this when one CI runner left a
@@ -3079,7 +3156,11 @@ def build_site(
     # when <link rel="icon"> points at a data URI, and the probe 404
     # shows up as a console.error that breaks e2e cleanliness checks.
     (out_dir / "favicon.ico").write_bytes(_FAVICON_PNG)
-    print("  wrote style.css, script.js, favicon.ico")
+    copy_hljs_assets(out_dir)
+    print(
+        "  wrote style.css, script.js, favicon.ico, "
+        + ", ".join(HLJS_VENDOR_FILES)
+    )
 
     # Copy raw markdown under sources/<project>/ for "Download .md" links
     # (matches session action hrefs + docs/architecture.md). Flat copytree
@@ -3303,8 +3384,8 @@ def build_site(
     if doc_pages:
         print(f"  wrote {len(doc_pages)} document pages under documents/")
 
-    # #387 U8: branded 404 page that serve.py returns as the body of any
-    # 404 response, instead of the stdlib http.server default.
+    # #387 U8: branded 404 page that static hosts return as the body of
+    # any 404 response.
     render_404(out_dir)
     # #284: compile README + CONTRIBUTING as standalone site pages so
     # they don't bounce visitors out to GitHub for content we're already
@@ -3428,6 +3509,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--out", type=Path, default=DEFAULT_OUT_DIR)
     p.add_argument("--synthesize", action="store_true")
     p.add_argument("--claude", type=str, default="")
+    p.add_argument("--local-root", type=str, default="", dest="local_root")
     return p.parse_args()
 
 
@@ -3437,6 +3519,7 @@ def main() -> int:
         out_dir=args.out,
         synthesize=args.synthesize,
         claude_path=args.claude,
+        local_root=args.local_root,
     )
 
 

@@ -45,34 +45,14 @@ jobs:
 
       - name: Build the demo site
         run: |
-          python3 -m llmwiki init
-          # Seed raw/sessions/ from examples/demo-sessions/ so build
-          # has something to work with (mirrors pages.yml). Without
-          # this `llmwiki build` exits 2 with "no sources found".
-          if [ -d examples/demo-sessions ] && [ "$(ls -A examples/demo-sessions 2>/dev/null)" ]; then
-            cp -r examples/demo-sessions/* raw/sessions/
-            echo "Seeded raw/sessions/ from examples/demo-sessions/"
-          fi
-          python3 -m llmwiki build
-
-      - name: Serve site in the background
-        run: |
-          # bash -e aborts on the first failing curl unless we gate it with `if`.
-          python3 -m llmwiki serve --dir site --port 8765 &
-          for i in {1..30}; do
-            if curl -fsS http://127.0.0.1:8765/ > /dev/null; then
-              echo "server up"
-              exit 0
-            fi
-            sleep 1
-          done
-          echo "server failed to start" >&2
-          exit 1
+          # Build the committed demo/ vault into ./site (mirrors pages.yml).
+          python3 -m llmwiki build --vault demo --out ./site --local-root /home/user
 
       - name: Run Playwright Test Agents
         run: npx playwright test
         env:
-          LLMWIKI_BASE_URL: http://127.0.0.1:8765
+          # The specs open the built files; nothing is served.
+          LLMWIKI_SITE_DIR: ${{ github.workspace }}/site
 
       - name: Upload HTML report
         if: always()

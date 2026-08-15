@@ -79,24 +79,9 @@ If empty, see "No sessions found" above.
 
 ## Code blocks not highlighted
 
-**Cause:** highlight.js loads from a CDN (`cdnjs.cloudflare.com`). If the CDN is blocked by a firewall, VPN, or you are fully offline, code blocks render as plain unformatted text.
+**Cause:** `highlight.min.js` or its theme stylesheet is missing from `site/`.
 
-**Fix:** This is by design -- the site degrades gracefully. Code is still readable, just not colorized. If you need highlighting offline, you could vendor the highlight.js files into `site/` manually, but this is not currently automated.
-
-## "Permission denied" on serve
-
-**Cause:** Port 8765 is already in use by another process.
-
-**Fix:**
-
-```bash
-# Use a different port
-python3 -m llmwiki serve --port 9000
-
-# Or find and kill the process using 8765
-lsof -i :8765
-kill <PID>
-```
+**Fix:** re-run `llmwiki build`. Every build copies `highlight.min.js`, `github.min.css` and `github-dark.min.css` into the output next to `style.css`; nothing is fetched from the network. If they are still absent after a rebuild, the installed package is missing its vendored assets — reinstall llmwiki.
 
 ## Heatmap shows no data
 

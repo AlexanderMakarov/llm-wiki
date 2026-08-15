@@ -4,7 +4,7 @@ A minimal VS Code extension that integrates with your local llm-wiki instance.
 
 ## Features
 
-- **Open llm-wiki** -- opens the local site (localhost:8765) in your browser
+- **Open llm-wiki** -- opens the built site (`site/index.html`) in your browser
 - **Sync Sessions** -- runs `python3 -m llmwiki sync` from the workspace root
 - **Build Site** -- runs `python3 -m llmwiki build`
 - **Wiki Pages sidebar** -- tree view of all wiki pages grouped by section (sources, entities, concepts, syntheses)
@@ -38,7 +38,6 @@ npx @vscode/vsce package
 
 | Setting | Default | Description |
 |---|---|---|
-| `llmwiki.serverPort` | `8765` | Port for the local llm-wiki server |
 | `llmwiki.pythonPath` | `python3` | Path to the Python interpreter |
 
 ## Development

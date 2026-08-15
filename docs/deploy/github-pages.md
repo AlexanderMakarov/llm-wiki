@@ -4,13 +4,13 @@ Host your llmwiki site on GitHub Pages for free, with automatic builds on every 
 
 Live example (this fork): [alexandermakarov.github.io/llm-wiki](https://alexandermakarov.github.io/llm-wiki/) · upstream: [pratiyush.github.io/llm-wiki](https://pratiyush.github.io/llm-wiki/)
 
-> **This fork (#69):** `pages.yml` is `workflow_dispatch`-only by default (restore `push:` if you want every merge to republish). Seed corpus: `examples/demo-sessions/`, `examples/demo-docs/` (product docs), `examples/demo-wiki/` (Claude-synthesized sources, committed so CI stays free/deterministic), `examples/demo-usage/` (MCP telemetry fixtures for Analytics).
+> **This fork (#69):** `pages.yml` is `workflow_dispatch`-only by default (restore `push:` if you want every merge to republish). The published site is built from the committed `demo/` vault: `demo/raw/sessions/` (demo sessions), `demo/raw/docs/` (product docs), `demo/wiki/` (pre-synthesized pages, committed so CI stays free/deterministic) and `demo/usage/` (MCP telemetry fixtures for Analytics).
 
 ## Prerequisites
 
 - A GitHub repository (fork or clone of [Pratiyush/llm-wiki](https://github.com/Pratiyush/llm-wiki))
 - Python 3.12+ (only needed locally for `llmwiki sync`)
-- Some session data already synced (or demo sessions under `examples/demo-sessions/`)
+- Some session data already synced (or the demo sessions under `demo/raw/sessions/`)
 
 ## Step 1: Fork or clone the repo
 
@@ -37,14 +37,9 @@ The repo ships with `.github/workflows/pages.yml` which:
 
 1. Checks out the code
 2. Installs Python 3.12 and the `markdown` dependency
-3. Runs `llmwiki init` to scaffold directories
-4. Seeds demo sessions from `examples/demo-sessions/` (or `tests/fixtures/demo/`)
-5. Seeds product docs from `examples/demo-docs/` into `raw/docs/`
-6. Seeds pre-synthesized wiki pages from `examples/demo-wiki/sources/`
-7. Seeds MCP usage fixtures from `examples/demo-usage/` into `usage/`
-8. Runs `llmwiki build --out ./site`
-9. Adds `.nojekyll` so Pages serves `_`-prefixed paths
-10. Uploads and deploys the artifact
+3. Runs `llmwiki build --vault demo --out ./site` against the committed `demo/` vault
+4. Adds `.nojekyll` so Pages serves `_`-prefixed paths
+5. Uploads and deploys the artifact
 
 No secrets or tokens are required. The workflow uses GitHub's built-in `actions/deploy-pages`.
 
@@ -58,10 +53,10 @@ https://<username>.github.io/<repo-name>/
 
 ## Using your own session data
 
-By default the workflow builds from demo sessions. To deploy your real sessions:
+By default the workflow builds the committed `demo/` vault. To deploy your real sessions:
 
-1. Run `llmwiki sync` locally to populate `raw/sessions/`
-2. Commit the `raw/sessions/` directory (remove it from `.gitignore` first)
+1. Point the build at your own vault — change `--vault demo` in `pages.yml` to the path you sync into
+2. Commit that vault's `raw/sessions/` and `wiki/` (remove them from `.gitignore` first)
 3. Push to master
 
 Alternatively, keep sessions local and commit only the built `site/` directory.
@@ -85,7 +80,7 @@ Alternatively, keep sessions local and commit only the built `site/` directory.
 ### Build fails with "no sources found"
 
 The workflow needs session data. Make sure either:
-- `examples/demo-sessions/` contains `.md` files, or
+- `demo/raw/sessions/` contains `.md` files, or
 - `raw/sessions/` is committed with real data
 
 ### Build fails with import error

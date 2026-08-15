@@ -14,16 +14,20 @@ demo/
 ## Build it
 
 ```bash
-python3 -m llmwiki build --vault demo --out demo/site
-python3 -m llmwiki serve --dir demo/site
+python3 -m llmwiki build --vault demo --out demo/site --local-root /home/user
 ```
 
-CI publishes the same tree via `.github/workflows/pages.yml`, which runs `llmwiki build --vault demo --out ./site` and uploads the result to GitHub Pages. Nothing is seeded or copied: everything the build needs is committed here.
+Open `demo/site/index.html` in a browser. Nothing has to be running.
 
-## Refresh the synthesized pages
+CI publishes the same tree via `.github/workflows/pages.yml`, which runs `llmwiki build --vault demo --out ./site --local-root /home/user` and uploads the result to GitHub Pages. Nothing is seeded or copied: everything the build needs is committed here.
 
-`demo/wiki/sources/` holds pre-synthesized pages so CI stays free, deterministic and secret-free — synthesis runs locally against a real backend, never in a workflow.
+## Refresh from product docs
+
+When `docs/` (not `docs/maintainers/`) changes, regenerate this vault locally with [`scripts/refresh_demo.py`](../scripts/refresh_demo.py). That command needs a git working copy and a reachable synthesis backend. It never runs in CI.
 
 ```bash
-python3 -m llmwiki synth --vault demo --force
+python3 scripts/refresh_demo.py --dry-run
+python3 scripts/refresh_demo.py
 ```
+
+The pre-push hook reminds you if the push includes product docs. Wiki-checks builds and lints the *committed* demo; if `demo/.demo-source-rev` is present it also prints a `--dry-run` plan so a stale demo is visible without calling a model.

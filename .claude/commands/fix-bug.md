@@ -84,7 +84,7 @@ python3 -m llmwiki init --vault "$TMP_VAULT"
 
 If already inside a matching worktree on `BRANCH`, reuse it and ensure `$WT/.worktree-vault` + worktree `config.json` still isolate from the live vault (never copy primary `config.json`).
 
-Store `BRANCH`, `WT`, `TMP_VAULT`, and `BUG_ID`. Always `python3 -m llmwiki` from `$WT` — never PATH `llmwiki`. Agent mutating commands → `$TMP_VAULT` only; read-only live-vault probes allowed; serve prefers non-8765 when needed.
+Store `BRANCH`, `WT`, `TMP_VAULT`, and `BUG_ID`. Always `python3 -m llmwiki` from `$WT` — never PATH `llmwiki`. Agent mutating commands → `$TMP_VAULT` only; read-only live-vault probes allowed.
 
 <!-- /awos:flow:stage -->
 

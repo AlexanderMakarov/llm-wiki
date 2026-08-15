@@ -2,9 +2,9 @@
 #
 # Two modes:
 #   • Pull published image (recommended):
-#       docker compose pull && docker compose up -d
+#       docker compose pull && docker compose run --rm llmwiki build
 #   • Build locally (for development / custom changes):
-#       docker compose -f docker-compose.yml -f docker-compose.build.yml up
+#       docker compose -f docker-compose.yml -f docker-compose.build.yml run --rm llmwiki build
 #
 # See docs/deploy/docker.md for the full walk-through.
 
@@ -17,8 +17,6 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: llmwiki
-    ports:
-      - "8765:8765"
     volumes:
       # Bind-mount the repo's user-data dirs so llmwiki reads/writes them
       # on the host instead of inside the container.
@@ -26,16 +24,8 @@ services:
       - ./wiki:/wiki/wiki
       - ./site:/wiki/site
       - ./examples:/wiki/examples:ro
-    # Default command: serve the pre-built site on 0.0.0.0:8765.
-    # Override at runtime:
-    #   docker compose run --rm llmwiki build
+    # Default command: compile site/ from the bind-mounted raw/ + wiki/.
+    # Open ./site/index.html on the host afterwards. Override at runtime:
     #   docker compose run --rm llmwiki sync
     #   docker compose run --rm llmwiki lint --fail-on-errors
-    command: ["serve", "--host", "0.0.0.0", "--port", "8765", "--dir", "site"]
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8765/')"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
+    command: ["build"]

@@ -1,8 +1,15 @@
 # llmwiki — Claude Code Schema
 
-You are maintaining an **LLM Wiki** (per [Karpathy's spec](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)) that compiles the user's Claude Code session history into a structured, interlinked markdown knowledge base.
+This file is for **people changing llmwiki itself**. It is the vault schema the product implements (per [Karpathy's spec](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)), kept here so contributors and tests agree with what a user's wiki looks like.
 
-> **Changing llmwiki's own code or docs instead of a vault?** This file is the *product schema* — it tells you how to maintain a user's `raw/` → `wiki/` → `site/` knowledge base. It is not the contribution guide. For repo work (fixes, features, tests, PRs) read [`CONTRIBUTING.md`](CONTRIBUTING.md), whose short form is loaded automatically from [`.claude/rules/contributing.md`](.claude/rules/contributing.md) when you touch `llmwiki/`, `tests/`, `scripts/`, or `docs/`. Run `ruff check` and `python3 -m pytest tests/ -q` before pushing.
+If you *use* llmwiki on your own sessions, do not work inside this repository. Install the package and the agent kit, then run `/wiki-sync` from your own project:
+
+```bash
+pip install llm-wiki
+llmwiki install-agent-kit --dest ~/.claude
+```
+
+> **Changing llmwiki's own code or docs?** Read [`CONTRIBUTING.md`](CONTRIBUTING.md), whose short form is loaded automatically from [`.claude/rules/contributing.md`](.claude/rules/contributing.md) when you touch `llmwiki/`, `tests/`, `scripts/`, or `docs/`. Run `ruff check` and `python3 -m pytest tests/ -q` before pushing.
 
 ## Three layers
 
@@ -21,9 +28,8 @@ wiki/          YOU OWN THIS. LLM-generated pages that summarise, cross-reference
   entities/        People, companies, products (TitleCase.md).
   concepts/        Ideas, frameworks, methods, theories (TitleCase.md).
   projects/        Codebases and work streams, seeded from session metadata (kebab-case slug).
-  syntheses/       Saved query answers (kebab-case slug).
-  comparisons/     Side-by-side diffs of two or more entities/concepts (kebab-case slug). [v0.2+]
-  questions/       First-class open questions with state tracking (kebab-case slug). [v0.2+]
+  syntheses/       Saved query answers (kebab-case slug). Written by an agent or a
+                   person answering a question — no pipeline step generates one.
   archive/         Deprecated / demoted pages preserved for history. [v0.2+]
 
 site/          GENERATED. Static HTML from `python3 -m llmwiki build`. Do not edit by hand.
@@ -42,7 +48,6 @@ Canonical loop: `sync / add → synth (sources + harvest) → review candidates 
 | `/wiki-query <question>` | Answer a question from the wiki | Executes the Query Workflow below |
 | `/wiki-lint` | Find orphans, broken links, stale pages | Executes the Lint Workflow below |
 | `/wiki-build` | Regenerate the static HTML site | Runs `python3 -m llmwiki build` |
-| `/wiki-serve` | Start the local HTTP server | Runs `python3 -m llmwiki serve` |
 | `/wiki-update` | Update one wiki page in place (v0.2+) | Surgical edit of one page without re-ingest |
 | `/wiki-graph` | Build the knowledge graph (v0.2+) | Walks `[[wikilinks]]` → `graph/graph.json` + `graph.html` |
 | `/wiki-reflect` | Higher-order self-reflection over the wiki (v0.2+) | Finds gaps, patterns, and suggests new pages |
@@ -118,8 +123,6 @@ last_updated: YYYY-MM-DD
 ---
 
 # Entity Name
-
-One-paragraph description.
 
 ## Key Facts
 - Fact 1

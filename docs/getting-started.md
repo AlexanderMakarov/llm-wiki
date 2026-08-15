@@ -20,7 +20,7 @@ That's it. No `npm`, no `brew`, no database, no account.
 
 ## Install
 
-The git clone holds **code + demo seeds only**. Your transcripts, wiki pages, and built site live in a separate **vault** directory *outside* the repo, so personal data never lands in git. (See [the README](../README.md#personal-data-stays-outside-the-repo) for the full rationale.)
+The git clone holds **code + demo seeds only**. Your transcripts, wiki pages, and built site live in a separate **vault** directory *outside* the repo, so personal data never lands in git. (See [the README](../README.md) for the product overview.)
 
 ### 1. Clone the code and set up a venv
 
@@ -101,10 +101,9 @@ With `vault.default_path` set (step 2 above), these all read and write the vault
 llmwiki sync     # pull new sessions from your agent store → <vault>/raw/sessions/<project>/*.md
 llmwiki synth    # fill wiki/sources/ and harvest wiki/candidates/ (then review)
 llmwiki build    # compile <vault>/raw/ + <vault>/wiki/ → <vault>/site/
-llmwiki serve --dir <vault>/site   # serve at http://127.0.0.1:8765/
 ```
 
-Open [http://127.0.0.1:8765/](http://127.0.0.1:8765/) and click around. Try:
+Open `<vault>/site/index.html` in a browser — the site is plain files, so nothing has to be running and nothing is fetched — and click around. Try:
 
 - **⌘K** or **Ctrl+K** — command palette
 - **/** — focus the search bar
@@ -139,12 +138,24 @@ Everything lands in your **vault** directory (the `vault.default_path` from step
 └── llmwiki-state.json        # unified sync + queue + synth + quarantine state
 ```
 
-The vault lives outside the repo, so it is never committed and never sent anywhere. The clone itself stays clean — only code and demo seeds.
+The vault lives outside the repo, so it is never committed and never sent anywhere. The clone itself stays clean — only code and demo seeds. `raw/`, `wiki/` (except the committed `demo/wiki/`), `site/`, `config.json`, and `llmwiki-state.json` are gitignored; the per-path table that used to live in the README is this tree.
+
+### Queue without auto-sync
+
+If you are not using SessionStart hooks, drive the unified queue by hand:
+
+```bash
+llmwiki queue status
+llmwiki queue run --limit 20
+llmwiki migrate-state   # one-time: merge legacy .llmwiki-* into llmwiki-state.json
+```
+
+Flags and output: [docs/reference/cli.md](reference/cli.md#queue--inspect-and-run-unified-queue).
 
 ## New in recent versions
 
 - **Model pages** (`/models/`) — structured profile pages for every LLM model referenced in your sessions, with pricing, context window, and usage stats.
-- **VS-comparisons** (`/comparisons/`) — auto-generated side-by-side diffs of related entities (e.g. Claude vs GPT-4, React vs Vue).
+- **VS-comparisons** (`/vs/`) — auto-generated side-by-side diffs of related AI-model entities (e.g. Claude vs GPT-4).
 - **Project topics** — auto-detected topic chips on project pages, extracted from session content.
 - **Multi-agent support** — sync sessions from Claude Code, Codex CLI, Copilot, Cursor, and Gemini CLI simultaneously. Each session gets a colored badge showing which agent produced it.
 

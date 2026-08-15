@@ -40,17 +40,15 @@ def test_dockerfile_uses_non_root_user():
     assert "UID 1000" in text or "uid 1000" in text.lower() or "--uid 1000" in text
 
 
-def test_dockerfile_exposes_default_port():
+def test_dockerfile_exposes_no_port():
+    """The image runs commands; llmwiki ships no server, so nothing listens."""
     text = DOCKERFILE.read_text(encoding="utf-8")
-    assert "EXPOSE 8765" in text
+    assert "EXPOSE" not in text
 
 
-def test_dockerfile_default_cmd_serves_built_site():
+def test_dockerfile_default_cmd_builds_the_site():
     text = DOCKERFILE.read_text(encoding="utf-8")
-    # CMD should reference serve + host 0.0.0.0 + site dir
-    assert "serve" in text
-    assert "0.0.0.0" in text
-    assert '"--dir"' in text and '"site"' in text
+    assert 'CMD ["build"]' in text
 
 
 def test_dockerfile_multi_stage_build():
@@ -83,9 +81,9 @@ def test_compose_has_build_fallback():
     assert "build:" in text
 
 
-def test_compose_maps_default_port():
+def test_compose_maps_no_ports():
     text = COMPOSE.read_text(encoding="utf-8")
-    assert '"8765:8765"' in text
+    assert "ports:" not in text
 
 
 def test_compose_bind_mounts_user_dirs():
@@ -102,14 +100,9 @@ def test_compose_mounts_examples_readonly():
     assert "./examples:/wiki/examples:ro" in text
 
 
-def test_compose_has_healthcheck():
+def test_compose_default_command_builds_the_site():
     text = COMPOSE.read_text(encoding="utf-8")
-    assert "healthcheck:" in text
-
-
-def test_compose_has_restart_policy():
-    text = COMPOSE.read_text(encoding="utf-8")
-    assert "restart: unless-stopped" in text
+    assert 'command: ["build"]' in text
 
 
 # ─── Publish workflow ────────────────────────────────────────────────
@@ -180,7 +173,14 @@ def test_docker_docs_list_image_details():
     text = DOCS.read_text(encoding="utf-8")
     assert "Image details" in text
     assert "non-root" in text
-    assert "8765" in text
+    assert "Default CMD:** `build`" in text
+
+
+def test_docker_docs_tell_the_reader_to_open_the_built_files():
+    """No document may tell a reader to start a server to view their wiki."""
+    text = DOCS.read_text(encoding="utf-8")
+    assert "site/index.html" in text
+    assert "llmwiki serve" not in text
 
 
 def test_docker_docs_list_volumes():

@@ -156,8 +156,8 @@ a subtle tinted background. No icons, no colored banners.
 4. Update the "Next" link on the previous tutorial to point to yours.
 5. Add any new internal links the tutorial needs to existing pages.
 6. Run the guardrail test: `python3 -m pytest tests/test_docs_structure.py`.
-7. Build locally: `python3 -m llmwiki build && python3 -m llmwiki serve`.
-8. Visually inspect the rendered page at `http://127.0.0.1:8765/docs/tutorials/<file>.html`.
+7. Build locally: `python3 -m llmwiki build`.
+8. Visually inspect the rendered page by opening `site/docs/tutorials/<file>.html` in a browser.
 
 ---
 

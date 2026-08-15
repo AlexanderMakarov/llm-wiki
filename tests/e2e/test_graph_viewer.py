@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import pytest
 from playwright.sync_api import Page
 from pytest_bdd import scenarios, then, when
@@ -11,24 +13,15 @@ from tests.e2e.steps.ui_steps import *  # noqa: F401,F403
 scenarios("features/graph_viewer.feature")
 
 
-def _graph_page_shipped(page: Page, base_url: str) -> bool:
-    """Return True when graph.html exists on the server.
-
-    On seeded-corpus E2E runs the graph has zero nodes, and the
-    build step intentionally skips writing graph.html in that case
-    (see ``graph.copy_to_site``).  The test should skip cleanly
-    rather than fail when the page is absent — the builder behaviour
-    is already covered in the unit tests.
-    """
-    resp = page.request.get(base_url + "/graph.html")
-    return resp.status < 400
-
-
 @when("I visit the graph page")
-def _visit_graph(page: Page, base_url: str) -> None:
-    if not _graph_page_shipped(page, base_url):
+def _visit_graph(page: Page, site_url: str, site_has: Callable[[str], bool]) -> None:
+    # On seeded-corpus E2E runs the graph has zero nodes, and the build
+    # step intentionally skips writing graph.html in that case (see
+    # ``graph.copy_to_site``). Skip cleanly rather than fail — the
+    # builder behaviour is already covered in the unit tests.
+    if not site_has("/graph.html"):
         pytest.skip("graph.html not shipped (empty seeded graph)")
-    page.goto(base_url + "/graph.html", wait_until="domcontentloaded")
+    page.goto(site_url + "/graph.html", wait_until="domcontentloaded")
 
 
 @then("the graph canvas is visible")

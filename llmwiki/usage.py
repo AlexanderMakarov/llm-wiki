@@ -974,8 +974,7 @@ def normalize_read_path(query: str | None) -> str | None:
     if text.startswith("wiki/"):
         return text
     if text.endswith(".md") or text.startswith(("sources/", "entities/", "concepts/",
-                                                 "syntheses/", "projects/", "comparisons/",
-                                                 "questions/", "archive/")):
+                                                 "syntheses/", "projects/", "archive/")):
         return "wiki/" + text.lstrip("/")
     return text or None
 

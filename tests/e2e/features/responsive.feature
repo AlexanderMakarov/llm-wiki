@@ -5,7 +5,7 @@ Feature: Responsive layout across breakpoints
   So I never land on a page that looks broken
 
   Background:
-    Given a built llmwiki site is served
+    Given a built llmwiki site on disk
 
   Scenario Outline: Homepage fits the viewport at every breakpoint
     When I resize the viewport to <width>x<height>

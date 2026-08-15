@@ -174,6 +174,7 @@ python3 -m llmwiki build --out ~/public_html
 python3 -m llmwiki build --search-mode tree
 python3 -m llmwiki build --synthesize --claude /usr/local/bin/claude
 python3 -m llmwiki build --vault ~/my-vault --out ~/site
+python3 -m llmwiki build --vault demo --out ./site --local-root /home/user
 ```
 
 ### Flags
@@ -185,6 +186,8 @@ python3 -m llmwiki build --vault ~/my-vault --out ~/site
 | `--claude PATH` | Path to the `claude` binary. Default: `/usr/local/bin/claude`. |
 | `--search-mode {auto,tree,flat}` | Search routing mode (#53). `auto` picks tree vs flat from heading depth; `tree` / `flat` force the mode. Default: `auto`. |
 | `--vault PATH` | Vault-overlay mode — build from an existing Obsidian / Logseq vault. Output still lands at `--out`. |
+| `--local-root PATH` | Value shown in place of a session's stored home directory (#109). Default: this machine's home directory, so local paths stay usable. Pass a fixed string when publishing so the same vault renders identically anywhere. Substitution applies to the `cwd` field only. |
+| `--seed-project-stubs` | Create a `wiki/projects/<slug>.md` stub for any project without one (#414). Off by default — `build` is read-only on `wiki/`. |
 
 ### Expected output (final lines)
 
@@ -196,28 +199,6 @@ python3 -m llmwiki build --vault ~/my-vault --out ~/site
   wrote site/docs/ (94 editorial pages: hub + tutorials + style guide)
 ==> build complete: 703 HTML files, 61 MB
 ```
-
----
-
-## `serve` — start a local HTTP server
-
-```bash
-python3 -m llmwiki serve
-python3 -m llmwiki serve --port 9000
-python3 -m llmwiki serve --dir ~/public_html
-python3 -m llmwiki serve --open
-```
-
-### Flags
-
-| Flag | What |
-|---|---|
-| `--dir PATH` | Directory to serve. Default: `./site/`. |
-| `--port N` | Port. Default: `8765`. |
-| `--host ADDR` | Bind address. Default: `127.0.0.1`. Use `0.0.0.0` to share on LAN. |
-| `--open` | Open the browser at the root URL after starting. |
-
-**Stdlib only** — it's `http.server` underneath. Safe for local use; don't expose to the public internet.
 
 ---
 
@@ -366,7 +347,7 @@ python3 -m llmwiki lint --wiki-dir ~/another-wiki
 
 Positional `action` picks `list` / `promote` / `flip-promote` / `merge` / `discard` / `apply` / `rewrite-key-facts`.
 
-Successful `promote` / `flip-promote` / `merge` / `discard` / `apply` reconcile `wiki/index.md` (#101): dead `candidates/…` bullets are dropped, an empty `## Candidates` section is removed, and newly trusted pages are listed under Entities/Concepts. `/wiki-candidates` should call these same actions — do not run idle `sync`/`synth` just to refresh the catalog after review. Site UI: open `/candidates.html` — per-row decisions + Apply; batch API under `llmwiki serve`, or one pasteable `candidates apply --actions '…'` command when static (#97).
+Successful `promote` / `flip-promote` / `merge` / `discard` / `apply` reconcile `wiki/index.md` (#101): dead `candidates/…` bullets are dropped, an empty `## Candidates` section is removed, and newly trusted pages are listed under Entities/Concepts. `/wiki-candidates` should call these same actions — do not run idle `sync`/`synth` just to refresh the catalog after review. Site UI: open `site/candidates.html` — it lists everything pending, takes a decision per row, and its **Apply** button prints the `candidates apply --vault … --actions -` command plus the JSON batch for the rows you decided (#97). A successful `apply` then rebuilds `site/` so the open candidates page, Home, and Analytics match the wiki; pass `--no-rebuild` to skip that (for example when applying several batches before one `llmwiki build`).
 
 `promote` also writes an empty (or heading-only) `## Key Facts` (#103). It builds an evidence digest — every line where each source listed in frontmatter `sources:` / Connections names the subject, capped at 12 sources and 4 lines each — and hands it to the backend named by `synthesis.backend`, which returns 3–5 attributed bullets. Non-empty reviewer Key Facts are left alone.
 
@@ -374,7 +355,7 @@ Because those bullets become trusted-layer prose, promote refuses to write them 
 
 `merge` folds a harvest stub into the target by unioning its `sources:` and Connections links and recording the name under `## Aliases`; a candidate containing reviewer prose still has that prose appended under `## Candidate merge — <date>`. Target may be a trusted page or another pending stub in the same kind.
 
-`apply` runs a **batch** of the same intents in one process (same JSON shape as `POST /api/candidates`):
+`apply` runs a **batch** of the same intents in one process (the JSON shape `site/candidates.html` prints):
 
 ```bash
 python3 -m llmwiki candidates apply --actions '[{"action":"promote","slug":"Foo","kind":"entities"},{"action":"promote","slug":"Prompt Caching","kind":"concepts"}]'
@@ -412,6 +393,7 @@ python3 -m llmwiki candidates rewrite-key-facts --all
 | `--stale-days N` | Staleness threshold. Default: 30. |
 | `--json` | JSON output for `list`. |
 | `--actions JSON` | For `apply`: JSON array of `{action,slug,kind?,into?,reason?}`. Pass `-` to read the array from stdin. |
+| `--no-rebuild` | For `apply`: skip rebuilding `site/` after a successful batch. Default is to rebuild so `candidates.html` drops the rows that were just promoted, merged, or discarded. |
 
 See [`guides/existing-vault.md`](../guides/existing-vault.md) for the round-trip semantics when a candidate lives inside a vault.
 
@@ -600,6 +582,60 @@ python3 scripts/migrate_tools_used_mcp.py --vault /path/to/vault --dry-run
 | `--config PATH` | Optional `sessions_config.json` override (record filters). |
 
 Origin resolution prefers the vault's `llmwiki-state.json` sync keys (`adapter::home-relative-path`), then falls back to a glob under the adapter session store by `sessionId`. Claude Code JSONL is fully supported; Cursor and other non-JSONL stores work when the state key or glob resolves a readable origin path. Missing origins leave `CallMcpTool` entries intact for `wiki_adoption` body fallback.
+
+---
+
+## `migrate-page-kinds` — retype pages off the removed question/comparison kinds (#109)
+
+`llmwiki/schema.py` lists five knowledge kinds — `source`, `entity`, `concept`, `project`, `synthesis`. A hand-written page declaring `type: question` or `type: comparison` is a `frontmatter_validity` **error**, and this migration clears it: each such page is retyped to `concept` and moved into `wiki/concepts/` **keeping its filename**, then `wiki/questions/` and `wiki/comparisons/` lose their `_context.md` and are pruned once empty.
+
+Inbound links are left alone on purpose. `[[wikilinks]]` resolve by filename, never by folder, so a page that keeps its name keeps every inbound link and no referring page needs editing.
+
+Two safety rules: a page whose filename is already taken in `wiki/concepts/` is retyped where it stands and reported as a collision rather than overwriting anything, and a removed folder still holding other content is left in place and reported rather than deleted. A vault with no removed-kind page prints `nothing to migrate` and exits 0 without writing.
+
+Implementation: `llmwiki/migrate_page_kinds.py` — in the package rather than under `scripts/`, so it runs from a pip or Homebrew install with no checkout. After migrating, rebuild so `site/` picks up the new locations: `llmwiki build --vault PATH`.
+
+```bash
+python3 -m llmwiki migrate-page-kinds --vault /path/to/vault --dry-run
+python3 -m llmwiki migrate-page-kinds --vault /path/to/vault
+python3 -m llmwiki lint --vault /path/to/vault --rules frontmatter_validity
+```
+
+### Flags
+
+| Flag | What |
+|---|---|
+| `--vault PATH` | **Required.** Vault root containing `wiki/`. |
+| `--dry-run` | Report what would change; write nothing. |
+
+Idempotent: a second run finds nothing to migrate. On a run that changed something the command reconciles `wiki/index.md` and appends `## [YYYY-MM-DD] migrate | page kinds` to `wiki/log.md`.
+
+---
+
+## `install-agent-kit` — copy packaged slash commands and skills (#109)
+
+A pip or Homebrew install carries the user-facing `/wiki-*` slash commands and skills inside the package (`llmwiki/agent_kit/`). This command copies `commands/` and `skills/` beneath a directory you name so Claude Code (or any agent that reads that layout) can see them. `--dest` is **required** — the command does not guess at agent directory conventions.
+
+Typical destinations: `.claude` in the project you are working in, or a user-level agent directory. Contributors working in this clone who want `/wiki-*` locally run `llmwiki install-agent-kit --dest .claude`.
+
+Re-running after an upgrade refreshes the copies. A destination file whose content already matches the kit is left alone. A destination file that differs is saved as `<filename>.bak` beside it before the kit version is written, and the backup is reported, so a customisation is never overwritten silently. `--dry-run` prints the same report and writes nothing.
+
+Contributor-only commands (`fix-bug`, `maintainer`, `release`, …) and skills (`docs-that-work`, `pytest-best-practices`, …) stay in this repository's `.claude/` tree and are not part of the kit.
+
+```bash
+python3 -m llmwiki install-agent-kit --dest .claude --dry-run
+python3 -m llmwiki install-agent-kit --dest .claude
+python3 -m llmwiki install-agent-kit --dest /path/to/agent-dir
+```
+
+### Flags
+
+| Flag | What |
+|---|---|
+| `--dest PATH` | **Required.** Directory that will receive `commands/` and `skills/`. |
+| `--dry-run` | Report what would be written; write nothing. |
+
+The command prints every path written, every `.bak` it created, and a count of identical files left untouched. Exit `0` on success, `1` if a file could not be read or written.
 
 ---
 

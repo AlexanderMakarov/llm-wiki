@@ -10,52 +10,12 @@ raw/sessions/
 raw/
 !raw/.gitkeep
 
-# LLM-generated wiki pages (Karpathy layer 2). Generated locally from raw/.
-# Ignore *contents* rather than the folders themselves so specific
-# seed files (_context.md stubs from #60, seeded model entity from
-# #55/#56) can be un-ignored via `!` patterns below.
-wiki/sources/*
-wiki/entities/*
-wiki/concepts/*
-wiki/syntheses/*
-wiki/index.md
-wiki/overview.md
-wiki/log.md
-wiki/log-archive-*.md
-wiki/lint-report.md
-wiki/MEMORY.md
-wiki/SOUL.md
-wiki/CRITICAL_FACTS.md
-wiki/hints.md
-wiki/hot.md
-wiki/hot/*
-!wiki/hot/.gitkeep
-wiki/dashboard.md
-wiki/categories/*
-!wiki/categories/_context.md
-!wiki/.gitkeep
-!wiki/README.md
-# v0.5 (#60): seeded folder-context files ship with the repo so the
-# navigation convention is self-documenting.
-!wiki/entities/_context.md
-!wiki/concepts/_context.md
-!wiki/sources/_context.md
-!wiki/syntheses/_context.md
-!wiki/comparisons/_context.md
-!wiki/questions/_context.md
-# v0.7 (#55, #56): seeded reference model entity ships with the repo
-# so the structured schema + changelog timeline are visible on the
-# live demo build.
-!wiki/entities/ClaudeSonnet4.md
-# v0.7 (#58): second seed model entity so the auto-gen vs-comparison
-# pipeline has a real pair to render on the demo build.
-!wiki/entities/GPT5.md
-# Project topics (v0.9): demo profiles ship with the repo so the public
-# build has topic chips on project cards. User profiles stay local —
-# same ignore-then-un-ignore pattern as wiki/sources/.
-wiki/projects/*
-!wiki/projects/demo-*.md
-!wiki/projects/llm-wiki.md
+# LLM-generated wiki pages (Karpathy layer 2). The example vault lives in
+# demo/; the repository root is not a vault at all — `.llmwiki-source-checkout`
+# makes the CLI refuse to scaffold one here (#109). These rules stay as a
+# backstop so a root `wiki/` created by hand never reaches a commit. Anchored
+# with a leading slash so the tracked `demo/wiki/` tree is untouched.
+/wiki/
 
 # Graphify output (AI-powered knowledge graph).
 graphify-out/
@@ -264,3 +224,12 @@ usage/
 /skills/
 /agents/
 /.cursor-plugin/
+
+# ─── Demo vault (demo/) ───────────────────────────────────────────────────
+# The demo corpus is committed so CI can build the public Pages site from
+# repository content alone. The generic `raw/` and `usage/` rules above match
+# a directory of that name at any depth, so re-include the demo's copies.
+!demo/raw/
+!demo/usage/
+# The built demo site is a CI artefact.
+demo/site/

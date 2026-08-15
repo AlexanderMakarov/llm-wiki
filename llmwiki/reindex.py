@@ -23,9 +23,9 @@ write:
 
 Section headings carry a ``(count)`` per the ``#387 U6`` convention. Canonical
 folders come first in the order ``CLAUDE.md`` documents them; any other folder
-with pages (``comparisons/``, ``questions/``, ``archive/``, …) gets a section
-named after it, so a page type added later is still listed rather than
-becoming permanent lint noise.
+with pages (``archive/``, ``candidates/``, …) gets a section named after it, so
+a page type added later — or a folder a user keeps by hand — is still listed
+rather than becoming permanent lint noise.
 """
 
 from __future__ import annotations

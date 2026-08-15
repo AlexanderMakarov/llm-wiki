@@ -16,6 +16,8 @@ first — it has the short version of what this folder covers in detail.
 | [`TRIAGE.md`](TRIAGE.md) | Label taxonomy + triage rules + stale-issue policy |
 | [`ROADMAP.md`](ROADMAP.md) | Living near-term plan + release theme table |
 | [`DECLINED.md`](DECLINED.md) | Graveyard of declined ideas with dates + reasons |
+| [`REFRESH_DEMO.md`](REFRESH_DEMO.md) | Local command that incrementally regenerates `demo/` from git-detected `docs/` changes — needs a working copy and a synth backend; never runs in CI |
+| [`surfaces/`](surfaces/README.md) | Per-page behavioural specs for the built site — scan the relevant `Must` lines when reviewing a UI PR |
 
 ## Slash commands
 

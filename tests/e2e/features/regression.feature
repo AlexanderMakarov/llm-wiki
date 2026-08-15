@@ -16,12 +16,13 @@ Feature: Regression locks for UI bugs #452–#460
   # imports `scenarios("features/regression.feature")` yet — the file
   # is documentation-quality until the step defs land.
   #
-  # See specs/<page>.md for the full behavioural contract each bug
+  # See docs/maintainers/surfaces/<page>.md for the full behavioural
+  # contract each bug
   # touches; the scenarios below assert just the specific invariant the
   # bug violated, not the full page spec. (#466 / parent #462)
 
   Background:
-    Given a built llmwiki site is served
+    Given a built llmwiki site on disk
 
   # ─── #452 — sessions table column layout ─────────────────────────────
   Scenario: Sessions table Session column shows a unique id, not a duplicated date

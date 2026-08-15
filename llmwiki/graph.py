@@ -41,8 +41,8 @@ _DATE_WIKI_STEM = re.compile(r"^\d{4}-\d{2}-\d{2}-(.+)$")
 # Graph clicks on these used to 404 — the viewer now disables the click
 # and shows a tooltip.  We keep the node + edges (for the graph
 # topology) but mark `site_url = None`.
-_NO_SITE_TYPES = {"entities", "concepts", "syntheses", "questions",
-                  "comparisons", "hot", "categories", "projects_meta"}
+_NO_SITE_TYPES = {"entities", "concepts", "syntheses",
+                  "hot", "categories", "projects_meta"}
 # #arch-l7: canonical system-page list lives in llmwiki/_system_pages.py.
 # Graph wants the slug form (already stripped of `.md`); lint wants the
 # filename form. Same set, different shape.
@@ -346,8 +346,6 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     --g-node-concepts: #059669;
     --g-node-syntheses: #d97706;
     --g-node-projects: #db2777;
-    --g-node-questions: #0891b2;
-    --g-node-comparisons: #b45309;
     --g-node-other: #65a30d;
     --g-node-root: #64748b;
     --g-node-topic: #7c3aed;
@@ -368,8 +366,6 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     --g-node-concepts: #059669;
     --g-node-syntheses: #d97706;
     --g-node-projects: #db2777;
-    --g-node-questions: #0891b2;
-    --g-node-comparisons: #b45309;
     --g-node-other: #65a30d;
     --g-node-root: #64748b;
     --g-node-topic: #7c3aed;
@@ -613,11 +609,11 @@ __SITE_NAV__
     <button type="button" role="menuitem" data-action="view-references">View references (CLI hint)</button>
     <div class="ctx-separator" role="separator"></div>
     <button type="button" role="menuitem" data-action="mark-stale" disabled
-            title="Requires `llmwiki serve --edit` (not yet shipped)">
+            title="Not available from the site — edit the page under wiki/">
       Mark stale
     </button>
     <button type="button" role="menuitem" data-action="archive" disabled
-            title="Requires `llmwiki serve --edit` (not yet shipped)">
+            title="Not available from the site — edit the page under wiki/">
       Archive
     </button>
   </div>

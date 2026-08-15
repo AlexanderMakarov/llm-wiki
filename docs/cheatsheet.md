@@ -17,7 +17,7 @@ From Claude Code, run these slash commands in order:
 2. `/wiki-sync` — ingest sessions from every auto-detected agent
 3. `/wiki-graph` — build the AI knowledge graph
 4. `/wiki-build` — compile the static site
-5. `/wiki-serve` — browse at http://127.0.0.1:8765/
+5. Open `site/index.html` — the site is plain files, nothing to run
 
 ## Daily flow
 
@@ -30,19 +30,17 @@ From Claude Code, run these slash commands in order:
 | Find orphans + broken links | `/wiki-lint` | `llmwiki lint` |
 | Triage candidate pages | -- | `llmwiki candidates list` |
 | Build / rebuild the site | `/wiki-build` | `llmwiki build` |
-| Serve locally | `/wiki-serve` | `llmwiki serve --open` |
 | Interactive graph | `/wiki-graph` | `llmwiki graph` |
 | AI knowledge graph | `/wiki-graph` | `llmwiki graph --engine graphify` |
 | Self-reflection on wiki gaps | `/wiki-reflect` | -- |
 
-## 12 CLI commands
+## 11 CLI commands
 
 | Command | Purpose |
 |---|---|
 | `init` | Scaffold `raw/` `wiki/` `site/` + seed 9 nav files |
 | `sync` | Convert `.jsonl` sessions -> markdown -> wiki -> site |
 | `build` | Compile `wiki/` markdown into `site/` HTML + AI exports (`llms.txt`, `sitemap.xml`, …) |
-| `serve` | Start local HTTP server (default `:8765`) |
 | `adapters` | List every adapter + its status |
 | `graph` | Build the knowledge graph (Graphify default, builtin fallback) |
 | `query` | Search the knowledge graph with a question |
@@ -155,9 +153,8 @@ llmwiki sync --adapter obsidian
 | `--force-resync` | `sync` | Override the newer-schema/corrupt-state guard (#29); implies `--force`, may duplicate `raw/` |
 | `--fail-on-errors` | `lint` | Non-zero exit on error-severity issues |
 | `--vault <path>` | `sync`, `build`, `synthesize`, `add`, `queue`, `all` | Operate on an external vault (also sets the active state file) |
-| `--dir <path>` | `serve` | Directory to serve (usually `<vault>/site`) |
+| `--local-root <path>` | `build` | Value shown in place of a session's stored home directory (default: this machine's home) |
 | `--engine graphify` | `graph` | AI-powered knowledge graph |
-| `--host 0.0.0.0` | `serve` | Bind LAN-accessible (default: loopback-only) |
 | `--status` | `sync` | Show last sync + per-adapter counters |
 
 ## Config files
@@ -182,9 +179,6 @@ llmwiki sync --adapter obsidian
 | `vault` | `allow_overwrite` | `false` | Allow clobbering existing vault pages |
 | `graph` | `default_engine` | `builtin` | Graph engine: `builtin` or `graphify` |
 | `graph` | `format` | `both` | Graph output: `json`, `html`, or `both` |
-| `serve` | `port` | `8765` | Dev server port |
-| `serve` | `host` | `127.0.0.1` | Dev server bind address |
-| `serve` | `open_browser` | `false` | Auto-open browser on serve |
 | `build` | `out_dir` | `site` | Build output directory |
 | `build` | `search_mode` | `auto` | Search index mode: `auto`, `tree`, `flat` |
 | `build` | `synthesize` | `false` | Auto-synthesize overview on build |
@@ -207,16 +201,14 @@ wiki/    LLM-generated pages (you own this)
   concepts/     ideas, patterns, decisions (TitleCase.md)
   projects/     codebases and work streams (kebab-case slug)
   syntheses/    saved query answers
-  comparisons/  side-by-side diffs
-  questions/    first-class open questions
 site/    GENERATED static HTML (don't edit by hand)
 ```
 
 ## Common recipes
 
 ```bash
-# Daily: sync + serve
-llmwiki sync && llmwiki serve --open
+# Daily: sync + rebuild, then open site/index.html
+llmwiki sync && llmwiki build
 
 # Nightly cron (one project)
 llmwiki sync --project my-project --no-auto-lint --since $(date -v-1d +%Y-%m-%d)

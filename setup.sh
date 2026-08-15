@@ -91,7 +91,7 @@ echo
 echo "Next steps:"
 echo "  ./sync.sh                   # convert new sessions to markdown"
 echo "  ./build.sh                  # generate the static HTML site"
-echo "  ./serve.sh                  # browse at http://127.0.0.1:8765/"
+echo "  open site/index.html        # browse the site — plain files, nothing to run"
 echo
 echo "Automation (schedulers / optional hooks / synth backend):"
 echo "  python3 -m llmwiki install-automation"

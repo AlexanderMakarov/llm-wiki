@@ -29,11 +29,11 @@ def _open_palette(page: Page) -> None:
     )
 
 
-def test_typing_into_palette_renders_results(page: Page, base_url: str) -> None:
+def test_typing_into_palette_renders_results(page: Page, site_url: str) -> None:
     """A query that matches the seeded synthetic corpus should
     produce at least one result row. The harness ships an "e2e"
     project — searching for it should always match."""
-    page.goto(f"{base_url}/index.html", wait_until="domcontentloaded")
+    page.goto(f"{site_url}/index.html", wait_until="domcontentloaded")
     _open_palette(page)
     # The input claims focus when the palette opens.
     page.keyboard.type("e2e", delay=20)
@@ -47,11 +47,11 @@ def test_typing_into_palette_renders_results(page: Page, base_url: str) -> None:
     )
 
 
-def test_palette_clears_when_input_emptied(page: Page, base_url: str) -> None:
+def test_palette_clears_when_input_emptied(page: Page, site_url: str) -> None:
     """Clearing the input should not leave stale results showing —
     a regression here makes the palette feel broken when the user
     backspaces over their query."""
-    page.goto(f"{base_url}/index.html", wait_until="domcontentloaded")
+    page.goto(f"{site_url}/index.html", wait_until="domcontentloaded")
     _open_palette(page)
     page.keyboard.type("e2e", delay=20)
     expect(page.locator("#palette-results").first).to_be_visible(timeout=3000)
@@ -72,10 +72,10 @@ def test_palette_clears_when_input_emptied(page: Page, base_url: str) -> None:
     assert count >= 1, "palette results container vanished after clearing input"
 
 
-def test_palette_closes_on_escape(page: Page, base_url: str) -> None:
+def test_palette_closes_on_escape(page: Page, site_url: str) -> None:
     """Escape after typing should close the palette without navigating
     anywhere. Catches the regression where the input swallows Escape."""
-    page.goto(f"{base_url}/index.html", wait_until="domcontentloaded")
+    page.goto(f"{site_url}/index.html", wait_until="domcontentloaded")
     starting_url = page.url
     _open_palette(page)
     page.keyboard.type("anything", delay=10)
@@ -90,10 +90,10 @@ def test_palette_closes_on_escape(page: Page, base_url: str) -> None:
     )
 
 
-def test_palette_arrow_keys_move_active_result(page: Page, base_url: str) -> None:
+def test_palette_arrow_keys_move_active_result(page: Page, site_url: str) -> None:
     """ArrowDown should advance the active result. Catches the bug
     where the keyboard handler is wired to the wrong element."""
-    page.goto(f"{base_url}/index.html", wait_until="domcontentloaded")
+    page.goto(f"{site_url}/index.html", wait_until="domcontentloaded")
     _open_palette(page)
     page.keyboard.type("e", delay=20)
     # Wait briefly for results to populate.
@@ -132,11 +132,11 @@ def test_palette_arrow_keys_move_active_result(page: Page, base_url: str) -> Non
             )
 
 
-def test_palette_input_has_accessible_role(page: Page, base_url: str) -> None:
+def test_palette_input_has_accessible_role(page: Page, site_url: str) -> None:
     """The palette input should be labelled as a combobox / search
     role for screen readers — without that, blind users can't tell
     a search input apart from a regular text field on the page."""
-    page.goto(f"{base_url}/index.html", wait_until="domcontentloaded")
+    page.goto(f"{site_url}/index.html", wait_until="domcontentloaded")
     _open_palette(page)
     role_or_type = page.evaluate(
         """() => {

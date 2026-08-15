@@ -4,7 +4,7 @@ Feature: Homepage
   So I can immediately see pipeline state and navigate into projects
 
   Background:
-    Given a built llmwiki site is served
+    Given a built llmwiki site on disk
 
   Scenario: Homepage hero is visible
     When I visit the homepage

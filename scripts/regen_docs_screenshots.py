@@ -7,11 +7,12 @@ emitted UI on every theme/CSS change.
 
 This script:
 
-  1. Spins up the same seeded e2e harness so we always have a known-
-     good corpus to screenshot (no dependency on the user's real
+  1. Builds the committed `demo/` vault so we always screenshot a
+     known-good corpus (no dependency on the user's real
      `~/.claude/projects/`).
-  2. Walks a deterministic route through the site with Playwright,
-     captures `docs/images/<name>.png` at 1280×800 in the dark theme.
+  2. Walks a deterministic route through the built files with
+     Playwright — the same `file://` addresses a reader opens —
+     capturing `docs/images/<name>.png` at 1280×800 in the dark theme.
   3. Reports a one-line diff (`changed N images / kept M`) so the
      person running it sees what's about to be committed.
 
@@ -29,64 +30,41 @@ produces no diff. PNG output is `optimize=True` so commits stay small.
 from __future__ import annotations
 
 import argparse
-import socket
 import subprocess
 import sys
-import threading
-import time
-from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SITE_DIR = REPO_ROOT / "site"
 DOCS_IMAGES = REPO_ROOT / "docs" / "images"
 
-# Each entry: (output filename, URL path, optional pre-screenshot JS to run).
+# Each entry: (output filename, page within the site, optional pre-screenshot JS).
 # Add or reorder as the README screenshot set evolves; this file is
 # the single source of truth for what canonical screenshots ship.
 ROUTES = [
-    ("home.png", "/index.html", None),
-    ("recent.png", "/recent.html", None),
-    ("projects.png", "/projects/index.html", None),
-    ("sessions.png", "/sessions/index.html", None),
-    ("analytics.png", "/analytics.html", None),
+    ("home.png", "index.html", None),
+    ("recent.png", "recent.html", None),
+    ("projects.png", "projects/index.html", None),
+    ("sessions.png", "sessions/index.html", None),
+    ("analytics.png", "analytics.html", None),
 ]
 
 
-def _free_port() -> int:
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.bind(("127.0.0.1", 0))
-    port = s.getsockname()[1]
-    s.close()
-    return port
-
-
-def _serve(port: int) -> ThreadingHTTPServer:
-    class _Handler(SimpleHTTPRequestHandler):
-        def __init__(self, *a, **kw):
-            super().__init__(*a, directory=str(SITE_DIR), **kw)
-        def log_message(self, *args):  # quiet
-            pass
-    srv = ThreadingHTTPServer(("127.0.0.1", port), _Handler)
-    threading.Thread(target=srv.serve_forever, daemon=True).start()
-    return srv
-
-
 def _build_site() -> None:
-    """Force a fresh build into ./site so we screenshot the latest."""
+    """Force a fresh build of the demo vault into ./site."""
     subprocess.run(
-        [sys.executable, "-m", "llmwiki", "build"],
+        [sys.executable, "-m", "llmwiki", "build",
+         "--vault", "demo", "--out", str(SITE_DIR)],
         cwd=str(REPO_ROOT),
         check=True,
     )
 
 
-def _capture(port: int, theme: str) -> dict[str, bool]:
+def _capture(theme: str) -> dict[str, bool]:
     """Returns {filename: True if changed else False}."""
     from playwright.sync_api import sync_playwright
 
     DOCS_IMAGES.mkdir(parents=True, exist_ok=True)
-    base = f"http://127.0.0.1:{port}"
     changed: dict[str, bool] = {}
 
     with sync_playwright() as p:
@@ -98,8 +76,8 @@ def _capture(port: int, theme: str) -> dict[str, bool]:
         )
         page = ctx.new_page()
 
-        for fname, path, pre_js in ROUTES:
-            page.goto(f"{base}{path}", wait_until="networkidle")
+        for fname, rel, pre_js in ROUTES:
+            page.goto((SITE_DIR / rel).as_uri(), wait_until="networkidle")
             if pre_js:
                 page.evaluate(pre_js)
                 page.wait_for_timeout(300)
@@ -127,13 +105,7 @@ def main() -> int:
         print(f"error: {SITE_DIR} doesn't exist — pass --no-build only after a successful build", file=sys.stderr)
         return 2
 
-    port = _free_port()
-    srv = _serve(port)
-    time.sleep(0.2)
-    try:
-        result = _capture(port, args.theme)
-    finally:
-        srv.shutdown()
+    result = _capture(args.theme)
 
     changed = [k for k, v in result.items() if v]
     kept = [k for k, v in result.items() if not v]

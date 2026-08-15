@@ -55,11 +55,6 @@
     "configuration": {
       "title": "llm-wiki",
       "properties": {
-        "llmwiki.serverPort": {
-          "type": "number",
-          "default": 8765,
-          "description": "Port for the llm-wiki local server"
-        },
         "llmwiki.pythonPath": {
           "type": "string",
           "default": "python3",

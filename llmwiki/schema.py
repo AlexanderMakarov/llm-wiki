@@ -53,8 +53,6 @@ PAGE_KINDS: tuple[str, ...] = (
     "concept",     # Ideas, frameworks, methods, theories
     "project",     # Codebases and work streams
     "synthesis",   # Saved query answers
-    "comparison",  # Side-by-side diffs of two or more pages
-    "question",    # First-class open questions with state tracking
 )
 
 #: Machinery the build and the query workflow emit: `_context.md` folder

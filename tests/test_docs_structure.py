@@ -354,6 +354,4 @@ def test_readme_points_at_tutorial_hub():
     assert "docs/index.md" in readme, (
         "README.md must surface docs/index.md as the documentation hub"
     )
-    # Spot-check a couple of tutorial links
-    assert "docs/tutorials/01-installation.md" in readme
-    assert "docs/tutorials/03-use-with-claude-code.md" in readme
+    assert "docs/getting-started.md" in readme

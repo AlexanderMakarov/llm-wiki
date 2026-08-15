@@ -1,0 +1,59 @@
+Ingest a source document (or folder) into the llmwiki.
+
+Usage: /wiki-ingest <path>
+
+`$ARGUMENTS` should be a path relative to the vault (or cwd), a folder, or a URL. Examples:
+
+- `/wiki-ingest raw/docs/some-article.md`
+- `/wiki-ingest https://example.com/some-article`
+- `/wiki-ingest raw/sessions/ai-newsletter/2026-04-04-kind-tinkering-hejlsberg.md`
+- `/wiki-ingest raw/sessions/ai-newsletter/`
+- `/wiki-ingest raw/sessions/`
+
+## Documents (files, folders, URLs, PDFs — anything not already under `raw/sessions/`)
+
+Route the source through the `llmwiki add` CLI instead of hand-writing a `wiki/sources/*` page:
+
+```bash
+python3 -m llmwiki add <src> --project <slug>
+```
+
+`<src>` is `$ARGUMENTS` (URL, file, or folder — repeatable). `--project <slug>` groups the doc under `raw/docs/<slug>/`; choose a slug matching the topic. The command resolves the vault (`--vault` / `config.json` → `vault.default_path`), converts the source, lands it under `raw/docs/`, synthesizes the `wiki/sources/<slug>.md` page, updates the index/overview, and rebuilds the site in one pass. Other useful flags: `--title`, `--tag` (repeatable), `--note`, `--dry-run`, `--no-synthesize`, `--no-build`.
+
+After it runs:
+
+1. Read the synthesized `wiki/sources/<slug>.md` page (in the resolved vault) to see what was produced.
+2. Create or update `wiki/entities/<Name>.md` for any people, companies, products, tools, libraries mentioned.
+3. Create or update `wiki/concepts/<Name>.md` for any ideas, patterns, or frameworks discussed.
+4. Create or update `wiki/projects/<slug>.md` with `type: project` for any codebase or work stream mentioned — projects are their own page kind, never entity pages.
+5. Cross-link everything with `[[wikilinks]]` under `## Connections`.
+6. Flag any contradictions with existing wiki content under `## Contradictions`.
+7. Append to `wiki/log.md`: `## [YYYY-MM-DD] ingest | <title>`
+
+**Vault resolution:** `llmwiki add` resolves the vault (`--vault`, else `config.json` → `vault.default_path`, else the current working directory). Every page you write by hand in steps 2–6 must go into that *same* vault.
+
+## Session transcripts (already under `raw/sessions/`)
+
+These were already converted by `llmwiki sync` — there's no `add` step. Follow this **Ingest Workflow**:
+
+1. Read the source file (or every file in the folder) using the Read tool
+2. Read `wiki/index.md` and `wiki/overview.md` for current context
+3. Write `wiki/sources/<slug>.md` (title, type, tags, date, source_file, then Summary / Key Claims / Key Quotes / Connections)
+4. Update `wiki/index.md` — add the new source under `## Sources`
+5. Update `wiki/overview.md` if the source adds substantial new information
+6. Create or update `wiki/entities/<Name>.md` for any people, companies, products, tools, libraries mentioned
+7. Create or update `wiki/concepts/<Name>.md` for any ideas, patterns, or frameworks discussed
+8. Create or update `wiki/projects/<slug>.md` with `type: project` for any codebase or work stream mentioned
+9. Cross-link everything with `[[wikilinks]]` under `## Connections`
+10. Flag any contradictions with existing wiki content under `## Contradictions`
+11. Append to `wiki/log.md`: `## [YYYY-MM-DD] ingest | <title>`
+
+Also apply these session-specific rules:
+
+- Trust the frontmatter as authoritative metadata
+- Do not copy the `## Conversation` section verbatim
+- Create or update the project page at `wiki/projects/<project-slug>.md` (`type: project`, slug from the frontmatter `project` field)
+- Extract any explicit decisions into `wiki/concepts/`
+- If there are more than ~20 files, ask the user before processing all of them
+
+After finishing, summarise: what was added, which pages were created or updated, any contradictions found.

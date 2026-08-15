@@ -99,12 +99,12 @@ Pages carrying an explicit `cache_tier` as of v1.1.0-rc8:
 
 | Page | Tier | Why |
 |---|---|---|
-| [`wiki/entities/ClaudeSonnet4.md`](../../wiki/entities/ClaudeSonnet4.md) | L1 | Flagship model entity — queries about current Claude behaviour always need this |
-| [`wiki/entities/GPT5.md`](../../wiki/entities/GPT5.md) | L2 | Reference comparison point, hot but not always loaded |
-| [`wiki/projects/llm-wiki.md`](../../wiki/projects/llm-wiki.md) | L1 | Meta project page — the framework's own canonical entry |
-| [`wiki/projects/demo-blog-engine.md`](../../wiki/projects/demo-blog-engine.md) | L2 | Demo project, loaded when queries touch SSG / Rust |
-| [`wiki/projects/demo-ml-pipeline.md`](../../wiki/projects/demo-ml-pipeline.md) | L2 | Demo project, loaded when queries touch ML / HuggingFace |
-| [`wiki/projects/demo-todo-api.md`](../../wiki/projects/demo-todo-api.md) | L2 | Demo project, loaded when queries touch FastAPI / OAuth2 |
+| [`demo/wiki/entities/ClaudeSonnet4.md`](../../demo/wiki/entities/ClaudeSonnet4.md) | L1 | Flagship model entity — queries about current Claude behaviour always need this |
+| [`demo/wiki/entities/GPT5.md`](../../demo/wiki/entities/GPT5.md) | L2 | Reference comparison point, hot but not always loaded |
+| [`demo/wiki/projects/llm-wiki.md`](../../demo/wiki/projects/llm-wiki.md) | L1 | Meta project page — the framework's own canonical entry |
+| [`demo/wiki/projects/demo-blog-engine.md`](../../demo/wiki/projects/demo-blog-engine.md) | L2 | Demo project, loaded when queries touch SSG / Rust |
+| [`demo/wiki/projects/demo-ml-pipeline.md`](../../demo/wiki/projects/demo-ml-pipeline.md) | L2 | Demo project, loaded when queries touch ML / HuggingFace |
+| [`demo/wiki/projects/demo-todo-api.md`](../../demo/wiki/projects/demo-todo-api.md) | L2 | Demo project, loaded when queries touch FastAPI / OAuth2 |
 
 This exercises `CacheTierConsistency` in real conditions.  To opt a page in, add `cache_tier: L1` (or `L2`/`L3`/`L4`) to its frontmatter.
 

@@ -1,8 +1,15 @@
 # llmwiki — Codex CLI / Agent Schema
 
-This file is the schema for **Codex CLI** and any other coding agent that reads `AGENTS.md` instead of `CLAUDE.md` (OpenCode, Gemini CLI, etc.). The workflows are identical to [CLAUDE.md](CLAUDE.md) — only the language is agent-agnostic.
+This file is for **people changing llmwiki itself**. Codex CLI and other agents that read `AGENTS.md` instead of `CLAUDE.md` (OpenCode, Gemini CLI, etc.) get the same vault schema; only the language is agent-agnostic.
 
-> **Changing llmwiki's own code or docs instead of a vault?** This file is the *product schema* — it tells you how to maintain a user's `raw/` → `wiki/` → `site/` knowledge base. It is not the contribution guide. For repo work (fixes, features, tests, PRs) read [`CONTRIBUTING.md`](CONTRIBUTING.md). Cursor loads the short form from [`.cursor/rules/`](.cursor/rules); Claude Code loads it from [`.claude/rules/contributing.md`](.claude/rules/contributing.md). Run `ruff check` and `python3 -m pytest tests/ -q` before pushing.
+If you *use* llmwiki on your own sessions, do not work inside this repository. Install the package and the agent kit, then run the wiki commands from your own project:
+
+```bash
+pip install llm-wiki
+llmwiki install-agent-kit --dest ~/.codex
+```
+
+> **Changing llmwiki's own code or docs?** Read [`CONTRIBUTING.md`](CONTRIBUTING.md). Cursor loads the short form from [`.cursor/rules/`](.cursor/rules); Claude Code loads it from [`.claude/rules/contributing.md`](.claude/rules/contributing.md). Run `ruff check` and `python3 -m pytest tests/ -q` before pushing.
 
 ## Three layers
 
@@ -25,12 +32,13 @@ wiki/          LLM-maintained. Pages you write that summarise and cross-referenc
   entities/        People, companies, products.
   concepts/        Ideas, frameworks, methods.
   projects/        Codebases and work streams (seeded from session metadata).
-  syntheses/       Saved query answers.
+  syntheses/       Saved query answers. Written by an agent or a person answering a
+                   question — no pipeline step generates one.
 
 site/          GENERATED. Static HTML from `python3 -m llmwiki build`. Do not edit.
 ```
 
-Canonical loop: `sync / add → synth (sources + harvest) → review candidates → build`. `synth` does not rebuild `site/` — run `build` when you want Home/Analytics refreshed. Serve with `llmwiki serve --dir <vault>/site` (bare `serve` defaults to `./site` under cwd).
+Canonical loop: `sync / add → synth (sources + harvest) → review candidates → build`. `synth` does not rebuild `site/` — run `build` when you want Home/Analytics refreshed. Then open `<vault>/site/index.html` in a browser; the site is plain files.
 
 ## Session stores by agent
 
@@ -53,11 +61,10 @@ Run from inside the repo:
 python3 -m llmwiki sync           # convert new .jsonl → raw/sessions/*.md
 python3 -m llmwiki synth          # wiki/sources/ + harvest wiki/candidates/
 python3 -m llmwiki build          # compile site/ from raw/ + wiki/
-python3 -m llmwiki serve --dir <vault>/site   # local HTTP server (default ./site is cwd-relative)
 python3 -m llmwiki init           # scaffold raw/, wiki/, site/ directories
 ```
 
-Or use the one-click scripts: `./sync.sh`, `./build.sh`, `./serve.sh` (macOS/Linux); `sync.bat`, `build.bat`, `serve.bat` (Windows).
+Or use the one-click scripts: `./sync.sh`, `./build.sh` (macOS/Linux); `sync.bat`, `build.bat` (Windows).
 
 ## Ingest Workflow
 
@@ -143,8 +150,6 @@ last_updated: YYYY-MM-DD
 ---
 
 # Name
-
-One paragraph.
 
 ## Key Facts
 - Fact 1

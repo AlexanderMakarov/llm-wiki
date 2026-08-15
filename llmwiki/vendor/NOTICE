@@ -1,4 +1,4 @@
-Third-party software vendored for offline Knowledge Graph rendering
+Third-party software vendored so the built site needs no network
 ====================================================================
 
 vis-network (standalone UMD bundle)
@@ -14,5 +14,25 @@ Repository: https://github.com/visjs/vis-network
 This file accompanies `vis-network.min.js`, a pinned copy of the upstream
 standalone UMD build used by llmwiki's interactive graph viewer. The upstream
 project is maintained by the vis.js community.
+
+Copyright notices and full license texts are available in the upstream repository.
+
+
+highlight.js (library + GitHub light/dark themes)
+--------------------------------------------------
+
+Project:  highlight.js
+Version:  11.9.0
+License:  BSD-3-Clause
+Homepage: https://highlightjs.org/
+Source:   https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js
+          https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github.min.css
+          https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github-dark.min.css
+Repository: https://github.com/highlightjs/highlight.js
+
+These files accompany `highlight.min.js`, `github.min.css` and
+`github-dark.min.css` — pinned copies of the upstream CDN release that
+llmwiki copies into every built site for client-side code highlighting.
+The GitHub themes are maintained in the highlight.js repository.
 
 Copyright notices and full license texts are available in the upstream repository.

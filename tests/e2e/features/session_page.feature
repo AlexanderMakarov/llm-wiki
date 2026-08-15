@@ -5,7 +5,7 @@ Feature: Session detail page
   So I can read the transcript and find my way back
 
   Background:
-    Given a built llmwiki site is served
+    Given a built llmwiki site on disk
 
   Scenario: Session page loads with the expected sections
     When I open the session "e2e-demo/2026-04-09-e2e-python-demo"

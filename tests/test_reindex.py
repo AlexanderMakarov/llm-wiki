@@ -231,20 +231,21 @@ def test_second_run_is_a_no_op(tmp_path: Path) -> None:
 
 
 def test_non_canonical_folder_gets_its_own_section(tmp_path: Path) -> None:
-    """`comparisons/`, `questions/`, … are documented page types too.
+    """A vault may carry folders the schema does not name — a page type added
+    later, or one a user keeps by hand.
 
-    Naming them after the folder means a page type added later is listed
-    instead of becoming permanent `index_sync` noise.
+    Naming the section after the folder lists those pages instead of leaving
+    them as permanent `index_sync` noise.
     """
     wiki = _seed_wiki(tmp_path)
-    _page(wiki / "comparisons" / "claude-vs-gpt.md", "Claude vs GPT")
-    _page(wiki / "questions" / "how-much-cache.md", "How much cache?")
+    _page(wiki / "decisions" / "adopt-cache-tiers.md", "Adopt cache tiers")
+    _page(wiki / "playbooks" / "cache-budget-review.md", "Cache budget review")
 
     reindex_wiki(wiki)
 
     text = _index(wiki)
-    assert "## Comparisons (1)" in text
-    assert "## Questions (1)" in text
+    assert "## Decisions (1)" in text
+    assert "## Playbooks (1)" in text
     assert run_all(load_pages(wiki), selected=["index_sync"]) == []
 
 

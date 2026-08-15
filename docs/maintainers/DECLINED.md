@@ -154,6 +154,31 @@ grows past 300.
 
 **Context:** #62 non-goal.
 
+## 2026-08-09 — First-class open questions as a page kind
+
+**Reason:** `type: question` sat in the vocabulary for years without a
+single line of product creating one — no scaffold, no synth path, no
+promote path — so it bought a graph colour and a legend label and
+nothing else; an open question is a `concept` page with an unanswered
+heading.
+
+**Context:** #109. `llmwiki migrate-page-kinds` moves any hand-written
+question page into `wiki/concepts/`. Reconsider only if question state
+tracking (open / answered / stale) becomes a feature someone builds,
+which is a lifecycle problem, not a page-kind problem.
+
+## 2026-08-09 — Comparison pages as a page kind
+
+**Reason:** The one comparison surface that exists is generated from
+AI-model entity frontmatter (`llmwiki/compare.py`, `/vs/`), so a
+hand-authored `type: comparison` kind duplicated the word without
+sharing any machinery and left readers unsure which one they were
+looking at.
+
+**Context:** #109. `llmwiki migrate-page-kinds` moves any hand-written
+comparison page into `wiki/concepts/`. The generated `/vs/` pages are
+untouched and stay the answer for model diffs.
+
 ---
 
 *Want to propose something that's on this list? File an issue with

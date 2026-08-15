@@ -106,7 +106,7 @@ llm-wiki-add = "llmwiki.cli:main_add"
 include = ["llmwiki*"]
 
 [tool.setuptools.package-data]
-llmwiki = ["py.typed", "vendor/*.js", "vendor/NOTICE"]
+llmwiki = ["py.typed", "vendor/*.js", "vendor/*.css", "vendor/NOTICE", "agent_kit/**/*.md"]
 
 [tool.ruff]
 line-length = 120

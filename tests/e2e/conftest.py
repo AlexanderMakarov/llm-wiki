@@ -8,13 +8,11 @@ Responsibilities:
   the same way `tests/test_highlightjs.py` does for its smoke test,
   so the harness never touches the user's real `raw/sessions/`.
 
-* **Serve the built site on a random free port** via Python's stdlib
-  `http.server` in a daemon thread. We pick the port ourselves so
-  parallel test runs don't collide.
-
-* **Expose a `base_url` fixture** that Playwright's built-in
-  `pytest-playwright` plugin uses automatically (it reads
-  `--base-url` or the `base_url` fixture at session scope).
+* **Expose a `site_root` fixture** holding the built site's directory,
+  and a `site_url` fixture holding the matching `file://` prefix.
+  Navigation is `page.goto(f"{site_url}/index.html")`, which is exactly
+  how a reader opens the site: no socket is opened anywhere in this
+  suite, and a page that only works when served fails here.
 
 * **Expose a `desktop_page` / `mobile_page` fixture** that configures
   the Playwright viewport so tests can pick the right layout without
@@ -33,53 +31,12 @@ so a step can drive the browser, read the DOM, and assert.
 
 from __future__ import annotations
 
-import socket
-import threading
-import time
-from collections.abc import Iterator
-from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
 
 from llmwiki import build as build_mod
-
-# ─── port + server helpers ──────────────────────────────────────────────
-
-
-def _free_port() -> int:
-    """Return a random free TCP port by binding to port 0 and reading
-    back the assigned port. Closes the socket immediately so the
-    returned port is available for the real server to claim."""
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(("127.0.0.1", 0))
-        return int(s.getsockname()[1])
-
-
-class _QuietHandler(SimpleHTTPRequestHandler):
-    """Suppress the default `log_message` spam so the pytest output
-    stays readable. Errors still print — we only silence the 200s."""
-
-    def log_message(self, format: str, *args: object) -> None:  # noqa: A002
-        pass
-
-
-def _serve_dir(root: Path, port: int) -> ThreadingHTTPServer:
-    """Start a daemon HTTP server serving `root` on `port`. Returns
-    the server so the caller can `shutdown()` it at teardown."""
-
-    class _RootedHandler(_QuietHandler):
-        def __init__(self, *args: object, **kwargs: object) -> None:
-            super().__init__(*args, directory=str(root), **kwargs)  # type: ignore[arg-type]
-
-    server = ThreadingHTTPServer(("127.0.0.1", port), _RootedHandler)
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
-    thread.start()
-    # Give the server a tick to bind — Playwright's first `goto` fails
-    # intermittently on CI if the port isn't live yet.
-    time.sleep(0.1)
-    return server
-
 
 # ─── synthetic wiki seed ────────────────────────────────────────────────
 
@@ -278,6 +235,99 @@ def _seed_raw(raw_sessions: Path) -> None:
     )
 
 
+_DEMO_WIKI_INDEX = """# Wiki Index
+
+## Overview (1)
+- [Overview](overview.md)
+
+## Entities (2)
+- [FastAPI](entities/FastAPI.md) — Python web framework
+- [Rust](entities/Rust.md) — systems language
+
+## Concepts (1)
+- [HealthEndpoint](concepts/HealthEndpoint.md) — liveness probe route
+"""
+
+_DEMO_WIKI_OVERVIEW = """---
+title: "Overview"
+type: synthesis
+tags: []
+sources: [e2e-python-demo, e2e-rust-demo]
+last_updated: 2026-04-09
+---
+
+# Overview
+
+Two demo sessions: a [[FastAPI]] service exposing a [[HealthEndpoint]], and a
+[[Rust]] CLI that prints a timestamp.
+"""
+
+_DEMO_WIKI_FASTAPI = """---
+title: "FastAPI"
+type: entity
+tags: [python, web]
+sources: [e2e-python-demo]
+last_updated: 2026-04-09
+---
+
+# FastAPI
+
+Python web framework used by the Python demo session.
+
+## Connections
+- [[HealthEndpoint]] — the route the demo scaffolded
+"""
+
+_DEMO_WIKI_RUST = """---
+title: "Rust"
+type: entity
+tags: [systems]
+sources: [e2e-rust-demo]
+last_updated: 2026-04-09
+---
+
+# Rust
+
+Systems language used by the Rust demo session.
+
+## Connections
+- [[FastAPI]] — the other demo project's stack
+"""
+
+_DEMO_WIKI_HEALTH = """---
+title: "HealthEndpoint"
+type: concept
+tags: [api]
+sources: [e2e-python-demo]
+last_updated: 2026-04-09
+---
+
+# HealthEndpoint
+
+A route that answers a liveness probe with a fixed payload.
+
+## Connections
+- [[FastAPI]] — framework that serves it
+"""
+
+
+def _seed_wiki(wiki_dir: Path) -> None:
+    """Lay out a four-page wiki under ``wiki_dir``.
+
+    The homepage links ``graph.html``, and the build emits that page only
+    when the wiki it graphs has pages — so the fixture seeds a wiki with
+    enough cross-links to yield a non-empty graph. The pages match the
+    ``## Connections`` wikilinks in the seeded sessions above.
+    """
+    (wiki_dir / "entities").mkdir(parents=True)
+    (wiki_dir / "concepts").mkdir(parents=True)
+    (wiki_dir / "index.md").write_text(_DEMO_WIKI_INDEX, encoding="utf-8")
+    (wiki_dir / "overview.md").write_text(_DEMO_WIKI_OVERVIEW, encoding="utf-8")
+    (wiki_dir / "entities" / "FastAPI.md").write_text(_DEMO_WIKI_FASTAPI, encoding="utf-8")
+    (wiki_dir / "entities" / "Rust.md").write_text(_DEMO_WIKI_RUST, encoding="utf-8")
+    (wiki_dir / "concepts" / "HealthEndpoint.md").write_text(_DEMO_WIKI_HEALTH, encoding="utf-8")
+
+
 # ─── fixtures ───────────────────────────────────────────────────────────
 
 
@@ -294,7 +344,9 @@ def site_root(tmp_path_factory: pytest.TempPathFactory) -> Path:
     workspace = tmp_path_factory.mktemp("llmwiki_e2e")
     raw = workspace / "raw"
     raw_sessions = raw / "sessions"
+    wiki = workspace / "wiki"
     _seed_raw(raw_sessions)
+    _seed_wiki(wiki)
 
     original_raw_dir = build_mod.RAW_DIR
     original_raw_sessions = build_mod.RAW_SESSIONS
@@ -302,7 +354,7 @@ def site_root(tmp_path_factory: pytest.TempPathFactory) -> Path:
     build_mod.RAW_SESSIONS = raw_sessions
     try:
         out = workspace / "site"
-        rc = build_mod.build_site(out_dir=out, synthesize=False)
+        rc = build_mod.build_site(out_dir=out, synthesize=False, wiki_dir=wiki)
         assert rc == 0, f"build_site returned {rc}"
     finally:
         build_mod.RAW_DIR = original_raw_dir
@@ -311,21 +363,29 @@ def site_root(tmp_path_factory: pytest.TempPathFactory) -> Path:
 
 
 @pytest.fixture(scope="session")
-def server(site_root: Path) -> Iterator[ThreadingHTTPServer]:
-    """Serve the built site on a random free port for the lifetime of
-    the test session. The `base_url` fixture below consumes this."""
-    port = _free_port()
-    srv = _serve_dir(site_root, port)
-    yield srv
-    srv.shutdown()
+def site_url(site_root: Path) -> str:
+    """`file://` prefix for every `page.goto(...)` call — the address a
+    reader uses when they double-click `index.html`.
+
+    Returned without a trailing slash so call sites read
+    `f"{site_url}/index.html"`. There is no directory index behind a
+    `file://` URL, so every path must name a file.
+    """
+    return site_root.as_uri().rstrip("/")
 
 
 @pytest.fixture(scope="session")
-def base_url(server: ThreadingHTTPServer) -> str:
-    """URL prefix for every `page.goto(...)` call. pytest-playwright
-    picks this up automatically via its own `base_url` fixture hook."""
-    host, port = server.server_address
-    return f"http://{host}:{port}"
+def site_has(site_root: Path) -> Callable[[str], bool]:
+    """Predicate over site paths: ``site_has("/graph.html")``.
+
+    Whether a page is part of the build is a fact about the output
+    directory, so tests that skip on an absent page ask the filesystem.
+    """
+
+    def _has(path: str) -> bool:
+        return (site_root / path.lstrip("/")).is_file()
+
+    return _has
 
 
 @pytest.fixture(scope="session")

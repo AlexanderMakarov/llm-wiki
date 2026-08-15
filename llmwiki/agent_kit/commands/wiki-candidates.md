@@ -1,0 +1,72 @@
+Review and triage candidate wiki pages — promote, flip and promote, merge, or discard.
+
+Candidate pages live under `wiki/candidates/<kind>/<slug>.md`. They are usually created by `llmwiki synth` (default harvest after sources) or `llmwiki synth --candidates-only`. They are **not** part of the trusted wiki layer until a human or agent approves them.
+
+Home **Candidates** (Knowledge layer) and Analytics **Candidates to review** show the backlog after `llmwiki build`. Open `site/candidates.html` (header: Home → Raw → **Candidates** …) to read what is pending: it lists every stub and prints the `llmwiki candidates apply --vault <vault> --actions -` command plus a ready-made JSON batch to pipe into it.
+
+Usage: `/wiki-candidates`
+
+## Workflow
+
+1. List all pending candidates:
+   ```
+   python3 -m llmwiki candidates list
+   ```
+   Or filter to stale (age > 30 days):
+   ```
+   python3 -m llmwiki candidates list --stale
+   ```
+
+2. For each candidate, decide:
+
+   - **promote** — candidate is legitimate and not a duplicate.
+     Moves it into the trusted tree (`wiki/entities/` or `wiki/concepts/`)
+     and rewrites `status: candidate` → `status: reviewed`. Also reconciles `wiki/index.md` (drops dead Candidates bullets; lists the trusted page).
+     When `## Key Facts` is empty (or heading-only), promote has the configured synthesis backend write it from harvest evidence — every line where the `sources:` / Connections source pages name the subject. Non-empty reviewer Key Facts are preserved; do **not** invent a separate free-text enhance pass or hand-edit Key Facts for the common case — use the CLI so slash and library stay in sync.
+     Promote **fails** (exit 2, candidate left pending) when Key Facts need writing and `synthesis.backend` is unset or `dummy`. Configure `claude` or `ollama` in `config.json` and re-run — do not work around it by writing the bullets yourself.
+     ```
+     python3 -m llmwiki candidates promote --slug MyEntity
+     ```
+
+   - **flip-promote** — kind was wrong (entity↔concept). Promotes into the opposite trusted folder and rewrites `type:`. Do **not** hand-`mv` stubs between `candidates/entities` and `candidates/concepts`.
+     ```
+     python3 -m llmwiki candidates flip-promote --slug Misfiled
+     ```
+
+   - **merge** — candidate is essentially a duplicate of another name in the same kind.
+     Target may be a trusted page or another pending stub in the same table. Unions the candidate's evidence (`sources:` frontmatter + Connections links) into the target and records the merged-away name under `## Aliases`, then archives the candidate. Reconciles `wiki/index.md`. A candidate carrying reviewer prose also gets that prose appended under `## Candidate merge — <date>`.
+     ```
+     python3 -m llmwiki candidates merge --slug DuplicateFoo --into Foo
+     ```
+
+   - **discard** — candidate is a hallucination or noise.
+     Moves it to `wiki/archive/candidates/<timestamp>/` with a
+     `.reason.txt` audit-trail file. Reconciles `wiki/index.md`.
+     ```
+     python3 -m llmwiki candidates discard --slug BogusEntity \
+       --reason "not a real company; LLM hallucinated"
+     ```
+
+   - **apply** — batch several intents in one process (same JSON as `POST /api/candidates` / the static Copy CLI line):
+     ```
+     python3 -m llmwiki candidates apply --actions '[{"action":"promote","slug":"MyEntity","kind":"entities"}]'
+     ```
+
+3. Prefer these CLI actions (same library as `/candidates.html`). Do **not** run idle `sync`/`synth` only to refresh the catalog after review — promote/merge/discard/apply already reconcile `index.md`. Do **not** hand-fill empty Key Facts on promote when the CLI already does it (#103). `candidates apply` rebuilds `site/` after a successful batch so reload `candidates.html`; pass `--no-rebuild` to skip. After one-off `promote` / `merge` / `discard`, run `llmwiki build` (those actions do not rebuild) and `/wiki-lint` to catch broken wikilinks.
+   Trusted pages that still have clipped regex Key Facts (or pasted harvest-stub `## Candidate merge` blocks) are fixed with:
+   ```
+   python3 -m llmwiki candidates rewrite-key-facts --slug MyEntity
+   ```
+   or `--all` for the whole knowledge layer (costs one LLM call per page).
+
+4. Append to `wiki/log.md`:
+   ```
+   ## [YYYY-MM-DD] review | <N> promoted, <M> merged, <K> discarded
+   ```
+
+## Related
+
+- #51 — approval workflow; #84 — Home/Analytics observability; #90 — harvest; #97 — `candidates.html` pending listing + copyable `apply --actions` batch; #101 — promote/merge/discard/apply reconcile index.md; #103 — promote fills empty Key Facts from evidence
+- `/wiki-lint` — finds stale candidates (age > 30 days) and broken wikilinks after review
+- `llmwiki synth` / `synth --candidates-only` — harvest stubs from synthesized sources
+- `/wiki-ingest` — optional enrichment / review discussion over candidates

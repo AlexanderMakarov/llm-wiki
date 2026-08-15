@@ -4,7 +4,7 @@ Feature: Keyboard navigation shortcuts
   So I never need to reach for the mouse
 
   Background:
-    Given a built llmwiki site is served
+    Given a built llmwiki site on disk
     And I visit the homepage
 
   Scenario: "g h" jumps to home

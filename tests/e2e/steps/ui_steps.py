@@ -30,18 +30,21 @@ from urllib.parse import urlparse
 
 import pytest
 import pytest as _pytest
+from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import Page, expect
 from pytest_bdd import given, parsers, then, when
 
 # ─── shared background steps ────────────────────────────────────────────
 
 
-@given("a built llmwiki site is served")
-def _built_site_served(base_url: str) -> str:
-    """Sanity-check that the session-scoped `base_url` fixture is
-    live. The real build + serve work happens in `conftest.py`."""
-    assert base_url.startswith("http://")
-    return base_url
+@given("a built llmwiki site on disk")
+def _built_site_on_disk(site_url: str) -> str:
+    """Sanity-check that the session-scoped `site_url` fixture addresses
+    the built files. The build happens in `conftest.py`."""
+    assert site_url.startswith("file://"), (
+        f"scenarios must open the built files, got {site_url!r}"
+    )
+    return site_url
 
 
 @given("clipboard permissions are granted")
@@ -62,24 +65,24 @@ def _clipboard_perms(browser_context_args: dict[str, Any]) -> None:
 
 @given("I visit the homepage")
 @when("I visit the homepage")
-def _visit_homepage(page: Page, base_url: str) -> None:
-    page.goto(f"{base_url}/index.html")
+def _visit_homepage(page: Page, site_url: str) -> None:
+    page.goto(f"{site_url}/index.html")
 
 
 @when("I visit the projects index")
-def _visit_projects_index(page: Page, base_url: str) -> None:
+def _visit_projects_index(page: Page, site_url: str) -> None:
     """Project cards live on /projects/index.html (Home shows the State widget)."""
-    page.goto(f"{base_url}/projects/index.html")
+    page.goto(f"{site_url}/projects/index.html")
 
 
 @when("I visit the homepage on a mobile viewport")
-def _visit_homepage_mobile(mobile_page: Page, base_url: str) -> None:
-    mobile_page.goto(f"{base_url}/index.html")
+def _visit_homepage_mobile(mobile_page: Page, site_url: str) -> None:
+    mobile_page.goto(f"{site_url}/index.html")
 
 
 @when(parsers.parse('I open the session "{slug}"'))
-def _open_session(page: Page, base_url: str, slug: str) -> None:
-    page.goto(f"{base_url}/sessions/{slug}.html")
+def _open_session(page: Page, site_url: str, slug: str) -> None:
+    page.goto(f"{site_url}/sessions/{slug}.html")
 
 
 # ─── page-title + hero assertions ───────────────────────────────────────
@@ -579,21 +582,23 @@ def _palette_hidden(page: Page) -> None:
 
 
 @when(parsers.parse('I visit the path "{path}"'))
-def _visit_path(page: Page, base_url: str, path: str) -> None:
-    # Capture the response so the 404 scenario can assert on it.
-    with page.expect_response(lambda r: r.url.endswith(path)) as resp_info:
-        try:
-            page.goto(f"{base_url}{path}")
-        except Exception:
-            pass
-    page._llmwiki_last_response = resp_info.value
+def _visit_path(page: Page, site_url: str, path: str) -> None:
+    """Open a site path, recording whether the browser could open it.
+
+    A path that names no file has nothing to answer for it, so the
+    navigation itself fails instead of returning a status.
+    """
+    page._llmwiki_nav_error = None
+    try:
+        page.goto(f"{site_url}{path}")
+    except PlaywrightError as exc:
+        page._llmwiki_nav_error = str(exc)
 
 
-@then(parsers.parse('the response status is {status:d}'))
-def _response_status(page: Page, status: int) -> None:
-    last = getattr(page, "_llmwiki_last_response", None)
-    assert last is not None, "no response captured; did you use 'I visit the path'?"
-    assert last.status == status, f"response status was {last.status}, expected {status}"
+@then("the browser cannot open the page")
+def _nav_failed(page: Page) -> None:
+    err = getattr(page, "_llmwiki_nav_error", None)
+    assert err, "the page opened; expected the build to have emitted no such file"
 
 
 @then(parsers.parse('the body innerHTML does not contain the string "{fragment}"'))

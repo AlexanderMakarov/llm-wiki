@@ -24,6 +24,7 @@ explicit bump.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 import pytest
@@ -74,9 +75,9 @@ def _format_violations(violations: list[dict[str, Any]]) -> str:
     return "\n".join(out)
 
 
-def _scan(page: Page, base_url: str, path: str) -> None:
-    """Load ``base_url + path``, run axe, fail on critical / serious."""
-    page.goto(f"{base_url}{path}", wait_until="domcontentloaded")
+def _scan(page: Page, site_url: str, path: str) -> None:
+    """Load ``site_url + path``, run axe, fail on critical / serious."""
+    page.goto(f"{site_url}{path}", wait_until="domcontentloaded")
     # Allow the page's own JS (theme boot, hljs, palette init) to settle.
     page.wait_for_load_state("networkidle", timeout=5000)
 
@@ -93,47 +94,42 @@ def _scan(page: Page, base_url: str, path: str) -> None:
         pytest.fail(msg)
 
 
-def test_homepage_has_no_critical_a11y_violations(page: Page, base_url: str) -> None:
+def test_homepage_has_no_critical_a11y_violations(page: Page, site_url: str) -> None:
     """Run axe-core against the homepage. Critical/serious violations
     fail the test; moderate/minor are tolerated for now."""
-    _scan(page, base_url, "/index.html")
+    _scan(page, site_url, "/index.html")
 
 
-def test_session_page_has_no_critical_a11y_violations(page: Page, base_url: str) -> None:
+def test_session_page_has_no_critical_a11y_violations(page: Page, site_url: str) -> None:
     """Session pages have the most user content (rendered Markdown,
     code blocks, breadcrumbs) and are the highest-risk surface for
     contrast / heading-hierarchy violations."""
-    _scan(page, base_url, "/sessions/e2e-demo/2026-04-09-e2e-python-demo.html")
+    _scan(page, site_url, "/sessions/e2e-demo/2026-04-09-e2e-python-demo.html")
 
 
-def test_projects_index_has_no_critical_a11y_violations(page: Page, base_url: str) -> None:
+def test_projects_index_has_no_critical_a11y_violations(
+    page: Page, site_url: str, site_has: Callable[[str], bool]
+) -> None:
     """Projects index uses card components which have a different
     visual treatment than session pages — separate axe pass."""
-    # The path varies by build mode — try both.
-    for path in ("/projects/index.html", "/projects/"):
-        try:
-            page.goto(f"{base_url}{path}", wait_until="domcontentloaded")
-            if page.url.endswith(("404", "404.html")):
-                continue
-            _scan(page, base_url, path)
-            return
-        except Exception:
-            continue
-    pytest.skip("no projects index page found at any expected path")
+    if not site_has("/projects/index.html"):
+        pytest.skip("no projects index page in this build")
+    _scan(page, site_url, "/projects/index.html")
 
 
-def test_graph_page_has_no_critical_a11y_violations(page: Page, base_url: str) -> None:
+def test_graph_page_has_no_critical_a11y_violations(
+    page: Page, site_url: str, site_has: Callable[[str], bool]
+) -> None:
     """The graph viewer is a canvas-heavy page — different a11y
     surface than text content. We test it separately because the
     site nav (#456) and the in-page toolbar controls (search,
     cluster toggle) are the only keyboard-accessible elements."""
-    resp = page.request.get(f"{base_url}/graph.html")
-    if resp.status >= 400:
+    if not site_has("/graph.html"):
         pytest.skip("graph.html not shipped (empty seeded graph)")
-    _scan(page, base_url, "/graph.html")
+    _scan(page, site_url, "/graph.html")
 
 
-def test_dark_mode_passes_color_contrast_audit(page: Page, base_url: str) -> None:
+def test_dark_mode_passes_color_contrast_audit(page: Page, site_url: str) -> None:
     """Dark mode is a frequent source of color-contrast regressions:
     a CSS variable change in light mode breaks contrast in dark mode
     if the dark-theme override wasn't updated together. Run a
@@ -141,7 +137,7 @@ def test_dark_mode_passes_color_contrast_audit(page: Page, base_url: str) -> Non
     page.add_init_script(
         "try { localStorage.setItem('llmwiki-theme', 'dark'); } catch (e) {}"
     )
-    page.goto(f"{base_url}/index.html", wait_until="domcontentloaded")
+    page.goto(f"{site_url}/index.html", wait_until="domcontentloaded")
     page.wait_for_load_state("networkidle", timeout=5000)
 
     try:

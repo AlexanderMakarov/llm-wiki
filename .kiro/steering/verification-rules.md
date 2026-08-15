@@ -62,8 +62,8 @@ Before tagging a release:
 
 - [ ] `setup.sh` runs clean on a fresh `git clone`
 - [ ] `build.sh` succeeds on an empty `raw/`
-- [ ] `serve.sh` binds to `127.0.0.1:8765` and returns HTTP 200 on `/`
-- [ ] Every page listed in `index.html` returns HTTP 200
+- [ ] `site/index.html` opens from disk with no console errors
+- [ ] Every page listed in `index.html` exists in `site/`
 - [ ] Copy-as-markdown button copies correct text
 - [ ] Cmd+K opens the command palette
 - [ ] `/` focuses the search bar

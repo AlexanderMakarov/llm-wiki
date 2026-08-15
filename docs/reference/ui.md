@@ -6,7 +6,7 @@ docs_shell: true
 
 # UI reference
 
-Every screen on the compiled site (`llmwiki build` → `site/`), what it shows, and how to reach it. Screens are what `llmwiki serve` exposes on `http://127.0.0.1:8765/`.
+Every screen on the compiled site (`llmwiki build` → `site/`), what it shows, and how to reach it. The site is plain files — open `site/index.html` in a browser, or publish `site/` to any static host.
 
 ---
 
@@ -18,7 +18,7 @@ Every page in the site carries the same header nav. Keyboard: `⌘K` opens the c
 |---|---|---|---|
 | 1 | **Home** | `/index.html` | pipeline State widget (Eligible sources Raw→To synthesize→Synthesized→On disk + Knowledge layer Candidates/Entities/Concepts + collapsible backlog/candidates/commands) + recent raw docs |
 | 2 | **Raw** | `/raw.html` | file tree browser of raw documents (wiki-add layer) |
-| — | **Candidates** | `/candidates.html` | pending entity/concept review (per-row decision + Apply); batch API under serve, or copy-CLI when static |
+| — | **Candidates** | `/candidates.html` | what is pending under `wiki/candidates/`, a per-row Decision control, and an Apply that assembles the `candidates apply` command + JSON batch for the rows you decided |
 | 3 | **Graph** | `/graph.html` | interactive force-directed knowledge graph (vis-network) |
 | 4 | **Projects** | `/projects/index.html` | filterable card grid of every project + freshness badge |
 | 5 | **Sessions** | `/sessions/index.html` | sortable table of every session, agent badge, project, model, tool-call count |
@@ -51,17 +51,28 @@ Numbers come from `llmwiki-state.js` (`synth.pipeline` + `synth.pending` + `synt
 
 URL: `/candidates.html`
 
-Review gate for pending stubs under `wiki/candidates/` (#97). Two tables — **Entities (pending)** and **Concepts (pending)** — with Name, Description, and Decision:
+The review gate for pending stubs under `wiki/candidates/` (#97). Two tables — **Entities (pending)** and **Concepts (pending)** — each with **Name** (title, slug and age), **Description**, and **Decision**.
 
-| Decision | Effect |
+**Decision** is a per-row select offering exactly the actions `llmwiki candidates apply` executes: *Promote*, *Flip and promote*, *Merge into…* and *Discard*. The last two reveal the field that action needs, and both fields are required before the row can be applied. Every row starts at **No decision** and stays there until you choose — deciding is browser state, so nothing runs and nothing is sent.
+
+**Apply** sits in a bar above the tables that stays pinned under the site nav while you scroll, so it is in reach from any row. It assembles the rows you decided — and only those — into the command to run and the JSON batch to pipe into it, shown directly below the bar with **Copy command** and **Copy JSON**:
+
+```bash
+llmwiki candidates apply --vault <vault> --actions -
+```
+
+*Merge into…* reveals a **filterable dropdown** of every page `merge --into` resolves for that table — the trusted pages under `wiki/<kind>/` first, then the same-table pending stubs. Press the ▾ button or `↓` to browse the whole list without typing, type any part of a name to narrow it (case-insensitive substring), `↑` / `↓` to move, `Enter` to choose, `Esc` to close. The list is the closed set of valid targets: text naming no page is marked as you type, and a row holding one is named on the page instead of going into a batch that would fail at the CLI.
+
+*Discard* reveals a **required reason**. `discard` files that reason beside the archived stub, so a blank one throws the decision away — a row set to *Discard* with no reason is held back the same way an unresolved merge target is.
+
+A row left at **No decision** is absent from the batch and stays pending, so a half-finished review can be applied and resumed. Apply refuses an empty batch; when a decided row is not yet executable it names the row, marks the field and moves focus to it, and emits nothing until you finish it. `llmwiki candidates apply` rebuilds `site/` after a successful batch, so reload the page (or reopen the file) to see the remaining queue. Pass `--no-rebuild` if you are applying several batches and will `llmwiki build` once at the end. One-off CLI actions and `/wiki-candidates` do the same wiki work; only `apply` rebuilds.
+
+| Action | Effect |
 |---|---|
-| **Skip** | Leave pending (default) |
-| **Promote** | Move into trusted `wiki/entities/` or `wiki/concepts/`; `status: reviewed` |
-| **Flip and promote** | Wrong kind → promote into the opposite trusted folder and rewrite `type:` (do not hand-`mv` stubs between candidate folders) |
-| **Discard** | Archive under `wiki/archive/candidates/` |
-| **Merge with…** | Pick another pending name in the **same table**; merges then archives the source stub (CLI `merge` can also target a trusted same-kind page) |
-
-Set decisions per row, then **Apply**. Under `llmwiki serve` (vault `…/site` beside `…/wiki`), Apply POSTs a **batch** to `/api/candidates`. On a static or `file://` open, Apply shows one pasteable `llmwiki candidates apply --actions '[{…}]'` line (Copy CLI) — same JSON shape as the API. After a successful served Apply the page reloads; run `llmwiki build` for a cold-open Home/Analytics recount. One-off CLI actions and `/wiki-candidates` remain available.
+| **promote** | Move into trusted `wiki/entities/` or `wiki/concepts/`; `status: reviewed` |
+| **flip-promote** | Wrong kind → promote into the opposite trusted folder and rewrite `type:` (do not hand-`mv` stubs between candidate folders) |
+| **discard** | Archive under `wiki/archive/candidates/` |
+| **merge** | Fold into another page of the same kind, then archive the stub |
 
 ---
 
@@ -152,7 +163,7 @@ Interactive force-directed knowledge graph. Details in [`reference/reader-api.md
 - Stats overlay (bottom-right) — total pages, edges, orphans, avg connections, top-5 hubs
 - Dark / light theme mirrors the main site
 
-**Node colours.** One colour per kind, at equal saturation — a topic no wiki page describes is a normal citizen of the map, not a faded placeholder. The legend renders one swatch per kind actually present in the graph, so a vault with no comparisons advertises no comparison swatch.
+**Node colours.** One colour per kind, at equal saturation — a topic no wiki page describes is a normal citizen of the map, not a faded placeholder. The legend renders one swatch per kind actually present in the graph, so a vault with no syntheses advertises no synthesis swatch.
 
 | Kind | Colour | |
 |---|---|---|
@@ -161,8 +172,6 @@ Interactive force-directed knowledge graph. Details in [`reference/reader-api.md
 | Concepts | green | `#059669` |
 | Syntheses | amber | `#d97706` |
 | Projects | magenta | `#db2777` |
-| Questions | cyan | `#0891b2` |
-| Comparisons | brown | `#b45309` |
 | Other (no wiki page describes the topic) | lime | `#65a30d` |
 
 Red is deliberately not a kind colour: the map already spends it on two states — the orphan border and a live search match — and a kind sharing it would read as an error.
@@ -189,7 +198,7 @@ The title, then an **identity line** of ` · `-separated parts in this order —
 
 `Entity` chip · `Active 2026-01-09 – 2026-07-30` · `Reviewed 2026-08-01` · `7 connected topics` · `12 sessions` · `<slug>`
 
-The kind chip names the singular kind — Entity, Concept, Project, Question, Comparison, Synthesis, Source — or `Unclassified topic` when no wiki page describes it. The chip is never dropped: the absence of a backing page is itself a fact, and a missing chip would leave a reader unable to tell an unclassified topic from a page that failed to render one. Below the identity line:
+The kind chip names the singular kind — Entity, Concept, Project, Synthesis, Source — or `Unclassified topic` when no wiki page describes it. The chip is never dropped: the absence of a backing page is itself a fact, and a missing chip would leave a reader unable to tell an unclassified topic from a page that failed to render one. Below the identity line:
 
 - **Also tagged as** — the alternative spellings sessions used before clustering merged them under this name.
 - **Page content** — the backing wiki page's body (see below). Absent when no page backs the topic or the page records nothing.
@@ -224,6 +233,8 @@ The topic page is the only browsable surface for entity and concept pages, so it
 A topic backed by a page under `wiki/projects/` links to `/projects/<slug>.html` — the full [project detail page](#project-detail-projectsslughtml) with its heatmap, session cards and charts — rather than to a thin topic page. The rewrite is applied once at build time and every surface honours it: the map's double-click target, the search index entry, Connected topics lists on topic pages and on project pages, `topics/index.html`, and `[[wikilinks]]` cited inside page content.
 
 The match itself identifies which project it is, so an alias spelling routes as correctly as the canonical one. The rewrite is skipped when the build wrote no page for that project: `wiki/projects/` is seeded from stubs while `site/projects/` comes from session groups, so a project page with no recorded sessions keeps its ordinary topic page rather than being handed a link that 404s.
+
+The `type:` vocabulary on the backing wiki page, and the origin of every frontmatter field, is [Page kinds](page-kinds.md).
 
 ---
 

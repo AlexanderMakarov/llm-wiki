@@ -1,22 +1,24 @@
 name: Wiki checks
 
-# Runs llmwiki lint + build on PRs and pushes to verify wiki-related code
-# still produces valid output. Seeded from examples/demo-sessions/ so CI
+# Runs llmwiki lint + build against demo/ on PRs and pushes to verify
+# still produces valid output. Seeded from the committed demo/ vault so CI
 # never touches personal data.
 
 on:
   push:
-    branches: ["master"]
+    branches: ["main"]
     paths:
       - "llmwiki/**"
-      - "wiki/**"
-      - "examples/**"
+      - "demo/**"
+      - "docs/**"
+      - "scripts/refresh_demo.py"
       - ".github/workflows/wiki-checks.yml"
   pull_request:
     paths:
       - "llmwiki/**"
-      - "wiki/**"
-      - "examples/**"
+      - "demo/**"
+      - "docs/**"
+      - "scripts/refresh_demo.py"
       - ".github/workflows/wiki-checks.yml"
   workflow_dispatch:
 
@@ -25,7 +27,7 @@ permissions:
 
 jobs:
   wiki-checks:
-    name: Lint + build seeded wiki
+    name: Lint + build the demo vault
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -40,31 +42,21 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e .
 
-      - name: Seed raw/ from example demo sessions
+      - name: llmwiki lint (errors fail the build)
         run: |
-          mkdir -p raw/sessions
-          if [ -d examples/demo-sessions ]; then
-            cp -r examples/demo-sessions/* raw/sessions/
-            echo "Seeded raw/sessions/ from examples/demo-sessions/"
-          fi
-
-      - name: llmwiki eval (structural quality checks)
-        run: |
-          python -m llmwiki eval --fail-below 60 || true
-          # Don't fail CI on eval score — it's informational. Just log it.
-
-      - name: llmwiki lint (11 rules)
-        run: |
-          # Run lint but don't fail on warnings/info.
-          # Errors WILL fail the build (--fail-on-errors).
-          python -m llmwiki lint --fail-on-errors || {
-            echo "::warning::llmwiki lint found errors. Review output above."
+          # Errors fail; warnings are printed and tolerated. --strict is
+          # deliberately not used: content_freshness fires on any committed
+          # vault once 90 days pass, so it would redden this job on a timer
+          # rather than on a defect.
+          python -m llmwiki lint --vault demo --fail-on-errors || {
+            echo "::error::llmwiki lint found errors in demo/. Review output above."
             exit 1
           }
 
       - name: llmwiki build (smoke test)
         run: |
-          python -m llmwiki build --out /tmp/site-test
+          # --local-root keeps the output identical on any machine.
+          python -m llmwiki build --vault demo --out /tmp/site-test --local-root /home/user
           # Verify output exists
           test -f /tmp/site-test/index.html || {
             echo "::error::build did not produce index.html"
@@ -72,13 +64,18 @@ jobs:
           }
           echo "Build produced $(find /tmp/site-test -name '*.html' | wc -l) HTML files"
 
-      - name: llmwiki check-links (internal link integrity)
-        run: |
-          # Informational — demo content has intentional broken wikilinks
-          # to non-seeded entities. Log them, don't fail the build.
-          python -m llmwiki check-links --site-dir /tmp/site-test || true
-
       - name: llmwiki adapters (dry-run listing)
         run: |
           # Verify the adapter registry still enumerates correctly.
           python -m llmwiki adapters
+
+      - name: Demo refresh plan (no model)
+        run: |
+          # Local-only refresh must never run here. If a recorded revision
+          # exists, print the dry-run plan so a docs change that was not
+          # followed by a local refresh is visible. No synth, no vault write.
+          if [ -f demo/.demo-source-rev ]; then
+            python3 scripts/refresh_demo.py --dry-run
+          else
+            echo "demo/.demo-source-rev is not committed — skip staleness preview"
+          fi

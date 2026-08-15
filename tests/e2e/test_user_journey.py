@@ -13,11 +13,15 @@ navigation surface, not any one feature.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import pytest
 from playwright.sync_api import Page, expect
 
 
-def test_full_navigation_journey(page: Page, base_url: str) -> None:
+def test_full_navigation_journey(
+    page: Page, site_url: str, site_has: Callable[[str], bool]
+) -> None:
     """Walk the canonical user path. Any step that fails surfaces a
     cross-page regression that single-feature tests miss."""
 
@@ -27,7 +31,7 @@ def test_full_navigation_journey(page: Page, base_url: str) -> None:
             if msg.type == "error" else None)
 
     # Step 1: home loads cleanly.
-    page.goto(f"{base_url}/index.html", wait_until="domcontentloaded")
+    page.goto(f"{site_url}/index.html", wait_until="domcontentloaded")
     expect(page.locator(".hero h1").first).to_be_visible()
 
     # Step 2: toggle theme — assert it sticks for the rest of the journey.
@@ -57,7 +61,7 @@ def test_full_navigation_journey(page: Page, base_url: str) -> None:
         )
 
     # Step 4: navigate to sessions index.
-    page.goto(f"{base_url}/sessions/index.html", wait_until="domcontentloaded")
+    page.goto(f"{site_url}/sessions/index.html", wait_until="domcontentloaded")
     # The sessions index should render at least one row OR an empty-state.
     has_content = page.evaluate(
         "() => document.querySelector('.content, article, main')?.innerText?.length > 0"
@@ -66,7 +70,7 @@ def test_full_navigation_journey(page: Page, base_url: str) -> None:
 
     # Step 5: open the synthetic demo session directly.
     page.goto(
-        f"{base_url}/sessions/e2e-demo/2026-04-09-e2e-python-demo.html",
+        f"{site_url}/sessions/e2e-demo/2026-04-09-e2e-python-demo.html",
         wait_until="domcontentloaded",
     )
     expect(page.locator(".breadcrumbs").first).to_be_visible()
@@ -95,9 +99,8 @@ def test_full_navigation_journey(page: Page, base_url: str) -> None:
     )
 
     # Step 8: graph page (skip cleanly if not shipped).
-    graph_resp = page.request.get(f"{base_url}/graph.html")
-    if graph_resp.status < 400:
-        page.goto(f"{base_url}/graph.html", wait_until="domcontentloaded")
+    if site_has("/graph.html"):
+        page.goto(f"{site_url}/graph.html", wait_until="domcontentloaded")
         # #456: the user's escape hatch is now the Home link in the
         # injected site nav (the #268 shim was removed).
         nav_home = page.locator('header.nav nav.nav-links a[href="index.html"]').first
@@ -108,7 +111,7 @@ def test_full_navigation_journey(page: Page, base_url: str) -> None:
             )
 
     # Step 9: return home. No errors should have accumulated.
-    page.goto(f"{base_url}/index.html", wait_until="networkidle")
+    page.goto(f"{site_url}/index.html", wait_until="networkidle")
 
     # Filter out CDN / external-resource noise — those aren't ours.
     real_errors = [
@@ -124,12 +127,12 @@ def test_full_navigation_journey(page: Page, base_url: str) -> None:
     )
 
 
-def test_breadcrumbs_back_to_home_works(page: Page, base_url: str) -> None:
+def test_breadcrumbs_back_to_home_works(page: Page, site_url: str) -> None:
     """The breadcrumb on a session page should always lead back to
     home in at most one click. Catches the regression where the
     first crumb's href is a relative path that doesn't resolve."""
     page.goto(
-        f"{base_url}/sessions/e2e-demo/2026-04-09-e2e-python-demo.html",
+        f"{site_url}/sessions/e2e-demo/2026-04-09-e2e-python-demo.html",
         wait_until="domcontentloaded",
     )
     crumbs = page.locator(".breadcrumbs a").all()

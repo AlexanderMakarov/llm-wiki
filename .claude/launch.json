@@ -2,10 +2,9 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "llmwiki-serve",
+      "name": "llmwiki-site-preview",
       "runtimeExecutable": "/usr/local/bin/python3.12",
-      "runtimeArgs": ["-m", "http.server", "8765", "--bind", "127.0.0.1", "--directory", "${workspaceFolder}/site"],
-      "port": 8765
+      "runtimeArgs": ["-m", "webbrowser", "-t", "${workspaceFolder}/site/index.html"]
     }
   ]
 }

@@ -4,7 +4,7 @@ Feature: Visual regression screenshots across breakpoints + themes
   So `pytest --snapshot-update` shows a diff when a change moves pixels
 
   Background:
-    Given a built llmwiki site is served
+    Given a built llmwiki site on disk
 
   Scenario Outline: Capture home page screenshot at <breakpoint> in <theme>
     When I resize the viewport to <width>x<height>

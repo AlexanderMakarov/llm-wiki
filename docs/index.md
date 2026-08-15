@@ -47,7 +47,7 @@ llmwiki runs two interchangeable ways. Pick one, start — you can switch later.
 
 ## Use it locally
 
-- **[Query your wiki](tutorials/05-querying-your-wiki.md)** — `/wiki-query`, `/wiki-graph`, `/wiki-lint`, `/wiki-candidates`, `/wiki-serve`.
+- **[Query your wiki](tutorials/05-querying-your-wiki.md)** — `/wiki-query`, `/wiki-graph`, `/wiki-lint`, `/wiki-candidates`.
 - **[Bring your existing Obsidian / Logseq vault](tutorials/06-bring-your-obsidian-vault.md)** — `llmwiki sync --vault <path>`, non-destructive by default.
 - **[Example workflows](tutorials/07-example-workflows.md)** — four real, end-to-end workflows.
 
@@ -71,6 +71,7 @@ llmwiki runs two interchangeable ways. Pick one, start — you can switch later.
 - **[CLI reference](reference/cli.md)** — every `python3 -m llmwiki <subcommand>` with every flag and realistic examples.
 - **[Slash commands reference](reference/slash-commands.md)** — every `/wiki-*` command used from Claude Code / Codex.
 - **[UI reference](reference/ui.md)** — every screen on the compiled site, how to reach it, what it shows.
+- **[Page kinds](reference/page-kinds.md)** — every `type:` value, what it is for, and where each frontmatter field comes from.
 - **[Architecture](architecture.md)** — three layers (`raw/` / `wiki/` / `site/`).
 - **[State persistence](reference/state-persistence.md)** — vault usage logs, rollup, daily series, and state file.
 - **[Configuration](configuration.md)** · **[Full configuration reference](configuration-reference.md)**.

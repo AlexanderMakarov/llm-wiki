@@ -132,8 +132,8 @@ Sorted **first by priority (M → S → C → W), then by layer (L0 → L7)**. E
 | S | L1 | S-L1-02 | `/wiki-graph` — networkx + vis.js knowledge graph | |
 | S | L1 | S-L1-03 | `/wiki-reflect` — self-reflection across all wiki | |
 | S | L1 | S-L1-04 | `/wiki-archive` — move stale entries to `wiki/archive/` | |
-| S | L1 | S-L1-05 | Comparison page type (`wiki/comparisons/`) | |
-| S | L1 | S-L1-06 | Question page type (`wiki/questions/`) | |
+| S | L1 | S-L1-05 | ~~Comparison page type~~ | Declined 2026-08-09 (#109) — no producer, no perceived value |
+| S | L1 | S-L1-06 | ~~Question page type~~ | Declined 2026-08-09 (#109) — no producer, no perceived value |
 | S | L2 | S-L2-01 | Timeline view of sessions | |
 | S | L2 | S-L2-02 | Tag cloud / tag index page | |
 | S | L2 | S-L2-03 | Knowledge graph HTML (vis.js) | |

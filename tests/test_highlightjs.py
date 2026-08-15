@@ -7,7 +7,9 @@ to client-side highlight.js:
   code blocks (no ``.codehilite`` wrapper, no Pygments tokens).
 * ``page_head`` and ``page_head_article`` include both light and dark
   highlight.js stylesheets plus the shared theme constants.
-* ``page_foot`` injects the highlight.js CDN script and the init snippet.
+* ``page_foot`` injects the vendored highlight.js script and the init snippet.
+* The library and both themes are vendored and copied into the site, so a
+  built page references them by relative path and fetches nothing (R12).
 * No build.py symbol still references ``HAS_PYGMENTS`` or ``codehilite``.
 """
 
@@ -23,8 +25,11 @@ from llmwiki.build import (
     HLJS_DARK_CSS,
     HLJS_LIGHT_CSS,
     HLJS_SCRIPT,
+    HLJS_VENDOR_DIR,
+    HLJS_VENDOR_FILES,
     HLJS_VERSION,
     _hljs_head_tags,
+    copy_hljs_assets,
     md_to_html,
     page_foot,
     page_head,
@@ -70,7 +75,7 @@ def test_md_to_html_multiple_languages_tagged_independently():
     assert '<pre><code class="language-json">' in html
 
 
-# ─── constants are CDN-shaped ────────────────────────────────────────────
+# ─── assets are vendored, not fetched ────────────────────────────────────
 
 
 def test_hljs_version_is_semver_major_11():
@@ -79,14 +84,35 @@ def test_hljs_version_is_semver_major_11():
     )
 
 
-@pytest.mark.parametrize(
-    "url",
-    [HLJS_LIGHT_CSS, HLJS_DARK_CSS, HLJS_SCRIPT],
-)
-def test_hljs_urls_point_at_cdn_release(url):
-    assert url.startswith("https://"), "highlight.js assets must load over HTTPS"
-    assert "highlightjs/cdn-release" in url
-    assert HLJS_VERSION in url
+@pytest.mark.parametrize("ref", [HLJS_LIGHT_CSS, HLJS_DARK_CSS, HLJS_SCRIPT])
+def test_hljs_references_are_relative(ref):
+    # @regression
+    """A built page must reach its highlighting assets without a network."""
+    assert "://" not in ref, f"{ref!r} must be a relative filename, not a URL"
+    assert "/" not in ref
+
+
+@pytest.mark.parametrize("name", HLJS_VENDOR_FILES)
+def test_hljs_asset_is_vendored_in_the_package(name):
+    # @regression
+    path = HLJS_VENDOR_DIR / name
+    assert path.is_file(), f"llmwiki/vendor/{name} missing from the package"
+    assert path.stat().st_size > 500
+
+
+def test_hljs_vendor_notice_credits_highlightjs():
+    notice = (HLJS_VENDOR_DIR / "NOTICE").read_text(encoding="utf-8")
+    assert "highlight.js" in notice
+    assert HLJS_VERSION in notice
+    assert "BSD-3-Clause" in notice
+    assert "github.com/highlightjs/highlight.js" in notice
+
+
+def test_copy_hljs_assets_writes_every_file(tmp_path):
+    written = copy_hljs_assets(tmp_path)
+    assert {p.name for p in written} == set(HLJS_VENDOR_FILES)
+    for name in HLJS_VENDOR_FILES:
+        assert (tmp_path / name).is_file()
 
 
 def test_hljs_head_tags_includes_both_themes_and_disables_dark():
@@ -108,7 +134,16 @@ def test_page_head_contains_hljs_links():
     html = page_head("t", "d", css_prefix="")
     assert 'id="hljs-light"' in html
     assert 'id="hljs-dark"' in html
-    assert HLJS_LIGHT_CSS in html
+    assert f'href="{HLJS_LIGHT_CSS}"' in html
+
+
+def test_page_head_prefixes_hljs_links_for_nested_pages():
+    # @regression
+    """Nested pages reach the site-root assets through the same prefix
+    style.css uses — otherwise every subdirectory loses highlighting."""
+    html = page_head("t", "d", css_prefix="../../")
+    assert f'href="../../{HLJS_LIGHT_CSS}"' in html
+    assert f'href="../../{HLJS_DARK_CSS}"' in html
 
 
 def test_page_head_article_contains_hljs_links():
@@ -118,14 +153,17 @@ def test_page_head_article_contains_hljs_links():
     assert HLJS_DARK_CSS in html
 
 
-# ─── page_foot injects the CDN script + init snippet ─────────────────────
+# ─── page_foot injects the vendored script + init snippet ────────────────
 
 
 def test_page_foot_loads_highlightjs_script():
     html = page_foot(js_prefix="")
-    assert HLJS_SCRIPT in html
-    # Must be deferred so it doesn't block first paint.
-    assert "defer" in html
+    assert f'<script src="{HLJS_SCRIPT}" defer>' in html
+
+
+def test_page_foot_prefixes_the_script_for_nested_pages():
+    html = page_foot(js_prefix="../")
+    assert f'<script src="../{HLJS_SCRIPT}" defer>' in html
 
 
 def test_page_foot_runs_highlightall_init():
@@ -308,6 +346,9 @@ def greet(name: str) -> str:
     assert "hljs-light" in index_html
     assert "hljs-dark" in index_html
     assert HLJS_SCRIPT in index_html
+    # The assets themselves land beside the pages that reference them.
+    for name in HLJS_VENDOR_FILES:
+        assert (out / name).is_file(), f"{name} missing from the built site"
 
     session_html = (
         out / "sessions" / "demo-proj" / "2026-04-08-hljs-smoke.html"

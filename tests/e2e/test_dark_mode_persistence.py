@@ -38,11 +38,11 @@ def _set_localstorage_theme(page: Page, theme: str) -> None:
     )
 
 
-def test_theme_persists_across_reload(page: Page, base_url: str) -> None:
+def test_theme_persists_across_reload(page: Page, site_url: str) -> None:
     """User flips to dark, refreshes — theme should still be dark.
     Catches the regression where the toggle handler fires but skips
     the localStorage write."""
-    page.goto(f"{base_url}/index.html", wait_until="domcontentloaded")
+    page.goto(f"{site_url}/index.html", wait_until="domcontentloaded")
     initial = _get_theme(page)
 
     # Click the toggle exactly once.
@@ -66,7 +66,7 @@ def test_theme_persists_across_reload(page: Page, base_url: str) -> None:
 
 
 def test_theme_respects_prefers_color_scheme_when_unset(
-    context: BrowserContext, base_url: str
+    context: BrowserContext, site_url: str
 ) -> None:
     """First-time visitor with no localStorage value should see the
     theme that matches their OS preference. We emulate
@@ -82,7 +82,7 @@ def test_theme_respects_prefers_color_scheme_when_unset(
         page.add_init_script(
             "try { localStorage.removeItem('llmwiki-theme'); } catch (e) {}"
         )
-        page.goto(f"{base_url}/index.html", wait_until="domcontentloaded")
+        page.goto(f"{site_url}/index.html", wait_until="domcontentloaded")
         theme = _get_theme(page)
         # The boot script may either set data-theme="dark" or leave
         # it absent and rely on @media (prefers-color-scheme: dark)
@@ -97,7 +97,7 @@ def test_theme_respects_prefers_color_scheme_when_unset(
 
 
 def test_explicit_localstorage_overrides_system_preference(
-    context: BrowserContext, base_url: str
+    context: BrowserContext, site_url: str
 ) -> None:
     """User explicitly chose light despite OS dark mode (or vice versa).
     The persisted value MUST win over ``prefers-color-scheme``.
@@ -109,7 +109,7 @@ def test_explicit_localstorage_overrides_system_preference(
         page.emulate_media(color_scheme="dark")
         # Force a "user chose light" persisted value.
         _set_localstorage_theme(page, "light")
-        page.goto(f"{base_url}/index.html", wait_until="domcontentloaded")
+        page.goto(f"{site_url}/index.html", wait_until="domcontentloaded")
         theme = _get_theme(page)
         assert theme == "light", (
             f"localStorage said light, OS said dark, page rendered as "
@@ -119,11 +119,11 @@ def test_explicit_localstorage_overrides_system_preference(
         page.close()
 
 
-def test_highlightjs_stylesheet_disabled_state_matches_theme(page: Page, base_url: str) -> None:
+def test_highlightjs_stylesheet_disabled_state_matches_theme(page: Page, site_url: str) -> None:
     """The page ships two hljs stylesheets (#hljs-light, #hljs-dark)
     with one ``disabled`` based on the active theme. After a toggle,
     the disabled flag must flip in the opposite direction."""
-    page.goto(f"{base_url}/index.html", wait_until="domcontentloaded")
+    page.goto(f"{site_url}/index.html", wait_until="domcontentloaded")
 
     def _disabled(selector: str) -> bool:
         return page.evaluate(
@@ -158,10 +158,10 @@ def test_highlightjs_stylesheet_disabled_state_matches_theme(page: Page, base_ur
     assert after_dark != init_dark, "#hljs-dark disabled state did not flip on theme toggle"
 
 
-def test_theme_toggle_button_has_accessible_name(page: Page, base_url: str) -> None:
+def test_theme_toggle_button_has_accessible_name(page: Page, site_url: str) -> None:
     """The toggle is icon-only on most viewports — without an
     aria-label or visible text it's invisible to screen readers."""
-    page.goto(f"{base_url}/index.html", wait_until="domcontentloaded")
+    page.goto(f"{site_url}/index.html", wait_until="domcontentloaded")
     toggle = page.locator("#theme-toggle").first
     expect(toggle).to_be_visible()
     label = toggle.get_attribute("aria-label") or toggle.inner_text() or ""

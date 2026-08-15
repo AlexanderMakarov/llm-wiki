@@ -6,7 +6,7 @@ slash file is supposed to dispatch `python3 -m llmwiki candidates …`.
 If the CLI grows a new flag, or a slash gets renamed, the two surfaces
 can drift silently.  These tests pin the contract:
 
-* Every `.claude/commands/wiki-*.md` that wraps a CLI subcommand
+* Every ``llmwiki/agent_kit/commands/wiki-*.md`` that wraps a CLI subcommand
   references the correct ``python3 -m llmwiki <subcommand>`` name.
 * Every CLI subcommand the slash wraps exists in ``build_parser()``.
 * Slash-command file names must start with ``wiki-`` for the pipeline.
@@ -22,7 +22,8 @@ from pathlib import Path
 from llmwiki.cli import build_parser
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-SLASH_DIR = REPO_ROOT / ".claude" / "commands"
+AGENT_KIT_CMDS = REPO_ROOT / "llmwiki" / "agent_kit" / "commands"
+CONTRIBUTOR_CMDS = REPO_ROOT / ".claude" / "commands"
 
 # Slashes that are pure prompts / orchestration (no CLI subcommand to
 # match). Listing them explicitly so future authors can't accidentally
@@ -65,19 +66,33 @@ def _wrapped_subcommand(slash_file: Path) -> str | None:
 
 
 def _all_slash_files() -> list[Path]:
-    if not SLASH_DIR.is_dir():
-        return []
-    return sorted(
-        p for p in SLASH_DIR.glob("*.md")
-        if p.stem not in {"README"}
-    )
+    files: list[Path] = []
+    for folder in (AGENT_KIT_CMDS, CONTRIBUTOR_CMDS):
+        if not folder.is_dir():
+            continue
+        files.extend(
+            p for p in folder.glob("*.md") if p.stem not in {"README"}
+        )
+    return sorted(files)
+
+
+def _slash_path(stem: str) -> Path:
+    kit = AGENT_KIT_CMDS / f"{stem}.md"
+    if kit.is_file():
+        return kit
+    return CONTRIBUTOR_CMDS / f"{stem}.md"
 
 
 # ─── Existence + naming ─────────────────────────────────────────────────
 
 
 def test_slash_dir_exists():
-    assert SLASH_DIR.is_dir(), f"missing {SLASH_DIR.relative_to(REPO_ROOT)}"
+    assert AGENT_KIT_CMDS.is_dir(), (
+        f"missing {AGENT_KIT_CMDS.relative_to(REPO_ROOT)}"
+    )
+    assert CONTRIBUTOR_CMDS.is_dir(), (
+        f"missing {CONTRIBUTOR_CMDS.relative_to(REPO_ROOT)}"
+    )
 
 
 def test_every_slash_has_wiki_prefix_or_is_governance():
@@ -159,10 +174,9 @@ def test_known_wrappers_match_expected_set():
         "wiki-candidates": "candidates",
         "wiki-graph": "graph",
         "wiki-init": "init",
-        "wiki-serve": "serve",
     }
     for slash_stem, cli_sub in expected.items():
-        p = SLASH_DIR / f"{slash_stem}.md"
+        p = AGENT_KIT_CMDS / f"{slash_stem}.md"
         assert p.is_file(), f"missing slash file: {p.name}"
         wrapped = _wrapped_subcommand(p)
         assert wrapped == cli_sub, (
@@ -180,7 +194,7 @@ def test_non_wrapper_slashes_dont_claim_to_wrap_cli():
     not the implementation" drift."""
     cli = _cli_subcommands()
     for stem in NON_WRAPPER_SLASHES:
-        p = SLASH_DIR / f"{stem}.md"
+        p = _slash_path(stem)
         if not p.is_file():
             continue
         sub = _wrapped_subcommand(p)
