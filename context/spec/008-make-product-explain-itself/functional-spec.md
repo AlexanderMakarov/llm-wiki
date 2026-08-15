@@ -79,7 +79,7 @@ None of these can be fixed independently. A README written against a fabricated 
     - [ ] The same check runs automatically on every change, and fails the build when the demo reports an error.
     - [ ] Warnings are printed for the maintainer to read, but do not fail the build. One warning is expected by design and is not a defect: the freshness check reports how long ago a page was last updated, which on a committed demo measures nothing but elapsed time and would otherwise turn the build red on a timer.
     - [ ] The failure message identifies which demo page is at fault.
-    - [ ] A follow-up issue proposes letting a vault opt out of individual quality rules, so the demo can enforce warnings too once the freshness check can be excluded.
+    - [ ] A follow-up issue proposes letting a vault opt out of individual quality rules, so the demo can enforce warnings too once the freshness check can be excluded — [#150](https://github.com/AlexanderMakarov/llm-wiki/issues/150).
 
 ### R5 — The demo site is published automatically
 
@@ -143,18 +143,40 @@ None of these can be fixed independently. A README written against a fabricated 
     - [ ] The user-facing commands make no reference to paths that only exist inside this repository.
     - [ ] The existing agent-plugin description files are either corrected to match reality or removed. They must not remain in the repository describing an author, a supported language version, and file locations that are all wrong.
 
-### R12 — The wiki is a static site with no server
+### R12 — The wiki is a static site, and nothing serves it
 
 - **As a** user, **I want** my wiki to be plain files I can open, **so that** nothing has to be running for me to read it and nothing consumes resources when I am not using it.
   - **Acceptance Criteria:**
-    - [ ] The product no longer ships a command that starts an HTTP server, and the one-click serve helper scripts are gone.
-    - [ ] A built site is fully usable by opening its home page as a file: navigation, project pages, session pages, topic pages, search and the graph all work with nothing running.
+    - [ ] The product ships no command that starts an HTTP server, no one-click serve helper, and no endpoint of any kind. Nothing in the product answers a request.
+    - [ ] A built site is fully usable by opening its home page as a file: navigation, project pages, session pages, topic pages, search, the graph and the candidates page all work with nothing running.
     - [ ] Every script and stylesheet carrying behaviour or layout ships with the site, including the code-highlighting library and its light and dark themes. No page fetches code or styling from a third party.
     - [ ] **Known exception, accepted deliberately:** the site links two web fonts from a font service. An offline reader gets the same pages with the reader's own system fonts instead of the intended ones — layout and behaviour are unaffected. Vendoring them was considered and rejected as not worth several hundred kilobytes of binary assets in every published site. A test pins this as the only remaining outbound link, so a new one fails loudly rather than slipping in.
-    - [ ] Reviewing candidates is possible entirely from the command line, and no review capability is lost — the batch action format the old review page posted is already accepted by the command line.
-    - [ ] The candidates page still lists what is pending and states plainly how to act on it, rather than offering controls that cannot work.
+    - [ ] **Nothing in the project serves the site for its own purposes either** — not the test harness, not a screenshot script, not a workflow, not an editor launch task. Any place that previously started a server to look at the output opens the files instead.
     - [ ] No document, agent instruction, or built page tells a reader to start a server in order to view their wiki. Every such place says to open the site instead.
     - [ ] A user who previously started a server is told what to do instead, in the upgrade notes.
+
+### R12a — The site is verified the way users actually open it
+
+- **As a** maintainer, **I want** the browser checks to open the built files directly, **so that** what the tests prove is what a reader experiences.
+  - **Acceptance Criteria:**
+    - [ ] The browser tests open the built site as files. No test starts a server to reach it.
+    - [ ] Those tests walk the surfaces a reader uses — home, a project, a session, a topic page, search, the graph and the candidates page — and fail on a console error or a resource that fails to load.
+    - [ ] A page that works only when served, and breaks when opened as a file, fails the suite.
+
+  - **Why this is a requirement and not an implementation detail:** the browser suite reached the site over HTTP while the product was being changed to need no server. Every check passed, and none of them exercised the thing being claimed. Opening a file differs from fetching a URL in ways that break real pages — same-origin requests are refused, modules are refused, a directory URL has no index — so a suite that only ever serves the site cannot detect the failures this requirement exists to prevent.
+
+### R12b — Reviewing candidates happens in the page, and is applied from the command line
+
+- **As a** reviewer, **I want** to make my decisions on the candidates page, **so that** I can judge a backlog by reading it rather than by hand-editing a batch file.
+  - **Acceptance Criteria:**
+    - [ ] The candidates page keeps a row per pending candidate showing its name and its description, and a control for choosing what to do with it — covering every action the command line can execute.
+    - [ ] A row starts with **no decision chosen**. A reviewer who applies without deciding anything gets an empty batch, not a batch that promotes everything.
+    - [ ] Applying assembles the chosen decisions into the command to run and the batch to pipe into it, ready to copy, and names the vault the decisions apply to.
+    - [ ] The command and its batch are reachable without scrolling past the candidate tables.
+    - [ ] Deciding requires nothing to be running. Only executing the decisions uses the command line.
+    - [ ] No review capability is lost relative to the page that posted its decisions to a server.
+
+  - **Why this is stated separately:** an earlier reading of "review moves to the command line" removed the page's controls altogether, on the grounds that they called an endpoint that no longer existed. Deciding is state held in the page; only executing ever needed a server. Conflating the two removed a working capability that the removal did not require.
 
 ### R13 — What the site shows for a local path is an explicit choice
 
@@ -198,7 +220,11 @@ None of these can be fixed independently. A README written against a fabricated 
 
 ### Out-of-Scope
 
-- **A synthesised description on knowledge pages** — considered and deliberately not adopted. No step in llmwiki produces one: the summarising prompt mandates attributed bullets with no preamble, and a newly harvested page is seeded as a title plus an empty facts heading. Adding one would be a new AI-generated field with its own per-page cost and quality bar, so it is deferred to [#137](https://github.com/AlexanderMakarov/llm-wiki/issues/137) rather than folded into this epic (R6).
+- **A synthesised description on knowledge pages** — out of scope here, and deferred to the synthesis rework rather than to this epic (R6).
+
+  The reasoning first recorded for this decision was wrong on two counts, and is corrected here rather than quietly replaced. It claimed no step in llmwiki produces a description: `consolidate-topics` does, storing them in a topic cache that `synth` feeds back into the source prompt as `desc="…"` to disambiguate topics. Those descriptions exist today and are never shown to a reader — the product already knows what these things are and does not say so. It also claimed a description would be a new AI-generated field with its own per-page cost, when `promote` already makes a per-page model call from the same evidence. The cost was the delta, not the feature, and the delta is small.
+
+  The decision to keep pages facts-only **for this epic** still stands, because the demo and the documentation have to describe what the product does today. Descriptions arrive with the synthesis rework, which is where the shape of the whole pipeline is settled.
 - **Producers for open questions and comparisons** — those kinds are being removed instead.
 - **Link-check hygiene as a project (#107)** — a separate ticket that should land first; this work owns only the links in files it changes.
 - **The site's automatically generated model comparison view** — unrelated to the comparisons page kind, left alone.

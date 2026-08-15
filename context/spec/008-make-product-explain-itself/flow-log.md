@@ -304,3 +304,35 @@ Operator: no point synthesising the demo now, because the docs it is built from 
 Revised order: **Stage C docs and product changes first, then one synth at the end.** This inverts the spec's Stage B → Stage C order for the demo-content step only; the refresh script still belongs to Stage B and is what makes subsequent doc edits cheap.
 
 **Consequence for the PR plan (R11):** the branch now carries Stage A, the Stage B demo corpus, and Stage C work together, so the three-PR split recorded in R11 no longer matches reality. Raised with the operator rather than drifting silently.
+
+## spec change — no served site anywhere — 2026-08-11
+
+Operator directive after reviewing the demo: "No served site at all. Everywhere... it should be removed with all tooling around it. Everything should be checked on static site from now on."
+
+Two defects in the previous specification prompted this.
+
+**1. R12 stated a property without stating its evidence.** It required the site to work as files, but said nothing about how that is verified — so the entire browser suite reached the site over HTTP via `ThreadingHTTPServer` while the server was being removed from the product. Every check passed and none exercised the claim. The operator noticed the browser running against a served page, not the files.
+
+This is the same failure shape as the `eval` / `check-links` workflow tests replaced earlier today: a check whose form implies coverage it does not provide. There the assertion pinned a string rather than a behaviour; here the harness exercised a transport the product no longer uses.
+
+**2. R12 was ambiguous enough to license removing a working feature.** "Reviewing candidates is possible entirely from the command line" was implemented as *the page becomes read-only*, deleting per-row decision controls and Apply. Only executing decisions ever needed a server; deciding is state held in the page. "Calls an endpoint" was collapsed into "needs an endpoint", and a capability was lost that the removal did not require.
+
+Spec changes:
+
+- **R12 rewritten** — no command, no helper, **no endpoint of any kind**, and nothing in the project serves the site for its own purposes either: not the test harness, not a screenshot script, not a workflow, not an editor launch task.
+- **R12a added** — the browser tests open the built files. No test starts a server. They walk the surfaces a reader uses and fail on a console error or a failed load. Carries a note explaining why this is a requirement rather than an implementation detail: a file URL is a different origin model, not a slower HTTP one.
+- **R12b added** — the review interaction stays in the page; only execution moves to the command line. A row starts with **no decision**, so applying without deciding yields an empty batch rather than promoting everything. Carries a note recording the conflation that caused the regression.
+- **Tech spec** gains Stage C0a, tabulating the six places that still serve the site and what each becomes, and recording that Chromium under Playwright does navigate `file://` — an earlier agent's claim that it blocks the scheme was wrong.
+- **Slice 11 rewritten** with the fuller scope.
+
+The agent restoring the candidates page was stopped mid-verification so the specification could be corrected first. Its work — `candidates_site.py`, CSS, two test files, docs — is uncommitted in the tree and was not discarded.
+
+## merge target becomes a closed, filterable list — 2026-08-13
+
+Operator: the merge control "presents as a plain text box — I did not recognise it as a chooser at all", and it accepted any string. An `<input list=…>` over a `<datalist>` offers typeahead but looks like free text, and `merge()` resolves a target under `wiki/<kind>/` or a pending peer, so an invented name failed later, after the reviewer had moved on.
+
+The Into field is now a combobox over the same `merge_targets()` list: the ▾ button or `↓` opens it whole, typing narrows it by case-insensitive substring, `↑`/`↓`/`Enter`/`Esc` drive it, and the list is the closed set of valid targets — a value that names no page is flagged as it is typed and never enters a batch. Target names are embedded once per kind as inline JSON rather than repeated per row, so a long backlog does not multiply the page size by the size of the vault.
+
+Same pass, same page: **the discard reason is required**. `discard` writes `<slug>.reason.txt` beside the archived stub, so a blank reason loses the decision rather than merely being untidy. A row set to *Discard* with no reason is held back exactly the way an unresolved merge target is — one mechanism, one message, one marked field, focus moved to it — instead of silently producing a reasonless action or silently vanishing from the batch.
+
+Observed while doing it, and filed separately by the operator rather than fixed here: **nothing reads `.reason.txt`**. Harvest has no memory of what a reviewer rejected, so a discarded candidate is re-proposed on the next run.

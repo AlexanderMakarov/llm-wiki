@@ -1,8 +1,9 @@
-"""Tests for the wiki-checks CI workflow (v1.0, #163)."""
+"""Tests for the wiki-checks CI workflow (v1.0, #163) and the #109 lint gate."""
 
 from __future__ import annotations
 
 import re
+from pathlib import Path
 
 from llmwiki import REPO_ROOT
 from llmwiki.cli import build_parser
@@ -107,3 +108,43 @@ def test_pinned_checkout_version():
     """Workflow pins actions/checkout to a floating major (@vN), not a branch tip."""
     text = WORKFLOW.read_text(encoding="utf-8")
     assert re.search(r"actions/checkout@v\d+", text)
+
+
+# ─── R4 boundary: --fail-on-errors, not --strict ────────────────────────
+
+
+def _seed_wiki(vault: Path, *, page_type: str, last_updated: str) -> None:
+    page = vault / "wiki" / "entities" / "Topic.md"
+    page.parent.mkdir(parents=True, exist_ok=True)
+    page.write_text(
+        f'---\ntitle: "Topic"\ntype: {page_type}\nlast_updated: {last_updated}\n---\n\n# Topic\n',
+        encoding="utf-8",
+    )
+
+
+def test_fail_on_errors_exits_nonzero_on_a_seeded_error(tmp_path: Path, capsys) -> None:
+    """An error-severity finding fails the same gate CI uses."""
+    vault = tmp_path / "vault"
+    _seed_wiki(vault, page_type="not-a-kind", last_updated="2026-01-01")
+    args = build_parser().parse_args([
+        "lint", "--vault", str(vault), "--fail-on-errors",
+        "--rules", "frontmatter_validity",
+    ])
+    assert args.func(args) == 1
+    capsys.readouterr()
+
+
+def test_fail_on_errors_exits_zero_on_warnings_only(tmp_path: Path, capsys) -> None:
+    """Warnings print and are tolerated — reintroducing --strict is a deliberate act.
+
+    content_freshness is warning-severity and fires on elapsed time, which is
+    why the demo CI gate must not use --strict.
+    """
+    vault = tmp_path / "vault"
+    _seed_wiki(vault, page_type="entity", last_updated="2020-01-01")
+    args = build_parser().parse_args([
+        "lint", "--vault", str(vault), "--fail-on-errors",
+        "--rules", "content_freshness",
+    ])
+    assert args.func(args) == 0
+    capsys.readouterr()

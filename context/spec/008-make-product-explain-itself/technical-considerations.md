@@ -127,7 +127,7 @@ Repairs: trigger on `main`; delete the `eval` step; drop the seeding dance; run 
 | --- | --- |
 | `llmwiki/serve.py` | Deleted, together with its `serve` subcommand wiring in `cli.py` |
 | `serve.sh`, `serve.bat` | Deleted |
-| `candidates.html` (built page) | Becomes a read-only listing of pending candidates. Instead of controls that cannot work, it states the command to run and — ideally — renders the ready-made `--actions` JSON for the listed candidates so a reviewer can copy it straight into `candidates apply --actions -` |
+| `candidates.html` (built page) | Keeps its per-row Decision controls and Apply — those are DOM state, and only *executing* the decisions needed a backend. Apply assembles the decided rows into the command to run plus the ready-made `--actions` JSON batch, instead of posting them |
 | `script.js` / page JS | Drop the `fetch("/api/candidates")` path |
 | Agent kit, docs, README, `CLAUDE.md`, `AGENTS.md` | Every "run the server to view your wiki" instruction becomes "open the site". The `/wiki-serve` slash command and `wiki-serve` skill go |
 | `docs/UPGRADING.md`, `CHANGELOG.md` | Record the removal and what to do instead |
@@ -141,6 +141,25 @@ Repairs: trigger on `main`; delete the `eval` step; drop the seeding dance; run 
 - Consider the `onerror` offline-notice affordance `graph.py:540` uses; for highlighting, degrading to unstyled code blocks is acceptable and needs no notice.
 
 **Verified prerequisite for "open the file works".** The built site loads its data through `<script src="llmwiki-state.js">` rather than `fetch`, and uses no `type="module"` scripts — both of which would fail under `file://`. So the site is already file-openable by design. The two exceptions found: `candidates.html`'s API call (removed by this stage) and a `highlight.js` tag pointing at `cdn.jsdelivr.net`, which needs network for syntax highlighting only. The CDN dependency is pre-existing and out of scope here; note it rather than fix it.
+
+### Stage C0a — Nothing serves the site, including the test harness (R12, R12a)
+
+Removing `llmwiki serve` left the project still serving its own output in six places. Each has to go, or the claim is false in the one environment that checks it.
+
+| Where | What it does now | Becomes |
+| --- | --- | --- |
+| `playwright.config.ts` | `baseURL = http://127.0.0.1:8765` plus a `webServer` block | No `webServer`; tests address built files |
+| `tests/e2e/conftest.py` | `ThreadingHTTPServer` + `_serve_dir` + `base_url` fixture | A fixture returning the built site's path; navigation uses file URLs |
+| `tests/e2e/test_navigation_404.py`, `test_build_artifacts.py` | consume `base_url` | consume the path fixture |
+| `.github/workflows/agents-e2e.yml` | starts `python3 -m http.server` in front of the output | opens the files |
+| `.github/workflows/synthetic.yml`, `.claude/launch.json` | serve the site | open the files |
+| `scripts/record_demo.py`, `scripts/regen_docs_screenshots.py` | serve to capture screenshots | capture from files |
+
+Out of scope, and legitimately HTTP: `llmwiki/synth/ollama.py` and its test talk to a model backend, not to a served site. The vendored `.cursor/skills/**` tests are third-party.
+
+**Why the harness matters as much as the product.** A file URL is not a slow HTTP URL — it is a different origin model. Same-origin `fetch` is refused, ES modules are refused, and a directory URL has no index to serve. The suite passed throughout the server's removal precisely because it never opened a file. Converting it is what turns R12 from an assertion into something the build can contradict.
+
+**Feasibility.** Chromium under Playwright navigates `file://` URLs. An earlier report that "Playwright blocks `file:`" was wrong and should not be repeated.
 
 ### Stage C0b — Displayed local paths become a build input (R13)
 
