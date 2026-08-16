@@ -3,9 +3,7 @@
 > **Audience:** maintainers planning the next releases. This is a
 > living doc; update it as you merge PRs.
 >
-> For the detailed historical roadmap (v0.1 → v0.4), see
-> [`docs/roadmap.md`](../roadmap.md). This page is the forward-looking
-> short-list.
+> This page is the forward-looking short-list by release theme. What the team is actually working on next lives in [`context/product/roadmap.md`](../../context/product/roadmap.md), which is the roadmap `/awos:spec` reads.
 
 ## Release theme overview
 

@@ -57,7 +57,7 @@ Pages interlink via `[[wikilinks]]`. Contradictions are recorded, not silently o
 
 ## Layer 2: The eight-layer build
 
-Internally the code is organised into eight functional layers. Each layer has one clear responsibility, and each feature in [docs/roadmap.md](roadmap.md) maps to exactly one layer.
+Internally the code is organised into eight functional layers. Each layer has one clear responsibility.
 
 ```
 ┌──────────────────────────────────────────────────────┐
@@ -164,7 +164,6 @@ Tells humans and agents how the system works:
 - `docs/framework.md` — Open Source Framework v4.1 adapted for llmwiki
 - `docs/research.md` — Phase 1.25 research report
 - `docs/feature-matrix.md` — 161 features across 16 categories
-- `docs/roadmap.md` — Phase × Layer × Item MoSCoW table
 
 ### L6 — Adapters
 

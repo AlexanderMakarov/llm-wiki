@@ -75,5 +75,4 @@ signal interest.
 3. **Could (C)** -- nice to have. Ships when a contributor or issue demands.
 4. **Won't (W)** -- considered and rejected. Documented in DECLINED.md.
 
-See [`roadmap.md`](roadmap.md) for the full internal roadmap with
-layer-by-layer breakdown and MoSCoW priority assignments.
+See [`context/product/roadmap.md`](../context/product/roadmap.md) for the working roadmap that drives development, and [`docs/maintainers/DECLINED.md`](maintainers/DECLINED.md) for ideas that were considered and rejected.
