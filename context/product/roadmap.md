@@ -39,6 +39,7 @@ _Stop misleading users; then systematically decide what fork residue to revive v
   - [ ] **Inventory what we inherited:** Catalog product surfaces left from the upstream fork and this fork's additions — CLI commands, adapters (core vs contrib), site/viewer features, docs claims, one-shot migrate-* tools, and anything half-removed or still advertised but broken — against the product definition's "cut useless / restore broken" goal.
   - [ ] **Decide and log each item:** For every inventoried surface, choose keep, revive (file/track a GitHub issue), or remove as useless; append removals and explicit non-goals to `docs/maintainers/DECLINED.md` with date + one-line reason (same format as existing entries), and keep revive work on the issue backlog.
   - [ ] **Execute cut/revive follow-ups:** Land the decided removals and restore-broken work as subsequent issues/PRs so the inventory does not become a static report.
+  - [ ] **Eval framework: build it or drop the claim (#154):** `llmwiki eval` is not a subcommand, yet the docs have advertised an eval framework as shipped since v0.3 and CI once ran it behind `|| true`, so the check reported success while measuring nothing.
 
 ---
 
@@ -61,6 +62,9 @@ _Humans see knowledge on topic pages; Cursor becomes a real session source (prod
 
 - [ ] **Visual knowledge depth**
   - [x] **Topic pages show kind, freshness, and Key Facts (#108):** Entity/concept content reaches readers; project topics route to project pages; graph panel shows the same metadata.
+  - [ ] **Hover-to-preview wikilinks:** Show the target page's opening lines on hover instead of making the reader click through to find out whether it is worth reading. Advertised as shipped in v0.2; never built.
+  - [ ] **Timeline view of sessions:** A chronological browse surface over the corpus. Also advertised as shipped in v0.2 and never built — `llmwiki/changelog_timeline.py` is unrelated, it renders entity `changelog:` frontmatter.
+  - [ ] **Session activity sparkline:** A compact per-project activity chart so a reader can see cadence without opening the analytics page.
 
 - [ ] **Pages that read well**
   - [ ] **Synthesised page descriptions (#137):** Give entity, concept, and project pages a short description instead of leading with bare Key Facts.
@@ -70,6 +74,16 @@ _Humans see knowledge on topic pages; Cursor becomes a real session source (prod
 
 - [ ] **Cursor as a real session source**
   - [ ] **Parse Cursor session state (#2):** Stop silently filtering all Cursor sessions after discovering the store.
+
+---
+
+### Phase 4 — v1.0 stability pass
+
+_No new features. Lock what exists so users can depend on it._
+
+- [ ] **API freeze:** CLI flags, frontmatter schema, and slash-command contracts stop changing without a migration note; breaking changes wait for a major.
+- [ ] **LTS branch:** v1.x receives security fixes for 12 months after v1.0.
+- [ ] **Docs polish:** every shipped feature documented and every tutorial current — with the claims verified against the code, since the retired roadmaps advertised an eval framework, hover-preview and a timeline view that were never built.
 
 ---
 
@@ -88,11 +102,4 @@ _Lower urgency or blocked on external reliability; revisit after Phases 1–3._
 - [ ] **MCP protocol upgrade (#78):** Keep any-agent wiki consumption current with the 2026-07-28 (stateless core) MCP server model.
 - [ ] **Claude Desktop Cowork / agent-mode ingest (#31):** Opt-in when the audit.jsonl path is solid.
 - [ ] **claude.ai chat ingest (#32):** Explicitly deferred until a reliable export mechanism exists.
-
-_Carried from the retired `docs/roadmap.md` (2026-08-16) — the only items from it with anything still to decide. Everything else there was shipped, covered by an open issue, or moved to [`docs/maintainers/DECLINED.md`](../../docs/maintainers/DECLINED.md)._
-
-- [ ] **Eval framework — LLM-judged wiki quality (#154):** `llmwiki eval` does not exist as a subcommand, while `docs/maintainers/ROADMAP.md` lists an eval framework as shipped in v0.3. Decide whether to build it or correct the claim.
-- [ ] **Timeline view of sessions:** A chronological browse surface. `llmwiki/changelog_timeline.py` is unrelated — it renders entity `changelog:` frontmatter, not sessions.
-- [ ] **Session activity sparkline:** A per-session or per-project activity chart on the built site.
-- [ ] **Hover-to-preview wikilinks:** Show the target page's opening lines on hover instead of requiring a click.
-- [ ] **`/wiki-merge` — merge two vaults:** No design exists for slug collisions, duplicate sources, or conflicting `index.md` catalogs.
+- [ ] **`/wiki-merge` — merge two vaults:** Deferred for want of a design: no answer yet for slug collisions, duplicate sources, or two `index.md` catalogs that disagree.

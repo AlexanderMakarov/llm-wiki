@@ -17,7 +17,7 @@ not to fully resolve it.
    - `docs/maintainers/TRIAGE.md` (label taxonomy + rules)
    - `docs/maintainers/ARCHITECTURE.md` (layer definitions)
    - `docs/maintainers/DECLINED.md` (check for prior rejection)
-   - `docs/maintainers/ROADMAP.md` (current milestone themes)
+   - `context/product/roadmap.md` (phases and what is next)
 
 3. **Check for duplicates** — before labeling, run:
    ```bash
@@ -40,8 +40,9 @@ not to fully resolve it.
      anything actionable; `question` and `epic` can skip)
 
 6. **Assign a milestone** — for `priority:must` + `priority:should`
-   items, assign the current release milestone from
-   `docs/maintainers/ROADMAP.md`. `priority:could` items stay
+   items, assign the current release milestone from the GitHub
+   milestone list, and place the issue in a phase in
+   `context/product/roadmap.md`. `priority:could` items stay
    unmilestoned until a contributor picks them up.
 
 7. **Post a triage comment** — use the template below.
