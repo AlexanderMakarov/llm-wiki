@@ -9,7 +9,7 @@ pip install llm-wiki
 llmwiki install-agent-kit --dest ~/.claude
 ```
 
-> **Changing llmwiki's own code or docs?** Read [`CONTRIBUTING.md`](CONTRIBUTING.md), whose short form is loaded automatically from [`.claude/rules/contributing.md`](.claude/rules/contributing.md) when you touch `llmwiki/`, `tests/`, `scripts/`, or `docs/`. Run `ruff check` and `python3 -m pytest tests/ -q` before pushing.
+> **Changing llmwiki's own code or docs?** Read [`CONTRIBUTING.md`](CONTRIBUTING.md), whose short form is loaded automatically from [`.claude/rules/contributing.md`](.claude/rules/contributing.md) when you touch `llmwiki/`, `tests/`, `scripts/`, or `docs/`. Run `ruff check` and `python3 -m pytest tests/ -q` before pushing. CI greps every committed `*.md` and `*.py` for strings that must never reach the repo (real usernames, personal paths): read [`.github/workflows/ci.yml`](.github/workflows/ci.yml) for the enforced list rather than guessing at it, and write about one with a placeholder — naming it literally, even to document it, trips the gate.
 
 ## Three layers
 
@@ -30,7 +30,12 @@ wiki/          YOU OWN THIS. LLM-generated pages that summarise, cross-reference
   projects/        Codebases and work streams, seeded from session metadata (kebab-case slug).
   syntheses/       Saved query answers (kebab-case slug). Written by an agent or a
                    person answering a question — no pipeline step generates one.
-  archive/         Deprecated / demoted pages preserved for history. [v0.2+]
+  archive/         Cold storage: candidates a reviewer dismissed as noise, kept for
+                   history. Not a live page set — never catalogued in index.md, linted,
+                   a graph node, tagged, or searchable/quotable via MCP. A [[wikilink]]
+                   to a discarded page reads as broken on purpose. One exception: the
+                   candidate harvest treats archived slugs as resolved, so a dismissal
+                   sticks instead of being re-proposed every synth. [v0.2+]
 
 site/          GENERATED. Static HTML from `python3 -m llmwiki build`. Do not edit by hand.
 ```

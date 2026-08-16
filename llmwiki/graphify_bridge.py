@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Any
 
 from llmwiki import REPO_ROOT
+from llmwiki._system_pages import is_archived_path
 from llmwiki.wikilinks import WIKILINK_RE, strip_anchor
 
 WIKI_DIR = REPO_ROOT / "wiki"
@@ -83,8 +84,12 @@ def _extract_wiki_nodes(wiki_dir: Path) -> dict[str, Any]:
     project_pages: dict[str, list[tuple[str, str]]] = {}
 
     for md in sorted(wiki_dir.rglob("*.md")):
-        text = md.read_text(encoding="utf-8", errors="replace")
         rel = md.relative_to(wiki_dir)
+        # Cold storage (#140), matching graph.scan_pages: discarded pages
+        # are not nodes, so nothing links to or through them.
+        if is_archived_path(rel.parts):
+            continue
+        text = md.read_text(encoding="utf-8", errors="replace")
         raw_id = str(rel.with_suffix("")).replace("/", "_").replace(" ", "_")
         # Cap node ID at 120 chars to avoid filesystem issues on export
         node_id = raw_id[:120] if len(raw_id) > 120 else raw_id

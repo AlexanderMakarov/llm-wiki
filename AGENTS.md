@@ -9,7 +9,7 @@ pip install llm-wiki
 llmwiki install-agent-kit --dest ~/.codex
 ```
 
-> **Changing llmwiki's own code or docs?** Read [`CONTRIBUTING.md`](CONTRIBUTING.md). Cursor loads the short form from [`.cursor/rules/`](.cursor/rules); Claude Code loads it from [`.claude/rules/contributing.md`](.claude/rules/contributing.md). Run `ruff check` and `python3 -m pytest tests/ -q` before pushing.
+> **Changing llmwiki's own code or docs?** Read [`CONTRIBUTING.md`](CONTRIBUTING.md). Cursor loads the short form from [`.cursor/rules/`](.cursor/rules); Claude Code loads it from [`.claude/rules/contributing.md`](.claude/rules/contributing.md). Run `ruff check` and `python3 -m pytest tests/ -q` before pushing. CI greps every committed `*.md` and `*.py` for strings that must never reach the repo (real usernames, personal paths): read [`.github/workflows/ci.yml`](.github/workflows/ci.yml) for the enforced list rather than guessing at it, and write about one with a placeholder — naming it literally, even to document it, trips the gate.
 
 ## Three layers
 

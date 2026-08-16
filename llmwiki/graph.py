@@ -25,6 +25,7 @@ from typing import Any
 
 from llmwiki import REPO_ROOT
 from llmwiki._frontmatter import parse_frontmatter
+from llmwiki._system_pages import is_archived_path
 from llmwiki.render.graph_viewer import GRAPH_VIEWER_JS
 from llmwiki.wikilinks import WIKILINK_RE
 
@@ -192,6 +193,11 @@ def scan_pages(wiki_dir: Path | None = None) -> dict[str, dict[str, Any]]:
         # Type = parent directory name when under sources/entities/concepts/etc.
         try:
             rel = p.relative_to(wiki_dir)
+            # `archive/` is cold storage (#140) — the candidate-triage reject
+            # bin. Discarded pages are not nodes, so nothing in the graph
+            # links to or through them.
+            if is_archived_path(rel.parts):
+                continue
             type_ = rel.parts[0] if len(rel.parts) > 1 else "root"
         except ValueError:
             type_ = "root"

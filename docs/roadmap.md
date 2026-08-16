@@ -131,7 +131,7 @@ Sorted **first by priority (M → S → C → W), then by layer (L0 → L7)**. E
 | S | L1 | S-L1-01 | `/wiki-update` — update existing page only | |
 | S | L1 | S-L1-02 | `/wiki-graph` — networkx + vis.js knowledge graph | |
 | S | L1 | S-L1-03 | `/wiki-reflect` — self-reflection across all wiki | |
-| S | L1 | S-L1-04 | `/wiki-archive` — move stale entries to `wiki/archive/` | |
+| S | L1 | S-L1-04 | `/wiki-archive` — move stale entries to a *live* folder; `wiki/archive/` is cold storage since #140, so anything moved there leaves the index, graph, tags, backlinks, lint and search with no error | |
 | S | L1 | S-L1-05 | ~~Comparison page type~~ | Declined 2026-08-09 (#109) — no producer, no perceived value |
 | S | L1 | S-L1-06 | ~~Question page type~~ | Declined 2026-08-09 (#109) — no producer, no perceived value |
 | S | L2 | S-L2-01 | Timeline view of sessions | |

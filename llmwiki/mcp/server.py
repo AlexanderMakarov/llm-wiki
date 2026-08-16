@@ -39,6 +39,7 @@ from llmwiki import REPO_ROOT as SOURCE_ROOT
 from llmwiki import __version__
 from llmwiki import usage as _usage
 from llmwiki._frontmatter import parse_frontmatter_dict
+from llmwiki._system_pages import is_archived_path
 from llmwiki.add_doc import add_sources
 from llmwiki.categories import scan_tags
 from llmwiki.config_schedule import resolve_content_root
@@ -617,6 +618,10 @@ def tool_wiki_query(args: dict[str, Any]) -> dict[str, Any]:
     for page in wiki.rglob("*.md"):
         if budget <= 0:
             break
+        # Cold storage (#140): a discarded page must never be quoted back
+        # as an answer — the reviewer dismissed the term as noise.
+        if is_archived_path(page.relative_to(wiki).parts):
+            continue
         content, consumed = _read_capped(page, remaining_budget=budget)
         if consumed == 0:
             try:
@@ -746,17 +751,30 @@ def _read_capped(p: Path, *, remaining_budget: int) -> tuple[str, int]:
         return "", 0
 
 
-def _iter_scan_files(roots: Iterable[Path]) -> Iterator[Path]:
+def _iter_scan_files(
+    roots: Iterable[Path], *, cold_storage_root: Path | None = None
+) -> Iterator[Path]:
     """Yield every ``.md`` file under the given roots as one flat sequence.
 
     A single iterator gives the caller a single termination check, so one
     hit cap applies across all roots instead of once per root (#413).
     Missing roots are skipped silently.
+
+    ``cold_storage_root`` names the wiki root whose ``archive/`` subtree is
+    withheld (#140): a discarded candidate is a term the reviewer called
+    noise, so search must not offer it back. The test is per root rather
+    than per path because only ``wiki/archive/**`` is cold storage — a raw
+    transcript filed under a folder named ``archive`` is ordinary source
+    material and stays searchable.
     """
     for root in roots:
         if not root.exists():
             continue
-        yield from root.rglob("*.md")
+        cold = cold_storage_root is not None and root == cold_storage_root
+        for path in root.rglob("*.md"):
+            if cold and is_archived_path(path.relative_to(root).parts):
+                continue
+            yield path
 
 
 def tool_wiki_search(args: dict[str, Any]) -> dict[str, Any]:
@@ -793,7 +811,8 @@ def tool_wiki_search(args: dict[str, Any]) -> dict[str, Any]:
     if kind and kind not in PAGE_KINDS:
         return _err(f"unknown kind {kind!r} (expected one of {list(PAGE_KINDS)})")
 
-    roots = [REPO_ROOT / "wiki"]
+    wiki_root = REPO_ROOT / "wiki"
+    roots = [wiki_root]
     if include_raw:
         roots.append(REPO_ROOT / "raw" / "sessions")
 
@@ -812,7 +831,7 @@ def tool_wiki_search(args: dict[str, Any]) -> dict[str, Any]:
     budget = _MCP_SCAN_AGGREGATE_BYTES
     skipped_oversize = 0
     budget_exhausted = False
-    for p in _iter_scan_files(roots):
+    for p in _iter_scan_files(roots, cold_storage_root=wiki_root):
         if budget <= 0:
             budget_exhausted = True
             break
@@ -978,9 +997,13 @@ def tool_wiki_lint(args: dict[str, Any]) -> dict[str, Any]:
     if not wiki.exists():
         return _err("wiki/ does not exist")
 
-    # 1. Collect all pages and their slugs
+    # 1. Collect all pages and their slugs. Cold storage is excluded (#140)
+    # exactly as `llmwiki lint` excludes it, so both report a [[wikilink]]
+    # to a discarded slug as broken instead of disagreeing about the vault.
     pages: dict[str, Path] = {}
     for p in wiki.rglob("*.md"):
+        if is_archived_path(p.relative_to(wiki).parts):
+            continue
         slug = p.stem
         pages[slug] = p
 

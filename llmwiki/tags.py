@@ -36,6 +36,7 @@ from llmwiki import REPO_ROOT
 # Windows-authored / BOM-prefixed pages as no-frontmatter, so every
 # tag-rename run skipped them.
 from llmwiki._frontmatter import parse_frontmatter_or_none as _parse_frontmatter
+from llmwiki._system_pages import is_archived_path
 
 # Inline-list tag value: ``tags: [a, b, c]``.
 _INLINE_LIST_RE = re.compile(
@@ -86,9 +87,12 @@ def _iter_tags_in_frontmatter(fm: str) -> list[tuple[str, list[str]]]:
 def _iter_wiki_pages(wiki_dir: Path) -> list[Path]:
     if not wiki_dir.is_dir():
         return []
+    # ``archive/`` is cold storage (#140) — a discarded page's tags stay out
+    # of the tag index.
     return sorted(
         p for p in wiki_dir.rglob("*.md")
-        if not p.name.startswith("_") and "archive" not in p.parts
+        if not p.name.startswith("_")
+        and not is_archived_path(p.relative_to(wiki_dir).parts)
     )
 
 
