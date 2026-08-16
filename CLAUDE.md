@@ -30,7 +30,12 @@ wiki/          YOU OWN THIS. LLM-generated pages that summarise, cross-reference
   projects/        Codebases and work streams, seeded from session metadata (kebab-case slug).
   syntheses/       Saved query answers (kebab-case slug). Written by an agent or a
                    person answering a question — no pipeline step generates one.
-  archive/         Deprecated / demoted pages preserved for history. [v0.2+]
+  archive/         Cold storage: candidates a reviewer dismissed as noise, kept for
+                   history. Not a live page set — never catalogued in index.md, linted,
+                   a graph node, tagged, or searchable/quotable via MCP. A [[wikilink]]
+                   to a discarded page reads as broken on purpose. One exception: the
+                   candidate harvest treats archived slugs as resolved, so a dismissal
+                   sticks instead of being re-proposed every synth. [v0.2+]
 
 site/          GENERATED. Static HTML from `python3 -m llmwiki build`. Do not edit by hand.
 ```

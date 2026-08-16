@@ -103,11 +103,20 @@ Frontmatter only — a project page whose body you have written by hand is not o
 - **`/wiki-candidates` should use the CLI promote path** for this — do not invent a separate free-text enhance pass for the common empty-Key-Facts case.
 - **Pages promoted by an earlier build carry machine-assembled Key Facts.** Those bullets were clipped from the line nearest a wikilink, so some state a fact about a different subject. Rewrite them with `llmwiki candidates rewrite-key-facts --slug <Name>` (or `--all` for every entity/concept). That also drops pasted harvest-stub `## Candidate merge` blocks left by the old merge behaviour.
 
-## Unreleased — lint skips `wiki/archive/`
+## Unreleased — `wiki/archive/` is cold storage everywhere (#140)
 
-- **`llmwiki lint` no longer scans archived pages.** `wiki/archive/` is history — demoted pages and candidates you discarded — and it was being linted like the trusted layer.
+Discarding a candidate means you judged the term to be noise. `wiki/archive/` keeps the stub for history, and nothing that reads content surfaces it any more.
+
+- **`wiki/index.md` stops listing archived pages.** Discarding a candidate used to write an `## Archive (N)` section that `lint` then reported as dead index links, so a correct vault failed `lint --fail-on-errors` (and the `wiki-checks` workflow with it).
+- **Nothing to run.** The next `reindex` — which `sync`, `synth`, `remove` and every `candidates` action trigger — deletes a leftover `## Archive` section and its bullets. No migration command.
+- **Any note you hand-wrote under a `## Archive` heading is removed along with the section.** Reindex drops the whole block, prose included. If you keep a note there, move it above the first section heading before your next `reindex`.
+- **`llmwiki lint` no longer scans archived pages,** and they stop counting toward `orphan_detection` and aging into `stale_candidates`, so those two rules get quieter.
 - **Your warning count may go up on the first lint after upgrading.** The archived copy of a discarded candidate used to satisfy `[[wikilinks]]` pointing at it, so those links were silently counted as resolving. They were already broken; lint just stopped hiding them. Fix them by promoting a real page, or leave them if the target genuinely should not exist.
-- Archived pages also stop counting toward `orphan_detection` and stop aging into `stale_candidates`, so those two rules get quieter.
+- **Archived pages are no longer graph nodes,** so `graph.json` and the map lose one node per discarded candidate. Tags on archived pages also stop appearing in the tag index, and they no longer get backlink blocks.
+- **The MCP tools honour the same rule.** `wiki_search` no longer returns archived pages, `wiki_query` no longer quotes them, and `wiki_lint` reports a `[[wikilink]]` to a discarded slug as broken — it used to resolve those links against the archived copy, so it and `llmwiki lint` disagreed about the same vault.
+- **One deliberate exception: candidate harvest still counts archived slugs as resolved.** The archived stub is the only record that you dismissed the term, so `synth` will not re-propose it. Without that, every term you discarded would come back as a candidate on every run.
+- **`[[wikilinks]]` to discarded slugs stay broken and are not rewritten.** That is the intended reading: the target was deliberately thrown away, so the link needs your decision, not a silent resolve.
+- **Scope is exactly top-level `wiki/archive/**`.** A folder named `archive` nested deeper (say `wiki/sources/archive/`, from a project slug of that name) stays a live page set.
 
 ## Unreleased — `llmwiki synth` rename (#90)
 

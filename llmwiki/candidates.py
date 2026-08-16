@@ -44,13 +44,17 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TypedDict
 
+from llmwiki._system_pages import ARCHIVE_FOLDER
 from llmwiki.reindex import reindex_wiki
 from llmwiki.synth.base import BaseSynthesizer
 
 # ─── constants ─────────────────────────────────────────────────────────
 
 CANDIDATES_DIR_NAME = "candidates"
-ARCHIVE_DIR_NAME = "archive"
+# This module is cold storage's only writer; `_system_pages.ARCHIVE_FOLDER` is
+# what every reader recognises. One constant, so renaming the folder cannot
+# leave the readers looking somewhere else.
+ARCHIVE_DIR_NAME = ARCHIVE_FOLDER
 ARCHIVED_CANDIDATES_SUBDIR = "candidates"
 
 # Subfolders mirrored under wiki/candidates/

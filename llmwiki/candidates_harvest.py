@@ -69,6 +69,16 @@ def harvest_targets(
     # A pending candidate does not resolve its own inbound links — if it did,
     # the first run would make every later run a no-op and evidence could
     # never be refreshed.
+    #
+    # `wiki/archive/**` IS scanned here, deliberately, and this is the one
+    # place that reads it (#140). Everywhere else archive/ is cold storage
+    # because it holds pages a reviewer dismissed as noise — a tool name, an
+    # example, a term repeated by accident. Here it plays its second role:
+    # the dismissal ledger. The archived stub is the only record that the
+    # term was ever judged, so an archived slug must keep counting as
+    # resolved. Route this through `is_archived_path` and every dismissed
+    # term is re-proposed on the next synth, and on every synth after —
+    # permanently, because discarding it again changes nothing.
     candidates_root = wiki_dir / "candidates"
     resolved = {
         _norm_slug(p.stem)

@@ -23,19 +23,21 @@ write:
 
 Section headings carry a ``(count)`` per the ``#387 U6`` convention. Canonical
 folders come first in the order ``CLAUDE.md`` documents them; any other folder
-with pages (``archive/``, ``candidates/``, …) gets a section named after it, so
-a page type added later — or a folder a user keeps by hand — is still listed
-rather than becoming permanent lint noise.
+with pages (``candidates/``, …) gets a section named after it, so a page type
+added later — or a folder a user keeps by hand — is still listed rather than
+becoming permanent lint noise. ``archive/`` is the exception: it is cold
+storage (#140), never catalogued, and a leftover ``## Archive`` section is
+pruned on the next run.
 """
 
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from llmwiki._frontmatter import parse_frontmatter
-from llmwiki._system_pages import is_system_file
+from llmwiki._system_pages import ARCHIVE_FOLDER, is_archived_path, is_system_file
 
 # Catalog folders in the order CLAUDE.md's index format lists them. Folders
 # outside this tuple are appended alphabetically after it.
@@ -50,7 +52,10 @@ CANONICAL_FOLDERS: tuple[str, ...] = (
 # Always managed even when empty so draining the last stub can prune a leftover
 # ``## Candidates`` section (#101). Not in CANONICAL_FOLDERS — an empty
 # Candidates section is dropped entirely rather than kept as ``(0)``.
-ALWAYS_MANAGED_FOLDERS: frozenset[str] = frozenset({"candidates"})
+# ``archive`` is here for the same drop: it contributes no pages at all (#140),
+# so being managed-and-empty is what removes a ``## Archive (N)`` section an
+# older index still carries, along with its dead links.
+ALWAYS_MANAGED_FOLDERS: frozenset[str] = frozenset({"candidates", ARCHIVE_FOLDER})
 
 # Section that collects loose ``wiki/*.md`` pages (a saved ``lint-report.md``,
 # say) which are neither system pages nor linked from anywhere else.
@@ -192,6 +197,12 @@ def plan_reindex(wiki_dir: Path) -> ReindexPlan | None:
                 continue
             if rel in on_disk:
                 entries.setdefault(rel, line.rstrip())
+            elif is_archived_path(PurePosixPath(rel).parts):
+                # Cold storage (#140). The file is still there, so the stray
+                # branch below would keep the bullet alive and hold the
+                # ``## Archive`` section open forever; a link into the reject
+                # bin is dropped from the catalog instead.
+                dead.setdefault(key, []).append(match.group("href"))
             elif (wiki_dir / rel).is_file():
                 strays.setdefault(key, []).append(line.rstrip())
             else:
@@ -300,13 +311,16 @@ def _discover_pages(wiki_dir: Path) -> dict[str, list[str]]:
 
     The key is the folder name; ``""`` collects loose pages at the wiki root.
     Folders with no listable page are absent, so an empty ``hot/`` never grows
-    a section.
+    a section. ``archive/`` is cold storage (#140) and contributes nothing, so
+    a discarded candidate never reaches the catalog.
     """
     pages: dict[str, list[str]] = {}
     if not wiki_dir.is_dir():
         return pages
     for child in sorted(wiki_dir.iterdir()):
         if not child.is_dir() or child.name.startswith((".", "_")):
+            continue
+        if is_archived_path(child.relative_to(wiki_dir).parts):
             continue
         rels = [
             p.relative_to(wiki_dir).as_posix()
@@ -338,7 +352,8 @@ def _managed_headings(pages: dict[str, list[str]]) -> dict[str, str]:
     Canonical folders are managed even when empty, so a stale ``## Sources``
     still gets its count corrected and its duplicates collapsed. ``candidates``
     is always managed (#101) so promote/discard can drop dead catalog bullets
-    after the folder is emptied.
+    after the folder is emptied, and ``archive`` (#140) so a ``## Archive``
+    section an older index carries is dropped rather than left as free text.
     """
     managed = {key: _heading_for(key) for key in CANONICAL_FOLDERS}
     for key in ALWAYS_MANAGED_FOLDERS:

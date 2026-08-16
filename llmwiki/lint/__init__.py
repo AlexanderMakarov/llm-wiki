@@ -30,6 +30,7 @@ from llmwiki import REPO_ROOT
 # Windows- or BOM-prefixed wiki page silently parsed as zero
 # frontmatter, so every lint rule that read `meta["type"]` skipped it.
 from llmwiki._frontmatter import parse_frontmatter as _parse_fm
+from llmwiki._system_pages import is_archived_path
 
 WIKI_DIR = REPO_ROOT / "wiki"
 
@@ -106,10 +107,13 @@ def load_pages(wiki_dir: Path | None = None) -> dict[str, dict[str, Any]]:
     pages: dict[str, dict[str, Any]] = {}
     for p in sorted(root.rglob("*.md")):
         rel_path = p.relative_to(root)
-        # Skip README and archive/ — the latter holds demoted and
-        # discarded pages, so linting it re-reports resolved issues and
-        # lets an archived slug keep satisfying [[wikilinks]].
-        if p.name == "README.md" or rel_path.parts[0] == "archive":
+        # Skip README and archive/. archive/ is cold storage (#140): it holds
+        # demoted and discarded pages, so linting it would re-report issues
+        # already resolved by the discard. Leaving those pages out also means
+        # link_integrity reports a [[wikilink]] to a discarded slug as broken,
+        # which is the intended reading — the target was deliberately thrown
+        # away, and the link needs a human decision, not a silent resolve.
+        if p.name == "README.md" or is_archived_path(rel_path.parts):
             continue
         try:
             text = p.read_text(encoding="utf-8")

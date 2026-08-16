@@ -39,6 +39,7 @@ from pathlib import Path
 from typing import Any
 
 from llmwiki import REPO_ROOT
+from llmwiki._system_pages import is_archived_path
 from llmwiki.wikilinks import wikilink_targets
 
 _START = "<!-- BACKLINKS:START -->"
@@ -78,14 +79,14 @@ def _parse_frontmatter(text: str) -> tuple[dict[str, str], str]:
 def _collect_pages(wiki_dir: Path) -> dict[str, dict[str, Any]]:
     """Gather every wiki page into ``{slug: {path, meta, body}}``.
 
-    Skips ``wiki/archive/`` (deprecated) and ``_context.md`` stubs —
+    Skips ``wiki/archive/`` (cold storage, #140) and ``_context.md`` stubs —
     neither wants a backlinks block.
     """
     out: dict[str, dict[str, Any]] = {}
     if not wiki_dir.is_dir():
         return out
     for p in sorted(wiki_dir.rglob("*.md")):
-        if "archive" in p.parts:
+        if is_archived_path(p.relative_to(wiki_dir).parts):
             continue
         if p.name == "_context.md":
             continue
@@ -203,7 +204,7 @@ def prune_all(
     root = wiki_dir or (REPO_ROOT / "wiki")
     count = 0
     for p in root.rglob("*.md"):
-        if "archive" in p.parts:
+        if is_archived_path(p.relative_to(root).parts):
             continue
         try:
             text = p.read_text(encoding="utf-8")
