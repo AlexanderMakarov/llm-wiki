@@ -14,8 +14,8 @@ first — it has the short version of what this folder covers in detail.
 | [`REVIEW_CHECKLIST.md`](REVIEW_CHECKLIST.md) | Canonical code-review criteria — apply to every incoming PR |
 | [`RELEASE_PROCESS.md`](RELEASE_PROCESS.md) | Version bump → CHANGELOG → tag → build → publish checklist |
 | [`TRIAGE.md`](TRIAGE.md) | Label taxonomy + triage rules + stale-issue policy |
-| [`ROADMAP.md`](ROADMAP.md) | Living near-term plan + release theme table |
 | [`DECLINED.md`](DECLINED.md) | Graveyard of declined ideas with dates + reasons |
+| [`../../context/product/roadmap.md`](../../context/product/roadmap.md) | The roadmap — phases, what is next, and which issue delivers each item |
 | [`REFRESH_DEMO.md`](REFRESH_DEMO.md) | Local command that incrementally regenerates `demo/` from git-detected `docs/` changes — needs a working copy and a synth backend; never runs in CI |
 | [`surfaces/`](surfaces/README.md) | Per-page behavioural specs for the built site — scan the relevant `Must` lines when reviewing a UI PR |
 
@@ -38,8 +38,7 @@ command.
 
 ## When things go wrong
 
-- **CI red on master** → see `ROADMAP.md` "Stability pass" section
-  for the contract. Fix-first, roll forward, never force-push
+- **CI red on master** → fix-first, roll forward, never force-push
 - **Security issue reported** → see `SECURITY.md` in the repo root
 - **Contributor PR stuck > 7 days** → escalate via the triage pass
   (there's a rule in `TRIAGE.md`)

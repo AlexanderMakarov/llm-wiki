@@ -185,3 +185,45 @@ untouched and stay the answer for model diffs.
 a link to the entry and explain what's changed since the rejection.
 Maintainers read proposals with an open mind, but "the idea is
 cool" isn't a new argument.*
+
+## 2026-08-16 — Slack / Discord export ingestion
+
+**Reason:** Chat exports are conversation logs without an agent session's structure — no tool calls, no project, no model — so they would land in `raw/` as a shape the converter, the frontmatter contract and every downstream page format were not built for.
+
+**Context:** Carried from the retired `docs/roadmap.md` (`W-L0-01`). Reconsider only if someone wants a chat adapter badly enough to design the frontmatter mapping first.
+
+## 2026-08-16 — TUI browser for the wiki
+
+**Reason:** The generated site is already browsable as plain files and the terminal audience is served by existing tools; a second UI would double the surface that every site feature has to ship into.
+
+**Context:** Carried from the retired `docs/roadmap.md` (`W-L2-01`), which deferred to `raine/claude-history`.
+
+## 2026-08-16 — Real-time collaborative editing
+
+**Reason:** Not a product goal. The wiki is a single-operator artifact compiled from that operator's own sessions; collaboration happens in git, not in the page.
+
+**Context:** Carried from the retired `docs/roadmap.md` (`W-L3-01`).
+
+## 2026-08-16 — Precompiled Go / Rust binary
+
+**Reason:** Python-first policy. A second toolchain would fork the build, the release pipeline and every adapter that reaches into a Python session store.
+
+**Context:** Carried from the retired `docs/roadmap.md` (`W-L4-01`).
+
+## 2026-08-16 — Sentry / telemetry
+
+**Reason:** Privacy rule. The product reads a user's entire session history; shipping anything that phones home is incompatible with that, regardless of what is in the payload.
+
+**Context:** Carried from the retired `docs/roadmap.md` (`W-L7-01`). Local-only usage telemetry (`llmwiki usage`) is the deliberate alternative — it never leaves the machine.
+
+## 2026-08-16 — Supabase / Postgres backend
+
+**Reason:** Stdlib-first rule. A database would make the vault something other than files on disk, which is the property that makes it greppable, diffable and portable.
+
+**Context:** Carried from the retired `docs/roadmap.md` (`W-L7-02`).
+
+## 2026-08-16 — Local HTTP server and server-side search
+
+**Reason:** The server was removed and the site is plain files opened directly from disk, so `llmwiki serve`, the `serve.sh` / `serve.bat` wrappers, and the SQLite FTS5 server-side search fallback all lost the runtime they depended on. Search is the prebuilt client-side index.
+
+**Context:** Carried from the retired `docs/roadmap.md` (`M-L3-15`, `M-L4-04`, `C-L7-02`), which still listed the server as a shipped Must long after it was deleted. Reconsider only together with a decision to reintroduce a runtime.

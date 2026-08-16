@@ -101,7 +101,7 @@ llmwiki runs two interchangeable ways. Pick one, start — you can switch later.
 - **[Style guide](style-guide.md)** — how to write docs that match this site's voice.
 - **[Adapter authoring](adapter-authoring.md)** — ship a new agent adapter.
 - **[Architecture](architecture.md)** — understand the three-layer model before changing code.
-- **[Roadmap](roadmap.md)** · **[Public roadmap](public-roadmap.md)**.
+- **[Roadmap](../context/product/roadmap.md)** — the single roadmap, phased by what it delivers to users. Released work is in [`CHANGELOG.md`](../CHANGELOG.md); rejected ideas are in [`docs/maintainers/DECLINED.md`](maintainers/DECLINED.md).
 
 ---
 

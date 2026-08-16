@@ -18,7 +18,7 @@ so every subsequent action in the session has the full bar in mind.
    - `docs/maintainers/REVIEW_CHECKLIST.md` (canonical review bar)
    - `docs/maintainers/RELEASE_PROCESS.md` (version bump flow)
    - `docs/maintainers/TRIAGE.md` (label taxonomy + stale policy)
-   - `docs/maintainers/ROADMAP.md` (near-term plan)
+   - `context/product/roadmap.md` (the roadmap — phases and what is next)
    - `docs/maintainers/DECLINED.md` (prior rejections)
 
 2. **Check current state** — run these in parallel so you know what
