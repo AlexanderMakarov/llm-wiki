@@ -349,9 +349,7 @@ Positional `action` picks `list` / `promote` / `flip-promote` / `merge` / `disca
 
 Successful `promote` / `flip-promote` / `merge` / `discard` / `apply` reconcile `wiki/index.md` (#101): dead `candidates/…` bullets are dropped, an empty `## Candidates` section is removed, and newly trusted pages are listed under Entities/Concepts. `/wiki-candidates` should call these same actions — do not run idle `sync`/`synth` just to refresh the catalog after review. Site UI: open `site/candidates.html` — it lists everything pending, takes a decision per row, and its **Apply** button prints the `candidates apply --vault … --actions -` command plus the JSON batch for the rows you decided (#97). A successful `apply` then rebuilds `site/` so the open candidates page, Home, and Analytics match the wiki; pass `--no-rebuild` to skip that (for example when applying several batches before one `llmwiki build`).
 
-`promote` also writes an empty (or heading-only) `## Key Facts` (#103). It builds an evidence digest — every line where each source listed in frontmatter `sources:` / Connections names the subject, capped at 12 sources and 4 lines each — and hands it to the backend named by `synthesis.backend`, which returns 3–5 attributed bullets. Non-empty reviewer Key Facts are left alone.
-
-Because those bullets become trusted-layer prose, promote refuses to write them without a model: with `synthesis.backend` unset or `dummy` it exits 2 with `KeyFactsBackendError` and leaves the candidate pending. Override the prompt per vault at `wiki/prompts/key_facts.md`.
+`promote` fills an empty (or heading-only) `## Key Facts` from nested `fact:` bullets on the cited source pages' Connections topics (#147 / #103). That path is offline — Dummy / `None` backends are fine. Non-empty reviewer Key Facts are left alone. Opt-in rewrite of trusted pages still needs a model: `rewrite-key-facts` uses the backend named by `synthesis.backend` (override the prompt per vault at `wiki/prompts/key_facts.md`).
 
 `merge` folds a harvest stub into the target by unioning its `sources:` and Connections links and recording the name under `## Aliases`; a candidate containing reviewer prose still has that prose appended under `## Candidate merge — <date>`. Target may be a trusted page or another pending stub in the same kind.
 
@@ -401,7 +399,9 @@ See [`guides/existing-vault.md`](../guides/existing-vault.md) for the round-trip
 
 ## `synth` — synthesize sources + harvest candidates
 
-Primary command (#90). Default runs **both** lists: pending sources → `wiki/sources/`, then entity/concept candidates → `wiki/candidates/`.
+Primary command (#90 / #147). Default runs **both** phases: pending sources → `wiki/sources/`, then entity/concept candidates → `wiki/candidates/`.
+
+A real sources pass is **two language-model jobs**, then bookkeeping: (1) prepare known-names once at the start of the run (canonical name, aliases, kind, short description) from wiki already on disk — Dummy / `not is_llm` skips this and uses heuristic vocabulary inject; (2) **one** source-summary ask per queued raw file, with that frozen list in the prompt. Connections bullets name each topic with kind and nested `fact:` claims. Harvest after sources (and `--candidates-only`) is a parser over those bullets — **no** classify LLM call; cost for harvest alone is **zero** LLM. Ctrl+C drains in-flight pages, then harvests from what was written (unless `--sources-only`, which prints `llmwiki synth --candidates-only`) and exits **130** (#145).
 
 ```bash
 python3 -m llmwiki synth --check            # probe the backend
@@ -433,7 +433,7 @@ Before the first page is synthesized, a real run announces the batch: `Synthesiz
 | `--sessions-only` | Synthesize only `raw/sessions/` — skip `raw/docs/`. Mutually exclusive with `--docs-only`. Combinable with `--path` / `--force` (paths under `raw/docs/` then exit 2). Incompatible with `--check` / `--estimate`. |
 | `--docs-only` | Synthesize only `raw/docs/` — skip `raw/sessions/`. Mutually exclusive with `--sessions-only`. Combinable with `--path` / `--force` (paths under `raw/sessions/` then exit 2). Incompatible with `--check` / `--estimate`. |
 | `--path PATH` | Synthesize only this raw session or doc under `raw/sessions/` or `raw/docs/` (repeatable; relative to the vault root, or absolute under it) (#62). Exit 2 if the path is missing or outside the vault. Still honours `filters.include_subagents` / `exclude_headless` (ineligible files are skipped even when named). Incompatible with `--check` / `--estimate`. |
-| `--candidates-only` | Harvest entity/concept **candidates** from already-synthesized `wiki/sources/` into `wiki/candidates/`, then exit (#90). Reads the source layer only — never `raw/` — so it runs no per-source synthesis; cost is at most **one batched call** to classify the harvested names as entity vs concept, regardless of corpus size. Classification is fail-closed: any new target left unclassified stops the run with a non-zero exit and **writes nothing**, naming the cause (unreachable backend, incomplete/unparseable reply after retry, or unreadable source pages). Mutually exclusive with `--sources-only` / `--check` / `--estimate`. |
+| `--candidates-only` | Harvest entity/concept **candidates** from already-synthesized `wiki/sources/` into `wiki/candidates/`, then exit (#90 / #147). Reads the source layer only — never `raw/` — so it runs no per-source synthesis and **no** classify LLM call; kind, description, and facts come from Connections topic bullets already on those pages. LLM cost is **zero**. Unreadable source pages still fail the run and write nothing. Mutually exclusive with `--sources-only` / `--check` / `--estimate`. |
 | `--min-refs N` | Candidate threshold: a `[[wikilink]]` target becomes a candidate when **N or more distinct source pages** name it (default: `3`). |
 | `--concurrency N` | Synthesize N source pages at once, overriding `synthesis.concurrency` (default: `2`; range `1`–`16`). `1` runs strictly sequentially. Pages are I/O-bound on the backend, so the wall clock shrinks roughly in proportion; raise it only as far as your provider's rate limits and your machine allow. `all --with-synth` has no matching flag — it reads `synthesis.concurrency`. |
 | `--vault PATH` | Read/write under the vault root; configures the active `llmwiki-state.json`. |
@@ -639,24 +639,13 @@ The command prints every path written, every `.bak` it created, and a count of i
 
 ---
 
-## `consolidate-topics` — dedupe + describe topics (#54)
+## `consolidate-topics` — retired; synthesis prepares known names (#147)
 
-One-time LLM pass over the topic list (not the sessions) that merges duplicate topic spellings (`LLM-Wiki` / `LLMWiki` / `llm wiki`) into one canonical node and writes short descriptions, caching the result in `.llmwiki-topics.json` for `llmwiki graph` / `llmwiki build`.
+Retired. The subcommand name stays registered so typing it still resolves, but every invocation exits **2** and prints that synthesis now prepares the known-names list. It does not emit a prompt, write `.llmwiki-topics.json`, or treat `--complete` as a lifecycle step (the flag is accepted and ignored for old scripts). Prefer `llmwiki synth` — the known-names prepare job at the start of each run is what keeps spellings unique.
 
 ```bash
-python3 -m llmwiki consolidate-topics                # emit the LLM prompt
-python3 -m llmwiki consolidate-topics --complete reply.json
-python3 -m llmwiki consolidate-topics --complete -    # read the reply from stdin
+python3 -m llmwiki consolidate-topics
 ```
-
-### Flags
-
-| Flag | What |
-|---|---|
-| `--complete PATH` | Ingest the LLM's JSON reply (file path, or `-` for stdin) and write the topic cache. Without this flag, the prompt is printed instead. |
-| `--vault PATH` | Read/write the topic cache inside the given vault instead of the repo. |
-
-Re-run after large ingest batches so near-duplicate topic spellings don't fragment the knowledge graph.
 
 ---
 
@@ -799,7 +788,7 @@ python3 -m llmwiki watch --vault ~/my-vault
 
 ## `install-automation` — daily scheduler + optional agent hooks
 
-Interactive wizard (or pass `--yes` for non-interactive) that writes OS scheduler unit files, optional agent sync hooks, and automation status for the site Home panel. Profiles: **A** = `sync` (auto-build on); **B** = `sync --no-auto-build` → `synthesize` → `build`; **C** = `all --with-sync --with-synth --skip-graph`. Asks for daily run time (default `08:00`). Linux systemd timers use `Persistent=true` so a missed run catches up after boot. Logs land under XDG state (`~/.local/state/llmwiki/` by default). Writes `.llmwiki/automation-status.json` under the vault for the Home panel. Agent hooks default to skip — press Enter at the prompt to install nothing; type `install` to opt in (not recommended; prefer the OS scheduler or `watch`).
+Interactive wizard (or pass `--yes` for non-interactive) that writes OS scheduler unit files, optional agent sync hooks, and automation status for the site Home panel. Profiles: **A** = `sync` (auto-build on); **B** = `sync --no-auto-build` → `synth` → `build`; **C** = `all --with-sync --with-synth --skip-graph`. Asks for daily run time (default `08:00`). Linux systemd timers use `Persistent=true` so a missed run catches up after boot. Logs land under XDG state (`~/.local/state/llmwiki/` by default). Writes `.llmwiki/automation-status.json` under the vault for the Home panel. Agent hooks default to skip — press Enter at the prompt to install nothing; type `install` to opt in (not recommended; prefer the OS scheduler or `watch`).
 
 ```bash
 python3 -m llmwiki install-automation

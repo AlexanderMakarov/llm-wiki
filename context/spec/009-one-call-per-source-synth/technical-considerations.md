@@ -1,7 +1,7 @@
 # Technical Specification: One synthesis pass per source
 
 - **Functional Specification:** [`functional-spec.md`](./functional-spec.md) (approved, FR5 amended 2026-08-16) — GitHub Issues [#147](https://github.com/AlexanderMakarov/llm-wiki/issues/147) and [#145](https://github.com/AlexanderMakarov/llm-wiki/issues/145)
-- **Status:** Approved
+- **Status:** Completed
 - **Author(s):** AWOS `/implement-feature` (agent)
 
 ---

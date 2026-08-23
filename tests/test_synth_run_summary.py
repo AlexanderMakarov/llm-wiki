@@ -45,6 +45,17 @@ def _ok_synth_summary(*, synthesized: int = 2) -> dict:
     }
 
 
+def _interrupted_synth_summary(*, synthesized: int = 1) -> dict:
+    return {
+        "total_scanned": synthesized,
+        "new_files": synthesized,
+        "synthesized": synthesized,
+        "skipped": 0,
+        "errors": [],
+        "interrupted": True,
+    }
+
+
 class _ClassifyBackend:
     """Available stub that classifies harvested names (no network)."""
 
@@ -161,6 +172,101 @@ def test_synth_sources_only_omits_candidates_from_end_summary(
     assert "backlog now" not in out.lower()
     assert _TOKENS_LINE.search(out) is None
     assert _COST_LINE.search(out) is None
+
+
+def test_interrupted_synth_harvests_then_exits_130(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Default ``synth`` on interrupt: harvest written sources, exit 130."""
+    vault = _mk_vault(
+        tmp_path, {s: ["Recurring"] for s in ("a", "b", "c")}
+    )
+    args = build_parser().parse_args(["synth", "--vault", str(vault)])
+
+    with (
+        patch("llmwiki.cli.resolve_backend") as rb,
+        patch(
+            "llmwiki.cli.synthesize_new_sessions",
+            return_value=_interrupted_synth_summary(synthesized=1),
+        ),
+        patch("llmwiki.cli.run_harvest", return_value=0) as harvest,
+        patch("llmwiki.cli._refresh_review_counts"),
+    ):
+        backend = MagicMock()
+        backend.name = "dummy"
+        backend.is_available.return_value = True
+        rb.return_value = backend
+        rc = cmd_synthesize(args)
+
+    assert rc == 130
+    harvest.assert_called_once()
+    assert harvest.call_args.kwargs.get("require_sources") is False
+    out = capsys.readouterr().out
+    assert "Pending names collected from written sources." in out
+
+
+def test_interrupted_synth_harvest_failure_prints_retry_not_success(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Interrupt still exits 130; harvest failure must not claim success."""
+    vault = _mk_vault(
+        tmp_path, {s: ["Recurring"] for s in ("a", "b", "c")}
+    )
+    args = build_parser().parse_args(["synth", "--vault", str(vault)])
+
+    with (
+        patch("llmwiki.cli.resolve_backend") as rb,
+        patch(
+            "llmwiki.cli.synthesize_new_sessions",
+            return_value=_interrupted_synth_summary(synthesized=1),
+        ),
+        patch("llmwiki.cli.run_harvest", return_value=2) as harvest,
+        patch("llmwiki.cli._refresh_review_counts") as refresh,
+    ):
+        backend = MagicMock()
+        backend.name = "dummy"
+        backend.is_available.return_value = True
+        rb.return_value = backend
+        rc = cmd_synthesize(args)
+
+    assert rc == 130
+    harvest.assert_called_once()
+    refresh.assert_not_called()
+    captured = capsys.readouterr()
+    assert "Pending names collected from written sources." not in captured.out
+    assert "Harvest after interrupt failed" in captured.err
+    assert "llmwiki synth --candidates-only" in captured.out
+
+
+def test_interrupted_sources_only_prints_candidates_only_hint(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """``--sources-only`` on interrupt: no harvest; print the one-line command."""
+    vault = _mk_vault(
+        tmp_path, {s: ["Recurring"] for s in ("a", "b", "c")}
+    )
+    args = build_parser().parse_args(
+        ["synth", "--sources-only", "--vault", str(vault)]
+    )
+
+    with (
+        patch("llmwiki.cli.resolve_backend") as rb,
+        patch(
+            "llmwiki.cli.synthesize_new_sessions",
+            return_value=_interrupted_synth_summary(synthesized=1),
+        ),
+        patch("llmwiki.cli.run_harvest") as harvest,
+    ):
+        backend = MagicMock()
+        backend.name = "dummy"
+        backend.is_available.return_value = True
+        rb.return_value = backend
+        rc = cmd_synthesize(args)
+
+    assert rc == 130
+    harvest.assert_not_called()
+    out = capsys.readouterr().out
+    assert "llmwiki synth --candidates-only" in out.splitlines()
 
 
 def test_estimate_skips_end_of_run_summary(

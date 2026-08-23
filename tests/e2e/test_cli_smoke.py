@@ -490,6 +490,49 @@ def test_query_without_graphify_exits_cleanly() -> None:
     )
 
 
+def test_consolidate_topics_is_retired(tmp_path: Path) -> None:
+    """``llmwiki consolidate-topics`` still resolves but exits 2 with a
+    retirement message. Synthesis prepares known-names; this command must
+    not emit a prompt file or write ``.llmwiki-topics.json`` (#147)."""
+    vault = REPO_ROOT_FOR_CLI / ".worktree-vault"
+    result = _run_cli(
+        "consolidate-topics", "--vault", str(vault), timeout=15
+    )
+    assert result.returncode == 2, (
+        f"consolidate-topics exited {result.returncode}, expected 2\n"
+        f"stdout: {result.stdout[:400]}\nstderr: {result.stderr[:400]}"
+    )
+    combined = (result.stderr + result.stdout).lower()
+    assert "retired" in combined or "gone" in combined, (
+        f"expected retirement message, got:\n{result.stderr}\n{result.stdout}"
+    )
+    assert "known-names" in combined or "known names" in combined, (
+        f"expected known-names mention, got:\n{result.stderr}\n{result.stdout}"
+    )
+    prompt = vault / "wiki" / ".llmwiki-topic-consolidation.md"
+    assert not prompt.is_file(), "retired command must not write consolidation prompt"
+
+    # --complete must also refuse to write the cache (scratch vault).
+    scratch = tmp_path / "vault"
+    (scratch / "wiki").mkdir(parents=True)
+    (scratch / "raw").mkdir()
+    reply = tmp_path / "reply.json"
+    reply.write_text('{"topics": [], "dropped": []}', encoding="utf-8")
+    complete = _run_cli(
+        "consolidate-topics",
+        "--complete",
+        str(reply),
+        "--vault",
+        str(scratch),
+        timeout=15,
+    )
+    assert complete.returncode == 2
+    assert not (scratch / "wiki" / ".llmwiki-topics.json").is_file(), (
+        "retired --complete must not write .llmwiki-topics.json"
+    )
+    assert not (scratch / "wiki" / ".llmwiki-topic-consolidation.md").is_file()
+
+
 # ─── candidates list: empty workspace handling ──────────────────────────
 
 

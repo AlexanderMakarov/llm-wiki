@@ -70,7 +70,8 @@ A real synthesis.
 
 ## Connections
 
-- [[ProjectAlpha]]
+- [[ProjectAlpha]] (entity) — the project this session belongs to
+  - fact: The session produced a real synthesis.
 """
 
 

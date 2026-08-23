@@ -35,6 +35,9 @@ Each `<candidate>` is a heuristically-clustered topic with:
    genuinely different (e.g. a tool vs. the project that uses it), add a
    `distinct_from` note explaining the difference, so later passes don't merge
    them. Omit when there's nothing confusable.
+5. **Classify each kept topic.** Set `kind` to `"entity"` (person, company,
+   product, tool, library) or `"concept"` (idea, framework, method, decision).
+   Pick the best fit; do not invent other values.
 
 ## Output
 
@@ -45,6 +48,7 @@ Return **ONLY** valid JSON (no prose, no markdown fence), matching:
   "topics": [
     {
       "canonical": "kbbuilder",
+      "kind": "entity",
       "description": "CLI that scrapes and ingests external docs into the wiki.",
       "aliases": ["KBBuilder", "Kbbuilder", "code-kbbuilder"],
       "distinct_from": [
@@ -59,6 +63,11 @@ Return **ONLY** valid JSON (no prose, no markdown fence), matching:
 Rules:
 - `canonical` must be unique. `aliases` may be empty `[]`. `distinct_from` is
   optional (omit or `[]` when nothing is confusable).
+- `kind` must be `"entity"` or `"concept"` for every kept topic.
 - Every input candidate must appear exactly once — either as a `canonical`, an
   `alias` of one, or in `dropped`.
 - Descriptions stay to a single sentence.
+
+## Session to synthesize
+
+Job 1 has no session body. Follow the Output rules above and return only the JSON object.

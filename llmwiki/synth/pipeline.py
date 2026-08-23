@@ -43,6 +43,7 @@ from llmwiki.agent_label import detect_agent_label
 from llmwiki.candidates import apply_review_summary_to_pipeline
 from llmwiki.config_schedule import _load_sessions_config
 from llmwiki.reindex import reindex_wiki
+from llmwiki.source_topics import source_page_needs_topics_rewrite
 from llmwiki.state_store import mtime_from_state, mtime_to_iso
 from llmwiki.state_store import read_state as _read_unified_state
 from llmwiki.state_store import resolve_state_file as _resolve_state_file
@@ -57,6 +58,7 @@ from llmwiki.synth.ollama import OllamaSynthesizer, load_ollama_config
 from llmwiki.synth.reporting import print_synth_run_start
 from llmwiki.tags import TagEntry, near_duplicate_tags
 from llmwiki.topics import build_topic_graph
+from llmwiki.topics_consolidate import prepare_known_names
 
 # Same matcher every other link consumer uses, so "a link" means the same thing
 # to the de-duplicator and to the thing that consumes the links.
@@ -133,6 +135,20 @@ def page_is_stub(page_path: Path) -> bool:
         return False
     _meta, body = parse_frontmatter(text)
     return _is_stub_page(body)
+
+
+def page_needs_topics_rewrite(page_path: Path) -> bool:
+    """True when ``page_path`` exists and needs the #147 topic-bullet shape.
+
+    Used by the synth skip loop so a Connections-only page is re-synthesized
+    in place even when state mtime says the source is done. Unreadable paths
+    are treated as not needing rewrite (same OSError swallow as other probes).
+    """
+    try:
+        text = Path(page_path).read_text(encoding="utf-8")
+    except OSError:
+        return False
+    return source_page_needs_topics_rewrite(text)
 
 
 def source_page_paths(
@@ -329,11 +345,11 @@ def _inject_vocabulary(template: str, wiki_dir: Path, *, limit: int = _VOCAB_LIM
     entries for the *regular* per-session synth.
 
     Regular synth needs just enough to pick the RIGHT topic, not to merge
-    spellings (that's the consolidation pass's job) — so each entry carries
-    ``name`` + ``desc`` (a one-line description, present once
-    ``consolidate-topics`` has run) + ``with`` (co-occurring topics, for
-    disambiguation). No ``aka`` noise. All derived from the corpus + cache —
-    no LLM call here.
+    spellings (that's job 1 ``prepare_known_names``) — so each entry carries
+    ``name`` + ``desc`` (a one-line description, present once the known-names
+    cache exists) + ``with`` (co-occurring topics, for disambiguation). No
+    ``aka`` noise. All derived from the corpus + cache — no LLM call here.
+    The ``consolidate-topics`` CLI is retired (#147).
 
     No-op (placeholder removed) when the template lacks the marker or the wiki
     has no topics yet. Attribute values are quote/brace-free so backends'
@@ -1310,20 +1326,29 @@ def _record_abandoned_pages(
     futures: list[Future[dict[str, Any]]],
     state: dict[str, Any],
     state_file: Path | None,
-) -> None:
-    """Persist the sources whose pages landed but were never drained (#118).
+    sources_out: Path,
+) -> bool:
+    """Persist the sources whose pages landed but were never drained (#118/#147).
 
     Called when the drain is abandoned. A worker that already wrote its page
     is invisible to the run's bookkeeping — it has no state entry, so the next
     run pays the backend for that page a second time. Cancelled futures never
     ran and are ignored; every other future is awaited (the executor's
-    shutdown joins those threads anyway) and each error-free result is
-    recorded, so a resume picks up exactly the remainder.
+    shutdown joins those threads anyway).
+
+    A source is recorded only when ``error is None``, ``written`` is non-empty,
+    and each named file exists under ``sources_out/<project>/``. Protected-
+    withheld empty writes (stub refused, nothing new on disk) are not marked
+    done, so a resume re-attempts them.
+
+    Returns True when at least one written page was found on disk (whether or
+    not the state file save succeeds).
 
     Never raises: it runs while another exception is propagating, and masking
     that exception would hide why the run stopped.
     """
     recorded = False
+    any_written = False
     for future in futures:
         if future.cancelled():
             continue
@@ -1331,14 +1356,21 @@ def _record_abandoned_pages(
             res = future.result()
         except (Exception, CancelledError):
             continue
-        if res["error"] is None and res["mtime"] is not None:
-            state[str(res["rel"])] = res["mtime"]
-            recorded = True
+        written = res.get("written") or []
+        if res["error"] is not None or not written or res.get("mtime") is None:
+            continue
+        out_dir = sources_out / str(res["project"])
+        if not all((out_dir / f"{name}.md").is_file() for name in written):
+            continue
+        any_written = True
+        state[str(res["rel"])] = res["mtime"]
+        recorded = True
     if recorded:
         try:
             _save_state(state, state_file)
         except Exception:
             pass
+    return any_written
 
 
 def synthesize_new_sessions(
@@ -1419,10 +1451,6 @@ def synthesize_new_sessions(
     else:
         concurrency = resolve_synth_concurrency({"synthesis": {"concurrency": concurrency}})
     prompt_template = _load_prompt_template()
-    # #54: feed the auto-derived topic vocabulary back into the prompt so the
-    # model reuses canonical spellings instead of coining new variants. Filled
-    # once here (corpus-wide); backends only substitute {body}/{meta} after.
-    prompt_template = _inject_vocabulary(prompt_template, sources_out.parent)
     state_file = _resolve_state_file(state_file)
     state = {} if force else _load_state(state_file)
     chunk_max = doc_chunk_max_chars or _DOC_CHUNK_MAX_CHARS
@@ -1529,8 +1557,15 @@ def synthesize_new_sessions(
             synth_page_filename(it["meta"], it["path"].stem),
             is_doc=bool(it["is_doc"]),
         )
-        page_is_pending = source_key in stub_source_keys or any(
-            page_is_stub(t) for t in targets
+        # #147: a real page whose Connections lack parseable (entity|concept)
+        # kinds is still pending — rewrite in place at the derived target.
+        derived_needs_topics_rewrite = any(
+            page_needs_topics_rewrite(t) for t in targets
+        )
+        page_is_pending = (
+            source_key in stub_source_keys
+            or any(page_is_stub(t) for t in targets)
+            or derived_needs_topics_rewrite
         )
         if (
             it["rel"] in state
@@ -1545,10 +1580,18 @@ def synthesize_new_sessions(
         # write-guard below sees it — synth would drop a sibling duplicate.
         # Skip only when the real page is elsewhere: a real page AT the derived
         # target is the normal overwrite/protect path, and --force re-synthesizes.
+        # #147: when the derived target itself needs a topics rewrite, do not
+        # take this continue — rewrite in place. Dedup-elsewhere still skips
+        # (do not invent a second page for a claim filed under another name).
         derived_has_real = any(
             t.exists() and not page_is_stub(t) for t in targets
         )
-        if not force and source_key in real_source_keys and not derived_has_real:
+        if (
+            not force
+            and source_key in real_source_keys
+            and not derived_has_real
+            and not derived_needs_topics_rewrite
+        ):
             print(
                 f"  skipped: {it['project']} → {source_key} "
                 "(real source page already claims this source; not duplicating)"
@@ -1576,6 +1619,15 @@ def synthesize_new_sessions(
         for it in new_items:
             print(f"  {it['meta'].get('slug', it['path'].stem)}")
         return summary
+
+    # #54 / #147: vocabulary is filled once after the queue is known so job 1
+    # (prepare_known_names) can refresh the cache first. Every job-2 page then
+    # shares one byte-identical `{vocabulary}` prefix. Dummy / empty queue skip
+    # the LLM call and still inject heuristic/cache vocabulary.
+    wiki_dir = sources_out.parent
+    if new_items and getattr(backend, "is_llm", False):
+        prepare_known_names(wiki_dir, backend)
+    prompt_template = _inject_vocabulary(prompt_template, wiki_dir)
 
     print_synth_run_start(
         total=len(new_items), backend_name=backend.name, concurrency=concurrency
@@ -1666,7 +1718,24 @@ def synthesize_new_sessions(
                         f"\nInterrupted after {completed}/{total} source(s) — "
                         f"waiting for {in_flight} page(s) already in flight."
                     )
-                _record_abandoned_pages(futures, state, state_file)
+                    any_written = _record_abandoned_pages(
+                        futures, state, state_file, sources_out
+                    )
+                    refresh_synth_pending(
+                        raw_dir=raw_dir,
+                        docs_dir=docs_dir,
+                        wiki_sources_dir=wiki_sources_dir,
+                        state_file=state_file,
+                        include_subagents=include_subagents,
+                    )
+                    if summary.get("synthesized", 0) > 0 or any_written:
+                        try:
+                            _rebuild_index(sources_out.parent)
+                        except (OSError, ValueError, RuntimeError) as e:
+                            summary["errors"].append(f"index rebuild: {e}")
+                    summary["interrupted"] = True
+                    return summary
+                _record_abandoned_pages(futures, state, state_file, sources_out)
                 raise
 
     # G-20 (#306): emit ONE summary log entry per invocation, not one

@@ -10,7 +10,6 @@ from pathlib import Path
 
 import pytest
 
-from llmwiki import candidates_harvest
 from llmwiki.candidates_harvest import (
     SourceReadError,
     classify_names,
@@ -24,10 +23,41 @@ from llmwiki.candidates_harvest import (
 
 
 def _mk_source(wiki: Path, slug: str, links: list[str]) -> Path:
-    """Write a minimal source page whose Connections list the given links."""
+    """Write a source page with the legacy ``- [[Name]] — why`` Connections shape.
+
+    Still counts as harvest evidence via ``wikilink_targets``; used by threshold
+    and resolution tests that do not need kind / description / facts.
+    """
     path = wiki / "sources" / f"{slug}.md"
     path.parent.mkdir(parents=True, exist_ok=True)
     body = "\n".join(f"- [[{name}]] — why it connects" for name in links)
+    path.write_text(
+        f"---\ntitle: {slug}\ntype: source\n---\n\n## Connections\n{body}\n",
+        encoding="utf-8",
+    )
+    return path
+
+
+def _mk_topic_source(
+    wiki: Path,
+    slug: str,
+    topics: list[tuple[str, str, str, list[str]]],
+) -> Path:
+    """Write a source page with the #147 topic-bullet Connections shape.
+
+    Each ``topics`` entry is ``(name, kind, description, facts)``::
+
+        - [[Name]] (kind) — description
+          - fact: ...
+    """
+    path = wiki / "sources" / f"{slug}.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lines: list[str] = []
+    for name, kind, description, facts in topics:
+        lines.append(f"- [[{name}]] ({kind}) — {description}")
+        for fact in facts:
+            lines.append(f"  - fact: {fact}")
+    body = "\n".join(lines)
     path.write_text(
         f"---\ntitle: {slug}\ntype: source\n---\n\n## Connections\n{body}\n",
         encoding="utf-8",
@@ -463,13 +493,11 @@ def test_rerun_does_not_reclassify_already_filed_candidates(tmp_path: Path) -> N
     assert asked[1] == []
 
 
-# ─── run_harvest failure surfaces ──────────────────────────────────────
+# ─── run_harvest (topic-based; backend ignored) ────────────────────────
 
 
-def test_run_harvest_probes_the_backend_once(tmp_path: Path) -> None:
-    """One probe per run: it can shell out or make a network round-trip, and
-    two probes can disagree, which reports the wrong cause to the operator.
-    """
+def test_run_harvest_succeeds_without_probing_the_backend(tmp_path: Path) -> None:
+    """Classification comes from source topics — the backend is not probed."""
 
     class _CountingBackend(_RecordingBackend):
         def __init__(self, reply: str) -> None:
@@ -488,25 +516,165 @@ def test_run_harvest_probes_the_backend_once(tmp_path: Path) -> None:
     rc = run_harvest(wiki, min_refs=2, backend=backend)
 
     assert rc == 0
-    assert backend.probes == 1
+    assert backend.probes == 0
+    assert backend.calls == []
+    assert (wiki / "candidates" / "entities" / "Tailscale.md").is_file()
 
 
-def test_run_harvest_reports_incomplete_classification_without_a_traceback(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture,
+def test_run_harvest_succeeds_when_backend_is_none(
+    tmp_path: Path, capsys: pytest.CaptureFixture,
 ) -> None:
-    """``write_stubs`` refuses to guess a kind it was not given. The whole
-    point of the surrounding rework was cause-specific failure, so that
-    refusal has to reach the operator as a message, not a stack trace.
-    """
+    """No synthesis backend is required to write candidate stubs."""
     wiki = tmp_path / "wiki"
     for slug in ("a", "b"):
         _mk_source(wiki, slug, ["Tailscale"])
-    # The two name sets agree today; force them apart so the guard fires.
+
+    rc = run_harvest(wiki, min_refs=2, backend=None)
+
+    assert rc == 0
+    assert "Candidates: 1 stub(s)" in capsys.readouterr().out
+    assert (wiki / "candidates" / "entities" / "Tailscale.md").is_file()
+
+
+def test_run_harvest_writes_stub_from_topic_bullets_with_backend_none(
+    tmp_path: Path,
+) -> None:
+    """Kind, description, and Key Facts come from Connections topic bullets."""
+    wiki = tmp_path / "wiki"
+    for slug in ("a", "b", "c"):
+        _mk_topic_source(
+            wiki,
+            slug,
+            [
+                (
+                    "Foo",
+                    "concept",
+                    "A short description of Foo",
+                    ["Foo does X"],
+                ),
+            ],
+        )
+
+    rc = run_harvest(wiki, backend=None)
+
+    assert rc == 0
+    path = wiki / "candidates" / "concepts" / "Foo.md"
+    assert path.is_file()
+    text = path.read_text(encoding="utf-8")
+    assert "type: concept" in text
+    assert "status: candidate" in text
+    # Description paragraph sits between the H1 and Key Facts.
+    assert "# Foo\n\nA short description of Foo\n\n## Key Facts\n" in text
+    for slug in ("a", "b", "c"):
+        assert f"- Foo does X [[{slug}]]" in text
+
+
+def test_run_harvest_does_not_call_classify_names(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Harvest must not ask the legacy LLM classifier (#147 §2.4)."""
+    calls: list[object] = []
+
+    def _spy(*args, **kwargs):
+        calls.append((args, kwargs))
+        raise AssertionError("classify_names must not be called from run_harvest")
+
     monkeypatch.setattr(
-        candidates_harvest, "unfiled_names", lambda *_a, **_k: [])
+        "llmwiki.candidates_harvest.classify_names", _spy,
+    )
+    wiki = tmp_path / "wiki"
+    for slug in ("a", "b", "c"):
+        _mk_topic_source(
+            wiki,
+            slug,
+            [("Foo", "concept", "A short description of Foo", ["Foo does X"])],
+        )
 
-    rc = run_harvest(wiki, min_refs=2, backend=_RecordingBackend())
+    assert run_harvest(wiki, backend=None) == 0
+    assert calls == []
+    assert (wiki / "candidates" / "concepts" / "Foo.md").is_file()
 
-    assert rc == 1
-    assert "classification is incomplete" in capsys.readouterr().err
-    assert not (wiki / "candidates").exists()
+
+def test_run_harvest_does_not_call_synthesize_source_page_for_classification(
+    tmp_path: Path,
+) -> None:
+    """A Dummy / recording backend must not be used to classify candidates."""
+    wiki = tmp_path / "wiki"
+    for slug in ("a", "b", "c"):
+        _mk_topic_source(
+            wiki,
+            slug,
+            [("Foo", "entity", "A tool named Foo", ["Foo does X"])],
+        )
+    backend = _RecordingBackend("Foo: concept\n")
+
+    assert run_harvest(wiki, backend=backend) == 0
+    assert backend.calls == []
+    # Majority kind from bullets is entity — not the backend's "concept" reply.
+    path = wiki / "candidates" / "entities" / "Foo.md"
+    assert path.is_file()
+    assert "type: entity" in path.read_text(encoding="utf-8")
+
+
+def test_run_harvest_keeps_existing_stub_folder_despite_source_kinds(
+    tmp_path: Path,
+) -> None:
+    """A stub already under candidates/entities/ stays there even if sources say concept."""
+    wiki = tmp_path / "wiki"
+    existing = wiki / "candidates" / "entities" / "Foo.md"
+    existing.parent.mkdir(parents=True, exist_ok=True)
+    existing.write_text(
+        "---\n"
+        'title: "Foo"\n'
+        "type: entity\n"
+        "status: candidate\n"
+        "tags: []\n"
+        "sources: [old]\n"
+        "last_updated: 2026-01-01\n"
+        "---\n\n"
+        "# Foo\n\n"
+        "Reviewer left this in entities.\n\n"
+        "## Key Facts\n\n"
+        "- Hand-edited fact.\n\n"
+        "## Connections\n\n"
+        "Named by 1 source page(s), which is the evidence that\n"
+        "justified this candidate:\n\n"
+        "- [[old]]\n",
+        encoding="utf-8",
+    )
+    for slug in ("a", "b", "c"):
+        _mk_topic_source(
+            wiki,
+            slug,
+            [
+                (
+                    "Foo",
+                    "concept",
+                    "A short description of Foo",
+                    ["Foo does X"],
+                ),
+            ],
+        )
+
+    assert run_harvest(wiki, backend=None) == 0
+
+    assert existing.is_file()
+    assert not (wiki / "candidates" / "concepts" / "Foo.md").exists()
+    text = existing.read_text(encoding="utf-8")
+    assert "type: entity" in text
+    # Re-harvest refreshes evidence but keeps reviewer prose above Connections.
+    assert "Reviewer left this in entities." in text
+    assert "- Hand-edited fact." in text
+    for slug in ("a", "b", "c"):
+        assert f"[[{slug}]]" in text
+
+
+def test_legacy_connection_bullets_still_count_toward_min_refs(tmp_path: Path) -> None:
+    """Old ``- [[Name]] — why`` bullets remain harvestable evidence."""
+    wiki = tmp_path / "wiki"
+    for slug in ("a", "b", "c"):
+        _mk_source(wiki, slug, ["Legacy"])
+
+    names = {t.name for t in harvest_targets(wiki, min_refs=3)}
+
+    assert names == {"Legacy"}

@@ -30,9 +30,9 @@ Design choices:
     callers run `llmwiki lint` afterward to catch any stale pointers.
   - Discard is non-destructive: pages move to ``wiki/archive/candidates/``
     with a timestamped reason file so you can recover them later.
-  - Promote fills an empty ``## Key Facts`` from harvest evidence (#103);
-    non-empty reviewer facts are never overwritten on promote. Use
-    ``rewrite_key_facts`` to replace machine-assembled bullets on a page
+  - Promote fills an empty ``## Key Facts`` from ``fact:`` lines on cited
+    source pages (#147); non-empty reviewer facts are never overwritten.
+    Use ``rewrite_key_facts`` (LLM, opt-in) to replace bullets on a page
     that is already trusted.
 """
 
@@ -46,6 +46,7 @@ from typing import TypedDict
 
 from llmwiki._system_pages import ARCHIVE_FOLDER
 from llmwiki.reindex import reindex_wiki
+from llmwiki.source_topics import parse_source_topics
 from llmwiki.synth.base import BaseSynthesizer
 
 # ─── constants ─────────────────────────────────────────────────────────
@@ -80,12 +81,11 @@ KEY_FACTS_PROMPT_PATH = Path(__file__).parent / "synth" / "prompts" / "key_facts
 
 
 class KeyFactsBackendError(RuntimeError):
-    """Raised when Key Facts need writing but no LLM backend can write them.
+    """Raised when ``rewrite_key_facts`` needs an LLM backend and lacks one.
 
-    Promote refuses rather than degrading to string-slicing: a Key Facts
-    section assembled by regex reads like prose but states whatever happened
-    to sit near a wikilink, which is worse than an empty section because
-    nothing downstream can tell the two apart.
+    Promote fills empty Key Facts from source topic ``fact:`` lines offline
+    (#147) and never raises this. The opt-in rewrite CLI still requires a
+    real backend rather than clipping prose near a wikilink.
     """
 
 FRONTMATTER_RE = re.compile(r"^---\n(.*?)\n---\n(.*)$", re.DOTALL)
@@ -450,6 +450,35 @@ def _evidence_digest(wiki_dir: Path, slugs: list[str], name: str) -> str:
     return "\n".join(blocks)
 
 
+def _topic_fact_bullets(
+    wiki_dir: Path,
+    slugs: list[str],
+    page_name: str,
+) -> list[str]:
+    """Key Facts lines from ``fact:`` bullets on evidence source pages (#147).
+
+    Each fact is suffixed with `` [[source-slug]]``. Order follows ``slugs``,
+    then topic order within each page. Does not clip mention lines.
+    """
+    bullets: list[str] = []
+    for slug in slugs:
+        path = _resolve_source_page(wiki_dir, slug)
+        if path is None:
+            continue
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        for record in parse_source_topics(text):
+            if record.name != page_name:
+                continue
+            for fact in record.facts:
+                cleaned = fact.strip()
+                if cleaned:
+                    bullets.append(f"{cleaned} [[{slug}]]")
+    return bullets
+
+
 def _bullets_from_completion(completion: str) -> list[str]:
     """Keep the model's bullet lines, drop any preamble or trailing chatter."""
     bullets: list[str] = []
@@ -520,19 +549,21 @@ def fill_key_facts_from_evidence(
     synthesizer: BaseSynthesizer | None = None,
     force: bool = False,
 ) -> str:
-    """Fill an empty ``## Key Facts`` from harvest evidence sources (#103).
+    """Fill an empty ``## Key Facts`` from cited source pages (#147 / #103).
 
     Resolves ``sources:`` frontmatter and Connections wikilinks that point at
-    ``wiki/sources/`` pages, collects every line where they name the page, and
-    asks ``synthesizer`` to write declarative facts from that evidence.
+    ``wiki/sources/`` pages. When ``synthesizer`` is missing or not LLM-backed
+    (the promote path), concatenates nested ``fact:`` lines from
+    :func:`llmwiki.source_topics.parse_source_topics` on those pages, each
+    suffixed `` [[slug]]``. If no facts are found, returns ``text`` unchanged
+    and never raises.
 
-    Non-empty Key Facts are left untouched unless ``force=True`` (rewrite path
-    for pages promoted by the earlier regex assembler). A page whose sources
-    never say anything about it is left alone too: there is nothing to write
-    from.
+    When ``synthesizer.is_llm`` (``rewrite_key_facts`` / ``force=True``), asks
+    the backend to write declarative facts from a mention digest and raises
+    ``KeyFactsBackendError`` if the backend is missing, unavailable, or
+    returns no bullets.
 
-    Raises ``KeyFactsBackendError`` when evidence exists but ``synthesizer``
-    is missing, unavailable, or not LLM-backed.
+    Non-empty Key Facts are left untouched unless ``force=True``.
     """
     meta, body = _parse_frontmatter(text)
     page_name = (name or meta.get("title") or "").strip().strip('"')
@@ -544,6 +575,23 @@ def fill_key_facts_from_evidence(
         return text
 
     slugs = _evidence_source_slugs(meta, body, wiki_dir)
+    use_llm = synthesizer is not None and getattr(synthesizer, "is_llm", False)
+
+    if not use_llm:
+        if force:
+            raise KeyFactsBackendError(
+                f"{page_name}: rewriting Key Facts needs an LLM backend — set "
+                'synthesis.backend to "claude" or "ollama" in config.json'
+            )
+        bullets = _topic_fact_bullets(wiki_dir, slugs, page_name)
+        if not bullets:
+            return text
+        new_body = _inject_key_facts(body, bullets)
+        fm_match = FRONTMATTER_RE.match(text)
+        if fm_match:
+            return f"---\n{fm_match.group(1)}\n---\n{new_body}"
+        return new_body
+
     evidence = _evidence_digest(wiki_dir, slugs, page_name)
     if not evidence:
         if not force:
@@ -553,11 +601,6 @@ def fill_key_facts_from_evidence(
             return f"---\n{fm_match.group(1)}\n---\n{body}"
         return body
 
-    if synthesizer is None or not getattr(synthesizer, "is_llm", False):
-        raise KeyFactsBackendError(
-            f"{page_name}: writing Key Facts needs an LLM backend — set "
-            'synthesis.backend to "claude" or "ollama" in config.json'
-        )
     if not synthesizer.is_available():
         raise KeyFactsBackendError(
             f"{page_name}: synthesis backend {synthesizer.name} is not available"
@@ -594,15 +637,17 @@ def promote(
     If ``kind`` is omitted, infers from where the candidate lives. ``dest_kind``
     defaults to that same folder (plain promote). Pass the opposite kind for
     flip-and-promote (#97). Rewrites ``status: candidate`` → ``reviewed`` and
-    aligns ``type:`` with the destination folder. Has ``synthesizer`` write an
-    empty ``## Key Facts`` from evidence sources (#103). Reconciles
-    ``wiki/index.md`` afterward (#101).
+    aligns ``type:`` with the destination folder. Fills an empty ``## Key
+    Facts`` from source topic ``fact:`` lines offline (#147) — never calls
+    ``synthesize_key_facts`` and never raises ``KeyFactsBackendError``.
+    ``synthesizer`` is accepted for API compatibility with callers that still
+    pass a backend; it is unused. Reconciles ``wiki/index.md`` afterward
+    (#101).
 
     Returns the new (promoted) path. Raises FileNotFoundError if the
-    candidate does not exist, ``ValueError`` if ``dest_kind`` is invalid, or
-    ``KeyFactsBackendError`` when the page needs Key Facts and no LLM backend
-    is configured.
+    candidate does not exist, or ``ValueError`` if ``dest_kind`` is invalid.
     """
+    del synthesizer  # promote fills Key Facts offline (#147)
     candidate = _find_candidate(slug, wiki_dir, kind)
     inferred_kind = candidate.parent.name
     target_kind = dest_kind or inferred_kind
@@ -620,9 +665,7 @@ def promote(
         text = _rewrite_type(
             text, new=_TYPE_FOR_KIND.get(target_kind, target_kind.rstrip("s"))
         )
-    text = fill_key_facts_from_evidence(
-        text, wiki_dir, name=candidate.stem, synthesizer=synthesizer
-    )
+    text = fill_key_facts_from_evidence(text, wiki_dir, name=candidate.stem)
     target.write_text(text, encoding="utf-8")
     candidate.unlink()
     _reconcile_catalog(wiki_dir)
@@ -733,11 +776,11 @@ def rewrite_key_facts(
 ) -> Path:
     """Rewrite ``## Key Facts`` on an already-trusted entity/concept page (#103).
 
-    Promote only fills empty Key Facts on the way out of ``candidates/``.
-    Pages promoted by the earlier regex assembler still carry clipped
-    fragments; this is the recovery path — force-fill from evidence via the
-    LLM backend, and optionally drop pasted harvest-stub ``## Candidate
-    merge`` blocks left by the old merge behaviour.
+    Promote fills empty Key Facts offline from source topic ``fact:`` lines
+    (#147). This opt-in CLI force-fills via an LLM backend (and optionally
+    drops pasted harvest-stub ``## Candidate merge`` blocks left by the old
+    merge behaviour). Requires a real synthesizer — Dummy/None raise
+    ``KeyFactsBackendError``.
     """
     path = _find_trusted_page(slug, wiki_dir, kind)
     text = path.read_text(encoding="utf-8")

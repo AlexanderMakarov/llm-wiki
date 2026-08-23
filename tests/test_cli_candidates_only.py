@@ -1,12 +1,11 @@
-"""CLI surface for candidate harvesting (#90).
+"""CLI surface for candidate harvesting (#90 / #147).
 
 ``--candidates-only`` must work on a vault whose sources are already
 synthesized — that is precisely the vault with the largest candidate
 backlog — without re-synthesizing a single source.
 
-Classification is fail-closed (#102): every new target must be labelled
-entity or concept, and a run that cannot get there stops with a
-cause-specific error having written nothing.
+Harvest is offline (#147): kinds come from source topic bullets. A missing
+or unreachable backend must not block writing stubs.
 """
 
 from __future__ import annotations
@@ -19,7 +18,9 @@ import pytest
 from llmwiki.cli import build_parser, cmd_synthesize
 
 
-def _mk_vault(tmp_path: Path, links: dict[str, list[str]]) -> Path:
+def _mk_vault(
+    tmp_path: Path, links: dict[str, list[str]], *, kind: str = "entity"
+) -> Path:
     """Build a vault whose wiki/sources pages carry the given wikilinks."""
     vault = tmp_path / "vault"
     (vault / "raw" / "sessions").mkdir(parents=True)
@@ -27,7 +28,11 @@ def _mk_vault(tmp_path: Path, links: dict[str, list[str]]) -> Path:
     sources = vault / "wiki" / "sources"
     sources.mkdir(parents=True)
     for slug, names in links.items():
-        body = "\n".join(f"- [[{n}]]" for n in names)
+        body = "\n".join(
+            f"- [[{n}]] ({kind}) — a harvested topic\n"
+            f"  - fact: cited from {slug}."
+            for n in names
+        )
         (sources / f"{slug}.md").write_text(
             f"---\ntitle: {slug}\ntype: source\n---\n\n## Connections\n{body}\n",
             encoding="utf-8",
@@ -191,11 +196,13 @@ def test_candidates_only_makes_no_per_source_synthesis_calls(
     assert cmd_synthesize(_args(candidates_only=True, vault=vault)) == 0
 
 
-def test_candidates_only_classifies_via_the_backend(tmp_path: Path, monkeypatch) -> None:
-    """The CLI must actually route classification through the backend."""
-    vault = _mk_vault(tmp_path, {s: ["Compounding"] for s in ("a", "b", "c")})
+def test_candidates_only_files_by_source_topic_kind(tmp_path: Path, monkeypatch) -> None:
+    """#147: harvest kind comes from source bullets, not a classifier call."""
+    vault = _mk_vault(
+        tmp_path, {s: ["Compounding"] for s in ("a", "b", "c")}, kind="concept"
+    )
     monkeypatch.setattr(
-        "llmwiki.cli.resolve_backend", lambda cfg: _ClassifyingBackend("concept")
+        "llmwiki.cli.resolve_backend", lambda cfg: _UnavailableBackend()
     )
 
     assert cmd_synthesize(_args(candidates_only=True, vault=vault)) == 0
@@ -218,13 +225,13 @@ def test_rerun_with_nothing_new_succeeds(tmp_path: Path, monkeypatch) -> None:
     assert cmd_synthesize(_args(candidates_only=True, vault=vault)) == 0
 
 
-# ─── Failure causes: each names itself and writes nothing ──────────────
+# ─── #147: harvest does not need a classifier ──────────────────────────
 
 
-def test_unreachable_backend_fails_the_run(
+def test_unreachable_backend_still_writes_stubs(
     tmp_path: Path, monkeypatch, capsys
 ) -> None:
-    """Cause (a): the backend was never reached, so there is no reply to blame."""
+    """Harvest is offline; Dummy/unavailable backends must not block stubs."""
     vault = _mk_vault(tmp_path, {s: ["Recurring"] for s in ("a", "b", "c")})
     monkeypatch.setattr(
         "llmwiki.cli.resolve_backend", lambda cfg: _UnavailableBackend()
@@ -232,20 +239,16 @@ def test_unreachable_backend_fails_the_run(
 
     rc = cmd_synthesize(_args(candidates_only=True, vault=vault))
 
+    assert rc == 0
+    stub = vault / "wiki" / "candidates" / "entities" / "Recurring.md"
+    assert stub.is_file()
     err = capsys.readouterr().err
-    assert rc == 1
-    assert "unreachable" in err
-    assert "offline" in err
-    assert "Nothing was written" in err
-    assert "Recurring" in err
-    assert not (vault / "wiki" / "candidates").exists()
+    assert "Nothing was written" not in err
 
 
-def test_backend_resolution_failure_fails_the_run(
+def test_backend_resolution_failure_still_writes_stubs(
     tmp_path: Path, monkeypatch, capsys
 ) -> None:
-    """Cause (a) again: a backend that cannot even be constructed is
-    unreachable, and harvest must not fall back to guessing."""
     vault = _mk_vault(tmp_path, {s: ["Recurring"] for s in ("a", "b", "c")})
 
     def _boom(cfg):
@@ -255,35 +258,14 @@ def test_backend_resolution_failure_fails_the_run(
 
     rc = cmd_synthesize(_args(candidates_only=True, vault=vault))
 
-    assert rc == 1
-    assert "unreachable" in capsys.readouterr().err
-    assert not (vault / "wiki" / "candidates").exists()
-
-
-def test_incomplete_reply_fails_the_run(tmp_path: Path, monkeypatch, capsys) -> None:
-    """Cause (b): the backend answered, but one name never came back — a
-    different problem from an unreachable backend, and it must read as one."""
-    vault = _mk_vault(tmp_path, {f"s{i}": ["Known", "Unknown"] for i in range(3)})
-    monkeypatch.setattr(
-        "llmwiki.cli.resolve_backend",
-        lambda cfg: _ClassifyingBackend(omit=("Unknown",)),
-    )
-
-    rc = cmd_synthesize(_args(candidates_only=True, vault=vault))
-
-    err = capsys.readouterr().err
-    assert rc == 1
-    assert "incomplete or unparseable" in err
-    assert "unreachable" not in err
-    assert "Unknown" in err
-    assert "Nothing was written" in err
-    assert not (vault / "wiki" / "candidates").exists()
+    assert rc == 0
+    assert (vault / "wiki" / "candidates" / "entities" / "Recurring.md").is_file()
+    assert "backend unavailable" in capsys.readouterr().err
 
 
 def test_unreadable_sources_fail_the_run(tmp_path: Path, monkeypatch, capsys) -> None:
-    """Cause (c): a file problem must not be reported as a classifier problem."""
+    """Unreadable source pages still abort harvest with nothing written."""
     vault = _mk_vault(tmp_path, {s: ["Recurring"] for s in ("a", "b", "c")})
-    # A directory named like a page: the scan finds it and cannot read it.
     (vault / "wiki" / "sources" / "broken.md").mkdir()
     monkeypatch.setattr(
         "llmwiki.cli.resolve_backend", lambda cfg: _ClassifyingBackend()
@@ -295,6 +277,5 @@ def test_unreadable_sources_fail_the_run(tmp_path: Path, monkeypatch, capsys) ->
     assert rc == 2
     assert "could not be read" in err
     assert "sources/broken.md" in err
-    assert "not a classifier problem" in err
     assert "Nothing was written" in err
     assert not (vault / "wiki" / "candidates").exists()

@@ -10,6 +10,7 @@ from llmwiki.build import build_site
 from llmwiki.raw_docs_site import render_dashboard_body
 from llmwiki.render import js
 from llmwiki.state_store import (
+    pipeline_on_disk_mismatch,
     pipeline_rows_missing_on_disk,
     read_state,
     synth_pipeline_shape_ok,
@@ -164,6 +165,38 @@ def test_pipeline_rows_missing_on_disk():
     )
     assert not pipeline_rows_missing_on_disk({})
     assert not pipeline_rows_missing_on_disk(None)
+
+
+def test_pipeline_on_disk_mismatch(tmp_path: Path):
+    """#145: stored on_disk totals vs wiki/sources file count (skip _context)."""
+    wiki = tmp_path / "wiki"
+    sources = wiki / "sources"
+    sources.mkdir(parents=True)
+    assert not pipeline_on_disk_mismatch(wiki, {"rows": []})
+    assert not pipeline_on_disk_mismatch(
+        wiki, {"rows": [{"label": "Claude", "on_disk": 0}]}
+    )
+    (sources / "a.md").write_text("# a\n", encoding="utf-8")
+    (sources / "b.md").write_text("# b\n", encoding="utf-8")
+    (sources / "c.md").write_text("# c\n", encoding="utf-8")
+    (sources / "_context.md").write_text("# ctx\n", encoding="utf-8")
+    assert pipeline_on_disk_mismatch(
+        wiki, {"rows": [{"label": "Other", "on_disk": 0}]}
+    )
+    assert not pipeline_on_disk_mismatch(
+        wiki, {"rows": [{"label": "Other", "on_disk": 3}]}
+    )
+    assert not pipeline_on_disk_mismatch(
+        wiki,
+        {
+            "rows": [
+                {"label": "Claude", "on_disk": 2},
+                {"label": "Stubs", "on_disk": 1},
+            ]
+        },
+    )
+    assert pipeline_on_disk_mismatch(wiki, {"rows": "bad"}) is False
+    assert pipeline_on_disk_mismatch(wiki, None) is False  # type: ignore[arg-type]
 
 
 def test_estimate_pipeline_rows_by_agent(tmp_path: Path):
@@ -654,3 +687,141 @@ def test_build_backfills_pipeline_rows_missing_on_disk(tmp_path: Path, monkeypat
     by_label = {r["label"]: r for r in rows}
     assert by_label["Claude"]["on_disk"] == 1
     assert not pipeline_rows_missing_on_disk(state["synth"])
+
+
+def test_build_refreshes_pipeline_on_disk_mismatch(tmp_path: Path, monkeypatch):
+    """#145: shape-ok snapshot with on_disk:0 but files on disk → rebuild counts."""
+
+    vault = _seed_build_vault(tmp_path)
+    wiki = vault / "wiki" / "sources"
+    for name in ("one.md", "two.md", "three.md"):
+        (wiki / name).write_text(
+            f"---\ntitle: {name}\ntype: source\nproject: demo\n---\n\n## Summary\n\nSeeded.\n",
+            encoding="utf-8",
+        )
+    (wiki / "_context.md").write_text("# folder context\n", encoding="utf-8")
+    state_path = vault / "llmwiki-state.json"
+    # Shape-ok with on_disk present but wrong (0 vs 3 real pages).
+    state_path.write_text(
+        json.dumps(
+            {
+                "queue": {"items": [], "legacy_pending_paths": []},
+                "sync": {"files": {}, "meta": {}, "counters": {}},
+                "synth": {
+                    "files": {},
+                    "pending": [],
+                    "pending_total": 0,
+                    "pending_updated_at": "2026-07-01T00:00:00Z",
+                    "estimate": {
+                        "updated_at": "2026-07-01T00:00:00Z",
+                        "source_pages_on_disk": 0,
+                    },
+                    "pipeline": {
+                        "stages": ["raw", "synthesized"],
+                        "rows": [
+                            {
+                                "id": "other",
+                                "label": "Other",
+                                "kind": "other",
+                                "raw": 0,
+                                "pending": 0,
+                                "synthesized": 0,
+                                "on_disk": 0,
+                                "next_usd": 0.0,
+                            }
+                        ],
+                        "updated_at": "2026-07-01T00:00:00Z",
+                    },
+                },
+                "quarantine": {"entries": []},
+                "ops": {
+                    "last_queue_run_at": "",
+                    "last_lint_run_at": "",
+                    "last_reflect_run_at": "",
+                },
+                "meta": {"schema_version": 1, "updated_at": "", "revision": 1},
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    seeded = json.loads(state_path.read_text(encoding="utf-8"))
+    assert synth_pipeline_shape_ok(seeded["synth"])
+    assert not pipeline_rows_missing_on_disk(seeded["synth"])
+    assert pipeline_on_disk_mismatch(
+        vault / "wiki", seeded["synth"]["pipeline"]
+    )
+
+    monkeypatch.setattr(build_mod, "REPO_ROOT", vault)
+    monkeypatch.setattr(build_mod, "RAW_DIR", vault / "raw")
+    monkeypatch.setattr(build_mod, "RAW_SESSIONS", vault / "raw" / "sessions")
+    monkeypatch.setattr(build_mod, "DEFAULT_OUT_DIR", vault / "site")
+
+    rc = build_site(
+        out_dir=vault / "site",
+        raw_sessions=vault / "raw" / "sessions",
+        raw_dir=vault / "raw",
+        wiki_dir=vault / "wiki",
+    )
+    assert rc == 0
+    state = read_state(state_path)
+    rows = state["synth"]["pipeline"]["rows"]
+    assert sum(int(r.get("on_disk") or 0) for r in rows) == 3
+    assert state["synth"]["estimate"]["source_pages_on_disk"] == 3
+    assert not pipeline_on_disk_mismatch(vault / "wiki", state["synth"]["pipeline"])
+
+
+def test_build_skips_pipeline_refresh_when_on_disk_matches(
+    tmp_path: Path, monkeypatch
+):
+    """#145: matching on_disk totals → build must not re-run estimate."""
+
+    vault = _seed_build_vault(tmp_path)
+    wiki = vault / "wiki" / "sources"
+    (wiki / "page.md").write_text(
+        "---\ntitle: P\ntype: source\n"
+        "source_file: raw/sessions/demo/2026-07-01T10-00-demo-x.md\n"
+        "project: demo\n---\n\n## Summary\n\nSeeded.\n",
+        encoding="utf-8",
+    )
+    state_path = vault / "llmwiki-state.json"
+    refresh_synth_pending(
+        raw_dir=vault / "raw" / "sessions",
+        docs_dir=vault / "raw" / "docs",
+        wiki_sources_dir=wiki,
+        state_file=state_path,
+        include_subagents="all",
+        exclude_headless=False,
+    )
+    before_state = json.loads(state_path.read_text(encoding="utf-8"))
+    before_pipeline = before_state["synth"]["pipeline"]
+    before_on_disk = sum(int(r.get("on_disk") or 0) for r in before_pipeline["rows"])
+    assert before_on_disk >= 1
+    assert not pipeline_on_disk_mismatch(vault / "wiki", before_pipeline)
+    calls: list[object] = []
+
+    def _spy(**kwargs):
+        calls.append(kwargs)
+        raise AssertionError("refresh_synth_pending must not run when on_disk matches")
+
+    monkeypatch.setattr(build_mod, "REPO_ROOT", vault)
+    monkeypatch.setattr(build_mod, "RAW_DIR", vault / "raw")
+    monkeypatch.setattr(build_mod, "RAW_SESSIONS", vault / "raw" / "sessions")
+    monkeypatch.setattr(build_mod, "DEFAULT_OUT_DIR", vault / "site")
+    monkeypatch.setattr(build_mod, "refresh_synth_pending", _spy)
+
+    rc = build_site(
+        out_dir=vault / "site",
+        raw_sessions=vault / "raw" / "sessions",
+        raw_dir=vault / "raw",
+        wiki_dir=vault / "wiki",
+    )
+    assert rc == 0
+    assert calls == []
+    after = json.loads(state_path.read_text(encoding="utf-8"))
+    # Candidate-review may rewrite state meta; pipeline on_disk snapshot stays put.
+    assert after["synth"]["pipeline"]["rows"] == before_pipeline["rows"]
+    assert after["synth"]["pipeline"]["updated_at"] == before_pipeline["updated_at"]
+    assert sum(int(r.get("on_disk") or 0) for r in after["synth"]["pipeline"]["rows"]) == (
+        before_on_disk
+    )

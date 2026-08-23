@@ -50,3 +50,41 @@ Memory of the `/implement-feature` run outside the context window. One entry per
 - Eight slices: parser → harvest offline → promote offline → job 1 + retire CLI → job 2 + FR2 rewrite → interrupt/#145 → docs → Feature Testing & Regression (`testing-expert`). Implementation tasks: `general-purpose` (no Python specialist hired).
 - Draft Approve ask suppressed per delivery-flow Local Customization.
 - **Next:** commit-specs.
+
+## commit-specs
+
+- Spec dir committed as `220ccdb` (`docs: add spec for #147 one-call-per-source synthesis`).
+- **Next:** implement.
+
+## implement — slices 1–7
+
+- **Worktree:** `.claude/worktrees/feat-147-one-call-synth` on `feat/147-one-call-synth`.
+- Slices 1–7 complete (`tasks.md` all `[x]` except Slice 8). Uncommitted product + docs + tests in the worktree (parser, offline harvest/promote, job 1+2, interrupt 130, `on_disk` mismatch, CHANGELOG/docs/agent-kit).
+- `context/product/architecture.md` §6 Testing stack added so Feature Testing is not blocked (pytest unit/integration; Playwright only when UI changes).
+- **Next:** Slice 8 `testing-expert`.
+
+## implement — slice 8
+
+- **Added:** `tests/test_147_acceptance.py` (10 tests, `@spec: 009-one-call-per-source-synth`). Slice 8 `[x]`.
+- **Next:** verify.
+
+## verify
+
+- Dummy `synth` on throwaway `.worktree-vault`: 3 sources → harvest SharedThing → `promote` exit 0 with Dummy; Connections parseable; `consolidate-topics` exit 2 and `--complete` writes no cache; FR2 rewrite then skip on a non-stub parseable page; `build` after seeded `on_disk: 0` shows Home ON DISK total 4.
+- Visual: `docs/screenshots/009-one-call-per-source-synth-home-on-disk.png` (Eligible sources table, ON DISK total 4).
+- Spec Status → Completed; roadmap item checked.
+- CHANGELOG Unreleased: dropped the superseded “promote requires LLM (#103)” current-tense bullet so it does not contradict #147.
+- **Flow correction (2026-08-16):** verify must not capture screenshots and must not start an HTTP server (#109). Recorded in `delivery-flow.md` §2 / §7 / §10; overlays on `/awos-verify` wrappers; implement-feature / fix-bug verify stages. Deleted the Home screenshot taken during the earlier verify pass.
+- **Next:** user smoke confirm (open `<vault>/site/index.html` — no server). Do not start local review until confirmed.
+
+## drive-by — install-automation profile B → synth
+
+- Profile B still chained deprecated `synthesize` (sources-only). Switched to `synth` + docs/CHANGELOG/tests.
+- Broader first-time UX (lean/full profiles, lint/graph addons, token trade-offs) deferred to https://github.com/AlexanderMakarov/llm-wiki/issues/156 — not in #147 scope.
+- **Next:** continue PR delivery for #147.
+
+## commit-push
+
+- `ruff check` + full `pytest tests/ -q` green in worktree (2026-08-23).
+- Committing product implementation (exclude `config.json` / `.worktree-vault/`); rebase onto `origin/main` (#155 roadmap); open PR; wait CI.
+- Do not merge without explicit user approval.

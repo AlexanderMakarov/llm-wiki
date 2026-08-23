@@ -763,9 +763,9 @@ def test_an_interrupt_records_the_pages_that_reached_disk(
 
     monkeypatch.setattr(pipeline, "_save_state", _save_state)
 
-    with pytest.raises(KeyboardInterrupt):
-        _run_synth(vault, _RealPageBackend(), concurrency=3)
+    summary = _run_synth(vault, _RealPageBackend(), concurrency=3)
 
+    assert summary["interrupted"] is True
     assert f"Interrupted after 1/{len(slugs)} source(s)" in capsys.readouterr().out
     assert len(_pages(vault)) == len(slugs)
     assert len(_synth_state(vault)) == len(slugs)

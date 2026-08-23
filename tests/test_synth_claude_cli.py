@@ -16,6 +16,7 @@ from llmwiki.synth.claude_cli import (
     resolve_overview_model,
 )
 from llmwiki.synth.pipeline import resolve_backend
+from llmwiki.topics_consolidate import CONSOLIDATION_PROMPT_PATH
 
 TEMPLATE = "Summarize:\n{body}\nMeta:\n{meta}\n"
 
@@ -242,6 +243,19 @@ def test_split_prompt_template_tolerates_a_custom_template():
     stable, per_page = split_prompt_template("Just do it: {body}")
     assert stable == ""
     assert per_page == "Just do it: {body}"
+
+
+def test_job1_consolidation_prompt_is_not_wiki_markdown_lean(tmp_path):
+    """#147 job 1: Claude must cache JSON instructions, not the source-page lean prompt."""
+    template = CONSOLIDATION_PROMPT_PATH.read_text(encoding="utf-8")
+    stable, per_page = split_prompt_template(template)
+    assert "valid JSON" in stable
+    assert "entity" in stable and "concept" in stable
+    assert per_page.startswith("## Session to synthesize")
+    argv = _argv_of(tmp_path, "claude-job1", template=template)
+    system = argv[argv.index("--system-prompt") + 1]
+    assert "valid JSON" in system
+    assert not system.startswith("You synthesize wiki source pages")
 
 
 def test_claude_sends_stable_half_as_system_prompt(tmp_path):

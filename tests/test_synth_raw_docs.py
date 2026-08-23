@@ -131,7 +131,11 @@ class RealSynthesizer(BaseSynthesizer):
         return True
 
     def synthesize_source_page(self, body, meta, prompt_template):
-        return "## Summary\n\nReal synthesis.\n\n## Connections\n\n- [[OpenClaw]]\n"
+        return (
+            "## Summary\n\nReal synthesis.\n\n"
+            "## Connections\n\n"
+            "- [[OpenClaw]] (entity) — runtime\n"
+        )
 
 
 def test_synthesize_docs_idempotent_rerun_is_noop(tmp_path: Path):

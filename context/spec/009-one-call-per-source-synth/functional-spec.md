@@ -1,7 +1,7 @@
 # Functional Specification: One synthesis pass per source — topics, kind, facts, and description together
 
 - **Roadmap Item:** GitHub Issue [#147](https://github.com/AlexanderMakarov/llm-wiki/issues/147) — collapse synthesis so each source is read by the language model once; harvest, promote, and name-deduping become work over what that pass already wrote. Also covers interrupt recovery from [#145](https://github.com/AlexanderMakarov/llm-wiki/issues/145).
-- **Status:** Approved
+- **Status:** Completed
 - **Author:** AWOS `/implement-feature` (issue #147)
 
 ---
@@ -29,9 +29,9 @@ Honest accounting: **one amortised language-model ask per synthesis run** (prepa
 The known list of people and ideas already in the wiki is prepared once at the start of the run (FR5) and shown to every source pass so the model reuses existing names instead of inventing near-duplicate spellings.
 
 - **Acceptance Criteria:**
-  - [ ] Given a pending source, when synthesis writes its summary, then that summary names the people and ideas it is about and, for each, records a kind (person/product vs idea), the facts this source supports, and a short description — without a second language-model ask for that source.
-  - [ ] Given a vault that already has people and ideas on file, when a new source is synthesized, then the pass can see those existing names and prefers them over a new spelling of the same thing.
-  - [ ] Given a source that names nothing worth filing, when it is synthesized, then it still gets a normal summary and does not invent empty people or ideas.
+  - [x] Given a pending source, when synthesis writes its summary, then that summary names the people and ideas it is about and, for each, records a kind (person/product vs idea), the facts this source supports, and a short description — without a second language-model ask for that source.
+  - [x] Given a vault that already has people and ideas on file, when a new source is synthesized, then the pass can see those existing names and prefers them over a new spelling of the same thing.
+  - [x] Given a source that names nothing worth filing, when it is synthesized, then it still gets a normal summary and does not invent empty people or ideas.
 
 ### FR2 — Existing summaries are rewritten once so the vault matches the new shape
 
@@ -40,17 +40,17 @@ The known list of people and ideas already in the wiki is prepared once at the s
 After that catch-up, only sources that are new or otherwise out of date are synthesized, as today.
 
 - **Acceptance Criteria:**
-  - [ ] Given a vault whose source summaries were written before this change, when the operator runs synthesis, then those summaries are treated as out of date and rewritten with the per-topic details in FR1.
-  - [ ] Given a vault whose source summaries already carry those details and are otherwise up to date, when the operator runs synthesis, then those sources are not rewritten again.
+  - [x] Given a vault whose source summaries were written before this change, when the operator runs synthesis, then those summaries are treated as out of date and rewritten with the per-topic details in FR1.
+  - [x] Given a vault whose source summaries already carry those details and are otherwise up to date, when the operator runs synthesis, then those sources are not rewritten again.
 
 ### FR3 — Collecting pending names does not ask the language model
 
 - **As an** operator, **I want** pending people and ideas collected by counting how often they are named across source summaries and reading the kind already recorded there, **so that** harvest does not cost a second pass over material already paid for.
 
 - **Acceptance Criteria:**
-  - [ ] Given source summaries that already record kind and facts per named topic, when pending names are collected, then each pending page’s kind matches what those summaries recorded — with no extra language-model ask.
-  - [ ] Given the same sources, when pending names are collected, then the pending page’s fact list is the facts those sources already recorded for that name, concatenated, with no extra language-model ask.
-  - [ ] Given a reviewer with no language model configured, when they run synthesis in a mode that only collects pending names from existing summaries, then collection still completes.
+  - [x] Given source summaries that already record kind and facts per named topic, when pending names are collected, then each pending page’s kind matches what those summaries recorded — with no extra language-model ask.
+  - [x] Given the same sources, when pending names are collected, then the pending page’s fact list is the facts those sources already recorded for that name, concatenated, with no extra language-model ask.
+  - [x] Given a reviewer with no language model configured, when they run synthesis in a mode that only collects pending names from existing summaries, then collection still completes.
 
 ### FR4 — Promoting works with no language model configured
 
@@ -61,9 +61,9 @@ Pending pages and promoted pages share the same shape: promote is a move, not a 
 This must not go back to assembling a “fact” by clipping a sentence near a name in a source page. That path produced fragments about the wrong subject and was replaced because it looked like prose while being untrustworthy. Facts stay authored in the source pass (FR1), then copied.
 
 - **Acceptance Criteria:**
-  - [ ] Given a pending page that already lists facts from its sources, when the reviewer promotes it with no language model configured, then the promoted page exists, carries those facts, and the pending page is gone.
-  - [ ] Given a pending page whose fact list a reviewer has already edited, when they promote it, then the edited facts are what appear on the promoted page.
-  - [ ] Given promote, when it fills facts, then it does not invent bullets by clipping text near a name in a source page.
+  - [x] Given a pending page that already lists facts from its sources, when the reviewer promotes it with no language model configured, then the promoted page exists, carries those facts, and the pending page is gone.
+  - [x] Given a pending page whose fact list a reviewer has already edited, when they promote it, then the edited facts are what appear on the promoted page.
+  - [x] Given promote, when it fills facts, then it does not invent bullets by clipping text near a name in a source page.
 
 ### FR5 — The known-names list is prepared once per synthesis run, before any new source
 
@@ -74,20 +74,20 @@ At the **start** of each synthesis run the language model is asked **once** to p
 Consequence, accepted: if 100 sources are synthesized in one uninterrupted run, a spelling discovered in the first source is not on the known-names list for the hundredth source of that same run. Stopping and restarting is how the list converges.
 
 - **Acceptance Criteria:**
-  - [ ] Given a synthesis run of many pending sources, when it starts, then the known-names list is prepared before the first new source is summarised, and that same list is what every source of the run sees — it is not rebuilt part-way through.
-  - [ ] Given a vault that already has people, ideas, or pending names, when that preparation runs, then the list carries canonical spellings, a kind (person/product vs idea), and a short description, without a separate classify, facts-on-promote, or merge-duplicates command.
-  - [ ] Given that run is interrupted and the operator starts synthesis again, when the second run begins, then its known-names list is prepared from disk including people, ideas, and pending names produced from the pages the first run wrote.
-  - [ ] Given pages already in flight when the operator presses Ctrl+C, when shutdown proceeds, then those in-flight pages are allowed to finish rather than being cancelled.
-  - [ ] Given a vault with no people or ideas on file yet, when synthesis starts, then preparation does not invent a list, and new sources still summarise.
+  - [x] Given a synthesis run of many pending sources, when it starts, then the known-names list is prepared before the first new source is summarised, and that same list is what every source of the run sees — it is not rebuilt part-way through.
+  - [x] Given a vault that already has people, ideas, or pending names, when that preparation runs, then the list carries canonical spellings, a kind (person/product vs idea), and a short description, without a separate classify, facts-on-promote, or merge-duplicates command.
+  - [x] Given that run is interrupted and the operator starts synthesis again, when the second run begins, then its known-names list is prepared from disk including people, ideas, and pending names produced from the pages the first run wrote.
+  - [x] Given pages already in flight when the operator presses Ctrl+C, when shutdown proceeds, then those in-flight pages are allowed to finish rather than being cancelled.
+  - [x] Given a vault with no people or ideas on file yet, when synthesis starts, then preparation does not invent a list, and new sources still summarise.
 
 ### FR6 — Interrupting synthesis still collects pending names and leaves counts honest
 
 - **As an** operator who stops a long run with Ctrl+C, **I want** pending names collected from the source pages already written, and Home’s counts to match the disk after the next site rebuild, **so that** paid work is not thrown away and I do not need a costing command to unstick the dashboard.
 
 - **Acceptance Criteria:**
-  - [ ] Given a multi-source synthesis interrupted after some pages have been written, when the command exits, then pending names have been collected from those written pages (or the operator is shown the exact one-line command that collects them), and the wiki’s pending-names folder is not left empty solely because the run did not finish.
-  - [ ] Given that interrupted run, when it exits, then sources whose pages were not successfully written are not recorded as finished — a restart synthesizes them.
-  - [ ] Given source pages on disk after an interrupt, when the operator rebuilds the site, then Home’s synthesized counts match the pages on disk — they do not stay at zero until someone runs a costing/estimate command.
+  - [x] Given a multi-source synthesis interrupted after some pages have been written, when the command exits, then pending names have been collected from those written pages (or the operator is shown the exact one-line command that collects them), and the wiki’s pending-names folder is not left empty solely because the run did not finish.
+  - [x] Given that interrupted run, when it exits, then sources whose pages were not successfully written are not recorded as finished — a restart synthesizes them.
+  - [x] Given source pages on disk after an interrupt, when the operator rebuilds the site, then Home’s synthesized counts match the pages on disk — they do not stay at zero until someone runs a costing/estimate command.
 
 ### FR7 — The separate merge-duplicates command is gone
 
@@ -96,9 +96,9 @@ Consequence, accepted: if 100 sources are synthesized in one uninterrupted run, 
 The old merge-duplicates command disappears from help and from agent skills/commands. Those instructions tell the agent to run synthesis (and review pending names), not to call a leftover consolidate step.
 
 - **Acceptance Criteria:**
-  - [ ] Given the product’s command list / help, when the operator looks up how to merge duplicate topic names, then that old command is not offered.
-  - [ ] Given someone still types the old command, when they run it, then they see a clear message that synthesis now keeps names unique and that the command is gone — not a prompt file to fill in.
-  - [ ] Given the project’s agent skills and slash commands that used to tell the agent to run that merge-duplicates step, when they are followed, then they tell the agent to run synthesis / review pending names instead of a separate consolidate function.
+  - [x] Given the product’s command list / help, when the operator looks up how to merge duplicate topic names, then that old command is not offered.
+  - [x] Given someone still types the old command, when they run it, then they see a clear message that synthesis now keeps names unique and that the command is gone — not a prompt file to fill in.
+  - [x] Given the project’s agent skills and slash commands that used to tell the agent to run that merge-duplicates step, when they are followed, then they tell the agent to run synthesis / review pending names instead of a separate consolidate function.
 
 ### FR8 — Topic pages get a description from the source pass, and it is not auto-rewritten from later facts
 
@@ -107,25 +107,25 @@ The old merge-duplicates command disappears from help and from agent skills/comm
 That opening paragraph is **not** rebuilt when more facts accumulate, and there is no “rewrite descriptions now” command. Reviewers can edit it by hand. Stitched descriptions after merging two pages remain a separate issue.
 
 - **Acceptance Criteria:**
-  - [ ] Given sources that recorded a description for a name, when that name becomes a pending page, then the page opens with a description taken from those recordings, with no extra language-model ask.
-  - [ ] Given more facts are later added to that page from new sources, when the operator looks at the opening paragraph, then it has not been silently rewritten just because the fact count grew.
-  - [ ] Given two pages are merged, when the result is saved, then this change does not add a language-model rewrite of the combined description.
+  - [x] Given sources that recorded a description for a name, when that name becomes a pending page, then the page opens with a description taken from those recordings, with no extra language-model ask.
+  - [x] Given more facts are later added to that page from new sources, when the operator looks at the opening paragraph, then it has not been silently rewritten just because the fact count grew.
+  - [x] Given two pages are merged, when the result is saved, then this change does not add a language-model rewrite of the combined description.
 
 ### FR9 — Progress and failure reporting stay understandable
 
 - **As an** operator watching synthesis, **I want** the existing start line, per-page progress, and interrupt message to keep making sense, **so that** the cheaper pipeline does not become a silent one.
 
 - **Acceptance Criteria:**
-  - [ ] Given a run of several sources, when it starts, then the operator still sees how many sources will be synthesized, which synthesizer is in use, and how many pages run at once — before the first page result.
-  - [ ] Given Ctrl+C, when in-flight pages drain, then the operator still sees how many sources finished and how many in-flight pages were waited on, and then sees that pending names were collected (or the recovery command).
-  - [ ] Given a source whose pass fails, when the run continues, then that failure is reported, the source is not marked finished, and other sources still complete.
+  - [x] Given a run of several sources, when it starts, then the operator still sees how many sources will be synthesized, which synthesizer is in use, and how many pages run at once — before the first page result.
+  - [x] Given Ctrl+C, when in-flight pages drain, then the operator still sees how many sources finished and how many in-flight pages were waited on, and then sees that pending names were collected (or the recovery command).
+  - [x] Given a source whose pass fails, when the run continues, then that failure is reported, the source is not marked finished, and other sources still complete.
 
 ### FR10 — The change is documented
 
 - **Acceptance Criteria:**
-  - [ ] Given the change ships, then `CHANGELOG.md` describes it under `## [Unreleased]`, including that promote no longer needs a language model and that the merge-duplicates command is gone.
-  - [ ] Given the CLI reference and getting-started / lifecycle docs, when a reader looks up synthesis, harvest, and promote, then they describe one pass per source and bookkeeping afterwards — not four language-model steps.
-  - [ ] Given agent skills and slash commands for synthesis and candidate review, when they are followed, then they match FR4 and FR7.
+  - [x] Given the change ships, then `CHANGELOG.md` describes it under `## [Unreleased]`, including that promote no longer needs a language model and that the merge-duplicates command is gone.
+  - [x] Given the CLI reference and getting-started / lifecycle docs, when a reader looks up synthesis, harvest, and promote, then they describe one pass per source and bookkeeping afterwards — not four language-model steps.
+  - [x] Given agent skills and slash commands for synthesis and candidate review, when they are followed, then they match FR4 and FR7.
 
 ---
 

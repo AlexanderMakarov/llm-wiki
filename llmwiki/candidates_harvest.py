@@ -4,9 +4,9 @@
 name the entities and concepts the LLM identified. Nothing materialized those
 names, so the links dangle and the trusted layer stays empty.
 
-Harvesting closes that loop deterministically: the extraction already happened
-during synthesis, so this is a pass over ``wiki/sources/`` — never over
-``raw/`` — and costs no synthesis calls.
+Harvesting closes that loop deterministically: kind, description, and facts are
+read from source topic bullets via :mod:`llmwiki.source_topics` — a pass over
+``wiki/sources/`` only, never ``raw/``, and with no classification LLM call.
 """
 
 from __future__ import annotations
@@ -20,6 +20,7 @@ from pathlib import Path
 
 from llmwiki.lint.rules.link_integrity import _norm_slug
 from llmwiki.reindex import reindex_wiki
+from llmwiki.source_topics import TopicRecord, parse_source_topics
 from llmwiki.wikilinks import wikilink_targets
 
 #: Default significance threshold. Matches the Lint Workflow's definition of a
@@ -245,6 +246,74 @@ def _preserved_body(path: Path, name: str) -> str:
     return body.lstrip("\n") if sep else text.strip("\n") + "\n\n"
 
 
+def _topic_records_for_target(
+    wiki_dir: Path, target: HarvestedTarget
+) -> list[tuple[str, TopicRecord]]:
+    """``(source-slug, TopicRecord)`` for citing sources in sorted slug order."""
+    matched: list[tuple[str, TopicRecord]] = []
+    for rel in target.sources:
+        slug = Path(rel).stem
+        try:
+            text = (wiki_dir / rel).read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        for record in parse_source_topics(text):
+            if record.name == target.name:
+                matched.append((slug, record))
+    return matched
+
+
+def _majority_kind(wiki_dir: Path, target: HarvestedTarget) -> str:
+    """Entity vs concept from citing source topic bullets; tie → first usable."""
+    entity = 0
+    concept = 0
+    first: str | None = None
+    for _slug, record in _topic_records_for_target(wiki_dir, target):
+        if record.kind not in _KIND_DIRS:
+            continue
+        if first is None:
+            first = record.kind
+        if record.kind == "entity":
+            entity += 1
+        elif record.kind == "concept":
+            concept += 1
+    if entity > concept:
+        return "entity"
+    if concept > entity:
+        return "concept"
+    if first is not None:
+        return first
+    return "entity"
+
+
+def _kinds_from_source_topics(
+    wiki_dir: Path, targets: Iterable[HarvestedTarget]
+) -> dict[str, str]:
+    """Map each target name to its majority kind from source topic bullets."""
+    return {t.name: _majority_kind(wiki_dir, t) for t in targets}
+
+
+def _new_stub_body(wiki_dir: Path, target: HarvestedTarget) -> str:
+    """Build H1 + optional description + Key Facts from source topic bullets."""
+    description = ""
+    fact_lines: list[str] = []
+    for slug, record in _topic_records_for_target(wiki_dir, target):
+        if not description and record.description.strip():
+            description = record.description.strip()
+        for fact in record.facts:
+            text = fact.strip()
+            if text:
+                fact_lines.append(f"- {text} [[{slug}]]")
+
+    parts = [f"# {target.name}\n\n"]
+    if description:
+        parts.append(f"{description}\n\n")
+    parts.append("## Key Facts\n\n")
+    if fact_lines:
+        parts.append("\n".join(fact_lines) + "\n\n")
+    return "".join(parts)
+
+
 def _stub_text(
     target: HarvestedTarget,
     kind: str,
@@ -288,6 +357,10 @@ def write_stubs(
     filed as an entity. Supplying a ``classify`` asserts that it decides, so a
     name it leaves out raises :class:`ValueError` rather than being guessed —
     a guessed stub is indistinguishable from a classified one on disk.
+
+    New stubs get description and Key Facts from source topic bullets; an
+    existing stub keeps prose above ``## Connections`` via
+    :func:`_preserved_body`.
     """
     targets = list(targets)
     # A stub that already exists keeps its folder — the reviewer may have
@@ -315,7 +388,10 @@ def write_stubs(
         kind = _DIR_KINDS.get(subdir, "entity")
         path = wiki_dir / "candidates" / subdir / f"{target.name}.md"
         path.parent.mkdir(parents=True, exist_ok=True)
-        body = _preserved_body(path, target.name)
+        if path.is_file():
+            body = _preserved_body(path, target.name)
+        else:
+            body = _new_stub_body(wiki_dir, target)
         path.write_text(
             _stub_text(target, kind, today=today, body=body), encoding="utf-8"
         )
@@ -388,8 +464,9 @@ def _backend_is_reachable(backend) -> bool:
     """Probe ``backend`` the way ``classify_names`` does, but report the answer.
 
     ``classify_names`` returns an empty mapping both for an unreachable
-    backend and for a reply it could not parse. Harvest has to tell an
-    operator which of the two happened, so it asks the question separately.
+    backend and for a reply it could not parse. Callers that still use the
+    LLM classifier probe availability separately so they can tell the two
+    apart.
     """
     if backend is None:
         return False
@@ -397,15 +474,6 @@ def _backend_is_reachable(backend) -> bool:
         return bool(backend.is_available())
     except Exception:  # noqa: BLE001 - a broken probe is an unreachable backend
         return False
-
-
-def _print_unclassified(names: list[str]) -> None:
-    """List the names harvest refused to guess at, capped for readability."""
-    print(
-        f"  unclassified: {', '.join(names[:10])}"
-        f"{' …' if len(names) > 10 else ''}",
-        file=sys.stderr,
-    )
 
 
 def run_harvest(
@@ -418,18 +486,18 @@ def run_harvest(
     """Harvest + write candidates. Returns a process-style exit code (0/1/2).
 
     Shared by ``llmwiki synth`` and ``all --with-synth`` so both paths agree
-    on classification refusal and messaging (#90).
+    on messaging (#90 / #147).
 
-    Classification is fail-closed: any new target the backend does not label
-    entity or concept stops the run before anything is written, with a message
-    naming the cause — unreachable backend, incomplete reply, or unreadable
-    source pages.
+    Kind, description, and Key Facts come from source topic bullets
+    (:func:`llmwiki.source_topics.parse_source_topics`). ``backend`` is
+    accepted for call-site compatibility and ignored for classification.
 
     ``require_sources=False`` treats a missing ``wiki/sources/`` as an empty
     harvest (exit 0) — used when harvest follows a sources pass that wrote
     nothing on a fresh vault. ``--candidates-only`` keeps ``require_sources``
     True so an operator who asked for harvest gets a clear error.
     """
+    del backend  # retained on the signature; classification is topic-based
     sources_dir = wiki_dir / "sources"
     if not sources_dir.is_dir():
         if require_sources:
@@ -447,56 +515,20 @@ def run_harvest(
         print(
             f"error: {len(exc.failures)} source page(s) under {sources_dir} "
             "could not be read, so the evidence behind every candidate is "
-            "incomplete. Nothing was written. This is a file problem, not a "
-            "classifier problem: fix the permissions or remove the "
-            "unreadable page(s), then re-run.",
+            "incomplete. Nothing was written. Fix the permissions or remove "
+            "the unreadable page(s), then re-run.",
             file=sys.stderr,
         )
         for rel, reason in exc.failures[:10]:
             print(f"  unreadable: {rel} ({reason})", file=sys.stderr)
         return 2
 
-    pending = unfiled_names(wiki_dir, targets)
-    backend_name = getattr(backend, "name", "none")
-
-    if pending and not _backend_is_reachable(backend):
-        print(
-            f"error: the synthesis backend ({backend_name}) is unreachable, so "
-            f"{len(pending)} new target(s) cannot be classified as entity or "
-            "concept. Nothing was written. Configure a reachable backend "
-            "under `synthesis.backend` and re-run.",
-            file=sys.stderr,
-        )
-        _print_unclassified(pending)
-        return 1
-
-    # Availability is already settled above — a second probe would cost
-    # another round-trip and could disagree with the first.
-    kinds = classify_names(pending, backend, check_available=False)
-    missing = [name for name in pending if name not in kinds]
-    if missing:
-        print(
-            f"error: the synthesis backend ({backend_name}) answered but left "
-            f"{len(missing)} of {len(pending)} new target(s) unclassified "
-            "after retry — the reply was incomplete or unparseable. Nothing "
-            "was written. Re-run to retry, or use a backend that answers with "
-            "one `<name>: entity|concept` line per name.",
-            file=sys.stderr,
-        )
-        _print_unclassified(missing)
-        return 1
-
-    try:
-        written = write_stubs(wiki_dir, targets, classify=lambda _names: kinds)
-    except ValueError as exc:
-        print(
-            f"error: classification is incomplete for the targets being "
-            f"written ({exc}). Nothing was written. Re-run to retry, or use a "
-            "backend that answers with one `<name>: entity|concept` line per "
-            "name.",
-            file=sys.stderr,
-        )
-        return 1
+    kinds = _kinds_from_source_topics(wiki_dir, targets)
+    written = write_stubs(
+        wiki_dir,
+        targets,
+        classify=lambda names: {n: kinds.get(n, "entity") for n in names},
+    )
     print(
         f"Candidates: {len(written)} stub(s) at --min-refs {min_refs} "
         f"→ {wiki_dir / 'candidates'}"
