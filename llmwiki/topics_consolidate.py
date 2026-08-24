@@ -20,10 +20,13 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 from pathlib import Path
 from typing import Any
 
 from llmwiki import REPO_ROOT
+
+_VALID_KINDS = frozenset({"entity", "concept"})
 
 CONSOLIDATION_PROMPT_PATH = (
     Path(__file__).parent / "synth" / "prompts" / "topic_consolidation.md"
@@ -124,16 +127,52 @@ def parse_and_cache(result_text: str, wiki_dir: Path | None = None) -> dict[str,
         if not canonical or canonical.lower() in seen:
             continue
         seen.add(canonical.lower())
-        clean.append({
+        entry: dict[str, Any] = {
             "canonical": canonical,
             "description": str(t.get("description", "")).strip(),
             "aliases": [str(a).strip() for a in t.get("aliases", []) if str(a).strip()],
             "distinct_from": t.get("distinct_from", []) or [],
-        })
+        }
+        # Optional on older replies; only persist a known value.
+        kind_raw = t.get("kind")
+        if isinstance(kind_raw, str):
+            kind = kind_raw.strip().lower()
+            if kind in _VALID_KINDS:
+                entry["kind"] = kind
+        clean.append(entry)
     cache = {"version": 1, "topics": clean, "dropped": data.get("dropped", []) or []}
     out = cache_path(wiki_dir)
     out.write_text(json.dumps(cache, indent=2, ensure_ascii=False), encoding="utf-8")
     return cache
+
+
+def prepare_known_names(wiki_dir: Path, backend: Any) -> None:
+    """One consolidation LLM call per synth run (job 1 / #147).
+
+    Skips when ``backend`` is missing, non-LLM (``is_llm`` is false), or
+    ``build_candidates`` is empty. On success writes ``.llmwiki-topics.json``
+    via :func:`parse_and_cache`. On any failure prints a warning and returns
+    without raising so the caller can fall back to heuristic vocabulary
+    injection.
+    """
+    if backend is None or not getattr(backend, "is_llm", False):
+        return
+    try:
+        if not build_candidates(wiki_dir):
+            return
+        prompt = render_consolidation_prompt(wiki_dir)
+        reply = backend.synthesize_source_page(
+            "",
+            {"slug": "known-names", "title": "known-names"},
+            prompt,
+        )
+        parse_and_cache(reply, wiki_dir)
+    except Exception as exc:
+        print(
+            f"  warning: prepare_known_names failed ({exc}); "
+            "using heuristic vocabulary",
+            file=sys.stderr,
+        )
 
 
 def load_cache(wiki_dir: Path | None = None) -> dict[str, Any] | None:

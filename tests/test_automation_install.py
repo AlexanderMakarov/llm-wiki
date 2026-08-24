@@ -9,10 +9,26 @@ from llmwiki.automation_install import (
     HOOK_MARKER,
     merge_claude_session_start_hook,
     merge_cursor_session_start_hook,
+    profile_command,
     render_systemd_timer,
     run_install,
 )
 from llmwiki.automation_status import load_status
+
+
+def test_profile_command_b_uses_synth_not_synthesize(tmp_path: Path):
+    """Profile B must call ``synth`` (sources + harvest), not deprecated ``synthesize``."""
+    cmd = profile_command("B", "python3", tmp_path)
+    assert "llmwiki synth &&" in cmd
+    assert "synthesize" not in cmd
+    assert "sync --no-auto-build" in cmd
+    assert "llmwiki build" in cmd
+
+
+def test_profile_command_c_is_all_pipeline(tmp_path: Path):
+    cmd = profile_command("C", "python3", tmp_path)
+    assert "all --with-sync --with-synth --skip-graph" in cmd
+    assert "synthesize" not in cmd
 
 
 def test_systemd_timer_persistent_and_time():

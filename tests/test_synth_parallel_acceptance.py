@@ -292,11 +292,14 @@ class _LinkedPageBackend(DummySynthesizer):
 
 
 def test_start_line_precedes_first_page_line_over_the_cli(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """FR1.1/FR1.2/FR3.1: a real ``llmwiki synth`` prints the batch size,
     backend name, and worker count before any per-page result line reaches
     stdout — with no ``--concurrency`` flag and no saved preference."""
+    monkeypatch.setattr(
+        "llmwiki.cli.resolve_backend", lambda cfg: DummySynthesizer()
+    )
     vault = _mk_vault(tmp_path)
     _seed_docs(vault, ("alpha", "beta"))
 

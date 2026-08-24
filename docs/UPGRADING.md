@@ -10,6 +10,14 @@ How to upgrade between `llmwiki` releases.  Most releases are drop-in (`pip inst
 
 The canonical per-release detail is [CHANGELOG.md](https://github.com/Pratiyush/llm-wiki/blob/master/CHANGELOG.md) — this guide focuses on "what might break".
 
+## Unreleased — one synthesis pass per source (#147 / #145)
+
+- **Next `synth` rewrites source pages that lack parseable topic bullets.** Summaries written before this change are treated as out of date once; after that catch-up, only new or otherwise stale sources are synthesized. If you override `wiki/prompts/source_page.md`, update it so Connections match the new shape (`- [[ExactName]] (entity|concept) — …` with nested `fact:` lines) — Key Claims / Key Quotes stay.
+- **`llmwiki consolidate-topics` is gone as a lifecycle step.** The name still resolves but always exits `2` with a message that synthesis prepares the known-names list. Do not run `--complete` or expect a prompt file / `.llmwiki-topics.json` write.
+- **Promote no longer needs a language-model backend.** Empty Key Facts are filled from source `fact:` bullets offline; Dummy/`None` is fine. Reviewer-written Key Facts are preserved. `rewrite-key-facts` still requires `claude` or `ollama`. This supersedes the older Unreleased note that said promote failed with `KeyFactsBackendError` without a backend (#103).
+- **Ctrl+C during `synth` harvests from written pages** (unless `--sources-only`, which prints `llmwiki synth --candidates-only`) and exits **130**. Run that recovery command if you interrupted a sources-only pass.
+- **Home pipeline `on_disk` recovers on `build` (#145).** When stored totals disagree with `wiki/sources/**/*.md`, the next `llmwiki build` refreshes them — you do not need an estimate run to unstick zeros after an interrupt.
+
 ## Unreleased — agent commands ship in the package (#109)
 
 - **`llmwiki install-agent-kit --dest PATH` copies the slash commands and skills into any agent directory you name.** A pip or Homebrew install now carries them; you do not need this repository. `--dest` is required — there is no auto-detection. Typical destinations: `.claude` in the project you are working in, or a user-level agent directory. Re-running after an upgrade refreshes the copies; a file you edited that now differs from the packaged version is saved as `<file>.bak` beside it before it is replaced. `--dry-run` prints the plan and writes nothing. See `docs/reference/cli.md` → `## install-agent-kit`.
@@ -58,7 +66,7 @@ The canonical per-release detail is [CHANGELOG.md](https://github.com/Pratiyush/
 Four breaking changes ship together. Three need nothing from you; the fourth is the only one with a data decision, and it is optional.
 
 - **Lint rule `entity_consistency` is gone, and an unknown `--rules` name now fails the run.** `llmwiki lint --rules entity_consistency` exits non-zero naming the unknown rule, where before it ran zero rules and reported a clean vault. Drop the rule from any script that pins it; plain `llmwiki lint` needs no change. The rule only ever demanded an `entity_type` value from a fixed seven-value list — removing it removes errors, not coverage.
-- **`synth --allow-unclassified` is gone.** Harvest now always fails closed: an incomplete classification exits non-zero, names the pages it could not classify, distinguishes an unreachable backend from an incomplete reply from unreadable source pages, and writes nothing. Drop the flag and configure a backend that returns `name: entity|concept` lines (`synthesis.backend` set to `claude` or `ollama` in `config.json`).
+- **`synth --allow-unclassified` is gone.** That flag was removed when harvest still ran a classify pass. **#147 later made harvest offline** (kind comes from source topic bullets; no classify LLM). Drop any leftover `--allow-unclassified` from scripts; you do not need a classify-capable backend for harvest.
 - **MCP tool `wiki_entity_search` is gone; `wiki_search` absorbs it.** There is no alias — an agent config or script naming `wiki_entity_search` gets an unknown-tool error, so re-read the tool list. `wiki_search` takes `term` (required), an optional `kind` (one of `source`, `entity`, `concept`, `project`, `synthesis`, matched against frontmatter `type`; the internal `navigation` and `context` kinds are not offered as a filter, and an unfiltered search still reaches those pages), an optional `format`, and the existing optional `include_raw`. The two compose independently: `include_raw` decides whether `raw/sessions/` is scanned at all, `kind` filters frontmatter `type` in every corpus that is scanned. Raw transcripts declare `type: source`, so `kind=source` with `include_raw` returns matching source pages *and* the transcripts behind them, while a kind no transcript declares (`kind=project`) simply contributes nothing from the raw corpus rather than erroring. Results are page-level (`path — title` with matching lines indented beneath) instead of bare `file:line`, and pages matching by title or path sort above pages matching only in the body. The default response is prose, not JSON: a client that did `json.loads(text)["matches"]` should pass `format: "json"`, which returns `{term, kind, include_raw, pages: [{path, title, name_match, lines: [{line, text}]}], truncated, budget_exhausted, skipped_oversize_files}`. Both renderings report completeness in two fields — `truncated` when an output cap dropped matches, `budget_exhausted` when the byte budget stopped the scan short of the corpus.
 - **`project` is a first-class page kind.** `type: project` is now accepted alongside `entity` and `concept`, new project stubs are written as `type: project` with no `entity_type`, and project pages are covered by claim verification and the graph relevance bonus.
 
@@ -98,10 +106,12 @@ Frontmatter only — a project page whose body you have written by hand is not o
 
 ## Unreleased — promote writes Key Facts with an LLM (#103)
 
-- **`llmwiki candidates promote` now needs a synthesis backend.** Promoting a page with an empty `## Key Facts` fails with `KeyFactsBackendError` unless `synthesis.backend` is `claude` or `ollama` in `config.json`. The candidate stays in `wiki/candidates/` so you can retry after configuring one. Pages that already have Key Facts, and pages whose sources never describe them, promote without any backend.
+> **Superseded for promote by [#147](#unreleased--one-synthesis-pass-per-source-147--145):** empty Key Facts are filled offline from source `fact:` bullets; Dummy/`None` is fine. The bullets below are the #103-era note (keep for `rewrite-key-facts` / merge behaviour).
+
+- **`llmwiki candidates promote` (as of #103) filled Key Facts via the synthesis backend.** That LLM requirement for promote is lifted in #147. Pages that already have Key Facts, and pages whose sources never describe them, were always promotable without a backend.
 - **`llmwiki candidates merge` no longer pastes the candidate body** when the candidate is a harvest stub. Its `sources:` and Connections links are unioned into the target page and the name goes under `## Aliases`. Reviewer-written candidates still get their prose appended under `## Candidate merge — <date>`.
-- **`/wiki-candidates` should use the CLI promote path** for this — do not invent a separate free-text enhance pass for the common empty-Key-Facts case.
-- **Pages promoted by an earlier build carry machine-assembled Key Facts.** Those bullets were clipped from the line nearest a wikilink, so some state a fact about a different subject. Rewrite them with `llmwiki candidates rewrite-key-facts --slug <Name>` (or `--all` for every entity/concept). That also drops pasted harvest-stub `## Candidate merge` blocks left by the old merge behaviour.
+- **`/wiki-candidates` should use the CLI promote path** for the common empty-Key-Facts case.
+- **Pages promoted by an earlier build carry machine-assembled Key Facts.** Those bullets were clipped from the line nearest a wikilink, so some state a fact about a different subject. Rewrite them with `llmwiki candidates rewrite-key-facts --slug <Name>` (or `--all` for every entity/concept) — that still needs an LLM. That also drops pasted harvest-stub `## Candidate merge` blocks left by the old merge behaviour.
 
 ## Unreleased — `wiki/archive/` is cold storage everywhere (#140)
 
@@ -122,7 +132,7 @@ Discarding a candidate means you judged the term to be noise. `wiki/archive/` ke
 
 - **`llmwiki synth` is the primary command.** Default: synthesize pending sources, then harvest entity/concept candidates. Prefer it over `synthesize`.
 - **`llmwiki synthesize` is deprecated.** It still runs (scripts keep working) but prints a warning and defaults to sources-only — the old behaviour — so upgrading does not silently write a large candidate backlog. Prefer `llmwiki synth` (or `synth --sources-only` / `synth --candidates-only`).
-- **`all --with-synth` / `watch`** call `synth` (sources + candidates). Classification retries omitted names once; if still incomplete, the run fails closed (writes nothing) and names the cause. Use a backend that returns `name: entity|concept` lines.
+- **`all --with-synth` / `watch`** call `synth` (sources + candidates). Harvest after sources is offline (#147) — no classify retry loop.
 - Slash: `/wiki-synth` preferred; `/wiki-synthesize` remains as a deprecated wrapper.
 
 ## Unreleased — candidates review gate on Home / Analytics (#84)

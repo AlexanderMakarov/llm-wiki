@@ -42,7 +42,7 @@ python3 -m llmwiki watch --vault ~/my-vault
 
 ## `install-automation` — daily scheduler + optional agent hooks
 
-Interactive wizard (or pass `--yes` for non-interactive) that writes OS scheduler unit files, optional agent sync hooks, and automation status for the site Home panel. Profiles: **A** = `sync` (auto-build on); **B** = `sync --no-auto-build` → `synthesize` → `build`; **C** = `all --with-sync --with-synth --skip-graph`. Asks for daily run time (default `08:00`). Linux systemd timers use `Persistent=true` so a missed run catches up after boot. Logs land under XDG state (`~/.local/state/llmwiki/` by default). Writes `.llmwiki/automation-status.json` under the vault for the Home panel. Agent hooks default to skip — press Enter at the prompt to install nothing; type `install` to opt in (not recommended; prefer the OS scheduler or `watch`).
+Interactive wizard (or pass `--yes` for non-interactive) that writes OS scheduler unit files, optional agent sync hooks, and automation status for the site Home panel. Profiles: **A** = `sync` (auto-build on); **B** = `sync --no-auto-build` → `synth` → `build`; **C** = `all --with-sync --with-synth --skip-graph`. Asks for daily run time (default `08:00`). Linux systemd timers use `Persistent=true` so a missed run catches up after boot. Logs land under XDG state (`~/.local/state/llmwiki/` by default). Writes `.llmwiki/automation-status.json` under the vault for the Home panel. Agent hooks default to skip — press Enter at the prompt to install nothing; type `install` to opt in (not recommended; prefer the OS scheduler or `watch`).
 
 ```bash
 python3 -m llmwiki install-automation

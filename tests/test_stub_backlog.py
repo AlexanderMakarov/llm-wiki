@@ -61,7 +61,7 @@ A real synthesis.
 
 ## Connections
 
-- [[ProjectAlpha]]
+- [[ProjectAlpha]] (entity) — project
 """
 
 SENTINEL_PAGE = """---
@@ -102,7 +102,11 @@ class RealSynthesizer(BaseSynthesizer):
         return True
 
     def synthesize_source_page(self, body, meta, prompt_template):
-        return "## Summary\n\nA real synthesis.\n\n## Connections\n\n- [[ProjectAlpha]]\n"
+        return (
+            "## Summary\n\nA real synthesis.\n\n"
+            "## Connections\n\n"
+            "- [[ProjectAlpha]] (entity) — project\n"
+        )
 
 
 @pytest.fixture

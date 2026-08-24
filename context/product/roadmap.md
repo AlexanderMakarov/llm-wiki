@@ -31,8 +31,8 @@ _Stop misleading users; then systematically decide what fork residue to revive v
   - [ ] **Tests stop reading the developer's `config.json` (#142):** The suite picks up a gitignored local config, so personal settings can fail an otherwise-clean checkout.
 
 - [ ] **Pipeline efficiency and recovery**
-  - [ ] **Interrupted synth still harvests (#145):** Interrupting `synth` skips candidate harvest entirely and leaves the Home pipeline counters stale.
-  - [ ] **One model call per source (#147):** Emit topics, kind, facts and description together instead of four separate synthesis calls.
+  - [x] **Interrupted synth still harvests (#145):** Interrupting a sources pass drains in-flight work, then harvests candidates from pages already written (unless `--sources-only`); `build` refreshes Home `on_disk` when stored totals disagree with disk.
+  - [x] **One model call per source (#147):** Each `synth` run prepares known-names once, then summarises each queued source once (kind, facts, and description on Connections); harvest and promote are offline parsers.
   - [ ] **Per-vault lint rule scoping (#150):** Let the demo enforce warnings without inheriting rules that do not apply to it.
 
 - [ ] **Migration inventory & keep/cut/revive log**

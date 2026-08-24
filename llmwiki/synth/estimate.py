@@ -153,6 +153,7 @@ def synthesize_estimate_report(
         _discover_raw_sessions,
         _load_state,
         page_is_stub,
+        page_needs_topics_rewrite,
         scan_wiki_sources_disk,
         synth_page_filename,
     )
@@ -393,10 +394,16 @@ def synthesize_estimate_report(
         out_path = sources_root / project / f"{filename}.md"
         # #24: a stub page (dummy filler / pending sentinel) is not synthesis —
         # its source stays in the backlog no matter what the state file says.
-        output_is_stub = source_key in stub_source_keys or page_is_stub(out_path)
-        output_exists = out_path.is_file() and not output_is_stub
+        # #147: Connections without parseable (entity|concept) kinds also stay
+        # pending so the skip/queue path rewrites them in place.
+        output_is_pending = (
+            source_key in stub_source_keys
+            or page_is_stub(out_path)
+            or page_needs_topics_rewrite(out_path)
+        )
+        output_exists = out_path.is_file() and not output_is_pending
 
-        matched = not output_is_stub and (
+        matched = not output_is_pending and (
             bool(keys_to_try & state_keys)
             or any(isinstance(k, str) and k.endswith(name) for k in state_keys)
             or source_key in discovered_source_keys
@@ -453,9 +460,13 @@ def synthesize_estimate_report(
             if len(chunks) <= 1
             else [out_dir / f"{filename}--part-{i:02d}.md" for i in range(1, len(chunks) + 1)]
         )
-        output_is_stub = source_key in stub_source_keys or any(page_is_stub(ep) for ep in expected)
-        output_exists = all(ep.is_file() for ep in expected) and not output_is_stub
-        matched = not output_is_stub and (
+        output_is_pending = (
+            source_key in stub_source_keys
+            or any(page_is_stub(ep) for ep in expected)
+            or any(page_needs_topics_rewrite(ep) for ep in expected)
+        )
+        output_exists = all(ep.is_file() for ep in expected) and not output_is_pending
+        matched = not output_is_pending and (
             rel in state_keys or source_key in discovered_source_keys or output_exists
         )
         # An oversized doc is written as one page per chunk, and each page is

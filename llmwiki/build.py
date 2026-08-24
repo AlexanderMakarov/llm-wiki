@@ -111,6 +111,7 @@ from llmwiki.search_tree import (
     search_index_footer_badge,
 )
 from llmwiki.state_store import (
+    pipeline_on_disk_mismatch,
     pipeline_rows_missing_on_disk,
     read_state,
     resolve_state_file,
@@ -3008,14 +3009,16 @@ def _ensure_synth_pipeline_snapshot(
     raw_dir: Path,
     wiki_sources: Path,
 ) -> bool:
-    """Backfill ``synth.pipeline`` when state predates the Home widget (#70 / #81).
+    """Backfill ``synth.pipeline`` when state predates the Home widget (#70 / #81 / #145).
 
     Returns True when ``refresh_synth_pending`` ran. Fires on a shape mismatch
-    (missing / non-dict ``pipeline``, or ``rows`` not a list) **or** when rows
-    lack ``on_disk`` (pre-#81 snapshots that otherwise look shape-ok). Does not
-    re-run when the snapshot is merely stale vs newest raw — sync / add /
-    estimate already refresh on content changes; paying estimate cost on every
-    build would be a permanent tax for a one-time migration.
+    (missing / non-dict ``pipeline``, or ``rows`` not a list), when rows lack
+    ``on_disk`` (pre-#81 snapshots that otherwise look shape-ok), **or** when
+    stored ``on_disk`` totals disagree with the wiki/sources file count (#145).
+    Does not re-run when the snapshot is merely stale vs newest raw — sync /
+    add / estimate already refresh on content changes; paying estimate cost on
+    every build would be a permanent tax for a one-time migration. Matching
+    ``on_disk`` totals skip.
     """
 
     state_path = content_root / "llmwiki-state.json"
@@ -3023,7 +3026,16 @@ def _ensure_synth_pipeline_snapshot(
         synth = read_state(state_path).get("synth") or {}
     except (OSError, ValueError, TypeError):
         synth = {}
-    if synth_pipeline_shape_ok(synth) and not pipeline_rows_missing_on_disk(synth):
+    pipeline = synth.get("pipeline") if isinstance(synth, dict) else None
+    if not isinstance(pipeline, dict):
+        pipeline = {}
+    # wiki_sources is ``…/wiki/sources``; mismatch helper expects the wiki root.
+    wiki_dir = wiki_sources.parent
+    if (
+        synth_pipeline_shape_ok(synth)
+        and not pipeline_rows_missing_on_disk(synth)
+        and not pipeline_on_disk_mismatch(wiki_dir, pipeline)
+    ):
         return False
     print("  backfilling synth.pipeline for Home State widget...")
     # refresh_synth_pending also merges source_pages_on_disk / source_page_stubs

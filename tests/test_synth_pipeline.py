@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from llmwiki.source_topics import parse_source_topics, source_page_needs_topics_rewrite
 from llmwiki.synth.base import BaseSynthesizer, DummySynthesizer
 from llmwiki.synth.pipeline import (
     _build_source_page,
@@ -13,6 +14,7 @@ from llmwiki.synth.pipeline import (
     _load_prompt_template,
     _normalise_slug,
     _rebuild_index,
+    _save_state,
     synthesize_new_sessions,
 )
 
@@ -73,7 +75,12 @@ class RealSynthesizer(BaseSynthesizer):
         return True
 
     def synthesize_source_page(self, body, meta, prompt_template):
-        return "## Summary\n\nReal synthesis.\n\n## Connections\n\n- [[pytest]]\n"
+        return (
+            "## Summary\n\nReal synthesis.\n\n"
+            "## Connections\n\n"
+            "- [[pytest]] (entity) — test runner\n"
+            "  - fact: Used in the session.\n"
+        )
 
 
 def _seed_raw(tmp_path: Path) -> Path:
@@ -109,7 +116,15 @@ def test_dummy_synthesizer_produces_valid_markdown():
     # project entity, which the ingest workflow guarantees exists.
     assert "[[pytest]]" not in result
     assert "[[FastAPI]]" not in result
-    assert "[[Demo]]" in result  # title-cased project name
+    assert "- [[Demo]] (entity) — parent project" in result
+    assert "  - fact: Session covered project `demo`." in result
+    topics = parse_source_topics(result)
+    assert len(topics) == 1
+    assert topics[0].name == "Demo"
+    assert topics[0].kind == "entity"
+    assert topics[0].description == "parent project"
+    assert topics[0].facts == ["Session covered project `demo`."]
+    assert source_page_needs_topics_rewrite(result) is False
 
 
 def test_dummy_synthesizer_handles_empty_body():
@@ -118,6 +133,10 @@ def test_dummy_synthesizer_handles_empty_body():
     assert "## Summary" in result
     assert "## Raw Mentions" in result
     assert "(no mentions detected)" in result
+    # Unknown project: placeholder only — no bare [[wikilink]] without kind.
+    assert "[[" not in result
+    assert "*(connections auto-extracted by a real synthesizer will appear here)*" in result
+    assert source_page_needs_topics_rewrite(result) is False
 
 
 # ─── prompt template loading ─────────────────────────────────────────────
@@ -294,6 +313,90 @@ def test_synthesize_skip_already_processed(tmp_path: Path):
     )
     assert s2["new_files"] == 0
     assert s2["synthesized"] == 0
+
+
+def test_connections_only_page_queued_for_topics_rewrite(tmp_path: Path):
+    """Legacy Connections (``- [[Foo]] — why``) re-synthesizes despite current mtime (#147)."""
+    raw = _seed_raw(tmp_path)
+    wiki_sources = tmp_path / "wiki" / "sources"
+    out = wiki_sources / "test-proj"
+    out.mkdir(parents=True)
+    page = out / "2026-04-09-test-synth.md"
+    page.write_text(
+        "---\n"
+        'title: "Session: test-synth"\n'
+        "type: source\n"
+        "source_file: raw/sessions/test-proj/2026-04-09-test-synth.md\n"
+        "project: test-proj\n"
+        "---\n\n"
+        "## Summary\n\nOld page.\n\n"
+        "## Connections\n\n"
+        "- [[Foo]] — why\n",
+        encoding="utf-8",
+    )
+    assert source_page_needs_topics_rewrite(page.read_text(encoding="utf-8")) is True
+
+    raw_file = raw / "test-proj" / "2026-04-09-test-synth.md"
+    state_file = tmp_path / "llmwiki-state.json"
+    _save_state({"test-proj/2026-04-09-test-synth.md": raw_file.stat().st_mtime}, state_file)
+
+    log_file = tmp_path / "wiki" / "log.md"
+    log_file.write_text("# Log\n", encoding="utf-8")
+
+    summary = synthesize_new_sessions(
+        backend=RealSynthesizer(),
+        raw_dir=raw,
+        wiki_sources_dir=wiki_sources,
+        log_path=log_file,
+        state_file=state_file,
+    )
+    assert summary["new_files"] == 1
+    assert summary["synthesized"] == 1
+    rewritten = page.read_text(encoding="utf-8")
+    assert source_page_needs_topics_rewrite(rewritten) is False
+    assert "(entity)" in rewritten
+
+
+def test_parseable_kind_page_skipped_when_mtime_current(tmp_path: Path):
+    """A page with ``(entity)`` kinds is done — mtime-current re-run is a no-op (#147)."""
+    raw = _seed_raw(tmp_path)
+    wiki_sources = tmp_path / "wiki" / "sources"
+    out = wiki_sources / "test-proj"
+    out.mkdir(parents=True)
+    page = out / "2026-04-09-test-synth.md"
+    page.write_text(
+        "---\n"
+        'title: "Session: test-synth"\n'
+        "type: source\n"
+        "source_file: raw/sessions/test-proj/2026-04-09-test-synth.md\n"
+        "project: test-proj\n"
+        "---\n\n"
+        "## Summary\n\nMigrated page.\n\n"
+        "## Connections\n\n"
+        "- [[Foo]] (entity) — why\n"
+        "  - fact: Already shaped.\n",
+        encoding="utf-8",
+    )
+    assert source_page_needs_topics_rewrite(page.read_text(encoding="utf-8")) is False
+
+    raw_file = raw / "test-proj" / "2026-04-09-test-synth.md"
+    state_file = tmp_path / "llmwiki-state.json"
+    _save_state({"test-proj/2026-04-09-test-synth.md": raw_file.stat().st_mtime}, state_file)
+
+    log_file = tmp_path / "wiki" / "log.md"
+    log_file.write_text("# Log\n", encoding="utf-8")
+
+    summary = synthesize_new_sessions(
+        backend=DummySynthesizer(),
+        raw_dir=raw,
+        wiki_sources_dir=wiki_sources,
+        log_path=log_file,
+        state_file=state_file,
+    )
+    assert summary["new_files"] == 0
+    assert summary["synthesized"] == 0
+    # Untouched — Dummy never ran.
+    assert "- [[Foo]] (entity) — why" in page.read_text(encoding="utf-8")
 
 
 def test_synthesize_unavailable_backend(tmp_path: Path):
@@ -527,6 +630,113 @@ def test_synthesize_logs_one_summary_entry_per_run(tmp_path: Path):
     )
     # Separator check: G-08 (#294) uses "→" arrow, not raw slash
     assert "sessions across" in synth_headings[0]
+
+
+# ─── #147 job 1: prepare_known_names once per synth run ─────────────────
+
+
+class _CountingDummy(DummySynthesizer):
+    """Counts synthesize_source_page calls (Dummy is_llm=False → no job 1)."""
+
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    def synthesize_source_page(self, body, meta, prompt_template):
+        self.calls.append(str(meta.get("slug", "")))
+        return super().synthesize_source_page(body, meta, prompt_template)
+
+
+class _Job1Backend(BaseSynthesizer):
+    """is_llm backend that records call order; job 1 returns consolidation JSON."""
+
+    name = "job1-spy"
+    is_llm = True
+
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+        self.prompts: list[str] = []
+
+    def is_available(self) -> bool:
+        return True
+
+    def synthesize_source_page(self, body, meta, prompt_template):
+        slug = str(meta.get("slug", ""))
+        self.calls.append(slug)
+        self.prompts.append(prompt_template)
+        if slug == "known-names":
+            return (
+                '{"topics": [{"canonical": "SharedTopic", "kind": "concept",'
+                ' "description": "A shared scope.", "aliases": []}],'
+                ' "dropped": []}'
+            )
+        return (
+            "## Summary\n\nReal synthesis.\n\n"
+            "## Connections\n\n- [[SharedTopic]] (concept) — shared\n"
+        )
+
+
+def _seed_existing_topic_sources(wiki_sources: Path) -> None:
+    """Two existing source pages linking the same name → min_sessions=2."""
+    proj = wiki_sources / "proj"
+    proj.mkdir(parents=True)
+    for stem in ("prior-a", "prior-b"):
+        (proj / f"{stem}.md").write_text(
+            f"---\ntitle: {stem}\nproject: proj\n"
+            f"source_file: raw/sessions/2026-01-01T00-00-proj-{stem}.md\n"
+            f"---\n\n## Summary\n[[SharedTopic]]\n",
+            encoding="utf-8",
+        )
+
+
+def test_dummy_synth_does_not_call_job1_prepare_known_names(tmp_path: Path):
+    raw = _seed_raw(tmp_path)
+    wiki_sources = tmp_path / "wiki" / "sources"
+    wiki_sources.mkdir(parents=True)
+    _seed_existing_topic_sources(wiki_sources)
+    backend = _CountingDummy()
+    summary = synthesize_new_sessions(
+        backend=backend,
+        raw_dir=raw,
+        wiki_sources_dir=wiki_sources,
+        state_file=tmp_path / "state.json",
+        log_path=tmp_path / "wiki" / "log.md",
+    )
+    assert summary["synthesized"] == 1
+    assert "known-names" not in backend.calls
+    assert len(backend.calls) == 1
+
+
+def test_llm_synth_runs_prepare_known_names_once_before_pages(tmp_path: Path):
+    raw = tmp_path / "raw" / "sessions" / "test-proj"
+    raw.mkdir(parents=True)
+    for i, stem in enumerate(("new-a", "new-b")):
+        (raw / f"2026-04-1{i}-test-{stem}.md").write_text(
+            f"---\nslug: {stem}\nproject: test-proj\ndate: 2026-04-1{i}\n---\n"
+            f"# {stem}\n[[SharedTopic]]\n",
+            encoding="utf-8",
+        )
+    wiki_sources = tmp_path / "wiki" / "sources"
+    wiki_sources.mkdir(parents=True)
+    _seed_existing_topic_sources(wiki_sources)
+    backend = _Job1Backend()
+    summary = synthesize_new_sessions(
+        backend=backend,
+        raw_dir=tmp_path / "raw" / "sessions",
+        wiki_sources_dir=wiki_sources,
+        state_file=tmp_path / "state.json",
+        log_path=tmp_path / "wiki" / "log.md",
+        concurrency=1,
+    )
+    assert summary["synthesized"] == 2, summary["errors"]
+    assert backend.calls[0] == "known-names"
+    assert backend.calls.count("known-names") == 1
+    assert set(backend.calls[1:]) == {"new-a", "new-b"}
+    # Job 2 pages share one byte-identical vocabulary prefix.
+    assert len(backend.prompts) == 3
+    page_prompts = backend.prompts[1:]
+    assert page_prompts[0] == page_prompts[1]
+    assert "SharedTopic" in page_prompts[0]
+    assert (tmp_path / ".llmwiki-topics.json").is_file()
 
 
 # ─── Baseline tags guarantee (#271 follow-up) ───────────────────────────

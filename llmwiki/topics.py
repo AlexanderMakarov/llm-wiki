@@ -143,11 +143,11 @@ def derive_vocabulary(
             if t:
                 raw_sessions[t].add(slug)
 
-    # #54: an LLM consolidation pass (llmwiki consolidate-topics) may have
+    # #54 / #147: job 1 ``prepare_known_names`` (once per synth) may have
     # written an authoritative merge-map + descriptions. When present it wins
     # over the string-similarity heuristic: cache-known spellings map to their
     # curated canonical, dropped spellings are excluded, and unknown spellings
-    # still fall back to the heuristic so new topics work before re-consolidating.
+    # still fall back to the heuristic so new topics work before the next synth.
     cache = _load_consolidation_cache(wiki_dir)
     alias_map = cache.get("alias_map", {}) if cache else {}
     descriptions = cache.get("descriptions", {}) if cache else {}

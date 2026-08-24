@@ -150,9 +150,16 @@ class DummySynthesizer(BaseSynthesizer):
 
         project_entity = self._title_case_project(project) if project and project != "unknown" else ""
         if project_entity:
-            connections_block = f"- [[{project_entity}]] — parent project"
+            # Shape must match parse_source_topics (#147): kind + em dash + nested fact.
+            connections_block = (
+                f"- [[{project_entity}]] (entity) — parent project\n"
+                f"  - fact: Session covered project `{project}`."
+            )
         else:
-            connections_block = "*(connections auto-extracted by a real synthesizer will appear here)*"
+            # No bare [[wikilink]] without kind — rewrite detector must stay quiet.
+            connections_block = (
+                "*(connections auto-extracted by a real synthesizer will appear here)*"
+            )
 
         return f"""## Summary
 

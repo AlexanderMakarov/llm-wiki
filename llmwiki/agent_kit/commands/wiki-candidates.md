@@ -1,6 +1,6 @@
 Review and triage candidate wiki pages — promote, flip and promote, merge, or discard.
 
-Candidate pages live under `wiki/candidates/<kind>/<slug>.md`. They are usually created by `llmwiki synth` (default harvest after sources) or `llmwiki synth --candidates-only`. They are **not** part of the trusted wiki layer until a human or agent approves them.
+Candidate pages live under `wiki/candidates/<kind>/<slug>.md`. They are usually created by `llmwiki synth` (default harvest after sources) or `llmwiki synth --candidates-only`. They are **not** part of the trusted wiki layer until a human or agent approves them. Harvest is offline (no classify LLM call).
 
 Home **Candidates** (Knowledge layer) and Analytics **Candidates to review** show the backlog after `llmwiki build`. Open `site/candidates.html` (header: Home → Raw → **Candidates** …) to read what is pending: it lists every stub and prints the `llmwiki candidates apply --vault <vault> --actions -` command plus a ready-made JSON batch to pipe into it.
 
@@ -22,8 +22,7 @@ Usage: `/wiki-candidates`
    - **promote** — candidate is legitimate and not a duplicate.
      Moves it into the trusted tree (`wiki/entities/` or `wiki/concepts/`)
      and rewrites `status: candidate` → `status: reviewed`. Also reconciles `wiki/index.md` (drops dead Candidates bullets; lists the trusted page).
-     When `## Key Facts` is empty (or heading-only), promote has the configured synthesis backend write it from harvest evidence — every line where the `sources:` / Connections source pages name the subject. Non-empty reviewer Key Facts are preserved; do **not** invent a separate free-text enhance pass or hand-edit Key Facts for the common case — use the CLI so slash and library stay in sync.
-     Promote **fails** (exit 2, candidate left pending) when Key Facts need writing and `synthesis.backend` is unset or `dummy`. Configure `claude` or `ollama` in `config.json` and re-run — do not work around it by writing the bullets yourself.
+     When `## Key Facts` is empty (or heading-only), promote fills it offline from nested `fact:` bullets on the cited source pages (and from harvest stubs). Non-empty reviewer Key Facts are preserved. Works with Dummy / no backend — no language model required for promote.
      ```
      python3 -m llmwiki candidates promote --slug MyEntity
      ```
@@ -47,17 +46,17 @@ Usage: `/wiki-candidates`
        --reason "not a real company; LLM hallucinated"
      ```
 
-   - **apply** — batch several intents in one process (same JSON as `POST /api/candidates` / the static Copy CLI line):
+   - **apply** — batch several intents in one process (same JSON as `site/candidates.html` prints):
      ```
      python3 -m llmwiki candidates apply --actions '[{"action":"promote","slug":"MyEntity","kind":"entities"}]'
      ```
 
-3. Prefer these CLI actions (same library as `/candidates.html`). Do **not** run idle `sync`/`synth` only to refresh the catalog after review — promote/merge/discard/apply already reconcile `index.md`. Do **not** hand-fill empty Key Facts on promote when the CLI already does it (#103). `candidates apply` rebuilds `site/` after a successful batch so reload `candidates.html`; pass `--no-rebuild` to skip. After one-off `promote` / `merge` / `discard`, run `llmwiki build` (those actions do not rebuild) and `/wiki-lint` to catch broken wikilinks.
-   Trusted pages that still have clipped regex Key Facts (or pasted harvest-stub `## Candidate merge` blocks) are fixed with:
+3. Prefer these CLI actions (same library as `/candidates.html`). Do **not** run idle `sync`/`synth` only to refresh the catalog after review — promote/merge/discard/apply already reconcile `index.md`. `candidates apply` rebuilds `site/` after a successful batch so reload `candidates.html`; pass `--no-rebuild` to skip. After one-off `promote` / `merge` / `discard`, run `llmwiki build` (those actions do not rebuild) and `/wiki-lint` to catch broken wikilinks.
+   Trusted pages that still have clipped regex Key Facts (or pasted harvest-stub `## Candidate merge` blocks) can be rewritten with the opt-in LLM path:
    ```
    python3 -m llmwiki candidates rewrite-key-facts --slug MyEntity
    ```
-   or `--all` for the whole knowledge layer (costs one LLM call per page).
+   or `--all` for the whole knowledge layer (costs one LLM call per page). Promote itself does not need that.
 
 4. Append to `wiki/log.md`:
    ```
@@ -66,7 +65,7 @@ Usage: `/wiki-candidates`
 
 ## Related
 
-- #51 — approval workflow; #84 — Home/Analytics observability; #90 — harvest; #97 — `candidates.html` pending listing + copyable `apply --actions` batch; #101 — promote/merge/discard/apply reconcile index.md; #103 — promote fills empty Key Facts from evidence
+- #51 — approval workflow; #84 — Home/Analytics observability; #90 — harvest; #97 — `candidates.html` pending listing + copyable `apply --actions` batch; #101 — promote/merge/discard/apply reconcile index.md; #103 / #147 — promote fills empty Key Facts from source `fact:` bullets (offline)
 - `/wiki-lint` — finds stale candidates (age > 30 days) and broken wikilinks after review
-- `llmwiki synth` / `synth --candidates-only` — harvest stubs from synthesized sources
+- `llmwiki synth` / `synth --candidates-only` — harvest stubs from synthesized sources (offline)
 - `/wiki-ingest` — optional enrichment / review discussion over candidates

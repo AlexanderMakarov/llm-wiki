@@ -211,7 +211,7 @@ want to re-run sync.
 
 ### `/wiki-synth`
 
-**What:** synthesize pending raw sessions/docs into `wiki/sources/`, then harvest entity/concept candidates into `wiki/candidates/` (default). Use `--sources-only` for the legacy sources-only path.
+**What:** synthesize pending raw sessions/docs into `wiki/sources/`, then harvest entity/concept candidates into `wiki/candidates/` (default). Use `--sources-only` for the legacy sources-only path. Sources are two LLM jobs per run (known-names prepare + one ask per queued file); harvest is offline. Ctrl+C harvests from written pages (or prints `synth --candidates-only` after `--sources-only`) and exits 130. Do not run `consolidate-topics`.
 
 **Wraps:** `python3 -m llmwiki synth`.
 
@@ -238,7 +238,7 @@ want to re-run sync.
 
 **When to use:** Home **Candidates** / Analytics **Candidates to review** is non-zero, `/wiki-lint` reported `stale_candidates`, or you just ran `llmwiki synth` / `synth --candidates-only`.
 
-Promote has the configured synthesis backend write an empty `## Key Facts` from harvest evidence sources, and fails rather than guessing when no LLM backend is configured (#103). Prefer the CLI action over hand-editing Key Facts for the common case. Already-trusted pages that still have regex-era Key Facts (or pasted harvest-stub `## Candidate merge` blocks) are recovered with `llmwiki candidates rewrite-key-facts --slug <Name>` (or `--all`). Prefer `flip-promote` over hand-moving stubs between `candidates/entities` and `candidates/concepts`.
+Promote fills an empty `## Key Facts` offline from source `fact:` bullets (and harvest stubs); Dummy / no backend is fine (#147). Prefer the CLI action for the common case. Opt-in `llmwiki candidates rewrite-key-facts --slug <Name>` (or `--all`) still needs an LLM for trusted pages with regex-era Key Facts or pasted harvest-stub `## Candidate merge` blocks. Prefer `flip-promote` over hand-moving stubs between `candidates/entities` and `candidates/concepts`.
 
 **Example:**
 

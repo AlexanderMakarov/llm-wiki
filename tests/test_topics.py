@@ -19,7 +19,11 @@ from llmwiki.topics import (
     topic_kind_lookup,
     topic_slug,
 )
-from llmwiki.topics_consolidate import parse_and_cache, render_consolidation_prompt
+from llmwiki.topics_consolidate import (
+    parse_and_cache,
+    prepare_known_names,
+    render_consolidation_prompt,
+)
 from llmwiki.topics_page import (
     KIND_OTHER_LABEL,
     _display_aliases,
@@ -224,6 +228,96 @@ def test_consolidation_cache_drives_merge_and_descriptions(tmp_path: Path):
     # Regular synth vocab now carries the cached description.
     out = _inject_vocabulary("{vocabulary}\n{body}\n{meta}", wiki)
     assert 'name="kbbuilder" desc="Doc-ingest CLI."' in out
+
+
+def test_parse_and_cache_persists_kind_when_present(tmp_path: Path):
+    wiki = _make_wiki(tmp_path, {"s1": ["OpenClaw"], "s2": ["OpenClaw"]})
+    reply = (
+        '{"topics": [{"canonical": "OpenClaw", "kind": "entity",'
+        ' "description": "Agent platform.", "aliases": []}], "dropped": []}'
+    )
+    cache = parse_and_cache(reply, wiki)
+    assert cache["topics"][0]["kind"] == "entity"
+
+
+def test_parse_and_cache_tolerates_missing_kind(tmp_path: Path):
+    wiki = _make_wiki(tmp_path, {"s1": ["OpenClaw"], "s2": ["OpenClaw"]})
+    reply = (
+        '{"topics": [{"canonical": "OpenClaw", "description": "Agent platform.",'
+        ' "aliases": []}], "dropped": []}'
+    )
+    cache = parse_and_cache(reply, wiki)
+    assert "kind" not in cache["topics"][0]
+
+
+def test_prepare_known_names_skips_non_llm_backend(tmp_path: Path):
+    wiki = _make_wiki(tmp_path, {
+        "s1": ["OpenClaw", "Bun"],
+        "s2": ["OpenClaw", "Bun"],
+    })
+
+    class _Spy:
+        is_llm = False
+        calls = 0
+
+        def synthesize_source_page(self, *a, **k):
+            self.calls += 1
+            raise AssertionError("non-LLM backend must not be called")
+
+    spy = _Spy()
+    prepare_known_names(wiki, spy)
+    assert spy.calls == 0
+    assert not (tmp_path / ".llmwiki-topics.json").is_file()
+
+
+def test_prepare_known_names_calls_llm_once_and_caches(tmp_path: Path):
+    wiki = _make_wiki(tmp_path, {
+        "s1": ["OpenClaw", "Bun"],
+        "s2": ["OpenClaw", "Bun"],
+    })
+
+    class _FakeLlm:
+        is_llm = True
+
+        def __init__(self) -> None:
+            self.calls: list[dict] = []
+
+        def synthesize_source_page(self, raw_body, meta, prompt_template):
+            self.calls.append({"slug": meta.get("slug"), "prompt": prompt_template})
+            return (
+                '{"topics": [{"canonical": "OpenClaw", "kind": "entity",'
+                ' "description": "Agent platform.", "aliases": []},'
+                '{"canonical": "Bun", "kind": "entity",'
+                ' "description": "JS runtime.", "aliases": []}],'
+                ' "dropped": []}'
+            )
+
+    backend = _FakeLlm()
+    prepare_known_names(wiki, backend)
+    assert len(backend.calls) == 1
+    assert backend.calls[0]["slug"] == "known-names"
+    assert "<candidate" in backend.calls[0]["prompt"]
+    cache = (tmp_path / ".llmwiki-topics.json").read_text(encoding="utf-8")
+    assert '"kind": "entity"' in cache
+    assert "OpenClaw" in cache
+
+
+def test_prepare_known_names_warns_on_failure_without_raising(tmp_path: Path, capsys):
+    wiki = _make_wiki(tmp_path, {
+        "s1": ["OpenClaw"],
+        "s2": ["OpenClaw"],
+    })
+
+    class _Boom:
+        is_llm = True
+
+        def synthesize_source_page(self, *a, **k):
+            raise RuntimeError("provider down")
+
+    prepare_known_names(wiki, _Boom())  # must not raise
+    err = capsys.readouterr().err
+    assert "prepare_known_names failed" in err
+    assert not (tmp_path / ".llmwiki-topics.json").is_file()
 
 
 def test_consolidation_dropped_excluded_from_graph(tmp_path: Path):

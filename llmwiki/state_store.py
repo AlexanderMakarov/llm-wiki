@@ -133,6 +133,42 @@ def pipeline_rows_missing_on_disk(synth: Any) -> bool:
     return False
 
 
+def _count_wiki_sources_on_disk(wiki: Path) -> int:
+    """Count ``wiki/sources/**/*.md`` the same way estimate ``on_disk`` totals do.
+
+    Matches ``scan_wiki_sources_disk``: every ``.md`` except ``_``-prefixed
+    folder stubs (e.g. ``_context.md``).
+    """
+    sources = wiki / "sources" if wiki.name != "sources" else wiki
+    if not sources.is_dir():
+        return 0
+    return sum(1 for p in sources.rglob("*.md") if not p.name.startswith("_"))
+
+
+def pipeline_on_disk_mismatch(wiki: Path, snapshot: dict) -> bool:
+    """Return True when stored pipeline ``on_disk`` totals disagree with disk (#145).
+
+    ``snapshot`` is the ``synth.pipeline`` object (``rows`` with ``on_disk``).
+    Compares ``sum(rows[*].on_disk)`` to the wiki/sources page count used by
+    estimate / ``refresh_synth_pending``. Integer mismatch only — matching
+    counts are a cheap skip for ``_ensure_synth_pipeline_snapshot``.
+    """
+    if not isinstance(snapshot, dict):
+        return False
+    rows = snapshot.get("rows")
+    if not isinstance(rows, list):
+        return False
+    stored = 0
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        try:
+            stored += int(row.get("on_disk") or 0)
+        except (TypeError, ValueError):
+            continue
+    return stored != _count_wiki_sources_on_disk(wiki)
+
+
 class IncompatibleStateError(RuntimeError):
     """A sync cannot safely reconcile with the on-disk state file.
 

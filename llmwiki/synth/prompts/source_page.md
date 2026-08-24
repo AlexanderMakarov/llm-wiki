@@ -49,8 +49,9 @@ decisions made, problems solved, and tools/libraries chosen.
 
 ## Connections
 
-- [[EntityName]] — how they relate to this session
-- [[ConceptName]] — how it connects
+- [[EntityName]] (entity) — one-line description
+  - fact: A concrete claim this source supports.
+- [[ConceptName]] (concept) — how it connects
 
 ## Contradictions
 

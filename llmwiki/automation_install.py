@@ -2,8 +2,8 @@
 
 Profiles:
   A — sync (auto-build)
-  B — sync --no-auto-build && synthesize && build
-  C — all --with-sync --with-synth
+  B — sync --no-auto-build && synth && build
+  C — all --with-sync --with-synth --skip-graph
 
 Unit names are fixed (``llmwiki-maintain`` / ``com.llmwiki.maintain``) for
 idempotent re-install. Daily timer uses Persistent=true (catch-up after boot).
@@ -44,7 +44,7 @@ def profile_command(profile: str, python_bin: str, working_dir: Path) -> str:
     if key == "B":
         return (
             f"{prefix} sync --no-auto-build && "
-            f"{py} -m llmwiki synthesize && "
+            f"{py} -m llmwiki synth && "
             f"{py} -m llmwiki build"
         )
     if key == "C":

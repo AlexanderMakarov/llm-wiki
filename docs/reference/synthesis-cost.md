@@ -1,6 +1,6 @@
 # Synthesis cost — what you pay per page, and why
 
-`llmwiki synth` calls an LLM once per source page. This page explains what a call actually costs, which parts of the bill are your data and which are overhead, and how the shipped defaults were chosen.
+`llmwiki synth` bills **one amortised known-names ask per run** (LLM backends only — Dummy / `not is_llm` skips it) **plus one ask per queued source page**. Harvest and promote add none. This page explains what a source-page call actually costs, which parts of the bill are your data and which are overhead, and how the shipped defaults were chosen.
 
 Everything below is measured against the real `source_page.md` prompt via `claude -p - --output-format json`, which returns a `usage` block. Reproduce any row yourself with the recipe at the bottom.
 

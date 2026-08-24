@@ -21,7 +21,7 @@ Lint requires only `title` and `type` (`frontmatter_completeness`). Everything e
 | **build** | Derived by the site build, or by a generator that writes wiki markdown from other pages | `llmwiki/build.py` `ensure_project_stubs`; `llmwiki/categories.py` |
 | **human** | Only ever filled in by a person or an agent acting as one. No pipeline step generates it | `llmwiki init` seeds, saved answers, `_context.md`, opt-in schema fields, `llmwiki tags` |
 
-Promote (`llmwiki candidates promote`) is a human gate: it moves a harvest stub into the trusted tree and rewrites `status: candidate` → `reviewed`. It does not invent a new kind and does not fill empty fields.
+Promote (`llmwiki candidates promote`) is a human gate: it moves a harvest stub into the trusted tree and rewrites `status: candidate` → `reviewed`. It does not invent a new kind. Empty `## Key Facts` are filled offline from source topic `fact:` bullets.
 
 ---
 
@@ -60,7 +60,7 @@ Raw files also carry `type: source`. That is the input layer (`raw/sessions/`, `
 
 ## `entity`
 
-A person, company, product, tool, or library. Harvest writes a stub under `wiki/candidates/entities/` when the same `[[Name]]` appears on enough source pages (default three). A person then promotes it into `wiki/entities/`. The body is attributed fact bullets under `## Key Facts`; nothing in the pipeline writes a descriptive opening paragraph.
+A person, company, product, tool, or library. Harvest writes a stub under `wiki/candidates/entities/` when the same `[[Name]]` appears on enough source pages (default three). Kind, short description, and facts come from Connections topic bullets on those sources — no classify LLM call. A person then promotes it into `wiki/entities/`. The body is attributed fact bullets under `## Key Facts`; the opening description is the one harvest already recorded from the source pass.
 
 **Demo.** [`demo/wiki/entities/Claude Code.md`](../../demo/wiki/entities/Claude Code.md) is a promoted entity. Pending harvest stubs remain under [`demo/wiki/candidates/entities/`](../../demo/wiki/candidates/entities/).
 
@@ -69,13 +69,13 @@ A person, company, product, tool, or library. Harvest writes a stub under `wiki/
 | Field | Provenance | What it is |
 |---|---|---|
 | `title` | harvest | The `[[wikilink]]` target name |
-| `type` | harvest | `entity` (or `concept` — the classifier chooses; a person can flip on promote) |
+| `type` | harvest | `entity` (or `concept` — taken from the source topic bullet; a person can flip on promote) |
 | `status` | harvest | `candidate` on the stub. `candidates promote` rewrites it to `reviewed` |
 | `tags` | harvest | Always `[]`. A person fills tags later (`llmwiki tags add`) |
 | `sources` | harvest | Slugs of the source pages that named this target — the evidence list |
 | `last_updated` | harvest | UTC date of the harvest run |
 
-Promote keeps those fields, fills an empty `## Key Facts` from the evidence sources when a synthesis backend is configured, and does not add `confidence`, `lifecycle`, or a new `last_updated`.
+Promote keeps those fields, fills an empty `## Key Facts` from source topic `fact:` bullets offline (no synthesis backend required), and does not add `confidence`, `lifecycle`, or a new `last_updated`.
 
 ### Opt-in model profile (human)
 
@@ -103,7 +103,7 @@ An entity with `entity_kind: ai-model` is picked up by the `/models/` index. Eve
 
 ## `concept`
 
-An idea, framework, method, or theory. Same producer as `entity`: harvest classifies a name as `concept` and writes `wiki/candidates/concepts/<Name>.md`. Promote moves it to `wiki/concepts/`. Flip-and-promote swaps entity ↔ concept and rewrites `type:` to match the destination folder.
+An idea, framework, method, or theory. Same producer as `entity`: harvest reads a name whose source topic bullets mark it `concept` and writes `wiki/candidates/concepts/<Name>.md`. Promote moves it to `wiki/concepts/`. Flip-and-promote swaps entity ↔ concept and rewrites `type:` to match the destination folder.
 
 **Demo.** [`demo/wiki/concepts/Adapters.md`](../../demo/wiki/concepts/Adapters.md) is a promoted concept. A pending concept stub is [`demo/wiki/candidates/concepts/Wiki Synthesis.md`](../../demo/wiki/candidates/concepts/Wiki Synthesis.md).
 
