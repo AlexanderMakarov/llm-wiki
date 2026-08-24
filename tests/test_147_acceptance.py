@@ -76,11 +76,11 @@ AC coverage matrix (FR<n>-AC<m>, functional-spec.md bullet order):
 
 Notes on RED validation (implementation already landed on this branch):
 
-    Prefer asserting against ``git show origin/main:<path>`` that the old
-    contracts existed. A test GREEN on this worktree is valid when it would be
-    RED on origin/main — documented per test.
+    Prefer asserting against a pinned pre-#147 baseline commit (parent of the
+    merge that landed #147) that the old contracts existed. After #147 merges,
+    ``origin/main`` carries the new code — do not use it for RED probes.
 
-    Verified on origin/main before writing this file:
+    Verified on baseline ``3298d35`` before writing this file:
     - ``llmwiki/candidates.py`` raised ``KeyFactsBackendError`` from promote
       and called ``synthesize_key_facts`` when evidence existed without an LLM.
     - ``llmwiki/candidates_harvest.py`` called ``classify_names`` on the default
@@ -111,19 +111,27 @@ from llmwiki.source_topics import parse_source_topics, source_page_needs_topics_
 from llmwiki.synth.base import DummySynthesizer
 from llmwiki.synth.pipeline import synthesize_new_sessions
 
+# Parent of merge commit 8301835 (#158) — last main before #147 landed.
+_PRE_147_BASELINE = "3298d351b296d84707502d8ba2f71f64391c98cd"
+
 # ─── helpers ───────────────────────────────────────────────────────────────
 
 
-def _git_show_main(relpath: str) -> str:
-    """Return ``origin/main`` blob for ``relpath``, or empty if unavailable."""
+def _git_show_at(rev: str, relpath: str) -> str:
+    """Return ``rev:<path>`` blob for ``relpath``, or empty if unavailable."""
     result = subprocess.run(
-        ["git", "show", f"origin/main:{relpath}"],
+        ["git", "show", f"{rev}:{relpath}"],
         cwd=str(REPO_ROOT),
         capture_output=True,
         text=True,
         check=False,
     )
     return result.stdout if result.returncode == 0 else ""
+
+
+def _git_show_pre_147(relpath: str) -> str:
+    """Return pre-#147 baseline blob for historical RED contract probes."""
+    return _git_show_at(_PRE_147_BASELINE, relpath)
 
 
 def _seed_shared_thing_raw(tmp_path: Path, *, n: int = 3) -> Path:
@@ -357,7 +365,7 @@ def test_fr4_promote_never_calls_synthesize_key_facts_or_mention_clip(
     assert calls["digest"] == 0
 
     # Documented RED: old promote path required an LLM for empty Key Facts.
-    old = _git_show_main("llmwiki/candidates.py")
+    old = _git_show_pre_147("llmwiki/candidates.py")
     if old:
         assert "KeyFactsBackendError" in old
         assert "synthesize_key_facts" in old
@@ -411,8 +419,8 @@ def test_fr8_description_not_rewritten_when_more_facts_arrive(tmp_path: Path) ->
 def test_fr10_agent_kit_matches_offline_promote_and_no_consolidate() -> None:
     """FR7-AC3 / FR10-AC3: agent kit must not teach dummy-fail promote or consolidate.
 
-    RED on origin/main: wiki-candidates said promote **fails** on dummy;
-    wiki-synth instructed ``consolidate-topics`` (``git show origin/main:…``).
+    RED on pre-#147 baseline: wiki-candidates said promote **fails** on dummy;
+    wiki-synth instructed ``consolidate-topics``.
     """
     # @regression
     candidates_cmd = (
@@ -433,7 +441,7 @@ def test_fr10_agent_kit_matches_offline_promote_and_no_consolidate() -> None:
     assert "llmwiki consolidate-topics" not in synth_cmd or "retired" in synth_cmd.lower()
     assert "Do **not** run `llmwiki consolidate-topics`" in synth_cmd
 
-    old_candidates = _git_show_main("llmwiki/agent_kit/commands/wiki-candidates.md")
+    old_candidates = _git_show_pre_147("llmwiki/agent_kit/commands/wiki-candidates.md")
     if old_candidates:
         assert "Promote **fails**" in old_candidates or "fails** (exit 2" in old_candidates
 
@@ -529,19 +537,19 @@ def test_fr7_consolidate_topics_exits_2_and_complete_writes_nothing(
 # ─── Documented RED probe (historical contracts on origin/main) ─────────────
 
 
-def test_red_origin_main_had_four_call_world_contracts() -> None:
-    """Documented RED: origin/main still has the pre-#147 four-call contracts.
+def test_red_pre_147_baseline_had_four_call_world_contracts() -> None:
+    """Documented RED: pre-#147 baseline has the four-call contracts.
 
     Does not execute old code — asserts the historical source strings that
-    this branch removed or retired. Skips soft-fail if origin/main is missing.
+    #147 removed or retired. Skips if the pinned baseline is unavailable.
     """
     # @regression
-    harvest = _git_show_main("llmwiki/candidates_harvest.py")
-    candidates = _git_show_main("llmwiki/candidates.py")
-    pipeline = _git_show_main("llmwiki/synth/pipeline.py")
-    cli = _git_show_main("llmwiki/cli.py")
+    harvest = _git_show_pre_147("llmwiki/candidates_harvest.py")
+    candidates = _git_show_pre_147("llmwiki/candidates.py")
+    pipeline = _git_show_pre_147("llmwiki/synth/pipeline.py")
+    cli = _git_show_pre_147("llmwiki/cli.py")
     if not (harvest and candidates and pipeline and cli):
-        pytest.skip("origin/main blobs unavailable for RED documentation")
+        pytest.skip("pre-#147 baseline blobs unavailable for RED documentation")
 
     assert "classify_names(pending" in harvest or "kinds = classify_names" in harvest
     assert "KeyFactsBackendError" in candidates
