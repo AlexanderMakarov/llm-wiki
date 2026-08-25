@@ -155,6 +155,7 @@ def synthesize_estimate_report(
         page_is_stub,
         page_needs_topics_rewrite,
         scan_wiki_sources_disk,
+        source_page_paths,
         synth_page_filename,
     )
     from llmwiki.synth.pipeline import (  # noqa: PLC0415 — cycle: synth.pipeline↔synth.estimate
@@ -455,17 +456,15 @@ def synthesize_estimate_report(
         filename = synth_page_filename(meta, p.stem)
         chunks = _chunk_markdown(body, _DOC_CHUNK_MAX_CHARS)
         out_dir = sources_root / project
-        expected = (
-            [out_dir / f"{filename}.md"]
-            if len(chunks) <= 1
-            else [out_dir / f"{filename}--part-{i:02d}.md" for i in range(1, len(chunks) + 1)]
-        )
+        # Pages this doc owns come from disk, exactly as the synth run resolves them.
+        # A doc with no pages yet has nothing to probe and stays pending.
+        expected = source_page_paths(out_dir, filename, is_doc=True)
         output_is_pending = (
             source_key in stub_source_keys
             or any(page_is_stub(ep) for ep in expected)
             or any(page_needs_topics_rewrite(ep) for ep in expected)
         )
-        output_exists = all(ep.is_file() for ep in expected) and not output_is_pending
+        output_exists = bool(expected) and not output_is_pending
         matched = not output_is_pending and (
             rel in state_keys or source_key in discovered_source_keys or output_exists
         )
