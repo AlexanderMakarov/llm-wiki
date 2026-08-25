@@ -1,7 +1,7 @@
 # Technical Specification: Plain-language automation setup
 
 - **Functional Specification:** [`functional-spec.md`](functional-spec.md) (Status: Approved)
-- **Status:** Approved
+- **Status:** Completed
 - **Author(s):** Alexander Makarov
 - **Issue:** [#156](https://github.com/AlexanderMakarov/llm-wiki/issues/156)
 

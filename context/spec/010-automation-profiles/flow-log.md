@@ -43,3 +43,37 @@ Delivery record for `/implement-feature https://github.com/AlexanderMakarov/llm-
 - PR shape: estimate rose from ~875 to **~1362 lines** (~642 code / ~535 tests / ~185 docs) once cron landed in scope. Maintainer re-confirmed **one PR with an extended waiver** in the body. Fallback seams recorded in tech spec §6 (cron out first, then the `all` flip) so they are not re-derived under review pressure.
 
 Next stage: `/awos:tasks`.
+
+## implement — done
+
+Eight slices, each dispatched to a subagent and independently verified by the orchestrator before being ticked.
+
+- **Slice 1** `llmwiki/cron_spec.py` + 75 tests. Parses a 5-field cron expression once and renders systemd `OnCalendar`, launchd `StartCalendarInterval`, and Windows Task Scheduler XML.
+- **Slice 2** `llmwiki/automation_plan.py` + 98 tests. `AutomationPlan`, command composer, label, status round-trip, legacy letter map.
+- **Slice 3** `llmwiki all` flipped to opt-out; `resolve_lint_fail` three-level policy; first-run notice gated on TTY plus a one-shot state flag.
+- **Slice 4** installer takes a plan and a `CronSpec`; `profile_command` deleted outright; default-schedule renderings byte-identical.
+- **Slice 5** the wizard: two-job question, extras step, graph-builder follow-up, schedule presets, confirmation summary.
+- **Slice 6** Home Automation panel and Commands table.
+- **Slice 7** newcomer docs, upgrade guide, CHANGELOG.
+- **Slice 8** `tests/test_156_acceptance.py` — 16 whole-feature acceptance tests, five of them RED-validated by breaking source and reverting.
+
+Three defects found and fixed during implementation that the technical spec had got wrong:
+
+1. **Windows schedule widening (three branches).** The tech spec said "`ScheduleByDay` unless day-of-week is restricted", which silently assumed day-of-week was the only calendar field that mattered. A restricted day-of-month rendered as a plain daily trigger (`0 6 1,15 * *` would have fired every day, ~15x too often), as did a restricted month, and day-of-week combined with months dropped the month restriction. All three now render faithfully (`ScheduleByMonth`, `ScheduleByMonthDayOfWeek`), and `test_windows_trigger_never_widens_the_schedule` closes the class rather than the instances.
+2. **The launchd expansion cap figure was wrong.** The spec claimed `*/1 * * * *` produces 1440 entries; it produces 60, because unrestricted `*` fields are omitted from launchd dicts entirely. Reaching 1440 needs the hours field restricted too.
+3. **R10's file scope was narrower than R10 itself.** The criterion says "any page that describes what `all` does", but the task list named five files. `llmwiki all` was in fact documented in nine places, including the **shipped** `llmwiki/agent_kit/commands/wiki-all.md` that `install-agent-kit` copies into users' `.claude/commands/`. All are now consistent.
+
+## verify — done
+
+- `ruff check llmwiki tests scripts` clean; `python3 -m pytest tests/` → **4370 passed, 48 skipped** (baseline before this feature: 4283).
+- All 52 acceptance criteria in `functional-spec.md` ticked; both spec documents marked Completed.
+- Orchestrator-run checks beyond the suite: legacy `--with-sync --with-synth --skip-graph` still parses; `--no-synth --with-synth` resolves to synth off; `resolve_lint_fail` maps `--strict` to `warnings` and takes the stricter when combined; all four Windows branch shapes correct; legacy letter-only status files render readable panels (`B` to "Maintain", unknown letter degrades safely, `{}` shows the setup prompt); an invalid `--schedule` exits 2 with a message naming the conflict and the fix; declining the wizard confirmation writes no status file, no units, no config change; a second `all` run over an unchanged vault converts 0 and exits 0.
+- RED-probe residue checked and clean: log redirect still truncating, ingest command still byte-identical, no default-backend change.
+
+Deferred to their own issues, deliberately not fixed here:
+
+- **#161** — `synth --estimate` derives doc part pages differently from `synth`. Adjacent (this feature's wizard points users at that command for cost framing) but a `bug`, so CONTRIBUTING rule 1 forbids mixing it into a `feat` PR.
+- **`llmwiki/agent_kit/skills/wiki-all/SKILL.md`** is stale in ways predating this feature: teaches `init` → `sync` → `graph` → `build` → `lint` (wrong order, `init` is not a pipeline stage, `synth` missing entirely), instructs manual per-stage commands rather than `llmwiki all`, and hardcodes an Obsidian vault path.
+- **Package-name split** — `pyproject.toml` says `llm-wiki`; roughly ten places across `docs/` and `CLAUDE.md` say the PyPI distribution is `llm-notebook`, and `docs/deploy/pypi-publishing.md` asserts it as policy. Only the `[graph]` extra install command was unified here, in files this change already touched.
+
+Next stage: user smoke confirm, then local review.
