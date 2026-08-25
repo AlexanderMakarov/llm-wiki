@@ -98,12 +98,14 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
       '<p class="muted">CLI rows are copy-paste runnable. Agent rows start <code>/wiki-candidates</code> from the <strong>llmwiki checkout</strong> (slash commands load from <code>.claude/commands/</code>; vault path comes from <code>config.json</code>). Harvest stubs with <code>llmwiki synth</code> (or <code>synth --candidates-only</code>) before review — estimate&apos;s <code>Candidates (pre-run state):</code> is current <code>wiki/sources/</code> shape, not the Home <strong>Candidates</strong> count of pending stubs.</p>' +
       '<table class="queue-commands-table">' +
       "<thead><tr><th>Command</th><th>Purpose</th><th></th></tr></thead><tbody>" +
+      commandRow("llmwiki install-automation", "Set up the daily job that runs this loop for you &mdash; then the rows below are only for one-off runs.") +
+      commandRow("llmwiki all", "Run every stage once (sync &rarr; synth &rarr; build &rarr; graph &rarr; lint) &mdash; the manual equivalent of the daily job. Sends session text to your AI provider, so it can spend tokens.") +
       commandRow("llmwiki sync", "Convert new agent sessions into <code>raw/sessions/</code>.") +
       commandRow("llmwiki sync --project <slug>", "Sync only one project&apos;s sessions.") +
       commandRow("llmwiki synth", "Synthesize pending sources, then harvest entity/concept candidates.") +
       commandRow("llmwiki synth --sources-only", "Drain unsynthesized backlog into <code>wiki/sources/</code> only.") +
       commandRow("llmwiki synth --candidates-only", "Harvest entity/concept candidates into <code>wiki/candidates/</code>.") +
-      commandRow("llmwiki synth --estimate", "Refresh cost estimate + pipeline table (sources cost + Candidates as pre-run state).") +
+      commandRow("llmwiki synth --estimate", "Preview what synthesis costs &mdash; run it before the daily job first fires. Refreshes the cost estimate + pipeline table (sources cost + Candidates as pre-run state).") +
       commandRow("llmwiki candidates list", "Show pending review stubs (runnable output).") +
       commandRow("llmwiki candidates list --stale", "Show candidates older than the stale threshold (default 30d).") +
       commandRow("llmwiki candidates promote --slug <Name>", "Promote one stub into trusted <code>wiki/entities/</code> or <code>concepts/</code>.") +
@@ -277,7 +279,7 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
       detailsSection("Not synthesized sessions", pendingSessions.length, pendingListHtml(pendingSessions)) +
       detailsSection("Not synthesized docs", pendingDocs.length, pendingListHtml(pendingDocs)) +
       detailsSection("Candidates to review", toReview, reviewBreakdownHtml(pipeline)) +
-      detailsSection("Commands", 13, commandsBody(repoRoot)) +
+      detailsSection("Commands", 15, commandsBody(repoRoot)) +
       detailsSection("Estimate warnings", warnings.length, warningsBody) +
       "</div>";
   }
