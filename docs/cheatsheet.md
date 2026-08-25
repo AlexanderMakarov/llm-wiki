@@ -6,8 +6,7 @@ docs_shell: true
 
 # Command cheatsheet
 
-Everything you need on one page. Slash commands work inside Claude
-Code / Codex CLI; CLI commands run at your terminal.
+Everything you need on one page. Slash commands work inside Claude Code / Codex CLI; CLI commands run at your terminal.
 
 ## 30-second setup
 
@@ -18,8 +17,31 @@ From Claude Code, run these slash commands in order:
 3. `/wiki-graph` — build the AI knowledge graph
 4. `/wiki-build` — compile the static site
 5. Open `site/index.html` — the site is plain files, nothing to run
+6. `llmwiki install-automation` — hand that loop to a daily job so you never repeat it
 
-## Daily flow
+## Keeping it current
+
+Set the daily job up once and llmwiki keeps itself up to date. The wizard asks what the job should do (collect sessions only, or also summarise them), offers the optional extras, and shows you the exact command line before it writes anything.
+
+```bash
+llmwiki install-automation                                   # interactive wizard
+llmwiki install-automation --yes --job ingest                # collect sessions + rebuild the site; no AI provider, no cost
+llmwiki install-automation --yes --job maintain --schedule "0 8 * * 1-5"   # also summarise; weekdays at 08:00
+llmwiki install-automation --yes --job maintain --graph builtin --lint-fail errors
+```
+
+`--job maintain` sends session text to your AI provider — run `llmwiki synth --estimate` first to see what a run costs. Re-running the command replaces the existing job instead of adding a second one. Full flag table: [CLI reference](reference/cli.md#install-automation--set-up-the-daily-job).
+
+For a one-off run of the same pipeline by hand:
+
+```bash
+llmwiki all                            # sync → synth → build → graph → lint
+llmwiki all --no-synth                 # same run, no LLM calls
+llmwiki all --skip-graph --skip-lint   # sync → synth → build only
+llmwiki all --lint-fail errors         # exit 2 when lint reports an error
+```
+
+## One step at a time
 
 | What you want | Slash command | CLI equivalent |
 |---|---|---|
@@ -34,20 +56,25 @@ From Claude Code, run these slash commands in order:
 | AI knowledge graph | `/wiki-graph` | `llmwiki graph --engine graphify` |
 | Self-reflection on wiki gaps | `/wiki-reflect` | -- |
 
-## 11 CLI commands
+## CLI commands you'll use most
+
+`llmwiki --help` lists all 25 subcommands, including the `migrate-*` one-offs and the maintenance helpers. These are the ones that carry the daily loop:
 
 | Command | Purpose |
 |---|---|
 | `init` | Scaffold `raw/` `wiki/` `site/` + seed 9 nav files |
+| `install-automation` | Set up the daily job that runs the loop for you |
+| `all` | Whole pipeline in one run: sync → synth → build → graph → lint (opt out per stage) |
 | `sync` | Convert `.jsonl` sessions -> markdown -> wiki -> site |
-| `build` | Compile `wiki/` markdown into `site/` HTML + AI exports (`llms.txt`, `sitemap.xml`, …) |
-| `adapters` | List every adapter + its status |
-| `graph` | Build the knowledge graph (Graphify default, builtin fallback) |
-| `query` | Search the knowledge graph with a question |
-| `all` | Full pipeline: optional sync/synth → build → graph → lint |
-| `lint` | Run 14 wiki-quality rules |
-| `candidates` | Approval workflow (list / promote / merge / discard) |
 | `synth` | Synthesize sources + harvest entity/concept candidates |
+| `candidates` | Approval workflow (list / promote / merge / discard) |
+| `build` | Compile `wiki/` markdown into `site/` HTML + AI exports (`llms.txt`, `sitemap.xml`, …) |
+| `graph` | Build the knowledge graph (Graphify default, builtin fallback) |
+| `lint` | Run 17 wiki-quality rules |
+| `query` | Search the knowledge graph with a question |
+| `add` | Add a URL, file, or folder to the wiki |
+| `watch` | Near-real-time sync → synth → build when a session finishes |
+| `adapters` | List every adapter + its status |
 | `synthesize` | *(deprecated)* alias for `synth --sources-only` |
 | `version` | Print version |
 
@@ -60,7 +87,7 @@ llmwiki graph --format json            # json only
 llmwiki graph --format html            # interactive HTML only
 ```
 
-Install Graphify: `pip install llm-notebook[graph]`
+Install Graphify: `pip install llm-wiki[graph]`
 
 Graphify outputs to `graphify-out/`: `graph.json`, `graph.html`, `GRAPH_REPORT.md`.
 Features: tree-sitter AST extraction, semantic analysis, community detection, confidence-scored edges.
@@ -76,7 +103,7 @@ llmwiki build                          # HTML site + llms.txt, llms-full.txt, gr
 ## Quality
 
 ```bash
-llmwiki lint                           # 17 structural rules
+llmwiki lint                           # 17 wiki-quality rules
 llmwiki lint --json --fail-on-errors   # CI-friendly
 llmwiki lint --rules link_integrity,orphan_detection
 ```
@@ -152,6 +179,10 @@ llmwiki sync --adapter obsidian
 | `--force` | `sync`, `synthesize` | Ignore state file, reconvert everything |
 | `--force-resync` | `sync` | Override the newer-schema/corrupt-state guard (#29); implies `--force`, may duplicate `raw/` |
 | `--fail-on-errors` | `lint` | Non-zero exit on error-severity issues |
+| `--no-sync`, `--no-synth` | `all` | Drop a stage from the run; `--no-synth` makes it LLM-free |
+| `--lint-fail {never,errors,warnings}` | `all`, `install-automation` | Which quality findings end the run with exit `2` (default: `never`) |
+| `--job {ingest,maintain}` | `install-automation` | What the daily job does — collect only, or also summarise |
+| `--schedule "<cron>"` | `install-automation` | When the daily job runs, e.g. `"0 8 * * 1-5"` |
 | `--vault <path>` | `sync`, `build`, `synthesize`, `add`, `queue`, `all` | Operate on an external vault (also sets the active state file) |
 | `--local-root <path>` | `build` | Value shown in place of a session's stored home directory (default: this machine's home) |
 | `--engine graphify` | `graph` | AI-powered knowledge graph |
@@ -207,14 +238,17 @@ site/    GENERATED static HTML (don't edit by hand)
 ## Common recipes
 
 ```bash
-# Daily: sync + rebuild, then open site/index.html
-llmwiki sync && llmwiki build
+# Daily, hands-off: schedule the whole loop
+llmwiki install-automation --yes --job maintain --schedule "0 8 * * 1-5"
+
+# Daily, by hand: the same loop as one run, then open site/index.html
+llmwiki all
 
 # Nightly cron (one project)
 llmwiki sync --project my-project --no-auto-lint --since $(date -v-1d +%Y-%m-%d)
 
 # AI knowledge graph
-pip install llm-notebook[graph]
+pip install llm-wiki[graph]
 llmwiki graph --engine graphify
 
 # CI quality gate

@@ -73,7 +73,7 @@ python3 -m llmwiki graph [options]
 
 ### `llmwiki all` (v1.2)
 
-Run the full pipeline: `[sync?]` → `[synthesize?]` → build → graph → lint. AI-consumable exports are written by `build`, not a separate step.
+Run the full pipeline: sync → synth → build → graph → lint. Every stage runs by default; each has an opt-out flag. AI-consumable exports are written by `build`, not a separate step.
 
 ```bash
 python3 -m llmwiki all [options]
@@ -82,14 +82,17 @@ python3 -m llmwiki all [options]
 | Flag | Type | Default | Description |
 |---|---|---|---|
 | `--out` | `path` | `./site` | Output directory |
-| `--with-sync` | flag | off | Run `sync --no-auto-build` before synthesize/build |
-| `--with-synth` | flag | off | Run `synthesize` before build |
-| `--synth-force` | flag | off | With `--with-synth`: pass `--force` to re-synthesize all sessions |
+| `--no-sync` | flag | off | Skip the sync step (do not convert new agent sessions first) |
+| `--no-synth` | flag | off | Skip the synth step, so the run makes no LLM calls |
+| `--synth-force` | flag | off | Pass `--force` to synth (re-synthesize every session) |
 | `--search-mode` | `auto/tree/flat` | `auto` | Forwarded to build |
 | `--graph-engine` | `builtin/graphify` | `graphify` | Forwarded to graph |
 | `--skip-graph` | flag | off | Skip the graph step |
-| `--strict` | flag | off | Exit 2 on any lint error or warning (CI gate) |
+| `--skip-lint` | flag | off | Skip the lint step |
+| `--lint-fail` | `never/errors/warnings` | `never` | Which lint findings end the run with exit 2 |
+| `--strict` | flag | off | Spelling for `--lint-fail warnings` (CI gate); the stricter of the two wins |
 | `--fail-fast` | flag | off | Stop at first non-zero step |
+| `--with-sync`, `--with-synth` | flag | off | Deprecated and inert — the stages they name run by default. Accepted so an already-installed scheduled command keeps parsing; each prints a one-line notice |
 
 ### `llmwiki version`
 

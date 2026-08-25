@@ -1,15 +1,18 @@
-Run the full llmwiki pipeline end-to-end: build → graph → export all → lint.
+Run the full llmwiki pipeline end-to-end: sync → synth → build → graph → lint.
 
 Usage: /wiki-all [flags]
 
-`$ARGUMENTS` is forwarded verbatim to `python3 -m llmwiki all`. Common flags:
+`$ARGUMENTS` is forwarded verbatim to `python3 -m llmwiki all`. Every stage runs by default; the flags below opt out of one or tune it. Common flags:
 
-- `--graph-engine builtin` — skip optional Graphify (use when `pip install llm-notebook[graph]` has not been run)
+- `--no-sync` — skip the sync step (do not convert new agent sessions first)
+- `--no-synth` — skip the synth step, so the run makes no LLM calls
+- `--synth-force` — pass `--force` to synth (re-synthesize every session)
+- `--graph-engine builtin` — skip optional Graphify (use when `pip install llm-wiki[graph]` has not been run)
 - `--skip-graph` — skip the graph step entirely
-- `--strict` — exit non-zero if lint reports any errors/warnings (good for CI)
+- `--skip-lint` — skip the lint step entirely
+- `--lint-fail {never,errors,warnings}` — exit `2` when lint reports issues at this level (default: `never` — findings are printed and the run still exits `0`)
+- `--strict` — spelling for `--lint-fail warnings` (good for CI)
 - `--fail-fast` — stop at the first non-zero step instead of continuing to the next
-- `--with-synth` — run `synthesize` before build (fills `wiki/sources/` from `raw/`; opt-in because it may invoke an LLM)
-- `--synth-force` — with `--with-synth`, pass `--force` to re-synthesize all sessions
 - `--out <dir>` — output directory (default: `site/`)
 
 Run:
@@ -20,14 +23,16 @@ python3 -m llmwiki all $ARGUMENTS
 
 The command runs these steps in order and surfaces their combined output:
 
-0. **synthesize** *(only with `--with-synth`)* — fill `wiki/sources/` from `raw/` via the configured LLM backend
-1. **build** — compile the static HTML site from `raw/` + `wiki/`
-2. **graph** — build the knowledge graph (`graph/graph.json` + interactive `graph.html`)
-3. **export all** — write every AI-consumable format (`llms.txt`, `llms-full.txt`, `graph.jsonld`, `sitemap.xml`, `rss.xml`, `robots.txt`, `ai-readme.md`)
-4. **lint** — run every registered lint rule against the wiki
+1. **sync** — convert new agent sessions into `raw/sessions/` and reconcile `wiki/index.md`
+2. **synth** — fill `wiki/sources/` from `raw/` via the configured LLM backend, then harvest candidate stubs into `wiki/candidates/`
+3. **build** — compile the static HTML site from `raw/` + `wiki/`, including every AI-consumable export (`llms.txt`, `llms-full.txt`, `graph.jsonld`, `sitemap.xml`, `rss.xml`, `robots.txt`, `ai-readme.md`)
+4. **graph** — build the knowledge graph (`graph/graph.json` + interactive `graph.html`)
+5. **lint** — run every registered lint rule against the wiki
 
 Report to the user:
 
+- How many sessions were converted by the sync step
+- How many sources were synthesized and how many candidates were harvested
 - Output directory and total file / size count from the build step
 - Graph stats (pages · edges · broken · orphans)
 - Which export files were written
@@ -36,5 +41,5 @@ Report to the user:
 
 If any step fails, surface the failing step's output and the pipeline exit code.
 
-Use this instead of chaining `/wiki-build` + `/wiki-graph` + `/wiki-lint` manually.
-It is the canonical one-shot "CI-ready site" command to run after `/wiki-sync`.
+Use this instead of chaining `/wiki-sync` + `/wiki-synth` + `/wiki-build` + `/wiki-graph` + `/wiki-lint` manually.
+It is the canonical one-shot "CI-ready site" command.

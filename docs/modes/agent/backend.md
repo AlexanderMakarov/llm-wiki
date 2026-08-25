@@ -28,7 +28,7 @@ Optional: `claude_path` (binary path), `timeout` (seconds, default 180).
 
 ## How it works
 
-1. `llmwiki synth` (or `add` / `all --with-synth`) resolves the backend.
+1. `llmwiki synth` (or `add` / `all`) resolves the backend.
 2. For each new/changed raw file, the pipeline renders the source-page prompt.
 3. `ClaudeCLISynthesizer` shells out to `claude -p -` with the prompt on stdin.
 4. The wiki page is written immediately under `wiki/sources/`.
@@ -56,5 +56,5 @@ See [UPGRADING.md](../UPGRADING.md) for the one-time state migration.
 ## Invariants
 
 - Works with or without `ANTHROPIC_API_KEY` (uses the Claude Code CLI subscription when available).
-- One backend serves `sync` auto-paths, `synthesize`, `add`, and `all --with-synth`.
+- One backend serves `sync` auto-paths, `synthesize`, `add`, and `all`.
 - Unavailable backend aborts the run (no silent dummy overwrite of real pages).

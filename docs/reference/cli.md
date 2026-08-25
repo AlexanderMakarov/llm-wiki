@@ -293,7 +293,7 @@ python3 -m llmwiki graph --format html
 
 **Builtin engine:** Emits `graph/graph.json` (nodes + edges) and/or `graph/graph.html` (vis-network interactive viewer) plus sibling `graph-viewer.js` and `vis-network.min.js`. The interactive trio is also auto-copied into `site/` on every `build`, so the graph works offline from the built static site without a CDN fetch.
 
-**Graphify engine:** Runs the [Graphify](https://github.com/safishamsi/graphify) pipeline: tree-sitter AST extraction for code, semantic analysis for docs, Leiden community detection, god-node analysis. Outputs to `graphify-out/` (graph.json, graph.html, GRAPH_REPORT.md) and copies to `graph/` for build compatibility. Install: `pip install llm-notebook[graph]` or `pip install graphifyy`.
+**Graphify engine:** Runs the [Graphify](https://github.com/safishamsi/graphify) pipeline: tree-sitter AST extraction for code, semantic analysis for docs, Leiden community detection, god-node analysis. Outputs to `graphify-out/` (graph.json, graph.html, GRAPH_REPORT.md) and copies to `graph/` for build compatibility. Install: `pip install llm-wiki[graph]` or `pip install graphifyy`.
 
 ---
 
@@ -435,7 +435,7 @@ Before the first page is synthesized, a real run announces the batch: `Synthesiz
 | `--path PATH` | Synthesize only this raw session or doc under `raw/sessions/` or `raw/docs/` (repeatable; relative to the vault root, or absolute under it) (#62). Exit 2 if the path is missing or outside the vault. Still honours `filters.include_subagents` / `exclude_headless` (ineligible files are skipped even when named). Incompatible with `--check` / `--estimate`. |
 | `--candidates-only` | Harvest entity/concept **candidates** from already-synthesized `wiki/sources/` into `wiki/candidates/`, then exit (#90 / #147). Reads the source layer only — never `raw/` — so it runs no per-source synthesis and **no** classify LLM call; kind, description, and facts come from Connections topic bullets already on those pages. LLM cost is **zero**. Unreadable source pages still fail the run and write nothing. Mutually exclusive with `--sources-only` / `--check` / `--estimate`. |
 | `--min-refs N` | Candidate threshold: a `[[wikilink]]` target becomes a candidate when **N or more distinct source pages** name it (default: `3`). |
-| `--concurrency N` | Synthesize N source pages at once, overriding `synthesis.concurrency` (default: `2`; range `1`–`16`). `1` runs strictly sequentially. Pages are I/O-bound on the backend, so the wall clock shrinks roughly in proportion; raise it only as far as your provider's rate limits and your machine allow. `all --with-synth` has no matching flag — it reads `synthesis.concurrency`. |
+| `--concurrency N` | Synthesize N source pages at once, overriding `synthesis.concurrency` (default: `2`; range `1`–`16`). `1` runs strictly sequentially. Pages are I/O-bound on the backend, so the wall clock shrinks roughly in proportion; raise it only as far as your provider's rate limits and your machine allow. `all` has no matching flag — its synth stage reads `synthesis.concurrency`. |
 | `--vault PATH` | Read/write under the vault root; configures the active `llmwiki-state.json`. |
 
 Backend is picked from `synthesis.backend` in `config.json` / `sessions_config.json` (`dummy` by default, `ollama` for local, `claude` for synchronous `claude -p`). See [`configuration.md`](../configuration.md#synthesis-backend).
@@ -674,7 +674,7 @@ python3 -m llmwiki query "Flutter mobile" --depth 2 --budget 1000
 | `--depth N` | BFS traversal depth. Default: `3`. |
 | `--budget N` | Max output tokens. Default: `2000`. |
 
-Requires Graphify (`pip install llm-notebook[graph]`). Run `llmwiki graph` first to build the graph.
+Requires Graphify (`pip install llm-wiki[graph]`). Run `llmwiki graph` first to build the graph.
 
 ---
 
@@ -723,15 +723,16 @@ Guided repair of broken hops will live under `doctor` (#110); this command only 
 
 ## `all` — run the full pipeline
 
-Convenience entry point that runs `[sync?]` → `[synthesize?]` → `build` → `graph` → `lint` in order. AI-consumable exports (`llms.txt`, `sitemap.xml`, etc.) are written by `build`, not a separate step. This is the one command to run after agent sessions land to produce a CI-ready site.
+The one command to run after agent sessions land. It runs every stage in order — `sync` → `synth` → `build` → `graph` → `lint` — so a scheduled job is a bare `llmwiki all` rather than a trail of flags. AI-consumable exports (`llms.txt`, `sitemap.xml`, etc.) are written by `build`, not a separate step.
+
+Every stage runs by default and every stage has an opt-out flag: `--no-sync`, `--no-synth`, `--skip-graph`, `--skip-lint`. `synth` is the only stage that can call an LLM; with the default `dummy` synthesis backend it makes no provider call at all, and `--no-synth` turns it off outright.
 
 ```bash
-python3 -m llmwiki all
-python3 -m llmwiki all --with-sync              # convert sessions first
-python3 -m llmwiki all --with-synth             # synthesize wiki/sources/ before build
-python3 -m llmwiki all --with-sync --with-synth # full refresh from agent stores
+python3 -m llmwiki all                          # every stage
+python3 -m llmwiki all --no-synth               # no LLM calls
+python3 -m llmwiki all --no-sync --no-synth     # build → graph → lint only
 python3 -m llmwiki all --graph-engine builtin   # skip optional graphify
-python3 -m llmwiki all --skip-graph --strict    # fail CI on any lint issue
+python3 -m llmwiki all --skip-graph --lint-fail warnings   # fail CI on any lint issue
 ```
 
 ### Flags
@@ -741,19 +742,36 @@ python3 -m llmwiki all --skip-graph --strict    # fail CI on any lint issue
 | `--out DIR` | Output dir for `build`. Default: `site/`. |
 | `--search-mode {auto,tree,flat}` | Forwarded to `build`. Default: `auto`. |
 | `--graph-engine {builtin,graphify}` | Forwarded to `graph`. Default: `graphify`. |
+| `--no-sync` | Skip the sync step (do not convert new agent sessions first). |
+| `--no-synth` | Skip the synth step, so the run makes no LLM calls. |
+| `--synth-force` | Pass `--force` to synth (re-synthesize every session). |
 | `--skip-graph` | Skip the graph step entirely (useful when graphify is not installed). |
+| `--skip-lint` | Skip the lint step entirely. |
+| `--lint-fail {never,errors,warnings}` | When lint findings fail the run with exit `2`. Default: `never`. |
+| `--strict` | Spelling for `--lint-fail warnings`. When both are given, the stricter wins. |
 | `--fail-fast` | Stop at the first non-zero step. Default: continue, report the worst exit code. |
-| `--strict` | Exit `2` if `lint` reports any errors/warnings. |
-| `--with-sync` | Run `sync --no-auto-build` before synthesize/build (convert agent sessions first). |
-| `--with-synth` | Run `synthesize` before build (fills `wiki/sources/` from `raw/`; may invoke an LLM — default off for cost discipline, #383). |
-| `--synth-force` | With `--with-synth`: pass `--force` to synthesize (re-synthesize all sessions). |
+| `--with-sync`, `--with-synth` | Deprecated and inert — the stages they used to enable now run by default. Accepted so an already-installed scheduled command keeps parsing; each prints a one-line notice. |
 | `--vault PATH` | Run every step against this vault instead of the repo. |
+
+### Lint failure policy
+
+`lint` always prints its findings. `--lint-fail` decides whether those findings end the run:
+
+| Policy | Fails when |
+|---|---|
+| `never` (default) | Never — findings are reported and the run still exits `0`. |
+| `errors` | Lint reported at least one error-severity issue. |
+| `warnings` | Lint reported at least one error **or** warning. |
+
+### Conflicting flags
+
+`--no-synth` wins over `--with-synth`, and `--no-sync` wins over `--with-sync`, in any order on the command line — the deprecated `--with-*` aliases are inert and cannot re-enable a stage you just switched off. `--strict` and `--lint-fail` resolve to whichever of the two is stricter.
 
 Exit codes:
 
 - `0` — every step succeeded.
 - non-zero — forwarded from the first (or worst) failing step.
-- `2` — `--strict` and lint reported issues.
+- `2` — the lint failure policy was met, or a required directory was missing.
 
 ---
 
@@ -786,15 +804,50 @@ python3 -m llmwiki watch --vault ~/my-vault
 
 ---
 
-## `install-automation` — daily scheduler + optional agent hooks
+## `install-automation` — set up the daily job
 
-Interactive wizard (or pass `--yes` for non-interactive) that writes OS scheduler unit files, optional agent sync hooks, and automation status for the site Home panel. Profiles: **A** = `sync` (auto-build on); **B** = `sync --no-auto-build` → `synth` → `build`; **C** = `all --with-sync --with-synth --skip-graph`. Asks for daily run time (default `08:00`). Linux systemd timers use `Persistent=true` so a missed run catches up after boot. Logs land under XDG state (`~/.local/state/llmwiki/` by default). Writes `.llmwiki/automation-status.json` under the vault for the Home panel. Agent hooks default to skip — press Enter at the prompt to install nothing; type `install` to opt in (not recommended; prefer the OS scheduler or `watch`).
+Sets up the job that keeps your wiki current so you do not have to run the steps by hand. Interactive by default: it asks what the daily job should do, when it should run, and shows you the exact command line before writing anything. Pass `--yes` with the flags below for an unattended install.
+
+### What the daily job can do
+
+| Job | What it does | Writes | Cost |
+|---|---|---|---|
+| **Ingest only** (default) | Collects new agent sessions into your vault and refreshes the site. | `raw/`, `site/` | Never contacts an AI provider — free. |
+| **Maintain** | Collects new sessions, summarises each one into a wiki page, gathers candidate topics for review, refreshes the site, and reports wiki quality findings into the run log. | `raw/`, `wiki/sources/`, `wiki/candidates/`, `site/` | Sends session text to your AI provider — this costs money once a real provider is configured. Run `llmwiki synth --estimate` to see how much before the job first fires. |
+
+### Optional extras (maintain only)
+
+Nothing here is on by default; the wizard offers them as one comma-separated question and each has a flag.
+
+| Extra | Flag | Effect |
+|---|---|---|
+| Build the knowledge graph | `--graph builtin` / `--graph graphify` | The job also builds the graph, with the built-in builder or the richer `graphify` one (`pip install llm-wiki[graph]`; the job falls back to the built-in builder until that extra is installed). Writes `graph/`. |
+| Fail the job on quality errors | `--lint-fail errors` | The scheduled job reports failure when the quality check finds errors. |
+| Fail the job on quality warnings | `--lint-fail warnings` | The scheduled job reports failure on any warning or error. Stricter than `errors`. |
+
+Without a failure policy the quality check still runs and its full report lands in the run log — findings simply never mark the job as failed.
+
+### When it runs
+
+The wizard offers presets and translates each into a cron expression; `--schedule` takes the same expression directly. Whatever the route, the schedule is validated before any unit file is written — an expression llmwiki cannot translate into your OS scheduler's own format is refused with the reason (exit code `2`).
+
+| Preset | Cron | Example |
+|---|---|---|
+| Every day | `M H * * *` | `"0 8 * * *"` — every day at 08:00 (the default) |
+| Weekdays only | `M H * * 1-5` | `"30 7 * * 1-5"` — weekdays at 07:30 |
+| Once a week | `M H * * D` | `"0 18 * * 3"` — Wednesdays at 18:00 |
+| Custom cron expression | as typed | `"0 */6 * * *"` — every six hours |
+
+Supported grammar is standard 5-field cron: `*`, integers, lists (`1,15`), ranges (`1-5`), steps (`*/15`), day names `SUN`–`SAT`, month names `JAN`–`DEC`. Nicknames (`@daily`), Vixie/Quartz extensions (`L`, `W`, `#`), a seconds field, and any expression restricting both day-of-month and day-of-week are refused — the last one because cron ORs those two fields and no OS scheduler can express it.
+
+Linux systemd timers use `Persistent=true` so a missed run catches up after boot. Logs land under XDG state (`~/.local/state/llmwiki/` by default). `.llmwiki/automation-status.json` is written under the vault for the Home Automation panel. Agent hooks default to skip — press Enter at that prompt to install nothing; type `install` to opt in (not recommended; prefer the OS scheduler or `watch`). Re-running the command replaces the existing job rather than adding a second one.
 
 ```bash
 python3 -m llmwiki install-automation
-python3 -m llmwiki install-automation --yes --profile B --hour 9 --minute 30
-python3 -m llmwiki install-automation --yes --profile C --watch-enabled
-python3 -m llmwiki install-automation --yes --synth-backend ollama --units-dir ~/.config/systemd/user
+python3 -m llmwiki install-automation --yes --job maintain
+python3 -m llmwiki install-automation --yes --job maintain --graph builtin --lint-fail errors --schedule "0 8 * * 1-5"
+python3 -m llmwiki install-automation --yes --job ingest --schedule "30 7 * * *" --units-dir ~/.config/systemd/user
+python3 -m llmwiki install-automation --yes --job maintain --synth-backend ollama --watch-enabled
 python3 -m llmwiki install-automation --vault ~/my-vault
 ```
 
@@ -802,15 +855,24 @@ python3 -m llmwiki install-automation --vault ~/my-vault
 
 | Flag | What |
 |---|---|
-| `--yes` | Non-interactive: use flags and defaults; never installs hooks. |
-| `--profile {A,B,C}` | Scheduler command profile. Default: `A`. |
-| `--hour N` | Daily run hour (24h). Default: `8`. |
-| `--minute N` | Daily run minute. Default: `0`. |
-| `--synth-backend NAME` | Synthesis backend for automation status (interactive mode also writes `synthesis.backend` to `config.json`). |
-| `--units-dir PATH` | Directory for systemd unit / launchd plist files. Default: `.llmwiki/units/` under the repo. |
+| `--yes` | Non-interactive: use the flags and defaults below; never installs hooks. |
+| `--job {ingest,maintain}` | What the daily job does. Default: `ingest`. |
+| `--graph {none,builtin,graphify}` | Build the knowledge graph, and with which builder. Default: `none`. |
+| `--lint-fail {never,errors,warnings}` | Quality findings at this level report the scheduled job as failed. Default: `never`. Same spelling as the `all` flag. |
+| `--schedule "<cron>"` | When the job runs, as a 5-field cron expression. Default: `"0 8 * * *"`. An expression that cannot be translated exits `2` with the reason. |
+| `--synth-backend NAME` | Synthesis backend for automation status (interactive mode also writes `synthesis.backend` to `config.json`, after you confirm the summary). |
+| `--units-dir PATH` | Directory for systemd unit / launchd plist / Task Scheduler files. Default: `.llmwiki/units/` under the repo. Also the offered default in the interactive prompt. |
 | `--watch-enabled` | Record `watch` as enabled in automation status (does not start `watch`). |
 | `--force-platform {linux,macos,windows}` | Override platform detection for unit format. |
 | `--vault PATH` | Vault root for `automation-status.json`. |
+| `--profile {A,B,C}` | **Deprecated** — use `--job`. `A` maps to `ingest`, `B` and `C` to `maintain`. Prints a notice; `--job` wins when both are given. |
+| `--hour N` | **Deprecated** — use `--schedule`. Translated to `"{minute} {hour} * * *"`, and ignored with a notice when `--schedule` is given. |
+| `--minute N` | **Deprecated** — use `--schedule`. See `--hour`. |
+
+Exit codes:
+
+- `0` — the scheduler files were written, or you declined the confirmation and nothing was written.
+- `2` — the schedule is not an expression llmwiki can translate.
 
 ---
 

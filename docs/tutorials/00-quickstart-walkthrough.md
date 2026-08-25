@@ -47,7 +47,7 @@ wiki/syntheses/   <- saved query answers
 site/             <- generated HTML
 ```
 
-Plus 8 seed files: `index.md`, `overview.md`, `log.md`, `MEMORY.md`, `SOUL.md`, `CRITICAL_FACTS.md`, `hints.md`, `hot.md`.
+Plus 9 seed files: `index.md`, `overview.md`, `log.md`, `MEMORY.md`, `SOUL.md`, `CRITICAL_FACTS.md`, `hints.md`, `hot.md`, `dashboard.md`.
 
 ---
 
@@ -131,7 +131,19 @@ Open `site/index.html` in a browser — the site is plain files, nothing to star
 
 ---
 
-## 7. Quality check
+## 7. Hand the loop to a daily job
+
+You have now run the whole loop once by hand. Set it up to run itself:
+
+```bash
+llmwiki install-automation
+```
+
+One question decides what the daily job does — collect new sessions only, or also summarise them into wiki pages — then the wizard offers the optional extras (knowledge graph, failing the job on quality findings) and a schedule, and prints the exact command line before writing anything. Collecting only never contacts an AI provider; summarising does. Everything below still works by hand whenever you want it.
+
+---
+
+## 8. Quality check
 
 Run `/wiki-lint`:
 
@@ -148,13 +160,13 @@ Key rules:
 
 ---
 
-## 8. Ask the wiki
+## 9. Ask the wiki
 
 Run `/wiki-query "what is the architecture of llm-wiki?"`. Claude reads the relevant wiki pages and synthesizes an answer with [[wikilink]] citations.
 
 ---
 
-## 9. AI-consumable exports
+## 10. AI-consumable exports
 
 All AI-consumable formats are written by `/wiki-build` (or `llmwiki build`) into `site/`. There is no separate `export` subcommand — replace `llmwiki export all` with `llmwiki build`.
 
@@ -164,7 +176,7 @@ llmwiki build                  # HTML site + llms.txt, llms-full.txt, graph.json
 
 ---
 
-## 10. Export to Obsidian
+## 11. Export to Obsidian
 
 After building the graph, export to your Obsidian vault:
 

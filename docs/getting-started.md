@@ -103,6 +103,8 @@ llmwiki synth    # fill wiki/sources/ and harvest wiki/candidates/ (then review)
 llmwiki build    # compile <vault>/raw/ + <vault>/wiki/ → <vault>/site/
 ```
 
+`llmwiki all` runs all three in one go, then builds the graph and reports quality findings.
+
 Open `<vault>/site/index.html` in a browser — the site is plain files, so nothing has to be running and nothing is fetched — and click around. Try:
 
 - **⌘K** or **Ctrl+K** — command palette
@@ -110,6 +112,16 @@ Open `<vault>/site/index.html` in a browser — the site is plain files, so noth
 - **g h / g p / g s** — jump to home / projects / sessions
 - **j / k** — navigate sessions table
 - **?** — keyboard shortcut help
+
+## Next: let it run itself
+
+You only have to do that by hand once. Hand the loop to a daily job:
+
+```bash
+llmwiki install-automation
+```
+
+The wizard asks one question — should the daily job just collect your sessions, or also summarise them into wiki pages? — then offers the optional extras and a schedule, and shows you the exact command line before it writes anything. Collecting only never contacts an AI provider; summarising does, which is why the wizard points you at `llmwiki synth --estimate` first. Every answer is also a flag, for an unattended install: [CLI reference](reference/cli.md#install-automation--set-up-the-daily-job).
 
 ## Where your data ends up
 
