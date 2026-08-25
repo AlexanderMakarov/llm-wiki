@@ -16,7 +16,7 @@ The canonical project config every generated flow command checks against. Flow-a
 - **Code-host org/repo:** `AlexanderMakarov/llm-wiki` (`origin`); upstream reference remote `source` = `Pratiyush/llm-wiki`
 - **Format/lint gate scope:** Scoped — CI and CONTRIBUTING run `ruff check llmwiki tests scripts` and `python3 -m pytest tests/ -q` (not whole-repo Prettier). Versioned hook `.githooks/pre-push` runs `ruff check` on **changed `*.py` in the push only** when `core.hooksPath` is `.githooks` (via `./setup.sh`). AWOS working files under `context/` are outside that ruff package scope. Review dumps are gitignored via `context/.gitignore` so they never enter the format/lint path as tracked files.
 - **Live vault path (operator machine):** gitignored root `config.json` → `vault.default_path` in the primary checkout (never commit the path; never copy that `config.json` into a worktree). Use for operator-driven live verification commands and for agent **read-only** probe commands only.
-- **Spec Author (human operator):** resolve per run from the machine — see §10. Never hardcode a single person; never tool/command/agent metadata in Author fields
+- **Spec Author (human operator):** resolve per run from the machine — see §10. Never tool/command/agent metadata in Author fields
 - **Reused-skill overrides:** none
 
 ## Generated Commands
@@ -150,16 +150,16 @@ Whether `/awos:flow` generated the lighter bug-fix command (named in **Generated
 
 - **Generated:** yes — `/fix-bug` → `.claude/commands/fix-bug.md`
 - **Bug source:** GitHub Issue
-- **Classification & amendment policy:** Always classify conformance (fix code + regression test, leave spec) vs divergence (fix + regression test + amend owning `functional-spec.md` via `/awos:spec` update mode). When there is no pre-existing owning spec, allocate a regular `context/spec/{issue}-{short-slug}/` directory for the run’s log and review (and any minimal notes the fix needs) — do not invent a parallel `context/fixes/` tree; full functional-spec authoring stays optional for pure conformance fixes with nothing to document.
+- **Classification & amendment policy:** Always classify conformance (fix code + regression test, leave spec) vs divergence (fix + regression test + amend owning `functional-spec.md` via `/awos:spec` update mode). When there is no pre-existing owning spec, allocate a regular `context/spec/{issue}-{short-slug}/` directory for the run’s log and review (and any minimal notes the fix needs); full functional-spec authoring stays optional for pure conformance fixes with nothing to document.
 - **Regression-test expectation:** One failing→passing test capturing the bug, honoring `<!-- skip-tests: true -->` on the owning spec's `tasks.md` when one exists
-- **Per-bug artifacts (#164):** Always under `context/spec/{SPEC_NAME}/` with `flow-log.md` + session-only `review.md`. Orphan fix → create `context/spec/{issue}-{short-slug}/` (same layout as a feature spec). Flat `context/fix-log-*` and `context/fixes/` are retired.
+- **Per-bug artifacts (#164):** Always under `context/spec/{SPEC_NAME}/` with `flow-log.md` + session-only `review.md`. Orphan fix → create `context/spec/{issue}-{short-slug}/` (same layout as a feature spec).
 
 ## 10. Local Customizations
 
 Manual edits to the generated command that the user chose to keep during regeneration. `/awos:flow` re-applies these on every regeneration; remove an entry to retire it.
 
 - **`/implement-feature` specs stage — suppress `/awos:tasks` draft Approve ask:** When running tasks generation inside `/implement-feature`, do not call `AskUserQuestion` / Approve for `tasks.md`. Write the file, summarize slices in chat, proceed to implement. Origin: user saw this pause in Cursor sessions (e.g. #117) and chose auto-accept for the feature flow only (2026-08-04). Still allow chat objections and standalone `/awos:tasks` revision.
-- **Spec Author / Author(s) = human operator name only (#159):** Stamp **Author** and **Author(s)** with the operator’s human name — never a command name, issue id, “AWOS”, “Auto”, “implement-feature”, or other agent/tool metadata. Ticket linkage stays on **Roadmap Item** / the issue line elsewhere in the spec header. **Resolve per run from the machine**, in order: (1) session / host identity that exposes a real display name when available; (2) else `git config user.name` (use it even when it is a nickname — do not prompt). Prefer a multi-word display name when one is available; never hardcode a single maintainer string in the flow.
+- **Spec Author / Author(s) = human operator name only (#159):** Stamp **Author** and **Author(s)** with the operator’s human name — never a command name, issue id, “AWOS”, “Auto”, “implement-feature”, or other agent/tool metadata. Ticket linkage stays on **Roadmap Item** / the issue line elsewhere in the spec header. **Resolve per run from the machine**, in order: (1) session / host identity that exposes a real display name when available; (2) else `git config user.name` (use it even when it is a nickname — do not prompt). Prefer a multi-word display name when one is available.
 - **Local review files never staged (#159):** Keep/drop still uses on-disk `review.md`; commit-push explicitly excludes `review.md` and `review-*.md` under `context/`.
 
 ---
