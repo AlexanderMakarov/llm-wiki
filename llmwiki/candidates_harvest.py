@@ -485,8 +485,7 @@ def run_harvest(
 ) -> int:
     """Harvest + write candidates. Returns a process-style exit code (0/1/2).
 
-    Shared by ``llmwiki synth`` and ``all --with-synth`` so both paths agree
-    on messaging (#90 / #147).
+    Shared by ``llmwiki synth`` and ``all`` so both paths agree on messaging (#90 / #147).
 
     Kind, description, and Key Facts come from source topic bullets
     (:func:`llmwiki.source_topics.parse_source_topics`). ``backend`` is

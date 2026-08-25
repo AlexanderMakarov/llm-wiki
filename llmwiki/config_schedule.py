@@ -138,10 +138,10 @@ def synthesis_status_hint(backend: str | None = None) -> str | None:
             "Synthesis backend: dummy — wiki/sources/ stays stub-only until you set "
             "synthesis.backend to ollama (or agent-delegate) in "
             "examples/sessions_config.json and run `llmwiki synth`, or use "
-            "`llmwiki all --with-synth` after configuring a real backend."
+            "`llmwiki all` after configuring a real backend."
         )
     return (
         f"Synthesis backend: {name} — run `llmwiki synth` to fill wiki/sources/ "
         "(and harvest candidates), "
-        "or `llmwiki all --with-synth` to chain synthesis before build."
+        "or `llmwiki all` to chain synthesis before build."
     )

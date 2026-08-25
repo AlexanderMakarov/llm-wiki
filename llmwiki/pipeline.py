@@ -32,7 +32,7 @@ from typing import Any
 from llmwiki import REPO_ROOT
 from llmwiki.build import RAW_DIR, RAW_SESSIONS, build_site
 from llmwiki.candidates_harvest import DEFAULT_MIN_REFS, run_harvest
-from llmwiki.config_schedule import _load_sessions_config
+from llmwiki.config_schedule import _load_sessions_config, load_synthesis_backend
 from llmwiki.convert import convert_all
 from llmwiki.graph import build_and_report
 from llmwiki.graphify_bridge import build_graphify_graph, is_available
@@ -130,6 +130,54 @@ def _run_lint_step(wiki_dir: Path) -> tuple[int, dict[str, int]]:
     return 0, summary
 
 
+#: Lint failure policies, ordered from most permissive to strictest.
+LINT_FAIL_LEVELS: tuple[str, ...] = ("never", "errors", "warnings")
+
+
+def resolve_lint_fail(args: argparse.Namespace) -> str:
+    """Return the lint failure policy for this run: ``never``/``errors``/``warnings``.
+
+    Single source of truth for the policy. ``--lint-fail`` names it directly;
+    ``--strict`` is the spelling for ``warnings``. When both are given the
+    stricter of the two wins.
+    """
+    policy = getattr(args, "lint_fail", None) or "never"
+    if policy not in LINT_FAIL_LEVELS:
+        policy = "never"
+    if getattr(args, "strict", False):
+        policy = max(policy, "warnings", key=LINT_FAIL_LEVELS.index)
+    return policy
+
+
+def _maybe_print_optout_notice() -> None:
+    """Print the one-shot notice that ``all`` includes the summarise step.
+
+    Stays silent unless a real synthesis backend is configured *and* stdout is
+    a terminal, so timer-driven runs (whose stdout is a log file) never see it.
+    The one-shot flag lives at ``ops.all_optout_notice_shown`` in the state file.
+    """
+    if load_synthesis_backend() == "dummy":
+        return
+    if not sys.stdout.isatty():
+        return
+
+    already_shown = False
+
+    def _mark(state: dict[str, Any]) -> dict[str, Any]:
+        nonlocal already_shown
+        ops = state.setdefault("ops", {})
+        already_shown = bool(ops.get("all_optout_notice_shown"))
+        ops["all_optout_notice_shown"] = True
+        return state
+
+    update_state(_mark, resolve_state_file())
+    if not already_shown:
+        print(
+            "note: `llmwiki all` includes the summarise step, which calls your "
+            "configured synthesis backend. Pass --no-synth to run without it."
+        )
+
+
 def run_pipeline(args: argparse.Namespace) -> int:
     """Run the full wiki pipeline end-to-end: [sync] → [synthesize] → build → graph → lint.
 
@@ -139,13 +187,18 @@ def run_pipeline(args: argparse.Namespace) -> int:
     library functions are called directly so no nested lock acquisition
     is possible (see module docstring).
 
-    With ``--with-sync`` (before synth/build): converts new sessions with
-    auto-build off (the pipeline's own build step runs later anyway),
-    refreshes the synth-pending backlog, and reconciles ``wiki/index.md``
-    unconditionally.
+    Every stage runs by default; each has an opt-out flag.
 
-    With ``--with-synth``: synthesizes wiki source pages from raw sessions
-    via the configured LLM backend — opt-in, may invoke an LLM (#383).
+    Sync (``--no-sync`` to skip, runs before synth/build): converts new
+    sessions with auto-build off (the pipeline's own build step runs later
+    anyway), refreshes the synth-pending backlog, and reconciles
+    ``wiki/index.md`` unconditionally.
+
+    Synth (``--no-synth`` to skip): synthesizes wiki source pages from raw
+    sessions via the configured LLM backend — may invoke an LLM.
+
+    Lint (``--skip-lint`` to skip): reports findings; whether they fail the
+    run is :func:`resolve_lint_fail`'s answer.
 
     ``build`` already writes every AI-consumable export
     (:func:`llmwiki.exporters.export_all`) as part of
@@ -155,7 +208,7 @@ def run_pipeline(args: argparse.Namespace) -> int:
     Exit codes:
       0  every step succeeded (lint warnings are informational).
       1  at least one step returned a non-zero exit status.
-      2  ``--strict`` was passed and lint reported any error or warning,
+      2  the lint failure policy (``--lint-fail`` / ``--strict``) was met,
          or a required directory (wiki/vault) was missing.
     """
     vault_arg = getattr(args, "vault", None)
@@ -201,15 +254,15 @@ def run_pipeline(args: argparse.Namespace) -> int:
             )
             # Always reconcile — unlike `sync`'s own auto-build path (which
             # only reindexes because it's the step that seeds project
-            # stubs), `all --with-sync` runs `build` right after this
-            # regardless, so there's no reason to gate the catalog fix-up
-            # on anything.
+            # stubs), `all` runs `build` right after this regardless, so
+            # there's no reason to gate the catalog fix-up on anything.
             plan = reindex_wiki(wiki_dir)
             if plan is not None and plan.changed:
                 print(f"  reindex: index.md +{len(plan.added)} listed, "
                       f"-{len(plan.removed)} dead link(s)")
 
         if getattr(args, "with_synth", False):
+            _maybe_print_optout_notice()
             print("\n==> llmwiki synth")
             config: dict[str, Any] = _load_sessions_config()
             backend = resolve_backend(config)
@@ -298,20 +351,27 @@ def run_pipeline(args: argparse.Namespace) -> int:
                     print(f"error: step 'graph' exited {rc}; stopping (--fail-fast).", file=sys.stderr)
                     return rc
 
-        lint_label = "lint --fail-on-errors" if args.strict else "lint"
-        print(f"\n==> llmwiki {lint_label}")
-        lint_rc, lint_summary = _run_lint_step(wiki_dir)
-        overall_rc = _merge_rc(overall_rc, lint_rc)
+        if not getattr(args, "skip_lint", False):
+            lint_fail = resolve_lint_fail(args)
+            lint_label = "lint" if lint_fail == "never" else f"lint --lint-fail {lint_fail}"
+            print(f"\n==> llmwiki {lint_label}")
+            lint_rc, lint_summary = _run_lint_step(wiki_dir)
+            overall_rc = _merge_rc(overall_rc, lint_rc)
 
-        if args.strict:
-            # ``--strict`` escalates *any* lint signal — errors OR warnings
-            # — into a pipeline failure, independent of lint's own exit
-            # code (which by design only fires on error-severity issues).
+            # The policy escalates lint findings into a pipeline failure,
+            # independent of lint's own exit code (which by design only fires
+            # on error-severity issues).
             errors = lint_summary.get("error", 0)
             warnings = lint_summary.get("warning", 0)
-            if errors or warnings:
+            if lint_fail == "errors":
+                failing = errors > 0
+            elif lint_fail == "warnings":
+                failing = errors > 0 or warnings > 0
+            else:
+                failing = False
+            if failing:
                 print(
-                    f"error: --strict: lint reported "
+                    f"error: --lint-fail {lint_fail}: lint reported "
                     f"{errors} error(s) + {warnings} warning(s).",
                     file=sys.stderr,
                 )

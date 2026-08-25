@@ -24,7 +24,8 @@ def test_synthesis_status_hint_for_dummy_backend():
     hint = synthesis_status_hint("dummy")
     assert hint is not None
     assert "dummy" in hint
-    assert "llmwiki all --with-synth" in hint
+    assert "llmwiki all" in hint
+    assert "--with-synth" not in hint
 
 
 def test_synthesis_status_hint_for_ollama_backend():

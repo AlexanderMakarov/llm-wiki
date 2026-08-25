@@ -33,6 +33,7 @@ import shutil as _shutil
 import sys
 import sys as _sys
 import time
+from collections.abc import Callable, Sequence
 from contextlib import ExitStack
 from datetime import UTC, datetime
 from datetime import date as _date
@@ -49,6 +50,15 @@ from llmwiki.adapters import REGISTRY, discover_adapters
 from llmwiki.adapters.status import adapter_status as _adapter_status  # noqa: F401
 from llmwiki.add_doc import add_sources, expected_source_page, remove_raw_docs
 from llmwiki.automation_install import run_install
+from llmwiki.automation_plan import (
+    DEFAULT_SCHEDULE,
+    LEGACY_PROFILE_MAP,
+    AutomationPlan,
+    GraphChoice,
+    LintFail,
+    plan_command,
+    plan_label,
+)
 from llmwiki.build import RAW_DIR, RAW_SESSIONS, build_site
 from llmwiki.cache import MODEL_PRICING, resolve_pricing_model
 from llmwiki.candidates import (
@@ -87,6 +97,7 @@ from llmwiki.config_schedule import (
     should_run_after_sync as _should_run_after_sync,
 )
 from llmwiki.convert import DEFAULT_OUT_DIR, convert_all
+from llmwiki.cron_spec import CronError, describe, parse_cron
 from llmwiki.graph import build_and_report
 from llmwiki.graphify_bridge import build_graphify_graph, is_available, query_graph
 from llmwiki.lint import REGISTRY as _LINT_REG
@@ -204,7 +215,7 @@ def cmd_version(args: argparse.Namespace) -> int:
 
 
 def cmd_all(args: argparse.Namespace) -> int:
-    """Run the full wiki pipeline: [sync?] → [synthesize?] → build → [graph?] → lint.
+    """Run the full wiki pipeline: sync → synth → build → graph → lint.
 
     Thin shim — the implementation lives in ``llmwiki.pipeline`` (#691).
     ``run_pipeline`` acquires the vault's ``pipeline_lock`` exactly once and
@@ -214,6 +225,12 @@ def cmd_all(args: argparse.Namespace) -> int:
     lock again and deadlock. AI exports are part of ``build``; there is no
     separate export step.
     """
+    if getattr(args, "legacy_with_sync", False) or getattr(args, "legacy_with_synth", False):
+        print(
+            "note: --with-sync / --with-synth are no longer needed — every stage "
+            "runs by default. Use --no-sync / --no-synth to skip one.",
+            file=sys.stderr,
+        )
     _apply_default_vault(args)
     return _run_pipeline(args)
 
@@ -759,93 +776,308 @@ def cmd_watch(args: argparse.Namespace) -> int:
     )
 
 
+_JOB_QUESTION = """
+What should the daily job do?
+
+  1) Ingest only     Collect new agent sessions into your vault and refresh
+                     the site. Never contacts an AI provider — no cost.
+                     Writes: raw/, site/
+
+  2) Maintain        Collect new sessions, summarise each one into a wiki page,
+                     gather candidate topics for you to review, refresh the
+                     site, and report wiki quality findings into the run log.
+                     Sends session text to your AI provider — this costs money
+                     once a real provider is configured.
+                     Writes: raw/, wiki/sources/, wiki/candidates/, site/
+"""
+
+_EXTRAS_QUESTION = """
+Optional extras (comma-separated numbers, Enter = none):
+
+  1) Build the knowledge graph        Adds a graph of how your pages link
+                                      together. Writes: graph/
+  2) Fail the job on quality errors   Report the scheduled job as failed when
+                                      the quality check finds errors.
+  3) Fail the job on quality warnings Report the scheduled job as failed when
+                                      the quality check finds warnings or
+                                      errors. Stricter than 2.
+"""
+
+_BUILDER_QUESTION = """
+Which builder should build the graph?
+
+  1) Built-in    Ships with llmwiki. Needs no extra install.
+  2) graphify    Richer graph, built by the graphify package. Needs an extra
+                 install: pip install llm-wiki[graph]
+"""
+
+_SCHEDULE_QUESTION = """
+When should the job run?
+
+  1) Every day
+  2) Weekdays only (skip weekends)
+  3) Once a week
+  4) Custom cron expression
+"""
+
+_DAY_QUESTION = """
+Which day?
+
+  1) Monday   2) Tuesday   3) Wednesday   4) Thursday
+  5) Friday   6) Saturday  7) Sunday
+"""
+
+
+def _ask_until[T](prompt: str, default: T, resolve: Callable[[str], T]) -> T:
+    """Ask a question until ``resolve`` accepts the answer, then return what it resolved to.
+
+    An empty answer returns ``default``, and so does ``EOFError`` — a piped or
+    otherwise non-interactive stdin ends the question instead of spinning. To
+    re-ask, ``resolve`` raises :class:`ValueError` carrying the message the user
+    should see.
+    """
+    while True:
+        try:
+            raw = input(prompt).strip()
+        except EOFError:
+            return default
+        if not raw:
+            return default
+        try:
+            return resolve(raw)
+        except ValueError as exc:
+            print(f"  {exc}")
+
+
+def _ask_choice(prompt: str, valid: Sequence[str], default: str, *, multi: bool = False) -> str:
+    """Ask a question whose answers are a fixed set, re-asking until one of them is given.
+
+    Answers match case-insensitively and come back spelled the way ``valid``
+    spells them. With ``multi`` the answer is a comma-separated list and the
+    result is the accepted items joined by commas; an empty answer returns
+    ``default`` either way.
+    """
+    options = {choice.lower(): choice for choice in valid}
+
+    def resolve(raw: str) -> str:
+        items = [part.strip() for part in raw.split(",")] if multi else [raw]
+        picked: list[str] = []
+        for item in items:
+            match = options.get(item.lower())
+            if match is None:
+                raise ValueError(f"'{item}' is not one of: {', '.join(valid)}")
+            picked.append(match)
+        return ",".join(picked)
+
+    return _ask_until(prompt, default, resolve)
+
+
+def _parse_hh_mm(raw: str) -> tuple[int, int]:
+    """Parse a 24-hour ``HH:MM`` answer into hour and minute."""
+    try:
+        hh, mm = raw.split(":", 1)
+        hour, minute = int(hh), int(mm)
+    except ValueError:
+        raise ValueError(f"'{raw}' is not a time — write it as HH:MM, for example 08:00") from None
+    if not (0 <= hour <= 23 and 0 <= minute <= 59):
+        raise ValueError(f"'{raw}' is out of range — hours are 0-23 and minutes are 0-59")
+    return hour, minute
+
+
+def _validated_cron(raw: str) -> str:
+    """Return a cron expression unchanged once :func:`parse_cron` accepts it."""
+    try:
+        parse_cron(raw)
+    except CronError as exc:
+        raise ValueError(str(exc)) from exc
+    return raw
+
+
+def _ask_graph_builder() -> GraphChoice:
+    """Ask which builder draws the knowledge graph, warning when the richer one is missing."""
+    print(_BUILDER_QUESTION)
+    if _ask_choice("Builder [1]: ", ("1", "2"), "1") != "2":
+        return "builtin"
+    if not is_available():
+        print("  graphify is not installed — the daily job falls back to the built-in builder")
+        print("  until you run: pip install llm-wiki[graph]")
+    return "graphify"
+
+
+def _ask_plan() -> AutomationPlan:
+    """Ask what the daily job does — the job itself, its extras, and the graph builder."""
+    print(_JOB_QUESTION)
+    answer = _ask_choice("Choice [1]: ", ("1", "2", "A", "B", "C"), "1")
+    legacy = LEGACY_PROFILE_MAP.get(answer)
+    job = legacy.job if legacy else ("maintain" if answer == "2" else "ingest")
+    if job != "maintain":
+        return AutomationPlan(job="ingest")
+    print("  Maintain sends session text to your AI provider. Run `llmwiki synth --estimate`")
+    print("  to see what that costs before the job first fires.")
+    print(_EXTRAS_QUESTION)
+    answered = _ask_choice("Extras []: ", ("1", "2", "3"), "", multi=True)
+    extras = {item for item in answered.split(",") if item}
+    lint_fail: LintFail = "never"
+    if "2" in extras and "3" in extras:
+        print("  Both failure policies chosen — applying the stricter one: fail on warnings.")
+        lint_fail = "warnings"
+    elif "3" in extras:
+        lint_fail = "warnings"
+    elif "2" in extras:
+        lint_fail = "errors"
+    graph: GraphChoice = _ask_graph_builder() if "1" in extras else "none"
+    return AutomationPlan(job="maintain", graph=graph, lint_fail=lint_fail)
+
+
+def _ask_schedule() -> str:
+    """Ask when the job runs, returning a cron expression whichever route the answer took."""
+    print(_SCHEDULE_QUESTION)
+    choice = _ask_choice("Schedule [1]: ", ("1", "2", "3", "4"), "1")
+    if choice == "4":
+        return _ask_until(f"Cron expression [{DEFAULT_SCHEDULE}]: ", DEFAULT_SCHEDULE, _validated_cron)
+    day_of_week = "*"
+    if choice == "2":
+        day_of_week = "1-5"
+    elif choice == "3":
+        print(_DAY_QUESTION)
+        # Cron numbers days 1=Monday … 6=Saturday and accepts 7 for Sunday, so
+        # the answer is already the day-of-week field.
+        day_of_week = _ask_choice("Day [1]: ", ("1", "2", "3", "4", "5", "6", "7"), "1")
+    hour, minute = _ask_until("Time HH:MM [08:00]: ", (8, 0), _parse_hh_mm)
+    return f"{minute} {hour} * * {day_of_week}"
+
+
+def _confirm_plan(plan: AutomationPlan, schedule: str) -> bool:
+    """Print the job, the schedule, and the exact command line, then ask whether to write it."""
+    print()
+    print("About to schedule:")
+    print(f"  Job:      {plan_label(plan)}")
+    print(f"  When:     {describe(parse_cron(schedule))}  (cron: {schedule})")
+    print(f"  Command:  {plan_command(plan, python_bin=sys.executable, working_dir=REPO_ROOT)}")
+    print()
+    return _ask_choice("Write these scheduler files? [Y/n]: ", ("y", "yes", "n", "no"), "y") in ("y", "yes")
+
+
+def _write_synth_backend(backend: str) -> None:
+    """Record the chosen synthesis backend under ``synthesis.backend`` in ``config.json``."""
+    cfg_path = REPO_ROOT / "config.json"
+    cfg: dict[str, Any] = {}
+    if cfg_path.is_file():
+        try:
+            cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            cfg = {}
+    synth = cfg.setdefault("synthesis", {})
+    if isinstance(synth, dict):
+        synth["backend"] = backend
+    cfg_path.write_text(json.dumps(cfg, indent=2) + "\n", encoding="utf-8")
+    print(f"  wrote synthesis.backend={backend!r} → config.json")
+
+
+def _plan_from_flags(args: argparse.Namespace) -> tuple[AutomationPlan, str]:
+    """Resolve the plan and the cron schedule from the non-interactive flags.
+
+    ``--job`` wins over the deprecated ``--profile``, and ``--schedule`` wins
+    over the deprecated ``--hour`` / ``--minute`` pair; every deprecated flag
+    that was used prints a notice naming what replaces it.
+
+    Raises:
+        CronError: when the resulting schedule is not an expression
+            :func:`parse_cron` can translate.
+    """
+    job = getattr(args, "job", None)
+    profile = getattr(args, "profile", None)
+    if profile:
+        print("note: --profile is deprecated; use --job {ingest,maintain}", file=sys.stderr)
+    if job and profile:
+        print("note: --job given, so --profile is ignored", file=sys.stderr)
+    if job:
+        plan = AutomationPlan(job=job)
+    elif profile:
+        plan = LEGACY_PROFILE_MAP.get(profile.strip().upper(), AutomationPlan())
+    else:
+        plan = AutomationPlan()
+    plan = AutomationPlan(
+        job=plan.job,
+        graph=getattr(args, "graph", None) or "none",
+        lint_fail=getattr(args, "lint_fail", None) or "never",
+    )
+
+    schedule = getattr(args, "schedule", None)
+    hour = getattr(args, "hour", None)
+    minute = getattr(args, "minute", None)
+    if hour is not None or minute is not None:
+        print('note: --hour/--minute are deprecated; use --schedule "<cron>"', file=sys.stderr)
+    if schedule:
+        if hour is not None or minute is not None:
+            print("note: --schedule given, so --hour/--minute are ignored", file=sys.stderr)
+    elif hour is not None or minute is not None:
+        schedule = f"{minute or 0} {hour if hour is not None else 8} * * *"
+    else:
+        schedule = DEFAULT_SCHEDULE
+    parse_cron(schedule)
+    return plan, schedule
+
+
 def cmd_install_automation(args: argparse.Namespace) -> int:
-    """Interactive (or --yes non-interactive) automation installer."""
+    """Set up the daily job: what it does, when it runs, then write the scheduler files."""
     _apply_default_vault(args)
 
     vault = getattr(args, "vault", None)
-    vault_root = Path(vault) if vault else (
-        load_default_vault_path() or REPO_ROOT
-    )
+    vault_root = Path(vault) if vault else (load_default_vault_path() or REPO_ROOT)
     if vault_root is None:
         vault_root = REPO_ROOT
 
-    profile = (getattr(args, "profile", None) or "A").upper()
-    hour = int(getattr(args, "hour", 8))
-    minute = int(getattr(args, "minute", 0))
     yes = bool(getattr(args, "yes", False))
-
-    if not yes:
+    install_hooks = False
+    if yes:
+        try:
+            plan, schedule = _plan_from_flags(args)
+        except CronError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        backend = getattr(args, "synth_backend", None) or load_synthesis_backend()
+        watch_enabled = bool(getattr(args, "watch_enabled", False))
+        write_dir = Path(getattr(args, "units_dir", None) or (REPO_ROOT / ".llmwiki" / "units"))
+    else:
         print("llmwiki install-automation")
         print("  Hooks are NOT recommended (Enter skips). Prefer OS scheduler or watch.")
         print("  Daily runs with no new sessions are a no-op.")
+        plan = _ask_plan()
+        schedule = _ask_schedule()
         print()
-        backend = input(
-            f"Synth backend [dummy/ollama/claude] "
-            f"(default {load_synthesis_backend()}): "
-        ).strip() or load_synthesis_backend()
-        hooks_ans = input(
-            "Install agent sync hooks? Type 'install' to opt in "
-            "(Enter = skip, not recommended): "
-        ).strip()
-        install_hooks = hooks_ans.lower() == "install"
-        prof = input(
-            "Scheduler profile A=sync  B=sync+synth+build  "
-            "C=all --with-sync --with-synth  [A]: "
-        ).strip().upper() or "A"
-        if prof in ("A", "B", "C"):
-            profile = prof
-        time_s = input("Daily time HH:MM [08:00]: ").strip() or "08:00"
-        try:
-            hh, mm = time_s.split(":", 1)
-            hour, minute = int(hh), int(mm)
-        except ValueError:
-            print("error: bad time; use HH:MM", file=sys.stderr)
-            return 2
-        watch_ans = input("Also document watch as enabled? [y/N]: ").strip().lower()
-        watch_enabled = watch_ans in ("y", "yes")
-        units = input(
-            f"Write unit files under directory "
-            f"(Enter = {REPO_ROOT / '.llmwiki' / 'units'}): "
-        ).strip()
-        write_dir = Path(units) if units else (REPO_ROOT / ".llmwiki" / "units")
-    else:
-        backend = getattr(args, "synth_backend", None) or load_synthesis_backend()
-        install_hooks = False
-        watch_enabled = bool(getattr(args, "watch_enabled", False))
-        write_dir = Path(
-            getattr(args, "units_dir", None)
-            or (REPO_ROOT / ".llmwiki" / "units")
+        backend = _ask_until(
+            f"Synth backend [dummy/ollama/claude] (default {load_synthesis_backend()}): ",
+            load_synthesis_backend(),
+            str,
         )
-
-    # Optionally merge synth backend into config.json
-    if not yes:
-        cfg_path = REPO_ROOT / "config.json"
-        cfg: dict[str, Any] = {}
-        if cfg_path.is_file():
-            try:
-                cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
-            except (OSError, ValueError):
-                cfg = {}
-        synth = cfg.setdefault("synthesis", {})
-        if isinstance(synth, dict):
-            synth["backend"] = backend
-        cfg_path.write_text(json.dumps(cfg, indent=2) + "\n", encoding="utf-8")
-        print(f"  wrote synthesis.backend={backend!r} → config.json")
+        hooks_answer = _ask_until(
+            "Install agent sync hooks? Type 'install' to opt in (Enter = skip, not recommended): ",
+            "",
+            str,
+        )
+        install_hooks = hooks_answer.lower() == "install"
+        watch_enabled = _ask_choice(
+            "Also document watch as enabled? [y/N]: ", ("y", "yes", "n", "no"), "n"
+        ) in ("y", "yes")
+        default_units = Path(getattr(args, "units_dir", None) or (REPO_ROOT / ".llmwiki" / "units"))
+        units = _ask_until(f"Write unit files under directory (Enter = {default_units}): ", "", str)
+        write_dir = Path(units) if units else default_units
+        if not _confirm_plan(plan, schedule):
+            print("  Nothing written — no scheduler files, no status file, no config change.")
+            return 0
+        _write_synth_backend(backend)
 
     status = run_install({
-        "profile": profile,
-        "hour": hour,
-        "minute": minute,
+        "plan": plan,
+        "schedule": schedule,
         "working_dir": REPO_ROOT,
         "python_bin": sys.executable,
         "vault_root": vault_root,
         "write_units_dir": write_dir,
-        "watch_enabled": watch_enabled if not yes else watch_enabled,
-        "hooks": ["claude", "cursor"] if (not yes and install_hooks) else [],
-        "synth_backend": backend if not yes else (
-            getattr(args, "synth_backend", None) or load_synthesis_backend()
-        ),
+        "watch_enabled": watch_enabled,
+        "hooks": ["claude", "cursor"] if install_hooks else [],
+        "synth_backend": backend,
         "force_platform": getattr(args, "force_platform", None),
     })
     print(f"  automation status → {vault_root / '.llmwiki' / 'automation-status.json'}")
@@ -2015,8 +2247,8 @@ def _add_vault_arg(parser: argparse.ArgumentParser, *, role: str) -> None:
                           "flag the state file lives at the repo root, so "
                           "two vaults synthesised against the same repo "
                           "silently share idempotency state.",
-            "all": "Operate on this vault: optional --with-sync / --with-synth, "
-                   "then build → graph → lint (AI exports are part of build).",
+            "all": "Operate on this vault: sync → synth → build → graph → "
+                   "lint (AI exports are part of build).",
             "add": "(#16) Vault-overlay mode: write the converted document "
                    "under the vault's raw/docs/ and run synthesize/build "
                    "against the vault.",
@@ -2526,8 +2758,8 @@ def build_parser() -> argparse.ArgumentParser:
     # all — [sync?] → [synthesize?] → build → graph → lint
     all_p = sub.add_parser(
         "all",
-        help="Run the full pipeline: build → graph → lint "
-             "(add --with-sync / --with-synth; AI exports are part of build)",
+        help="Run the full pipeline: sync → synth → build → graph → lint "
+             "(each stage has an opt-out flag; AI exports are part of build)",
     )
     all_p.add_argument(
         "--out", type=Path, default=REPO_ROOT / "site",
@@ -2550,22 +2782,40 @@ def build_parser() -> argparse.ArgumentParser:
         help="Stop at the first non-zero step (default: continue, report worst exit code)",
     )
     all_p.add_argument(
+        "--skip-lint", action="store_true",
+        help="Skip the lint step",
+    )
+    all_p.add_argument(
+        "--lint-fail", choices=["never", "errors", "warnings"], default="never",
+        help="Exit 2 when lint reports issues at this level (default: never — "
+             "findings are printed, the run still exits 0)",
+    )
+    all_p.add_argument(
         "--strict", action="store_true",
-        help="Exit 2 if lint reports any errors/warnings",
+        help="Spelling for --lint-fail warnings (exit 2 on any lint error or warning)",
     )
     all_p.add_argument(
-        "--with-sync", action="store_true",
-        help="Run `sync --no-auto-build` before synthesize/build "
-             "(convert agent sessions first)",
+        "--no-sync", action="store_false", dest="with_sync", default=True,
+        help="Skip the sync step (do not convert new agent sessions first)",
     )
     all_p.add_argument(
-        "--with-synth", action="store_true",
-        help="Run `synthesize` before build (fills wiki/sources/ from raw/; "
-             "may invoke LLM — default off for cost discipline, #383)",
+        "--no-synth", action="store_false", dest="with_synth", default=True,
+        help="Skip the synth step, so the run makes no LLM calls",
     )
     all_p.add_argument(
         "--synth-force", action="store_true",
-        help="With --with-synth: pass --force to synthesize (re-synthesize all sessions)",
+        help="Pass --force to synth (re-synthesize every session)",
+    )
+    # Accepted so an already-installed scheduled command keeps parsing. They
+    # land on their own dests, inert: both stages already run by default, and
+    # a --no-* on the same line must stay honoured.
+    all_p.add_argument(
+        "--with-sync", action="store_true", dest="legacy_with_sync",
+        help="Deprecated and inert: sync runs by default; skip it with --no-sync",
+    )
+    all_p.add_argument(
+        "--with-synth", action="store_true", dest="legacy_with_synth",
+        help="Deprecated and inert: synth runs by default; skip it with --no-synth",
     )
     _add_vault_arg(all_p, role="all")
     all_p.set_defaults(func=cmd_all)
@@ -2597,9 +2847,24 @@ def build_parser() -> argparse.ArgumentParser:
     )
     auto_p.add_argument("--yes", action="store_true",
                         help="Non-interactive: use flags / defaults (no hooks)")
-    auto_p.add_argument("--profile", choices=["A", "B", "C"], default="A")
-    auto_p.add_argument("--hour", type=int, default=8)
-    auto_p.add_argument("--minute", type=int, default=0)
+    auto_p.add_argument("--job", choices=["ingest", "maintain"], default=None,
+                        help="What the daily job does: 'ingest' collects sessions and rebuilds the "
+                             "site; 'maintain' also summarises them, which costs AI-provider money "
+                             "(default: ingest)")
+    auto_p.add_argument("--graph", choices=["none", "builtin", "graphify"], default="none",
+                        help="Build the knowledge graph, and with which builder (default: none)")
+    auto_p.add_argument("--lint-fail", choices=["never", "errors", "warnings"], default="never",
+                        help="Report the scheduled job as failed on quality findings at this level "
+                             "(default: never)")
+    auto_p.add_argument("--schedule", default=None,
+                        help='Cron expression for when the job runs, e.g. "0 8 * * 1-5" '
+                             '(default: "0 8 * * *")')
+    auto_p.add_argument("--profile", choices=["A", "B", "C"], default=None,
+                        help="Deprecated: use --job. A=ingest, B/C=maintain")
+    auto_p.add_argument("--hour", type=int, default=None,
+                        help="Deprecated: use --schedule")
+    auto_p.add_argument("--minute", type=int, default=None,
+                        help="Deprecated: use --schedule")
     auto_p.add_argument("--synth-backend", default=None)
     auto_p.add_argument("--units-dir", type=Path, default=None)
     auto_p.add_argument("--watch-enabled", action="store_true")
