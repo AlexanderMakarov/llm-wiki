@@ -7,7 +7,7 @@ It is NOT a copy-paste implementation guide.
 
 - **Functional Specification:** [`functional-spec.md`](./functional-spec.md)
 - **Status:** Completed
-- **Author(s):** Auto (implement-feature #127)
+- **Author(s):** Alexander Makarov
 
 ---
 

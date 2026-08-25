@@ -2,7 +2,7 @@
 
 - **Functional Specification:** [`functional-spec.md`](./functional-spec.md) (Status: Approved)
 - **Status:** Approved
-- **Author(s):** 4ellendger
+- **Author(s):** Alexander Makarov
 - **Issue:** [#109](https://github.com/AlexanderMakarov/llm-wiki/issues/109)
 - **Date:** 2026-08-09
 

@@ -2,7 +2,7 @@
 
 - **Functional Specification:** [`functional-spec.md`](./functional-spec.md) (approved) — GitHub Issue [#118](https://github.com/AlexanderMakarov/llm-wiki/issues/118)
 - **Status:** Completed
-- **Author(s):** AWOS `/implement-feature` (agent)
+- **Author(s):** Alexander Makarov
 
 ---
 

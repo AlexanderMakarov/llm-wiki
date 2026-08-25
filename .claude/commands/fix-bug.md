@@ -26,7 +26,7 @@ Comment when:
 A flow degrades in one long context window. Per §8 of delivery-flow.md:
 
 - Run every isolatable stage in a subagent (a subagent can invoke `/awos:*` commands via the Skill tool; its context is discarded on completion). Subagent reports must be terse — paths, verdicts, counts — never full diff or log content. Exception for local review: the **subagent** still returns only verdict/counts/path after writing the review file; the **orchestrator** then Reads that file and prints the full review body in chat for keep/drop (see Step 9b).
-- After each completed stage, append an entry to `context/spec/{SPEC_NAME}/flow-log.md` (or `context/fix-log-{BUG_ID}.md` when the bug maps to no spec): the stage name, what was produced and where (paths, branch, commit), the classification verdict once known, any decisions taken, and which stage comes next. The log is the flow's memory outside the context window — a fresh session resumes by reading this one small file. It is committed with the work (commit-push stages it alongside the code), so it must never become an uncommittable leftover: **once the change request is opened — or the change is merged — stop writing to the tracked log.** New commits are unwelcome on a change request under review or already merged, so a late append would strand a change that can never reach it. From that point, report late-stage progress (gate results, merge, close-out evidence) to the user and via §9 notifications (exceptions only), and resume the remote stages from remote state — the open/merged change request and the ticket status, which the resume-detection stage already inspects. The close stage leaves a clean working tree and never writes a final entry it cannot commit.
+- After each completed stage, append an entry to `context/spec/{SPEC_NAME}/flow-log.md` (#164 — same path for attached fixes and orphan fix-as-spec dirs): the stage name, what was produced and where (paths, branch, commit), the classification verdict once known, any decisions taken, and which stage comes next. Create `context/spec/{SPEC_NAME}/` if needed (`{issue}-{short-slug}` for orphan fixes). The log is the flow's memory outside the context window — a fresh session resumes by reading this one small file. It is committed with the work (commit-push stages it alongside the code), so it must never become an uncommittable leftover: **once the change request is opened — or the change is merged — stop writing to the tracked log.** New commits are unwelcome on a change request under review or already merged, so a late append would strand a change that can never reach it. From that point, report late-stage progress (gate results, merge, close-out evidence) to the user and via §9 notifications (exceptions only), and resume the remote stages from remote state — the open/merged change request and the ticket status, which the resume-detection stage already inspects. The close stage leaves a clean working tree and never writes a final entry it cannot commit.
 - Never launch a nested headless session (`claude -p`) from this command — permission modes, PATH, and timeouts differ per machine. Unattended chaining belongs to the trigger setup (§6), outside this command.
 - Tell every dispatched subagent: tools are functional — do not test them or make exploratory calls; every call needs a purpose. Run each delegated stage on the model tier recorded in §8 — the fast tier for mechanical transport work, the strongest for judgment (diagnosis, classification, review).
 
@@ -56,7 +56,7 @@ Fetch the GitHub Issue (`gh issue view … --json number,title,body,labels,url,s
 
 ### Step 2: Detect the Entry Point
 
-Start with a cheap preflight on the fast model tier (per §8): is this bug **already fixed**? If the GitHub Issue is `closed`, or a merged change request exists for the same fix, report that and stop rather than re-fixing. Then, if a flow log for this bug exists (`context/spec/{SPEC_NAME}/flow-log.md`, or `context/fix-log-{BUG_ID}.md`), read it first — it names the last completed stage and carries the branch, commit, classification verdict, and change-request state, and is the resume signal for the middle stages that produce no scannable artifact.
+Start with a cheap preflight on the fast model tier (per §8): is this bug **already fixed**? If the GitHub Issue is `closed`, or a merged change request exists for the same fix, report that and stop rather than re-fixing. Then choose / create `SPEC_NAME`: prefer an existing owning `context/spec/{SPEC_NAME}/` for the affected behavior; if none exists, allocate a regular fix-as-spec directory `context/spec/{issue}-{short-slug}/` (#164). Read `context/spec/{SPEC_NAME}/flow-log.md` first when it exists — it names the last completed stage and carries the branch, commit, classification verdict, and change-request state, and is the resume signal for the middle stages that produce no scannable artifact.
 
 <!-- /awos:flow:stage -->
 
@@ -100,12 +100,12 @@ Reproduce the bug and find the root cause. Delegate the investigation to the bui
 
 ### Step 5: Classify — Conformance vs. Divergence
 
-This gate decides whether the spec gets amended later, so it runs **before** any fix touches behavior. Locate the owning `context/spec/NNN-*/` for the affected behavior (read its `functional-spec.md`), then classify:
+This gate decides whether a functional spec gets amended later, so it runs **before** any fix touches behavior. Prefer an existing owning `context/spec/{SPEC_NAME}/` that already has `functional-spec.md` for the affected behavior; if Step 2 already allocated a fix-as-spec directory for an orphan bug, use that as `SPEC_NAME` for logs/review. Then classify:
 
 - **Conformance bug** — the code violates a _correct_ spec. The acceptance criteria were right; the code was wrong. → Fix the code and add a regression test; **do not** amend the spec.
 - **Divergence** — the spec was wrong or incomplete, or the fix intentionally changes documented behavior. → Fix, add a regression test, and **amend** the owning spec in the `amend-spec` stage. Once a PR exists, post a §9 divergence exception comment.
 
-If the bug maps to **no** existing spec (legacy or cross-cutting behavior), do not fabricate one — record "no owning spec" and proceed without amendment. Record the verdict and the owning spec dir (or "none") in the flow log; later stages read it.
+If there is **no** pre-existing functional spec to amend (orphan / cross-cutting behavior), keep the fix-as-spec `SPEC_NAME` from Step 2 for `flow-log.md` + `review.md`, record "no functional-spec to amend", and skip amendment — do not invent `functional-spec.md` unless divergence requires documenting new behavior. Record the verdict and `SPEC_NAME` in the log; later stages read it.
 
 <!-- /awos:flow:stage -->
 
@@ -144,7 +144,7 @@ Automated verify is the flow's job on `$TMP_VAULT` (`python3 -m llmwiki build`, 
 Conditional on the Step 5 verdict:
 
 - **Conformance** — nothing to amend; the spec was already correct. Skip to the next stage.
-- **Divergence** — invoke `/awos:spec` in update mode for the owning spec, passing the spec directory and a description of the behavior change (e.g. `/awos:spec amend spec NNN: <what changed and why>`). `/awos:spec`'s Mode Detection routes this to its Update Mode, which edits the affected acceptance criteria in place and appends a dated `## Change Log` entry — no new spec index is allocated, and a `Completed` Status is left untouched. Do not duplicate the amendment prose here; the amendment capability lives in core `/awos:spec`. §9 exception comment once a PR exists.
+- **Divergence** — invoke `/awos:spec` in update mode for the owning spec, passing the spec directory and a description of the behavior change (e.g. `/awos:spec amend spec NNN: <what changed and why>`). `/awos:spec`'s Mode Detection routes this to its Update Mode, which edits the affected acceptance criteria in place and appends a dated `## Change Log` entry — no new spec index is allocated, and a `Completed` Status is left untouched. Do not duplicate the amendment prose here; the amendment capability lives in core `/awos:spec`. After the amendment, ensure **Author** / **Author(s)** remains the operator human name per §10 (#159) — resolve from session/git as in `/implement-feature`, never tool metadata. §9 exception comment once a PR exists.
 
 In either case, if the fix revealed that `product-definition.md` or `architecture.md` also drifted, surface the same `/awos:product <…>` / `/awos:architecture <…>` suggestions `/awos:verify` Step 5 emits — as suggestions, never auto-edits.
 
@@ -163,7 +163,7 @@ Independence rules:
 - That reviewer writes the review file and returns only verdict, counts by severity, and path.
 - Then **Read the review file and print its full body in chat** (lead with `Review file: <path>`). Pause for keep/drop; apply accepted findings before push.
 
-Review output path: `context/spec/{SPEC_NAME}/review.md` when a spec dir exists, else `context/fix-log-{BUG_ID}-review.md`.
+Review output path: `context/spec/{SPEC_NAME}/review.md` (attached feature spec or fix-as-spec directory — #164). Create the parent directory if needed. The review file is **session-only (#159):** write it for keep/drop and chat; never stage or commit it (see Step 10). `context/.gitignore` ignores `review.md` / `review-*.md`.
 
 Fixed prompt (replace the path placeholder before dispatch):
 
@@ -199,7 +199,7 @@ Do not push until keep/drop is done and the static gate is green. Serious findin
 
 ### Step 10: Commit & Push
 
-Write this stage's flow-log entry **before** staging so the log rides in this commit — this is the flow-log's last committed state (see Context Discipline). Then stage all changed files, excluding `.env`, credentials, secrets, and local vault/config (`config.json`, `.worktree-vault/`). Commit with conventional commits referencing `#<BUG_ID>`; if pre-push ruff rejects, fix and create a new commit (no `--no-verify` unless the user allows). Push `BRANCH` to `origin`.
+Write this stage's flow-log entry **before** staging so the log rides in this commit — this is the flow-log's last committed state (see Context Discipline). Then stage all changed files, excluding `.env`, credentials, secrets, local vault/config (`config.json`, `.worktree-vault/`), and **all local-review dumps (#159):** `context/**/review.md` and `context/**/review-*.md` (covered by `context/.gitignore`). Prefer path-aware adds over a blind `git add context/` / `-f`. Commit with conventional commits referencing `#<BUG_ID>`; if pre-push ruff rejects, fix and create a new commit (no `--no-verify` unless the user allows). Push `BRANCH` to `origin`.
 
 <!-- /awos:flow:stage -->
 
@@ -239,4 +239,4 @@ Leave a clean working tree: do not write a closing flow-log entry. If any flow-c
 
 ---
 
-<!-- awos:flow:generated date=2026-08-08 version=2.4.3 source=context/product/delivery-flow.md -->
+<!-- awos:flow:generated date=2026-08-25 version=2.4.3 source=context/product/delivery-flow.md -->

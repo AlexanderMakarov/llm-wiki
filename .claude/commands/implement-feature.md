@@ -102,6 +102,8 @@ Run the AWOS commands sequentially in the **main context**, passing the normaliz
 2. `/awos:tech` — **approval gate:** stop and wait for the user to accept `technical-considerations.md` before continuing.
 3. `/awos:tasks` — **no document gate** and **no draft Approve ask** under this command (Local Customization / §4). Upstream `/awos:tasks` Step 4 normally presents the slice plan and iterates until the user is satisfied — **suppress that Approve / AskUserQuestion loop here**. Draft the vertical slices, write `tasks.md` immediately, report a short chat summary of slices + agent assignments (informational only — not a blocking approval), then continue. Still ask for the other `/awos:tasks` decisions that are not draft approval (e.g. skip-tests intent when unclear, QA-agent hire choices). If the user objects in chat after seeing the summary, revise and rewrite `tasks.md`. Standalone `/awos:tasks` outside this flow keeps its full draft loop. The task list stays revisable by re-running `/awos:tasks`.
 
+**Author field (#159 / §10):** After `/awos:spec` and `/awos:tech` write (or amend) their documents, ensure **Author** / **Author(s)** is the operator’s human name — never command names, issue ids, “AWOS”, “Auto”, or other agent/tool metadata. Resolve per run: session/host display name when available; else `git config user.name` (use a nickname if that is all git has — do not prompt). Prefer a multi-word display name when one is available. Ticket linkage stays on **Roadmap Item** / the issue line elsewhere in the header.
+
 Store the spec directory name (e.g. `007-tasks-api`) as `SPEC_NAME`.
 
 <!-- /awos:flow:stage -->
@@ -181,6 +183,8 @@ Return only: verdict, counts by severity, and the review file path — never the
 
 Replace `{SPEC_NAME}` with the actual spec directory name before dispatch.
 
+The review file is **session-only (#159):** write it for keep/drop and chat presentation; it must never be staged or committed (see Step 9). `context/.gitignore` ignores `review.md` / `review-*.md`.
+
 Present the printed review for keep/drop. Apply accepted findings before anything is pushed. Then run the static gate:
 
 ```bash
@@ -196,7 +200,7 @@ Do not push until keep/drop is done and the static gate is green. Serious findin
 
 ### Step 9: Commit & Push
 
-Write this stage's flow-log entry **before** staging so the log rides in this commit — this is the flow-log's last committed state (see Context Discipline). Then stage all changed files, excluding `.env`, credentials, secrets, and local vault/config (`config.json`, `.worktree-vault/`). Commit with conventional commits (`feat`/`fix`/`docs`/… per CONTRIBUTING), referencing `#<TICKET_ID>` when an issue exists. If `.githooks/pre-push` is active and rejects the push, fix ruff findings and create a new commit (do not `--no-verify` unless the user explicitly allows it). Push `BRANCH` to `origin`.
+Write this stage's flow-log entry **before** staging so the log rides in this commit — this is the flow-log's last committed state (see Context Discipline). Then stage all changed files, excluding `.env`, credentials, secrets, local vault/config (`config.json`, `.worktree-vault/`), and **all local-review dumps (#159):** `context/**/review.md` and `context/**/review-*.md` (covered by `context/.gitignore`). Prefer path-aware adds (`git add -u` / explicit paths) over a blind `git add context/` so gitignore cannot be bypassed with `-f`. Commit with conventional commits (`feat`/`fix`/`docs`/… per CONTRIBUTING), referencing `#<TICKET_ID>` when an issue exists. If `.githooks/pre-push` is active and rejects the push, fix ruff findings and create a new commit (do not `--no-verify` unless the user explicitly allows it). Push `BRANCH` to `origin`.
 
 <!-- /awos:flow:stage -->
 
@@ -246,4 +250,4 @@ Leave a clean working tree: do not write a closing flow-log entry (the log was f
 
 ---
 
-<!-- awos:flow:generated date=2026-08-08 version=2.4.3 source=context/product/delivery-flow.md -->
+<!-- awos:flow:generated date=2026-08-25 version=2.4.3 source=context/product/delivery-flow.md -->

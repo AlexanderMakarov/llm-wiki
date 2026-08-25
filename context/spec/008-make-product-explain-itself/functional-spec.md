@@ -2,7 +2,7 @@
 
 - **Roadmap Item:** Phase 2 — Make the product self-explanatory → "README as a product page (#109)"
 - **Status:** Approved
-- **Author:** 4ellendger
+- **Author:** Alexander Makarov
 - **Issue:** [#109](https://github.com/AlexanderMakarov/llm-wiki/issues/109)
 - **Date:** 2026-08-09
 

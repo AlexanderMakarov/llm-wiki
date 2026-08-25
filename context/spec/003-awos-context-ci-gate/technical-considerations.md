@@ -7,7 +7,7 @@ It is NOT a copy-paste implementation guide.
 
 - **Functional Specification:** [functional-spec.md](./functional-spec.md)
 - **Status:** Completed
-- **Author(s):** AWOS /implement-feature (from #117 + interview)
+- **Author(s):** Alexander Makarov
 
 ---
 

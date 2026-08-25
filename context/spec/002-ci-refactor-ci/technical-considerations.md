@@ -2,7 +2,7 @@
 
 - **Functional Specification:** [functional-spec.md](./functional-spec.md)
 - **Status:** Approved
-- **Author(s):** implement-feature flow (issue #116)
+- **Author(s):** Alexander Makarov
 
 ---
 

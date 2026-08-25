@@ -2,7 +2,7 @@
 
 - **Roadmap Item:** GitHub Issue [#147](https://github.com/AlexanderMakarov/llm-wiki/issues/147) — collapse synthesis so each source is read by the language model once; harvest, promote, and name-deduping become work over what that pass already wrote. Also covers interrupt recovery from [#145](https://github.com/AlexanderMakarov/llm-wiki/issues/145).
 - **Status:** Completed
-- **Author:** AWOS `/implement-feature` (issue #147)
+- **Author:** Alexander Makarov
 
 ---
 
