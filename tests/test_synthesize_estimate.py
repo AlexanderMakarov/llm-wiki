@@ -11,6 +11,9 @@ Covers:
 * Money numbers are non-negative and full_force ≥ incremental.
 * #113: Candidates block uses pre-run label + pending-sources note; no post-run summary.
 * #81: Corpus / Already synthesized use eligible-source units; Source pages current-state line; no ``pages in wiki/sources/``.
+* #161: doc target pages are read from what's on disk (``source_page_paths``), not
+  re-derived from the current ``_DOC_CHUNK_MAX_CHARS`` — the two can disagree in
+  either direction whenever the chunk size has changed since a doc was last synthesized.
 """
 
 from __future__ import annotations
@@ -29,7 +32,12 @@ import llmwiki.cli as cli_mod
 from llmwiki.cache import CACHE_WRITE_1H_MULTIPLIER, MODEL_PRICING, TRANSCRIPT_CHARS_PER_TOKEN
 from llmwiki.cli import synthesize_estimate_report
 from llmwiki.synth.estimate import BODY_CHAR_CAP, DEFAULT_OUTPUT_TOKENS, LEAN_OVERHEAD_TOKENS
-from llmwiki.synth.pipeline import _discover_raw_sessions
+from llmwiki.synth.pipeline import (
+    _discover_raw_sessions,
+    page_is_stub,
+    page_needs_topics_rewrite,
+    source_page_paths,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -568,3 +576,175 @@ def test_cli_estimate_does_not_print_pages_in_wiki_sources(estimate_vault):
     cp = _run_cli("synthesize", "--estimate", "--vault", str(estimate_vault))
     assert cp.returncode == 0, cp.stderr
     assert "pages in wiki/sources/" not in cp.stdout
+
+
+# ─── #161: doc target pages come from disk, not a re-derived chunk count ──
+
+
+_REAL_PART_BODY = (
+    "## Summary\n\nReal synthesis of one doc part.\n\n"
+    "## Connections\n\n- [[SomeThing]] (entity) — related\n"
+)
+_STUB_PART_BODY = "<!-- llmwiki-pending: doc -->\n\n*Pending*\n"
+
+
+def _doc_vault(tmp_path):
+    """Bare raw/docs + wiki/sources dirs — never the live vault."""
+    raw_docs = tmp_path / "raw" / "docs"
+    sources = tmp_path / "wiki" / "sources"
+    raw_docs.mkdir(parents=True)
+    sources.mkdir(parents=True)
+    return raw_docs, sources
+
+
+def _expected_doc_pending(out_dir: Path, filename: str) -> bool:
+    """Ground truth for "is this doc pending", per the run's own definition.
+
+    Mirrors ``source_page_paths`` + the stub/topics-rewrite checks the real
+    synth run uses (llmwiki/synth/pipeline.py) — target pages come from what
+    is actually on disk, never re-derived from the current chunk size (#161).
+    """
+    expected = source_page_paths(out_dir, filename, is_doc=True) or [
+        out_dir / f"{filename}.md"
+    ]
+    if not all(p.is_file() for p in expected):
+        return True
+    return any(page_is_stub(p) for p in expected) or any(
+        page_needs_topics_rewrite(p) for p in expected
+    )
+
+
+def test_estimate_pending_when_disk_has_a_stub_part_beyond_current_chunk_count(
+    tmp_path, monkeypatch
+):
+    """More parts on disk than the current chunker yields (#161, direction 1).
+
+    The chunker is stubbed to yield 2 chunks for this body, while 3 part
+    pages sit on disk from a previous synth — part-03 still a stub. Whatever
+    made the two disagree, re-deriving the expected path list from today's
+    chunk count stops at part-02 and never sees the still-pending part-03 —
+    under-reporting the doc as synthesized when the run still has work.
+    """
+    raw_docs, sources = _doc_vault(tmp_path)
+    (raw_docs / "bigdoc.md").write_text("# Big Doc\n\nSome content.\n", encoding="utf-8")
+    out_dir = sources / "docs"
+    out_dir.mkdir(parents=True)
+    (out_dir / "bigdoc--part-01.md").write_text(_REAL_PART_BODY, encoding="utf-8")
+    (out_dir / "bigdoc--part-02.md").write_text(_REAL_PART_BODY, encoding="utf-8")
+    (out_dir / "bigdoc--part-03.md").write_text(_STUB_PART_BODY, encoding="utf-8")
+    monkeypatch.setattr(
+        "llmwiki.synth.pipeline._chunk_markdown",
+        lambda text, max_chars: ["chunk-a", "chunk-b"],
+    )
+    assert _expected_doc_pending(out_dir, "bigdoc") is True  # sanity: fixture is genuinely pending
+
+    rpt = synthesize_estimate_report(
+        raw_sessions=[],
+        docs_root=raw_docs,
+        wiki_sources_dir=sources,
+        state_keys=set(),
+        prefix_tokens=2000,
+    )
+    docs_row = next(r for r in rpt["pipeline_rows"] if r["label"] == "Documents")
+    assert docs_row["pending"] == 1, "doc must be pending — part-03 is still a stub"
+    assert docs_row["synthesized"] == 0
+    assert "docs::bigdoc.md" in {item["rel"] for item in rpt["unsynth_items"]}
+
+
+def test_estimate_synthesized_when_disk_has_fewer_parts_than_current_chunk_count(
+    tmp_path, monkeypatch
+):
+    """Fewer parts on disk than the current chunker yields (#161, direction 2).
+
+    The chunker is stubbed to yield 3 chunks for this body, while only 2 real
+    part pages sit on disk — a previous synth that fully covered the doc.
+    Whatever made the two disagree, re-deriving the expected path list from
+    today's chunk count requires a non-existent part-03 — over-reporting a
+    done doc as pending re-synthesis.
+    """
+    raw_docs, sources = _doc_vault(tmp_path)
+    (raw_docs / "bigdoc2.md").write_text("# Big Doc 2\n\nSome content.\n", encoding="utf-8")
+    out_dir = sources / "docs"
+    out_dir.mkdir(parents=True)
+    (out_dir / "bigdoc2--part-01.md").write_text(_REAL_PART_BODY, encoding="utf-8")
+    (out_dir / "bigdoc2--part-02.md").write_text(_REAL_PART_BODY, encoding="utf-8")
+    monkeypatch.setattr(
+        "llmwiki.synth.pipeline._chunk_markdown",
+        lambda text, max_chars: ["chunk-a", "chunk-b", "chunk-c"],
+    )
+    assert _expected_doc_pending(out_dir, "bigdoc2") is False  # sanity: fixture is genuinely done
+
+    rpt = synthesize_estimate_report(
+        raw_sessions=[],
+        docs_root=raw_docs,
+        wiki_sources_dir=sources,
+        state_keys=set(),
+        prefix_tokens=2000,
+    )
+    docs_row = next(r for r in rpt["pipeline_rows"] if r["label"] == "Documents")
+    assert docs_row["synthesized"] == 1, "doc is done — 2 real parts cover the whole doc"
+    assert docs_row["pending"] == 0
+    assert "docs::bigdoc2.md" not in {item["rel"] for item in rpt["unsynth_items"]}
+
+
+def test_estimate_doc_cost_scales_with_chunk_count_not_parts_on_disk(tmp_path, monkeypatch):
+    """A pending multi-part doc is billed per chunk (#161, cost regression guard).
+
+    Nothing is on disk for this doc in either call — only the mocked chunk
+    count differs — so a future rewrite that dropped ``_chunk_markdown`` from
+    the cost math (billing the raw body once, or billing per on-disk part
+    instead of per derived chunk) would make this cost go flat instead of
+    scaling with N.
+    """
+    raw_docs, sources = _doc_vault(tmp_path)
+    (raw_docs / "pending.md").write_text("# Pending\n\nSome content.\n", encoding="utf-8")
+
+    def _docs_next_usd(chunks):
+        # One patch per measurement, undone before the next — the two calls
+        # never stack a chunker mock on top of another.
+        with monkeypatch.context() as m:
+            m.setattr(
+                "llmwiki.synth.pipeline._chunk_markdown", lambda text, max_chars: chunks
+            )
+            rpt = synthesize_estimate_report(
+                raw_sessions=[],
+                docs_root=raw_docs,
+                wiki_sources_dir=sources,
+                state_keys=set(),
+                prefix_tokens=2000,
+            )
+        docs_row = next(r for r in rpt["pipeline_rows"] if r["label"] == "Documents")
+        assert docs_row["pending"] == 1, "one doc, whatever the chunk count"
+        return docs_row["next_usd"]
+
+    # Full BODY_CHAR_CAP chunks so the (never-cached) body dominates the
+    # (partly-cached) per-call overhead/template — the cleanest signal that
+    # cost tracks chunk count. Ceiling is below 3x because the overhead +
+    # template half of chunks 2 and 3 rides the 0.1x cached-prefix rate; a
+    # flat/no-scaling regression would show a ratio of ~1x, not ~2.5x.
+    one_chunk_usd = _docs_next_usd(["x" * BODY_CHAR_CAP])
+    three_chunk_usd = _docs_next_usd(["x" * BODY_CHAR_CAP] * 3)
+    assert three_chunk_usd > one_chunk_usd * 2.0, (
+        f"3 identical chunks (${three_chunk_usd:.4f}) should cost noticeably more "
+        f"than one chunk (${one_chunk_usd:.4f}) — cost must scale with the derived "
+        "chunk count, not stay flat"
+    )
+
+
+def test_estimate_sessions_never_consult_the_doc_chunker(tmp_path, monkeypatch):
+    """Sessions are never chunked — the doc chunker must not even be called (#161)."""
+    empty_docs = tmp_path / "raw" / "docs"
+    empty_docs.mkdir(parents=True)
+    calls = []
+    monkeypatch.setattr(
+        "llmwiki.synth.pipeline._chunk_markdown",
+        lambda text, max_chars: calls.append(1) or [text],
+    )
+    rpt = synthesize_estimate_report(
+        raw_sessions=_sessions("a.md", "b.md"),
+        docs_root=empty_docs,
+        state_keys=set(),
+        prefix_tokens=2000,
+    )
+    assert rpt["corpus"] == 2
+    assert calls == []
