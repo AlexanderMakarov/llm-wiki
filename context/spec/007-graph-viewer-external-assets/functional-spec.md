@@ -2,7 +2,7 @@
 
 - **Roadmap Item:** GitHub Issue #127 — move the Knowledge Graph viewer script out of the page itself; expanded here to also ship the canvas library with the site so the graph works offline
 - **Status:** Completed
-- **Author:** Auto (implement-feature run for #127)
+- **Author:** Alexander Makarov
 
 ---
 

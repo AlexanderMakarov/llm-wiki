@@ -6,7 +6,7 @@ Architectural HOW — not a copy-paste implementation guide.
 
 - **Functional Specification:** [functional-spec.md](./functional-spec.md)
 - **Status:** Approved
-- **Author(s):** AWOS `/implement-feature` (issue #122)
+- **Author(s):** Alexander Makarov
 
 ---
 

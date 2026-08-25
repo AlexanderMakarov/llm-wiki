@@ -2,7 +2,7 @@
 
 - **Functional Specification:** [`functional-spec.md`](functional-spec.md) (approved)
 - **Status:** Completed
-- **Author(s):** AWOS `/implement-feature` (issue #108)
+- **Author(s):** Alexander Makarov
 
 ---
 

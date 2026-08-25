@@ -1,0 +1,5 @@
+# AWOS session-only / generated scratch under context/
+# Local review dumps (#159) — keep/drop uses these on disk; never commit.
+# Covers context/spec/*/review.md and context/fixes/*/review.md (and review-*.md dual-review leftovers).
+**/review.md
+**/review-*.md

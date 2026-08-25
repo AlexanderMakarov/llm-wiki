@@ -2,7 +2,7 @@
 
 - **Roadmap Item:** Honest `--estimate` candidate preview (#113)
 - **Status:** Completed
-- **Author:** implement-feature / product interview
+- **Author:** Alexander Makarov
 - **GitHub Issue:** https://github.com/AlexanderMakarov/llm-wiki/issues/113
 
 ---

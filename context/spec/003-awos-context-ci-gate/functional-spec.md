@@ -2,7 +2,7 @@
 
 - **Roadmap Item:** Issue #117 — pull-request check that product-related changes also update AWOS working notes
 - **Status:** Completed
-- **Author:** AWOS /implement-feature (from #117 + interview)
+- **Author:** Alexander Makarov
 
 ---
 

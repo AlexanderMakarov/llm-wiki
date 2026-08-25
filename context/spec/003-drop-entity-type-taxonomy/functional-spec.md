@@ -2,7 +2,7 @@
 
 - **Roadmap Item:** Drop hardcoded entity_type taxonomy (#102) — stop validating the old seven-value list that harvest stamps as `unknown` and that then fails lint after promote.
 - **Status:** Completed
-- **Author:** AWOS `/implement-feature` (interviewed with the maintainer, 2026-08-04)
+- **Author:** Alexander Makarov
 - **Ticket:** [#102](https://github.com/AlexanderMakarov/llm-wiki/issues/102)
 
 ---

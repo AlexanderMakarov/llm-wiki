@@ -2,7 +2,7 @@
 
 - **Roadmap Item:** Phase 3 — Visual knowledge depth: "Topic pages show kind, freshness, and Key Facts (#108): Entity/concept content reaches readers; project topics route to project pages; graph panel shows the same metadata."
 - **Status:** Completed
-- **Author:** AWOS `/implement-feature` (issue #108)
+- **Author:** Alexander Makarov
 
 ---
 

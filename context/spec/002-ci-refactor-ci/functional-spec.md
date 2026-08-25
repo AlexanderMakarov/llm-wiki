@@ -2,7 +2,7 @@
 
 - **Roadmap Item:** GitHub Issue #116 — CI maintenance: clear Node 20 deprecation warnings, verify Python 3.12 only, remove non-working Claude-in-CI workflows
 - **Status:** Approved
-- **Author:** implement-feature flow (issue #116)
+- **Author:** Alexander Makarov
 
 ---
 

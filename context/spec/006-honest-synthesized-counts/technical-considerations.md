@@ -2,7 +2,7 @@
 
 - **Functional Specification:** [functional-spec.md](./functional-spec.md)
 - **Status:** Completed
-- **Author(s):** implement-feature / architecture interview
+- **Author(s):** Alexander Makarov
 - **GitHub Issue:** https://github.com/AlexanderMakarov/llm-wiki/issues/81
 
 ---

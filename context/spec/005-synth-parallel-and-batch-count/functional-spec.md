@@ -2,7 +2,7 @@
 
 - **Roadmap Item:** Phase 1 — Honest pipeline reporting (follow-up to "Honest `--estimate` candidate preview (#113)"); GitHub Issue [#118](https://github.com/AlexanderMakarov/llm-wiki/issues/118)
 - **Status:** Completed
-- **Author:** AWOS `/implement-feature` (agent), for AlexanderMakarov
+- **Author:** Alexander Makarov
 
 ---
 

@@ -2,7 +2,7 @@
 
 - **Roadmap Item:** GitHub Issue #122 — expose the encoded chain from a wiki page down to its raw session material (defensible claims)
 - **Status:** Completed
-- **Author:** AWOS `/implement-feature` (issue #122)
+- **Author:** Alexander Makarov
 
 ---
 
