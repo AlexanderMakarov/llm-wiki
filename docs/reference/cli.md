@@ -864,7 +864,7 @@ python3 -m llmwiki install-automation --vault ~/my-vault
 | `--units-dir PATH` | Directory for systemd unit / launchd plist / Task Scheduler files. Default: `.llmwiki/units/` under the repo. Also the offered default in the interactive prompt. |
 | `--watch-enabled` | Record `watch` as enabled in automation status (does not start `watch`). |
 | `--force-platform {linux,macos,windows}` | Override platform detection for unit format. |
-| `--vault PATH` | Vault root for `automation-status.json`. |
+| `--vault PATH` | Vault the job runs against: `automation-status.json` is written under it, and the scheduled command carries `--vault PATH` whenever it differs from `vault.default_path` in `config.json`, so the job and its status file always mean the same vault. Omitted, the job resolves its vault from config. |
 | `--profile {A,B,C}` | **Deprecated** — use `--job`. `A` maps to `ingest`, `B` and `C` to `maintain`. Prints a notice; `--job` wins when both are given. |
 | `--hour N` | **Deprecated** — use `--schedule`. Translated to `"{minute} {hour} * * *"`, and ignored with a notice when `--schedule` is given. |
 | `--minute N` | **Deprecated** — use `--schedule`. See `--hour`. |

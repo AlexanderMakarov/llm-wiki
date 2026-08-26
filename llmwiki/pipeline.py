@@ -32,14 +32,15 @@ from typing import Any
 from llmwiki import REPO_ROOT
 from llmwiki.build import RAW_DIR, RAW_SESSIONS, build_site
 from llmwiki.candidates_harvest import DEFAULT_MIN_REFS, run_harvest
-from llmwiki.config_schedule import _load_sessions_config, load_synthesis_backend
+from llmwiki.config_schedule import _load_sessions_config
 from llmwiki.convert import convert_all
 from llmwiki.graph import build_and_report
 from llmwiki.graphify_bridge import build_graphify_graph, is_available
 from llmwiki.lint import load_pages, run_all, summarize
 from llmwiki.pipeline_lock import pipeline_lock
 from llmwiki.reindex import reindex_wiki
-from llmwiki.state_store import resolve_state_file, update_state
+from llmwiki.state_store import read_state, resolve_state_file, update_state
+from llmwiki.synth.base import BaseSynthesizer
 from llmwiki.synth.pipeline import refresh_synth_pending, resolve_backend, synthesize_new_sessions
 from llmwiki.synth.reporting import print_synth_run_summary
 from llmwiki.vault import describe_vault, resolve_vault
@@ -61,7 +62,7 @@ def _run_graph_step(*, wiki_dir: Path, graph_root: Path, engine: str) -> int:
     if engine == "graphify":
         if not is_available():
             print("  graphify not installed — falling back to builtin engine", file=sys.stderr)
-            print("  install with: pip install llmwiki[graph]", file=sys.stderr)
+            print("  install with: pip install llm-wiki[graph]", file=sys.stderr)
             engine = "builtin"
         else:
             try:
@@ -149,33 +150,34 @@ def resolve_lint_fail(args: argparse.Namespace) -> str:
     return policy
 
 
-def _maybe_print_optout_notice() -> None:
+def _maybe_print_optout_notice(backend: BaseSynthesizer) -> None:
     """Print the one-shot notice that ``all`` includes the summarise step.
 
-    Stays silent unless a real synthesis backend is configured *and* stdout is
-    a terminal, so timer-driven runs (whose stdout is a log file) never see it.
-    The one-shot flag lives at ``ops.all_optout_notice_shown`` in the state file.
+    Stays silent unless ``backend`` — the backend this run actually synthesizes
+    with — calls an LLM *and* stdout is a terminal, so a canned-text backend and
+    timer-driven runs (whose stdout is a log file) never see it. The one-shot flag
+    lives at ``ops.all_optout_notice_shown`` in the state file, which is written
+    only by the run that flips it.
     """
-    if load_synthesis_backend() == "dummy":
+    if not backend.is_llm:
         return
     if not sys.stdout.isatty():
         return
 
-    already_shown = False
+    state_file = resolve_state_file()
+    ops = read_state(state_file).get("ops")
+    if isinstance(ops, dict) and ops.get("all_optout_notice_shown"):
+        return
 
     def _mark(state: dict[str, Any]) -> dict[str, Any]:
-        nonlocal already_shown
-        ops = state.setdefault("ops", {})
-        already_shown = bool(ops.get("all_optout_notice_shown"))
-        ops["all_optout_notice_shown"] = True
+        state.setdefault("ops", {})["all_optout_notice_shown"] = True
         return state
 
-    update_state(_mark, resolve_state_file())
-    if not already_shown:
-        print(
-            "note: `llmwiki all` includes the summarise step, which calls your "
-            "configured synthesis backend. Pass --no-synth to run without it."
-        )
+    update_state(_mark, state_file)
+    print(
+        "note: `llmwiki all` includes the summarise step, which calls your "
+        "configured synthesis backend. Pass --no-synth to run without it."
+    )
 
 
 def run_pipeline(args: argparse.Namespace) -> int:
@@ -262,10 +264,10 @@ def run_pipeline(args: argparse.Namespace) -> int:
                       f"-{len(plan.removed)} dead link(s)")
 
         if getattr(args, "with_synth", False):
-            _maybe_print_optout_notice()
             print("\n==> llmwiki synth")
             config: dict[str, Any] = _load_sessions_config()
             backend = resolve_backend(config)
+            _maybe_print_optout_notice(backend)
             print(f"Backend: {backend.name}")
             if not backend.is_available():
                 print(

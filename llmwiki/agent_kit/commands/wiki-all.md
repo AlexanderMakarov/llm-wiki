@@ -2,6 +2,8 @@ Run the full llmwiki pipeline end-to-end: sync → synth → build → graph →
 
 Usage: /wiki-all [flags]
 
+The default run includes the synth stage, which sends session text to the configured AI provider, so it can spend tokens; `--no-synth` keeps the whole run offline.
+
 `$ARGUMENTS` is forwarded verbatim to `python3 -m llmwiki all`. Every stage runs by default; the flags below opt out of one or tune it. Common flags:
 
 - `--no-sync` — skip the sync step (do not convert new agent sessions first)

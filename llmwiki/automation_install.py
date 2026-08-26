@@ -22,6 +22,7 @@ import platform
 import shlex
 from pathlib import Path
 from typing import Any
+from xml.sax.saxutils import escape
 
 from llmwiki.automation_plan import AutomationPlan, plan_command, plan_from_status, plan_to_status, schedule_from_status
 from llmwiki.automation_status import default_log_path, save_status
@@ -56,9 +57,15 @@ def render_wrapper_script(
     python_bin: str,
     working_dir: Path,
     log_path: Path,
+    vault: Path | None = None,
 ) -> str:
-    """Bash wrapper running the plan's command line, truncating the log each run."""
-    cmd = plan_command(plan, python_bin=python_bin, working_dir=working_dir)
+    """Bash wrapper running the plan's command line, truncating the log each run.
+
+    ``vault`` is forwarded to :func:`~llmwiki.automation_plan.plan_command`, which
+    appends it as ``--vault`` when the scheduled run must not resolve its vault
+    from config.
+    """
+    cmd = plan_command(plan, python_bin=python_bin, working_dir=working_dir, vault=vault)
     log = shlex.quote(str(log_path))
     return (
         "#!/usr/bin/env bash\n"
@@ -129,7 +136,14 @@ def render_launchd_plist(
     log_path: Path,
     spec: CronSpec,
 ) -> str:
-    """launchd agent plist running the wrapper on the schedule, logging to ``log_path``."""
+    """launchd agent plist running the wrapper on the schedule, logging to ``log_path``.
+
+    Every interpolated path is XML-escaped, so a vault or home directory holding
+    ``&``, ``<`` or ``>`` still yields a plist launchd can parse.
+    """
+    wrapper_xml = escape(str(wrapper))
+    working_dir_xml = escape(str(working_dir))
+    log_path_xml = escape(str(log_path))
     return f"""<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
   "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -140,16 +154,16 @@ def render_launchd_plist(
   <key>ProgramArguments</key>
   <array>
     <string>/bin/bash</string>
-    <string>{wrapper}</string>
+    <string>{wrapper_xml}</string>
   </array>
   <key>WorkingDirectory</key>
-  <string>{working_dir}</string>
+  <string>{working_dir_xml}</string>
   <key>StartCalendarInterval</key>
 {_plist_calendar_value(spec)}
   <key>StandardOutPath</key>
-  <string>{log_path}</string>
+  <string>{log_path_xml}</string>
   <key>StandardErrorPath</key>
-  <string>{log_path}</string>
+  <string>{log_path_xml}</string>
 </dict>
 </plist>
 """
@@ -161,7 +175,13 @@ def render_windows_task(
     working_dir: Path,
     spec: CronSpec,
 ) -> str:
-    """Task Scheduler XML running the wrapper on the schedule; the user imports it via schtasks."""
+    """Task Scheduler XML running the wrapper on the schedule; the user imports it via schtasks.
+
+    Every interpolated path is XML-escaped, so a path holding ``&``, ``<`` or
+    ``>`` still yields a task file Task Scheduler can parse.
+    """
+    wrapper_xml = escape(str(wrapper))
+    working_dir_xml = escape(str(working_dir))
     return f"""<?xml version="1.0" encoding="UTF-16"?>
 <Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
   <RegistrationInfo>
@@ -173,8 +193,8 @@ def render_windows_task(
   <Actions>
     <Exec>
       <Command>bash</Command>
-      <Arguments>{wrapper}</Arguments>
-      <WorkingDirectory>{working_dir}</WorkingDirectory>
+      <Arguments>{wrapper_xml}</Arguments>
+      <WorkingDirectory>{working_dir_xml}</WorkingDirectory>
     </Exec>
   </Actions>
 </Task>
@@ -274,7 +294,10 @@ def run_install(config: dict[str, Any]) -> dict[str, Any]:
     letter; the schedule from the cron expression under ``schedule``, otherwise from
     the legacy ``hour`` / ``minute`` integers. Optional: ``watch_enabled``, ``hooks``
     (list), ``synth_backend``, ``log_path``, ``write_units_dir`` (Path to write unit
-    files into), ``force_platform``.
+    files into), ``force_platform``, and ``command_vault`` — the vault the scheduled
+    command names with ``--vault``, which callers set when the install targets a vault
+    other than the configured default, so the job runs against the same vault whose
+    status file records it.
 
     Raises:
         CronError: when the schedule is not an expression ``cron_spec`` can translate.
@@ -287,6 +310,7 @@ def run_install(config: dict[str, Any]) -> dict[str, Any]:
     spec = parse_cron(schedule)
     log_path = Path(config.get("log_path") or default_log_path())
     vault_root = Path(config.get("vault_root") or working_dir)
+    command_vault = Path(config["command_vault"]) if config.get("command_vault") else None
     write_dir = Path(config["write_units_dir"]) if config.get("write_units_dir") else None
 
     wrapper_text = render_wrapper_script(
@@ -294,6 +318,7 @@ def run_install(config: dict[str, Any]) -> dict[str, Any]:
         python_bin=python_bin,
         working_dir=working_dir,
         log_path=log_path,
+        vault=command_vault,
     )
     written: list[str] = []
     if write_dir is not None:

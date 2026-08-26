@@ -947,15 +947,31 @@ def _ask_schedule() -> str:
     return f"{minute} {hour} * * {day_of_week}"
 
 
-def _confirm_plan(plan: AutomationPlan, schedule: str) -> bool:
-    """Print the job, the schedule, and the exact command line, then ask whether to write it."""
+def _confirm_plan(plan: AutomationPlan, schedule: str, vault: Path | None = None) -> bool:
+    """Print the job, the schedule, and the exact command line, then ask whether to write it.
+
+    ``vault`` is the one the scheduled command will name, so the line shown here
+    is the line that gets installed. An empty answer is a yes, and an answer the
+    question does not recognise is re-asked. Consent has to be typed: stdin ending
+    without one is a no.
+    """
     print()
     print("About to schedule:")
     print(f"  Job:      {plan_label(plan)}")
     print(f"  When:     {describe(parse_cron(schedule))}  (cron: {schedule})")
-    print(f"  Command:  {plan_command(plan, python_bin=sys.executable, working_dir=REPO_ROOT)}")
+    print(f"  Command:  {plan_command(plan, python_bin=sys.executable, working_dir=REPO_ROOT, vault=vault)}")
     print()
-    return _ask_choice("Write these scheduler files? [Y/n]: ", ("y", "yes", "n", "no"), "y") in ("y", "yes")
+    while True:
+        try:
+            answer = input("Write these scheduler files? [Y/n]: ").strip().lower()
+        except EOFError:
+            print("  stdin ended before an answer — reading that as 'no'.")
+            return False
+        if answer in ("", "y", "yes"):
+            return True
+        if answer in ("n", "no"):
+            return False
+        print(f"  '{answer}' is not one of: y, yes, n, no")
 
 
 def _write_synth_backend(backend: str) -> None:
@@ -979,7 +995,9 @@ def _plan_from_flags(args: argparse.Namespace) -> tuple[AutomationPlan, str]:
 
     ``--job`` wins over the deprecated ``--profile``, and ``--schedule`` wins
     over the deprecated ``--hour`` / ``--minute`` pair; every deprecated flag
-    that was used prints a notice naming what replaces it.
+    that was used prints a notice naming what replaces it. ``--graph`` and
+    ``--lint-fail`` describe the maintain job only, so any other job prints a
+    notice naming the flag it is dropping and why.
 
     Raises:
         CronError: when the resulting schedule is not an expression
@@ -997,11 +1015,22 @@ def _plan_from_flags(args: argparse.Namespace) -> tuple[AutomationPlan, str]:
         plan = LEGACY_PROFILE_MAP.get(profile.strip().upper(), AutomationPlan())
     else:
         plan = AutomationPlan()
-    plan = AutomationPlan(
-        job=plan.job,
-        graph=getattr(args, "graph", None) or "none",
-        lint_fail=getattr(args, "lint_fail", None) or "never",
-    )
+    graph = getattr(args, "graph", None) or "none"
+    lint_fail = getattr(args, "lint_fail", None) or "never"
+    if plan.job != "maintain":
+        if graph != "none":
+            print(
+                f"note: --graph {graph} is ignored for --job {plan.job}; "
+                f"the {plan.job} job runs a plain sync and builds no graph",
+                file=sys.stderr,
+            )
+        if lint_fail != "never":
+            print(
+                f"note: --lint-fail {lint_fail} is ignored for --job {plan.job}; "
+                f"the {plan.job} job runs no lint step",
+                file=sys.stderr,
+            )
+    plan = AutomationPlan(job=plan.job, graph=graph, lint_fail=lint_fail)
 
     schedule = getattr(args, "schedule", None)
     hour = getattr(args, "hour", None)
@@ -1019,8 +1048,26 @@ def _plan_from_flags(args: argparse.Namespace) -> tuple[AutomationPlan, str]:
     return plan, schedule
 
 
+def _scheduled_command_vault(explicit_vault: str | None) -> Path | None:
+    """The ``--vault`` the scheduled command needs, or ``None`` when config resolves it.
+
+    ``explicit_vault`` is the ``--vault`` the user typed, read before the config
+    default is filled in. A job installed against any other vault than the one
+    ``vault.default_path`` resolves to has to name it, or the scheduled run would
+    work on the default vault while its status file sits in the installed one.
+    """
+    if not explicit_vault:
+        return None
+    target = Path(explicit_vault).expanduser()
+    default = load_default_vault_path()
+    if default is not None and default.expanduser().resolve() == target.resolve():
+        return None
+    return target
+
+
 def cmd_install_automation(args: argparse.Namespace) -> int:
     """Set up the daily job: what it does, when it runs, then write the scheduler files."""
+    command_vault = _scheduled_command_vault(getattr(args, "vault", None))
     _apply_default_vault(args)
 
     vault = getattr(args, "vault", None)
@@ -1040,6 +1087,13 @@ def cmd_install_automation(args: argparse.Namespace) -> int:
         watch_enabled = bool(getattr(args, "watch_enabled", False))
         write_dir = Path(getattr(args, "units_dir", None) or (REPO_ROOT / ".llmwiki" / "units"))
     else:
+        if not sys.stdin.isatty():
+            print(
+                "error: install-automation needs a terminal; "
+                "pass --yes with the flags for an unattended install",
+                file=sys.stderr,
+            )
+            return 2
         print("llmwiki install-automation")
         print("  Hooks are NOT recommended (Enter skips). Prefer OS scheduler or watch.")
         print("  Daily runs with no new sessions are a no-op.")
@@ -1063,7 +1117,7 @@ def cmd_install_automation(args: argparse.Namespace) -> int:
         default_units = Path(getattr(args, "units_dir", None) or (REPO_ROOT / ".llmwiki" / "units"))
         units = _ask_until(f"Write unit files under directory (Enter = {default_units}): ", "", str)
         write_dir = Path(units) if units else default_units
-        if not _confirm_plan(plan, schedule):
+        if not _confirm_plan(plan, schedule, command_vault):
             print("  Nothing written — no scheduler files, no status file, no config change.")
             return 0
         _write_synth_backend(backend)
@@ -1074,6 +1128,7 @@ def cmd_install_automation(args: argparse.Namespace) -> int:
         "working_dir": REPO_ROOT,
         "python_bin": sys.executable,
         "vault_root": vault_root,
+        "command_vault": command_vault,
         "write_units_dir": write_dir,
         "watch_enabled": watch_enabled,
         "hooks": ["claude", "cursor"] if install_hooks else [],

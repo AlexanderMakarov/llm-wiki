@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import re
+
 import pytest
 
 from llmwiki.cron_spec import (
+    MAX_WINDOWS_TRIGGERS,
     CronError,
     CronSpec,
     describe,
@@ -192,16 +195,6 @@ _MONDAY_TRIGGER = (
     "    </CalendarTrigger>"
 )
 
-_QUARTER_HOUR_TRIGGER = (
-    "    <CalendarTrigger>\n"
-    "      <StartBoundary>2026-01-01T00:00:00</StartBoundary>\n"
-    "      <Enabled>true</Enabled>\n"
-    "      <ScheduleByDay>\n"
-    "        <DaysInterval>1</DaysInterval>\n"
-    "      </ScheduleByDay>\n"
-    "    </CalendarTrigger>"
-)
-
 # Task Scheduler's ScheduleByMonth requires both children, so an unrestricted field is
 # spelled out in full in the expected XML.
 _ALL_MONTH_ELEMENTS = "\n".join(
@@ -213,10 +206,7 @@ _ALL_MONTH_ELEMENTS = "\n".join(
 )
 _ALL_DAY_ELEMENTS = "\n".join(f"          <Day>{day}</Day>" for day in range(1, 32))
 
-_TWICE_DAILY_TRIGGER = (
-    "    <CalendarTrigger>\n"
-    "      <StartBoundary>2026-01-01T06:00:00</StartBoundary>\n"
-    "      <Enabled>true</Enabled>\n"
+_TWO_DAYS_OF_MONTH_SCHEDULE = (
     "      <ScheduleByMonth>\n"
     "        <DaysOfMonth>\n"
     "          <Day>1</Day>\n"
@@ -225,8 +215,42 @@ _TWICE_DAILY_TRIGGER = (
     "        <Months>\n"
     f"{_ALL_MONTH_ELEMENTS}\n"
     "        </Months>\n"
-    "      </ScheduleByMonth>\n"
+    "      </ScheduleByMonth>"
+)
+
+_DAY_OF_MONTH_TRIGGER = (
+    "    <CalendarTrigger>\n"
+    "      <StartBoundary>2026-01-01T06:00:00</StartBoundary>\n"
+    "      <Enabled>true</Enabled>\n"
+    f"{_TWO_DAYS_OF_MONTH_SCHEDULE}\n"
     "    </CalendarTrigger>"
+)
+
+# Two times of day means two triggers over one schedule body: <Triggers> takes a list, and a
+# CalendarTrigger carries a single StartBoundary.
+_TWICE_DAILY_TRIGGER = (
+    f"{_DAY_OF_MONTH_TRIGGER}\n"
+    "    <CalendarTrigger>\n"
+    "      <StartBoundary>2026-01-01T18:00:00</StartBoundary>\n"
+    "      <Enabled>true</Enabled>\n"
+    f"{_TWO_DAYS_OF_MONTH_SCHEDULE}\n"
+    "    </CalendarTrigger>"
+)
+
+_DAILY_SCHEDULE = (
+    "      <ScheduleByDay>\n"
+    "        <DaysInterval>1</DaysInterval>\n"
+    "      </ScheduleByDay>"
+)
+
+# 0 */6 * * * — the "custom cron expression" the docs advertise — fires four times a day.
+_SIX_HOURLY_TRIGGER = "\n".join(
+    "    <CalendarTrigger>\n"
+    f"      <StartBoundary>2026-01-01T{hour:02d}:00:00</StartBoundary>\n"
+    "      <Enabled>true</Enabled>\n"
+    f"{_DAILY_SCHEDULE}\n"
+    "    </CalendarTrigger>"
+    for hour in (0, 6, 12, 18)
 )
 
 _TWO_MONTHS_TRIGGER = (
@@ -284,7 +308,6 @@ RENDER_CASES = [
         "0 8 * * *",
         "*-*-* 08:00:00",
         [{"Minute": 0, "Hour": 8}],
-        _DAILY_TRIGGER,
         id="daily",
     ),
     pytest.param(
@@ -297,21 +320,18 @@ RENDER_CASES = [
             {"Minute": 0, "Hour": 8, "Weekday": 4},
             {"Minute": 0, "Hour": 8, "Weekday": 5},
         ],
-        _WEEKDAY_TRIGGER,
         id="weekdays",
     ),
     pytest.param(
         "30 9 * * MON",
         "Mon *-*-* 09:30:00",
         [{"Minute": 30, "Hour": 9, "Weekday": 1}],
-        _MONDAY_TRIGGER,
         id="weekly",
     ),
     pytest.param(
         "*/15 * * * *",
         "*-*-* *:00,15,30,45:00",
         [{"Minute": 0}, {"Minute": 15}, {"Minute": 30}, {"Minute": 45}],
-        _QUARTER_HOUR_TRIGGER,
         id="every-quarter-hour",
     ),
     pytest.param(
@@ -323,7 +343,6 @@ RENDER_CASES = [
             {"Minute": 0, "Hour": 18, "Day": 1},
             {"Minute": 0, "Hour": 18, "Day": 15},
         ],
-        _TWICE_DAILY_TRIGGER,
         id="twice-daily-on-two-days-of-month",
     ),
     pytest.param(
@@ -333,7 +352,6 @@ RENDER_CASES = [
             {"Minute": 0, "Hour": 6, "Month": 3},
             {"Minute": 0, "Hour": 6, "Month": 9},
         ],
-        _TWO_MONTHS_TRIGGER,
         id="every-day-in-two-months",
     ),
     pytest.param(
@@ -343,24 +361,52 @@ RENDER_CASES = [
             {"Minute": 0, "Hour": 0, "Month": 1, "Weekday": 0},
             {"Minute": 0, "Hour": 0, "Month": 7, "Weekday": 0},
         ],
-        _SUNDAYS_IN_TWO_MONTHS_TRIGGER,
         id="sundays-in-two-months",
     ),
 ]
 
+# Byte-exact Windows renderings. Kept separate from RENDER_CASES because a schedule naming
+# many times of day renders many triggers, and spelling all of them out is unreadable past a
+# handful — those are asserted structurally further down.
+WINDOWS_RENDER_CASES = [
+    pytest.param("0 8 * * *", _DAILY_TRIGGER, id="daily"),
+    pytest.param("0 8 * * 1-5", _WEEKDAY_TRIGGER, id="weekdays"),
+    pytest.param("30 9 * * MON", _MONDAY_TRIGGER, id="weekly"),
+    pytest.param("0 6 1,15 * *", _DAY_OF_MONTH_TRIGGER, id="day-of-month"),
+    pytest.param("0 6,18 1,15 * *", _TWICE_DAILY_TRIGGER, id="twice-daily-on-two-days-of-month"),
+    pytest.param("0 6 * 3,9 *", _TWO_MONTHS_TRIGGER, id="every-day-in-two-months"),
+    pytest.param("0 0 * JAN,JUL SUN", _SUNDAYS_IN_TWO_MONTHS_TRIGGER, id="sundays-in-two-months"),
+    pytest.param("0 */6 * * *", _SIX_HOURLY_TRIGGER, id="every-six-hours"),
+]
 
-@pytest.mark.parametrize(("expr", "oncalendar", "intervals", "trigger"), RENDER_CASES)
-def test_to_systemd_oncalendar(expr: str, oncalendar: str, intervals: list[dict[str, int]], trigger: str) -> None:
+# The four schedules that render a single trigger and whose XML render_windows_task
+# interpolates verbatim; each must stay byte-identical to the rendering it had before
+# multi-time triggers existed.
+SINGLE_TIME_CASES = [
+    pytest.param("0 8 * * *", _DAILY_TRIGGER, id="daily"),
+    pytest.param("0 8 * * 1-5", _WEEKDAY_TRIGGER, id="weekdays"),
+    pytest.param("0 6 1,15 * *", _DAY_OF_MONTH_TRIGGER, id="day-of-month"),
+    pytest.param("0 0 * JAN,JUL SUN", _SUNDAYS_IN_TWO_MONTHS_TRIGGER, id="weekday-within-months"),
+]
+
+
+def _start_boundary_times(trigger: str) -> list[str]:
+    """Return the ``HH:MM`` time of every ``StartBoundary`` in a rendered trigger set, in order."""
+    return re.findall(r"<StartBoundary>2026-01-01T(\d\d:\d\d):00</StartBoundary>", trigger)
+
+
+@pytest.mark.parametrize(("expr", "oncalendar", "intervals"), RENDER_CASES)
+def test_to_systemd_oncalendar(expr: str, oncalendar: str, intervals: list[dict[str, int]]) -> None:
     assert to_systemd_oncalendar(parse_cron(expr)) == oncalendar
 
 
-@pytest.mark.parametrize(("expr", "oncalendar", "intervals", "trigger"), RENDER_CASES)
-def test_to_launchd_intervals(expr: str, oncalendar: str, intervals: list[dict[str, int]], trigger: str) -> None:
+@pytest.mark.parametrize(("expr", "oncalendar", "intervals"), RENDER_CASES)
+def test_to_launchd_intervals(expr: str, oncalendar: str, intervals: list[dict[str, int]]) -> None:
     assert to_launchd_intervals(parse_cron(expr)) == intervals
 
 
-@pytest.mark.parametrize(("expr", "oncalendar", "intervals", "trigger"), RENDER_CASES)
-def test_to_windows_trigger(expr: str, oncalendar: str, intervals: list[dict[str, int]], trigger: str) -> None:
+@pytest.mark.parametrize(("expr", "trigger"), WINDOWS_RENDER_CASES)
+def test_to_windows_trigger(expr: str, trigger: str) -> None:
     assert to_windows_trigger(parse_cron(expr)) == trigger
 
 
@@ -383,14 +429,16 @@ def test_restricted_months_render_only_the_selected_months() -> None:
     assert trigger.count(" />") == 2
 
 
-def test_unrestricted_schedule_still_renders_a_plain_daily_trigger() -> None:
-    """The default daily task XML depends on this fragment staying byte-identical."""
-    assert to_windows_trigger(parse_cron("0 8 * * *")) == _DAILY_TRIGGER
+@pytest.mark.parametrize(("expr", "expected"), SINGLE_TIME_CASES)
+def test_single_time_schedule_renders_exactly_one_unchanged_trigger(expr: str, expected: str) -> None:
+    """One time of day is one trigger, byte for byte: render_windows_task interpolates this verbatim."""
+    rendered = to_windows_trigger(parse_cron(expr))
+    assert rendered == expected
+    assert rendered.count("<CalendarTrigger>") == 1
 
 
 def test_restricted_day_of_week_alone_still_renders_schedule_by_week() -> None:
     """With months unrestricted, ScheduleByWeek stays the faithful rendering, byte for byte."""
-    assert to_windows_trigger(parse_cron("0 8 * * 1-5")) == _WEEKDAY_TRIGGER
     assert to_windows_trigger(parse_cron("30 9 * * MON")) == _MONDAY_TRIGGER
 
 
@@ -407,30 +455,141 @@ def test_weekdays_within_months_render_only_the_selected_days_and_months() -> No
 
 
 @pytest.mark.parametrize(
-    ("expr", "expected_element"),
+    ("expr", "expected_element", "firings"),
     [
-        pytest.param("0 8 * * *", "<ScheduleByDay>", id="nothing-restricted"),
-        pytest.param("*/15 * * * *", "<ScheduleByDay>", id="sub-hourly-nothing-restricted"),
-        pytest.param("0 8 * * 1-5", "<ScheduleByWeek>", id="day-of-week-only"),
-        pytest.param("0 6 1,15 * *", "<ScheduleByMonth>", id="day-of-month-only"),
-        pytest.param("0 6 * 3,9 *", "<ScheduleByMonth>", id="months-only"),
-        pytest.param("0 6 1,15 3,9 *", "<ScheduleByMonth>", id="day-of-month-and-months"),
-        pytest.param("0 0 * JAN,JUL SUN", "<ScheduleByMonthDayOfWeek>", id="day-of-week-and-months"),
+        pytest.param("0 8 * * *", "<ScheduleByDay>", 1, id="nothing-restricted"),
+        pytest.param("*/15 * * * *", "<ScheduleByDay>", 96, id="sub-hourly-nothing-restricted"),
+        pytest.param("0 * * * *", "<ScheduleByDay>", 24, id="hourly-on-the-hour"),
+        pytest.param("0 */6 * * *", "<ScheduleByDay>", 4, id="every-six-hours"),
+        pytest.param("*/15 8 * * *", "<ScheduleByDay>", 4, id="quarter-hourly-within-one-hour"),
+        pytest.param("0 8 * * 1-5", "<ScheduleByWeek>", 1, id="day-of-week-only"),
+        pytest.param("0 8,20 * * 1-5", "<ScheduleByWeek>", 2, id="day-of-week-at-two-times"),
+        pytest.param("0 6 1,15 * *", "<ScheduleByMonth>", 1, id="day-of-month-only"),
+        pytest.param("0 6,18 1,15 * *", "<ScheduleByMonth>", 2, id="day-of-month-at-two-times"),
+        pytest.param("0 6 * 3,9 *", "<ScheduleByMonth>", 1, id="months-only"),
+        pytest.param("0 6 1,15 3,9 *", "<ScheduleByMonth>", 1, id="day-of-month-and-months"),
+        pytest.param("0 0 * JAN,JUL SUN", "<ScheduleByMonthDayOfWeek>", 1, id="day-of-week-and-months"),
+        pytest.param("0 0,12 * JAN,JUL SUN", "<ScheduleByMonthDayOfWeek>", 2, id="day-of-week-and-months-twice-daily"),
     ],
 )
-def test_windows_trigger_never_widens_the_schedule(expr: str, expected_element: str) -> None:
-    """Every branch picks the schedule kind that carries all of the expression's restrictions.
+def test_windows_trigger_matches_the_firings_the_expression_describes(
+    expr: str, expected_element: str, firings: int
+) -> None:
+    """Every rendering carries all of the expression's restrictions on both axes.
 
-    A Windows schedule that fires more often than the cron expression asked for is invisible
-    at install time — the task XML is accepted and only the job running too often reveals it.
-    Pinning the schedule element per branch shape means a restricted field cannot be silently
-    dropped from the rendered trigger.
+    A Windows schedule that differs from the cron expression in EITHER direction — firing
+    more often than asked for, or less — is invisible at install time: the task XML is
+    accepted and only the job running at the wrong frequency reveals it. The calendar axis is
+    pinned by the schedule element, one per branch shape, so a restricted field cannot be
+    silently dropped or widened. The time-of-day axis is pinned by the trigger count, because
+    a CalendarTrigger carries one StartBoundary: for every expression the renderer accepts,
+    the trigger count equals the number of firings the expression describes. Expressions
+    whose firings a CalendarTrigger cannot express raise instead of rendering something
+    narrower — see the unrestricted-minute and expansion-cap refusals below.
     """
     trigger = to_windows_trigger(parse_cron(expr))
-    assert expected_element in trigger
+    assert trigger.count("<CalendarTrigger>") == firings
+    assert trigger.count(expected_element) == firings
     for element in _WINDOWS_SCHEDULE_ELEMENTS:
         if element != expected_element:
             assert element not in trigger
+
+
+def test_hour_step_renders_one_trigger_per_hour_it_names() -> None:
+    """The cron expression the docs advertise fires four times a day, so it renders four triggers."""
+    trigger = to_windows_trigger(parse_cron("0 */6 * * *"))
+    assert _start_boundary_times(trigger) == ["00:00", "06:00", "12:00", "18:00"]
+
+
+def test_minute_step_within_one_hour_renders_one_trigger_per_minute_it_names() -> None:
+    """A quarter-hourly schedule pinned to one hour renders that hour's four firings."""
+    trigger = to_windows_trigger(parse_cron("*/15 8 * * *"))
+    assert _start_boundary_times(trigger) == ["08:00", "08:15", "08:30", "08:45"]
+
+
+def test_unrestricted_hour_renders_a_trigger_for_every_hour() -> None:
+    """An unrestricted hour field means every hour, the same 24 firings systemd and launchd give it."""
+    trigger = to_windows_trigger(parse_cron("0 * * * *"))
+    assert _start_boundary_times(trigger) == [f"{hour:02d}:00" for hour in range(24)]
+
+
+# An unrestricted minute field is legitimate on two of the three backends, so it stays
+# parseable and is refused only where it cannot be rendered faithfully.
+UNRESTRICTED_MINUTE_CASES = [
+    pytest.param("* 8 * * *", "*-*-* 08:*:00", [{"Hour": 8}], id="every-minute-of-one-hour"),
+    pytest.param("* * * * *", "*-*-* *:*:00", [{}], id="every-minute-of-every-hour"),
+]
+
+
+@pytest.mark.parametrize(("expr", "oncalendar", "intervals"), UNRESTRICTED_MINUTE_CASES)
+def test_unrestricted_minute_renders_on_systemd_and_launchd(
+    expr: str, oncalendar: str, intervals: list[dict[str, int]]
+) -> None:
+    """Both backends express "every minute" natively, so the refusal must not be a parse-level one."""
+    spec = parse_cron(expr)
+    assert to_systemd_oncalendar(spec) == oncalendar
+    assert to_launchd_intervals(spec) == intervals
+
+
+@pytest.mark.parametrize(("expr", "oncalendar", "intervals"), UNRESTRICTED_MINUTE_CASES)
+def test_unrestricted_minute_is_refused_by_the_windows_renderer(
+    expr: str, oncalendar: str, intervals: list[dict[str, int]]
+) -> None:
+    """A CalendarTrigger fires at listed times, so "every minute" is refused rather than narrowed to :00."""
+    with pytest.raises(CronError) as excinfo:
+        to_windows_trigger(parse_cron(expr))
+    message = str(excinfo.value)
+    assert "minute" in message
+    assert "repetition interval" in message
+    assert "*/15" in message
+    assert "llmwiki watch" in message
+
+
+@pytest.mark.parametrize(
+    "expr",
+    [
+        pytest.param("* 8 * * *", id="every-minute-of-one-hour"),
+        pytest.param("* * * * *", id="every-minute-of-every-hour"),
+        pytest.param("*/1 0-23 * * *", id="past-the-expansion-cap"),
+    ],
+)
+def test_windows_renderer_raises_rather_than_rendering_a_narrower_schedule(expr: str) -> None:
+    """The other half of the invariant: what a CalendarTrigger set cannot express is refused, not approximated."""
+    with pytest.raises(CronError):
+        to_windows_trigger(parse_cron(expr))
+
+
+@pytest.mark.parametrize(
+    ("expr", "expected_times"),
+    [
+        pytest.param("0 8,20 * * 1-5", ["08:00", "20:00"], id="day-of-week"),
+        pytest.param("0 6,18 1,15 * *", ["06:00", "18:00"], id="day-of-month"),
+        pytest.param("0 6,18 * 3,9 *", ["06:00", "18:00"], id="months"),
+        pytest.param("0 0,12 * JAN,JUL SUN", ["00:00", "12:00"], id="day-of-week-within-months"),
+    ],
+)
+def test_multiple_times_cross_with_every_calendar_branch(expr: str, expected_times: list[str]) -> None:
+    """The time cross-product applies to all four schedule kinds, not just the plain daily one."""
+    trigger = to_windows_trigger(parse_cron(expr))
+    assert _start_boundary_times(trigger) == expected_times
+
+
+def test_every_windows_trigger_keeps_the_indentation_contract() -> None:
+    """Each fragment sits at the indentation <Triggers> expects, and the set ends without a newline."""
+    trigger = to_windows_trigger(parse_cron("0 */6 * * *"))
+    assert trigger.startswith("    <CalendarTrigger>\n")
+    assert trigger.endswith("    </CalendarTrigger>")
+    assert trigger.count("\n    <CalendarTrigger>\n") == 3
+
+
+def test_windows_trigger_expansion_cap_raises_and_points_at_watch() -> None:
+    spec = parse_cron("*/1 0-23 * * *")
+    with pytest.raises(CronError) as excinfo:
+        to_windows_trigger(spec)
+    message = str(excinfo.value)
+    assert "1440" in message
+    assert str(MAX_WINDOWS_TRIGGERS) in message
+    assert "llmwiki watch" in message
 
 
 def test_daily_schedule_yields_exactly_one_launchd_entry() -> None:

@@ -6,8 +6,11 @@ an existing install must not silently change shape when the schedule notation do
 
 from __future__ import annotations
 
+import io
 import json
+import shlex
 import sys
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any
 
@@ -34,6 +37,12 @@ WEEKDAYS = parse_cron("0 8 * * 1-5")
 WRAPPER = Path("/opt/wiki/units/llmwiki-maintain.sh")
 WORKING_DIR = Path("/opt/wiki")
 LOG_PATH = Path("/var/log/llmwiki-automation.log")
+
+# A vault root nobody would choose on purpose, but every character in it is legal in a
+# POSIX path and lethal to an XML parser if it reaches the document unescaped.
+XML_HOSTILE_DIR = Path("/opt/R&D <wiki>")
+XML_HOSTILE_WRAPPER = XML_HOSTILE_DIR / "units" / "llmwiki-maintain.sh"
+XML_HOSTILE_LOG = XML_HOSTILE_DIR / "last-automation.log"
 
 DAILY_TIMER = """[Unit]
 Description=llmwiki maintain daily timer
@@ -125,6 +134,38 @@ def test_daily_windows_task_is_byte_identical():
 
 def test_weekday_schedule_renders_systemd_range():
     assert "OnCalendar=Mon-Fri *-*-* 08:00:00\n" in render_systemd_timer(spec=WEEKDAYS)
+
+
+def test_launchd_plist_escapes_paths_so_the_plist_still_parses():
+    """A vault or home directory holding ``&``/``<``/``>`` must not produce a plist
+    launchd refuses with an opaque parse error."""
+    rendered = render_launchd_plist(
+        wrapper=XML_HOSTILE_WRAPPER,
+        working_dir=XML_HOSTILE_DIR,
+        log_path=XML_HOSTILE_LOG,
+        spec=DAILY,
+    )
+    texts = {element.text for element in ET.fromstring(rendered).iter()}
+    assert {str(XML_HOSTILE_WRAPPER), str(XML_HOSTILE_DIR), str(XML_HOSTILE_LOG)} <= texts
+    assert "&amp;" in rendered
+
+
+def test_windows_task_escapes_paths_so_the_task_xml_still_parses():
+    rendered = render_windows_task(
+        wrapper=XML_HOSTILE_WRAPPER, working_dir=XML_HOSTILE_DIR, spec=DAILY
+    )
+    texts = {element.text for element in ET.fromstring(rendered).iter()}
+    assert {str(XML_HOSTILE_WRAPPER), str(XML_HOSTILE_DIR)} <= texts
+    assert "&amp;" in rendered
+
+
+def test_escaping_leaves_ordinary_paths_byte_identical():
+    """Escaping is a no-op on a path with nothing to escape — the pinned renderings above
+    stay valid, and this says so explicitly rather than leaving it implied."""
+    assert render_launchd_plist(
+        wrapper=WRAPPER, working_dir=WORKING_DIR, log_path=LOG_PATH, spec=DAILY
+    ) == DAILY_PLIST
+    assert render_windows_task(wrapper=WRAPPER, working_dir=WORKING_DIR, spec=DAILY) == DAILY_TASK
 
 
 def test_weekday_schedule_renders_five_launchd_entries():
@@ -244,6 +285,18 @@ def test_status_carries_new_and_legacy_keys(tmp_path: Path):
 ENTER = ""
 
 
+class _TerminalStdin(io.StringIO):
+    """A stdin stand-in whose ``isatty`` is true, the way a real wizard run needs."""
+
+    def isatty(self) -> bool:
+        return True
+
+
+def _pretend_tty(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Satisfy the wizard's terminal guard; the answers themselves stay scripted."""
+    monkeypatch.setattr(sys, "stdin", _TerminalStdin())
+
+
 def _script_input(monkeypatch: pytest.MonkeyPatch, answers: list[str]) -> list[str]:
     """Answer ``input()`` from a script, returning the list prompts accumulate into.
 
@@ -277,6 +330,7 @@ def _run_wizard(
     so nothing the wizard writes can land in the repo.
     """
     monkeypatch.setattr(cli, "REPO_ROOT", tmp_path)
+    _pretend_tty(monkeypatch)
     captured: dict = {}
 
     def fake_run_install(config: dict) -> dict:
@@ -325,7 +379,7 @@ def test_wizard_maintain_with_extras_produces_the_expected_plan_and_command(
 
 def test_wizard_accepts_the_legacy_profile_letters(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     _code, config, _prompts = _run_wizard(
-        monkeypatch, tmp_path, ["B", ENTER, ENTER, ENTER, ENTER, ENTER, ENTER, "y"]
+        monkeypatch, tmp_path, ["B", ENTER, ENTER, ENTER, ENTER, ENTER, ENTER, ENTER, "y"]
     )
     assert config["plan"] == AutomationPlan(job="maintain")
 
@@ -334,7 +388,7 @@ def test_wizard_reasks_instead_of_defaulting_on_an_unrecognised_answer(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ):
     _code, config, prompts = _run_wizard(
-        monkeypatch, tmp_path, ["banana", "2", ENTER, ENTER, ENTER, ENTER, ENTER, ENTER, "y"]
+        monkeypatch, tmp_path, ["banana", "2", ENTER, ENTER, ENTER, ENTER, ENTER, ENTER, ENTER, "y"]
     )
     assert prompts.count("Choice [1]: ") == 2
     assert "is not one of" in capsys.readouterr().out
@@ -345,7 +399,7 @@ def test_wizard_both_failure_policies_resolve_to_the_stricter_one(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ):
     _code, config, prompts = _run_wizard(
-        monkeypatch, tmp_path, ["2", "2,3", ENTER, ENTER, ENTER, ENTER, ENTER, "y"]
+        monkeypatch, tmp_path, ["2", "2,3", ENTER, ENTER, ENTER, ENTER, ENTER, ENTER, "y"]
     )
     assert config["plan"] == AutomationPlan(job="maintain", lint_fail="warnings")
     assert "stricter" in capsys.readouterr().out
@@ -398,12 +452,53 @@ def test_wizard_declining_the_confirmation_writes_nothing(
 ):
     """No status file, no unit files, and no config.json change when the user says no."""
     monkeypatch.setattr(cli, "REPO_ROOT", tmp_path)
+    _pretend_tty(monkeypatch)
     vault = tmp_path / "vault"
     vault.mkdir()
     _script_input(monkeypatch, ["2", ENTER, ENTER, ENTER, "ollama", ENTER, ENTER, ENTER, "n"])
     args = cli.build_parser().parse_args(["install-automation", "--vault", str(vault)])
     assert cli.cmd_install_automation(args) == 0
     assert "Nothing written" in capsys.readouterr().out
+    assert load_status(vault) is None
+    assert not (tmp_path / ".llmwiki").exists()
+    assert not (tmp_path / "config.json").exists()
+
+
+def test_wizard_confirmation_never_answers_itself_when_stdin_ends(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+):
+    """Ctrl-D at the confirmation is a decline: consent has to be typed, never assumed."""
+    monkeypatch.setattr(cli, "REPO_ROOT", tmp_path)
+    _pretend_tty(monkeypatch)
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    # Seven answers reach the last informational question, so stdin ends at the confirmation.
+    _script_input(monkeypatch, [ENTER] * 7)
+    args = cli.build_parser().parse_args(["install-automation", "--vault", str(vault)])
+    assert cli.cmd_install_automation(args) == 0
+    assert "Nothing written" in capsys.readouterr().out
+    assert load_status(vault) is None
+    assert not (tmp_path / "config.json").exists()
+
+
+def test_a_non_terminal_stdin_refuses_to_install_without_yes(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+):
+    """A piped stdin cannot consent, so the wizard exits 2 without asking or writing anything."""
+    monkeypatch.setattr(cli, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(sys, "stdin", io.StringIO())  # a plain StringIO is not a terminal
+
+    def refuse(prompt: str = "") -> str:
+        raise AssertionError(f"the wizard asked {prompt!r} on a non-terminal stdin")
+
+    monkeypatch.setattr("builtins.input", refuse)
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    args = cli.build_parser().parse_args(["install-automation", "--vault", str(vault)])
+    assert cli.cmd_install_automation(args) == 2
+    err = capsys.readouterr().err
+    assert "needs a terminal" in err
+    assert "--yes" in err
     assert load_status(vault) is None
     assert not (tmp_path / ".llmwiki").exists()
     assert not (tmp_path / "config.json").exists()
@@ -502,6 +597,92 @@ def test_an_untranslatable_schedule_exits_two_with_the_reason(
     assert load_status(vault) is None
 
 
+def test_yes_installs_with_a_non_terminal_stdin(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """The unattended path is the one a pipe is allowed to take."""
+    monkeypatch.setattr(sys, "stdin", io.StringIO())
+    code, vault, units = _install_via_flags(tmp_path, monkeypatch, "--job", "ingest")
+    assert code == 0
+    assert load_status(vault) is not None
+    assert (units / "llmwiki-maintain.sh").is_file()
+
+
+def test_extras_flags_are_noted_as_ignored_for_an_ingest_job(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+):
+    """`--graph` / `--lint-fail` describe maintain, so an ingest install says it drops them."""
+    code, vault, _units = _install_via_flags(
+        tmp_path, monkeypatch, "--job", "ingest", "--graph", "builtin", "--lint-fail", "errors"
+    )
+    assert code == 0
+    err = capsys.readouterr().err
+    assert "--graph builtin is ignored for --job ingest" in err
+    assert "builds no graph" in err
+    assert "--lint-fail errors is ignored for --job ingest" in err
+    assert "no lint step" in err
+    status = load_status(vault)
+    assert status is not None and status["job"] == "ingest"
+
+
+def test_an_ingest_install_records_none_of_the_extras_it_will_not_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """The status file, the label, the command and the Home panel must all describe the
+    job that was actually installed — an ingest job runs no lint step, so nothing may
+    advertise a failure policy for it."""
+    _code, vault, units = _install_via_flags(
+        tmp_path, monkeypatch, "--job", "ingest", "--graph", "builtin", "--lint-fail", "errors"
+    )
+    status = load_status(vault)
+    assert status is not None
+    assert (status["graph"], status["lint_fail"]) == ("none", "never")
+    assert status["label"] == "Ingest only"
+    wrapper = (units / "llmwiki-maintain.sh").read_text(encoding="utf-8")
+    assert "--lint-fail" not in wrapper and "--graph-engine" not in wrapper
+    assert "mark the scheduled run as failed" not in render_automation_panel(vault)
+
+
+def test_a_non_default_vault_is_named_in_the_scheduled_command(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """Installing against a vault other than ``vault.default_path`` must schedule a command
+    that names it, or the run would work on the default vault while its status file sits in
+    the installed one."""
+    monkeypatch.setattr(cli, "load_default_vault_path", lambda: tmp_path / "default-vault")
+    _code, vault, units = _install_via_flags(tmp_path, monkeypatch, "--job", "ingest")
+    wrapper = (units / "llmwiki-maintain.sh").read_text(encoding="utf-8")
+    assert f"--vault {shlex.quote(str(vault))}" in wrapper
+    expected = plan_command(
+        AutomationPlan(job="ingest"), python_bin=sys.executable, working_dir=tmp_path, vault=vault
+    )
+    assert expected in wrapper
+
+
+def test_the_default_vault_leaves_the_scheduled_command_unchanged(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """When the install targets the configured default, the command stays byte-identical
+    and resolves its vault from config the way it always did."""
+    vault_root = tmp_path / "vault"
+    monkeypatch.setattr(cli, "load_default_vault_path", lambda: vault_root)
+    _code, _vault, units = _install_via_flags(tmp_path, monkeypatch, "--job", "ingest")
+    wrapper = (units / "llmwiki-maintain.sh").read_text(encoding="utf-8")
+    assert "--vault" not in wrapper
+    expected = plan_command(AutomationPlan(job="ingest"), python_bin=sys.executable, working_dir=tmp_path)
+    assert f"{{ {expected} ; echo EXIT:$?; }}" in wrapper
+
+
+def test_extras_flags_are_not_noted_for_a_maintain_job(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+):
+    code, vault, _units = _install_via_flags(
+        tmp_path, monkeypatch, "--job", "maintain", "--graph", "builtin"
+    )
+    assert code == 0
+    assert "ignored" not in capsys.readouterr().err
+    status = load_status(vault)
+    assert status is not None and status["graph"] == "builtin"
+
+
 # ─── The Home Automation panel ─────────────────────────────────────────
 
 
@@ -548,6 +729,13 @@ def test_panel_mentions_the_failure_policy_only_when_one_is_set(tmp_path: Path, 
     plan = AutomationPlan(job="maintain", lint_fail=lint_fail)
     panel = _panel(tmp_path, plan_to_status(plan))
     assert ("mark the scheduled run as failed" in panel) is expected
+
+
+def test_panel_does_not_advertise_a_failure_policy_for_an_ingest_job(tmp_path: Path):
+    """An ingest job runs no lint step; the panel must not promise findings can fail it."""
+    panel = _panel(tmp_path, plan_to_status(AutomationPlan(job="ingest", lint_fail="errors")))
+    assert "Ingest only" in panel
+    assert "mark the scheduled run as failed" not in panel
 
 
 def test_panel_survives_a_malformed_status_file(tmp_path: Path):

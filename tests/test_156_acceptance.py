@@ -44,6 +44,7 @@ AC coverage matrix (R<n>, in functional-spec.md order):
 
 from __future__ import annotations
 
+import io
 import re
 import shlex
 import socket
@@ -101,6 +102,18 @@ def _all_args(*flags: str):
     return build_parser().parse_args(["all", *flags])
 
 
+class _TerminalStdin(io.StringIO):
+    """A stdin stand-in whose ``isatty`` is true, the way a real wizard run needs."""
+
+    def isatty(self) -> bool:
+        return True
+
+
+def _pretend_tty(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Satisfy the wizard's terminal guard; the answers themselves stay scripted."""
+    monkeypatch.setattr(sys, "stdin", _TerminalStdin())
+
+
 # ─── R1 -- one plain-language question, two real choices ──────────────────
 
 
@@ -125,6 +138,7 @@ def test_ingest_choice_writes_no_extras_or_graph_choice_end_to_end(
     file (not just the in-memory plan) carries graph=none / lint_fail=never -- proving the
     whole chain from scripted input through the real, unmocked run_install."""
     monkeypatch.setattr(cli, "REPO_ROOT", tmp_path)
+    _pretend_tty(monkeypatch)
     vault = tmp_path / "vault"
     prompts: list[str] = []
     answers = iter([""] * 8)
@@ -207,6 +221,7 @@ def test_declining_writes_nothing_and_a_later_real_install_still_succeeds(
     right after must still succeed cleanly -- declining must not leave partial state
     that blocks a later real install."""
     monkeypatch.setattr(cli, "REPO_ROOT", tmp_path)
+    _pretend_tty(monkeypatch)
     vault = tmp_path / "vault"
     vault.mkdir()
     answers = iter(["2", "", "", "", "ollama", "", "", "", "n"])

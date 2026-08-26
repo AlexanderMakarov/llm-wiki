@@ -12,9 +12,16 @@ step over either (``*/15``, ``1-5/2``). Day-of-week accepts ``0``-``7`` with bot
 
 Deliberately refused, each with its own message: cron nicknames (``@daily``, ``@reboot``),
 the Vixie/Quartz extensions ``L``, ``W`` and ``#``, a 6-field expression carrying seconds,
-and any expression restricting **both** day-of-month and day-of-week — cron ORs those two
-fields together and none of the three backends can express that, so translating it would be
-silently wrong everywhere.
+a step applied to a bare single value (``5/15``, which Vixie cron reads as ``5,20,35,50`` —
+write the range it stands for, ``5-59/15``), and any expression restricting **both**
+day-of-month and day-of-week — cron ORs those two fields together and none of the three
+backends can express that, so translating it would be silently wrong everywhere.
+
+One further refusal is Windows-specific rather than raised at parse time: an unrestricted
+minute field (``*`` in the first position) parses and renders faithfully for systemd and
+launchd, but is refused when rendering for Windows, whose ``<CalendarTrigger>`` fires at the
+times it lists and cannot say "every minute" without a repetition interval this module does
+not generate.
 
 Stdlib only; nothing here imports the rest of ``llmwiki``.
 """
@@ -26,6 +33,7 @@ from dataclasses import dataclass
 
 __all__ = [
     "MAX_LAUNCHD_INTERVALS",
+    "MAX_WINDOWS_TRIGGERS",
     "CronError",
     "CronSpec",
     "describe",
@@ -40,8 +48,13 @@ __all__ = [
 # would expand to 1440 entries.
 MAX_LAUNCHD_INTERVALS = 200
 
-# Retained from the previously hardcoded Windows task: the trigger needs a start date, and
-# only the time-of-day is taken from the schedule.
+# Cap on the Windows time-of-day cross-product, sharing the launchd cap's reasoning: one
+# <CalendarTrigger> fires once per day it matches, so a schedule needing more triggers than
+# this is a sub-hourly one and belongs in `llmwiki watch`. An unrestricted hour field counts
+# as all 24 hours, so the cap is reached sooner here than on launchd.
+MAX_WINDOWS_TRIGGERS = 200
+
+# The trigger needs a start date; only the time-of-day comes from the schedule.
 WINDOWS_START_DATE = "2026-01-01"
 
 _DAY_NAMES = {"SUN": 0, "MON": 1, "TUE": 2, "WED": 3, "THU": 4, "FRI": 5, "SAT": 6}
@@ -214,19 +227,25 @@ def to_launchd_intervals(spec: CronSpec) -> list[dict[str, int]]:
 
 
 def to_windows_trigger(spec: CronSpec) -> str:
-    """Render the Windows Task Scheduler ``<CalendarTrigger>`` fragment for a schedule.
+    """Render the Windows Task Scheduler ``<CalendarTrigger>`` fragments for a schedule.
 
     The schedule kind follows the restricted calendar fields: ``ScheduleByMonthDayOfWeek``
     when day-of-week and month are both restricted, ``ScheduleByWeek`` with ``<DaysOfWeek>``
     children when only day-of-week is, ``ScheduleByMonth`` with ``<DaysOfMonth>`` and
     ``<Months>`` children when day-of-month or month is, and ``ScheduleByDay`` on a one-day
-    interval when none of them is. A Task Scheduler trigger carries a single time-of-day, so
-    the schedule's first hour and minute become the ``StartBoundary`` time. The fragment is
-    indented for its place inside ``<Triggers>`` and carries no trailing newline; the
-    surrounding Task XML lives in ``llmwiki/automation_install.py``.
+    interval when none of them is.
+
+    One ``<CalendarTrigger>`` carries one time-of-day, so a schedule naming several times
+    becomes one trigger per ``(hour, minute)`` pair it names, every trigger repeating the
+    same schedule body and differing only in ``StartBoundary``. ``<Triggers>`` accepts the
+    list, so the joined result drops into the surrounding Task XML in
+    ``llmwiki/automation_install.py`` unchanged. Every fragment is indented for its place
+    inside ``<Triggers>`` and the result carries no trailing newline.
+
+    Raises:
+        CronError: when the minute field is unrestricted, or when the time cross-product
+            exceeds :data:`MAX_WINDOWS_TRIGGERS`.
     """
-    hour = spec.hours[0] if spec.hours else 0
-    minute = spec.minutes[0] if spec.minutes else 0
     if spec.days_of_week is not None and spec.months is not None:
         schedule = _windows_schedule_by_month_day_of_week(spec.days_of_week, spec.months)
     elif spec.days_of_week is not None:
@@ -239,13 +258,46 @@ def to_windows_trigger(spec: CronSpec) -> str:
             "        <DaysInterval>1</DaysInterval>\n"
             "      </ScheduleByDay>"
         )
-    return (
+    return "\n".join(
         "    <CalendarTrigger>\n"
         f"      <StartBoundary>{WINDOWS_START_DATE}T{hour:02d}:{minute:02d}:00</StartBoundary>\n"
         "      <Enabled>true</Enabled>\n"
         f"{schedule}\n"
         "    </CalendarTrigger>"
+        for hour, minute in _windows_trigger_times(spec)
     )
+
+
+def _windows_trigger_times(spec: CronSpec) -> list[tuple[int, int]]:
+    """Return the ``(hour, minute)`` firings a schedule covers, in chronological order.
+
+    An unrestricted hour field means every hour, matching what ``0 * * * *`` asks for and
+    what systemd and launchd both do with it: 24 firings, not one. An unrestricted minute
+    field is refused instead of being anchored anywhere, because every anchoring narrows the
+    schedule the user wrote.
+
+    Raises:
+        CronError: when the minute field is unrestricted, or when the cross-product exceeds
+            :data:`MAX_WINDOWS_TRIGGERS`.
+    """
+    if spec.minutes is None:
+        raise CronError(
+            "An unrestricted minute field ('*') has no faithful Windows rendering. A Windows scheduled task "
+            "fires at the times its triggers list, and 'every minute' needs a repetition interval, which "
+            "llmwiki does not generate. Name the minute, as in '0 8 * * *', or step it, as in '*/15 8 * * *'; "
+            "work that has to run continuously belongs in 'llmwiki watch', which runs continuously, rather "
+            "than in a scheduled task. systemd and launchd render the expression as written."
+        )
+    hours = spec.hours if spec.hours is not None else tuple(range(24))
+    minutes = spec.minutes
+    size = len(hours) * len(minutes)
+    if size > MAX_WINDOWS_TRIGGERS:
+        raise CronError(
+            f"This schedule expands to {size} Windows calendar triggers, past the cap of "
+            f"{MAX_WINDOWS_TRIGGERS}. A schedule that dense is a sub-hourly one, and belongs in "
+            "'llmwiki watch', which runs continuously, rather than in a daily timer."
+        )
+    return [(hour, minute) for hour in hours for minute in minutes]
 
 
 def _windows_schedule_by_week(days_of_week: tuple[int, ...]) -> str:

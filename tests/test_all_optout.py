@@ -189,38 +189,70 @@ def test_resolve_lint_fail_takes_the_stricter_of_both_flags():
 # ─── First-run notice ────────────────────────────────────────────────────
 
 
+def _backend(*, is_llm: bool) -> MagicMock:
+    """A stand-in synthesis backend that only has to answer ``is_llm``."""
+    backend = MagicMock()
+    backend.is_llm = is_llm
+    return backend
+
+
 def test_notice_is_silent_when_stdout_is_not_a_tty(tmp_path: Path, capsys, monkeypatch):
-    monkeypatch.setattr(pipeline, "load_synthesis_backend", lambda: "ollama")
     monkeypatch.setattr(pipeline, "resolve_state_file",
                         lambda *_a, **_k: tmp_path / "state.json")
 
-    pipeline._maybe_print_optout_notice()
+    pipeline._maybe_print_optout_notice(_backend(is_llm=True))
 
     assert capsys.readouterr().out == ""
 
 
-def test_notice_is_silent_for_the_dummy_backend_on_a_tty(tmp_path: Path, monkeypatch):
+def test_notice_is_silent_for_a_backend_that_calls_no_llm(tmp_path: Path, monkeypatch):
+    """The gate is the resolved backend's own ``is_llm``, not the configured name —
+    a non-LLM backend spelled anything but ``dummy`` must not warn about provider calls."""
     fake = _FakeTTY()
     monkeypatch.setattr(sys, "stdout", fake)
-    monkeypatch.setattr(pipeline, "load_synthesis_backend", lambda: "dummy")
     monkeypatch.setattr(pipeline, "resolve_state_file",
                         lambda *_a, **_k: tmp_path / "state.json")
 
-    pipeline._maybe_print_optout_notice()
+    pipeline._maybe_print_optout_notice(_backend(is_llm=False))
 
     assert fake.getvalue() == ""
+    assert not (tmp_path / "state.json").exists()
 
 
 def test_notice_prints_once_on_a_tty_with_a_real_backend(tmp_path: Path, monkeypatch):
     fake = _FakeTTY()
     monkeypatch.setattr(sys, "stdout", fake)
-    monkeypatch.setattr(pipeline, "load_synthesis_backend", lambda: "ollama")
     monkeypatch.setattr(pipeline, "resolve_state_file",
                         lambda *_a, **_k: tmp_path / "state.json")
 
-    pipeline._maybe_print_optout_notice()
+    pipeline._maybe_print_optout_notice(_backend(is_llm=True))
     first = fake.getvalue()
-    pipeline._maybe_print_optout_notice()
+    pipeline._maybe_print_optout_notice(_backend(is_llm=True))
 
     assert "--no-synth" in first
     assert fake.getvalue() == first
+
+
+def test_notice_writes_the_state_file_only_on_the_run_that_flips_the_flag(
+    tmp_path: Path, monkeypatch
+):
+    """Every later `all` run re-reads the flag; none of them rewrite the state file."""
+    fake = _FakeTTY()
+    state = tmp_path / "state.json"
+    monkeypatch.setattr(sys, "stdout", fake)
+    monkeypatch.setattr(pipeline, "resolve_state_file", lambda *_a, **_k: state)
+
+    pipeline._maybe_print_optout_notice(_backend(is_llm=True))
+    after_first = state.read_text(encoding="utf-8")
+
+    writes: list[str] = []
+    real_update = pipeline.update_state
+    monkeypatch.setattr(
+        pipeline, "update_state",
+        lambda mutator, *a, **k: (writes.append("write"), real_update(mutator, *a, **k))[1],
+    )
+    pipeline._maybe_print_optout_notice(_backend(is_llm=True))
+    pipeline._maybe_print_optout_notice(_backend(is_llm=True))
+
+    assert writes == []
+    assert state.read_text(encoding="utf-8") == after_first

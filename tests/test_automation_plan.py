@@ -75,6 +75,63 @@ def test_ingest_command_ignores_graph_and_lint_choices():
     assert command(plan) == f"{PREFIX} sync"
 
 
+# ─── Extras normalise onto the job that can run them ──────────────────────
+
+
+def test_a_non_maintain_plan_drops_extras_it_cannot_run():
+    """An ingest job runs no graph step and no lint step, so it never carries either."""
+    plan = AutomationPlan(job="ingest", graph="builtin", lint_fail="errors")
+    assert plan.graph == "none"
+    assert plan.lint_fail == "never"
+    assert plan == AutomationPlan(job="ingest")
+
+
+def test_normalised_extras_reach_the_status_file_and_the_label():
+    """The status file, the label and the command must agree with the installed job."""
+    plan = AutomationPlan(job="ingest", graph="graphify", lint_fail="warnings")
+    status = plan_to_status(plan)
+    assert status["graph"] == "none"
+    assert status["lint_fail"] == "never"
+    assert status["label"] == "Ingest only"
+    assert command(plan) == f"{PREFIX} sync"
+
+
+def test_maintain_keeps_the_extras_it_does_run():
+    plan = AutomationPlan(job="maintain", graph="builtin", lint_fail="errors")
+    assert (plan.graph, plan.lint_fail) == ("builtin", "errors")
+
+
+# ─── --vault threading ────────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize("plan", ALL_PLANS)
+def test_plan_command_without_a_vault_is_byte_identical(plan: AutomationPlan):
+    """The default install emits the command unchanged and resolves its vault from config."""
+    assert plan_command(plan, python_bin=PYTHON_BIN, working_dir=WORKING_DIR, vault=None) == command(plan)
+
+
+@pytest.mark.parametrize(
+    ("plan", "expected"),
+    [
+        (AutomationPlan(job="ingest"), f"{PREFIX} sync --vault /vaults/b"),
+        (AutomationPlan(job="maintain"), f"{PREFIX} all --skip-graph --vault /vaults/b"),
+        (
+            AutomationPlan(job="maintain", graph="builtin", lint_fail="errors"),
+            f"{PREFIX} all --graph-engine builtin --lint-fail errors --vault /vaults/b",
+        ),
+    ],
+)
+def test_plan_command_names_a_non_default_vault(plan: AutomationPlan, expected: str):
+    assert plan_command(plan, python_bin=PYTHON_BIN, working_dir=WORKING_DIR, vault=Path("/vaults/b")) == expected
+
+
+def test_plan_command_quotes_the_vault_path():
+    cmd = plan_command(
+        AutomationPlan(), python_bin=PYTHON_BIN, working_dir=WORKING_DIR, vault=Path("/vaults/my wiki")
+    )
+    assert cmd == f"{PREFIX} sync --vault '/vaults/my wiki'"
+
+
 @pytest.mark.parametrize(
     ("plan", "expected"),
     [

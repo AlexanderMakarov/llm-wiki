@@ -53,13 +53,26 @@ _GRAPH_LABELS: dict[GraphChoice, str] = {
 class AutomationPlan:
     """What the scheduled daily job does.
 
-    ``graph`` and ``lint_fail`` describe the maintain job; the ingest job runs a
-    plain ``sync`` and ignores both.
+    ``graph`` and ``lint_fail`` describe the maintain job. Any other job runs a
+    plain ``sync``, so construction normalises both back to their defaults —
+    a plan never carries an extra its job cannot run.
     """
 
     job: Job = "ingest"
     graph: GraphChoice = "none"
     lint_fail: LintFail = "never"
+
+    def __post_init__(self) -> None:
+        """Normalise extras onto the job that can run them.
+
+        Only maintain builds a graph or lints, so any other job resolves to
+        ``graph="none"`` / ``lint_fail="never"``. Every derived rendering — the
+        command, the label, the status file, the site panel — then describes the
+        same job. The CLI tells the user which flag it dropped and why.
+        """
+        if self.job != "maintain":
+            object.__setattr__(self, "graph", "none")
+            object.__setattr__(self, "lint_fail", "never")
 
 
 #: The wizard letters accepted before plans existed. ``B`` and ``C`` both land on
@@ -73,18 +86,30 @@ LEGACY_PROFILE_MAP: dict[str, AutomationPlan] = {
 }
 
 
-def plan_command(plan: AutomationPlan, *, python_bin: str, working_dir: Path | str) -> str:
+def plan_command(
+    plan: AutomationPlan,
+    *,
+    python_bin: str,
+    working_dir: Path | str,
+    vault: Path | str | None = None,
+) -> str:
     """Compose the shell command line the scheduled wrapper runs.
 
     The line changes directory into ``working_dir`` first, so the command works
     from whatever cwd the scheduler happens to use. Flag order is fixed, which
     lets callers and tests compare the result as an exact string.
+
+    ``vault`` names the vault the scheduled run must operate on, appended as a
+    trailing ``--vault``. Pass it only when the job targets a vault other than
+    the one ``vault.default_path`` resolves to; leaving it ``None`` emits the
+    command unchanged and lets the run read its vault from config.
     """
     py = shlex.quote(python_bin)
     root = shlex.quote(str(working_dir))
     prefix = f"cd {root} && {py} -m llmwiki"
+    suffix = f" --vault {shlex.quote(str(vault))}" if vault is not None else ""
     if plan.job != "maintain":
-        return f"{prefix} sync"
+        return f"{prefix} sync{suffix}"
     parts = [f"{prefix} all"]
     if plan.graph == "none":
         parts.append("--skip-graph")
@@ -92,7 +117,7 @@ def plan_command(plan: AutomationPlan, *, python_bin: str, working_dir: Path | s
         parts.append(f"--graph-engine {plan.graph}")
     if plan.lint_fail != "never":
         parts.append(f"--lint-fail {plan.lint_fail}")
-    return " ".join(parts)
+    return " ".join(parts) + suffix
 
 
 def plan_label(plan: AutomationPlan) -> str:
