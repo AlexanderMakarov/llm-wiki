@@ -123,7 +123,7 @@ kbd { display: inline-block; padding: 2px 6px; font-family: var(--mono); font-si
 .nav-search-btn:hover { border-color: var(--accent); color: var(--accent); }
 .nav-search-btn svg { flex-shrink: 0; }
 @media (max-width: 767px) { .nav-search-btn span, .nav-search-btn kbd { display: none; } }
-/* Tablet + mobile: the six text anchors (Home/Projects/Sessions/Models/Compare/Changelog)
+/* Tablet + mobile: the desktop text anchors (Home/Raw/Candidates/Graph/Projects/Sessions/Analytics/Docs)
    overflow a 768px viewport at 0.9rem/gap-20, so collapse them below the
    1024 desktop breakpoint. Users still have Search + Theme in the top nav,
    the command palette via Cmd+K, and the mobile bottom nav below 767. */
@@ -913,30 +913,6 @@ a.topic-chip:hover {
 .project-hero-topics { margin-bottom: 6px; }
 .project-homepage { display: inline-block; margin-top: 6px; font-size: 0.82rem; color: var(--accent); text-decoration: none; }
 .project-homepage:hover { text-decoration: underline; }
-
-/* v0.7 (#58): Auto-generated vs-comparison pages. Side-by-side table
-   with difference highlighting, benchmark bar chart, price delta, and
-   a stub summary section the user fills in. */
-.vs-section { margin: 24px 0; }
-.vs-section h2 { font-size: 1.2rem; font-weight: 600; margin: 0 0 14px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
-.vs-table { width: 100%; border-collapse: collapse; margin: 12px 0 24px; font-size: 0.92rem; }
-.vs-table th, .vs-table td { padding: 10px 14px; text-align: left; border-bottom: 1px solid var(--border); }
-.vs-table th:first-child { width: 180px; color: var(--text-secondary); font-weight: 500; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.03em; }
-.vs-table .vs-colhead { font-size: 1rem; background: var(--bg-alt); }
-.vs-table .vs-colhead a { color: var(--accent); text-decoration: none; }
-.vs-table .vs-colhead a:hover { text-decoration: underline; }
-.vs-table td { font-family: 'JetBrains Mono', monospace; }
-.vs-table .cell-diff { background: rgba(124, 58, 237, 0.08); font-weight: 600; }
-:root[data-theme="dark"] .vs-table .cell-diff { background: rgba(167, 139, 250, 0.12); }
-.vs-bench-chart { display: block; max-width: 100%; margin: 8px 0; }
-.vs-summary-stub p { padding: 14px 18px; background: var(--bg-alt); border-left: 3px solid var(--accent); border-radius: 0 4px 4px 0; font-style: italic; }
-.vs-index-table { width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 0.92rem; }
-.vs-index-table th, .vs-index-table td { padding: 10px 14px; text-align: left; border-bottom: 1px solid var(--border); }
-.vs-index-table th { font-weight: 600; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary); background: var(--bg-alt); }
-.vs-index-table a { color: var(--accent); text-decoration: none; font-weight: 500; }
-.vs-index-table a:hover { text-decoration: underline; }
-.vs-index-table tr:hover td { background: var(--bg-alt); }
-
 
 /* Agent badge — shows which AI agent produced the session */
 .agent-badge {

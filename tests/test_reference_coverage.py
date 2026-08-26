@@ -171,7 +171,7 @@ def test_ui_reference_lists_every_nav_item():
     ui_text = UI_REF.read_text(encoding="utf-8")
     for label in (
         "Home", "Raw", "Candidates", "Graph", "Projects", "Sessions", "Analytics",
-        "Models", "Compare", "Docs", "Prototypes",
+        "Models", "Docs", "Prototypes",
     ):
         assert f"**{label}**" in ui_text, (
             f"docs/reference/ui.md missing nav entry for `{label}`"

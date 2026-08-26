@@ -31,10 +31,10 @@ surfaced these real bugs which this PR addresses:
   6. `#palette-input` had no programmatic label. Added
      `aria-label="Search pages"`.
 
-  7. `render_models_section` + `render_vs_section` referenced 8
-     names that were never imported. The build doesn't currently call
-     either function, but they would have crashed with `NameError` on
-     first wire-up. Added lazy imports inside both functions.
+  7. `render_models_section` referenced names that were never
+     imported. The build doesn't currently call the function, but
+     it would have crashed with `NameError` on first wire-up.
+     Added lazy imports inside the function.
 """
 from __future__ import annotations
 
@@ -42,7 +42,7 @@ import re
 import tempfile
 from pathlib import Path
 
-from llmwiki.build import nav_bar, page_foot, render_models_section, render_vs_section
+from llmwiki.build import nav_bar, page_foot, render_models_section
 from llmwiki.render.js import JS
 
 # 1. Per-dialog focus stash.
@@ -129,7 +129,7 @@ def test_palette_input_has_aria_label() -> None:
     assert 'aria-label="Search pages"' in m.group(0)
 
 
-# 7. render_models_section + render_vs_section import their dependencies.
+# 7. render_models_section imports its dependencies.
 
 def test_render_models_section_does_not_raise_name_error_at_load_time() -> None:
     """Either the imports are at module level OR they're lazy inside
@@ -145,12 +145,4 @@ def test_render_models_section_does_not_raise_name_error_at_load_time() -> None:
         # the function should return (path, 0) cleanly.
         result = render_models_section(out)
         # Tuple-of-2 contract.
-        assert isinstance(result, tuple) and len(result) == 2
-
-
-def test_render_vs_section_does_not_raise_name_error_at_load_time() -> None:
-    with tempfile.TemporaryDirectory() as td:
-        out = Path(td) / "site"
-        out.mkdir(parents=True)
-        result = render_vs_section(out)
         assert isinstance(result, tuple) and len(result) == 2

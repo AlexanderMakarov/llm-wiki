@@ -69,13 +69,6 @@ from llmwiki.changelog_timeline import (
     render_recent_activity,
 )
 from llmwiki.claude_path import resolve_claude_path as _resolve_claude_path
-from llmwiki.compare import (
-    discover_user_overrides,
-    generate_pairs,
-    pair_slug,
-    render_comparison_body,
-    render_comparisons_index,
-)
 from llmwiki.context_md import is_context_file
 from llmwiki.convert import ENCODED_PATH_PREFIXES, HOME_PATH_PREFIXES
 from llmwiki.docs_pages import (
@@ -93,7 +86,6 @@ from llmwiki.graph import write_html as write_graph_html
 from llmwiki.log_reader import recent_events as _recent_log_events
 from llmwiki.manifest import write_manifest
 from llmwiki.models_page import (
-    discover_model_entities,
     discover_model_entities_with_meta,
     render_model_info_card,
     render_models_index,
@@ -2557,95 +2549,6 @@ def render_models_section(out_dir: Path) -> tuple[Path | None, int]:
         (models_out / f"{slug}.html").write_text(page, encoding="utf-8")
 
     return index_path, len(entries)
-
-
-# ─── v0.7 (#58) auto-generated vs-comparison pages ────────────────────────
-
-def render_vs_section(
-    out_dir: Path,
-    max_pairs: int = 500,
-    min_shared_fields: int = 3,
-) -> tuple[Path | None, int]:
-    """Generate `/vs/<slug_a>-vs-<slug_b>.html` for every pair of
-    comparable model entities + an index at `/vs/index.html`.
-
-    Honors user overrides under `wiki/vs/<slug>.md` — a hand-written
-    comparison replaces the auto-gen for that URL. Returns
-    `(index_path, pair_count)`. Always writes the index so the nav
-    link resolves even when no entities exist.
-    """
-    # Post-review: lazy imports so this function actually works the
-    # next time someone wires it. Previously these names were referenced
-    # but never imported — first call would have crashed with NameError.
-    entities_dir = REPO_ROOT / "wiki" / "entities"
-    overrides_dir = REPO_ROOT / "wiki" / "vs"
-    entries = discover_model_entities(entities_dir)
-    # Strip down to (path, profile) for compare.generate_pairs
-    pair_entries = [(p, profile) for p, profile, _w, _b in entries]
-    pairs = generate_pairs(
-        pair_entries,
-        min_shared_fields=min_shared_fields,
-        max_pairs=max_pairs,
-    )
-
-    vs_out = out_dir / "vs"
-    vs_out.mkdir(parents=True, exist_ok=True)
-
-    # Index
-    index_body = render_comparisons_index(pairs)
-    index_page = (
-        page_head(
-            "Model comparisons — LLM Wiki",
-            "Auto-generated side-by-side comparisons of AI-model entities.",
-            css_prefix="../",
-        )
-        + nav_bar("vs", link_prefix="../")
-        + hero("Model comparisons", f"{len(pairs)} auto-generated pairs")
-        + index_body
-        + "</main>\n"
-        + page_foot(js_prefix="../")
-    )
-    index_path = vs_out / "index.html"
-    index_path.write_text(index_page, encoding="utf-8")
-
-    # User overrides replace the auto-gen for matching slugs
-    overrides = discover_user_overrides(overrides_dir)
-
-    for pair in pairs:
-        slug = pair_slug(pair)
-        if slug in overrides:
-            # User override — render the raw body through md_to_html
-            body_html = md_to_html(overrides[slug])
-            article_body = (
-                '<section class="section"><div class="container narrow">'
-                f'<article class="article content">{body_html}</article>'
-                '</div></section>'
-            )
-        else:
-            # Auto-gen — three structured sections
-            comparison_body = render_comparison_body(pair)
-            article_body = (
-                '<section class="section"><div class="container narrow">'
-                f'{comparison_body}'
-                '</div></section>'
-            )
-
-        title = f"{pair['title_a']} vs {pair['title_b']}"
-        page = (
-            page_head(
-                f"{title} — LLM Wiki",
-                f"Side-by-side comparison of {title}.",
-                css_prefix="../",
-            )
-            + nav_bar("vs", link_prefix="../")
-            + hero(title, f"{pair['score']} shared structured fields")
-            + article_body
-            + "</main>\n"
-            + page_foot(js_prefix="../")
-        )
-        (vs_out / f"{slug}.html").write_text(page, encoding="utf-8")
-
-    return index_path, len(pairs)
 
 
 # ─── search index ──────────────────────────────────────────────────────────

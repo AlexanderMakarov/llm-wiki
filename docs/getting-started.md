@@ -167,7 +167,6 @@ Flags and output: [docs/reference/cli.md](reference/cli.md#queue--inspect-and-ru
 ## New in recent versions
 
 - **Model pages** (`/models/`) — structured profile pages for every LLM model referenced in your sessions, with pricing, context window, and usage stats.
-- **VS-comparisons** (`/vs/`) — auto-generated side-by-side diffs of related AI-model entities (e.g. Claude vs GPT-4).
 - **Project topics** — auto-detected topic chips on project pages, extracted from session content.
 - **Multi-agent support** — sync sessions from Claude Code, Codex CLI, Copilot, Cursor, and Gemini CLI simultaneously. Each session gets a colored badge showing which agent produced it.
 

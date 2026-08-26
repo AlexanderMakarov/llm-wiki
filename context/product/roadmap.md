@@ -17,7 +17,7 @@ _Stop misleading users; then systematically decide what fork residue to revive v
 - [ ] **Fork / migration residue cleanup (known)**
   - [x] **Drop hardcoded entity_type taxonomy (#102):** Stop validating the old seven-value enum that harvest stamps as `unknown` and then fails lint after promote.
   - [ ] **Fix broken docs links and link-check hygiene (#107):** Repair real 404s, exclude build-time placeholders, and make link-check fire on `main` so regressions do not wait for weekly cron. Close the duplicate auto-filed reports (#136, #152) against this one instead of accumulating a new issue per run.
-  - [ ] **Dead `/vs/` comparison surface (#138):** `render_vs_section` has no production callers and hardcodes `REPO_ROOT/wiki`, so the model-comparison surface never renders — revive it or remove it per the inventory rule below.
+  - [x] **Dead `/vs/` comparison surface (#138):** Removed — `llmwiki/compare.py`, `render_vs_section`, vs CSS, docs/nav claims, and tests are gone. `/models/` and the ai-model schema stay.
   - [ ] **One project, one page (#126):** Project aggregation splits a single project across worktrees, clones, and adapters, so the same codebase appears as several projects.
 
 - [ ] **Candidate review correctness**

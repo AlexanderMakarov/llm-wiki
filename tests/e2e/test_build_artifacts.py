@@ -289,7 +289,7 @@ def test_no_session_html_links_to_localhost_or_file_uri(site_root: Path) -> None
     """
     forbidden = ("http://localhost", "https://localhost", "file:///")
     # Surfaces that should never reference localhost.
-    enforced_prefixes = ("sessions/", "projects/", "models/", "vs/")
+    enforced_prefixes = ("sessions/", "projects/", "models/")
     leaks: list[tuple[Path, str]] = []
     for html_file in site_root.rglob("*.html"):
         rel = html_file.relative_to(site_root)

@@ -10,6 +10,11 @@ How to upgrade between `llmwiki` releases.  Most releases are drop-in (`pip inst
 
 The canonical per-release detail is [CHANGELOG.md](https://github.com/Pratiyush/llm-wiki/blob/master/CHANGELOG.md) — this guide focuses on "what might break".
 
+## Unreleased — auto-generated `/vs/` model comparisons removed (#138)
+
+- **No vault migration.** The `/vs/` surface was never called from `build_site` and never wrote `site/vs/` for a normal vault build. Rebuild as usual.
+- **Optional cleanup.** If you hand-authored `wiki/vs/*.md` overrides from older docs, they are no longer read; delete or keep as personal notes. `/models/` is unchanged.
+
 ## Unreleased — `all` runs every stage; automation setup is plain-language (#156)
 
 - **`llmwiki all` now includes `sync` and `synth`, which used to be opt-in.** The pipeline is `sync` → `synth` → `build` → `graph` → `lint`, and each stage has an opt-out flag: `--no-sync`, `--no-synth`, `--skip-graph`, `--skip-lint`. **If you have a bare `llmwiki all` in cron, it will start summarising your sessions.** How much that matters depends on your backend: the default `synthesis.backend` is `dummy`, which makes no provider call, so a default install spends nothing — the change only reaches you if you configured a real backend. To keep the old shape, add `--no-sync --no-synth`; to keep sync but never call a provider, add `--no-synth`. If a real backend is configured, the first `llmwiki all` you run in a terminal prints the same warning once, before any provider request; scheduled runs stay quiet because their output is a log file, not a terminal.
@@ -61,7 +66,6 @@ The canonical per-release detail is [CHANGELOG.md](https://github.com/Pratiyush/
 - **`type: question` and `type: comparison` are no longer valid frontmatter.** They are gone from the `type:` vocabulary, so `llmwiki lint` reports a `frontmatter_validity` **error** on any page still declaring one, and `wiki_search` no longer offers them as a `kind` filter. Nothing in the product ever created such a page — `init` never scaffolded `wiki/questions/` or `wiki/comparisons/`, and no synth, harvest, or promote path wrote into them — so for almost every vault this is a no-op.
 - **If you hand-wrote pages of either kind, run `llmwiki migrate-page-kinds --vault <your vault>`.** It retypes each page to `concept`, moves it into `wiki/concepts/` keeping the filename, deletes the legacy `_context.md`, and prunes `wiki/questions/` and `wiki/comparisons/` once they are empty. Inbound `[[wikilinks]]` resolve by filename, not by folder, so the move does not break a single link and no referring page is edited. Preview with `--dry-run`; a vault with no such page prints `nothing to migrate` and exits 0. A filename already taken in `wiki/concepts/` is never overwritten — that page is retyped where it stands and reported so you can settle the clash — and a legacy folder still holding other content is left in place and reported. Rebuild afterwards (`llmwiki build --vault <your vault>`) so `site/` picks up the new locations.
 - **A folder you keep for your own reasons still works.** `reindex` catalogues any folder it finds under `wiki/`, so pages in a non-canonical folder stay listed in `wiki/index.md` and stay in the graph. Only the frontmatter `type:` value is constrained.
-- **Model comparisons are a different feature and are untouched.** The auto-generated side-by-side pages for AI-model entity pages (`/vs/`) share only the word "comparison" with the removed kind.
 
 ## Unreleased — trace provenance + lint `provenance_integrity` (#122)
 

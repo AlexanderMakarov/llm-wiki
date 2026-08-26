@@ -65,19 +65,17 @@ Clicking a row navigates to `/sessions/<project>/<slug>.html`.
 
 ---
 
-## Models + Compare
+## Models
 
-URLs: `/models/index.html`, `/vs/index.html`
+URL: `/models/index.html`
 
-**Models:** structured info cards for each AI model (per `llmwiki/schema.py :: ModelProfile`):
+Structured info cards for each AI model (per `llmwiki/schema.py :: ModelProfile`):
 
 - Provider · release date · license
 - Context window · max output
 - Modalities (text / vision / audio)
 - Pricing per 1 M tokens (input, cached_input, cache_write, output)
 - Benchmark scores (GPQA Diamond, SWE-bench, MMLU, LiveCodeBench, etc.)
-
-**Compare:** auto-generated pairwise comparison pages (`/vs/claude-sonnet-4-6-vs-gpt-5.html`, etc.). One row per shared field, winner highlighted.
 
 ---
 

@@ -18,7 +18,6 @@ llmwiki/viz_heatmap.py          @AlexanderMakarov
 llmwiki/viz_tools.py             @AlexanderMakarov
 llmwiki/viz_tokens.py           @AlexanderMakarov
 llmwiki/models_page.py          @AlexanderMakarov
-llmwiki/compare.py              @AlexanderMakarov
 llmwiki/project_topics.py       @AlexanderMakarov
 
 # L5 Schema — docs, steering, CLAUDE.md

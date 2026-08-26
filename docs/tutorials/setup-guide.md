@@ -234,8 +234,7 @@ benchmarks: {"gpqa_diamond": 0.82, "swe_bench": 0.65}
 - [[Anthropic]]
 ```
 
-Rebuild — a `/models/` page appears listing every model entity. Pairs are
-auto-rendered at `/vs/` for benchmark comparison.
+Rebuild — a `/models/` page appears listing every model entity.
 
 ### 4.3 Use Obsidian
 

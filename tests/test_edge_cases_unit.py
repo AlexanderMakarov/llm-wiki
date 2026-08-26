@@ -294,42 +294,6 @@ class TestSchemaEdgeCases:
 
 
 # ═══════════════════════════════════════════════════════════════════════
-# compare: degenerate pairs
-# ═══════════════════════════════════════════════════════════════════════
-
-from llmwiki.compare import compare_pair_score, generate_pairs
-
-
-class TestCompareEdgeCases:
-    def test_identical_profiles(self):
-        """Two identical profiles should still produce a valid comparison."""
-        p = {"title": "Same", "provider": "X",
-             "model": {"context_window": 100000},
-             "pricing": {"input_per_1m": 3.0}}
-        score, shared = compare_pair_score(p, p)
-        assert score >= 3
-
-    def test_one_empty_one_full(self):
-        a = {"title": "Full", "provider": "X",
-             "model": {"context_window": 100000, "license": "mit"},
-             "benchmarks": {"mmlu": 0.9}}
-        b = {}
-        score, shared = compare_pair_score(a, b)
-        assert score == 0
-
-    def test_generate_pairs_three_identical(self):
-        """Three identical models → 3 pairs, all with the same score."""
-        entries = [(Path(f"/tmp/M{i}.md"), {"title": f"M{i}", "provider": "X",
-                    "model": {"context_window": 100000},
-                    "pricing": {"input_per_1m": 3.0}})
-                   for i in range(3)]
-        pairs = generate_pairs(entries, min_shared_fields=2)
-        assert len(pairs) == 3
-        scores = [p["score"] for p in pairs]
-        assert len(set(scores)) == 1  # all same score
-
-
-# ═══════════════════════════════════════════════════════════════════════
 # changelog_timeline: degenerate entries
 # ═══════════════════════════════════════════════════════════════════════
 
