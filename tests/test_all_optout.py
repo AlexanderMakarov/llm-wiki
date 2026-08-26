@@ -14,7 +14,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from llmwiki import cli, pipeline
+from llmwiki import cli, convert, pipeline
 from llmwiki.cli import build_parser
 
 
@@ -256,3 +256,35 @@ def test_notice_writes_the_state_file_only_on_the_run_that_flips_the_flag(
 
     assert writes == []
     assert state.read_text(encoding="utf-8") == after_first
+
+
+# @spec: 010-automation-profiles
+# @regression
+def test_all_succeeds_on_a_machine_with_no_session_store_adapter(tmp_path: Path) -> None:
+    """A vault fed only by ``llmwiki add`` has no agent to sync from.
+
+    ``all`` runs sync by default, and ``convert_all`` reports "no adapters
+    available" as exit 1. Merged into the pipeline's exit code that would
+    mark every scheduled run failed on such a machine, for a condition that
+    describes the machine rather than a fault in the run — the same reason
+    lint findings do not fail the job by default.
+    """
+    vault = tmp_path / "vault"
+    (vault / "raw" / "sessions").mkdir(parents=True)
+    (vault / "wiki" / "sources").mkdir(parents=True)
+
+    args = build_parser().parse_args(["all", "--no-synth", "--skip-graph", "--vault", str(vault)])
+
+    # Simulate a machine with no agent installed. Clearing the registry alone is
+    # not enough — convert_all calls discover_adapters(), which repopulates it —
+    # so discovery is stubbed out too.
+    with (
+        patch.object(convert, "discover_adapters", lambda: None),
+        patch.object(convert, "discover_contrib", lambda: None),
+        patch.dict(convert.REGISTRY, {}, clear=True),
+        patch.object(pipeline, "build_site", return_value=0),
+        patch.object(pipeline, "_run_lint_step", return_value=(0, {})),
+    ):
+        rc = cli.cmd_all(args)
+
+    assert rc == 0, "no installed agent must not fail the run"

@@ -798,7 +798,7 @@ def test_all_with_synth_honours_config_concurrency_with_no_flag_to_set_it(
     backend = _TrackingBackend()
 
     args = build_parser().parse_args(
-        ["all", "--with-synth", "--skip-graph", "--vault", str(vault)]
+        ["all", "--no-sync", "--skip-graph", "--vault", str(vault)]
     )
 
     with (

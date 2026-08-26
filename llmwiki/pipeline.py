@@ -242,7 +242,7 @@ def run_pipeline(args: argparse.Namespace) -> int:
         if getattr(args, "with_sync", False):
             print("\n==> llmwiki sync (convert; auto-build off)")
             state_file = resolve_state_file()
-            rc = convert_all(out_dir=raw_sessions, state_file=state_file)
+            rc = convert_all(out_dir=raw_sessions, state_file=state_file, no_adapters_ok=True)
             if rc != 0:
                 overall_rc = _merge_rc(overall_rc, rc)
                 if args.fail_fast:
