@@ -803,8 +803,10 @@ def test_all_with_synth_honours_config_concurrency_with_no_flag_to_set_it(
 
     with (
         patch.object(pipeline_mod, "resolve_backend", return_value=backend),
+        # Workers resolve concurrency via synth.pipeline's binding (#142),
+        # same injection point as FR3.3 above — not pipeline._load_sessions_config.
         patch.object(
-            pipeline_mod,
+            synth_pipeline,
             "_load_sessions_config",
             lambda: {"synthesis": {"concurrency": 3}},
         ),
