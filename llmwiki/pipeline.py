@@ -45,6 +45,10 @@ from llmwiki.synth.pipeline import refresh_synth_pending, resolve_backend, synth
 from llmwiki.synth.reporting import print_synth_run_summary
 from llmwiki.vault import describe_vault, resolve_vault
 
+# Canonical stage order for ``llmwiki all`` / the wiki-all agent skill (#170).
+# Opt-out flags may skip a stage; init is not part of this pipeline.
+PIPELINE_STAGES = ("sync", "synth", "build", "graph", "lint")
+
 
 def _merge_rc(overall: int, rc: int) -> int:
     """Keep the first non-zero exit code seen (worst-first-wins isn't the
@@ -355,8 +359,10 @@ def run_pipeline(args: argparse.Namespace) -> int:
 
         if not getattr(args, "skip_lint", False):
             lint_fail = resolve_lint_fail(args)
-            lint_label = "lint" if lint_fail == "never" else f"lint --lint-fail {lint_fail}"
-            print(f"\n==> llmwiki {lint_label}")
+            # Keep the stage name literal so PIPELINE_STAGES / agent-kit
+            # honesty tests can grep banners in order (#170).
+            lint_extra = "" if lint_fail == "never" else f" --lint-fail {lint_fail}"
+            print(f"\n==> llmwiki lint{lint_extra}")
             lint_rc, lint_summary = _run_lint_step(wiki_dir)
             overall_rc = _merge_rc(overall_rc, lint_rc)
 
