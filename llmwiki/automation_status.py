@@ -41,16 +41,3 @@ def save_status(root: Path, data: dict[str, Any]) -> Path:
     payload["updated_at"] = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return path
-
-
-def empty_status() -> dict[str, Any]:
-    return {
-        "profile": None,
-        "hour": 8,
-        "minute": 0,
-        "watch_enabled": False,
-        "hooks": [],
-        "synth_backend": "dummy",
-        "log_path": str(default_log_path()),
-        "updated_at": "",
-    }

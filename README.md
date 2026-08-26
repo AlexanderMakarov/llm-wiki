@@ -66,7 +66,7 @@ llmwiki build                        # vault/wiki/ → vault/site/
 
 `synth` does not rebuild the site. `build` does. `candidates apply` rebuilds after a successful batch so `/candidates.html` matches the wiki (`--no-rebuild` skips that). Candidate review is the human gate: a row starts with no decision, Apply assembles `llmwiki candidates apply --vault … --actions '…'`, and only that command writes the wiki.
 
-One-shot: `llmwiki all --with-synth --graph-engine builtin`.
+One-shot: `llmwiki all --graph-engine builtin` runs the whole loop — sync → synth → build → graph → lint. Opt out of a stage with `--no-sync`, `--no-synth`, `--skip-graph`, or `--skip-lint`.
 
 ## Agents
 

@@ -1629,11 +1629,20 @@ def convert_all(
     force: bool = False,
     dry_run: bool = False,
     fail_on_errors: bool = False,
+    no_adapters_ok: bool = False,
 ) -> int:
     """Main entry: convert new sessions across all enabled adapters.
 
     Returns 0 when the run completes, 1 when no adapters are available,
     2 on bad arguments.
+
+    ``no_adapters_ok`` makes a machine with no session-store adapter a
+    no-op returning 0 instead of a failure. Callers that run this as one
+    stage of a larger pipeline pass it: a vault fed only by ``llmwiki
+    add`` has no agent installed to sync from, and that is a description
+    of the machine rather than a fault in the run. A bare ``llmwiki
+    sync`` leaves it off, because there the user asked for exactly this
+    and an empty result is worth an exit code.
     Per-file conversion errors do NOT fail the run by default — each one
     is counted in the summary, recorded in the quarantine, and visible
     via ``sync --status``, and the rest of the corpus still converts.
@@ -1700,6 +1709,9 @@ def convert_all(
                 selected.append(cls)
 
     if not selected:
+        if no_adapters_ok:
+            print("  no session-store adapter installed — nothing to convert")
+            return 0
         print("No adapters available. Install Claude Code or Codex CLI first.", file=sys.stderr)
         return 1
 

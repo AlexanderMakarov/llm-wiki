@@ -56,7 +56,7 @@ _FAVICON_PNG = bytes.fromhex(
 # Resolve it from the package location, NOT REPO_ROOT — with LLMWIKI_ROOT
 # set, REPO_ROOT points at the user's vault, which has none of these files.
 SOURCE_ROOT = PACKAGE_ROOT.parent
-from llmwiki import raw_docs_site
+from llmwiki import automation_plan, cron_spec, raw_docs_site
 from llmwiki.agent_label import detect_agent_label, render_agent_badge
 from llmwiki.automation_status import load_status
 from llmwiki.candidates import apply_review_summary_to_pipeline, candidate_review_summary
@@ -2163,6 +2163,24 @@ def render_analytics(
     return out_path
 
 
+def _schedule_label(status: dict[str, Any]) -> str:
+    """Human wording for when the daily job runs, e.g. ``Every day at 08:00``.
+
+    Prefers the ``schedule_label`` key the installer writes; a status file that
+    predates it is described from its cron expression instead. A cron
+    expression this build cannot translate falls back to the default daily
+    schedule, so a site build never fails over a malformed status file.
+    """
+    label = status.get("schedule_label")
+    if isinstance(label, str) and label.strip():
+        return label.strip()
+    schedule = automation_plan.schedule_from_status(status)
+    try:
+        return cron_spec.describe(cron_spec.parse_cron(schedule))
+    except cron_spec.CronError:
+        return cron_spec.describe(cron_spec.parse_cron(automation_plan.DEFAULT_SCHEDULE))
+
+
 def render_automation_panel(content_root: Path | None) -> str:
     """HTML panel describing install-automation status for the Home page."""
     if content_root is None:
@@ -2180,9 +2198,22 @@ def render_automation_panel(content_root: Path | None) -> str:
             "</div>"
         )
 
-    profile = status.get("profile") or "none"
-    hour = int(status.get("hour") or 8)
-    minute = int(status.get("minute") or 0)
+    plan = automation_plan.plan_from_status(status)
+    job_label = html.escape(automation_plan.plan_label(plan))
+    schedule_label = html.escape(_schedule_label(status))
+    spend_line = (
+        "<li>Cost: <strong>can spend money at your AI provider</strong> — it sends session text for "
+        "synthesis. Run <code>llmwiki synth --estimate</code> to see what that costs.</li>"
+        if automation_plan.spends_tokens(plan)
+        else "<li>Cost: <strong>cannot spend money at your AI provider</strong> — it only converts new "
+        "sessions into <code>raw/</code>.</li>"
+    )
+    lint_fail_line = (
+        f"<li>Quality findings can mark the scheduled run as failed "
+        f"(<code>--lint-fail {html.escape(plan.lint_fail)}</code>).</li>"
+        if plan.lint_fail != "never"
+        else ""
+    )
     watch = "on" if status.get("watch_enabled") else "off"
     hooks = status.get("hooks") or []
     hooks_s = ", ".join(str(h) for h in hooks) if hooks else "none (recommended)"
@@ -2196,8 +2227,10 @@ def render_automation_panel(content_root: Path | None) -> str:
         '<div class="automation-panel" aria-label="Automation">'
         "<h2>Automation</h2>"
         "<ul>"
-        f"<li>Scheduler profile: <strong>{html.escape(str(profile))}</strong> "
-        f"at <strong>{hour:02d}:{minute:02d}</strong> local</li>"
+        f"<li>Daily job: <strong>{job_label}</strong></li>"
+        f"<li>Runs: <strong>{schedule_label}</strong> local time</li>"
+        f"{spend_line}"
+        f"{lint_fail_line}"
         f"<li>Watch: <strong>{watch}</strong></li>"
         f"<li>Agent hooks: {html.escape(hooks_s)}</li>"
         f"<li>Synth backend: <code>{backend}</code></li>"

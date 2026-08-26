@@ -723,8 +723,8 @@ def test_sources_only_force_concurrency_and_vault_compose(
 
 def test_cli_reference_documents_the_concurrency_flag() -> None:
     """FR6.2: ``docs/reference/cli.md`` lists ``--concurrency`` with its
-    default and accepted range, and calls out that ``all --with-synth`` has
-    no matching flag."""
+    default and accepted range, and calls out that ``all`` has no matching
+    flag."""
     text = (REPO_ROOT / "docs" / "reference" / "cli.md").read_text(encoding="utf-8")
     concurrency_row = next(
         (ln for ln in text.splitlines() if ln.startswith("| `--concurrency N`")),
@@ -733,7 +733,7 @@ def test_cli_reference_documents_the_concurrency_flag() -> None:
     assert concurrency_row is not None, "no --concurrency row in docs/reference/cli.md"
     assert "default: `2`" in concurrency_row
     assert "1" in concurrency_row and "16" in concurrency_row
-    assert "all --with-synth" in concurrency_row
+    assert "`all` has no matching flag" in concurrency_row
 
 
 def test_configuration_reference_documents_the_concurrency_key() -> None:
@@ -798,7 +798,7 @@ def test_all_with_synth_honours_config_concurrency_with_no_flag_to_set_it(
     backend = _TrackingBackend()
 
     args = build_parser().parse_args(
-        ["all", "--with-synth", "--skip-graph", "--vault", str(vault)]
+        ["all", "--no-sync", "--skip-graph", "--vault", str(vault)]
     )
 
     with (

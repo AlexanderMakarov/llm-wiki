@@ -119,9 +119,7 @@ code block is syntax-highlighted, every `[[wikilink]]` resolves.
 
 **`Permission denied` on `~/.claude/projects/`** — the adapter reads; it never writes. Check file permissions: `ls -la ~/.claude/projects/ | head -3`.
 
-**Site loads but is empty** — you may have only run `sync --status`, or
-synthesis hasn't filled `wiki/sources/` yet. Run `llmwiki sync` then
-`llmwiki synth` (or `llmwiki all --with-synth`).
+**Site loads but is empty** — you may have only run `sync --status`, or synthesis hasn't filled `wiki/sources/` yet. Run `llmwiki sync` then `llmwiki synth` (or `llmwiki all`, which does both and rebuilds the site).
 
 ---
 

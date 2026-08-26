@@ -95,7 +95,7 @@ def test_state_widget_js_has_pipeline_table_and_collapsibles():
     # Vault is wrong cwd for slash commands — do not advertise opening agents there.
     assert "Open Claude Code in the vault" not in js.JS
     assert " && cursor ." not in js.JS
-    assert 'detailsSection("Commands", 13,' in js.JS
+    assert 'detailsSection("Commands", 15,' in js.JS
     assert "queued " in js.JS
     assert "in progress " in js.JS
     # Stubs/Other disk-only rows use muted dashes; Knowledge layer stays numeric.
@@ -120,6 +120,18 @@ def test_state_widget_js_has_pipeline_table_and_collapsibles():
     # Combined static blurb moved into per-table captions in JS.
     assert "Knowledge layer: To review → Entities / Concepts (vault-wide)." not in js.JS
     assert "vault-wide — not split by agent" not in js.JS
+
+
+def test_commands_table_offers_automation_before_the_manual_rows():
+    """Home Commands leads with the daily job, and offers `all` as its manual equivalent."""
+    install_idx = js.JS.index('commandRow("llmwiki install-automation"')
+    all_idx = js.JS.index('commandRow("llmwiki all"')
+    sync_idx = js.JS.index('commandRow("llmwiki sync"')
+    assert install_idx < all_idx < sync_idx
+    assert "the daily job" in js.JS
+    assert "it can spend tokens" in js.JS
+    # The estimate row is what the setup wizard points at for cost.
+    assert "before the daily job first fires" in js.JS
 
 
 def test_state_widget_js_on_disk_column_no_under_table_note():

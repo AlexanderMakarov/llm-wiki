@@ -323,7 +323,7 @@ a fresh site without running the full sync pipeline.
 
 ### `/wiki-all`
 
-**What:** run the full pipeline end-to-end — optional sync/synth → build → graph → lint. AI-consumable exports (`llms.txt`, `sitemap.xml`, etc.) are written by `build`, not a separate step.
+**What:** run the full pipeline end-to-end — sync → synth → build → graph → lint. Every stage runs unless you opt out of it. AI-consumable exports (`llms.txt`, `sitemap.xml`, etc.) are written by `build`, not a separate step.
 
 **Wraps:** `python3 -m llmwiki all`.
 
@@ -334,16 +334,12 @@ instead of chaining `/wiki-build` + `/wiki-graph` + `/wiki-lint` yourself.
 
 ```
 /wiki-all
-/wiki-all --with-sync --with-synth
+/wiki-all --no-synth
 /wiki-all --graph-engine builtin
 /wiki-all --skip-graph --strict
 ```
 
-Pass `--strict` to turn any lint warning into a non-zero exit, which is
-exactly what CI wants. Pass `--skip-graph` or `--graph-engine builtin`
-when the optional Graphify backend is not installed. Pass `--with-sync` or
-`--with-synth` when you want session conversion or synthesis folded into
-the same run.
+Pass `--strict` to turn any lint warning into a non-zero exit, which is exactly what CI wants. Pass `--skip-graph` or `--graph-engine builtin` when the optional Graphify backend is not installed. Pass `--no-sync` or `--no-synth` to leave session conversion or synthesis out of the run — `--no-synth` is the one that keeps the run away from your AI provider.
 
 ---
 
