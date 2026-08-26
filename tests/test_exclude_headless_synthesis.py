@@ -175,7 +175,6 @@ def test_estimate_excludes_headless_from_backlog():
     rpt = synthesize_estimate_report(
         raw_sessions=_mixed_sessions(),
         state_keys=set(),
-        synthesized_source_keys=set(),
         exclude_headless=True,
     )
     assert rpt["new_sessions"] == 1
@@ -187,7 +186,6 @@ def test_estimate_includes_headless_when_filter_disabled():
     rpt = synthesize_estimate_report(
         raw_sessions=_mixed_sessions(),
         state_keys=set(),
-        synthesized_source_keys=set(),
         exclude_headless=False,
     )
     assert rpt["new_sessions"] == 2
@@ -198,12 +196,10 @@ def test_estimate_headless_does_not_inflate_full_force_cost():
     # Full-force bills the whole corpus, so an ineligible session must be
     # dropped before costing — not merely omitted from the incremental bucket.
     on = synthesize_estimate_report(
-        raw_sessions=_mixed_sessions(), state_keys=set(),
-        synthesized_source_keys=set(), exclude_headless=True,
+        raw_sessions=_mixed_sessions(), state_keys=set(), exclude_headless=True,
     )
     off = synthesize_estimate_report(
-        raw_sessions=_mixed_sessions(), state_keys=set(),
-        synthesized_source_keys=set(), exclude_headless=False,
+        raw_sessions=_mixed_sessions(), state_keys=set(), exclude_headless=False,
     )
     assert on["full_force_usd"] < off["full_force_usd"]
 

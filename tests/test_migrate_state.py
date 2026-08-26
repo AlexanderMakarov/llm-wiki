@@ -17,6 +17,7 @@ from pathlib import Path
 import pytest
 
 from llmwiki.state_store import default_state, read_state, write_state
+from llmwiki.synth.pipeline import _save_state
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -145,8 +146,16 @@ def test_rerunning_migration_does_not_stack_synthesize_tasks(vault: Path):
     assert report["queued_synthesize"] == 0
 
 
+def _mark_session_synthesized(vault: Path) -> None:
+    """Seed synth state so a real on-disk page is treated as done (#163)."""
+    rel = "proj/2026-04-09-alpha.md"
+    mtime = (vault / "raw" / "sessions" / rel).stat().st_mtime
+    _save_state({rel: mtime}, _state_file(vault))
+
+
 def test_migration_enqueues_nothing_when_backlog_empty(vault: Path):
     _page(vault).write_text(REAL_PAGE, encoding="utf-8")
+    _mark_session_synthesized(vault)
     _prompt(vault, "aaaa-1111")
 
     report = _load_migrator().run_migration(_state_file(vault))
@@ -170,6 +179,7 @@ def test_migration_purges_existing_synth_request_items(vault: Path):
         {"id": "keep", "task_type": "build", "status": "done"},
     ]
     write_state(state, _state_file(vault))
+    _mark_session_synthesized(vault)
 
     report = _load_migrator().run_migration(_state_file(vault))
 

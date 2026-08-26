@@ -187,12 +187,11 @@ def test_discover_source_keys_survives_unreadable_page(vault):
 # ─── estimate + refresh_synth_pending ──────────────────────────────────
 
 
-def _report(vault, state_keys: set[str]) -> dict:
+def _report(vault, state_keys: set[str] | dict[str, float]) -> dict:
 
     return synthesize_estimate_report(
         raw_sessions=_discover_raw_sessions(vault["raw_dir"]),
         state_keys=state_keys,
-        synthesized_source_keys=discover_synth_source_keys(vault["sources"]),
         wiki_sources_dir=vault["sources"],
         raw_root=vault["raw_dir"],
         docs_root=vault["docs_dir"],
@@ -247,9 +246,18 @@ def test_stub_page_filed_under_another_name_is_resynthesized(vault):
     assert summary["synthesized"] == 1
 
 
-def test_estimate_counts_real_page_as_synthesized(vault):
+def test_estimate_real_page_without_state_is_not_synthesized(vault):
+    """#163: a real page on disk alone is not done — estimate needs synth state."""
     vault["page"].write_text(REAL_PAGE, encoding="utf-8")
     rpt = _report(vault, set())
+    assert rpt["new"] == 1
+    assert rpt["synthesized"] == 0
+
+
+def test_estimate_real_page_with_fresh_state_is_synthesized(vault):
+    vault["page"].write_text(REAL_PAGE, encoding="utf-8")
+    mtime = (vault["raw_dir"] / "proj" / "2026-04-09-alpha.md").stat().st_mtime
+    rpt = _report(vault, {"proj/2026-04-09-alpha.md": mtime})
     assert rpt["new"] == 0
     assert rpt["synthesized"] == 1
 
@@ -267,7 +275,10 @@ def test_refresh_synth_pending_lists_stub_backed_source(vault):
 
 
 def test_refresh_synth_pending_empty_for_real_page(vault):
+    """Real page + fresh state → empty backlog (#163; disk alone is not enough)."""
     vault["page"].write_text(REAL_PAGE, encoding="utf-8")
+    mtime = (vault["raw_dir"] / "proj" / "2026-04-09-alpha.md").stat().st_mtime
+    _save_state({"proj/2026-04-09-alpha.md": mtime}, vault["state"])
     out = refresh_synth_pending(
         raw_dir=vault["raw_dir"],
         docs_dir=vault["docs_dir"],

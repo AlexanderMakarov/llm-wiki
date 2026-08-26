@@ -10,6 +10,10 @@ How to upgrade between `llmwiki` releases.  Most releases are drop-in (`pip inst
 
 The canonical per-release detail is [CHANGELOG.md](https://github.com/Pratiyush/llm-wiki/blob/master/CHANGELOG.md) — this guide focuses on "what might break".
 
+## Unreleased — `synth --estimate` Already synthesized follows synth state (#163)
+
+- **`synth --estimate` Already synthesized now uses the same state+mtime predicate as a real `synth` run.** Pages on disk alone no longer count as done. If synth state is missing or stale, you may see Already synthesized drop and New / incremental $ rise — that matches what the next non-force run would process. No vault migration; the real `synth` skip rules were already this way.
+
 ## Unreleased — auto-generated `/vs/` model comparisons removed (#138)
 
 - **No vault migration.** The `/vs/` surface was never called from `build_site` and never wrote `site/vs/` for a normal vault build. Rebuild as usual.

@@ -46,6 +46,7 @@ from pathlib import Path
 
 import pytest
 
+from llmwiki.state_store import mtime_to_iso
 from llmwiki.synth.estimate import synthesize_estimate_report
 from llmwiki.synth.pipeline import _DOC_CHUNK_MAX_CHARS, _chunk_markdown
 from llmwiki.synth.reporting import print_source_pages_current_state
@@ -238,15 +239,19 @@ def stale_vault(tmp_path: Path) -> Path:
             encoding="utf-8",
         )
 
-    # State file marks BOTH sessions as synthesized (stale: one page was deleted).
-    # mtime_from_state requires numeric or ISO-8601 values — use a real timestamp.
+    # State marks BOTH sessions synthesized (keys are session-root rels; mtimes
+    # must be ≥ raw file mtimes so #163's shared done predicate agrees).
+    alpha_rel = "2026-01-01T10-00-project-alpha.md"
+    beta_rel = "2026-01-02T11-00-project-beta.md"
+    alpha_mtime = (sessions / alpha_rel).stat().st_mtime
+    beta_mtime = (sessions / beta_rel).stat().st_mtime
     state = {
         "queue": {"items": [], "legacy_pending_paths": []},
         "sync": {"files": {}, "meta": {}, "counters": {}},
         "synth": {
             "files": {
-                "raw/sessions/2026-01-01T10-00-project-alpha.md": "2026-01-01T10:00:00Z",
-                "raw/sessions/2026-01-02T11-00-project-beta.md": "2026-01-02T11:00:00Z",
+                alpha_rel: mtime_to_iso(alpha_mtime),
+                beta_rel: mtime_to_iso(beta_mtime),
             },
             "pending": [],
             "pending_total": 0,
