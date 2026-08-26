@@ -77,7 +77,7 @@ On successful non-dry-run with ≥1 page stamped, write vault-root JSON:
 ### 2.3 CLI wiring
 
 - `cmd_migrate_topic_kinds` in `llmwiki/cli.py` (same pattern as `cmd_migrate_page_kinds`).
-- Subparser `migrate-topic-kinds` with required `--vault` and `--dry-run`.
+- Subparser `migrate-topic-kinds` with required `--vault`; optional `--dry-run`.
 - Exit `0` on success / nothing to migrate; `1` if errors list non-empty (I/O failures), matching siblings.
 - Import the module in `cli.py` like `migrate_page_kinds` (package surface, not `scripts/`).
 

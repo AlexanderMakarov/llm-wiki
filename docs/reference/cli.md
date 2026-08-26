@@ -612,6 +612,32 @@ Idempotent: a second run finds nothing to migrate. On a run that changed somethi
 
 ---
 
+## `migrate-topic-kinds` — stamp entity/concept kinds onto older source Connections (#174)
+
+Older source summaries often list `[[wikilinks]]` under `## Connections` without an `(entity)` or `(concept)` kind. After the one-pass topic shape, those pages look like they still need a full rewrite. This offline migration stamps known kinds from pages already under `wiki/entities/`, `wiki/concepts/`, and the matching `wiki/candidates/` folders — no language model, no network call, and `raw/` is never written.
+
+Only the Connections section is edited. Nested `fact:` lines, Key Claims, Key Quotes, and frontmatter stay byte-identical. Names that exist as both an entity and a concept are ambiguous: those bullets are skipped and listed in the report rather than guessed. Already-kinded bullets are left alone.
+
+A successful non-dry-run that stamps at least one page writes `.llmwiki-topic-kinds-stamped.json` at the vault root (vault-local machine state — not for git) so you can later force-resynthesize exactly those sources if you want fact lines. The report always states that zero facts were derived.
+
+Implementation: `llmwiki/migrate_topic_kinds.py` — in the package rather than under `scripts/`, so it runs from a pip or Homebrew install with no checkout. Stamping clears the rewrite-needed flag when at least one resolvable kind lands; it does not invent facts. Use `llmwiki synth --force --path …` on stamped pages if you want fact lines afterwards.
+
+```bash
+python3 -m llmwiki migrate-topic-kinds --vault /path/to/vault --dry-run
+python3 -m llmwiki migrate-topic-kinds --vault /path/to/vault
+```
+
+### Flags
+
+| Flag | What |
+|---|---|
+| `--vault PATH` | **Required.** Vault root containing `wiki/`. |
+| `--dry-run` | Report what would change; write nothing (no stamped JSON either). |
+
+Idempotent: a second run finds nothing to stamp and prints `nothing to migrate: no connection lines need topic kinds`. Preview with `--dry-run` before applying.
+
+---
+
 ## `install-agent-kit` — copy packaged slash commands and skills (#109)
 
 A pip or Homebrew install carries the user-facing `/wiki-*` slash commands and skills inside the package (`llmwiki/agent_kit/`). This command copies `commands/` and `skills/` beneath a directory you name so Claude Code (or any agent that reads that layout) can see them. `--dest` is **required** — the command does not guess at agent directory conventions.

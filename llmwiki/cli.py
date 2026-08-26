@@ -40,7 +40,14 @@ from datetime import date as _date
 from pathlib import Path
 from typing import Any
 
-from llmwiki import REPO_ROOT, __version__, install_agent_kit, migrate_page_kinds, usage
+from llmwiki import (
+    REPO_ROOT,
+    __version__,
+    install_agent_kit,
+    migrate_page_kinds,
+    migrate_topic_kinds,
+    usage,
+)
 from llmwiki.adapters import REGISTRY, discover_adapters
 
 # #v1378-review (#691 follow-up): hoist these re-exports from mid-module
@@ -1300,6 +1307,21 @@ def cmd_migrate_page_kinds(args: argparse.Namespace) -> int:
         dry_run=bool(getattr(args, "dry_run", False)),
     )
     migrate_page_kinds.print_report(report)
+    return 1 if report["errors"] else 0
+
+
+def cmd_migrate_topic_kinds(args: argparse.Namespace) -> int:
+    """Stamp ``(entity|concept)`` onto older source Connections bullets (#174).
+
+    Package-local like ``migrate-page-kinds``: pip/Homebrew installs have no
+    ``scripts/`` checkout. Kinds come from existing wiki pages only — no
+    synthesis backend or network call.
+    """
+    report = migrate_topic_kinds.run_migration(
+        vault=Path(args.vault),
+        dry_run=bool(getattr(args, "dry_run", False)),
+    )
+    migrate_topic_kinds.print_report(report)
     return 1 if report["errors"] else 0
 
 
@@ -2568,6 +2590,26 @@ def build_parser() -> argparse.ArgumentParser:
         help="Report would-change files; write nothing",
     )
     migrate_kinds.set_defaults(func=cmd_migrate_page_kinds)
+
+    migrate_topic = sub.add_parser(
+        "migrate-topic-kinds",
+        help=(
+            "Stamp (entity|concept) onto older source Connections bullets "
+            "from wiki entity/concept/candidate pages (#174)"
+        ),
+    )
+    migrate_topic.add_argument(
+        "--vault",
+        type=Path,
+        required=True,
+        help="Vault root containing wiki/",
+    )
+    migrate_topic.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Report would-change files; write nothing",
+    )
+    migrate_topic.set_defaults(func=cmd_migrate_topic_kinds)
 
     kit = sub.add_parser(
         "install-agent-kit",
