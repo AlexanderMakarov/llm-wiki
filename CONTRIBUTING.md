@@ -300,6 +300,8 @@ python3 -m llmwiki build                # smoke test build
 python3 -m llmwiki --version            # version check
 ```
 
+Suite autouse in `tests/conftest.py` isolates the default vault **and** neutralizes repo-root `config.json` for in-process merges (#142). Tests that intentionally exercise the user-config overlay must monkeypatch `_USER_CONFIG` / `USER_CONFIG_FILE` themselves.
+
 Every adapter must ship with:
 
 - A fixture (synthetic or heavily redacted)
