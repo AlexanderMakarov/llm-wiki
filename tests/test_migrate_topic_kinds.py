@@ -20,6 +20,7 @@ from llmwiki.migrate_topic_kinds import (
     stamp_connections_body,
 )
 from llmwiki.source_topics import source_page_needs_topics_rewrite
+from llmwiki.synth.pipeline import _load_state, _save_state, source_synth_is_done
 
 
 def _page(path: Path, body: str, **meta: object) -> None:
@@ -180,18 +181,39 @@ def test_ambiguous_name_left_unchanged() -> None:
 def test_stamping_flips_rewrite_predicate(tmp_path: Path) -> None:
     wiki = tmp_path / "wiki"
     _entity(wiki, "OpenAI")
-    source = _source(wiki, "demo", "- [[OpenAI]] — vendor\n")
-    before = source.read_text(encoding="utf-8")
+    raw = tmp_path / "raw" / "sessions"
+    raw.mkdir(parents=True)
+    raw_path = raw / "2026-08-01-demo.md"
+    raw_path.write_text(
+        "---\ntitle: demo\nproject: demo\nslug: demo\ndate: 2026-08-01\n---\n\nbody\n",
+        encoding="utf-8",
+    )
+    source = _source(
+        wiki,
+        "demo",
+        "- [[OpenAI]] — vendor\n",
+        source_file="raw/sessions/2026-08-01-demo.md",
+    )
+    # Put page where synth expects it
+    dest = wiki / "sources" / "demo" / "2026-08-01-demo.md"
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
+    source.unlink()
+    before = dest.read_text(encoding="utf-8")
     assert source_page_needs_topics_rewrite(before) is True
 
     report = run_migration(vault=tmp_path)
 
-    after = source.read_text(encoding="utf-8")
+    after = dest.read_text(encoding="utf-8")
     assert source_page_needs_topics_rewrite(after) is False
     assert report["pages_stamped"] == 1
     assert report["bullets_stamped"] == 1
     assert report["facts_derived"] == 0
     assert "[[OpenAI]] (entity) — vendor" in after
+    assert report["state_entries_updated"] >= 1
+
+    state = _load_state(tmp_path / "llmwiki-state.json")
+    assert "2026-08-01-demo.md" in state
 
 
 def test_key_claims_and_quotes_untouched(tmp_path: Path) -> None:
@@ -303,7 +325,24 @@ def test_stamped_json_written_only_on_successful_apply(tmp_path: Path) -> None:
 def test_nothing_to_migrate_message(tmp_path: Path, capsys) -> None:
     wiki = tmp_path / "wiki"
     _entity(wiki, "OpenAI")
-    _source(wiki, "demo", "- [[OpenAI]] (entity) — already\n")
+    raw = tmp_path / "raw" / "sessions"
+    raw.mkdir(parents=True)
+    raw_path = raw / "2026-08-01-demo.md"
+    raw_path.write_text(
+        "---\ntitle: demo\nproject: demo\nslug: demo\ndate: 2026-08-01\n---\n\nx\n",
+        encoding="utf-8",
+    )
+    dest = wiki / "sources" / "demo" / "2026-08-01-demo.md"
+    _page(
+        dest,
+        "# demo\n\n## Connections\n- [[OpenAI]] (entity) — already\n",
+        title='"demo"',
+        type="source",
+        date="2026-08-01",
+        source_file="raw/sessions/2026-08-01-demo.md",
+    )
+    # Prime state so backfill has nothing to do
+    _save_state({raw_path.name: raw_path.stat().st_mtime}, tmp_path / "llmwiki-state.json")
 
     report = run_migration(vault=tmp_path)
     print_report(report)
@@ -311,7 +350,54 @@ def test_nothing_to_migrate_message(tmp_path: Path, capsys) -> None:
     out = capsys.readouterr().out
     assert "nothing to migrate" in out
     assert report["changed"] is False
+    assert report["state_entries_updated"] == 0
     assert not (tmp_path / STAMPED_LIST_FILENAME).exists()
+
+
+def test_state_backfill_marks_shared_filename_raws_done(tmp_path: Path) -> None:
+    """Many raw sessions → one rewrite-clear wiki page; all get state (#174)."""
+    wiki = tmp_path / "wiki"
+    _entity(wiki, "OpenAI")
+    raw = tmp_path / "raw" / "sessions"
+    raw.mkdir(parents=True)
+    page = wiki / "sources" / "proj" / "2026-08-08-store.md"
+    body = (
+        "# store\n\n## Connections\n- [[OpenAI]] (entity) — already kinded\n"
+    )
+    _page(
+        page,
+        body,
+        title='"store"',
+        type="source",
+        date="2026-08-08",
+        source_file="raw/sessions/2026-08-08T10-00-proj-store.md",
+        project="proj",
+    )
+    rels = []
+    for hour in ("10-00", "11-00", "12-00"):
+        rel = f"2026-08-08T{hour}-proj-store.md"
+        rels.append(rel)
+        (raw / rel).write_text(
+            "---\n"
+            'title: "store"\n'
+            "project: proj\n"
+            "slug: store\n"
+            "date: 2026-08-08\n"
+            "---\n\nbody\n",
+            encoding="utf-8",
+        )
+
+    report = run_migration(vault=tmp_path)
+
+    assert report["pages_stamped"] == 0  # already kinded
+    assert report["state_entries_updated"] == 3
+
+    state = _load_state(tmp_path / "llmwiki-state.json")
+    for rel in rels:
+        assert rel in state
+        assert source_synth_is_done(
+            rel, state, state[rel], page_is_pending=False
+        )
 
 
 def test_print_report_includes_facts_derived_zero(tmp_path: Path, capsys) -> None:
@@ -329,10 +415,11 @@ def test_print_report_includes_facts_derived_zero(tmp_path: Path, capsys) -> Non
 
 
 def test_migration_module_has_no_synth_backend_imports() -> None:
-    """Leaf-ish constraint: migration must not pull synth backends / HTTP."""
+    """Migration may use synth *state* helpers; must not pull HTTP backends."""
     source = Path("llmwiki/migrate_topic_kinds.py").read_text(encoding="utf-8")
     forbidden = (
-        r"llmwiki\.synth",
+        r"llmwiki\.synth\.ollama",
+        r"llmwiki\.synth\.claude",
         r"llmwiki\.backends",
         r"\bhttpx\b",
         r"\burllib\b",
@@ -342,6 +429,8 @@ def test_migration_module_has_no_synth_backend_imports() -> None:
     )
     for pattern in forbidden:
         assert not re.search(pattern, source), f"forbidden import pattern: {pattern}"
+    # State backfill uses pipeline leaf helpers only.
+    assert "from llmwiki.synth.pipeline import" in source
 
 
 # ─── CLI wiring ────────────────────────────────────────────────────────

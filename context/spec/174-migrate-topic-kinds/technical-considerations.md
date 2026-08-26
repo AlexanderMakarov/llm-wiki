@@ -53,7 +53,7 @@ Stamping:
 
 Per-page outcome: if any bullet stamped and afterward `source_page_needs_topics_rewrite(body)` is False (or was True before and False after), count as page stamped. Also count pages that remain pending rewrite after the pass (whole vault walk).
 
-### 2.2 Stamped list (FR6)
+### 2.2 Stamped list (FR6) and synth-state backfill (FR8)
 
 On successful non-dry-run with ≥1 page stamped, write vault-root JSON:
 
@@ -73,6 +73,8 @@ On successful non-dry-run with ≥1 page stamped, write vault-root JSON:
 ```
 
 `source_file` comes from frontmatter when present (so `synth --force --path …` can target raw files); omit or null when missing. Dry-run must not overwrite this file as an applied migration. Re-running a real migration may replace/merge the list (prefer replace with this run’s stamped set, documented in CLI help).
+
+**Synth state backfill (FR8):** after the stamp pass (and on re-runs that stamp nothing), upsert `llmwiki-state.json` → `synth.files` for every eligible raw session/doc whose derived wiki target(s) exist, are non-stub, and are rewrite-clear — using the same rel keys as `synthesize_new_sessions` (`<rel under raw/sessions>` / `docs::<rel>`). Shared synth filenames all get entries. Report `state entries updated`. Dry-run counts without writing.
 
 ### 2.3 CLI wiring
 

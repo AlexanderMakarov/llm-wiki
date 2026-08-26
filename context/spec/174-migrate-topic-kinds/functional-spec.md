@@ -68,6 +68,14 @@ Measured on a real large vault, most of those labels are already known because t
   - [ ] Given a successful (non-dry-run) migration that stamps pages, when it finishes, then a machine-readable record of those stamped pages is available for a later forced re-synthesis of exactly that set.
   - [ ] Given dry-run, when it finishes, then that record is not written as if the migration had applied.
 
+### FR8 — Plain synth must not re-bill rewrite-clear pages
+
+- **As an** operator who just stamped kinds offline, **I want** a normal `synth` / cost estimate to treat those sources as already done (including when many raw files share one wiki page name), **so that** clearing kinds does not leave a second full-model bill from missing synth state.
+
+- **Acceptance Criteria:**
+  - [ ] Given a non-dry-run migration after which a source page no longer needs a topics rewrite, when the operator runs `synth --estimate` or plain `synth`, then raw sessions/docs that resolve to that page are not counted as new solely for missing synth state.
+  - [ ] Given many raw files that share one synth filename pointing at a rewrite-clear page, when migration finishes, then each of those raw files is marked done in synth state (not only the page's `source_file` entry).
+
 ### FR7 — Upgrade docs explain the trade-off
 
 - **As an** operator reading the upgrade guide next to the #147 catch-up note, **I want** this migration’s cheap-shape / one-way / facts-still-missing trade-off spelled out, **so that** I choose it knowingly.

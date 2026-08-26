@@ -618,7 +618,7 @@ Older source summaries often list `[[wikilinks]]` under `## Connections` without
 
 Only the Connections section is edited. Nested `fact:` lines, Key Claims, Key Quotes, and frontmatter stay byte-identical. Names that exist as both an entity and a concept are ambiguous: those bullets are skipped and listed in the report rather than guessed. Already-kinded bullets are left alone.
 
-A successful non-dry-run that stamps at least one page writes `.llmwiki-topic-kinds-stamped.json` at the vault root (vault-local machine state — not for git) so you can later force-resynthesize exactly those sources if you want fact lines. The report always states that zero facts were derived.
+A successful non-dry-run that stamps at least one page writes `.llmwiki-topic-kinds-stamped.json` at the vault root (vault-local machine state — not for git) so you can later force-resynthesize exactly those sources if you want fact lines. The same apply (and a re-run over already-clear pages) upserts synth state for every raw session/doc whose wiki target is rewrite-clear — including when many raw files share one synth filename — so plain `llmwiki synth` / `--estimate` will not re-bill them. The report always states that zero facts were derived.
 
 Implementation: `llmwiki/migrate_topic_kinds.py` — in the package rather than under `scripts/`, so it runs from a pip or Homebrew install with no checkout. Stamping clears the rewrite-needed flag when at least one resolvable kind lands; it does not invent facts. Use `llmwiki synth --force --path …` on stamped pages if you want fact lines afterwards.
 
