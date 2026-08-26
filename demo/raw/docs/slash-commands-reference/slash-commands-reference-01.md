@@ -50,21 +50,14 @@ Summary of **20 commands in 5 groups**:
 use the CLI. If the output should feed back into an LLM turn, use the
 slash — the model sees the full stdout and can chain into the next step.
 
-### Eval vs lint
+### Lint (wiki quality)
 
-Two different QA surfaces that are easy to confuse:
+Structural and content quality for the wiki is **`llmwiki lint`** / **`/wiki-lint`** — there is no separate `eval` subcommand.
 
 | Command | Checks | Severity model | When to run |
 |---|---|---|---|
-| [`llmwiki lint`](../reference/cli.md#lint--run-13-wiki-quality-rules) / `/wiki-lint` | **Wiki content quality** — frontmatter completeness, `[[wikilink]]` integrity, orphans, duplicate titles, stale pages, cache-tier consistency, tag-topic convention, stale references | 15 rules with `error` / `warning` / `info` severities; `--fail-on-errors` exits non-zero only on errors | After every `/wiki-sync` or `/wiki-build` |
-| [`llmwiki eval`](../reference/cli.md#eval--structural-eval-checks-over-wiki) | **Structural corpus health** — site-wide metrics (total pages, orphan ratio, avg outbound links, broken-link rate, duplicate-slug rate, content-length distribution) | Pass / fail against configurable thresholds | In CI, weekly, or when comparing two wiki snapshots |
+| [`llmwiki lint`](../reference/cli.md#lint--run-13-wiki-quality-rules) / `/wiki-lint` | Frontmatter completeness, `[[wikilink]]` integrity, orphans, duplicate titles, stale pages, cache-tier consistency, tag-topic convention, stale references, and the rest of the registered rules | Rules with `error` / `warning` / `info` severities; `--fail-on-errors` exits non-zero only on errors | After every `/wiki-sync` or `/wiki-build`, and in CI |
 
-In plain English: **lint** checks each page against its contract;
-**eval** checks the whole wiki against health thresholds.  A page
-passing lint doesn't mean the corpus passes eval, and vice versa.
-
-Reach for `lint` first when something looks wrong with a specific
-page.  Reach for `eval` when you want to compare two builds (is the
-wiki trending healthier? getting more orphans?).
+Reach for lint when a page or the corpus looks wrong: orphans, broken `[[wikilinks]]`, missing frontmatter, stale summaries. Use `--fail-on-errors` (or the automation lint-fail policy) when a non-zero exit should block a pipeline.
 
 ---

@@ -39,7 +39,7 @@ _Stop misleading users; then systematically decide what fork residue to revive v
   - [ ] **Inventory what we inherited:** Catalog product surfaces left from the upstream fork and this fork's additions — CLI commands, adapters (core vs contrib), site/viewer features, docs claims, one-shot migrate-* tools, and anything half-removed or still advertised but broken — against the product definition's "cut useless / restore broken" goal.
   - [ ] **Decide and log each item:** For every inventoried surface, choose keep, revive (file/track a GitHub issue), or remove as useless; append removals and explicit non-goals to `docs/maintainers/DECLINED.md` with date + one-line reason (same format as existing entries), and keep revive work on the issue backlog.
   - [ ] **Execute cut/revive follow-ups:** Land the decided removals and restore-broken work as subsequent issues/PRs so the inventory does not become a static report.
-  - [ ] **Eval framework: build it or drop the claim (#154):** `llmwiki eval` is not a subcommand, yet the docs have advertised an eval framework as shipped since v0.3 and CI once ran it behind `|| true`, so the check reported success while measuring nothing.
+  - [x] **Eval framework: build it or drop the claim (#154):** Claim dropped — `llmwiki eval` was never implemented; remaining docs no longer advertise it. Wiki quality stays `llmwiki lint` / `/wiki-lint`.
 
 ---
 
@@ -83,7 +83,7 @@ _No new features. Lock what exists so users can depend on it._
 
 - [ ] **API freeze:** CLI flags, frontmatter schema, and slash-command contracts stop changing without a migration note; breaking changes wait for a major.
 - [ ] **LTS branch:** v1.x receives security fixes for 12 months after v1.0.
-- [ ] **Docs polish:** every shipped feature documented and every tutorial current — with the claims verified against the code, since the retired roadmaps advertised an eval framework, hover-preview and a timeline view that were never built.
+- [ ] **Docs polish:** every shipped feature documented and every tutorial current — with the claims verified against the code. Hover-preview and a timeline view were advertised as shipped and never built; the false eval-framework claim is already dropped (#154).
 
 ---
 

@@ -1,4 +1,4 @@
-"""Tests for v0.3 additions — eval framework, i18n docs, pyproject."""
+"""Tests for v0.3 additions — i18n docs, pyproject (eval framework never shipped; #154)."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ import re
 import pytest
 
 from llmwiki import __version__
+from llmwiki.cli import build_parser
 from tests.conftest import REPO_ROOT
 
 # ─── version bump ────────────────────────────────────────────────────────
@@ -72,5 +73,57 @@ def test_i18n_readme_lists_all_languages():
 
 
 # ─── CLI subcommand ──────────────────────────────────────────────────────
+
+
+def test_eval_framework_never_shipped_docs_stay_honest():  # @regression
+    """#154: docs must not resurrect false claims that ``llmwiki eval`` shipped."""
+    slash_ref = REPO_ROOT / "docs" / "reference" / "slash-commands.md"
+    slash_text = slash_ref.read_text(encoding="utf-8")
+    assert "llmwiki eval" not in slash_text, (
+        "slash-commands.md must not document a non-existent `llmwiki eval` "
+        "subcommand — use `llmwiki lint` / `/wiki-lint` for wiki quality"
+    )
+
+    demo_slash = (
+        REPO_ROOT
+        / "demo/raw/docs/slash-commands-reference/slash-commands-reference-01.md"
+    )
+    if demo_slash.exists():
+        assert "llmwiki eval" not in demo_slash.read_text(encoding="utf-8"), (
+            "demo slash-commands mirror must not advertise `llmwiki eval`"
+        )
+
+    upgrading = (REPO_ROOT / "docs" / "UPGRADING.md").read_text(encoding="utf-8")
+    assert "never a live CLI" in upgrading or "never shipped" in upgrading.lower(), (
+        "UPGRADING.md must clarify that `llmwiki eval` never shipped"
+    )
+    for line in upgrading.splitlines():
+        if "llmwiki eval" in line:
+            assert re.search(r"(?i)never|removed|lint", line), (
+                f"UPGRADING.md must only mention `llmwiki eval` in a "
+                f"never/removed/lint context: {line!r}"
+            )
+
+    matrix = (REPO_ROOT / "docs" / "feature-matrix.md").read_text(encoding="utf-8")
+    i4_rows = [ln for ln in matrix.splitlines() if ln.startswith("| I4 |")]
+    assert len(i4_rows) == 1, "feature-matrix.md should have exactly one I4 row"
+    i4 = i4_rows[0]
+    assert "#154" in i4 or "declined" in i4.lower(), (
+        "I4 row must cite #154 or mark eval as declined"
+    )
+    phase = i4.rstrip("|").split("|")[-1].strip()
+    assert phase != "v0.3", (
+        f"I4 phase must not be bare v0.3 (implies shipped eval); got {phase!r}"
+    )
+
+    parser = build_parser()
+    for action in parser._actions:
+        if hasattr(action, "choices") and action.choices:
+            assert "eval" not in action.choices, (
+                "CLI must not register an `eval` subcommand that never shipped"
+            )
+            break
+    else:
+        raise AssertionError("no subparsers found on the CLI parser")
 
 
