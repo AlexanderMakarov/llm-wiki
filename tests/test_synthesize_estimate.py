@@ -674,11 +674,13 @@ def test_estimate_synthesized_when_disk_has_fewer_parts_than_current_chunk_count
     )
     assert _expected_doc_pending(out_dir, "bigdoc2") is False  # sanity: fixture is genuinely done
 
+    # #163: done also requires synth state (pages on disk alone are not enough).
+    raw_mtime = (raw_docs / "bigdoc2.md").stat().st_mtime
     rpt = synthesize_estimate_report(
         raw_sessions=[],
         docs_root=raw_docs,
         wiki_sources_dir=sources,
-        state_keys=set(),
+        state_keys={"docs::bigdoc2.md": raw_mtime},
         prefix_tokens=2000,
     )
     docs_row = next(r for r in rpt["pipeline_rows"] if r["label"] == "Documents")

@@ -129,7 +129,6 @@ from llmwiki.synth.pipeline import (
     MAX_SYNTH_CONCURRENCY,
     _discover_raw_sessions,
     _load_state,
-    discover_synth_source_keys,
     refresh_synth_pending,
     resolve_backend,
     resolve_exclude_headless,
@@ -1875,7 +1874,6 @@ def _synthesize_estimate(args: argparse.Namespace | None = None) -> int:
     _apply_default_vault(args)
     raw_sessions = None
     state_keys = None
-    synthesized_source_keys = None
     wiki_sources_dir = None
     docs_root = None
     execution_model = ""
@@ -1916,8 +1914,7 @@ def _synthesize_estimate(args: argparse.Namespace | None = None) -> int:
     docs_root = vault_root / "raw" / "docs"
     wiki_sources_dir = vault_root / "wiki" / "sources"
     raw_sessions = _discover_raw_sessions(raw_root)
-    state_keys = set(_load_state(state_target).keys())
-    synthesized_source_keys = discover_synth_source_keys(wiki_sources_dir)
+    state_keys = _load_state(state_target)
     # prefix_tokens is left for the report to derive: what every page pays
     # up front is the CLI's own per-call overhead plus the rendered prompt
     # template, not CLAUDE.md / index.md / overview.md — the `claude`
@@ -1930,7 +1927,6 @@ def _synthesize_estimate(args: argparse.Namespace | None = None) -> int:
         else True,
         model=pricing_model,
         pricing_table=pricing_table,
-        synthesized_source_keys=synthesized_source_keys,
         wiki_sources_dir=wiki_sources_dir,
         raw_root=raw_root,
         docs_root=docs_root,

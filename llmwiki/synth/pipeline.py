@@ -171,6 +171,30 @@ def source_page_paths(
     return paths
 
 
+def source_synth_is_done(
+    rel: str,
+    state: Mapping[str, float],
+    mtime: float,
+    *,
+    force: bool = False,
+    page_is_pending: bool = False,
+) -> bool:
+    """True when a synth run should skip ``rel`` as already synthesized (#163).
+
+    Shared by the real ``synthesize_new_sessions`` skip loop and
+    ``synthesize_estimate_report`` so ``--estimate`` prices the same set a
+    non-force run would process. Requires a fresh-enough state mtime entry;
+    pages on disk alone do not count as done. The ``1e-6`` tolerance matches
+    float mtime round-trips through the state file.
+    """
+    return (
+        rel in state
+        and (state[rel] + 1e-6) >= mtime
+        and not force
+        and not page_is_pending
+    )
+
+
 def resolve_backend(
     cfg: dict[str, Any] | None = None,
 ) -> BaseSynthesizer:
@@ -585,23 +609,22 @@ def discover_unsynth_session_rels(
     """Session rel-paths that the shared estimate logic considers unsynth."""
 
     sessions = _discover_raw_sessions(raw_dir)
-    state_keys: set[str]
+    synth_state: dict[str, float]
     if state_file is None and raw_dir is not None:
         try:
             provided = Path(raw_dir).resolve()
             default = RAW_SESSIONS.resolve()
             if provided != default:
-                state_keys = set()
+                synth_state = {}
             else:
-                state_keys = set(_load_state(state_file).keys())
+                synth_state = _load_state(state_file)
         except OSError:
-            state_keys = set(_load_state(state_file).keys())
+            synth_state = _load_state(state_file)
     else:
-        state_keys = set(_load_state(state_file).keys())
+        synth_state = _load_state(state_file)
     report = synthesize_estimate_report(
         raw_sessions=sessions,
-        state_keys=state_keys,
-        synthesized_source_keys=discover_synth_source_keys(wiki_sources_dir),
+        state_keys=synth_state,
         wiki_sources_dir=wiki_sources_dir,
         raw_root=raw_dir or RAW_SESSIONS,
         docs_root=(raw_dir.parent / "docs") if raw_dir is not None else RAW_DOCS,
@@ -642,8 +665,7 @@ def refresh_synth_pending(
     state = _load_state(state_file)
     report = synthesize_estimate_report(
         raw_sessions=raw_sessions,
-        state_keys=set(state.keys()),
-        synthesized_source_keys=discover_synth_source_keys(sources_out),
+        state_keys=state,
         wiki_sources_dir=sources_out,
         raw_root=raw_dir or RAW_SESSIONS,
         docs_root=docs_dir or ((raw_dir.parent / "docs") if raw_dir is not None else RAW_DOCS),
@@ -1567,11 +1589,8 @@ def synthesize_new_sessions(
             or any(page_is_stub(t) for t in targets)
             or derived_needs_topics_rewrite
         )
-        if (
-            it["rel"] in state
-            and (state[it["rel"]] + 1e-6) >= mtime
-            and not force
-            and not page_is_pending
+        if source_synth_is_done(
+            rel, state, mtime, force=force, page_is_pending=page_is_pending
         ):
             continue
         # Dedup guard (#37): a REAL page under any folder/slug already claims

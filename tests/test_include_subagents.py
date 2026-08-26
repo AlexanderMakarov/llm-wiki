@@ -229,7 +229,6 @@ def test_estimate_only_raw_excludes_subagent_from_backlog():
     rpt = synthesize_estimate_report(
         raw_sessions=_mixed_sessions(),
         state_keys=set(),
-        synthesized_source_keys=set(),
         include_subagents="only-raw",
     )
     assert rpt["new_sessions"] == 1
@@ -241,7 +240,6 @@ def test_estimate_all_includes_subagent_in_backlog():
     rpt = synthesize_estimate_report(
         raw_sessions=_mixed_sessions(),
         state_keys=set(),
-        synthesized_source_keys=set(),
         include_subagents="all",
     )
     assert rpt["new_sessions"] == 2
@@ -251,7 +249,6 @@ def test_estimate_defaults_to_only_raw():
     rpt = synthesize_estimate_report(
         raw_sessions=_mixed_sessions(),
         state_keys=set(),
-        synthesized_source_keys=set(),
     )
     assert rpt["new_sessions"] == 1
 

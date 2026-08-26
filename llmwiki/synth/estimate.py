@@ -11,6 +11,7 @@ working for any test or caller that reached for it.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -94,11 +95,10 @@ def _rendered_template_tokens(wiki_sources_dir: Any | None = None) -> int:
 def synthesize_estimate_report(
     *,
     raw_sessions: list[tuple[Any, dict, str]] | None = None,
-    state_keys: set[str] | None = None,
+    state_keys: set[str] | Mapping[str, float] | None = None,
     prefix_tokens: int | None = None,
     output_tokens_per_call: int = DEFAULT_OUTPUT_TOKENS,
     model: str | None = None,
-    synthesized_source_keys: set[str] | None = None,
     wiki_sources_dir: Any | None = None,
     raw_root: Any | None = None,
     docs_root: Any | None = None,
@@ -121,8 +121,8 @@ def synthesize_estimate_report(
     the numbers without parsing stdout. Keys:
 
     * ``corpus`` — total raw sessions discovered under ``raw/sessions/``
-    * ``synthesized`` — eligible sources already covered (state keys,
-      existing non-stub wiki pages, or injected ``synthesized_source_keys``)
+    * ``synthesized`` — eligible sources the next non-force ``synth`` would
+      skip (same state+mtime+pending predicate as the run; #163)
     * ``new`` — ``corpus - synthesized``
     * ``incremental_usd`` — dollars to synthesize the ``new`` bucket
     * ``full_force_usd`` — dollars to re-synthesize the **whole** corpus
@@ -143,6 +143,9 @@ def synthesize_estimate_report(
     * ``pipeline_rows[*].on_disk`` — per-row file counts; Stubs/Other rows
       carry on-disk only
 
+    ``state_keys`` accepts a full ``{rel: mtime}`` map (preferred) or a bare
+    set of rels (tests: each key is treated as fresh enough for any mtime).
+
     Any of the args can be injected for tests; the default reads from
     disk and is what the CLI invokes.
     """
@@ -156,6 +159,7 @@ def synthesize_estimate_report(
         page_needs_topics_rewrite,
         scan_wiki_sources_disk,
         source_page_paths,
+        source_synth_is_done,
         synth_page_filename,
     )
     from llmwiki.synth.pipeline import (  # noqa: PLC0415 — cycle: synth.pipeline↔synth.estimate
@@ -252,30 +256,25 @@ def synthesize_estimate_report(
             source_rel = name
         source_key = ("raw/sessions/" + source_rel).replace("\\", "/")
         agent_by_source[source_key] = detect_agent_label(meta)
-    # One wiki/sources walk: real keys feed discovered-synth matching when
-    # the caller did not inject synthesized_source_keys; stub keys mark
-    # backlog (#24). File-category counts (On disk column + CLI snapshot)
-    # reuse this same scan — counts are .md files, not unique source_file keys.
+    # One wiki/sources walk: stub keys mark backlog (#24). File-category
+    # counts (On disk column + CLI snapshot) reuse this same scan — counts
+    # are .md files, not unique source_file keys.
     disk_scan = scan_wiki_sources_disk(
         sources_root, agent_by_source=agent_by_source
     )
-    real_source_keys = set(disk_scan["real_keys"])
     stub_source_keys = set(disk_scan["stub_keys"])
-    discovered_source_keys = (
-        synthesized_source_keys
-        if synthesized_source_keys is not None
-        else real_source_keys
-    )
     if state_keys is None:
-        state_keys = set(_load_state().keys())
+        state: dict[str, float] = _load_state()
+    elif isinstance(state_keys, Mapping):
+        state = {str(k): float(v) for k, v in state_keys.items()}
+    else:
+        # Bare set (unit tests): membership alone means fresh enough.
+        state = {str(k): float("inf") for k in state_keys}
 
     corpus = len(raw_sessions)
 
-    # The real synth state stores rel-paths under ``raw/sessions/``
-    # (e.g. ``proj/2026-04-09-slug.md``). Match against those first;
-    # fall back to bare filename + suffix-endswith for tests that
-    # inject simpler keys. A session counts as "synthesized" if any
-    # of those three keys already appears in state_keys.
+    # Done = the run's skip predicate (state + mtime + not pending), shared via
+    # source_synth_is_done (#163). Pages on disk alone are not enough.
     # #py-m10 (#596): single-pass walk. The previous version walked
     # raw_sessions twice — once to bucket new vs synthesised + collect
     # body strings, once via a list comprehension to materialise the
@@ -371,15 +370,7 @@ def synthesize_estimate_report(
     for p, _meta, body in raw_sessions:
         meta = _meta if isinstance(_meta, dict) else {}
         agent_label, agent_css = detect_agent_label(meta)
-        keys_to_try: set[str] = set()
         name = getattr(p, "name", str(p))
-        keys_to_try.add(name)
-        if hasattr(p, "relative_to"):
-            try:
-                keys_to_try.add(str(p.relative_to(raw_root_path)))
-            except (ValueError, AttributeError):
-                pass
-        keys_to_try.add(str(p))
         source_rel = ""
         if hasattr(p, "relative_to"):
             try:
@@ -392,23 +383,27 @@ def synthesize_estimate_report(
 
         filename = synth_page_filename(meta, getattr(p, "stem", name))
         project = str(meta.get("project") or getattr(getattr(p, "parent", None), "name", "unknown"))
-        out_path = sources_root / project / f"{filename}.md"
-        # #24: a stub page (dummy filler / pending sentinel) is not synthesis —
-        # its source stays in the backlog no matter what the state file says.
-        # #147: Connections without parseable (entity|concept) kinds also stay
-        # pending so the skip/queue path rewrites them in place.
-        output_is_pending = (
-            source_key in stub_source_keys
-            or page_is_stub(out_path)
-            or page_needs_topics_rewrite(out_path)
+        # #24 / #147: stub or topics-stale pages stay pending — same probes as
+        # the run (source_page_paths + stub keys).
+        targets = source_page_paths(
+            sources_root / project, filename, is_doc=False
         )
-        output_exists = out_path.is_file() and not output_is_pending
-
-        matched = not output_is_pending and (
-            bool(keys_to_try & state_keys)
-            or any(isinstance(k, str) and k.endswith(name) for k in state_keys)
-            or source_key in discovered_source_keys
-            or output_exists
+        page_is_pending = (
+            source_key in stub_source_keys
+            or any(page_is_stub(t) for t in targets)
+            or any(page_needs_topics_rewrite(t) for t in targets)
+        )
+        try:
+            raw_mtime = float(Path(p).stat().st_mtime)
+        except (OSError, TypeError, ValueError):
+            # Tests inject Path-ish stubs without a real filesystem path.
+            raw_mtime = 0.0
+        matched = source_synth_is_done(
+            source_rel,
+            state,
+            raw_mtime,
+            force=False,
+            page_is_pending=page_is_pending,
         )
         body_tokens = _body_tokens(body)
         # Full-force bucket: every session contributes regardless of state.
@@ -459,14 +454,21 @@ def synthesize_estimate_report(
         # Pages this doc owns come from disk, exactly as the synth run resolves them.
         # A doc with no pages yet has nothing to probe and stays pending.
         expected = source_page_paths(out_dir, filename, is_doc=True)
-        output_is_pending = (
+        page_is_pending = (
             source_key in stub_source_keys
             or any(page_is_stub(ep) for ep in expected)
             or any(page_needs_topics_rewrite(ep) for ep in expected)
         )
-        output_exists = bool(expected) and not output_is_pending
-        matched = not output_is_pending and (
-            rel in state_keys or source_key in discovered_source_keys or output_exists
+        try:
+            raw_mtime = float(Path(p).stat().st_mtime)
+        except (OSError, TypeError, ValueError):
+            raw_mtime = 0.0
+        matched = source_synth_is_done(
+            rel,
+            state,
+            raw_mtime,
+            force=False,
+            page_is_pending=page_is_pending,
         )
         # An oversized doc is written as one page per chunk, and each page is
         # its own `claude` call — so it is billed per chunk, not per doc.
