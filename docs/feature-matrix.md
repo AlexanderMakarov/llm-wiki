@@ -145,7 +145,7 @@
 | I1 | Unit tests (pytest) | ⭐⭐⭐⭐⭐ | bitsofchris, kytmanov, hsuanguo, lucasastorian | v0.1 |
 | I2 | Snapshot tests for adapters | ⭐⭐⭐⭐⭐ | **None** | v0.1 |
 | I3 | Fixture-based end-to-end tests | ⭐⭐⭐⭐⭐ | bitsofchris, kytmanov | v0.1 |
-| I4 | Eval framework (LLM-judged wiki quality) | ⭐⭐⭐ | xoai | v0.3 |
+| I4 | Eval framework (LLM-judged / structural wiki scoring) | ⭐⭐⭐ | xoai | declined (#154) — never shipped; use `llmwiki lint` |
 | I5 | Link checker (CI) | ⭐⭐⭐⭐ | **None explicit** | v0.1 |
 | I6 | **Gitleaks secret scanning in CI** | ⭐⭐⭐⭐⭐ | sinzin91 | v0.1 |
 | I7 | Privacy check (grep for real PII in fixtures) | ⭐⭐⭐⭐⭐ | **None** | v0.1 |

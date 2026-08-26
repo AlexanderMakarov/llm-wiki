@@ -31,7 +31,7 @@ The CLI was slimmed in #362. If you scripted any of these, replace as noted:
 - `llmwiki schedule` — removed. Schedule `llmwiki sync` directly via your OS's job runner (launchd / systemd / Task Scheduler).
 - `llmwiki install-skills` — removed. Manually copy `.claude/commands/wiki-*.md` into `~/.claude/commands/` for global availability.
 - `llmwiki check-links` — removed. Use the GitHub Actions link-check workflow instead.
-- `llmwiki watch`, `llmwiki manifest`, `llmwiki link-obsidian`, `llmwiki export-obsidian`, `llmwiki export-marp`, `llmwiki export-qmd`, `llmwiki eval` — also removed.
+- `llmwiki watch`, `llmwiki manifest`, `llmwiki link-obsidian`, `llmwiki export-obsidian`, `llmwiki export-marp`, `llmwiki export-qmd`, `llmwiki eval` — also removed. (`llmwiki eval` was never a live CLI — structural scoring never shipped; use `llmwiki lint` for wiki quality.)
 - `llmwiki export marp` is the new path for Marp slide export.
 
 ### Removed adapters

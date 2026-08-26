@@ -218,3 +218,9 @@ cool" isn't a new argument.*
 **Reason:** The server was removed and the site is plain files opened directly from disk, so `llmwiki serve`, the `serve.sh` / `serve.bat` wrappers, and the SQLite FTS5 server-side search fallback all lost the runtime they depended on. Search is the prebuilt client-side index.
 
 **Context:** Carried from the retired `docs/roadmap.md` (`M-L3-15`, `M-L4-04`, `C-L7-02`), which still listed the server as a shipped Must long after it was deleted. Reconsider only together with a decision to reintroduce a runtime.
+
+## 2026-08-26 — Eval framework / `llmwiki eval` subcommand
+
+**Reason:** Never implemented. Docs and roadmaps advertised an eval framework / `llmwiki eval` as shipped since v0.3, and CI once ran a no-op behind `|| true`, so the check reported success while measuring nothing. Structural and wiki quality remains `llmwiki lint` / `/wiki-lint`.
+
+**Context:** #154. Do not reintroduce a scoring CLI unless it is a real subcommand with tests; until then, lint is the quality gate.
