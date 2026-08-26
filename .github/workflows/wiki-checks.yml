@@ -42,14 +42,16 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e .
 
-      - name: llmwiki lint (errors fail the build)
+      - name: llmwiki lint (errors and warnings fail the build)
         run: |
-          # Errors fail; warnings are printed and tolerated. --strict is
-          # deliberately not used: content_freshness fires on any committed
-          # vault once 90 days pass, so it would redden this job on a timer
-          # rather than on a defect.
-          python -m llmwiki lint --vault demo --fail-on-errors || {
-            echo "::error::llmwiki lint found errors in demo/. Review output above."
+          # Errors and warnings both fail. Enforcing warnings is only honest
+          # because demo/llmwiki.json switches off content_freshness — it
+          # fires on any committed vault once 90 days pass, so it would
+          # redden this job on a calendar date rather than on a defect. That
+          # is the demo's one opt-out; every other check runs at stock
+          # settings, and the report below names what was skipped.
+          python -m llmwiki lint --vault demo --fail-on-errors --fail-on-warnings || {
+            echo "::error::llmwiki lint found errors or warnings in demo/. Review output above."
             exit 1
           }
 

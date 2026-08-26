@@ -106,6 +106,7 @@ llmwiki build                          # HTML site + llms.txt, llms-full.txt, gr
 llmwiki lint                           # 17 wiki-quality rules
 llmwiki lint --json --fail-on-errors   # CI-friendly
 llmwiki lint --rules link_integrity,orphan_detection
+llmwiki lint --vault /path/to/vault --fail-on-warnings   # rules switched off in <vault>/llmwiki.json never run
 ```
 
 ## Candidate workflow
@@ -183,11 +184,13 @@ llmwiki sync --adapter obsidian
 | `--force` | `sync`, `synthesize` | Ignore state file, reconvert everything |
 | `--force-resync` | `sync` | Override the newer-schema/corrupt-state guard (#29); implies `--force`, may duplicate `raw/` |
 | `--fail-on-errors` | `lint` | Non-zero exit on error-severity issues |
+| `--fail-on-warnings` | `lint` | Non-zero exit on warning-severity issues; pass both flags to gate on either |
+| `--min-refs N` | `lint`, `synth`, `all` | How many distinct source pages must name a `[[wikilink]]` target before it earns a candidate page — and before an unresolved link to it is a finding (default: `3`) |
 | `--no-sync`, `--no-synth` | `all` | Drop a stage from the run; `--no-synth` makes it LLM-free |
 | `--lint-fail {never,errors,warnings}` | `all`, `install-automation` | Which quality findings end the run with exit `2` (default: `never`) |
 | `--job {ingest,maintain}` | `install-automation` | What the daily job does — collect only, or also summarise |
 | `--schedule "<cron>"` | `install-automation` | When the daily job runs, e.g. `"0 8 * * 1-5"` |
-| `--vault <path>` | `sync`, `build`, `synthesize`, `add`, `queue`, `all` | Operate on an external vault (also sets the active state file) |
+| `--vault <path>` | `sync`, `build`, `synthesize`, `lint`, `add`, `queue`, `all` | Operate on an external vault (also sets the active state file) |
 | `--local-root <path>` | `build` | Value shown in place of a session's stored home directory (default: this machine's home) |
 | `--engine graphify` | `graph` | AI-powered knowledge graph |
 | `--status` | `sync` | Show last sync + per-adapter counters |

@@ -12,10 +12,13 @@ without risking an import cycle.
 from __future__ import annotations
 
 import re
+from collections import defaultdict
+from collections.abc import Mapping
 
 __all__ = [
     "WIKILINK_RE",
     "build_page_alias_map",
+    "count_source_refs",
     "parse_page_aliases",
     "resolve_wikilink_target",
     "strip_anchor",
@@ -130,3 +133,21 @@ def resolve_wikilink_target(
         if canonical and canonical in slugs:
             return canonical
     return None
+
+
+def count_source_refs(texts_by_rel: Mapping[str, str]) -> dict[str, set[str]]:
+    """Return ``target -> set of pages naming it`` for a corpus of page text.
+
+    ``texts_by_rel`` maps a page's path (relative to ``wiki/``) to its text.
+    A target is counted **once per page**: repeated mentions inside one
+    document are one signal, not several.
+
+    Shared by the candidate harvest and ``link_integrity`` (#150) so the
+    component that decides a target is worth a page and the component that
+    reports the missing page count references the same way.
+    """
+    by_target: dict[str, set[str]] = defaultdict(set)
+    for rel, text in texts_by_rel.items():
+        for name in wikilink_targets(text):
+            by_target[name].add(rel)
+    return dict(by_target)

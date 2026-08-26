@@ -1,7 +1,7 @@
 # Technical Specification: Per-vault quality-check scoping
 
 - **Functional Specification:** [`functional-spec.md`](./functional-spec.md) (Approved)
-- **Status:** Approved
+- **Status:** Completed
 - **Author(s):** 4ellendger
 
 ---
@@ -91,12 +91,17 @@ class LintOptions:
 
 ### 2.5 `link_integrity` becomes threshold-aware
 
-Resolution logic is unchanged. One new gate before recording an issue:
+Resolution logic is unchanged. One new gate before recording an issue, keyed on how many **source** pages name the target (counts from §2.3, over `pages` whose relative path is under `sources/`):
 
-- target named by **fewer** than `options.min_refs` source pages → expected, not reported
-- target named by **at least** `options.min_refs` source pages with no page → reported
+| Source references | Interpretation | Verdict |
+| --- | --- | --- |
+| `0` | Harvest never saw the name — it was never a decision, nothing was ever going to materialise it | **reported at every threshold** |
+| `1 … min_refs - 1` | Harvest saw it and deliberately declined | not reported |
+| `>= min_refs` | Harvest should have materialised it | **reported** |
 
-Reference counts come from §2.3 over `pages` whose relative path is under `sources/`.
+**The zero case is load-bearing.** Excusing everything below the threshold would make a reference that *nothing* names unreportable at any threshold, `--min-refs 1` included — silently deleting a whole class of genuine finding while appearing to satisfy "lower the threshold and everything comes back". Measured: 0 such links on the demo, 1 on a 717-page vault (`entities/AmeriaBank.md → [[Banking-APIs]]`), i.e. rare enough to miss in review and real enough to matter.
+
+This also keeps the rule in step with the harvester rather than departing from it: harvest's decision domain is exactly the source-named targets, so the rule excuses only inside that domain and never outside it.
 
 Measured effect: demo `120 → 0` at the stock threshold; live 717-page vault `650 → 256`, the 256 being genuine gaps.
 
@@ -118,6 +123,10 @@ run_all(pages, *, selected=None, **_) -> list[dict]     # delegates, returns .is
 ```
 
 `disabled` names validated against `REGISTRY`, raising the existing `UnknownRuleError` — R3 reuses the machinery `--rules` already has.
+
+**Findings must be ordered deterministically.** Several rules iterate a `set` — `LinkIntegrity` walks `wikilink_targets(text)`, which returns one — so with `PYTHONHASHSEED` randomised, two processes emit the same findings in different order. Measured on a four-target fixture: five distinct payload hashes across five seeds. This predates #150, but §2.10 makes it load-bearing: the MCP server and the CLI are *different processes*, so a payload diff between them can show reordered `issues` for an unchanged vault, and R9's "the same report" would be false on a technicality.
+
+`run_lint` therefore sorts each rule's issues by `(page, message)` before extending the result. Sorting **within** each rule, not globally, preserves the `REGISTRY` enumeration order that `llmwiki/lint/rules/__init__.py` documents as deliberate ("any test or downstream consumer that relied on enumeration order continues to see the same sequence"). One place, every rule fixed, no rule module touched.
 
 ### 2.7 One reporter, two callers
 

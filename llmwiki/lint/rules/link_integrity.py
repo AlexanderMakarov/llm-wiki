@@ -9,6 +9,7 @@ from llmwiki.lint.rules._helpers import _page_slug
 from llmwiki.wikilinks import (
     WIKILINK_RE,
     build_page_alias_map,
+    count_source_refs,
     resolve_wikilink_target,
     strip_anchor,
 )
@@ -19,6 +20,14 @@ _NORM_RE = re.compile(r"[^a-z0-9]")
 def _norm_slug(s: str) -> str:
     """Case/punct-insensitive key: ``LLM-Wiki`` / ``llm wiki`` → ``llmwiki``."""
     return _NORM_RE.sub("", s.lower())
+
+
+def _under_sources(rel: str) -> bool:
+    """True for a page under ``wiki/sources/`` — the corpus harvest counts.
+
+    Handles the native separators ``load_pages`` produces on Windows (#490).
+    """
+    return rel.replace("\\", "/").startswith("sources/")
 
 
 @register
@@ -42,6 +51,13 @@ class LinkIntegrity(LintRule):
             {_page_slug(rel): page["body"] for rel, page in pages.items()}
         )
 
+        # Honour the same min_refs threshold as candidate harvest (#150).
+        # Zero source refs → always report; 1..min_refs-1 → expected decline.
+        min_refs = self.options.min_refs
+        refs = count_source_refs({
+            rel: page["text"] for rel, page in pages.items() if _under_sources(rel)
+        })
+
         issues = []
         for rel, page in pages.items():
             # The raw target — anchor included — is what the message quotes,
@@ -53,6 +69,9 @@ class LinkIntegrity(LintRule):
                 if resolve_wikilink_target(t, slugs, alias_map) is not None:
                     continue
                 if t in slugs or _norm_slug(t) in by_norm:
+                    continue
+                n_refs = len(refs.get(t, ()))
+                if 0 < n_refs < min_refs:
                     continue
                 issues.append({
                     "rule": self.name,

@@ -155,10 +155,14 @@ def test_workflow_never_regenerates_the_demo() -> None:
 
 
 def test_fail_on_errors_exits_zero_on_warnings_only(tmp_path: Path, capsys) -> None:
-    """Warnings print and are tolerated — reintroducing --strict is a deliberate act.
+    """`--fail-on-errors` alone tolerates warnings: a warning-only wiki exits 0.
 
-    content_freshness is warning-severity and fires on elapsed time, which is
-    why the demo CI gate must not use --strict.
+    Pins the flag's own semantics against a temp vault, not the workflow.
+    content_freshness is warning-severity, so a page old enough to fire it
+    leaves the gate green under --fail-on-errors. Failing on warnings is the
+    separate, deliberate act of passing --fail-on-warnings — which the demo
+    gate now does, with content_freshness switched off in demo/llmwiki.json so
+    the snapshot's age cannot redden it (#150).
     """
     vault = tmp_path / "vault"
     _seed_wiki(vault, page_type="entity", last_updated="2020-01-01")

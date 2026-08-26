@@ -1,0 +1,7 @@
+{
+  "lint": {
+    "disabled_rules": {
+      "content_freshness": "The demo is a committed snapshot, so this check measures elapsed calendar time since the snapshot was taken rather than a defect in it. Refreshing the demo more often is the honest cure and is tracked separately."
+    }
+  }
+}
