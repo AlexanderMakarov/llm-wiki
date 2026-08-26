@@ -5,14 +5,9 @@ reader or agent browses; `navigation` and `context` are build machinery.
 Nothing else is a valid `type:`, and no surface — graph palette, viewer
 legend, MCP tool schema, Obsidian export — offers a kind outside that set.
 
-Two collisions make this area easy to break, so both are pinned here:
-
-* **Model comparisons** (`llmwiki.compare`, `build.render_vs_section`) are
-  auto-generated side-by-side pages for AI-model entities. They share the
-  word "comparison" with nothing else in the schema and must keep working.
-* **Wikilink resolution** is name-based, so relocating a page between wiki
-  folders leaves inbound `[[links]]` intact. `test_wikilink_resolution_*`
-  is the evidence behind that claim.
+Wikilink resolution is name-based, so relocating a page between wiki
+folders leaves inbound `[[links]]` intact. `test_wikilink_resolution_*`
+is the evidence behind that claim.
 """
 
 from __future__ import annotations
@@ -23,17 +18,10 @@ from pathlib import Path
 import pytest
 
 from llmwiki.backlinks import _collect_pages, build_reverse_index
-from llmwiki.build import render_vs_section
-from llmwiki.compare import (
-    generate_pairs,
-    render_comparison_body,
-    render_comparisons_index,
-)
 from llmwiki.graph import build_graph, write_html
 from llmwiki.lint import load_pages, run_all
 from llmwiki.lint.rules.frontmatter_validity import FrontmatterValidity
 from llmwiki.mcp.server import TOOLS
-from llmwiki.models_page import discover_model_entities
 from llmwiki.obsidian_output import EXPORTED_DIRS
 from llmwiki.references import build_index
 from llmwiki.render.graph_viewer import GRAPH_VIEWER_JS
@@ -140,51 +128,6 @@ def test_a_leftover_folder_still_gets_a_generic_topic_label(folder: str) -> None
     """A user vault may still carry the folder until they migrate, and the
     topic chip must name it rather than crash on the missing entry."""
     assert kind_label(folder) == folder.removesuffix("s").capitalize()
-
-
-# ─── name collision: model comparisons are a different feature ─────────
-
-
-def test_model_comparison_index_still_renders(tmp_path: Path) -> None:
-    """`compare.py` builds side-by-side pages for AI-model *entities*. It
-    shares only the word "comparison" with the removed page kind, so it must
-    survive the vocabulary cut intact."""
-    index_path, pair_count = render_vs_section(tmp_path)
-
-    assert index_path is not None
-    assert index_path == tmp_path / "vs" / "index.html"
-    assert index_path.is_file()
-    html = index_path.read_text(encoding="utf-8")
-    assert "Model comparisons" in html
-    assert f"{pair_count} auto-generated pairs" in html
-
-
-def test_model_comparison_pages_render_for_a_matched_pair(tmp_path: Path) -> None:
-    """Two comparable model entities pair up and render, so the body
-    renderer — not just the index — is pinned."""
-    entities = tmp_path / "wiki" / "entities"
-    for name, ctx, inp in (("Aster", 200000, 3.0), ("Borel", 128000, 1.5)):
-        _page(
-            entities / f"{name}.md",
-            f"# {name}\n\nA model.",
-            title=f'"{name}"',
-            type="entity",
-            entity_kind="ai-model",
-            provider="Testworks",
-            model=f'{{"context_window": {ctx}, "license": "proprietary"}}',
-            pricing=f'{{"input_per_1m": {inp}, "output_per_1m": 15.0}}',
-        )
-
-    discovered = discover_model_entities(entities)
-    pairs = generate_pairs([(p, prof) for p, prof, _w, _b in discovered],
-                           min_shared_fields=1)
-
-    assert len(pairs) == 1
-    assert {pairs[0]["title_a"], pairs[0]["title_b"]} == {"Aster", "Borel"}
-
-    body = render_comparison_body(pairs[0])
-    assert "Aster" in body and "Borel" in body
-    assert "Model comparisons" in render_comparisons_index(pairs)
 
 
 # ─── the spike: wikilink resolution is name-based, not path-based ──────

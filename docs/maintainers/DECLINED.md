@@ -24,14 +24,9 @@ nuance about *when* this might be reconsidered.
 
 ## 2026-04-09 — N-way comparisons on vs-comparison pages
 
-**Reason:** 2-way side-by-side comparisons (#58) are a clean,
-queryable format. N-way comparisons degenerate into an info table
-with N columns, which loses the "at-a-glance diff" that makes the
-2-way format useful. Users who want N-way can run N-choose-2 pair
-navigation from the index.
+**Reason (historical):** When #58 sketched 2-way side-by-side comparisons, N-way was declined as degenerating into an info table. The whole `/vs/` surface was later removed (#138); this entry stays only as the record of that earlier non-goal.
 
-**Context:** #58 non-goal. Reconsider if a genuine user request
-demands it.
+**Context:** #58 non-goal; superseded by #138.
 
 ## 2026-04-09 — Automatic benchmark scraping from provider websites
 
@@ -122,13 +117,9 @@ pipeline.
 
 ## 2026-04-09 — SEO schema.org markup on vs-comparison pages
 
-**Reason:** Every session and model page already ships `Article`
-microdata (v0.4). Vs-comparison pages are aggregations, not
-articles — schema.org doesn't have a clean "comparison" type.
-Adding half-correct schema is worse than no schema.
+**Reason (historical):** Vs-comparison pages were never a clean schema.org article type; half-correct markup was declined under #58. The `/vs/` surface itself was later removed (#138).
 
-**Context:** #58 non-goal. Follow up if Google adds a comparison
-type.
+**Context:** #58 non-goal; superseded by #138.
 
 ## 2026-04-09 — CLAs or DCO sign-off for contributions
 
@@ -167,17 +158,17 @@ question page into `wiki/concepts/`. Reconsider only if question state
 tracking (open / answered / stale) becomes a feature someone builds,
 which is a lifecycle problem, not a page-kind problem.
 
+## 2026-08-26 — Auto-generated `/vs/` model-comparison surface
+
+**Reason:** `render_vs_section` had no production callers, hard-coded `REPO_ROOT/wiki`, and never emitted `site/vs/` on a real vault. Docs and nav still advertised Compare. Per the fork-residue inventory rule, remove the dead surface rather than wire it.
+
+**Context:** #138. `/models/` (`render_models_section`, ai-model schema) stays. Reconsider only if a real demand for pairwise model diffs appears with a design that takes a vault path and is called from `build_site`.
+
 ## 2026-08-09 — Comparison pages as a page kind
 
-**Reason:** The one comparison surface that exists is generated from
-AI-model entity frontmatter (`llmwiki/compare.py`, `/vs/`), so a
-hand-authored `type: comparison` kind duplicated the word without
-sharing any machinery and left readers unsure which one they were
-looking at.
+**Reason:** A hand-authored `type: comparison` kind duplicated the word "comparison" without sharing machinery with anything else in the product and left readers unsure what it meant. Model diffs were briefly sketched as auto-generated `/vs/` pages from AI-model entity frontmatter; that surface was never wired and was later removed (#138).
 
-**Context:** #109. `llmwiki migrate-page-kinds` moves any hand-written
-comparison page into `wiki/concepts/`. The generated `/vs/` pages are
-untouched and stay the answer for model diffs.
+**Context:** #109. `llmwiki migrate-page-kinds` moves any hand-written comparison page into `wiki/concepts/`. Reconsider a first-class comparison kind only if a real product need for authored side-by-side pages appears — not as a revival of dead `/vs/` code.
 
 ---
 

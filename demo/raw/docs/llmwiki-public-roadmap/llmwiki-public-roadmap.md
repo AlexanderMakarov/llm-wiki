@@ -24,7 +24,7 @@ content_sha256: b062d31c22c694e3427809212f417d7666be7536df1ed97a235a52a910f338a3
 | **v0.4** | 2026-04-08 | AI+human dual format: `llms.txt`, JSON-LD graph, per-page `.txt`/`.json` siblings, `sitemap.xml`, `rss.xml`, Schema.org microdata, Open Graph tags, canonical URLs, build manifest, link checker, performance budgets |
 | **v0.5** | 2026-04-08 | highlight.js CDN (replaced Pygments), public demo on GitHub Pages, README screenshots, raw-HTML escape fix, folder-level `_context.md` for LLM navigation |
 | **v0.6** | 2026-04-08 | qmd collection exporter, PyPI release automation (OIDC), GitLab Pages deployment, lazy search index (per-project chunks), scheduled sync templates (launchd/systemd/Task Scheduler), WCAG 2.1 AA audit (0 violations), Playwright E2E tests (62 scenarios) |
-| **v0.7** | 2026-04-08 | Structured model-profile schema, `/models/` section with sortable benchmarks, vs-comparison pages (auto-generated), project topic chips (GitHub-style), append-only changelog timeline with pricing sparkline |
+| **v0.7** | 2026-04-08 | Structured model-profile schema, `/models/` section with sortable benchmarks, project topic chips (GitHub-style), append-only changelog timeline with pricing sparkline |
 | **v0.8** | 2026-04-08 | 365-day activity heatmap, tool-calling bar chart, token usage card with cache-hit-ratio badge, session metrics frontmatter |
 | **v0.9** | 2026-04-09 | Maintainer governance scaffold (CODE_OF_CONDUCT, SECURITY, CODEOWNERS), review checklist, triage taxonomy, release process, image download pipeline, Cursor + Gemini CLI + PDF adapters graduated to production, Copilot adapter |
 

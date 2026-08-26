@@ -88,8 +88,7 @@ chain three requests before showing anything.
     { "id": "projects",      "label": "Projects",  "href": "/projects/" },
     { "id": "sessions",      "label": "Sessions",  "href": "/sessions/" },
     { "id": "analytics",     "label": "Analytics", "href": "/analytics.html" },
-    { "id": "models",        "label": "Models",    "href": "/models/" },
-    { "id": "vs",            "label": "Compare",   "href": "/vs/" }
+    { "id": "models",        "label": "Models",    "href": "/models/" }
   ],
   "theme": {
     "accent":  "#7C3AED",

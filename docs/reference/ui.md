@@ -24,9 +24,8 @@ Every page in the site carries the same header nav. Keyboard: `⌘K` opens the c
 | 5 | **Sessions** | `/sessions/index.html` | sortable table of every session, agent badge, project, model, tool-call count |
 | 6 | **Analytics** | `/analytics.html` | activity heatmaps, wiki usage, recent activity, project grid |
 | 7 | **Models** | `/models/index.html` | structured model-profile cards (provider, pricing, benchmarks) |
-| 8 | **Compare** | `/vs/index.html` | auto-generated vs-pages between AI models |
-| 9 | **Docs** | `/docs/index.html` | editorial docs hub — tutorials, references, deployment guides |
-| 10 | **Prototypes** | `/prototypes/index.html` | review-ready UI states (page-shell, article-anatomy, …) for UX iteration |
+| 8 | **Docs** | `/docs/index.html` | editorial docs hub — tutorials, references, deployment guides |
+| 9 | **Prototypes** | `/prototypes/index.html` | review-ready UI states (page-shell, article-anatomy, …) for UX iteration |
 | — | **Search** | `⌘K` | fuzzy-match command palette over the whole corpus |
 | — | **Theme toggle** | button on the right | light / dark (persists via `localStorage.theme`) |
 
@@ -130,19 +129,17 @@ Clicking a row navigates to `/sessions/<project>/<slug>.html`.
 
 ---
 
-## Models + Compare
+## Models
 
-URLs: `/models/index.html`, `/vs/index.html`
+URL: `/models/index.html`
 
-**Models:** structured info cards for each AI model (per `llmwiki/schema.py :: ModelProfile`):
+Structured info cards for each AI model (per `llmwiki/schema.py :: ModelProfile`):
 
 - Provider · release date · license
 - Context window · max output
 - Modalities (text / vision / audio)
 - Pricing per 1 M tokens (input, cached_input, cache_write, output)
 - Benchmark scores (GPQA Diamond, SWE-bench, MMLU, LiveCodeBench, etc.)
-
-**Compare:** auto-generated pairwise comparison pages (`/vs/claude-sonnet-4-6-vs-gpt-5.html`, etc.). One row per shared field, winner highlighted.
 
 ---
 

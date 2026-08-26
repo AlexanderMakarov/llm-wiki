@@ -108,8 +108,6 @@ Pages rendered (v0.9 surface):
 - `site/sessions/<project>/<slug>.html` — per-session transcript with tool chart + token card + full conversation
 - `site/models/index.html` — sortable AI-model directory (v0.7, #55)
 - `site/models/<slug>.html` — per-model info card + changelog timeline + pricing sparkline (v0.7, #56)
-- `site/vs/index.html` — auto-generated vs-comparison index (v0.7, #58)
-- `site/vs/<a>-vs-<b>.html` — side-by-side info table + benchmark chart + price delta
 - `site/index.html` — pipeline State dashboard (recent raw docs)
 - `site/raw.html` — raw-docs file-tree browser (tree loaded from `documents-tree.js`)
 - `site/documents/<path>.html` — one page per raw document file; shared tree sidebar loaded once via JS

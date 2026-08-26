@@ -18,7 +18,7 @@
 ┌─────────────────────────────────────────────────┐
 │  wiki/                     LLM-MAINTAINED       │
 │    • sources/ entities/ concepts/ syntheses/   │
-│      projects/ vs/                              │
+│      projects/                                  │
 │    • gitignored; the tracked example vault      │
 │      lives in demo/wiki/                        │
 │    • owned by Claude Code slash commands       │

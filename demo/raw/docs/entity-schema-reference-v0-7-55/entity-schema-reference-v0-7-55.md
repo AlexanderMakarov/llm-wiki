@@ -15,8 +15,7 @@ The wiki's entity pages are free-form markdown by default — a file
 like `wiki/entities/OpenAI.md` can be whatever you want, and the
 slash-command workflow just edits the body. **AI model entities**
 are a special case: they carry structured frontmatter so llmwiki can
-render a sortable `/models/` index, inline info-cards, and future
-comparison pages (#58).
+render a sortable `/models/` index and inline info-cards.
 
 This reference describes the schema. It's opt-in — any entity page
 that doesn't set `entity_kind: ai-model` is ignored by the model
