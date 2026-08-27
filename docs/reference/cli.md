@@ -353,7 +353,7 @@ Successful `promote` / `flip-promote` / `merge` / `discard` / `apply` reconcile 
 
 `merge` folds a harvest stub into the target by unioning its `sources:` and Connections links and recording the name under `## Aliases` (inbound `[[merged-away]]` links resolve to the survivor via that section in graph, lint, backlinks, and references); a candidate containing reviewer prose still has that prose appended under `## Candidate merge — <date>`. Target may be a trusted page or another pending stub in the same kind.
 
-`apply` runs a **batch** of the same intents in one process (the JSON shape `site/candidates.html` prints):
+`apply` runs a **batch** of the same intents in one process (the JSON shape `site/candidates.html` prints). A batch that merges into a peer slug the same batch also promotes, flip-promotes, discards, or merges away is refused before any row runs — the CLI prints the conflicting actions and exits non-zero (#149).
 
 ```bash
 python3 -m llmwiki candidates apply --actions '[{"action":"promote","slug":"Foo","kind":"entities"},{"action":"promote","slug":"Prompt Caching","kind":"concepts"}]'

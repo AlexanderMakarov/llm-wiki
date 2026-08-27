@@ -32,6 +32,8 @@ from llmwiki.synth.base import BaseSynthesizer
 _HEADING_RE = re.compile(r"^#+\s+.*$", re.MULTILINE)
 
 _VALID_ACTIONS = frozenset({"promote", "flip-promote", "discard", "merge"})
+# Same set as ``_VALID_ACTIONS``; name marks rows that conflict with a merge target.
+_BATCH_PEER_ACTIONS = _VALID_ACTIONS
 
 
 def candidate_description(cand: Candidate) -> str:
@@ -150,6 +152,37 @@ def vault_display_path(wiki_dir: Path | None) -> str:
     return str(rel) if str(rel) != "." else "."
 
 
+def validate_candidate_batch(actions: list[dict[str, Any]]) -> None:
+    """Refuse a batch before mutation when a merge target is also acted on.
+
+    A ``merge`` with ``into=T`` conflicts with another row whose ``slug`` is
+    ``T`` and whose ``action`` is promote, flip-promote, discard, or merge.
+    Slugs and ``into`` values are normalised the same way ``apply`` passes
+    them to ``merge()`` — stripped strings, exact match.
+    """
+    for i, raw in enumerate(actions):
+        if not isinstance(raw, dict):
+            continue
+        action = str(raw.get("action") or "").strip()
+        if action != "merge":
+            continue
+        merge_slug = str(raw.get("slug") or "").strip()
+        into = str(raw.get("into") or "").strip()
+        if not merge_slug or not into:
+            continue
+        for j, other in enumerate(actions):
+            if i == j or not isinstance(other, dict):
+                continue
+            other_action = str(other.get("action") or "").strip()
+            other_slug = str(other.get("slug") or "").strip()
+            if other_slug != into or other_action not in _BATCH_PEER_ACTIONS:
+                continue
+            raise ValueError(
+                f"batch conflict: merge {merge_slug!r} into {into!r} "
+                f"conflicts with {other_action} {other_slug!r} in the same batch"
+            )
+
+
 def apply_candidate_actions(
     wiki_dir: Path,
     actions: list[dict[str, Any]],
@@ -161,7 +194,12 @@ def apply_candidate_actions(
     Each result is ``{"ok": True, "slug": …, "action": …, "path": …}`` or
     ``{"ok": False, "slug": …, "action": …, "error": …}``. Processing continues
     after failures so one bad row does not hide the rest.
+
+    Raises ``ValueError`` before any mutation when :func:`validate_candidate_batch`
+    finds a merge target that another row in the batch also promotes,
+    flip-promotes, discards, or merges away.
     """
+    validate_candidate_batch(actions)
     results: list[dict[str, Any]] = []
     for raw in actions:
         if not isinstance(raw, dict):
@@ -499,6 +537,27 @@ _REVIEW_SCRIPT = """<script>
       var none = new Error("Set at least one Decision before Apply.");
       none.reviewerFixable = true;
       throw none;
+    }
+    var peerActions = {promote: true, "flip-promote": true, discard: true, merge: true};
+    for (var i = 0; i < actions.length; i++) {
+      var mergeItem = actions[i];
+      if (mergeItem.action !== "merge") continue;
+      var into = String(mergeItem.into || "").trim();
+      var mergeSlug = String(mergeItem.slug || "").trim();
+      if (!into || !mergeSlug) continue;
+      for (var j = 0; j < actions.length; j++) {
+        if (i === j) continue;
+        var other = actions[j];
+        var otherAction = String(other.action || "").trim();
+        var otherSlug = String(other.slug || "").trim();
+        if (otherSlug !== into || !peerActions[otherAction]) continue;
+        var conflict = new Error(
+          "batch conflict: merge '" + mergeSlug + "' into '" + into + "' "
+          + "conflicts with " + otherAction + " '" + otherSlug + "' in the same batch"
+        );
+        conflict.reviewerFixable = true;
+        throw conflict;
+      }
     }
     return actions;
   }

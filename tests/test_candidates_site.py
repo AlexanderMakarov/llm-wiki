@@ -28,6 +28,7 @@ from llmwiki.candidates_site import (
     cli_command_for_actions,
     merge_targets,
     render_candidates_body,
+    validate_candidate_batch,
     vault_display_path,
 )
 
@@ -400,6 +401,121 @@ def test_cli_candidates_apply_batch(tmp_path: Path) -> None:
     assert not (wiki / "candidates" / "entities" / "Drop.md").exists()
 
 
+# ─── #149 batch conflict validation ──────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    ("peer_action", "peer_extra"),
+    [
+        ("promote", {}),
+        ("discard", {"reason": "noise"}),
+        ("flip-promote", {}),
+        ("merge", {"into": "Other"}),
+    ],
+    ids=["promote", "discard", "flip-promote", "merge-away"],
+)
+def test_validate_candidate_batch_refuses_merge_into_acted_on_peer(
+    peer_action: str,
+    peer_extra: dict[str, str],
+) -> None:
+    # @regression  #149
+    """Merge into T must fail when another row also acts on slug T."""
+    peer: dict[str, str] = {
+        "action": peer_action,
+        "slug": "Target",
+        "kind": "entities",
+        **peer_extra,
+    }
+    merge = {"action": "merge", "slug": "Dupe", "kind": "entities", "into": "Target"}
+    with pytest.raises(ValueError, match=r"batch conflict: merge 'Dupe' into 'Target'"):
+        validate_candidate_batch([peer, merge])
+
+
+def test_apply_candidate_actions_refuses_conflicting_batch_without_mutating(
+    tmp_path: Path,
+) -> None:
+    # @regression  #149
+    """Conflicting batch raises before any promote/discard/merge side effects."""
+    wiki = _mk_wiki(tmp_path)
+    _write_candidate(wiki, "entities", "Target")
+    _write_candidate(wiki, "entities", "Dupe")
+    cand_dir = wiki / "candidates" / "entities"
+    before_candidates = sorted(p.name for p in cand_dir.iterdir())
+    before_entities = sorted(p.name for p in (wiki / "entities").iterdir())
+
+    with pytest.raises(ValueError, match="batch conflict"):
+        apply_candidate_actions(wiki, [
+            {"action": "promote", "slug": "Target", "kind": "entities"},
+            {"action": "merge", "slug": "Dupe", "kind": "entities", "into": "Target"},
+        ])
+
+    assert sorted(p.name for p in cand_dir.iterdir()) == before_candidates
+    assert sorted(p.name for p in (wiki / "entities").iterdir()) == before_entities
+
+
+def test_collect_actions_refuses_merge_into_acted_on_peer(tmp_path: Path) -> None:
+    # @regression  #149
+    """The page's collectActions() mirrors validate_candidate_batch before copy."""
+    out = _collect_actions([
+        {"slug": "Target", "kind": "entities", "decision": "promote"},
+        {"slug": "Dupe", "kind": "entities", "decision": "merge", "into": "Target"},
+    ], tmp_path)
+    assert not out["ok"], out
+    assert "batch conflict: merge 'Dupe' into 'Target'" in out["error"]
+    assert "conflicts with promote 'Target'" in out["error"]
+
+
+def test_cli_candidates_apply_batch_conflict_exits_2(tmp_path: Path) -> None:
+    # @regression  #149
+    wiki = _mk_wiki(tmp_path)
+    _write_candidate(wiki, "entities", "Target")
+    _write_candidate(wiki, "entities", "Dupe")
+    payload = json.dumps([
+        {"action": "discard", "slug": "Target", "kind": "entities", "reason": "noise"},
+        {"action": "merge", "slug": "Dupe", "kind": "entities", "into": "Target"},
+    ])
+    proc = subprocess.run(
+        [
+            sys.executable, "-m", "llmwiki", "candidates", "apply",
+            "--actions", payload,
+            "--wiki-dir", str(wiki),
+            "--no-rebuild",
+        ],
+        cwd=str(REPO_ROOT),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode == 2, proc.stdout
+    assert "error: batch conflict:" in proc.stderr
+    assert (wiki / "candidates" / "entities" / "Target.md").is_file()
+    assert (wiki / "candidates" / "entities" / "Dupe.md").is_file()
+    assert not (wiki / "entities" / "Target.md").exists()
+
+
+def test_apply_candidate_actions_accepts_non_conflicting_merge_and_promote(
+    tmp_path: Path,
+) -> None:
+    # @regression  #149
+    """Promote one slug and merge another into an untouched peer still applies."""
+    wiki = _mk_wiki(tmp_path)
+    _write_candidate(wiki, "entities", "Keep")
+    _write_candidate(wiki, "entities", "Dupe")
+    (wiki / "entities" / "Canonical.md").write_text(
+        '---\ntitle: "Canonical"\ntype: entity\nstatus: reviewed\n'
+        "last_updated: 2026-04-17\n---\n\n# Canonical\n",
+        encoding="utf-8",
+    )
+    results = apply_candidate_actions(wiki, [
+        {"action": "promote", "slug": "Keep", "kind": "entities"},
+        {"action": "merge", "slug": "Dupe", "kind": "entities", "into": "Canonical"},
+    ])
+    assert all(r["ok"] for r in results), results
+    assert (wiki / "entities" / "Keep.md").is_file()
+    assert (wiki / "entities" / "Canonical.md").is_file()
+    assert not (wiki / "candidates" / "entities" / "Dupe.md").exists()
+
+
 def test_render_candidates_body_prints_the_command_it_hands_off_to(tmp_path: Path) -> None:
     wiki = _mk_wiki(tmp_path)
     _write_candidate(wiki, "entities", "Alpha")
@@ -523,16 +639,20 @@ def test_the_assembled_batch_is_what_apply_executes(tmp_path: Path) -> None:
     # @regression
     """End to end: the page's own batch runs through the apply path unedited."""
     wiki = _mk_wiki(tmp_path)
-    for slug in ("Keep", "Drop", "Dupe", "Target"):
+    for slug in ("Keep", "Drop", "Dupe"):
         _write_candidate(wiki, "entities", slug)
+    (wiki / "entities" / "Canonical.md").write_text(
+        '---\ntitle: "Canonical"\ntype: entity\nstatus: reviewed\n'
+        "last_updated: 2026-04-17\n---\n\n# Canonical\n",
+        encoding="utf-8",
+    )
 
     out = _collect_actions([
         {"slug": "Keep", "kind": "entities", "decision": "promote"},
         {"slug": "Skipped", "kind": "entities", "decision": ""},
         {"slug": "Drop", "kind": "entities", "decision": "discard", "reason": "noise"},
-        {"slug": "Target", "kind": "entities", "decision": "promote"},
-        {"slug": "Dupe", "kind": "entities", "decision": "merge", "into": "Target"},
-    ], tmp_path)
+        {"slug": "Dupe", "kind": "entities", "decision": "merge", "into": "Canonical"},
+    ], tmp_path, targets={"entities": ["Canonical"]})
     assert out["ok"], out.get("error")
 
     # The batch the page prints is the batch the CLI validates.
@@ -543,7 +663,7 @@ def test_the_assembled_batch_is_what_apply_executes(tmp_path: Path) -> None:
 
     assert all(r["ok"] for r in results), results
     assert (wiki / "entities" / "Keep.md").is_file()
-    assert (wiki / "entities" / "Target.md").is_file()
+    assert (wiki / "entities" / "Canonical.md").is_file()
     assert not (wiki / "candidates" / "entities" / "Drop.md").exists()
     assert not (wiki / "candidates" / "entities" / "Dupe.md").exists()
 

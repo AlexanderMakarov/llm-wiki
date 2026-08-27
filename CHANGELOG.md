@@ -29,6 +29,7 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Fixed
 
+- **`candidates apply` refuses conflicting merge+peer batches (#149)** — when a batch merges into a slug that another row in the same batch promotes, flip-promotes, discards, or merges away, the whole batch is rejected before any mutation; the CLI names both actions and exits non-zero.
 - **`candidates merge` aliases now resolve across the wiki (#139)** — merge already recorded merged-away names under `## Aliases` on the survivor page, but graph, lint, backlinks, and references keyed links by filename stem only, so every inbound `[[merged-away]]` stayed broken. Those consumers now resolve aliases declared on the target page. Merge also refreshes stale harvest boilerplate (`Named by N source page(s)…`) when evidence is unioned into a pending stub.
   - *Release note:* Merged candidate aliases resolve in graph, lint, backlinks, and references (#139).
 - **Cursor Agent CLI `sessionId` / `createdAt` / string `subagentInfo` (#180 smoke)** — convert injects store meta `agentId` as `sessionId` and short `slug` (never the filesystem stem `store`), maps `createdAt` unix-ms to an ISO `timestamp` for real chat dates, and treats non-dict `subagentInfo` as headless without calling `.keys()` / `.get` on it.
