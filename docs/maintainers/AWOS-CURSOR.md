@@ -109,14 +109,14 @@ See [`.cursor/rules/awos-cursor-runtime.mdc`](../../.cursor/rules/awos-cursor-ru
 
 | Claude | Cursor |
 |---|---|
-| `AskUserQuestion` | **`AskQuestion` first** (structured UI). Prose numbered lists **only** if `AskQuestion` is not in the tool list for that turn |
+| `AskUserQuestion` | Native `AskQuestion` when it is already a first-class tool this turn (invoke by name, same as `Read` / `Shell`). **Never** `CallDynamicTool` with `namespace: cursor` and `toolName: AskQuestion` — the `cursor` namespace is only `CreateGoal`, `GenerateImage`, `UpdateGoal`. If native `AskQuestion` is not injected (Auto / some models), use a numbered list in chat |
 | `Agent(subagent_type=…)` | `Task(subagent_type=…)` |
 | `general-purpose` | `generalPurpose` |
 | Project `.claude/agents/*.md` | Keep kebab-case `subagent_type` |
 | `awos-recruitment` tool `search` | Real tool name: `search_capabilities` |
 | `/awos:product` | `/awos-product` |
 
-Flat Cursor wrappers repeat the `AskQuestion`-first rule so slash-command context does not soft-fallback to prose when the tool is available.
+Flat Cursor wrappers repeat that rule so slash-command context does not probe `CallDynamicTool` `cursor`/`AskQuestion` (that call fails with `Tool "AskQuestion" not found in namespace "cursor"`). Native `AskQuestion` is still the structured picker when the host injects it; Cursor's on-demand `cursor` MCP namespace is a different bag of tools and does not include it. Working notes: [`context/spec/011-awos-cursor-askquestion-dispatch/functional-spec.md`](../../context/spec/011-awos-cursor-askquestion-dispatch/functional-spec.md).
 
 ## How to install into Cursor
 
@@ -234,7 +234,7 @@ Details:
 
 - [ ] `./scripts/update-awos.sh` completes without error on a clean or existing tree.
 - [ ] Cursor slash **`/awos-flow`** appears after `./scripts/update-awos.sh --plugin` (not `/flow`, not `/awos:flow`).
-- [ ] Cursor slash `/awos-product` appears in the `/` menu and loads `.awos/commands/product.md`; when `AskQuestion` is in the tool list, the agent **calls it** (not a prose numbered list first). Typing Claude's `/awos:` must not be expected to resolve.
+- [ ] Cursor slash `/awos-product` appears in the `/` menu and loads `.awos/commands/product.md`; when native `AskQuestion` is in the first-class tool list, the agent **calls it by name** (not `CallDynamicTool` `cursor`/`AskQuestion`, not a prose numbered list first). If it is not injected, the agent uses a numbered list in chat. Typing Claude's `/awos:` must not be expected to resolve.
 - [ ] `awos-recruitment` appears under Cursor Tools & MCP; `search_capabilities` returns results.
 - [ ] `/awos-hire` (or CLI) can install one skill; the skill directory is visible under `.claude/skills/` to Cursor.
 - [ ] No personal vault paths or usernames in committed AWOS docs or PR text.

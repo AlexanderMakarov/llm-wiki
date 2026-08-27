@@ -15,7 +15,7 @@ A Claude-shaped install is not enough for Cursor Agent:
 | Claude slash `/awos:name` | Does **not** resolve in Cursor — Agent uses filename basenames (`/awos-name`) |
 | Nested `.cursor/commands/awos/*.md` | Agent CLI often **skips** subfolders; use **flat** `.cursor/commands/awos-*.md` |
 | Root `.mcp.json` only | Cursor reads **`.cursor/mcp.json`** for project MCP |
-| Prompt bodies saying `AskUserQuestion` / `Agent(...)` | Still Claude tool names — need a runtime map (or prose fallback); **acplugin does not rewrite** them |
+| Prompt bodies saying `AskUserQuestion` / `Agent(...)` | Still Claude tool names — need a runtime map; `AskUserQuestion` → native `AskQuestion` when injected, never `CallDynamicTool` `cursor`/`AskQuestion`; **acplugin does not rewrite** them |
 | Claude `/plugin install` | Does not install into Cursor; use Cursor-native (`/add-plugin`) or acplugin for Layer C |
 
 Frameworks that write Cursor-flat commands / skills at init avoid most of that tax. AWOS in this repo pays it via wrappers + docs.

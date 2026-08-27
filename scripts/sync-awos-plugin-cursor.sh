@@ -74,8 +74,9 @@ slash = sys.argv[2]
 text = path.read_text(encoding="utf-8")
 banner = (
     f"\n<!-- Cursor slash: /{slash}. "
-    f"When the body says AskUserQuestion, call AskQuestion if available "
-    f"(see .cursor/rules/awos-cursor-runtime.mdc). "
+    f"When the body says AskUserQuestion, call native AskQuestion if listed "
+    f"(never CallDynamicTool cursor/AskQuestion; "
+    f"see .cursor/rules/awos-cursor-runtime.mdc). "
     f"Agent(…) → Task(…). -->\n"
 )
 if f"Cursor slash: /{slash}" in text:
