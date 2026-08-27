@@ -2,7 +2,7 @@
 description: Sets up the project's /implement-feature delivery flow — investigates, interviews, writes the command, and flags what stays manual.
 argument-hint: '[focus, optional — e.g. a dimension to revisit on re-run]'
 ---
-<!-- Cursor slash: /awos-flow. When the body says AskUserQuestion, call AskQuestion if available (see .cursor/rules/awos-cursor-runtime.mdc). Agent(…) → Task(…). -->
+<!-- Cursor slash: /awos-flow. When the body says AskUserQuestion, call native AskQuestion if listed (never CallDynamicTool cursor/AskQuestion; see .cursor/rules/awos-cursor-runtime.mdc). Agent(…) → Task(…). -->
 
 
 # ROLE
