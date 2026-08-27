@@ -524,6 +524,35 @@ _HARVEST_BOILERPLATE_RE = re.compile(
     r"Named by \d+ source page\(s\).*?justified this candidate:",
     re.DOTALL,
 )
+_HARVEST_BOILERPLATE_SHORT_RE = re.compile(
+    r"Named by \d+ source page\(s\):\s*\n+(?:- \[\[[^\]]+\]\]\s*\n)+",
+)
+
+
+def _harvest_boilerplate_block(slugs: list[str]) -> str:
+    """Evidence sentence + link list, matching ``candidates_harvest._stub_text``."""
+    evidence = "\n".join(f"- [[{s}]]" for s in slugs)
+    return (
+        f"Named by {len(slugs)} source page(s), which is the evidence that\n"
+        f"justified this candidate:\n\n"
+        f"{evidence}\n"
+    )
+
+
+def _refresh_harvest_boilerplate(body: str, slugs: list[str]) -> str:
+    """Rewrite harvest evidence boilerplate when its count or list is stale."""
+    if not slugs or not re.search(r"Named by \d+ source page\(s\)", body):
+        return body
+    if _HARVEST_BOILERPLATE_RE.search(body):
+        return _HARVEST_BOILERPLATE_RE.sub(_harvest_boilerplate_block(slugs), body, count=1)
+    if _HARVEST_BOILERPLATE_SHORT_RE.search(body):
+        short_block = (
+            f"Named by {len(slugs)} source page(s):\n\n"
+            + "\n".join(f"- [[{s}]]" for s in slugs)
+            + "\n"
+        )
+        return _HARVEST_BOILERPLATE_SHORT_RE.sub(short_block, body, count=1)
+    return body
 
 #: Inner headings inside a pasted harvest stub under ``## Candidate merge``.
 _STUB_INNER_HEADINGS = frozenset({"key facts", "connections"})
@@ -925,6 +954,9 @@ def merge(
     merged = _union_sources_frontmatter(target.read_text(encoding="utf-8"), evidence)
     meta_text, body = _split_frontmatter_text(merged)
     body = _union_connections(body, evidence)
+    merged_meta, _ = _parse_frontmatter(meta_text + "\n")
+    all_evidence = _evidence_source_slugs(merged_meta, body, wiki_dir)
+    body = _refresh_harvest_boilerplate(body, all_evidence)
     body = _record_alias(body, slug, len(evidence), today)
     if prose:
         body = (

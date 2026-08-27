@@ -29,6 +29,8 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Fixed
 
+- **`candidates merge` aliases now resolve across the wiki (#139)** — merge already recorded merged-away names under `## Aliases` on the survivor page, but graph, lint, backlinks, and references keyed links by filename stem only, so every inbound `[[merged-away]]` stayed broken. Those consumers now resolve aliases declared on the target page. Merge also refreshes stale harvest boilerplate (`Named by N source page(s)…`) when evidence is unioned into a pending stub.
+  - *Release note:* Merged candidate aliases resolve in graph, lint, backlinks, and references (#139).
 - **Cursor Agent CLI `sessionId` / `createdAt` / string `subagentInfo` (#180 smoke)** — convert injects store meta `agentId` as `sessionId` and short `slug` (never the filesystem stem `store`), maps `createdAt` unix-ms to an ISO `timestamp` for real chat dates, and treats non-dict `subagentInfo` as headless without calling `.keys()` / `.get` on it.
   - *Release note:* Cursor CLI sync uses real agent IDs and chat times; harden string `subagentInfo` (#180).
 - **Tool-use `input` that is not a mapping no longer aborts Cursor convert (#180 smoke)** — `summarize_tool_use` accepts a non-dict `input` (some Cursor blobs store a JSON string) instead of raising `AttributeError: 'str' object has no attribute 'keys'`.
