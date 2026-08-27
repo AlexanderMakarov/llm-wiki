@@ -2156,9 +2156,13 @@ def cmd_candidates(args: argparse.Namespace) -> int:
             )
             return 2
         backend = resolve_backend(_load_sessions_config())
-        results = apply_candidate_actions(
-            wiki_dir, parsed, synthesizer=backend,
-        )
+        try:
+            results = apply_candidate_actions(
+                wiki_dir, parsed, synthesizer=backend,
+            )
+        except ValueError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
         any_ok = False
         for r in results:
             slug = r.get("slug") or "?"

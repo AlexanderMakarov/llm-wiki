@@ -94,14 +94,18 @@ def test_cli_apply_performs_promote_discard_and_merge(tmp_path: Path):
     wiki = tmp_path / "vault" / "wiki"
     for kind in ("entities", "concepts"):
         (wiki / kind).mkdir(parents=True, exist_ok=True)
-    for slug in ("Keep", "Drop", "Dupe", "Target"):
+    for slug in ("Keep", "Drop", "Dupe"):
         _candidate(wiki, "entities", slug)
+    (wiki / "entities" / "Canonical.md").write_text(
+        '---\ntitle: "Canonical"\ntype: entity\nstatus: reviewed\n'
+        "last_updated: 2026-04-17\n---\n\n# Canonical\n",
+        encoding="utf-8",
+    )
 
     batch = json.dumps([
-        {"action": "promote", "slug": "Target", "kind": "entities"},
         {"action": "promote", "slug": "Keep", "kind": "entities"},
         {"action": "discard", "slug": "Drop", "kind": "entities", "reason": "noise"},
-        {"action": "merge", "slug": "Dupe", "into": "Target", "kind": "entities"},
+        {"action": "merge", "slug": "Dupe", "into": "Canonical", "kind": "entities"},
     ])
     proc = subprocess.run(
         [
@@ -116,7 +120,7 @@ def test_cli_apply_performs_promote_discard_and_merge(tmp_path: Path):
     )
     assert proc.returncode == 0, proc.stderr
     assert (wiki / "entities" / "Keep.md").is_file()
-    assert (wiki / "entities" / "Target.md").is_file()
+    assert (wiki / "entities" / "Canonical.md").is_file()
     assert not (wiki / "candidates" / "entities" / "Drop.md").exists()
     assert not (wiki / "candidates" / "entities" / "Dupe.md").exists()
 
