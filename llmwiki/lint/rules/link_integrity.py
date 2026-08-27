@@ -6,7 +6,12 @@ import re
 
 from llmwiki.lint import LintRule, register
 from llmwiki.lint.rules._helpers import _page_slug
-from llmwiki.wikilinks import WIKILINK_RE, strip_anchor
+from llmwiki.wikilinks import (
+    WIKILINK_RE,
+    build_page_alias_map,
+    resolve_wikilink_target,
+    strip_anchor,
+)
 
 _NORM_RE = re.compile(r"[^a-z0-9]")
 
@@ -33,6 +38,9 @@ class LinkIntegrity(LintRule):
             key = _norm_slug(slug)
             if key and key not in by_norm:
                 by_norm[key] = slug
+        alias_map = build_page_alias_map(
+            {_page_slug(rel): page["body"] for rel, page in pages.items()}
+        )
 
         issues = []
         for rel, page in pages.items():
@@ -41,6 +49,8 @@ class LinkIntegrity(LintRule):
             for target in set(WIKILINK_RE.findall(page["body"])):
                 t = strip_anchor(target)
                 if not t:
+                    continue
+                if resolve_wikilink_target(t, slugs, alias_map) is not None:
                     continue
                 if t in slugs or _norm_slug(t) in by_norm:
                     continue

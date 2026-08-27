@@ -345,6 +345,37 @@ def test_link_no_substring_alias():
     assert "kbbuilder" in issues[0]["message"]
 
 
+def test_link_integrity_resolves_merged_alias() -> None:  # @regression
+    """#139: inbound [[Tailnet]] is valid when Tailscale lists Tailnet under Aliases."""
+    # @layer: unit  # @spec: 139-candidates-merge-aliases
+    pages = {
+        "entities/Tailscale.md": _mk_page(
+            {"title": "Tailscale"},
+            "## Aliases\n\n- Tailnet — merged 2026-08-27 (2 source pages)\n",
+        ),
+        "sources/older.md": _mk_page(
+            {"title": "Older"},
+            "Session still links [[Tailnet]] after merge.\n",
+        ),
+    }
+    assert LinkIntegrity().run(pages) == []
+
+
+def test_link_integrity_still_flags_unlisted_alias_name() -> None:
+    """#139 negative: only names under ## Aliases resolve — not fuzzy guesses."""
+    # @layer: unit  # @spec: 139-candidates-merge-aliases
+    pages = {
+        "entities/Tailscale.md": _mk_page(
+            {"title": "Tailscale"},
+            "## Aliases\n\n- Tailnet — merged 2026-08-27\n",
+        ),
+        "sources/a.md": _mk_page({"title": "A"}, "See [[TailnetTypo]]"),
+    }
+    issues = LinkIntegrity().run(pages)
+    assert len(issues) == 1
+    assert "TailnetTypo" in issues[0]["message"]
+
+
 # ─── 4. OrphanDetection ──────────────────────────────────────────────
 
 
@@ -392,6 +423,24 @@ def test_index_markdown_link_clears_orphan():
     orphan_pages = {i["page"] for i in issues}
     assert "sources/proj/a.md" not in orphan_pages
     assert "entities/Orphan.md" in orphan_pages
+
+
+def test_orphan_detection_resolves_merged_alias() -> None:  # @regression
+    """#139: survivor is not orphan when inbound links use merged-away alias."""
+    # @layer: unit  # @spec: 139-candidates-merge-aliases
+    pages = {
+        "entities/Tailscale.md": _mk_page(
+            {"title": "Tailscale"},
+            "## Aliases\n\n- Tailnet — merged 2026-08-27 (2 source pages)\n",
+        ),
+        "sources/older.md": _mk_page(
+            {"title": "Older"},
+            "Session still links [[Tailnet]] after merge.\n",
+        ),
+    }
+    issues = OrphanDetection().run(pages)
+    orphan_pages = {i["page"] for i in issues if i["rule"] == "orphan_detection"}
+    assert "entities/Tailscale.md" not in orphan_pages
 
 
 # ─── 5. ContentFreshness ─────────────────────────────────────────────

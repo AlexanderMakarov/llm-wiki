@@ -648,6 +648,64 @@ def test_merge_records_the_alias(tmp_path: Path):
     assert "- Tailnet — merged " in text
 
 
+def test_merge_refreshes_named_by_count_on_pending_target(tmp_path: Path) -> None:  # @regression
+    """#139: harvest boilerplate count tracks unioned evidence after same-table merge."""
+    # @layer: integration  # @spec: 139-candidates-merge-aliases
+    wiki = _mk_wiki(tmp_path)
+    (wiki / "sources").mkdir(parents=True, exist_ok=True)
+    for slug in ("s1", "s2", "s3"):
+        (wiki / "sources" / f"{slug}.md").write_text(
+            f'---\ntitle: "{slug}"\ntype: source\n---\n\nBody.\n',
+            encoding="utf-8",
+        )
+    (wiki / "candidates" / "entities" / "Canonical.md").write_text(
+        '---\ntitle: "Canonical"\ntype: entity\nstatus: candidate\n'
+        "sources: [s1, s2]\n---\n\n# Canonical\n\n## Key Facts\n\n## Connections\n\n"
+        "Named by 2 source page(s):\n\n- [[s1]]\n- [[s2]]\n",
+        encoding="utf-8",
+    )
+    (wiki / "candidates" / "entities" / "Dup.md").write_text(
+        '---\ntitle: "Dup"\ntype: entity\nstatus: candidate\n'
+        "sources: [s2, s3]\n---\n\n# Dup\n\n## Key Facts\n\n## Connections\n\n"
+        "Named by 2 source page(s), which is the evidence that\n"
+        "justified this candidate:\n\n- [[s2]]\n- [[s3]]\n",
+        encoding="utf-8",
+    )
+
+    merge("Dup", wiki, into_slug="Canonical")
+    text = (wiki / "candidates" / "entities" / "Canonical.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "Named by 3 source page(s)" in text
+    assert "Named by 2 source page(s)" not in text
+    assert "- [[s3]]" in text.split("Named by 3", 1)[1]
+
+
+def test_merge_refreshes_named_by_on_trusted_target_with_boilerplate(
+    tmp_path: Path,
+) -> None:  # @regression
+    """#139: trusted pages that still carry harvest boilerplate get a fresh count."""
+    # @layer: integration  # @spec: 139-candidates-merge-aliases
+    wiki, target = _write_merge_pair(tmp_path)
+    target.write_text(
+        target.read_text(encoding="utf-8").replace(
+            "## Connections",
+            "Named by 2 source page(s), which is the evidence that\n"
+            "justified this candidate:\n\n- [[s1]]\n- [[s2]]\n\n## Connections",
+            1,
+        ),
+        encoding="utf-8",
+    )
+
+    merge("Tailnet", wiki, into_slug="Tailscale")
+    text = target.read_text(encoding="utf-8")
+
+    assert "Named by 3 source page(s)" in text
+    assert "Named by 2 source page(s)" not in text
+    assert "- [[s3]]" in text
+
+
 def test_merge_preserves_target_key_facts(tmp_path: Path):
     wiki, target = _write_merge_pair(tmp_path)
     merge("Tailnet", wiki, into_slug="Tailscale")

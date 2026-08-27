@@ -31,7 +31,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Any
 
-from llmwiki.wikilinks import wikilink_targets
+from llmwiki.wikilinks import build_page_alias_map, resolve_wikilink_target, wikilink_targets
 
 # Dated-claim detection: human prose that commits to a specific moment
 # in time. Captures the date so we can compare to the target's
@@ -141,16 +141,21 @@ def build_index(pages: dict[str, dict]) -> dict[str, list[Reference]]:
     slug_to_rel: dict[str, str] = {
         _rel_to_slug(rel): rel for rel in pages
     }
+    slugs = set(slug_to_rel)
+    alias_map = build_page_alias_map(
+        {_rel_to_slug(rel): page.get("body") or "" for rel, page in pages.items()}
+    )
     idx: dict[str, list[Reference]] = {}
     for rel, page in pages.items():
         body = page.get("body") or ""
         dated = _extract_dated_claims(body)
         for target in wikilink_targets(body):
-            target_rel = slug_to_rel.get(target)
-            idx.setdefault(target, []).append(
+            resolved = resolve_wikilink_target(target, slugs, alias_map) or target
+            target_rel = slug_to_rel.get(resolved)
+            idx.setdefault(resolved, []).append(
                 Reference(
                     source=rel,
-                    target=target,
+                    target=resolved,
                     target_rel=target_rel,
                     dated_claims=tuple(dated),
                 )

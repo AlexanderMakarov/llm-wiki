@@ -40,7 +40,7 @@ from typing import Any
 
 from llmwiki import REPO_ROOT
 from llmwiki._system_pages import is_archived_path
-from llmwiki.wikilinks import wikilink_targets
+from llmwiki.wikilinks import build_page_alias_map, resolve_wikilink_target, wikilink_targets
 
 _START = "<!-- BACKLINKS:START -->"
 _END = "<!-- BACKLINKS:END -->"
@@ -108,12 +108,15 @@ def build_reverse_index(pages: dict[str, dict[str, Any]]) -> dict[str, list[Back
     skipped (a page never appears in its own backlinks list).
     """
     rev: dict[str, list[BacklinkEntry]] = {}
+    slugs = set(pages)
+    alias_map = build_page_alias_map({slug: page["body"] for slug, page in pages.items()})
     for slug, page in pages.items():
         body = page["body"]
         for t in wikilink_targets(body):
-            if t == slug:
+            resolved = resolve_wikilink_target(t, slugs, alias_map) or t
+            if resolved == slug:
                 continue
-            rev.setdefault(t, []).append(
+            rev.setdefault(resolved, []).append(
                 BacklinkEntry(
                     slug=slug,
                     title=page["meta"].get("title", slug),

@@ -27,7 +27,7 @@ from llmwiki import REPO_ROOT
 from llmwiki._frontmatter import parse_frontmatter
 from llmwiki._system_pages import is_archived_path
 from llmwiki.render.graph_viewer import GRAPH_VIEWER_JS
-from llmwiki.wikilinks import WIKILINK_RE
+from llmwiki.wikilinks import WIKILINK_RE, build_page_alias_map, resolve_wikilink_target, strip_anchor
 
 VIS_NETWORK_VENDOR = Path(__file__).resolve().parent / "vendor" / "vis-network.min.js"
 
@@ -206,7 +206,7 @@ def scan_pages(wiki_dir: Path | None = None) -> dict[str, dict[str, Any]]:
         except OSError:
             continue
         # One frontmatter parse feeds title, review date, and page date.
-        meta, _body = parse_frontmatter(text)
+        meta, body = parse_frontmatter(text)
         title = _frontmatter_str(meta, "title") or slug
         # Extract wikilinks
         out_links = set(WIKILINK_RE.findall(text))
@@ -215,6 +215,7 @@ def scan_pages(wiki_dir: Path | None = None) -> dict[str, dict[str, Any]]:
             "path": str(p.relative_to(path_root)),
             "type": type_,
             "title": title,
+            "body": body,
             "out_links": out_links,
             "site_url": site_url,
             "last_updated": _frontmatter_str(meta, "last_updated"),
@@ -257,10 +258,18 @@ def build_graph(verify_site_dir: Path | None = None,
         for p in pages.values():
             p["site_url"] = _verify_site_url(p.get("site_url"), verify_site_dir)
 
+    slugs = set(pages)
+    alias_map = build_page_alias_map({slug: page["body"] for slug, page in pages.items()})
+
+    def _resolved_target(raw: str) -> str:
+        name = strip_anchor(raw)
+        return resolve_wikilink_target(name, slugs, alias_map) or name
+
     # Compute in-degree
     in_deg: dict[str, int] = {slug: 0 for slug in pages}
     for page in pages.values():
-        for target in page["out_links"]:
+        for raw_target in page["out_links"]:
+            target = _resolved_target(raw_target)
             if target in in_deg:
                 in_deg[target] += 1
 
@@ -285,11 +294,12 @@ def build_graph(verify_site_dir: Path | None = None,
     edges = []
     broken_edges = []
     for slug, page in pages.items():
-        for target in page["out_links"]:
+        for raw_target in page["out_links"]:
+            target = _resolved_target(raw_target)
             if target in pages:
                 edges.append({"source": slug, "target": target})
             else:
-                broken_edges.append({"source": slug, "target": target, "broken": True})
+                broken_edges.append({"source": slug, "target": raw_target, "broken": True})
 
     return {
         "nodes": nodes,

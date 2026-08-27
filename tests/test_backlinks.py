@@ -135,6 +135,22 @@ def test_build_reverse_index_counts_multiple_referrers():
     assert len(rev["b"]) == 2
 
 
+def test_build_reverse_index_resolves_merged_alias() -> None:  # @regression
+    """#139: [[Tailnet]] inbound links attribute to canonical Tailscale."""
+    # @layer: unit  # @spec: 139-candidates-merge-aliases
+    pages = {
+        "Tailscale": _page(
+            "Tailscale",
+            "## Aliases\n\n- Tailnet — merged 2026-08-27 (2 source pages)\n",
+        ),
+        "older": _page("Older", "Still cites [[Tailnet]]."),
+    }
+    rev = b.build_reverse_index(pages)
+    assert "Tailnet" not in rev
+    assert len(rev["Tailscale"]) == 1
+    assert rev["Tailscale"][0].slug == "older"
+
+
 # ─── Render + sort ──────────────────────────────────────────────────────
 
 

@@ -33,7 +33,7 @@ Usage: `/wiki-candidates`
      ```
 
    - **merge** — candidate is essentially a duplicate of another name in the same kind.
-     Target may be a trusted page or another pending stub in the same table. Unions the candidate's evidence (`sources:` frontmatter + Connections links) into the target and records the merged-away name under `## Aliases`, then archives the candidate. Reconciles `wiki/index.md`. A candidate carrying reviewer prose also gets that prose appended under `## Candidate merge — <date>`.
+     Target may be a trusted page or another pending stub in the same table. Unions the candidate's evidence (`sources:` frontmatter + Connections links) into the target and records the merged-away name under `## Aliases`, then archives the candidate. Inbound `[[merged-away]]` links resolve to the survivor via that section (graph, lint, backlinks, references). Reconciles `wiki/index.md`. A candidate carrying reviewer prose also gets that prose appended under `## Candidate merge — <date>`.
      ```
      python3 -m llmwiki candidates merge --slug DuplicateFoo --into Foo
      ```

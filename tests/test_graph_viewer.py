@@ -153,6 +153,35 @@ def test_build_graph_tracks_broken_edges(seeded_graph):
     )
 
 
+def test_build_graph_resolves_merged_alias_not_broken(
+    tmp_path: Path, monkeypatch
+) -> None:  # @regression
+    """#139: graph edges follow ## Aliases instead of reporting alias as broken."""
+    # @layer: integration  # @spec: 139-candidates-merge-aliases
+    wiki = tmp_path / "wiki"
+    (wiki / "entities").mkdir(parents=True)
+    (wiki / "sources").mkdir(parents=True)
+    (wiki / "entities" / "Tailscale.md").write_text(
+        '---\ntitle: "Tailscale"\ntype: entity\n---\n\n'
+        "# Tailscale\n\n"
+        "## Aliases\n\n- Tailnet — merged 2026-08-27 (2 source pages)\n",
+        encoding="utf-8",
+    )
+    (wiki / "sources" / "older.md").write_text(
+        '---\ntitle: "Older"\ntype: source\n---\n\n'
+        "Still references [[Tailnet]] in prose.\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(graph_mod, "WIKI_DIR", wiki)
+    monkeypatch.setattr(graph_mod, "REPO_ROOT", tmp_path)
+    graph = build_graph()
+    assert not any(e.get("target") == "Tailnet" for e in graph["broken_edges"])
+    assert any(
+        e["source"] == "older" and e["target"] == "Tailscale"
+        for e in graph["edges"]
+    )
+
+
 def test_build_graph_stats_include_orphans(seeded_graph):
     stats = seeded_graph["stats"]
     assert "Foo" in stats["orphans"]

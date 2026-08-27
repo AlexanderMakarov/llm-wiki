@@ -13,7 +13,14 @@ from __future__ import annotations
 
 import re
 
-__all__ = ["WIKILINK_RE", "strip_anchor", "wikilink_targets"]
+__all__ = [
+    "WIKILINK_RE",
+    "build_page_alias_map",
+    "parse_page_aliases",
+    "resolve_wikilink_target",
+    "strip_anchor",
+    "wikilink_targets",
+]
 
 #: Matches ``[[Target]]`` and ``[[Target|display text]]``. Group 1 is the
 #: target as written, including any ``#section`` anchor.
@@ -38,3 +45,88 @@ def wikilink_targets(text: str) -> set[str]:
     targets = {strip_anchor(raw) for raw in WIKILINK_RE.findall(text)}
     targets.discard("")
     return targets
+
+
+_ALIASES_HEADING_RE = re.compile(r"^##\s+Aliases\s*$", re.MULTILINE)
+
+
+def _aliases_section_lines(body: str) -> list[str]:
+    """Return body lines under ``## Aliases``, or ``[]`` when absent."""
+    match = _ALIASES_HEADING_RE.search(body)
+    if not match:
+        return []
+    rest = body[match.end() :]
+    lines: list[str] = []
+    for line in rest.splitlines():
+        if line.startswith("## "):
+            break
+        lines.append(line)
+    return lines
+
+
+def parse_page_aliases(body: str) -> list[str]:
+    """Return alias names declared under ``## Aliases``.
+
+    Accepts harvest-merge bullets (``- Foo — merged …``) and wikilink
+    bullets (``- [[Foo]]``).
+    """
+    aliases: list[str] = []
+    seen: set[str] = set()
+    for line in _aliases_section_lines(body):
+        stripped = line.strip()
+        if not stripped.startswith("-"):
+            continue
+        wikilinks = WIKILINK_RE.findall(stripped)
+        if wikilinks:
+            for raw in wikilinks:
+                alias = strip_anchor(raw)
+                if alias and alias.casefold() not in seen:
+                    seen.add(alias.casefold())
+                    aliases.append(alias)
+            continue
+        rest = stripped.lstrip("-").strip()
+        if not rest:
+            continue
+        alias = rest.split("—", 1)[0].strip()
+        if alias and alias.casefold() not in seen:
+            seen.add(alias.casefold())
+            aliases.append(alias)
+    return aliases
+
+
+def build_page_alias_map(page_bodies: dict[str, str]) -> dict[str, str]:
+    """Map merged-away page names to the survivor slug that lists them.
+
+    First declaration wins when the same alias appears on more than one page.
+    """
+    alias_map: dict[str, str] = {}
+    for slug, body in page_bodies.items():
+        for alias in parse_page_aliases(body):
+            if alias == slug:
+                continue
+            if alias not in alias_map:
+                alias_map[alias] = slug
+    return alias_map
+
+
+def resolve_wikilink_target(
+    target: str,
+    slugs: set[str],
+    alias_map: dict[str, str] | None = None,
+) -> str | None:
+    """Return the canonical page slug for ``target``, or ``None`` when missing.
+
+    ``target`` may still carry a ``#section`` anchor; it is stripped before
+    lookup. A name listed under another page's ``## Aliases`` resolves to that
+    page's slug.
+    """
+    name = strip_anchor(target)
+    if not name:
+        return None
+    if name in slugs:
+        return name
+    if alias_map:
+        canonical = alias_map.get(name)
+        if canonical and canonical in slugs:
+            return canonical
+    return None

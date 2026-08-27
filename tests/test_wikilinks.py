@@ -19,7 +19,13 @@ import pytest
 from llmwiki.backlinks import build_reverse_index
 from llmwiki.lint.rules.orphan_detection import OrphanDetection
 from llmwiki.references import build_index
-from llmwiki.wikilinks import WIKILINK_RE, wikilink_targets
+from llmwiki.wikilinks import (
+    WIKILINK_RE,
+    build_page_alias_map,
+    parse_page_aliases,
+    resolve_wikilink_target,
+    wikilink_targets,
+)
 
 #: A pattern shape that keeps ``#`` out of the captured target instead of
 #: stripping it afterwards. Consumers must not be able to tell the two apart.
@@ -133,3 +139,75 @@ def test_canonical_parser_imports_nothing_from_the_package() -> None:
     """It stays a leaf so every consumer can import it without a cycle."""
     source = (_PACKAGE / "wikilinks.py").read_text(encoding="utf-8")
     assert not re.search(r"^\s*(?:from|import)\s+llmwiki", source, re.MULTILINE)
+
+
+# ─── merge aliases (#139) ─────────────────────────────────────────────────
+
+
+def test_parse_page_aliases_accepts_merge_bullets() -> None:  # @regression
+    """# @layer: unit  # @spec: 139-candidates-merge-aliases"""
+    body = (
+        "## Aliases\n\n"
+        "- Tailnet — merged 2026-08-27 (2 source pages)\n"
+        "- [[OldName]]\n"
+    )
+    assert parse_page_aliases(body) == ["Tailnet", "OldName"]
+
+
+def test_build_page_alias_map_maps_merged_names_to_survivor() -> None:  # @regression
+    """# @layer: unit  # @spec: 139-candidates-merge-aliases"""
+    bodies = {
+        "Tailscale": (
+            "## Connections\n- [[s1]]\n\n"
+            "## Aliases\n\n- Tailnet — merged 2026-08-27 (2 source pages)\n"
+        ),
+    }
+    assert build_page_alias_map(bodies) == {"Tailnet": "Tailscale"}
+
+
+def test_resolve_wikilink_target_follows_alias_map() -> None:  # @regression
+    """# @layer: unit  # @spec: 139-candidates-merge-aliases"""
+    slugs = {"Tailscale"}
+    alias_map = {"Tailnet": "Tailscale"}
+    assert resolve_wikilink_target("Tailnet", slugs, alias_map) == "Tailscale"
+    assert resolve_wikilink_target("Tailnet#history", slugs, alias_map) == "Tailscale"
+    assert resolve_wikilink_target("Missing", slugs, alias_map) is None
+
+
+def test_backlinks_attribute_alias_links_to_canonical() -> None:  # @regression
+    """# @layer: unit  # @spec: 139-candidates-merge-aliases"""
+    pages = {
+        "Tailscale": {
+            "path": Path("entities/Tailscale.md"),
+            "meta": {"title": "Tailscale"},
+            "body": "## Aliases\n\n- Tailnet — merged 2026-08-27\n",
+            "text": "",
+        },
+        "older": {
+            "path": Path("sources/older.md"),
+            "meta": {"title": "Older"},
+            "body": "Historical note on [[Tailnet]].\n",
+            "text": "",
+        },
+    }
+    rev = build_reverse_index(pages)
+    assert list(rev) == ["Tailscale"]
+    assert rev["Tailscale"][0].slug == "older"
+
+
+def test_references_attribute_alias_links_to_canonical() -> None:  # @regression
+    """# @layer: unit  # @spec: 139-candidates-merge-aliases"""
+    pages = {
+        "entities/Tailscale.md": {
+            "meta": {},
+            "body": "## Aliases\n\n- Tailnet — merged 2026-08-27\n",
+        },
+        "sources/older.md": {
+            "meta": {},
+            "body": "Historical note on [[Tailnet]].\n",
+        },
+    }
+    idx = build_index(pages)
+    assert "Tailscale" in idx
+    assert idx["Tailscale"][0].source == "sources/older.md"
+    assert "Tailnet" not in idx

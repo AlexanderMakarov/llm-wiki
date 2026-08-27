@@ -351,7 +351,7 @@ Successful `promote` / `flip-promote` / `merge` / `discard` / `apply` reconcile 
 
 `promote` fills an empty (or heading-only) `## Key Facts` from nested `fact:` bullets on the cited source pages' Connections topics (#147 / #103). That path is offline — Dummy / `None` backends are fine. Non-empty reviewer Key Facts are left alone. Opt-in rewrite of trusted pages still needs a model: `rewrite-key-facts` uses the backend named by `synthesis.backend` (override the prompt per vault at `wiki/prompts/key_facts.md`).
 
-`merge` folds a harvest stub into the target by unioning its `sources:` and Connections links and recording the name under `## Aliases`; a candidate containing reviewer prose still has that prose appended under `## Candidate merge — <date>`. Target may be a trusted page or another pending stub in the same kind.
+`merge` folds a harvest stub into the target by unioning its `sources:` and Connections links and recording the name under `## Aliases` (inbound `[[merged-away]]` links resolve to the survivor via that section in graph, lint, backlinks, and references); a candidate containing reviewer prose still has that prose appended under `## Candidate merge — <date>`. Target may be a trusted page or another pending stub in the same kind.
 
 `apply` runs a **batch** of the same intents in one process (the JSON shape `site/candidates.html` prints):
 
