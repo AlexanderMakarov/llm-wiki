@@ -1,8 +1,9 @@
 """Pytest config for llmwiki tests.
 
 Makes sure the `llmwiki` package is importable regardless of where pytest is
-invoked from, and that tests never write into the developer's real vault
-(``config.json`` ``vault.default_path``).
+invoked from, and that tests never write into the developer's real vault or
+inherit gitignored root ``config.json`` settings (``vault.default_path``,
+``synthesis.concurrency``, convert filters, …).
 """
 
 from __future__ import annotations
@@ -37,11 +38,21 @@ def _isolate_default_vault(tmp_path_factory, monkeypatch):
     ``llmwiki synthesize --estimate`` without ``--vault`` will read/write
     ``config.json``'s ``vault.default_path`` (e.g. an Obsidian vault) and
     can wipe ``llmwiki-state.json``.
+
+    Also points ``config_schedule._USER_CONFIG`` and ``convert.USER_CONFIG_FILE``
+    at a path that does not exist (#142) so ``_load_sessions_config`` /
+    ``convert_all`` never merge the developer's gitignored root ``config.json``.
+    Opt-in merge tests re-point those names at a fixture file themselves.
     """
     isolated = tmp_path_factory.mktemp("llmwiki-default-vault")
     (isolated / "raw" / "sessions").mkdir(parents=True)
     (isolated / "raw" / "docs").mkdir(parents=True)
     (isolated / "wiki" / "sources").mkdir(parents=True)
+
+    # Missing file → merge skips the user overlay (is_file() is False).
+    missing_user_config = isolated / "no-user-config.json"
+    monkeypatch.setattr("llmwiki.config_schedule._USER_CONFIG", missing_user_config)
+    monkeypatch.setattr("llmwiki.convert.USER_CONFIG_FILE", missing_user_config)
 
     monkeypatch.setattr(
         "llmwiki.config_schedule.load_default_vault_path",
