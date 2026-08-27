@@ -172,7 +172,7 @@ cp examples/sessions_config.json config.json
 | `filters` | `include_projects` | list | [] | If non-empty, only sync matching project slugs |
 | `filters` | `exclude_projects` | list | [] | Skip projects containing these substrings |
 | `filters` | `drop_record_types` | list | [3 types] | JSONL record types to discard |
-| `filters` | `exclude_headless` | bool | true | Skip headless `claude -p` / Agent-SDK sessions (`entrypoint=sdk-cli` or `promptSource=sdk`). Prevents the synthesis feedback loop. Applies at **both** ingest (never converted) and synthesis (a headless session already in `raw/` is never synthesized and never counted as backlog) |
+| `filters` | `exclude_headless` | bool | true | Skip automated / headless launches across coding-agent adapters (Claude SDK markers; Cursor Agent CLI `subagentInfo` / `approvalMode=auto-review`; OpenClaw never skipped; others false until markers exist). Prevents the synthesis feedback loop. Applies at **both** ingest and synthesis. See [multi-agent-setup.md](multi-agent-setup.md#what-automated-headless-means) |
 | `filters` | `exclude_temp_cwd` | bool | false | Opt-in: skip sessions whose `cwd` is a throwaway temp dir (`/tmp`, `/var/folders`, …). Off by default — a git worktree under `/tmp` is often real work |
 | `redaction` | `real_username` | string | `$USER` | Your OS username (auto-detected if empty) |
 | `redaction` | `replacement_username` | string | `USER` | Replacement in path redaction |
@@ -246,22 +246,23 @@ ai-newsletter/2026-04-04-*secret*
 
 Each adapter can be configured in the `adapters` section of `config.json`. The key must match the adapter's registry name.
 
-| Adapter | Config key | AI session? | Configurable fields |
+| Adapter | Config key | Core / contrib | Configurable fields |
 |---|---|---|---|
-| Claude Code | `claude_code` | yes (default on) | `roots` |
-| Codex CLI | `codex_cli` | yes (default on) | `roots` |
-| Copilot Chat | `copilot_chat` | yes (default on) | `roots` |
-| Copilot CLI | `copilot_cli` | yes (default on) | `roots` |
-| Cursor | `cursor` | yes (default on) | `roots` |
-| Gemini CLI | `gemini_cli` | yes (default on) | `roots` |
-| OpenCode / OpenClaw (app-config dir) | `opencode` | yes (default on) | `roots` |
-| OpenClaw (native session store) | `openclaw` | yes (default on) | `roots` |
-| ChatGPT | `chatgpt` | yes (opt-in) | `enabled`, `conversations_json` |
-| Obsidian | `obsidian` | **no** (opt-in) | `vault_paths`, `exclude_folders`, `min_content_chars` |
-| Jira | `jira` | **no** (opt-in) | `server`, `email`, `api_token` / `api_token_env`, `jql`, `max_results` |
-| Meeting transcripts | `meeting` | **no** (opt-in) | `source_dirs`, `extensions` |
+| Claude Code | `claude_code` | **core** (bare `sync`) | `roots` |
+| Codex CLI | `codex_cli` | **core** (bare `sync`) | `roots` |
+| Copilot Chat | `copilot_chat` | contrib (`--adapter`) | `roots` |
+| Copilot CLI | `copilot_cli` | contrib (`--adapter`) | `roots` |
+| Cursor IDE | `cursor` | contrib (`--adapter`) | `roots` |
+| Cursor Agent CLI | `cursor_cli` | contrib (`--adapter`) | `roots` |
+| Gemini CLI | `gemini_cli` | contrib (`--adapter`) | `roots` |
+| OpenCode | `opencode` | contrib (`--adapter`) | `roots` |
+| OpenClaw (native store) | `openclaw` | contrib (`--adapter`) | `roots` |
+| ChatGPT | `chatgpt` | contrib + `enabled: true` | `enabled`, `conversations_json` |
+| Obsidian | `obsidian` | contrib + `enabled: true` (notes, not agent chats) | `vault_paths`, `exclude_folders`, `min_content_chars` |
+| Jira | `jira` | contrib + `enabled: true` | `server`, `email`, `api_token` / `api_token_env`, `jql`, `max_results` |
+| Meeting transcripts | `meeting` | contrib + `enabled: true` | `source_dirs`, `extensions` |
 
-Non-AI-session adapters are opt-in only (#326) — set `{name}.enabled: true` in this config to have them fire on `sync`.
+**Core** adapters run on a bare `llmwiki sync` when their store exists. **Contrib** AI adapters need `--adapter <name>` (or an explicit enable where documented) until [#182](https://github.com/AlexanderMakarov/llm-wiki/issues/182). Non-AI intake (Obsidian, Jira, Meeting, ChatGPT export) also needs `enabled: true` (#326). Support map + headless rules: [multi-agent-setup.md](multi-agent-setup.md).
 
 Example:
 

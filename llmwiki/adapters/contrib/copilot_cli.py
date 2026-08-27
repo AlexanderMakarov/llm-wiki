@@ -113,3 +113,12 @@ class CopilotCliAdapter(BaseAdapter):
                 continue
         # Fallback: use the parent directory name
         return path.parent.name
+
+    def is_headless_session(self, records: list[dict[str, Any]]) -> bool:
+        """Always False — no verified Copilot CLI automation markers (#180).
+
+        In-repo tests only seed minimal ``{"type":"init"}`` event lines; no
+        local ``~/.copilot/session-state`` store was present to verify
+        non-interactive / nested-agent launch fields.
+        """
+        return False

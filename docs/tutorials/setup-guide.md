@@ -277,20 +277,23 @@ llmwiki build                                         # HTML site + AI exports (
 
 ## Part 5: Multi-agent setup
 
-llmwiki works with Claude Code, Codex CLI, Copilot Chat, Copilot CLI, Cursor,
-Gemini CLI, Obsidian, and PDFs — all in one wiki. Each session gets an agent
-badge on the site so you know which AI produced which transcript.
+llmwiki works with Claude Code, Codex CLI, Copilot Chat, Copilot CLI, Cursor
+Agent CLI, OpenClaw, Gemini CLI, and Obsidian notes — all in one wiki when you
+enable each source. Each session gets an agent badge on the site so you know
+which AI produced which transcript. Core vs contrib and headless rules:
+[multi-agent-setup.md](../multi-agent-setup.md).
 
 ### 5.1 Enable multiple agents
 
-The setup script detects what's installed. To force-enable:
+The setup script detects what's installed. A bare `llmwiki sync` runs **core**
+adapters only. Contrib sources need `--adapter <name>`:
 
 ```bash
 llmwiki adapters
+llmwiki sync --adapter cursor_cli openclaw
 ```
 
-Shows default availability + configured state. Enable opt-in adapters in
-`examples/sessions_config.json`:
+Non-AI intake (meeting / jira / …) still uses `enabled: true` in config:
 
 ```json
 {

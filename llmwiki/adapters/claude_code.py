@@ -14,10 +14,17 @@ We strip the common prefix to produce a friendly slug.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from llmwiki.adapters import register
 from llmwiki.adapters.base import BaseAdapter
 from llmwiki.slugs import project_slug_from_encoded_dir
+
+# Headless `claude -p` / Agent-SDK runs (#8 / #180). Match the `sdk-`
+# entrypoint *prefix* so a future SDK runtime (sdk-go, …) is caught
+# without a code change; promptSource is the belt-and-suspenders signal.
+_HEADLESS_ENTRYPOINT_PREFIX = "sdk-"
+_HEADLESS_PROMPT_SOURCES = frozenset({"sdk"})
 
 
 @register("claude_code")
@@ -26,6 +33,18 @@ class ClaudeCodeAdapter(BaseAdapter):
 
     # Cross-platform: dot-dir works on macOS, Linux, and Windows
     session_store_path = Path.home() / ".claude" / "projects"
+
+    def is_headless_session(self, records: list[dict[str, Any]]) -> bool:
+        """True if any record marks this as a headless `claude -p` / SDK run."""
+        for r in records:
+            entrypoint = r.get("entrypoint")
+            if isinstance(entrypoint, str) and entrypoint.startswith(
+                _HEADLESS_ENTRYPOINT_PREFIX
+            ):
+                return True
+            if r.get("promptSource") in _HEADLESS_PROMPT_SOURCES:
+                return True
+        return False
 
     def derive_project_slug(self, jsonl_path: Path) -> str:
         """Strip the '-Users-...-production-draft-' prefix from the project dir name.

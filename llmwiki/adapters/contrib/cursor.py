@@ -98,3 +98,11 @@ class CursorAdapter(BaseAdapter):
             except ValueError:
                 continue
         return path.parent.name
+
+    def is_headless_session(self, records: list[dict[str, Any]]) -> bool:
+        """Always False — Cursor IDE ingest cannot detect launches yet (#180 / #2).
+
+        ``state.vscdb`` parsing is out of scope here; Agent CLI automation is
+        handled by ``cursor_cli``, not this IDE scaffold.
+        """
+        return False

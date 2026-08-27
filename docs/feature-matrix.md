@@ -32,12 +32,13 @@
 | # | Feature | Value | Prior art | llmwiki phase |
 |---|---|---|---|---|
 | B1 | **Claude Code `.jsonl` adapter** (killer feature) | ⭐⭐⭐⭐⭐ | **None** | v0.1 |
-| B2 | **Codex CLI adapter** | ⭐⭐⭐⭐⭐ | bashiraziz (stub), Ss1024sS (script only) | v0.1 stub, v0.2 full |
+| B2 | **Codex CLI adapter** | ⭐⭐⭐⭐⭐ | bashiraziz (stub), Ss1024sS (script only) | shipped (production) |
 | B3 | **Obsidian vault adapter** (input mode) | ⭐⭐⭐⭐ | AgriciDaniel, louiswang524, kytmanov, remember-md | v0.1 |
 | B4 | Generic markdown (drop in `raw/`) | ⭐⭐⭐⭐ | All | v0.1 |
-| B5 | Cursor adapter | ⭐⭐⭐ | bashiraziz | v0.2 |
-| B6 | Gemini CLI adapter | ⭐⭐⭐ | SamurAIGPT (schema only) | v0.3 |
-| B7 | OpenCode/OpenClaw adapter | ⭐⭐⭐ | remember-md, sinzin91 | v0.3 |
+| B5 | Cursor Agent CLI adapter | ⭐⭐⭐ | — | shipped (contrib `cursor_cli`) |
+| B5b | Cursor IDE adapter | ⭐⭐⭐ | bashiraziz | limited — see #2 |
+| B6 | Gemini CLI adapter | ⭐⭐⭐ | SamurAIGPT (schema only) | scaffold (contrib) |
+| B7 | OpenCode/OpenClaw adapter | ⭐⭐⭐ | remember-md, sinzin91 | shipped (contrib) |
 | B8 | PDF ingestion | ⭐⭐⭐ | lucasastorian | v0.3 |
 | B9 | URL / web-clipper ingestion | ⭐⭐ | kytmanov | v0.4 |
 | B10 | Image ingestion (screenshots, diagrams) | ⭐⭐ | louiswang524 (mentioned) | v0.4 |

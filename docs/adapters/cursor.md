@@ -1,9 +1,10 @@
-# Cursor adapter
+# Cursor IDE adapter
 
-**Status:** Production (v0.5)
+**Status:** Limited / scaffold (contrib) — full IDE chat ingest tracked in [#2](https://github.com/AlexanderMakarov/llm-wiki/issues/2)
 **Module:** `llmwiki.adapters.contrib.cursor`
 **Source:** [`llmwiki/adapters/contrib/cursor.py`](../../llmwiki/adapters/contrib/cursor.py)
-**Tracking issue:** #37
+
+For **Cursor Agent CLI** sessions (`~/.cursor/chats/`), use the separate [`cursor_cli`](cursor-cli.md) adapter — that path is production for Agent CLI transcripts and participates in `filters.exclude_headless`.
 
 ## What it reads
 
@@ -20,7 +21,19 @@ Cursor IDE stores conversation history in per-workspace directories under platfo
 %APPDATA%\Cursor\User\workspaceStorage\<hash>\
 ```
 
-The adapter checks all three platform paths and discovers `.jsonl` files (and `state.vscdb` for future SQLite support). The `<hash>` is a workspace-specific identifier.
+The adapter checks those roots and discovers `.jsonl` files when present. Full `state.vscdb` parsing for IDE chats is not finished yet ([#2](https://github.com/AlexanderMakarov/llm-wiki/issues/2)).
+
+## Enable it
+
+**Contrib** — not on a bare `llmwiki sync`:
+
+```bash
+python3 -m llmwiki sync --adapter cursor
+```
+
+## Automated (headless) sessions
+
+No verified automation-launch markers for IDE workspace chats today — `is_headless_session` returns false. Prefer [`cursor_cli`](cursor-cli.md) when you need Agent CLI headless filtering.
 
 ## Project slug derivation
 
@@ -31,8 +44,6 @@ workspaceStorage/a1b2c3d4e5f6789/session.jsonl
   -> cursor-a1b2c3d4e5f6
 ```
 
-Future versions will read `workspace.json` from each workspace directory to extract the friendly project name.
-
 ## Schema versions supported
 
 ```python
@@ -40,8 +51,6 @@ SUPPORTED_SCHEMA_VERSIONS = ["v1"]
 ```
 
 ## Configuration
-
-Override roots in `config.json`:
 
 ```json
 {
@@ -56,16 +65,12 @@ Override roots in `config.json`:
 ## Testing the adapter
 
 ```bash
-python3 -m llmwiki adapters      # should list cursor as available (if installed)
+python3 -m llmwiki adapters
 python3 -m pytest tests/test_adapter_graduation.py -k cursor -v
 ```
 
-## Fixture
+## See also
 
-A minimal synthetic fixture is provided at `tests/fixtures/cursor/minimal.jsonl` for converter round-trip testing. It contains a single turn with a Write tool call.
-
-## Reference
-
-- [`llmwiki/adapters/contrib/cursor.py`](../../llmwiki/adapters/contrib/cursor.py) -- the adapter source
-- [`llmwiki/convert.py`](../../llmwiki/convert.py) -- the shared converter
-- [README](../../README.md) -- project overview
+- [Cursor Agent CLI adapter](cursor-cli.md)
+- [Multi-agent setup](../multi-agent-setup.md)
+- [`llmwiki/adapters/contrib/cursor.py`](../../llmwiki/adapters/contrib/cursor.py)

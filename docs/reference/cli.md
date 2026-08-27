@@ -70,7 +70,7 @@ python3 -m llmwiki sync --force
 
 | Flag | What |
 |---|---|
-| `--adapter NAME [NAME ...]` | Limit to specific adapters. Default: every adapter with a session store on disk. |
+| `--adapter NAME [NAME ...]` | Limit to / load specific adapters. Default: **core** adapters (`claude_code`, `codex_cli`) with a session store on disk. Contrib adapters need this flag (or config enable) — see [multi-agent-setup.md](../multi-agent-setup.md). |
 | `--since YYYY-MM-DD` | Only sessions on/after this date (e.g. `--since 2026-04-01`). |
 | `--project SUBSTRING` | Filter by project-slug substring. |
 | `--include-current` | Include sessions < 60 min old (default skips live ones). |
@@ -638,6 +638,34 @@ Idempotent: a second run finds nothing to stamp and prints `nothing to migrate: 
 
 ---
 
+## `migrate-broken-provenance` — remap or clear hops to missing raw sessions (#180)
+
+After a Cursor Agent CLI re-sync that used the filesystem stem `store` as `sessionId`, force-convert can leave wiki pages pointing at deleted `raw/sessions/…` paths while newer raw files exist under the same project slug (`cursor-<hash>`). This offline migration walks wiki pages that carry `source_file:` / `sources:` provenance and, when a hop targets a missing `raw/sessions/` file:
+
+1. Parses the project slug from the missing path (for example `cursor-<hash>`).
+2. Finds existing raw files whose names contain that project slug.
+3. Restricts candidates to the **same calendar day** (`YYYY-MM-DD` prefix). Never remaps across days (that used to point every June stub at a single January session).
+4. Remaps only among same-day **interactive** raw files: explicit `is_headless: false`, or legacy unmarked (no `is_headless` field — same eligibility rule as synth). When several remain, remaps to the uniquely closest HH-MM in that shortlist.
+5. Otherwise clears the broken `source_file` (same-day headless-only pools, ambiguous closest-time ties, or no same-day interactive candidate) and drops matching `sources:` list aliases. Wiki pages themselves are never deleted. Never remaps to a row that is explicitly `is_headless: true`.
+
+Implementation: `llmwiki/migrate_broken_provenance.py` — in the package rather than under `scripts/`, so it runs from a pip or Homebrew install with no checkout. Preview with `--dry-run`. Prefer a Cursor Agent CLI re-sync first so raw filenames carry real chat dates and `is_headless` is stamped; unmarked legacy same-day files remain remap-eligible until then.
+
+```bash
+python3 -m llmwiki migrate-broken-provenance --vault /path/to/vault --dry-run
+python3 -m llmwiki migrate-broken-provenance --vault /path/to/vault
+```
+
+### Flags
+
+| Flag | What |
+|---|---|
+| `--vault PATH` | **Required.** Vault root containing `wiki/` and `raw/`. |
+| `--dry-run` | Report what would change; write nothing. |
+
+The report prints `remapped` / `cleared` / `unresolved` counts. Idempotent once hops are healed or cleared.
+
+---
+
 ## `install-agent-kit` — copy packaged slash commands and skills (#109)
 
 A pip or Homebrew install carries the user-facing `/wiki-*` slash commands and skills inside the package (`llmwiki/agent_kit/`). This command copies `commands/` and `skills/` beneath a directory you name so Claude Code (or any agent that reads that layout) can see them. `--dest` is **required** — the command does not guess at agent directory conventions.
@@ -820,7 +848,7 @@ python3 -m llmwiki watch --vault ~/my-vault
 
 | Flag | What |
 |---|---|
-| `--adapter NAME [NAME ...]` | Limit to specific adapters. Default: every adapter with a session store on disk. |
+| `--adapter NAME [NAME ...]` | Limit to / load specific adapters. Default: **core** adapters (`claude_code`, `codex_cli`) with a session store on disk. Contrib adapters need this flag (or config enable) — see [multi-agent-setup.md](../multi-agent-setup.md). |
 | `--interval SECONDS` | Poll interval. Default: `5`. |
 | `--settle SECONDS` | Mtime settle before ready check for adapters without a finished-signal. Default: `2`. |
 | `--dry-run` | Detect finished sessions only; do not run maintain. |

@@ -10,6 +10,15 @@ How to upgrade between `llmwiki` releases.  Most releases are drop-in (`pip inst
 
 The canonical per-release detail is [CHANGELOG.md](https://github.com/Pratiyush/llm-wiki/blob/master/CHANGELOG.md) — this guide focuses on "what might break".
 
+## Unreleased — exclude headless across adapters (#180)
+
+- **`filters.exclude_headless` (still default on) now classifies automated launches for every coding-agent adapter, not only Claude.** Cursor Agent CLI sessions with `subagentInfo` or `approvalMode=auto-review` are skipped on sync and omitted from synth / `--estimate` backlog once marked. OpenClaw sessions stay eligible (never treated as headless). Codex / OpenCode / Copilot stay eligible until verified markers exist.
+- **Re-sync to classify older Cursor Agent CLI rows.** Raw files converted before this change have no `is_headless` frontmatter and stay eligible for synthesis until you re-convert them (`llmwiki sync --force` for those sessions, or a full force sync if you accept the cost). After re-sync, newly classified headless rows drop out of the synth backlog.
+- **Cursor CLI `sessionId` / chat time fix on re-sync.** Convert now writes store meta `agentId` as `sessionId` (never the filesystem stem `store`) and uses meta `createdAt` for `started` / filenames. Re-sync Cursor Agent CLI after upgrading so new raw files are stable and correctly dated.
+- **Optional: `llmwiki migrate-broken-provenance --vault <vault>`** when wiki pages still point at missing `raw/sessions/…` paths left by an older `sessionId: store` sync. Preview with `--dry-run`. Remaps only to a **same-calendar-day** interactive raw under the same project (`is_headless: false` or unmarked legacy; uniquely closest HH-MM when several); never to explicit headless rows, and never across days. Otherwise clears the broken `source_file` without deleting wiki pages. See `docs/reference/cli.md`.
+- **Nested Cursor Task / subagent runs are under `exclude_headless`, not `include_subagents`.** Turning off `exclude_headless` includes them again. Support map: [multi-agent-setup.md](multi-agent-setup.md).
+- **Contrib adapters still need `--adapter`.** This change does not implement [#182](https://github.com/AlexanderMakarov/llm-wiki/issues/182); Cursor Agent CLI / OpenClaw / Copilot still require an explicit adapter choice on sync.
+
 ## Unreleased — `synth --estimate` Already synthesized follows synth state (#163)
 
 - **`synth --estimate` Already synthesized now uses the same state+mtime predicate as a real `synth` run.** Pages on disk alone no longer count as done. If synth state is missing or stale, you may see Already synthesized drop and New / incremental $ rise — that matches what the next non-force run would process. No vault migration; the real `synth` skip rules were already this way.

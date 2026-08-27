@@ -92,6 +92,7 @@ ALL_SUBCOMMANDS = (
     "migrate-tools-used",
     "migrate-page-kinds",
     "migrate-topic-kinds",
+    "migrate-broken-provenance",
     "candidates",
     "synthesize",
     "add",

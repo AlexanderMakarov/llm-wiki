@@ -171,6 +171,16 @@ class BaseAdapter:
         """
         return False
 
+    def is_headless_session(self, records: list[dict[str, Any]]) -> bool:
+        """True if this session is a non-interactive / automated launch (#180).
+
+        Concrete adapters must override. Default returns False (not headless)
+        so interactive / unmarked sessions stay eligible. Claude Code maps
+        ``entrypoint`` / ``promptSource`` SDK markers; Cursor Agent CLI and
+        others add store-specific rules in their overrides.
+        """
+        return False
+
     def load_records(self, path: Path) -> list[dict[str, Any]]:
         """Load raw records from one discovered session path.
 

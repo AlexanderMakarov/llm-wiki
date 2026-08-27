@@ -129,7 +129,7 @@ This document is the deliverable for **Phase 1.25 Research**, a new phase added 
 |---|---|---|
 | Ingests `.jsonl` session transcripts | ❌ (generic markdown only) | ✅ |
 | Claude Code adapter | Some | ✅ |
-| Codex CLI adapter | None | ✅ stub (v0.2) |
+| Codex CLI adapter | None | ✅ production |
 | Multi-agent adapter pattern | None | ✅ |
 | Pure stdlib + `markdown` (no DB, no MCP, no Node) | ~50% | ✅ |
 | Beautiful static HTML viewer | ❌ | ✅ god-level UI |
