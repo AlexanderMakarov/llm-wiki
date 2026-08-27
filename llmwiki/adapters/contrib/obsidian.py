@@ -119,3 +119,11 @@ class ObsidianAdapter(BaseAdapter):
 
     def is_subagent(self, md_path: Path) -> bool:
         return False  # Obsidian notes are never subagents
+
+    def is_headless_session(self, records: list[dict[str, Any]]) -> bool:
+        """Always False — Obsidian notes are not agent launches (#180).
+
+        Hand-written vault markdown is notes intake, not an agent chat store;
+        automated-launch detection does not apply (functional-spec R4).
+        """
+        return False

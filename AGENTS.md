@@ -46,12 +46,15 @@ Different agents write their transcripts to different locations. The adapter reg
 
 | Agent | Session store | Adapter |
 |---|---|---|
-| Claude Code | `~/.claude/projects/<project>/<uuid>.jsonl` | `claude_code.py` |
-| Codex CLI | `~/.codex/sessions/` | `codex_cli.py` (stub in v0.1) |
-| Gemini CLI | `~/.gemini/` (TBD) | `gemini_cli.py` (planned) |
-| OpenCode | `~/.opencode/` (TBD) | `opencode.py` (planned) |
+| Claude Code | `~/.claude/projects/<project>/<uuid>.jsonl` | `claude_code.py` (core) |
+| Codex CLI | `~/.codex/sessions/` | `codex_cli.py` (core, production) |
+| Cursor Agent CLI | `~/.cursor/chats/` | `contrib/cursor_cli.py` (contrib — `--adapter cursor_cli`) |
+| Cursor IDE | workspaceStorage | `contrib/cursor.py` (contrib; IDE ingest incomplete — #2) |
+| Gemini CLI | `~/.gemini/` | `contrib/gemini_cli.py` (contrib scaffold) |
+| OpenCode | OpenCode / OpenClaw app-config sessions | `contrib/opencode.py` (contrib) |
+| OpenClaw | `~/.openclaw/agents/` | `contrib/openclaw.py` (contrib; all sessions not headless) |
 
-The CLI auto-detects which adapter(s) to run. Override with `--adapter <name>`.
+Bare `llmwiki sync` runs **core** adapters only. Contrib adapters need `--adapter <name>` (or explicit enable) until #182. Override with `--adapter <name>`.
 
 ## Commands
 

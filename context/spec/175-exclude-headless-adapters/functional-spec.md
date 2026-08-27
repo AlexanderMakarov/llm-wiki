@@ -1,7 +1,7 @@
 # Functional Specification: Skip automated sessions from every coding-agent source
 
 - **Roadmap Item:** GitHub [#180](https://github.com/AlexanderMakarov/llm-wiki/issues/180) — extend the “skip automated sessions” filter beyond Claude Code
-- **Status:** Approved
+- **Status:** Completed
 - **Author:** Aleksandr Makarov
 - **Related (out of this change):** [#2](https://github.com/AlexanderMakarov/llm-wiki/issues/2) Cursor IDE ingest; [#182](https://github.com/AlexanderMakarov/llm-wiki/issues/182) config/install enablement for every shipped source
 
@@ -13,7 +13,7 @@ Summarizing the wiki can itself launch a non-interactive agent run. If that run 
 
 Interactive chats stay valuable: outcomes of automation often reappear inside a human session; that human session is what should be summarized, not the silent automation itself.
 
-**Desired outcome.** Under the default “skip automated sessions” setting, every **working** coding-agent source either skips non-interactive launches the way Claude already does, or documents a clear special rule (OpenClaw: interactive except background modes like dreaming). The built docs state which agents can supply sessions today, what “automated” means per source, and stop claiming Codex is a future stub.
+**Desired outcome.** Under the default “skip automated sessions” setting, every **working** coding-agent source either skips non-interactive launches the way Claude already does, or documents a clear special rule (OpenClaw: all sessions from the gateway store stay eligible — dreaming lives outside that store). The built docs state which agents can supply sessions today, what “automated” means per source, and stop claiming Codex is a future stub.
 
 **Success.** Default sync and cost-estimate drop the same automated set; Cursor Agent CLI automation is covered; ordinary OpenClaw chats stay; docs match product reality for the sources this change touches.
 
@@ -28,55 +28,55 @@ Interactive chats stay valuable: outcomes of automation often reappear inside a 
 **In scope for this behavior (working session sources today):** Claude Code, Codex CLI, Cursor Agent CLI, OpenClaw (with R3), OpenCode, Copilot CLI, Copilot Chat, ChatGPT export (N/A for automation — R4), Gemini CLI and Cursor IDE only as “document / N/A until they can detect launches” (scaffold — see boundaries).
 
 - **Acceptance Criteria:**
-  - [ ] Given an interactive chat from a working coding-agent source, when I sync and when I estimate synthesis cost, then that chat stays eligible.
-  - [ ] Given a clearly non-interactive / scripted / agent-CLI launch from Claude Code, Cursor Agent CLI, Codex CLI, OpenCode, or Copilot CLI (when the store exposes enough evidence), when I sync with the default setting, then the session is not collected; when I estimate synthesis cost, then it is not counted as pending.
-  - [ ] Given the skip-automated setting is turned off, when I sync and estimate, then those automated launches are included.
-  - [ ] Given an older collected session with no launch marker, when I estimate or synthesize, then it stays eligible (no silent reclassification); re-sync is required to classify it.
+  - [x] Given an interactive chat from a working coding-agent source, when I sync and when I estimate synthesis cost, then that chat stays eligible.
+  - [x] Given a clearly non-interactive / scripted / agent-CLI launch from Claude Code, Cursor Agent CLI, Codex CLI, OpenCode, or Copilot CLI (when the store exposes enough evidence), when I sync with the default setting, then the session is not collected; when I estimate synthesis cost, then it is not counted as pending.
+  - [x] Given the skip-automated setting is turned off, when I sync and estimate, then those automated launches are included.
+  - [x] Given an older collected session with no launch marker, when I estimate or synthesize, then it stays eligible (no silent reclassification); re-sync is required to classify it.
 
 ### R2 — Cursor Agent CLI only (not Cursor IDE)
 
 - **As a** Cursor user, **I want** interactive IDE chats kept (once IDE ingest exists) and only non-interactive Agent CLI runs skipped today, **so that** human work stays in the wiki while silent automation does not.
 
 - **Acceptance Criteria:**
-  - [ ] Given a non-interactive Cursor Agent CLI run, when I sync with the default setting, then it is skipped; the estimate omits it the same way.
-  - [ ] This change does not claim to fix Cursor IDE `state.vscdb` ingest — that remains [#2](https://github.com/AlexanderMakarov/llm-wiki/issues/2).
-  - [ ] Docs distinguish Cursor Agent CLI (works) from Cursor IDE (not ingested yet).
+  - [x] Given a non-interactive Cursor Agent CLI run, when I sync with the default setting, then it is skipped; the estimate omits it the same way.
+  - [x] This change does not claim to fix Cursor IDE `state.vscdb` ingest — that remains [#2](https://github.com/AlexanderMakarov/llm-wiki/issues/2).
+  - [x] Docs distinguish Cursor Agent CLI (works) from Cursor IDE (not ingested yet).
 
-### R3 — OpenClaw: interactive by default; skip dreaming-alike background modes
+### R3 — OpenClaw: always not headless at the session-store layer
 
-- **As an** OpenClaw user, **I want** ordinary gateway chats kept and only identifiable background modes (e.g. dreaming) skipped, **so that** real conversations still become wiki knowledge.
+- **As an** OpenClaw user, **I want** every session the gateway store surfaces kept under the default skip-automated setting, **so that** ordinary chats become wiki knowledge without a false “automated” drop.
 
 - **Acceptance Criteria:**
-  - [ ] Given a normal interactive OpenClaw session, when I sync with the default setting, then it is collected and stays eligible.
-  - [ ] Given an OpenClaw background mode such as dreaming (when the store can identify it), when I sync with the default setting, then it is skipped like other automated runs.
-  - [ ] Docs state this OpenClaw rule next to the other sources.
+  - [x] Given any OpenClaw session from the configured session store, when I sync with the default setting, then it is collected and stays eligible (`is_headless_session` is always false).
+  - [x] Dreaming / similar background modes are out of filter scope here: they live under vault `memory/.dreams/` (outside the session store), so the adapter does not classify them — noted in adapter code and user docs, not as a sync skip rule.
+  - [x] Docs state this OpenClaw rule next to the other sources (supersedes earlier “skip dreaming when identifiable” wording; tech decision locked).
 
 ### R4 — Sources with no automation launch to detect
 
 - **As a** reader of the docs, **I want** note/export sources called out as “this filter does not apply,” **so that** I do not expect Claude-style skipping there.
 
 - **Acceptance Criteria:**
-  - [ ] Obsidian (hand-written notes intake — not agent chats) and ChatGPT export are documented as not applicable for automated-launch detection, with a test that locks that claim.
-  - [ ] Scaffold sources that cannot yet detect launches (Cursor IDE, Gemini CLI as of today) are documented as N/A / not yet, not silently reclassified.
+  - [x] Obsidian (hand-written notes intake — not agent chats) and ChatGPT export are documented as not applicable for automated-launch detection, with a test that locks that claim.
+  - [x] Scaffold sources that cannot yet detect launches (Cursor IDE, Gemini CLI as of today) are documented as N/A / not yet, not silently reclassified.
 
 ### R5 — Sync feedback stays the current style
 
 - **As a** user running sync, **I want** the existing headless-skip summary behavior, **so that** the command output stays familiar.
 
 - **Acceptance Criteria:**
-  - [ ] When automated sessions are skipped under the default setting, sync reports them the same way it already reports Claude headless skips (count in the filter summary), without requiring a new per-agent breakdown line.
+  - [x] When automated sessions are skipped under the default setting, sync reports them the same way it already reports Claude headless skips (count in the filter summary), without requiring a new per-agent breakdown line.
 
 ### R6 — Docs: support map + per-source “automated” meaning + fix stale claims
 
 - **As a** user reading the built site docs, **I want** one clear section that lists which agents can supply sessions today, how each is turned on with today’s product (including that some need an explicit adapter choice until [#182](https://github.com/AlexanderMakarov/llm-wiki/issues/182)), and what “automated” means for that agent, **so that** I am not left guessing from “coming in v0.2” text.
 
 - **Acceptance Criteria:**
-  - [ ] Configuration / getting-started (and thus built `site/docs/…` after a docs build) include a dedicated “which agents are supported” section matching current behavior for every registered session source.
-  - [ ] Stale claims that Codex CLI is only a stub / “will be supported in v0.2” are removed or corrected.
-  - [ ] Cursor Agent CLI vs Cursor IDE is explained; IDE gap points at #2.
-  - [ ] For each working coding-agent source, docs say what counts as automated, that the default is to skip those, and how to turn the filter off.
-  - [ ] OpenClaw’s “interactive except dreaming-alike” rule appears in that section.
-  - [ ] Obsidian is described as notes intake (not an agent chat source) and remains outside automated-launch detection.
+  - [x] Configuration / getting-started (and thus built `site/docs/…` after a docs build) include a dedicated “which agents are supported” section matching current behavior for every registered session source.
+  - [x] Stale claims that Codex CLI is only a stub / “will be supported in v0.2” are removed or corrected.
+  - [x] Cursor Agent CLI vs Cursor IDE is explained; IDE gap points at #2.
+  - [x] For each working coding-agent source, docs say what counts as automated, that the default is to skip those, and how to turn the filter off.
+  - [x] OpenClaw’s “always eligible / dreaming outside the session store” rule appears in that section.
+  - [x] Obsidian is described as notes intake (not an agent chat source) and remains outside automated-launch detection.
 
 ---
 
@@ -86,7 +86,7 @@ Interactive chats stay valuable: outcomes of automation often reappear inside a 
 
 - Detect, mark, and skip automated launches for working coding-agent sources under the existing default filter
 - Cursor Agent CLI coverage (highest-priority gap after Claude)
-- OpenClaw: keep interactive; skip dreaming / similar when identifiable
+- OpenClaw: all store sessions eligible; dreaming noted as outside the store (not a sync skip)
 - Docs support map + per-source automated meaning; fix outdated Codex wording; clarify Cursor CLI vs IDE
 - Tests: interactive kept / automated skipped / filter off / legacy unmarked
 - Changelog / upgrade note when previously collected automated rows start being skipped on synthesis after re-sync (legacy unmarked files stay visible until then)

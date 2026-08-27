@@ -1,81 +1,73 @@
 # Codex CLI adapter
 
-**Status:** 🚧 **v0.1 stub — not yet production-ready**
+**Status:** Production
 **Module:** `llmwiki.adapters.codex_cli`
 **Source:** [`llmwiki/adapters/codex_cli.py`](../../llmwiki/adapters/codex_cli.py)
-**Tracking issue:** [LMW-13 · Codex CLI adapter (stub)](https://github.com/Pratiyush/llm-wiki/issues) (to be filled in when the v0.2 work starts)
 
-## What "stub" means
+## What it reads
 
-The Codex CLI adapter in v0.1 does these things:
-
-1. Imports cleanly — no errors on `python3 -m llmwiki adapters`
-2. Registers under the name `codex_cli` in the adapter registry
-3. Declares its expected session store path (`~/.codex/sessions/`)
-4. Reports `available: yes` if the path exists
-
-It does NOT yet:
-
-- Parse records correctly for all known types
-- Have a tested snapshot fixture
-- Handle Codex-specific quirks (if any)
-
-**If you run `llmwiki sync` with Codex installed, the stub will attempt to use the shared converter with the default record-type filters.** Your mileage may vary. The output is best-effort.
-
-## How to help finalise this adapter
-
-llmwiki's Phase 5.25 Adapter Flow applies. To push this adapter to production:
-
-1. **Clone the repo** and install Codex CLI on your machine.
-2. **Generate a few real sessions**, then copy 2-3 of them into `tests/fixtures/codex_cli/` after heavy redaction. Keep each fixture under 50 KB.
-3. **Run the converter** against your fixtures and inspect the output:
-   ```bash
-   python3 -m llmwiki sync --adapter codex_cli --dry-run
-   ```
-4. **Compare with the Claude Code output format** for similar sessions. Note any fields that are missing or named differently.
-5. **Update `llmwiki/adapters/codex_cli.py`** to handle those differences. Common customisations:
-   - `session_store_path` — confirm the exact directory layout
-   - `derive_project_slug()` — if Codex uses a different encoding
-   - `is_subagent()` — if Codex has sub-agent sessions
-6. **Add snapshot tests** under `tests/snapshots/codex_cli/<slug>.md` and a test file `tests/test_codex_adapter.py`.
-7. **Write `docs/adapters/codex-cli.md`** (this file) with the finalised record format.
-8. **Bump version** in `llmwiki/adapters/codex_cli.py`:
-   ```python
-   SUPPORTED_SCHEMA_VERSIONS = ["0.1"]  # actual Codex CLI version tested
-   ```
-9. **Open a PR** with all of the above. CHANGELOG gets a `Codex CLI adapter graduated from stub to production` entry.
-
-## Expected session store path
-
-Based on Codex CLI conventions as of April 2026 (subject to change):
+OpenAI's Codex CLI stores session transcripts as `.jsonl` under:
 
 ```
 ~/.codex/sessions/
-    <session-id>.jsonl        # main session files
+    YYYY/MM/DD/rollout-*.jsonl
 ~/.codex/projects/
     <project>/
-        <session-id>.jsonl    # alternate layout
+        <session-id>.jsonl
 ```
 
-The adapter checks both paths.
+The adapter checks both roots. Override with `adapters.codex_cli.roots` in `config.json`.
 
-## Expected record format
+## Enable it
 
-Unknown until we test against a real Codex install. We expect it to be similar to Claude Code's `.jsonl` format:
+**Core** adapter — included on a bare `llmwiki sync` when either root exists. No `--adapter` flag required.
 
-```jsonc
-{"type": "user", "content": "...", "timestamp": "..."}
-{"type": "assistant", "content": [{"type": "text", "text": "..."}, {"type": "tool_use", ...}], "usage": {...}}
-{"type": "tool_result", "tool_use_id": "...", "content": "..."}
+```bash
+python3 -m llmwiki adapters | grep codex_cli
+python3 -m llmwiki sync
 ```
 
-If the format diverges significantly, the adapter will need its own record classifier.
+## Project slug derivation
+
+Codex date-buckets sessions under `~/.codex/sessions/YYYY/MM/DD/`, so the directory path is not the project. The adapter reads the first `session_meta` record's `cwd` and uses its basename (lowercased, spaces → dashes). If `cwd` is missing, it falls back to the parent directory name.
+
+## Schema versions supported
+
+```python
+SUPPORTED_SCHEMA_VERSIONS = ["v0.x", "v1.0"]
+```
+
+Codex-native record types (`response_item`, `event_msg`, …) are normalized into the shared Claude-style format used by the converter.
+
+## Automated (headless) sessions
+
+`filters.exclude_headless` (default on) applies to every coding-agent adapter. Codex has **no verified automation-launch markers** in the store today, so Codex sessions are treated as **not** headless. Interactive chats stay eligible; turn the filter off only if you need other agents' automated runs included. See [Multi-agent setup — What “automated” means](../multi-agent-setup.md#what-automated-headless-means).
+
+## Configuration
+
+```json
+{
+  "adapters": {
+    "codex_cli": {
+      "roots": ["~/.codex/sessions", "~/.codex/projects"]
+    }
+  }
+}
+```
 
 ## Privacy
 
-Redaction runs the same way for Codex sessions as for Claude Code — username, API keys, tokens, and emails are redacted at the converter layer. Any Codex-specific path patterns (e.g. `~/.codex/cache/`) can be added to `extra_patterns` in `config.json`.
+Redaction is the same as for Claude Code — username, API keys, tokens, and emails are scrubbed at convert time. Add Codex-specific path patterns to `redaction.extra_patterns` if needed.
 
-## Tracking
+## Testing
 
-- [Epic: v0.2.0 — Extensions](https://github.com/Pratiyush/llm-wiki/issues/2) — this adapter's graduation
-- Pull requests welcome. See [CONTRIBUTING.md](../../CONTRIBUTING.md) §"Adding a new adapter" for the full contract.
+```bash
+python3 -m llmwiki adapters
+python3 -m pytest tests/ -k codex -q
+```
+
+## See also
+
+- [Multi-agent setup](../multi-agent-setup.md) — support map + enablement
+- [Use with Codex CLI](../tutorials/04-use-with-codex-cli.md) — end-to-end tutorial
+- [`llmwiki/adapters/codex_cli.py`](../../llmwiki/adapters/codex_cli.py)

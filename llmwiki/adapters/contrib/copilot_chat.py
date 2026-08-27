@@ -119,3 +119,12 @@ class CopilotChatAdapter(BaseAdapter):
         if path.parent.name == "chatSessions":
             return f"copilot-{path.parent.parent.name[:12]}"
         return f"copilot-{path.parent.name[:12]}"
+
+    def is_headless_session(self, records: list[dict[str, Any]]) -> bool:
+        """Always False — no verified Copilot Chat automation markers (#180).
+
+        VS Code ``chatSessions`` layout is discovered in-repo, but no
+        automation / nested-agent launch fields are documented or present in
+        fixtures on this host.
+        """
+        return False

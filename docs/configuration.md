@@ -47,10 +47,10 @@ Minimal config:
       "progress"
     ],
 
-    // Skip headless `claude -p` / Agent-SDK sessions (entrypoint=sdk-cli
-    // or promptSource=sdk). These are not coding sessions worth a wiki
-    // page, and ingesting them creates a synthesis feedback loop when the
-    // synthesizer itself shells out to `claude -p`.
+    // Skip automated / headless agent launches (default on). Claude: SDK
+    // entrypoint / promptSource; Cursor Agent CLI: subagentInfo or
+    // approvalMode=auto-review; OpenClaw: never skipped. Applies at ingest
+    // and synthesis. See docs/multi-agent-setup.md § automated.
     "exclude_headless": true,
 
     // Skip sessions whose cwd is a throwaway temp dir (/tmp, /var/folders,
@@ -269,7 +269,11 @@ Files smaller than `min_content_chars` are skipped (mostly empty notes).
 
 ### Codex CLI
 
-**v0.1 stub.** The adapter imports and registers but does not yet parse records. Configuration will land in v0.2.
+**Production** core adapter. Default roots: `~/.codex/sessions` and `~/.codex/projects`. Override with `adapters.codex_cli.roots`. Included on a bare `llmwiki sync` when a root exists. Full detail: [adapters/codex-cli.md](adapters/codex-cli.md).
+
+### Which agents + what “automated” means
+
+Support map, core vs contrib (`--adapter` opt-in), Cursor Agent CLI vs IDE, and per-source headless rules: **[multi-agent-setup.md](multi-agent-setup.md)**.
 
 ## Changing the theme
 

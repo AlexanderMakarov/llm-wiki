@@ -163,3 +163,13 @@ class OpenCodeAdapter(BaseAdapter):
 
             out.append(normalized)
         return out
+
+    def is_headless_session(self, records: list[dict[str, Any]]) -> bool:
+        """Always False — no verified OpenCode automation markers (#180).
+
+        Filename ``subagent`` segments are gated by ``include_subagents`` via
+        ``is_subagent`` (path-based), not by ``exclude_headless``. Normalized
+        records carry role/content only — no launch / nested-agent fields
+        were found in in-repo fixtures or local OpenCode session roots.
+        """
+        return False

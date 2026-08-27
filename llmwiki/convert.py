@@ -592,18 +592,11 @@ def filter_records(records: list[dict[str, Any]], drop_types: list[str]) -> list
     return [r for r in records if r.get("type") not in drop]
 
 
-# #8: headless / temp-cwd session discriminators. Claude Code tags every
-# record with `entrypoint` + `promptSource`; a headless run shows an
-# `sdk-*` entrypoint (sdk-cli for `claude -p`, sdk-py for the Python SDK —
-# both seen in real corpora) and/or `promptSource == "sdk"`, while an
-# interactive session shows `cli` / `typed|queued|system`. We match the
-# `sdk-` entrypoint *prefix* so a future SDK runtime (sdk-go, …) is caught
-# without a code change; promptSource is the belt-and-suspenders signal.
-# Generalizes beyond Claude Code: anyone whose automation shells out to a
-# logged agent CLI hits the same feedback loop.
-_HEADLESS_ENTRYPOINT_PREFIX = "sdk-"
-_HEADLESS_PROMPT_SOURCES = frozenset({"sdk"})
-
+# #8 / #180: headless detection lives on each adapter
+# (``BaseAdapter.is_headless_session``). Claude's historical
+# ``entrypoint`` / ``promptSource`` rule is on ``ClaudeCodeAdapter``;
+# ``is_headless_session`` below wraps it for tests and legacy callers.
+#
 # Throwaway temp roots. e2e test runs, scratch git-worktrees, and /tmp
 # experiments each spawn a one-off ephemeral "project" that floods the
 # projects index. Cover both the bare macOS/Linux temp roots and their
@@ -613,14 +606,16 @@ _TEMP_CWD_EXACT = frozenset({"/tmp", "/private/tmp"})
 
 
 def is_headless_session(records: list[dict[str, Any]]) -> bool:
-    """True if any record marks this as a headless `claude -p` / SDK run."""
-    for r in records:
-        entrypoint = r.get("entrypoint")
-        if isinstance(entrypoint, str) and entrypoint.startswith(_HEADLESS_ENTRYPOINT_PREFIX):
-            return True
-        if r.get("promptSource") in _HEADLESS_PROMPT_SOURCES:
-            return True
-    return False
+    """Claude Code headless rule (module-level for tests / legacy callers).
+
+    Prefer ``adapter.is_headless_session`` in ``convert_all`` (#180). This
+    wrapper preserves the historical Claude ``entrypoint`` / ``promptSource``
+    behaviour for unit tests and for ``render_session_markdown`` when no
+    adapter-computed flag is passed.
+    """
+    from llmwiki.adapters.claude_code import ClaudeCodeAdapter  # noqa: PLC0415
+
+    return ClaudeCodeAdapter().is_headless_session(records)
 
 
 def is_temp_cwd_session(records: list[dict[str, Any]]) -> bool:
@@ -1110,7 +1105,12 @@ def _coerce_int(value: Any) -> int | None:
 
 def summarize_tool_use(block: dict[str, Any], redact: Redactor, config: dict[str, Any]) -> str:
     name = block.get("name", "Tool")
-    inp = block.get("input", {}) or {}
+    raw_inp = block.get("input", {}) or {}
+    # Cursor / odd tool records sometimes store ``input`` as a JSON string
+    # (or other non-mapping). Never call ``.get`` / ``.keys`` on those.
+    if not isinstance(raw_inp, dict):
+        return f"`{name}` (inputs: {type(raw_inp).__name__})"
+    inp = raw_inp
     trunc = config.get("truncation", {})
 
     if name == "Bash":
@@ -1190,7 +1190,9 @@ def summarize_tool_use(block: dict[str, Any], redact: Redactor, config: dict[str
                 f"`{redact(str(tool).strip())}`"
             )
 
-    keys = ", ".join(inp.keys())
+    if not isinstance(inp, dict):
+        return f"`{name}` (inputs: {type(inp).__name__})"
+    keys = ", ".join(str(k) for k in inp.keys())
     return f"`{name}` (inputs: {keys})"
 
 
@@ -1477,6 +1479,7 @@ def render_session_markdown(
     config: dict[str, Any],
     is_subagent_file: bool,
     adapter_name: str = "claude_code",
+    is_headless: bool | None = None,
 ) -> tuple[str, str, datetime]:
     started = first_record_time(records) or datetime.now(UTC)
     ended = latest_record_time(records) or started
@@ -1497,9 +1500,18 @@ def render_session_markdown(
     # `claude -p` run from a real one. Synthesis needs that (a headless run
     # is the wiki's own output, not material worth a page), and without it
     # the only recourse is guessing from message counts.
+    # #180: prefer the adapter-computed flag from ``convert_all``; fall back
+    # to the Claude module helper for direct test / legacy call sites.
     entrypoint = first_field(records, "entrypoint")
     prompt_source = first_field(records, "promptSource")
-    headless = is_headless_session(records)
+    # #180 Cursor Agent CLI audit fields (absent on Claude / other adapters).
+    approval_mode = first_field(records, "approvalMode")
+    subagent_type_name = first_field(records, "subagentTypeName")
+    headless = (
+        bool(is_headless)
+        if is_headless is not None
+        else is_headless_session(records)
+    )
     model = most_common_model(records)
     tools_used = extract_tools_used(records)
     u_count = count_user_messages(records)
@@ -1555,9 +1567,17 @@ def render_session_markdown(
         f"entrypoint: {entrypoint}",
         f"promptSource: {prompt_source}",
         f"is_headless: {str(headless).lower()}",
+    ]
+    # Optional Cursor Agent CLI launch audit (#180) — only when present so
+    # Claude / other adapters keep the same frontmatter shape.
+    if approval_mode:
+        front.append(f"approvalMode: {approval_mode}")
+    if subagent_type_name:
+        front.append(f"subagentTypeName: {subagent_type_name}")
+    front.extend([
         "---",
         "",
-    ]
+    ])
 
     body: list[str] = [
         f"# {title}",
@@ -1860,18 +1880,22 @@ def convert_all(
                 filtered += 1
                 _bump(cls.name, "filtered")
                 continue
-            # #8: drop headless `claude -p` / SDK runs and throwaway
+            # #8 / #180: drop headless automated launches and throwaway
             # temp-cwd sessions before they ever become a wiki page. The
             # headless filter is what breaks the synthesis feedback loop
             # (each synth `claude -p` is itself logged as a new session).
-            # Persist the mtime on exclusion so a no-op re-sync short-
-            # circuits at the mtime check instead of re-opening + re-parsing
-            # every filtered file. On a synth-heavy corpus that's ~94% of
-            # sessions, so without this each sync re-reads hundreds of files
-            # only to drop them again. Trade-off: re-enabling a filter later
-            # requires `sync --force` to reconsider files already recorded
-            # here (they otherwise register as "unchanged").
-            if exclude_headless and is_headless_session(records):
+            # Detection is per-adapter via ``is_headless_session``; the
+            # aggregate ``excluded_headless`` summary stays one count (no
+            # per-adapter breakdown). Persist the mtime on exclusion so a
+            # no-op re-sync short-circuits at the mtime check instead of
+            # re-opening + re-parsing every filtered file. On a synth-heavy
+            # corpus that's ~94% of sessions, so without this each sync
+            # re-reads hundreds of files only to drop them again. Trade-off:
+            # re-enabling a filter later requires `sync --force` to
+            # reconsider files already recorded here (they otherwise
+            # register as "unchanged").
+            headless = adapter.is_headless_session(records)
+            if exclude_headless and headless:
                 filtered += 1
                 excluded_headless += 1
                 _bump(cls.name, "filtered")
@@ -1909,6 +1933,7 @@ def convert_all(
                     records, path, project_slug, redact, config,
                     is_subagent_file,
                     adapter_name=cls.name,
+                    is_headless=headless,
                 )
             except Exception as e:
                 print(f"  error: {path.name}: {e}", file=sys.stderr)

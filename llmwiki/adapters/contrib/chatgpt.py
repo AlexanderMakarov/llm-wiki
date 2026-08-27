@@ -100,6 +100,14 @@ class ChatGPTAdapter(BaseAdapter):
                 out.append(path)
         return out
 
+    def is_headless_session(self, records: list[dict[str, Any]]) -> bool:
+        """Always False — ChatGPT export has no automation-launch signal (#180).
+
+        Export JSON is a user download of interactive chats; automated-launch
+        detection does not apply (functional-spec R4).
+        """
+        return False
+
 
 # ─── Parsing ───────────────────────────────────────────────────────────
 

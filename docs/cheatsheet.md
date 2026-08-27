@@ -152,10 +152,14 @@ llmwiki adapters --wide                # untruncated descriptions
 | `chatgpt` | `conversations.json` export |
 | `copilot_chat` | VS Code workspaceStorage |
 | `copilot_cli` | GitHub Copilot CLI |
-| `cursor` | VS Code workspaceStorage |
+| `cursor` | Cursor IDE workspaceStorage (limited — #2) |
+| `cursor_cli` | `~/.cursor/chats/` (Agent CLI) |
 | `gemini_cli` | `~/.gemini/` |
-| `obsidian` | Obsidian vault `.md` files |
-| `opencode` | OpenCode / OpenClaw sessions |
+| `obsidian` | Obsidian vault `.md` files (notes intake) |
+| `opencode` | OpenCode / OpenClaw app-config sessions |
+| `openclaw` | `~/.openclaw/agents/` |
+
+Support map + headless rules: [multi-agent-setup.md](multi-agent-setup.md).
 
 ## Obsidian integration
 

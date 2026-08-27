@@ -223,3 +223,15 @@ class CodexCliAdapter(BaseAdapter):
         prefix in user code).
         """
         return False
+
+    def is_headless_session(self, records: list[dict[str, Any]]) -> bool:
+        """Always False — no verified Codex automation markers (#180).
+
+        In-repo fixtures and this host's ``~/.codex/sessions`` store do not
+        expose launch fields the converter preserves after
+        ``normalize_records`` (which keeps only ``sessionId`` / ``cwd`` from
+        ``session_meta``). Nested-agent / ``codex exec`` signals are not
+        mapped until a verified on-disk marker survives into normalized
+        records.
+        """
+        return False

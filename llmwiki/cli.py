@@ -44,6 +44,7 @@ from llmwiki import (
     REPO_ROOT,
     __version__,
     install_agent_kit,
+    migrate_broken_provenance,
     migrate_page_kinds,
     migrate_topic_kinds,
     usage,
@@ -1322,6 +1323,21 @@ def cmd_migrate_topic_kinds(args: argparse.Namespace) -> int:
         dry_run=bool(getattr(args, "dry_run", False)),
     )
     migrate_topic_kinds.print_report(report)
+    return 1 if report["errors"] else 0
+
+
+def cmd_migrate_broken_provenance(args: argparse.Namespace) -> int:
+    """Remap or clear wiki hops to missing ``raw/sessions/`` files (#180).
+
+    Package-local like ``migrate-topic-kinds``: pip/Homebrew installs have no
+    ``scripts/`` checkout. Prefers same-date / non-headless raw candidates;
+    clears unbroken-unmatchable ``source_file`` values without deleting pages.
+    """
+    report = migrate_broken_provenance.run_migration(
+        vault=Path(args.vault),
+        dry_run=bool(getattr(args, "dry_run", False)),
+    )
+    migrate_broken_provenance.print_report(report)
     return 1 if report["errors"] else 0
 
 
@@ -2610,6 +2626,26 @@ def build_parser() -> argparse.ArgumentParser:
         help="Report would-change files; write nothing",
     )
     migrate_topic.set_defaults(func=cmd_migrate_topic_kinds)
+
+    migrate_prov = sub.add_parser(
+        "migrate-broken-provenance",
+        help=(
+            "Remap or clear wiki source_file hops to missing raw/sessions "
+            "files (#180)"
+        ),
+    )
+    migrate_prov.add_argument(
+        "--vault",
+        type=Path,
+        required=True,
+        help="Vault root containing wiki/ and raw/",
+    )
+    migrate_prov.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Report would-change files; write nothing",
+    )
+    migrate_prov.set_defaults(func=cmd_migrate_broken_provenance)
 
     kit = sub.add_parser(
         "install-agent-kit",

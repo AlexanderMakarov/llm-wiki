@@ -8,7 +8,7 @@ docs_shell: true
 
 Reads `.jsonl` session transcripts written by the [OpenClaw](https://openclaw.ai) agent gateway (native store under `~/.openclaw/agents/`, not the OpenCode app-config layout — that is the separate [`opencode`](opencode.md) adapter).
 
-**AI-session adapter** (`is_ai_session = True`) — fires by default when its session store is present on disk.
+**Contrib** AI-session adapter — not on a bare `llmwiki sync`. Pass `--adapter openclaw` (until [#182](https://github.com/AlexanderMakarov/llm-wiki/issues/182)).
 
 ## Session store
 
@@ -37,9 +37,17 @@ Override the search roots in `config.json`:
 
 Each session is a JSONL stream of typed OpenClaw records. Only `type == "message"` rows become conversation turns; user `content` lists are flattened to strings for the shared renderer.
 
+## Automated (headless) sessions
+
+**All OpenClaw sessions are treated as not headless.** `filters.exclude_headless` does not skip them. See [Multi-agent setup — What “automated” means](../multi-agent-setup.md#what-automated-headless-means).
+
 ## Enable it
 
-Works out-of-the-box if OpenClaw has written sessions under `~/.openclaw/agents`. Point `roots` at a vault inbox when transcripts are mirrored there instead.
+```bash
+python3 -m llmwiki sync --adapter openclaw
+```
+
+Point `roots` at a vault inbox when transcripts are mirrored there instead of `~/.openclaw/agents`.
 
 ## Output layout
 
@@ -52,6 +60,6 @@ Standard `raw/sessions/<YYYY-MM-DDTHH-MM>-openclaw-<agent>-<slug>.md` (project s
 
 ## See also
 
-- [OpenCode / OpenClaw (app-config) adapter](opencode.md) — shared schema under `~/.config/openclaw/sessions/`
+- [OpenCode adapter](opencode.md) — shared schema under OpenCode / OpenClaw app-config dirs
+- [Multi-agent setup](../multi-agent-setup.md)
 - [Configuration reference](../configuration-reference.md) — `adapters.openclaw.roots`
-- [All adapters](../../README.md#works-with)

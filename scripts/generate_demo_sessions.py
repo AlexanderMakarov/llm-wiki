@@ -13,12 +13,18 @@ Everything downstream is still genuine product output: these files go through
 the real `synth`, candidate harvest, review, `build` and `graph`.
 
 The corpus is deterministic — same inputs, same files — so regenerating it
-produces no spurious diff. Only `--today` changes the dates.
+produces no spurious diff. Only `--today` changes the dates. The committed
+demo wiki cites filenames from `--today 2026-08-10`; use that anchor when
+refreshing `demo/raw/sessions/` so existing `source_file:` links stay valid.
+
+Three authored sessions carry `#180` headless markers (`is_headless: true`).
+They stay in `raw/` for coverage but are skipped by default synth under
+`filters.exclude_headless`.
 
 Run from the repository root:
 
     python3 scripts/generate_demo_sessions.py --dry-run
-    python3 scripts/generate_demo_sessions.py
+    python3 scripts/generate_demo_sessions.py --today 2026-08-10
 """
 
 from __future__ import annotations
@@ -51,13 +57,22 @@ class Session:
     age_days: int = 0
     entrypoint: str = "cli"
     tags: tuple[str, ...] = field(default=("session",))
+    # #180 headless launch markers (optional; interactive demos leave defaults).
+    is_headless: bool = False
+    prompt_source: str = "typed"
+    approval_mode: str | None = None
+    subagent_type_name: str | None = None
 
 
 def _s(project, slug, adapter, model, branch, title, summary, subjects, turns,
        tools=("Read", "Edit", "Bash"), age_days=0, entrypoint="cli",
-       tags=("session",)) -> Session:
-    return Session(project, slug, adapter, model, branch, title, summary,
-                   tuple(subjects), tuple(turns), tuple(tools), age_days, entrypoint, tuple(tags))
+       tags=("session",), is_headless=False, prompt_source="typed",
+       approval_mode=None, subagent_type_name=None) -> Session:
+    return Session(
+        project, slug, adapter, model, branch, title, summary,
+        tuple(subjects), tuple(turns), tuple(tools), age_days, entrypoint,
+        tuple(tags), is_headless, prompt_source, approval_mode, subagent_type_name,
+    )
 
 
 # ─── The corpus ────────────────────────────────────────────────────────────
@@ -317,6 +332,49 @@ SESSIONS: list[Session] = [
         ("user", "Does it handle a paper that switches layout mid-document?"),
         ("assistant", "Yes — detection runs per page rather than once per document, so a single-column abstract followed by two-column body works.")],
        tools=("Read", "Edit", "Bash"), age_days=18),
+
+    # ── #180 headless fixtures (synthetic; excluded from synth by default) ─
+    # These exist in raw/ so the demo shows headless frontmatter markers.
+    # `filters.exclude_headless` (default on) keeps them out of wiki/sources/.
+
+    _s("llm-wiki", "sdk-cli-headless-lint-pass", "claude_code", "claude-opus-5",
+       "chore/headless-demo",
+       "Headless SDK lint pass over a synthetic fixture vault",
+       "Synthetic Claude SDK-CLI headless run that would be skipped under exclude_headless.",
+       ["Lint Rules", "Session Adapters", "Incremental Sync"],
+       [("user", "Run the lint rules against the fixture vault and report only errors."),
+        ("assistant", "Scanned the fixture. Four structural rules are clean; two warning-severity findings remain on stub pages that the fixture deliberately leaves unfinished.\n\nThis transcript is authored demo material — not a captured session — so paths stay under `/home/USER/code/llm-wiki`."),
+        ("user", "Exit non-zero on warnings too."),
+        ("assistant", "Re-ran with the stricter gate. The two stub warnings now fail the pass, matching what `lint --fail-on warnings` would do on a real vault.")],
+       tools=("Read", "Bash", "Grep"), age_days=6,
+       entrypoint="sdk-cli", prompt_source="sdk", is_headless=True,
+       tags=("claude-code", "session")),
+
+    _s("llm-wiki", "auto-review-headless-diff", "cursor_cli", "claude-opus-5",
+       "chore/headless-demo",
+       "Auto-review headless pass on a synthetic diff",
+       "Synthetic Cursor Agent CLI auto-review launch; headless via approvalMode.",
+       ["Lint Rules", "Static Site", "Frontmatter"],
+       [("user", "Review the synthetic patch for frontmatter and link issues only."),
+        ("assistant", "Checked the fixture diff. No broken wikilinks; one frontmatter date disagrees with the filename stamp and is noted as a warning.\n\nAuthored for the demo corpus — no real user vault content."),
+        ("user", "Is that enough to block merge under the demo policy?"),
+        ("assistant", "Under errors-only, no. Under fail-on-warnings, yes. The demo policy matches the product default of reporting without failing a scheduled job.")],
+       tools=("Read", "Grep", "Bash"), age_days=3,
+       is_headless=True, approval_mode="auto-review",
+       tags=("cursor-cli", "session")),
+
+    _s("llm-wiki", "code-reviewer-subagent-headless", "cursor_cli", "claude-opus-5",
+       "chore/headless-demo",
+       "Code-reviewer subagent: synthetic PR findings",
+       "Synthetic Cursor nested code-reviewer subagent session; headless via subagentTypeName.",
+       ["Candidate Review", "Wiki Synthesis", "Lint Rules"],
+       [("user", "Spawn a code-reviewer subagent on the synthetic PR fixture."),
+        ("assistant", "Nested review complete. Three findings: one missing CHANGELOG bullet, one docs cross-link that still points at a retired path, and one test that asserts the old filter summary wording.\n\nThis is a fabricated subagent transcript for headless-coverage demos."),
+        ("user", "Which finding is highest priority?"),
+        ("assistant", "The retired docs link — readers hit a dead page. The CHANGELOG gap and the stale assertion are follow-ups once the link is fixed.")],
+       tools=("Read", "Grep", "Bash"), age_days=1,
+       is_headless=True, subagent_type_name="code-reviewer",
+       tags=("cursor-cli", "session")),
 ]
 
 
@@ -328,7 +386,7 @@ def frontmatter(s: Session, when: datetime, index: int) -> str:
     tool_calls = 6 + (index * 5) % 23
     counts = ", ".join(f'"{t}": {2 + (i * 3 + index) % 7}' for i, t in enumerate(s.tools))
     fname = f"{when:%Y-%m-%dT%H-%M}-{s.project}-{s.slug}.md"
-    return "\n".join([
+    lines = [
         "---",
         f'title: "{s.title}"',
         "type: source",
@@ -354,14 +412,22 @@ def frontmatter(s: Session, when: datetime, index: int) -> str:
         f"duration_seconds: {int((ended - when).total_seconds())}",
         "is_subagent: false",
         f"entrypoint: {s.entrypoint}",
-        "promptSource: typed",
-        "is_headless: false",
+        f"promptSource: {s.prompt_source}",
+        f"is_headless: {str(s.is_headless).lower()}",
+    ]
+    # Optional Cursor Agent CLI launch audit (#180) — only when present.
+    if s.approval_mode:
+        lines.append(f"approvalMode: {s.approval_mode}")
+    if s.subagent_type_name:
+        lines.append(f"subagentTypeName: {s.subagent_type_name}")
+    lines.extend([
         # `agent:` is what `detect_agent_label` reads first. Without it the
         # model pattern wins, and a Cursor session running a Claude model
         # would be labelled Claude.
         f"agent: {s.adapter.replace('_', '-')}",
         "---",
     ])
+    return "\n".join(lines)
 
 
 def body(s: Session, when: datetime) -> str:
@@ -388,19 +454,26 @@ def main() -> int:
              if args.today else datetime.now(UTC)).replace(hour=0, minute=0, second=0, microsecond=0)
 
     ordered = sorted(SESSIONS, key=lambda s: (-s.age_days, s.project, s.slug))
+    # Clock offsets use interactive-only indices so adding headless fixtures
+    # (#180) does not rename existing session files the wiki already cites.
+    interactive = [s for s in ordered if not s.is_headless]
+    headless = [s for s in ordered if s.is_headless]
+    clock_order = interactive + headless
     projects = sorted({s.project for s in ordered})
     adapters = sorted({s.adapter for s in ordered})
-    print(f"{len(ordered)} sessions · {len(projects)} projects · {len(adapters)} adapters")
+    print(f"{len(ordered)} sessions · {len(projects)} projects · {len(adapters)} adapters"
+          f" · {len(headless)} headless")
     print(f"  projects: {', '.join(projects)}")
     print(f"  adapters: {', '.join(adapters)}\n")
 
     if not args.dry_run and DEMO_SESSIONS.exists():
         shutil.rmtree(DEMO_SESSIONS)
 
-    for i, s in enumerate(ordered):
+    for i, s in enumerate(clock_order):
         when = today - timedelta(days=s.age_days, hours=(i * 5) % 12, minutes=(i * 17) % 60)
         fname = f"{when:%Y-%m-%dT%H-%M}-{s.project}-{s.slug}.md"
-        print(f"  {when:%Y-%m-%d}  {s.adapter:<11} {s.project:<14} {s.slug}")
+        mark = " headless" if s.is_headless else ""
+        print(f"  {when:%Y-%m-%d}  {s.adapter:<11} {s.project:<14} {s.slug}{mark}")
         if not args.dry_run:
             dest = DEMO_SESSIONS / s.project / fname
             dest.parent.mkdir(parents=True, exist_ok=True)

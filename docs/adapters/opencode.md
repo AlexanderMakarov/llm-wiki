@@ -10,8 +10,7 @@ Reads `.jsonl` session transcripts written by the
 [OpenCode](https://github.com/sst/opencode) / OpenClaw agents —
 both use an identical schema.
 
-**AI-session adapter** (`is_ai_session = True`) — fires by default
-when its session store is present on disk.
+**Contrib** AI-session adapter — not on a bare `llmwiki sync`. Pass `--adapter opencode` (until [#182](https://github.com/AlexanderMakarov/llm-wiki/issues/182)).
 
 ## Session store
 
@@ -46,13 +45,19 @@ Each session is a JSONL stream of `{role, content}` records:
 
 ## Enable it
 
-Works out-of-the-box if OpenCode / OpenClaw is installed on this
-machine.  To explicitly disable:
+```bash
+python3 -m llmwiki sync --adapter opencode
+```
+
+To turn it off after enabling via config:
 
 ```jsonc
-// sessions_config.json
-{ "opencode": { "enabled": false } }
+{ "adapters": { "opencode": { "enabled": false } } }
 ```
+
+## Automated (headless) sessions
+
+No verified automation-launch markers in the store today — sessions are treated as **not** headless under `filters.exclude_headless`. See [Multi-agent setup](../multi-agent-setup.md#what-automated-headless-means).
 
 ## Output layout
 

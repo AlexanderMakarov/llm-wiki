@@ -8,6 +8,14 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ## [Unreleased]
 
+### Added
+
+- **`filters.exclude_headless` across coding-agent adapters (#180)** — every registered session adapter implements `is_headless_session`; Cursor Agent CLI skips `subagentInfo` / `approvalMode=auto-review` launches; OpenClaw keeps all sessions; docs support map + docs-currency gate. See `docs/multi-agent-setup.md` and `docs/UPGRADING.md`.
+  - *Release note:* Skip automated sessions from every coding-agent source under the existing `exclude_headless` default (#180).
+- **Demo headless session fixtures (#180)** — `scripts/generate_demo_sessions.py` authors three synthetic headless raw sessions (Claude `sdk-cli` / Cursor `auto-review` / Cursor `code-reviewer` subagent) so the published demo corpus covers `is_headless` frontmatter without synthesizing those rows under the default filter.
+- **`llmwiki migrate-broken-provenance --vault PATH` (#180)** — offline remap/clear of wiki `source_file` hops that point at missing `raw/sessions/…` files (typical after Cursor CLI re-syncs that used `sessionId: store`). Remaps only to a **same-calendar-day** interactive raw under the same project (`is_headless: false` or unmarked legacy; closest HH-MM when several); otherwise clears the hop without deleting wiki pages. `--dry-run` previews. Docs: `docs/reference/cli.md`, `docs/UPGRADING.md`.
+  - *Release note:* Migrate broken raw-session provenance after Cursor CLI re-sync (#180).
+
 ### Removed
 
 - **Auto-generated `/vs/` model-comparison surface (#138)** — `llmwiki/compare.py`, `build.render_vs_section`, vs-only CSS, docs/nav claims, and the related tests are gone. The surface was never wired into `build_site` and hard-coded `REPO_ROOT/wiki`, so it never rendered on a real vault. `/models/` (`render_models_section`, ai-model schema, `models_page`) is unchanged.
@@ -21,6 +29,10 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Fixed
 
+- **Cursor Agent CLI `sessionId` / `createdAt` / string `subagentInfo` (#180 smoke)** — convert injects store meta `agentId` as `sessionId` and short `slug` (never the filesystem stem `store`), maps `createdAt` unix-ms to an ISO `timestamp` for real chat dates, and treats non-dict `subagentInfo` as headless without calling `.keys()` / `.get` on it.
+  - *Release note:* Cursor CLI sync uses real agent IDs and chat times; harden string `subagentInfo` (#180).
+- **Tool-use `input` that is not a mapping no longer aborts Cursor convert (#180 smoke)** — `summarize_tool_use` accepts a non-dict `input` (some Cursor blobs store a JSON string) instead of raising `AttributeError: 'str' object has no attribute 'keys'`.
+  - *Release note:* Harden Cursor tool-input rendering so one bad blob cannot quarantine a whole store (#180).
 - **Cursor AWOS mapping: never look up `AskQuestion` in the `cursor` MCP namespace** — Claude's `AskUserQuestion` still maps to native Cursor `AskQuestion` when the host injects it as a first-class tool. Agents must not `CallDynamicTool` with `namespace: cursor` and `toolName: AskQuestion` (that namespace is only `CreateGoal`, `GenerateImage`, `UpdateGoal`); if native `AskQuestion` is absent, use a numbered list in chat.
 - **Pytest no longer inherits the developer's gitignored root `config.json` (#142)** — the suite-wide autouse in `tests/conftest.py` already isolated `vault.default_path`; it now also points `config_schedule._USER_CONFIG` and `convert.USER_CONFIG_FILE` at a missing path so synthesis settings (e.g. `synthesis.concurrency`), convert filters, and other overlays cannot poison in-process tests. Opt-in merge tests still re-point those names at a fixture file.
 - **Docs no longer advertise `llmwiki eval` / an eval framework as shipped (#154)** — the subcommand was never implemented (CI once ran a no-op behind `|| true`). Remaining product docs point at `llmwiki lint` / `/wiki-lint` for wiki quality; the false claim is recorded in `docs/maintainers/DECLINED.md`.

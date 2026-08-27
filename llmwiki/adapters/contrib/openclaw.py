@@ -172,3 +172,11 @@ class OpenClawAdapter(BaseAdapter):
                 }
             )
         return out
+
+    def is_headless_session(self, records: list[dict[str, Any]]) -> bool:
+        """Always False — all OpenClaw session-store transcripts are kept (#180).
+
+        Dreaming / background artifacts live outside the session store, so
+        they never appear in these records and need no headless filter here.
+        """
+        return False

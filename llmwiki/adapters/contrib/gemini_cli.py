@@ -72,3 +72,11 @@ class GeminiCliAdapter(BaseAdapter):
             except ValueError:
                 continue
         return f"gemini-{path.parent.name.lower()}"
+
+    def is_headless_session(self, records: list[dict[str, Any]]) -> bool:
+        """Always False — Gemini CLI store layout / markers still TBC (#180).
+
+        Scaffold adapter: no in-repo fixtures and no local ``~/.gemini``
+        sessions to verify automation launches against.
+        """
+        return False

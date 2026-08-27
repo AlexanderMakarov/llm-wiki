@@ -1,7 +1,7 @@
 # Technical Specification: Extend exclude_headless across agentic adapters
 
 - **Functional Specification:** [functional-spec.md](./functional-spec.md)
-- **Status:** Approved
+- **Status:** Completed
 - **Author(s):** Aleksandr Makarov
 - **Issue:** [#180](https://github.com/AlexanderMakarov/llm-wiki/issues/180)
 

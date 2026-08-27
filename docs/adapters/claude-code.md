@@ -88,6 +88,8 @@ Override with `--include-current` or lower `filters.live_session_minutes` in con
 
 When the `Task` or `Agent` tool is used, Claude Code writes the sub-agent's conversation to a separate file under `subagents/`. The adapter treats these as **separate session pages** but tags them with `is_subagent: true` in the frontmatter so they can be grouped under the parent on project pages.
 
+Automated / headless launches (`entrypoint` `sdk-*` or `promptSource` `sdk`) are skipped when `filters.exclude_headless` is on (default). See [Multi-agent setup — What “automated” means](../multi-agent-setup.md#what-automated-headless-means).
+
 File naming for sub-agents:
 
 ```

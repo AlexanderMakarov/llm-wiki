@@ -7,14 +7,12 @@
 - Python ≥ 3.12
 - `git`
 - Sessions from at least one supported agent already on disk:
-  - **Claude Code** — `~/.claude/projects/`
-  - **Codex CLI** — `~/.codex/sessions/`
-  - **GitHub Copilot Chat** — VS Code workspaceStorage
-  - **GitHub Copilot CLI** — `~/.copilot/session-state/`
-  - **Cursor** — Cursor IDE workspaceStorage
-  - **Gemini CLI** — `~/.gemini/`
+  - **Claude Code** (core) — `~/.claude/projects/`
+  - **Codex CLI** (core) — `~/.codex/sessions/`
+  - **Cursor Agent CLI** (contrib) — `~/.cursor/chats/` via `llmwiki sync --adapter cursor_cli`
+  - **OpenClaw**, Copilot, Gemini, ChatGPT export, Obsidian notes — contrib; see [multi-agent-setup.md](multi-agent-setup.md)
 
-llmwiki auto-detects whichever agents you have installed. No configuration needed.
+A bare `llmwiki sync` runs **core** adapters when their stores exist. Contrib sources need `--adapter <name>` (until [#182](https://github.com/AlexanderMakarov/llm-wiki/issues/182)).
 
 That's it. No `npm`, no `brew`, no database, no account.
 
@@ -91,7 +89,7 @@ Registered adapters:
 
 > The PDF adapter was removed in the simplification sweep — `llmwiki adapters` no longer lists it.
 
-Any adapter marked `available: yes` will be included when you run `llmwiki sync`. See [multi-agent-setup.md](multi-agent-setup.md) for details on configuring individual agents.
+Core adapters marked available fire on `llmwiki sync`. Contrib adapters need `--adapter <name>`. Full support map and what “automated” means per source: [multi-agent-setup.md](multi-agent-setup.md).
 
 ## Three commands after install
 
