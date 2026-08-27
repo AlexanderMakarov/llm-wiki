@@ -42,6 +42,7 @@ llmwiki-state.json.tmp
 .llmwiki-batch-state.json
 .llmwiki-quarantine.json
 .llmwiki-topics.json
+.llmwiki-topic-kinds-stamped.json
 # Agent-delegate synthesis scratch prompts (#316). Created by
 # `llmwiki synthesize` with synthesis.backend=agent; deleted on
 # `--complete`. Stale files here are safe to delete.
