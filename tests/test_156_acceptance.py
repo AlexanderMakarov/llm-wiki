@@ -60,6 +60,7 @@ from llmwiki.automation_plan import AutomationPlan, plan_command
 from llmwiki.automation_status import load_status, status_path
 from llmwiki.build import render_automation_panel
 from llmwiki.cli import _JOB_QUESTION, build_parser
+from tests.changelog_notes import shipping_section_text
 
 CHEATSHEET = REPO_ROOT / "docs" / "cheatsheet.md"
 GETTING_STARTED = REPO_ROOT / "docs" / "getting-started.md"
@@ -441,9 +442,13 @@ def test_upgrade_guide_and_changelog_flag_the_all_behaviour_change() -> None:
     assert "--schedule" in upgrading
 
     changelog = CHANGELOG.read_text(encoding="utf-8")
-    unreleased = changelog.split("## [Unreleased]", 1)[-1]
-    assert "BREAKING (behaviour change)" in unreleased
+    unreleased = shipping_section_text(changelog)
     assert "#156" in unreleased
+    assert (
+        "BREAKING" in unreleased
+        or "### Breaking" in unreleased
+        or "runs `sync` and `synth`" in unreleased
+    )
     assert "runs every stage" in unreleased or "opt-out" in unreleased
 
 

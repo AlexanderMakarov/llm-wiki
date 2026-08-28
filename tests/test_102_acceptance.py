@@ -63,6 +63,7 @@ from llmwiki.mcp.server import TOOL_IMPLS, handle_tools_call
 from llmwiki.reindex import reindex_wiki, seed_index_text
 from llmwiki.synth.base import BaseSynthesizer, DummySynthesizer
 from llmwiki.synth.pipeline import synthesize_new_sessions
+from tests.changelog_notes import shipping_section_text
 
 
 def _mk_source(wiki: Path, slug: str, links: list[str]) -> None:
@@ -457,7 +458,7 @@ def test_r7_docs_sweep_teaches_neither_the_field_nor_a_filter_on_it() -> None:
     assert offenders == [], f"still teaches entity_type: {offenders}"
 
     changelog = (REPO_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
-    unreleased = changelog.split("## [Unreleased]", 1)[1].split("\n## [", 1)[0]
+    unreleased = shipping_section_text(changelog)
     for marker in (
         "entity_consistency",
         "--allow-unclassified",

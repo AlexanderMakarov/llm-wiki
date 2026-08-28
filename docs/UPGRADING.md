@@ -10,210 +10,77 @@ How to upgrade between `llmwiki` releases.  Most releases are drop-in (`pip inst
 
 The canonical per-release detail is [CHANGELOG.md](https://github.com/Pratiyush/llm-wiki/blob/master/CHANGELOG.md) — this guide focuses on "what might break".
 
-## Unreleased — configurable session sources (#182)
+## 2.0.0 — static site, pipeline, and MCP (from v1.5.0)
 
-- **Bare `llmwiki sync` now loads every shipped coding-agent adapter whose store exists**, not only Claude Code and Codex CLI. Contrib vs core is a maintainer package layout only — users configure sources under `adapters.<name>` in `config.json`.
-- **`enabled: false` is honoured** — an AI adapter explicitly disabled in config is skipped even when its store is on disk.
-- **Obsidian and ChatGPT export stay opt-in** (`adapters.obsidian.enabled: true` / `adapters.chatgpt.enabled: true` plus paths). A detected vault path alone does not ingest notes.
-- **Run `llmwiki configure-sources` once after install** (or accept the prompt at the end of `./setup.sh`) to probe default store paths and write `adapters.*` settings. Pip/Homebrew installs have no setup script — run it manually after `llmwiki init`.
-- **`--adapter` still limits a single run** when you want one source only.
+### Read this first
 
-## Unreleased — exclude headless across adapters (#180)
+1. **Re-run `llmwiki install-automation`** if you schedule `llmwiki all` — bare `all` now includes `sync` and `synth`. With a real synthesis backend, add `--no-synth` (or `--no-sync --no-synth`) to keep the old behaviour (#156).
+2. **Run `llmwiki configure-sources`** after upgrade if you use Cursor Agent CLI, OpenClaw, Codex, or other non-Claude stores (#182).
+3. **Stop using `llmwiki serve`** — open `<vault>/site/index.html`. Candidate decisions on `/candidates.html` execute via `llmwiki candidates apply --vault <vault> --actions -` (#109).
+4. **Update MCP clients** — replace `wiki_entity_search` with `wiki_search`; parse `wiki_lint` as `llmwiki lint --json` (#102, #150).
+5. **Run migrations when applicable:**
+   - `llmwiki migrate-page-kinds --vault <vault>` if you have `wiki/questions/` or `wiki/comparisons/`
+   - `llmwiki migrate-topic-kinds --vault <vault>` for #147 catch-up on older source pages (#174)
+   - `llmwiki migrate-broken-provenance --vault <vault>` after Cursor CLI re-sync left broken `source_file` hops (#180)
+6. **Re-sync Cursor Agent CLI** (`llmwiki sync --force` or targeted re-convert) so `is_headless`, `sessionId`, and timestamps are correct (#180).
+7. **Rebuild the site** — `llmwiki build --vault <vault>` refreshes vendored assets, topic pages, pipeline widgets, and provenance links.
 
-- **`filters.exclude_headless` (still default on) now classifies automated launches for every coding-agent adapter, not only Claude.** Cursor Agent CLI sessions with `subagentInfo` or `approvalMode=auto-review` are skipped on sync and omitted from synth / `--estimate` backlog once marked. OpenClaw sessions stay eligible (never treated as headless). Codex / OpenCode / Copilot stay eligible until verified markers exist.
-- **Re-sync to classify older Cursor Agent CLI rows.** Raw files converted before this change have no `is_headless` frontmatter and stay eligible for synthesis until you re-convert them (`llmwiki sync --force` for those sessions, or a full force sync if you accept the cost). After re-sync, newly classified headless rows drop out of the synth backlog.
-- **Cursor CLI `sessionId` / chat time fix on re-sync.** Convert now writes store meta `agentId` as `sessionId` (never the filesystem stem `store`) and uses meta `createdAt` for `started` / filenames. Re-sync Cursor Agent CLI after upgrading so new raw files are stable and correctly dated.
-- **Optional: `llmwiki migrate-broken-provenance --vault <vault>`** when wiki pages still point at missing `raw/sessions/…` paths left by an older `sessionId: store` sync. Preview with `--dry-run`. Remaps only to a **same-calendar-day** interactive raw under the same project (`is_headless: false` or unmarked legacy; uniquely closest HH-MM when several); never to explicit headless rows, and never across days. Otherwise clears the broken `source_file` without deleting wiki pages. See `docs/reference/cli.md`.
-- **Nested Cursor Task / subagent runs are under `exclude_headless`, not `include_subagents`.** Turning off `exclude_headless` includes them again. Support map: [multi-agent-setup.md](multi-agent-setup.md).
-- **Support map:** [multi-agent-setup.md](multi-agent-setup.md).
+### Breaking changes
 
-## Unreleased — `synth --estimate` Already synthesized follows synth state (#163)
+- **`llmwiki serve` / `POST /api/candidates` / `/wiki-serve` gone** — static files + CLI review (#109).
+- **`llmwiki all` default pipeline** is `sync` → `synth` → `build` → `graph` → `lint` (#156).
+- **Lint default on `all`** is `--lint-fail never` (report only) (#156).
+- **MCP `wiki_lint` JSON shape** matches CLI (**BREAKING**); filter `issues` by `rule`; old keys `orphans` / `broken_links` are gone (#150).
+- **`wiki_entity_search` removed** — `wiki_search(term, kind=…, format=…)` (#102).
+- **`llmwiki consolidate-topics` exits 2** (#147).
+- **`synth --allow-unclassified` removed** (#102).
+- **`type: question` / `type: comparison` invalid** — `migrate-page-kinds` (#109).
+- **`entity_consistency` lint rule removed**; unknown `--rules` names fail (#102).
 
-- **`synth --estimate` Already synthesized now uses the same state+mtime predicate as a real `synth` run.** Pages on disk alone no longer count as done. If synth state is missing or stale, you may see Already synthesized drop and New / incremental $ rise — that matches what the next non-force run would process. No vault migration; the real `synth` skip rules were already this way.
+### Session sources and adapters
 
-## Unreleased — auto-generated `/vs/` model comparisons removed (#138)
+- Bare **`llmwiki sync` loads every enabled ingest-ready adapter** whose store exists; `enabled: false` is honoured (#182).
+- **Obsidian and ChatGPT export stay opt-in** (`adapters.*.enabled: true`).
+- **`filters.exclude_headless` (default on)** skips automated launches for every coding-agent adapter; re-sync to classify older Cursor CLI rows (#180).
+- **Cursor IDE (`cursor` adapter) is still discovery-only** — sessions are not ingested until [#2](https://github.com/AlexanderMakarov/llm-wiki/issues/2) ships; Cursor Agent CLI (`cursor_cli`) works today.
 
-- **No vault migration.** The `/vs/` surface was never called from `build_site` and never wrote `site/vs/` for a normal vault build. Rebuild as usual.
-- **Optional cleanup.** If you hand-authored `wiki/vs/*.md` overrides from older docs, they are no longer read; delete or keep as personal notes. `/models/` is unchanged.
-## Unreleased — a vault can switch checks off, and MCP `wiki_lint` returns the CLI report (#150)
+### Synthesis and candidates
 
-- **BREAKING — MCP `wiki_lint` payload** now matches `llmwiki lint --json` (`summary`, `issues`, `total_pages`, `disabled_rules`, `ran`). Migration: filter `issues` by `rule` for orphan/broken-link counts.
-- **`<vault>/llmwiki.json`** — `lint.disabled_rules` (list or `{rule: reason}`) opts out of named checks; every report lists skipped rules.
-- **`llmwiki lint --min-refs N`** — same threshold as candidate harvest (default 3); `--min-refs 1` reports every unresolved link.
-- **`llmwiki all --min-refs N`** — threads the threshold to harvest and lint.
-- **`llmwiki lint --fail-on-warnings`** — exit 1 on warnings; disabled rules do not fail the gate.
-- **`wiki_lint`** optional `rules` and `min_refs` arguments.
+- Prefer **`llmwiki synth`** over deprecated `synthesize` (sources + harvest by default) (#90).
+- **Next `synth` rewrites source pages** lacking parseable topic bullets once (#147); optional `migrate-topic-kinds` for cheap catch-up (#174).
+- **Promote needs no LLM** — empty Key Facts copy from source `fact:` bullets; `rewrite-key-facts` still needs a backend (#147, #103).
+- **`wiki/archive/` is cold storage** — discarded candidates stay resolved in harvest; first lint after upgrade may report more broken links (#140).
+- **`synth --estimate` Already synthesized** follows synth state, not pages-on-disk alone (#163).
+- **Ctrl+C during `synth`** exits 130 after recording pages that reached disk (#145).
 
-## Unreleased — `all` runs every stage; automation setup is plain-language (#156)
+### Site and review
 
-- **`llmwiki all` now includes `sync` and `synth`, which used to be opt-in.** The pipeline is `sync` → `synth` → `build` → `graph` → `lint`, and each stage has an opt-out flag: `--no-sync`, `--no-synth`, `--skip-graph`, `--skip-lint`. **If you have a bare `llmwiki all` in cron, it will start summarising your sessions.** How much that matters depends on your backend: the default `synthesis.backend` is `dummy`, which makes no provider call, so a default install spends nothing — the change only reaches you if you configured a real backend. To keep the old shape, add `--no-sync --no-synth`; to keep sync but never call a provider, add `--no-synth`. If a real backend is configured, the first `llmwiki all` you run in a terminal prints the same warning once, before any provider request; scheduled runs stay quiet because their output is a log file, not a terminal.
-- **`--with-sync` / `--with-synth` still parse, but do nothing.** They are accepted so an already-installed scheduled command does not die on "unrecognized arguments"; each prints a one-line notice. `--no-synth` wins over `--with-synth` and `--no-sync` over `--with-sync`, in any order.
-- **Lint findings no longer fail `all` unless you ask.** The new `--lint-fail {never,errors,warnings}` decides, and the default is `never` — lint still prints its full report and the run still exits `0`. `--strict` is the spelling for `--lint-fail warnings`; when both are given, the stricter wins.
-- **Re-run `llmwiki install-automation` if you already have a scheduled job.** The wrapper command it writes changed with the `all` flip, and an old unit keeps running yesterday's command line forever. Re-running replaces the existing job rather than adding a second one. Jobs installed by an older version still show up on the site's Home Automation panel — the recorded `A` / `B` / `C` letters are read as *Ingest only* / *Maintain*.
-- **`--hour` / `--minute` are superseded by `--schedule` with a cron expression.** Both flags still work and are translated to `"{minute} {hour} * * *"`; they are ignored with a notice when `--schedule` is also given. `--schedule "0 8 * * 1-5"` is what makes "weekdays only" expressible. Standard 5-field cron only: nicknames (`@daily`), Vixie/Quartz extensions (`L`, `W`, `#`), a seconds field, and any expression restricting both day-of-month and day-of-week are refused with exit `2`.
-- **`--profile {A,B,C}` is deprecated in favour of `--job {ingest,maintain}`.** `A` maps to `ingest`, `B` and `C` both to `maintain`; the old letters still work and print a notice. The extras that used to be welded to a letter — the knowledge graph and the quality-failure policy — are now their own flags (`--graph {none,builtin,graphify}`, `--lint-fail {never,errors,warnings}`), off unless you ask for them.
+- **Open `site/index.html`** (or `file://`) — highlight.js and vis-network are vendored (#109, #127).
+- **`llmwiki build --local-root PATH`** for portable published paths (#109).
+- **`candidates apply` rebuilds `site/`** unless `--no-rebuild` (#109).
+- **`llmwiki export` / `llmwiki reindex` CLI removed** — use `build`; catalog reconciles on `sync` / `synth` / candidate actions (#82).
 
-## Unreleased — one synthesis pass per source (#147 / #145)
+### Lint and MCP
 
-- **Next `synth` rewrites source pages that lack parseable topic bullets.** Summaries written before this change are treated as out of date once; after that catch-up, only new or otherwise stale sources are synthesized. If you override `wiki/prompts/source_page.md`, update it so Connections match the new shape (`- [[ExactName]] (entity|concept) — …` with nested `fact:` lines) — Key Claims / Key Quotes stay.
-- **Optional cheap catch-up: `llmwiki migrate-topic-kinds --vault <vault>` (#174).** When most connection targets already have entity/concept (or pending candidate) pages, this offline stamp fills missing `(entity|concept)` labels on source Connections from the wiki on disk — no language-model or network call. Preview with `--dry-run`. It does **not** invent nested `fact:` lines or rewrite Key Claims / Key Quotes; the report states that no facts were derived. After stamping (and on a re-run over already-clear pages), it also upserts synth state for every raw session/doc whose wiki target is rewrite-clear, including when many raw files share one synth filename, so plain `llmwiki synth` / `--estimate` will not re-bill those sources (#163 done predicate).
-- **One-way lock-in after a stamp.** Once a source page has at least one usable topic kind, a normal `synth` treats it as caught up and will not revisit it for the #147 topics rewrite unless you pass `--force`. Prefer dry-run first; stamp only when clearing the mass-rewrite backlog is worth that trade-off.
-- **Facts still need a forced re-synthesis.** After a successful non-dry-run that stamped pages, the vault root gains `.llmwiki-topic-kinds-stamped.json` listing each stamped wiki page and its frontmatter `source_file` (when present). To buy fact lines later for exactly that set, run `llmwiki synth --force --path <raw/…>` for each `source_file` entry (repeat `--path`, or script the list) — not a bare vault-wide `synth`.
-- **`llmwiki consolidate-topics` is gone as a lifecycle step.** The name still resolves but always exits `2` with a message that synthesis prepares the known-names list. Do not run `--complete` or expect a prompt file / `.llmwiki-topics.json` write.
-- **Promote no longer needs a language-model backend.** Empty Key Facts are filled from source `fact:` bullets offline; Dummy/`None` is fine. Reviewer-written Key Facts are preserved. `rewrite-key-facts` still requires `claude` or `ollama`. This supersedes the older Unreleased note that said promote failed with `KeyFactsBackendError` without a backend (#103).
-- **Ctrl+C during `synth` harvests from written pages** (unless `--sources-only`, which prints `llmwiki synth --candidates-only`) and exits **130**. Run that recovery command if you interrupted a sources-only pass.
-- **Home pipeline `on_disk` recovers on `build` (#145).** When stored totals disagree with `wiki/sources/**/*.md`, the next `llmwiki build` refreshes them — you do not need an estimate run to unstick zeros after an interrupt.
+- **`<vault>/llmwiki.json`** — `lint.disabled_rules` to opt out of named checks (#150).
+- **`llmwiki lint --min-refs N`** and **`llmwiki all --min-refs N`** share harvest threshold (default 3) (#150).
+- **`llmwiki lint --fail-on-warnings`** for warning-severity gate (#150).
+- **`llmwiki lint --include-llm` removed** — drop the flag from scripts (#72).
+- **`provenance_integrity`** may report new errors on broken `sources:` / `source_file:` chains (#122).
 
-## Unreleased — agent commands ship in the package (#109)
+### Automation
 
-- **`llmwiki install-agent-kit --dest PATH` copies the slash commands and skills into any agent directory you name.** A pip or Homebrew install now carries them; you do not need this repository. `--dest` is required — there is no auto-detection. Typical destinations: `.claude` in the project you are working in, or a user-level agent directory. Re-running after an upgrade refreshes the copies; a file you edited that now differs from the packaged version is saved as `<file>.bak` beside it before it is replaced. `--dry-run` prints the plan and writes nothing. See `docs/reference/cli.md` → `## install-agent-kit`.
-- **`.claude-plugin/` is gone.** The Claude Code plugin manifest could not work (wrong paths, wrong Python floor, incomplete command list). `install-agent-kit` is the supported delivery channel.
-- **Manual copy of `.claude/commands/wiki-*.md` is no longer the upgrade path.** Earlier notes that said to copy those files out of a clone (after `install-skills` was removed) are superseded: install the package and run `install-agent-kit`.
+- **`install-automation`** plain-language wizard, cron `--schedule`, `--job {ingest,maintain}` (#156).
+- **`--with-sync` / `--with-synth` still parse** but are inert — use `--no-sync` / `--no-synth` to opt out (#156).
+- **`--profile {A,B,C}` deprecated** — `A`→ingest, `B`/`C`→maintain; `--hour`/`--minute` superseded by `--schedule`.
+- **`llmwiki install-agent-kit --dest PATH`** replaces manual `.claude/commands` copy and `.claude-plugin/` (#109).
 
-## Unreleased — the server is gone; the site is files (#109)
+### No action needed
 
-- **`llmwiki serve` no longer exists, and `serve.sh` / `serve.bat` are deleted.** A build already produced a site that works from disk, so **open `site/index.html`** (or `<vault>/site/index.html`) in a browser instead. Navigation, project and session pages, topic pages, search and the graph all work with nothing running. Anything scripted around `llmwiki serve` should either open the file or, when it genuinely needs an HTTP origin, use the stdlib stand-in: `python3 -m http.server 8765 --directory <vault>/site`.
-- **Publishing is unchanged.** `site/` is still a static tree — GitHub Pages, GitLab Pages, Netlify, Vercel and any web server serve it as before. See `docs/deploy/`.
-- **Docker: the image builds, it does not host.** `Dockerfile` drops `EXPOSE` and its default command is now `build`; `docker-compose.yml` drops `ports`, the healthcheck and the restart policy. Replace `docker compose up -d` with `docker compose run --rm llmwiki build`, then open `./site/index.html` on the host — `site/` is bind-mounted, so the pages land beside your other files.
-- **Executing candidate decisions moved to the command line; deciding them did not.** The `POST /api/candidates` endpoint lived inside the removed server. `candidates.html` still carries its per-row **Decision** control (Promote · Flip and promote · Merge into… · Discard) and its **Apply** button — those are browser state and need nothing running. Apply now assembles the rows you decided into the command to run and the JSON batch to pipe into it:
-
-  ```bash
-  llmwiki candidates apply --vault <vault> --actions -
-  ```
-
-  Paste the JSON the page prints into that command. Every row starts at **No decision** and only the rows you chose enter the batch, so an undecided row stays pending and a half-finished review can be applied and resumed. The one-off subcommands (`list`, `promote`, `flip-promote`, `merge`, `discard`, `rewrite-key-facts`) and `/wiki-candidates` are unchanged. **The printed command carries `--vault`** — the old copy-CLI line omitted it, so it only ever acted on the default vault. A successful `apply` rebuilds `site/` so reload the candidates page (or reopen the file) to see the remaining queue; pass `--no-rebuild` to skip.
-- **`/wiki-serve` is deleted.** If you installed the slash commands into your own agent directory, remove `wiki-serve.md` from it.
-- **The site fetches nothing.** highlight.js and both of its themes are now copied into the site root at build time instead of loaded from a CDN. No action needed — the files appear on your next `llmwiki build`. If code blocks come out unstyled, re-run the build; if they still do, the installed package is missing its vendored assets and should be reinstalled.
-
-## Unreleased — the displayed local path is a build input (#109)
-
-- **`llmwiki build --local-root PATH` sets the value shown in place of a session's stored home directory.** Without the flag it resolves from the machine running the build, so browsing your own site locally still shows paths you can paste into a shell — no configuration needed, and nothing to do after upgrading.
-- **Pass a fixed string when you publish.** `llmwiki build --vault demo --out ./site --local-root /home/user` renders the same pages on every machine, so a published site never shows whoever ran the build. The repository's own Pages workflow does exactly this.
-- **The displayed path is no longer worked out by undoing the redaction applied at import.** It rewrites the home directory a stored `cwd` begins with, so it no longer depends on `redaction.real_username` / `replacement_username` in `config.json` matching what was written months ago. Those settings still control what `sync` writes into `raw/`; they simply no longer affect what the site displays.
-- **Only the `cwd` field is substituted.** A session description is prose from the first user turn and is now rendered exactly as imported — previously any path-shaped text inside it was rewritten too. Descriptions on `sessions/index.html` may therefore show `/home/USER/…` where they previously showed your username. That is the redacted value as stored; it is not a regression.
-- **`llmwiki.convert.restore_local_path` is removed.** Scripts importing it should call `llmwiki.build.display_cwd(cwd, local_root)` instead.
-
-## Unreleased — page kinds `question` and `comparison` removed (#109)
-
-- **`type: question` and `type: comparison` are no longer valid frontmatter.** They are gone from the `type:` vocabulary, so `llmwiki lint` reports a `frontmatter_validity` **error** on any page still declaring one, and `wiki_search` no longer offers them as a `kind` filter. Nothing in the product ever created such a page — `init` never scaffolded `wiki/questions/` or `wiki/comparisons/`, and no synth, harvest, or promote path wrote into them — so for almost every vault this is a no-op.
-- **If you hand-wrote pages of either kind, run `llmwiki migrate-page-kinds --vault <your vault>`.** It retypes each page to `concept`, moves it into `wiki/concepts/` keeping the filename, deletes the legacy `_context.md`, and prunes `wiki/questions/` and `wiki/comparisons/` once they are empty. Inbound `[[wikilinks]]` resolve by filename, not by folder, so the move does not break a single link and no referring page is edited. Preview with `--dry-run`; a vault with no such page prints `nothing to migrate` and exits 0. A filename already taken in `wiki/concepts/` is never overwritten — that page is retyped where it stands and reported so you can settle the clash — and a legacy folder still holding other content is left in place and reported. Rebuild afterwards (`llmwiki build --vault <your vault>`) so `site/` picks up the new locations.
-- **A folder you keep for your own reasons still works.** `reindex` catalogues any folder it finds under `wiki/`, so pages in a non-canonical folder stay listed in `wiki/index.md` and stay in the graph. Only the frontmatter `type:` value is constrained.
-
-## Unreleased — trace provenance + lint `provenance_integrity` (#122)
-
-- **New CLI: `llmwiki trace <page>`.** Prints the downward provenance chain from a wiki page to its source summaries and raw files (`sources:` / `source_file:` only). Missing hops are labelled; the walk still exits 0 unless the starting page cannot be resolved. See `docs/reference/cli.md` → `## trace`.
-- **New lint rule `provenance_integrity` (errors).** After upgrading, `llmwiki lint` (and `llmwiki all`) may report **new errors** on pages whose `sources:` slugs or `source_file:` paths no longer resolve. Pages with no provenance fields are unchanged. The rule only reports — it does not prune or rewrite frontmatter. Guided repair ships with `doctor` (#110); until then, fix pointers by hand or leave the findings if the targets are truly gone.
-- **Site Sources links.** Session and document pages turn provenance Sources into clickable links: built HTML when the hop compiled, otherwise the raw (or site copy) in a new tab with a “(raw)” mark. Topic pages list graph evidence under a collapsible **Sources** section (Sessions / Documents), not a separate frontmatter provenance panel. Rebuild with `llmwiki build` to see them.
-- **No new MCP tool.** Agents that need the chain should call `llmwiki trace` (or read frontmatter via existing wiki tools). Do not expect a `wiki_trace` MCP entry.
-
-## Unreleased — entity-type taxonomy dropped, `project` page kind, one search tool (#102)
-
-Four breaking changes ship together. Three need nothing from you; the fourth is the only one with a data decision, and it is optional.
-
-- **Lint rule `entity_consistency` is gone, and an unknown `--rules` name now fails the run.** `llmwiki lint --rules entity_consistency` exits non-zero naming the unknown rule, where before it ran zero rules and reported a clean vault. Drop the rule from any script that pins it; plain `llmwiki lint` needs no change. The rule only ever demanded an `entity_type` value from a fixed seven-value list — removing it removes errors, not coverage.
-- **`synth --allow-unclassified` is gone.** That flag was removed when harvest still ran a classify pass. **#147 later made harvest offline** (kind comes from source topic bullets; no classify LLM). Drop any leftover `--allow-unclassified` from scripts; you do not need a classify-capable backend for harvest.
-- **MCP tool `wiki_entity_search` is gone; `wiki_search` absorbs it.** There is no alias — an agent config or script naming `wiki_entity_search` gets an unknown-tool error, so re-read the tool list. `wiki_search` takes `term` (required), an optional `kind` (one of `source`, `entity`, `concept`, `project`, `synthesis`, matched against frontmatter `type`; the internal `navigation` and `context` kinds are not offered as a filter, and an unfiltered search still reaches those pages), an optional `format`, and the existing optional `include_raw`. The two compose independently: `include_raw` decides whether `raw/sessions/` is scanned at all, `kind` filters frontmatter `type` in every corpus that is scanned. Raw transcripts declare `type: source`, so `kind=source` with `include_raw` returns matching source pages *and* the transcripts behind them, while a kind no transcript declares (`kind=project`) simply contributes nothing from the raw corpus rather than erroring. Results are page-level (`path — title` with matching lines indented beneath) instead of bare `file:line`, and pages matching by title or path sort above pages matching only in the body. The default response is prose, not JSON: a client that did `json.loads(text)["matches"]` should pass `format: "json"`, which returns `{term, kind, include_raw, pages: [{path, title, name_match, lines: [{line, text}]}], truncated, budget_exhausted, skipped_oversize_files}`. Both renderings report completeness in two fields — `truncated` when an output cap dropped matches, `budget_exhausted` when the byte budget stopped the scan short of the corpus.
-- **`project` is a first-class page kind.** `type: project` is now accepted alongside `entity` and `concept`, new project stubs are written as `type: project` with no `entity_type`, and project pages are covered by claim verification and the graph relevance bonus.
-
-### What needs no action
-
-- **Pages that still carry `entity_type` keep it as inert metadata.** Nothing validates it, nothing reads it, and no migration ships. Leave the field or delete it — either way the vault lints the same.
-- **`entity_kind: ai-model` is untouched.** It is a different field with a similar name and it still drives the AI-model index and info-cards. Do not sweep it away while cleaning up `entity_type`.
-- **Project pages written by an earlier build stay valid.** `type: entity` on a page under `wiki/projects/` is still an accepted kind, the catalog's Projects section keys off the folder rather than the frontmatter, and claim verification and the graph bonus already covered `entity`. Nothing errors and nothing is dropped.
-
-### Optional: re-stamp existing project pages
-
-`ensure_project_stubs` only writes *missing* stubs, so project pages created before this change keep `type: entity` + `entity_type: project` indefinitely. That is valid but inconsistent with what the build writes today, and it has one visible effect: those pages answer `wiki_search kind=entity` rather than `wiki_search kind=project`. If you want the whole folder to declare its kind, edit the frontmatter of each file under `wiki/projects/` — set `type: project` and delete the `entity_type:` line, leaving the body alone:
-
-```bash
-sed -i.bak -e 's/^type: entity$/type: project/' -e '/^entity_type: project$/d' <vault>/wiki/projects/*.md
-rm <vault>/wiki/projects/*.md.bak
-llmwiki lint --vault <vault>          # expect no new errors
-llmwiki build --vault <vault>         # refresh the site and search index
-```
-
-Frontmatter only — a project page whose body you have written by hand is not otherwise touched.
-
-### Built search index
-
-`site/search-index.json` (and its sharded siblings) no longer carry an `entity_type` key per entry or an `entity_type` bucket under `_facets`. The shipped site reads neither, so the browsable site is unaffected; only a client that reads the index file directly needs to adjust. `docs/reference/reader-api.md` drops the matching invariant from its data-model list, and the surviving invariants renumbered — cite an invariant by the field it constrains, not by its position in the list.
-
-## Unreleased — honest already-synthesized counts (#81)
-
-- **`synth --estimate` Corpus / Already synthesized count eligible sources**, not pages under `wiki/sources/`. Expect `Corpus: N eligible sources (S sessions + D docs)` and `Already synthesized: N of M eligible sources`. A separate `Source pages (current state): T on disk (Sess sessions + D docs + X stubs)` line is the on-disk `.md` file mix (not unique `source_file` keys) — it may differ from Already synthesized when bookkeeping and disk diverge.
-- **Home Pipeline** captions the input table **Eligible sources** (not Files layer as the unit of the input columns) and adds an **On disk** column (Stubs row; Other when needed). There is no under-table Source pages note.
-
-## Unreleased — honest estimate Candidates (#113)
-
-- **`synth --estimate` Candidates is pre-run state**, not a preview of what the next run will harvest. The block is labelled `Candidates (pre-run state):` and notes that pending sources are not yet reflected.
-- **After a successful real `synth`**, the CLI prints an end-of-run summary: `Synthesized:`, `Duration:`, optional `Tokens:` / `Cost:` when known. Harvest still prints Candidates once; the end summary does not repeat that line.
-- Home Knowledge-layer **Candidates** still counts pending pages under `wiki/candidates/` — distinct from the estimate pre-run harvestable figure.
-
-## Unreleased — promote writes Key Facts with an LLM (#103)
-
-> **Superseded for promote by [#147](#unreleased--one-synthesis-pass-per-source-147--145):** empty Key Facts are filled offline from source `fact:` bullets; Dummy/`None` is fine. The bullets below are the #103-era note (keep for `rewrite-key-facts` / merge behaviour).
-
-- **`llmwiki candidates promote` (as of #103) filled Key Facts via the synthesis backend.** That LLM requirement for promote is lifted in #147. Pages that already have Key Facts, and pages whose sources never describe them, were always promotable without a backend.
-- **`llmwiki candidates merge` no longer pastes the candidate body** when the candidate is a harvest stub. Its `sources:` and Connections links are unioned into the target page and the name goes under `## Aliases`. Reviewer-written candidates still get their prose appended under `## Candidate merge — <date>`.
-- **`/wiki-candidates` should use the CLI promote path** for the common empty-Key-Facts case.
-- **Pages promoted by an earlier build carry machine-assembled Key Facts.** Those bullets were clipped from the line nearest a wikilink, so some state a fact about a different subject. Rewrite them with `llmwiki candidates rewrite-key-facts --slug <Name>` (or `--all` for every entity/concept) — that still needs an LLM. That also drops pasted harvest-stub `## Candidate merge` blocks left by the old merge behaviour.
-
-## Unreleased — `wiki/archive/` is cold storage everywhere (#140)
-
-Discarding a candidate means you judged the term to be noise. `wiki/archive/` keeps the stub for history, and nothing that reads content surfaces it any more.
-
-- **`wiki/index.md` stops listing archived pages.** Discarding a candidate used to write an `## Archive (N)` section that `lint` then reported as dead index links, so a correct vault failed `lint --fail-on-errors` (and the `wiki-checks` workflow with it).
-- **Nothing to run.** The next `reindex` — which `sync`, `synth`, `remove` and every `candidates` action trigger — deletes a leftover `## Archive` section and its bullets. No migration command.
-- **Any note you hand-wrote under a `## Archive` heading is removed along with the section.** Reindex drops the whole block, prose included. If you keep a note there, move it above the first section heading before your next `reindex`.
-- **`llmwiki lint` no longer scans archived pages,** and they stop counting toward `orphan_detection` and aging into `stale_candidates`, so those two rules get quieter.
-- **Your warning count may go up on the first lint after upgrading.** The archived copy of a discarded candidate used to satisfy `[[wikilinks]]` pointing at it, so those links were silently counted as resolving. They were already broken; lint just stopped hiding them. Fix them by promoting a real page, or leave them if the target genuinely should not exist.
-- **Archived pages are no longer graph nodes,** so `graph.json` and the map lose one node per discarded candidate. Tags on archived pages also stop appearing in the tag index, and they no longer get backlink blocks.
-- **The MCP tools honour the same rule.** `wiki_search` no longer returns archived pages, `wiki_query` no longer quotes them, and `wiki_lint` reports a `[[wikilink]]` to a discarded slug as broken — it used to resolve those links against the archived copy, so it and `llmwiki lint` disagreed about the same vault.
-- **One deliberate exception: candidate harvest still counts archived slugs as resolved.** The archived stub is the only record that you dismissed the term, so `synth` will not re-propose it. Without that, every term you discarded would come back as a candidate on every run.
-- **`[[wikilinks]]` to discarded slugs stay broken and are not rewritten.** That is the intended reading: the target was deliberately thrown away, so the link needs your decision, not a silent resolve.
-- **Scope is exactly top-level `wiki/archive/**`.** A folder named `archive` nested deeper (say `wiki/sources/archive/`, from a project slug of that name) stays a live page set.
-
-## Unreleased — `llmwiki synth` rename (#90)
-
-- **`llmwiki synth` is the primary command.** Default: synthesize pending sources, then harvest entity/concept candidates. Prefer it over `synthesize`.
-- **`llmwiki synthesize` is deprecated.** It still runs (scripts keep working) but prints a warning and defaults to sources-only — the old behaviour — so upgrading does not silently write a large candidate backlog. Prefer `llmwiki synth` (or `synth --sources-only` / `synth --candidates-only`).
-- **`all --with-synth` / `watch`** call `synth` (sources + candidates). Harvest after sources is offline (#147) — no classify retry loop.
-- Slash: `/wiki-synth` preferred; `/wiki-synthesize` remains as a deprecated wrapper.
-
-## Unreleased — candidates review gate on Home / Analytics (#84)
-
-- **Home** shows an **Eligible sources** table (Raw → To synthesize → Synthesized → On disk; shell-handled input counts — see #81) and a **Knowledge layer** table (Candidates → Entities / Concepts; review via agent Commands). Candidates = pending `wiki/candidates/` pages (not the estimate `Candidates (pre-run state):` harvestable figure). Entities/Concepts = trusted pages after promote.
-- **Every `llmwiki build`** recounts pending/stale candidates and trusted entity/concept counts into `synth.pipeline` before copying `llmwiki-state.js` into `site/` — promote/discard no longer leave a stale Home table until the next estimate.
-- **Commands** agent rows are one-shot: `cd <llm-wiki-checkout> && claude|agent|codex "/wiki-candidates"` (Purpose: review/edit candidates). Slash commands load from the checkout, not the vault. Gemini CLI stays adapter-scaffold — no Home launcher.
-- **Analytics** adds a **Candidates to review** section (pending + stale). Zeros are intentional: a synthesize-only vault still shows that the review gate exists.
-- **No auto-promote.** Trusted hubs still require `llmwiki candidates promote|merge|discard` or agent `/wiki-candidates` / `/wiki-ingest`.
-
-## Unreleased — pipeline reshape: export/reindex CLI removed, `all` extended
-
-- **`llmwiki export` is gone.** AI-consumable files (`llms.txt`, `llms-full.txt`, `sitemap.xml`, `rss.xml`, `robots.txt`, `graph.jsonld`, `ai-readme.md`, etc.) are written by `build` into `--out` (default `site/`). Replace `llmwiki export all` with `llmwiki build`. The library module `llmwiki.exporters` (`export_all`, …) remains — only the standalone CLI entry point is removed.
-- **`llmwiki reindex` is gone.** Catalog reconciliation (`wiki/index.md` ↔ pages on disk) runs inside `sync`, after a sources `synth` pass that actually wrote pages, after candidate **harvest** when stubs are written, and after `candidates promote|merge|discard` (#101). Idle sync/synth with nothing new are not the path to clean the catalog after review — use the candidates consume actions. After unrelated hand-edits to `wiki/`, `llmwiki sync --no-auto-build` still reconciles; then `llmwiki lint --rules index_sync` to verify. The library module `llmwiki.reindex` (`reindex_wiki`, `plan_reindex`) remains for internal callers.
-- **`sync` always reconciles `wiki/index.md`.** Reconciliation used to run only inside the auto-build branch; it now runs after every successful `sync` regardless of `--no-auto-build`, so a sync-only workflow can't drift the catalog between builds.
-- **`llmwiki all` pipeline order** — `[sync?]` → `[synthesize?]` → `build` → `[graph?]` → `lint`. Optional `--with-sync` converts new agent sessions (auto-build off — `all` builds next), refreshes the synth-pending backlog, and reconciles the catalog. Optional `--with-synth` fills `wiki/sources/` from `raw/`. `build` already calls `export_all`, so there is no separate export step. `graph` is skipped with `--skip-graph`.
-
-```bash
-llmwiki all                              # build → graph → lint
-llmwiki all --with-sync --with-synth     # sync → synthesize → build → graph → lint
-llmwiki all --strict                     # exit 2 on any lint warning
-```
-
-- **`llmwiki all` no longer self-deadlocks.** It used to acquire the pipeline lock and then dispatch to `cmd_build` / `cmd_sync` / `cmd_synthesize`, each of which tried to acquire the same non-reentrant lock again and hung. `run_pipeline` now takes the lock exactly once and calls the library functions directly (`convert_all`, `synthesize_new_sessions`, `build_site`, …). No CLI or config change is needed — `llmwiki all` just completes instead of hanging.
-- **`llmwiki watch`** — near-real-time maintain: polls agent session stores and runs sync → synthesize → build when a session finishes (turn-complete gating where the adapter supports it). Restores the v1.2.0-removed daemon as a focused maintain loop; stdlib only, no `watchdog` dep.
-- **`llmwiki install-automation`** — interactive setup for OS schedulers (systemd / launchd / Task Scheduler), optional agent hooks, and synth backend; writes automation status for the site Home panel. Non-interactive flags exist; `./setup.sh` is an alias.
-
-Index reconciliation behaviour (#71) is unchanged — existing entries stay verbatim; dead links drop; `(count)` headings refresh.
-
-## Unreleased — lint: `--include-llm` removed (#72)
-
-`llmwiki lint --include-llm` is gone. The flag never called an LLM (no callback was wired; the three stub rules never invoked one). Scripts that pass it will fail with `unrecognized arguments: --include-llm` — drop the flag.
-
-`contradiction_detection`, `claim_verification`, and `summary_accuracy` now always run with the other structural rules. `contradiction_detection` no longer flags filler `## Contradictions` sections (`None identified.`, `n/a`, and similar synthesis boilerplate).
-
-Python callers of `run_all(..., include_llm=…, llm_callback=…)` still work — those kwargs are ignored.
+- **`/vs/` removed** — never wired into normal builds (#138).
+- **Honest Home pipeline counts** — eligible sources and On disk column (#81).
+- **Estimate Candidates** labelled pre-run state, not a harvest forecast (#113).
+- **`entity_type` on existing pages** — inert metadata; optional re-stamp `wiki/projects/` to `type: project` (#102).
 
 ## v1.5.0 — Analytics layout + CallMcpTool migration
 
