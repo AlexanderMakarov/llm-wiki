@@ -105,6 +105,21 @@ echo "  python3 -m llmwiki queue run --limit 20"
 echo "  python3 scripts/migrate_state_v1_4_0.py   # one-time legacy state migration"
 echo "  # or: python3 -m llmwiki migrate-state"
 
+# Optional interactive source configuration (#182)
+if [ -t 0 ] && [ "${LLMWIKI_SKIP_CONFIGURE_SOURCES:-}" != "1" ]; then
+  echo
+  printf "Run configure-sources now? [Y/n] "
+  read -r _cfg || _cfg=""
+  case "$_cfg" in
+    n|N|no|NO)
+      ;;
+    *)
+      python3 -m llmwiki configure-sources || \
+        echo "    (configure-sources did not complete)"
+      ;;
+  esac
+fi
+
 # Optional interactive automation wizard (skip when non-TTY / CI)
 if [ -t 0 ] && [ "${LLMWIKI_SKIP_AUTOMATION:-}" != "1" ]; then
   echo

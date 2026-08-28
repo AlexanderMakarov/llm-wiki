@@ -10,6 +10,14 @@ How to upgrade between `llmwiki` releases.  Most releases are drop-in (`pip inst
 
 The canonical per-release detail is [CHANGELOG.md](https://github.com/Pratiyush/llm-wiki/blob/master/CHANGELOG.md) — this guide focuses on "what might break".
 
+## Unreleased — configurable session sources (#182)
+
+- **Bare `llmwiki sync` now loads every shipped coding-agent adapter whose store exists**, not only Claude Code and Codex CLI. Contrib vs core is a maintainer package layout only — users configure sources under `adapters.<name>` in `config.json`.
+- **`enabled: false` is honoured** — an AI adapter explicitly disabled in config is skipped even when its store is on disk.
+- **Obsidian and ChatGPT export stay opt-in** (`adapters.obsidian.enabled: true` / `adapters.chatgpt.enabled: true` plus paths). A detected vault path alone does not ingest notes.
+- **Run `llmwiki configure-sources` once after install** (or accept the prompt at the end of `./setup.sh`) to probe default store paths and write `adapters.*` settings. Pip/Homebrew installs have no setup script — run it manually after `llmwiki init`.
+- **`--adapter` still limits a single run** when you want one source only.
+
 ## Unreleased — exclude headless across adapters (#180)
 
 - **`filters.exclude_headless` (still default on) now classifies automated launches for every coding-agent adapter, not only Claude.** Cursor Agent CLI sessions with `subagentInfo` or `approvalMode=auto-review` are skipped on sync and omitted from synth / `--estimate` backlog once marked. OpenClaw sessions stay eligible (never treated as headless). Codex / OpenCode / Copilot stay eligible until verified markers exist.
@@ -17,7 +25,7 @@ The canonical per-release detail is [CHANGELOG.md](https://github.com/Pratiyush/
 - **Cursor CLI `sessionId` / chat time fix on re-sync.** Convert now writes store meta `agentId` as `sessionId` (never the filesystem stem `store`) and uses meta `createdAt` for `started` / filenames. Re-sync Cursor Agent CLI after upgrading so new raw files are stable and correctly dated.
 - **Optional: `llmwiki migrate-broken-provenance --vault <vault>`** when wiki pages still point at missing `raw/sessions/…` paths left by an older `sessionId: store` sync. Preview with `--dry-run`. Remaps only to a **same-calendar-day** interactive raw under the same project (`is_headless: false` or unmarked legacy; uniquely closest HH-MM when several); never to explicit headless rows, and never across days. Otherwise clears the broken `source_file` without deleting wiki pages. See `docs/reference/cli.md`.
 - **Nested Cursor Task / subagent runs are under `exclude_headless`, not `include_subagents`.** Turning off `exclude_headless` includes them again. Support map: [multi-agent-setup.md](multi-agent-setup.md).
-- **Contrib adapters still need `--adapter`.** This change does not implement [#182](https://github.com/AlexanderMakarov/llm-wiki/issues/182); Cursor Agent CLI / OpenClaw / Copilot still require an explicit adapter choice on sync.
+- **Support map:** [multi-agent-setup.md](multi-agent-setup.md).
 
 ## Unreleased — `synth --estimate` Already synthesized follows synth state (#163)
 

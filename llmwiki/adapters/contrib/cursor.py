@@ -25,11 +25,18 @@ from typing import Any
 
 from llmwiki.adapters import register
 from llmwiki.adapters.base import BaseAdapter
+from llmwiki.adapters.settings import adapter_block
 
 
 @register("cursor")
 class CursorAdapter(BaseAdapter):
-    """Cursor IDE — reads chat history from ~/Library/Application Support/Cursor/"""
+    """Cursor IDE — scaffold only; IDE chat ingest incomplete (#2)"""
+
+    _DESCRIPTION_OVERRIDE = (
+        "Cursor IDE — scaffold only; IDE chat ingest incomplete (#2)"
+    )
+
+    ingest_ready = False
 
     SUPPORTED_SCHEMA_VERSIONS = ["v1"]  # to be pinned against a real Cursor install
 
@@ -49,7 +56,7 @@ class CursorAdapter(BaseAdapter):
 
     def __init__(self, config: dict[str, Any] | None = None):
         super().__init__(config)
-        ad_cfg = (config or {}).get("adapters", {}).get("cursor", {})
+        ad_cfg = adapter_block(config or {}, "cursor")
         paths = ad_cfg.get("roots") or []
         self.roots: list[Path] = (
             [Path(p).expanduser() for p in paths] if paths else self.DEFAULT_ROOTS

@@ -8,7 +8,7 @@ docs_shell: true
 
 Reads `.jsonl` session transcripts written by the [OpenClaw](https://openclaw.ai) agent gateway (native store under `~/.openclaw/agents/`, not the OpenCode app-config layout — that is the separate [`opencode`](opencode.md) adapter).
 
-**Contrib** AI-session adapter — not on a bare `llmwiki sync`. Pass `--adapter openclaw` (until [#182](https://github.com/AlexanderMakarov/llm-wiki/issues/182)).
+Runs on bare `llmwiki sync` when configured roots exist (native `~/.openclaw/agents/` or vault inbox at `<vault>/.openclaw-sessions-inbox`).
 
 ## Session store
 

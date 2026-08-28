@@ -41,6 +41,7 @@ from typing import Any
 
 from llmwiki.adapters import register
 from llmwiki.adapters.base import BaseAdapter
+from llmwiki.adapters.settings import adapter_block
 
 
 def _flatten_text_blocks(content: Any) -> str:
@@ -96,7 +97,7 @@ class OpenClawAdapter(BaseAdapter):
 
     def __init__(self, config: dict[str, Any] | None = None):
         super().__init__(config)
-        ad_cfg = (config or {}).get("adapters", {}).get("openclaw", {})
+        ad_cfg = adapter_block(config or {}, "openclaw")
         paths = ad_cfg.get("roots") or []
         self.roots: list[Path] = (
             [Path(p).expanduser() for p in paths] if paths else self.DEFAULT_ROOTS

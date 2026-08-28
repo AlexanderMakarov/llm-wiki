@@ -70,7 +70,7 @@ python3 -m llmwiki sync --force
 
 | Flag | What |
 |---|---|
-| `--adapter NAME [NAME ...]` | Limit to / load specific adapters. Default: **core** adapters (`claude_code`, `codex_cli`) with a session store on disk. Contrib adapters need this flag (or config enable) — see [multi-agent-setup.md](../multi-agent-setup.md). |
+| `--adapter NAME [NAME ...]` | Limit to / load specific adapters. Default: every ingest-ready coding-agent source with a present store and no `enabled: false`. Notes intake still needs `enabled: true`. See [multi-agent-setup.md](../multi-agent-setup.md). |
 | `--since YYYY-MM-DD` | Only sessions on/after this date (e.g. `--since 2026-04-01`). |
 | `--project SUBSTRING` | Filter by project-slug substring. |
 | `--include-current` | Include sessions < 60 min old (default skips live ones). |
@@ -244,6 +244,22 @@ Scope is MCP calls only — `file://` static-site browsing stays untracked.
 
 ---
 
+## `configure-sources` — enable detected session stores
+
+```bash
+python3 -m llmwiki configure-sources
+```
+
+Interactive interview: probes each shipped adapter's default store paths, asks which coding-agent sources to enable (default yes when detected), asks separately for notes/export intake (Obsidian, ChatGPT export — default no), optionally confirms paths, then writes `adapters.<name>` blocks to gitignored `config.json`.
+
+| Flag | What |
+|---|---|
+| `--yes` | Non-interactive: skip interview (no config writes). |
+
+After pip or Homebrew install (no `setup.sh`), run this once after `llmwiki init`. Git clone `setup.sh` offers the same interview on a TTY before `install-automation`. Set `LLMWIKI_SKIP_CONFIGURE_SOURCES=1` to skip from `setup.sh`.
+
+---
+
 ## `adapters` — list every adapter + its status
 
 ```bash
@@ -256,22 +272,14 @@ python3 -m llmwiki adapters
 
 ```
 Registered adapters:
-  name              default   configured    description
-  ----------------  --------  ------------  ----------------------------------------
-  chatgpt           no        -             ChatGPT — parses conversations.json …
-  claude_code       yes       ✓            Claude Code — reads ~/.claude/projects/
-  codex_cli         no        ✓            Codex CLI — reads ~/.codex/sessions/
-  copilot           no        -             GitHub Copilot — reads VS Code …
-  cursor            no        -             Cursor — reads VS Code workspaceStorage
-  gemini_cli        no        -             Gemini CLI — reads ~/.gemini/
-  jira              no        -             Jira — reads via REST API
-  meeting           no        -             Meeting transcripts (VTT/SRT)
-  obsidian          no        -             Obsidian — reads a vault
-  opencode          no        -             OpenCode / OpenClaw sessions
-  web_clipper       no        -             Obsidian Web Clipper intake
+  name              present   enabled     active   description
+  ----------------  --------  ----------  -------  ------------------------------
+  claude_code       yes       auto        yes      Claude Code — reads ~/.claude/projects/
+  openclaw          yes       explicit    yes      OpenClaw — reads configured roots …
+  cursor            yes       explicit    no       Cursor IDE — scaffold only; IDE chat ingest incomplete (#2)
 ```
 
-Columns: **default** (runs when you don't pass `--adapter`), **configured** (adapter sees a valid session store on this machine).
+Columns: **present** (store path on disk), **enabled** (`auto` / `explicit` / `off`), **active** (included on the next bare `sync`).
 
 ---
 
@@ -853,7 +861,7 @@ python3 -m llmwiki watch --vault ~/my-vault
 
 | Flag | What |
 |---|---|
-| `--adapter NAME [NAME ...]` | Limit to / load specific adapters. Default: **core** adapters (`claude_code`, `codex_cli`) with a session store on disk. Contrib adapters need this flag (or config enable) — see [multi-agent-setup.md](../multi-agent-setup.md). |
+| `--adapter NAME [NAME ...]` | Limit to / load specific adapters. Default: every ingest-ready coding-agent source with a present store and no `enabled: false`. Notes intake still needs `enabled: true`. See [multi-agent-setup.md](../multi-agent-setup.md). |
 | `--interval SECONDS` | Poll interval. Default: `5`. |
 | `--settle SECONDS` | Mtime settle before ready check for adapters without a finished-signal. Default: `2`. |
 | `--dry-run` | Detect finished sessions only; do not run maintain. |
@@ -921,7 +929,7 @@ python3 -m llmwiki install-automation --vault ~/my-vault
 | `--schedule "<cron>"` | When the job runs, as a 5-field cron expression. Default: `"0 8 * * *"`. An expression that cannot be translated exits `2` with the reason. |
 | `--synth-backend NAME` | Synthesis backend for automation status (interactive mode also writes `synthesis.backend` to `config.json`, after you confirm the summary). |
 | `--units-dir PATH` | Directory for systemd unit / launchd plist / Task Scheduler files. Default: `.llmwiki/units/` under the repo. Also the offered default in the interactive prompt. |
-| `--watch-enabled` | Record `watch` as enabled in automation status (does not start `watch`). |
+| `--watch-enabled` | Set `watch_enabled` in automation status so the site Automation panel shows Watch: on (does not install or start `llmwiki watch`). |
 | `--force-platform {linux,macos,windows}` | Override platform detection for unit format. |
 | `--vault PATH` | Vault the job runs against: `automation-status.json` is written under it, and the scheduled command carries `--vault PATH` whenever it differs from `vault.default_path` in `config.json`, so the job and its status file always mean the same vault. Omitted, the job resolves its vault from config. |
 | `--profile {A,B,C}` | **Deprecated** — use `--job`. `A` maps to `ingest`, `B` and `C` to `maintain`. Prints a notice; `--job` wins when both are given. |
@@ -930,7 +938,7 @@ python3 -m llmwiki install-automation --vault ~/my-vault
 
 Exit codes:
 
-- `0` — the scheduler files were written, or you declined the confirmation and nothing was written.
+- `0` — the scheduler files were written, or you answered **n** at the final confirmation (automation skipped; vault and config unchanged).
 - `2` — the schedule is not an expression llmwiki can translate.
 
 ---

@@ -29,7 +29,6 @@ import argparse
 import importlib.util
 import json
 import json as _json
-import shutil as _shutil
 import sys
 import sys as _sys
 import time
@@ -49,13 +48,14 @@ from llmwiki import (
     migrate_topic_kinds,
     usage,
 )
-from llmwiki.adapters import REGISTRY, discover_adapters
+from llmwiki.adapters import REGISTRY, discover_all
 
 # #v1378-review (#691 follow-up): hoist these re-exports from mid-module
 # to here so the file passes E402 cleanly. They re-export business
 # logic that lives in the proper domain modules now (#611) — kept here
 # for any caller still importing from llmwiki.cli.
 from llmwiki.adapters.status import adapter_status as _adapter_status  # noqa: F401
+from llmwiki.adapters.status import print_adapters_table
 from llmwiki.add_doc import add_sources, expected_source_page, remove_raw_docs
 from llmwiki.automation_install import run_install
 from llmwiki.automation_plan import (
@@ -552,6 +552,13 @@ def _print_usage_report(consumption: dict[str, Any], cost: dict[str, Any]) -> No
         print("synthesis cost: unknown (run `llmwiki synth --estimate`)")
 
 
+def cmd_configure_sources(args: argparse.Namespace) -> int:
+    """Interactive probe + enablement for shipped session sources (#182)."""
+    from llmwiki.configure_sources import run_configure_sources  # noqa: PLC0415
+
+    return run_configure_sources(yes=bool(getattr(args, "yes", False)))
+
+
 def cmd_adapters(args: argparse.Namespace) -> int:
     """List available adapters and their config state.
 
@@ -563,63 +570,14 @@ def cmd_adapters(args: argparse.Namespace) -> int:
     G-02 (#288): ``--wide`` disables the description cap.
     """
 
-    discover_adapters()
+    discover_all()
     if not REGISTRY:
         print("No adapters registered.")
         return 0
 
-    # Load user config to show enable/disable state
-    config_path = REPO_ROOT / "examples" / "sessions_config.json"
-    config: dict = {}
-    if config_path.is_file():
-        try:
-            config = _json.loads(config_path.read_text(encoding="utf-8"))
-        except (ValueError, OSError):
-            pass
-
-    # Description column width: 40 by default, full line with --wide,
-    # or auto-fit to terminal (minus the four fixed columns + gutters).
-    # #387 U2: column names renamed from default/configured/will_fire to
-    # present/enabled/active — they read at a glance without needing the
-    # legend below.
+    config = _load_sessions_config()
     wide = bool(getattr(args, "wide", False))
-    if wide:
-        desc_width: int | None = None  # no cap
-    else:
-        term_cols = _shutil.get_terminal_size(fallback=(80, 24)).columns
-        # Layout: "  name(16)  present(8)  enabled(10)  active(7)  desc"
-        desc_width = max(30, term_cols - 55)
-
-    print("Registered adapters:")
-    dash = "-"
-    header = (
-        f"  {'name':<16}  {'present':<8}  {'enabled':<10}  "
-        f"{'active':<7}  description"
-    )
-    print(header)
-    sep_desc = "-" * (desc_width if desc_width is not None else len("description"))
-    print(
-        f"  {dash * 16}  {dash * 8}  {dash * 10}  {dash * 7}  {sep_desc}"
-    )
-    for name, adapter_cls in sorted(REGISTRY.items()):
-        present = "yes" if adapter_cls.is_available() else "no"
-        enabled, active = _adapter_status(name, adapter_cls, config)
-        desc = adapter_cls.description()
-        if desc_width is not None and len(desc) > desc_width:
-            desc = desc[: max(desc_width - 3, 1)] + "..."
-        print(
-            f"  {name:<16}  {present:<8}  {enabled:<10}  "
-            f"{active:<7}  {desc}"
-        )
-
-    print()
-    print("Columns:")
-    print("  present  — is the adapter's session store visible on disk?")
-    print("  enabled  — auto (default), explicit (enabled:true in config), off (enabled:false)")
-    print("  active   — yes/no — will `sync` pick this adapter up on its next run?")
-    if not wide:
-        print()
-        print("Pass --wide to see untruncated descriptions.")
+    print_adapters_table(config, wide=wide)
     return 0
 
 
@@ -980,7 +938,10 @@ def _confirm_plan(plan: AutomationPlan, schedule: str, vault: Path | None = None
     print()
     while True:
         try:
-            answer = input("Write these scheduler files? [Y/n]: ").strip().lower()
+            answer = input(
+                "Write scheduler files and automation status now? [Y/n] "
+                "(n = skip this step only): "
+            ).strip().lower()
         except EOFError:
             print("  stdin ended before an answer — reading that as 'no'.")
             return False
@@ -1129,13 +1090,23 @@ def cmd_install_automation(args: argparse.Namespace) -> int:
         )
         install_hooks = hooks_answer.lower() == "install"
         watch_enabled = _ask_choice(
-            "Also document watch as enabled? [y/N]: ", ("y", "yes", "n", "no"), "n"
+            "Show 'Watch: on' on the site Automation panel? "
+            "(metadata only — does not install or start `llmwiki watch`) [y/N]: ",
+            ("y", "yes", "n", "no"),
+            "n",
         ) in ("y", "yes")
         default_units = Path(getattr(args, "units_dir", None) or (REPO_ROOT / ".llmwiki" / "units"))
-        units = _ask_until(f"Write unit files under directory (Enter = {default_units}): ", "", str)
+        print("  Writes systemd/launchd/Task Scheduler files; you enable the timer yourself.")
+        units = _ask_until(
+            f"Scheduler unit directory (Enter = {default_units}): ",
+            "",
+            str,
+        )
         write_dir = Path(units) if units else default_units
         if not _confirm_plan(plan, schedule, command_vault):
-            print("  Nothing written — no scheduler files, no status file, no config change.")
+            print("  Skipped install-automation — no scheduler files or automation status written.")
+            print("  Your vault, adapters, and config.json are unchanged.")
+            print("  Run `python3 -m llmwiki install-automation` later to set up the daily job.")
             return 0
         _write_synth_backend(backend)
 
@@ -2527,6 +2498,17 @@ def build_parser() -> argparse.ArgumentParser:
         help="Show untruncated adapter descriptions (G-02 · #288).",
     )
     ads.set_defaults(func=cmd_adapters)
+
+    cfg_src = sub.add_parser(
+        "configure-sources",
+        help="Interactive: enable detected session sources and write adapters.* to config.json",
+    )
+    cfg_src.add_argument(
+        "--yes",
+        action="store_true",
+        help="Non-interactive: skip interview (no config writes)",
+    )
+    cfg_src.set_defaults(func=cmd_configure_sources)
 
     # graph
     graph = sub.add_parser("graph", help="Build the knowledge graph (graph/graph.json + graph.html)")

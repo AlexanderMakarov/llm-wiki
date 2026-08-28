@@ -6,13 +6,9 @@
 
 - Python ≥ 3.12
 - `git`
-- Sessions from at least one supported agent already on disk:
-  - **Claude Code** (core) — `~/.claude/projects/`
-  - **Codex CLI** (core) — `~/.codex/sessions/`
-  - **Cursor Agent CLI** (contrib) — `~/.cursor/chats/` via `llmwiki sync --adapter cursor_cli`
-  - **OpenClaw**, Copilot, Gemini, ChatGPT export, Obsidian notes — contrib; see [multi-agent-setup.md](multi-agent-setup.md)
+- Sessions from at least one supported agent already on disk (Claude Code, Codex CLI, Cursor Agent CLI, OpenClaw, Copilot, Gemini, etc.) — see [multi-agent-setup.md](multi-agent-setup.md) for default paths.
 
-A bare `llmwiki sync` runs **core** adapters when their stores exist. Contrib sources need `--adapter <name>` (until [#182](https://github.com/AlexanderMakarov/llm-wiki/issues/182)).
+A bare `llmwiki sync` runs every **enabled** coding-agent source whose store exists on disk. Configure sources in `config.json` under `adapters.<name>` or run `llmwiki configure-sources` after install. Use `--adapter <name>` to limit a single run.
 
 That's it. No `npm`, no `brew`, no database, no account.
 
@@ -78,18 +74,12 @@ Example output:
 
 ```
 Registered adapters:
-  claude_code       available: yes  (Claude Code — reads ~/.claude/projects/*/*.jsonl)
-  codex_cli         available: yes  (Codex CLI — reads ~/.codex/sessions/**/*.jsonl)
-  copilot_chat      available: no   (GitHub Copilot Chat — reads VS Code workspaceStorage chatSessions)
-  copilot_cli       available: no   (GitHub Copilot CLI — reads ~/.copilot/session-state/*/events.jsonl)
-  cursor            available: yes  (Cursor IDE — reads chat history)
-  gemini_cli        available: no   (Gemini CLI — reads ~/.gemini/ session history)
-  obsidian          available: no   (Obsidian vault)
+  name              present   enabled     active   description
+  claude_code       yes       auto        yes      Claude Code — reads ~/.claude/projects/...
+  openclaw          yes       explicit    yes      OpenClaw — reads configured roots...
 ```
 
-> The PDF adapter was removed in the simplification sweep — `llmwiki adapters` no longer lists it.
-
-Core adapters marked available fire on `llmwiki sync`. Contrib adapters need `--adapter <name>`. Full support map and what “automated” means per source: [multi-agent-setup.md](multi-agent-setup.md).
+Run `llmwiki configure-sources` after install to probe stores and write `adapters.<name>` settings. Full support map: [multi-agent-setup.md](multi-agent-setup.md).
 
 ## Three commands after install
 

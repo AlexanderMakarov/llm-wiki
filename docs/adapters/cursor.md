@@ -1,6 +1,6 @@
 # Cursor IDE adapter
 
-**Status:** Limited / scaffold (contrib) — full IDE chat ingest tracked in [#2](https://github.com/AlexanderMakarov/llm-wiki/issues/2)
+**Status:** Scaffold — listed for discovery; **not active on bare sync** until [#2](https://github.com/AlexanderMakarov/llm-wiki/issues/2) lands full IDE ingest.
 **Module:** `llmwiki.adapters.contrib.cursor`
 **Source:** [`llmwiki/adapters/contrib/cursor.py`](../../llmwiki/adapters/contrib/cursor.py)
 
@@ -25,10 +25,10 @@ The adapter checks those roots and discovers `.jsonl` files when present. Full `
 
 ## Enable it
 
-**Contrib** — not on a bare `llmwiki sync`:
+Listed in `llmwiki adapters` when `workspaceStorage` exists, but **not included on bare `sync`** (`active=no`) until ingest is complete ([#2](https://github.com/AlexanderMakarov/llm-wiki/issues/2)). Use [`cursor_cli`](cursor-cli.md) for Agent CLI sessions.
 
 ```bash
-python3 -m llmwiki sync --adapter cursor
+python3 -m llmwiki sync --adapter cursor   # explicit only; scaffold
 ```
 
 ## Automated (headless) sessions

@@ -10,6 +10,10 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Added
 
+- **Configurable session sources + `llmwiki configure-sources` (#182)** — bare `llmwiki sync` and `llmwiki adapters` load every shipped ingest-ready adapter. Enablement and paths live under `adapters.<name>` in `config.json`; `enabled: false` is honoured. Interactive `configure-sources` (and optional `setup.sh` / `setup.bat` prompt) probes default store paths (prefers existing OS paths and vault OpenClaw inbox), supports custom paths for undetected stores, and reprints the adapter table after save. Cursor IDE stays a discovery-only scaffold (`ingest_ready=false`, `active=no` until [#2](https://github.com/AlexanderMakarov/llm-wiki/issues/2)). Obsidian and ChatGPT export stay explicit opt-in. See `docs/multi-agent-setup.md` and `docs/UPGRADING.md`.
+  - *Release note:* Configure every shipped session source in config; run `llmwiki configure-sources` after install (#182).
+- **Clearer `install-automation` watch prompt** — interactive wizard explains that answering yes only updates the site Automation panel metadata; default remains **N** (does not start `llmwiki watch`).
+- **Clearer `install-automation` confirm skip** — answering **n** at the final write prompt says the step was skipped (vault/config unchanged), not that setup failed.
 - **`filters.exclude_headless` across coding-agent adapters (#180)** — every registered session adapter implements `is_headless_session`; Cursor Agent CLI skips `subagentInfo` / `approvalMode=auto-review` launches; OpenClaw keeps all sessions; docs support map + docs-currency gate. See `docs/multi-agent-setup.md` and `docs/UPGRADING.md`.
   - *Release note:* Skip automated sessions from every coding-agent source under the existing `exclude_headless` default (#180).
 - **Demo headless session fixtures (#180)** — `scripts/generate_demo_sessions.py` authors three synthetic headless raw sessions (Claude `sdk-cli` / Cursor `auto-review` / Cursor `code-reviewer` subagent) so the published demo corpus covers `is_headless` frontmatter without synthesizing those rows under the default filter.

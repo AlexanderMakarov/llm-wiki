@@ -458,7 +458,7 @@ def test_wizard_declining_the_confirmation_writes_nothing(
     _script_input(monkeypatch, ["2", ENTER, ENTER, ENTER, "ollama", ENTER, ENTER, ENTER, "n"])
     args = cli.build_parser().parse_args(["install-automation", "--vault", str(vault)])
     assert cli.cmd_install_automation(args) == 0
-    assert "Nothing written" in capsys.readouterr().out
+    assert "Skipped install-automation" in capsys.readouterr().out
     assert load_status(vault) is None
     assert not (tmp_path / ".llmwiki").exists()
     assert not (tmp_path / "config.json").exists()
@@ -476,7 +476,7 @@ def test_wizard_confirmation_never_answers_itself_when_stdin_ends(
     _script_input(monkeypatch, [ENTER] * 7)
     args = cli.build_parser().parse_args(["install-automation", "--vault", str(vault)])
     assert cli.cmd_install_automation(args) == 0
-    assert "Nothing written" in capsys.readouterr().out
+    assert "Skipped install-automation" in capsys.readouterr().out
     assert load_status(vault) is None
     assert not (tmp_path / "config.json").exists()
 

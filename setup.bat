@@ -71,3 +71,28 @@ echo Next steps:
 echo   sync.bat                    ^-^- convert new sessions to markdown
 echo   build.bat                   ^-^- generate the static HTML site
 echo   start site\index.html       ^-^- browse the site ^-^- plain files, nothing to run
+echo.
+echo Automation (schedulers / optional hooks / synth backend):
+echo   python -m llmwiki install-automation
+echo.
+
+REM Optional interactive source configuration (#182)
+if defined LLMWIKI_SKIP_CONFIGURE_SOURCES goto skip_configure_sources
+python -c "import sys; sys.exit(0 if sys.stdin.isatty() else 1)" 2>nul
+if errorlevel 1 goto skip_configure_sources
+echo.
+set /p _cfg="Run configure-sources now? [Y/n] "
+if /i "!_cfg!"=="n" goto skip_configure_sources
+if /i "!_cfg!"=="no" goto skip_configure_sources
+python -m llmwiki configure-sources
+:skip_configure_sources
+
+REM Optional interactive automation wizard
+if defined LLMWIKI_SKIP_AUTOMATION goto end_setup
+python -c "import sys; sys.exit(0 if sys.stdin.isatty() else 1)" 2>nul
+if errorlevel 1 goto end_setup
+echo.
+set /p _ans="Run install-automation now? [y/N] "
+if /i not "!_ans!"=="y" if /i not "!_ans!"=="yes" goto end_setup
+python -m llmwiki install-automation
+:end_setup

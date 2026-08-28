@@ -52,6 +52,7 @@ from typing import Any
 
 from llmwiki.adapters import register
 from llmwiki.adapters.base import BaseAdapter
+from llmwiki.adapters.settings import adapter_block
 
 
 @register("chatgpt")
@@ -66,7 +67,7 @@ class ChatGPTAdapter(BaseAdapter):
 
     def __init__(self, config: dict[str, Any] | None = None):
         super().__init__(config)
-        ad_cfg = (config or {}).get("chatgpt", {})
+        ad_cfg = adapter_block(config or {}, "chatgpt")
         self._enabled = ad_cfg.get("enabled", False)
         self._min_messages = int(ad_cfg.get("min_messages", 2))
         dirs = ad_cfg.get("export_dirs", [])
