@@ -1087,10 +1087,18 @@ def cmd_install_automation(args: argparse.Namespace) -> int:
         )
         install_hooks = hooks_answer.lower() == "install"
         watch_enabled = _ask_choice(
-            "Also document watch as enabled? [y/N]: ", ("y", "yes", "n", "no"), "n"
+            "Show 'Watch: on' on the site Automation panel? "
+            "(metadata only — does not install or start `llmwiki watch`) [y/N]: ",
+            ("y", "yes", "n", "no"),
+            "n",
         ) in ("y", "yes")
         default_units = Path(getattr(args, "units_dir", None) or (REPO_ROOT / ".llmwiki" / "units"))
-        units = _ask_until(f"Write unit files under directory (Enter = {default_units}): ", "", str)
+        print("  Writes systemd/launchd/Task Scheduler files; you enable the timer yourself.")
+        units = _ask_until(
+            f"Scheduler unit directory (Enter = {default_units}): ",
+            "",
+            str,
+        )
         write_dir = Path(units) if units else default_units
         if not _confirm_plan(plan, schedule, command_vault):
             print("  Nothing written — no scheduler files, no status file, no config change.")

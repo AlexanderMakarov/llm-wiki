@@ -929,7 +929,7 @@ python3 -m llmwiki install-automation --vault ~/my-vault
 | `--schedule "<cron>"` | When the job runs, as a 5-field cron expression. Default: `"0 8 * * *"`. An expression that cannot be translated exits `2` with the reason. |
 | `--synth-backend NAME` | Synthesis backend for automation status (interactive mode also writes `synthesis.backend` to `config.json`, after you confirm the summary). |
 | `--units-dir PATH` | Directory for systemd unit / launchd plist / Task Scheduler files. Default: `.llmwiki/units/` under the repo. Also the offered default in the interactive prompt. |
-| `--watch-enabled` | Record `watch` as enabled in automation status (does not start `watch`). |
+| `--watch-enabled` | Set `watch_enabled` in automation status so the site Automation panel shows Watch: on (does not install or start `llmwiki watch`). |
 | `--force-platform {linux,macos,windows}` | Override platform detection for unit format. |
 | `--vault PATH` | Vault the job runs against: `automation-status.json` is written under it, and the scheduled command carries `--vault PATH` whenever it differs from `vault.default_path` in `config.json`, so the job and its status file always mean the same vault. Omitted, the job resolves its vault from config. |
 | `--profile {A,B,C}` | **Deprecated** — use `--job`. `A` maps to `ingest`, `B` and `C` to `maintain`. Prints a notice; `--job` wins when both are given. |
