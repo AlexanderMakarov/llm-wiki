@@ -53,19 +53,44 @@ def adapter_enabled_flag(config: dict[str, Any] | None, name: str) -> bool | Non
     return None
 
 
-def adapter_is_available(adapter_cls: type, config: dict[str, Any] | None) -> bool:
-    """Whether the adapter's store is visible, respecting per-config paths."""
+def _adapter_instance(adapter_cls: type, config: dict[str, Any] | None):
     try:
-        inst = adapter_cls(config or {})
+        return adapter_cls(config or {})
     except Exception:
+        return None
+
+
+def _normalized_store_paths(inst: Any) -> list[Path]:
+    paths = inst.session_store_path
+    if isinstance(paths, Path):
+        paths = [paths]
+    return [Path(p).expanduser() for p in paths]
+
+
+def adapter_store_present(adapter_cls: type, config: dict[str, Any] | None) -> bool:
+    """Whether the adapter's store path exists on disk (``present`` column).
+
+  Independent of enablement — R3 treats ``present`` as disk visibility only.
+    """
+    inst = _adapter_instance(adapter_cls, config)
+    if inst is None:
+        return False
+    if adapter_cls.name == "chatgpt":
+        return any(
+            (p / "conversations.json").is_file() for p in _normalized_store_paths(inst)
+        )
+    return any(p.exists() for p in _normalized_store_paths(inst))
+
+
+def adapter_is_available(adapter_cls: type, config: dict[str, Any] | None) -> bool:
+    """Whether sync/watch can use this adapter (store ready to read)."""
+    inst = _adapter_instance(adapter_cls, config)
+    if inst is None:
         return False
     checker = getattr(inst, "is_available_with_config", None)
     if callable(checker):
         return bool(checker())
-    paths = inst.session_store_path
-    if isinstance(paths, Path):
-        paths = [paths]
-    return any(Path(p).expanduser().exists() for p in paths)
+    return adapter_store_present(adapter_cls, config)
 
 
 def select_sync_adapters(
@@ -93,6 +118,8 @@ def select_sync_adapters(
 
     selected = []
     for name, cls in sorted(REGISTRY.items()):
+        if not getattr(cls, "ingest_ready", True):
+            continue
         if not adapter_is_available(cls, config):
             continue
         enabled = adapter_enabled_flag(config, name)

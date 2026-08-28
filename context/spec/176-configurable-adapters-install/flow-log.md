@@ -14,8 +14,16 @@
 - Created worktree from `origin/main` @ db921b5
 - Ran `bash setup.sh`, throwaway vault + `config.json` in worktree
 
-## 2026-08-28 — specs (in progress)
+## 2026-08-28 — commit-push (pre-PR)
 
-- **SPEC_NAME:** `176-configurable-adapters-install`
-- Wrote `functional-spec.md` (Draft) — **awaiting user approval gate**
-- **Next:** `/awos:tech` after functional-spec approval
+- Implemented: `adapters/settings.py`, `configure-sources`, wired sync/adapters/watch/status
+- Docs + CHANGELOG + UPGRADING updated; tests green locally
+- **Next:** user smoke confirm → local review → push → PR (#182)
+
+## 2026-08-28 — local-review
+
+- Independent review pass complete → `review.md` (session-only, gitignored)
+- **Verdict:** Request changes
+- **Blockers:** 0
+- **Important:** R6 doc sweep (core/contrib stale text); R4 gaps (not_detected path prompt, post-save adapter table, `setup.bat`); ChatGPT `present` column; test gaps
+- **Next:** user keep/drop on review findings → fix Important items → push → PR

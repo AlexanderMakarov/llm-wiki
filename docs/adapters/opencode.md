@@ -10,7 +10,7 @@ Reads `.jsonl` session transcripts written by the
 [OpenCode](https://github.com/sst/opencode) / OpenClaw agents —
 both use an identical schema.
 
-**Contrib** AI-session adapter — not on a bare `llmwiki sync`. Pass `--adapter opencode` (until [#182](https://github.com/AlexanderMakarov/llm-wiki/issues/182)).
+Runs on bare `llmwiki sync` when OpenCode / OpenClaw app-config session dirs exist on disk.
 
 ## Session store
 

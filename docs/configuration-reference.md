@@ -389,23 +389,23 @@ ai-newsletter/2026-04-04-*secret*
 
 Each adapter can be configured in the `adapters` section of `config.json`. The key must match the adapter's registry name.
 
-| Adapter | Config key | Core / contrib | Configurable fields |
+| Adapter | Config key | Default enablement | Configurable fields |
 |---|---|---|---|
-| Claude Code | `claude_code` | **core** (bare `sync`) | `roots` |
-| Codex CLI | `codex_cli` | **core** (bare `sync`) | `roots` |
-| Copilot Chat | `copilot_chat` | contrib (`--adapter`) | `roots` |
-| Copilot CLI | `copilot_cli` | contrib (`--adapter`) | `roots` |
-| Cursor IDE | `cursor` | contrib (`--adapter`) | `roots` |
-| Cursor Agent CLI | `cursor_cli` | contrib (`--adapter`) | `roots` |
-| Gemini CLI | `gemini_cli` | contrib (`--adapter`) | `roots` |
-| OpenCode | `opencode` | contrib (`--adapter`) | `roots` |
-| OpenClaw (native store) | `openclaw` | contrib (`--adapter`) | `roots` |
-| ChatGPT | `chatgpt` | contrib + `enabled: true` | `enabled`, `conversations_json` |
-| Obsidian | `obsidian` | contrib + `enabled: true` (notes, not agent chats) | `vault_paths`, `exclude_folders`, `min_content_chars` |
-| Jira | `jira` | contrib + `enabled: true` | `server`, `email`, `api_token` / `api_token_env`, `jql`, `max_results` |
-| Meeting transcripts | `meeting` | contrib + `enabled: true` | `source_dirs`, `extensions` |
+| Claude Code | `claude_code` | Auto when store present | `roots`, `enabled` |
+| Codex CLI | `codex_cli` | Auto when store present | `roots`, `enabled` |
+| Copilot Chat | `copilot_chat` | Auto when store present | `roots`, `enabled` |
+| Copilot CLI | `copilot_cli` | Auto when store present | `roots`, `enabled` |
+| Cursor IDE | `cursor` | **Not active on bare sync** (scaffold — [#2](https://github.com/AlexanderMakarov/llm-wiki/issues/2)) | `roots`, `enabled` |
+| Cursor Agent CLI | `cursor_cli` | Auto when store present | `roots`, `enabled` |
+| Gemini CLI | `gemini_cli` | Auto when store present | `roots`, `enabled` |
+| OpenCode | `opencode` | Auto when store present | `roots`, `enabled` |
+| OpenClaw | `openclaw` | Auto when store present | `roots`, `enabled` |
+| ChatGPT | `chatgpt` | Opt-in (`enabled: true`) | `enabled`, `export_dirs`, `min_messages` |
+| Obsidian | `obsidian` | Opt-in (`enabled: true`, notes intake) | `vault_paths`, `exclude_folders`, `min_content_chars` |
+| Jira | `jira` | Opt-in (`enabled: true`) | `server`, `email`, `api_token` / `api_token_env`, `jql`, `max_results` |
+| Meeting transcripts | `meeting` | Opt-in (`enabled: true`) | `source_dirs`, `extensions` |
 
-**Core** adapters run on a bare `llmwiki sync` when their store exists. **Contrib** AI adapters need `--adapter <name>` (or an explicit enable where documented) until [#182](https://github.com/AlexanderMakarov/llm-wiki/issues/182). Non-AI intake (Obsidian, Jira, Meeting, ChatGPT export) also needs `enabled: true` (#326). Support map + headless rules: [multi-agent-setup.md](multi-agent-setup.md).
+Bare `llmwiki sync` runs every ingest-ready coding-agent adapter whose store is present and not explicitly disabled. Notes/export intake needs `enabled: true` (#326). Run `llmwiki configure-sources` to probe paths and write settings. Support map: [multi-agent-setup.md](multi-agent-setup.md).
 
 Example:
 

@@ -6,10 +6,11 @@ from pathlib import Path
 
 import pytest
 
-from llmwiki.adapters import discover_all
+from llmwiki.adapters import REGISTRY, discover_all
 from llmwiki.adapters.settings import (
     adapter_block,
     adapter_enabled_flag,
+    adapter_store_present,
     select_sync_adapters,
 )
 
@@ -68,3 +69,33 @@ def test_select_sync_explicit_adapter_override():
 def test_select_sync_unknown_adapter_raises():
     with pytest.raises(ValueError, match="unknown adapter"):
         select_sync_adapters({}, ["not-a-real-adapter"])
+
+
+def test_select_sync_skips_cursor_ide_even_when_enabled(tmp_path: Path):
+    discover_all()
+    root = tmp_path / "workspaceStorage"
+    root.mkdir(parents=True)
+    cfg = {"adapters": {"cursor": {"enabled": True, "roots": [str(root)]}}}
+    names = [c.name for c in select_sync_adapters(cfg, None)]
+    assert "cursor" not in names
+    names_explicit = [c.name for c in select_sync_adapters(cfg, ["cursor"])]
+    assert names_explicit == ["cursor"]
+
+
+def test_adapter_store_present_openclaw_custom_root(tmp_path: Path):
+    discover_all()
+    root = tmp_path / "inbox"
+    root.mkdir(parents=True)
+    cfg = {"adapters": {"openclaw": {"roots": [str(root)]}}}
+    assert adapter_store_present(REGISTRY["openclaw"], cfg) is True
+
+
+def test_adapter_store_present_chatgpt_without_enable(tmp_path: Path):
+    discover_all()
+    export_dir = tmp_path / "export"
+    export_dir.mkdir(parents=True)
+    (export_dir / "conversations.json").write_text("[]", encoding="utf-8")
+    cfg = {"adapters": {"chatgpt": {"enabled": False, "export_dirs": [str(export_dir)]}}}
+    assert adapter_store_present(REGISTRY["chatgpt"], cfg) is True
+    names = [c.name for c in select_sync_adapters(cfg, None)]
+    assert "chatgpt" not in names

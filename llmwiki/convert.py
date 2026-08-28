@@ -1706,7 +1706,11 @@ def convert_all(
         if no_adapters_ok:
             print("  no session-store adapter installed — nothing to convert")
             return 0
-        print("No adapters available. Install Claude Code or Codex CLI first.", file=sys.stderr)
+        print(
+            "No session stores available for sync. "
+            "Run `llmwiki adapters` or `llmwiki configure-sources`.",
+            file=sys.stderr,
+        )
         return 1
 
     converted = unchanged = live = filtered = ignored_count = errors = 0

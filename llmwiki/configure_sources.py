@@ -10,7 +10,8 @@ from typing import Any
 
 from llmwiki import REPO_ROOT
 from llmwiki.adapters import REGISTRY, discover_all
-from llmwiki.adapters.settings import adapter_is_available
+from llmwiki.adapters.settings import adapter_store_present
+from llmwiki.adapters.status import print_adapters_table
 from llmwiki.config_schedule import _load_sessions_config
 
 # Adapters whose default store path may be shown / edited in the interview.
@@ -30,7 +31,14 @@ _PATH_KEYS: dict[str, str] = {
 _NOTES_INTAKE = frozenset({"obsidian", "chatgpt"})
 
 
-def _default_paths(adapter_cls: type, config: dict[str, Any]) -> list[str]:
+def _vault_openclaw_inbox(config: dict[str, Any]) -> str | None:
+    vault = (config.get("vault") or {}).get("default_path")
+    if not vault:
+        return None
+    return str(Path(vault).expanduser() / ".openclaw-sessions-inbox")
+
+
+def _default_paths(adapter_cls: type, config: dict[str, Any], name: str) -> list[str]:
     try:
         inst = adapter_cls(config)
         stores = inst.session_store_path
@@ -38,7 +46,21 @@ def _default_paths(adapter_cls: type, config: dict[str, Any]) -> list[str]:
         return []
     if isinstance(stores, Path):
         stores = [stores]
-    return [str(Path(p).expanduser()) for p in stores]
+    paths = [str(Path(p).expanduser()) for p in stores]
+    if name == "openclaw":
+        inbox = _vault_openclaw_inbox(config)
+        if inbox and inbox not in paths:
+            paths.insert(0, inbox)
+    return paths
+
+
+def _suggested_path(adapter_cls: type, config: dict[str, Any], name: str) -> str:
+    """First existing candidate path, else first listed default."""
+    candidates = _default_paths(adapter_cls, config, name)
+    for path in candidates:
+        if Path(path).expanduser().exists():
+            return path
+    return candidates[0] if candidates else ""
 
 
 def _merge_write_adapters(updates: dict[str, dict[str, Any]]) -> None:
@@ -61,6 +83,45 @@ def _merge_write_adapters(updates: dict[str, dict[str, Any]]) -> None:
         adapters[name] = merged
     cfg_path.write_text(json.dumps(cfg, indent=2) + "\n", encoding="utf-8")
     print(f"  wrote adapter settings → {cfg_path}")
+
+
+def _prompt_enable_block(
+    name: str,
+    cls: type,
+    config: dict[str, Any],
+    *,
+    ask_choice: Callable[..., str],
+    ask_until: Callable[..., Any],
+    default_enable: str,
+    extra_lines: tuple[str, ...] = (),
+) -> dict[str, Any] | None:
+    label = cls.description() if hasattr(cls, "description") else name
+    print(f"  Found {name}: {label}")
+    for line in extra_lines:
+        print(line)
+    enable = ask_choice(
+        "    Enable for sync? [Y/n]: " if default_enable == "y" else "    Enable for sync? [y/N]: ",
+        ("y", "yes", "n", "no"),
+        default_enable,
+    )
+    if enable not in ("y", "yes"):
+        return {"enabled": False}
+    block: dict[str, Any] = {"enabled": True}
+    path_key = _PATH_KEYS.get(name)
+    if path_key:
+        suggested = _suggested_path(cls, config, name)
+        if suggested:
+
+            def _path_default(default: str) -> Callable[[str], str]:
+                return lambda s: s.strip() or default
+
+            entered = ask_until(
+                f"    Path [{suggested}]: ",
+                suggested,
+                _path_default(suggested),
+            )
+            block[path_key] = [str(Path(entered).expanduser())]
+    return block
 
 
 def run_configure_sources(
@@ -90,38 +151,61 @@ def run_configure_sources(
 
     for name in sorted(REGISTRY):
         cls = REGISTRY[name]
-        present = adapter_is_available(cls, config)
-        label = cls.description() if hasattr(cls, "description") else name
+        present = adapter_store_present(cls, config)
         if not present:
             continue
         is_notes = name in _NOTES_INTAKE or not getattr(cls, "is_ai_session", True)
-        if is_notes:
-            print(f"  Found {name}: {label}")
-            print("    (notes/export intake — not agent chat history)")
-            enable = ask_choice("    Enable for sync? [y/N]: ", ("y", "yes", "n", "no"), "n")
-        else:
-            print(f"  Found {name}: {label}")
-            enable = ask_choice("    Enable for sync? [Y/n]: ", ("y", "yes", "n", "no"), "y")
-        if enable not in ("y", "yes"):
-            updates[name] = {"enabled": False}
+        ingest_ready = getattr(cls, "ingest_ready", True)
+        extra: tuple[str, ...] = ()
+        default_enable = "n" if is_notes else "y"
+        if not ingest_ready:
+            extra = ("    (IDE chat ingest incomplete — see #2; not active on bare sync)",)
+            default_enable = "n"
+        elif is_notes:
+            extra = ("    (notes/export intake — not agent chat history)",)
+        block = _prompt_enable_block(
+            name,
+            cls,
+            config,
+            ask_choice=ask_choice,
+            ask_until=ask_until,
+            default_enable=default_enable,
+            extra_lines=extra,
+        )
+        if block is not None:
+            updates[name] = block
+
+    for name in sorted(REGISTRY):
+        if name in updates or adapter_store_present(REGISTRY[name], config):
             continue
-        block: dict[str, Any] = {"enabled": True}
+        cls = REGISTRY[name]
+        label = cls.description() if hasattr(cls, "description") else name
+        print(f"  Not detected: {name} ({label})")
+        enable = ask_choice("    Enable with custom path? [y/N]: ", ("y", "yes", "n", "no"), "n")
+        if enable not in ("y", "yes"):
+            continue
         path_key = _PATH_KEYS.get(name)
-        if path_key:
-            defaults = _default_paths(cls, config)
-            if defaults:
-                suggested = defaults[0]
+        if not path_key:
+            updates[name] = {"enabled": True}
+            continue
+        suggested = _suggested_path(cls, config, name)
+        if not suggested and name == "openclaw":
+            suggested = _vault_openclaw_inbox(config) or ""
+        if not suggested:
+            suggested = str(Path.home())
 
-                def _path_default(default: str) -> Callable[[str], str]:
-                    return lambda s: s.strip() or default
+        def _path_default(default: str) -> Callable[[str], str]:
+            return lambda s: s.strip() or default
 
-                entered = ask_until(
-                    f"    Path [{suggested}]: ",
-                    suggested,
-                    _path_default(suggested),
-                )
-                block[path_key] = [str(Path(entered).expanduser())]
-        updates[name] = block
+        entered = ask_until(
+            f"    Path [{suggested}]: ",
+            suggested,
+            _path_default(suggested),
+        )
+        updates[name] = {
+            "enabled": True,
+            path_key: [str(Path(entered).expanduser())],
+        }
 
     if not updates:
         print("  No session stores detected — nothing to configure.")
@@ -136,5 +220,9 @@ def run_configure_sources(
         print("  Aborted — no changes written.")
         return 0
     _merge_write_adapters(updates)
-    print("  Run `llmwiki adapters` to confirm active sources.")
+    config = _load_sessions_config()
+    print()
+    print("  Active sources after save:")
+    print()
+    print_adapters_table(config)
     return 0

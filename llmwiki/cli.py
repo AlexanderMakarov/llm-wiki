@@ -29,7 +29,6 @@ import argparse
 import importlib.util
 import json
 import json as _json
-import shutil as _shutil
 import sys
 import sys as _sys
 import time
@@ -50,13 +49,13 @@ from llmwiki import (
     usage,
 )
 from llmwiki.adapters import REGISTRY, discover_all
-from llmwiki.adapters.settings import adapter_is_available
 
 # #v1378-review (#691 follow-up): hoist these re-exports from mid-module
 # to here so the file passes E402 cleanly. They re-export business
 # logic that lives in the proper domain modules now (#611) — kept here
 # for any caller still importing from llmwiki.cli.
 from llmwiki.adapters.status import adapter_status as _adapter_status  # noqa: F401
+from llmwiki.adapters.status import print_adapters_table
 from llmwiki.add_doc import add_sources, expected_source_page, remove_raw_docs
 from llmwiki.automation_install import run_install
 from llmwiki.automation_plan import (
@@ -577,50 +576,8 @@ def cmd_adapters(args: argparse.Namespace) -> int:
         return 0
 
     config = _load_sessions_config()
-
-    # Description column width: 40 by default, full line with --wide,
-    # or auto-fit to terminal (minus the four fixed columns + gutters).
-    # #387 U2: column names renamed from default/configured/will_fire to
-    # present/enabled/active — they read at a glance without needing the
-    # legend below.
     wide = bool(getattr(args, "wide", False))
-    if wide:
-        desc_width: int | None = None  # no cap
-    else:
-        term_cols = _shutil.get_terminal_size(fallback=(80, 24)).columns
-        # Layout: "  name(16)  present(8)  enabled(10)  active(7)  desc"
-        desc_width = max(30, term_cols - 55)
-
-    print("Registered adapters:")
-    dash = "-"
-    header = (
-        f"  {'name':<16}  {'present':<8}  {'enabled':<10}  "
-        f"{'active':<7}  description"
-    )
-    print(header)
-    sep_desc = "-" * (desc_width if desc_width is not None else len("description"))
-    print(
-        f"  {dash * 16}  {dash * 8}  {dash * 10}  {dash * 7}  {sep_desc}"
-    )
-    for name, adapter_cls in sorted(REGISTRY.items()):
-        present = "yes" if adapter_is_available(adapter_cls, config) else "no"
-        enabled, active = _adapter_status(name, adapter_cls, config)
-        desc = adapter_cls.description()
-        if desc_width is not None and len(desc) > desc_width:
-            desc = desc[: max(desc_width - 3, 1)] + "..."
-        print(
-            f"  {name:<16}  {present:<8}  {enabled:<10}  "
-            f"{active:<7}  {desc}"
-        )
-
-    print()
-    print("Columns:")
-    print("  present  — is the adapter's session store visible on disk?")
-    print("  enabled  — auto (default), explicit (enabled:true in config), off (enabled:false)")
-    print("  active   — yes/no — will `sync` pick this adapter up on its next run?")
-    if not wide:
-        print()
-        print("Pass --wide to see untruncated descriptions.")
+    print_adapters_table(config, wide=wide)
     return 0
 
 

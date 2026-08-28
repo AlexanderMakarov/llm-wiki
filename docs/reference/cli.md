@@ -70,7 +70,7 @@ python3 -m llmwiki sync --force
 
 | Flag | What |
 |---|---|
-| `--adapter NAME [NAME ...]` | Limit to / load specific adapters. Default: **core** adapters (`claude_code`, `codex_cli`) with a session store on disk. Contrib adapters need this flag (or config enable) — see [multi-agent-setup.md](../multi-agent-setup.md). |
+| `--adapter NAME [NAME ...]` | Limit to / load specific adapters. Default: every ingest-ready coding-agent source with a present store and no `enabled: false`. Notes intake still needs `enabled: true`. See [multi-agent-setup.md](../multi-agent-setup.md). |
 | `--since YYYY-MM-DD` | Only sessions on/after this date (e.g. `--since 2026-04-01`). |
 | `--project SUBSTRING` | Filter by project-slug substring. |
 | `--include-current` | Include sessions < 60 min old (default skips live ones). |
@@ -272,22 +272,14 @@ python3 -m llmwiki adapters
 
 ```
 Registered adapters:
-  name              default   configured    description
-  ----------------  --------  ------------  ----------------------------------------
-  chatgpt           no        -             ChatGPT — parses conversations.json …
-  claude_code       yes       ✓            Claude Code — reads ~/.claude/projects/
-  codex_cli         no        ✓            Codex CLI — reads ~/.codex/sessions/
-  copilot           no        -             GitHub Copilot — reads VS Code …
-  cursor            no        -             Cursor — reads VS Code workspaceStorage
-  gemini_cli        no        -             Gemini CLI — reads ~/.gemini/
-  jira              no        -             Jira — reads via REST API
-  meeting           no        -             Meeting transcripts (VTT/SRT)
-  obsidian          no        -             Obsidian — reads a vault
-  opencode          no        -             OpenCode / OpenClaw sessions
-  web_clipper       no        -             Obsidian Web Clipper intake
+  name              present   enabled     active   description
+  ----------------  --------  ----------  -------  ------------------------------
+  claude_code       yes       auto        yes      Claude Code — reads ~/.claude/projects/
+  openclaw          yes       explicit    yes      OpenClaw — reads configured roots …
+  cursor            yes       explicit    no       Cursor IDE — scaffold only; IDE chat ingest incomplete (#2)
 ```
 
-Columns: **default** (runs when you don't pass `--adapter`), **configured** (adapter sees a valid session store on this machine).
+Columns: **present** (store path on disk), **enabled** (`auto` / `explicit` / `off`), **active** (included on the next bare `sync`).
 
 ---
 
@@ -869,7 +861,7 @@ python3 -m llmwiki watch --vault ~/my-vault
 
 | Flag | What |
 |---|---|
-| `--adapter NAME [NAME ...]` | Limit to / load specific adapters. Default: **core** adapters (`claude_code`, `codex_cli`) with a session store on disk. Contrib adapters need this flag (or config enable) — see [multi-agent-setup.md](../multi-agent-setup.md). |
+| `--adapter NAME [NAME ...]` | Limit to / load specific adapters. Default: every ingest-ready coding-agent source with a present store and no `enabled: false`. Notes intake still needs `enabled: true`. See [multi-agent-setup.md](../multi-agent-setup.md). |
 | `--interval SECONDS` | Poll interval. Default: `5`. |
 | `--settle SECONDS` | Mtime settle before ready check for adapters without a finished-signal. Default: `2`. |
 | `--dry-run` | Detect finished sessions only; do not run maintain. |
