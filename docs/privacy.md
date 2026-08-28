@@ -16,7 +16,7 @@ These are non-negotiable and enforced in both code and CI:
 
 ## What gets redacted
 
-Everything in this table is redacted at the **converter** layer — the moment each `.jsonl` record is parsed into markdown. The redaction happens before the file hits `raw/`.
+Everything in this table is redacted at the **converter** layer — the moment each `.jsonl` record is parsed into markdown (and, for `llmwiki add`, when local file paths are written into the `source:` frontmatter field). The redaction happens before the file hits `raw/`.
 
 | Pattern | What matches | Replacement |
 |---|---|---|
