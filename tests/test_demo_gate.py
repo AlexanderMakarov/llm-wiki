@@ -45,6 +45,15 @@ WORKFLOW = REPO_ROOT / ".github" / "workflows" / "wiki-checks.yml"
 #: Comfortably past ``ContentFreshness.STALE_DAYS`` for every committed page.
 _WELL_PAST_STALE = timedelta(days=400)
 
+#: What ``state_store`` writes beside a vault root once a command has run.
+_STATE_FILENAME = "llmwiki-state.json"
+
+
+def _demo_state_stamp() -> tuple[bool, int]:
+    """Whether the checkout's demo state file exists, and when it last changed."""
+    path = DEMO / _STATE_FILENAME
+    return (path.exists(), path.stat().st_mtime_ns if path.exists() else 0)
+
 
 def _gate(vault: Path) -> int:
     """Run exactly the command the workflow runs, against ``vault``."""
@@ -52,6 +61,32 @@ def _gate(vault: Path) -> int:
         "lint", "--vault", str(vault), "--fail-on-errors", "--fail-on-warnings",
     ])
     return args.func(args)
+
+
+def _copy_demo(dest: Path) -> Path:
+    """Copy the committed demo vault — what the gate reads — into ``dest``.
+
+    ``lint --vault`` points ``configure_state_file`` at the vault it was
+    given, which overrides ``conftest``'s isolation and records
+    ``last_lint_run_at`` beside the wiki. Gating a copy keeps that write in
+    ``tmp_path``; the claim under test is unchanged because the copy is the
+    committed bytes.
+
+    ``raw/`` travels with ``wiki/``: ``provenance_integrity`` follows each
+    page's ``source_file`` hop down to the transcript, so a wiki-only copy
+    would fail the gate on 42 errors the committed demo does not have.
+    """
+    dest.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(DEMO / "wiki", dest / "wiki")
+    shutil.copytree(DEMO / "raw", dest / "raw")
+    shutil.copy2(DEMO / VAULT_SETTINGS_FILENAME, dest / VAULT_SETTINGS_FILENAME)
+    return dest
+
+
+@pytest.fixture(scope="module")
+def demo_vault(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """A pristine copy of the demo, shared by the tests that only read it."""
+    return _copy_demo(tmp_path_factory.mktemp("demo-gate") / "demo")
 
 
 @pytest.fixture
@@ -104,18 +139,42 @@ def test_demo_overrides_no_other_setting() -> None:
 # ─── The gate ────────────────────────────────────────────────────────────
 
 
-def test_committed_demo_passes_the_enforced_gate(capsys: pytest.CaptureFixture) -> None:
-    assert _gate(DEMO) == 0
+def test_committed_demo_passes_the_enforced_gate(
+    demo_vault: Path, capsys: pytest.CaptureFixture
+) -> None:
+    assert _gate(demo_vault) == 0
     capsys.readouterr()
 
 
-def test_the_gate_report_names_the_skipped_check(capsys: pytest.CaptureFixture) -> None:
+def test_the_gate_report_names_the_skipped_check(
+    demo_vault: Path, capsys: pytest.CaptureFixture
+) -> None:
     """R2: a clean result must never read as "almost nothing was checked"."""
-    _gate(DEMO)
+    _gate(demo_vault)
     out = capsys.readouterr().out
     assert "content_freshness" in out
     reason = disabled_lint_rules(load_vault_settings(DEMO))["content_freshness"]
     assert reason in out
+
+
+def test_the_gate_records_its_run_beside_the_copy_not_the_checkout(
+    demo_vault: Path, capsys: pytest.CaptureFixture
+) -> None:
+    """Why these tests gate a copy: ``lint`` records that it ran.
+
+    ``--vault`` reaches ``configure_state_file``, which overrides the
+    autouse isolation in ``conftest``, so whichever directory the gate is
+    pointed at is the one ``last_lint_run_at`` lands in. Pointed at
+    ``demo/`` that is a write into the checkout on every suite run —
+    invisible to the tracked-file guard, because the state file is
+    gitignored.
+    """
+    before = _demo_state_stamp()
+    _gate(demo_vault)
+    capsys.readouterr()
+
+    assert (demo_vault / _STATE_FILENAME).is_file()
+    assert _demo_state_stamp() == before
 
 
 def test_a_real_warning_severity_defect_still_stops_the_gate(
@@ -127,10 +186,7 @@ def test_a_real_warning_severity_defect_still_stops_the_gate(
     clears the stock significance threshold: this is a genuine gap the demo
     should have a page for, not a deliberate harvest decline.
     """
-    copy = tmp_path / "demo-copy"
-    copy.mkdir()
-    shutil.copytree(DEMO / "wiki", copy / "wiki")
-    shutil.copy2(DEMO / VAULT_SETTINGS_FILENAME, copy / VAULT_SETTINGS_FILENAME)
+    copy = _copy_demo(tmp_path / "demo-copy")
 
     seeded = sorted((copy / "wiki" / "sources").rglob("*.md"))[:3]
     assert len(seeded) == 3
@@ -149,10 +205,10 @@ def test_a_real_warning_severity_defect_still_stops_the_gate(
 
 
 def test_demo_still_passes_when_the_clock_moves_past_the_threshold(
-    frozen_clock: datetime, capsys: pytest.CaptureFixture
+    demo_vault: Path, frozen_clock: datetime, capsys: pytest.CaptureFixture
 ) -> None:
     """R8: the example must not redden on a calendar date."""
-    assert _gate(DEMO) == 0
+    assert _gate(demo_vault) == 0
     capsys.readouterr()
 
 

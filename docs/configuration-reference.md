@@ -83,8 +83,8 @@ python3 -m llmwiki lint [options]
 |---|---|---|---|
 | `--wiki-dir` | `path` | `<content root>/wiki` | Wiki directory to lint. Narrower than `--vault`, and wins over it; the vault settings file is then read from this directory's parent |
 | `--rules` | `name,name` | all registered rules | Comma-separated rule names to run. An unrecognised name stops the run with exit 2 and lists the valid names |
-| `--min-refs` | `N` | `3` | How many distinct `wiki/sources/` pages must name a `[[wikilink]]` target before an unresolved link to it is reported as broken (see below) |
-| `--json` | flag | off | Print the machine-readable report — `summary`, `issues`, `total_pages`, `disabled_rules` — instead of the text one |
+| `--min-refs` | `N` | `3` | How many distinct `wiki/sources/` pages must name a `[[wikilink]]` target before an unresolved link to it is reported as broken (see below). Must be at least 1 — a value below that is rejected rather than silently treated as 1 |
+| `--json` | flag | off | Print the machine-readable report — `summary`, `issues`, `total_pages`, `disabled_rules`, `ran` — instead of the text one |
 | `--fail-on-errors` | flag | off | Exit 1 when any error-severity finding was reported |
 | `--fail-on-warnings` | flag | off | Exit 1 when any warning-severity finding was reported. Stricter than `--fail-on-errors`; pass both to gate on either. A rule the wiki switched off cannot stop the gate — it never ran |
 | `--vault` | `path` | `vault.default_path` from `config.json` | Lint the wiki under this vault root, and read that vault's `llmwiki.json` |
@@ -333,9 +333,12 @@ The report names what it skipped, above the findings:
   "total_pages": 3,
   "disabled_rules": {
     "content_freshness": "This wiki is a committed snapshot, so this check measures elapsed calendar time rather than a defect in the pages."
-  }
+  },
+  "ran": ["frontmatter_completeness", "index_sync", "link_integrity", "orphan_detection"]
 }
 ```
+
+`ran` names the checks that actually produced the report, in registry order. `disabled_rules` covers only the narrowing the wiki declared; `--rules` (and the MCP tool's `rules` argument) narrows a run without declaring anything, so without `ran` a short report is indistinguishable from a full one.
 
 ### A declaration that cannot be honoured is an error, never a silent skip
 
@@ -345,6 +348,7 @@ The report names what it skipped, above the findings:
 | `llmwiki.json` that is not valid JSON, or whose top level is not a JSON object | **exit 2**, naming the file and the parse error |
 | A `lint.disabled_rules` that is neither a list of names nor an object mapping names to reasons | **exit 2** |
 | Every registered rule disabled | The report states that nothing was checked, instead of printing a clean summary |
+| Every rule a narrowed run selected disabled | The same, counted against what the run would have used — `--rules content_freshness` on a wiki that disables it skipped 1 rule of 1, not 1 of 17 |
 
 None of these fall back to "this wiki declares no opt-outs". A declaration nobody can read might be switching every check off, so reporting the wiki as clean would be a guess dressed up as a result — and a typo must never leave a check switched on that you believed you had switched off.
 

@@ -207,11 +207,89 @@ def test_json_carries_the_disabled_rules():
         _outcome(skipped={"content_freshness": "a frozen snapshot"}), total_pages=3
     )
     assert payload["disabled_rules"] == {"content_freshness": "a frozen snapshot"}
-    assert set(payload) == {"summary", "issues", "total_pages", "disabled_rules"}
+    assert set(payload) == {
+        "summary", "issues", "total_pages", "disabled_rules", "ran"
+    }
 
 
 def test_json_always_carries_the_key_even_when_empty():
     assert render_json(_outcome(), total_pages=3)["disabled_rules"] == {}
+
+
+# ─── Both counts are out of what the run would have used ───────────────
+
+
+def test_the_outcome_records_the_rules_the_run_would_have_used(warning_vault: Path):
+    """``considered`` is the selection, before the vault's opt-outs apply."""
+    pages = load_pages(warning_vault / "wiki")
+    assert run_lint(pages).considered == list(REGISTRY)
+
+    narrowed = run_lint(
+        pages, selected=["link_integrity"], disabled={"link_integrity": ""}
+    )
+    assert narrowed.considered == ["link_integrity"]
+    assert narrowed.ran == []
+
+
+def test_a_narrowed_run_counts_against_what_it_selected(
+    warning_vault: Path, capsys
+):
+    """A false number in the line that exists to stop a false clean report.
+
+    ``--rules`` can empty a run without the vault disabling anything like
+    seventeen rules: here exactly one rule was asked for, and exactly one
+    was switched off.
+    """
+    _declare(warning_vault, {"link_integrity": "targets are materialized elsewhere"})
+    assert _lint(warning_vault, "--rules", "link_integrity") == 0
+
+    out = capsys.readouterr().out
+    assert "nothing was checked" in out
+    assert "all 1 rule this run would have used was skipped" in out
+    assert "skipped 1 of 1 rules" in out
+    assert f"of {len(REGISTRY)} rules" not in out
+
+
+def test_a_rule_the_selection_never_named_is_not_called_skipped(
+    warning_vault: Path, capsys
+):
+    """It was not skipped by this run — it was never going to be used."""
+    _declare(warning_vault, {"content_freshness": "a frozen snapshot"})
+    assert _lint(warning_vault, "--rules", "link_integrity") == 0
+
+    out = capsys.readouterr().out
+    assert "broken wikilink" in out  # the selected rule did run
+    assert "content_freshness" not in out
+    assert "skipped" not in out
+
+
+def test_a_full_run_still_counts_against_the_whole_registry(
+    clean_vault: Path, capsys
+):
+    """The unnarrowed case the wording must not regress."""
+    _declare(clean_vault, {"content_freshness": "a frozen snapshot"})
+    assert _lint(clean_vault) == 0
+    assert f"skipped 1 of {len(REGISTRY)} rules" in capsys.readouterr().out
+
+
+# ─── The payload says which checks produced it ─────────────────────────
+
+
+def test_json_names_the_rules_that_ran(clean_vault: Path, capsys):
+    """Otherwise a run narrowed by ``rules`` reads as a full one."""
+    assert _lint(clean_vault, "--json") == 0
+    assert json.loads(capsys.readouterr().out)["ran"] == list(REGISTRY)
+
+
+def test_json_ran_shrinks_with_the_selection(clean_vault: Path, capsys):
+    _declare(clean_vault, {"content_freshness": "a frozen snapshot"})
+    assert _lint(
+        clean_vault, "--json", "--rules", "link_integrity,orphan_detection"
+    ) == 0
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ran"] == ["link_integrity", "orphan_detection"]
+    assert payload["disabled_rules"] == {"content_freshness": "a frozen snapshot"}
 
 
 # ─── The CLI, end to end ───────────────────────────────────────────────

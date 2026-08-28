@@ -46,6 +46,7 @@ from llmwiki.synth.pipeline import refresh_synth_pending, resolve_backend, synth
 from llmwiki.synth.reporting import print_synth_run_summary
 from llmwiki.vault import describe_vault, resolve_vault
 from llmwiki.vault_settings import (
+    VAULT_SETTINGS_FILENAME,
     VaultSettingsError,
     disabled_lint_rules,
     load_vault_settings,
@@ -140,7 +141,9 @@ def _run_lint_step(
         print(f"error: {vault_settings_path(settings_root)}: {exc}", file=sys.stderr)
         return 2, {}
 
-    print(render_text(outcome, len(pages)))
+    print(render_text(
+        outcome, len(pages), settings_filename=VAULT_SETTINGS_FILENAME
+    ))
 
     now = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     update_state(

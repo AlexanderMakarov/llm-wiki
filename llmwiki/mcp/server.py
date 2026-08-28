@@ -346,11 +346,13 @@ TOOLS = [
         "description": (
             "Run every registered quality check over the wiki and return the "
             "same JSON report `llmwiki lint --json` prints: {summary, issues, "
-            "total_pages, disabled_rules}. The checks cover link integrity, "
-            "orphan pages, contradictions, staleness, frontmatter and catalog "
-            "health. Rules the vault switches off in its llmwiki.json are "
-            "skipped and named in `disabled_rules`, so a clean report can "
-            "never be mistaken for an unchecked one."
+            "total_pages, disabled_rules, ran}. The checks cover link "
+            "integrity, orphan pages, contradictions, staleness, frontmatter "
+            "and catalog health. Rules the vault switches off in its "
+            "llmwiki.json are skipped and named in `disabled_rules`, and "
+            "`ran` names the checks that actually produced the report — so a "
+            "report narrowed by `rules`, or by the vault, can never be "
+            "mistaken for a full one."
         ),
         "inputSchema": {
             "type": "object",
@@ -1059,6 +1061,11 @@ def tool_wiki_lint(args: dict[str, Any]) -> dict[str, Any]:
         min_refs = int(args.get("min_refs", DEFAULT_MIN_REFS))
     except (TypeError, ValueError):
         return _err(f"error: min_refs must be an integer, got {args.get('min_refs')!r}")
+    # Same range the CLI flag enforces: below 1 the suppression gate
+    # (`0 < n_refs < min_refs`) silently behaves like 1, so accepting it
+    # would answer a threshold the caller did not ask for.
+    if min_refs < 1:
+        return _err(f"error: min_refs must be at least 1, got {min_refs}")
 
     pages = load_pages(wiki)
     try:

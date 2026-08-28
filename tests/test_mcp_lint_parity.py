@@ -106,7 +106,9 @@ def test_the_payload_is_worth_comparing(vault: Path, capsys):
     an error severity the private implementation could not produce.
     """
     payload = _via_mcp(vault)
-    assert set(payload) == {"summary", "issues", "total_pages", "disabled_rules"}
+    assert set(payload) == {
+        "summary", "issues", "total_pages", "disabled_rules", "ran"
+    }
     assert payload["total_pages"] > 0
     assert len({issue["rule"] for issue in payload["issues"]}) > 1
     assert payload["summary"].get("error", 0) > 0
@@ -184,6 +186,13 @@ def test_a_non_integer_threshold_is_an_error(vault: Path):
     assert "min_refs" in _mcp_error(vault, {"min_refs": "three"})
 
 
+@pytest.mark.parametrize("bad", [0, -5])
+def test_a_non_positive_threshold_is_an_error(vault: Path, bad: int):
+    """The CLI rejects the same range: below 1 the suppression gate
+    silently behaves like 1, so the answer would not be the one asked for."""
+    assert "at least 1" in _mcp_error(vault, {"min_refs": bad})
+
+
 # ─── The rules argument mirrors the CLI flag ───────────────────────────
 
 
@@ -200,6 +209,18 @@ def test_the_rules_argument_mirrors_the_cli_flag(
 def test_selecting_one_rule_narrows_the_findings(vault: Path):
     payload = _via_mcp(vault, {"rules": ["link_integrity"]})
     assert {i["rule"] for i in payload["issues"]} == {"link_integrity"}
+
+
+def test_the_payload_says_which_checks_produced_it(vault: Path):
+    """Without ``ran``, a run narrowed by ``rules`` is indistinguishable
+    from a full one that happened to find a single class of issue —
+    ``disabled_rules`` only covers the narrowing the vault declared."""
+    full = _via_mcp(vault)
+    narrowed = _via_mcp(vault, {"rules": ["link_integrity"]})
+
+    assert full["ran"] == list(REGISTRY)
+    assert narrowed["ran"] == ["link_integrity"]
+    assert narrowed["disabled_rules"] == full["disabled_rules"] == {}
 
 
 # ─── An unknown name errors rather than reporting a clean wiki ─────────
@@ -242,7 +263,7 @@ def test_the_description_no_longer_promises_a_private_shape():
     """R9's third criterion. The old text named the two keys it returned and
     two checks it never implemented; the new text names the CLI payload."""
     description = _schema()["description"]
-    for key in ("summary", "issues", "total_pages", "disabled_rules"):
+    for key in ("summary", "issues", "total_pages", "disabled_rules", "ran"):
         assert key in description
     assert "llmwiki lint --json" in description
     for stale in ("orphan_count", "broken_link_count", "broken_links"):

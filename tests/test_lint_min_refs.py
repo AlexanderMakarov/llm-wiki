@@ -234,3 +234,31 @@ def test_lint_parser_exposes_min_refs():
     parser = build_parser()
     assert parser.parse_args(["lint"]).min_refs == DEFAULT_MIN_REFS
     assert parser.parse_args(["lint", "--min-refs", "1"]).min_refs == 1
+
+
+@pytest.mark.parametrize("bad", ["0", "-5"])
+def test_a_non_positive_threshold_is_rejected(bad: str, capsys):
+    """The gate is ``0 < n_refs < min_refs``, so 0 and negatives behave
+    exactly like 1 — while the help text says 1 is the loudest setting.
+    Answering a threshold nobody asked for is worse than refusing it."""
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(["lint", "--min-refs", bad])
+    assert "--min-refs must be at least 1" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("command", ["lint", "synth", "synthesize", "all"])
+def test_every_parser_that_takes_the_flag_enforces_the_range(
+    command: str, capsys
+):
+    """The same value reaches ``run_harvest`` on the ``all`` path, where a
+    non-positive threshold is meaningless — one check, three parsers."""
+    assert build_parser().parse_args([command, "--min-refs", "1"]).min_refs == 1
+    with pytest.raises(SystemExit):
+        build_parser().parse_args([command, "--min-refs", "0"])
+    assert "at least 1" in capsys.readouterr().err
+
+
+def test_a_non_integer_threshold_is_rejected(capsys):
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(["lint", "--min-refs", "three"])
+    assert "must be an integer" in capsys.readouterr().err

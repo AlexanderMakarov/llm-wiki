@@ -178,9 +178,16 @@ class LintOutcome:
     #: :func:`_issue_sort_key`.
     issues: list[dict[str, Any]] = field(default_factory=list)
     #: Rules the vault switched off → the recorded reason (``""`` when none).
+    #: The vault's whole declaration, including rules this run never selected.
     skipped: dict[str, str] = field(default_factory=dict)
     #: Names of the rules that actually ran, in registry order.
     ran: list[str] = field(default_factory=list)
+    #: Names of the rules this run *would* have used had the vault disabled
+    #: nothing — the whole registry, or the ``selected`` subset of it, in
+    #: registry order. Reports count against this rather than against
+    #: ``REGISTRY``: a run narrowed to one rule that the vault happens to
+    #: disable skipped one rule of one, not one of seventeen.
+    considered: list[str] = field(default_factory=list)
 
 
 def _normalize_disabled(
@@ -249,15 +256,14 @@ def run_lint(
         raise UnknownRuleError(unknown, sorted(REGISTRY))
 
     resolved_options = options or LintOptions()
+    considered = [name for name in REGISTRY if not selected or name in selected]
     issues: list[dict[str, Any]] = []
     ran: list[str] = []
-    for name, rule_cls in REGISTRY.items():
-        if selected and name not in selected:
-            continue
+    for name in considered:
         if name in skipped:
             continue
         ran.append(name)
-        rule = rule_cls()
+        rule = REGISTRY[name]()
         rule.options = resolved_options
         try:
             issues.extend(sorted(rule.run(pages), key=_issue_sort_key))
@@ -268,7 +274,9 @@ def run_lint(
                 "page": "",
                 "message": f"rule raised exception: {e}",
             })
-    return LintOutcome(issues=issues, skipped=skipped, ran=ran)
+    return LintOutcome(
+        issues=issues, skipped=skipped, ran=ran, considered=considered
+    )
 
 
 def run_all(

@@ -154,6 +154,7 @@ from llmwiki.trace import TraceError, TraceResult, trace_page
 from llmwiki.usage import UNATTRIBUTED
 from llmwiki.vault import describe_vault, resolve_vault
 from llmwiki.vault_settings import (
+    VAULT_SETTINGS_FILENAME,
     VaultSettingsError,
     disabled_lint_rules,
     load_vault_settings,
@@ -754,7 +755,9 @@ def cmd_lint(args: argparse.Namespace) -> int:
     if args.json:
         print(_json.dumps(_render_lint_json(outcome, len(pages)), indent=2))
     else:
-        print(_render_lint_text(outcome, len(pages)))
+        print(_render_lint_text(
+            outcome, len(pages), settings_filename=VAULT_SETTINGS_FILENAME
+        ))
 
     _apply_default_vault(args)
 
@@ -2321,6 +2324,27 @@ def _refresh_review_counts(wiki_dir: Path) -> None:
     update_state(_mut, state_file)
 
 
+def _min_refs(value: str) -> int:
+    """Parse ``--min-refs``: a threshold below 1 is not a weaker threshold.
+
+    The suppression gate is ``0 < n_refs < min_refs``, so ``0`` and negatives
+    behave exactly like ``1`` while the help text ("use 1 to report every
+    unresolved link") implies they would report less. The same value reaches
+    the candidate harvest on the ``all`` path, where "named by fewer than one
+    source page" is not a threshold at all. Shared by every parser that
+    accepts the flag so the three cannot drift.
+    """
+    try:
+        n = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(
+            f"--min-refs must be an integer, got {value!r}"
+        ) from None
+    if n < 1:
+        raise argparse.ArgumentTypeError("--min-refs must be at least 1")
+    return n
+
+
 def _add_vault_arg(parser: argparse.ArgumentParser, *, role: str) -> None:
     """#arch-m8 (#620): single source of truth for the ``--vault`` flag.
 
@@ -2525,7 +2549,7 @@ def build_parser() -> argparse.ArgumentParser:
                       help="Comma-separated rule names (default: all applicable)")
     lint.add_argument("--json", action="store_true", help="JSON output")
     lint.add_argument(
-        "--min-refs", type=int, default=DEFAULT_MIN_REFS, metavar="N",
+        "--min-refs", type=_min_refs, default=DEFAULT_MIN_REFS, metavar="N",
         help=(
             "How many distinct source pages must name a [[wikilink]] target "
             "before an unresolved link to it is reported as broken. Matches "
@@ -2770,7 +2794,7 @@ def build_parser() -> argparse.ArgumentParser:
             ),
         )
         parser.add_argument(
-            "--min-refs", type=int, default=DEFAULT_MIN_REFS, metavar="N",
+            "--min-refs", type=_min_refs, default=DEFAULT_MIN_REFS, metavar="N",
             help=(
                 "Candidate threshold: a wikilink target becomes a candidate when "
                 f"N or more distinct source pages name it (default: {DEFAULT_MIN_REFS})"
@@ -2963,7 +2987,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Pass --force to synth (re-synthesize every session)",
     )
     all_p.add_argument(
-        "--min-refs", type=int, default=DEFAULT_MIN_REFS, metavar="N",
+        "--min-refs", type=_min_refs, default=DEFAULT_MIN_REFS, metavar="N",
         help=(
             "Candidate threshold passed through to the synth and lint stages: "
             "a wikilink target becomes a candidate — and an unresolved link to "
