@@ -389,7 +389,7 @@ def test_link_integrity_still_flags_unlisted_alias_name() -> None:
         ),
         "sources/a.md": _mk_page({"title": "A"}, "See [[TailnetTypo]]"),
     }
-    issues = LinkIntegrity().run(pages)
+    issues = _link_rule().run(pages)
     assert len(issues) == 1
     assert "TailnetTypo" in issues[0]["message"]
 

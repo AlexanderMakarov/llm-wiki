@@ -97,7 +97,7 @@ python3 -m llmwiki lint [options]
 | fewer than `--min-refs` | no | The harvest deliberately declined to give this target a page |
 | `--min-refs` or more | **yes** | A genuine gap: named often enough to deserve a page, and it does not have one |
 
-So lowering the threshold widens the middle band into the reported band: `--min-refs 1` reports every unresolved link, which on a mature wiki can be hundreds of findings that were all deliberate declines. Nothing is hidden permanently — the lower threshold always brings them back. The stock value lives in one place, `llmwiki.thresholds.DEFAULT_MIN_REFS`, which the harvest reads too, so the step that declines to create a page and the check that reports the missing page cannot drift apart. `llmwiki all --min-refs N` sets it for the synth and lint stages of a pipeline run.
+So lowering the threshold widens the middle band into the reported band: `--min-refs 1` reports every unresolved link, which on a mature wiki can be hundreds of findings that were all deliberate declines. Nothing is hidden permanently — the lower threshold always brings them back. The stock value lives in one place, `llmwiki.vault_settings.DEFAULT_MIN_REFS`, which the harvest reads too, so the step that declines to create a page and the check that reports the missing page cannot drift apart. `llmwiki all --min-refs N` sets it for the synth and lint stages of a pipeline run.
 
 ### `llmwiki all` (v1.2)
 

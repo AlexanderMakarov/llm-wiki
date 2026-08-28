@@ -33,7 +33,7 @@ import pytest
 from llmwiki import REPO_ROOT
 from llmwiki.lint import REGISTRY, load_pages, run_lint
 from llmwiki.lint import rules as _rules  # noqa: F401 — populate REGISTRY
-from llmwiki.thresholds import DEFAULT_MIN_REFS
+from llmwiki.vault_settings import DEFAULT_MIN_REFS
 
 #: Enough distinct unresolved targets in one page that a stable order cannot
 #: happen by luck: 5! orderings per page.

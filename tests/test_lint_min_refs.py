@@ -23,7 +23,7 @@ from llmwiki.lint import (
     run_all,
 )
 from llmwiki.lint.rules import LinkIntegrity
-from llmwiki.thresholds import DEFAULT_MIN_REFS as THRESHOLDS_DEFAULT_MIN_REFS
+from llmwiki.vault_settings import DEFAULT_MIN_REFS as VAULT_DEFAULT_MIN_REFS
 from llmwiki.wikilinks import count_source_refs
 
 # ─── Fixtures ──────────────────────────────────────────────────────────
@@ -65,8 +65,8 @@ def vault(tmp_path: Path) -> Path:
 
 def test_one_definition_of_the_stock_threshold():
     """The harvester's constant *is* the neutral module's — not a copy."""
-    assert DEFAULT_MIN_REFS is THRESHOLDS_DEFAULT_MIN_REFS
-    assert LintOptions().min_refs == THRESHOLDS_DEFAULT_MIN_REFS
+    assert DEFAULT_MIN_REFS is VAULT_DEFAULT_MIN_REFS
+    assert LintOptions().min_refs == VAULT_DEFAULT_MIN_REFS
 
 
 def test_below_threshold_target_is_not_reported(vault: Path):

@@ -33,7 +33,7 @@ from llmwiki import REPO_ROOT
 # frontmatter, so every lint rule that read `meta["type"]` skipped it.
 from llmwiki._frontmatter import parse_frontmatter as _parse_fm
 from llmwiki._system_pages import is_archived_path
-from llmwiki.thresholds import DEFAULT_MIN_REFS
+from llmwiki.vault_settings import DEFAULT_MIN_REFS
 
 WIKI_DIR = REPO_ROOT / "wiki"
 
@@ -51,7 +51,7 @@ class LintOptions:
 
     #: How many distinct source pages must name a wikilink target before an
     #: unresolved link to it counts as a defect. Shared with the candidate
-    #: harvest via :data:`llmwiki.thresholds.DEFAULT_MIN_REFS`, so the step
+    #: harvest via :data:`llmwiki.vault_settings.DEFAULT_MIN_REFS`, so the step
     #: that declines to materialize a target and the check that reports the
     #: missing page cannot disagree.
     min_refs: int = DEFAULT_MIN_REFS

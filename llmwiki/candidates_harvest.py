@@ -20,14 +20,14 @@ from pathlib import Path
 from llmwiki.lint.rules.link_integrity import _norm_slug
 from llmwiki.reindex import reindex_wiki
 from llmwiki.source_topics import TopicRecord, parse_source_topics
-from llmwiki.thresholds import DEFAULT_MIN_REFS
+from llmwiki.vault_settings import DEFAULT_MIN_REFS
 from llmwiki.wikilinks import count_source_refs
 
-# ``DEFAULT_MIN_REFS`` is imported here rather than defined here so existing
-# importers (``cli.py``, ``pipeline.py``) keep reading it from the harvester
-# while :mod:`llmwiki.lint` reads the same definition straight from
-# :mod:`llmwiki.thresholds` — a lint import of this module would be a cycle,
-# since ``_norm_slug`` above comes out of the lint package (#150).
+# ``DEFAULT_MIN_REFS`` is re-exported from :mod:`llmwiki.vault_settings` so
+# existing importers (``cli.py``, ``pipeline.py``) keep reading it here while
+# :mod:`llmwiki.lint` reads the same definition from vault_settings — a lint
+# import of this module would be a cycle, since ``_norm_slug`` above comes out
+# of the lint package (#150).
 
 
 @dataclass(frozen=True)

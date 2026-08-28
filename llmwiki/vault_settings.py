@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any
 
 __all__ = [
+    "DEFAULT_MIN_REFS",
     "VAULT_SETTINGS_FILENAME",
     "VaultSettingsError",
     "disabled_lint_rules",
@@ -29,6 +30,13 @@ __all__ = [
 
 #: Name of the per-vault settings file, resolved against the content root.
 VAULT_SETTINGS_FILENAME = "llmwiki.json"
+
+#: Default significance threshold for candidate harvest and ``link_integrity``.
+#: A wikilink target must be named by this many distinct source pages before
+#: harvest materializes a stub and before lint treats an unresolved link as a
+#: defect. Lives here (not in the harvest or lint packages) to avoid import
+#: cycles — ``candidates_harvest`` already imports from ``link_integrity``.
+DEFAULT_MIN_REFS = 3
 
 
 class VaultSettingsError(RuntimeError):

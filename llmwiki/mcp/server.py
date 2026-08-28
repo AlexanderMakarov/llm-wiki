@@ -47,8 +47,8 @@ from llmwiki.config_schedule import resolve_content_root
 from llmwiki.lint import LintOptions, UnknownRuleError, load_pages, run_lint
 from llmwiki.lint.report import render_json as render_lint_json
 from llmwiki.schema import PAGE_KINDS
-from llmwiki.thresholds import DEFAULT_MIN_REFS
 from llmwiki.vault_settings import (
+    DEFAULT_MIN_REFS,
     VaultSettingsError,
     disabled_lint_rules,
     load_vault_settings,
