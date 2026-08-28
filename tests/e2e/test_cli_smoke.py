@@ -84,6 +84,7 @@ ALL_SUBCOMMANDS = (
     "build",
     "usage",
     "adapters",
+    "configure-sources",
     "graph",
     "lint",
     "queue",

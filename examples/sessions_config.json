@@ -72,7 +72,20 @@
     "search_mode": "auto",
     "synthesize": false
   },
-  "_adapters_comment": "Contrib adapters. All disabled by default \u2014 enable with: llmwiki sync --adapter <name>",
+  "_adapters_comment": "Per-source enablement and paths. AI session sources sync automatically when their store exists unless enabled:false. Notes/export intake (obsidian, chatgpt) need enabled:true. Run `llmwiki configure-sources` for an interactive setup.",
+  "adapters": {
+    "claude_code": {},
+    "codex_cli": {},
+    "cursor_cli": {},
+    "cursor": {},
+    "openclaw": {},
+    "opencode": {},
+    "copilot_chat": {},
+    "copilot_cli": {},
+    "gemini_cli": {},
+    "chatgpt": { "enabled": false },
+    "obsidian": { "enabled": false }
+  },
   "web_clipper": {
     "enabled": false,
     "_comment": "Obsidian Web Clipper intake path.",

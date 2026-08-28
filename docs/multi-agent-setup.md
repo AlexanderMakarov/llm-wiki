@@ -1,6 +1,6 @@
 # Multi-Agent Setup
 
-llmwiki reads sessions from multiple coding agents. A bare `llmwiki sync` runs **core** adapters only (`claude_code`, `codex_cli`) when their stores exist. **Contrib** adapters (Cursor Agent CLI, OpenClaw, Copilot, …) stay opt-in until [#182](https://github.com/AlexanderMakarov/llm-wiki/issues/182) — pass `--adapter <name>` or set `adapters.<name>.enabled: true` in config.
+llmwiki reads sessions from multiple coding agents. Every shipped source is configured under `adapters.<name>` in `config.json`. Bare `llmwiki sync` runs all enabled coding-agent sources when their store is present; notes intake (Obsidian, ChatGPT export) needs `enabled: true`. Run `llmwiki configure-sources` after install to probe stores and write settings, or use `--adapter <name>` for a one-off limit.
 
 ## Which agents are supported
 

@@ -21,7 +21,8 @@ from typing import Any
 
 from llmwiki import REPO_ROOT
 from llmwiki.adapters import REGISTRY, discover_all
-from llmwiki.config_schedule import load_default_vault_path
+from llmwiki.adapters.settings import select_sync_adapters
+from llmwiki.config_schedule import _load_sessions_config, load_default_vault_path
 from llmwiki.session_ready import Ready, session_ready_for_adapter
 
 SETTLE_SECONDS = 2.0
@@ -38,26 +39,20 @@ _STARTUP_BANNER = f"""\
 """
 
 
-def scan_mtimes(adapters: list[str] | None) -> dict[str, float]:
+def scan_mtimes(adapters: list[str] | None, config: dict[str, Any] | None = None) -> dict[str, float]:
     """Return ``{path: mtime}`` for every session file visible to adapters.
 
-    Uses ``discover_all`` — not ``discover_adapters`` — so contrib stores
-    (Cursor, OpenClaw, …) are watched too. ``sync`` loads contrib the same
-    way, and a store watch can't see is a store watch can never trigger on.
-    Opt-in adapters stay excluded: ``is_available()`` already gates those.
+    Uses the same adapter selection as bare ``sync`` (``select_sync_adapters``).
     """
-    discover_all()
-    selected_cls = []
-    if adapters:
-        for name in adapters:
-            if name in REGISTRY:
-                selected_cls.append(REGISTRY[name])
-    else:
-        selected_cls = [c for c in REGISTRY.values() if c.is_available()]
+    cfg = config if config is not None else _load_sessions_config()
+    try:
+        selected_cls = select_sync_adapters(cfg, adapters)
+    except ValueError:
+        selected_cls = []
 
     mtimes: dict[str, float] = {}
     for cls in selected_cls:
-        adapter = cls()
+        adapter = cls(cfg)
         for p in adapter.discover_sessions():
             try:
                 mtimes[str(p)] = p.stat().st_mtime

@@ -10,6 +10,8 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Added
 
+- **Configurable session sources + `llmwiki configure-sources` (#182)** — bare `llmwiki sync` and `llmwiki adapters` load every shipped adapter (not only Claude/Codex). Enablement and paths live under `adapters.<name>` in `config.json`; `enabled: false` is honoured. Interactive `configure-sources` (and optional `setup.sh` prompt) probes default store paths and writes settings. Obsidian and ChatGPT export stay explicit opt-in. See `docs/multi-agent-setup.md` and `docs/UPGRADING.md`.
+  - *Release note:* Configure every shipped session source in config; run `llmwiki configure-sources` after install (#182).
 - **`filters.exclude_headless` across coding-agent adapters (#180)** — every registered session adapter implements `is_headless_session`; Cursor Agent CLI skips `subagentInfo` / `approvalMode=auto-review` launches; OpenClaw keeps all sessions; docs support map + docs-currency gate. See `docs/multi-agent-setup.md` and `docs/UPGRADING.md`.
   - *Release note:* Skip automated sessions from every coding-agent source under the existing `exclude_headless` default (#180).
 - **Demo headless session fixtures (#180)** — `scripts/generate_demo_sessions.py` authors three synthetic headless raw sessions (Claude `sdk-cli` / Cursor `auto-review` / Cursor `code-reviewer` subagent) so the published demo corpus covers `is_headless` frontmatter without synthesizing those rows under the default filter.

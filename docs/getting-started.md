@@ -12,7 +12,7 @@
   - **Cursor Agent CLI** (contrib) — `~/.cursor/chats/` via `llmwiki sync --adapter cursor_cli`
   - **OpenClaw**, Copilot, Gemini, ChatGPT export, Obsidian notes — contrib; see [multi-agent-setup.md](multi-agent-setup.md)
 
-A bare `llmwiki sync` runs **core** adapters when their stores exist. Contrib sources need `--adapter <name>` (until [#182](https://github.com/AlexanderMakarov/llm-wiki/issues/182)).
+A bare `llmwiki sync` runs every **enabled** coding-agent source whose store exists on disk. Configure sources in `config.json` under `adapters.<name>` or run `llmwiki configure-sources` after install. Use `--adapter <name>` to limit a single run.
 
 That's it. No `npm`, no `brew`, no database, no account.
 

@@ -244,6 +244,22 @@ Scope is MCP calls only — `file://` static-site browsing stays untracked.
 
 ---
 
+## `configure-sources` — enable detected session stores
+
+```bash
+python3 -m llmwiki configure-sources
+```
+
+Interactive interview: probes each shipped adapter's default store paths, asks which coding-agent sources to enable (default yes when detected), asks separately for notes/export intake (Obsidian, ChatGPT export — default no), optionally confirms paths, then writes `adapters.<name>` blocks to gitignored `config.json`.
+
+| Flag | What |
+|---|---|
+| `--yes` | Non-interactive: skip interview (no config writes). |
+
+After pip or Homebrew install (no `setup.sh`), run this once after `llmwiki init`. Git clone `setup.sh` offers the same interview on a TTY before `install-automation`. Set `LLMWIKI_SKIP_CONFIGURE_SOURCES=1` to skip from `setup.sh`.
+
+---
+
 ## `adapters` — list every adapter + its status
 
 ```bash

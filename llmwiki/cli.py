@@ -49,7 +49,8 @@ from llmwiki import (
     migrate_topic_kinds,
     usage,
 )
-from llmwiki.adapters import REGISTRY, discover_adapters
+from llmwiki.adapters import REGISTRY, discover_all
+from llmwiki.adapters.settings import adapter_is_available
 
 # #v1378-review (#691 follow-up): hoist these re-exports from mid-module
 # to here so the file passes E402 cleanly. They re-export business
@@ -552,6 +553,13 @@ def _print_usage_report(consumption: dict[str, Any], cost: dict[str, Any]) -> No
         print("synthesis cost: unknown (run `llmwiki synth --estimate`)")
 
 
+def cmd_configure_sources(args: argparse.Namespace) -> int:
+    """Interactive probe + enablement for shipped session sources (#182)."""
+    from llmwiki.configure_sources import run_configure_sources  # noqa: PLC0415
+
+    return run_configure_sources(yes=bool(getattr(args, "yes", False)))
+
+
 def cmd_adapters(args: argparse.Namespace) -> int:
     """List available adapters and their config state.
 
@@ -563,19 +571,12 @@ def cmd_adapters(args: argparse.Namespace) -> int:
     G-02 (#288): ``--wide`` disables the description cap.
     """
 
-    discover_adapters()
+    discover_all()
     if not REGISTRY:
         print("No adapters registered.")
         return 0
 
-    # Load user config to show enable/disable state
-    config_path = REPO_ROOT / "examples" / "sessions_config.json"
-    config: dict = {}
-    if config_path.is_file():
-        try:
-            config = _json.loads(config_path.read_text(encoding="utf-8"))
-        except (ValueError, OSError):
-            pass
+    config = _load_sessions_config()
 
     # Description column width: 40 by default, full line with --wide,
     # or auto-fit to terminal (minus the four fixed columns + gutters).
@@ -602,7 +603,7 @@ def cmd_adapters(args: argparse.Namespace) -> int:
         f"  {dash * 16}  {dash * 8}  {dash * 10}  {dash * 7}  {sep_desc}"
     )
     for name, adapter_cls in sorted(REGISTRY.items()):
-        present = "yes" if adapter_cls.is_available() else "no"
+        present = "yes" if adapter_is_available(adapter_cls, config) else "no"
         enabled, active = _adapter_status(name, adapter_cls, config)
         desc = adapter_cls.description()
         if desc_width is not None and len(desc) > desc_width:
@@ -2527,6 +2528,17 @@ def build_parser() -> argparse.ArgumentParser:
         help="Show untruncated adapter descriptions (G-02 · #288).",
     )
     ads.set_defaults(func=cmd_adapters)
+
+    cfg_src = sub.add_parser(
+        "configure-sources",
+        help="Interactive: enable detected session sources and write adapters.* to config.json",
+    )
+    cfg_src.add_argument(
+        "--yes",
+        action="store_true",
+        help="Non-interactive: skip interview (no config writes)",
+    )
+    cfg_src.set_defaults(func=cmd_configure_sources)
 
     # graph
     graph = sub.add_parser("graph", help="Build the knowledge graph (graph/graph.json + graph.html)")
