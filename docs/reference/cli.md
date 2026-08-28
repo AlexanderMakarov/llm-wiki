@@ -938,7 +938,7 @@ python3 -m llmwiki install-automation --vault ~/my-vault
 
 Exit codes:
 
-- `0` — the scheduler files were written, or you declined the confirmation and nothing was written.
+- `0` — the scheduler files were written, or you answered **n** at the final confirmation (automation skipped; vault and config unchanged).
 - `2` — the schedule is not an expression llmwiki can translate.
 
 ---

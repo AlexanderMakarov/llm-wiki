@@ -938,7 +938,10 @@ def _confirm_plan(plan: AutomationPlan, schedule: str, vault: Path | None = None
     print()
     while True:
         try:
-            answer = input("Write these scheduler files? [Y/n]: ").strip().lower()
+            answer = input(
+                "Write scheduler files and automation status now? [Y/n] "
+                "(n = skip this step only): "
+            ).strip().lower()
         except EOFError:
             print("  stdin ended before an answer — reading that as 'no'.")
             return False
@@ -1101,7 +1104,9 @@ def cmd_install_automation(args: argparse.Namespace) -> int:
         )
         write_dir = Path(units) if units else default_units
         if not _confirm_plan(plan, schedule, command_vault):
-            print("  Nothing written — no scheduler files, no status file, no config change.")
+            print("  Skipped install-automation — no scheduler files or automation status written.")
+            print("  Your vault, adapters, and config.json are unchanged.")
+            print("  Run `python3 -m llmwiki install-automation` later to set up the daily job.")
             return 0
         _write_synth_backend(backend)
 
