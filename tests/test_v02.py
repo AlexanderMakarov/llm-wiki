@@ -155,13 +155,16 @@ def test_mcp_tool_wiki_list_sources():
 
 
 def test_mcp_tool_wiki_lint():
+    """The tool returns the `lint --json` payload, not a private shape (#150)."""
 
     result = tool_wiki_lint({})
     if result["isError"]:
         pytest.skip("wiki/ not present")
     data = json.loads(result["content"][0]["text"])
-    for key in ("total_pages", "orphans", "orphan_count", "broken_links", "broken_link_count"):
+    for key in ("summary", "issues", "total_pages", "disabled_rules"):
         assert key in data
+    assert isinstance(data["issues"], list)
+    assert isinstance(data["disabled_rules"], dict)
 
 
 def test_mcp_tool_wiki_read_page_path_traversal_guard():

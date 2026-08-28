@@ -36,7 +36,8 @@ from llmwiki.config_schedule import _load_sessions_config
 from llmwiki.convert import convert_all
 from llmwiki.graph import build_and_report
 from llmwiki.graphify_bridge import build_graphify_graph, is_available
-from llmwiki.lint import load_pages, run_all, summarize
+from llmwiki.lint import LintOptions, UnknownRuleError, load_pages, run_lint, summarize
+from llmwiki.lint.report import render_text
 from llmwiki.pipeline_lock import pipeline_lock
 from llmwiki.reindex import reindex_wiki
 from llmwiki.state_store import read_state, resolve_state_file, update_state
@@ -44,6 +45,13 @@ from llmwiki.synth.base import BaseSynthesizer
 from llmwiki.synth.pipeline import refresh_synth_pending, resolve_backend, synthesize_new_sessions
 from llmwiki.synth.reporting import print_synth_run_summary
 from llmwiki.vault import describe_vault, resolve_vault
+from llmwiki.vault_settings import (
+    VAULT_SETTINGS_FILENAME,
+    VaultSettingsError,
+    disabled_lint_rules,
+    load_vault_settings,
+    vault_settings_path,
+)
 
 # Canonical stage order for ``llmwiki all`` / the wiki-all agent skill (#170).
 # Opt-out flags may skip a stage; init is not part of this pipeline.
@@ -91,15 +99,33 @@ def _run_graph_step(*, wiki_dir: Path, graph_root: Path, engine: str) -> int:
     )
 
 
-def _run_lint_step(wiki_dir: Path) -> tuple[int, dict[str, int]]:
+def _run_lint_step(
+    wiki_dir: Path, *, min_refs: int = DEFAULT_MIN_REFS
+) -> tuple[int, dict[str, int]]:
     """Run every lint rule and print the same report ``llmwiki lint`` prints.
 
-    Returns ``(rc, summary)``. ``rc`` is 2 when ``wiki_dir`` doesn't exist,
-    else 0 — lint issues alone never fail the pipeline; ``--strict``
-    escalation is the caller's job (it needs the summary either way).
+    Renders through :mod:`llmwiki.lint.report`, so this stage and the
+    ``lint`` command cannot drift into two accounts of the same wiki —
+    including which rules the vault switched off in its ``llmwiki.json``,
+    which are honoured and named as skipped here too (#150).
+
+    Returns ``(rc, summary)``. ``rc`` is 2 when ``wiki_dir`` doesn't exist
+    or the vault's settings file cannot be used, else 0 — lint issues alone
+    never fail the pipeline; ``--strict`` escalation is the caller's job
+    (it needs the summary either way).
     """
     if not wiki_dir.is_dir():
         print(f"error: wiki directory not found: {wiki_dir}", file=sys.stderr)
+        return 2, {}
+
+    # The opt-out declaration sits beside ``wiki/``, and is read before
+    # anything can print a result: a settings file that cannot be parsed
+    # must never yield a clean report on this path either.
+    settings_root = wiki_dir.parent
+    try:
+        disabled = disabled_lint_rules(load_vault_settings(settings_root))
+    except VaultSettingsError as exc:
+        print(f"error: {exc}", file=sys.stderr)
         return 2, {}
 
     pages = load_pages(wiki_dir)
@@ -107,32 +133,24 @@ def _run_lint_step(wiki_dir: Path) -> tuple[int, dict[str, int]]:
         print(f"  no pages found in {wiki_dir}")
         return 0, {}
 
-    issues = run_all(pages)
-    summary = summarize(issues)
-    print(f"  scanned {len(pages)} pages")
-    print(f"  {sum(summary.values())} issues: "
-          f"{summary.get('error', 0)} errors, "
-          f"{summary.get('warning', 0)} warnings, "
-          f"{summary.get('info', 0)} info")
-    print()
-    if issues:
-        by_rule: dict[str, list[dict[str, str]]] = {}
-        for i in issues:
-            by_rule.setdefault(i["rule"], []).append(i)
-        for rule, rule_issues in sorted(by_rule.items()):
-            print(f"## {rule} ({len(rule_issues)})")
-            for i in rule_issues[:20]:
-                print(f"  [{i['severity']}] {i['page']}: {i['message']}")
-            if len(rule_issues) > 20:
-                print(f"  ... and {len(rule_issues) - 20} more")
-            print()
+    try:
+        outcome = run_lint(
+            pages, disabled=disabled, options=LintOptions(min_refs=min_refs)
+        )
+    except UnknownRuleError as exc:
+        print(f"error: {vault_settings_path(settings_root)}: {exc}", file=sys.stderr)
+        return 2, {}
+
+    print(render_text(
+        outcome, len(pages), settings_filename=VAULT_SETTINGS_FILENAME
+    ))
 
     now = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     update_state(
         lambda s: (s.setdefault("ops", {}).__setitem__("last_lint_run_at", now) or s),
         resolve_state_file(),
     )
-    return 0, summary
+    return 0, summarize(outcome.issues)
 
 
 #: Lint failure policies, ordered from most permissive to strictest.
@@ -239,6 +257,10 @@ def run_pipeline(args: argparse.Namespace) -> int:
     out_dir = args.out
     if vault_root and out_dir == REPO_ROOT / "site":
         out_dir = vault_root / "site"
+    # One threshold for the whole run: the harvest that materializes a
+    # candidate and the lint rule that reports an unmaterialized link must
+    # agree, or `all` behaves differently from `synth` + `lint` (#150).
+    min_refs = getattr(args, "min_refs", DEFAULT_MIN_REFS)
 
     overall_rc = 0
 
@@ -306,7 +328,7 @@ def run_pipeline(args: argparse.Namespace) -> int:
                 # Default synth also harvests candidates (#90).
                 harvest_rc = run_harvest(
                     wiki_dir,
-                    min_refs=DEFAULT_MIN_REFS,
+                    min_refs=min_refs,
                     backend=backend,
                     require_sources=False,
                 )
@@ -363,7 +385,7 @@ def run_pipeline(args: argparse.Namespace) -> int:
             # honesty tests can grep banners in order (#170).
             lint_extra = "" if lint_fail == "never" else f" --lint-fail {lint_fail}"
             print(f"\n==> llmwiki lint{lint_extra}")
-            lint_rc, lint_summary = _run_lint_step(wiki_dir)
+            lint_rc, lint_summary = _run_lint_step(wiki_dir, min_refs=min_refs)
             overall_rc = _merge_rc(overall_rc, lint_rc)
 
             # The policy escalates lint findings into a pipeline failure,

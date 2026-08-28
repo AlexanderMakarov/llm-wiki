@@ -9,6 +9,7 @@ import pytest
 
 from llmwiki.lint import (
     REGISTRY,
+    LintOptions,
     UnknownRuleError,
     load_pages,
     rules,  # noqa: F401
@@ -298,6 +299,21 @@ def test_validity_confidence_not_numeric():
 # ─── 3. LinkIntegrity ────────────────────────────────────────────────
 
 
+def _link_rule(min_refs: int = 1) -> LinkIntegrity:
+    """``LinkIntegrity`` pinned to an explicit significance threshold (#150).
+
+    At the stock threshold a target named by a *single* source fixture page
+    sits inside the harvest's decline band and reports nothing — that is the
+    feature. Tests about *resolution* whose fixture is shaped that way pin
+    ``min_refs=1`` so they keep testing resolution; a fixture no source page
+    names needs no pin, because the zero case is reported at every threshold.
+    The threshold itself is covered in ``tests/test_lint_min_refs.py``.
+    """
+    rule = LinkIntegrity()
+    rule.options = LintOptions(min_refs=min_refs)
+    return rule
+
+
 def test_links_resolve():
     pages = {
         "entities/Foo.md": _mk_page({"title": "Foo"}, "See [[Bar]]"),
@@ -308,6 +324,8 @@ def test_links_resolve():
 
 
 def test_broken_link():
+    # No source page names [[Nowhere]], so the harvest never saw it and the
+    # threshold never excuses it — reported at the stock value (#150).
     pages = {
         "entities/Foo.md": _mk_page({"title": "Foo"}, "See [[Nowhere]]"),
     }
@@ -340,7 +358,7 @@ def test_link_no_substring_alias():
         "projects/code-kbbuilder.md": _mk_page({"title": "code-kbbuilder"}, ""),
         "sources/a.md": _mk_page({"title": "A"}, "See [[kbbuilder]]"),
     }
-    issues = LinkIntegrity().run(pages)
+    issues = _link_rule().run(pages)
     assert len(issues) == 1
     assert "kbbuilder" in issues[0]["message"]
 
@@ -371,7 +389,7 @@ def test_link_integrity_still_flags_unlisted_alias_name() -> None:
         ),
         "sources/a.md": _mk_page({"title": "A"}, "See [[TailnetTypo]]"),
     }
-    issues = LinkIntegrity().run(pages)
+    issues = _link_rule().run(pages)
     assert len(issues) == 1
     assert "TailnetTypo" in issues[0]["message"]
 
@@ -908,7 +926,7 @@ def test_discarded_candidate_stops_resolving_wikilinks(tmp_path: Path):
         '---\ntitle: "Bogus"\ntype: entity\n---\n\n# Bogus\n', encoding="utf-8"
     )
 
-    issues = LinkIntegrity().run(load_pages(tmp_path))
+    issues = _link_rule().run(load_pages(tmp_path))
 
     assert [i["message"] for i in issues] == ["broken wikilink [[Bogus]]"]
 

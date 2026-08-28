@@ -12,7 +12,6 @@ read from source topic bullets via :mod:`llmwiki.source_topics` — a pass over
 from __future__ import annotations
 
 import sys
-from collections import defaultdict
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -21,12 +20,14 @@ from pathlib import Path
 from llmwiki.lint.rules.link_integrity import _norm_slug
 from llmwiki.reindex import reindex_wiki
 from llmwiki.source_topics import TopicRecord, parse_source_topics
-from llmwiki.wikilinks import wikilink_targets
+from llmwiki.vault_settings import DEFAULT_MIN_REFS
+from llmwiki.wikilinks import count_source_refs
 
-#: Default significance threshold. Matches the Lint Workflow's definition of a
-#: missing entity page ("mentioned in 3+ source pages") so the producer and the
-#: checker that reports on it cannot disagree.
-DEFAULT_MIN_REFS = 3
+# ``DEFAULT_MIN_REFS`` is re-exported from :mod:`llmwiki.vault_settings` so
+# existing importers (``cli.py``, ``pipeline.py``) keep reading it here while
+# :mod:`llmwiki.lint` reads the same definition from vault_settings — a lint
+# import of this module would be a cycle, since ``_norm_slug`` above comes out
+# of the lint package (#150).
 
 
 @dataclass(frozen=True)
@@ -87,23 +88,22 @@ def harvest_targets(
         if not p.is_relative_to(candidates_root)
     }
 
-    by_target: dict[str, set[str]] = defaultdict(set)
+    texts_by_rel: dict[str, str] = {}
     unreadable: list[tuple[str, str]] = []
     sources_dir = wiki_dir / "sources"
     for page in sorted(sources_dir.rglob("*.md")):
         rel = page.relative_to(wiki_dir).as_posix()
         try:
-            text = page.read_text(encoding="utf-8", errors="replace")
+            texts_by_rel[rel] = page.read_text(encoding="utf-8", errors="replace")
         except OSError as exc:
             unreadable.append((rel, exc.strerror or str(exc)))
-            continue
-        # Distinct targets per page: repeated mentions in one document are one
-        # signal.
-        for name in wikilink_targets(text):
-            by_target[name].add(rel)
 
     if unreadable:
         raise SourceReadError(unreadable)
+
+    # Counting is shared with ``link_integrity`` (#150); resolution is not, and
+    # deliberately so — see the note above on candidates/ and archive/.
+    by_target = count_source_refs(texts_by_rel)
 
     return [
         HarvestedTarget(name=name, sources=tuple(sorted(pages)))

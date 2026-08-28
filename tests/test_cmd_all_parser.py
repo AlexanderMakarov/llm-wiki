@@ -192,7 +192,7 @@ def test_cmd_all_runs_build_graph_lint_by_default():
         order.append("graph")
         return 0
 
-    def lint_stub(_wiki_dir):
+    def lint_stub(_wiki_dir, **_kwargs):
         order.append("lint")
         return 0, {}
 
@@ -236,7 +236,7 @@ def test_cmd_all_with_sync_and_synth_order():
         order.append("build")
         return 0
 
-    def lint_stub(_wiki_dir):
+    def lint_stub(_wiki_dir, **_kwargs):
         order.append("lint")
         return 0, {}
 

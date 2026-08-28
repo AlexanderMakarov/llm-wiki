@@ -15,7 +15,7 @@ Installation tutorial for [[llmwiki]], a local-first CLI tool for synthesizing A
 ## Key Claims
 
 - llmwiki runs entirely on the user's machine with no telemetry, accounts, or network calls required at build time
-- Installation requires Python 3.9+, git, and an existing AI-coding agent with session history stored locally
+- Installation requires Python 3.12+, git, and an existing AI-coding agent with session history stored locally
 - The setup process is accomplished via a single idempotent shell script that creates required directories, seeds initial wiki files, and installs the markdown package dependency
 - CLI functionality can be verified via `python3 -m llmwiki --version` and `python3 -m llmwiki adapters` (which lists configured agent adapters)
 - Optional installation paths via PyPI (`#246`) and Homebrew (`#247`) are under development; clone-and-run is currently authoritative
@@ -37,4 +37,4 @@ Installation tutorial for [[llmwiki]], a local-first CLI tool for synthesizing A
 
 ## Contradictions
 
-- **Python version requirement mismatch:** The frontmatter declares "Python 3.12+" as a requirement, but Step 1 explicitly states "expect 3.9 or newer" and the troubleshooting section confirms ≥3.9 as sufficient. The documented requirement (3.9+) is less strict than the stated minimum (3.12+).
+None identified. The tutorial's header, its verification step, and its troubleshooting section all state Python 3.12 as the minimum, matching what the project requires.

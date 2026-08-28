@@ -33,7 +33,7 @@ _Stop misleading users; then systematically decide what fork residue to revive v
 - [ ] **Pipeline efficiency and recovery**
   - [x] **Interrupted synth still harvests (#145):** Interrupting a sources pass drains in-flight work, then harvests candidates from pages already written (unless `--sources-only`); `build` refreshes Home `on_disk` when stored totals disagree with disk.
   - [x] **One model call per source (#147):** Each `synth` run prepares known-names once, then summarises each queued source once (kind, facts, and description on Connections); harvest and promote are offline parsers.
-  - [ ] **Per-vault lint rule scoping (#150):** Let the demo enforce warnings without inheriting rules that do not apply to it.
+  - [x] **Per-vault lint rule scoping (#150):** Let the demo enforce warnings without inheriting rules that do not apply to it.
 
 - [ ] **Migration inventory & keep/cut/revive log**
   - [ ] **Inventory what we inherited:** Catalog product surfaces left from the upstream fork and this fork's additions — CLI commands, adapters (core vs contrib), site/viewer features, docs claims, one-shot migrate-* tools, and anything half-removed or still advertised but broken — against the product definition's "cut useless / restore broken" goal.

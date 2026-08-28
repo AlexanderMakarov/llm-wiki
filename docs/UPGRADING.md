@@ -27,6 +27,14 @@ The canonical per-release detail is [CHANGELOG.md](https://github.com/Pratiyush/
 
 - **No vault migration.** The `/vs/` surface was never called from `build_site` and never wrote `site/vs/` for a normal vault build. Rebuild as usual.
 - **Optional cleanup.** If you hand-authored `wiki/vs/*.md` overrides from older docs, they are no longer read; delete or keep as personal notes. `/models/` is unchanged.
+## Unreleased — a vault can switch checks off, and MCP `wiki_lint` returns the CLI report (#150)
+
+- **BREAKING — MCP `wiki_lint` payload** now matches `llmwiki lint --json` (`summary`, `issues`, `total_pages`, `disabled_rules`, `ran`). Migration: filter `issues` by `rule` for orphan/broken-link counts.
+- **`<vault>/llmwiki.json`** — `lint.disabled_rules` (list or `{rule: reason}`) opts out of named checks; every report lists skipped rules.
+- **`llmwiki lint --min-refs N`** — same threshold as candidate harvest (default 3); `--min-refs 1` reports every unresolved link.
+- **`llmwiki all --min-refs N`** — threads the threshold to harvest and lint.
+- **`llmwiki lint --fail-on-warnings`** — exit 1 on warnings; disabled rules do not fail the gate.
+- **`wiki_lint`** optional `rules` and `min_refs` arguments.
 
 ## Unreleased — `all` runs every stage; automation setup is plain-language (#156)
 

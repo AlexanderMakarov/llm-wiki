@@ -23,7 +23,7 @@ deliberately boring: clone, run the setup script, done.
 ## Step 1 — Check your toolchain
 
 ```bash
-python3 --version          # expect 3.9 or newer
+python3 --version          # expect 3.12 or newer
 git --version
 ```
 
@@ -115,7 +115,7 @@ machine — your first sync pulls from every one marked `configured ✓`.
 
 **`ModuleNotFoundError: No module named 'markdown'`** — `pip install markdown` and re-run.
 
-**`ImportError` on Python 3.8 or older** — llmwiki requires ≥ 3.9. Upgrade Python; on macOS use `brew install python@3.12`.
+**`ImportError` on Python 3.11 or older** — llmwiki requires ≥ 3.12. Upgrade Python; on macOS use `brew install python@3.12`.
 
 ---
 

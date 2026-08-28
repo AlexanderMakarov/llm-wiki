@@ -25,7 +25,8 @@ _FILLER_MARKUP_RE = re.compile(
 # Synonyms that mean "nothing to record" after `none`.
 _NONE_SYNONYMS = (
     r"identified|identifiable|detected|found|noted|apparent|known|observed|"
-    r"recorded|applicable|seen|introduced|flagged|raised|surfaced|spotted"
+    r"recorded|applicable|seen|introduced|flagged|raised|surfaced|spotted|"
+    r"evident"
 )
 
 # Exact short placeholder lines (after normalize).
@@ -77,8 +78,10 @@ _AFFIRMATIVE_CUE_RE = re.compile(
 
 # Negators that cancel an affirmative cue in the same clause (#86).
 # `\bno\b` does not match inside `None` (single word token).
+# Modals (`could`, `would`, `might`, `may`) mark the conflict as hypothetical
+# ("claims that could conflict with prior entries"), not recorded (#150).
 _NEGATOR_RE = re.compile(
-    r"\b(?:no|not|never|nor|without|\w+n't)\b",
+    r"\b(?:no|not|never|nor|without|could|would|might|may|\w+n't)\b",
     re.IGNORECASE,
 )
 

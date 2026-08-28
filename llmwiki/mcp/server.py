@@ -12,7 +12,8 @@ v0.2 tool surface (6 production tools):
   wiki by name and body text, narrowable to one page kind
 - `wiki_list_sources(project?)` — list raw source files, optionally filtered
 - `wiki_read_page(path)` — return the full content of a single wiki page
-- `wiki_lint()` — run the lint workflow and return the report
+- `wiki_lint(rules?, min_refs?)` — run every registered quality check
+  and return the same JSON report `llmwiki lint --json` prints
 - `wiki_sync(dry_run?)` — trigger a converter sync
 
 Protocol: Model Context Protocol, stdio transport, JSON-RPC 2.0.
@@ -43,8 +44,16 @@ from llmwiki._system_pages import is_archived_path
 from llmwiki.add_doc import add_sources
 from llmwiki.categories import scan_tags
 from llmwiki.config_schedule import resolve_content_root
-from llmwiki.lint import load_pages
+from llmwiki.lint import LintOptions, UnknownRuleError, load_pages, run_lint
+from llmwiki.lint.report import render_json as render_lint_json
 from llmwiki.schema import PAGE_KINDS
+from llmwiki.vault_settings import (
+    DEFAULT_MIN_REFS,
+    VaultSettingsError,
+    disabled_lint_rules,
+    load_vault_settings,
+    vault_settings_path,
+)
 
 CONTENT_ROOT = resolve_content_root()
 # Back-compat test seam: many MCP tests monkeypatch llmwiki.mcp.server.REPO_ROOT.
@@ -335,13 +344,39 @@ TOOLS = [
     {
         "name": "wiki_lint",
         "description": (
-            "Run the lint workflow over the wiki: find orphan pages, broken "
-            "wikilinks, contradictions, and stale summaries. Returns a JSON "
-            "report."
+            "Run every registered quality check over the wiki and return the "
+            "same JSON report `llmwiki lint --json` prints: {summary, issues, "
+            "total_pages, disabled_rules, ran}. The checks cover link "
+            "integrity, orphan pages, contradictions, staleness, frontmatter "
+            "and catalog health. Rules the vault switches off in its "
+            "llmwiki.json are skipped and named in `disabled_rules`, and "
+            "`ran` names the checks that actually produced the report — so a "
+            "report narrowed by `rules`, or by the vault, can never be "
+            "mistaken for a full one."
         ),
         "inputSchema": {
             "type": "object",
-            "properties": {},
+            "properties": {
+                "rules": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": (
+                        "Run only these checks by name (a comma-separated "
+                        "string is also accepted). Default: all of them. An "
+                        "unrecognised name is an error, not a silent skip."
+                    ),
+                },
+                "min_refs": {
+                    "type": "integer",
+                    "description": (
+                        "How many distinct source pages must name a wikilink "
+                        "target before an unresolved link to it counts as "
+                        f"broken. Default: {DEFAULT_MIN_REFS}, the same "
+                        "threshold the candidate harvest uses. Lowering it "
+                        "reports more broken links."
+                    ),
+                },
+            },
         },
     },
     {
@@ -986,62 +1021,68 @@ def tool_wiki_read_page(args: dict[str, Any]) -> dict[str, Any]:
     return _ok(content)
 
 
-def tool_wiki_lint(args: dict[str, Any]) -> dict[str, Any]:
-    """Run a basic lint pass over wiki/ and return a JSON report.
+def _lint_rule_selection(args: dict[str, Any]) -> list[str] | None:
+    """Normalise the ``rules`` argument to the list ``run_lint`` expects.
 
-    This is the programmatic equivalent of the /wiki-lint slash command — but
-    without any LLM synthesis. It just walks the files and reports structural
-    issues.
+    Accepts the CLI's comma-separated string as well as a JSON array, so a
+    client can pass ``"link_integrity,orphan_pages"`` or
+    ``["link_integrity", "orphan_pages"]`` and get the same run.
     """
-    wiki = REPO_ROOT / "wiki"
-    if not wiki.exists():
+    raw = args.get("rules")
+    if raw is None:
+        return None
+    names = raw.split(",") if isinstance(raw, str) else list(raw)
+    selected = [str(name).strip() for name in names if str(name).strip()]
+    return selected or None
+
+
+def tool_wiki_lint(args: dict[str, Any]) -> dict[str, Any]:
+    """Run the registered lint rules over the vault's wiki/ (#150).
+
+    Parity, not resemblance: this is `load_pages` + `run_lint` + `render_json`
+    — byte-for-byte the payload `llmwiki lint --json` prints for the same
+    vault, including the rules the vault switched off in `llmwiki.json`. An
+    agent and a person must not be working from two accounts of one wiki.
+    """
+    root = REPO_ROOT
+    wiki = root / "wiki"
+    if not wiki.is_dir():
         return _err("wiki/ does not exist")
 
-    # 1. Collect all pages and their slugs. Cold storage is excluded (#140)
-    # exactly as `llmwiki lint` excludes it, so both report a [[wikilink]]
-    # to a discarded slug as broken instead of disagreeing about the vault.
-    pages: dict[str, Path] = {}
-    for p in wiki.rglob("*.md"):
-        if is_archived_path(p.relative_to(wiki).parts):
-            continue
-        slug = p.stem
-        pages[slug] = p
+    # Read the opt-out declaration before anything can print a result: a
+    # settings file nobody can parse might be switching every check off, so
+    # reporting the vault as clean would be a guess dressed up as a result.
+    try:
+        disabled = disabled_lint_rules(load_vault_settings(root))
+    except VaultSettingsError as exc:
+        return _err(f"error: {exc}")
 
-    # 2. Collect all wikilinks
-    wikilink_re = re.compile(r"\[\[([^\]|]+)(?:\|[^\]]*)?\]\]")
-    out_links: dict[str, set[str]] = {}
-    all_links: set[str] = set()
-    for slug, path in pages.items():
-        try:
-            text = path.read_text(encoding="utf-8")
-        except OSError:
-            continue
-        links = set(wikilink_re.findall(text))
-        out_links[slug] = links
-        all_links.update(links)
+    try:
+        min_refs = int(args.get("min_refs", DEFAULT_MIN_REFS))
+    except (TypeError, ValueError):
+        return _err(f"error: min_refs must be an integer, got {args.get('min_refs')!r}")
+    # Same range the CLI flag enforces: below 1 the suppression gate
+    # (`0 < n_refs < min_refs`) silently behaves like 1, so accepting it
+    # would answer a threshold the caller did not ask for.
+    if min_refs < 1:
+        return _err(f"error: min_refs must be at least 1, got {min_refs}")
 
-    # 3. Compute in-degree
-    in_deg: dict[str, int] = {slug: 0 for slug in pages}
-    for _slug, links in out_links.items():
-        for target in links:
-            if target in in_deg:
-                in_deg[target] += 1
+    pages = load_pages(wiki)
+    try:
+        outcome = run_lint(
+            pages,
+            selected=_lint_rule_selection(args),
+            disabled=disabled,
+            options=LintOptions(min_refs=min_refs),
+        )
+    except UnknownRuleError as exc:
+        # Name the file when the bad name came from it — the reader is
+        # editing a declaration, not passing `rules`.
+        origin = (f"{vault_settings_path(root)}: "
+                  if any(name in disabled for name in exc.unknown) else "")
+        return _err(f"error: {origin}{exc}")
 
-    orphans = [slug for slug, d in in_deg.items() if d == 0 and slug not in ("index", "overview", "log")]
-    broken_links: list[dict[str, str]] = []
-    for slug, links in out_links.items():
-        for target in links:
-            if target not in pages:
-                broken_links.append({"page": slug, "broken_link": target})
-
-    report = {
-        "total_pages": len(pages),
-        "orphans": orphans[:50],
-        "orphan_count": len(orphans),
-        "broken_links": broken_links[:50],
-        "broken_link_count": len(broken_links),
-    }
-    return _ok(json.dumps(report, indent=2))
+    return _ok(json.dumps(render_lint_json(outcome, len(pages)), indent=2))
 
 
 def tool_wiki_sync(args: dict[str, Any]) -> dict[str, Any]:

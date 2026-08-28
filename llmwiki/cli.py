@@ -109,8 +109,10 @@ from llmwiki.cron_spec import CronError, describe, parse_cron
 from llmwiki.graph import build_and_report
 from llmwiki.graphify_bridge import build_graphify_graph, is_available, query_graph
 from llmwiki.lint import REGISTRY as _LINT_REG
-from llmwiki.lint import UnknownRuleError, load_pages, run_all, summarize
+from llmwiki.lint import LintOptions, UnknownRuleError, load_pages, run_all, run_lint, summarize
 from llmwiki.lint import rules as _lint_rules  # noqa: F401 — force registration
+from llmwiki.lint.report import render_json as _render_lint_json
+from llmwiki.lint.report import render_text as _render_lint_text
 from llmwiki.pipeline import run_pipeline as _run_pipeline
 from llmwiki.pipeline_lock import pipeline_lock
 from llmwiki.queue_ops import enqueue_task, queue_status, run_queue
@@ -151,6 +153,13 @@ from llmwiki.synth.reporting import (
 from llmwiki.trace import TraceError, TraceResult, trace_page
 from llmwiki.usage import UNATTRIBUTED
 from llmwiki.vault import describe_vault, resolve_vault
+from llmwiki.vault_settings import (
+    VAULT_SETTINGS_FILENAME,
+    VaultSettingsError,
+    disabled_lint_rules,
+    load_vault_settings,
+    vault_settings_path,
+)
 from llmwiki.watch import watch as watch_loop
 
 #: Subcommands that write a vault's own content — ``raw/``, ``wiki/`` or
@@ -710,10 +719,20 @@ def cmd_lint(args: argparse.Namespace) -> int:
     """Run every registered lint rule against the wiki and print a report."""
 
     # --wiki-dir is the narrower flag and wins; otherwise lint the vault's
-    # wiki, not the clone's seed demo content.
-    wiki_dir = args.wiki_dir or (_content_root(args) / "wiki")
+    # wiki, not the clone's seed demo content. The vault's settings file
+    # sits beside wiki/, so it follows whichever root won.
+    settings_root = args.wiki_dir.parent if args.wiki_dir else _content_root(args)
+    wiki_dir = args.wiki_dir or (settings_root / "wiki")
     if not wiki_dir.is_dir():
         print(f"error: wiki directory not found: {wiki_dir}", file=sys.stderr)
+        return 2
+
+    # Read the opt-out declaration before anything can print a result: a
+    # settings file that cannot be parsed must never yield a clean report.
+    try:
+        disabled = disabled_lint_rules(load_vault_settings(settings_root))
+    except VaultSettingsError as exc:
+        print(f"error: {exc}", file=sys.stderr)
         return 2
 
     pages = load_pages(wiki_dir)
@@ -722,41 +741,24 @@ def cmd_lint(args: argparse.Namespace) -> int:
         return 0
 
     selected = [r.strip() for r in args.rules.split(",") if r.strip()] if args.rules else None
+    options = LintOptions(min_refs=getattr(args, "min_refs", DEFAULT_MIN_REFS))
     try:
-        issues = run_all(pages, selected=selected)
+        outcome = run_lint(pages, selected=selected, disabled=disabled, options=options)
     except UnknownRuleError as exc:
-        print(f"error: {exc}", file=sys.stderr)
+        # Name the file when the bad name came from it — the reader is
+        # editing a declaration, not typing --rules.
+        origin = (f"{vault_settings_path(settings_root)}: "
+                  if any(name in disabled for name in exc.unknown) else "")
+        print(f"error: {origin}{exc}", file=sys.stderr)
         return 2
 
-    summary = summarize(issues)
-
     if args.json:
-        print(_json.dumps({
-            "summary": summary,
-            "issues": issues,
-            "total_pages": len(pages),
-        }, indent=2))
+        print(_json.dumps(_render_lint_json(outcome, len(pages)), indent=2))
     else:
-        print(f"  scanned {len(pages)} pages")
-        print(f"  {sum(summary.values())} issues: "
-              f"{summary.get('error', 0)} errors, "
-              f"{summary.get('warning', 0)} warnings, "
-              f"{summary.get('info', 0)} info")
-        print()
-        if issues:
-            by_rule: dict[str, list[dict[str, str]]] = {}
-            for i in issues:
-                by_rule.setdefault(i["rule"], []).append(i)
-            for rule, rule_issues in sorted(by_rule.items()):
-                print(f"## {rule} ({len(rule_issues)})")
-                for i in rule_issues[:20]:
-                    print(f"  [{i['severity']}] {i['page']}: {i['message']}")
-                if len(rule_issues) > 20:
-                    print(f"  ... and {len(rule_issues) - 20} more")
-                print()
+        print(_render_lint_text(
+            outcome, len(pages), settings_filename=VAULT_SETTINGS_FILENAME
+        ))
 
-    if args.fail_on_errors and summary.get("error", 0) > 0:
-        return 1
     _apply_default_vault(args)
 
     now = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -764,6 +766,14 @@ def cmd_lint(args: argparse.Namespace) -> int:
         lambda s: (s.setdefault("ops", {}).__setitem__("last_lint_run_at", now) or s),
         resolve_state_file(),
     )
+
+    # Exit code last: returning early on a failing gate is what stopped a
+    # failing lint from ever recording that it ran (#150).
+    summary = summarize(outcome.issues)
+    if args.fail_on_errors and summary.get("error", 0) > 0:
+        return 1
+    if getattr(args, "fail_on_warnings", False) and summary.get("warning", 0) > 0:
+        return 1
     return 0
 
 
@@ -2314,6 +2324,27 @@ def _refresh_review_counts(wiki_dir: Path) -> None:
     update_state(_mut, state_file)
 
 
+def _min_refs(value: str) -> int:
+    """Parse ``--min-refs``: a threshold below 1 is not a weaker threshold.
+
+    The suppression gate is ``0 < n_refs < min_refs``, so ``0`` and negatives
+    behave exactly like ``1`` while the help text ("use 1 to report every
+    unresolved link") implies they would report less. The same value reaches
+    the candidate harvest on the ``all`` path, where "named by fewer than one
+    source page" is not a threshold at all. Shared by every parser that
+    accepts the flag so the three cannot drift.
+    """
+    try:
+        n = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(
+            f"--min-refs must be an integer, got {value!r}"
+        ) from None
+    if n < 1:
+        raise argparse.ArgumentTypeError("--min-refs must be at least 1")
+    return n
+
+
 def _add_vault_arg(parser: argparse.ArgumentParser, *, role: str) -> None:
     """#arch-m8 (#620): single source of truth for the ``--vault`` flag.
 
@@ -2517,8 +2548,24 @@ def build_parser() -> argparse.ArgumentParser:
     lint.add_argument("--rules", type=str, default=None,
                       help="Comma-separated rule names (default: all applicable)")
     lint.add_argument("--json", action="store_true", help="JSON output")
+    lint.add_argument(
+        "--min-refs", type=_min_refs, default=DEFAULT_MIN_REFS, metavar="N",
+        help=(
+            "How many distinct source pages must name a [[wikilink]] target "
+            "before an unresolved link to it is reported as broken. Matches "
+            "the candidate harvest's threshold, so a target the harvest "
+            "deliberately declined is not a finding "
+            f"(default: {DEFAULT_MIN_REFS}; use 1 to report every "
+            "unresolved link)"
+        ),
+    )
     lint.add_argument("--fail-on-errors", action="store_true",
                       help="Exit non-zero if any error-severity issues found")
+    lint.add_argument("--fail-on-warnings", action="store_true",
+                      help="Exit non-zero if any warning-severity issues found. "
+                           "Stricter than --fail-on-errors; combine the two to "
+                           "gate on both. Rules a vault switched off in "
+                           "llmwiki.json cannot stop the gate — they never ran")
     _add_vault_arg(lint, role="synthesize")
     lint.set_defaults(func=cmd_lint)
 
@@ -2747,7 +2794,7 @@ def build_parser() -> argparse.ArgumentParser:
             ),
         )
         parser.add_argument(
-            "--min-refs", type=int, default=DEFAULT_MIN_REFS, metavar="N",
+            "--min-refs", type=_min_refs, default=DEFAULT_MIN_REFS, metavar="N",
             help=(
                 "Candidate threshold: a wikilink target becomes a candidate when "
                 f"N or more distinct source pages name it (default: {DEFAULT_MIN_REFS})"
@@ -2938,6 +2985,15 @@ def build_parser() -> argparse.ArgumentParser:
     all_p.add_argument(
         "--synth-force", action="store_true",
         help="Pass --force to synth (re-synthesize every session)",
+    )
+    all_p.add_argument(
+        "--min-refs", type=_min_refs, default=DEFAULT_MIN_REFS, metavar="N",
+        help=(
+            "Candidate threshold passed through to the synth and lint stages: "
+            "a wikilink target becomes a candidate — and an unresolved link to "
+            "it becomes a finding — when N or more distinct source pages name "
+            f"it (default: {DEFAULT_MIN_REFS})"
+        ),
     )
     # Accepted so an already-installed scheduled command keeps parsing. They
     # land on their own dests, inert: both stages already run by default, and

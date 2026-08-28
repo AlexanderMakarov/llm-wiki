@@ -27,7 +27,8 @@ from llmwiki.candidates import MIRRORED_SUBDIRS, discard
 from llmwiki.candidates_harvest import harvest_targets
 from llmwiki.graph import scan_pages
 from llmwiki.graphify_bridge import _extract_wiki_nodes
-from llmwiki.lint import load_pages, run_all
+from llmwiki.lint import load_pages, run_all, run_lint
+from llmwiki.lint.report import render_json
 from llmwiki.mcp.server import tool_wiki_lint, tool_wiki_query, tool_wiki_search
 from llmwiki.reindex import reindex_wiki, seed_index_text
 
@@ -272,12 +273,24 @@ def test_mcp_query_does_not_quote_archived_pages(tmp_path: Path) -> None:
 def test_mcp_lint_agrees_with_llmwiki_lint_about_discarded_slugs(
     tmp_path: Path,
 ) -> None:
-    """A `[[wikilink]]` to a discarded page is broken in both, or neither."""
+    """A `[[wikilink]]` to a discarded page is broken in both, or neither.
+
+    Since #150 the MCP tool *is* `run_lint`, so agreement is structural rather
+    than two implementations happening to match — the assertion is that the
+    tool returns the runner's own payload, plus the discard-specific finding
+    that made this test worth writing.
+    """
     wiki = _seed_vault(tmp_path)
     _cold_and_live(wiki)
 
     with patch("llmwiki.mcp.server.REPO_ROOT", tmp_path):
         report = json.loads(tool_wiki_lint({})["content"][0]["text"])
 
-    assert {"page": "Alpha", "broken_link": "Tailnet"} in report["broken_links"]
-    assert "Tailnet" not in report["orphans"]
+    pages = load_pages(wiki)
+    assert report == render_json(run_lint(pages), len(pages))
+    assert {
+        "rule": "link_integrity",
+        "severity": "warning",
+        "page": "entities/Alpha.md",
+        "message": "broken wikilink [[Tailnet]]",
+    } in report["issues"]
