@@ -30,6 +30,7 @@ from urllib.parse import urljoin, urlparse
 from llmwiki import __version__
 from llmwiki._frontmatter import parse_frontmatter
 from llmwiki.claude_path import resolve_claude_path as _resolve_claude_path
+from llmwiki.convert import _resolve_convert_config, _substitute_path_username
 from llmwiki.htmlmd import html_to_markdown
 from llmwiki.install_hint import install_hint, python_module_command
 from llmwiki.slugs import derive_title, first_heading, slugify
@@ -449,13 +450,28 @@ class ConvertedDoc:
     """One source converted to markdown, before slug/title finalization."""
     title: str                       # provisional (filename/URL); finalized by the writer
     markdown: str
-    source_label: str                # original URL or absolute path, for frontmatter
+    source_label: str                # original URL or redacted local path (cwd-relative when under cwd)
     html_title: str | None = None  # <title> when the source was an HTML page
     url: str | None = None
     path_name: str | None = None   # filename/dirname for title fallback
     no_content: bool = False       # fetched 200 but yielded no article body
     warnings: list[str] = field(default_factory=list)
     extractor: str | None = None   # "trafilatura" | "stdlib" for HTML sources
+
+
+def _source_path_label(path: Path) -> str:
+    """Frontmatter ``source:`` for a local file — cwd-relative when possible,
+    username-redacted like ``sync`` (#141)."""
+    try:
+        label = path.relative_to(Path.cwd().resolve()).as_posix()
+    except ValueError:
+        label = path.as_posix()
+    red = _resolve_convert_config(None).get("redaction", {})
+    return _substitute_path_username(
+        label,
+        from_user=red.get("real_username", ""),
+        to_user=red.get("replacement_username", "USER"),
+    )
 
 
 def assert_readable_path(value: str) -> Path:
@@ -512,7 +528,7 @@ def _walk_folder(dir_path: Path, depth: int = 0) -> str:
 def convert_path(value: str, note: str | None = None) -> ConvertedDoc:
     """Convert a local file or folder to one markdown document."""
     real = assert_readable_path(value)
-    label = str(real)
+    label = _source_path_label(real)
     if real.is_dir():
         title = real.name
         body = _walk_folder(real)

@@ -37,6 +37,7 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Fixed
 
+- **`llmwiki add` redacts usernames in `source:` frontmatter (#141)** — local file paths now use the same username substitution as `sync` (`_substitute_path_username` via `sessions_config.json` / `config.json`), and prefer a cwd-relative path when the source lives under the current working directory.
 - **`candidates apply` refuses conflicting merge+peer batches (#149)** — when a batch merges into a slug that another row in the same batch promotes, flip-promotes, discards, or merges away, the whole batch is rejected before any mutation; the CLI names both actions and exits non-zero.
 - **`candidates merge` aliases now resolve across the wiki (#139)** — merge already recorded merged-away names under `## Aliases` on the survivor page, but graph, lint, backlinks, and references keyed links by filename stem only, so every inbound `[[merged-away]]` stayed broken. Those consumers now resolve aliases declared on the target page. Merge also refreshes stale harvest boilerplate (`Named by N source page(s)…`) when evidence is unioned into a pending stub.
   - *Release note:* Merged candidate aliases resolve in graph, lint, backlinks, and references (#139).
