@@ -39,6 +39,7 @@ from tests.awos_context_gate import (
     is_context_path,
     print_failure,
 )
+from tests.changelog_notes import shipping_section_text
 
 _WORKFLOW = REPO_ROOT / ".github" / "workflows" / "pr-lint.yml"
 _CONTRIBUTING = REPO_ROOT / "CONTRIBUTING.md"
@@ -392,18 +393,12 @@ class TestDocumentationCompleteness:
         assert "AWOS context updated" in text
 
 
-# ─── FR7: CHANGELOG.md Unreleased entry ───────────────────────────────────────
-
 class TestChangelogEntry:
     """FR7: CHANGELOG.md records this as an unreleased contributor-facing change."""
 
     @staticmethod
     def _unreleased_text() -> str:
-        text = _CHANGELOG.read_text(encoding="utf-8")
-        start = text.index("## [Unreleased]")
-        rest = text[start + len("## [Unreleased]"):]
-        next_section = rest.find("\n## [")
-        return rest[:next_section].strip() if next_section > 0 else rest.strip()
+        return shipping_section_text(_CHANGELOG.read_text(encoding="utf-8"))
 
     def test_changelog_has_unreleased_section(self) -> None:
         text = _CHANGELOG.read_text(encoding="utf-8")

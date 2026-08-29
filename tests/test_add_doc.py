@@ -125,7 +125,35 @@ def test_default_cap_is_7000():
 
 # ── file/folder conversion + path safety ─────────────────────────────
 
-from llmwiki.add_doc import ConvertedDoc, assert_readable_path, convert_path
+from llmwiki.add_doc import (
+    ConvertedDoc,
+    _source_path_label,
+    assert_readable_path,
+    convert_path,
+)
+
+
+def test_source_path_label_redacts_username_and_prefers_relative(
+    tmp_path, monkeypatch,
+):
+    """#141: frontmatter source: must not leak the operator home directory."""
+    monkeypatch.setattr(
+        "llmwiki.add_doc._resolve_convert_config",
+        lambda _cfg: {
+            "redaction": {
+                "real_username": "alice",
+                "replacement_username": "USER",
+            },
+        },
+    )
+    assert _source_path_label(Path("/home/alice/code/doc.md")) == (
+        "/home/USER/code/doc.md"
+    )
+    nested = tmp_path / "docs" / "file.md"
+    nested.parent.mkdir(parents=True)
+    nested.touch()
+    monkeypatch.chdir(tmp_path)
+    assert _source_path_label(nested.resolve()) == "docs/file.md"
 
 
 def test_reject_dotdot_segments(tmp_path):

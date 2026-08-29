@@ -53,6 +53,11 @@ class BaseAdapter:
     #: See #326.
     is_ai_session: bool = True
 
+    #: False when the adapter registers for discovery but cannot convert
+    #: sessions yet (e.g. Cursor IDE — #2). Bare ``sync`` / ``watch`` skip
+    #: adapters with ``ingest_ready=False``; ``--adapter`` still loads them.
+    ingest_ready: bool = True
+
     #: #arch-m9 (#621): canonical declaration on BaseAdapter so subclasses
     #: don't redeclare with format drift (`["v1"]` vs `["v1.0"]` vs
     #: `["1.x"]`). Default is ``["v1"]`` — the schema version the

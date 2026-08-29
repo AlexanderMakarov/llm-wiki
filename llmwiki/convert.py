@@ -22,7 +22,8 @@ from pathlib import Path
 from typing import Any
 
 from llmwiki import REPO_ROOT
-from llmwiki.adapters import REGISTRY, discover_adapters, discover_contrib, resolve_adapter_name
+from llmwiki.adapters import REGISTRY, discover_adapters, discover_contrib  # noqa: F401 — test/back-compat surface
+from llmwiki.adapters.settings import select_sync_adapters
 from llmwiki.quarantine import add_entry as _quarantine_add
 from llmwiki.quarantine import clear_entry as _quarantine_clear
 from llmwiki.state_store import mtime_from_state, mtime_to_iso
@@ -1695,44 +1696,21 @@ def convert_all(
             print(f"error: --since must be YYYY-MM-DD, got {since!r}", file=sys.stderr)
             return 2
 
-    discover_adapters()
-    selected: list[type] = []
-    if adapters:
-        # Contrib adapters (cursor_cli, openclaw, gemini_cli, …) register
-        # lazily, so an explicit ``--adapter <contrib>`` must import them
-        # before we resolve names — otherwise the lookup fails with
-        # "unknown adapter" even though the adapter ships. Default-fire (the
-        # ``else`` branch) intentionally stays core-only to keep contrib
-        # adapters opt-in.
-        discover_contrib()
-        for name in adapters:
-            canonical = resolve_adapter_name(name)
-            if canonical is None:
-                print(f"error: unknown adapter {name!r}. Try: {', '.join(REGISTRY)}", file=sys.stderr)
-                return 2
-            selected.append(REGISTRY[canonical])
-    else:
-        # #326: default-fire only AI-session adapters. Non-AI adapters
-        # (obsidian, jira, meeting, pdf) must be explicitly enabled via
-        # ``sessions_config.json`` with ``{<name>: {enabled: true}}`` —
-        # otherwise ``llmwiki sync`` never walks a user's personal
-        # Obsidian vault or ingests their Jira tickets silently.
-        for cls in REGISTRY.values():
-            if not cls.is_available():
-                continue
-            adapter_cfg = config.get(cls.name, {}) if isinstance(config, dict) else {}
-            explicit_enabled = (
-                isinstance(adapter_cfg, dict)
-                and adapter_cfg.get("enabled") is True
-            )
-            if getattr(cls, "is_ai_session", True) or explicit_enabled:
-                selected.append(cls)
+    try:
+        selected = select_sync_adapters(config, adapters or None)
+    except ValueError as e:
+        print(f"error: {e}. Try: {', '.join(REGISTRY)}", file=sys.stderr)
+        return 2
 
     if not selected:
         if no_adapters_ok:
             print("  no session-store adapter installed — nothing to convert")
             return 0
-        print("No adapters available. Install Claude Code or Codex CLI first.", file=sys.stderr)
+        print(
+            "No session stores available for sync. "
+            "Run `llmwiki adapters` or `llmwiki configure-sources`.",
+            file=sys.stderr,
+        )
         return 1
 
     converted = unchanged = live = filtered = ignored_count = errors = 0

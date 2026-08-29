@@ -1,22 +1,22 @@
 # Multi-Agent Setup
 
-llmwiki reads sessions from multiple coding agents. A bare `llmwiki sync` runs **core** adapters only (`claude_code`, `codex_cli`) when their stores exist. **Contrib** adapters (Cursor Agent CLI, OpenClaw, Copilot, …) stay opt-in until [#182](https://github.com/AlexanderMakarov/llm-wiki/issues/182) — pass `--adapter <name>` or set `adapters.<name>.enabled: true` in config.
+llmwiki reads sessions from multiple coding agents. Every shipped source is configured under `adapters.<name>` in `config.json`. Bare `llmwiki sync` runs all enabled coding-agent sources when their store is present; notes intake (Obsidian, ChatGPT export) needs `enabled: true`. Run `llmwiki configure-sources` after install to probe stores and write settings, or use `--adapter <name>` for a one-off limit.
 
 ## Which agents are supported
 
 | Agent | Registry name | Session store | How to enable | Status |
 |---|---|---|---|---|
-| Claude Code | `claude_code` | `~/.claude/projects/` | Core — default `sync` | Production |
-| Codex CLI | `codex_cli` | `~/.codex/sessions/` (and `~/.codex/projects/`) | Core — default `sync` | Production |
-| Cursor Agent CLI | `cursor_cli` | `~/.cursor/chats/` | Contrib — `--adapter cursor_cli` | Production |
-| Cursor IDE | `cursor` | Cursor `workspaceStorage` | Contrib — `--adapter cursor` | Limited — IDE chat ingest is incomplete; see [#2](https://github.com/AlexanderMakarov/llm-wiki/issues/2) |
-| OpenClaw | `openclaw` | `~/.openclaw/agents/` | Contrib — `--adapter openclaw` | Production |
-| OpenCode | `opencode` | OpenCode / OpenClaw app-config sessions dirs | Contrib — `--adapter opencode` | Production |
-| GitHub Copilot Chat | `copilot_chat` | VS Code workspaceStorage | Contrib — `--adapter copilot_chat` | Production |
-| GitHub Copilot CLI | `copilot_cli` | `~/.copilot/session-state/` | Contrib — `--adapter copilot_cli` | Production |
-| Gemini CLI | `gemini_cli` | `~/.gemini/` (and related paths) | Contrib — `--adapter gemini_cli` | Scaffold — store detection only; no verified launch markers yet |
-| ChatGPT export | `chatgpt` | `conversations.json` export | Contrib — opt-in `enabled: true` + path | Production (export ingest) |
-| Obsidian | `obsidian` | Configurable vault paths | Contrib — opt-in `enabled: true` | Production — **notes intake**, not an agent chat source |
+| Claude Code | `claude_code` | `~/.claude/projects/` | Auto when store present (`adapters.claude_code`) | Production |
+| Codex CLI | `codex_cli` | `~/.codex/sessions/` (and `~/.codex/projects/`) | Auto when store present | Production |
+| Cursor Agent CLI | `cursor_cli` | `~/.cursor/chats/` | Auto when store present | Production |
+| Cursor IDE | `cursor` | `workspaceStorage` (OS-specific; see [cursor.md](adapters/cursor.md)) | **Not active on bare sync** — ingest incomplete ([#2](https://github.com/AlexanderMakarov/llm-wiki/issues/2)) | Scaffold |
+| OpenClaw | `openclaw` | `~/.openclaw/agents/` or `<vault>/.openclaw-sessions-inbox` | Auto when store present; set `adapters.openclaw.roots` for vault inbox | Production |
+| OpenCode | `opencode` | OpenCode / OpenClaw app-config sessions dirs | Auto when store present | Production |
+| GitHub Copilot Chat | `copilot_chat` | VS Code workspaceStorage | Auto when store present | Production |
+| GitHub Copilot CLI | `copilot_cli` | `~/.copilot/session-state/` | Auto when store present | Production |
+| Gemini CLI | `gemini_cli` | `~/.gemini/` (and related paths) | Auto when store present | Scaffold — store detection only |
+| ChatGPT export | `chatgpt` | `conversations.json` export | `enabled: true` + `export_dirs` (opt-in) | Production (export ingest) |
+| Obsidian | `obsidian` | Configurable vault paths | `enabled: true` + `vault_paths` (opt-in notes intake) | Production |
 
 Per-adapter detail: [Claude Code](adapters/claude-code.md) · [Codex CLI](adapters/codex-cli.md) · [Cursor Agent CLI](adapters/cursor-cli.md) · [Cursor IDE](adapters/cursor.md) · [OpenClaw](adapters/openclaw.md) · [OpenCode](adapters/opencode.md) · [Copilot](adapters/copilot.md) · [Gemini CLI](adapters/gemini-cli.md) · [ChatGPT](adapters/chatgpt.md) · [Obsidian](adapters/obsidian.md).
 
@@ -42,17 +42,19 @@ Legacy raw files with no `is_headless` marker stay eligible until you re-sync (r
 
 ## How default sync chooses adapters
 
-1. Imports **core** adapters (`claude_code`, `codex_cli`).
-2. Calls `is_available()` — whether the session store path exists.
-3. Runs each available core adapter. Contrib adapters load only when named with `--adapter` (or explicitly enabled in config where that applies).
+1. Loads every shipped adapter from the registry.
+2. For each adapter, checks whether its store path exists (`present`) and whether ingest is implemented (Cursor IDE is listed but **not active** until [#2](https://github.com/AlexanderMakarov/llm-wiki/issues/2)).
+3. Includes every **coding-agent** source that is present, ingest-ready, and not explicitly disabled (`enabled: false` in `adapters.<name>`). Notes/export intake (Obsidian, ChatGPT) requires `enabled: true`.
 
 ```bash
-# Core only (Claude + Codex when present)
+# All enabled coding-agent sources with stores on disk
 python3 -m llmwiki sync
 
-# Also pull Cursor Agent CLI + OpenClaw
-python3 -m llmwiki sync --adapter claude_code codex_cli cursor_cli openclaw
+# Limit to specific sources this run
+python3 -m llmwiki sync --adapter cursor_cli openclaw
 ```
+
+Run `llmwiki configure-sources` after install to probe paths (including `<vault>/.openclaw-sessions-inbox` when `vault.default_path` is set) and write `config.json`.
 
 ## Checking detected agents
 
@@ -73,50 +75,33 @@ Sessions under `~/.codex/sessions/` (date-bucketed) and optionally `~/.codex/pro
 
 ### Cursor Agent CLI
 
-```bash
-python3 -m llmwiki sync --adapter cursor_cli
-```
-
-See [Cursor Agent CLI adapter](adapters/cursor-cli.md).
+Runs on bare `sync` when `~/.cursor/chats/` exists. See [Cursor Agent CLI adapter](adapters/cursor-cli.md).
 
 ### Cursor IDE
 
-```bash
-python3 -m llmwiki sync --adapter cursor
-```
-
-Limited until [#2](https://github.com/AlexanderMakarov/llm-wiki/issues/2) lands full IDE ingest. See [Cursor IDE adapter](adapters/cursor.md).
+Listed for discovery only — **not active on bare sync** until [#2](https://github.com/AlexanderMakarov/llm-wiki/issues/2). Use `cursor_cli` for Agent CLI sessions. See [Cursor IDE adapter](adapters/cursor.md).
 
 ### OpenClaw
 
-```bash
-python3 -m llmwiki sync --adapter openclaw
-```
-
-Native store under `~/.openclaw/agents/`. All sessions are treated as not headless. See [OpenClaw adapter](adapters/openclaw.md).
+Runs on bare `sync` when configured roots exist. Default native store: `~/.openclaw/agents/`. Vault mirror: `<vault>/.openclaw-sessions-inbox/<agent>/*.jsonl`. See [OpenClaw adapter](adapters/openclaw.md).
 
 ### OpenCode
 
-```bash
-python3 -m llmwiki sync --adapter opencode
-```
+Runs on bare `sync` when its store paths exist.
 
 ### GitHub Copilot Chat / CLI
 
+Runs on bare `sync` when stores exist.
+
 ```bash
-python3 -m llmwiki sync --adapter copilot_chat
-python3 -m llmwiki sync --adapter copilot_cli
+python3 -m llmwiki sync --adapter copilot_chat   # optional one-run limit
 ```
 
 Copilot CLI: set `COPILOT_HOME` to override `~/.copilot`.
 
 ### Gemini CLI
 
-```bash
-python3 -m llmwiki sync --adapter gemini_cli
-```
-
-Scaffold — store paths are checked; automation markers are not detected yet.
+Runs on bare `sync` when `~/.gemini/` exists. Automation markers are not detected yet.
 
 ### ChatGPT / Obsidian
 
@@ -149,7 +134,7 @@ Override roots in `config.json`:
 
 ## Tips
 
-1. Use `--adapter` to test one contrib source at a time.
+1. Use `--adapter` to limit sync to one or more sources for a single run.
 2. Each agent gets its own project slug from its store layout — sessions do not collide across agents.
 3. The wiki layer is agent-agnostic once files are in `raw/`.
 4. Schedule with `llmwiki install-automation` (or cron / Task Scheduler) rather than a hand-rolled loop.

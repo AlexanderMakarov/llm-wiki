@@ -84,6 +84,7 @@ from llmwiki import pipeline as pipeline_mod
 from llmwiki.cli import build_parser, cmd_synthesize
 from llmwiki.synth import pipeline as synth_pipeline
 from llmwiki.synth.base import DummySynthesizer
+from tests.changelog_notes import shipping_section_text
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -758,13 +759,11 @@ def test_configuration_reference_documents_the_concurrency_key() -> None:
 
 
 def test_changelog_unreleased_section_describes_the_change() -> None:
-    """FR6.3: the Unreleased section of the changelog describes #118 —
+    """FR6.3: the shipping changelog section describes #118 —
     batch announcement and parallel synthesis, not just a bullet mentioning
     the issue number in passing."""
     text = (REPO_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
-    match = re.search(r"(?ms)^## \[Unreleased\]\n(.*?)(?=^## \[)", text)
-    assert match is not None, "no [Unreleased] section found in CHANGELOG.md"
-    unreleased = match.group(1)
+    unreleased = shipping_section_text(text)
     assert "#118" in unreleased
     entry = next(
         (ln for ln in unreleased.splitlines() if "#118" in ln), ""

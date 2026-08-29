@@ -12,11 +12,14 @@ from __future__ import annotations
 
 from llmwiki import watch
 from llmwiki.adapters import REGISTRY, discover_all
+from llmwiki.adapters.settings import select_sync_adapters
+from llmwiki.config_schedule import _load_sessions_config
 
 
-def _available_after(discover) -> set[str]:
-    discover()
-    return {name for name, cls in REGISTRY.items() if cls.is_available()}
+def _sync_visible(config: dict | None = None) -> set[str]:
+    discover_all()
+    cfg = config if config is not None else _load_sessions_config()
+    return {c.name for c in select_sync_adapters(cfg, None)}
 
 
 def test_watch_registers_contrib_adapters():
@@ -29,20 +32,20 @@ def test_watch_registers_contrib_adapters():
     )
 
 
-def test_watch_sees_every_adapter_sync_sees():
-    """No store is watchable by `sync` but invisible to `watch`."""
-    watch.scan_mtimes(None)
-    watch_visible = {name for name, cls in REGISTRY.items() if cls.is_available()}
 
-    sync_visible = _available_after(discover_all)
-
-    assert sync_visible <= watch_visible, (
-        f"stores visible to sync but not watch: {sorted(sync_visible - watch_visible)}"
-    )
+def test_watch_uses_same_adapter_selection_as_sync():
+    """``scan_mtimes`` must not narrow to core-only adapters (#182)."""
+    cfg = _load_sessions_config()
+    sync_names = _sync_visible(cfg)
+    watch.scan_mtimes(None, cfg)
+    for name in sync_names:
+        assert name in REGISTRY
+        mtimes = watch.scan_mtimes([name], cfg)
+        assert isinstance(mtimes, dict)
 
 
 def test_scan_mtimes_honours_explicit_contrib_adapter_name():
-    """`--adapter cursor_cli` resolves now that contrib is registered."""
+    """``--adapter cursor_cli`` resolves now that contrib is registered."""
     mtimes = watch.scan_mtimes(["cursor_cli"])
 
     assert isinstance(mtimes, dict)

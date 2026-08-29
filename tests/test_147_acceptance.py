@@ -110,6 +110,7 @@ from llmwiki.candidates_harvest import run_harvest
 from llmwiki.source_topics import parse_source_topics, source_page_needs_topics_rewrite
 from llmwiki.synth.base import DummySynthesizer
 from llmwiki.synth.pipeline import synthesize_new_sessions
+from tests.changelog_notes import shipping_section_text
 
 # Parent of merge commit 8301835 (#158) — last main before #147 landed.
 _PRE_147_BASELINE = "3298d351b296d84707502d8ba2f71f64391c98cd"
@@ -450,7 +451,7 @@ def test_fr10_changelog_unreleased_describes_offline_promote_and_retirement() ->
     """FR10-AC1: Unreleased notes promote-without-LLM and consolidate-topics gone."""
     # @regression
     text = (REPO_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
-    unreleased = text.split("## [Unreleased]", 1)[1].split("\n## [", 1)[0]
+    unreleased = shipping_section_text(text)
     lowered = unreleased.lower()
     assert "#147" in unreleased or "147" in unreleased
     assert "#145" in unreleased or "145" in unreleased

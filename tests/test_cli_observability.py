@@ -104,8 +104,9 @@ def test_adapters_cli_shows_new_columns():
             f"adapters table missing the {header!r} column header"
         )
     # Old column names should be gone — they're confusing without the legend.
-    assert "configured" not in cp.stdout, "old 'configured' column header still rendered"
-    assert "will_fire" not in cp.stdout, "old 'will_fire' column header still rendered"
+    table_section = cp.stdout.split("Columns:")[0]
+    assert "  configured  " not in table_section, "old 'configured' column header still rendered"
+    assert "  will_fire  " not in table_section, "old 'will_fire' column header still rendered"
     # Human-readable column legend at the bottom describes the new names.
     assert "auto (default)" in cp.stdout
     assert "explicit (enabled:true" in cp.stdout

@@ -41,6 +41,7 @@ from llmwiki.graph import (
     write_html,
 )
 from llmwiki.render.graph_viewer import GRAPH_VIEWER_JS
+from tests.changelog_notes import shipping_section_text
 
 # ─── Shared fixture ────────────────────────────────────────────────────
 
@@ -244,10 +245,7 @@ def test_changelog_unreleased_has_external_assets_entry():
     changelog = Path(__file__).resolve().parents[1] / "CHANGELOG.md"
     assert changelog.is_file(), "CHANGELOG.md not found"
     text = changelog.read_text(encoding="utf-8")
-    # Find the [Unreleased] block (everything up to the next versioned heading).
-    unreleased_match = re.search(r"## \[Unreleased\](.*?)(?=\n## \[)", text, re.DOTALL)
-    assert unreleased_match, "[Unreleased] section not found in CHANGELOG.md"
-    unreleased = unreleased_match.group(1)
+    unreleased = shipping_section_text(text)
     assert "#127" in unreleased, (
         "No #127 entry in [Unreleased] — FR6 requires a changelog entry"
     )

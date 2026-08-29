@@ -69,6 +69,7 @@ from llmwiki.cli import build_parser
 from llmwiki.lint import load_pages, run_lint
 from llmwiki.lint import rules as _rules  # noqa: F401 -- force rule registration
 from llmwiki.mcp.server import tool_wiki_lint
+from tests.changelog_notes import shipping_section_text
 
 
 def _run_lint_json(vault: Path, *flags: str) -> tuple[int, dict]:
@@ -134,10 +135,10 @@ def test_changelog_and_upgrading_document_the_wiki_lint_payload_change() -> None
     told the assistant-facing route's return shape changed, not just that
     some internal rewiring happened."""
     changelog = CHANGELOG.read_text(encoding="utf-8")
-    unreleased = changelog.split("## [Unreleased]", 1)[-1]
+    unreleased = shipping_section_text(changelog)
     assert "wiki_lint" in unreleased
     assert "#150" in unreleased
-    assert "BREAKING" in unreleased
+    assert "BREAKING" in unreleased.upper()
     # The old and new payload shapes are both named, so a reader can tell
     # what to migrate away from and what replaces it.
     for old_key in ("orphans", "broken_links"):

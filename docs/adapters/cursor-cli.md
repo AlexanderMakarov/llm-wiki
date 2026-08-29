@@ -1,6 +1,6 @@
 # Cursor Agent CLI adapter
 
-**Status:** Production (contrib)
+**Status:** Production
 **Module:** `llmwiki.adapters.contrib.cursor_cli`
 **Source:** [`llmwiki/adapters/contrib/cursor_cli.py`](../../llmwiki/adapters/contrib/cursor_cli.py)
 
@@ -20,13 +20,12 @@ Store meta ``agentId`` becomes frontmatter ``sessionId`` (and a short ``slug``) 
 
 ## Enable it
 
-**Contrib** — not on a bare `llmwiki sync`. Pass the adapter explicitly (until [#182](https://github.com/AlexanderMakarov/llm-wiki/issues/182)):
+Runs on bare `llmwiki sync` when `~/.cursor/chats/` exists. Override roots in `adapters.cursor_cli` or run `llmwiki configure-sources`.
 
 ```bash
-python3 -m llmwiki sync --adapter cursor_cli
+python3 -m llmwiki sync                    # includes cursor_cli when store present
+python3 -m llmwiki sync --adapter cursor_cli   # this source only
 ```
-
-Or set `adapters.cursor_cli.enabled: true` in config when that opt-in path is what you use.
 
 ## Automated (headless) sessions
 

@@ -2223,7 +2223,7 @@ def render_automation_panel(content_root: Path | None) -> str:
         f"<li>Runs: <strong>{schedule_label}</strong> local time</li>"
         f"{spend_line}"
         f"{lint_fail_line}"
-        f"<li>Watch: <strong>{watch}</strong></li>"
+        f"<li>Watch (near-real-time maintain, documented): <strong>{watch}</strong></li>"
         f"<li>Agent hooks: {html.escape(hooks_s)}</li>"
         f"<li>Synth backend: <code>{backend}</code></li>"
         f"<li>Last-run log: <code>{log_path}</code></li>"
