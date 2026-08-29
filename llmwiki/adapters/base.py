@@ -12,6 +12,7 @@ class returns.
 from __future__ import annotations
 
 import re as _re
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -27,6 +28,34 @@ def _safe_project_slug(raw: str) -> str:
     s = _PROJECT_SLUG_RE.sub("_", raw)
     s = s.lstrip(".")
     return s or "unnamed"
+
+
+def portable_session_key_fragment(path: Path) -> str:
+    """Home-relative posix path for sync state keys, else ``str(path)``.
+
+    Shared by ``SessionRef`` defaults and ``convert._portable_state_key`` so
+    file-backed adapters keep stable ``adapter::rel`` keys across machines.
+    """
+    try:
+        return Path(path).resolve().relative_to(Path.home()).as_posix()
+    except (ValueError, OSError):
+        return str(path)
+
+
+@dataclass(frozen=True)
+class SessionRef:
+    """First-class session handle for file-backed or non-file (e.g. DB row) stores.
+
+    ``key`` — portable identity fragment; sync state uses ``adapter::key``.
+    ``mtime`` — unix seconds (file ``st_mtime`` or max row timestamp).
+    ``locator`` — opaque string passed to ``load_records`` / ``derive_project_slug``
+    (real filesystem path, or a logical locator such as ``cursor-ide:composer:<id>``).
+    Never requires creating stub files on disk.
+    """
+
+    key: str
+    mtime: float
+    locator: str
 
 
 class BaseAdapter:
@@ -132,9 +161,32 @@ class BaseAdapter:
                 paths.extend(sorted(store.rglob("*.jsonl")))
         return paths
 
+    def discover_session_refs(self) -> list[SessionRef]:
+        """Preferred discovery entry for convert/watch (#2 SessionRef).
+
+        Default wraps ``discover_sessions()`` with file ``st_mtime`` and a
+        portable ``key`` fragment. Adapters whose sessions are DB rows (or
+        other non-file stores) override this and may leave ``discover_sessions``
+        unused by convert.
+        """
+        out: list[SessionRef] = []
+        for path in self.discover_sessions():
+            try:
+                mtime = path.stat().st_mtime
+            except OSError:
+                continue
+            out.append(
+                SessionRef(
+                    key=portable_session_key_fragment(path),
+                    mtime=mtime,
+                    locator=str(path),
+                )
+            )
+        return out
+
     # ─── per-agent helpers ─────────────────────────────────────────────
 
-    def derive_project_slug(self, jsonl_path: Path) -> str:
+    def derive_project_slug(self, jsonl_path: Path | str) -> str:
         """Derive a friendly project slug from a .jsonl file path.
 
         Default: the immediate parent directory name under the store.
@@ -146,6 +198,7 @@ class BaseAdapter:
         `foo/bar` could traverse out of `raw/` or smuggle a sub-path.
         Sanitise via the same regex rule the rest of the build uses.
         """
+        jsonl_path = Path(jsonl_path)
         stores = self.session_store_path
         if isinstance(stores, Path):
             stores = [stores]
@@ -162,7 +215,7 @@ class BaseAdapter:
             raw = jsonl_path.parent.name
         return _safe_project_slug(raw)
 
-    def is_subagent(self, jsonl_path: Path) -> bool:
+    def is_subagent(self, jsonl_path: Path | str) -> bool:
         """Default: no adapter has a sub-agent concept — only Claude Code does
         (#406). Subclasses that DO have sub-agents (currently only the
         Claude Code adapter) override this method.
@@ -186,15 +239,16 @@ class BaseAdapter:
         """
         return False
 
-    def load_records(self, path: Path) -> list[dict[str, Any]]:
-        """Load raw records from one discovered session path.
+    def load_records(self, path: Path | str) -> list[dict[str, Any]]:
+        """Load raw records from one discovered session path or locator.
 
         Default: parse the path as line-delimited JSON (``parse_jsonl``) — the
         format every built-in coding-agent store uses. Adapters whose store is
         NOT line-delimited JSON (e.g. an SQLite content-addressed blob store
-        like the Cursor CLI's ``store.db``) override this to return records in
-        the same raw shape ``parse_jsonl`` would, *before* ``normalize_records``
-        translates them into the shared Claude-style schema.
+        like the Cursor CLI's ``store.db``, or IDE DB-row locators) override
+        this to return records in the same raw shape ``parse_jsonl`` would,
+        *before* ``normalize_records`` translates them into the shared
+        Claude-style schema.
 
         Called by ``convert.convert_all`` instead of calling ``parse_jsonl``
         directly, so non-JSONL session stores plug in without the renderer or
@@ -205,7 +259,7 @@ class BaseAdapter:
         """
         from llmwiki.convert import parse_jsonl  # noqa: PLC0415 — cycle: adapters↔convert
 
-        return parse_jsonl(path)
+        return parse_jsonl(Path(path))
 
     def normalize_records(self, records: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Normalize agent-specific JSONL records into the shared Claude-style

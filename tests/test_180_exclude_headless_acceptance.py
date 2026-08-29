@@ -464,9 +464,10 @@ def test_support_map_marks_non_applicable_sources(support_map_text: str) -> None
 
 
 def test_support_map_marks_scaffold_sources(support_map_text: str) -> None:
-    """@spec: 175-exclude-headless-adapters — R4 Gemini CLI / Cursor IDE scaffold N/A."""
+    """@spec: 175-exclude-headless-adapters — R4 Gemini CLI scaffold N/A."""
     # @regression
     assert "Scaffold" in support_map_text
+    assert "Gemini CLI" in support_map_text
     assert "N/A until launch detection" in support_map_text or "never classified headless" in support_map_text
 
 

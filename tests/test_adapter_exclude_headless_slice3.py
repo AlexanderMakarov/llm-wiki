@@ -118,8 +118,9 @@ def test_gemini_cli_scaffold_not_headless() -> None:
     ) is False
 
 
-def test_cursor_ide_scaffold_not_headless() -> None:
-    """IDE gap is #2; Agent CLI headless lives on cursor_cli."""
+def test_cursor_ide_subagent_is_headless() -> None:
+    """IDE spawned agents: composerHeaders.isSubagent → headless (#2)."""
+    assert CursorAdapter().is_headless_session([{"isSubagent": True}]) is True
     assert CursorAdapter().is_headless_session(
         [
             {

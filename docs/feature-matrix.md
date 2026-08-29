@@ -36,7 +36,7 @@
 | B3 | **Obsidian vault adapter** (input mode) | ⭐⭐⭐⭐ | AgriciDaniel, louiswang524, kytmanov, remember-md | v0.1 |
 | B4 | Generic markdown (drop in `raw/`) | ⭐⭐⭐⭐ | All | v0.1 |
 | B5 | Cursor Agent CLI adapter | ⭐⭐⭐ | — | shipped (contrib `cursor_cli`) |
-| B5b | Cursor IDE adapter | ⭐⭐⭐ | bashiraziz | limited — see #2 |
+| B5b | Cursor IDE adapter | ⭐⭐⭐ | bashiraziz | shipped (contrib `cursor`) — #2 |
 | B6 | Gemini CLI adapter | ⭐⭐⭐ | SamurAIGPT (schema only) | scaffold (contrib) |
 | B7 | OpenCode/OpenClaw adapter | ⭐⭐⭐ | remember-md, sinzin91 | shipped (contrib) |
 | B8 | PDF ingestion | ⭐⭐⭐ | lucasastorian | v0.3 |

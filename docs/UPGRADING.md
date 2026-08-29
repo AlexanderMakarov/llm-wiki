@@ -42,7 +42,7 @@ The canonical per-release detail is [CHANGELOG.md](https://github.com/Pratiyush/
 - Bare **`llmwiki sync` loads every enabled ingest-ready adapter** whose store exists; `enabled: false` is honoured (#182).
 - **Obsidian and ChatGPT export stay opt-in** (`adapters.*.enabled: true`).
 - **`filters.exclude_headless` (default on)** skips automated launches for every coding-agent adapter; re-sync to classify older Cursor CLI rows (#180).
-- **Cursor IDE (`cursor` adapter) is still discovery-only** — sessions are not ingested until [#2](https://github.com/AlexanderMakarov/llm-wiki/issues/2) ships; Cursor Agent CLI (`cursor_cli`) works today.
+- **Cursor IDE Composer ingest works via `llmwiki sync --adapter cursor`** (#2) — parses global `state.vscdb`; not on bare `sync` yet (`ingest_ready` false) so a large Composer history does not flood `raw/` by accident. Prefer `--since YYYY-MM-DD` until config lookback ([#192](https://github.com/AlexanderMakarov/llm-wiki/issues/192)). Cursor Agent CLI remains `cursor_cli`.
 
 ### Synthesis and candidates
 
