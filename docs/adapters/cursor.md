@@ -1,54 +1,49 @@
 # Cursor IDE adapter
 
-**Status:** Scaffold — listed for discovery; **not active on bare sync** until [#2](https://github.com/AlexanderMakarov/llm-wiki/issues/2) lands full IDE ingest.
+**Status:** Production — Composer ingest from global `state.vscdb` ([#2](https://github.com/AlexanderMakarov/llm-wiki/issues/2))
 **Module:** `llmwiki.adapters.contrib.cursor`
 **Source:** [`llmwiki/adapters/contrib/cursor.py`](../../llmwiki/adapters/contrib/cursor.py)
 
-For **Cursor Agent CLI** sessions (`~/.cursor/chats/`), use the separate [`cursor_cli`](cursor-cli.md) adapter — that path is production for Agent CLI transcripts and participates in `filters.exclude_headless`.
+For **Cursor Agent CLI** sessions (`~/.cursor/chats/`), use the separate [`cursor_cli`](cursor-cli.md) adapter.
 
 ## What it reads
 
-Cursor IDE stores conversation history in per-workspace directories under platform-specific paths:
+Cursor IDE stores Composer threads in the **global** SQLite DB:
 
 ```
 # macOS
-~/Library/Application Support/Cursor/User/workspaceStorage/<hash>/
+~/Library/Application Support/Cursor/User/globalStorage/state.vscdb
 
 # Linux
-~/.config/Cursor/User/workspaceStorage/<hash>/
+~/.config/Cursor/User/globalStorage/state.vscdb
 
 # Windows
-%APPDATA%\Cursor\User\workspaceStorage\<hash>\
+%APPDATA%\Cursor\User\globalStorage\state.vscdb
 ```
 
-The adapter checks those roots and discovers `.jsonl` files when present. Full `state.vscdb` parsing for IDE chats is not finished yet ([#2](https://github.com/AlexanderMakarov/llm-wiki/issues/2)).
+Table `composerHeaders` lists threads (`composerId`, `workspaceId`, `isArchived`, `isSubagent`). Message bodies live in `cursorDiskKV` under `bubbleId:<composerId>:<bubbleId>` (`type` 1 = user, 2 = assistant). Per-workspace `workspaceStorage/<hash>/` is used only for association when needed — not as the session file itself.
+
+Each Composer thread is one sync session (non-file `SessionRef`). Archived threads are still ingested under the same `composerId`.
 
 ## Enable it
 
-Listed in `llmwiki adapters` when `workspaceStorage` exists, but **not included on bare `sync`** (`active=no`) until ingest is complete ([#2](https://github.com/AlexanderMakarov/llm-wiki/issues/2)). Use [`cursor_cli`](cursor-cli.md) for Agent CLI sessions.
+Ingest works via explicit adapter selection:
 
 ```bash
-python3 -m llmwiki sync --adapter cursor   # explicit only; scaffold
+python3 -m llmwiki sync --adapter cursor
 ```
+
+`select_sync_adapters` bypasses `ingest_ready` for `--adapter`, so this always runs when the store is present. Bare `llmwiki sync` still skips Cursor IDE while `ingest_ready = False` — intentional until lookback config ([#192](https://github.com/AlexanderMakarov/llm-wiki/issues/192)) / operator opt-in, so a default sync does not flood from a large historical Composer DB. Prefer keeping that flag off; if you flip `ingest_ready` to `True` locally, expect a large first sync unless you also pass `--since`.
+
+Listed in `llmwiki adapters` when `workspaceStorage` (or the global DB) exists. Use [`cursor_cli`](cursor-cli.md) for Agent CLI sessions under `~/.cursor/chats/`.
 
 ## Automated (headless) sessions
 
-No verified automation-launch markers for IDE workspace chats today — `is_headless_session` returns false. Prefer [`cursor_cli`](cursor-cli.md) when you need Agent CLI headless filtering.
+With `filters.exclude_headless` (default **true**), threads with `composerHeaders.isSubagent = 1` (agents spawned from a parent Composer) are skipped. User-facing Composer chats stay eligible. Set `"exclude_headless": false` to include spawned threads.
 
 ## Project slug derivation
 
-Cursor workspace directories use opaque hashes. The adapter truncates the hash to 12 characters and prefixes with `cursor-`:
-
-```
-workspaceStorage/a1b2c3d4e5f6789/session.jsonl
-  -> cursor-a1b2c3d4e5f6
-```
-
-## Schema versions supported
-
-```python
-SUPPORTED_SCHEMA_VERSIONS = ["v1"]
-```
+When `workspaceId` is present (typically the `workspaceStorage` directory hash), the slug is `cursor-<first-12-chars>` — the **same form** as [`cursor_cli`](cursor-cli.md). Agent CLI’s `~/.cursor/chats/<hash>/` directory names may differ from IDE workspace hashes on some installs; full cross-adapter project merge is [#126](https://github.com/AlexanderMakarov/llm-wiki/issues/126).
 
 ## Configuration
 
@@ -56,17 +51,20 @@ SUPPORTED_SCHEMA_VERSIONS = ["v1"]
 {
   "adapters": {
     "cursor": {
-      "roots": ["~/custom/cursor/path"]
+      "global_db": "~/.config/Cursor/User/globalStorage/state.vscdb",
+      "roots": ["~/.config/Cursor/User/workspaceStorage"]
     }
   }
 }
 ```
 
+`global_db` is optional (platform defaults apply). `roots` still override workspaceStorage paths used for association.
+
 ## Testing the adapter
 
 ```bash
 python3 -m llmwiki adapters
-python3 -m pytest tests/test_adapter_graduation.py -k cursor -v
+python3 -m pytest tests/test_cursor_ide_adapter.py -q
 ```
 
 ## See also

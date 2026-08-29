@@ -53,23 +53,25 @@ def scan_mtimes(adapters: list[str] | None, config: dict[str, Any] | None = None
     mtimes: dict[str, float] = {}
     for cls in selected_cls:
         adapter = cls(cfg)
-        for p in adapter.discover_sessions():
-            try:
-                mtimes[str(p)] = p.stat().st_mtime
-            except OSError:
-                continue
+        for ref in adapter.discover_session_refs():
+            mtimes[ref.locator] = ref.mtime
     return mtimes
 
 
 def _adapter_for_path(path: str) -> str:
     discover_all()
-    p = Path(path)
     for name, cls in REGISTRY.items():
         try:
             adapter = cls()
-            for sp in adapter.discover_sessions():
-                if sp.resolve() == p.resolve():
+            for ref in adapter.discover_session_refs():
+                if ref.locator == path:
                     return name
+                # File-backed: also match resolved paths when both exist.
+                try:
+                    if Path(ref.locator).resolve() == Path(path).resolve():
+                        return name
+                except OSError:
+                    continue
         except OSError:
             continue
     return ""

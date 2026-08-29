@@ -39,7 +39,8 @@ from pathlib import Path
 from typing import Any
 
 from llmwiki.adapters import register
-from llmwiki.adapters.base import BaseAdapter
+from llmwiki.adapters.base import BaseAdapter, _safe_project_slug
+from llmwiki.adapters.contrib.cursor_slug import cursor_workspace_slug
 
 # Synthetic record type injected by ``load_records`` so store-meta audit
 # fields survive ``normalize_records`` / ``filter_records`` and reach
@@ -66,11 +67,11 @@ class CursorCliAdapter(BaseAdapter):
         """Use the workspace-hash directory (first segment under chats/)."""
         store = Path(self.session_store_path).expanduser()
         try:
-            rel = path.relative_to(store)
+            rel = Path(path).relative_to(store)
         except ValueError:
-            return path.parent.name
-        ws = rel.parts[0] if rel.parts else path.parent.name
-        return f"cursor-{ws[:12]}"
+            return _safe_project_slug(Path(path).parent.name)
+        ws = rel.parts[0] if rel.parts else Path(path).parent.name
+        return cursor_workspace_slug(ws)
 
     # ── non-JSONL load: parse the SQLite blob store into ordered messages ──
 

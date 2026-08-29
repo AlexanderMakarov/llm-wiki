@@ -33,4 +33,23 @@
 
 - Operator: **lgtm** on revised tech → Status **Approved**
 - Wrote `tasks.md` (7 slices: SessionRef → local probe → IDE parse → slug → headless → R6/docs → feature testing)
-- **Next:** Commit specs (Step 5), then `/awos:implement`
+- Specs committed: `d4638b0` `docs: add spec for #2 Cursor IDE composer ingest`
+- **Next:** `/awos:implement`
+
+## 2026-08-29 — Slice 1 done (SessionRef)
+
+- Added `SessionRef` + `discover_session_refs` / `portable_session_key_fragment` in `llmwiki/adapters/base.py`
+- `convert_all` + `watch.scan_mtimes` / `_adapter_for_path` iterate refs
+- Tests: `tests/test_session_ref.py` + related suite green (30 passed)
+- **Next:** Slice 2 local Cursor probe (schema-only; needs read of operator `state.vscdb`)
+
+## 2026-08-29 — Slices 2–7 implemented
+
+- Inventory: `cursor-ide-store-inventory.md` (composerHeaders.isSubagent / isArchived / workspaceId; bubbleId UUID keys)
+- Fixtures: `tests/fixtures_cursor_ide.py`
+- Adapter rewrite: `llmwiki/adapters/contrib/cursor.py` + shared `cursor_slug.py`
+- SessionRef convert/watch; R6 empty-parse warning; docs + CHANGELOG
+- Full `ruff` + `pytest tests/` green
+- **Next:** operator smoke confirm on live vault, then local review / commit-push
+
+

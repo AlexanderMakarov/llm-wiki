@@ -6,23 +6,28 @@ import re
 
 
 def shipping_section_text(changelog_text: str) -> str:
-    """Return [Unreleased] body, or the newest versioned section when Unreleased is empty.
+    """Return notes acceptance tests should search for shipping claims.
 
     After a release cut, feature bullets move from ``## [Unreleased]`` into
-    ``## [X.Y.Z]``; acceptance tests should keep reading the shipping notes
-    without hard-coding a version number on every release.
+    ``## [X.Y.Z]``. When Unreleased is empty, return the newest versioned
+    section. When Unreleased already has new work, concatenate it with that
+    newest section so older acceptance tests still find their shipped
+    bullets without hard-coding a version number on every release.
     """
     m = re.search(r"^## \[Unreleased\]\s*\n(.*?)(?=^## \[)", changelog_text, re.M | re.S)
     if not m:
         raise AssertionError("no [Unreleased] section in CHANGELOG.md")
     unreleased = m.group(1)
-    if re.search(r"^- ", unreleased, re.M):
-        return unreleased
     m2 = re.search(
-        r"^(## \[\d+\.\d+\.\d+\][^\n]*\n.*?)(?=^## \[)",
+        r"^(## \[\d+\.\d+\.\d+\][^\n]*\n.*?)(?=^## \[|\Z)",
         changelog_text,
         re.M | re.S,
     )
-    if not m2:
+    latest = m2.group(1) if m2 else ""
+    if re.search(r"^- ", unreleased, re.M):
+        if latest:
+            return unreleased.rstrip() + "\n\n" + latest
+        return unreleased
+    if not latest:
         raise AssertionError("no versioned changelog section after [Unreleased]")
-    return m2.group(1)
+    return latest

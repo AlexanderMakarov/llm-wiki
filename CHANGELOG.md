@@ -10,6 +10,9 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Added
 
+- **Cursor IDE Composer ingest (`cursor` adapter, #2)** — parses global `state.vscdb` (`composerHeaders` + `cursorDiskKV` bubbles) via first-class `SessionRef` discovery (DB-row sessions without stub files); archived threads kept; spawned `isSubagent` threads skipped under default `exclude_headless`; project slug `cursor-<12-char-hash>` shared with Agent CLI when `workspaceId` is known.
+  - *Release note:* Sync Cursor IDE Composer chats with `--adapter cursor` (#2).
+
 ### Changed
 
 ### Fixed

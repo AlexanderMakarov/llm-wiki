@@ -23,6 +23,7 @@ from typing import Any
 
 from llmwiki import REPO_ROOT
 from llmwiki.adapters import REGISTRY, discover_adapters, discover_contrib  # noqa: F401 — test/back-compat surface
+from llmwiki.adapters.base import portable_session_key_fragment
 from llmwiki.adapters.settings import select_sync_adapters
 from llmwiki.quarantine import add_entry as _quarantine_add
 from llmwiki.quarantine import clear_entry as _quarantine_clear
@@ -257,13 +258,11 @@ def _portable_state_key(adapter_name: str, path: Path) -> str:
     When ``path`` is outside the user's home, the absolute path is
     preserved so we don't silently lose a key.  The prefix still names
     the adapter so two adapters can't collide on the same file.
+
+    Non-file sessions (#2 ``SessionRef``) use ``f"{adapter}::{ref.key}"``
+    directly; this helper remains for path-based callers and migration.
     """
-    try:
-        relative = Path(path).resolve().relative_to(Path.home())
-        rel = relative.as_posix()
-    except (ValueError, OSError):
-        rel = str(path)
-    return f"{adapter_name}::{rel}"
+    return f"{adapter_name}::{portable_session_key_fragment(path)}"
 
 
 def _migrate_legacy_state(
@@ -1744,30 +1743,23 @@ def convert_all(
     for cls in selected:
         adapter = cls(config)
         print(f"==> adapter: {cls.name}")
-        sessions = adapter.discover_sessions()
+        sessions = adapter.discover_session_refs()
         print(f"  discovered: {len(sessions)} source files")
         counters.setdefault(cls.name, {
             "discovered": 0, "converted": 0, "unchanged": 0, "live": 0,
             "filtered": 0, "ignored": 0, "errored": 0,
         })
         counters[cls.name]["discovered"] = len(sessions)
-        for path in sessions:
-            # #arch-h9 (#612): mtime check FIRST. The previous order
-            # called `adapter.derive_project_slug(path)` before the
-            # mtime check, which on Codex CLI opens every .jsonl to
-            # read the session_meta cwd field. On a 5k-session corpus
-            # that's 5k needless file opens per no-op sync (~10x scale
-            # projection). Stat is cheap; slug derivation can be
-            # expensive — so check mtime first and skip the expensive
-            # slug + ignore + project-filter work when nothing changed.
-            try:
-                mtime = path.stat().st_mtime
-            except OSError as e:
-                errors += 1
-                _bump(cls.name, "errored")
-                _quarantine_add(cls.name, str(path), f"stat failed: {e}")
-                continue
-            key = _portable_state_key(cls.name, path)
+        empty_after_parse = 0
+        saw_nonempty_records = False
+        for ref in sessions:
+            # #2 SessionRef: mtime + portable key come from the ref so
+            # DB-row / non-file adapters need not create stub files.
+            # File adapters get the same keys as before via the default
+            # discover_session_refs wrap (#arch-h9 mtime-first still holds).
+            mtime = ref.mtime
+            path = Path(ref.locator)
+            key = f"{cls.name}::{ref.key}"
             stored_mtime = mtime_from_state(state.get(key))
             if stored_mtime is not None and abs(stored_mtime - mtime) <= 1e-6:
                 unchanged += 1
@@ -1856,8 +1848,10 @@ def convert_all(
             records = filter_records(records, drop_types)
             if not records:
                 filtered += 1
+                empty_after_parse += 1
                 _bump(cls.name, "filtered")
                 continue
+            saw_nonempty_records = True
             # #8 / #180: drop headless automated launches and throwaway
             # temp-cwd sessions before they ever become a wiki page. The
             # headless filter is what breaks the synthesis feedback loop
@@ -2015,6 +2009,23 @@ def convert_all(
                 _quarantine_clear(str(path), adapter=cls.name)
             converted += 1
             _bump(cls.name, "converted")
+
+        # #2 R6: adapter discovered sessions but every load/normalize/filter
+        # produced zero records — usually a scaffold or wrong store format.
+        c = counters[cls.name]
+        if (
+            c.get("discovered", 0) > 0
+            and empty_after_parse > 0
+            and not saw_nonempty_records
+            and c.get("converted", 0) == 0
+            and c.get("unchanged", 0) == 0
+        ):
+            print(
+                f"  warning: {cls.name}: discovered {c['discovered']} sources "
+                f"but parsed 0 records — adapter may not implement this store "
+                f"format",
+                file=sys.stderr,
+            )
 
     if not dry_run:
         # G-03 (#289): stamp _meta.last_sync + _counters onto the state

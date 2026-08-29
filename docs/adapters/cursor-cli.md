@@ -4,7 +4,7 @@
 **Module:** `llmwiki.adapters.contrib.cursor_cli`
 **Source:** [`llmwiki/adapters/contrib/cursor_cli.py`](../../llmwiki/adapters/contrib/cursor_cli.py)
 
-This is **not** the Cursor IDE adapter. IDE workspace chats use [`cursor`](cursor.md) and are a separate, incomplete ingest path ([#2](https://github.com/AlexanderMakarov/llm-wiki/issues/2)).
+This is **not** the Cursor IDE adapter. IDE Composer history uses [`cursor`](cursor.md) (global `state.vscdb`, [#2](https://github.com/AlexanderMakarov/llm-wiki/issues/2)).
 
 ## What it reads
 

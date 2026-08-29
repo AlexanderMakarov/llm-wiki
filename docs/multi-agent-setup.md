@@ -9,7 +9,7 @@ llmwiki reads sessions from multiple coding agents. Every shipped source is conf
 | Claude Code | `claude_code` | `~/.claude/projects/` | Auto when store present (`adapters.claude_code`) | Production |
 | Codex CLI | `codex_cli` | `~/.codex/sessions/` (and `~/.codex/projects/`) | Auto when store present | Production |
 | Cursor Agent CLI | `cursor_cli` | `~/.cursor/chats/` | Auto when store present | Production |
-| Cursor IDE | `cursor` | `workspaceStorage` (OS-specific; see [cursor.md](adapters/cursor.md)) | **Not active on bare sync** — ingest incomplete ([#2](https://github.com/AlexanderMakarov/llm-wiki/issues/2)) | Scaffold |
+| Cursor IDE | `cursor` | `globalStorage/state.vscdb` (Composer) | `--adapter cursor` (not on bare sync until `ingest_ready`) | Production |
 | OpenClaw | `openclaw` | `~/.openclaw/agents/` or `<vault>/.openclaw-sessions-inbox` | Auto when store present; set `adapters.openclaw.roots` for vault inbox | Production |
 | OpenCode | `opencode` | OpenCode / OpenClaw app-config sessions dirs | Auto when store present | Production |
 | GitHub Copilot Chat | `copilot_chat` | VS Code workspaceStorage | Auto when store present | Production |
@@ -22,8 +22,8 @@ Per-adapter detail: [Claude Code](adapters/claude-code.md) · [Codex CLI](adapte
 
 ### Cursor Agent CLI vs Cursor IDE
 
-- **Cursor Agent CLI** (`cursor_cli`) — working session source for non-interactive / Agent CLI chats under `~/.cursor/chats/`. This is what `filters.exclude_headless` can classify today.
-- **Cursor IDE** (`cursor`) — IDE workspace chat ingest is not finished ([#2](https://github.com/AlexanderMakarov/llm-wiki/issues/2)). Do not expect IDE chats to land in the wiki from this adapter yet.
+- **Cursor Agent CLI** (`cursor_cli`) — working session source for Agent CLI chats under `~/.cursor/chats/`.
+- **Cursor IDE** (`cursor`) — working Composer ingest from global `state.vscdb` ([#2](https://github.com/AlexanderMakarov/llm-wiki/issues/2)). Both adapters use the same `cursor-<12-char-hash>` project-id form when a workspace hash is known.
 
 ## What “automated” (headless) means
 
@@ -33,9 +33,10 @@ Per-adapter detail: [Claude Code](adapters/claude-code.md) · [Codex CLI](adapte
 |---|---|
 | Claude Code | `entrypoint` starts with `sdk-` (e.g. `sdk-cli`) **or** `promptSource` is `sdk` — headless `claude -p` / Agent SDK runs |
 | Cursor Agent CLI | Store meta has `subagentInfo` **or** `approvalMode` is `auto-review`. Interactive top-level Agent chats stay eligible. Nested Task/subagent runs are classified under `exclude_headless` (not `include_subagents`) |
+| Cursor IDE | `composerHeaders.isSubagent` — agents spawned from a parent Composer stay skipped; user-facing Composer chats stay eligible |
 | Codex CLI, OpenCode, Copilot CLI, Copilot Chat | No verified automation markers in the store yet — sessions are treated as **not** headless |
 | OpenClaw | **All** OpenClaw sessions are treated as not headless |
-| Gemini CLI, Cursor IDE | N/A until launch detection exists — never classified headless today |
+| Gemini CLI | Scaffold — N/A until launch detection exists — never classified headless today |
 | ChatGPT export, Obsidian | **Not applicable** — export / notes intake, not agent launches |
 
 Legacy raw files with no `is_headless` marker stay eligible until you re-sync (re-convert) them. Sync still reports skipped automated sessions as one aggregate headless count in the filter summary.
@@ -43,7 +44,7 @@ Legacy raw files with no `is_headless` marker stay eligible until you re-sync (r
 ## How default sync chooses adapters
 
 1. Loads every shipped adapter from the registry.
-2. For each adapter, checks whether its store path exists (`present`) and whether ingest is implemented (Cursor IDE is listed but **not active** until [#2](https://github.com/AlexanderMakarov/llm-wiki/issues/2)).
+2. For each adapter, checks whether its store path exists (`present`) and whether ingest is ready. Cursor IDE is production via `--adapter cursor`, but is **not** selected on bare sync while `ingest_ready` is false (avoids flooding from a large historical Composer DB until lookback / opt-in).
 3. Includes every **coding-agent** source that is present, ingest-ready, and not explicitly disabled (`enabled: false` in `adapters.<name>`). Notes/export intake (Obsidian, ChatGPT) requires `enabled: true`.
 
 ```bash
@@ -79,7 +80,11 @@ Runs on bare `sync` when `~/.cursor/chats/` exists. See [Cursor Agent CLI adapte
 
 ### Cursor IDE
 
-Listed for discovery only — **not active on bare sync** until [#2](https://github.com/AlexanderMakarov/llm-wiki/issues/2). Use `cursor_cli` for Agent CLI sessions. See [Cursor IDE adapter](adapters/cursor.md).
+```bash
+python3 -m llmwiki sync --adapter cursor
+```
+
+Composer threads from global `state.vscdb`; spawned subagents skipped under default `exclude_headless`. Not on bare sync while `ingest_ready` is false. See [Cursor IDE adapter](adapters/cursor.md).
 
 ### OpenClaw
 
