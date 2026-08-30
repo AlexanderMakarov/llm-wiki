@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Any
 
 from llmwiki.adapters import register
-from llmwiki.adapters.base import BaseAdapter, SessionRef
+from llmwiki.adapters.base import BaseAdapter, SessionRef, SyncCandidateEstimate, lookback_cutoff_ts
 from llmwiki.adapters.contrib.cursor_slug import cursor_workspace_slug
 from llmwiki.adapters.settings import adapter_block
 
@@ -32,12 +32,12 @@ _CURSOR_IDE_META = "cursor_ide_meta"
 _LOCATOR_RE = re.compile(r"^cursor-ide:composer:(.+)$")
 
 
-@register("cursor")
+@register("cursor_ide", aliases=["cursor"])
 class CursorAdapter(BaseAdapter):
     """Cursor IDE — Composer threads from globalStorage/state.vscdb."""
 
     _DESCRIPTION_OVERRIDE = (
-        "Cursor IDE — Composer ingest from globalStorage/state.vscdb (#2)"
+        "Cursor IDE — Composer sessions (globalStorage state.vscdb)"
     )
 
     ingest_ready = False
@@ -59,7 +59,7 @@ class CursorAdapter(BaseAdapter):
 
     def __init__(self, config: dict[str, Any] | None = None):
         super().__init__(config)
-        ad_cfg = adapter_block(config or {}, "cursor")
+        ad_cfg = adapter_block(config or {}, "cursor_ide")
         roots = ad_cfg.get("roots") or []
         self.roots: list[Path] = (
             [Path(p).expanduser() for p in roots] if roots else list(self.DEFAULT_ROOTS)
@@ -90,18 +90,25 @@ class CursorAdapter(BaseAdapter):
         """Unused by convert — prefer ``discover_session_refs``. Returns []."""
         return []
 
-    def discover_session_refs(self) -> list[SessionRef]:
+    def discover_session_refs(
+        self, since_dt: datetime | None = None
+    ) -> list[SessionRef]:
         db = self._resolve_global_db()
         if db is None:
             return []
         self._db_path = db
         headers = self._load_headers(db)
         self._header_cache = headers
+        since_ts = since_dt.timestamp() if since_dt is not None else None
         refs: list[SessionRef] = []
         for cid, hdr in headers.items():
             # Skip empty threads (no bubbles) — still discover? Spec: empty → filtered.
             # Discover all with header or composerData; empty filtered at load.
+            # #192: when lookback is set, drop old composers here so they are
+            # never SessionRefs (header lastUpdatedAt/createdAt → mtime).
             mtime = _ms_to_unix(hdr.get("lastUpdatedAt") or hdr.get("createdAt")) or db.stat().st_mtime
+            if since_ts is not None and mtime < since_ts:
+                continue
             refs.append(
                 SessionRef(
                     key=f"composer/{cid}",
@@ -110,6 +117,43 @@ class CursorAdapter(BaseAdapter):
                 )
             )
         return refs
+
+    def estimate_sync_candidates(self) -> SyncCandidateEstimate:
+        """Header-based counts for configure-sources (#192).
+
+        Eligible excludes ``isSubagent`` (automated) and composers with no
+        ``bubbleId:*`` rows (empty). Window split uses header
+        ``lastUpdatedAt`` / ``createdAt`` only — no bubble payloads loaded.
+        """
+        db = self._resolve_global_db()
+        if db is None:
+            return SyncCandidateEstimate(eligible=0, in_last_30_days=0)
+        headers = self._load_headers(db)
+        nonempty = self._composer_ids_with_bubbles(db)
+        cutoff = lookback_cutoff_ts(days=30)
+        eligible = 0
+        in_window = 0
+        earliest_ts: float | None = None
+        for cid, hdr in headers.items():
+            if hdr.get("isSubagent"):
+                continue
+            if cid not in nonempty:
+                continue
+            eligible += 1
+            mtime = _ms_to_unix(hdr.get("lastUpdatedAt") or hdr.get("createdAt"))
+            if mtime is not None:
+                if earliest_ts is None or mtime < earliest_ts:
+                    earliest_ts = mtime
+                if mtime >= cutoff:
+                    in_window += 1
+        earliest = (
+            datetime.fromtimestamp(earliest_ts, tz=UTC) if earliest_ts is not None else None
+        )
+        return SyncCandidateEstimate(
+            eligible=eligible,
+            in_last_30_days=in_window,
+            earliest=earliest,
+        )
 
     def derive_project_slug(self, path: Path | str) -> str:
         cid = _composer_id_from_locator(path)
@@ -188,6 +232,31 @@ class CursorAdapter(BaseAdapter):
         return False
 
     # ─── SQLite helpers ────────────────────────────────────────────────
+
+    def _composer_ids_with_bubbles(self, db: Path) -> set[str]:
+        """Composer ids that have at least one ``bubbleId:<id>:…`` key (no value load)."""
+        out: set[str] = set()
+        con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+        try:
+            tables = {
+                r[0]
+                for r in con.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table'"
+                )
+            }
+            if "cursorDiskKV" not in tables:
+                return out
+            for (key,) in con.execute(
+                "SELECT key FROM cursorDiskKV WHERE typeof(key)='text' "
+                "AND key LIKE 'bubbleId:%'"
+            ):
+                # bubbleId:<composerId>:<bubbleId>
+                parts = str(key).split(":", 2)
+                if len(parts) >= 2 and parts[1]:
+                    out.add(parts[1])
+        finally:
+            con.close()
+        return out
 
     def _load_headers(self, db: Path) -> dict[str, dict[str, Any]]:
         out: dict[str, dict[str, Any]] = {}

@@ -179,7 +179,7 @@ llmwiki sync --adapter obsidian
 
 | Flag | Command | What |
 |---|---|---|
-| `--since YYYY-MM-DD` | `sync` | Only sessions after that date |
+| `--since YYYY-MM-DD` | `sync` | One-run lookback (overrides `filters.since` / `adapters.*.since`) |
 | `--project <slug>` | `sync` | Restrict to one project |
 | `--force` | `sync`, `synthesize` | Ignore state file, reconvert everything |
 | `--force-resync` | `sync` | Override the newer-schema/corrupt-state guard (#29); implies `--force`, may duplicate `raw/` |
@@ -227,6 +227,8 @@ llmwiki sync --adapter obsidian
 | `synthesis` | `base_url` | `http://127.0.0.1:11434` | Ollama server URL |
 | `synthesis` | `timeout` | `60` | Synthesis timeout (seconds) |
 | `filters` | `live_session_minutes` | `60` | Skip sessions younger than N minutes |
+| `filters` | `since` | unset | Shared sync lookback (`YYYY-MM-DD`); omit = unlimited; see [configuration-reference.md](configuration-reference.md#sync-lookback) |
+| `adapters.<name>` | `since` | unset | Per-source lookback (`YYYY-MM-DD` or `"all"`); omit = inherit shared |
 | `truncation` | `tool_result_chars` | `500` | Max chars for tool results in output |
 
 ## Three-layer architecture

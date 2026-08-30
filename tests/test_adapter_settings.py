@@ -75,11 +75,14 @@ def test_select_sync_skips_cursor_ide_even_when_enabled(tmp_path: Path):
     discover_all()
     root = tmp_path / "workspaceStorage"
     root.mkdir(parents=True)
+    # Legacy adapters.cursor key still configures cursor_ide.
     cfg = {"adapters": {"cursor": {"enabled": True, "roots": [str(root)]}}}
     names = [c.name for c in select_sync_adapters(cfg, None)]
-    assert "cursor" not in names
+    assert "cursor_ide" not in names
     names_explicit = [c.name for c in select_sync_adapters(cfg, ["cursor"])]
-    assert names_explicit == ["cursor"]
+    assert names_explicit == ["cursor_ide"]
+    names_canon = [c.name for c in select_sync_adapters(cfg, ["cursor_ide"])]
+    assert names_canon == ["cursor_ide"]
 
 
 def test_adapter_store_present_openclaw_custom_root(tmp_path: Path):

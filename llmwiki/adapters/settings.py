@@ -14,6 +14,8 @@ from llmwiki.adapters import REGISTRY, discover_all, resolve_adapter_name
 # Legacy kebab-case keys still seen in user configs.
 _ADAPTER_KEY_ALIASES: dict[str, tuple[str, ...]] = {
     "copilot_chat": ("copilot-chat",),
+    # Pre-rename config key for Cursor IDE (canonical: cursor_ide).
+    "cursor_ide": ("cursor",),
 }
 
 

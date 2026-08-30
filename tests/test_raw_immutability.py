@@ -58,7 +58,7 @@ def test_guard_error_includes_source_and_adapter(tmp_path):
 
 AI_SESSION_ADAPTERS = {
     "claude_code", "codex_cli", "copilot-chat", "copilot-cli",
-    "cursor", "gemini_cli", "opencode", "chatgpt",
+    "cursor_ide", "gemini_cli", "opencode", "chatgpt",
 }
 NON_AI_ADAPTERS = {"obsidian", "jira", "meeting", "pdf"}
 

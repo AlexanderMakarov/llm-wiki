@@ -9,7 +9,7 @@ llmwiki reads sessions from multiple coding agents. Every shipped source is conf
 | Claude Code | `claude_code` | `~/.claude/projects/` | Auto when store present (`adapters.claude_code`) | Production |
 | Codex CLI | `codex_cli` | `~/.codex/sessions/` (and `~/.codex/projects/`) | Auto when store present | Production |
 | Cursor Agent CLI | `cursor_cli` | `~/.cursor/chats/` | Auto when store present | Production |
-| Cursor IDE | `cursor` | `globalStorage/state.vscdb` (Composer) | `--adapter cursor` (not on bare sync until `ingest_ready`) | Production |
+| Cursor IDE | `cursor_ide` | `globalStorage/state.vscdb` (Composer) | `--adapter cursor_ide` (not on bare sync until `ingest_ready`) | Production |
 | OpenClaw | `openclaw` | `~/.openclaw/agents/` or `<vault>/.openclaw-sessions-inbox` | Auto when store present; set `adapters.openclaw.roots` for vault inbox | Production |
 | OpenCode | `opencode` | OpenCode / OpenClaw app-config sessions dirs | Auto when store present | Production |
 | GitHub Copilot Chat | `copilot_chat` | VS Code workspaceStorage | Auto when store present | Production |
@@ -18,12 +18,12 @@ llmwiki reads sessions from multiple coding agents. Every shipped source is conf
 | ChatGPT export | `chatgpt` | `conversations.json` export | `enabled: true` + `export_dirs` (opt-in) | Production (export ingest) |
 | Obsidian | `obsidian` | Configurable vault paths | `enabled: true` + `vault_paths` (opt-in notes intake) | Production |
 
-Per-adapter detail: [Claude Code](adapters/claude-code.md) · [Codex CLI](adapters/codex-cli.md) · [Cursor Agent CLI](adapters/cursor-cli.md) · [Cursor IDE](adapters/cursor.md) · [OpenClaw](adapters/openclaw.md) · [OpenCode](adapters/opencode.md) · [Copilot](adapters/copilot.md) · [Gemini CLI](adapters/gemini-cli.md) · [ChatGPT](adapters/chatgpt.md) · [Obsidian](adapters/obsidian.md).
+Per-adapter detail: [Claude Code](adapters/claude-code.md) · [Codex CLI](adapters/codex-cli.md) · [Cursor Agent CLI](adapters/cursor-cli.md) · [Cursor IDE](adapters/cursor-ide.md) · [OpenClaw](adapters/openclaw.md) · [OpenCode](adapters/opencode.md) · [Copilot](adapters/copilot.md) · [Gemini CLI](adapters/gemini-cli.md) · [ChatGPT](adapters/chatgpt.md) · [Obsidian](adapters/obsidian.md).
 
 ### Cursor Agent CLI vs Cursor IDE
 
 - **Cursor Agent CLI** (`cursor_cli`) — working session source for Agent CLI chats under `~/.cursor/chats/`.
-- **Cursor IDE** (`cursor`) — working Composer ingest from global `state.vscdb` ([#2](https://github.com/AlexanderMakarov/llm-wiki/issues/2)). Both adapters use the same `cursor-<12-char-hash>` project-id form when a workspace hash is known.
+- **Cursor IDE** (`cursor_ide`) — working Composer ingest from global `state.vscdb` (alias `cursor` still resolves). Both adapters use the same `cursor-<12-char-hash>` project-id form when a workspace hash is known.
 
 ## What “automated” (headless) means
 
@@ -44,7 +44,7 @@ Legacy raw files with no `is_headless` marker stay eligible until you re-sync (r
 ## How default sync chooses adapters
 
 1. Loads every shipped adapter from the registry.
-2. For each adapter, checks whether its store path exists (`present`) and whether ingest is ready. Cursor IDE is production via `--adapter cursor`, but is **not** selected on bare sync while `ingest_ready` is false (avoids flooding from a large historical Composer DB until lookback / opt-in).
+2. For each adapter, checks whether its store path exists (`present`) and whether ingest is ready. Cursor IDE is production via `--adapter cursor_ide`, but is **not** selected on bare sync while `ingest_ready` is false (avoids flooding from a large historical Composer DB until you set a lookback and opt in).
 3. Includes every **coding-agent** source that is present, ingest-ready, and not explicitly disabled (`enabled: false` in `adapters.<name>`). Notes/export intake (Obsidian, ChatGPT) requires `enabled: true`.
 
 ```bash
@@ -55,7 +55,7 @@ python3 -m llmwiki sync
 python3 -m llmwiki sync --adapter cursor_cli openclaw
 ```
 
-Run `llmwiki configure-sources` after install to probe paths (including `<vault>/.openclaw-sessions-inbox` when `vault.default_path` is set) and write `config.json`.
+Run `llmwiki configure-sources` after install to probe paths (including `<vault>/.openclaw-sessions-inbox` when `vault.default_path` is set) and write `config.json`. The interview asks shared start date first (default today−30), then per source **Sessions · Earliest · In last 30 days** before Enable. Unset `filters.since` (skip the interview) still means unlimited. See [configuration-reference.md — Sync lookback](configuration-reference.md#sync-lookback).
 
 ## Checking detected agents
 
@@ -84,7 +84,7 @@ Runs on bare `sync` when `~/.cursor/chats/` exists. See [Cursor Agent CLI adapte
 python3 -m llmwiki sync --adapter cursor
 ```
 
-Composer threads from global `state.vscdb`; spawned subagents skipped under default `exclude_headless`. Not on bare sync while `ingest_ready` is false. See [Cursor IDE adapter](adapters/cursor.md).
+Composer threads from global `state.vscdb`; spawned subagents skipped under default `exclude_headless`. Not on bare sync while `ingest_ready` is false. See [Cursor IDE adapter](adapters/cursor-ide.md).
 
 ### OpenClaw
 

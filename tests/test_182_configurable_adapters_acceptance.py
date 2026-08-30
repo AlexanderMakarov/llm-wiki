@@ -32,11 +32,11 @@ def test_cursor_ide_explicit_enabled_not_active_on_bare_sync(tmp_path: Path):
     discover_all()
     root = tmp_path / "workspaceStorage"
     root.mkdir(parents=True)
-    cfg = {"adapters": {"cursor": {"enabled": True, "roots": [str(root)]}}}
+    cfg = {"adapters": {"cursor_ide": {"enabled": True, "roots": [str(root)]}}}
     selected = {c.name for c in select_sync_adapters(cfg, None)}
     enabled, active = adapter_status(
-        "cursor", REGISTRY["cursor"], cfg, selected_names=selected
+        "cursor_ide", REGISTRY["cursor_ide"], cfg, selected_names=selected
     )
     assert enabled == "explicit"
     assert active == "no"
-    assert adapter_store_present(REGISTRY["cursor"], cfg) is True
+    assert adapter_store_present(REGISTRY["cursor_ide"], cfg) is True

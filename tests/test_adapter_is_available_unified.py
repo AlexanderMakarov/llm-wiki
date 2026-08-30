@@ -27,7 +27,7 @@ for mod in (
     "llmwiki.adapters.codex_cli",
     "llmwiki.adapters.contrib.copilot_chat",
     "llmwiki.adapters.contrib.copilot_cli",
-    "llmwiki.adapters.contrib.cursor",
+    "llmwiki.adapters.contrib.cursor_ide",
     "llmwiki.adapters.contrib.gemini_cli",
     "llmwiki.adapters.contrib.obsidian",
     "llmwiki.adapters.contrib.opencode",
@@ -48,7 +48,7 @@ def test_contrib_property_pattern_still_works():
     session_store_path as @property. is_available() now flows through
     BaseAdapter via temp-instance and reads it correctly."""
     contrib_names = [
-        "codex_cli", "copilot-chat", "cursor", "gemini_cli",
+        "codex_cli", "copilot-chat", "cursor_ide", "gemini_cli",
         "obsidian", "opencode", "chatgpt",
     ]
     for name in contrib_names:
@@ -71,7 +71,7 @@ def test_six_contrib_adapters_inherit_base_is_available():
     - chatgpt — intentionally returns False unconditionally (opt-in
       only, requires explicit config)
     """
-    inherited = ("codex_cli", "copilot-chat", "cursor", "gemini_cli",
+    inherited = ("codex_cli", "copilot-chat", "cursor_ide", "gemini_cli",
                  "obsidian", "opencode")
     for name in inherited:
         if name not in REGISTRY:

@@ -9,6 +9,7 @@
       "file-history-snapshot",
       "progress"
     ],
+    "_since_comment": "#192: optional shared sync lookback as absolute YYYY-MM-DD. Absent or empty = unlimited history (default). Per-adapter override: adapters.<name>.since as YYYY-MM-DD, or \"all\" for no date gate on that source only. CLI --since overrides both for one run. llmwiki configure-sources suggests today−30 and shows Sessions · Earliest · In last 30 days. Do not set \"since\" here unless you want a shared floor.",
     "_headless_comment": "#8: skip headless `claude -p` / Agent-SDK sessions (entrypoint=sdk-* or promptSource=sdk). Prevents the synthesis feedback loop when the synthesizer shells out to `claude -p`.",
     "exclude_headless": true,
     "_temp_cwd_comment": "#8: skip sessions whose cwd is a throwaway temp dir (/tmp, /var/folders, ...). Default OFF \u2014 a git worktree under /tmp is often real work. Set true only if your temp dirs hold e2e/scratch junk.",
@@ -72,12 +73,12 @@
     "search_mode": "auto",
     "synthesize": false
   },
-  "_adapters_comment": "Per-source enablement and paths. AI session sources sync automatically when their store exists unless enabled:false. Notes/export intake (obsidian, chatgpt) need enabled:true. Run `llmwiki configure-sources` for an interactive setup.",
+  "_adapters_comment": "Per-source enablement and paths. AI session sources sync automatically when their store exists unless enabled:false. Notes/export intake (obsidian, chatgpt) need enabled:true. Run `llmwiki configure-sources` for an interactive setup. Optional per-adapter \"since\": YYYY-MM-DD (override shared filters.since) or \"all\" (no date gate for this source); omit the key to inherit the shared lookback (#192).",
   "adapters": {
     "claude_code": {},
     "codex_cli": {},
     "cursor_cli": {},
-    "cursor": {},
+    "cursor_ide": {},
     "openclaw": {},
     "opencode": {},
     "copilot_chat": {},

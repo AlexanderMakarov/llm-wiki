@@ -85,7 +85,7 @@ def test_claude_code_is_subagent(path, expected):
 
 @pytest.mark.parametrize("adapter_cls_name", [
     "codex_cli.CodexCliAdapter",
-    "contrib.cursor.CursorAdapter",
+    "contrib.cursor_ide.CursorAdapter",
     "contrib.gemini_cli.GeminiCliAdapter",
     "contrib.obsidian.ObsidianAdapter",
 ])

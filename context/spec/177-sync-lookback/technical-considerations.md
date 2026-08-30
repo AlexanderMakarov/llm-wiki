@@ -9,7 +9,7 @@
 
 ## 1. High-Level Technical Approach
 
-Extend CLI `--since` into durable config with resolution **CLI → adapter `YYYY-MM-DD` → adapter `"all"` (no gate) → shared `filters.since` → unlimited**. Apply lookback early on `SessionRef.mtime` / Cursor headers, then again via post-load `latest_record_time`. Never stamp `sync.files` for lookback-only skips; GC that adapter’s `sync.files` older than its effective lookback after a successful sync. `configure-sources` suggests today−30, shows **Eligible · In last 30 days** per source, and accepts **Enter / `all` / `YYYY-MM-DD`**. One optional `BaseAdapter.estimate_sync_candidates()` for counts — not a large adapter rewrite.
+Extend CLI `--since` into durable config with resolution **CLI → adapter `YYYY-MM-DD` → adapter `"all"` (no gate) → shared `filters.since` → unlimited**. Apply lookback early on `SessionRef.mtime` / Cursor headers, then again via post-load `latest_record_time`. Never stamp `sync.files` for lookback-only skips; GC that adapter’s `sync.files` older than its effective lookback after a successful sync. `configure-sources` asks shared start date first (Enter = today−30 or keep stored; typed `YYYY-MM-DD`), then per source shows **Sessions · Earliest · In last 30 days** before Enable / path / start date (Enter = inherit shared; typed date = override). Hand-edit `"all"` on an adapter remains valid outside the quiz. One optional `BaseAdapter.estimate_sync_candidates()` for counts — not a large adapter rewrite.
 
 No new runtime deps.
 
@@ -54,39 +54,9 @@ Helper: `resolve_effective_since(cli, config, adapter_name) -> datetime | None` 
 
 ### Configure quiz (`configure_sources.py`)
 
-Always show both counts per enabled source before/while asking:
-
-```text
-  claude_code — Eligible: 412 · In last 30 days: 38
-  openclaw    — Eligible: 20  · In last 30 days: 20
-```
-
-**Shared:**
-
-```text
-Shared earliest session date [2026-07-31 = today−30].
-  Enter = accept suggestion · all = unlimited · or type YYYY-MM-DD:
-```
-
-| Input | Write |
-|---|---|
-| Enter | `filters.since = "<today−30 absolute>"` |
-| `all` | leave shared unset |
-| `YYYY-MM-DD` | that value |
-
-**Per enabled source:**
-
-```text
-  openclaw override [Enter = use shared · all = no date gate for this source · YYYY-MM-DD]:
-```
-
-| Input | Write |
-|---|---|
-| Enter | no `since` key (inherit) |
-| `all` | `adapters.<name>.since = "all"` |
-| `YYYY-MM-DD` | that override |
-
-Extend config write to merge `filters.since` and per-adapter `since` without clobbering unrelated keys. Non-interactive / skipped interview invents no dates. `setup.sh` already launches configure-sources.
+1. **Shared start date first.** Enter = today−30 (or keep stored `filters.since`); typed `YYYY-MM-DD` = custom. Always writes a shared date when the interview is saved.
+2. **Each adapter:** facts (path found/not, Sessions, Earliest, In last 30 days) → Enable (`[Y/n]` if store present, `[y/N]` if not) → path (suggested only when found) → start date (Enter = inherit shared, or `YYYY-MM-DD`).
+3. Merge-write `filters.since` and per-adapter `since` without clobbering unrelated keys. Non-interactive / `--yes` invents no dates. `setup.sh` already launches configure-sources.
 
 ### Docs / examples / CHANGELOG / UPGRADING
 
@@ -94,7 +64,7 @@ Document keys, `"all"`, inheritance, early prune, no state on lookback skip, GC,
 
 ### Tests
 
-Precedence including `"all"`; invalid → 2; early prune; no state write on lookback skip; GC; configure Enter/`all`/date writes; estimate helper with fakes.
+Precedence including `"all"`; invalid → 2; early prune; no state write on lookback skip; GC; configure shared Enter/date + adapter Enter/date writes; estimate helper with fakes.
 
 ---
 

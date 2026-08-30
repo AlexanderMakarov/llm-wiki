@@ -58,6 +58,12 @@ Minimal config:
     // don't silently drop it. Turn on only if your temp dirs hold nothing
     // but e2e/scratch junk.
     "exclude_temp_cwd": false
+
+    // Optional shared sync lookback as absolute YYYY-MM-DD (#192).
+    // Omit (default) = unlimited history. Per-adapter override:
+    // adapters.<name>.since as YYYY-MM-DD, or "all" for no date gate.
+    // CLI --since overrides both for one run. See configuration-reference.md.
+    // "since": "2026-07-31"
   },
 
   "redaction": {
@@ -98,7 +104,7 @@ Minimal config:
   // These are verbose and often redundant with the visible response.
   "drop_thinking_blocks": true,
 
-  // Per-adapter config
+  // Per-adapter config. Optional since: YYYY-MM-DD override or "all" (no date gate).
   "adapters": {
     "obsidian": {
       "vault_paths": ["~/Documents/Obsidian Vault"],
@@ -178,7 +184,7 @@ Vault content root is **`vault.default_path` in `config.json`** (not an env var)
 python3 -m llmwiki sync [options]
 
 --adapter <name...>       Only run the named adapter(s); default: all available
---since YYYY-MM-DD        Skip sessions with a last record older than this
+--since YYYY-MM-DD        One-run lookback (overrides filters.since / adapters.*.since)
 --project <substring>     Only sync projects whose slug contains this substring
 --include-current         Don't skip live (<60 min) sessions
 --force                   Ignore the state file; reconvert everything
@@ -195,6 +201,8 @@ scripted pipelines that must not proceed past a partial sync).
 
 There is **no** `sync --dry-run` — use `add --dry-run` for document intake
 previews, or inspect with `sync --status` / `synth --estimate`.
+
+Durable lookback (optional): set `filters.since` to an absolute `YYYY-MM-DD` in `config.json`, or `adapters.<name>.since` to a date / `"all"` (no date gate for that source). Unset = unlimited history. `llmwiki configure-sources` asks the shared date first (default today−30) and shows Sessions · Earliest · In last 30 days per source before Enable. See [configuration-reference.md — Sync lookback](configuration-reference.md#sync-lookback).
 
 ### `llmwiki build`
 

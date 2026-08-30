@@ -435,6 +435,7 @@ def test_support_map_section_covers_working_sources(support_map_text: str) -> No
         "claude_code",
         "codex_cli",
         "cursor_cli",
+        "cursor_ide",
         "openclaw",
         "opencode",
         "copilot_cli",
@@ -447,11 +448,11 @@ def test_support_map_section_covers_working_sources(support_map_text: str) -> No
 
 
 def test_support_map_distinguishes_cursor_cli_from_ide(support_map_text: str) -> None:
-    """@spec: 175-exclude-headless-adapters — R2/R6 Cursor Agent CLI vs IDE (#2)."""
+    """@spec: 175-exclude-headless-adapters — R2/R6 Cursor Agent CLI vs IDE."""
     # @regression
     assert "### Cursor Agent CLI vs Cursor IDE" in support_map_text
     assert "`cursor_cli`" in support_map_text
-    assert "#2" in support_map_text
+    assert "`cursor_ide`" in support_map_text
     assert "IDE" in support_map_text
 
 

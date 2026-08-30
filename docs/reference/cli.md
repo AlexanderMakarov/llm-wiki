@@ -71,7 +71,7 @@ python3 -m llmwiki sync --force
 | Flag | What |
 |---|---|
 | `--adapter NAME [NAME ...]` | Limit to / load specific adapters. Default: every ingest-ready coding-agent source with a present store and no `enabled: false`. Notes intake still needs `enabled: true`. See [multi-agent-setup.md](../multi-agent-setup.md). |
-| `--since YYYY-MM-DD` | Only sessions on/after this date (e.g. `--since 2026-04-01`). |
+| `--since YYYY-MM-DD` | Only sessions on/after this date (e.g. `--since 2026-04-01`). Overrides durable `filters.since` / `adapters.*.since` for every source this run. Absent CLI flag: use config lookback, or unlimited if unset. See [configuration-reference.md — Sync lookback](../configuration-reference.md#sync-lookback). |
 | `--project SUBSTRING` | Filter by project-slug substring. |
 | `--include-current` | Include sessions < 60 min old (default skips live ones). |
 | `--force` | Ignore the mtime state file, reconvert everything. |
@@ -250,13 +250,15 @@ Scope is MCP calls only — `file://` static-site browsing stays untracked.
 python3 -m llmwiki configure-sources
 ```
 
-Interactive interview: probes each shipped adapter's default store paths, asks which coding-agent sources to enable (default yes when detected), asks separately for notes/export intake (Obsidian, ChatGPT export — default no), optionally confirms paths, then writes `adapters.<name>` blocks to gitignored `config.json`.
+Interactive interview: **shared start date first** (Enter = today−30 or keep stored; or type `YYYY-MM-DD`). Then each shipped adapter: facts (`Sessions · Earliest · In last 30 days`, path found or not) → Enable (`[Y/n]` when a default path exists and ingest is ready, `[y/N]` otherwise) → path (suggested only if found) → start date (Enter = use shared, or `YYYY-MM-DD`). Writes `filters.since` and `adapters.<name>` to gitignored `config.json`.
+
+Lookback quiz keys: shared **Enter** writes today−30 (or keeps stored); typed **`YYYY-MM-DD`** sets a custom shared floor. Per-source **Enter** on start date inherits shared (no `since` key); typed **`YYYY-MM-DD`** writes `adapters.<name>.since`. Merge-write touches only those `since` keys plus enable/path. Non-interactive `--yes` / skipped interview invents no dates. Config `"all"` on a per-adapter `since` key (hand-edited) still means no date gate for that source.
 
 | Flag | What |
 |---|---|
 | `--yes` | Non-interactive: skip interview (no config writes). |
 
-After pip or Homebrew install (no `setup.sh`), run this once after `llmwiki init`. Git clone `setup.sh` offers the same interview on a TTY before `install-automation`. Set `LLMWIKI_SKIP_CONFIGURE_SOURCES=1` to skip from `setup.sh`.
+After pip or Homebrew install (no `setup.sh`), run this once after `llmwiki init`. Git clone `setup.sh` offers the same interview on a TTY before `install-automation`. Set `LLMWIKI_SKIP_CONFIGURE_SOURCES=1` to skip from `setup.sh`. Durable keys: [configuration-reference.md — Sync lookback](../configuration-reference.md#sync-lookback).
 
 ---
 
@@ -276,7 +278,8 @@ Registered adapters:
   ----------------  --------  ----------  -------  ------------------------------
   claude_code       yes       auto        yes      Claude Code — reads ~/.claude/projects/
   openclaw          yes       explicit    yes      OpenClaw — reads configured roots …
-  cursor            yes       explicit    no       Cursor IDE — scaffold only; IDE chat ingest incomplete (#2)
+  cursor_ide        yes       explicit    no       Cursor IDE — Composer sessions (globalStorage state.vscdb)
+  cursor_cli        yes       auto        yes      Cursor Agent CLI — reads ~/.cursor/chats/
 ```
 
 Columns: **present** (store path on disk), **enabled** (`auto` / `explicit` / `off`), **active** (included on the next bare `sync`).

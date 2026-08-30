@@ -4,7 +4,7 @@
 **Module:** `llmwiki.adapters.contrib.cursor_cli`
 **Source:** [`llmwiki/adapters/contrib/cursor_cli.py`](../../llmwiki/adapters/contrib/cursor_cli.py)
 
-This is **not** the Cursor IDE adapter. IDE Composer history uses [`cursor`](cursor.md) (global `state.vscdb`, [#2](https://github.com/AlexanderMakarov/llm-wiki/issues/2)).
+This is **not** the Cursor IDE adapter. IDE Composer history uses [`cursor_ide`](cursor-ide.md) (global `state.vscdb`).
 
 ## What it reads
 
@@ -52,6 +52,6 @@ See [Multi-agent setup — What “automated” means](../multi-agent-setup.md#w
 
 ## See also
 
-- [Cursor IDE adapter](cursor.md) — workspaceStorage / `#2`
+- [Cursor IDE adapter](cursor-ide.md)
 - [Multi-agent setup](../multi-agent-setup.md)
 - [`llmwiki/adapters/contrib/cursor_cli.py`](../../llmwiki/adapters/contrib/cursor_cli.py)
