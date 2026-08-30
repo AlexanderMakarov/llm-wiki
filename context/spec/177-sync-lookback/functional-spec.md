@@ -12,7 +12,9 @@ Some coding agents keep years of chat history. A plain sync can pull that entire
 
 Operators need durable shared and per-source lookbacks, early pruning so excluded history is not loaded, clear per-source sync numbers, lookback-tied cleanup of sync memory in the vault state file, and a first-run configure interview that **suggests** a sensible window (today minus 30 days), shows how many sessions that implies, and teaches how to change it later — without forcing a lookback when someone syncs without configuring.
 
-**Success:** Unconfigured sync still means full history; configured lookbacks are respected on every bare sync; setup makes a 30-day suggestion easy and informed; sync hints how to change dates; state sync memory is pruned to the active lookback.
+After lookback ships, **configure-sources is the only adapter-side gate for bare sync**: Enable in the quiz means the source runs on the next bare `llmwiki sync`. There is no second “active / ingest_ready” surprise. One-off sources use `sync --adapter <name>`.
+
+**Success:** Unconfigured sync still means full history; configured lookbacks are respected on every bare sync; setup makes a 30-day suggestion easy and informed; sync hints how to change dates; state sync memory is pruned to the active lookback; Cursor IDE and other ready sources that the operator Enabled in configure-sources are included on bare sync; the adapters roster shows **enabled yes/no** (not a separate active column).
 
 ---
 
@@ -95,6 +97,17 @@ Operators need durable shared and per-source lookbacks, early pruning so exclude
   - [x] CHANGELOG `[Unreleased]` + short UPGRADING note: set lookback before enabling long stores; configure suggests 30 days; next sync with a lookback prunes sync memory outside the window.
   - [x] Docs state lookback-skipped sessions are not remembered as done.
 
+### R9 — Configure Enable = bare sync; adapters table is enabled yes/no
+
+- **As an** operator, **I want** Enable in `configure-sources` to be sufficient for bare `llmwiki sync` for every ready session source (including Cursor IDE), **so that** I never need a second hidden gate or a separate “active” column.
+
+- **Acceptance Criteria:**
+  - [x] Given Cursor IDE’s store is present and configure-sources wrote `adapters.cursor_ide.enabled: true` (with a lookback set), when I run bare `llmwiki sync`, then the `cursor_ide` adapter runs (no `--adapter` required).
+  - [x] `cursor_ide.ingest_ready` is `True` so selection no longer skips IDE on bare sync.
+  - [x] The `llmwiki adapters` / post-configure roster columns are **name · present · enabled · description** only — **enabled** is **yes** or **no** (whether the next bare sync includes that source). There is **no** `active` column and no `auto` / `explicit` / `off` labels in that table.
+  - [x] Quiz Enable for a present, ready store defaults to yes (`[Y/n]`); unfinished adapters (`ingest_ready=False`) still default to no with a short note.
+  - [x] One-off / forced runs still use `llmwiki sync --adapter <name>` (bypasses the enabled roster).
+
 ---
 
 ## 3. Scope and Boundaries
@@ -105,6 +118,7 @@ Operators need durable shared and per-source lookbacks, early pruning so exclude
 - Configure quiz suggests today−30; shows per-source session counts for the chosen/suggested window.
 - Sync: hybrid early prune; per-source after-filter + synced; hint how to change start dates.
 - No lookback-only writes to `sync.files`; lookback-tied GC of `sync.files`.
+- Cursor IDE `ingest_ready=True`; configure Enable ⇒ bare sync; adapters table **enabled yes/no** only (no active column).
 - Docs, examples, CHANGELOG, UPGRADING, tests covering the above.
 
 ### Out-of-Scope
@@ -113,3 +127,4 @@ Operators need durable shared and per-source lookbacks, early pruning so exclude
 - Deleting already-synced raw sessions; vault TTL; product retention changes.
 - Broader state diet (queue capping, synth map redesign, legacy `.llmwiki-state.json` removal) beyond lookback GC of `sync.files`.
 - Unrelated filter redesign (headless / temp cwd / subagents) beyond lookback interaction.
+- Requiring configure-sources before *any* AI adapter runs (Claude Code and similar stay auto when the store is present and not explicitly off).

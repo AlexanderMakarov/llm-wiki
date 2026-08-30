@@ -417,7 +417,7 @@ Each adapter can be configured in the `adapters` section of `config.json`. The k
 | Codex CLI | `codex_cli` | Auto when store present | `roots`, `enabled`, `since` |
 | Copilot Chat | `copilot_chat` | Auto when store present | `roots`, `enabled`, `since` |
 | Copilot CLI | `copilot_cli` | Auto when store present | `roots`, `enabled`, `since` |
-| Cursor IDE | `cursor_ide` | **Not active on bare sync** (`ingest_ready` false) | `roots`, `enabled`, `since`, `global_db` |
+| Cursor IDE | `cursor_ide` | Bare sync when enabled / store present | `roots`, `enabled`, `since`, `global_db` |
 | Cursor Agent CLI | `cursor_cli` | Auto when store present | `roots`, `enabled`, `since` |
 | Gemini CLI | `gemini_cli` | Auto when store present | `roots`, `enabled`, `since` |
 | OpenCode | `opencode` | Auto when store present | `roots`, `enabled`, `since` |

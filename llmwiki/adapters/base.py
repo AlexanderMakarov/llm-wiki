@@ -104,8 +104,10 @@ class BaseAdapter:
     is_ai_session: bool = True
 
     #: False when the adapter registers for discovery but cannot convert
-    #: sessions yet (e.g. Cursor IDE — #2). Bare ``sync`` / ``watch`` skip
-    #: adapters with ``ingest_ready=False``; ``--adapter`` still loads them.
+    #: sessions yet (scaffold / incomplete ingest). Bare ``sync`` / ``watch``
+    #: skip ``ingest_ready=False``; ``--adapter`` still loads them. Ready
+    #: sources (including Cursor IDE after #192) stay ``True`` so
+    #: ``configure-sources`` Enable is enough for bare sync.
     ingest_ready: bool = True
 
     #: #arch-m9 (#621): canonical declaration on BaseAdapter so subclasses

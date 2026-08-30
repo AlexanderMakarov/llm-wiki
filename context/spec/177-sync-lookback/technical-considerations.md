@@ -1,7 +1,7 @@
 # Technical Specification: Durable sync lookback (`filters.since` + per-adapter)
 
 - **Functional Specification:** [functional-spec.md](./functional-spec.md)
-- **Status:** Approved
+- **Status:** Completed
 - **Author(s):** Aleksandr Makarov
 - **Issue:** [#192](https://github.com/AlexanderMakarov/llm-wiki/issues/192)
 
@@ -80,4 +80,6 @@ Precedence including `"all"`; invalid → 2; early prune; no state write on look
 
 **System dependencies:** `#2` SessionRef; unified `llmwiki-state.json` `sync.files`; existing `configure-sources` / `setup.sh` interview entry.
 
-**Out of this PR:** relative stored forms (`90d`); queue/synth state diet; Cursor `ingest_ready`; mandatory headless peek in default estimate.
+**In this PR (R9 follow-on):** set `cursor_ide.ingest_ready = True`; drop the adapters-table `active` column and the `auto`/`explicit`/`off` enabled labels — print **enabled yes/no** (= selected for bare sync); quiz Enable for present+ready stores defaults yes. `select_sync_adapters` still skips any future `ingest_ready=False` scaffolds; `--adapter` still bypasses enablement.
+
+**Out of this PR:** relative stored forms (`90d`); queue/synth state diet; mandatory headless peek in default estimate; making every AI adapter opt-in-only via configure.

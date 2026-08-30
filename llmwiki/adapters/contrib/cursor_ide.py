@@ -40,7 +40,9 @@ class CursorAdapter(BaseAdapter):
         "Cursor IDE — Composer sessions (globalStorage state.vscdb)"
     )
 
-    ingest_ready = False
+    # #192 R9: lookback is the safety net; Enable in configure-sources is
+    # enough for bare sync (no second ingest_ready gate).
+    ingest_ready = True
 
     SUPPORTED_SCHEMA_VERSIONS = ["v1"]
     is_ai_session = True

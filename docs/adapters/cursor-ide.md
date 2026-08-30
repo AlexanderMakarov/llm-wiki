@@ -28,7 +28,14 @@ Each Composer thread is one sync session (non-file `SessionRef`). Archived threa
 
 ## Enable it
 
-Ingest works via explicit adapter selection:
+Prefer **`llmwiki configure-sources`**: Enable Cursor IDE when the store is present, set a shared (or per-adapter) lookback, and save. After that, bare `llmwiki sync` includes `cursor_ide` — no second gate.
+
+```bash
+python3 -m llmwiki configure-sources
+python3 -m llmwiki sync
+```
+
+One-off without changing the roster:
 
 ```bash
 python3 -m llmwiki sync --adapter cursor_ide
@@ -36,7 +43,7 @@ python3 -m llmwiki sync --adapter cursor_ide
 python3 -m llmwiki sync --adapter cursor
 ```
 
-`select_sync_adapters` bypasses `ingest_ready` for `--adapter`, so this always runs when the store is present. Bare `llmwiki sync` still skips Cursor IDE while `ingest_ready = False` — intentional so a default sync does not flood from a large historical Composer DB. Set `filters.since` or `adapters.cursor_ide.since` (or pass `--since`) before flipping `ingest_ready` locally; see [Sync lookback](../configuration-reference.md#sync-lookback).
+Set `filters.since` or `adapters.cursor_ide.since` (or pass `--since`) before the first large run so Composer history stays bounded — see [Sync lookback](../configuration-reference.md#sync-lookback).
 
 Listed in `llmwiki adapters` / `configure-sources` as **`cursor_ide`**. Use [`cursor_cli`](cursor-cli.md) for Agent CLI sessions under `~/.cursor/chats/`.
 

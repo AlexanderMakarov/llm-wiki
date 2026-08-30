@@ -9,7 +9,7 @@ llmwiki reads sessions from multiple coding agents. Every shipped source is conf
 | Claude Code | `claude_code` | `~/.claude/projects/` | Auto when store present (`adapters.claude_code`) | Production |
 | Codex CLI | `codex_cli` | `~/.codex/sessions/` (and `~/.codex/projects/`) | Auto when store present | Production |
 | Cursor Agent CLI | `cursor_cli` | `~/.cursor/chats/` | Auto when store present | Production |
-| Cursor IDE | `cursor_ide` | `globalStorage/state.vscdb` (Composer) | `--adapter cursor_ide` (not on bare sync until `ingest_ready`) | Production |
+| Cursor IDE | `cursor_ide` | `globalStorage/state.vscdb` (Composer) | bare sync after `configure-sources` Enable (or `--adapter cursor_ide`) | Production |
 | OpenClaw | `openclaw` | `~/.openclaw/agents/` or `<vault>/.openclaw-sessions-inbox` | Auto when store present; set `adapters.openclaw.roots` for vault inbox | Production |
 | OpenCode | `opencode` | OpenCode / OpenClaw app-config sessions dirs | Auto when store present | Production |
 | GitHub Copilot Chat | `copilot_chat` | VS Code workspaceStorage | Auto when store present | Production |
@@ -44,7 +44,7 @@ Legacy raw files with no `is_headless` marker stay eligible until you re-sync (r
 ## How default sync chooses adapters
 
 1. Loads every shipped adapter from the registry.
-2. For each adapter, checks whether its store path exists (`present`) and whether ingest is ready. Cursor IDE is production via `--adapter cursor_ide`, but is **not** selected on bare sync while `ingest_ready` is false (avoids flooding from a large historical Composer DB until you set a lookback and opt in).
+2. For each adapter, checks whether its store path exists (`present`) and whether it is **enabled** for the next bare sync (yes/no). Cursor IDE is production and is selected on bare sync when Enabled in `configure-sources` (or auto when the store is present and not explicitly off) — set a lookback first so a large Composer DB stays bounded.
 3. Includes every **coding-agent** source that is present, ingest-ready, and not explicitly disabled (`enabled: false` in `adapters.<name>`). Notes/export intake (Obsidian, ChatGPT) requires `enabled: true`.
 
 ```bash
@@ -84,7 +84,7 @@ Runs on bare `sync` when `~/.cursor/chats/` exists. See [Cursor Agent CLI adapte
 python3 -m llmwiki sync --adapter cursor
 ```
 
-Composer threads from global `state.vscdb`; spawned subagents skipped under default `exclude_headless`. Not on bare sync while `ingest_ready` is false. See [Cursor IDE adapter](adapters/cursor-ide.md).
+Composer threads from global `state.vscdb`; spawned subagents skipped under default `exclude_headless`. Enable via `configure-sources` for bare sync (or `--adapter cursor_ide`). See [Cursor IDE adapter](adapters/cursor-ide.md).
 
 ### OpenClaw
 

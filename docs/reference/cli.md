@@ -274,15 +274,15 @@ python3 -m llmwiki adapters
 
 ```
 Registered adapters:
-  name              present   enabled     active   description
-  ----------------  --------  ----------  -------  ------------------------------
-  claude_code       yes       auto        yes      Claude Code — reads ~/.claude/projects/
-  openclaw          yes       explicit    yes      OpenClaw — reads configured roots …
-  cursor_ide        yes       explicit    no       Cursor IDE — Composer sessions (globalStorage state.vscdb)
-  cursor_cli        yes       auto        yes      Cursor Agent CLI — reads ~/.cursor/chats/
+  name              present   enabled   description
+  ----------------  --------  --------  ------------------------------
+  claude_code       yes       yes       Claude Code — reads ~/.claude/projects/
+  openclaw          yes       yes       OpenClaw — reads configured roots …
+  cursor_ide        yes       yes       Cursor IDE — Composer sessions (globalStorage state.vscdb)
+  cursor_cli        yes       yes       Cursor Agent CLI — reads ~/.cursor/chats/
 ```
 
-Columns: **present** (store path on disk), **enabled** (`auto` / `explicit` / `off`), **active** (included on the next bare `sync`).
+Columns: **present** (store path on disk), **enabled** (**yes** / **no** — included on the next bare `sync`). Set via `configure-sources`; use `sync --adapter <name>` for a one-off.
 
 ---
 

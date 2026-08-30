@@ -31,3 +31,7 @@
   > Verifies the whole feature end-to-end against functional-spec.md, run after all implementation slices are complete.
   - [x] Read functional-spec.md acceptance criteria in full. Generate acceptance-level tests that verify the entire feature as a whole — not individual slices. Cover applicable layers (unit for pure logic, integration for service interactions, e2e for user flows) based on the project's testing stack. Write tests with RED validation (must fail before implementation is confirmed done). Annotate each test with `@spec: 177-sync-lookback` and `@regression` if suitable for long-term regression. **[Agent: testing-expert]**
   - [x] Run all generated tests. All must pass. Fix any failures before proceeding. **[Agent: testing-expert]**
+
+- [x] **Slice 7: Configure Enable = bare sync (R9)**
+  - [x] Set `cursor_ide.ingest_ready = True`; adapters table = present + enabled yes/no (drop active / auto/explicit/off); docs + CHANGELOG + UPGRADING + AGENTS; acceptance tests that enabled IDE is selected on bare sync. **[Agent: generalPurpose]**
+  - [x] Verify: focused pytest + `llmwiki adapters` column smoke; ruff; delete ephemeral artifacts. **[Agent: generalPurpose]**

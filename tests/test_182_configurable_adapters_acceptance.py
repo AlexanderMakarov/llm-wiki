@@ -28,15 +28,27 @@ def test_merged_config_enables_openclaw_vault_inbox(tmp_path: Path):
     assert adapter_store_present(REGISTRY["openclaw"], cfg) is True
 
 
-def test_cursor_ide_explicit_enabled_not_active_on_bare_sync(tmp_path: Path):
+def test_cursor_ide_explicit_enabled_on_bare_sync(tmp_path: Path):
+    """#192 R9: Enable in config is enough — ingest_ready no longer blocks."""
     discover_all()
-    root = tmp_path / "workspaceStorage"
-    root.mkdir(parents=True)
-    cfg = {"adapters": {"cursor_ide": {"enabled": True, "roots": [str(root)]}}}
+    db = tmp_path / "state.vscdb"
+    db.write_bytes(b"")
+    cfg = {
+        "adapters": {
+            "cursor_ide": {
+                "enabled": True,
+                "roots": [str(tmp_path)],
+                "global_db": str(db),
+            }
+        }
+    }
     selected = {c.name for c in select_sync_adapters(cfg, None)}
-    enabled, active = adapter_status(
-        "cursor_ide", REGISTRY["cursor_ide"], cfg, selected_names=selected
+    assert "cursor_ide" in selected
+    assert (
+        adapter_status(
+            "cursor_ide", REGISTRY["cursor_ide"], cfg, selected_names=selected
+        )
+        == "yes"
     )
-    assert enabled == "explicit"
-    assert active == "no"
     assert adapter_store_present(REGISTRY["cursor_ide"], cfg) is True
+    assert REGISTRY["cursor_ide"].ingest_ready is True
