@@ -1,8 +1,9 @@
 # Cursor IDE adapter
 
-**Status:** Production — Composer ingest from global `state.vscdb` ([#2](https://github.com/AlexanderMakarov/llm-wiki/issues/2))
-**Module:** `llmwiki.adapters.contrib.cursor`
-**Source:** [`llmwiki/adapters/contrib/cursor.py`](../../llmwiki/adapters/contrib/cursor.py)
+**Status:** Production — Composer ingest from global `state.vscdb`
+**Registry name:** `cursor_ide` (alias `cursor` still resolves for CLI / old configs)
+**Module:** `llmwiki.adapters.contrib.cursor_ide`
+**Source:** [`llmwiki/adapters/contrib/cursor_ide.py`](../../llmwiki/adapters/contrib/cursor_ide.py)
 
 For **Cursor Agent CLI** sessions (`~/.cursor/chats/`), use the separate [`cursor_cli`](cursor-cli.md) adapter.
 
@@ -27,15 +28,24 @@ Each Composer thread is one sync session (non-file `SessionRef`). Archived threa
 
 ## Enable it
 
-Ingest works via explicit adapter selection:
+Prefer **`llmwiki configure-sources`**: Enable Cursor IDE when the store is present, set a shared (or per-adapter) lookback, and save. After that, bare `llmwiki sync` includes `cursor_ide` — no second gate.
 
 ```bash
+python3 -m llmwiki configure-sources
+python3 -m llmwiki sync
+```
+
+One-off without changing the roster:
+
+```bash
+python3 -m llmwiki sync --adapter cursor_ide
+# alias still works:
 python3 -m llmwiki sync --adapter cursor
 ```
 
-`select_sync_adapters` bypasses `ingest_ready` for `--adapter`, so this always runs when the store is present. Bare `llmwiki sync` still skips Cursor IDE while `ingest_ready = False` — intentional until lookback config ([#192](https://github.com/AlexanderMakarov/llm-wiki/issues/192)) / operator opt-in, so a default sync does not flood from a large historical Composer DB. Prefer keeping that flag off; if you flip `ingest_ready` to `True` locally, expect a large first sync unless you also pass `--since`.
+Set `filters.since` or `adapters.cursor_ide.since` (or pass `--since`) before the first large run so Composer history stays bounded — see [Sync lookback](../configuration-reference.md#sync-lookback).
 
-Listed in `llmwiki adapters` when `workspaceStorage` (or the global DB) exists. Use [`cursor_cli`](cursor-cli.md) for Agent CLI sessions under `~/.cursor/chats/`.
+Listed in `llmwiki adapters` / `configure-sources` as **`cursor_ide`**. Use [`cursor_cli`](cursor-cli.md) for Agent CLI sessions under `~/.cursor/chats/`.
 
 ## Automated (headless) sessions
 
@@ -50,7 +60,7 @@ When `workspaceId` is present (typically the `workspaceStorage` directory hash),
 ```json
 {
   "adapters": {
-    "cursor": {
+    "cursor_ide": {
       "global_db": "~/.config/Cursor/User/globalStorage/state.vscdb",
       "roots": ["~/.config/Cursor/User/workspaceStorage"]
     }
@@ -58,7 +68,7 @@ When `workspaceId` is present (typically the `workspaceStorage` directory hash),
 }
 ```
 
-`global_db` is optional (platform defaults apply). `roots` still override workspaceStorage paths used for association.
+`global_db` is optional (platform defaults apply). `roots` still override workspaceStorage paths used for association. A legacy `adapters.cursor` block is still read if `adapters.cursor_ide` is absent.
 
 ## Testing the adapter
 
@@ -71,4 +81,4 @@ python3 -m pytest tests/test_cursor_ide_adapter.py -q
 
 - [Cursor Agent CLI adapter](cursor-cli.md)
 - [Multi-agent setup](../multi-agent-setup.md)
-- [`llmwiki/adapters/contrib/cursor.py`](../../llmwiki/adapters/contrib/cursor.py)
+- [`llmwiki/adapters/contrib/cursor_ide.py`](../../llmwiki/adapters/contrib/cursor_ide.py)

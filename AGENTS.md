@@ -49,7 +49,7 @@ Different agents write their transcripts to different locations. The adapter reg
 | Claude Code | `~/.claude/projects/<project>/<uuid>.jsonl` | `claude_code.py` (core) |
 | Codex CLI | `~/.codex/sessions/` | `codex_cli.py` (core, production) |
 | Cursor Agent CLI | `~/.cursor/chats/` | `contrib/cursor_cli.py` (contrib — `--adapter cursor_cli`) |
-| Cursor IDE | workspaceStorage | `contrib/cursor.py` (contrib; IDE ingest incomplete — #2) |
+| Cursor IDE | globalStorage `state.vscdb` | `contrib/cursor_ide.py` (contrib — bare sync after configure Enable, or `--adapter cursor_ide`) |
 | Gemini CLI | `~/.gemini/` | `contrib/gemini_cli.py` (contrib scaffold) |
 | OpenCode | OpenCode / OpenClaw app-config sessions | `contrib/opencode.py` (contrib) |
 | OpenClaw | `~/.openclaw/agents/` | `contrib/openclaw.py` (contrib; all sessions not headless) |

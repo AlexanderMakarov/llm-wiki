@@ -25,7 +25,7 @@ python3 -m llmwiki sync [options]
 | Flag | Type | Default | Description |
 |---|---|---|---|
 | `--adapter` | `name...` | all available | Only run the named adapter(s) |
-| `--since` | `YYYY-MM-DD` | none | Only sessions on or after this date |
+| `--since` | `YYYY-MM-DD` | none | One-run lookback: only sessions on or after this date. Overrides durable `filters.since` / `adapters.*.since` for every source in the run (#192) |
 | `--project` | `substring` | none | Only sync projects whose slug contains this |
 | `--include-current` | flag | off | Don't skip live sessions (< 60 min old) |
 | `--force` | flag | off | Ignore state file, reconvert everything |
@@ -192,6 +192,26 @@ cp examples/sessions_config.json config.json
 }
 ```
 
+### Sync lookback
+
+Optional absolute date gate so bare `llmwiki sync` does not ingest years of history (#192). Unset shared and per-adapter keys mean **unlimited** — same as today’s default.
+
+| Key | Values | Meaning |
+|---|---|---|
+| `filters.since` | absent, `""`, or `YYYY-MM-DD` | Shared earliest session day; absent/empty = no shared floor |
+| `adapters.<name>.since` | absent, `YYYY-MM-DD`, or `"all"` | Per-source override; absent = inherit shared; `"all"` = no date gate for that source only |
+
+**Precedence** (per adapter, highest first): CLI `--since` → adapter `YYYY-MM-DD` → adapter `"all"` → `filters.since` → unlimited. `"all"` is valid only on the per-adapter key. An invalid date string exits **2** (same as a bad `--since`).
+
+**How sync applies it**
+
+- **Early prune** — file-based sources drop candidates whose `SessionRef.mtime` is before the effective lookback before loading; Cursor IDE filters on Composer header timestamps before any bubble payloads are loaded. A post-load `latest_record_time` gate still runs.
+- **No state on lookback skip** — sessions skipped only because of lookback are **not** written into `llmwiki-state.json` `sync.files`, so widening the window later can reconsider them on a normal sync.
+- **Lookback GC** — after a successful non-dry-run sync, for each **coding-agent** adapter with a *durable* lookback (config `filters.since` / `adapters.<name>.since`, not a one-run CLI `--since`), remove that adapter’s `sync.files` keys (`"<adapter>::…"`) whose stored mtime is before the lookback. Notes/export intake (`is_ai_session: false`, e.g. Obsidian) is not GC’d. Sources with no durable lookback are untouched. GC does not delete `raw/`, and does not touch queue / synth / quarantine / ops.
+- **Sync hint** — every sync ends with a line pointing at `filters.since`, `adapters.<name>.since`, and `llmwiki configure-sources`.
+
+**`configure-sources` quiz** — **shared start date first** (Enter = today−30, or keep a stored date; or type `YYYY-MM-DD`). Then each source: facts block (`Sessions · Earliest · In last 30 days`, path found or not) → Enable (`[Y/n]` when a default path exists *and* ingest is ready, `[y/N]` otherwise) → path → start date (Enter = use shared, or `YYYY-MM-DD`). Non-interactive / skipped interviews invent no dates. See [CLI `configure-sources`](reference/cli.md#configure-sources--enable-detected-session-stores).
+
 ### Section reference
 
 | Section | Key | Type | Default | Description |
@@ -200,6 +220,7 @@ cp examples/sessions_config.json config.json
 | `filters` | `include_projects` | list | [] | If non-empty, only sync matching project slugs |
 | `filters` | `exclude_projects` | list | [] | Skip projects containing these substrings |
 | `filters` | `drop_record_types` | list | [3 types] | JSONL record types to discard |
+| `filters` | `since` | string | unset (unlimited) | Shared sync lookback as absolute `YYYY-MM-DD`. Absent or empty = no shared date gate. Overridden per run by CLI `--since`. See [Sync lookback](#sync-lookback) |
 | `filters` | `exclude_headless` | bool | true | Skip automated / headless launches across coding-agent adapters (Claude SDK markers; Cursor Agent CLI `subagentInfo` / `approvalMode=auto-review`; OpenClaw never skipped; others false until markers exist). Prevents the synthesis feedback loop. Applies at **both** ingest and synthesis. See [multi-agent-setup.md](multi-agent-setup.md#what-automated-headless-means) |
 | `filters` | `exclude_temp_cwd` | bool | false | Opt-in: skip sessions whose `cwd` is a throwaway temp dir (`/tmp`, `/var/folders`, …). Off by default — a git worktree under `/tmp` is often real work |
 | `redaction` | `real_username` | string | `$USER` | Your OS username (auto-detected if empty) |
@@ -211,7 +232,8 @@ cp examples/sessions_config.json config.json
 | `truncation` | `user_prompt_chars` | int | 4000 | Max chars per user prompt |
 | `truncation` | `assistant_text_chars` | int | 8000 | Max chars of assistant text |
 | root | `drop_thinking_blocks` | bool | true | Drop `<thinking>` blocks from output |
-| `adapters` | per-adapter | object | varies | Override adapter-specific settings |
+| `adapters` | per-adapter | object | varies | Override adapter-specific settings (`roots`, `enabled`, optional `since`, plus adapter-specific fields) |
+| `adapters.<name>` | `since` | string | unset (inherit) | Per-source lookback: `YYYY-MM-DD` override, or `"all"` for no date gate on that source. Omit the key to inherit `filters.since`. See [Sync lookback](#sync-lookback) |
 | `schedule` | `build` | enum | `"on-sync"` | When `/wiki-build` runs. `on-sync` / `daily` / `weekly` / `manual` / `never`. |
 | `schedule` | `lint` | enum | `"manual"` | When `/wiki-lint` runs. Same enum. |
 | `synthesis` | `backend` | enum | `"dummy"` | Which synthesizer: `"dummy"` / `"ollama"` / `"claude"` (synchronous `claude -p` CLI). Unknown values warn and fall back to `"dummy"`. The old `"agent"` / agent-delegate backend was removed in v1.4.0. See [configuration.md § Synthesis backend](configuration.md#synthesis-backend). |
@@ -391,29 +413,35 @@ Each adapter can be configured in the `adapters` section of `config.json`. The k
 
 | Adapter | Config key | Default enablement | Configurable fields |
 |---|---|---|---|
-| Claude Code | `claude_code` | Auto when store present | `roots`, `enabled` |
-| Codex CLI | `codex_cli` | Auto when store present | `roots`, `enabled` |
-| Copilot Chat | `copilot_chat` | Auto when store present | `roots`, `enabled` |
-| Copilot CLI | `copilot_cli` | Auto when store present | `roots`, `enabled` |
-| Cursor IDE | `cursor` | **Not active on bare sync** (scaffold — [#2](https://github.com/AlexanderMakarov/llm-wiki/issues/2)) | `roots`, `enabled` |
-| Cursor Agent CLI | `cursor_cli` | Auto when store present | `roots`, `enabled` |
-| Gemini CLI | `gemini_cli` | Auto when store present | `roots`, `enabled` |
-| OpenCode | `opencode` | Auto when store present | `roots`, `enabled` |
-| OpenClaw | `openclaw` | Auto when store present | `roots`, `enabled` |
-| ChatGPT | `chatgpt` | Opt-in (`enabled: true`) | `enabled`, `export_dirs`, `min_messages` |
-| Obsidian | `obsidian` | Opt-in (`enabled: true`, notes intake) | `vault_paths`, `exclude_folders`, `min_content_chars` |
-| Jira | `jira` | Opt-in (`enabled: true`) | `server`, `email`, `api_token` / `api_token_env`, `jql`, `max_results` |
-| Meeting transcripts | `meeting` | Opt-in (`enabled: true`) | `source_dirs`, `extensions` |
+| Claude Code | `claude_code` | Auto when store present | `roots`, `enabled`, `since` |
+| Codex CLI | `codex_cli` | Auto when store present | `roots`, `enabled`, `since` |
+| Copilot Chat | `copilot_chat` | Auto when store present | `roots`, `enabled`, `since` |
+| Copilot CLI | `copilot_cli` | Auto when store present | `roots`, `enabled`, `since` |
+| Cursor IDE | `cursor_ide` | Bare sync when enabled / store present | `roots`, `enabled`, `since`, `global_db` |
+| Cursor Agent CLI | `cursor_cli` | Auto when store present | `roots`, `enabled`, `since` |
+| Gemini CLI | `gemini_cli` | Auto when store present | `roots`, `enabled`, `since` |
+| OpenCode | `opencode` | Auto when store present | `roots`, `enabled`, `since` |
+| OpenClaw | `openclaw` | Auto when store present | `roots`, `enabled`, `since` |
+| ChatGPT | `chatgpt` | Opt-in (`enabled: true`) | `enabled`, `export_dirs`, `min_messages`, `since` |
+| Obsidian | `obsidian` | Opt-in (`enabled: true`, notes intake) | `vault_paths`, `exclude_folders`, `min_content_chars`, `since` |
+| Jira | `jira` | Opt-in (`enabled: true`) | `server`, `email`, `api_token` / `api_token_env`, `jql`, `max_results`, `since` |
+| Meeting transcripts | `meeting` | Opt-in (`enabled: true`) | `source_dirs`, `extensions`, `since` |
 
-Bare `llmwiki sync` runs every ingest-ready coding-agent adapter whose store is present and not explicitly disabled. Notes/export intake needs `enabled: true` (#326). Run `llmwiki configure-sources` to probe paths and write settings. Support map: [multi-agent-setup.md](multi-agent-setup.md).
+Every adapter accepts optional `since` (`YYYY-MM-DD` or `"all"`) — see [Sync lookback](#sync-lookback). Bare `llmwiki sync` runs every ingest-ready coding-agent adapter whose store is present and not explicitly disabled. Notes/export intake needs `enabled: true` (#326). Run `llmwiki configure-sources` to probe paths, set lookbacks, and write settings. Support map: [multi-agent-setup.md](multi-agent-setup.md).
 
 Example:
 
 ```json
 {
+  "filters": {
+    "since": "2026-07-31"
+  },
   "adapters": {
     "copilot_chat": {
       "roots": ["/custom/path/to/vscode/workspaceStorage"]
+    },
+    "openclaw": {
+      "since": "all"
     }
   }
 }

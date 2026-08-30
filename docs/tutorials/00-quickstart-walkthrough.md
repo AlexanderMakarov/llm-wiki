@@ -59,10 +59,13 @@ Expected output:
 
 ```
 ==> adapter: claude_code
-  discovered: 487 source files
+  candidates: 487 (after lookback filter)
+  synced: 12
 ==> adapter: codex_cli
-  discovered: 2 source files
-summary: 488 converted, 0 unchanged, ...
+  candidates: 2 (after lookback filter)
+  synced: 2
+summary: 14 converted, 0 unchanged, ...
+hint: set sync lookback via filters.since or adapters.<name>.since in sessions config, or re-run llmwiki configure-sources
 ```
 
 Check status anytime:

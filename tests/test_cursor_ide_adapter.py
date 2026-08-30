@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from llmwiki.adapters.contrib.cursor import CursorAdapter
+from llmwiki.adapters.contrib.cursor_ide import CursorAdapter
 from llmwiki.adapters.contrib.cursor_slug import cursor_workspace_slug
 from tests.fixtures_cursor_ide import make_cursor_ide_db
 
@@ -16,7 +16,7 @@ WS = "aabbccddeeff00112233445566778899"
 
 def _adapter_with_db(tmp_path: Path, composers: list) -> CursorAdapter:
     db = make_cursor_ide_db(tmp_path / "state.vscdb", composers=composers)
-    ad = CursorAdapter(config={"adapters": {"cursor": {"global_db": str(db)}}})
+    ad = CursorAdapter(config={"adapters": {"cursor_ide": {"global_db": str(db)}}})
     return ad
 
 

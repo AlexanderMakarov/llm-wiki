@@ -41,7 +41,7 @@ llmwiki runs two interchangeable ways. Pick one, start — you can switch later.
 
 - **[Claude Code](tutorials/03-use-with-claude-code.md)** — slash commands, session metadata, `/wiki-ingest`, `/wiki-sync`, `/wiki-query`.
 - **[Codex CLI](tutorials/04-use-with-codex-cli.md)** — sync from `~/.codex/sessions/`, live-session filtering.
-- *Adapter reference:* [Claude Code](adapters/claude-code.md) · [Codex CLI](adapters/codex-cli.md) · [Cursor Agent CLI](adapters/cursor-cli.md) · [Cursor IDE](adapters/cursor.md) · [Gemini CLI](adapters/gemini-cli.md) · [Copilot](adapters/copilot.md) · [Obsidian](adapters/obsidian.md) · [OpenCode](adapters/opencode.md) · [OpenClaw](adapters/openclaw.md) · [ChatGPT](adapters/chatgpt.md).
+- *Adapter reference:* [Claude Code](adapters/claude-code.md) · [Codex CLI](adapters/codex-cli.md) · [Cursor Agent CLI](adapters/cursor-cli.md) · [Cursor IDE](adapters/cursor-ide.md) · [Gemini CLI](adapters/gemini-cli.md) · [Copilot](adapters/copilot.md) · [Obsidian](adapters/obsidian.md) · [OpenCode](adapters/opencode.md) · [OpenClaw](adapters/openclaw.md) · [ChatGPT](adapters/chatgpt.md).
 - **[Multi-agent setup](multi-agent-setup.md)** — which agents are supported, core vs contrib, what “automated” means per source.
 
 ---

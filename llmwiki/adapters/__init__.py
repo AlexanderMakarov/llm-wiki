@@ -14,7 +14,7 @@ Core adapters (always loaded):
     claude_code, codex_cli
 
 Contrib adapters (loaded on demand via --adapter flag):
-    chatgpt, copilot_chat, copilot_cli, cursor, gemini_cli, obsidian, opencode
+    chatgpt, copilot_chat, copilot_cli, cursor_ide, gemini_cli, obsidian, opencode
 """
 
 from __future__ import annotations
@@ -34,7 +34,7 @@ REGISTRY_ALIASES: dict[str, str] = {}
 # Contrib adapters that can be loaded on demand.
 CONTRIB_ADAPTERS = {
     "chatgpt", "copilot_chat", "copilot_cli",
-    "cursor", "cursor_cli", "gemini_cli", "obsidian", "opencode", "openclaw",
+    "cursor_ide", "cursor_cli", "gemini_cli", "obsidian", "opencode", "openclaw",
 }
 
 

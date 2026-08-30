@@ -202,10 +202,10 @@ def test_adapters_lists_at_least_one_adapter() -> None:
     assert result.returncode == 0, result.stderr
     # Header row + at least one data row.
     assert "Registered adapters:" in result.stdout
-    # #387 U2: columns are now name / present / enabled / active / description.
+    # #192 R9: columns are name / present / enabled(yes|no) / description.
     assert "present" in result.stdout
     assert "enabled" in result.stdout
-    assert "active" in result.stdout
+    assert "  active  " not in result.stdout.split("Columns:")[0]
 
 
 def test_adapters_wide_disables_truncation() -> None:

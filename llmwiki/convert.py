@@ -12,6 +12,7 @@ from __future__ import annotations
 import copy
 import fnmatch as _fnmatch  # #py-m11 (#597): module-level alias
 import hashlib
+import inspect
 import json
 import os
 import re
@@ -31,6 +32,7 @@ from llmwiki.state_store import mtime_from_state, mtime_to_iso
 from llmwiki.state_store import read_state as _read_unified_state
 from llmwiki.state_store import resolve_state_file as _resolve_state_file
 from llmwiki.state_store import update_state as _update_unified_state
+from llmwiki.sync.lookback import gc_sync_files_for_lookback, resolve_effective_since
 from llmwiki.synth.pipeline import resolve_include_subagents
 
 DEFAULT_CONFIG_FILE = REPO_ROOT / "examples" / "sessions_config.json"
@@ -285,7 +287,7 @@ def _migrate_legacy_state(
         ("codex_cli",   ".codex/sessions/"),
         ("copilot-chat", "workspaceStorage"),
         ("copilot-cli",  ".copilot/"),
-        ("cursor",       "Cursor/"),
+        ("cursor_ide",   "Cursor/"),
         ("gemini_cli",   ".gemini/"),
         ("obsidian",     "Obsidian"),
         ("opencode",     "opencode/"),
@@ -309,7 +311,14 @@ def _migrate_legacy_state(
         if parsed_v is None:
             continue
         if "::" in k:
-            # Already portable — keep (float in memory; ISO on disk via save_state).
+            # ``cursor`` → ``cursor_ide`` registry rename: rewrite portable
+            # keys so Composer threads are not re-converted as new sessions.
+            if k.startswith("cursor::") and "cursor_ide" in known_names:
+                new_k = "cursor_ide::" + k[len("cursor::"):]
+                if new_k not in out:
+                    out[new_k] = parsed_v
+                    migrated += 1
+                continue
             out[k] = parsed_v
             continue
         # Legacy absolute-path key. Try to infer the adapter from the path.
@@ -1388,6 +1397,26 @@ def _same_session_output(out_path: Path, own_session_id: str) -> bool:
     return bool(existing_id) and existing_id == own_session_id
 
 
+def _md_output_owned(out_path: Path, new_text: str) -> bool:
+    """True when the existing ``.md`` raw file is this source's prior copy.
+
+    Notes-intake adapters (Obsidian, …) copy redacted source text and
+    typically have no ``sessionId``. A dest without a sessionId is treated
+    as our prior write so lookback GC cannot permanently quarantine notes.
+    A dest that *does* carry a sessionId is some other session's page —
+    leave the immutability guard in place.
+    """
+    if not out_path.is_file():
+        return False
+    try:
+        existing = out_path.read_text(encoding="utf-8")
+    except OSError:
+        return False
+    if existing == new_text:
+        return True
+    return not _frontmatter_session_id(existing)
+
+
 def _adapter_tag(adapter_name: str) -> str:
     """Normalise an adapter registry name for the frontmatter ``tags``
     field.  Matches the convention used across the codebase:
@@ -1687,14 +1716,6 @@ def convert_all(
     # synthesis), so sync only cares about the "off" case.
     include_subagents = resolve_include_subagents(config)
 
-    since_dt: datetime | None = None
-    if since:
-        try:
-            since_dt = datetime.strptime(since, "%Y-%m-%d").replace(tzinfo=UTC)
-        except ValueError:
-            print(f"error: --since must be YYYY-MM-DD, got {since!r}", file=sys.stderr)
-            return 2
-
     try:
         selected = select_sync_adapters(config, adapters or None)
     except ValueError as e:
@@ -1739,12 +1760,48 @@ def convert_all(
     # set, `sync --force` silently overwrote colliding outputs because the
     # disambiguator on disk was gated on ``not force`` (bug #339).
     names_written_this_run: set[str] = set()
+    # #192: durable (config) lookbacks for post-run sync.files GC.
+    # CLI ``--since`` must not drive persistent GC; notes intake is not GC'd.
+    durable_lookbacks: dict[str, datetime] = {}
 
     for cls in selected:
+        try:
+            # #192: per-adapter lookback (CLI --since still overrides every source).
+            since_dt = resolve_effective_since(since, config, cls.name)
+        except ValueError as e:
+            print(f"error: {e}", file=sys.stderr)
+            return 2
+        try:
+            durable_dt = resolve_effective_since(None, config, cls.name)
+        except ValueError:
+            durable_dt = None
+        if durable_dt is not None and getattr(cls, "is_ai_session", True):
+            durable_lookbacks[cls.name] = durable_dt
         adapter = cls(config)
         print(f"==> adapter: {cls.name}")
-        sessions = adapter.discover_session_refs()
-        print(f"  discovered: {len(sessions)} source files")
+        # #192: optional discover_session_refs(since_dt=); BaseAdapter default
+        # ignores it. Call only when the signature accepts the kwarg so older
+        # overrides without since_dt still work.
+        discover = adapter.discover_session_refs
+        try:
+            params = inspect.signature(discover).parameters
+        except (TypeError, ValueError):
+            params = {}
+        if "since_dt" in params or any(
+            p.kind == inspect.Parameter.VAR_KEYWORD for p in params.values()
+        ):
+            sessions = discover(since_dt=since_dt)
+        else:
+            sessions = discover()
+        # Early mtime prune before any load (#192 hybrid): drop files whose
+        # mtime is before the effective lookback. Cursor (and similar) may
+        # already have filtered in discover; this is the shared safety net.
+        if since_dt is not None:
+            since_ts = since_dt.timestamp()
+            sessions = [ref for ref in sessions if ref.mtime >= since_ts]
+        # R5: primary count is after early filter ("what we have"), not the
+        # full-store discovered total.
+        print(f"  candidates: {len(sessions)} (after lookback filter)")
         counters.setdefault(cls.name, {
             "discovered": 0, "converted": 0, "unchanged": 0, "live": 0,
             "filtered": 0, "ignored": 0, "errored": 0,
@@ -1752,6 +1809,7 @@ def convert_all(
         counters[cls.name]["discovered"] = len(sessions)
         empty_after_parse = 0
         saw_nonempty_records = False
+        adapter_synced = 0
         for ref in sessions:
             # #2 SessionRef: mtime + portable key come from the ref so
             # DB-row / non-file adapters need not create stub files.
@@ -1801,16 +1859,23 @@ def convert_all(
                 else:
                     out_path.parent.mkdir(parents=True, exist_ok=True)
                     try:
-                        _raw_write_guard(out_path, force=force, source=str(path),
-                                         adapter_name=cls.name)
+                        redacted = redact(text)
+                        _raw_write_guard(
+                            out_path,
+                            force=force,
+                            source=str(path),
+                            adapter_name=cls.name,
+                            owned=_md_output_owned(out_path, redacted),
+                        )
                     except FileExistsError as e:
                         errors += 1
                         _bump(cls.name, "errored")
                         _quarantine_add(cls.name, str(path), str(e))
                         continue
-                    out_path.write_text(redact(text), encoding="utf-8")
+                    out_path.write_text(redacted, encoding="utf-8")
                     state[key] = mtime_to_iso(mtime)
                 converted += 1
+                adapter_synced += 1
                 _bump(cls.name, "converted")
                 continue
 
@@ -1897,6 +1962,8 @@ def convert_all(
                 _bump(cls.name, "live")
                 continue
             if since_dt and last_t and last_t < since_dt:
+                # Lookback-only skip: do NOT stamp sync.files — widening
+                # lookback later must still reconsider these on a normal sync.
                 filtered += 1
                 _bump(cls.name, "filtered")
                 continue
@@ -2008,8 +2075,10 @@ def convert_all(
                 # `sync --status` until someone runs `quarantine clear`.
                 _quarantine_clear(str(path), adapter=cls.name)
             converted += 1
+            adapter_synced += 1
             _bump(cls.name, "converted")
 
+        print(f"  synced: {adapter_synced}")
         # #2 R6: adapter discovered sessions but every load/normalize/filter
         # produced zero records — usually a scaffold or wrong store format.
         c = counters[cls.name]
@@ -2021,7 +2090,7 @@ def convert_all(
             and c.get("unchanged", 0) == 0
         ):
             print(
-                f"  warning: {cls.name}: discovered {c['discovered']} sources "
+                f"  warning: {cls.name}: {c['discovered']} candidates "
                 f"but parsed 0 records — adapter may not implement this store "
                 f"format",
                 file=sys.stderr,
@@ -2041,6 +2110,15 @@ def convert_all(
         # `sync --status` after a `--force` re-sync would silently show
         # the *previous* run's `last_sync` timestamp, and the next
         # non-force sync would re-process every file all over again.
+        # #192: drop this adapter's sync.files stamps older than its
+        # *durable* lookback (config, not CLI ``--since``). Notes-intake
+        # adapters (``is_ai_session=False``) are not GC'd — their raw
+        # copies have no sessionId ownership, so dropping stamps would
+        # quarantine them on the next widen. Other sections
+        # (queue/synth/quarantine/ops) are owned by save_state's unified
+        # merge — GC only mutates the in-memory files map.
+        for adapter_name, adapter_since in durable_lookbacks.items():
+            gc_sync_files_for_lookback(state, adapter_name, adapter_since)
         meta = {
             "last_sync": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "version": 1,
@@ -2061,4 +2139,9 @@ def convert_all(
             f"(exclude_headless), {excluded_temp} temp-cwd (exclude_temp_cwd), "
             f"{excluded_subagents} subagent (include_subagents=off)"
         )
+    # #192 R5: always hint how to set/change lookback (including unlimited runs).
+    print(
+        "hint: set sync lookback via filters.since or adapters.<name>.since "
+        "in sessions config, or re-run llmwiki configure-sources"
+    )
     return 1 if (errors and fail_on_errors) else 0

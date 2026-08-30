@@ -83,7 +83,7 @@ sessions into markdown under `raw/sessions/`, then ingest into `wiki/`.
 **Arguments Claude may pass through:** `--dry-run`, `--since`,
 `--project`, `--force`, `--vault`. Say any of them in natural language
 — "sync but only sessions from this week" becomes
-`--since $(date -v-7d +%Y-%m-%d)`.
+`--since $(date -v-7d +%Y-%m-%d)`. Durable lookback in config (`filters.since` / `adapters.*.since`) applies on bare `/wiki-sync` when `--since` is omitted — see [configuration-reference.md](../configuration-reference.md#sync-lookback).
 
 **When to use:** at the end of each coding block. Also the only command
 that triggers auto-ingest of new pages into `wiki/`.

@@ -13,7 +13,7 @@ from llmwiki.adapters.codex_cli import CodexCliAdapter
 from llmwiki.adapters.contrib.chatgpt import ChatGPTAdapter
 from llmwiki.adapters.contrib.copilot_chat import CopilotChatAdapter
 from llmwiki.adapters.contrib.copilot_cli import CopilotCliAdapter
-from llmwiki.adapters.contrib.cursor import CursorAdapter
+from llmwiki.adapters.contrib.cursor_ide import CursorAdapter
 from llmwiki.adapters.contrib.gemini_cli import GeminiCliAdapter
 from llmwiki.adapters.contrib.obsidian import ObsidianAdapter
 from llmwiki.adapters.contrib.openclaw import OpenClawAdapter
@@ -28,7 +28,7 @@ _SLICE3 = (
     ("copilot_chat", CopilotChatAdapter),
     ("chatgpt", ChatGPTAdapter),
     ("gemini_cli", GeminiCliAdapter),
-    ("cursor", CursorAdapter),
+    ("cursor_ide", CursorAdapter),
     ("obsidian", ObsidianAdapter),
 )
 

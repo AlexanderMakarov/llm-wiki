@@ -26,6 +26,7 @@ from llmwiki.convert import DEFAULT_CONFIG, Redactor, _adapter_tag, render_sessi
     ("codex_cli", "codex-cli"),
     ("gemini_cli", "gemini-cli"),
     ("cursor", "cursor"),
+    ("cursor_ide", "cursor-ide"),
     ("copilot-chat", "copilot-chat"),
     ("copilot-cli", "copilot-cli"),
     ("opencode", "opencode"),
@@ -90,9 +91,9 @@ def test_render_emits_hyphenated_copilot_chat_tag():
     assert "tags: [copilot-chat, session-transcript]" in md
 
 
-def test_render_emits_cursor_tag():
-    md = _render("cursor")
-    assert "tags: [cursor, session-transcript]" in md
+def test_render_emits_cursor_ide_tag():
+    md = _render("cursor_ide")
+    assert "tags: [cursor-ide, session-transcript]" in md
 
 
 def test_render_defaults_to_claude_code_when_adapter_missing():
@@ -126,6 +127,6 @@ def test_render_never_emits_empty_tag():
 def test_render_session_transcript_tag_always_present():
     """Every sync output must carry the generic ``session-transcript``
     marker so UI filters + lint rules can target it."""
-    for adapter in ("claude_code", "codex_cli", "cursor", "gemini_cli"):
+    for adapter in ("claude_code", "codex_cli", "cursor_ide", "gemini_cli"):
         md = _render(adapter)
         assert "session-transcript" in md

@@ -46,6 +46,8 @@ llmwiki build
 
 `llmwiki-state.json` follows a different lifecycle: sync and synth update it; it does not participate in MCP log folding.
 
+When a durable sync lookback is set (`filters.since` / `adapters.<name>.since`, or CLI `--since`), successful sync **GCs** that adapter’s `sync.files` stamps whose stored mtime is before the lookback. Sessions skipped only because of lookback are never added to the map, so widening the window later can reconsider them. GC does not delete `raw/` and does not touch queue, synth, quarantine, or ops. See [configuration-reference.md — Sync lookback](../configuration-reference.md#sync-lookback).
+
 ---
 
 ## What is safe to delete

@@ -79,7 +79,7 @@ Registered adapters:
   openclaw          yes       explicit    yes      OpenClaw — reads configured roots...
 ```
 
-Run `llmwiki configure-sources` after install to probe stores and write `adapters.<name>` settings. Full support map: [multi-agent-setup.md](multi-agent-setup.md).
+Run `llmwiki configure-sources` after install to probe stores and write `adapters.<name>` settings. The interview asks a shared lookback first (default today−30) and shows Sessions · Earliest · In last 30 days per source before Enable; skip configure to keep unlimited history. Full support map: [multi-agent-setup.md](multi-agent-setup.md). Lookback keys: [configuration-reference.md](configuration-reference.md#sync-lookback).
 
 ## Three commands after install
 

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from llmwiki.adapters.contrib.cursor import CursorAdapter
+from llmwiki.adapters.contrib.cursor_ide import CursorAdapter
 from llmwiki.adapters.contrib.gemini_cli import GeminiCliAdapter
 
 # ═══════════════════════════════════════════════════════════════════════

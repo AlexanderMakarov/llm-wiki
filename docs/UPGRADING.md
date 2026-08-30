@@ -10,6 +10,17 @@ How to upgrade between `llmwiki` releases.  Most releases are drop-in (`pip inst
 
 The canonical per-release detail is [CHANGELOG.md](https://github.com/Pratiyush/llm-wiki/blob/master/CHANGELOG.md) — this guide focuses on "what might break".
 
+## Unreleased — durable sync lookback (#192)
+
+Optional shared `filters.since` and per-adapter `adapters.<name>.since` (`YYYY-MM-DD`, or `"all"` to skip the date gate for one source). Unset still means unlimited history.
+
+- **Set a lookback before enabling a long-retention store** so the first bare sync does not convert years of history. CLI `--since` still overrides for one run.
+- **`llmwiki configure-sources`** asks shared start date first (Enter = today−30, or keep a stored date), then per source shows **Sessions · Earliest · In last 30 days** before Enable / path / start date. Enable means the source is on the next bare `sync` (Cursor IDE included). Skipped interviews invent no dates.
+- **The next successful sync with a durable lookback** prunes that coding-agent adapter’s `sync.files` stamps older than the window (CLI `--since` does not GC; notes intake is not GC’d). Lookback-only skips are never remembered as done, so widening the date later can pick them up. GC does not delete `raw/` or queue/synth/quarantine/ops.
+- **Cursor IDE registry name is `cursor_ide`** (was `cursor`) so it is distinct from `cursor_cli`. `--adapter cursor` and a legacy `adapters.cursor` config block still work. Prefer `adapters.cursor_ide` in new configs. Existing `sync.files` keys prefixed `cursor::` are rewritten to `cursor_ide::` on the next state load so Composer threads are not re-converted.
+- **`llmwiki adapters` enabled column is yes/no** (will the next bare sync include this source). The old `active` column and `auto` / `explicit` / `off` labels are gone.
+Keys and inheritance: [configuration-reference.md — Sync lookback](configuration-reference.md#sync-lookback).
+
 ## 2.0.0 — static site, pipeline, and MCP (from v1.5.0)
 
 ### Read this first
@@ -42,7 +53,7 @@ The canonical per-release detail is [CHANGELOG.md](https://github.com/Pratiyush/
 - Bare **`llmwiki sync` loads every enabled ingest-ready adapter** whose store exists; `enabled: false` is honoured (#182).
 - **Obsidian and ChatGPT export stay opt-in** (`adapters.*.enabled: true`).
 - **`filters.exclude_headless` (default on)** skips automated launches for every coding-agent adapter; re-sync to classify older Cursor CLI rows (#180).
-- **Cursor IDE Composer ingest works via `llmwiki sync --adapter cursor`** (#2) — parses global `state.vscdb`; not on bare `sync` yet (`ingest_ready` false) so a large Composer history does not flood `raw/` by accident. Prefer `--since YYYY-MM-DD` until config lookback ([#192](https://github.com/AlexanderMakarov/llm-wiki/issues/192)). Cursor Agent CLI remains `cursor_cli`.
+- **Cursor IDE Composer ingest works via bare `llmwiki sync` after `configure-sources` Enable** (or `llmwiki sync --adapter cursor_ide`) (#2 / #192) — parses global `state.vscdb`. Set `filters.since` / `adapters.cursor_ide.since` (or pass `--since`) before the first large run. Alias `--adapter cursor` / legacy `adapters.cursor` still resolve. Cursor Agent CLI remains `cursor_cli`.
 
 ### Synthesis and candidates
 

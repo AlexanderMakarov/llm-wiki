@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import re as _re
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -58,6 +59,26 @@ class SessionRef:
     locator: str
 
 
+@dataclass(frozen=True)
+class SyncCandidateEstimate:
+    """Cheap sync-size hint for ``configure-sources`` (#192).
+
+    ``eligible`` — sessions that look convertible (adapter-defined).
+    ``in_last_30_days`` — subset with activity on or after today UTC − 30 days.
+    ``earliest`` — oldest activity/mtime among eligible sessions, if any.
+    """
+
+    eligible: int
+    in_last_30_days: int
+    earliest: datetime | None = None
+
+
+def lookback_cutoff_ts(*, days: int = 30) -> float:
+    """Unix timestamp for UTC midnight of (today UTC − ``days``)."""
+    day = datetime.now(UTC).date() - timedelta(days=days)
+    return datetime(day.year, day.month, day.day, tzinfo=UTC).timestamp()
+
+
 class BaseAdapter:
     """Adapter interface.
 
@@ -83,8 +104,10 @@ class BaseAdapter:
     is_ai_session: bool = True
 
     #: False when the adapter registers for discovery but cannot convert
-    #: sessions yet (e.g. Cursor IDE — #2). Bare ``sync`` / ``watch`` skip
-    #: adapters with ``ingest_ready=False``; ``--adapter`` still loads them.
+    #: sessions yet (scaffold / incomplete ingest). Bare ``sync`` / ``watch``
+    #: skip ``ingest_ready=False``; ``--adapter`` still loads them. Ready
+    #: sources (including Cursor IDE after #192) stay ``True`` so
+    #: ``configure-sources`` Enable is enough for bare sync.
     ingest_ready: bool = True
 
     #: #arch-m9 (#621): canonical declaration on BaseAdapter so subclasses
@@ -161,14 +184,20 @@ class BaseAdapter:
                 paths.extend(sorted(store.rglob("*.jsonl")))
         return paths
 
-    def discover_session_refs(self) -> list[SessionRef]:
+    def discover_session_refs(
+        self, since_dt: datetime | None = None
+    ) -> list[SessionRef]:
         """Preferred discovery entry for convert/watch (#2 SessionRef).
 
         Default wraps ``discover_sessions()`` with file ``st_mtime`` and a
         portable ``key`` fragment. Adapters whose sessions are DB rows (or
         other non-file stores) override this and may leave ``discover_sessions``
         unused by convert.
+
+        ``since_dt`` is optional early lookback (#192). The default ignores it;
+        ``convert_all`` still drops ``ref.mtime < since_dt`` before load.
         """
+        del since_dt  # default: convert still mtime-prunes after discover
         out: list[SessionRef] = []
         for path in self.discover_sessions():
             try:
@@ -183,6 +212,30 @@ class BaseAdapter:
                 )
             )
         return out
+
+    def estimate_sync_candidates(self) -> SyncCandidateEstimate:
+        """Count candidates for the configure-sources lookback quiz (#192).
+
+        Default: ``discover_session_refs()``; ``eligible`` is the full count;
+        ``in_last_30_days`` counts refs with ``mtime >=`` today UTC − 30 days.
+
+        Caveat: this path does **not** apply a headless peek — automated /
+        empty sessions that only become obvious after ``load_records`` may
+        still be counted. Adapters that can filter cheaply (e.g. Cursor IDE
+        headers) override this method.
+        """
+        cutoff = lookback_cutoff_ts(days=30)
+        refs = self.discover_session_refs()
+        eligible = len(refs)
+        in_window = sum(1 for ref in refs if ref.mtime >= cutoff)
+        earliest: datetime | None = None
+        if refs:
+            earliest = datetime.fromtimestamp(min(ref.mtime for ref in refs), tz=UTC)
+        return SyncCandidateEstimate(
+            eligible=eligible,
+            in_last_30_days=in_window,
+            earliest=earliest,
+        )
 
     # ─── per-agent helpers ─────────────────────────────────────────────
 

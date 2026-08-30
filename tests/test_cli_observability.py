@@ -1,8 +1,8 @@
 """Tests for the observability CLI bundle (G-01 · G-03 · G-13).
 
-* ``cmd_adapters``: status helper returns right tuple, CLI shows
-  ``auto``/``explicit``/``off`` + ``will_fire`` columns, legacy labels
-  are gone.
+* ``cmd_adapters``: status helper returns yes/no; CLI shows present +
+  enabled yes/no (#192 R9); legacy active/auto/explicit labels gone;
+  ``--wide`` still works.
 * ``cmd_log``: filters by date / operation, JSON vs text output, empty
   log, missing file, invalid --since, limit clamping.
 * ``cmd_sync_status``: reads ``_meta`` + ``_counters`` from the state
@@ -63,53 +63,48 @@ def _available_fake(is_avail: bool):
 
 
 def test_adapter_status_auto_default():
-    configured, will_fire = _adapter_status("x", _available_fake(True), config={})
-    assert configured == "auto"
-    assert will_fire == "yes"
+    assert _adapter_status("x", _available_fake(True), config={}) == "yes"
 
 
 def test_adapter_status_explicit_enable():
     cfg = {"x": {"enabled": True}}
-    configured, will_fire = _adapter_status("x", _available_fake(True), config=cfg)
-    assert configured == "explicit"
-    assert will_fire == "yes"
+    assert _adapter_status("x", _available_fake(True), config=cfg) == "yes"
 
 
 def test_adapter_status_explicit_off_blocks_fire():
     cfg = {"x": {"enabled": False}}
-    configured, will_fire = _adapter_status("x", _available_fake(True), config=cfg)
-    assert configured == "off"
-    assert will_fire == "no"
+    assert _adapter_status("x", _available_fake(True), config=cfg) == "no"
 
 
 def test_adapter_status_unavailable_never_fires():
-    configured, will_fire = _adapter_status(
-        "x", _available_fake(False), config={"x": {"enabled": True}}
+    assert (
+        _adapter_status(
+            "x", _available_fake(False), config={"x": {"enabled": True}}
+        )
+        == "no"
     )
-    assert will_fire == "no"
 
 
 def test_adapter_status_invalid_config_entry_defaults_to_auto():
     """A malformed config row (string instead of dict) must not crash."""
-    configured, _ = _adapter_status("x", _available_fake(True), config={"x": "yes"})
-    assert configured == "auto"
+    assert _adapter_status("x", _available_fake(True), config={"x": "yes"}) == "yes"
 
 
 def test_adapters_cli_shows_new_columns():
     cp = _run_cli("adapters")
     assert cp.returncode == 0
-    # #387 U2: column names renamed to present / enabled / active.
-    for header in ("name", "present", "enabled", "active", "description"):
+    # #192 R9: name / present / enabled(yes|no) / description — no active column.
+    for header in ("name", "present", "enabled", "description"):
         assert header in cp.stdout, (
             f"adapters table missing the {header!r} column header"
         )
-    # Old column names should be gone — they're confusing without the legend.
     table_section = cp.stdout.split("Columns:")[0]
+    assert "  active  " not in table_section, "retired 'active' column still rendered"
     assert "  configured  " not in table_section, "old 'configured' column header still rendered"
     assert "  will_fire  " not in table_section, "old 'will_fire' column header still rendered"
-    # Human-readable column legend at the bottom describes the new names.
-    assert "auto (default)" in cp.stdout
-    assert "explicit (enabled:true" in cp.stdout
+    assert "auto (default)" not in cp.stdout
+    assert "explicit (enabled:true" not in cp.stdout
+    assert "yes/no" in cp.stdout
 
 
 def test_adapters_wide_flag_still_works():

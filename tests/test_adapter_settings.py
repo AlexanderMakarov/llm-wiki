@@ -71,15 +71,27 @@ def test_select_sync_unknown_adapter_raises():
         select_sync_adapters({}, ["not-a-real-adapter"])
 
 
-def test_select_sync_skips_cursor_ide_even_when_enabled(tmp_path: Path):
+def test_select_sync_includes_cursor_ide_when_enabled(tmp_path: Path):
+    """#192 R9: enabled Cursor IDE is on bare sync; alias cursor still works."""
     discover_all()
-    root = tmp_path / "workspaceStorage"
-    root.mkdir(parents=True)
-    cfg = {"adapters": {"cursor": {"enabled": True, "roots": [str(root)]}}}
+    db = tmp_path / "state.vscdb"
+    db.write_bytes(b"")
+    # Legacy adapters.cursor key still configures cursor_ide.
+    cfg = {
+        "adapters": {
+            "cursor": {
+                "enabled": True,
+                "roots": [str(tmp_path)],
+                "global_db": str(db),
+            }
+        }
+    }
     names = [c.name for c in select_sync_adapters(cfg, None)]
-    assert "cursor" not in names
+    assert "cursor_ide" in names
     names_explicit = [c.name for c in select_sync_adapters(cfg, ["cursor"])]
-    assert names_explicit == ["cursor"]
+    assert names_explicit == ["cursor_ide"]
+    names_canon = [c.name for c in select_sync_adapters(cfg, ["cursor_ide"])]
+    assert names_canon == ["cursor_ide"]
 
 
 def test_adapter_store_present_openclaw_custom_root(tmp_path: Path):

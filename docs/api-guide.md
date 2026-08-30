@@ -23,7 +23,7 @@ from llmwiki.convert import convert_all
 
 rc = convert_all(
     adapters=None,         # list[str] | None -- adapter names; None = all available
-    since=None,            # str | None -- "YYYY-MM-DD" cutoff date
+    since=None,            # str | None -- one-run "YYYY-MM-DD"; overrides filters.since / adapters.*.since
     project=None,          # str | None -- substring filter on project slug
     include_current=False, # bool -- include live sessions (< 60 min old)
     force=False,           # bool -- ignore state file, reconvert everything
@@ -32,7 +32,7 @@ rc = convert_all(
 # Returns: 0 on success, non-zero on error
 ```
 
-This is the programmatic equivalent of `llmwiki sync`. It discovers agent session stores, converts `.jsonl` files to markdown, and writes them under `raw/sessions/`.
+This is the programmatic equivalent of `llmwiki sync`. It discovers agent session stores, converts `.jsonl` files to markdown, and writes them under `raw/sessions/`. When `since` is omitted, durable lookback from `filters.since` / `adapters.<name>.since` still applies (unset = unlimited). See [configuration-reference.md — Sync lookback](configuration-reference.md#sync-lookback).
 
 ### `build_site()` -- compile HTML from markdown
 

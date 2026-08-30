@@ -9,7 +9,7 @@ import pytest
 
 from llmwiki.adapters import REGISTRY, discover_all
 from llmwiki.adapters.base import BaseAdapter
-from llmwiki.adapters.contrib.cursor import CursorAdapter
+from llmwiki.adapters.contrib.cursor_ide import CursorAdapter
 from llmwiki.adapters.contrib.gemini_cli import GeminiCliAdapter
 from llmwiki.cli import build_parser
 from llmwiki.graph import build_graph, scan_pages
@@ -32,7 +32,7 @@ from tests.conftest import REPO_ROOT
 
 def test_v02_registry_has_new_adapters():
     discover_all()
-    for name in ("cursor", "gemini_cli"):
+    for name in ("cursor_ide", "gemini_cli"):
         assert name in REGISTRY, f"missing adapter: {name}"
 
 

@@ -115,13 +115,28 @@ def test_migrate_handles_codex_and_obsidian(monkeypatch, tmp_path):
     assert any(k.startswith("obsidian::") for k in migrated)
 
 
-def test_migrate_preserves_already_portable_keys():
+def test_migrate_rewrites_cursor_prefix_to_cursor_ide():
     portable = {
-        "claude_code::.claude/projects/foo/bar.jsonl": 1.0,
+        "cursor::composer/abc": 1.0,
+        "cursor_cli::chats/x": 2.0,
     }
-    migrated, count = _migrate_legacy_state(portable, ["claude_code"])
-    assert count == 0
-    assert migrated == portable
+    migrated, count = _migrate_legacy_state(
+        portable, ["cursor_ide", "cursor_cli"]
+    )
+    assert count == 1
+    assert "cursor_ide::composer/abc" in migrated
+    assert "cursor::composer/abc" not in migrated
+    assert migrated["cursor_cli::chats/x"] == 2.0
+
+
+def test_migrate_cursor_prefix_does_not_clobber_existing_cursor_ide():
+    portable = {
+        "cursor::composer/abc": 1.0,
+        "cursor_ide::composer/abc": 9.0,
+    }
+    migrated, count = _migrate_legacy_state(portable, ["cursor_ide"])
+    assert migrated["cursor_ide::composer/abc"] == 9.0
+    assert "cursor::composer/abc" not in migrated
 
 
 def test_migrate_skips_non_string_and_non_numeric_entries():

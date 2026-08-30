@@ -8,7 +8,7 @@ from llmwiki.adapters.claude_code import ClaudeCodeAdapter
 from llmwiki.adapters.codex_cli import CodexCliAdapter
 from llmwiki.adapters.contrib.copilot_chat import CopilotChatAdapter
 from llmwiki.adapters.contrib.copilot_cli import CopilotCliAdapter
-from llmwiki.adapters.contrib.cursor import CursorAdapter
+from llmwiki.adapters.contrib.cursor_ide import CursorAdapter
 from llmwiki.adapters.contrib.gemini_cli import GeminiCliAdapter
 from llmwiki.adapters.contrib.obsidian import ObsidianAdapter
 
@@ -27,7 +27,10 @@ def test_registry_discovers_all_adapters():
     assert REGISTRY_ALIASES.get("copilot-cli") == "copilot_cli"
     assert resolve_adapter_name("copilot-chat") == "copilot_chat"
     assert resolve_adapter_name("copilot-cli") == "copilot_cli"
-    assert "cursor" in REGISTRY
+    assert "cursor_ide" in REGISTRY
+    assert "cursor" not in REGISTRY
+    assert REGISTRY_ALIASES.get("cursor") == "cursor_ide"
+    assert resolve_adapter_name("cursor") == "cursor_ide"
     assert "gemini_cli" in REGISTRY
     assert "obsidian" in REGISTRY
 
