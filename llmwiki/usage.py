@@ -69,9 +69,10 @@ QUERY_MAX_CHARS = 200
 # Arg keys that count as "the thing the caller asked for", in priority order.
 _QUERY_KEYS = ("term", "question", "path", "query", "project")
 
-# Retired MCP tool names → canonical names for aggregation/display (#196).
-# Raw JSONL records keep the name logged at call time; mapping runs at read.
-CANONICAL_TOOL_ALIASES: dict[str, str] = {
+# Retired MCP tool names → current names for aggregation/display (#196).
+# Raw JSONL and folded daily.json keep the name logged at call time; mapping
+# runs when folding into per-tool totals (combined_totals, Analytics table).
+BACKPORT_MAPPING: dict[str, str] = {
     "wiki_query": "wiki_search",
     "wiki_list_sources": "wiki_search",
     "wiki_confidence": "wiki_search",
@@ -82,37 +83,33 @@ CANONICAL_TOOL_ALIASES: dict[str, str] = {
     "wiki_dashboard": "wiki_health",
 }
 
-# Live MCP surface — entity-returning tools after canonicalisation.
+
+# Classify *persisted records* — every name that has ever written telemetry.
+# Live MCP names plus legacy aliases; not derived from BACKPORT_MAPPING so
+# retrieval vs entity boundaries stay explicit (see demo/usage/daily.json).
 ENTITY_TOOLS = frozenset({
-    "wiki_search", "wiki_read_page", "wiki_export",
+    "wiki_query", "wiki_search", "wiki_list_sources", "wiki_read_page",
+    "wiki_category_browse", "wiki_export", "wiki_confidence",
+    "wiki_entity_search",
 })
 
-# Consumption tools for the value headline / daily retrievals counter (#52).
 RETRIEVAL_TOOLS = frozenset({
-    "wiki_search", "wiki_read_page",
+    "wiki_query", "wiki_search", "wiki_read_page",
 })
 WRITE_TOOLS = frozenset({"wiki_add"})
 
 
-def canonical_tool_name(tool: str) -> str:
-    """Map a persisted or live tool name to the post-#196 canonical name."""
-    return CANONICAL_TOOL_ALIASES.get(tool, tool)
-
-
-def _remap_by_tool_counts(by_tool: Mapping[str, Any]) -> dict[str, int]:
-    out: dict[str, int] = {}
-    for key, value in by_tool.items():
-        name = canonical_tool_name(str(key))
-        out[name] = out.get(name, 0) + int(value or 0)
-    return out
+def backport_tool_name(tool: str) -> str:
+    """Map a persisted or live tool name to the current MCP surface name."""
+    return BACKPORT_MAPPING.get(tool, tool)
 
 
 def is_entity_tool(tool: str) -> bool:
-    return canonical_tool_name(tool) in ENTITY_TOOLS
+    return tool in ENTITY_TOOLS
 
 
 def is_retrieval_tool(tool: str) -> bool:
-    return canonical_tool_name(tool) in RETRIEVAL_TOOLS
+    return tool in RETRIEVAL_TOOLS
 
 
 def is_write_tool(tool: str) -> bool:
@@ -373,7 +370,7 @@ def aggregate(records: Iterable[dict[str, Any]]) -> dict[str, Any]:
     totals = _empty_totals()
     proc_sets: dict[str, set] = {}
     for r in records:
-        tool = canonical_tool_name(str(r.get("tool") or "unknown"))
+        tool = backport_tool_name(str(r.get("tool") or "unknown"))
         project = attributed_project(r)
         resp_bytes = int(r.get("resp_bytes") or 0)
         hits = r.get("hits")
@@ -431,7 +428,7 @@ def merge_aggregates(a: dict[str, Any], b: dict[str, Any]) -> dict[str, Any]:
         a.get("total_server_processes", 0) + b.get("total_server_processes", 0))
     for side in (a, b):
         for tool, stats in side.get("per_tool", {}).items():
-            tool = canonical_tool_name(str(tool))
+            tool = backport_tool_name(str(tool))
             dst = out["per_tool"].setdefault(
                 tool, {"calls": 0, "zero_hits": 0, "resp_bytes": 0, "items_returned": 0})
             dst["calls"] += stats.get("calls", 0)
@@ -448,7 +445,7 @@ def merge_aggregates(a: dict[str, Any], b: dict[str, Any]) -> dict[str, Any]:
         for project, tools in side.get("per_project_tool", {}).items():
             dproj = out["per_project_tool"].setdefault(project, {})
             for tool, stats in tools.items():
-                tool = canonical_tool_name(str(tool))
+                tool = backport_tool_name(str(tool))
                 dt = dproj.setdefault(tool, {"calls": 0, "items_returned": 0})
                 dt["calls"] += stats.get("calls", 0)
                 dt["items_returned"] += stats.get("items_returned", 0)
@@ -732,7 +729,7 @@ def day_buckets_from_records(
         if day is None:
             continue
         bucket = days.setdefault(day, _empty_day_bucket())
-        tool = canonical_tool_name(str(r.get("tool") or "unknown"))
+        tool = str(r.get("tool") or "unknown")
         bucket["mcp_calls"] += 1
         by_tool = bucket["by_tool"]
         by_tool[tool] = int(by_tool.get(tool, 0) or 0) + 1
@@ -790,8 +787,7 @@ def merge_day_buckets(
             )
             for tool, n in (raw.get("by_tool") or {}).items():
                 by_tool = dst["by_tool"]
-                ctool = canonical_tool_name(str(tool))
-                by_tool[ctool] = int(by_tool.get(ctool, 0) or 0) + int(n or 0)
+                by_tool[str(tool)] = int(by_tool.get(str(tool), 0) or 0) + int(n or 0)
     for bucket in out.values():
         bucket.pop("_projects", None)
     return out
@@ -801,11 +797,11 @@ def _normalize_day_bucket(raw: Any) -> dict[str, Any] | None:
     if not isinstance(raw, dict):
         return None
     by_tool_raw = raw.get("by_tool") or {}
-    by_tool = _remap_by_tool_counts({
+    by_tool = {
         str(k): int(v or 0)
         for k, v in by_tool_raw.items()
         if isinstance(k, str)
-    }) if isinstance(by_tool_raw, dict) else {}
+    } if isinstance(by_tool_raw, dict) else {}
     return {
         "mcp_calls": int(raw.get("mcp_calls", 0) or 0),
         "retrievals": int(raw.get("retrievals", 0) or 0),
@@ -1003,7 +999,7 @@ def page_retrievals(records: Iterable[dict[str, Any]]) -> dict[str, int]:
     """Count ``wiki_read_page`` hits per normalized wiki path."""
     counts: dict[str, int] = {}
     for r in records:
-        if canonical_tool_name(str(r.get("tool") or "")) != "wiki_read_page":
+        if backport_tool_name(str(r.get("tool") or "")) != "wiki_read_page":
             continue
         path = normalize_read_path(r.get("query") if isinstance(r.get("query"), str) else None)
         if not path:

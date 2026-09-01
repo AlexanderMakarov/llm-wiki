@@ -33,7 +33,8 @@ def test_day_buckets_from_records_counts_retrievals_and_writes():
     assert days["2026-07-19"]["doc_reads"] == 0
     assert days["2026-07-19"]["other_reads"] == 0
     assert days["2026-07-19"]["attributed_projects"] == 2
-    assert days["2026-07-19"]["by_tool"]["wiki_search"] == 2
+    assert days["2026-07-19"]["by_tool"]["wiki_query"] == 1
+    assert days["2026-07-19"]["by_tool"]["wiki_search"] == 1
     assert days["2026-07-20"]["mcp_calls"] == 1
     assert days["2026-07-20"]["unattributed_calls"] == 1
     assert days["2026-07-20"]["attributed_projects"] == 0

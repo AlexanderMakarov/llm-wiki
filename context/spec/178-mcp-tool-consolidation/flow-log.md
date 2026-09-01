@@ -21,4 +21,5 @@
 - **Revision 5:** Telemetry display maps retired tool names → canonical six; Analytics shows new names only (old values folded in)
 - **Revision 6:** Functional spec approved (lgtm); technical-considerations.md + tasks.md written
 - **Revision 7:** Implementation complete — 6 tools, 5877 chars schema; full pytest green
-- **Next:** User smoke confirm → local review → commit-push → PR
+- **Revision 8:** User review — revert demo `usage/` fixtures to pre-#196 tool names; `BACKPORT_MAPPING` + explicit `ENTITY_TOOLS`/`RETRIEVAL_TOOLS` (not auto-expanded); daily.json keys preserved on refresh
+- **Next:** commit-push → PR update → CI

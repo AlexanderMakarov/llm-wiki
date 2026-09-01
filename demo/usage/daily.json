@@ -3,44 +3,32 @@
   "folded_daily_files": [],
   "folded_days": {},
   "days": {
-    "2026-07-25": {
-      "mcp_calls": 1,
-      "retrievals": 1,
-      "writes": 0,
-      "session_reads": 0,
-      "doc_reads": 0,
-      "other_reads": 0,
-      "by_tool": {
-        "wiki_search": 1
-      },
-      "attributed_projects": 1,
-      "unattributed_calls": 0
-    },
     "2026-07-26": {
-      "mcp_calls": 1,
-      "retrievals": 1,
+      "mcp_calls": 2,
+      "retrievals": 2,
       "writes": 0,
       "session_reads": 0,
       "doc_reads": 0,
       "other_reads": 0,
       "by_tool": {
+        "wiki_query": 1,
         "wiki_search": 1
       },
       "attributed_projects": 1,
       "unattributed_calls": 0
     },
     "2026-07-27": {
-      "mcp_calls": 3,
-      "retrievals": 3,
+      "mcp_calls": 2,
+      "retrievals": 2,
       "writes": 0,
       "session_reads": 0,
       "doc_reads": 0,
       "other_reads": 1,
       "by_tool": {
-        "wiki_read_page": 1,
-        "wiki_search": 2
+        "wiki_query": 1,
+        "wiki_read_page": 1
       },
-      "attributed_projects": 3,
+      "attributed_projects": 2,
       "unattributed_calls": 0
     },
     "2026-07-28": {
@@ -51,36 +39,40 @@
       "doc_reads": 0,
       "other_reads": 1,
       "by_tool": {
-        "wiki_search": 2,
-        "wiki_read_page": 1
+        "wiki_read_page": 1,
+        "wiki_search": 1,
+        "wiki_query": 1
       },
       "attributed_projects": 2,
       "unattributed_calls": 0
     },
     "2026-07-29": {
-      "mcp_calls": 4,
-      "retrievals": 3,
+      "mcp_calls": 3,
+      "retrievals": 2,
       "writes": 0,
       "session_reads": 0,
       "doc_reads": 0,
       "other_reads": 0,
       "by_tool": {
-        "wiki_search": 3,
-        "wiki_health": 1
+        "wiki_list_sources": 1,
+        "wiki_search": 1,
+        "wiki_query": 1
       },
-      "attributed_projects": 1,
+      "attributed_projects": 2,
       "unattributed_calls": 0
     },
     "2026-07-30": {
-      "mcp_calls": 3,
+      "mcp_calls": 4,
       "retrievals": 3,
       "writes": 0,
       "session_reads": 0,
       "doc_reads": 0,
       "other_reads": 1,
       "by_tool": {
-        "wiki_search": 2,
-        "wiki_read_page": 1
+        "wiki_query": 1,
+        "wiki_category_browse": 1,
+        "wiki_read_page": 1,
+        "wiki_search": 1
       },
       "attributed_projects": 3,
       "unattributed_calls": 0
@@ -93,9 +85,10 @@
       "doc_reads": 0,
       "other_reads": 1,
       "by_tool": {
-        "wiki_search": 3,
-        "wiki_read_page": 1,
-        "wiki_export": 1
+        "wiki_search": 1,
+        "wiki_query": 2,
+        "wiki_dashboard": 1,
+        "wiki_read_page": 1
       },
       "attributed_projects": 3,
       "unattributed_calls": 0
@@ -108,26 +101,29 @@
       "doc_reads": 0,
       "other_reads": 1,
       "by_tool": {
-        "wiki_search": 4,
-        "wiki_read_page": 1,
-        "wiki_sync": 1,
-        "wiki_health": 1
+        "wiki_query": 2,
+        "wiki_list_sources": 1,
+        "wiki_search": 2,
+        "wiki_lint": 1,
+        "wiki_read_page": 1
       },
-      "attributed_projects": 4,
+      "attributed_projects": 3,
       "unattributed_calls": 0
     },
     "2026-08-02": {
       "mcp_calls": 4,
-      "retrievals": 4,
+      "retrievals": 3,
       "writes": 0,
       "session_reads": 0,
       "doc_reads": 0,
       "other_reads": 1,
       "by_tool": {
-        "wiki_search": 3,
-        "wiki_read_page": 1
+        "wiki_search": 1,
+        "wiki_read_page": 1,
+        "wiki_category_browse": 1,
+        "wiki_query": 1
       },
-      "attributed_projects": 2,
+      "attributed_projects": 3,
       "unattributed_calls": 0
     },
     "2026-08-03": {
@@ -138,40 +134,43 @@
       "doc_reads": 0,
       "other_reads": 1,
       "by_tool": {
-        "wiki_search": 4,
-        "wiki_health": 1,
-        "wiki_read_page": 1
+        "wiki_query": 2,
+        "wiki_search": 2,
+        "wiki_read_page": 1,
+        "wiki_list_sources": 1
       },
-      "attributed_projects": 4,
+      "attributed_projects": 2,
       "unattributed_calls": 0
     },
     "2026-08-04": {
-      "mcp_calls": 7,
-      "retrievals": 5,
-      "writes": 1,
+      "mcp_calls": 5,
+      "retrievals": 4,
+      "writes": 0,
       "session_reads": 0,
       "doc_reads": 0,
       "other_reads": 1,
       "by_tool": {
-        "wiki_search": 4,
+        "wiki_query": 2,
         "wiki_read_page": 1,
-        "wiki_add": 1,
-        "wiki_export": 1
+        "wiki_dashboard": 1,
+        "wiki_search": 1
       },
-      "attributed_projects": 4,
+      "attributed_projects": 2,
       "unattributed_calls": 0
     },
     "2026-08-05": {
-      "mcp_calls": 7,
+      "mcp_calls": 8,
       "retrievals": 6,
       "writes": 0,
       "session_reads": 0,
       "doc_reads": 0,
       "other_reads": 2,
       "by_tool": {
-        "wiki_search": 4,
         "wiki_read_page": 2,
-        "wiki_health": 1
+        "wiki_list_sources": 1,
+        "wiki_query": 2,
+        "wiki_search": 2,
+        "wiki_category_browse": 1
       },
       "attributed_projects": 2,
       "unattributed_calls": 0
@@ -184,40 +183,44 @@
       "doc_reads": 0,
       "other_reads": 1,
       "by_tool": {
-        "wiki_search": 4,
-        "wiki_health": 1,
-        "wiki_sync": 1,
-        "wiki_read_page": 1
+        "wiki_list_sources": 1,
+        "wiki_query": 2,
+        "wiki_read_page": 1,
+        "wiki_search": 2,
+        "wiki_lint": 1
       },
       "attributed_projects": 4,
       "unattributed_calls": 0
     },
     "2026-08-07": {
-      "mcp_calls": 7,
+      "mcp_calls": 8,
       "retrievals": 6,
       "writes": 0,
       "session_reads": 0,
       "doc_reads": 0,
       "other_reads": 1,
       "by_tool": {
-        "wiki_export": 1,
-        "wiki_search": 5,
-        "wiki_read_page": 1
+        "wiki_dashboard": 1,
+        "wiki_query": 3,
+        "wiki_search": 2,
+        "wiki_read_page": 1,
+        "wiki_category_browse": 1
       },
-      "attributed_projects": 4,
+      "attributed_projects": 3,
       "unattributed_calls": 0
     },
     "2026-08-08": {
-      "mcp_calls": 8,
-      "retrievals": 7,
+      "mcp_calls": 6,
+      "retrievals": 5,
       "writes": 0,
       "session_reads": 0,
       "doc_reads": 0,
       "other_reads": 2,
       "by_tool": {
-        "wiki_search": 5,
+        "wiki_query": 2,
         "wiki_read_page": 2,
-        "wiki_health": 1
+        "wiki_list_sources": 1,
+        "wiki_search": 1
       },
       "attributed_projects": 4,
       "unattributed_calls": 0
@@ -230,26 +233,28 @@
       "doc_reads": 0,
       "other_reads": 1,
       "by_tool": {
-        "wiki_read_page": 1,
-        "wiki_search": 4
+        "wiki_search": 2,
+        "wiki_query": 2,
+        "wiki_read_page": 1
       },
-      "attributed_projects": 2,
+      "attributed_projects": 3,
       "unattributed_calls": 0
     },
     "2026-08-10": {
-      "mcp_calls": 6,
-      "retrievals": 2,
-      "writes": 1,
+      "mcp_calls": 7,
+      "retrievals": 3,
+      "writes": 0,
       "session_reads": 0,
       "doc_reads": 0,
       "other_reads": 1,
       "by_tool": {
-        "wiki_sync": 1,
-        "wiki_health": 1,
-        "wiki_export": 1,
-        "wiki_read_page": 1,
-        "wiki_add": 1,
-        "wiki_search": 1
+        "wiki_lint": 1,
+        "wiki_category_browse": 1,
+        "wiki_dashboard": 1,
+        "wiki_search": 1,
+        "wiki_query": 1,
+        "wiki_list_sources": 1,
+        "wiki_read_page": 1
       },
       "attributed_projects": 3,
       "unattributed_calls": 0

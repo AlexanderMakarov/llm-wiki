@@ -416,7 +416,7 @@ def test_retired_wiki_query_records_fold_into_wiki_search_aggregate():
 def test_entity_tool_classification():
     assert is_entity_tool("wiki_search") is True
     assert is_entity_tool("wiki_dashboard") is False
-    assert is_entity_tool("wiki_confidence") is True  # canonical alias of wiki_search
+    assert is_entity_tool("wiki_confidence") is True  # legacy alias of wiki_search
     assert "wiki_export" in ENTITY_TOOLS and "wiki_sync" not in ENTITY_TOOLS
 
 
