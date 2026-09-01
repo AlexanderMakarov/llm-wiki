@@ -1,7 +1,7 @@
 # Technical Specification: Consolidate the MCP Tool Surface (#196)
 
 - **Functional Specification:** [`functional-spec.md`](./functional-spec.md) (Status: Approved)
-- **Status:** Draft
+- **Status:** Approved
 - **Author(s):** 4ellendger
 - **Ticket:** [#196](https://github.com/AlexanderMakarov/llm-wiki/issues/196)
 

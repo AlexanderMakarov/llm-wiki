@@ -110,7 +110,7 @@ def test_tools_list_returns_twelve_tools() -> None:
         _shutdown(proc)
     assert resp is not None
     tools = resp.get("result", {}).get("tools") or []
-    assert len(tools) == 12, f"expected 12 tools, got {len(tools)}"
+    assert len(tools) == 6, f"expected 6 tools, got {len(tools)}"
     # Each tool must carry name + inputSchema.
     for t in tools:
         assert "name" in t

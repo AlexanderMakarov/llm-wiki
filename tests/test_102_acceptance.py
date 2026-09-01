@@ -53,6 +53,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 from llmwiki import REPO_ROOT
 from llmwiki.build import ensure_project_stubs
 from llmwiki.candidates import promote
@@ -413,6 +415,24 @@ def test_r4_old_entity_search_tool_name_is_now_unknown() -> None:
     text = result["content"][0]["text"]
     assert "wiki_entity_search" in text
     assert "unknown tool" in text.lower()
+
+
+@pytest.mark.parametrize("retired", [
+    "wiki_query",
+    "wiki_list_sources",
+    "wiki_confidence",
+    "wiki_lifecycle",
+    "wiki_category_browse",
+    "wiki_lint",
+    "wiki_dashboard",
+])
+def test_retired_mcp_tools_return_unknown(retired: str) -> None:
+    """#196: retired tool names are not aliased — callers must migrate."""
+    assert retired not in TOOL_IMPLS
+    result = handle_tools_call({"name": retired, "arguments": {}})
+    assert result.get("isError") is True
+    assert retired in result["content"][0]["text"]
+    assert "unknown tool" in result["content"][0]["text"].lower()
 
 
 # ─── R7 — documentation matches the new behaviour ──────────────────────

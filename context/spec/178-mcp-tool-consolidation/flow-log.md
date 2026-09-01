@@ -20,4 +20,5 @@
 - **Revision 4:** Rename lint → wiki_health; split search/read (6 tools); §2.6 analytics continuity
 - **Revision 5:** Telemetry display maps retired tool names → canonical six; Analytics shows new names only (old values folded in)
 - **Revision 6:** Functional spec approved (lgtm); technical-considerations.md + tasks.md written
-- **Next:** Commit specs → implement slices 1–5
+- **Revision 7:** Implementation complete — 6 tools, 5877 chars schema; full pytest green
+- **Next:** User smoke confirm → local review → commit-push → PR

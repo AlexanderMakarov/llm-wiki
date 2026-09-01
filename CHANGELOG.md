@@ -18,6 +18,9 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Changed
 
+- **MCP tool consolidation (#196)** — the stdio server now registers **six** tools instead of twelve: unified `wiki_search` (match / extract / filter modes), `wiki_read_page`, `wiki_health` (lint JSON + `totals`), `wiki_sync`, `wiki_export`, and `wiki_add`. Retired names (`wiki_query`, `wiki_list_sources`, `wiki_confidence`, `wiki_lifecycle`, `wiki_category_browse`, `wiki_lint`, `wiki_dashboard`) are not aliased; usage aggregation maps them to canonical names for Analytics. See [`docs/reference/mcp.md`](docs/reference/mcp.md).
+  - *Release note:* Update MCP clients to the six-tool surface; migrate `wiki_query` → `wiki_search` extract, `wiki_lint` → `wiki_health` (#196).
+
 ### Fixed
 
 ### Removed

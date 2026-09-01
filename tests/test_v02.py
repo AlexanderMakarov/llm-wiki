@@ -19,9 +19,9 @@ from llmwiki.mcp.server import (
     handle_initialize,
     handle_tools_call,
     handle_tools_list,
-    tool_wiki_lint,
-    tool_wiki_list_sources,
+    tool_wiki_health,
     tool_wiki_read_page,
+    tool_wiki_search,
 )
 from llmwiki.obsidian_output import _add_source_backlink, _build_readme, export_to_vault
 from llmwiki.watch import run_maintain, scan_mtimes, watch
@@ -120,7 +120,7 @@ def test_obsidian_output_refuses_missing_vault(tmp_path):
 def test_mcp_tools_list():
 
     names = {t["name"] for t in TOOLS}
-    expected = {"wiki_query", "wiki_search", "wiki_list_sources", "wiki_read_page", "wiki_lint", "wiki_sync"}
+    expected = {"wiki_search", "wiki_read_page", "wiki_health", "wiki_sync"}
     assert expected.issubset(names), f"missing: {expected - names}"
 
 
@@ -147,7 +147,7 @@ def test_mcp_tool_call_unknown_tool():
 
 def test_mcp_tool_wiki_list_sources():
 
-    result = tool_wiki_list_sources({})
+    result = tool_wiki_search({"list_sources": True})
     assert result["isError"] is False
     text = result["content"][0]["text"]
     data = json.loads(text)
@@ -157,7 +157,7 @@ def test_mcp_tool_wiki_list_sources():
 def test_mcp_tool_wiki_lint():
     """The tool returns the `lint --json` payload, not a private shape (#150)."""
 
-    result = tool_wiki_lint({})
+    result = tool_wiki_health({})
     if result["isError"]:
         pytest.skip("wiki/ not present")
     data = json.loads(result["content"][0]["text"])

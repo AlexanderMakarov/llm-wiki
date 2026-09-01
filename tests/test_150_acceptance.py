@@ -68,7 +68,7 @@ from llmwiki import REPO_ROOT
 from llmwiki.cli import build_parser
 from llmwiki.lint import load_pages, run_lint
 from llmwiki.lint import rules as _rules  # noqa: F401 -- force rule registration
-from llmwiki.mcp.server import tool_wiki_lint
+from llmwiki.mcp.server import tool_wiki_health
 from tests.changelog_notes import shipping_section_text
 
 
@@ -130,27 +130,22 @@ def test_installation_guide_and_pyproject_agree_on_minimum_python() -> None:
 # ─── R9 -- the MCP payload break is announced where a reader would look ──
 
 
-def test_changelog_and_upgrading_document_the_wiki_lint_payload_change() -> None:
-    """R9's last AC: a reader of the release notes and the upgrade guide is
-    told the assistant-facing route's return shape changed, not just that
-    some internal rewiring happened."""
+def test_changelog_and_upgrading_document_mcp_consolidation() -> None:
+    """#196: readers of the release notes and upgrade guide are told the MCP
+    surface shrank to six tools and which retired names map where."""
     changelog = CHANGELOG.read_text(encoding="utf-8")
     unreleased = shipping_section_text(changelog)
-    assert "wiki_lint" in unreleased
-    assert "#150" in unreleased
-    assert "BREAKING" in unreleased.upper()
-    # The old and new payload shapes are both named, so a reader can tell
-    # what to migrate away from and what replaces it.
-    for old_key in ("orphans", "broken_links"):
-        assert old_key in unreleased
-    for new_key in ("disabled_rules", "total_pages"):
-        assert new_key in unreleased
+    assert "wiki_health" in unreleased
+    assert "#196" in unreleased
+    assert "BREAKING" in unreleased.upper() or "six" in unreleased.lower()
+    for retired in ("wiki_query", "wiki_lint", "wiki_dashboard"):
+        assert retired in unreleased
 
     upgrading = UPGRADING.read_text(encoding="utf-8")
-    assert "wiki_lint" in upgrading
-    assert "#150" in upgrading
-    assert "BREAKING" in upgrading
-    assert "disabled_rules" in upgrading
+    assert "wiki_health" in upgrading
+    assert "#196" in upgrading
+    assert "wiki_query" in upgrading
+    assert "mcp.md" in upgrading
 
 
 # ─── R10 -- the documentation's own worked example actually works ────────
@@ -282,9 +277,11 @@ def _via_cli(vault: Path, *flags: str) -> dict:
 
 def _via_mcp(vault: Path, args: dict | None = None) -> dict:
     with patch("llmwiki.mcp.server.REPO_ROOT", vault):
-        result = tool_wiki_lint(args or {})
+        result = tool_wiki_health(args or {})
     assert result["isError"] is False, result["content"][0]["text"]
-    return json.loads(result["content"][0]["text"])
+    payload = json.loads(result["content"][0]["text"])
+    payload.pop("totals", None)
+    return payload
 
 
 def test_mcp_and_cli_agree_with_an_opt_out_and_a_threshold_together(

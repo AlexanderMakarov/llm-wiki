@@ -1,6 +1,6 @@
 """An agent asking about wiki quality gets the same answer a person does (#150, R9).
 
-``wiki_lint`` used to be a private reimplementation: 2 hand-rolled checks
+``wiki_health`` used to be a private reimplementation: 2 hand-rolled checks
 against the registry's 17, with a stricter broken-link test (exact stem
 match, no slug normalisation, no anchor stripping) and a narrower orphan
 test — so it over-reported on both, and its advertised description promised
@@ -8,7 +8,7 @@ contradictions and stale summaries it had never implemented. Two accounts of
 one wiki, and the assistant's was the wrong one.
 
 The central assertion of this module is a single equality: for the same
-vault, ``tool_wiki_lint`` returns exactly the payload ``lint --json`` prints.
+vault, ``tool_wiki_health`` returns exactly the payload ``lint --json`` prints.
 Everything else here defends one way that equality could rot — an opt-out
 honoured on one route only, a threshold honoured on one route only, or an
 unrecognised rule name swallowed into a clean report.
@@ -24,7 +24,7 @@ import pytest
 
 from llmwiki.cli import build_parser
 from llmwiki.lint import REGISTRY, rules  # noqa: F401 — force rule registration
-from llmwiki.mcp.server import TOOLS, tool_wiki_lint
+from llmwiki.mcp.server import TOOLS, tool_wiki_health
 
 # ─── Fixtures ──────────────────────────────────────────────────────────
 
@@ -78,14 +78,16 @@ def _via_cli(root: Path, *flags: str, capsys) -> dict:
 def _via_mcp(root: Path, args: dict | None = None) -> dict:
     """What an assistant sees, resolved against the same vault root."""
     with patch("llmwiki.mcp.server.REPO_ROOT", root):
-        result = tool_wiki_lint(args or {})
+        result = tool_wiki_health(args or {})
     assert result["isError"] is False, result["content"][0]["text"]
-    return json.loads(result["content"][0]["text"])
+    payload = json.loads(result["content"][0]["text"])
+    payload.pop("totals", None)
+    return payload
 
 
 def _mcp_error(root: Path, args: dict) -> str:
     with patch("llmwiki.mcp.server.REPO_ROOT", root):
-        result = tool_wiki_lint(args)
+        result = tool_wiki_health(args)
     assert result["isError"] is True
     return result["content"][0]["text"]
 
@@ -256,14 +258,14 @@ def test_a_vault_without_a_wiki_errors(tmp_path: Path):
 
 
 def _schema() -> dict:
-    return next(tool for tool in TOOLS if tool["name"] == "wiki_lint")
+    return next(tool for tool in TOOLS if tool["name"] == "wiki_health")
 
 
 def test_the_description_no_longer_promises_a_private_shape():
     """R9's third criterion. The old text named the two keys it returned and
     two checks it never implemented; the new text names the CLI payload."""
     description = _schema()["description"]
-    for key in ("summary", "issues", "total_pages", "disabled_rules", "ran"):
+    for key in ("disabled_rules", "ran", "totals"):
         assert key in description
     assert "llmwiki lint --json" in description
     for stale in ("orphan_count", "broken_link_count", "broken_links"):

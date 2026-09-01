@@ -109,10 +109,10 @@ def test_aggregate_totals_per_tool_and_project():
     agg = usage.aggregate(records)
     assert agg["total_calls"] == 3
     assert agg["total_resp_bytes"] == 350
-    assert agg["per_tool"]["wiki_search"]["calls"] == 2
+    assert agg["per_tool"]["wiki_search"]["calls"] == 3
     assert agg["per_tool"]["wiki_search"]["zero_hits"] == 1
-    assert agg["per_tool"]["wiki_search"]["zero_hit_rate"] == 0.5
-    assert agg["per_tool"]["wiki_search"]["resp_bytes"] == 150
+    assert agg["per_tool"]["wiki_search"]["zero_hit_rate"] == 1 / 3
+    assert agg["per_tool"]["wiki_search"]["resp_bytes"] == 350
     assert agg["per_project"]["a"]["calls"] == 2
     assert agg["per_project"]["b"]["calls"] == 1
 
@@ -147,9 +147,9 @@ def test_merge_aggregates_sums_counters():
     m = usage.merge_aggregates(a, b)
     assert m["total_calls"] == 3
     assert m["total_resp_bytes"] == 22
-    assert m["per_tool"]["wiki_search"]["calls"] == 2
+    assert m["per_tool"]["wiki_search"]["calls"] == 3
     assert m["per_tool"]["wiki_search"]["zero_hits"] == 1
-    assert m["per_tool"]["wiki_search"]["zero_hit_rate"] == 0.5
+    assert m["per_tool"]["wiki_search"]["zero_hit_rate"] == 1 / 3
     assert m["per_project"]["q"]["calls"] == 1
 
 
@@ -234,8 +234,8 @@ def test_combined_totals_joins_rollup_and_live(tmp_path: Path):
     combined = usage.combined_totals(tmp_path)
     assert combined["total_calls"] == 2
     assert combined["total_resp_bytes"] == 30
-    assert combined["per_tool"]["wiki_search"]["calls"] == 1
-    assert combined["per_tool"]["wiki_query"]["calls"] == 1
+    assert combined["per_tool"]["wiki_search"]["calls"] == 2
+    assert "wiki_query" not in combined["per_tool"]
 
 
 # ─── Server integration: handle_tools_call telemetry ──────────────────────
@@ -303,7 +303,7 @@ def test_telemetry_disabled_writes_nothing(tmp_path: Path, monkeypatch):
 
 
 def test_query_zero_hits_recorded_from_no_match_sentinel(tmp_path: Path, monkeypatch):
-    # wiki_query returns prose, not JSON. Its documented "no results"
+    # Extract-mode search returns prose, not JSON. Its documented "no results"
     # output must still register as a zero-hit call (the knowledge-gap
     # signal for /wiki-reflect), not as an unknown count.
     server = _reset_server_telemetry()
@@ -312,9 +312,9 @@ def test_query_zero_hits_recorded_from_no_match_sentinel(tmp_path: Path, monkeyp
     (tmp_path / "wiki").mkdir()
 
     server.handle_tools_call(
-        {"name": "wiki_query", "arguments": {"question": "nonexistent topic"}})
+        {"name": "wiki_search", "arguments": {"question": "nonexistent topic"}})
     rec = list(usage.iter_records(tmp_path))[0]
-    assert rec["tool"] == "wiki_query"
+    assert rec["tool"] == "wiki_search"
     assert rec["hits"] == 0
 
 
@@ -328,7 +328,7 @@ def test_query_positive_hits_recorded(tmp_path: Path, monkeypatch):
     (wiki / "topic.md").write_text('---\ntitle: "Synthesis"\n---\nsynthesis pipeline notes\n')
 
     server.handle_tools_call(
-        {"name": "wiki_query", "arguments": {"question": "synthesis"}})
+        {"name": "wiki_search", "arguments": {"question": "synthesis"}})
     rec = list(usage.iter_records(tmp_path))[0]
     assert rec["hits"] and rec["hits"] >= 1
 
@@ -349,7 +349,7 @@ def test_query_hits_not_inflated_by_snippet_headings(tmp_path: Path, monkeypatch
         "more synthesis text\n"
     )
     server.handle_tools_call(
-        {"name": "wiki_query", "arguments": {"question": "synthesis"}})
+        {"name": "wiki_search", "arguments": {"question": "synthesis"}})
     rec = list(usage.iter_records(tmp_path))[0]
     assert rec["hits"] == 1  # one real matched page, not two
 
@@ -380,7 +380,7 @@ def test_hits_channel_stripped_from_client_result(tmp_path: Path, monkeypatch):
     (tmp_path / "wiki" / "index.md").write_text("# Index\n")
 
     result = server.handle_tools_call(
-        {"name": "wiki_query", "arguments": {"question": "anything"}})
+        {"name": "wiki_search", "arguments": {"question": "anything"}})
     assert "_hits" not in result
     assert set(result.keys()) == {"content", "isError"}
 
@@ -397,15 +397,27 @@ def test_items_returned_counts_only_entity_tools():
     ]
     agg = aggregate(records)
     assert agg["total_items_returned"] == 8            # 5 + 3
-    assert agg["per_tool"]["wiki_search"]["items_returned"] == 5
-    assert agg["per_tool"]["wiki_query"]["items_returned"] == 3
-    assert agg["per_tool"]["wiki_lint"]["items_returned"] == 0
+    assert agg["per_tool"]["wiki_search"]["items_returned"] == 8
+    assert agg["per_tool"]["wiki_health"]["items_returned"] == 0
     assert agg["per_project"]["p"]["items_returned"] == 8
+
+
+def test_retired_wiki_query_records_fold_into_wiki_search_aggregate():
+    records = [
+        {"tool": "wiki_search", "hits": 2, "caller_project": "p", "caller_source": "client-root"},
+        {"tool": "wiki_query", "hits": 3, "caller_project": "p", "caller_source": "client-root"},
+    ]
+    agg = aggregate(records)
+    assert agg["per_tool"]["wiki_search"]["calls"] == 2
+    assert agg["per_tool"]["wiki_search"]["items_returned"] == 5
+    assert "wiki_query" not in agg["per_tool"]
+
 
 def test_entity_tool_classification():
     assert is_entity_tool("wiki_search") is True
     assert is_entity_tool("wiki_dashboard") is False
-    assert "wiki_confidence" in ENTITY_TOOLS and "wiki_sync" not in ENTITY_TOOLS
+    assert is_entity_tool("wiki_confidence") is True  # canonical alias of wiki_search
+    assert "wiki_export" in ENTITY_TOOLS and "wiki_sync" not in ENTITY_TOOLS
 
 
 # ─── Task 2: server_processes ─────────────────────────────────────────────
@@ -449,8 +461,8 @@ def test_per_project_tool_breakdown():
     ]
     agg = aggregate(records)
     assert agg["per_project_tool"]["a"]["wiki_search"] == {"calls": 2, "items_returned": 7}
-    assert agg["per_project_tool"]["a"]["wiki_lint"] == {"calls": 1, "items_returned": 0}
-    assert agg["per_project_tool"]["b"]["wiki_query"] == {"calls": 1, "items_returned": 4}
+    assert agg["per_project_tool"]["a"]["wiki_health"] == {"calls": 1, "items_returned": 0}
+    assert agg["per_project_tool"]["b"]["wiki_search"] == {"calls": 1, "items_returned": 4}
 
 def test_merge_sums_per_project_tool_and_legacy_defaults_empty():
     live = aggregate([
