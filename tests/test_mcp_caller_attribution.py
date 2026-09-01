@@ -227,7 +227,7 @@ def test_rollup_written_before_the_fix_collapses_to_unattributed(tmp_path: Path)
     assert "llm-wiki" not in rollup["per_project"]
     assert rollup["per_project"][usage.UNATTRIBUTED]["calls"] == 5
     assert rollup["per_project"][usage.UNATTRIBUTED]["items_returned"] == 3
-    assert rollup["per_project_tool"][usage.UNATTRIBUTED]["wiki_query"]["calls"] == 5
+    assert rollup["per_project_tool"][usage.UNATTRIBUTED]["wiki_search"]["calls"] == 5
     # Totals and the folded-file ledger are untouched — only the labels were wrong.
     assert rollup["total_calls"] == 5
     assert rollup["folded_files"] == ["mcp-1-2026-06-01T00-00-00Z.jsonl"]

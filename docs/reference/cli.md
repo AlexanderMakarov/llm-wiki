@@ -212,6 +212,8 @@ python3 -m llmwiki usage --compact    # roll past months into rollup.json first
 
 Folds the local MCP telemetry logs into totals and prints them next to the synthesis cost persisted in state — so the "is this wiki earning its synthesis spend?" question is answerable at a glance.
 
+The live MCP surface is six tools (`wiki_search`, `wiki_read_page`, `wiki_health`, `wiki_sync`, `wiki_export`, `wiki_add`); see [mcp.md](mcp.md) for parameters and migration from retired tool names (#196).
+
 The MCP server logs one JSON record per tool call to a **per-process** file under `<vault>/usage/` (`mcp-<pid>-<start>.jsonl`), merged at read time. Several server processes run at once (one per editor session), so per-process files mean zero write contention and no lock on the hot path; telemetry never touches `llmwiki-state.json`. Each record carries `tool`, `query`, `hits` (`0` = a knowledge gap or noise; `null` = the tool can't report a count), `resp_bytes`, `duration_ms`, `caller_project`, `caller_source`, `server_pid`, `server_started`. Writes are best-effort — a telemetry failure never breaks a tool call. Opt out with `LLMWIKI_MCP_TELEMETRY=0`.
 
 **Caller attribution.** `caller_project` is resolved per call and `caller_source` says where it came from:

@@ -282,7 +282,7 @@ Below that, sections appear in this order:
 2. **Activity** — ~18-month GitHub-style heatmaps: **Agents Activity** (session counts), **Wiki MCP calls**, and — when telemetry carries signal — **Session-page reads** and **Doc-page reads** split from `wiki_read_page` hits.
 3. **Recent activity** — last entries from `wiki/log.md` (including producer breakdown lines such as `Processed: 2 Claude · 1 Cursor`).
 4. **Projects** — filterable card grid (session counts, date range, topic chips) linking to per-project detail pages.
-5. **LLM-Wiki MCP usage** — merged value block and MCP table in one section (MCP telemetry only, not `file://` browsing): retrievals · writes · answer rate · payoff-per-page · distinct attributed projects; optional synthesis cost line; sessions vs documents corpus/read mix; top-earning pages; **Dead stock** as a shared count-badge collapsible listing every unread synthesized source (`collapse_section`); per-tool calls, items returned, and zero-hit rate.
+5. **LLM-Wiki MCP usage** — merged value block and MCP table in one section (MCP telemetry only, not `file://` browsing): retrievals · writes · answer rate · payoff-per-page · distinct attributed projects; optional synthesis cost line; sessions vs documents corpus/read mix; top-earning pages; **Dead stock** as a shared count-badge collapsible listing every unread synthesized source (`collapse_section`); per-tool calls, items returned, and zero-hit rate. The live surface is six tools (#196); retired names in historical logs are folded into canonical rows at aggregation time — see [mcp.md](mcp.md).
 
 There is no daily bar chart — trends are read from the heatmaps. Durable counts and series are described in [`reference/state-persistence.md`](state-persistence.md).
 

@@ -21,6 +21,20 @@ Optional shared `filters.since` and per-adapter `adapters.<name>.since` (`YYYY-M
 - **`llmwiki adapters` enabled column is yes/no** (will the next bare sync include this source). The old `active` column and `auto` / `explicit` / `off` labels are gone.
 Keys and inheritance: [configuration-reference.md — Sync lookback](configuration-reference.md#sync-lookback).
 
+## Unreleased — MCP tool consolidation (#196)
+
+The stdio MCP server registers **six** tools: `wiki_search`, `wiki_read_page`, `wiki_health`, `wiki_sync`, `wiki_export`, `wiki_add`. There are no alias stubs for retired names.
+
+| Retired | Replacement |
+|---|---|
+| `wiki_query` | `wiki_search` with `question` or `mode=extract` |
+| `wiki_list_sources` | `wiki_search` with `list_sources=true` |
+| `wiki_confidence` / `wiki_lifecycle` / `wiki_category_browse` | `wiki_search` with `mode=filter` and the matching `filter_by` |
+| `wiki_lint` | `wiki_health` (same lint JSON keys; adds `totals`) |
+| `wiki_dashboard` | `wiki_health` (`totals` field) |
+
+Full parameter tables: [mcp.md](reference/mcp.md). Historical telemetry rows keep the logged tool name; `llmwiki usage` and Analytics fold retired names into the canonical six-tool surface.
+
 ## 2.0.0 — static site, pipeline, and MCP (from v1.5.0)
 
 ### Read this first

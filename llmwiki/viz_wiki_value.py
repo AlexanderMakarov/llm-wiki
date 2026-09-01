@@ -155,7 +155,7 @@ def render_wiki_value_section(
         '<div class="token-stat-grid wiki-value-stats">'
         f'<div class="token-stat"><div class="token-stat-label muted">Retrievals</div>'
         f'<div class="token-stat-value">{summary["retrievals"]}</div>'
-        f'<div class="token-stat-sub muted">query · search · read_page</div></div>'
+        f'<div class="token-stat-sub muted">search · read</div></div>'
         f'<div class="token-stat"><div class="token-stat-label muted">Writes</div>'
         f'<div class="token-stat-value">{summary["writes"]}</div>'
         f'<div class="token-stat-sub muted">wiki_add</div></div>'

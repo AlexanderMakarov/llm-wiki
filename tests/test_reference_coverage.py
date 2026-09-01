@@ -202,6 +202,7 @@ def test_hub_links_to_all_three_new_references():
     hub = (REPO_ROOT / "docs" / "index.md").read_text(encoding="utf-8")
     for target in (
         "reference/cli.md",
+        "reference/mcp.md",
         "reference/slash-commands.md",
         "reference/ui.md",
     ):

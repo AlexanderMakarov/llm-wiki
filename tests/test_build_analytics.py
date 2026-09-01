@@ -15,7 +15,7 @@ def test_mcp_section_renders_tools_and_totals_caption():
         "total_calls": 12, "total_items_returned": 40, "total_server_processes": 3,
         "per_tool": {
             "wiki_search": {"calls": 8, "zero_hits": 2, "zero_hit_rate": 0.25, "resp_bytes": 0, "items_returned": 30},
-            "wiki_lint":   {"calls": 4, "zero_hits": 0, "zero_hit_rate": 0.0,  "resp_bytes": 0, "items_returned": 0},
+            "wiki_health":   {"calls": 4, "zero_hits": 0, "zero_hit_rate": 0.0,  "resp_bytes": 0, "items_returned": 0},
         },
         "per_project": {"proj-x": {"calls": 12, "resp_bytes": 0, "items_returned": 40, "server_processes": 3}},
     }
@@ -90,24 +90,23 @@ def test_project_usage_block_renders_per_tool_table():
         "per_project": {"proj-x": {"calls": 3, "items_returned": 7, "server_processes": 1, "resp_bytes": 0}},
         "per_project_tool": {"proj-x": {
             "wiki_search": {"calls": 2, "items_returned": 7},
-            "wiki_lint":   {"calls": 1, "items_returned": 0},
+            "wiki_health":   {"calls": 1, "items_returned": 0},
         }},
         "per_tool": {},
     }
     out = render_project_usage_block("proj-x", totals, doc_count=0)
-    assert "wiki_search" in out and "wiki_lint" in out
+    assert "wiki_search" in out and "wiki_health" in out
     assert "mcp-usage-table" in out          # per-tool table present
-    assert "—" in out                        # wiki_lint (non-entity) items cell is em dash
+    assert "—" in out                        # wiki_health (non-entity) items cell is em dash
 
 
 def test_wiki_value_section_renders_cards_without_chart():
     totals = {
         "total_calls": 10,
         "per_tool": {
-            "wiki_query": {"calls": 4, "zero_hits": 1},
-            "wiki_search": {"calls": 3, "zero_hits": 0},
+            "wiki_search": {"calls": 7, "zero_hits": 1},
             "wiki_add": {"calls": 2, "zero_hits": 0},
-            "wiki_lint": {"calls": 1, "zero_hits": 0},
+            "wiki_health": {"calls": 1, "zero_hits": 0},
         },
         "per_project": {
             "unknown": {"calls": 5},
@@ -160,7 +159,7 @@ def test_wiki_value_section_empty_without_data():
 def test_wiki_value_excludes_unknown_from_distinct_projects():
     totals = {
         "total_calls": 3,
-        "per_tool": {"wiki_query": {"calls": 3, "zero_hits": 0}},
+        "per_tool": {"wiki_search": {"calls": 3, "zero_hits": 0}},
         "per_project": {"unknown": {"calls": 3}},
     }
     out = render_wiki_value_section(totals, wiki_page_count=1)

@@ -69,6 +69,7 @@ def test_palette_index_includes_reference_pages(search_index):
     # Sanity: CLI + slash + UI reference must all be there.
     must_have = {
         "docs/reference/cli.html",
+        "docs/reference/mcp.html",
         "docs/reference/slash-commands.html",
         "docs/reference/ui.html",
     }

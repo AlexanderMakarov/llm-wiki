@@ -34,6 +34,7 @@ def test_day_buckets_from_records_counts_retrievals_and_writes():
     assert days["2026-07-19"]["other_reads"] == 0
     assert days["2026-07-19"]["attributed_projects"] == 2
     assert days["2026-07-19"]["by_tool"]["wiki_query"] == 1
+    assert days["2026-07-19"]["by_tool"]["wiki_search"] == 1
     assert days["2026-07-20"]["mcp_calls"] == 1
     assert days["2026-07-20"]["unattributed_calls"] == 1
     assert days["2026-07-20"]["attributed_projects"] == 0
@@ -148,10 +149,9 @@ def test_value_summary_excludes_unknown_from_project_count():
     totals = {
         "total_calls": 10,
         "per_tool": {
-            "wiki_query": {"calls": 4, "zero_hits": 1},
-            "wiki_search": {"calls": 3, "zero_hits": 0},
+            "wiki_search": {"calls": 7, "zero_hits": 1},
             "wiki_add": {"calls": 2, "zero_hits": 0},
-            "wiki_lint": {"calls": 1, "zero_hits": 0},
+            "wiki_health": {"calls": 1, "zero_hits": 0},
         },
         "per_project": {
             "unknown": {"calls": 5},

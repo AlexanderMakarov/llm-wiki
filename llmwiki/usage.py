@@ -69,25 +69,39 @@ QUERY_MAX_CHARS = 200
 # Arg keys that count as "the thing the caller asked for", in priority order.
 _QUERY_KEYS = ("term", "question", "path", "query", "project")
 
-# Tools whose result is a set of retrievable entities/answers. Only these
-# contribute to "items returned" — lint/sync/lifecycle/dashboard perform an
-# action or report status rather than returning corpus items.
-#
-# This set classifies *persisted records*, not the live tool surface, so it
-# names every tool that has ever written one. A name the server no longer
-# serves matches nothing new; dropping it would instead relabel already-
-# reported history and change figures a user has already read.
+# Retired MCP tool names → current names for aggregation/display (#196).
+# Raw JSONL and folded daily.json keep the name logged at call time; mapping
+# runs when folding into per-tool totals (combined_totals, Analytics table).
+BACKPORT_MAPPING: dict[str, str] = {
+    "wiki_query": "wiki_search",
+    "wiki_list_sources": "wiki_search",
+    "wiki_confidence": "wiki_search",
+    "wiki_lifecycle": "wiki_search",
+    "wiki_category_browse": "wiki_search",
+    "wiki_entity_search": "wiki_search",
+    "wiki_lint": "wiki_health",
+    "wiki_dashboard": "wiki_health",
+}
+
+
+# Classify *persisted records* — every name that has ever written telemetry.
+# Live MCP names plus legacy aliases; not derived from BACKPORT_MAPPING so
+# retrieval vs entity boundaries stay explicit (see demo/usage/daily.json).
 ENTITY_TOOLS = frozenset({
     "wiki_query", "wiki_search", "wiki_list_sources", "wiki_read_page",
     "wiki_category_browse", "wiki_export", "wiki_confidence",
     "wiki_entity_search",
 })
 
-# Consumption tools for the value headline / daily retrievals counter (#52).
 RETRIEVAL_TOOLS = frozenset({
     "wiki_query", "wiki_search", "wiki_read_page",
 })
 WRITE_TOOLS = frozenset({"wiki_add"})
+
+
+def backport_tool_name(tool: str) -> str:
+    """Map a persisted or live tool name to the current MCP surface name."""
+    return BACKPORT_MAPPING.get(tool, tool)
 
 
 def is_entity_tool(tool: str) -> bool:
@@ -356,7 +370,7 @@ def aggregate(records: Iterable[dict[str, Any]]) -> dict[str, Any]:
     totals = _empty_totals()
     proc_sets: dict[str, set] = {}
     for r in records:
-        tool = r.get("tool") or "unknown"
+        tool = backport_tool_name(str(r.get("tool") or "unknown"))
         project = attributed_project(r)
         resp_bytes = int(r.get("resp_bytes") or 0)
         hits = r.get("hits")
@@ -414,6 +428,7 @@ def merge_aggregates(a: dict[str, Any], b: dict[str, Any]) -> dict[str, Any]:
         a.get("total_server_processes", 0) + b.get("total_server_processes", 0))
     for side in (a, b):
         for tool, stats in side.get("per_tool", {}).items():
+            tool = backport_tool_name(str(tool))
             dst = out["per_tool"].setdefault(
                 tool, {"calls": 0, "zero_hits": 0, "resp_bytes": 0, "items_returned": 0})
             dst["calls"] += stats.get("calls", 0)
@@ -430,6 +445,7 @@ def merge_aggregates(a: dict[str, Any], b: dict[str, Any]) -> dict[str, Any]:
         for project, tools in side.get("per_project_tool", {}).items():
             dproj = out["per_project_tool"].setdefault(project, {})
             for tool, stats in tools.items():
+                tool = backport_tool_name(str(tool))
                 dt = dproj.setdefault(tool, {"calls": 0, "items_returned": 0})
                 dt["calls"] += stats.get("calls", 0)
                 dt["items_returned"] += stats.get("items_returned", 0)
@@ -983,7 +999,7 @@ def page_retrievals(records: Iterable[dict[str, Any]]) -> dict[str, int]:
     """Count ``wiki_read_page`` hits per normalized wiki path."""
     counts: dict[str, int] = {}
     for r in records:
-        if r.get("tool") != "wiki_read_page":
+        if backport_tool_name(str(r.get("tool") or "")) != "wiki_read_page":
             continue
         path = normalize_read_path(r.get("query") if isinstance(r.get("query"), str) else None)
         if not path:

@@ -70,6 +70,7 @@ llmwiki runs two interchangeable ways. Pick one, start — you can switch later.
 ## Reference
 
 - **[CLI reference](reference/cli.md)** — every `python3 -m llmwiki <subcommand>` with every flag and realistic examples.
+- **[MCP server reference](reference/mcp.md)** — six stdio tools (`wiki_search`, `wiki_read_page`, `wiki_health`, `wiki_sync`, `wiki_export`, `wiki_add`), parameters, and migration from retired tool names.
 - **[Slash commands reference](reference/slash-commands.md)** — every `/wiki-*` command used from Claude Code / Codex.
 - **[UI reference](reference/ui.md)** — every screen on the compiled site, how to reach it, what it shows.
 - **[Page kinds](reference/page-kinds.md)** — every `type:` value, what it is for, and where each frontmatter field comes from.

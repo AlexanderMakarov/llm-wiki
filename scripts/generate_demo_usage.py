@@ -36,49 +36,45 @@ SERVER_PID = 4242
 # Per tool: total calls, how many returned nothing, and a typical response
 # size. Zero-hit shares differ by tool on purpose — a broad query misses more
 # often than a direct page read, and reporting tools cannot miss at all.
+# Canonical six-tool surface (#196); aggregation still folds legacy names if
+# present in older fixtures.
 TOOLS: tuple[tuple[str, int, int, int], ...] = (
-    ("wiki_query", 26, 6, 4300),
-    ("wiki_search", 21, 4, 1900),
+    ("wiki_search", 52, 11, 3200),
     ("wiki_read_page", 16, 2, 3600),
-    ("wiki_list_sources", 7, 1, 2400),
-    ("wiki_category_browse", 5, 1, 1500),
-    ("wiki_dashboard", 4, 0, 900),
-    ("wiki_lint", 3, 0, 1200),
+    ("wiki_health", 7, 0, 1200),
+    ("wiki_export", 4, 0, 900),
+    ("wiki_sync", 3, 0, 600),
+    ("wiki_add", 2, 0, 400),
 )
 
 QUERIES = {
-    "wiki_query": [
-        "what did I decide about adapter opt-in", "how does incremental synth work",
-        "why did the topic graph fall back", "candidate review gate rationale",
-        "how are key facts attributed", "what breaks when a page is merged",
-        "which adapters are core", "how does search work offline",
-    ],
     "wiki_search": [
-        "wikilinks resolution", "static site offline", "lint severities",
-        "mcp server tools", "project page aggregation", "pagination cursors",
+        "what did I decide about adapter opt-in", "how does incremental synth work",
+        "wikilinks resolution", "static site offline", "mcp server tools",
+        "project page aggregation", "candidate review gate rationale",
+        "how are key facts attributed",
     ],
     "wiki_read_page": [
         "wiki/concepts/WikiLinks.md", "wiki/entities/OpenClaw.md",
         "wiki/projects/llm-wiki.md", "wiki/concepts/StaticSiteGeneration.md",
     ],
-    "wiki_list_sources": ["llm-wiki", "trailhead-api", "all"],
-    "wiki_category_browse": ["concepts", "entities", "projects"],
-    "wiki_dashboard": ["overview"],
-    "wiki_lint": ["all rules"],
+    "wiki_health": ["all rules", "link_integrity"],
+    "wiki_export": ["llms-txt", "jsonld"],
+    "wiki_sync": ["dry-run"],
+    "wiki_add": ["https://example.com/doc"],
 }
 
 # Misses look different from hits: they are the questions the wiki could not
 # answer, which is the signal the Analytics page exists to surface.
 MISSES = {
-    "wiki_query": [
-        "how do I roll back a release", "what is the deploy checklist",
+    "wiki_search": [
+        "how do I roll back a release", "kubernetes", "terraform",
+        "oncall runbook", "postgres tuning", "what is the deploy checklist",
         "who owns the release process", "what is the on-call rotation",
         "how do I rotate credentials", "what is the SLA for sync",
+        "infra",
     ],
-    "wiki_search": ["kubernetes", "terraform", "oncall runbook", "postgres tuning"],
     "wiki_read_page": ["wiki/concepts/Kubernetes.md", "wiki/entities/Terraform.md"],
-    "wiki_list_sources": ["infra"],
-    "wiki_category_browse": ["runbooks"],
 }
 
 CALLERS = ("llm-wiki", "llm-wiki", "llm-wiki", "trailhead-api", "sensor-mesh", "dotfiles")

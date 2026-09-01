@@ -24,8 +24,6 @@ import pytest
 from llmwiki.mcp.server import (
     _SEARCH_PAGE_CAP,
     _iter_scan_files,
-    tool_wiki_list_sources,
-    tool_wiki_query,
     tool_wiki_search,
 )
 
@@ -263,7 +261,7 @@ def test_list_sources_project_filter_is_substring_only_no_traversal(
         ("demo-todo-api", ["s2.md"]),
     ])
     with patch("llmwiki.mcp.server.REPO_ROOT", tmp_path):
-        result = tool_wiki_list_sources({"project": filter_value})
+        result = tool_wiki_search({"list_sources": True, "project": filter_value})
     payload = _result_json(result)
     assert payload == [], (
         f"hostile filter {filter_value!r} returned data: {payload}"
@@ -277,7 +275,7 @@ def test_list_sources_legitimate_filter_still_works(tmp_path: Path):
         ("demo-todo-api", ["s3.md"]),
     ])
     with patch("llmwiki.mcp.server.REPO_ROOT", tmp_path):
-        result = tool_wiki_list_sources({"project": "demo-blog"})
+        result = tool_wiki_search({"list_sources": True, "project": "demo-blog"})
     payload = _result_json(result)
     assert len(payload) == 2
     for item in payload:
@@ -291,7 +289,7 @@ def test_list_sources_empty_project_returns_all(tmp_path: Path):
         ("demo-todo-api", ["s2.md"]),
     ])
     with patch("llmwiki.mcp.server.REPO_ROOT", tmp_path):
-        result = tool_wiki_list_sources({})
+        result = tool_wiki_search({"list_sources": True})
     payload = _result_json(result)
     assert len(payload) == 2
 
@@ -304,7 +302,7 @@ def test_list_sources_unicode_project_filter(tmp_path: Path):
         ("normal-proj", ["s2.md"]),
     ])
     with patch("llmwiki.mcp.server.REPO_ROOT", tmp_path):
-        result = tool_wiki_list_sources({"project": "café"})
+        result = tool_wiki_search({"list_sources": True, "project": "café"})
     payload = _result_json(result)
     assert len(payload) == 1
     assert "café-proj" in payload[0]["path"]
@@ -318,7 +316,7 @@ def test_list_sources_filter_does_not_glob(tmp_path: Path):
         ("demo-blog-engine", ["s1.md"]),
     ])
     with patch("llmwiki.mcp.server.REPO_ROOT", tmp_path):
-        result = tool_wiki_list_sources({"project": "demo*"})
+        result = tool_wiki_search({"list_sources": True, "project": "demo*"})
     payload = _result_json(result)
     assert payload == []
 
@@ -366,7 +364,7 @@ def test_query_short_relevant_beats_long_incidental(tmp_path: Path):
         "sources/log.md": long_incidental,
     })
     with patch("llmwiki.mcp.server.REPO_ROOT", tmp_path):
-        result = tool_wiki_query({"question": "caching"})
+        result = tool_wiki_search({"question": "caching"})
     pages = _query_pages_in_order(result)
     assert pages, f"no pages returned: {_result_text(result)[:500]}"
     assert pages[0].endswith("Caching.md"), (
@@ -389,7 +387,7 @@ def test_query_title_match_still_wins(tmp_path: Path):
         "entities/Foo.md": title_match,
     })
     with patch("llmwiki.mcp.server.REPO_ROOT", tmp_path):
-        result = tool_wiki_query({"question": "foo"})
+        result = tool_wiki_search({"question": "foo"})
     pages = _query_pages_in_order(result)
     assert pages[0].endswith("Foo.md"), (
         f"title match should win, got order: {pages}"
@@ -401,7 +399,7 @@ def test_query_empty_question_returns_no_results(tmp_path: Path):
         "entities/Foo.md": '---\ntitle: "Foo"\n---\n\n# Foo\n',
     })
     with patch("llmwiki.mcp.server.REPO_ROOT", tmp_path):
-        result = tool_wiki_query({"question": ""})
+        result = tool_wiki_search({"question": ""})
     text = _result_text(result)
     # Either explicit empty-results message or just no `## ` page entries.
     assert "score:" not in text or "No matching" in text
@@ -412,7 +410,7 @@ def test_query_no_matches_does_not_crash(tmp_path: Path):
         "entities/Foo.md": '---\ntitle: "Foo"\n---\n\n# Foo\n',
     })
     with patch("llmwiki.mcp.server.REPO_ROOT", tmp_path):
-        result = tool_wiki_query({"question": "completely-unrelated-xyz"})
+        result = tool_wiki_search({"question": "completely-unrelated-xyz"})
     text = _result_text(result)
     assert "No matching pages" in text or "score:" not in text
 
@@ -426,7 +424,7 @@ def test_query_handles_frontmatter_only_pages(tmp_path: Path):
         ),
     })
     with patch("llmwiki.mcp.server.REPO_ROOT", tmp_path):
-        result = tool_wiki_query({"question": "Real"})
+        result = tool_wiki_search({"question": "Real"})
     # Must succeed (no crash on the empty-body page).
     pages = _query_pages_in_order(result)
     assert any("Real" in p for p in pages)
@@ -440,7 +438,7 @@ def test_query_unicode_query_tokenises(tmp_path: Path):
         ),
     })
     with patch("llmwiki.mcp.server.REPO_ROOT", tmp_path):
-        result = tool_wiki_query({"question": "café"})
+        result = tool_wiki_search({"question": "café"})
     pages = _query_pages_in_order(result)
     assert pages, f"unicode query returned nothing: {_result_text(result)[:500]}"
 
@@ -452,7 +450,7 @@ def test_query_score_is_finite_no_nan(tmp_path: Path):
         "entities/Normal.md": '---\ntitle: "X"\n---\n\n# X\n\nSome x body.\n',
     })
     with patch("llmwiki.mcp.server.REPO_ROOT", tmp_path):
-        result = tool_wiki_query({"question": "x"})
+        result = tool_wiki_search({"question": "x"})
     text = _result_text(result)
     # No NaN/Infinity should appear in the rendered scores.
     assert "nan" not in text.lower()
@@ -472,7 +470,7 @@ def test_query_short_floor_prevents_tiny_page_dominance(tmp_path: Path):
         "entities/Normal.md": normal,
     })
     with patch("llmwiki.mcp.server.REPO_ROOT", tmp_path):
-        result = tool_wiki_query({"question": "match"})
+        result = tool_wiki_search({"question": "match"})
     pages = _query_pages_in_order(result)
     # The page with title match should still win (titles aren't normalised).
     assert pages[0].endswith("Normal.md")

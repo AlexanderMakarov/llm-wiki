@@ -454,16 +454,15 @@ exposes the full entity/concept/source relation graph. The per-page
 
 ## Querying via MCP
 
-If you have MCP access, the llmwiki MCP server exposes 7 tools
-(v0.4 adds `wiki_export`):
+If you have MCP access, the llmwiki MCP server exposes six tools
+(see docs/reference/mcp.md):
 
-- `wiki_query(question, max_pages)` — keyword search + page content
-- `wiki_search(term, kind, include_raw, format)` — page-level search by name and body text
-- `wiki_list_sources(project)` — list sources with metadata
+- `wiki_search(mode, …)` — unified match, extract, and filter search
 - `wiki_read_page(path)` — read one page
-- `wiki_lint()` — orphans + broken wikilinks report
-- `wiki_sync(dry_run)` — trigger the converter
+- `wiki_health(rules?, min_refs?)` — lint report + headline totals
+- `wiki_sync(dry_run?, confirm?)` — trigger the converter
 - `wiki_export(format)` — export the whole wiki in a named format
+- `wiki_add(url | path | content)` — ingest one source into raw/docs/
 
 ## Projects
 

@@ -12,10 +12,7 @@ from llmwiki.lint.rules.frontmatter_validity import FrontmatterValidity
 from llmwiki.mcp.server import (
     TOOL_IMPLS,
     TOOLS,
-    tool_wiki_category_browse,
-    tool_wiki_confidence,
-    tool_wiki_dashboard,
-    tool_wiki_lifecycle,
+    tool_wiki_health,
     tool_wiki_search,
 )
 from llmwiki.schema import ALL_PAGE_KINDS, PAGE_KINDS, SYSTEM_PAGE_KINDS
@@ -27,13 +24,11 @@ def _search_schema() -> dict:
 # ─── Registration ─────────────────────────────────────────────────────
 
 
-def test_all_12_tools_registered():
-    assert len(TOOLS) == 12
+def test_all_6_tools_registered():
+    assert len(TOOLS) == 6
     names = {t["name"] for t in TOOLS}
-    for required in ["wiki_query", "wiki_search", "wiki_list_sources",
-                      "wiki_read_page", "wiki_lint", "wiki_sync", "wiki_export",
-                      "wiki_confidence", "wiki_lifecycle", "wiki_dashboard",
-                      "wiki_category_browse", "wiki_add"]:
+    for required in ["wiki_search", "wiki_read_page", "wiki_health", "wiki_sync",
+                      "wiki_export", "wiki_add"]:
         assert required in names
 
 
@@ -63,7 +58,9 @@ def test_confidence_filter_by_min(tmp_path: Path):
         '---\ntitle: "B"\ntype: entity\nconfidence: 0.3\n---\n', encoding="utf-8"
     )
     with patch("llmwiki.mcp.server.REPO_ROOT", tmp_path):
-        result = tool_wiki_confidence({"min_confidence": 0.8})
+        result = tool_wiki_search({
+            "mode": "filter", "filter_by": "confidence", "min_confidence": 0.8,
+        })
     text = result["content"][0]["text"]
     assert "a.md" in text
     assert "b.md" not in text
@@ -76,7 +73,9 @@ def test_confidence_filter_by_max(tmp_path: Path):
         '---\ntitle: "L"\ntype: entity\nconfidence: 0.3\n---\n', encoding="utf-8"
     )
     with patch("llmwiki.mcp.server.REPO_ROOT", tmp_path):
-        result = tool_wiki_confidence({"max_confidence": 0.5})
+        result = tool_wiki_search({
+            "mode": "filter", "filter_by": "confidence", "max_confidence": 0.5,
+        })
     assert "low.md" in result["content"][0]["text"]
 
 
@@ -87,7 +86,7 @@ def test_confidence_skips_pages_without_field(tmp_path: Path):
         '---\ntitle: "A"\ntype: entity\n---\n', encoding="utf-8"
     )
     with patch("llmwiki.mcp.server.REPO_ROOT", tmp_path):
-        result = tool_wiki_confidence({})
+        result = tool_wiki_search({"mode": "filter", "filter_by": "confidence"})
     assert "0 pages" in result["content"][0]["text"]
 
 
@@ -98,7 +97,7 @@ def test_confidence_handles_invalid_value(tmp_path: Path):
         '---\ntitle: "A"\ntype: entity\nconfidence: high\n---\n', encoding="utf-8"
     )
     with patch("llmwiki.mcp.server.REPO_ROOT", tmp_path):
-        result = tool_wiki_confidence({})
+        result = tool_wiki_search({"mode": "filter", "filter_by": "confidence"})
     assert "0 pages" in result["content"][0]["text"]
 
 
@@ -106,7 +105,7 @@ def test_confidence_handles_invalid_value(tmp_path: Path):
 
 
 def test_lifecycle_requires_state():
-    result = tool_wiki_lifecycle({})
+    result = tool_wiki_search({"mode": "filter", "filter_by": "lifecycle"})
     assert result.get("isError") is True
 
 
@@ -120,7 +119,9 @@ def test_lifecycle_filters_by_state(tmp_path: Path):
         '---\ntitle: "B"\nlifecycle: verified\n---\n', encoding="utf-8"
     )
     with patch("llmwiki.mcp.server.REPO_ROOT", tmp_path):
-        result = tool_wiki_lifecycle({"state": "draft"})
+        result = tool_wiki_search({
+            "mode": "filter", "filter_by": "lifecycle", "state": "draft",
+        })
     text = result["content"][0]["text"]
     assert "a.md" in text
     assert "b.md" not in text
@@ -130,55 +131,45 @@ def test_lifecycle_empty_state(tmp_path: Path):
     wiki = tmp_path / "wiki"
     wiki.mkdir()
     with patch("llmwiki.mcp.server.REPO_ROOT", tmp_path):
-        result = tool_wiki_lifecycle({"state": "verified"})
+        result = tool_wiki_search({
+            "mode": "filter", "filter_by": "lifecycle", "state": "verified",
+        })
     assert "0 pages" in result["content"][0]["text"]
 
 
-# ─── wiki_dashboard ──────────────────────────────────────────────────
+# ─── wiki_health totals (was wiki_dashboard) ─────────────────────────
 
 
-def test_dashboard_counts_by_type(tmp_path: Path):
+def test_health_totals_counts_pages_and_candidates(tmp_path: Path):
     wiki = tmp_path / "wiki"
-    wiki.mkdir()
-    (wiki / "a.md").write_text(
+    (wiki / "entities").mkdir(parents=True)
+    (wiki / "sources").mkdir(parents=True)
+    (wiki / "candidates").mkdir(parents=True)
+    (wiki / "entities" / "a.md").write_text(
         '---\ntitle: "A"\ntype: entity\n---\n', encoding="utf-8"
     )
-    (wiki / "b.md").write_text(
-        '---\ntitle: "B"\ntype: concept\n---\n', encoding="utf-8"
+    (wiki / "sources" / "s.md").write_text(
+        '---\ntitle: "S"\ntype: source\n---\n', encoding="utf-8"
     )
+    (wiki / "candidates" / "stub.md").write_text(
+        '---\ntitle: "Stub"\n---\n', encoding="utf-8"
+    )
+    (wiki / "candidates" / "_context.md").write_text("# context\n", encoding="utf-8")
     with patch("llmwiki.mcp.server.REPO_ROOT", tmp_path):
-        result = tool_wiki_dashboard({})
-    text = result["content"][0]["text"]
-    assert "entity" in text
-    assert "concept" in text
+        result = tool_wiki_health({})
+    payload = json.loads(result["content"][0]["text"])
+    assert payload["totals"]["wiki_pages"] == 4
+    assert payload["totals"]["sources"] == 1
+    assert payload["totals"]["pending_candidates"] == 1
 
 
-def test_dashboard_confidence_buckets(tmp_path: Path):
-    wiki = tmp_path / "wiki"
-    wiki.mkdir()
-    (wiki / "high.md").write_text(
-        '---\ntitle: "H"\ntype: entity\nconfidence: 0.95\n---\n', encoding="utf-8"
-    )
-    (wiki / "low.md").write_text(
-        '---\ntitle: "L"\ntype: entity\nconfidence: 0.2\n---\n', encoding="utf-8"
-    )
-    (wiki / "none.md").write_text(
-        '---\ntitle: "N"\ntype: entity\n---\n', encoding="utf-8"
-    )
-    with patch("llmwiki.mcp.server.REPO_ROOT", tmp_path):
-        result = tool_wiki_dashboard({})
-    text = result["content"][0]["text"]
-    assert "high" in text
-    assert "low" in text
-
-
-def test_dashboard_handles_empty_wiki(tmp_path: Path):
+def test_health_handles_empty_wiki(tmp_path: Path):
     wiki = tmp_path / "wiki"
     wiki.mkdir()
     with patch("llmwiki.mcp.server.REPO_ROOT", tmp_path):
-        result = tool_wiki_dashboard({})
-    text = result["content"][0]["text"]
-    assert "0 pages" in text
+        result = tool_wiki_health({})
+    payload = json.loads(result["content"][0]["text"])
+    assert payload["totals"]["wiki_pages"] == 0
 
 
 # ─── wiki_search (merged, #102) ──────────────────────────────────────
@@ -374,7 +365,8 @@ def test_search_kind_without_include_raw_stays_wiki_only(tmp_path: Path):
 
 def test_search_kind_schema_offers_project(tmp_path: Path):
     schema = _search_schema()
-    assert schema["required"] == ["term"]
+    assert "term" in schema["properties"]
+    assert "project" in schema["properties"]
     assert "project" in schema["properties"]["kind"]["enum"]
     assert "entity" in schema["properties"]["kind"]["enum"]
 
@@ -487,7 +479,7 @@ def test_category_browse_lists_all(tmp_path: Path):
         '---\ntitle: "B"\ntags: [flutter]\n---\n', encoding="utf-8"
     )
     with patch("llmwiki.mcp.server.REPO_ROOT", tmp_path):
-        result = tool_wiki_category_browse({})
+        result = tool_wiki_search({"mode": "filter", "filter_by": "tag"})
     text = result["content"][0]["text"]
     assert "flutter" in text
     assert "mobile" in text
@@ -503,7 +495,9 @@ def test_category_browse_specific_tag(tmp_path: Path):
         '---\ntitle: "B"\ntags: [python]\n---\n', encoding="utf-8"
     )
     with patch("llmwiki.mcp.server.REPO_ROOT", tmp_path):
-        result = tool_wiki_category_browse({"tag": "flutter"})
+        result = tool_wiki_search({
+            "mode": "filter", "filter_by": "tag", "tag": "flutter",
+        })
     text = result["content"][0]["text"]
     assert "a.md" in text
     assert "b.md" not in text
@@ -522,7 +516,9 @@ def test_category_browse_min_count(tmp_path: Path):
         '---\ntitle: "C"\ntags: [lonely]\n---\n', encoding="utf-8"
     )
     with patch("llmwiki.mcp.server.REPO_ROOT", tmp_path):
-        result = tool_wiki_category_browse({"min_count": 2})
+        result = tool_wiki_search({
+            "mode": "filter", "filter_by": "tag", "min_count": 2,
+        })
     text = result["content"][0]["text"]
     assert "popular" in text
     assert "lonely" not in text

@@ -50,7 +50,7 @@ def test_usage_json_reports_consumption(tmp_path: Path, monkeypatch, capsys):
     cons = payload["consumption"]
     assert cons["total_calls"] == 3
     assert cons["total_resp_bytes"] == 340
-    assert cons["per_tool"]["wiki_search"]["calls"] == 2
+    assert cons["per_tool"]["wiki_search"]["calls"] == 3
     assert cons["per_tool"]["wiki_search"]["zero_hits"] == 1
     assert cons["per_project"]["sde-automation"]["calls"] == 3
     # cost side present even when state has no estimate yet
@@ -81,7 +81,6 @@ def test_usage_human_output_lists_tools(tmp_path: Path, monkeypatch, capsys):
     assert rc == 0
     out = capsys.readouterr().out
     assert "wiki_search" in out
-    assert "wiki_query" in out
 
 
 def test_usage_report_labels_calls_with_no_identified_caller(

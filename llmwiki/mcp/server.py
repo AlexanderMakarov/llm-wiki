@@ -4,17 +4,15 @@ Exposes llmwiki operations as Model Context Protocol tools that any MCP
 client (Claude Desktop, Claude Code, Codex, Cline, Cursor, ChatGPT desktop)
 can call directly via stdio.
 
-v0.2 tool surface (6 production tools):
+Production tool surface (6 tools, #196):
 
-- `wiki_query(question)` — search the wiki's index and return relevant
-  content from the matching pages
-- `wiki_search(term, kind?, include_raw?)` — page-level search over the
-  wiki by name and body text, narrowable to one page kind
-- `wiki_list_sources(project?)` — list raw source files, optionally filtered
+- `wiki_search` — unified search: ``mode=match`` (term / list_sources),
+  ``mode=extract`` (question), or ``mode=filter`` (confidence / lifecycle / tag)
 - `wiki_read_page(path)` — return the full content of a single wiki page
-- `wiki_lint(rules?, min_refs?)` — run every registered quality check
-  and return the same JSON report `llmwiki lint --json` prints
-- `wiki_sync(dry_run?)` — trigger a converter sync
+- `wiki_health(rules?, min_refs?)` — lint JSON report plus headline totals
+- `wiki_sync(dry_run?, confirm?)` — trigger a converter sync
+- `wiki_export(format)` — return an AI-consumable export file
+- `wiki_add(url | path | content)` — ingest one source into raw/docs/
 
 Protocol: Model Context Protocol, stdio transport, JSON-RPC 2.0.
 Reference: https://modelcontextprotocol.io/
@@ -232,94 +230,106 @@ def _record_usage(
 
 #: Rendering modes for wiki_search: prose for a reader, JSON for a parser.
 _SEARCH_FORMATS = ("text", "json")
+_SEARCH_MODES = ("match", "extract", "filter")
+_SEARCH_FILTER_BY = ("confidence", "lifecycle", "tag")
+_LIFECYCLE_STATES = ("draft", "reviewed", "verified", "stale", "archived")
 
 TOOLS = [
     {
-        "name": "wiki_query",
+        "name": "wiki_search",
         "description": (
-            "Search the llmwiki by keyword and return relevant page content. "
-            "Reads wiki/index.md, wiki/overview.md, and any matching pages. "
-            "Use for questions like 'what did I decide about X' or 'what's my "
-            "preferred approach to Y'."
+            "Unified wiki search. ``mode=match`` (default) finds a literal term "
+            "in page names and bodies, or lists raw sources when "
+            "``list_sources=true``. ``mode=extract`` answers a natural-language "
+            "question from index, overview, and matching pages. "
+            "``mode=filter`` narrows by confidence, lifecycle state, or tag."
         ),
         "inputSchema": {
             "type": "object",
             "properties": {
+                "mode": {
+                    "type": "string",
+                    "enum": list(_SEARCH_MODES),
+                    "description": (
+                        "`match` (default) — term search or list sources; "
+                        "`extract` — question answering; `filter` — metadata filters."
+                    ),
+                    "default": "match",
+                },
+                "term": {
+                    "type": "string",
+                    "description": "Match mode: literal substring (case-insensitive).",
+                },
                 "question": {
                     "type": "string",
-                    "description": "Natural-language question or keyword(s) to search for.",
+                    "description": (
+                        "Extract mode (or omit mode when only this is set): "
+                        "natural-language question or keywords."
+                    ),
                 },
                 "max_pages": {
                     "type": "integer",
-                    "description": "Maximum pages to return (default 5).",
+                    "description": "Extract mode: maximum pages to return (default 5).",
                     "default": 5,
                 },
-            },
-            "required": ["question"],
-        },
-    },
-    {
-        "name": "wiki_search",
-        "description": (
-            "Search the wiki for a term by page name and page text. Results "
-            "are page-level — `path — title` with the matching lines beneath "
-            "it — and pages whose title or path matches are listed before "
-            "pages that match only in their body. `include_raw` widens the "
-            "scan to raw session transcripts and `kind` filters on frontmatter "
-            "`type`; the two compose, so `kind=source` with `include_raw` "
-            "returns source pages and the raw transcripts behind them. The "
-            "result reports `truncated` when output caps dropped matches and "
-            "`budget_exhausted` when the scan stopped short of the corpus."
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "term": {
+                "list_sources": {
+                    "type": "boolean",
+                    "description": (
+                        "Match mode: list raw/sessions/ metadata instead of searching "
+                        "(optional `project` filter)."
+                    ),
+                    "default": False,
+                },
+                "project": {
                     "type": "string",
-                    "description": "Search term (literal, case-insensitive substring match).",
+                    "description": "Match mode with list_sources: filter by project slug.",
                 },
                 "kind": {
                     "type": "string",
                     "enum": list(PAGE_KINDS),
                     "description": (
-                        "Only return files whose frontmatter `type` is this kind. "
-                        "Applies to every corpus scanned, raw sessions included; "
-                        "raw session files carry `type: source`. Omit it to search "
-                        "every page, generated navigation and folder context "
-                        "pages included."
+                        "Match mode: only files whose frontmatter `type` is this kind."
                     ),
                 },
                 "include_raw": {
                     "type": "boolean",
-                    "description": (
-                        "Also search raw/sessions/ (default false — only wiki/). "
-                        "Combines with kind, which then filters both corpora."
-                    ),
+                    "description": "Match mode: also scan raw/sessions/ (default false).",
                     "default": False,
                 },
                 "format": {
                     "type": "string",
                     "enum": list(_SEARCH_FORMATS),
-                    "description": (
-                        "`text` (default) renders the prose listing; `json` "
-                        "returns the same result as a parseable payload with "
-                        "`pages[].lines[]` and the completeness flags."
-                    ),
+                    "description": "Match mode: `text` (default) or `json` payload.",
                     "default": "text",
                 },
-            },
-            "required": ["term"],
-        },
-    },
-    {
-        "name": "wiki_list_sources",
-        "description": "List all raw source markdown files under raw/sessions/ with their metadata.",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "project": {
+                "filter_by": {
                     "type": "string",
-                    "description": "Optional project slug to filter by.",
+                    "enum": list(_SEARCH_FILTER_BY),
+                    "description": "Filter mode: confidence, lifecycle, or tag.",
+                },
+                "min_confidence": {
+                    "type": "number",
+                    "description": "Filter confidence: minimum (default 0.0).",
+                    "default": 0.0,
+                },
+                "max_confidence": {
+                    "type": "number",
+                    "description": "Filter confidence: maximum (default 1.0).",
+                    "default": 1.0,
+                },
+                "state": {
+                    "type": "string",
+                    "enum": list(_LIFECYCLE_STATES),
+                    "description": "Filter lifecycle: required lifecycle state.",
+                },
+                "tag": {
+                    "type": "string",
+                    "description": "Filter tag: drill into one tag (omit for all tag counts).",
+                },
+                "min_count": {
+                    "type": "integer",
+                    "description": "Filter tag: minimum pages per tag (default 1).",
+                    "default": 1,
                 },
             },
         },
@@ -342,17 +352,13 @@ TOOLS = [
         },
     },
     {
-        "name": "wiki_lint",
+        "name": "wiki_health",
         "description": (
             "Run every registered quality check over the wiki and return the "
-            "same JSON report `llmwiki lint --json` prints: {summary, issues, "
-            "total_pages, disabled_rules, ran}. The checks cover link "
-            "integrity, orphan pages, contradictions, staleness, frontmatter "
-            "and catalog health. Rules the vault switches off in its "
-            "llmwiki.json are skipped and named in `disabled_rules`, and "
-            "`ran` names the checks that actually produced the report — so a "
-            "report narrowed by `rules`, or by the vault, can never be "
-            "mistaken for a full one."
+            "same JSON report `llmwiki lint --json` prints, plus `totals` "
+            "(wiki_pages, sources, pending_candidates). Rules the vault "
+            "switches off in llmwiki.json are skipped and named in "
+            "`disabled_rules`; `ran` names the checks that produced the report."
         ),
         "inputSchema": {
             "type": "object",
@@ -434,60 +440,6 @@ TOOLS = [
             "required": ["format"],
         },
     },
-    # v1.0 (#159) — MCP tools for confidence, lifecycle, dashboard and
-    # category browse.
-    {
-        "name": "wiki_confidence",
-        "description": (
-            "Return confidence scores for wiki pages. Filters by minimum "
-            "confidence threshold. Pages below threshold may need review."
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "min_confidence": {
-                    "type": "number",
-                    "description": "Only return pages with confidence >= this (0.0-1.0). Default 0.",
-                    "default": 0.0,
-                },
-                "max_confidence": {
-                    "type": "number",
-                    "description": "Only return pages with confidence <= this (0.0-1.0). Default 1.0.",
-                    "default": 1.0,
-                },
-            },
-        },
-    },
-    {
-        "name": "wiki_lifecycle",
-        "description": (
-            "List pages by lifecycle state: draft, reviewed, verified, stale, "
-            "or archived. Use to find pages needing review or archival."
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "state": {
-                    "type": "string",
-                    "enum": ["draft", "reviewed", "verified", "stale", "archived"],
-                    "description": "Which lifecycle state to filter by.",
-                },
-            },
-            "required": ["state"],
-        },
-    },
-    {
-        "name": "wiki_dashboard",
-        "description": (
-            "Return a summary of wiki health: page counts by type, "
-            "confidence distribution, lifecycle distribution, stale pages, "
-            "and recent updates."
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {},
-        },
-    },
     # #37 A3: the one write tool other than wiki_sync — MCP-only agents
     # otherwise have no supported way to land a new document.
     {
@@ -530,27 +482,6 @@ TOOLS = [
                 "note": {
                     "type": "string",
                     "description": "Blockquote note prepended to the document body.",
-                },
-            },
-        },
-    },
-    {
-        "name": "wiki_category_browse",
-        "description": (
-            "List tags and the count of pages for each. Optionally return "
-            "all pages for a specific tag."
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "tag": {
-                    "type": "string",
-                    "description": "Optional tag to drill into. If omitted, returns counts for all tags.",
-                },
-                "min_count": {
-                    "type": "integer",
-                    "description": "Only include tags with >= this many pages (default 1).",
-                    "default": 1,
                 },
             },
         },
@@ -620,7 +551,7 @@ def _is_read_page_allowed(p: Path) -> bool:
     return False
 
 
-def tool_wiki_query(args: dict[str, Any]) -> dict[str, Any]:
+def _wiki_search_extract(args: dict[str, Any]) -> dict[str, Any]:
     question = (args.get("question") or "").strip()
     max_pages = int(args.get("max_pages", 5))
     if not question:
@@ -813,6 +744,35 @@ def _iter_scan_files(
 
 
 def tool_wiki_search(args: dict[str, Any]) -> dict[str, Any]:
+    """Dispatch unified wiki_search by mode (#196)."""
+    question = (args.get("question") or "").strip()
+    mode = str(args.get("mode") or "").strip().lower()
+    if question and (not mode or mode == "extract"):
+        return _wiki_search_extract(args)
+    if not mode:
+        mode = "match"
+    if mode == "extract":
+        return _wiki_search_extract(args)
+    if mode == "filter":
+        filter_by = str(args.get("filter_by") or "").strip().lower()
+        if filter_by == "confidence":
+            return _wiki_search_filter_confidence(args)
+        if filter_by == "lifecycle":
+            return _wiki_search_filter_lifecycle(args)
+        if filter_by == "tag":
+            return _wiki_search_filter_tag(args)
+        return _err(
+            "filter_by is required for mode=filter "
+            f"(expected one of {list(_SEARCH_FILTER_BY)})"
+        )
+    if mode == "match":
+        if bool(args.get("list_sources")):
+            return _wiki_search_list_sources(args)
+        return _wiki_search_match(args)
+    return _err(f"unknown mode {mode!r} (expected one of {_SEARCH_MODES})")
+
+
+def _wiki_search_match(args: dict[str, Any]) -> dict[str, Any]:
     """Search wiki pages (and optionally raw sessions) for a literal term.
 
     Results are page-level: ``path — title`` with the matching lines
@@ -968,7 +928,7 @@ def tool_wiki_search(args: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
-def tool_wiki_list_sources(args: dict[str, Any]) -> dict[str, Any]:
+def _wiki_search_list_sources(args: dict[str, Any]) -> dict[str, Any]:
     project_filter = args.get("project")
     raw_sessions = REPO_ROOT / "raw" / "sessions"
     if not raw_sessions.exists():
@@ -1036,7 +996,33 @@ def _lint_rule_selection(args: dict[str, Any]) -> list[str] | None:
     return selected or None
 
 
-def tool_wiki_lint(args: dict[str, Any]) -> dict[str, Any]:
+def _health_totals(wiki: Path, pages: dict[str, Any]) -> dict[str, int]:
+    """Headline wiki counts for wiki_health totals (#196)."""
+    wiki_pages = len(pages)
+    sources = sum(
+        1 for page in pages.values()
+        if str(page["meta"].get("type", "")).strip().lower() == "source"
+    )
+    sources_dir = wiki / "sources"
+    if sources_dir.is_dir():
+        disk_sources = sum(
+            1 for p in sources_dir.rglob("*.md") if p.name != "_context.md"
+        )
+        sources = max(sources, disk_sources)
+    candidates_dir = wiki / "candidates"
+    pending_candidates = 0
+    if candidates_dir.is_dir():
+        pending_candidates = sum(
+            1 for p in candidates_dir.glob("*.md") if p.name != "_context.md"
+        )
+    return {
+        "wiki_pages": wiki_pages,
+        "sources": sources,
+        "pending_candidates": pending_candidates,
+    }
+
+
+def tool_wiki_health(args: dict[str, Any]) -> dict[str, Any]:
     """Run the registered lint rules over the vault's wiki/ (#150).
 
     Parity, not resemblance: this is `load_pages` + `run_lint` + `render_json`
@@ -1082,7 +1068,9 @@ def tool_wiki_lint(args: dict[str, Any]) -> dict[str, Any]:
                   if any(name in disabled for name in exc.unknown) else "")
         return _err(f"error: {origin}{exc}")
 
-    return _ok(json.dumps(render_lint_json(outcome, len(pages)), indent=2))
+    payload = render_lint_json(outcome, len(pages))
+    payload["totals"] = _health_totals(wiki, pages)
+    return _ok(json.dumps(payload, indent=2))
 
 
 def tool_wiki_sync(args: dict[str, Any]) -> dict[str, Any]:
@@ -1259,7 +1247,7 @@ def _err(text: str) -> dict[str, Any]:
     return {"content": [{"type": "text", "text": text}], "isError": True}
 
 
-def tool_wiki_confidence(args: dict[str, Any]) -> dict[str, Any]:
+def _wiki_search_filter_confidence(args: dict[str, Any]) -> dict[str, Any]:
     """List pages filtered by confidence score range (v1.0 · #159)."""
 
     min_c = float(args.get("min_confidence", 0.0))
@@ -1294,7 +1282,7 @@ def tool_wiki_confidence(args: dict[str, Any]) -> dict[str, Any]:
     return _ok(text)
 
 
-def tool_wiki_lifecycle(args: dict[str, Any]) -> dict[str, Any]:
+def _wiki_search_filter_lifecycle(args: dict[str, Any]) -> dict[str, Any]:
     """List pages filtered by lifecycle state (v1.0 · #159)."""
 
     state = (args.get("state") or "").strip().lower()
@@ -1319,53 +1307,10 @@ def tool_wiki_lifecycle(args: dict[str, Any]) -> dict[str, Any]:
     return _ok(text)
 
 
-def tool_wiki_dashboard(args: dict[str, Any]) -> dict[str, Any]:
-    """Return wiki health summary (v1.0 · #159)."""
-
-    wiki = REPO_ROOT / "wiki"
-    pages = load_pages(wiki)
-
-    by_type: dict[str, int] = {}
-    by_lifecycle: dict[str, int] = {}
-    conf_buckets = {"high (≥0.8)": 0, "medium (0.5-0.8)": 0, "low (<0.5)": 0, "none": 0}
-
-    for page in pages.values():
-        meta = page["meta"]
-        t = meta.get("type", "unknown")
-        by_type[t] = by_type.get(t, 0) + 1
-        lc = meta.get("lifecycle", "none")
-        by_lifecycle[lc] = by_lifecycle.get(lc, 0) + 1
-
-        conf_raw = meta.get("confidence", "")
-        if not conf_raw:
-            conf_buckets["none"] += 1
-        else:
-            try:
-                c = float(conf_raw)
-                if c >= 0.8:
-                    conf_buckets["high (≥0.8)"] += 1
-                elif c >= 0.5:
-                    conf_buckets["medium (0.5-0.8)"] += 1
-                else:
-                    conf_buckets["low (<0.5)"] += 1
-            except (ValueError, TypeError):
-                conf_buckets["none"] += 1
-
-    lines = [f"# Wiki Dashboard — {len(pages)} pages\n"]
-    lines.append("## By type\n")
-    for t in sorted(by_type):
-        lines.append(f"  {by_type[t]:4d}  {t}")
-    lines.append("\n## By lifecycle\n")
-    for lc in sorted(by_lifecycle):
-        lines.append(f"  {by_lifecycle[lc]:4d}  {lc}")
-    lines.append("\n## Confidence distribution\n")
-    for bucket in ["high (≥0.8)", "medium (0.5-0.8)", "low (<0.5)", "none"]:
-        lines.append(f"  {conf_buckets[bucket]:4d}  {bucket}")
-
-    return _ok("\n".join(lines))
+    return _ok(text)
 
 
-def tool_wiki_category_browse(args: dict[str, Any]) -> dict[str, Any]:
+def _wiki_search_filter_tag(args: dict[str, Any]) -> dict[str, Any]:
     """Browse tags / categories (v1.0 · #159)."""
 
     tag = (args.get("tag") or "").strip().lower()
@@ -1394,20 +1339,12 @@ def tool_wiki_category_browse(args: dict[str, Any]) -> dict[str, Any]:
 
 
 TOOL_IMPLS = {
-    "wiki_query": tool_wiki_query,
     "wiki_search": tool_wiki_search,
-    "wiki_list_sources": tool_wiki_list_sources,
     "wiki_read_page": tool_wiki_read_page,
-    "wiki_lint": tool_wiki_lint,
+    "wiki_health": tool_wiki_health,
     "wiki_sync": tool_wiki_sync,
     "wiki_export": tool_wiki_export,
-    # #37 A3
     "wiki_add": tool_wiki_add,
-    # v1.0 (#159)
-    "wiki_confidence": tool_wiki_confidence,
-    "wiki_lifecycle": tool_wiki_lifecycle,
-    "wiki_dashboard": tool_wiki_dashboard,
-    "wiki_category_browse": tool_wiki_category_browse,
 }
 
 
