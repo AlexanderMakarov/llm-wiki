@@ -912,7 +912,7 @@ The wizard offers presets and translates each into a cron expression; `--schedul
 
 Supported grammar is standard 5-field cron: `*`, integers, lists (`1,15`), ranges (`1-5`), steps (`*/15`), day names `SUN`–`SAT`, month names `JAN`–`DEC`. Nicknames (`@daily`), Vixie/Quartz extensions (`L`, `W`, `#`), a seconds field, and any expression restricting both day-of-month and day-of-week are refused — the last one because cron ORs those two fields and no OS scheduler can express it.
 
-Linux systemd timers use `Persistent=true` so a missed run catches up after boot. Logs land under XDG state (`~/.local/state/llmwiki/` by default). `.llmwiki/automation-status.json` is written under the vault for the Home Automation panel. Agent hooks default to skip — press Enter at that prompt to install nothing; type `install` to opt in (not recommended; prefer the OS scheduler or `watch`). Re-running the command replaces the existing job rather than adding a second one.
+Linux systemd timers use `Persistent=true` so a missed run catches up after boot. By default the installer copies unit files into your OS scheduler (`~/.config/systemd/user` on Linux, `~/Library/LaunchAgents` on macOS) and enables the job (`systemctl --user enable --now`, `launchctl bootstrap`, or `schtasks /Create`). Pass `--no-activate` to write unit files only and print manual enable commands. Logs land under XDG state (`~/.local/state/llmwiki/` by default). `.llmwiki/automation-status.json` is written under the vault for the Home Automation panel and records scheduler activation state (`scheduler_activated`, `scheduler_backend`, `scheduler_active`, `scheduler_error`). Agent hooks default to skip — press Enter at that prompt to install nothing; type `install` to opt in (not recommended; prefer the OS scheduler or `watch`). Re-running the command replaces the existing job rather than adding a second one.
 
 ```bash
 python3 -m llmwiki install-automation
@@ -920,6 +920,7 @@ python3 -m llmwiki install-automation --yes --job maintain
 python3 -m llmwiki install-automation --yes --job maintain --graph builtin --lint-fail errors --schedule "0 8 * * 1-5"
 python3 -m llmwiki install-automation --yes --job ingest --schedule "30 7 * * *" --units-dir ~/.config/systemd/user
 python3 -m llmwiki install-automation --yes --job maintain --synth-backend ollama --watch-enabled
+python3 -m llmwiki install-automation --yes --no-activate
 python3 -m llmwiki install-automation --vault ~/my-vault
 ```
 
@@ -936,6 +937,8 @@ python3 -m llmwiki install-automation --vault ~/my-vault
 | `--units-dir PATH` | Directory for systemd unit / launchd plist / Task Scheduler files. Default: `.llmwiki/units/` under the repo. Also the offered default in the interactive prompt. |
 | `--watch-enabled` | Set `watch_enabled` in automation status so the site Automation panel shows Watch: on (does not install or start `llmwiki watch`). |
 | `--force-platform {linux,macos,windows}` | Override platform detection for unit format. |
+| `--activate` | Copy units into the OS scheduler location and enable the job (default). |
+| `--no-activate` | Write unit files only; print copy-paste enable commands. |
 | `--vault PATH` | Vault the job runs against: `automation-status.json` is written under it, and the scheduled command carries `--vault PATH` whenever it differs from `vault.default_path` in `config.json`, so the job and its status file always mean the same vault. Omitted, the job resolves its vault from config. |
 | `--profile {A,B,C}` | **Deprecated** — use `--job`. `A` maps to `ingest`, `B` and `C` to `maintain`. Prints a notice; `--job` wins when both are given. |
 | `--hour N` | **Deprecated** — use `--schedule`. Translated to `"{minute} {hour} * * *"`, and ignored with a notice when `--schedule` is given. |
@@ -943,8 +946,11 @@ python3 -m llmwiki install-automation --vault ~/my-vault
 
 Exit codes:
 
-- `0` — the scheduler files were written, or you answered **n** at the final confirmation (automation skipped; vault and config unchanged).
+- `0` — the scheduler files were written (and activated unless `--no-activate`), or you answered **n** at the final confirmation (automation skipped; vault and config unchanged).
+- `1` — scheduler activation failed (`--activate` default); status file records `scheduler_error`.
 - `2` — the schedule is not an expression llmwiki can translate.
+
+**Status file fields** (under `<vault>/.llmwiki/automation-status.json`): in addition to job/schedule keys, activation adds `scheduler_activated` (bool), `scheduler_backend` (`systemd` / `launchd` / `schtasks`), `scheduler_units_dir` (install path), `scheduler_active` (read-back when available), and `scheduler_error` (string when activation failed).
 
 ---
 

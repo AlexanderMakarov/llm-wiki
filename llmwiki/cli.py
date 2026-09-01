@@ -57,7 +57,7 @@ from llmwiki.adapters import REGISTRY, discover_all
 from llmwiki.adapters.status import adapter_status as _adapter_status  # noqa: F401
 from llmwiki.adapters.status import print_adapters_table
 from llmwiki.add_doc import add_sources, expected_source_page, remove_raw_docs
-from llmwiki.automation_install import run_install
+from llmwiki.automation_install import AutomationActivationError, detect_platform, run_install
 from llmwiki.automation_plan import (
     DEFAULT_SCHEDULE,
     LEGACY_PROFILE_MAP,
@@ -1043,6 +1043,27 @@ def _scheduled_command_vault(explicit_vault: str | None) -> Path | None:
     return target
 
 
+def _print_manual_scheduler_activation(write_dir: Path, plat: str) -> None:
+    """Copy-paste commands when ``--no-activate`` leaves units on disk only."""
+    print("  Scheduler was NOT activated — enable it yourself:")
+    if plat == "linux":
+        dest = Path.home() / ".config" / "systemd" / "user"
+        print(f"    mkdir -p {dest}")
+        print(f"    cp {write_dir}/llmwiki-maintain.{{sh,service,timer}} {dest}/")
+        print("    systemctl --user daemon-reload")
+        print("    systemctl --user enable --now llmwiki-maintain.timer")
+    elif plat == "macos":
+        dest = Path.home() / "Library" / "LaunchAgents"
+        plist = f"{dest}/com.llmwiki.maintain.plist"
+        print(f"    cp {write_dir}/com.llmwiki.maintain.plist {dest}/")
+        print(f"    launchctl bootstrap gui/$UID {plist}")
+    elif plat == "windows":
+        xml = write_dir / "llmwiki-maintain-task.xml"
+        print(f"    schtasks /Create /TN llmwiki-maintain /XML {xml} /F")
+    else:
+        print(f"    See unit files under {write_dir}")
+
+
 def cmd_install_automation(args: argparse.Namespace) -> int:
     """Set up the daily job: what it does, when it runs, then write the scheduler files."""
     command_vault = _scheduled_command_vault(getattr(args, "vault", None))
@@ -1096,7 +1117,7 @@ def cmd_install_automation(args: argparse.Namespace) -> int:
             "n",
         ) in ("y", "yes")
         default_units = Path(getattr(args, "units_dir", None) or (REPO_ROOT / ".llmwiki" / "units"))
-        print("  Writes systemd/launchd/Task Scheduler files; you enable the timer yourself.")
+        print("  Writes systemd/launchd/Task Scheduler files and activates the job by default.")
         units = _ask_until(
             f"Scheduler unit directory (Enter = {default_units}): ",
             "",
@@ -1110,25 +1131,48 @@ def cmd_install_automation(args: argparse.Namespace) -> int:
             return 0
         _write_synth_backend(backend)
 
-    status = run_install({
-        "plan": plan,
-        "schedule": schedule,
-        "working_dir": REPO_ROOT,
-        "python_bin": sys.executable,
-        "vault_root": vault_root,
-        "command_vault": command_vault,
-        "write_units_dir": write_dir,
-        "watch_enabled": watch_enabled,
-        "hooks": ["claude", "cursor"] if install_hooks else [],
-        "synth_backend": backend,
-        "force_platform": getattr(args, "force_platform", None),
-    })
+    activate = bool(getattr(args, "activate", True))
+    plat = str(getattr(args, "force_platform", None) or detect_platform())
+
+    try:
+        status = run_install({
+            "plan": plan,
+            "schedule": schedule,
+            "working_dir": REPO_ROOT,
+            "python_bin": sys.executable,
+            "vault_root": vault_root,
+            "command_vault": command_vault,
+            "write_units_dir": write_dir,
+            "watch_enabled": watch_enabled,
+            "hooks": ["claude", "cursor"] if install_hooks else [],
+            "synth_backend": backend,
+            "force_platform": getattr(args, "force_platform", None),
+            "activate": activate,
+        })
+    except AutomationActivationError as exc:
+        print(f"error: scheduler activation failed: {exc}", file=sys.stderr)
+        return 1
+
     print(f"  automation status → {vault_root / '.llmwiki' / 'automation-status.json'}")
     print(f"  log path: {status.get('log_path')}")
     for u in status.get("units_written") or []:
         print(f"  wrote {u}")
-    print("  Enable the timer/plist using your OS instructions; "
-          "idle days are a no-op.")
+    if activate and status.get("scheduler_activated"):
+        backend_name = status.get("scheduler_backend") or "scheduler"
+        active = status.get("scheduler_active")
+        if active is True:
+            print(f"  Scheduler activated ({backend_name}): timer is enabled.")
+        elif active is False:
+            print(f"  Scheduler activated ({backend_name}): installed but not yet enabled.")
+        else:
+            print(f"  Scheduler activated ({backend_name}).")
+        print("  Idle days are a no-op.")
+    elif not activate:
+        _print_manual_scheduler_activation(write_dir, plat)
+        print("  Idle days are a no-op.")
+    else:
+        print("  Enable the timer/plist using your OS instructions; "
+              "idle days are a no-op.")
     return 0
 
 
@@ -3041,6 +3085,20 @@ def build_parser() -> argparse.ArgumentParser:
     auto_p.add_argument("--watch-enabled", action="store_true")
     auto_p.add_argument("--force-platform", choices=["linux", "macos", "windows"],
                         default=None)
+    activate_group = auto_p.add_mutually_exclusive_group()
+    activate_group.add_argument(
+        "--activate",
+        dest="activate",
+        action="store_true",
+        help="Copy units into the OS scheduler location and enable the job (default)",
+    )
+    activate_group.add_argument(
+        "--no-activate",
+        dest="activate",
+        action="store_false",
+        help="Write unit files only; print manual enable commands",
+    )
+    auto_p.set_defaults(activate=True)
     _add_vault_arg(auto_p, role="install-automation")
     auto_p.set_defaults(func=cmd_install_automation)
 

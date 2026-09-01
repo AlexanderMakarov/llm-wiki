@@ -8,8 +8,10 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import shlex
 import sys
+import textwrap
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any
@@ -19,9 +21,13 @@ import pytest
 from llmwiki import cli
 from llmwiki.automation_install import (
     HOOK_MARKER,
+    AutomationActivationError,
+    activate_scheduler,
+    default_scheduler_units_dir,
     merge_claude_session_start_hook,
     merge_cursor_session_start_hook,
     render_launchd_plist,
+    render_systemd_service,
     render_systemd_timer,
     render_windows_task,
     run_install,
@@ -209,6 +215,7 @@ def _install(tmp_path: Path, **overrides) -> tuple[dict, Path, Path]:
         "write_units_dir": units,
         "force_platform": "linux",
         "synth_backend": "dummy",
+        "activate": False,
     }
     config.update(overrides)
     return run_install(config), vault, units
@@ -518,6 +525,7 @@ def _install_via_flags(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *flags: 
         "--units-dir", str(units),
         "--vault", str(vault),
         "--force-platform", "linux",
+        "--no-activate",
         *flags,
     ])
     return code, vault, units
@@ -744,3 +752,109 @@ def test_panel_survives_a_malformed_status_file(tmp_path: Path):
     panel = _panel(tmp_path, {"profile": "Z", "schedule": "@daily", "hour": "eight"})
     assert "Ingest only" in panel
     assert "Every day at 08:00" in panel
+
+
+# ─── Scheduler activation ───────────────────────────────────────────────
+
+
+def _fake_systemctl(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, fail_enable: bool = False) -> Path:
+    """Install a fake ``systemctl`` on PATH and point HOME at a throwaway directory."""
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    log = bin_dir / "systemctl.log"
+    script = textwrap.dedent(f"""\
+        #!/bin/sh
+        echo "$@" >> "{log}"
+        case "$2" in
+          is-enabled)
+            echo enabled
+            exit 0
+            ;;
+          enable)
+            {"exit 1" if fail_enable else "exit 0"}
+            ;;
+        esac
+        exit 0
+        """)
+    systemctl = bin_dir / "systemctl"
+    systemctl.write_text(script, encoding="utf-8")
+    systemctl.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ.get('PATH', '')}")
+    return log
+
+
+def test_activate_scheduler_linux_copies_units_and_enables_timer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    units = tmp_path / "units"
+    units.mkdir()
+    staging_wrapper = units / "llmwiki-maintain.sh"
+    staging_wrapper.write_text("# wrapper\n", encoding="utf-8")
+    (units / "llmwiki-maintain.service").write_text(
+        render_systemd_service(wrapper=staging_wrapper, working_dir=tmp_path),
+        encoding="utf-8",
+    )
+    (units / "llmwiki-maintain.timer").write_text("# timer\n", encoding="utf-8")
+    log = _fake_systemctl(tmp_path, monkeypatch)
+
+    result = activate_scheduler(platform="linux", units_source_dir=units, working_dir=tmp_path)
+
+    dest = default_scheduler_units_dir("linux")
+    assert result["scheduler_activated"] is True
+    assert result["scheduler_backend"] == "systemd"
+    assert result["scheduler_active"] is True
+    assert result["scheduler_error"] is None
+    installed_service = (dest / "llmwiki-maintain.service").read_text(encoding="utf-8")
+    assert str(dest / "llmwiki-maintain.sh") in installed_service
+    assert str(staging_wrapper) not in installed_service
+    assert (dest / "llmwiki-maintain.timer").read_text(encoding="utf-8") == "# timer\n"
+    logged = log.read_text(encoding="utf-8")
+    assert "--user daemon-reload" in logged
+    assert "enable --now llmwiki-maintain.timer" in logged
+    assert "is-enabled llmwiki-maintain.timer" in logged
+
+
+def test_run_install_with_activate_records_scheduler_state(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    _fake_systemctl(tmp_path, monkeypatch)
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    units = tmp_path / "units"
+    status = run_install({
+        "working_dir": tmp_path,
+        "python_bin": "python3",
+        "vault_root": vault,
+        "write_units_dir": units,
+        "force_platform": "linux",
+        "activate": True,
+    })
+    assert status["scheduler_activated"] is True
+    assert status["scheduler_backend"] == "systemd"
+    assert status["scheduler_active"] is True
+    loaded = load_status(vault)
+    assert loaded is not None
+    assert loaded["scheduler_activated"] is True
+
+
+def test_run_install_activate_failure_sets_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    _fake_systemctl(tmp_path, monkeypatch, fail_enable=True)
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    units = tmp_path / "units"
+    with pytest.raises(AutomationActivationError):
+        run_install({
+            "working_dir": tmp_path,
+            "python_bin": "python3",
+            "vault_root": vault,
+            "write_units_dir": units,
+            "force_platform": "linux",
+            "activate": True,
+        })
+    loaded = load_status(vault)
+    assert loaded is not None
+    assert loaded.get("scheduler_error")
+    assert loaded.get("scheduler_activated") is False

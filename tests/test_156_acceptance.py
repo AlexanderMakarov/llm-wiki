@@ -139,6 +139,16 @@ def test_ingest_choice_writes_no_extras_or_graph_choice_end_to_end(
     file (not just the in-memory plan) carries graph=none / lint_fail=never -- proving the
     whole chain from scripted input through the real, unmocked run_install."""
     monkeypatch.setattr(cli, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(
+        "llmwiki.automation_install.activate_scheduler",
+        lambda **kwargs: {
+            "scheduler_activated": True,
+            "scheduler_backend": "systemd",
+            "scheduler_units_dir": "/home/USER/.config/systemd/user",
+            "scheduler_active": True,
+            "scheduler_error": None,
+        },
+    )
     _pretend_tty(monkeypatch)
     vault = tmp_path / "vault"
     prompts: list[str] = []
@@ -238,6 +248,7 @@ def test_declining_writes_nothing_and_a_later_real_install_still_succeeds(
     code = cli.main([
         "install-automation", "--yes", "--job", "maintain",
         "--units-dir", str(units), "--vault", str(vault), "--force-platform", "linux",
+        "--no-activate",
     ])
     assert code == 0
     status = load_status(vault)
@@ -341,6 +352,7 @@ def test_ingest_scheduled_command_is_byte_identical_to_pre_change_profile_a(
         "vault_root": tmp_path / "vault",
         "write_units_dir": units,
         "force_platform": "linux",
+        "activate": False,
     })
     wrapper = (units / "llmwiki-maintain.sh").read_text(encoding="utf-8")
     expected_command = f"cd {shlex.quote(str(working_dir))} && {shlex.quote(python_bin)} -m llmwiki sync"
@@ -364,6 +376,7 @@ def test_maintain_scheduled_command_is_one_invocation_not_a_chain(tmp_path: Path
         "vault_root": tmp_path / "vault",
         "write_units_dir": units,
         "force_platform": "linux",
+        "activate": False,
     })
     wrapper = (units / "llmwiki-maintain.sh").read_text(encoding="utf-8")
     command_line = next(line for line in wrapper.splitlines() if "-m llmwiki" in line)
@@ -398,6 +411,7 @@ def test_home_page_shows_a_readable_label_for_a_new_format_status(tmp_path: Path
         "working_dir": tmp_path,
         "python_bin": sys.executable,
         "vault_root": tmp_path,
+        "activate": False,
     })
     panel = render_automation_panel(tmp_path)
     assert "Maintain + graph (built-in)" in panel
@@ -464,6 +478,7 @@ def test_rerunning_install_replaces_the_existing_units_not_duplicates_them(tmp_p
         "vault_root": vault_root,
         "write_units_dir": units,
         "force_platform": "linux",
+        "activate": False,
     }
     first = run_install({"plan": AutomationPlan(job="ingest"), "schedule": "0 8 * * *", **common})
     files_after_first = sorted(p.name for p in units.iterdir())
