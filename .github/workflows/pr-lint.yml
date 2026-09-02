@@ -9,8 +9,8 @@ name: PR lint
 #      (llmwiki/, integrations/, tests/, .github/workflows/,
 #       docs/maintainers/, docs/reference/; path filters; no label bypass)
 #
-# The main tests + lint + privacy scan live in `ci.yml` — this workflow
-# is just the governance gate.
+# The main tests + lint live in `ci.yml` (including the privacy username
+# guard as a pytest); this workflow is just the governance gate.
 
 on:
   pull_request:

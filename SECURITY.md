@@ -75,9 +75,10 @@ what's already in place:
 - **No runtime deps beyond stdlib + `markdown`** — smallest possible
   attack surface
 - **`raw/` is gitignored** — contributors physically can't commit real
-  session data (CI also greps for the maintainer's real username)
-- **Privacy grep in CI** — `grep -r "<real_username>" .` must return
-  zero hits in committed files
+  session data (the test suite also rejects the maintainer's real username
+  in tracked `.md` / `.py`)
+- **Privacy username guard** — `tests/test_privacy_username.py` fails if
+  any tracked `.md` / `.py` contains the real username (fixtures use `USER`)
 - **HTML-escape raw tags in prose** — fixed in #74; session content
   that mentions things like `<textarea>` can't leak into the DOM
 

@@ -69,14 +69,6 @@ jobs:
             exit 1
           fi
 
-      - name: Privacy grep (should return zero hits)
-        run: |
-          # Never commit the real username; the test fixtures use USER as placeholder
-          if grep -rn "deepshikhasingh" --include="*.md" --include="*.py" --exclude-dir=".temp" --exclude-dir=".framework" --exclude-dir=".git" .; then
-            echo "ERROR: real username leaked into committed files" >&2
-            exit 1
-          fi
-
   performance-budget:
     runs-on: ubuntu-latest
     needs: lint-and-test
