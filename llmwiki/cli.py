@@ -61,6 +61,7 @@ from llmwiki.automation_install import (
     AutomationActivationError,
     default_staging_units_dir,
     detect_platform,
+    resolve_main_worktree,
     run_install,
 )
 from llmwiki.automation_plan import (
@@ -950,21 +951,31 @@ def _ask_schedule() -> str:
     return f"{minute} {hour} * * {day_of_week}"
 
 
-def _confirm_plan(plan: AutomationPlan, schedule: str, vault: Path | None = None) -> bool:
+def _confirm_plan(
+    plan: AutomationPlan,
+    schedule: str,
+    vault: Path | None = None,
+    *,
+    working_dir: Path | None = None,
+) -> bool:
     """Print the job, the schedule, and the exact command line, then ask whether to write it.
 
     ``vault`` is the one the scheduled command will name, so the line shown here
-    is the line that gets installed. An empty answer is a yes, and an answer the
-    question does not recognise is re-asked. Consent has to be typed: stdin ending
-    without one is a no.
+    is the line that gets installed. ``working_dir`` is the directory the
+    scheduled command will ``cd`` into — the git main worktree when install
+    was run from a linked one (#206) — so the previewed command matches what
+    actually gets written. An empty answer is a yes, and an answer the
+    question does not recognise is re-asked. Consent has to be typed: stdin
+    ending without one is a no.
     """
     vault_root = vault if vault is not None else (load_default_vault_path() or REPO_ROOT)
     log_path = vault_automation_log_path(vault_root)
+    command_dir = working_dir if working_dir is not None else REPO_ROOT
     print()
     print("About to schedule:")
     print(f"  Job:      {plan_label(plan)}")
     print(f"  When:     {describe(parse_cron(schedule))}  (cron: {schedule})")
-    print(f"  Command:  {plan_command(plan, python_bin=sys.executable, working_dir=REPO_ROOT, vault=vault)}")
+    print(f"  Command:  {plan_command(plan, python_bin=sys.executable, working_dir=command_dir, vault=vault)}")
     print(f"  Run log:  {log_path}  (truncated each run)")
     print()
     while True:
@@ -1105,6 +1116,19 @@ def cmd_install_automation(args: argparse.Namespace) -> int:
     if vault_root is None:
         vault_root = REPO_ROOT
 
+    # #206: bake the *main* git worktree as working_dir, not an incidental
+    # linked worktree the package happened to be imported from — the
+    # generated wrapper `cd`s there before `python3 -m llmwiki`, and that
+    # directory's config.json is what governs the scheduled run's
+    # `filters.since` / adapter lookback.
+    working_dir = resolve_main_worktree(REPO_ROOT)
+    if working_dir != REPO_ROOT:
+        print(
+            f"  Automation will run from the git main worktree ({working_dir}), "
+            f"not this checkout ({REPO_ROOT}), so config.json lookback/adapters "
+            "match the primary settings."
+        )
+
     yes = bool(getattr(args, "yes", False))
     install_hooks = False
     if yes:
@@ -1150,7 +1174,7 @@ def cmd_install_automation(args: argparse.Namespace) -> int:
             str,
         )
         write_dir = Path(units) if units else default_units
-        if not _confirm_plan(plan, schedule, command_vault):
+        if not _confirm_plan(plan, schedule, command_vault, working_dir=working_dir):
             print("  Skipped install-automation — no scheduler files or automation status written.")
             print("  Your vault, adapters, and config.json are unchanged.")
             print("  Run `python3 -m llmwiki install-automation` later to set up the daily job.")
@@ -1164,7 +1188,7 @@ def cmd_install_automation(args: argparse.Namespace) -> int:
         status = run_install({
             "plan": plan,
             "schedule": schedule,
-            "working_dir": REPO_ROOT,
+            "working_dir": working_dir,
             "python_bin": sys.executable,
             "vault_root": vault_root,
             "command_vault": command_vault,

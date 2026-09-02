@@ -914,6 +914,8 @@ Supported grammar is standard 5-field cron: `*`, integers, lists (`1,15`), range
 
 Linux systemd timers use `Persistent=true` so a missed run catches up once after wake (not every skipped day while the laptop stayed off). By default the installer writes rendered units to `~/.automation/`, copies them into your OS scheduler (`~/.config/systemd/user` on Linux, `~/Library/LaunchAgents` on macOS), and enables the job. Pass `--no-activate` to write unit files only and print manual enable commands. Each run appends to `<vault>/.llmwiki/last-automation.log` (truncated each run). `.llmwiki/automation-status.json` under the vault drives the Home Automation panel and records scheduler activation state. The wizard defaults to **Maintain** on Enter; choose **1** for ingest-only. Re-running replaces the existing job rather than adding a second one.
 
+The generated wrapper `cd`s into a working directory before running `python3 -m llmwiki`, and that directory's `config.json` supplies the scheduled run's `filters.since` / adapter settings. If `install-automation` is run from a [linked git worktree](https://git-scm.com/docs/git-worktree) (a worktree's own `config.json` is typically empty), the working directory it bakes into the wrapper is the git **main** worktree, not the linked one — so scheduled lookback matches your primary checkout instead of silently resetting to unlimited history (#206). When the two differ, install-automation prints a one-line notice naming the main worktree it resolved. Outside a git repo (an installed package, for example), the working directory is unchanged.
+
 ```bash
 python3 -m llmwiki install-automation
 python3 -m llmwiki install-automation --yes --job maintain

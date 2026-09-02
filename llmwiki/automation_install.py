@@ -23,6 +23,7 @@ import platform
 import shlex
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 from xml.sax.saxutils import escape
@@ -45,6 +46,63 @@ LAUNCHD_LABEL = "com.llmwiki.maintain"
 
 class AutomationActivationError(RuntimeError):
     """Raised when ``activate_scheduler`` cannot enable the OS job."""
+
+
+def resolve_main_worktree(path: Path) -> Path:
+    """Resolve the git **main** worktree directory that owns ``path`` (#206).
+
+    Automation's baked ``working_dir`` becomes the ``cd`` a scheduled wrapper
+    script runs from before invoking ``python3 -m llmwiki``, which then loads
+    *that directory's* ``config.json`` for ``filters.since`` and adapter
+    settings. Installing from a linked git worktree (its own, usually empty
+    ``config.json``) must not silently point the scheduled job at the
+    worktree instead of the operator's primary checkout.
+
+    - ``path`` is not inside a git repo → returned unchanged (current
+      behavior for non-git installs, e.g. an installed package).
+    - ``path`` is already the main worktree → returned (resolved).
+    - ``path`` is a linked worktree → the main worktree's path is returned.
+    - Detection fails (git missing, unreadable, no worktree entry) → falls
+      back to ``path``, with a one-line warning on stderr so the operator
+      knows automation may end up using a worktree-local config.
+    """
+    resolved = path.expanduser().resolve()
+    git = shutil.which("git")
+    if git is None:
+        return resolved
+    try:
+        inside = subprocess.run(
+            [git, "-C", str(resolved), "rev-parse", "--is-inside-work-tree"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if inside.returncode != 0 or inside.stdout.strip() != "true":
+            # Not a git repo (or an error running git there) — unchanged.
+            return resolved
+        listing = subprocess.run(
+            [git, "-C", str(resolved), "worktree", "list", "--porcelain"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if listing.returncode != 0:
+            raise RuntimeError((listing.stderr or listing.stdout or "git worktree list failed").strip())
+        # Porcelain output's first record is always the main worktree.
+        main_line = next(
+            (line for line in listing.stdout.splitlines() if line.startswith("worktree ")),
+            None,
+        )
+        if main_line is None:
+            raise RuntimeError("git worktree list produced no `worktree` entry")
+        return Path(main_line[len("worktree ") :].strip()).expanduser().resolve()
+    except (OSError, RuntimeError) as exc:
+        print(
+            f"warning: could not resolve the git main worktree for {resolved} ({exc}); "
+            "automation may schedule against a worktree-local config.json",
+            file=sys.stderr,
+        )
+        return resolved
 
 
 def default_staging_units_dir() -> Path:

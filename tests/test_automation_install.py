@@ -10,6 +10,7 @@ import io
 import json
 import os
 import shlex
+import subprocess
 import sys
 import textwrap
 import xml.etree.ElementTree as ET
@@ -18,6 +19,7 @@ from typing import Any
 
 import pytest
 
+from llmwiki import automation_install as ai_module
 from llmwiki import cli
 from llmwiki.automation_install import (
     HOOK_MARKER,
@@ -30,6 +32,7 @@ from llmwiki.automation_install import (
     render_systemd_service,
     render_systemd_timer,
     render_windows_task,
+    resolve_main_worktree,
     run_install,
 )
 from llmwiki.automation_plan import AutomationPlan, LintFail, plan_command, plan_to_status
@@ -201,6 +204,72 @@ def test_cursor_hook_merge_idempotent():
     once = merge_cursor_session_start_hook(hooks, cmd, install=True)
     twice = merge_cursor_session_start_hook(once, cmd, install=True)
     assert json.dumps(twice).count(HOOK_MARKER) == 1
+
+
+# ─── Main worktree resolution (#206) ───────────────────────────────────
+
+
+def _git(*args: str, cwd: Path) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["git", *args], cwd=cwd, check=True, capture_output=True, text=True
+    )
+
+
+def test_resolve_main_worktree_returns_path_unchanged_when_not_a_git_repo(tmp_path: Path):
+    """Installed packages and other non-git checkouts keep today's behavior."""
+    not_a_repo = tmp_path / "plain-dir"
+    not_a_repo.mkdir()
+    assert resolve_main_worktree(not_a_repo) == not_a_repo.resolve()
+
+
+def test_resolve_main_worktree_returns_itself_for_the_main_worktree(tmp_path: Path):
+    main = tmp_path / "main"
+    main.mkdir()
+    _git("init", "-q", cwd=main)
+    _git("-c", "user.email=t@example.com", "-c", "user.name=t", "commit", "--allow-empty", "-q", "-m", "init", cwd=main)
+    assert resolve_main_worktree(main) == main.resolve()
+
+
+def test_resolve_main_worktree_returns_main_for_a_linked_worktree(tmp_path: Path):
+    """The #206 case: installing from a linked worktree must resolve back to main."""
+    main = tmp_path / "main"
+    main.mkdir()
+    _git("init", "-q", cwd=main)
+    _git("-c", "user.email=t@example.com", "-c", "user.name=t", "commit", "--allow-empty", "-q", "-m", "init", cwd=main)
+    linked = tmp_path / "linked"
+    _git("worktree", "add", "-q", str(linked), "-b", "feature", cwd=main)
+    assert resolve_main_worktree(linked) == main.resolve()
+    # The linked worktree's own config.json (if any) is what #206 says must be bypassed.
+    assert resolve_main_worktree(linked) != linked.resolve()
+
+
+def test_resolve_main_worktree_falls_back_with_a_warning_on_detection_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+):
+    """A git that reports being inside a work tree but then fails to list worktrees
+    must not raise — it falls back to the given path and warns on stderr."""
+    real_run = subprocess.run
+
+    def fake_run(args, **kwargs):
+        if args[1:3] == ["-C", str(tmp_path.resolve())] and args[3:] == ["rev-parse", "--is-inside-work-tree"]:
+            return subprocess.CompletedProcess(args, 0, stdout="true\n", stderr="")
+        if "worktree" in args and "list" in args:
+            return subprocess.CompletedProcess(args, 128, stdout="", stderr="fatal: not a git repository")
+        return real_run(args, **kwargs)
+
+    monkeypatch.setattr(ai_module.subprocess, "run", fake_run)
+    result = resolve_main_worktree(tmp_path)
+    assert result == tmp_path.resolve()
+    err = capsys.readouterr().err
+    assert "could not resolve the git main worktree" in err
+    assert "worktree-local config.json" in err
+
+
+def test_resolve_main_worktree_returns_path_unchanged_when_git_is_missing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    monkeypatch.setattr(ai_module.shutil, "which", lambda _name: None)
+    assert resolve_main_worktree(tmp_path) == tmp_path.resolve()
 
 
 def _install(tmp_path: Path, **overrides) -> tuple[dict, Path, Path]:
