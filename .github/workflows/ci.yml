@@ -69,6 +69,17 @@ jobs:
             exit 1
           fi
 
+      - name: Case-insensitive path collisions (should return zero hits)
+        run: |
+          set -euo pipefail
+          # #160 guard: two tracked paths differing only in case (e.g.
+          # llmwiki.md / LLMWiki.md) coexist fine on case-sensitive Linux but
+          # collide on case-insensitive filesystems (macOS default, Windows).
+          # Run the single pytest definition of this check (Unicode-aware
+          # str.lower() fold) rather than a separate ASCII-only shell
+          # pipeline, so the two guards cannot disagree at the edges.
+          python -m pytest tests/test_case_insensitive_paths.py -q
+
       - name: Privacy grep (should return zero hits)
         run: |
           # Never commit the real username; the test fixtures use USER as placeholder

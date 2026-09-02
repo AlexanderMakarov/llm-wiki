@@ -123,12 +123,11 @@ page without descending into a tree. -->
 
 ## Syntheses (0)
 
-## Candidates (10)
+## Candidates (9)
 - [Wiki Synthesis](candidates/concepts/Wiki Synthesis.md)
 - [Cursor](candidates/entities/Cursor.md)
 - [GitHub Pages](candidates/entities/GitHub Pages.md)
 - [LLM Wiki](candidates/entities/LLM Wiki.md)
-- [LLMWiki](candidates/entities/LLMWiki.md)
 - [Logseq](candidates/entities/Logseq.md)
 - [Obsidian](candidates/entities/Obsidian.md)
 - [Python](candidates/entities/Python.md)
