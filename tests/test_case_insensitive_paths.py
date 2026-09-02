@@ -3,9 +3,8 @@
 Two tracked paths differing only in case (e.g. ``demo/.../LLMWiki.md`` and
 ``demo/.../llmwiki.md``) coexist fine on case-sensitive Linux but collide on
 case-insensitive filesystems (macOS default, Windows) — one file silently
-shadows the other on checkout. ``.github/workflows/ci.yml`` now has a "Case-
-insensitive path collisions" guard step that runs this test in CI; this test
-gives the same guarantee locally, without waiting on a push.
+shadows the other on checkout. Runs under the standard ``pytest tests/`` suite
+(local and CI).
 """
 
 from __future__ import annotations

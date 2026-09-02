@@ -11,7 +11,7 @@ These are non-negotiable and enforced in both code and CI:
 3. **No telemetry, ever.** The tool never calls home. No usage counts, no adapter pings, no error uploads.
 4. **No network by default.** Everything runs offline after install. `--synthesize` is the one exception — it calls the local `claude` binary on your machine — and it's opt-in.
 5. **raw/, wiki/, site/, and .ingestion-state.json are gitignored.** They never enter version control.
-6. **Privacy grep in CI.** GitHub Actions fails the build if any committed file contains the maintainer's real username.
+6. **Privacy username guard.** `tests/test_privacy_username.py` fails the suite if any tracked `.md` / `.py` contains the maintainer's real username (fixtures use `USER`).
 7. **Gitleaks in CI.** Secret scanning blocks merges on any detected API key, token, or password.
 
 ## What gets redacted
