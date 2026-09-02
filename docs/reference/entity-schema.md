@@ -116,5 +116,5 @@ change.
 
 ## Example
 
-See [`demo/wiki/entities/ClaudeSonnet4.md`](../../demo/wiki/entities/ClaudeSonnet4.md)
+See [`demo/wiki/entities/Claude Code.md`](../../demo/wiki/entities/Claude%20Code.md)
 for a complete real-world page.

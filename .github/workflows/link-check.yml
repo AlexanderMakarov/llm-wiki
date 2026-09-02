@@ -54,15 +54,22 @@ jobs:
           fail: false  # Don't fail the workflow; file an issue instead
           output: lychee-report.md
 
+      - name: Find existing link-check issue
+        id: link-issue
+        if: steps.lychee.outputs.exit_code != 0
+        uses: micalevisk/last-issue-action@v2
+        with:
+          state: open
+          labels: link-check
+
       - name: Create or update tracking issue on broken links
         if: steps.lychee.outputs.exit_code != 0
         uses: peter-evans/create-issue-from-file@v6
         with:
           title: "Broken external links detected"
           content-filepath: lychee-report.md
-          labels: docs, chore
-          # #544+: without update_existing every weekly cron + every push
-          # filed a fresh issue with the same title. update_existing keeps
-          # one tracking issue and replaces its body with the latest report
-          # (it does not append — triage belongs in comments, not the body).
-          update_existing: true
+          issue-number: ${{ steps.link-issue.outputs.issue-number }}
+          labels: |
+            docs
+            chore
+            link-check

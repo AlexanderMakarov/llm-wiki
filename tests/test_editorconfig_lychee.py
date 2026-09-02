@@ -103,6 +103,7 @@ def test_lychee_skips_pypi_and_homebrew_placeholders():
 def test_lychee_skips_build_time_template_tokens():
     text = LYCHEE.read_text(encoding="utf-8")
     assert "__llmwiki" in text
+    assert "%7B%7B__llmwiki" in text
 
 
 # ─── workflow ─────────────────────────────────────────────────────────
@@ -138,6 +139,8 @@ def test_workflow_uses_cache():
 def test_workflow_files_issue_on_broken_links():
     text = LINK_WORKFLOW.read_text(encoding="utf-8")
     assert "create-issue-from-file" in text
+    assert "last-issue-action" in text
+    assert "link-check" in text
 
 
 def test_workflow_scans_required_paths():
