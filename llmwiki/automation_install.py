@@ -28,7 +28,7 @@ from typing import Any
 from xml.sax.saxutils import escape
 
 from llmwiki.automation_plan import AutomationPlan, plan_command, plan_from_status, plan_to_status, schedule_from_status
-from llmwiki.automation_status import default_log_path, save_status
+from llmwiki.automation_status import save_status, vault_automation_log_path
 from llmwiki.cron_spec import (
     CronSpec,
     describe,
@@ -45,6 +45,17 @@ LAUNCHD_LABEL = "com.llmwiki.maintain"
 
 class AutomationActivationError(RuntimeError):
     """Raised when ``activate_scheduler`` cannot enable the OS job."""
+
+
+def default_staging_units_dir() -> Path:
+    """Directory where rendered unit files are written before OS activation."""
+    return Path.home() / ".automation"
+
+
+def vault_unit_hint(vault_root: Path, command_vault: Path | None = None) -> str:
+    """Short vault label for scheduler unit descriptions (basename of the target path)."""
+    target = (command_vault or vault_root).expanduser().resolve()
+    return target.name or str(target)
 
 
 def default_scheduler_units_dir(platform: str) -> Path:
@@ -74,6 +85,7 @@ def activate_scheduler(
     working_dir: Path,
     log_path: Path | None = None,
     spec: CronSpec | None = None,
+    vault_hint: str | None = None,
 ) -> dict[str, Any]:
     """Copy rendered units into the OS scheduler location and enable the job.
 
@@ -98,13 +110,23 @@ def activate_scheduler(
             shutil.copy2(units_source_dir / f"{UNIT_BASENAME}.sh", dest_wrapper)
             dest_wrapper.chmod(0o755)
             (dest / f"{UNIT_BASENAME}.service").write_text(
-                render_systemd_service(wrapper=dest_wrapper, working_dir=working_dir),
+                render_systemd_service(
+                    wrapper=dest_wrapper,
+                    working_dir=working_dir,
+                    vault_hint=vault_hint,
+                ),
                 encoding="utf-8",
             )
-            shutil.copy2(
-                units_source_dir / f"{UNIT_BASENAME}.timer",
-                dest / f"{UNIT_BASENAME}.timer",
-            )
+            if spec is not None:
+                (dest / f"{UNIT_BASENAME}.timer").write_text(
+                    render_systemd_timer(spec=spec, vault_hint=vault_hint),
+                    encoding="utf-8",
+                )
+            else:
+                shutil.copy2(
+                    units_source_dir / f"{UNIT_BASENAME}.timer",
+                    dest / f"{UNIT_BASENAME}.timer",
+                )
             reload_proc = _run_scheduler_cmd(["systemctl", "--user", "daemon-reload"])
             if reload_proc.returncode != 0:
                 raise RuntimeError(
@@ -146,6 +168,7 @@ def activate_scheduler(
                         working_dir=working_dir,
                         log_path=log_path,
                         spec=spec,
+                        vault_hint=vault_hint,
                     ),
                     encoding="utf-8",
                 )
@@ -225,10 +248,15 @@ def render_wrapper_script(
     )
 
 
-def render_systemd_service(*, wrapper: Path, working_dir: Path) -> str:
+def render_systemd_service(
+    *, wrapper: Path, working_dir: Path, vault_hint: str | None = None
+) -> str:
+    desc = "llmwiki maintain (managed by install-automation)"
+    if vault_hint:
+        desc += f" — vault {vault_hint}"
     return (
         "[Unit]\n"
-        "Description=llmwiki maintain (managed by install-automation)\n"
+        f"Description={desc}\n"
         "After=network-online.target\n"
         "\n"
         "[Service]\n"
@@ -241,11 +269,14 @@ def render_systemd_service(*, wrapper: Path, working_dir: Path) -> str:
     )
 
 
-def render_systemd_timer(*, spec: CronSpec) -> str:
+def render_systemd_timer(*, spec: CronSpec, vault_hint: str | None = None) -> str:
     """systemd ``.timer`` unit firing on the schedule, catching up after a missed boot."""
+    desc = "llmwiki maintain daily timer"
+    if vault_hint:
+        desc += f" — vault {vault_hint}"
     return (
         "[Unit]\n"
-        "Description=llmwiki maintain daily timer\n"
+        f"Description={desc}\n"
         "\n"
         "[Timer]\n"
         f"OnCalendar={to_systemd_oncalendar(spec)}\n"
@@ -285,6 +316,7 @@ def render_launchd_plist(
     working_dir: Path,
     log_path: Path,
     spec: CronSpec,
+    vault_hint: str | None = None,
 ) -> str:
     """launchd agent plist running the wrapper on the schedule, logging to ``log_path``.
 
@@ -294,6 +326,11 @@ def render_launchd_plist(
     wrapper_xml = escape(str(wrapper))
     working_dir_xml = escape(str(working_dir))
     log_path_xml = escape(str(log_path))
+    comment = ""
+    if vault_hint:
+        comment = f"""  <key>Comment</key>
+  <string>llmwiki maintain — vault {escape(vault_hint)}</string>
+"""
     return f"""<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
   "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -301,7 +338,7 @@ def render_launchd_plist(
 <dict>
   <key>Label</key>
   <string>{LAUNCHD_LABEL}</string>
-  <key>ProgramArguments</key>
+{comment}  <key>ProgramArguments</key>
   <array>
     <string>/bin/bash</string>
     <string>{wrapper_xml}</string>
@@ -324,6 +361,7 @@ def render_windows_task(
     wrapper: Path,
     working_dir: Path,
     spec: CronSpec,
+    vault_hint: str | None = None,
 ) -> str:
     """Task Scheduler XML running the wrapper on the schedule; the user imports it via schtasks.
 
@@ -332,10 +370,13 @@ def render_windows_task(
     """
     wrapper_xml = escape(str(wrapper))
     working_dir_xml = escape(str(working_dir))
+    desc = "llmwiki maintain (managed)"
+    if vault_hint:
+        desc += f" — vault {escape(vault_hint)}"
     return f"""<?xml version="1.0" encoding="UTF-16"?>
 <Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
   <RegistrationInfo>
-    <Description>llmwiki maintain (managed)</Description>
+    <Description>{desc}</Description>
   </RegistrationInfo>
   <Triggers>
 {to_windows_trigger(spec)}
@@ -459,9 +500,10 @@ def run_install(config: dict[str, Any]) -> dict[str, Any]:
     plan = supplied if isinstance(supplied, AutomationPlan) else plan_from_status(config)
     schedule = schedule_from_status(config)
     spec = parse_cron(schedule)
-    log_path = Path(config.get("log_path") or default_log_path())
     vault_root = Path(config.get("vault_root") or working_dir)
     command_vault = Path(config["command_vault"]) if config.get("command_vault") else None
+    hint = vault_unit_hint(vault_root, command_vault)
+    log_path = Path(config.get("log_path") or vault_automation_log_path(vault_root))
     write_dir = Path(config["write_units_dir"]) if config.get("write_units_dir") else None
 
     wrapper_text = render_wrapper_script(
@@ -483,10 +525,12 @@ def run_install(config: dict[str, Any]) -> dict[str, Any]:
             svc = write_dir / f"{UNIT_BASENAME}.service"
             tim = write_dir / f"{UNIT_BASENAME}.timer"
             svc.write_text(
-                render_systemd_service(wrapper=wrapper, working_dir=working_dir),
+                render_systemd_service(
+                    wrapper=wrapper, working_dir=working_dir, vault_hint=hint
+                ),
                 encoding="utf-8",
             )
-            tim.write_text(render_systemd_timer(spec=spec), encoding="utf-8")
+            tim.write_text(render_systemd_timer(spec=spec, vault_hint=hint), encoding="utf-8")
             written.extend([str(svc), str(tim)])
         elif plat == "macos" or config.get("force_platform") == "macos":
             plist = write_dir / f"{LAUNCHD_LABEL}.plist"
@@ -496,6 +540,7 @@ def run_install(config: dict[str, Any]) -> dict[str, Any]:
                     working_dir=working_dir,
                     log_path=log_path,
                     spec=spec,
+                    vault_hint=hint,
                 ),
                 encoding="utf-8",
             )
@@ -503,7 +548,9 @@ def run_install(config: dict[str, Any]) -> dict[str, Any]:
         elif plat == "windows" or config.get("force_platform") == "windows":
             xml = write_dir / f"{UNIT_BASENAME}-task.xml"
             xml.write_text(
-                render_windows_task(wrapper=wrapper, working_dir=working_dir, spec=spec),
+                render_windows_task(
+                    wrapper=wrapper, working_dir=working_dir, spec=spec, vault_hint=hint
+                ),
                 encoding="utf-8",
             )
             written.append(str(xml))
@@ -535,6 +582,7 @@ def run_install(config: dict[str, Any]) -> dict[str, Any]:
                 working_dir=working_dir,
                 log_path=log_path,
                 spec=spec,
+                vault_hint=hint,
             ))
             if status.get("scheduler_error"):
                 save_status(vault_root, status)

@@ -115,10 +115,10 @@ DAILY_TASK = """<?xml version="1.0" encoding="UTF-16"?>
 """
 
 
-def test_systemd_timer_persistent_and_time():
-    text = render_systemd_timer(spec=DAILY)
+def test_systemd_timer_includes_vault_hint_when_provided():
+    text = render_systemd_timer(spec=DAILY, vault_hint="my-vault")
+    assert "vault my-vault" in text
     assert "Persistent=true" in text
-    assert "08:00:00" in text
 
 
 def test_daily_systemd_timer_is_byte_identical():
@@ -228,6 +228,7 @@ def test_run_install_writes_status_and_units(tmp_path: Path):
     loaded = load_status(vault)
     assert loaded is not None
     assert loaded["hour"] == 8
+    assert status["log_path"] == str(vault / ".llmwiki" / "last-automation.log")
     assert (units / "llmwiki-maintain.timer").is_file()
     assert (units / "llmwiki-maintain.sh").is_file()
     assert "no-op" in (loaded.get("note") or "")
@@ -352,11 +353,27 @@ def _run_wizard(
     return cli.cmd_install_automation(args), captured, prompts
 
 
-def test_wizard_enter_through_yields_ingest_and_skips_the_maintain_questions(
+def test_wizard_enter_through_defaults_to_maintain_with_no_extras(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ):
-    """Pressing Enter at every question installs the free, no-provider daily job."""
-    code, config, prompts = _run_wizard(monkeypatch, tmp_path, [ENTER] * 8)
+    """Pressing Enter at every question installs Maintain with no extras."""
+    code, config, prompts = _run_wizard(
+        monkeypatch, tmp_path, [ENTER, ENTER, ENTER, ENTER, ENTER, ENTER, ENTER, ENTER, "y"]
+    )
+    assert code == 0
+    assert config["plan"] == AutomationPlan(job="maintain")
+    assert config["schedule"] == "0 8 * * *"
+    asked = " ".join(prompts)
+    assert "Extras" in asked
+
+
+def test_wizard_explicit_ingest_skips_maintain_questions(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    """Choosing 1 installs the free, no-provider daily job without extras."""
+    code, config, prompts = _run_wizard(
+        monkeypatch, tmp_path, ["1", ENTER, ENTER, ENTER, ENTER, ENTER, ENTER, "y"]
+    )
     assert code == 0
     assert config["plan"] == AutomationPlan(job="ingest")
     assert config["schedule"] == "0 8 * * *"
@@ -397,7 +414,7 @@ def test_wizard_reasks_instead_of_defaulting_on_an_unrecognised_answer(
     _code, config, prompts = _run_wizard(
         monkeypatch, tmp_path, ["banana", "2", ENTER, ENTER, ENTER, ENTER, ENTER, ENTER, ENTER, "y"]
     )
-    assert prompts.count("Choice [1]: ") == 2
+    assert prompts.count("Choice [2]: ") == 2
     assert "is not one of" in capsys.readouterr().out
     assert config["plan"].job == "maintain"
 
@@ -429,14 +446,14 @@ def test_wizard_warns_but_continues_when_graphify_is_not_installed(
 
 def test_wizard_weekday_preset_produces_a_weekday_cron(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     _code, config, _prompts = _run_wizard(
-        monkeypatch, tmp_path, [ENTER, "2", "07:30", ENTER, ENTER, ENTER, ENTER, "y"]
+        monkeypatch, tmp_path, ["1", "2", "07:30", ENTER, ENTER, ENTER, ENTER, "y"]
     )
     assert config["schedule"] == "30 7 * * 1-5"
 
 
 def test_wizard_weekly_preset_asks_for_a_day(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     _code, config, prompts = _run_wizard(
-        monkeypatch, tmp_path, [ENTER, "3", "3", "18:00", ENTER, ENTER, ENTER, ENTER, "y"]
+        monkeypatch, tmp_path, ["1", "3", "3", "18:00", ENTER, ENTER, ENTER, ENTER, "y"]
     )
     assert config["schedule"] == "0 18 * * 3"
     assert "Day [1]: " in prompts
@@ -446,7 +463,7 @@ def test_wizard_reasks_a_cron_expression_it_cannot_translate(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ):
     _code, config, prompts = _run_wizard(
-        monkeypatch, tmp_path, [ENTER, "4", "@daily", "0 9 * * 6", ENTER, ENTER, ENTER, ENTER, "y"]
+        monkeypatch, tmp_path, ["1", "4", "@daily", "0 9 * * 6", ENTER, ENTER, ENTER, ENTER, "y"]
     )
     out = capsys.readouterr().out
     assert config["schedule"] == "0 9 * * 6"

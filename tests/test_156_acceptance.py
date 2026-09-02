@@ -152,7 +152,7 @@ def test_ingest_choice_writes_no_extras_or_graph_choice_end_to_end(
     _pretend_tty(monkeypatch)
     vault = tmp_path / "vault"
     prompts: list[str] = []
-    answers = iter([""] * 8)
+    answers = iter(["1"] + [""] * 8)
 
     def fake_input(prompt: str) -> str:
         prompts.append(prompt)

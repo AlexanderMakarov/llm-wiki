@@ -57,7 +57,12 @@ from llmwiki.adapters import REGISTRY, discover_all
 from llmwiki.adapters.status import adapter_status as _adapter_status  # noqa: F401
 from llmwiki.adapters.status import print_adapters_table
 from llmwiki.add_doc import add_sources, expected_source_page, remove_raw_docs
-from llmwiki.automation_install import AutomationActivationError, detect_platform, run_install
+from llmwiki.automation_install import (
+    AutomationActivationError,
+    default_staging_units_dir,
+    detect_platform,
+    run_install,
+)
 from llmwiki.automation_plan import (
     DEFAULT_SCHEDULE,
     LEGACY_PROFILE_MAP,
@@ -67,6 +72,7 @@ from llmwiki.automation_plan import (
     plan_command,
     plan_label,
 )
+from llmwiki.automation_status import vault_automation_log_path
 from llmwiki.build import RAW_DIR, RAW_SESSIONS, build_site
 from llmwiki.cache import MODEL_PRICING, resolve_pricing_model
 from llmwiki.candidates import (
@@ -795,11 +801,32 @@ When should the job run?
   4) Custom cron expression
 """
 
+_SCHEDULE_CATCHUP_NOTE = """
+  If the machine was off at the scheduled time: Linux systemd timers run once after
+  wake (Persistent=true). macOS launchd and Windows Task Scheduler wait for the next
+  slot — they do not backfill every missed day.
+"""
+
 _DAY_QUESTION = """
 Which day?
 
   1) Monday   2) Tuesday   3) Wednesday   4) Thursday
   5) Friday   6) Saturday  7) Sunday
+"""
+
+_HOOKS_QUESTION = """
+Install agent sync hooks? A SessionStart hook runs `llmwiki sync` whenever you open
+a Claude Code or Cursor session — keeping raw/ fresher between daily runs, but firing
+on every session start (not only when new transcripts exist). Prefer the OS scheduler
+or `llmwiki watch` unless you specifically want sync-on-open.
+Type 'install' to opt in (Enter = skip):
+"""
+
+_WATCH_QUESTION = """
+Will you run `llmwiki watch` yourself for near-real-time updates? If yes, the built
+site's Automation panel can show Watch: on as a reminder. This does not install or
+start watch — it only records your choice in automation-status.json for the panel.
+[y/N]:
 """
 
 
@@ -882,7 +909,7 @@ def _ask_graph_builder() -> GraphChoice:
 def _ask_plan() -> AutomationPlan:
     """Ask what the daily job does — the job itself, its extras, and the graph builder."""
     print(_JOB_QUESTION)
-    answer = _ask_choice("Choice [1]: ", ("1", "2", "A", "B", "C"), "1")
+    answer = _ask_choice("Choice [2]: ", ("1", "2", "A", "B", "C"), "2")
     legacy = LEGACY_PROFILE_MAP.get(answer)
     job = legacy.job if legacy else ("maintain" if answer == "2" else "ingest")
     if job != "maintain":
@@ -919,6 +946,7 @@ def _ask_schedule() -> str:
         # the answer is already the day-of-week field.
         day_of_week = _ask_choice("Day [1]: ", ("1", "2", "3", "4", "5", "6", "7"), "1")
     hour, minute = _ask_until("Time HH:MM [08:00]: ", (8, 0), _parse_hh_mm)
+    print(_SCHEDULE_CATCHUP_NOTE)
     return f"{minute} {hour} * * {day_of_week}"
 
 
@@ -930,11 +958,14 @@ def _confirm_plan(plan: AutomationPlan, schedule: str, vault: Path | None = None
     question does not recognise is re-asked. Consent has to be typed: stdin ending
     without one is a no.
     """
+    vault_root = vault if vault is not None else (load_default_vault_path() or REPO_ROOT)
+    log_path = vault_automation_log_path(vault_root)
     print()
     print("About to schedule:")
     print(f"  Job:      {plan_label(plan)}")
     print(f"  When:     {describe(parse_cron(schedule))}  (cron: {schedule})")
     print(f"  Command:  {plan_command(plan, python_bin=sys.executable, working_dir=REPO_ROOT, vault=vault)}")
+    print(f"  Run log:  {log_path}  (truncated each run)")
     print()
     while True:
         try:
@@ -1084,7 +1115,7 @@ def cmd_install_automation(args: argparse.Namespace) -> int:
             return 2
         backend = getattr(args, "synth_backend", None) or load_synthesis_backend()
         watch_enabled = bool(getattr(args, "watch_enabled", False))
-        write_dir = Path(getattr(args, "units_dir", None) or (REPO_ROOT / ".llmwiki" / "units"))
+        write_dir = Path(getattr(args, "units_dir", None) or default_staging_units_dir())
     else:
         if not sys.stdin.isatty():
             print(
@@ -1094,7 +1125,6 @@ def cmd_install_automation(args: argparse.Namespace) -> int:
             )
             return 2
         print("llmwiki install-automation")
-        print("  Hooks are NOT recommended (Enter skips). Prefer OS scheduler or watch.")
         print("  Daily runs with no new sessions are a no-op.")
         plan = _ask_plan()
         schedule = _ask_schedule()
@@ -1104,22 +1134,18 @@ def cmd_install_automation(args: argparse.Namespace) -> int:
             load_synthesis_backend(),
             str,
         )
-        hooks_answer = _ask_until(
-            "Install agent sync hooks? Type 'install' to opt in (Enter = skip, not recommended): ",
-            "",
-            str,
-        )
+        print(_HOOKS_QUESTION)
+        hooks_answer = _ask_until("Hooks [Enter = skip]: ", "", str)
         install_hooks = hooks_answer.lower() == "install"
-        watch_enabled = _ask_choice(
-            "Show 'Watch: on' on the site Automation panel? "
-            "(metadata only — does not install or start `llmwiki watch`) [y/N]: ",
-            ("y", "yes", "n", "no"),
-            "n",
-        ) in ("y", "yes")
-        default_units = Path(getattr(args, "units_dir", None) or (REPO_ROOT / ".llmwiki" / "units"))
-        print("  Writes systemd/launchd/Task Scheduler files and activates the job by default.")
+        print(_WATCH_QUESTION)
+        watch_enabled = _ask_choice("Watch panel [y/N]: ", ("y", "yes", "n", "no"), "n") in (
+            "y",
+            "yes",
+        )
+        default_units = Path(getattr(args, "units_dir", None) or default_staging_units_dir())
+        print("  Writes unit files to ~/.automation and activates the OS scheduler by default.")
         units = _ask_until(
-            f"Scheduler unit directory (Enter = {default_units}): ",
+            f"Staging directory for unit files (Enter = {default_units}): ",
             "",
             str,
         )
