@@ -20,7 +20,7 @@ Two consequences drive every decision on this page:
 1. **Output is the expensive direction** — roughly 5x input per token. A model that "thinks" before answering can cost more than a pricier model that answers directly, even at a lower headline rate.
 2. **A cache write costs *more* than fresh input.** Caching only pays off if the same prefix is re-read. Each `claude -p` invocation is a separate process, so cache reuse across pages is partial at best.
 
-The rate card llmwiki prices against lives in [`model_pricing.csv`](https://github.com/Pratiyush/llm-wiki/blob/master/model_pricing.csv) at the repo root — one row per model, with `aliases` mapping CLI names (`sonnet`, `claude-haiku-4-5-20251001`) onto pricing rows. Update that file when provider pricing changes; nothing else hardcodes rates.
+The rate card llmwiki prices against lives in [`model_pricing.csv`](../../model_pricing.csv) at the repo root — one row per model, with `aliases` mapping CLI names (`sonnet`, `claude-haiku-4-5-20251001`) onto pricing rows. Update that file when provider pricing changes; nothing else hardcodes rates.
 
 ## Where the money actually goes
 

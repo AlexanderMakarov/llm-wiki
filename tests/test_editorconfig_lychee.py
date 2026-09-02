@@ -100,6 +100,11 @@ def test_lychee_skips_pypi_and_homebrew_placeholders():
     assert "homebrew-llmwiki" in text
 
 
+def test_lychee_skips_build_time_template_tokens():
+    text = LYCHEE.read_text(encoding="utf-8")
+    assert "__llmwiki" in text
+
+
 # ─── workflow ─────────────────────────────────────────────────────────
 
 
@@ -145,3 +150,9 @@ def test_workflow_uses_pinned_action_versions():
     """link-check.yml pins actions/checkout to a floating major (@vN), not a branch tip."""
     text = LINK_WORKFLOW.read_text(encoding="utf-8")
     assert re.search(r"actions/checkout@v\d+", text)
+
+
+def test_workflow_push_trigger_uses_main_branch():
+    text = LINK_WORKFLOW.read_text(encoding="utf-8")
+    assert 'branches: ["main"]' in text
+    assert "master" not in text

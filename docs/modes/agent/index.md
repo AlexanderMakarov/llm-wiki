@@ -57,5 +57,5 @@ You: llmwiki synth   # or /wiki-all
 ## Read next
 
 - [Claude CLI backend notes](backend.md)
-- [Configuration — synthesis backend](../configuration.md#synthesis-backend)
-- [Upgrade guide](../UPGRADING.md)
+- [Configuration — synthesis backend](../../configuration.md#synthesis-backend)
+- [Upgrade guide](../../UPGRADING.md)

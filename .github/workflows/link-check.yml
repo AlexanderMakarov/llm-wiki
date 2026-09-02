@@ -1,7 +1,7 @@
 name: Link check
 
 # Scans README, CHANGELOG, docs/, and examples/ for broken external links.
-# Runs weekly on Sunday 03:00 UTC, on push to master when link-heavy files
+# Runs weekly on Sunday 03:00 UTC, on push to main when link-heavy files
 # change, and on manual dispatch. Internal links in site/ have a separate
 # checker (llmwiki check-links) that runs on build.
 
@@ -9,7 +9,7 @@ on:
   schedule:
     - cron: "0 3 * * 0"
   push:
-    branches: ["master"]
+    branches: ["main"]
     paths:
       - "README.md"
       - "CHANGELOG.md"
@@ -62,7 +62,7 @@ jobs:
           content-filepath: lychee-report.md
           labels: docs, chore
           # #544+: without update_existing every weekly cron + every push
-          # filed a fresh issue with the same title. Use the action's
-          # built-in update path so a single tracking issue gets the
-          # latest report appended instead of spawning duplicates.
+          # filed a fresh issue with the same title. update_existing keeps
+          # one tracking issue and replaces its body with the latest report
+          # (it does not append — triage belongs in comments, not the body).
           update_existing: true
