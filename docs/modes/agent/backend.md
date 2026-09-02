@@ -51,7 +51,7 @@ python3 -m llmwiki synth --force      # re-synth everything
 | `synthesize --complete <uuid>` | n/a |
 | `.llmwiki-pending-prompts/` | migrated into `llmwiki-state.json` / deleted |
 
-See [UPGRADING.md](../UPGRADING.md) for the one-time state migration.
+See [UPGRADING.md](../../UPGRADING.md) for the one-time state migration.
 
 ## Invariants
 

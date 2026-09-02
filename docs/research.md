@@ -47,12 +47,6 @@ This document is the deliverable for **Phase 1.25 Research**, a new phase added 
 - **Gap:** Input is "drop markdown in `raw/`" — no knowledge of session transcripts. No dark mode. No search. No HTML output beyond the graph HTML.
 - **Lesson:** This is the closest prior art. llmwiki inherits its directory layout and slash-command naming (`/wiki-*`).
 
-#### [Ss1024sS/LLM-wiki](https://github.com/Ss1024sS/LLM-wiki)
-- **Shape:** 25 markdown + 4 Python. Generates 30 files including stale-reporting scripts.
-- **Strength:** Explicitly covers the "AI remembers nothing in new sessions" pain point in its README.
-- **Gap:** No HTML viewer. No multi-agent.
-- **Lesson:** The stale-reporting idea is worth borrowing — llmwiki should ship `/wiki-lint` with "stale pages" detection baked in.
-
 #### [hsuanguo/llm-wiki](https://github.com/hsuanguo/llm-wiki)
 - **Shape:** 13 markdown + 9 Python. Has a logo, more polish.
 - **Strength:** The most Python-heavy of the markdown-first implementations — suggests the author hit real scale issues.

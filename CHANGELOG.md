@@ -23,7 +23,8 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Fixed
 
-### Removed
+- **Docs link-check hygiene (#107)** — repair relative links under `docs/modes/agent/`, drop dead external URLs (`claude-code` session-history, deleted `Ss1024sS/LLM-wiki` research entry), point `synthesis-cost.md` at repo-root `model_pricing.csv`, exclude `{{__llmwiki_*}}` build-time placeholders from lychee, and fire link-check on `main` (not `master`) so regressions surface on push.
+  - *Release note:* Weekly link-check stops re-opening #107 once this ships; stale duplicate tracking issues can be closed.
 
 ## [2.0.0] — 2026-08-28
 
