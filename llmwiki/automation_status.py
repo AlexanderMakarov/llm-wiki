@@ -13,10 +13,15 @@ STATUS_FILENAME = "automation-status.json"
 
 
 def default_log_path() -> Path:
-    """XDG state home (or ~/.local/state) / llmwiki / last-automation.log."""
+    """Legacy global log path (prefer :func:`vault_automation_log_path`)."""
     xdg = os.environ.get("XDG_STATE_HOME", "").strip()
     base = Path(xdg) if xdg else (Path.home() / ".local" / "state")
     return base / "llmwiki" / "last-automation.log"
+
+
+def vault_automation_log_path(vault_root: Path) -> Path:
+    """Per-vault run log written by the scheduled wrapper each time the job fires."""
+    return Path(vault_root) / STATUS_DIRNAME / "last-automation.log"
 
 
 def status_path(root: Path) -> Path:

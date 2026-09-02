@@ -25,6 +25,10 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 - **Docs link-check hygiene (#107)** — repair relative links under `docs/modes/agent/`, drop dead external URLs (`claude-code` session-history, deleted `Ss1024sS/LLM-wiki` research entry), point `synthesis-cost.md` at repo-root `model_pricing.csv`, exclude `{{__llmwiki_*}}` build-time placeholders from lychee, and fire link-check on `main` (not `master`) so regressions surface on push.
   - *Release note:* Weekly link-check stops re-opening #107 once this ships; stale duplicate tracking issues can be closed.
+- **`install-automation` activates the OS scheduler by default (#198)** — `run_install` copies systemd/launchd/schtasks units into the platform install location and enables the job; `--no-activate` keeps the old write-only behaviour. `automation-status.json` records `scheduler_activated`, `scheduler_backend`, `scheduler_active`, and `scheduler_error`. Activation failure exits `1` after saving the error fields. Wizard default job is **Maintain** (Enter); run logs live at `<vault>/.llmwiki/last-automation.log`; rendered units default to `~/.automation/`; scheduler unit descriptions include the vault name.
+  - *Release note:* Re-run `llmwiki install-automation` (or pass `--no-activate` to stage units without enabling) — the daily job is enabled automatically on Linux/macOS/Windows (#198).
+
+### Removed
 
 ## [2.0.0] — 2026-08-28
 
