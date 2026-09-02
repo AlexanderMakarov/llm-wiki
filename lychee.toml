@@ -51,6 +51,7 @@ exclude = [
   "^https://example\\.com",
   # Build-time template tokens in docs/index.md (substituted in llmwiki/docs_pages.py)
   "\\{\\{__llmwiki",
+  "%7B%7B__llmwiki",
 ]
 
 # ─── quiet output ───────────────────────────────────────────────────
