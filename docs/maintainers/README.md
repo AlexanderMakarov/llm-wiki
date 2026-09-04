@@ -12,7 +12,7 @@ first — it has the short version of what this folder covers in detail.
 | [`AWOS-CURSOR.md`](AWOS-CURSOR.md) | Cursor-compatible AWOS install (Layers A–C, recruitment MCP, companion plugins) |
 | [`AGENT-WORKFLOW-ALTERNATIVES.md`](AGENT-WORKFLOW-ALTERNATIVES.md) | Cursor-ready SDD alternatives vs AWOS — #114 pitfalls, features, learning curve |
 | [`REVIEW_CHECKLIST.md`](REVIEW_CHECKLIST.md) | Canonical code-review criteria — apply to every incoming PR |
-| [`RELEASE_PROCESS.md`](RELEASE_PROCESS.md) | Version bump → CHANGELOG → tag → build → publish checklist |
+| [`RELEASE_PROCESS.md`](RELEASE_PROCESS.md) | Version bump → CHANGELOG → tag → `release.yml` checklist (canonical order; cut via `/release` skill) |
 | [`TRIAGE.md`](TRIAGE.md) | Label taxonomy + triage rules + stale-issue policy |
 | [`DECLINED.md`](DECLINED.md) | Graveyard of declined ideas with dates + reasons |
 | [`../../context/product/roadmap.md`](../../context/product/roadmap.md) | The roadmap — phases, what is next, and which issue delivers each item |
@@ -21,24 +21,19 @@ first — it has the short version of what this folder covers in detail.
 
 ## Slash commands
 
-Three Claude Code slash commands automate the common maintainer ops.
-Each command loads the relevant governance doc as context and runs a
-guided pass:
+Maintainer ops use slash wrappers plus skills under `.claude/`:
 
-- `/triage-issue <issue-number>` — applies `TRIAGE.md` label
-  taxonomy to a new issue
-- `/release <version>` — walks `RELEASE_PROCESS.md` step by step
-- `/maintainer` — meta-skill that loads every doc in this folder
-  and surfaces triage / release next actions
+- `/triage-issue <issue-number>` — applies `TRIAGE.md` label taxonomy to a new issue
+- `/release <version>` — thin wrapper that loads [`.claude/skills/release/SKILL.md`](../../.claude/skills/release/SKILL.md) and follows [`RELEASE_PROCESS.md`](RELEASE_PROCESS.md) (Claude: `.claude/commands/release.md`; Cursor: `.cursor/commands/release.md`)
+- `/maintainer` — meta-skill that loads every doc in this folder and surfaces triage / release next actions
 
 Code review uses `REVIEW_CHECKLIST.md` directly (or via the single independent review stage inside `/implement-feature` / `/fix-bug`, where the coding agent picks its own most suitable review skill or command).
 
-See `.claude/commands/` in the repo root for the source of each
-command.
+See `.claude/commands/` (and `.cursor/commands/` for Cursor-facing wrappers) in the repo root for the source of each command.
 
 ## When things go wrong
 
-- **CI red on master** → fix-first, roll forward, never force-push
+- **CI red on `main`** → fix-first, roll forward, never force-push
 - **Security issue reported** → see `SECURITY.md` in the repo root
 - **Contributor PR stuck > 7 days** → escalate via the triage pass
   (there's a rule in `TRIAGE.md`)

@@ -10,7 +10,13 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Added
 
+- **Cross-agent `/release` skill (#209)** — maintainer-only `.claude/skills/release/SKILL.md` scripts the tagged cut (preflight → bump → CHANGELOG/UPGRADING → commit/tag → human gate → watch `release.yml`); thin Claude and Cursor `/release` wrappers load the skill. Not part of `install-agent-kit`.
+  - *Release note:* Maintainers cut releases with `/release <version>` (or the `release` skill); process doc matches `main` + tag automation (#209).
+
 ### Changed
+
+- **`RELEASE_PROCESS.md` aligned with real automation (#209)** — default branch `main`; tag push triggers `release.yml` (GitHub Release + Sigstore; PyPI when enabled); prerelease only for rc/alpha/beta/dev; human approval before push; pitfalls for root `wiki/` and `shipping_section_text`.
+  - *Release note:* Follow the updated maintainer release checklist / skill; do not push `master` or always `--prerelease` (#209).
 
 ### Fixed
 

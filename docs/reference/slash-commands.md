@@ -348,9 +348,7 @@ Use before doing anything governance-related.
 
 ### `/release`
 
-Walk through the llmwiki release process step by step — tag, changelog
-cut, GitHub Release note, PyPI publish (via OIDC), Homebrew tap bump,
-Docker image push.
+Maintainer-only. Thin wrapper around [`.claude/skills/release/SKILL.md`](../../.claude/skills/release/SKILL.md): preflight on `main`, version bump, CHANGELOG/UPGRADING editorial, local commit+tag, **human gate before push**, then watch `.github/workflows/release.yml` (GitHub Release + Sigstore; PyPI only when `PYPI_PUBLISHING` is enabled). Canonical checklist order: [`docs/maintainers/RELEASE_PROCESS.md`](../maintainers/RELEASE_PROCESS.md). Usage: `/release <version>`.
 
 ### `/triage-issue`
 
