@@ -1,26 +1,10 @@
 """llmwiki CLI.
 
 Usage:
-    python3 -m llmwiki <subcommand> [options]
+    python3 -m llmwiki <command> [options]
+    python3 -m llmwiki --help
 
-Subcommands:
-    init              Scaffold raw/, wiki/, site/ directories
-    sync              Convert new .jsonl sessions to markdown
-    add               Add documents: URL, file, or folder → raw/docs/ + synthesize + build
-    build             Compile static HTML site from raw/ + wiki/
-    usage             Report local MCP tool-usage telemetry vs synthesis cost
-    adapters          List available session-store adapters
-    graph             Build the knowledge graph (graph/graph.json + graph.html)
-    lint              Run lint rules against the wiki
-    candidates        List / promote / merge / discard candidate pages
-    synthesize        (deprecated) alias for synth --sources-only
-    synth             Synthesize wiki sources + harvest entity/concept candidates
-    trace             Print downward provenance (wiki page → sources → raw)
-    all               Run the full pipeline: [sync?] → [synthesize?] → build → graph → lint
-    watch             Near-real-time sync→synthesize→build when sessions finish
-    install-agent-kit  Copy packaged slash commands and skills into --dest
-    install-automation  Interactive OS schedulers / hooks / synth backend setup
-    version           Print version and exit
+Canonical loop: ingest (sync / add) → summarise (synth) → review candidates → publish (build).
 """
 
 from __future__ import annotations
@@ -31,6 +15,7 @@ import json
 import json as _json
 import sys
 import sys as _sys
+import textwrap
 import time
 from collections.abc import Callable, Sequence
 from contextlib import ExitStack
@@ -177,9 +162,9 @@ from llmwiki.watch import watch as watch_loop
 #: ``query``, ``trace``, ``usage``, ``adapters``) only read, and
 #: commands that edit an existing vault in place (``candidates``, ``remove``,
 #: ``graph``) have nothing to edit in a checkout whose root can no longer
-#: become a vault. (``consolidate-topics`` is retired and exits 2.)
+#: become a vault.
 _SOURCE_CHECKOUT_GUARDED_COMMANDS = frozenset(
-    {"init", "sync", "synth", "synthesize", "add", "build", "all", "watch"}
+    {"init", "sync", "synth", "add", "build", "all", "watch"}
 )
 
 
@@ -1255,6 +1240,65 @@ def cmd_queue(args: argparse.Namespace) -> int:
     return 1 if summary["errors"] else 0
 
 
+# Add new migrations here, never as a new top-level command.
+# Each record is (name, purpose, when you would run it).
+_MIGRATIONS: tuple[tuple[str, str, str], ...] = (
+    (
+        "state",
+        "Merge older per-feature state files into the single llmwiki-state.json the current CLI expects (queue, sync stamps, synth backlog, and related counters).",
+        "Run once after an upgrade that introduced unified state, if leftover .llmwiki-* state files still sit beside the vault or you still see split/legacy state behaviour. Safe to re-run; it does not re-ingest sessions or rewrite wiki pages.",
+    ),
+    (
+        "raw-redaction",
+        "Rewrite already-synced raw/sessions/*.md so home-path and dash-encoded username segments use the USER placeholder, without re-reading agent session stores.",
+        "Run when you publish or share raw/ and still see real usernames encoded in session paths (for example -Users-<you>-…). Prefer this over sync --force: agent stores are often short-lived, and a force re-sync can miss older files or trigger unnecessary synth. Does not touch wiki/ or call a synthesis backend.",
+    ),
+    (
+        "tools-used",
+        "Expand opaque CallMcpTool / GetMcpTools entries in raw/sessions frontmatter into concrete mcp__server__tool names by re-reading the originating agent session file when it still exists.",
+        "Run after upgrading Analytics / tool-usage views if older synced sessions still show CallMcpTool stubs and the origin transcript is still on disk. Skips files whose origin store is gone (TTL or deleted). Does not synthesise wiki pages or invent tool names.",
+    ),
+    (
+        "page-kinds",
+        "Retype wiki pages that still use the removed question or comparison kinds to concept, and move their files into wiki/concepts/.",
+        "Run after upgrading past the release that dropped those kinds, if lint or the site still shows question/comparison pages or paths outside concepts/. Does not invent new pages from raw/; it only relocates and retypes existing wiki markdown.",
+    ),
+    (
+        "topic-kinds",
+        "Stamp missing (entity) or (concept) labels onto older ## Connections bullets in wiki/sources/ by matching names already present as entity, concept, or candidate pages.",
+        "Run when source pages still list bare [[wikilinks]] in Connections without a kind label, after an upgrade that expects those stamps for harvest and display. Reads only existing wiki pages — no LLM call and no new candidate creation.",
+    ),
+    (
+        "broken-provenance",
+        "Fix or clear wiki source_file pointers that still name raw/sessions files which are no longer on disk (remap to a same-date candidate when one exists, otherwise clear the hop).",
+        "Run after a re-sync or adapter rename left wiki pages pointing at missing raw transcripts (broken Trace / provenance). Does not delete wiki pages and does not convert new sessions.",
+    ),
+)
+
+
+def _print_migrate_catalog() -> None:
+    for name, purpose, when in _MIGRATIONS:
+        print(f"{name}")
+        print(f"  What: {purpose}")
+        print(f"  When: {when}")
+
+
+def cmd_migrate(args: argparse.Namespace) -> int:
+    """List migrations when unnamed or ``--list``; error if both ``--list`` and a name."""
+    named = getattr(args, "migration", None)
+    listing = bool(getattr(args, "list_migrations", False))
+    if listing and named:
+        print(
+            "error: --list cannot be combined with a migration name.",
+            file=sys.stderr,
+        )
+        print("To list migrations: llmwiki migrate --list", file=sys.stderr)
+        print("To apply one: llmwiki migrate <name> [flags]", file=sys.stderr)
+        return 2
+    _print_migrate_catalog()
+    return 0
+
+
 def cmd_migrate_state(args: argparse.Namespace) -> int:
     # One-shot v1.4.0 migrator lives under scripts/ (not the package).
     script = REPO_ROOT / "scripts" / "migrate_state_v1_4_0.py"
@@ -1484,22 +1528,9 @@ def _run_candidate_harvest(args: argparse.Namespace) -> int:
 def cmd_synthesize(args: argparse.Namespace) -> int:
     """Synthesize wiki source pages and/or harvest candidates (#90 · #35).
 
-    Primary CLI name is ``llmwiki synth``. ``synthesize`` remains as a
-    deprecated alias that defaults to sources-only (legacy behaviour) and
-    always prints a removal warning.
+    Wired to ``llmwiki synth``. ``--sources-only`` skips candidate harvest.
     """
     _apply_default_vault(args)
-
-    deprecated = bool(getattr(args, "deprecated_synthesize", False))
-    if deprecated:
-        print(
-            "warning: `llmwiki synthesize` is deprecated — it does not complete "
-            "ingestion (no entity/concept candidates). Use `llmwiki synth` "
-            "(default: sources + candidates). `synthesize` will be removed in a "
-            "future release; today it behaves like `synth --sources-only` unless "
-            "you pass --candidates-only.",
-            file=sys.stderr,
-        )
 
     candidates_only = bool(getattr(args, "candidates_only", False))
     sources_only = bool(getattr(args, "sources_only", False))
@@ -1521,11 +1552,6 @@ def cmd_synthesize(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return 2
-
-    # Legacy `synthesize` with no restrict flag: keep sources-only so existing
-    # scripts do not suddenly write dozens of candidate stubs.
-    if deprecated and not candidates_only and not sources_only:
-        sources_only = True
 
     if candidates_only:
         return _run_candidate_harvest(args)
@@ -1664,8 +1690,7 @@ def cmd_synthesize(args: argparse.Namespace) -> int:
     if summary["errors"]:
         return 1
 
-    # Default `synth`: harvest candidates after sources. `--sources-only` and
-    # the deprecated `synthesize` alias (without --candidates-only) skip this.
+    # Default `synth`: harvest candidates after sources. `--sources-only` skips this.
     if sources_only:
         print_synth_run_summary(
             synthesized=summary["synthesized"],
@@ -2400,29 +2425,24 @@ def _add_vault_arg(parser: argparse.ArgumentParser, *, role: str) -> None:
     parser.add_argument(
         "--vault", type=Path, default=None, metavar="PATH",
         help={
-            "sync": "Vault-overlay mode (#54): write new pages inside an "
-                    "existing Obsidian / Logseq vault instead of the "
-                    "repo's wiki/ directory.",
-            "build": "Vault-overlay mode (#54): build from an existing "
-                     "Obsidian / Logseq vault. Still writes site output to "
-                     "--out.",
-            "synthesize": "(#420) Vault-overlay mode: read raw/ + write "
-                          "wiki/sources/ under the vault root, and isolate "
-                          "the synth state file to the vault. Without this "
-                          "flag the state file lives at the repo root, so "
-                          "two vaults synthesised against the same repo "
-                          "silently share idempotency state.",
+            "sync": "Write new pages inside an existing Obsidian / Logseq "
+                    "vault instead of the repo's wiki/ directory.",
+            "build": "Build from an existing Obsidian / Logseq vault. Still "
+                     "writes site output to --out.",
+            "synthesize": "Read raw/ + write wiki/sources/ under the vault "
+                          "root, and isolate the synth state file to the "
+                          "vault. Without this flag the state file lives at "
+                          "the repo root, so two vaults synthesised against "
+                          "the same repo silently share idempotency state.",
             "all": "Operate on this vault: sync → synth → build → graph → "
                    "lint (AI exports are part of build).",
-            "add": "(#16) Vault-overlay mode: write the converted document "
-                   "under the vault's raw/docs/ and run synthesize/build "
-                   "against the vault.",
-            "remove": "(#B2) Cascade-remove raw docs + their derived pages "
-                      "from this vault's raw/docs/ + wiki/, instead of the "
+            "add": "Write the converted document under the vault's "
+                   "raw/docs/ and run synth/build against the vault.",
+            "remove": "Cascade-remove raw docs + their derived pages from "
+                      "this vault's raw/docs/ + wiki/, instead of the "
                       "repo's own directories.",
-            "init": "(#29) Scaffold raw/, wiki/, site/ into this vault "
-                    "instead of the repo, so personal data lands outside "
-                    "the git clone.",
+            "init": "Scaffold raw/, wiki/, site/ into this vault instead of "
+                    "the repo, so personal data lands outside the git clone.",
             "graph": "Graph this vault's wiki/ and write graph/ under it, "
                      "instead of the repo's. Vault mode uses the builtin "
                      "engine (graphify is repo-anchored).",
@@ -2431,45 +2451,101 @@ def _add_vault_arg(parser: argparse.ArgumentParser, *, role: str) -> None:
             "trace": "Trace provenance under this vault's wiki/ → sources → "
                      "raw/, instead of the repo's.",
             "watch": "Watch agent session stores and maintain this vault "
-                     "(sync → synthesize → build) when sessions finish.",
+                     "(sync → synth → build) when sessions finish.",
             "install-automation": "Write automation status and schedulers "
                                   "for this vault.",
         }[role],
     )
 
 
-def cmd_consolidate_topics(args: argparse.Namespace) -> int:
-    """Retired (#147): synthesis now prepares the known-names list.
-
-    The subparser name is kept so ``llmwiki consolidate-topics`` still
-    resolves. ``--complete`` is accepted for old scripts but never writes
-    ``.llmwiki-topics.json`` or a prompt file.
-    """
-    print(
-        "consolidate-topics is retired: synthesis now prepares the "
-        "known-names list; this command is gone.",
-        file=sys.stderr,
-    )
-    return 2
-
-
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="llmwiki",
-        description="LLM-powered knowledge base from Claude Code and Codex CLI sessions.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=textwrap.dedent("""\
+            LLM-powered knowledge base from agent sessions.
+
+            Start here
+              init                 Scaffold raw/, wiki/, and site/ directories
+              configure-sources    Enable detected session sources in config
+              install-agent-kit    Copy slash commands and skills into an agent directory
+
+            Daily loop (this order)
+              sync                 Convert new agent sessions to raw markdown
+              add                  Ingest a URL, file, or folder as a document
+              synth                Summarise raw sources and harvest candidate pages
+              candidates           Review harvested stubs: promote, merge, or discard
+              build                Compile the static HTML site
+
+            Run the loop for me
+              all                  Run the full pipeline in one invocation
+              watch                Re-run the loop when agent sessions finish
+              install-automation   Install OS schedulers and optional hooks
+
+            Look around
+              lint                 Check the wiki without changing pages
+              query                Ask a natural-language question of the wiki
+              trace                Show how a wiki page traces back to raw sources
+              graph                Walk [[wikilinks]] into a browsable connection map
+              adapters             List which agents can feed sessions into this vault
+              usage                Report local MCP tool calls next to synthesis cost
+              version              Print which llmwiki release is installed
+
+            Take things out
+              remove               Delete raw documents and everything derived from them
+
+            Rare — one-time
+              migrate              List or apply a named one-time vault repair
+              queue                Inspect or run the deferred-work task list
+        """),
+        epilog=textwrap.dedent("""\
+            Canonical loop: ingest (sync / add) → summarise (synth) → review candidates → publish (build).
+            After synth, rebuild the site so candidates and analytics stay current.
+        """),
     )
     p.add_argument("--version", action="version", version=f"llmwiki {__version__}")
 
     sub = p.add_subparsers(dest="cmd", metavar="COMMAND")
 
+    def add_command(name: str, description: str) -> argparse.ArgumentParser:
+        return sub.add_parser(
+            name,
+            formatter_class=argparse.RawDescriptionHelpFormatter,
+            description=textwrap.dedent(description).strip(),
+        )
+
     # init
-    init = sub.add_parser("init", help="Scaffold raw/, wiki/, site/ directories")
+    init = add_command(
+        "init",
+        """
+        Scaffold an empty llmwiki vault: the three layers (raw/, wiki/, site/) plus the seed wiki pages every later command assumes exist.
+
+        First command for a fresh setup. Run this once before configure-sources / install-agent-kit, then sync to pull sessions, then synth to write summaries.
+
+        Creates raw/sessions/, wiki/sources/, wiki/entities/, wiki/concepts/, wiki/projects/, wiki/syntheses/, and site/. Seeds wiki/index.md, overview.md, log.md, hints.md, hot.md, MEMORY.md, SOUL.md, CRITICAL_FACTS.md, and dashboard.md when they are missing.
+        """,
+    )
     _add_vault_arg(init, role="init")
     init.set_defaults(func=cmd_init)
 
     # sync
-    sync = sub.add_parser("sync", help="Convert new .jsonl sessions to markdown")
-    sync.add_argument("--adapter", nargs="*", default=None, help="Adapter(s) to run; default: all available")
+    sync = add_command(
+        "sync",
+        """
+        Ingest new agent sessions into the vault as immutable markdown under raw/sessions/. This is the start of the daily loop: convert first, then summarise with synth, optionally review candidates, and publish with build.
+
+        Enabled session-store adapters read each agent's transcript store, convert settled sessions into flat raw/sessions/*.md files, update sync state, and refresh which paths are pending for synth. After a successful convert, sync may also rebuild the site and/or run lint if your sessions config asks for that after sync. Pass --status to report last-sync time, per-adapter counters, and quarantine without converting anything.
+
+        Does not write wiki/sources/ summaries or propose candidate pages — that is synth. Live sessions are skipped unless you pass --include-current.
+        """,
+    )
+    sync.add_argument(
+        "--adapter",
+        nargs="*",
+        default=None,
+        help="Session-store adapter name(s) to run (an adapter reads one agent's session files). "
+             "List names with `llmwiki adapters`. Default: all available",
+    )
     sync.add_argument("--since", type=str, help="Only sessions on or after YYYY-MM-DD")
     sync.add_argument("--project", type=str, help="Substring filter on project slug")
     sync.add_argument("--include-current", action="store_true", help="Don't skip live sessions (<60 min)")
@@ -2477,7 +2553,7 @@ def build_parser() -> argparse.ArgumentParser:
     sync.add_argument(
         "--force-resync", action="store_true",
         help="Override the newer-schema/corrupt-state guard and reconvert "
-             "from scratch (#29). Implies --force; may duplicate an "
+             "from scratch. Implies --force; may duplicate an "
              "already-populated raw/.",
     )
     sync.add_argument(
@@ -2487,13 +2563,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sync.add_argument(
         "--auto-build", action=argparse.BooleanOptionalAction, default=True,
-        help="After sync, rebuild the site when sessions_config.json's "
-             "schedule.build is 'on-sync' (default: on; pass --no-auto-build to skip)",
+        help="After sync, also rebuild the site if your sessions config asks for a rebuild after sync "
+             "(default: on; pass --no-auto-build to skip)",
     )
     sync.add_argument(
         "--auto-lint", action=argparse.BooleanOptionalAction, default=True,
-        help="After sync, run lint when sessions_config.json's "
-             "schedule.lint is 'on-sync' (default: on; pass --no-auto-lint to skip)",
+        help="After sync, also run lint if your sessions config asks for lint after sync "
+             "(default: on; pass --no-auto-lint to skip)",
     )
     _add_vault_arg(sync, role="sync")
     sync.add_argument(
@@ -2503,8 +2579,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sync.add_argument(
         "--status", action="store_true",
-        help="Show last-sync time + per-adapter counters + quarantine "
-             "(G-03 · #289). Does not run a sync.",
+        help="Show last-sync time, counters per session-store adapter, and "
+             "quarantine. Does not run a sync.",
     )
     sync.add_argument(
         "--recent", type=int, default=0,
@@ -2513,21 +2589,30 @@ def build_parser() -> argparse.ArgumentParser:
     sync.set_defaults(func=cmd_sync)
 
     # build
-    build = sub.add_parser("build", help="Compile static HTML site from raw/ + wiki/")
+    build = add_command(
+        "build",
+        """
+        Publish the vault: compile raw/ and wiki/ into a static HTML site under site/ (or --out), including AI-facing exports such as llms.txt. This is the last step of the daily loop after ingest and synth (and after candidate review when you chose to do one).
+
+        Walks markdown pages, resolves wikilinks and navigation, and writes browsable HTML plus export artifacts. By default it is read-only on wiki/ content; the only exception is --seed-project-stubs, which may create missing wiki/projects/<slug>.md stubs.
+
+        Run sync (and synth) first when those layers should catch up; run candidates when you need the Candidates page to match reviewed stubs.
+        """,
+    )
     build.add_argument("--out", type=Path, default=REPO_ROOT / "site", help="Output dir (default: site/)")
     build.add_argument("--synthesize", action="store_true", help="Call claude CLI for overview synthesis")
     build.add_argument(
         "--claude", type=str, default="",
-        help="Path to claude CLI (#421: defaults to `shutil.which('claude')` "
+        help="Path to claude CLI (defaults to `shutil.which('claude')` "
              "so PATH-based / brew / nvm / Windows installs all work)",
     )
     build.add_argument(
         "--search-mode", choices=["auto", "tree", "flat"], default="auto",
-        help="Search index mode (#53): auto picks tree vs flat from heading depth",
+        help="Search index mode: auto picks tree vs flat from heading depth",
     )
     build.add_argument(
         "--local-root", type=str, default="", dest="local_root", metavar="PATH",
-        help="(#109) Value shown in place of a session's stored home "
+        help="Value shown in place of a session's stored home "
              "directory, e.g. /home/user. Defaults to this machine's home "
              "directory so local paths stay usable; pass a fixed string when "
              "publishing so the same vault renders identically anywhere.",
@@ -2535,7 +2620,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_vault_arg(build, role="build")
     build.add_argument(
         "--seed-project-stubs", action="store_true", dest="seed_project_stubs",
-        help="(#414) Auto-create wiki/projects/<slug>.md stubs for any "
+        help="Auto-create wiki/projects/<slug>.md stubs for any "
              "newly-discovered project that doesn't have a metadata file. "
              "Off by default — `build` is read-only on wiki/. Use `sync` "
              "(which already mutates wiki/) for routine seeding, or pass "
@@ -2544,10 +2629,15 @@ def build_parser() -> argparse.ArgumentParser:
     build.set_defaults(func=cmd_build)
 
     # usage (#26) — local MCP tool-usage telemetry
-    usage_p = sub.add_parser(
+    usage_p = add_command(
         "usage",
-        help="Report local MCP tool-usage telemetry (calls, zero-hit rate, "
-             "bytes served) next to synthesis cost",
+        """
+        Look around: report local MCP tool-usage telemetry (calls, zero-hit rate, bytes served) next to estimated synthesis cost for this vault.
+
+        Reads stored usage logs and optional synthesis-cost state, then prints a human table or JSON. --compact can fold older raw log months into a kept-forever rollup before reporting.
+
+        Not part of the daily loop. Does not sync sessions, run synth, rebuild the site, or change wiki pages (aside from optional log compaction under --compact).
+        """,
     )
     usage_p.add_argument("--vault", type=Path, default=None,
                          help="Read telemetry from this vault instead of the repo root")
@@ -2561,17 +2651,32 @@ def build_parser() -> argparse.ArgumentParser:
     usage_p.set_defaults(func=cmd_usage)
 
     # adapters
-    ads = sub.add_parser("adapters", help="List available adapters")
+    ads = add_command(
+        "adapters",
+        """
+        Look around: list which session-store adapters this install knows about. An adapter is a connector that reads one agent's session files (for example Claude Code or Codex CLI) so sync can turn them into raw markdown.
+
+        Prints each adapter's name, availability, and a short description (use --wide for the full text). Useful before configure-sources or when diagnosing why sync skipped a source.
+
+        Not part of the daily loop. Does not enable adapters in config, convert sessions, or write wiki pages — use configure-sources then sync for that.
+        """,
+    )
     ads.add_argument(
         "--wide",
         action="store_true",
-        help="Show untruncated adapter descriptions (G-02 · #288).",
+        help="Show untruncated adapter descriptions (an adapter is a connector to one agent's session store).",
     )
     ads.set_defaults(func=cmd_adapters)
 
-    cfg_src = sub.add_parser(
+    cfg_src = add_command(
         "configure-sources",
-        help="Interactive: enable detected session sources and write adapters.* to config.json",
+        """
+        Start-here setup: interactively enable detected session sources and write adapters.* entries into config.json. An adapter is a connector that reads one agent's session files so later sync runs know what to convert.
+
+        Do this once after init (or whenever you add a new agent). Probes the machine for known stores, asks which to enable, and persists the choice. --yes skips the interview and makes no config writes.
+
+        Does not convert sessions into raw/, summarise into wiki/, or rebuild the site. Run sync afterwards to ingest, then continue the daily loop with synth and build.
+        """,
     )
     cfg_src.add_argument(
         "--yes",
@@ -2581,7 +2686,16 @@ def build_parser() -> argparse.ArgumentParser:
     cfg_src.set_defaults(func=cmd_configure_sources)
 
     # graph
-    graph = sub.add_parser("graph", help="Build the knowledge graph (graph/graph.json + graph.html)")
+    graph = add_command(
+        "graph",
+        """
+        Look around / optional publish step: turn [[wikilink]] connections among wiki pages into a browsable knowledge graph. Often run after build (and included in all) when you want a map of how pages relate.
+
+        Walks wikilinks across the wiki and writes graph/graph.json plus graph.html (or only one format via --format). The default engine is graphify; --engine builtin falls back to a stdlib wikilink walk.
+
+        Does not summarise raw sessions into wiki/sources/, harvest candidates, or rebuild the rest of the static site. It only refreshes the graph artifacts.
+        """,
+    )
     graph.add_argument("--format", choices=["json", "html", "both"], default="both")
     graph.add_argument(
         "--engine", choices=["builtin", "graphify"], default="graphify",
@@ -2591,9 +2705,15 @@ def build_parser() -> argparse.ArgumentParser:
     graph.set_defaults(func=cmd_graph)
 
     # lint (v1.0, #155) — live count via the rule registry (currently 15)
-    lint = sub.add_parser(
+    lint = add_command(
         "lint",
-        help=f"Run all {len(_LINT_REG)} lint rules against the wiki",
+        f"""
+        Look around: run the lint rule registry against the wiki and print findings (orphans, broken links, index drift, and similar). There are currently {len(_LINT_REG)} registered rules; --rules can narrow the set.
+
+        Evaluates each selected rule over wiki/ (and related vault paths as the rule requires), then reports issues at their severity. Use --fail-on-errors / --fail-on-warnings when a script or CI gate should exit non-zero. Often run after a review pass (for example after candidates) or as the last stage of all.
+
+        Report only — does not edit wiki pages, convert sessions, summarise sources, or rebuild the site.
+        """,
     )
     lint.add_argument("--wiki-dir", type=Path, default=None,
                       help="Wiki directory (default: ./wiki)")
@@ -2621,7 +2741,16 @@ def build_parser() -> argparse.ArgumentParser:
     _add_vault_arg(lint, role="synthesize")
     lint.set_defaults(func=cmd_lint)
 
-    queue_p = sub.add_parser("queue", help="Manage unified llmwiki queue")
+    queue_p = add_command(
+        "queue",
+        """
+        Rare. Internal deferred-work task list used when something else postponed a step (add a document, sync sessions, summarise, rebuild) instead of running it immediately.
+
+        Most people never need this command if they run sync, synth, build, or all themselves. Subcommands status / run / enqueue inspect or process queued tasks with optional --limit and --task-type filters.
+
+        Not part of the daily loop. Prefer the ordinary commands for routine work; use queue only when diagnosing or draining deferred tasks left behind by another path.
+        """,
+    )
     queue_p.add_argument("queue_action", nargs="?", default="status", choices=["status", "run", "enqueue"])
     queue_p.add_argument("--limit", type=int, default=20, help="Max tasks to process in one run")
     queue_p.add_argument("--task-type", default="add_doc", choices=["add_doc", "session_sync", "synthesize", "build"])
@@ -2630,16 +2759,54 @@ def build_parser() -> argparse.ArgumentParser:
     _add_vault_arg(queue_p, role="synthesize")
     queue_p.set_defaults(func=cmd_queue)
 
-    migrate = sub.add_parser("migrate-state", help="One-time migration into unified state")
-    migrate.add_argument("--state-file", type=Path, default=None, help="Target unified state file")
-    migrate.set_defaults(func=cmd_migrate_state)
+    migrate = add_command(
+        "migrate",
+        """
+        Rare. One-time vault repairs after an upgrade — fix or rewrite existing vault data that an older release left behind.
 
-    migrate_raw = sub.add_parser(
-        "migrate-raw-redaction",
-        help=(
-            "Deterministic #56 rewrite: redact encoded usernames in "
-            "raw/sessions (no re-sync, no synthesize)"
-        ),
+        List available migrations with `llmwiki migrate` or `llmwiki migrate --list`. Nothing is applied until you choose a name: `llmwiki migrate <name> [flags]`. There is no run-everything default. Use `--dry-run` on a named migration to preview writes before applying.
+
+        Does not run sync, synth, build, or any other command that adds new sessions or documents. Listing alone never mutates the vault; only an explicit named migration (without --list) performs a repair.
+        """,
+    )
+    migrate.add_argument(
+        "--list",
+        dest="list_migrations",
+        action="store_true",
+        help="Print the migration catalog and exit (do not apply)",
+    )
+    migrate.set_defaults(func=cmd_migrate)
+    mig = migrate.add_subparsers(dest="migration", metavar="NAME", required=False)
+
+    def add_migration(
+        name: str, purpose: str, when: str, *, short: str,
+    ) -> argparse.ArgumentParser:
+        """Register a nested migrate name; catalog uses purpose/when, list uses short."""
+        return mig.add_parser(
+            name,
+            formatter_class=argparse.RawDescriptionHelpFormatter,
+            help=short,
+            description=textwrap.dedent(f"""\
+                {purpose}
+
+                When to run: {when}
+
+                Does not ingest new sessions or documents. Prefer --dry-run first when the migration can rewrite files.
+            """).strip(),
+        )
+
+    _mig_by_name = {name: (purpose, when) for name, purpose, when in _MIGRATIONS}
+
+    migrate_state = add_migration(
+        "state", *_mig_by_name["state"],
+        short="Merge legacy state files into unified llmwiki-state.json",
+    )
+    migrate_state.add_argument("--state-file", type=Path, default=None, help="Target unified state file")
+    migrate_state.set_defaults(func=cmd_migrate_state)
+
+    migrate_raw = add_migration(
+        "raw-redaction", *_mig_by_name["raw-redaction"],
+        short="Redact encoded usernames already present in raw/sessions",
     )
     migrate_raw.add_argument(
         "--vault",
@@ -2664,12 +2831,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     migrate_raw.set_defaults(func=cmd_migrate_raw_redaction)
 
-    migrate_tools = sub.add_parser(
-        "migrate-tools-used",
-        help=(
-            "Expand CallMcpTool/GetMcpTools in raw/sessions frontmatter "
-            "from still-available origin session stores (no synthesize)"
-        ),
+    migrate_tools = add_migration(
+        "tools-used", *_mig_by_name["tools-used"],
+        short="Expand CallMcpTool stubs in raw frontmatter from origin stores",
     )
     migrate_tools.add_argument(
         "--vault",
@@ -2690,12 +2854,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     migrate_tools.set_defaults(func=cmd_migrate_tools_used)
 
-    migrate_kinds = sub.add_parser(
-        "migrate-page-kinds",
-        help=(
-            "Retype pages carrying the removed question/comparison kinds to "
-            "concept and move them into wiki/concepts/ (#109)"
-        ),
+    migrate_kinds = add_migration(
+        "page-kinds", *_mig_by_name["page-kinds"],
+        short="Retype removed question/comparison pages into concepts/",
     )
     migrate_kinds.add_argument(
         "--vault",
@@ -2710,12 +2871,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     migrate_kinds.set_defaults(func=cmd_migrate_page_kinds)
 
-    migrate_topic = sub.add_parser(
-        "migrate-topic-kinds",
-        help=(
-            "Stamp (entity|concept) onto older source Connections bullets "
-            "from wiki entity/concept/candidate pages (#174)"
-        ),
+    migrate_topic = add_migration(
+        "topic-kinds", *_mig_by_name["topic-kinds"],
+        short="Stamp (entity|concept) onto older source Connections bullets",
     )
     migrate_topic.add_argument(
         "--vault",
@@ -2730,12 +2888,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     migrate_topic.set_defaults(func=cmd_migrate_topic_kinds)
 
-    migrate_prov = sub.add_parser(
-        "migrate-broken-provenance",
-        help=(
-            "Remap or clear wiki source_file hops to missing raw/sessions "
-            "files (#180)"
-        ),
+    migrate_prov = add_migration(
+        "broken-provenance", *_mig_by_name["broken-provenance"],
+        short="Fix wiki source_file links that point at missing raw sessions",
     )
     migrate_prov.add_argument(
         "--vault",
@@ -2750,12 +2905,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
     migrate_prov.set_defaults(func=cmd_migrate_broken_provenance)
 
-    kit = sub.add_parser(
+    kit = add_command(
         "install-agent-kit",
-        help=(
-            "Copy packaged slash commands and skills into an agent directory "
-            "(#109)"
-        ),
+        """
+        Start-here setup: copy packaged slash commands and skills into an agent directory (--dest, for example .claude or .codex) so the agent can run /wiki-sync and related workflows against this vault.
+
+        Do this after init when you want agent-facing commands on disk. Writes command and skill files under the destination; --dry-run reports would-write paths without changing anything.
+
+        Not part of the daily loop. Does not convert sessions, summarise into wiki/, harvest candidates, or rebuild the site.
+        """,
     )
     kit.add_argument(
         "--dest",
@@ -2771,9 +2929,15 @@ def build_parser() -> argparse.ArgumentParser:
     kit.set_defaults(func=cmd_install_agent_kit)
 
     # candidates (v1.1, #51) — approval workflow
-    cand = sub.add_parser(
+    cand = add_command(
         "candidates",
-        help="List / promote / flip-promote / merge / discard / apply / rewrite-key-facts",
+        """
+        Daily-loop review gate: promote, flip-promote, merge, discard, list, or batch-apply stubs under wiki/candidates/ after harvest. Runs after synth; rebuilding the site after review keeps the Candidates page in sync, unless you pass --no-rebuild on batch apply.
+
+        Actions operate on pending candidate markdown: promote moves a stub into entities/ or concepts/, merge folds one slug into another, discard archives noise, and apply runs a JSON action list (the shape site/candidates.html prints). Successful apply rebuilds site/ by default so candidates.html matches the wiki.
+
+        Does not harvest new stubs from sources — that is synth. Does not convert sessions or summarise raw/ into wiki/sources/.
+        """,
     )
     cand.add_argument(
         "action",
@@ -2816,9 +2980,9 @@ def build_parser() -> argparse.ArgumentParser:
     _add_vault_arg(cand, role="candidates")
     cand.set_defaults(func=cmd_candidates)
 
-    # synth (#90) — primary; synthesize kept as deprecated alias
+    # synth (#90)
     def _add_synth_arguments(parser: argparse.ArgumentParser) -> None:
-        """Flags shared by ``synth`` and the deprecated ``synthesize`` alias."""
+        """Flags for ``llmwiki synth``."""
         syn_mode = parser.add_mutually_exclusive_group()
         syn_mode.add_argument(
             "--check", action="store_true",
@@ -2828,7 +2992,7 @@ def build_parser() -> argparse.ArgumentParser:
             "--estimate", action="store_true",
             help=(
                 "Print cached-vs-fresh token + dollar estimate without calling "
-                "a backend (#50); Candidates shown as pre-run state (#113)"
+                "a backend; Candidates shown as pre-run state"
             ),
         )
         syn_mode.add_argument(
@@ -2872,7 +3036,7 @@ def build_parser() -> argparse.ArgumentParser:
             metavar="PATH",
             help=(
                 "Synthesize only this raw session/doc under raw/sessions/ or "
-                "raw/docs/ (repeatable; relative to vault root) (#62)"
+                "raw/docs/ (repeatable; relative to vault root)"
             ),
         )
         syn_corpus = parser.add_mutually_exclusive_group()
@@ -2888,24 +3052,27 @@ def build_parser() -> argparse.ArgumentParser:
         )
         _add_vault_arg(parser, role="synthesize")
 
-    syn = sub.add_parser(
+    syn = add_command(
         "synth",
-        help="Synthesize wiki sources and harvest entity/concept candidates (#90)",
+        """
+        Summarise pending raw sessions and documents into wiki/sources/, then propose repeated topics as stubs under wiki/candidates/ for later review. In the daily loop this follows ingest (sync / add) and prepares the material you browse, query, and optionally promote before publishing with build.
+
+        Calls the configured LLM (or other synthesis backend) to write or refresh source pages, updates synth state, then walks those sources for repeated [[wikilink]] targets and writes candidate stubs. Flags can limit the run (--sources-only, --candidates-only, --path, --sessions-only / --docs-only) or probe cost (--estimate) / backend reachability (--check).
+
+        Rebuild the site afterwards so candidates and analytics stay current. Promoting stubs into entities/concepts is the candidates command — many runs skip that review and go straight to build.
+        """,
     )
     _add_synth_arguments(syn)
-    syn.set_defaults(func=cmd_synthesize, deprecated_synthesize=False)
-
-    syn_legacy = sub.add_parser(
-        "synthesize",
-        help="(deprecated) alias for synth --sources-only — use llmwiki synth",
-    )
-    _add_synth_arguments(syn_legacy)
-    syn_legacy.set_defaults(func=cmd_synthesize, deprecated_synthesize=True)
+    syn.set_defaults(func=cmd_synthesize)
 
     # add — ingest a document into the wiki (#16)
-    add_p = sub.add_parser(
+    add_p = add_command(
         "add",
-        help="Add documents to the wiki: URL, file, or folder → raw/docs/ + synthesize + build (#16)",
+        """
+        Alternative ingest path for documents (not agent transcripts): fetch or copy a URL, file, or folder into raw/docs/, then by default synthesise those paths and rebuild the site so the new material shows up in the wiki and on Home.
+
+        Converts each SOURCE into markdown under raw/docs/ (optionally grouped with --project) and records state, then runs the default follow-on steps unless flags say otherwise.
+        """,
     )
     add_p.add_argument("sources", nargs="+", metavar="SOURCE",
                        help="URL (http/https), file, or folder. Repeatable.")
@@ -2929,15 +3096,20 @@ def build_parser() -> argparse.ArgumentParser:
     add_p.add_argument("--dry-run", action="store_true",
                        help="Convert and report, write nothing, run nothing")
     add_p.add_argument("--force-new", action="store_true",
-                       help="Always land a new snapshot even when body matches an existing doc (#22)")
+                       help="Always land a new snapshot even when body matches an existing doc")
     _add_vault_arg(add_p, role="add")
     add_p.set_defaults(func=cmd_add)
 
     # remove — cascade-delete raw docs + their derived artifacts (B2)
-    rm_p = sub.add_parser(
+    rm_p = add_command(
         "remove",
-        help="Cascade-remove raw docs (by project or slug glob) and everything "
-             "derived: synth state, wiki/sources pages, index/log/backlinks",
+        """
+        Take things out: cascade-delete raw documents matching a project name or slug glob, and everything derived from them (synth state entries, wiki/sources pages, index/log/backlink housekeeping).
+
+        Destructive and interactive unless --yes. Prefer --dry-run first to print the full cascade without writing. Use this when a document or project should leave the vault entirely, not when you only want to stop syncing new sessions.
+
+        Not part of ingest. Does not convert sessions, summarise remaining sources, or rebuild the site afterward — run build yourself if published HTML should drop the removed material.
+        """,
     )
     rm_p.add_argument("selector", metavar="SELECTOR",
                       help="Project name or slug glob, e.g. 'old-project*'")
@@ -2948,32 +3120,32 @@ def build_parser() -> argparse.ArgumentParser:
     _add_vault_arg(rm_p, role="remove")
     rm_p.set_defaults(func=cmd_remove)
 
-    # consolidate-topics — retired (#147); name kept so typing it still resolves
-    cons = sub.add_parser(
-        "consolidate-topics",
-        help="Retired — synthesis now prepares the known-names list; "
-             "this command is gone",
-        description="Retired — synthesis now prepares the known-names list; "
-                    "this command is gone.",
-    )
-    cons.add_argument(
-        "--complete", metavar="PATH", default=None,
-        help=argparse.SUPPRESS,  # accepted but ignored; do not teach old flow
-    )
-    _add_vault_arg(cons, role="synthesize")
-    cons.set_defaults(func=cmd_consolidate_topics)
-
     # query — natural-language graph query
-    qry = sub.add_parser("query", help="Query the knowledge graph with a question")
+    qry = add_command(
+        "query",
+        """
+        Look around: ask a natural-language question of the knowledge graph and get an answer grounded in wiki pages.
+
+        Traverses linked pages (BFS depth via --depth, token budget via --budget) and synthesises a read-only reply in the terminal. Substantial answers are not auto-saved; write a wiki/syntheses/ page yourself if you want to keep one.
+
+        Does not convert sessions, run the synth harvest pipeline, edit existing pages, or rebuild the site.
+        """,
+    )
     qry.add_argument("question", nargs="+", help="The question to ask")
     qry.add_argument("--depth", type=int, default=3, help="BFS traversal depth (default: 3)")
     qry.add_argument("--budget", type=int, default=2000, help="Max output tokens (default: 2000)")
     qry.set_defaults(func=cmd_query)
 
     # trace — downward provenance (#122)
-    trc = sub.add_parser(
+    trc = add_command(
         "trace",
-        help="Print downward provenance: wiki page → source summaries → raw",
+        """
+        Look around: print downward provenance from a wiki page through its source summaries to the underlying raw sessions or docs.
+
+        Resolves PAGE (vault-relative path or page stem), follows source_file / sources metadata, and prints the chain so you can defend a claim against original material.
+
+        Read-only. Does not edit pages, convert sessions, summarise, or rebuild the site.
+        """,
     )
     trc.add_argument(
         "page",
@@ -2984,14 +3156,28 @@ def build_parser() -> argparse.ArgumentParser:
     trc.set_defaults(func=cmd_trace)
 
     # version
-    ver = sub.add_parser("version", help="Print version")
+    ver = add_command(
+        "version",
+        """
+        Look around: print the installed llmwiki package version and exit.
+
+        Useful when filing bugs or checking whether an upgrade landed. Same information as `llmwiki --version` on the root parser.
+
+        Does not touch the vault, config, or any pipeline stage.
+        """,
+    )
     ver.set_defaults(func=cmd_version)
 
     # all — [sync?] → [synthesize?] → build → graph → lint
-    all_p = sub.add_parser(
+    all_p = add_command(
         "all",
-        help="Run the full pipeline: sync → synth → build → graph → lint "
-             "(each stage has an opt-out flag; AI exports are part of build)",
+        """
+        Run the full pipeline in one locked invocation: sync → synth → build → graph → lint. Use this when you want the daily loop without typing each command yourself (CI, scheduled jobs, or a one-shot refresh).
+
+        Each stage runs in order with the same semantics as the standalone command. AI-consumable exports (llms.txt and similar) are written by the build stage, not a separate step. Skip stages with --no-sync, --no-synth, --skip-graph, or --skip-lint; --fail-fast stops at the first non-zero exit.
+
+        Does not review or promote candidates — that stays a human (or scripted) candidates step between synth and a final build when the Candidates page must match decisions. It is not a substitute for migrate or one-off vault repairs.
+        """,
     )
     all_p.add_argument(
         "--out", type=Path, default=REPO_ROOT / "site",
@@ -3061,13 +3247,19 @@ def build_parser() -> argparse.ArgumentParser:
     _add_vault_arg(all_p, role="all")
     all_p.set_defaults(func=cmd_all)
 
-    watch_p = sub.add_parser(
+    watch_p = add_command(
         "watch",
-        help="Near-real-time sync→synthesize→build when sessions finish "
-             "(turn-complete gates; unsupported adapters settle 2s then run)",
+        """
+        Hands-off daily loop: poll configured agent session stores and, when a session file has settled, run maintain (sync → synth → build) for the new material.
+
+        Watches adapter roots at --interval, waits --settle after the last mtime change, then invokes the maintain path. --dry-run only detects ready sessions; --no-synthesize / --no-build skip those stages of maintain.
+
+        Does not install a persistent OS scheduler or login hooks — that is install-automation. Stops when you interrupt the process; it is a foreground poller, not a background service unit.
+        """,
     )
     watch_p.add_argument("--adapter", nargs="*", default=None,
-                         help="Adapter name(s) to watch")
+                         help="Session-store adapter name(s) to watch "
+                              "(an adapter reads one agent's session files)")
     watch_p.add_argument("--interval", type=float, default=5.0,
                          help="Poll interval seconds (default 5)")
     watch_p.add_argument("--settle", type=float, default=2.0,
@@ -3081,10 +3273,15 @@ def build_parser() -> argparse.ArgumentParser:
     _add_vault_arg(watch_p, role="watch")
     watch_p.set_defaults(func=cmd_watch)
 
-    auto_p = sub.add_parser(
+    auto_p = add_command(
         "install-automation",
-        help="Install OS schedulers / optional hooks; write automation status "
-             "for the site Home panel (hooks default skip)",
+        """
+        Setup for running the loop on a schedule: install OS scheduler units (and optional hooks) and write automation status for the site Home panel. Choose --job ingest (collect + rebuild) or maintain (also summarise — costs provider money).
+
+        Writes unit files, optionally activates them into the platform scheduler (--activate is default; --no-activate only writes and prints enable commands), and records what was installed so Home can show status. Hooks default to skip unless you opt in during the interview.
+
+        Not a one-off ingest. Does not convert sessions or rebuild the site by itself until the scheduled job (or a hook) actually runs. For an immediate full pass use all; for a live foreground poller use watch.
+        """,
     )
     auto_p.add_argument("--yes", action="store_true",
                         help="Non-interactive: use flags / defaults (no hooks)")
@@ -3137,6 +3334,12 @@ def main(argv: list[str] | None = None) -> int:
     if not hasattr(args, "func"):
         parser.print_help()
         return 0
+    # Nested migrate parsers overwrite func; catch --list vs name before apply.
+    if getattr(args, "cmd", None) == "migrate" and (
+        bool(getattr(args, "list_migrations", False))
+        or getattr(args, "migration", None) is None
+    ):
+        return cmd_migrate(args)
     return args.func(args)
 
 

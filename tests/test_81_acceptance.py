@@ -292,7 +292,7 @@ def test_ac_232_stale_bookkeeping_gap_visible_in_output(
     other.
     """
     # @regression
-    cp = _run_cli("synthesize", "--estimate", "--vault", str(stale_vault))
+    cp = _run_cli("synth", "--estimate", "--vault", str(stale_vault))
     assert cp.returncode == 0, cp.stderr
 
     # Already synthesized line: eligible-source unit.
@@ -334,7 +334,7 @@ def test_ac_232_stale_bookkeeping_no_pages_in_wiki_sources_phrase(
 ) -> None:
     """AC 2.3.2 (negative): stale vault output must not use 'pages in wiki/sources/'."""
     # @regression
-    cp = _run_cli("synthesize", "--estimate", "--vault", str(stale_vault))
+    cp = _run_cli("synth", "--estimate", "--vault", str(stale_vault))
     assert cp.returncode == 0, cp.stderr
     assert "pages in wiki/sources/" not in cp.stdout, (
         "Forbidden phrase 'pages in wiki/sources/' found in stale-vault output.\n"

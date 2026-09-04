@@ -101,7 +101,7 @@ def test_ac_211_pending_sources_estimate_uses_prerun_label(
     new sessions exist in raw/sessions/ but are not yet in the state file.
     """
     # @regression
-    cp = _run_cli("synthesize", "--estimate", "--vault", str(pending_vault))
+    cp = _run_cli("synth", "--estimate", "--vault", str(pending_vault))
     assert cp.returncode == 0, cp.stderr
 
     # Must carry the honest pre-run label.
@@ -135,7 +135,7 @@ def test_ac_212_pending_sources_estimate_prints_note(
     upcoming synthesize will harvest from the new sessions.
     """
     # @regression
-    cp = _run_cli("synthesize", "--estimate", "--vault", str(pending_vault))
+    cp = _run_cli("synth", "--estimate", "--vault", str(pending_vault))
     assert cp.returncode == 0, cp.stderr
 
     assert "note: pending sources are not yet reflected in this figure" in cp.stdout, (

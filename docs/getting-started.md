@@ -147,7 +147,7 @@ If you are not using SessionStart hooks, drive the unified queue by hand:
 ```bash
 llmwiki queue status
 llmwiki queue run --limit 20
-llmwiki migrate-state   # one-time: merge legacy .llmwiki-* into llmwiki-state.json
+llmwiki migrate state   # one-time: merge legacy .llmwiki-* into llmwiki-state.json
 ```
 
 Flags and output: [docs/reference/cli.md](reference/cli.md#queue--inspect-and-run-unified-queue).

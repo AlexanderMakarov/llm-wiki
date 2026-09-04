@@ -69,6 +69,8 @@ python3 -m llmwiki init           # scaffold raw/, wiki/, site/ directories
 
 Or use the one-click scripts: `./sync.sh`, `./build.sh` (macOS/Linux); `sync.bat`, `build.bat` (Windows).
 
+Vault migrations are named subcommands of `llmwiki migrate`, never new top-level CLI commands. When adding one, register it under `migrate` in `llmwiki/cli.py`. List with `llmwiki migrate` or `llmwiki migrate --list`; apply with `llmwiki migrate <name>`.
+
 ## Ingest Workflow
 
 Triggered when the user says "ingest this", "sync the wiki", or runs `/wiki-sync`:

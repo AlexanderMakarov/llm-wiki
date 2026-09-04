@@ -1,4 +1,4 @@
-"""Tests for ``llmwiki synthesize --path`` (#62)."""
+"""Tests for ``llmwiki synth --path`` (#62)."""
 
 from __future__ import annotations
 
@@ -116,7 +116,7 @@ def test_only_paths_can_target_a_doc(tmp_path: Path):
 def test_parser_accepts_repeatable_path():
     parser = build_parser()
     args = parser.parse_args([
-        "synthesize",
+        "synth",
         "--path", "raw/sessions/a.md",
         "--path", "raw/docs/b.md",
     ])
@@ -155,7 +155,7 @@ def test_cmd_synthesize_path_passes_only_paths(
     monkeypatch.setattr("llmwiki.cli.synthesize_new_sessions", _fake_synth)
 
     args = build_parser().parse_args([
-        "synthesize",
+        "synth",
         "--vault", str(vault),
         "--path", "raw/sessions/keep.md",
     ])
@@ -185,7 +185,7 @@ def test_cmd_synthesize_missing_path_exits_2(
     monkeypatch.setattr("llmwiki.cli.resolve_backend", lambda _cfg: _Ok())
 
     args = build_parser().parse_args([
-        "synthesize",
+        "synth",
         "--vault", str(vault),
         "--path", "raw/sessions/missing.md",
     ])
@@ -204,7 +204,7 @@ def test_cmd_synthesize_path_rejects_estimate(
         lambda: {"synthesis": {"backend": "dummy"}},
     )
     args = build_parser().parse_args([
-        "synthesize",
+        "synth",
         "--vault", str(vault),
         "--estimate",
         "--path", "raw/sessions/keep.md",
@@ -284,11 +284,11 @@ def test_include_docs_false_skips_docs(tmp_path: Path):
 
 def test_parser_sessions_only_and_docs_only_are_exclusive():
     parser = build_parser()
-    args = parser.parse_args(["synthesize", "--sessions-only"])
+    args = parser.parse_args(["synth", "--sessions-only"])
     assert args.sessions_only is True
     assert args.docs_only is False
     with pytest.raises(SystemExit):
-        parser.parse_args(["synthesize", "--sessions-only", "--docs-only"])
+        parser.parse_args(["synth", "--sessions-only", "--docs-only"])
 
 
 def test_cmd_synthesize_sessions_only_passes_flags(
@@ -322,7 +322,7 @@ def test_cmd_synthesize_sessions_only_passes_flags(
     monkeypatch.setattr("llmwiki.cli.synthesize_new_sessions", _fake_synth)
 
     args = build_parser().parse_args([
-        "synthesize",
+        "synth",
         "--vault", str(vault),
         "--sessions-only",
     ])
@@ -364,7 +364,7 @@ def test_cmd_synthesize_docs_only_passes_flags(
     monkeypatch.setattr("llmwiki.cli.synthesize_new_sessions", _fake_synth)
 
     args = build_parser().parse_args([
-        "synthesize",
+        "synth",
         "--vault", str(vault),
         "--docs-only",
     ])
@@ -392,7 +392,7 @@ def test_cmd_synthesize_sessions_only_rejects_doc_path(
     monkeypatch.setattr("llmwiki.cli.resolve_backend", lambda _cfg: _Ok())
 
     args = build_parser().parse_args([
-        "synthesize",
+        "synth",
         "--vault", str(vault),
         "--sessions-only",
         "--path", "raw/docs/note.md",
@@ -420,7 +420,7 @@ def test_cmd_synthesize_docs_only_rejects_session_path(
     monkeypatch.setattr("llmwiki.cli.resolve_backend", lambda _cfg: _Ok())
 
     args = build_parser().parse_args([
-        "synthesize",
+        "synth",
         "--vault", str(vault),
         "--docs-only",
         "--path", "raw/sessions/keep.md",
@@ -439,7 +439,7 @@ def test_cmd_synthesize_sessions_only_rejects_estimate(
         lambda: {"synthesis": {"backend": "dummy"}},
     )
     args = build_parser().parse_args([
-        "synthesize",
+        "synth",
         "--vault", str(vault),
         "--estimate",
         "--sessions-only",

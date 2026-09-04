@@ -1,4 +1,4 @@
-"""Tests for ``llmwiki migrate-broken-provenance`` (#180 smoke side-effects).
+"""Tests for ``llmwiki migrate broken-provenance`` (#180 smoke side-effects).
 
 # @spec: 175-exclude-headless-adapters
 """
@@ -224,7 +224,7 @@ def test_cli_parse_and_run(tmp_path: Path, capsys) -> None:
     _source_page(wiki, "2026-08-07-store", missing)
     _raw(tmp_path, "2026-08-07T21-00-cursor-aabbccddeeff-e2285ab8.md")
     args = build_parser().parse_args(
-        ["migrate-broken-provenance", "--vault", str(tmp_path)]
+        ["migrate", "broken-provenance", "--vault", str(tmp_path)]
     )
     assert args.func(args) == 0
     out = capsys.readouterr().out

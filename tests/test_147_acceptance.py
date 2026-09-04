@@ -55,10 +55,8 @@ AC coverage matrix (FR<n>-AC<m>, functional-spec.md bullet order):
     FR6-AC3  → covered by tests/test_state_widget.py
                ::test_build_refreshes_pipeline_on_disk_mismatch
                ::test_build_skips_pipeline_refresh_when_on_disk_matches
-    FR7-AC1  → covered by tests/test_reference_coverage.py (retired heading in cli.md)
-               + tests/e2e/test_cli_smoke.py::test_consolidate_topics_is_retired
-    FR7-AC2  → covered by tests/e2e/test_cli_smoke.py
-               ::test_consolidate_topics_is_retired
+    FR7-AC1  → command unregistered (#199); documented==live via tests/test_reference_coverage.py
+    FR7-AC2  → command unregistered (#199); do not assert unknown-name argv
     FR7-AC3  → test_fr10_agent_kit_matches_offline_promote_and_no_consolidate
     FR8-AC1  → test_full_loop_dummy_synth_harvest_promote_shared_thing
     FR8-AC2  → test_fr8_description_not_rewritten_when_more_facts_arrive
@@ -95,10 +93,8 @@ Notes on RED validation (implementation already landed on this branch):
 
 from __future__ import annotations
 
-import os
 import re
 import subprocess
-import sys
 from pathlib import Path
 
 import pytest
@@ -439,8 +435,8 @@ def test_fr10_agent_kit_matches_offline_promote_and_no_consolidate() -> None:
         or "Works with Dummy" in candidates_cmd
     )
 
-    assert "llmwiki consolidate-topics" not in synth_cmd or "retired" in synth_cmd.lower()
     assert "Do **not** run `llmwiki consolidate-topics`" in synth_cmd
+    assert "exits 2" not in synth_cmd
 
     old_candidates = _git_show_pre_147("llmwiki/agent_kit/commands/wiki-candidates.md")
     if old_candidates:
@@ -476,63 +472,6 @@ def test_fr10_source_prompt_keeps_key_claims_and_quotes() -> None:
     assert "## Key Quotes" in prompt
     assert "(entity)" in prompt
     assert "fact:" in prompt
-
-
-# ─── FR7 CLI retirement (lightweight; full path in e2e smoke) ──────────────
-
-
-def test_fr7_consolidate_topics_exits_2_and_complete_writes_nothing(
-    tmp_path: Path,
-) -> None:
-    """FR7-AC2: retired command exits 2; ``--complete`` does not write cache.
-
-    Full CLI smoke lives in ``tests/e2e/test_cli_smoke.py``; this keeps the
-    whole-feature suite self-contained without a live vault.
-    """
-    # @regression
-    vault = tmp_path / "vault"
-    (vault / "wiki").mkdir(parents=True)
-    (vault / "raw").mkdir()
-    env = os.environ.copy()
-    env["PYTHONPATH"] = str(REPO_ROOT) + (
-        os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else ""
-    )
-
-    basic = subprocess.run(
-        [sys.executable, "-m", "llmwiki", "consolidate-topics", "--vault", str(vault)],
-        capture_output=True,
-        text=True,
-        check=False,
-        env=env,
-        cwd=str(REPO_ROOT),
-    )
-    assert basic.returncode == 2
-    combined = (basic.stderr + basic.stdout).lower()
-    assert "retired" in combined or "gone" in combined
-    assert not (vault / "wiki" / ".llmwiki-topics.json").is_file()
-    assert not (vault / "wiki" / ".llmwiki-topic-consolidation.md").is_file()
-
-    reply = tmp_path / "reply.json"
-    reply.write_text('{"topics": [], "dropped": []}', encoding="utf-8")
-    complete = subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "llmwiki",
-            "consolidate-topics",
-            "--complete",
-            str(reply),
-            "--vault",
-            str(vault),
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-        env=env,
-        cwd=str(REPO_ROOT),
-    )
-    assert complete.returncode == 2
-    assert not (vault / "wiki" / ".llmwiki-topics.json").is_file()
 
 
 # ─── Documented RED probe (historical contracts on origin/main) ─────────────

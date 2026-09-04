@@ -501,7 +501,7 @@ def test_resolve_backend_case_insensitive():
 # ─── CLI integration ──────────────────────────────────────────────────
 
 
-def test_synthesize_subcommand_registered():
+def test_synth_subcommand_registered():
 
     parser = build_parser()
     sub_action = None
@@ -510,5 +510,4 @@ def test_synthesize_subcommand_registered():
             sub_action = a
             break
     assert sub_action is not None
-    assert "synthesize" in sub_action.choices
     assert "synth" in sub_action.choices

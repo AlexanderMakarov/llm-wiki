@@ -442,7 +442,7 @@ def test_the_migrated_vault_reports_no_invalid_type(tmp_path: Path) -> None:
 def test_cli_runs_the_migration(tmp_path: Path, capsys) -> None:
     vault = _vault(tmp_path)
     args = build_parser().parse_args(
-        ["migrate-page-kinds", "--vault", str(vault)]
+        ["migrate", "page-kinds", "--vault", str(vault)]
     )
 
     assert args.func(args) == 0
@@ -454,7 +454,7 @@ def test_cli_dry_run_writes_nothing(tmp_path: Path, capsys) -> None:
     vault = _vault(tmp_path)
     before = _snapshot(vault)
     args = build_parser().parse_args(
-        ["migrate-page-kinds", "--vault", str(vault), "--dry-run"]
+        ["migrate", "page-kinds", "--vault", str(vault), "--dry-run"]
     )
 
     assert args.func(args) == 0
@@ -464,4 +464,4 @@ def test_cli_dry_run_writes_nothing(tmp_path: Path, capsys) -> None:
 
 def test_cli_requires_a_vault(capsys) -> None:
     with pytest.raises(SystemExit):
-        build_parser().parse_args(["migrate-page-kinds"])
+        build_parser().parse_args(["migrate", "page-kinds"])

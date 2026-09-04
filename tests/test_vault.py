@@ -583,16 +583,16 @@ def test_synth_state_file_with_spaces_in_path(tmp_path: Path):
 
 
 def test_cli_synthesize_accepts_vault_flag():
-    """CLI exposes --vault flag on `synthesize` (#420)."""
+    """CLI exposes --vault flag on `synth` (#420)."""
     parser = build_parser()
-    args = parser.parse_args(["synthesize", "--vault", "/tmp/myvault"])
+    args = parser.parse_args(["synth", "--vault", "/tmp/myvault"])
     assert str(args.vault) == "/tmp/myvault"
 
 
 def test_cli_synthesize_default_vault_is_none():
     """No --vault flag → args.vault is None → state lives at repo root."""
     parser = build_parser()
-    args = parser.parse_args(["synthesize"])
+    args = parser.parse_args(["synth"])
     assert getattr(args, "vault", None) is None
 
 
@@ -600,7 +600,7 @@ def test_cli_synthesize_bad_vault_path_exits_with_error(tmp_path: Path, capsys):
     """cmd_synthesize fails fast with exit 2 on non-existent --vault path."""
     parser = build_parser()
     args = parser.parse_args(
-        ["synthesize", "--vault", str(tmp_path / "missing-vault")]
+        ["synth", "--vault", str(tmp_path / "missing-vault")]
     )
     rc = cmd_synthesize(args)
     assert rc == 2

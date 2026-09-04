@@ -88,17 +88,11 @@ ALL_SUBCOMMANDS = (
     "graph",
     "lint",
     "queue",
-    "migrate-state",
-    "migrate-raw-redaction",
-    "migrate-tools-used",
-    "migrate-page-kinds",
-    "migrate-topic-kinds",
-    "migrate-broken-provenance",
+    "migrate",
     "candidates",
-    "synthesize",
+    "synth",
     "add",
     "remove",
-    "consolidate-topics",
     "query",
     "version",
     "all",
@@ -450,28 +444,28 @@ def test_graph_run_against_real_repo_produces_well_formed_json() -> None:
     )
 
 
-# ─── synthesize / query: skip cleanly when optional deps missing ───────
+# ─── synth / query: skip cleanly when optional deps missing ───────
 
 
-def test_synthesize_check_runs_or_skips() -> None:
-    """``llmwiki synthesize --check`` probes backend availability.
+def test_synth_check_runs_or_skips() -> None:
+    """``llmwiki synth --check`` probes backend availability.
     With no backend configured it exits non-zero — we accept any exit
     code as long as the command doesn't crash with a Python traceback.
 
-    ``synthesize`` writes vault content, so it needs a vault named:
+    ``synth`` writes vault content, so it needs a vault named:
     ``demo/`` is the example vault that ships with the checkout. The
     refusal that follows from *not* naming one is covered by
     ``tests/test_source_checkout_guard.py``."""
-    result = _run_cli("synthesize", "--check", "--vault", "demo", timeout=20)
+    result = _run_cli("synth", "--check", "--vault", "demo", timeout=20)
     # 0 (backend reachable), 1 (not reachable) — both fine. >1 means
     # an unhandled exception, which is what we're guarding against.
     assert result.returncode in (0, 1), (
-        f"synthesize --check exited {result.returncode}\n"
+        f"synth --check exited {result.returncode}\n"
         f"stderr: {result.stderr[:400]}"
     )
     # No Python traceback in stderr.
     assert "Traceback" not in result.stderr, (
-        f"synthesize --check raised an unhandled exception:\n{result.stderr}"
+        f"synth --check raised an unhandled exception:\n{result.stderr}"
     )
 
 
@@ -491,49 +485,6 @@ def test_query_without_graphify_exits_cleanly() -> None:
     assert "Traceback" not in result.stderr, (
         f"query crashed instead of gracefully reporting missing dep:\n{result.stderr}"
     )
-
-
-def test_consolidate_topics_is_retired(tmp_path: Path) -> None:
-    """``llmwiki consolidate-topics`` still resolves but exits 2 with a
-    retirement message. Synthesis prepares known-names; this command must
-    not emit a prompt file or write ``.llmwiki-topics.json`` (#147)."""
-    vault = REPO_ROOT_FOR_CLI / ".worktree-vault"
-    result = _run_cli(
-        "consolidate-topics", "--vault", str(vault), timeout=15
-    )
-    assert result.returncode == 2, (
-        f"consolidate-topics exited {result.returncode}, expected 2\n"
-        f"stdout: {result.stdout[:400]}\nstderr: {result.stderr[:400]}"
-    )
-    combined = (result.stderr + result.stdout).lower()
-    assert "retired" in combined or "gone" in combined, (
-        f"expected retirement message, got:\n{result.stderr}\n{result.stdout}"
-    )
-    assert "known-names" in combined or "known names" in combined, (
-        f"expected known-names mention, got:\n{result.stderr}\n{result.stdout}"
-    )
-    prompt = vault / "wiki" / ".llmwiki-topic-consolidation.md"
-    assert not prompt.is_file(), "retired command must not write consolidation prompt"
-
-    # --complete must also refuse to write the cache (scratch vault).
-    scratch = tmp_path / "vault"
-    (scratch / "wiki").mkdir(parents=True)
-    (scratch / "raw").mkdir()
-    reply = tmp_path / "reply.json"
-    reply.write_text('{"topics": [], "dropped": []}', encoding="utf-8")
-    complete = _run_cli(
-        "consolidate-topics",
-        "--complete",
-        str(reply),
-        "--vault",
-        str(scratch),
-        timeout=15,
-    )
-    assert complete.returncode == 2
-    assert not (scratch / "wiki" / ".llmwiki-topics.json").is_file(), (
-        "retired --complete must not write .llmwiki-topics.json"
-    )
-    assert not (scratch / "wiki" / ".llmwiki-topic-consolidation.md").is_file()
 
 
 # ─── candidates list: empty workspace handling ──────────────────────────

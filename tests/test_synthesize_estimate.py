@@ -1,4 +1,4 @@
-"""Tests for ``llmwiki synthesize --estimate`` breakdown (G-07 · #293).
+"""Tests for ``llmwiki synth --estimate`` breakdown (G-07 · #293).
 
 Covers:
 * Empty corpus → zeros with no divide-by-zero errors.
@@ -370,7 +370,7 @@ def estimate_vault(tmp_path):
 
 
 def test_cli_estimate_prints_three_bucket_header(estimate_vault):
-    cp = _run_cli("synthesize", "--estimate", "--vault", str(estimate_vault))
+    cp = _run_cli("synth", "--estimate", "--vault", str(estimate_vault))
     assert cp.returncode == 0, cp.stderr
     # #387 U4: the "Synthesized (history)" row label was confusing; renamed to
     # "Already synthesized" for plainer English.
@@ -379,14 +379,14 @@ def test_cli_estimate_prints_three_bucket_header(estimate_vault):
 
 
 def test_cli_estimate_prints_both_cost_rows(estimate_vault):
-    cp = _run_cli("synthesize", "--estimate", "--vault", str(estimate_vault))
+    cp = _run_cli("synth", "--estimate", "--vault", str(estimate_vault))
     assert cp.returncode == 0, cp.stderr
     assert "Incremental sync:" in cp.stdout
     assert "Full re-synth:" in cp.stdout
 
 
 def test_cli_estimate_prints_model_and_per_page_cost(estimate_vault):
-    cp = _run_cli("synthesize", "--estimate", "--vault", str(estimate_vault))
+    cp = _run_cli("synth", "--estimate", "--vault", str(estimate_vault))
     assert cp.returncode == 0, cp.stderr
     # Split into its halves so a surprising figure is traceable to either
     # the agent scaffolding or a bloated topic vocabulary.
@@ -398,7 +398,7 @@ def test_cli_estimate_prints_model_and_per_page_cost(estimate_vault):
 
 def test_cli_estimate_does_not_claim_cache_reuse(estimate_vault):
     """Each page is its own process — there is no prefix to re-read."""
-    cp = _run_cli("synthesize", "--estimate", "--vault", str(estimate_vault))
+    cp = _run_cli("synth", "--estimate", "--vault", str(estimate_vault))
     assert "cache write" not in cp.stdout
     assert "hits)" not in cp.stdout
 
@@ -408,14 +408,14 @@ def test_cli_estimate_doesnt_hit_network(estimate_vault):
     # Run with DNS poisoned (127.0.0.1 only) via env isn't trivial —
     # instead assert that the CLI returns quickly (sub-5s is plenty).
     t0 = time.monotonic()
-    cp = _run_cli("synthesize", "--estimate", "--vault", str(estimate_vault))
+    cp = _run_cli("synth", "--estimate", "--vault", str(estimate_vault))
     elapsed = time.monotonic() - t0
     assert cp.returncode == 0
     assert elapsed < 30, f"estimate took {elapsed:.1f}s — too slow"
 
 
 def test_cli_estimate_never_prints_negative_dollar(estimate_vault):
-    cp = _run_cli("synthesize", "--estimate", "--vault", str(estimate_vault))
+    cp = _run_cli("synth", "--estimate", "--vault", str(estimate_vault))
     assert cp.returncode == 0
     assert "$-" not in cp.stdout
 
@@ -423,7 +423,7 @@ def test_cli_estimate_never_prints_negative_dollar(estimate_vault):
 def test_cli_estimate_full_force_not_less_than_incremental(estimate_vault):
     """Invariant: re-synthesizing everything can't cost less than just
     the new bucket. Cheap regression guard against formula bugs."""
-    cp = _run_cli("synthesize", "--estimate", "--vault", str(estimate_vault))
+    cp = _run_cli("synth", "--estimate", "--vault", str(estimate_vault))
     assert cp.returncode == 0
     # Parse the two dollar figures out of stdout.
     incr = re.search(r"Incremental sync:\s+\$([\d.]+)", cp.stdout)
@@ -442,7 +442,7 @@ _PENDING_SOURCES_NOTE = (
 
 def test_cli_estimate_labels_candidates_as_pre_run_state(estimate_vault):
     """Candidates on estimate must read as a snapshot, not a harvest forecast."""
-    cp = _run_cli("synthesize", "--estimate", "--vault", str(estimate_vault))
+    cp = _run_cli("synth", "--estimate", "--vault", str(estimate_vault))
     assert cp.returncode == 0, cp.stderr
     assert "Candidates (pre-run state):" in cp.stdout
     # Bare ``Candidates:`` was the pre-#113 forecast-flavoured header.
@@ -450,14 +450,14 @@ def test_cli_estimate_labels_candidates_as_pre_run_state(estimate_vault):
 
 
 def test_cli_estimate_prints_pending_sources_note(estimate_vault):
-    cp = _run_cli("synthesize", "--estimate", "--vault", str(estimate_vault))
+    cp = _run_cli("synth", "--estimate", "--vault", str(estimate_vault))
     assert cp.returncode == 0, cp.stderr
     assert _PENDING_SOURCES_NOTE in cp.stdout
 
 
 def test_cli_estimate_does_not_print_post_run_summary(estimate_vault):
     """Estimate-only mode must not emit a completed-synth / post-harvest summary."""
-    cp = _run_cli("synthesize", "--estimate", "--vault", str(estimate_vault))
+    cp = _run_cli("synth", "--estimate", "--vault", str(estimate_vault))
     assert cp.returncode == 0, cp.stderr
     # Real synthesize progress / one-liner (never an estimate concern).
     assert "Scanned " not in cp.stdout
@@ -472,7 +472,7 @@ def test_cli_estimate_does_not_print_post_run_summary(estimate_vault):
 
 def test_cli_estimate_corpus_uses_eligible_sources_and_mix(estimate_vault):
     """Corpus must count eligible sources and show the sessions + docs split."""
-    cp = _run_cli("synthesize", "--estimate", "--vault", str(estimate_vault))
+    cp = _run_cli("synth", "--estimate", "--vault", str(estimate_vault))
     assert cp.returncode == 0, cp.stderr
     assert re.search(
         r"Corpus:\s+\d+ eligible sources \(\d+ sessions \+ \d+ docs\)",
@@ -481,7 +481,7 @@ def test_cli_estimate_corpus_uses_eligible_sources_and_mix(estimate_vault):
 
 
 def test_cli_estimate_already_synthesized_uses_of_eligible(estimate_vault):
-    cp = _run_cli("synthesize", "--estimate", "--vault", str(estimate_vault))
+    cp = _run_cli("synth", "--estimate", "--vault", str(estimate_vault))
     assert cp.returncode == 0, cp.stderr
     assert re.search(
         r"Already synthesized:\s+\d+ of \d+ eligible sources",
@@ -565,7 +565,7 @@ def test_cli_estimate_prints_source_pages_current_state(estimate_vault):
         "---\ntitle: D\ntype: source\ntags: [raw-doc]\n---\n\n## Summary\n\nD.\n",
         encoding="utf-8",
     )
-    cp = _run_cli("synthesize", "--estimate", "--vault", str(estimate_vault))
+    cp = _run_cli("synth", "--estimate", "--vault", str(estimate_vault))
     assert cp.returncode == 0, cp.stderr
     assert "Source pages (current state):" in cp.stdout
     assert "2 on disk" in cp.stdout
@@ -573,7 +573,7 @@ def test_cli_estimate_prints_source_pages_current_state(estimate_vault):
 
 def test_cli_estimate_does_not_print_pages_in_wiki_sources(estimate_vault):
     """Pre-#81 wording that framed synthesized counts as wiki/sources pages."""
-    cp = _run_cli("synthesize", "--estimate", "--vault", str(estimate_vault))
+    cp = _run_cli("synth", "--estimate", "--vault", str(estimate_vault))
     assert cp.returncode == 0, cp.stderr
     assert "pages in wiki/sources/" not in cp.stdout
 

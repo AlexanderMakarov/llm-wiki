@@ -1,6 +1,6 @@
 """Migration to unified state v1.4.0 (#23).
 
-``migrate-state`` must not enqueue task types the queue runner cannot
+``migrate state`` must not enqueue task types the queue runner cannot
 dispatch. Legacy ``.llmwiki-pending-prompts/<uuid>.md`` files are resolved
 against the sentinel pages still sitting in ``wiki/sources/``; the backlog
 is drained by exactly one ``synthesize`` task. Vaults migrated with the

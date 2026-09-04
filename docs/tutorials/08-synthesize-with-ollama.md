@@ -94,7 +94,7 @@ New since last run:     71
 Prefix: 3,944 tok  Model: llama3.1:8b  (local, $0)
 ```
 
-### 6. Run synthesize
+### 6. Run synth
 
 ```bash
 llmwiki synth
@@ -151,7 +151,7 @@ tracked under [#315](https://github.com/Pratiyush/llm-wiki/issues/315).
 
 - **[Query your wiki](05-querying-your-wiki.md)** — `/wiki-query`
   synthesizes answers from the wiki you just populated.
-- **[CLI reference — `synthesize`](../reference/cli.md#synthesize--llm-backed-source-page-synthesis)**
+- **[CLI reference — `synth`](../reference/cli.md#synth--synthesize-sources--harvest-candidates)**
   for every flag.
 
 ## See also

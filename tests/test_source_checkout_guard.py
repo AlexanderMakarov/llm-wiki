@@ -28,7 +28,6 @@ GUARDED = (
     ("init", ["init"]),
     ("sync", ["sync"]),
     ("synth", ["synth"]),
-    ("synthesize", ["synthesize"]),
     ("add", ["add", "some-document.md"]),
     ("build", ["build"]),
     ("all", ["all"]),

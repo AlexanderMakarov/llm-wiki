@@ -10,15 +10,26 @@ docs_shell: true
 
 Global flags: `-h` / `--help` on every command, `--version` at the root.
 
+`llmwiki --help` groups commands into six lifecycle sections (same labels and order as the table below). Canonical loop: ingest (`sync` / `add`) → summarise (`synth`) → review candidates → publish (`build`). `synth` does not rebuild the site; run `build` afterwards when Home / Analytics should refresh.
+
 ---
 
 ## Top-level
 
 ```bash
 python3 -m llmwiki --version    # → llmwiki <version>
-python3 -m llmwiki --help       # list every subcommand
+python3 -m llmwiki --help       # lifecycle map of every subcommand
 python3 -m llmwiki              # same as --help
 ```
+
+| Group | Commands |
+|---|---|
+| **Start here** | `init` · `configure-sources` · `install-agent-kit` |
+| **Daily loop (this order)** | `sync` · `add` · `synth` · `candidates` · `build` |
+| **Run the loop for me** | `all` · `watch` · `install-automation` |
+| **Look around** | `lint` · `query` · `trace` · `graph` · `adapters` · `usage` · `version` |
+| **Take things out** | `remove` |
+| **Rare — one-time** | `migrate` · `queue` |
 
 The shorter alias `llmwiki` works too once the package is installed (`pip install llm-notebook` or via Homebrew — see [`deploy/pypi-publishing.md`](../deploy/pypi-publishing.md) / [`deploy/homebrew-setup.md`](../deploy/homebrew-setup.md)).
 
@@ -434,7 +445,7 @@ python3 -m llmwiki synth --path raw/sessions/<file>.md
 python3 -m llmwiki synth                    # real run (sources + candidates)
 ```
 
-`llmwiki synthesize` is a **deprecated** alias: it warns and defaults to `--sources-only` so existing scripts do not suddenly write candidate stubs. Prefer `synth`.
+`llmwiki synth` is the synthesize entry. Known-names prepare runs at the start of each sources pass.
 
 Before the first page is synthesized, a real run announces the batch: `Synthesizing 11 source(s) with ClaudeCLISynthesizer (2 at a time)` — the count is the work queue after up-to-date, ineligible, and already-claimed sources are excluded, so it is what the run will actually do. An empty queue says `Nothing to synthesize — every source is already up to date.` instead. Each result line then carries its position, `  [3/11] synthesized: <project> → <page>`, counting completed **sources** against that total; pages finish in whatever order the backend returns them, so the positions arrive out of order while the last one is always `N/N`.
 
@@ -473,19 +484,7 @@ Every `synthesize` call now produces **topical** tags alongside the deterministi
 
 No extra API round-trip — rides the existing synthesis call, so cost estimates from `--estimate` are unchanged.  If the backend returns no suggested-tags block (dummy backend, malformed output), the page still ships with baseline tags.
 
----
-
-## `synthesize` — deprecated alias for `synth --sources-only`
-
-Kept so existing scripts do not break. Always prints a deprecation warning and defaults to sources-only (does **not** harvest candidates unless you pass `--candidates-only`). Prefer `llmwiki synth`.
-
-```bash
-python3 -m llmwiki synthesize --check
-python3 -m llmwiki synthesize --estimate
-python3 -m llmwiki synthesize --candidates-only   # still works; prefer synth
-```
-
-Same flags as [`synth`](#synth--synthesize-sources--harvest-candidates).
+Removed: `synthesize` (use `synth`; the old name was sources-only by default) and `consolidate-topics` (known-names prepare is part of `synth`).
 
 ---
 
@@ -519,54 +518,53 @@ python3 -m llmwiki queue run --vault /path/to/vault --limit 20
 
 ---
 
-## `migrate-state` — one-time legacy state migration (v1.4.0)
+## `migrate` — list or apply a named one-time vault repair
+
+Rare. One-time vault repairs after an upgrade — not part of the daily loop. List available migrations with `llmwiki migrate` or `llmwiki migrate --list`. Nothing is applied until you choose a name: `llmwiki migrate <name> [flags]`. There is no run-everything default. Prefer `--dry-run` on a named migration to preview writes.
+
+New migrations are registered under `migrate` in `llmwiki/cli.py`, not as new top-level commands. Older docs that said `migrate-X` mean `migrate <name>` (for example `migrate-raw-redaction` → `migrate raw-redaction`).
+
+```bash
+python3 -m llmwiki migrate
+python3 -m llmwiki migrate --list
+python3 -m llmwiki migrate state --state-file /path/to/vault/llmwiki-state.json
+python3 -m llmwiki migrate raw-redaction --vault /path/to/vault --dry-run
+python3 -m llmwiki migrate tools-used --vault /path/to/vault
+python3 -m llmwiki migrate page-kinds --vault /path/to/vault --dry-run
+python3 -m llmwiki migrate topic-kinds --vault /path/to/vault
+python3 -m llmwiki migrate broken-provenance --vault /path/to/vault --dry-run
+```
+
+### `state` — one-time legacy state migration (v1.4.0)
 
 Migrates legacy dotfiles (`.llmwiki-state.json`, `.llmwiki-synth-state.json`, `.llmwiki-queue.json`, `.llmwiki-quarantine.json`, `.llmwiki-pending-prompts/`) into the unified `llmwiki-state.json`.
 
 Implementation lives at `scripts/migrate_state_v1_4_0.py`; the CLI is a thin wrapper.
 
 ```bash
-python3 scripts/migrate_state_v1_4_0.py
+python3 -m llmwiki migrate state
+python3 -m llmwiki migrate state --state-file /path/to/vault/llmwiki-state.json
 python3 scripts/migrate_state_v1_4_0.py --state-file /path/to/vault/llmwiki-state.json
-python3 -m llmwiki migrate-state
-python3 -m llmwiki migrate-state --state-file /path/to/vault/llmwiki-state.json
 ```
-
-### Flags
 
 | Flag | What |
 |---|---|
 | `--state-file PATH` | Explicit target state file (defaults to configured vault path). |
-| `--json` | Print the migration report as JSON (script entry point only). |
 
-The command is idempotent and prints cleanup suggestions for migrated legacy files.
+The command is idempotent and prints cleanup suggestions for migrated legacy files. It also repairs the vault: legacy pending prompts are resolved (not re-queued); dead `synth_request` queue items are purged; one `synthesize` queue task is enqueued when `synth.pending_total > 0` and none is already pending (drain with `llmwiki queue run --vault <path>`); removed synthesis backends (`agent`, `agent-delegate`, `agent_delegate`) print a `WARNING:` to set `claude`, `ollama`, or `dummy`. Report keys: `state_file`, `migrated`, `orphan_cleanup_suggestions`, `warnings`, `pending_prompts_total`, `pending_prompts_unfilled`, `synth_request_items_purged`, `queued_synthesize`.
 
-It also repairs the vault (#23):
+### `raw-redaction` — deterministic username rewrite in raw/
 
-- **Legacy pending prompts are resolved, not re-queued.** Each `.llmwiki-pending-prompts/<uuid>.md` is matched against the pending sentinel pages (`<!-- llmwiki-pending: <uuid> -->`) still sitting in `wiki/sources/`. Prompts whose page has since been filled record nothing.
-- **Dead `synth_request` items are purged.** The queue runner has no handler for that task type, so items left by an earlier migrator would fail forever. Re-running `migrate-state` removes them.
-- **One `synthesize` task is enqueued** when — and only when — `synth.pending_total > 0` after the migration *and* no pending `synthesize` task is already queued, so re-running `migrate-state` never stacks duplicates. It drains the whole backlog; run it with `llmwiki queue run --vault <path>`.
-- **Removed synthesis backends are flagged.** `synthesis.backend` values dropped in v1.4.0 (`agent`, `agent-delegate`, `agent_delegate`) silently fall back to `dummy`, which writes stub pages. The report prints a `WARNING:` telling you to set `claude`, `ollama`, or `dummy`.
-
-Report keys: `state_file`, `migrated`, `orphan_cleanup_suggestions`, `warnings`, `pending_prompts_total`, `pending_prompts_unfilled`, `synth_request_items_purged`, `queued_synthesize`.
-
----
-
-## `migrate-raw-redaction` — deterministic username rewrite in raw/ (#56)
-
-Rewrites already-synced `raw/sessions/*.md` so home-path **and** dash-encoded agent-store segments use the `USER` placeholder (`-Users-<you>-…` → `-Users-USER-…`). In-place string rewrite only — does **not** re-convert from `~/.claude/projects` / Cursor stores, does **not** touch `wiki/`, and does **not** enqueue `synthesize`.
+Rewrites already-synced `raw/sessions/*.md` so home-path **and** dash-encoded agent-store segments use the `USER` placeholder (`-Users-<you>-…` → `-Users-USER-…`). In-place string rewrite only — does **not** re-convert from `~/.claude/projects` / Cursor stores, does **not** touch `wiki/`, and does **not** enqueue synthesis.
 
 Prefer this over `llmwiki sync --force` when redaction completeness in existing `raw/` matters: agent transcripts are usually retained only ~30 days, so older sessions often have no source left to re-convert; force-sync followed by re-synth also burns LLM tokens for no benefit.
 
-Implementation: `scripts/migrate_raw_encoded_username.py`; the CLI is a thin wrapper. After migrating, rebuild so `site/` picks up any display changes: `llmwiki build --vault PATH`.
+Implementation: `scripts/migrate_raw_encoded_username.py`. After migrating, rebuild so `site/` picks up any display changes: `llmwiki build --vault PATH`.
 
 ```bash
-python3 -m llmwiki migrate-raw-redaction --vault /path/to/vault --dry-run
-python3 -m llmwiki migrate-raw-redaction --vault /path/to/vault
-python3 scripts/migrate_raw_encoded_username.py --vault /path/to/vault --dry-run
+python3 -m llmwiki migrate raw-redaction --vault /path/to/vault --dry-run
+python3 -m llmwiki migrate raw-redaction --vault /path/to/vault
 ```
-
-### Flags
 
 | Flag | What |
 |---|---|
@@ -577,21 +575,16 @@ python3 scripts/migrate_raw_encoded_username.py --vault /path/to/vault --dry-run
 
 Idempotent: already-redacted files count as `unchanged`. Private local vaults that never publish `raw/` can skip this and only run `llmwiki build` after upgrading (see [UPGRADING.md](../UPGRADING.md)).
 
----
+### `tools-used` — expand CallMcpTool frontmatter from origin stores
 
-## `migrate-tools-used` — expand CallMcpTool frontmatter from origin stores
+Rewrites `tools_used` and `tool_counts` in already-synced `raw/sessions/*.md` when the originating agent session file still exists. Re-reads records through the session adapter and applies the same `tool_use_recorded_names` expansion `llmwiki sync` uses (`CallMcpTool` → `mcp__{server}__{tool}`). In-place frontmatter update only — does **not** touch `wiki/`, does **not** enqueue synthesis, and **never** invents MCP names when the origin store is gone (TTL / deleted sessions count as `skipped_missing_origin` and stay unchanged).
 
-Rewrites `tools_used` and `tool_counts` in already-synced `raw/sessions/*.md` when the originating agent session file still exists. Re-reads records through the session adapter and applies the same `tool_use_recorded_names` expansion `llmwiki sync` uses (`CallMcpTool` → `mcp__{server}__{tool}`). In-place frontmatter update only — does **not** touch `wiki/`, does **not** enqueue `synthesize`, and **never** invents MCP names when the origin store is gone (TTL / deleted sessions count as `skipped_missing_origin` and stay unchanged).
-
-Implementation: `scripts/migrate_tools_used_mcp.py`; the CLI is a thin wrapper. After migrating, rebuild so analytics and the site pick up the new tool names: `llmwiki build --vault PATH`.
+Implementation: `scripts/migrate_tools_used_mcp.py`. After migrating, rebuild so analytics and the site pick up the new tool names: `llmwiki build --vault PATH`.
 
 ```bash
-python3 -m llmwiki migrate-tools-used --vault /path/to/vault --dry-run
-python3 -m llmwiki migrate-tools-used --vault /path/to/vault
-python3 scripts/migrate_tools_used_mcp.py --vault /path/to/vault --dry-run
+python3 -m llmwiki migrate tools-used --vault /path/to/vault --dry-run
+python3 -m llmwiki migrate tools-used --vault /path/to/vault
 ```
-
-### Flags
 
 | Flag | What |
 |---|---|
@@ -601,9 +594,7 @@ python3 scripts/migrate_tools_used_mcp.py --vault /path/to/vault --dry-run
 
 Origin resolution prefers the vault's `llmwiki-state.json` sync keys (`adapter::home-relative-path`), then falls back to a glob under the adapter session store by `sessionId`. Claude Code JSONL is fully supported; Cursor and other non-JSONL stores work when the state key or glob resolves a readable origin path. Missing origins leave `CallMcpTool` entries intact for `wiki_adoption` body fallback.
 
----
-
-## `migrate-page-kinds` — retype pages off the removed question/comparison kinds (#109)
+### `page-kinds` — retype pages off the removed question/comparison kinds
 
 `llmwiki/schema.py` lists five knowledge kinds — `source`, `entity`, `concept`, `project`, `synthesis`. A hand-written page declaring `type: question` or `type: comparison` is a `frontmatter_validity` **error**, and this migration clears it: each such page is retyped to `concept` and moved into `wiki/concepts/` **keeping its filename**, then `wiki/questions/` and `wiki/comparisons/` lose their `_context.md` and are pruned once empty.
 
@@ -614,12 +605,10 @@ Two safety rules: a page whose filename is already taken in `wiki/concepts/` is 
 Implementation: `llmwiki/migrate_page_kinds.py` — in the package rather than under `scripts/`, so it runs from a pip or Homebrew install with no checkout. After migrating, rebuild so `site/` picks up the new locations: `llmwiki build --vault PATH`.
 
 ```bash
-python3 -m llmwiki migrate-page-kinds --vault /path/to/vault --dry-run
-python3 -m llmwiki migrate-page-kinds --vault /path/to/vault
+python3 -m llmwiki migrate page-kinds --vault /path/to/vault --dry-run
+python3 -m llmwiki migrate page-kinds --vault /path/to/vault
 python3 -m llmwiki lint --vault /path/to/vault --rules frontmatter_validity
 ```
-
-### Flags
 
 | Flag | What |
 |---|---|
@@ -628,9 +617,7 @@ python3 -m llmwiki lint --vault /path/to/vault --rules frontmatter_validity
 
 Idempotent: a second run finds nothing to migrate. On a run that changed something the command reconciles `wiki/index.md` and appends `## [YYYY-MM-DD] migrate | page kinds` to `wiki/log.md`.
 
----
-
-## `migrate-topic-kinds` — stamp entity/concept kinds onto older source Connections (#174)
+### `topic-kinds` — stamp entity/concept kinds onto older source Connections
 
 Older source summaries often list `[[wikilinks]]` under `## Connections` without an `(entity)` or `(concept)` kind. After the one-pass topic shape, those pages look like they still need a full rewrite. This offline migration stamps known kinds from pages already under `wiki/entities/`, `wiki/concepts/`, and the matching `wiki/candidates/` folders — no language model, no network call, and `raw/` is never written.
 
@@ -638,14 +625,12 @@ Only the Connections section is edited. Nested `fact:` lines, Key Claims, Key Qu
 
 A successful non-dry-run that stamps at least one page writes `.llmwiki-topic-kinds-stamped.json` at the vault root (vault-local machine state — not for git) so you can later force-resynthesize exactly those sources if you want fact lines. The same apply (and a re-run over already-clear pages) upserts synth state for every raw session/doc whose wiki target is rewrite-clear — including when many raw files share one synth filename — so plain `llmwiki synth` / `--estimate` will not re-bill them. The report always states that zero facts were derived.
 
-Implementation: `llmwiki/migrate_topic_kinds.py` — in the package rather than under `scripts/`, so it runs from a pip or Homebrew install with no checkout. Stamping clears the rewrite-needed flag when at least one resolvable kind lands; it does not invent facts. Use `llmwiki synth --force --path …` on stamped pages if you want fact lines afterwards.
+Implementation: `llmwiki/migrate_topic_kinds.py`. Stamping clears the rewrite-needed flag when at least one resolvable kind lands; it does not invent facts. Use `llmwiki synth --force --path …` on stamped pages if you want fact lines afterwards.
 
 ```bash
-python3 -m llmwiki migrate-topic-kinds --vault /path/to/vault --dry-run
-python3 -m llmwiki migrate-topic-kinds --vault /path/to/vault
+python3 -m llmwiki migrate topic-kinds --vault /path/to/vault --dry-run
+python3 -m llmwiki migrate topic-kinds --vault /path/to/vault
 ```
-
-### Flags
 
 | Flag | What |
 |---|---|
@@ -654,9 +639,7 @@ python3 -m llmwiki migrate-topic-kinds --vault /path/to/vault
 
 Idempotent: a second run finds nothing to stamp and prints `nothing to migrate: no connection lines need topic kinds`. Preview with `--dry-run` before applying.
 
----
-
-## `migrate-broken-provenance` — remap or clear hops to missing raw sessions (#180)
+### `broken-provenance` — remap or clear hops to missing raw sessions
 
 After a Cursor Agent CLI re-sync that used the filesystem stem `store` as `sessionId`, force-convert can leave wiki pages pointing at deleted `raw/sessions/…` paths while newer raw files exist under the same project slug (`cursor-<hash>`). This offline migration walks wiki pages that carry `source_file:` / `sources:` provenance and, when a hop targets a missing `raw/sessions/` file:
 
@@ -666,14 +649,12 @@ After a Cursor Agent CLI re-sync that used the filesystem stem `store` as `sessi
 4. Remaps only among same-day **interactive** raw files: explicit `is_headless: false`, or legacy unmarked (no `is_headless` field — same eligibility rule as synth). When several remain, remaps to the uniquely closest HH-MM in that shortlist.
 5. Otherwise clears the broken `source_file` (same-day headless-only pools, ambiguous closest-time ties, or no same-day interactive candidate) and drops matching `sources:` list aliases. Wiki pages themselves are never deleted. Never remaps to a row that is explicitly `is_headless: true`.
 
-Implementation: `llmwiki/migrate_broken_provenance.py` — in the package rather than under `scripts/`, so it runs from a pip or Homebrew install with no checkout. Preview with `--dry-run`. Prefer a Cursor Agent CLI re-sync first so raw filenames carry real chat dates and `is_headless` is stamped; unmarked legacy same-day files remain remap-eligible until then.
+Implementation: `llmwiki/migrate_broken_provenance.py`. Preview with `--dry-run`. Prefer a Cursor Agent CLI re-sync first so raw filenames carry real chat dates and `is_headless` is stamped; unmarked legacy same-day files remain remap-eligible until then.
 
 ```bash
-python3 -m llmwiki migrate-broken-provenance --vault /path/to/vault --dry-run
-python3 -m llmwiki migrate-broken-provenance --vault /path/to/vault
+python3 -m llmwiki migrate broken-provenance --vault /path/to/vault --dry-run
+python3 -m llmwiki migrate broken-provenance --vault /path/to/vault
 ```
-
-### Flags
 
 | Flag | What |
 |---|---|
@@ -708,16 +689,6 @@ python3 -m llmwiki install-agent-kit --dest /path/to/agent-dir
 | `--dry-run` | Report what would be written; write nothing. |
 
 The command prints every path written, every `.bak` it created, and a count of identical files left untouched. Exit `0` on success, `1` if a file could not be read or written.
-
----
-
-## `consolidate-topics` — retired; synthesis prepares known names (#147)
-
-Retired. The subcommand name stays registered so typing it still resolves, but every invocation exits **2** and prints that synthesis now prepares the known-names list. It does not emit a prompt, write `.llmwiki-topics.json`, or treat `--complete` as a lifecycle step (the flag is accepted and ignored for old scripts). Prefer `llmwiki synth` — the known-names prepare job at the start of each run is what keeps spellings unique.
-
-```bash
-python3 -m llmwiki consolidate-topics
-```
 
 ---
 
@@ -851,7 +822,7 @@ Exit codes:
 
 Polls adapter session stores on an interval and runs maintain when a session looks finished. Uses per-adapter turn-complete heuristics (Claude `stop_reason`, Cursor last role, Codex events). Mid-tool / permission loops stay deferred until the adapter reports safe. Adapters without a finished-signal still trigger after a 2s mtime settle — not a multi-minute quiesce.
 
-Single-flight: only one maintain iteration at a time (`sync` → `synthesize` → `build` by default). Changes that arrive during a run set a dirty flag and retry after it finishes. Sync may time out (~180s); synthesize and build have no timeout.
+Single-flight: only one maintain iteration at a time (`sync` → `synth` → `build` by default). Changes that arrive during a run set a dirty flag and retry after it finishes. Sync may time out (~180s); synth and build have no timeout.
 
 ```bash
 python3 -m llmwiki watch

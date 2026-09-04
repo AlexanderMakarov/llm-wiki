@@ -58,7 +58,7 @@ llmwiki all --lint-fail errors         # exit 2 when lint reports an error
 
 ## CLI commands you'll use most
 
-`llmwiki --help` lists all 25 subcommands, including the `migrate-*` one-offs and the maintenance helpers. These are the ones that carry the daily loop:
+`llmwiki --help` lists every subcommand in six lifecycle groups (Start here → Daily loop → Run the loop for me → Look around → Take things out → Rare). One-time vault repairs live under `migrate <name>`, not top-level `migrate-*`. These are the ones that carry the daily loop:
 
 | Command | Purpose |
 |---|---|
@@ -75,7 +75,7 @@ llmwiki all --lint-fail errors         # exit 2 when lint reports an error
 | `add` | Add a URL, file, or folder to the wiki |
 | `watch` | Near-real-time sync → synth → build when a session finishes |
 | `adapters` | List every adapter + its status |
-| `synthesize` | *(deprecated)* alias for `synth --sources-only` |
+| `migrate` | List or apply a named one-time vault repair (`migrate --list`) |
 | `version` | Print version |
 
 ## Knowledge graph
@@ -123,11 +123,10 @@ llmwiki candidates discard --slug X --reason "hallucinated"
 
 ```bash
 llmwiki synth                          # sources + candidates
-llmwiki synth --sources-only           # legacy: sources only
+llmwiki synth --sources-only           # sources only (legacy synthesize default)
 llmwiki synth --check                  # probe backend (exit 0 if ok)
 llmwiki synth --estimate               # cost (eligible sources) + Candidates (pre-run state)
 llmwiki synth --force                  # re-synth everything, then harvest
-llmwiki synthesize                     # deprecated → sources-only + warning
 ```
 
 Auto-tags pages (up to 5 AI tags per page, near-dup rejection, stop-word filter).
@@ -181,7 +180,7 @@ llmwiki sync --adapter obsidian
 |---|---|---|
 | `--since YYYY-MM-DD` | `sync` | One-run lookback (overrides `filters.since` / `adapters.*.since`) |
 | `--project <slug>` | `sync` | Restrict to one project |
-| `--force` | `sync`, `synthesize` | Ignore state file, reconvert everything |
+| `--force` | `sync`, `synth` | Ignore state file, reconvert / re-synth everything |
 | `--force-resync` | `sync` | Override the newer-schema/corrupt-state guard (#29); implies `--force`, may duplicate `raw/` |
 | `--fail-on-errors` | `lint` | Non-zero exit on error-severity issues |
 | `--fail-on-warnings` | `lint` | Non-zero exit on warning-severity issues; pass both flags to gate on either |
@@ -190,7 +189,7 @@ llmwiki sync --adapter obsidian
 | `--lint-fail {never,errors,warnings}` | `all`, `install-automation` | Which quality findings end the run with exit `2` (default: `never`) |
 | `--job {ingest,maintain}` | `install-automation` | What the daily job does — collect only, or also summarise |
 | `--schedule "<cron>"` | `install-automation` | When the daily job runs, e.g. `"0 8 * * 1-5"` |
-| `--vault <path>` | `sync`, `build`, `synthesize`, `lint`, `add`, `queue`, `all` | Operate on an external vault (also sets the active state file) |
+| `--vault <path>` | `sync`, `build`, `synth`, `lint`, `add`, `queue`, `all`, `migrate` | Operate on an external vault (also sets the active state file) |
 | `--local-root <path>` | `build` | Value shown in place of a session's stored home directory (default: this machine's home) |
 | `--engine graphify` | `graph` | AI-powered knowledge graph |
 | `--status` | `sync` | Show last sync + per-adapter counters |

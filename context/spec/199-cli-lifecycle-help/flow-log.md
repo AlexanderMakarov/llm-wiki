@@ -42,3 +42,9 @@
 - Commit `context/spec/199-cli-lifecycle-help/` on `feat/112-cli-lifecycle-help`.
 - Next: implement.
 
+## implement
+
+- Slices 1–5 complete in worktree: migrate wrapper; drop synthesize/consolidate-topics; lifecycle help + tests; docs/schema; acceptance tests (`tests/test_112_acceptance.py`, `tests/test_cli_lifecycle_help.py`).
+- Static gate: `ruff check` clean; full `pytest tests/ -q` green.
+- Next: verify / user smoke confirm (no local review until confirmed).
+
