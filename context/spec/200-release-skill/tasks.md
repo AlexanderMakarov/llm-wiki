@@ -24,16 +24,18 @@ Hired specialists: none required — **general-purpose** for implementation; **t
   - [x] Update `docs/maintainers/README.md`, `docs/reference/slash-commands.md` (`/release` blurb), and `docs/reference/cli.md` contributor-only note if needed so they name the skill. **Required** maintainer pointer to the skill. **[Agent: general-purpose]**
   - [x] CHANGELOG.md Unreleased: Added skill + wrappers; Changed process-doc alignment. **[Agent: general-purpose]**
 
-- [ ] **Slice 3: Packaging / docs-currency tests**
+- [x] **Slice 3: Packaging / docs-currency tests**
 
   > End state: CI guards skill existence and no stale `push … master` happy path.
 
-  - [ ] Add tests: `.claude/skills/release/SKILL.md` exists with `name: release`; `RELEASE_PROCESS.md` (and/or skill) mentions `main` and does not instruct `git push origin master` as the happy path; no “always `--prerelease` until 1.0” as the default path. Keep slash parity (`release` in governance lists — already present). **[Agent: testing-expert]**
-  - [ ] Run new tests + `tests/test_slash_cli_parity.py` + `tests/test_reference_coverage.py` + `tests/test_skill_installer.py::test_real_skills_have_SKILL_md`; `ruff check` on touched Python. **[Agent: testing-expert]**
+  - [x] Add tests: `.claude/skills/release/SKILL.md` exists with `name: release`; `RELEASE_PROCESS.md` (and/or skill) mentions `main` and does not instruct `git push origin master` as the happy path; no “always `--prerelease` until 1.0” as the default path. Keep slash parity (`release` in governance lists — already present). **[Agent: testing-expert]**
+  - [x] Run new tests + `tests/test_slash_cli_parity.py` + `tests/test_reference_coverage.py` + `tests/test_skill_installer.py::test_real_skills_have_SKILL_md`; `ruff check` on touched Python. **[Agent: testing-expert]**
 
-- [ ] **Slice 4: Feature Testing & Regression**
+- [x] **Slice 4: Feature Testing & Regression**
 
   > Verifies the whole feature against functional-spec.md after slices 1–3.
 
-  - [ ] Read functional-spec.md acceptance criteria. Add or extend `@spec: 200-release-skill` acceptance coverage for FR1–FR5 (skill scripts cut; wrappers; docs match reality; pitfalls named; no implement-feature line required in skill). RED-then-green where practical. **[Agent: testing-expert]**
-  - [ ] Full `python3 -m pytest tests/ -q` on the worktree (aside root `wiki/` if present); fix failures. **[Agent: testing-expert]**
+  - [x] Read functional-spec.md acceptance criteria. Add or extend `@spec: 200-release-skill` acceptance coverage for FR1–FR5 (skill scripts cut; wrappers; docs match reality; pitfalls named; no implement-feature line required in skill). RED-then-green where practical. **[Agent: testing-expert]**
+  - [x] Full `python3 -m pytest tests/ -q` on the worktree (aside root `wiki/` if present); fix failures. **[Agent: testing-expert]**
+
+<!-- flow-log: 2026-09-04 testing-expert — Slices 3+4: wrote tests/test_209_release_skill.py (34 tests, @spec: 200-release-skill, @layer: integration); all S3 content-smoke assertions pass (skill exists, name: release frontmatter, main branch, no push origin master, no always-prerelease, no implement-feature in body); FR1-FR5 AC coverage added; companion suites green (slash parity 7, reference coverage 9, skill installer 1); full suite 4838 passed 48 skipped 0 failed; ruff clean. -->
