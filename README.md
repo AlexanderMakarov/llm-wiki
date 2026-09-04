@@ -6,7 +6,7 @@ Your coding-agent sessions, compiled into a local wiki you can search, graph, an
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/)
-[![Version](https://img.shields.io/badge/version-v2.0.0-10B981.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-v2.1.0-10B981.svg)](CHANGELOG.md)
 [![CI](https://github.com/AlexanderMakarov/llm-wiki/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/AlexanderMakarov/llm-wiki/actions/workflows/ci.yml)
 [![Link check](https://github.com/AlexanderMakarov/llm-wiki/actions/workflows/link-check.yml/badge.svg?branch=main)](https://github.com/AlexanderMakarov/llm-wiki/actions/workflows/link-check.yml)
 [![Wiki checks](https://github.com/AlexanderMakarov/llm-wiki/actions/workflows/wiki-checks.yml/badge.svg?branch=main)](https://github.com/AlexanderMakarov/llm-wiki/actions/workflows/wiki-checks.yml)

@@ -310,7 +310,7 @@ Every adapter must ship with:
 
 ## Releases
 
-Current version is **1.5.0** — see `CHANGELOG.md` for what changed when.
+Current version is **2.1.0** — see `CHANGELOG.md` for what changed when.
 
 Release flow (Phase 6 of the framework):
 

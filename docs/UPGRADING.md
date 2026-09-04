@@ -10,7 +10,7 @@ How to upgrade between `llmwiki` releases.  Most releases are drop-in (`pip inst
 
 The canonical per-release detail is [CHANGELOG.md](https://github.com/Pratiyush/llm-wiki/blob/master/CHANGELOG.md) — this guide focuses on "what might break".
 
-## Unreleased — CLI help as a lifecycle map (#112)
+## 2.1.0 — CLI help as a lifecycle map (#112)
 
 `llmwiki --help` is grouped into six lifecycle sections. Command renames that affect scripts and muscle memory:
 
@@ -27,7 +27,7 @@ The canonical per-release detail is [CHANGELOG.md](https://github.com/Pratiyush/
 
 List migrations with `llmwiki migrate` or `llmwiki migrate --list`. Nothing runs until you pick a name. Prefer `--dry-run` first. `/wiki-synthesize` still works as a slash alias and runs `synth --sources-only`.
 
-## Unreleased — durable sync lookback (#192)
+## 2.1.0 — durable sync lookback (#192)
 
 Optional shared `filters.since` and per-adapter `adapters.<name>.since` (`YYYY-MM-DD`, or `"all"` to skip the date gate for one source). Unset still means unlimited history.
 
@@ -38,7 +38,7 @@ Optional shared `filters.since` and per-adapter `adapters.<name>.since` (`YYYY-M
 - **`llmwiki adapters` enabled column is yes/no** (will the next bare sync include this source). The old `active` column and `auto` / `explicit` / `off` labels are gone.
 Keys and inheritance: [configuration-reference.md — Sync lookback](configuration-reference.md#sync-lookback).
 
-## Unreleased — MCP tool consolidation (#196)
+## 2.1.0 — MCP tool consolidation (#196)
 
 The stdio MCP server registers **six** tools: `wiki_search`, `wiki_read_page`, `wiki_health`, `wiki_sync`, `wiki_export`, `wiki_add`. There are no alias stubs for retired names.
 

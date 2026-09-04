@@ -10,6 +10,18 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Added
 
+### Changed
+
+### Fixed
+
+### Removed
+
+## [2.1.0] — 2026-09-04
+
+Theme: Cursor IDE ingest + sync lookback, lifecycle CLI help / migrate wrapper, MCP six-tool surface.
+
+### Added
+
 - **Durable sync lookback (`filters.since` / `adapters.*.since`, #192)** — optional absolute `YYYY-MM-DD` shared floor plus per-adapter override (`"all"` = no date gate for that source); unset = unlimited. CLI `--since` still overrides for one run. Early prune before load; lookback-only skips are not stamped in `sync.files`; successful sync GCs that coding-agent adapter’s `sync.files` older than the *durable* lookback (CLI `--since` does not GC; notes intake is not GC’d). `configure-sources` asks shared start date first (Enter = today−30), then per source prints Sessions · Earliest (local calendar day) · In last 30 days before Enable / path / start date (Enter = use shared). Sync prints a hint to change dates. Cursor IDE is bare-sync eligible when Enabled (`ingest_ready` true); `llmwiki adapters` shows **enabled yes/no** only (no separate active column).
   - *Release note:* Set `filters.since` (or per-adapter `since`) so bare sync does not ingest years of history; Enable sources in `configure-sources` for bare sync (#192).
 
