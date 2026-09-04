@@ -230,3 +230,5 @@ The `Processed:` detail may carry a short producer breakdown instead of a bare c
 After upgrading to a new `llmwiki` release (e.g., via `pip install -U llm-notebook` or `brew upgrade llmwiki`), **read `docs/UPGRADING.md` before running the first `sync` or `build`**. The guide documents schema migrations, config changes, and behaviour flips that might affect your wiki. Per-release detail is in `CHANGELOG.md`.
 
 Most releases are drop-in upgrades. When migrations are needed, the upgrade guide lists them between your old and new version — apply any migrations listed before syncing, or your next run may fail or silently produce incorrect output.
+
+Vault migrations are named subcommands of `llmwiki migrate`, never new top-level CLI commands. When adding one, register it under `migrate` in `llmwiki/cli.py`. List with `llmwiki migrate` or `llmwiki migrate --list`; apply with `llmwiki migrate <name>`.

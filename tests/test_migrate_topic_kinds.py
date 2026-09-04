@@ -441,7 +441,7 @@ def test_cli_runs_the_migration(tmp_path: Path, capsys) -> None:
     _entity(wiki, "OpenAI")
     source = _source(wiki, "demo", "- [[OpenAI]] — vendor\n")
     args = build_parser().parse_args(
-        ["migrate-topic-kinds", "--vault", str(tmp_path)]
+        ["migrate", "topic-kinds", "--vault", str(tmp_path)]
     )
 
     assert args.func(args) == 0
@@ -456,7 +456,7 @@ def test_cli_dry_run_writes_nothing(tmp_path: Path, capsys) -> None:
     _source(wiki, "demo", "- [[OpenAI]] — vendor\n")
     before = _snapshot(tmp_path)
     args = build_parser().parse_args(
-        ["migrate-topic-kinds", "--vault", str(tmp_path), "--dry-run"]
+        ["migrate", "topic-kinds", "--vault", str(tmp_path), "--dry-run"]
     )
 
     assert args.func(args) == 0
@@ -494,4 +494,4 @@ def test_write_failure_omits_page_from_stamped_list(
 
 def test_cli_requires_a_vault() -> None:
     with pytest.raises(SystemExit):
-        build_parser().parse_args(["migrate-topic-kinds"])
+        build_parser().parse_args(["migrate", "topic-kinds"])

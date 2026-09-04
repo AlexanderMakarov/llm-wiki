@@ -318,14 +318,14 @@ def test_cost_estimate_breakdown_sums_to_total():
 def test_synthesize_parser_accepts_estimate_flag():
 
     parser = build_parser()
-    args = parser.parse_args(["synthesize", "--estimate"])
+    args = parser.parse_args(["synth", "--estimate"])
     assert args.estimate is True
 
 
 def test_synthesize_parser_estimate_defaults_false():
 
     parser = build_parser()
-    args = parser.parse_args(["synthesize"])
+    args = parser.parse_args(["synth"])
     assert args.estimate is False
 
 
@@ -375,7 +375,7 @@ def test_estimate_command_emits_total(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(pipe, "_discover_raw_sessions", _fake_discover)
     monkeypatch.setattr(pipe, "_load_state", lambda _p=None: {})
 
-    args = cli_mod.build_parser().parse_args(["synthesize", "--estimate", "--vault", str(tmp_path)])
+    args = cli_mod.build_parser().parse_args(["synth", "--estimate", "--vault", str(tmp_path)])
     rc = cli_mod._synthesize_estimate(args)
     out = capsys.readouterr().out
     assert rc == 0
@@ -397,7 +397,7 @@ def test_estimate_command_no_new_sessions(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(pipe, "_discover_raw_sessions", lambda raw_dir=None: [])
     monkeypatch.setattr(pipe, "_load_state", lambda _p=None: {})
 
-    args = cli_mod.build_parser().parse_args(["synthesize", "--estimate", "--vault", str(tmp_path)])
+    args = cli_mod.build_parser().parse_args(["synth", "--estimate", "--vault", str(tmp_path)])
     rc = cli_mod._synthesize_estimate(args)
     out = capsys.readouterr().out
     assert rc == 0
@@ -416,7 +416,7 @@ def test_estimate_persists_unsynth_backlog_for_vault(tmp_path, capsys, monkeypat
     (vault / "raw" / "docs" / "invoice.md").write_text("# Invoice\n\nbody\n", encoding="utf-8")
     (vault / "llmwiki-state.json").write_text("{}", encoding="utf-8")
 
-    args = cli_mod.build_parser().parse_args(["synthesize", "--estimate", "--vault", str(vault)])
+    args = cli_mod.build_parser().parse_args(["synth", "--estimate", "--vault", str(vault)])
     rc = cli_mod._synthesize_estimate(args)
     assert rc == 0
     _ = capsys.readouterr()

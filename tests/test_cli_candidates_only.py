@@ -61,7 +61,7 @@ def _args(**overrides) -> argparse.Namespace:
 
 def test_min_refs_defaults_to_three() -> None:
     """Agrees with the lint rule defining a missing entity as 3+ mentions."""
-    args = build_parser().parse_args(["synthesize", "--candidates-only"])
+    args = build_parser().parse_args(["synth", "--candidates-only"])
 
     assert args.min_refs == 3
     assert args.candidates_only is True

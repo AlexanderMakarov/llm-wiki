@@ -28,7 +28,7 @@ Everything in this table is redacted at the **converter** layer — the moment e
 
 All patterns live in `examples/sessions_config.json` under `redaction.extra_patterns`. You can add your own (company domain, customer names, internal hostnames, etc.).
 
-**Already-synced `raw/`:** new syncs apply encoded-segment redaction automatically. Files written before that change keep whatever was on disk (`raw/` is immutable during normal sync). To rewrite them without re-converting from agent stores (transcripts are often gone after ~30 days) and without re-synthesizing wiki pages, run `llmwiki migrate-raw-redaction --vault PATH` — see [UPGRADING.md](UPGRADING.md) and [CLI reference](reference/cli.md#migrate-raw-redaction--deterministic-username-rewrite-in-raw-56).
+**Already-synced `raw/`:** new syncs apply encoded-segment redaction automatically. Files written before that change keep whatever was on disk (`raw/` is immutable during normal sync). To rewrite them without re-converting from agent stores (transcripts are often gone after ~30 days) and without re-synthesizing wiki pages, run `llmwiki migrate raw-redaction --vault PATH` — see [UPGRADING.md](UPGRADING.md) and [CLI reference](reference/cli.md#raw-redaction--deterministic-username-rewrite-in-raw).
 
 ## What is NOT redacted by default
 

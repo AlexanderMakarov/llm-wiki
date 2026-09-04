@@ -298,16 +298,12 @@ def test_cli_rejects_a_non_integer_concurrency(
     assert "--concurrency" in capsys.readouterr().err
 
 
-@pytest.mark.parametrize("command", ["synth", "synthesize"])
 def test_help_names_the_default_and_the_range(
-    command: str, capsys: pytest.CaptureFixture[str]
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """The operator can find the setting without reading source.
-
-    The deprecated alias shares the flag, so both parsers are checked.
-    """
+    """The operator can find the setting without reading source."""
     with pytest.raises(SystemExit):
-        build_parser().parse_args([command, "--help"])
+        build_parser().parse_args(["synth", "--help"])
 
     out = capsys.readouterr().out
     assert "--concurrency" in out

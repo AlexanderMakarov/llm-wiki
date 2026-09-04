@@ -10,6 +10,23 @@ How to upgrade between `llmwiki` releases.  Most releases are drop-in (`pip inst
 
 The canonical per-release detail is [CHANGELOG.md](https://github.com/Pratiyush/llm-wiki/blob/master/CHANGELOG.md) — this guide focuses on "what might break".
 
+## Unreleased — CLI help as a lifecycle map (#112)
+
+`llmwiki --help` is grouped into six lifecycle sections. Command renames that affect scripts and muscle memory:
+
+| Old name | Replacement |
+|---|---|
+| `synthesize` | `synth` (old default was sources-only; today's `synth` does sources + harvest unless you pass `--sources-only`) |
+| `consolidate-topics` | gone — `synth` prepares known names at the start of each sources pass |
+| `migrate-state` | `migrate state` |
+| `migrate-raw-redaction` | `migrate raw-redaction` |
+| `migrate-tools-used` | `migrate tools-used` |
+| `migrate-page-kinds` | `migrate page-kinds` |
+| `migrate-topic-kinds` | `migrate topic-kinds` |
+| `migrate-broken-provenance` | `migrate broken-provenance` |
+
+List migrations with `llmwiki migrate` or `llmwiki migrate --list`. Nothing runs until you pick a name. Prefer `--dry-run` first. `/wiki-synthesize` still works as a slash alias and runs `synth --sources-only`.
+
 ## Unreleased — durable sync lookback (#192)
 
 Optional shared `filters.since` and per-adapter `adapters.<name>.since` (`YYYY-MM-DD`, or `"all"` to skip the date gate for one source). Unset still means unlimited history.
@@ -44,9 +61,9 @@ Full parameter tables: [mcp.md](reference/mcp.md). Historical telemetry rows kee
 3. **Stop using `llmwiki serve`** — open `<vault>/site/index.html`. Candidate decisions on `/candidates.html` execute via `llmwiki candidates apply --vault <vault> --actions -` (#109).
 4. **Update MCP clients** — replace `wiki_entity_search` with `wiki_search`; parse `wiki_lint` as `llmwiki lint --json` (#102, #150).
 5. **Run migrations when applicable:**
-   - `llmwiki migrate-page-kinds --vault <vault>` if you have `wiki/questions/` or `wiki/comparisons/`
-   - `llmwiki migrate-topic-kinds --vault <vault>` for #147 catch-up on older source pages (#174)
-   - `llmwiki migrate-broken-provenance --vault <vault>` after Cursor CLI re-sync left broken `source_file` hops (#180)
+   - `llmwiki migrate page-kinds --vault <vault>` if you have `wiki/questions/` or `wiki/comparisons/`
+   - `llmwiki migrate topic-kinds --vault <vault>` for #147 catch-up on older source pages (#174)
+   - `llmwiki migrate broken-provenance --vault <vault>` after Cursor CLI re-sync left broken `source_file` hops (#180)
 6. **Re-sync Cursor Agent CLI** (`llmwiki sync --force` or targeted re-convert) so `is_headless`, `sessionId`, and timestamps are correct (#180).
 7. **Rebuild the site** — `llmwiki build --vault <vault>` refreshes vendored assets, topic pages, pipeline widgets, and provenance links.
 
@@ -57,9 +74,9 @@ Full parameter tables: [mcp.md](reference/mcp.md). Historical telemetry rows kee
 - **Lint default on `all`** is `--lint-fail never` (report only) (#156).
 - **MCP `wiki_lint` JSON shape** matches CLI (**BREAKING**); filter `issues` by `rule`; old keys `orphans` / `broken_links` are gone (#150).
 - **`wiki_entity_search` removed** — `wiki_search(term, kind=…, format=…)` (#102).
-- **`llmwiki consolidate-topics` exits 2** (#147).
+- **`llmwiki consolidate-topics` is gone** (#147 / #112) — known-names prepare is part of `synth`.
 - **`synth --allow-unclassified` removed** (#102).
-- **`type: question` / `type: comparison` invalid** — `migrate-page-kinds` (#109).
+- **`type: question` / `type: comparison` invalid** — `migrate page-kinds` (#109).
 - **`entity_consistency` lint rule removed**; unknown `--rules` names fail (#102).
 
 ### Session sources and adapters
@@ -71,8 +88,8 @@ Full parameter tables: [mcp.md](reference/mcp.md). Historical telemetry rows kee
 
 ### Synthesis and candidates
 
-- Prefer **`llmwiki synth`** over deprecated `synthesize` (sources + harvest by default) (#90).
-- **Next `synth` rewrites source pages** lacking parseable topic bullets once (#147); optional `migrate-topic-kinds` for cheap catch-up (#174).
+- Prefer **`llmwiki synth`** — `synthesize` is removed (#112); use `--sources-only` when you want the old sources-only default (#90).
+- **Next `synth` rewrites source pages** lacking parseable topic bullets once (#147); optional `migrate topic-kinds` for cheap catch-up (#174).
 - **Promote needs no LLM** — empty Key Facts copy from source `fact:` bullets; `rewrite-key-facts` still needs a backend (#147, #103).
 - **`wiki/archive/` is cold storage** — discarded candidates stay resolved in harvest; first lint after upgrade may report more broken links (#140).
 - **`synth --estimate` Already synthesized** follows synth state, not pages-on-disk alone (#163).
@@ -117,13 +134,13 @@ llmwiki build --vault /path/to/vault
 llmwiki build
 ```
 
-`build` also one-shot backfills `synth.pipeline` in `llmwiki-state.json` / `llmwiki-state.js` when that key is missing (state last written by v1.4.0). That fills the Home **State** widget without a separate `synthesize --estimate`. The refresh is local-only (no API / no tokens) and runs only on a shape mismatch — later builds skip it once the snapshot exists. Sync / add / estimate still refresh the snapshot when content changes.
+`build` also one-shot backfills `synth.pipeline` in `llmwiki-state.json` / `llmwiki-state.js` when that key is missing (state last written by v1.4.0). That fills the Home **State** widget without a separate `synth --estimate`. The refresh is local-only (no API / no tokens) and runs only on a shape mismatch — later builds skip it once the snapshot exists. Sync / add / estimate still refresh the snapshot when content changes.
 
 **Optional:** expand `CallMcpTool` entries in already-synced `raw/sessions/*.md` when the originating agent session file still exists:
 
 ```bash
-llmwiki migrate-tools-used --vault /path/to/vault --dry-run
-llmwiki migrate-tools-used --vault /path/to/vault
+llmwiki migrate tools-used --vault /path/to/vault --dry-run
+llmwiki migrate tools-used --vault /path/to/vault
 llmwiki build --vault /path/to/vault
 ```
 
@@ -167,22 +184,22 @@ When the user intends to **publish or share `raw/`** (or otherwise wants the `US
 
 ```bash
 # preview
-llmwiki migrate-raw-redaction --vault /path/to/their/vault --dry-run
+llmwiki migrate raw-redaction --vault /path/to/their/vault --dry-run
 # or: python3 scripts/migrate_raw_encoded_username.py --vault … --dry-run
 
-llmwiki migrate-raw-redaction --vault /path/to/their/vault
+llmwiki migrate raw-redaction --vault /path/to/their/vault
 llmwiki build --vault /path/to/their/vault
 ```
 
 **Do not** use `llmwiki sync --force` / re-convert from `~/.claude/projects/` or Cursor session folders for this:
 
 - Agent stores usually retain transcripts only ~**30 days** (Claude Code retention; Cursor similar). Older sessions in `raw/` often have **no** source file left to re-convert from — force-sync silently skips or fails those rows while still looking like “migration work”.
-- Force-sync is the wrong tool anyway: agents may follow it with `synthesize` / queue digest and **burn LLM tokens** rewriting wiki pages that did not need to change. The path-string rewrite above is enough.
+- Force-sync is the wrong tool anyway: agents may follow it with `synth` / queue digest and **burn LLM tokens** rewriting wiki pages that did not need to change. The path-string rewrite above is enough.
 
 **If you skip the raw migrator** (normal for private vaults):
 
 - Day-to-day browsing and resume: **unaffected** after rebuild.
-- Old `raw/` rows that already contain `-Users-<real-username>-…` next to a redacted `/Users/USER/…` prefix keep that incomplete masking until `migrate-raw-redaction` (or a future sync of still-present sources). That is a redaction-contract gap for publish/share workflows, not data escaping a private vault.
+- Old `raw/` rows that already contain `-Users-<real-username>-…` next to a redacted `/Users/USER/…` prefix keep that incomplete masking until `migrate raw-redaction` (or a future sync of still-present sources). That is a redaction-contract gap for publish/share workflows, not data escaping a private vault.
 
 ### Config note
 
@@ -225,7 +242,7 @@ Two things to do explicitly, because neither is obvious:
 ```bash
 python3 scripts/migrate_state_v1_4_0.py --state-file /path/to/vault/llmwiki-state.json
 # or:
-llmwiki migrate-state --state-file /path/to/vault/llmwiki-state.json
+llmwiki migrate state --state-file /path/to/vault/llmwiki-state.json
 # optional cleanup after verifying:
 # rm -rf /path/to/vault/.llmwiki-state.json ...
 ```
@@ -265,12 +282,12 @@ PYTHONPATH=/path/to/llm-wiki python3 scripts/migrate_state_v1_4_0.py \
 
 Legacy dotfiles (`.llmwiki-state.json`, `.llmwiki-synth-state.json`, …) are merged in; verify `sync.files` / `synth.files` counts before deleting them.
 
-### Re-run `migrate-state` to repair dead `synth_request` items (#23)
+### Re-run `migrate state` to repair dead `synth_request` items (#23)
 
 Vaults migrated with the first v1.4.0 migrator carry queue items with `task_type: "synth_request"`. The queue runner has no handler for that type, so `llmwiki queue run` marks every one of them `status: error`. Re-run the migration — it purges them, and enqueues a single `synthesize` task if (and only if) real backlog remains:
 
 ```bash
-llmwiki migrate-state --state-file /path/to/vault/llmwiki-state.json
+llmwiki migrate state --state-file /path/to/vault/llmwiki-state.json
 llmwiki queue run --vault /path/to/vault
 ```
 
@@ -278,7 +295,7 @@ The migration resolves each legacy `.llmwiki-pending-prompts/<uuid>.md` against 
 
 ### Check `synthesis.backend` before syncing (#23)
 
-`agent`, `agent-delegate`, and `agent_delegate` were **removed** in v1.4.0. `resolve_backend()` reads them as a typo and silently falls back to `dummy`, which writes stub pages (`Auto-synthesized from session`) into `wiki/sources/`. `migrate-state` prints a `WARNING:` when your `config.json` still names one — set `synthesis.backend` to `claude`, `ollama`, or `dummy`, then re-synthesize:
+`agent`, `agent-delegate`, and `agent_delegate` were **removed** in v1.4.0. `resolve_backend()` reads them as a typo and silently falls back to `dummy`, which writes stub pages (`Auto-synthesized from session`) into `wiki/sources/`. `migrate state` prints a `WARNING:` when your `config.json` still names one — set `synthesis.backend` to `claude`, `ollama`, or `dummy`, then re-synthesize:
 
 ```bash
 llmwiki synth --vault /path/to/vault
@@ -377,7 +394,7 @@ None. JSON sibling files now correctly emit `int` and `bool` types for `user_mes
 
 - **`README.md` and `CONTRIBUTING.md` now compile as site pages.** `site/README.html` and `site/CONTRIBUTING.html` ship alongside `changelog.html`. Link rewriter routes to the compiled page instead of GitHub for these two files.
 
-- **`/wiki-synthesize` slash command** — wraps `llmwiki synthesize` with natural-language flags ("estimate cost", "dry run", "force"). Copy `.claude/commands/wiki-synthesize.md` into `~/.claude/commands/` for global availability. (`llmwiki install-skills` was removed in v1.2.0; manual copy is the supported path.)
+- **`/wiki-synthesize` slash command** — wraps `llmwiki synth --sources-only` (prefer `/wiki-synth`). Copy via `llmwiki install-agent-kit --dest PATH`. (`llmwiki install-skills` was removed in v1.2.0.)
 
 - **Dual-mode docs landing pages.** `docs/modes/api/` and `docs/modes/agent/` exist as skeletons; the actual API / Agent backends ship with #315 / #316.
 

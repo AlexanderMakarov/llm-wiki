@@ -204,7 +204,7 @@ want to re-run sync.
 
 ### `/wiki-synth`
 
-**What:** synthesize pending raw sessions/docs into `wiki/sources/`, then harvest entity/concept candidates into `wiki/candidates/` (default). Use `--sources-only` for the legacy sources-only path. Sources are two LLM jobs per run (known-names prepare + one ask per queued file); harvest is offline. Ctrl+C harvests from written pages (or prints `synth --candidates-only` after `--sources-only`) and exits 130. Do not run `consolidate-topics`.
+**What:** synthesize pending raw sessions/docs into `wiki/sources/`, then harvest entity/concept candidates into `wiki/candidates/` (default). Use `--sources-only` for the legacy sources-only path. Sources are two LLM jobs per run (known-names prepare + one ask per queued file); harvest is offline. Ctrl+C harvests from written pages (or prints `synth --candidates-only` after `--sources-only`) and exits 130. Do not run a separate consolidate-topics step — known-names prepare is part of `synth`.
 
 **Wraps:** `python3 -m llmwiki synth`.
 
@@ -219,7 +219,7 @@ want to re-run sync.
 
 ### `/wiki-synthesize`
 
-**Deprecated** alias for `/wiki-synth`. Prefer `/wiki-synth`. Still wraps `python3 -m llmwiki synthesize` (sources-only + deprecation warning).
+**Deprecated** alias for `/wiki-synth`. Prefer `/wiki-synth`. Still wraps `python3 -m llmwiki synth --sources-only` (legacy synthesize default).
 
 ---
 

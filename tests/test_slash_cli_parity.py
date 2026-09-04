@@ -48,6 +48,11 @@ LEGACY_SLASH_FILES = {
     "wiki-export-marp",  # export-marp CLI subcommand removed
 }
 
+# Deprecated slash aliases: filename is not ``wiki-<cli-sub>``.
+SLASH_CLI_ALIASES = {
+    "wiki-synthesize": "synth",
+}
+
 
 def _cli_subcommands() -> set[str]:
     parser = build_parser()
@@ -138,6 +143,13 @@ def test_wrapper_slash_name_matches_cli_subcommand():
             continue
         sub = _wrapped_subcommand(p)
         if sub is None:
+            continue
+        if p.stem in SLASH_CLI_ALIASES:
+            expected = SLASH_CLI_ALIASES[p.stem]
+            if sub != expected:
+                mismatches.append(
+                    f"{p.name} wraps `{sub}` but alias must wrap `{expected}`"
+                )
             continue
         expected_prefix = f"wiki-{sub}"
         if p.stem != expected_prefix:

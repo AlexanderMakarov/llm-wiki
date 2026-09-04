@@ -18,6 +18,12 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Changed
 
+- **CLI `--help` is a lifecycle map (#112)** — six groups (Start here → Daily loop → Run the loop for me → Look around → Take things out → Rare); epilog states the canonical loop and that you should rebuild after synth so candidates and analytics stay current. Per-command `--help` describes purpose, loop position, and internals without issue numbers.
+  - *Release note:* Run `llmwiki --help` for the lifecycle map; one-time repairs are under `migrate` (#112).
+
+- **`llmwiki migrate <name>` wrapper (#112)** — the six one-time repairs (`state`, `raw-redaction`, `tools-used`, `page-kinds`, `topic-kinds`, `broken-provenance`) nest under `migrate`; `migrate` / `migrate --list` print the catalog and write nothing. New migrations register here, not as top-level commands.
+  - *Release note:* Replace `migrate-X` with `migrate <name>` (e.g. `migrate raw-redaction`) (#112).
+
 - **MCP tool consolidation (#196)** — the stdio server now registers **six** tools instead of twelve: unified `wiki_search` (match / extract / filter modes), `wiki_read_page`, `wiki_health` (lint JSON + `totals`), `wiki_sync`, `wiki_export`, and `wiki_add`. Retired names (`wiki_query`, `wiki_list_sources`, `wiki_confidence`, `wiki_lifecycle`, `wiki_category_browse`, `wiki_lint`, `wiki_dashboard`) are not aliased; usage aggregation maps them to canonical names for Analytics. See [`docs/reference/mcp.md`](docs/reference/mcp.md).
   - *Release note:* Update MCP clients to the six-tool surface; migrate `wiki_query` → `wiki_search` extract, `wiki_lint` → `wiki_health` (#196).
 
@@ -31,6 +37,12 @@ Versions below 1.0 are pre-production — API and file formats may change.
   - *Release note:* Re-run `llmwiki install-automation` (or pass `--no-activate` to stage units without enabling) — the daily job is enabled automatically on Linux/macOS/Windows (#198).
 
 ### Removed
+
+- **`synthesize` and `consolidate-topics` CLI commands (#112)** — use `synth` (add `--sources-only` for the old synthesize default). Known-names prepare runs inside each `synth` sources pass. `/wiki-synthesize` still wraps `synth --sources-only`.
+  - *Release note:* Replace `llmwiki synthesize` with `llmwiki synth` (or `synth --sources-only`); drop `consolidate-topics` (#112).
+
+- **Top-level `migrate-*` commands (#112)** — use `llmwiki migrate <name>` instead.
+  - *Release note:* `migrate-page-kinds` → `migrate page-kinds`, and likewise for the other five (#112).
 
 ## [2.0.0] — 2026-08-28
 

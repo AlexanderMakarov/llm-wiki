@@ -153,7 +153,7 @@ promote path — so it bought a graph colour and a legend label and
 nothing else; an open question is a `concept` page with an unanswered
 heading.
 
-**Context:** #109. `llmwiki migrate-page-kinds` moves any hand-written
+**Context:** #109. `llmwiki migrate page-kinds` moves any hand-written
 question page into `wiki/concepts/`. Reconsider only if question state
 tracking (open / answered / stale) becomes a feature someone builds,
 which is a lifecycle problem, not a page-kind problem.
@@ -168,7 +168,7 @@ which is a lifecycle problem, not a page-kind problem.
 
 **Reason:** A hand-authored `type: comparison` kind duplicated the word "comparison" without sharing machinery with anything else in the product and left readers unsure what it meant. Model diffs were briefly sketched as auto-generated `/vs/` pages from AI-model entity frontmatter; that surface was never wired and was later removed (#138).
 
-**Context:** #109. `llmwiki migrate-page-kinds` moves any hand-written comparison page into `wiki/concepts/`. Reconsider a first-class comparison kind only if a real product need for authored side-by-side pages appears — not as a revival of dead `/vs/` code.
+**Context:** #109. `llmwiki migrate page-kinds` moves any hand-written comparison page into `wiki/concepts/`. Reconsider a first-class comparison kind only if a real product need for authored side-by-side pages appears — not as a revival of dead `/vs/` code.
 
 ---
 

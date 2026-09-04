@@ -246,7 +246,7 @@ def test_a_non_positive_threshold_is_rejected(bad: str, capsys):
     assert "--min-refs must be at least 1" in capsys.readouterr().err
 
 
-@pytest.mark.parametrize("command", ["lint", "synth", "synthesize", "all"])
+@pytest.mark.parametrize("command", ["lint", "synth", "all"])
 def test_every_parser_that_takes_the_flag_enforces_the_range(
     command: str, capsys
 ):
