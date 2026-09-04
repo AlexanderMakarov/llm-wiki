@@ -45,6 +45,12 @@
 ## implement
 
 - Slices 1–5 complete in worktree: migrate wrapper; drop synthesize/consolidate-topics; lifecycle help + tests; docs/schema; acceptance tests (`tests/test_112_acceptance.py`, `tests/test_cli_lifecycle_help.py`).
+- Operator feedback: expanded then laconicized per-command `--help`; fuller migrate catalog What/When blurbs.
 - Static gate: `ruff check` clean; full `pytest tests/ -q` green.
-- Next: verify / user smoke confirm (no local review until confirmed).
+- Next: commit-push / PR (operator asked to open PR).
+
+## commit-push
+
+- Final flow-log entry before staging implementation commit and opening PR.
+- Next: remote gates (do not append to this log after PR opens).
 
