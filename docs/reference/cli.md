@@ -673,7 +673,7 @@ Typical destinations: `.claude` in the project you are working in, or a user-lev
 
 Re-running after an upgrade refreshes the copies. A destination file whose content already matches the kit is left alone. A destination file that differs is saved as `<filename>.bak` beside it before the kit version is written, and the backup is reported, so a customisation is never overwritten silently. `--dry-run` prints the same report and writes nothing.
 
-Contributor-only commands (`fix-bug`, `maintainer`, `release`, …) and skills (`docs-that-work`, `pytest-best-practices`, …) stay in this repository's `.claude/` tree and are not part of the kit.
+Contributor-only commands (`fix-bug`, `maintainer`, `release`, …) and skills (`docs-that-work`, `pytest-best-practices`, `release`, …) stay in this repository's `.claude/` tree and are not part of the kit. Cutting a tagged release uses `.claude/skills/release/SKILL.md` via `/release` (see [`docs/maintainers/RELEASE_PROCESS.md`](../maintainers/RELEASE_PROCESS.md)).
 
 ```bash
 python3 -m llmwiki install-agent-kit --dest .claude --dry-run

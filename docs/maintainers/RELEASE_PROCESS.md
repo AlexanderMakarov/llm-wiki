@@ -1,110 +1,110 @@
 # Release process
 
-> **Audience:** whoever is cutting the next tag. This is the
-> step-by-step checklist. Run the `/release <version>` slash command
-> for a guided walkthrough that follows the same steps.
+> **Audience:** whoever is cutting the next tag.
+>
+> **How to run the cut:** load the cross-agent skill [`.claude/skills/release/SKILL.md`](../../.claude/skills/release/SKILL.md) (Claude Code / Cursor: `/release <version>`). Wrappers live at `.claude/commands/release.md` and `.cursor/commands/release.md`. This document is the canonical checklist order; the skill is the operational walkthrough and must stay aligned with it.
 
-llmwiki uses [semantic versioning](https://semver.org/) with a
-pre-`1.0.0` caveat: every `0.x.y` release can break compatibility
-freely. `1.0.0` will be the first stable release.
+llmwiki uses [semantic versioning](https://semver.org/). Past `1.0` / `2.x`, a normal `vX.Y.Z` tag is a full GitHub Release. Tags whose names contain `rc`, `alpha`, `beta`, or `dev` are marked prerelease by automation.
 
-Minor-version bumps (`0.X.0`) ship when a coherent feature batch
-lands (heatmap + tool chart + token usage = v0.8). Patch bumps
-(`0.X.y`) ship when a critical fix can't wait for the next minor.
+Minor bumps (`X.Y.0`) ship when a coherent feature batch lands. Patch bumps (`X.Y.Z`) ship when a fix cannot wait for the next minor.
 
 ## Pre-flight
 
-- [ ] Master is green (all tests pass, all recent CI runs passed)
-- [ ] `python3 -m pytest tests/ -q` on a clean checkout — local
-      pass beats CI-only pass
-- [ ] `python3 -m llmwiki build` succeeds end-to-end, no warnings
-      that weren't there before
-- [ ] Preview the built site locally and click through every nav
-      item — look for broken links, missing icons, crashed JS
-- [ ] No open `priority:critical` bugs (run `gh issue list --label
-      priority:critical --state open` and verify it's empty)
+- [ ] `main` is green — recent CI on `main` passed (`gh run list --branch main --limit 5`)
+- [ ] `ruff check llmwiki tests scripts`
+- [ ] `python3 -m pytest tests/ -q` on a clean checkout (local pass beats CI-only pass)
+- [ ] No open `priority:critical` bugs (`gh issue list --label priority:critical --state open`)
+- [ ] If a leftover gitignored `wiki/` exists at the repo root, warn / move it aside before relying on demo self-containment checks — do not delete user data without asking
+- [ ] Optional when the site changed: `python3 -m llmwiki build` and a quick local click-through for new warnings or broken nav
 
 ## Bump version
 
-The single source of truth is `llmwiki/__init__.py`. Every other
-place that mentions the version is derivative and must match.
+The package version in `llmwiki/__init__.py` and `pyproject.toml` must match (`test_pyproject_version_matches_package`).
 
 - [ ] Update `__version__ = "X.Y.Z"` in `llmwiki/__init__.py`
-- [ ] Update `version = "X.Y.Z"` in `pyproject.toml` (the test
-      `test_pyproject_version_matches_package` enforces this)
-- [ ] Update the version badge in `README.md`
-      (`Version-vX.Y.Z-7C3AED.svg`)
-- [ ] Update the tests badge in `README.md` with the new passing count
-      from `python3 -m pytest tests/`
-- [ ] Run `python3 -m llmwiki --version` and confirm it prints the
-      new version
+- [ ] Update `version = "X.Y.Z"` in `pyproject.toml`
+- [ ] Update the version badge in `README.md` (keep current badge color/URL style)
+- [ ] Update the tests badge in `README.md` only if the passing count changed
+- [ ] Run `python3 -m llmwiki --version` and confirm it prints the new version
+- [ ] Confirm version + Theme with the human before committing
 
-## Update CHANGELOG
+## Update CHANGELOG and UPGRADING
 
-- [ ] Move every entry from `## [Unreleased]` into a new
-      `## [X.Y.Z] — YYYY-MM-DD` section
-- [ ] Re-create an empty `## [Unreleased]` section above the new one
-- [ ] Group entries by `### Added` / `### Changed` / `### Fixed` /
-      `### Removed` in keep-a-changelog order
-- [ ] Add a one-line "Theme:" at the top of the release section
-      summarising the batch (e.g. "Theme: v0.8 visualization trio —
-      heatmap, tool charts, token usage")
-- [ ] Spot-check every PR number against the actual merged PRs —
-      copy-paste errors happen
+- [ ] Move every entry from `## [Unreleased]` into a new `## [X.Y.Z] — YYYY-MM-DD` section
+- [ ] Re-create an empty `## [Unreleased]` scaffold above the new section
+- [ ] Group entries by `### Added` / `### Changed` / `### Fixed` / `### Removed`
+- [ ] Add a one-line Theme at the top of the release section
+- [ ] Rename/compact `docs/UPGRADING.md` headings that still say Unreleased / in-progress for this cut
+- [ ] Spot-check every `#N` against merged PRs/issues
+- [ ] Remember `tests/changelog_notes.shipping_section_text` — acceptance tests search Unreleased (when non-empty) **and** all versioned sections; emptying Unreleased is fine as long as shipping bullets remain under the new version section. Do not narrow that helper.
 
-## Commit + tag
+## Commit + tag (local only)
 
 ```bash
-git add llmwiki/__init__.py pyproject.toml README.md CHANGELOG.md
+git add llmwiki/__init__.py pyproject.toml README.md CHANGELOG.md docs/UPGRADING.md
 git commit -m "release(vX.Y.Z): bump version + CHANGELOG"
 git tag vX.Y.Z
-git push origin master vX.Y.Z
 ```
 
-- [ ] Do NOT force-push master
-- [ ] Do NOT amend the release commit after tagging
+- [ ] Do **not** push yet — human gate next
+- [ ] Do **not** force-push `main`
+- [ ] Do **not** amend the release commit after tagging
 
-## GitHub Release + PyPI publish
+## Human gate, then push
 
-The tag push triggers `.github/workflows/release.yml` which automatically:
-1. Builds sdist + wheel via `python -m build`
-2. Publishes to PyPI via OIDC trusted publisher (no API tokens needed)
-3. Signs artifacts with Sigstore
-4. Creates a GitHub Release with build artifacts + signature bundles
+Direct push of the release commit to `main` is the maintainer path for a cut (distinct from normal PR flow). Still requires an explicit OK in the session.
 
-- [ ] Confirm the release workflow ran: `gh run list --workflow=release.yml --limit=3`
-- [ ] Confirm the package is on PyPI: `pip install llm-notebook==X.Y.Z`
-- [ ] Confirm the release shows up at
-      `https://github.com/Pratiyush/llm-wiki/releases`
-- [ ] If the workflow failed, check the "release" environment protection rules
+- [ ] Show `git show` / version / Theme; wait for explicit approval
+- [ ] Only then: `git push origin main` and `git push origin vX.Y.Z` (or both in one push)
 
-**Manual fallback** (if automation is broken):
+## GitHub Release + PyPI (automation)
+
+Pushing the `v*.*.*` tag triggers [`.github/workflows/release.yml`](../../.github/workflows/release.yml), which:
+
+1. Builds sdist + wheel
+2. Signs artifacts with Sigstore
+3. Creates (or updates) the GitHub Release with notes + artifacts — **this is the happy path**; do not run a second `gh release create` unless automation is broken
+4. Publishes to PyPI via OIDC **only when** repository variable `PYPI_PUBLISHING` is `true` (otherwise the publish job is skipped; the GitHub Release still ships)
+
+Prerelease: the workflow passes `--prerelease` only when the tag name matches `rc` / `alpha` / `beta` / `dev`. Stable tags are full releases.
+
+- [ ] Confirm the workflow: `gh run list --workflow=release.yml --limit=3` (watch the run for this tag)
+- [ ] Open the GitHub Release for this repo and confirm title, notes, and assets
+- [ ] If PyPI was expected, confirm `pip install llm-notebook==X.Y.Z`; if skipped, that is normal until publishing is enabled (see `docs/deploy/pypi-publishing.md`)
+- [ ] Watch CI on the release commit SHA on `main`
+
+**Manual fallback** (only if `release.yml` is broken):
 
 ```bash
-gh release create vX.Y.Z --title "vX.Y.Z" --generate-notes --prerelease
+gh release create vX.Y.Z --title "vX.Y.Z" --generate-notes
+# add --prerelease only for rc/alpha/beta/dev tags
 ```
 
-## Verify Pages deploy
+## Verify Pages deploy (optional)
 
-- [ ] `.github/workflows/pages.yml` fires on both `master` push and
-      the new tag. Watch the run with `gh run list --workflow=pages.yml
-      --limit=3`
-- [ ] Visit `https://pratiyush.github.io/llm-wiki/` and confirm the
-      new version badge + any new features are visible
-- [ ] If the deploy failed, fix master first; don't hotfix the tag
+- [ ] If Pages is configured to deploy for this push/tag, watch `.github/workflows/pages.yml` and confirm the demo site shows the new version badge
+- [ ] If the deploy failed, fix `main` first; do not hotfix by rewriting the tag
 
 ## Announce (optional)
 
-- [ ] Post to the project X account / LinkedIn with a link to the
-      GitHub Release page
-- [ ] Pin an "issue digest" discussion thread with the highlights
-      if it's a milestone release (v0.5, v0.9, v1.0, ...)
+- [ ] Post with a link to the GitHub Release page
+- [ ] Pin an issue-digest discussion for milestone releases when useful
 
 ## Rollback
 
-If a release is broken, don't delete the tag. Do:
+If a release is broken, do not delete the tag. Do:
 
-1. Cut a patch release (`vX.Y.Z+1`) that reverts the bad PR
-2. Mark the broken release as "Pre-release" and edit the notes to
-   say "superseded by vX.Y.Z+1"
+1. Cut a patch release (`vX.Y.Z+1`) that reverts the bad change
+2. Mark the broken release superseded in the GitHub Release notes (use Pre-release only when appropriate)
 3. Never delete tags — downstream packages may pin to them
+4. Never force-push `main` to rewrite the cut
+
+## Pitfalls (from recent cuts)
+
+| Pitfall | What to do |
+|---|---|
+| Leftover root `wiki/` | Warn / move aside with approval; breaks demo self-containment style checks |
+| Emptying Unreleased | Keep shipping bullets under the new version section; rely on `shipping_section_text` scanning versioned sections |
+| Double-creating the GitHub Release | Trust `release.yml` after the tag push |
+| Always marking prerelease | Only for rc/alpha/beta/dev tags — not every release past 1.0 |
+| Pushing without approval | Human gate is mandatory; no unattended publish |
