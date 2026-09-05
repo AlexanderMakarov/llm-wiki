@@ -64,6 +64,7 @@ Agent judgment; human can correct before the commit:
 Stage the bump + editorial files (typically `__init__.py`, `pyproject.toml`, `README.md`, `CHANGELOG.md`, `docs/UPGRADING.md`, and any other files this cut intentionally includes). Commit with a conventional message, then tag:
 
 ```bash
+git add llmwiki/__init__.py pyproject.toml README.md CHANGELOG.md docs/UPGRADING.md
 git commit -m "release(vX.Y.Z): bump version + CHANGELOG"
 git tag vX.Y.Z
 ```

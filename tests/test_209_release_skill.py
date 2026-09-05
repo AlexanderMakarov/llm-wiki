@@ -44,8 +44,6 @@ from __future__ import annotations
 
 import re
 
-import yaml
-
 from llmwiki import REPO_ROOT
 
 # ─── Paths ───────────────────────────────────────────────────────────────────
@@ -61,15 +59,21 @@ CHANGELOG = REPO_ROOT / "CHANGELOG.md"
 SCRIPTS_DIR = REPO_ROOT / "scripts"
 
 
-def _skill_parts() -> tuple[dict, str]:
-    """Parse skill frontmatter + body from SKILL.md."""
+def _skill_parts() -> tuple[dict[str, str], str]:
+    """Parse skill frontmatter + body from SKILL.md (stdlib only — no PyYAML)."""
     raw = SKILL_FILE.read_text(encoding="utf-8")
     if not raw.startswith("---"):
         return {}, raw
     end = raw.index("---", 3)
-    fm = yaml.safe_load(raw[3:end])
-    body = raw[end + 3:]
-    return fm or {}, body
+    fm: dict[str, str] = {}
+    for line in raw[3:end].splitlines():
+        line = line.strip()
+        if not line or ":" not in line:
+            continue
+        key, _, value = line.partition(":")
+        fm[key.strip()] = value.strip().strip("\"'")
+    body = raw[end + 3 :]
+    return fm, body
 
 
 # ─── Slice 3 smoke: existence + frontmatter ───────────────────────────────────
