@@ -109,3 +109,54 @@ Memory of the `/implement-feature` run outside the context window. One entry per
 
 - Per the maintainer's decision at the review gate, the branch is split into two commits so the CHANGELOG's `### Added` and `### Fixed` entries each trace to one: `feat:` for #118's parallel synthesis, `fix:` for the vault-scoped log path. Both reviews raised the bundling; splitting is cheap before push and impossible after merge.
 - This is the flow log's last committed state. Everything past this point — PR, CI, merge — is reported in chat and recoverable from the remote state.
+
+## [2026-09-04] fix-bug #186 — fetch / resume / workspace
+
+- **BUG_ID:** 186 — flaky `test_an_interrupt_records_the_pages_that_reached_disk` under full-suite runs
+- **URL:** https://github.com/AlexanderMakarov/llm-wiki/issues/186 (OPEN, label bug)
+- **Already fixed?** No — issue open; no merged PR for #186 (PR #187 was the #150 feature that flagged it)
+- **SPEC_NAME:** `005-synth-parallel-and-batch-count` (owning FR5 interrupt/recovery)
+- **BRANCH:** `fix/186-flaky-interrupt-test`
+- **WT:** `.claude/worktrees/fix-186-flaky-interrupt-test`
+- **TMP_VAULT:** absolute `$WT/.worktree-vault` (isolated config.json)
+- **Primary dirty tree:** untracked `.automation/`, `candidates*.png` — warned, not blocking
+- **Next:** diagnose
+
+## [2026-09-04] fix-bug #186 — diagnose + classify
+
+- **reproduction:** yes — isolation 25/25 pass; under CPU load 8/25 then 3/12 fail at `assert len(_pages)==len(slugs)` (never state mismatch)
+- **root_cause:** brittle test assumes all 3 futures start before KeyboardInterrupt; under contention `cancel_futures=True` cancels a queued item → 2 pages on disk, state matches
+- **race_or_test:** brittle test (product `_record_abandoned_pages` invariant held)
+- **classification:** **Conformance** — FR5 interrupt/recovery is correct; test over-asserted; no functional-spec amend
+- **fix_shape:** use `_BarrierBackend(parties=len(slugs))` so all workers enter before interrupt (preferred); alt: lower-bound + set-membership
+- **Next:** fix (testing-expert / generalPurpose) then regression stress
+
+## [2026-09-04] fix-bug #186 — fix + stress + verify
+
+- **Fix applied:** in `test_an_interrupt_records_the_pages_that_reached_disk`, swapped `_RealPageBackend()` for `_BarrierBackend(len(slugs))` (test-only change, `tests/test_synth_parallel.py`). All 3 workers must now enter the backend — leave the pool's pending queue — before any can return, so none can still be a cancellable pending future when the first `_save_state` call raises `KeyboardInterrupt`. Added a docstring paragraph citing #186 with the mechanism, kept the resume assertions unchanged.
+- **No production code touched** — confirms the Conformance classification: `_record_abandoned_pages` and the interrupt/drain path in `llmwiki/synth/pipeline.py` are correct as shipped.
+- **Stress evidence:** 30/30 sequential runs of the fixed test alone; 30/30 runs of the interrupt/drain/abandoned subset under 8 busy-loop background processes (one per core); 20/20 full-file (`test_synth_parallel.py`, 44 tests) runs under the same load. Zero failures across all three passes.
+- **Gate:** `ruff check llmwiki tests scripts` clean; `python3 -m pytest tests/test_synth_parallel.py -q` — 44 passed.
+- **Next:** local review, then commit-push (not done in this session — worktree left uncommitted per instructions).
+
+## [2026-09-04] fix-bug #186 — fix + regression + verify-criteria
+
+- **fix:** `tests/test_synth_parallel.py` — `_RealPageBackend` → `_BarrierBackend(len(slugs))` + #186 docstring; product untouched
+- **context:** flow-log entries (AWOS gate for tests/ touch)
+- **regression:** same test is the regression; stress 30/30 alone, 30/30 interrupt subset under load, 20/20 full file under load
+- **criteria checked:** FR5 interrupt AC only — resume does not redo completed sources; disk/state invariant
+- **amend-spec:** skipped (conformance)
+- **Next:** user smoke confirm, then local review
+
+## [2026-09-05] fix-bug #186 — smoke confirm
+
+- User confirmed fix OK (test-only; live vault N/A)
+- **Next:** local review → keep/drop → commit-push
+
+## [2026-09-05] fix-bug #186 — local review + apply-findings + commit-push
+
+- **Review:** Request changes — 1 Blocker, 2 Nits (`context/spec/005-synth-parallel-and-batch-count/review.md`, session-only #159)
+- **Keep/drop:** B1 → no CHANGELOG (test-only; use `test:` title so `pr-lint` skips the gate); N1 → applied (barrier precondition docstring + `assert concurrency >= len(slugs)`); N2 → skipped (flow-log stage bundling left as-is)
+- **Classification:** Conformance (product FR5 correct; brittle test only)
+- **Commit:** `test:` — `tests/test_synth_parallel.py` + this flow log; no CHANGELOG; review.md not staged
+- **Next:** push → rebase onto `origin/main` if needed → open PR → remote gates (no further flow-log appends after PR open)

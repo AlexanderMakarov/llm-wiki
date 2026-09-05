@@ -744,9 +744,29 @@ def test_an_interrupt_records_the_pages_that_reached_disk(
     Ctrl-C cancels the queue, but every worker already running writes its
     page all the same, and its future is never drained. Unrecorded, those
     pages are synthesized — and billed — a second time on the next run.
+
+    #186: a plain ``_RealPageBackend`` let the drain race the pool — under
+    load, the third worker could still be *pending* (never picked up by a
+    thread) when the first completion's ``_save_state`` raised, so
+    ``cancel_futures=True`` legitimately cancelled it and only 2 of 3 pages
+    reached disk (state and disk still agreed; the test's fixed count of 3
+    was just wrong under contention). A ``_BarrierBackend`` with one party
+    per source forces every worker to enter the backend — i.e. leave the
+    pool's pending queue — before any of them can return, so by the time the
+    first ``_save_state`` call fires none of the three futures can still be
+    cancelled and the disk/state count of 3 is deterministic.
+
+    The barrier only releases when every source is a single chunk (one
+    backend call each) and the pool is wide enough to hold them all at once
+    (``concurrency >= len(slugs)``). Chunking a source or lowering
+    concurrency would leave the barrier unsatisfied and time out.
     """
     vault = _mk_vault(tmp_path)
     slugs = ("alpha", "beta", "gamma")
+    concurrency = 3
+    # The barrier only releases if every source is a single chunk (one backend
+    # call each) and the pool is wide enough to hold them all at once.
+    assert concurrency >= len(slugs)
     _seed_docs(vault, slugs)
     real_save_state = pipeline._save_state
     saves = {"n": 0}
@@ -759,7 +779,7 @@ def test_an_interrupt_records_the_pages_that_reached_disk(
 
     monkeypatch.setattr(pipeline, "_save_state", _save_state)
 
-    summary = _run_synth(vault, _RealPageBackend(), concurrency=3)
+    summary = _run_synth(vault, _BarrierBackend(len(slugs)), concurrency=concurrency)
 
     assert summary["interrupted"] is True
     assert f"Interrupted after 1/{len(slugs)} source(s)" in capsys.readouterr().out
@@ -768,7 +788,7 @@ def test_an_interrupt_records_the_pages_that_reached_disk(
 
     # The resume has nothing left to do — no page is synthesized twice.
     monkeypatch.setattr(pipeline, "_save_state", real_save_state)
-    resumed = _run_synth(vault, _RealPageBackend(), concurrency=3)
+    resumed = _run_synth(vault, _RealPageBackend(), concurrency=concurrency)
 
     assert resumed["new_files"] == 0
     assert resumed["synthesized"] == 0
