@@ -33,7 +33,12 @@ Confirm all of the following; stop and fix before bumping if any fail:
 3. Lint: `ruff check llmwiki tests scripts`.
 4. Tests: `python3 -m pytest tests/ -q`.
 5. **Root `wiki/` pitfall:** if a gitignored leftover `wiki/` exists at the repo root, warn the human — demo self-containment / acceptance checks can fail against it. Do **not** delete user data without asking; rename/move aside only with explicit approval.
-6. Propose the version (`X.Y.Z`) and a one-line Theme; wait for the human to confirm or correct before editing files.
+6. **Demo corpus (#225):** ask whether this cut should refresh the public demo content (not only the version badge). If yes, before bumping version:
+   - `python3 scripts/generate_demo_sessions.py --dry-run`, then regenerate with a release-appropriate `--today` (bumping `--today` requires re-synth/build of `demo/` so `source_file:` links stay valid — see the script docstring).
+   - `python3 scripts/refresh_demo.py --dry-run`, then a real refresh when the plan is non-empty ([REFRESH_DEMO.md](../../docs/maintainers/REFRESH_DEMO.md)).
+   - Commit the `demo/` updates on `main` (or include them in the release commit) **before** the tag, so Pages builds the refreshed vault.
+   - If the human declines a content refresh, record that choice in the session notes — Pages will still assert `manifest.json` version (#213) but session dates can stay weeks old.
+7. Propose the version (`X.Y.Z`) and a one-line Theme; wait for the human to confirm or correct before editing files.
 
 Optional when the release touches the static site: `python3 -m llmwiki build` and a quick local preview (no new unexpected warnings).
 
@@ -89,9 +94,11 @@ Push **only** after explicit approval in the session. Direct push of the release
 4. Watch CI on the release commit SHA (`gh pr checks` is N/A for a direct `main` push — use `gh run list --branch main` / the commit’s Actions tab).
 5. Note when PyPI was skipped because publishing is not enabled.
 
-### 8. Optional follow-ups
+### 8. Pages deploy + announce
 
-Pages deploy and social announce are optional; follow `RELEASE_PROCESS.md` if the human wants them this cut.
+1. Watch `pages.yml` for the tag (`gh run list --workflow=pages.yml --limit=3`). Post-deploy assert must be green (`manifest.json` == `__version__`).
+2. If this cut refreshed demo sessions, spot-check live session dates — version-only green is not a content refresh (#225).
+3. Social announce is optional; follow `RELEASE_PROCESS.md` if the human wants it this cut.
 
 ## Rollback (after a bad tag is public)
 

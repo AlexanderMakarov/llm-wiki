@@ -16,6 +16,10 @@ Minor bumps (`X.Y.0`) ship when a coherent feature batch lands. Patch bumps (`X.
 - [ ] No open `priority:critical` bugs (`gh issue list --label priority:critical --state open`)
 - [ ] If a leftover gitignored `wiki/` exists at the repo root, warn / move it aside before relying on demo self-containment checks — do not delete user data without asking
 - [ ] Optional when the site changed: `python3 -m llmwiki build` and a quick local click-through for new warnings or broken nav
+- [ ] **Demo corpus before the cut (#225):** if the public demo should look current this release, refresh it locally and commit the result **before** tagging (CI never regenerates `demo/`):
+  - Sessions: `python3 scripts/generate_demo_sessions.py --dry-run`, then regenerate with a release-appropriate `--today` (not the frozen `2026-08-10` anchor unless you intentionally keep it). A new `--today` changes filenames — re-run synth/build on `demo/` so wiki `source_file:` links stay valid, then commit `demo/raw/sessions/` + updated `demo/wiki/`
+  - Product docs drift: `python3 scripts/refresh_demo.py --dry-run`, then a real `python3 scripts/refresh_demo.py` when the plan is non-empty (needs a synthesis backend; see [REFRESH_DEMO.md](REFRESH_DEMO.md))
+  - Spot-check newest session dates under `demo/raw/sessions/` and that `demo/` builds clean: `python3 -m llmwiki lint --vault demo --fail-on-errors` and `python3 -m llmwiki build --vault demo --out /tmp/demo-site --local-root /home/user`
 
 ## Bump version
 
@@ -87,10 +91,10 @@ The same tag push that triggers `release.yml` also triggers [`.github/workflows/
 
 - [ ] Confirm the run exists and went green: `gh run list --workflow=pages.yml --limit=3`
 - [ ] Confirm its post-deploy assert passed — the deploy job fetches `manifest.json` from the live URL and fails when the served version isn't the tagged `__version__`, so a green run means the site really serves this release
-- [ ] Spot-check the live demo shows the new version
+- [ ] Spot-check the live demo shows the new version **and**, if you refreshed sessions in pre-flight, that session dates match what you committed (version-only green is not a content refresh — #225)
 - [ ] If the deploy failed, fix `main` first and re-run the workflow from **Actions → Deploy demo site to GitHub Pages → Run workflow**; do not hotfix by rewriting the tag
 
-There is no separate scheduled freshness workflow — the post-deploy assert on `pages.yml` is the gate. If that run is missing or red, fix it before calling the release done (see [docs/uptime.md](../uptime.md)).
+There is no separate scheduled freshness workflow — the post-deploy assert on `pages.yml` is the version gate. Session/docs corpus freshness is still a pre-tag maintainer step (#225; see pre-flight above and [docs/uptime.md](../uptime.md)).
 
 ## Announce (optional)
 
@@ -111,6 +115,7 @@ If a release is broken, do not delete the tag. Do:
 | Pitfall | What to do |
 |---|---|
 | Leftover root `wiki/` | Warn / move aside with approval; breaks demo self-containment style checks |
+| Shipping without regenerating demo sessions | Decide explicitly in pre-flight (#225); Pages version assert does not rewrite mid-August session dates |
 | Emptying Unreleased | Keep shipping bullets under the new version section; rely on `shipping_section_text` scanning versioned sections |
 | Double-creating the GitHub Release | Trust `release.yml` after the tag push |
 | Always marking prerelease | Only for rc/alpha/beta/dev tags — not every release past 1.0 |

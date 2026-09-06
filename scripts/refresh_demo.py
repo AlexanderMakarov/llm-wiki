@@ -5,6 +5,12 @@ Maintainer-only. Never shipped, never referenced by the CLI, never run in CI.
 Requires a git working copy of this repository (not a release archive) and a
 reachable synthesis backend.
 
+On a release cut, run ``--dry-run`` (and a real refresh when the plan is
+non-empty) **before** tagging so Pages does not republish a docs-stale demo
+vault. Session dates are a separate step — see
+``scripts/generate_demo_sessions.py`` and ``docs/maintainers/RELEASE_PROCESS.md``
+(#225). This script only plans product-doc changes under ``docs/``.
+
 Run from the repository root:
 
     python3 scripts/refresh_demo.py --dry-run
