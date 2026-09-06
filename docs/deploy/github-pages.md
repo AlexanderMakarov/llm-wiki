@@ -4,7 +4,7 @@ Host your llmwiki site on GitHub Pages for free, with automatic builds on every 
 
 Live example (this fork): [alexandermakarov.github.io/llm-wiki](https://alexandermakarov.github.io/llm-wiki/) · upstream: [pratiyush.github.io/llm-wiki](https://pratiyush.github.io/llm-wiki/)
 
-> **This fork (#69):** `pages.yml` is `workflow_dispatch`-only by default (restore `push:` if you want every merge to republish). The published site is built from the committed `demo/` vault: `demo/raw/sessions/` (demo sessions), `demo/raw/docs/` (product docs), `demo/wiki/` (pre-synthesized pages, committed so CI stays free/deterministic) and `demo/usage/` (MCP telemetry fixtures for Analytics).
+> **This fork (#213):** `pages.yml` publishes on every version tag (`v*.*.*`) and on manual **Run workflow**. Deploy on every push to `main` stays off (#69) — the demo tracks releases, not merges; restore `push:` if you want each merge to republish. The published site is built from the committed `demo/` vault: `demo/raw/sessions/` (demo sessions), `demo/raw/docs/` (product docs), `demo/wiki/` (pre-synthesized pages, committed so CI stays free/deterministic) and `demo/usage/` (MCP telemetry fixtures for Analytics).
 
 ## Prerequisites
 
@@ -45,11 +45,30 @@ No secrets or tokens are required. The workflow uses GitHub's built-in `actions/
 
 ## Step 4: Publish
 
-With auto-push disabled on this fork, run **Actions → Deploy demo site to GitHub Pages → Run workflow** (or restore the `push:` trigger in `pages.yml`). After a successful run, the site is live at:
+Two ways to publish, and both end in the same assertion:
+
+- **Push a version tag.** `git push origin v2.2.0` runs `pages.yml` alongside `release.yml`, so the live demo moves with the release instead of drifting behind it (#213).
+- **Run it by hand.** **Actions → Deploy demo site to GitHub Pages → Run workflow** — for republishing after a demo-vault change, or the first deploy once Pages is enabled.
+
+After a successful run, the site is live at:
 
 ```
 https://<username>.github.io/<repo-name>/
 ```
+
+### The deploy verifies itself
+
+A green deploy job means GitHub accepted the artifact, not that the site serves it. So after `actions/deploy-pages`, the workflow checks out the commit it just published, fetches `manifest.json` from the deployed URL, and fails the run when the version there is not the `__version__` of that commit. `llmwiki build` stamps the manifest with the package version, which makes it the only field on a deployed site that identifies the build.
+
+Both triggers assert against the checked-out `__version__` rather than the tag name, so a manual dispatch is checked exactly as strictly as a tag push — and a tag whose `__version__` was never bumped fails here rather than publishing a mislabelled site.
+
+Run the same check by hand against any deployed site:
+
+```bash
+python3 scripts/check_live_version.py --url https://<username>.github.io/<repo-name>/
+```
+
+It exits 0 on a match, 1 when the site is stale, 2 when the manifest is unreachable, and 3 when it cannot be parsed. A weekly `pages-freshness.yml` run does this on a schedule — see [uptime.md](../uptime.md).
 
 ## Using your own session data
 
@@ -94,8 +113,17 @@ The workflow installs `markdown` via pip. If you have added dependencies, update
 
 ### Workflow not triggering
 
-- On this fork, automatic push deploy is disabled until Pages is configured (#69). Use **Actions → Deploy demo site to GitHub Pages → Run workflow** for a manual run after enabling Pages, then restore the `push:` trigger in `pages.yml`.
-- When the `push:` trigger is restored, it fires on `master` and `main` — check your default branch name.
+- `pages.yml` fires on version tags matching `v*.*.*` and on manual dispatch. A tag like `v2.2` or `release-2.2.0` matches neither — check the tag shape first.
+- Deploy on push to the default branch is deliberately off (#69). Add a `push:` trigger to `pages.yml` if you want every merge to republish; it fires on `master` and `main`, so check your default branch name.
+- Pages must be enabled with **Source: GitHub Actions** before any run can deploy.
+
+### Deploy succeeded but the site is stale
+
+The post-deploy check fails with `serves version X, expected Y`. The artifact was published but the URL still serves an older build:
+
+- Give it a minute — the check already retries, but a CDN edge can lag further. Re-run the job before digging.
+- Confirm the run you are looking at actually deployed: a cancelled or skipped `deploy` job leaves the previous site up while the tag looks handled.
+- Check that `__version__` in `llmwiki/__init__.py` matches the tag. A tag pushed without the version bump publishes a site labelled with the old version, and this is the check that says so.
 
 ### Assets or CSS missing
 

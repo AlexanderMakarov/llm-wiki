@@ -67,6 +67,33 @@ Add this step after the checks to post to Slack on failure:
             -d '{"text":"llmwiki demo site is DOWN. Check: https://github.com/Pratiyush/llm-wiki/actions/workflows/uptime.yml"}'
 ```
 
+## Version freshness (a reachable site can still be wrong)
+
+An uptime check answers "is the site up", which is not the same question as "is the site current". The llmwiki demo once served a four-release-old build behind entirely green checks: every URL returned 200, and nothing compared what was published with what had been released (#213).
+
+`llmwiki build` writes `site/manifest.json` with the `__version__` of the build that produced it, so the deployed site carries its own version. `scripts/check_live_version.py` reads it back and compares:
+
+```bash
+# against __version__ in the checked-out tree
+python3 scripts/check_live_version.py --url https://<username>.github.io/<repo-name>/
+
+# against an explicit version (a leading "v" is stripped, so tags work)
+python3 scripts/check_live_version.py --url https://<username>.github.io/<repo-name>/ --expected v2.1.0
+```
+
+Pass either the site root or the `manifest.json` URL — the script appends the filename when it is missing. Exit codes are distinct so a failing job says which problem it hit:
+
+| Exit | Meaning |
+|---|---|
+| 0 | Live version matches the expected version |
+| 1 | Mismatch — the site is stale (or ahead of) the code |
+| 2 | Unreachable — the manifest could not be fetched |
+| 3 | Malformed — the response was not JSON, or carried no `version` |
+
+Two workflows run it. `.github/workflows/pages.yml` calls it right after `actions/deploy-pages`, so a deploy that does not actually reach the live URL turns the run red instead of green. `.github/workflows/pages-freshness.yml` runs it weekly (Mondays 06:00 UTC) plus on demand, against the published demo, and fails when the live version has fallen behind `__version__` on the default branch. It installs no dependencies — the checker reads the version out of the source tree rather than importing the package.
+
+A red freshness run is not an outage: the site is up, it is just old. The fix is to republish (push the version tag, or **Actions → Deploy demo site to GitHub Pages → Run workflow**), not to page anyone.
+
 ## Simple cron job (self-hosted)
 
 If you deploy to your own server instead of GitHub Pages, run a cron
@@ -97,6 +124,7 @@ check passed; red means the site was unreachable.
 | `/sitemap.xml` | SEO health -- search engines rely on this |
 | `/llms.txt` | AI agent discoverability |
 | `/search-index.json` | Search functionality depends on this |
+| `/manifest.json` | Which build is live — reachable is not the same as current |
 | `/sessions/` (any session) | Content rendering works end-to-end |
 
 ## Monitoring services (free tier)

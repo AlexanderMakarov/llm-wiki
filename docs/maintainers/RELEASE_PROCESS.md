@@ -81,10 +81,16 @@ gh release create vX.Y.Z --title "vX.Y.Z" --generate-notes
 # add --prerelease only for rc/alpha/beta/dev tags
 ```
 
-## Verify Pages deploy (optional)
+## Verify Pages deploy (expected, not optional)
 
-- [ ] If Pages is configured to deploy for this push/tag, watch `.github/workflows/pages.yml` and confirm the demo site shows the new version badge
-- [ ] If the deploy failed, fix `main` first; do not hotfix by rewriting the tag
+The same tag push that triggers `release.yml` also triggers [`.github/workflows/pages.yml`](../../.github/workflows/pages.yml) (#213). The demo site is part of what a release ships — treat a failed or missing Pages run the way you'd treat a failed PyPI upload, not as cosmetic. Skipping this check is how the live demo ended up four releases stale.
+
+- [ ] Confirm the run exists and went green: `gh run list --workflow=pages.yml --limit=3`
+- [ ] Confirm its post-deploy assert passed — the deploy job fetches `manifest.json` from the live URL and fails when the served version isn't the tagged `__version__`, so a green run means the site really serves this release
+- [ ] Spot-check the live demo shows the new version
+- [ ] If the deploy failed, fix `main` first and re-run the workflow from **Actions → Deploy demo site to GitHub Pages → Run workflow**; do not hotfix by rewriting the tag
+
+A weekly `pages-freshness.yml` run catches a demo that drifts behind afterwards (see [docs/uptime.md](../uptime.md)); it is a backstop, not a substitute for checking the release ran.
 
 ## Announce (optional)
 
