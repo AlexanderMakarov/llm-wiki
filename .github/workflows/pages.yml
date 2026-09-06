@@ -5,11 +5,18 @@ name: Deploy demo site to GitHub Pages
 # loads is emitted into the output, so there is nothing to fetch at view time.
 #
 # `demo/` carries its own `raw/`, `wiki/` and `usage/` trees, so the build is a
-# single command with nothing to seed. Auto push-deploy stays off (#69); use
-# workflow_dispatch (or restore `push:` once you want every main merge to
-# republish). See docs/deploy/github-pages.md.
+# single command with nothing to seed.
+#
+# Triggers: every version tag republishes, plus manual workflow_dispatch (#213).
+# Deploying only on dispatch left the live site four releases behind the
+# package — nobody remembers to press a button. Auto-deploy on every push to
+# main stays off (#69): the demo tracks releases, not merges. See
+# docs/deploy/github-pages.md.
 
 on:
+  push:
+    tags:
+      - "v*.*.*"
   workflow_dispatch:
 
 permissions:
@@ -61,3 +68,23 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v5
+
+      # A green deploy job only proves the artifact was accepted, not that the
+      # site now serves it — the stale demo in #213 lived behind green runs.
+      # The build stamps `site/manifest.json` with `llmwiki.__version__`, so
+      # reading it back is the one check that says which build is live.
+      - uses: actions/checkout@v7
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      # Compares against `__version__` in the commit that was just published,
+      # so a tag push and a manual dispatch assert exactly the same thing.
+      # `page_url` ends with "/"; the script appends manifest.json. Retries
+      # cover the CDN's propagation window.
+      - name: Assert the live site serves this version
+        env:
+          PAGE_URL: ${{ steps.deployment.outputs.page_url }}
+        run: python3 scripts/check_live_version.py --url "$PAGE_URL" --attempts 6 --delay 15

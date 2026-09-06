@@ -67,6 +67,33 @@ Add this step after the checks to post to Slack on failure:
             -d '{"text":"llmwiki demo site is DOWN. Check: https://github.com/Pratiyush/llm-wiki/actions/workflows/uptime.yml"}'
 ```
 
+## Version freshness (a reachable site can still be wrong)
+
+An uptime check answers "is the site up", which is not the same question as "is the site current". The llmwiki demo once served a four-release-old build behind entirely green checks: every URL returned 200, and nothing compared what was published with what had been released (#213).
+
+`llmwiki build` writes `site/manifest.json` with the `__version__` of the build that produced it, so the deployed site carries its own version. `scripts/check_live_version.py` reads it back and compares:
+
+```bash
+# against __version__ in the checked-out tree
+python3 scripts/check_live_version.py --url https://<username>.github.io/<repo-name>/
+
+# against an explicit version (a leading "v" is stripped, so tags work)
+python3 scripts/check_live_version.py --url https://<username>.github.io/<repo-name>/ --expected v2.1.0
+```
+
+Pass either the site root or the `manifest.json` URL — the script appends the filename when it is missing. Exit codes are distinct so a failing job says which problem it hit:
+
+| Exit | Meaning |
+|---|---|
+| 0 | Live version matches the expected version |
+| 1 | Mismatch — the site is stale (or ahead of) the code |
+| 2 | Unreachable — the manifest could not be fetched |
+| 3 | Malformed — the response was not JSON, or carried no `version` |
+
+`.github/workflows/pages.yml` calls it right after `actions/deploy-pages`, so a deploy that does not actually reach the live URL turns the run red instead of green. That post-deploy assert is the only automated freshness gate: version tags (and manual dispatch) republish the demo, and the check confirms the live site matches the commit that was just published. There is no separate weekly job — a skipped or cancelled Pages run is caught by watching the release checklist, not by a cron.
+
+A red post-deploy check is not an outage: the site is up, it is just not serving this build yet (or at all). Re-run **Actions → Deploy demo site to GitHub Pages**, or fix `__version__` / the tag and cut again — do not treat it as an HTTP outage.
+
 ## Simple cron job (self-hosted)
 
 If you deploy to your own server instead of GitHub Pages, run a cron
@@ -97,6 +124,7 @@ check passed; red means the site was unreachable.
 | `/sitemap.xml` | SEO health -- search engines rely on this |
 | `/llms.txt` | AI agent discoverability |
 | `/search-index.json` | Search functionality depends on this |
+| `/manifest.json` | Which build is live — reachable is not the same as current |
 | `/sessions/` (any session) | Content rendering works end-to-end |
 
 ## Monitoring services (free tier)
