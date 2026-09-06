@@ -11,9 +11,9 @@ with the code it was supposed to be serving.
 Two halves, both offline:
 
 * Static assertions on the workflow YAML — the tag trigger, the retained
-  dispatch, the post-deploy version assert, and the weekly freshness job. Text
-  matching in the style of ``tests/test_release_pipeline.py``: the failure mode
-  is an edit that quietly drops a trigger or a step, which a substring catches.
+  dispatch, and the post-deploy version assert. Text matching in the style of
+  ``tests/test_release_pipeline.py``: the failure mode is an edit that quietly
+  drops a trigger or a step, which a substring catches.
 * Unit and CLI coverage of ``scripts/check_live_version.py``. The helpers are
   pure and the CLI takes ``--manifest-json``, so every exit path is exercised
   against fixtures without touching the network.
@@ -24,7 +24,6 @@ from __future__ import annotations
 import importlib.util
 import io
 import json
-import re
 import sys
 from pathlib import Path
 
@@ -33,15 +32,7 @@ import pytest
 from llmwiki import REPO_ROOT, __version__
 
 PAGES_YML = REPO_ROOT / ".github" / "workflows" / "pages.yml"
-FRESHNESS_YML = REPO_ROOT / ".github" / "workflows" / "pages-freshness.yml"
 CHECK_SCRIPT = REPO_ROOT / "scripts" / "check_live_version.py"
-
-# The demo lives on this fork's Pages domain. A URL pointing anywhere else
-# (an upstream fork, a copy-pasted example) checks somebody else's site and
-# reports it green while ours rots — which is the #213 failure, automated.
-LIVE_MANIFEST_URL = "https://alexandermakarov.github.io/llm-wiki/manifest.json"
-
-_CRON_RE = re.compile(r'cron:\s*"[^"]+"')
 
 
 def _load_checker():
@@ -60,16 +51,8 @@ def pages_yml() -> str:
 
 
 @pytest.fixture(scope="module")
-def freshness_yml() -> str:
-    assert FRESHNESS_YML.is_file(), (
-        ".github/workflows/pages-freshness.yml is missing — nothing notices when the live demo goes stale (#213)"
-    )
-    return FRESHNESS_YML.read_text(encoding="utf-8")
-
-
-@pytest.fixture(scope="module")
 def checker():
-    assert CHECK_SCRIPT.is_file(), "scripts/check_live_version.py is missing — both workflows invoke it"
+    assert CHECK_SCRIPT.is_file(), "scripts/check_live_version.py is missing — pages.yml invokes it post-deploy"
     return _load_checker()
 
 
@@ -133,42 +116,6 @@ def test_pages_post_deploy_check_retries_for_cdn_propagation(pages_yml: str):
     assert "--attempts" in body, (
         "the post-deploy check has no retries — a just-finished deploy needs a moment to reach the CDN, so a single attempt flakes red"
     )
-
-
-# ─── pages-freshness.yml: the standing guard ──────────────────────────
-
-
-def test_freshness_workflow_runs_on_a_schedule(freshness_yml: str):
-    assert "schedule:" in freshness_yml, (
-        "pages-freshness.yml has no schedule — an unscheduled guard only reports when someone already suspects a problem"
-    )
-    assert _CRON_RE.search(freshness_yml), "pages-freshness.yml declares a schedule with no cron expression"
-
-
-def test_freshness_workflow_can_be_dispatched(freshness_yml: str):
-    assert "workflow_dispatch:" in freshness_yml, (
-        "pages-freshness.yml cannot be run on demand — a maintainer verifying a republish should not wait for Monday"
-    )
-
-
-def test_freshness_workflow_checks_this_forks_live_demo(freshness_yml: str):
-    assert LIVE_MANIFEST_URL in freshness_yml, f"pages-freshness.yml must check {LIVE_MANIFEST_URL}"
-    assert "pratiyush" not in freshness_yml.lower(), (
-        "pages-freshness.yml points at another fork's Pages site — it would pass while this demo is stale"
-    )
-
-
-def test_freshness_workflow_runs_the_version_checker(freshness_yml: str):
-    assert "scripts/check_live_version.py" in freshness_yml, (
-        "pages-freshness.yml does not run the version checker — it asserts nothing"
-    )
-
-
-def test_freshness_workflow_never_deploys(freshness_yml: str):
-    # A read-only guard: a scheduled job that can publish turns a stale-site
-    # alarm into an unreviewed release.
-    for forbidden in ("actions/deploy-pages", "upload-pages-artifact", "pages: write"):
-        assert forbidden not in freshness_yml, f"pages-freshness.yml is read-only but contains {forbidden!r}"
 
 
 # ─── check_live_version.py: pure helpers ──────────────────────────────

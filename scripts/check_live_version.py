@@ -12,7 +12,7 @@ Two callers:
     # after a deploy — page_url ends with "/", manifest.json is appended
     python3 scripts/check_live_version.py --url "$PAGE_URL" --attempts 6 --delay 15
 
-    # weekly freshness guard against the published demo
+    # manual check against any published site
     python3 scripts/check_live_version.py --url https://example.github.io/llm-wiki/manifest.json
 
 The expected version defaults to `__version__` in the checked-out tree, which

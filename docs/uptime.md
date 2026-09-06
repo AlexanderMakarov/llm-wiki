@@ -90,9 +90,9 @@ Pass either the site root or the `manifest.json` URL — the script appends the 
 | 2 | Unreachable — the manifest could not be fetched |
 | 3 | Malformed — the response was not JSON, or carried no `version` |
 
-Two workflows run it. `.github/workflows/pages.yml` calls it right after `actions/deploy-pages`, so a deploy that does not actually reach the live URL turns the run red instead of green. `.github/workflows/pages-freshness.yml` runs it weekly (Mondays 06:00 UTC) plus on demand, against the published demo, and fails when the live version has fallen behind `__version__` on the default branch. It installs no dependencies — the checker reads the version out of the source tree rather than importing the package.
+`.github/workflows/pages.yml` calls it right after `actions/deploy-pages`, so a deploy that does not actually reach the live URL turns the run red instead of green. That post-deploy assert is the only automated freshness gate: version tags (and manual dispatch) republish the demo, and the check confirms the live site matches the commit that was just published. There is no separate weekly job — a skipped or cancelled Pages run is caught by watching the release checklist, not by a cron.
 
-A red freshness run is not an outage: the site is up, it is just old. The fix is to republish (push the version tag, or **Actions → Deploy demo site to GitHub Pages → Run workflow**), not to page anyone.
+A red post-deploy check is not an outage: the site is up, it is just not serving this build yet (or at all). Re-run **Actions → Deploy demo site to GitHub Pages**, or fix `__version__` / the tag and cut again — do not treat it as an HTTP outage.
 
 ## Simple cron job (self-hosted)
 

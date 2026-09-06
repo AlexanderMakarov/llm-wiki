@@ -90,7 +90,7 @@ The same tag push that triggers `release.yml` also triggers [`.github/workflows/
 - [ ] Spot-check the live demo shows the new version
 - [ ] If the deploy failed, fix `main` first and re-run the workflow from **Actions → Deploy demo site to GitHub Pages → Run workflow**; do not hotfix by rewriting the tag
 
-A weekly `pages-freshness.yml` run catches a demo that drifts behind afterwards (see [docs/uptime.md](../uptime.md)); it is a backstop, not a substitute for checking the release ran.
+There is no separate scheduled freshness workflow — the post-deploy assert on `pages.yml` is the gate. If that run is missing or red, fix it before calling the release done (see [docs/uptime.md](../uptime.md)).
 
 ## Announce (optional)
 

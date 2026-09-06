@@ -68,7 +68,7 @@ Run the same check by hand against any deployed site:
 python3 scripts/check_live_version.py --url https://<username>.github.io/<repo-name>/
 ```
 
-It exits 0 on a match, 1 when the site is stale, 2 when the manifest is unreachable, and 3 when it cannot be parsed. A weekly `pages-freshness.yml` run does this on a schedule — see [uptime.md](../uptime.md).
+It exits 0 on a match, 1 when the site is stale, 2 when the manifest is unreachable, and 3 when it cannot be parsed. The same check runs automatically after every Pages deploy; there is no separate scheduled freshness workflow — release/tag deploys are the gate (see [uptime.md](../uptime.md)).
 
 ## Using your own session data
 
