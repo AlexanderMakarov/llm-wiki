@@ -31,7 +31,7 @@ python3 -m llmwiki              # same as --help
 | **Take things out** | `remove` |
 | **Rare — one-time** | `migrate` · `queue` |
 
-The shorter alias `llmwiki` works too once the package is installed (`pip install llm-notebook` or via Homebrew — see [`deploy/pypi-publishing.md`](../deploy/pypi-publishing.md) / [`deploy/homebrew-setup.md`](../deploy/homebrew-setup.md)).
+The shorter alias `llmwiki` works too once the package is installed (`pip install llm-wiki-plus` or via Homebrew — see [`deploy/pypi-publishing.md`](../deploy/pypi-publishing.md) / [`deploy/homebrew-setup.md`](../deploy/homebrew-setup.md)).
 
 ---
 
@@ -317,7 +317,7 @@ python3 -m llmwiki graph --format html
 
 **Builtin engine:** Emits `graph/graph.json` (nodes + edges) and/or `graph/graph.html` (vis-network interactive viewer) plus sibling `graph-viewer.js` and `vis-network.min.js`. The interactive trio is also auto-copied into `site/` on every `build`, so the graph works offline from the built static site without a CDN fetch.
 
-**Graphify engine:** Runs the [Graphify](https://github.com/safishamsi/graphify) pipeline: tree-sitter AST extraction for code, semantic analysis for docs, Leiden community detection, god-node analysis. Outputs to `graphify-out/` (graph.json, graph.html, GRAPH_REPORT.md) and copies to `graph/` for build compatibility. Install: `pip install llm-wiki[graph]` or `pip install graphifyy`.
+**Graphify engine:** Runs the [Graphify](https://github.com/safishamsi/graphify) pipeline: tree-sitter AST extraction for code, semantic analysis for docs, Leiden community detection, god-node analysis. Outputs to `graphify-out/` (graph.json, graph.html, GRAPH_REPORT.md) and copies to `graph/` for build compatibility. Install: `pip install llm-wiki-plus[graph]` or `pip install graphifyy`.
 
 ---
 
@@ -717,7 +717,7 @@ python3 -m llmwiki query "Flutter mobile" --depth 2 --budget 1000
 | `--depth N` | BFS traversal depth. Default: `3`. |
 | `--budget N` | Max output tokens. Default: `2000`. |
 
-Requires Graphify (`pip install llm-wiki[graph]`). Run `llmwiki graph` first to build the graph.
+Requires Graphify (`pip install llm-wiki-plus[graph]`). Run `llmwiki graph` first to build the graph.
 
 ---
 
@@ -864,7 +864,7 @@ Nothing here is on by default; the wizard offers them as one comma-separated que
 
 | Extra | Flag | Effect |
 |---|---|---|
-| Build the knowledge graph | `--graph builtin` / `--graph graphify` | The job also builds the graph, with the built-in builder or the richer `graphify` one (`pip install llm-wiki[graph]`; the job falls back to the built-in builder until that extra is installed). Writes `graph/`. |
+| Build the knowledge graph | `--graph builtin` / `--graph graphify` | The job also builds the graph, with the built-in builder or the richer `graphify` one (`pip install llm-wiki-plus[graph]`; the job falls back to the built-in builder until that extra is installed). Writes `graph/`. |
 | Fail the job on quality errors | `--lint-fail errors` | The scheduled job reports failure when the quality check finds errors. |
 | Fail the job on quality warnings | `--lint-fail warnings` | The scheduled job reports failure on any warning or error. Stricter than `errors`. |
 

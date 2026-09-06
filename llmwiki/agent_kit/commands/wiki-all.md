@@ -9,7 +9,7 @@ The default run includes the synth stage, which sends session text to the config
 - `--no-sync` — skip the sync step (do not convert new agent sessions first)
 - `--no-synth` — skip the synth step, so the run makes no LLM calls
 - `--synth-force` — pass `--force` to synth (re-synthesize every session)
-- `--graph-engine builtin` — skip optional Graphify (use when `pip install llm-wiki[graph]` has not been run)
+- `--graph-engine builtin` — skip optional Graphify (use when `pip install llm-wiki-plus[graph]` has not been run)
 - `--skip-graph` — skip the graph step entirely
 - `--skip-lint` — skip the lint step entirely
 - `--lint-fail {never,errors,warnings}` — exit `2` when lint reports issues at this level (default: `never` — findings are printed and the run still exits `0`)

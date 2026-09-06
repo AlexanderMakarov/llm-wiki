@@ -82,7 +82,13 @@ class ModelRates(TypedDict):
     output: float          # model output tokens
 
 
-MODEL_PRICING_CSV = Path(__file__).resolve().parent.parent / "model_pricing.csv"
+#: Shipped inside the package so a wheel install can price a synth run. Before
+#: #210 the table only existed at the repo root, which is outside the wheel —
+#: every pip-installed ``sync``/``build`` died on ``unknown model/family
+#: 'sonnet'``. The repo-root path stays as a fallback for older checkouts.
+_PACKAGED_PRICING_CSV = Path(__file__).resolve().parent / "model_pricing.csv"
+_CHECKOUT_PRICING_CSV = Path(__file__).resolve().parent.parent / "model_pricing.csv"
+MODEL_PRICING_CSV = _PACKAGED_PRICING_CSV if _PACKAGED_PRICING_CSV.is_file() else _CHECKOUT_PRICING_CSV
 MODEL_FAMILY_BY_NAME: dict[str, str] = {}
 MODEL_ALIAS_TO_NAME: dict[str, str] = {}
 

@@ -36,6 +36,7 @@ from llmwiki.config_schedule import _load_sessions_config
 from llmwiki.convert import convert_all
 from llmwiki.graph import build_and_report
 from llmwiki.graphify_bridge import build_graphify_graph, is_available
+from llmwiki.install_hint import pip_install_command
 from llmwiki.lint import LintOptions, UnknownRuleError, load_pages, run_lint, summarize
 from llmwiki.lint.report import render_text
 from llmwiki.pipeline_lock import pipeline_lock
@@ -74,7 +75,7 @@ def _run_graph_step(*, wiki_dir: Path, graph_root: Path, engine: str) -> int:
     if engine == "graphify":
         if not is_available():
             print("  graphify not installed — falling back to builtin engine", file=sys.stderr)
-            print("  install with: pip install llm-wiki[graph]", file=sys.stderr)
+            print(f"  install with: {pip_install_command('graph')}", file=sys.stderr)
             engine = "builtin"
         else:
             try:

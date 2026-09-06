@@ -1,7 +1,7 @@
 """Build an install command that works in the interpreter actually running llmwiki.
 
-The optional-extra hints used to be hardcoded ``pip install 'llm-wiki[add]'``
-strings. That command is wrong whenever a bare ``pip`` resolves to a different
+The optional-extra hints used to be a hardcoded ``pip install`` string. That
+command is wrong whenever a bare ``pip`` resolves to a different
 interpreter than the one running llmwiki: a uv-managed venv (which ships no
 ``pip`` module at all), a wrapper script that execs a venv Python, or a source
 checkout put on ``PYTHONPATH``. A hint that installs into the *wrong*
@@ -21,8 +21,10 @@ from dataclasses import dataclass
 from importlib.util import find_spec
 from pathlib import Path
 
-#: Distribution name on PyPI. Not the import name (``llmwiki``).
-DIST_NAME = "llm-wiki"
+#: Distribution name on PyPI. Not the import name (``llmwiki``). ``llmwiki`` is
+#: owned by another author and PyPI rejects ``llm-wiki`` as too similar to it,
+#: so the published distribution carries the ``-plus`` suffix (#210).
+DIST_NAME = "llm-wiki-plus"
 
 _UV_DOCS = "https://docs.astral.sh/uv/"
 
@@ -90,6 +92,17 @@ def install_target(extra: str, env: PythonEnv | None = None) -> str:
     if env.project_root is not None:
         return f"-e {shlex.quote(f'{env.project_root}[{extra}]')}"
     return shlex.quote(f"{DIST_NAME}[{extra}]")
+
+
+def pip_install_command(extra: str) -> str:
+    """Return the generic ``pip install <dist>[extra]`` line for prose and prompts.
+
+    Interpreter-agnostic on purpose: this is the line shown as advice about an
+    extra the user has not installed yet, whereas :func:`install_hint` is the
+    command that fixes *this* process. Both read :data:`DIST_NAME`, so no
+    user-facing install string can drift from the published distribution.
+    """
+    return f"pip install {DIST_NAME}[{extra}]"
 
 
 def python_module_command(module: str, *args: str, env: PythonEnv | None = None) -> str:

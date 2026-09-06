@@ -99,6 +99,7 @@ from llmwiki.convert import DEFAULT_OUT_DIR, convert_all
 from llmwiki.cron_spec import CronError, describe, parse_cron
 from llmwiki.graph import build_and_report
 from llmwiki.graphify_bridge import build_graphify_graph, is_available, query_graph
+from llmwiki.install_hint import pip_install_command
 from llmwiki.lint import REGISTRY as _LINT_REG
 from llmwiki.lint import LintOptions, UnknownRuleError, load_pages, run_all, run_lint, summarize
 from llmwiki.lint import rules as _lint_rules  # noqa: F401 — force registration
@@ -769,12 +770,12 @@ Optional extras (comma-separated numbers, Enter = none):
                                       errors. Stricter than 2.
 """
 
-_BUILDER_QUESTION = """
+_BUILDER_QUESTION = f"""
 Which builder should build the graph?
 
   1) Built-in    Ships with llmwiki. Needs no extra install.
   2) graphify    Richer graph, built by the graphify package. Needs an extra
-                 install: pip install llm-wiki[graph]
+                 install: {pip_install_command('graph')}
 """
 
 _SCHEDULE_QUESTION = """
@@ -887,7 +888,7 @@ def _ask_graph_builder() -> GraphChoice:
         return "builtin"
     if not is_available():
         print("  graphify is not installed — the daily job falls back to the built-in builder")
-        print("  until you run: pip install llm-wiki[graph]")
+        print(f"  until you run: {pip_install_command('graph')}")
     return "graphify"
 
 

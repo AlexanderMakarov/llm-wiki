@@ -27,9 +27,10 @@ def test_pyproject_exists():
     assert p.exists()
     content = p.read_text(encoding="utf-8")
     # Minimal sanity
-    # Distribution name is `llm-wiki` (fork of upstream llm-notebook).
+    # Distribution name is `llm-wiki-plus`: `llmwiki` is another author's
+    # project and PyPI rejects `llm-wiki` as too similar to it (#210).
     # Python module + CLI command remain `llmwiki`.
-    assert 'name = "llm-wiki"' in content
+    assert 'name = "llm-wiki-plus"' in content
     assert 'requires-python = ">=3.12"' in content
     # Accept any valid semver — bumped to 1.0 in v1.0.0 release
     assert re.search(r'version = "\d+\.\d+\.\d+', content), "missing version string"

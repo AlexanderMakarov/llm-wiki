@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import sys
+import tomllib
 from pathlib import Path
 
+from llmwiki import REPO_ROOT
 from llmwiki.install_hint import (
     DIST_NAME,
     PythonEnv,
@@ -12,6 +14,7 @@ from llmwiki.install_hint import (
     detect_env,
     install_hint,
     install_target,
+    pip_install_command,
     python_module_command,
 )
 
@@ -78,6 +81,16 @@ def test_non_checkout_installs_the_published_distribution():
 
 def test_extra_name_is_interpolated():
     assert "[e2e]" in install_hint("e2e", _env())
+
+
+# ── generic prose hint ───────────────────────────────────────────────
+
+def test_generic_pip_hint_names_the_distribution_pyproject_publishes():
+    # The `pip install …[graph]` lines printed by the CLI and the automation
+    # prompts read this helper, so they cannot drift from packaging (#210).
+    name = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]["name"]
+    assert DIST_NAME == name
+    assert pip_install_command("graph") == f"pip install {name}[graph]"
 
 
 # ── quoting ──────────────────────────────────────────────────────────

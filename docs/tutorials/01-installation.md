@@ -16,7 +16,7 @@ docs_shell: true
 
 llmwiki runs **locally**. Every session transcript stays on your machine. No
 telemetry, no account, no network calls at build time. The install is
-deliberately boring: clone, run the setup script, done.
+deliberately boring: `pip install`, done.
 
 ---
 
@@ -30,14 +30,43 @@ git --version
 macOS and most Linux distros already ship both. Windows: install Python from
 [python.org](https://python.org) and git from [git-scm.com](https://git-scm.com).
 
-## Step 2 — Clone the repo
+## Step 2 — Install from PyPI (recommended)
+
+The distribution is `llm-wiki-plus`; the CLI it installs is `llmwiki`:
+
+```bash
+pip install llm-wiki-plus
+llmwiki --version
+```
+
+Expected output (version string matches the latest tagged release):
+
+```
+llmwiki <version>
+```
+
+Each version tag publishes the matching release, so a brand-new version reaches PyPI when its tag is pushed — if `pip` cannot find the version you expect yet, it hasn't been tagged.
+
+Then scaffold a vault wherever you want it:
+
+```bash
+llmwiki init --vault .
+```
+
+Or via Homebrew, once [#247](https://github.com/Pratiyush/llm-wiki/issues/247) is set up:
+
+```bash
+brew install Pratiyush/tap/llmwiki
+```
+
+## Step 3 — (Alternative) Clone and run the setup script
+
+Use this path to run unreleased code or to change llmwiki itself:
 
 ```bash
 git clone https://github.com/Pratiyush/llm-wiki.git
 cd llm-wiki
 ```
-
-## Step 3 — Run the setup script
 
 ### macOS / Linux
 
@@ -60,30 +89,7 @@ It will:
 - Install the `markdown` pip package (only runtime dep; everything else is stdlib)
 - Verify the CLI launches: `python3 -m llmwiki --version`
 
-Expected output (version string matches the latest tagged release):
-
-```
-llmwiki <version>
-```
-
-## Step 4 — (Optional) Install via PyPI instead
-
-Once [#246](https://github.com/Pratiyush/llm-wiki/issues/246) is set up:
-
-```bash
-pip install llm-notebook
-llmwiki --version
-```
-
-Or via Homebrew, once [#247](https://github.com/Pratiyush/llm-wiki/issues/247) is set up:
-
-```bash
-brew install Pratiyush/tap/llmwiki
-```
-
-Until then the clone-and-run path above is authoritative.
-
-## Step 5 — (Optional) Install via Docker
+## Step 4 — (Optional) Install via Docker
 
 Zero-touch, no Python on your machine:
 
@@ -98,9 +104,11 @@ See [deploy/docker.md](../deploy/docker.md) for the full Compose setup.
 ## Verify
 
 ```bash
-python3 -m llmwiki --version           # → llmwiki <version>
-python3 -m llmwiki adapters            # lists every agent adapter and whether it's configured
+llmwiki --version                      # → llmwiki <version>
+llmwiki adapters                       # lists every agent adapter and whether it's configured
 ```
+
+From a clone, `python3 -m llmwiki <command>` does the same thing without the CLI being on your PATH.
 
 The `adapters` output tells you which agents have session stores on this
 machine — your first sync pulls from every one marked `configured ✓`.

@@ -429,7 +429,7 @@ def test_cheatsheet_presents_automation_before_the_manual_alternative() -> None:
     assert setup_idx < manual_idx
     # Stale facts the tech spec flagged must be fixed, consistently.
     assert "llm-notebook[graph]" not in text
-    assert "pip install llm-wiki[graph]" in text
+    assert "pip install llm-wiki-plus[graph]" in text
     assert "11 CLI commands" not in text
     counts = {int(n) for n in re.findall(r"(\d+) wiki-quality rules", text)}
     assert len(counts) <= 1, f"cheatsheet quality-rule count must not contradict itself: {counts}"

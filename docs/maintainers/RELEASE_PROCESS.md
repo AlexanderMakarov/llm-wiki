@@ -65,12 +65,13 @@ Pushing the `v*.*.*` tag triggers [`.github/workflows/release.yml`](../../.githu
 2. Signs artifacts with Sigstore
 3. Creates (or updates) the GitHub Release with notes + artifacts — **this is the happy path**; do not run a second `gh release create` unless automation is broken
 4. Publishes to PyPI via OIDC **only when** repository variable `PYPI_PUBLISHING` is `true` (otherwise the publish job is skipped; the GitHub Release still ships)
+5. Runs a post-publish `smoke` job that installs `llm-wiki-plus==X.Y.Z` from real PyPI and asserts `llmwiki --version` matches the tag — it also fails the run outright when `publish` was skipped, so a gate-off tag can't pass quietly
 
 Prerelease: the workflow passes `--prerelease` only when the tag name matches `rc` / `alpha` / `beta` / `dev`. Stable tags are full releases.
 
 - [ ] Confirm the workflow: `gh run list --workflow=release.yml --limit=3` (watch the run for this tag)
 - [ ] Open the GitHub Release for this repo and confirm title, notes, and assets
-- [ ] If PyPI was expected, confirm `pip install llm-notebook==X.Y.Z`; if skipped, that is normal until publishing is enabled (see `docs/deploy/pypi-publishing.md`)
+- [ ] Confirm the `smoke` job went green — it is the check that the tag actually reached users as `pip install llm-wiki-plus==X.Y.Z`. `PYPI_PUBLISHING` is enabled on this repo, so a **skipped** `publish` is no longer normal: it means releases were turned off and the tag shipped nothing to PyPI, which `smoke` now fails on rather than skipping alongside it (see `docs/deploy/pypi-publishing.md`)
 - [ ] Watch CI on the release commit SHA on `main`
 
 **Manual fallback** (only if `release.yml` is broken):

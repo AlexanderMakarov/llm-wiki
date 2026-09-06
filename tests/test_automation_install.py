@@ -441,7 +441,7 @@ def test_wizard_warns_but_continues_when_graphify_is_not_installed(
     out = capsys.readouterr().out
     assert config["plan"] == AutomationPlan(job="maintain", graph="graphify")
     assert "falls back to the built-in builder" in out
-    assert "pip install llm-wiki[graph]" in out
+    assert "pip install llm-wiki-plus[graph]" in out
 
 
 def test_wizard_weekday_preset_produces_a_weekday_cron(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):

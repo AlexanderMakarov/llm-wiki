@@ -82,6 +82,91 @@ def test_github_release_job_runs_even_if_publish_fails(release_yml: str):
     assert "if: always()" in release_yml
 
 
+# ─── Post-publish smoke (#210) ────────────────────────────────────────
+#
+# Before #210 a tag could go green having shipped nothing: the publish job
+# was gated, the GitHub Release job ran `if: always()`, and no step ever
+# asked PyPI whether the version was installable. These tests pin the job
+# that closes that gap.
+
+
+def test_release_workflow_has_a_post_publish_smoke_job(release_yml: str):
+    assert re.search(r"^  smoke:$", release_yml, re.MULTILINE), (
+        "release.yml lost its post-publish `smoke` job — without it a tag that "
+        "publishes nothing still reports success"
+    )
+
+
+def test_smoke_job_runs_after_publish(release_yml: str):
+    smoke = _job_block(release_yml, "smoke")
+    needs = re.search(r"^    needs:\s*(.+)$", smoke, re.MULTILINE)
+    assert needs is not None and "publish" in needs.group(1), (
+        "`smoke` must depend on `publish` so it tests what that job uploaded"
+    )
+
+
+def test_smoke_job_runs_even_when_publish_was_skipped(release_yml: str):
+    # `needs: publish` alone propagates a skip, which is the silent-green path
+    # this job exists to close. The job must run on the build result instead.
+    smoke = _job_block(release_yml, "smoke")
+    assert "if: always()" in smoke, (
+        "`smoke` must run with `if: always()` — otherwise a skipped `publish` "
+        "skips the only check that a tag reached PyPI"
+    )
+    assert "needs.build.result == 'success'" in smoke
+    needs = re.search(r"^    needs:\s*(.+)$", smoke, re.MULTILINE)
+    assert needs is not None and "build" in needs.group(1), (
+        "`smoke` reads `needs.build.result`, so `build` must be one of its "
+        "`needs` — the `needs` context only carries direct dependencies"
+    )
+
+
+def test_smoke_job_fails_when_publish_did_not_succeed(release_yml: str):
+    # Running `if: always()` is only half of it: without this precondition a
+    # gate-off tag would install the *previous* release and go green.
+    smoke = _job_block(release_yml, "smoke")
+    assert "needs.publish.result }}\" != \"success\"" in smoke, (
+        "`smoke` must hard-fail when `publish` didn't succeed — a tag that "
+        "skips publish ships nothing to PyPI"
+    )
+
+
+def test_smoke_job_installs_the_published_distribution_from_pypi(release_yml: str):
+    smoke = _job_block(release_yml, "smoke")
+    name = re.search(r'^name\s*=\s*"([^"]+)"', PYPROJECT.read_text(encoding="utf-8"), re.MULTILINE)
+    assert name is not None
+    assert f"{name.group(1)}==" in smoke, (
+        f"`smoke` must install {name.group(1)}=='<tag>' from PyPI — installing "
+        "an unpinned version or the local checkout proves nothing about the release"
+    )
+
+
+def test_smoke_job_asserts_the_reported_version(release_yml: str):
+    smoke = _job_block(release_yml, "smoke")
+    assert "llmwiki --version" in smoke, "`smoke` must check the CLI reports the tagged version"
+
+
+def test_smoke_job_is_not_soft_failed(release_yml: str):
+    # A `continue-on-error: true` here would restore exactly the silent-skip
+    # behaviour the job exists to end.
+    smoke = _job_block(release_yml, "smoke")
+    # Match the YAML key, not the word — the job comments explain its absence.
+    assert not re.search(r"^\s*continue-on-error\s*:", smoke, re.MULTILINE)
+
+
+def _job_block(release_yml: str, job: str) -> str:
+    """Return the YAML lines belonging to one top-level job."""
+    lines = release_yml.splitlines()
+    try:
+        start = lines.index(f"  {job}:")
+    except ValueError:  # pragma: no cover - guarded by the existence test
+        raise AssertionError(f"release.yml has no `{job}` job") from None
+    for offset, line in enumerate(lines[start + 1 :], start=start + 1):
+        if line.startswith("  ") and not line.startswith("   ") and line.rstrip().endswith(":"):
+            return "\n".join(lines[start:offset])
+    return "\n".join(lines[start:])
+
+
 # ─── pyproject.toml must be publishable ───────────────────────────────
 
 
@@ -129,6 +214,26 @@ def test_pypi_doc_mentions_trusted_publisher(pypi_doc: str):
 
 def test_pypi_doc_mentions_publishing_variable(pypi_doc: str):
     assert "PYPI_PUBLISHING" in pypi_doc
+
+
+def test_pypi_doc_names_the_packaged_distribution(pypi_doc: str, pyproject: str):
+    # The walkthrough tells an operator which project to register on PyPI. If
+    # it names anything but the distribution we build, the trusted-publisher
+    # binding is created for a project the workflow never uploads to (#210).
+    name = re.search(r'^name\s*=\s*"([^"]+)"', pyproject, re.MULTILINE)
+    assert name is not None
+    assert f"| PyPI Project Name | `{name.group(1)}` |" in pypi_doc
+
+
+def test_pypi_doc_explains_why_the_short_names_are_unavailable(pypi_doc: str):
+    # Without the rationale the next maintainer retries `llm-wiki` and hits
+    # PyPI's similarity rejection all over again.
+    assert "llmwiki" in pypi_doc
+    assert "similar" in pypi_doc.lower()
+
+
+def test_pypi_doc_documents_the_smoke_job(pypi_doc: str):
+    assert "smoke" in pypi_doc.lower()
 
 
 def test_pypi_doc_covers_troubleshooting(pypi_doc: str):

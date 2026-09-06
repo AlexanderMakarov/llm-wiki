@@ -1,5 +1,7 @@
 # llmwiki v1.2.0 — first stable on the 1.x line
 
+> **Superseded install instructions.** The `llm-notebook` commands below were never published for this fork. The distribution is `llm-wiki-plus` — see [`docs/deploy/pypi-publishing.md`](docs/deploy/pypi-publishing.md) (#210). The rest of this file is kept as the historical record of the v1.2.0 release.
+
 **Release date:** 2026-04-25
 **Tag:** `v1.2.0`
 **PyPI:** `pip install llm-notebook==1.2.0` (once trusted publisher is configured — see issue #246)
