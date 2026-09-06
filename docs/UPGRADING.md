@@ -25,7 +25,7 @@ The canonical per-release detail is [CHANGELOG.md](https://github.com/Pratiyush/
 | `migrate-topic-kinds` | `migrate topic-kinds` |
 | `migrate-broken-provenance` | `migrate broken-provenance` |
 
-List migrations with `llmwiki migrate` or `llmwiki migrate --list`. Nothing runs until you pick a name. Prefer `--dry-run` first. `/wiki-synthesize` still works as a slash alias and runs `synth --sources-only`.
+List migrations with `llmwiki migrate` or `llmwiki migrate --list`. Nothing runs until you pick a name. Prefer `--dry-run` first. The `/wiki-synthesize` slash alias is retired — `/wiki-synth` is the command, and `synth --sources-only` is the flag for the sources-only pass.
 
 ## 2.1.0 — durable sync lookback (#192)
 
@@ -358,7 +358,6 @@ The CLI was slimmed in #362. If you scripted any of these, replace as noted:
 - `llmwiki install-skills` — removed. Manually copy `.claude/commands/wiki-*.md` into `~/.claude/commands/` for global availability.
 - `llmwiki check-links` — removed. Use the GitHub Actions link-check workflow instead.
 - `llmwiki watch`, `llmwiki manifest`, `llmwiki link-obsidian`, `llmwiki export-obsidian`, `llmwiki export-marp`, `llmwiki export-qmd`, `llmwiki eval` — also removed. (`llmwiki eval` was never a live CLI — structural scoring never shipped; use `llmwiki lint` for wiki quality.)
-- `llmwiki export marp` is the new path for Marp slide export.
 
 ### Removed adapters
 

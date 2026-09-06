@@ -85,3 +85,13 @@ No new installer path. Existing `llmwiki` skill installer already mirrors `.clau
 - **Content smoke:** assert skill or `RELEASE_PROCESS.md` mentions `main` and does **not** instruct `git push origin master` as the happy path; assert no “always `--prerelease`” for every release after 1.0 (or equivalent stale phrase removed).
 - **Manual:** dry-run reading the skill against the v2.1.0 checklist in review (no second live tag in this PR).
 - No E2E that pushes tags.
+
+---
+
+## Change Log
+
+### 2026-09-06 — maintainer slash-command reference moved ([#214](https://github.com/AlexanderMakarov/llm-wiki/issues/214))
+
+- **What changed:** FR4-AC4 ("Maintainer README and slash-command reference describe the skill accurately") does not name a file. The slash-command reference has since been split: `docs/reference/slash-commands.md` covers only the vault pipeline commands shipped by `install-agent-kit`, and maintainer commands — `/release` included — are documented in `docs/maintainers/slash-commands.md`. That maintainer doc is the reference FR4-AC4 now points at.
+- **Why:** #214 separated the installed vault command surface from contributor-only commands so neither reference can advertise a command the reader does not have.
+- **Scope of the amendment:** the file FR4-AC4's "slash-command reference" resolves to. The criterion itself is unchanged, and `test_slash_ref_mentions_release` now asserts the `### /release` heading in `docs/maintainers/slash-commands.md`.

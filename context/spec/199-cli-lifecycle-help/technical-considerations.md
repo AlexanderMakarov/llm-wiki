@@ -13,7 +13,7 @@ Stay in the existing CLI package. Use stdlib `argparse` as it exists on Python 3
 Three mechanical pieces:
 
 1. **Help surface** — grouped command map and canonical-loop reminder via the root parser’s `description` / `epilog` and `argparse.RawDescriptionHelpFormatter`. Long per-command text via each subparser’s `description`. Strip issue numbers from flag `help=` strings.
-2. **Command set** — unregister `synthesize` and `consolidate-topics`. Point slash commands and docs that still invoked them at `synth` (with `--sources-only` where that was the old alias default).
+2. **Command set** — unregister `synthesize` and `consolidate-topics`. Point docs that still invoked them at `synth` (with `--sources-only` where that was the old alias default). No packaged slash command invokes the removed names.
 3. **Migration wrapper** — one top-level `migrate` with nested names (`add_subparsers` on that parser). List when no name is given or `--list` is passed; run only when a name is given. Delete the six `migrate-*` subparsers. Existing handler functions and `scripts/migrate_*.py` stay; only the invocation shape changes.
 
 Tests that existed only to cover a **removed** command or retirement stub are deleted. Do not replace them with assertions that the old name is “unknown.” Keep tests that still exercise a live feature (including migrations and `synth`), and point their argv at the new shape.
@@ -49,7 +49,7 @@ A test must check that every key in the root subparsers `choices` appears in the
 
 - Drop subparsers `synthesize` and `consolidate-topics`.
 - Delete `cmd_consolidate_topics` and the `deprecated_synthesize` branch. `cmd_synthesize` remains wired only to `synth`.
-- Packaged `/wiki-synthesize` stays as a deprecated slash alias that runs `python3 -m llmwiki synth --sources-only`. It must not shell out to a missing `synthesize` subcommand. Docs say prefer `/wiki-synth`.
+- Packaged `/wiki-synthesize` is retired, not kept as a deprecated alias (amended 2026-09-06, see Change Log): the command file is dropped from the agent kit and `install-agent-kit` ships one fewer command. `/wiki-synth` is the only synthesize entry point; what the old alias did is reached with `synth --sources-only`. Docs mention `/wiki-synthesize` only as a removed name.
 
 ### `migrate` contract
 
@@ -95,7 +95,7 @@ Do not keep or invert tests whose subject is a command or retirement behaviour w
 
 - Migration dry-run / report tests: call `migrate <name> …` (or the handler function) instead of `migrate-…`.
 - `synth` pipeline, `--estimate`, `--candidates-only`, `--sources-only` as flags on `synth`.
-- Slash `/wiki-synth` behaviour; `/wiki-synthesize` only as far as it still exists as a slash alias (must invoke `synth`, not a deleted CLI name).
+- Slash `/wiki-synth` behaviour. There is no `/wiki-synthesize` alias behaviour to cover — the packaged command set simply no longer ships that file, and the packaged-command count guards that.
 
 New tests that *are* in scope: grouped headings and epilog in root `format_help()`; no `#\d+` in top-level help; every live subparser name appears in the description; `migrate` / `migrate --list` print the catalog without writing; `migrate <name> --dry-run` still reaches the existing handler.
 
@@ -116,3 +116,14 @@ New tests that *are* in scope: grouped headings and epilog in root `format_help(
 - Help: `build_parser().format_help()` and subparser `format_help()` (no private formatter API).
 - Doc parity: existing coverage tests green after heading rewrite.
 - Regression: remaining migrate / synth tests use the new argv; removed-feature tests are gone, not rewritten as unknown-command cases.
+
+---
+
+## Change Log
+
+### 2026-09-06 — `/wiki-synthesize` slash alias retired ([#214](https://github.com/AlexanderMakarov/llm-wiki/issues/214))
+
+- **What changed:** this spec's §2 "Removed commands" decided to keep packaged `/wiki-synthesize` as a deprecated slash alias running `python3 -m llmwiki synth --sources-only`. That decision is reversed. The packaged command file is deleted, `install-agent-kit` ships 12 commands, and `/wiki-synth` is the only synthesize entry point; the old sources-only behaviour is reached with `--sources-only` on `synth`.
+- **Why:** work on #214 trimmed the vault command surface, and the repo owner directed retiring the alias rather than carrying a second name for the same job.
+- **Scope of the amendment:** §2 "Removed commands", the §1 command-set summary, and the §2 "Keep and retarget argv" testing note. The functional spec is unchanged: its R3 acceptance criteria concern the CLI `synthesize` subcommand, whose removal stands exactly as specified — only the packaged slash alias decision, which lived here, was reversed.
+- **`tasks.md`:** Slice 2's checked items are left as written. They record accurately what shipped for #112; the alias they created was removed later under #214.

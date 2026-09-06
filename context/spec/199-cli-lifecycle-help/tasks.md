@@ -20,6 +20,8 @@ Hired specialists: none for Python CLI — implementation tasks use **general-pu
 
   > End state: those names are not registered; `synth` is the only synthesize entry; `/wiki-synthesize` runs `synth --sources-only`; retirement/alias tests are deleted.
 
+  > Superseded on 2026-09-06: the `/wiki-synthesize` alias this slice created was later retired under #214 — see the Change Log in [`technical-considerations.md`](./technical-considerations.md). The items below stay checked; they record what shipped for #112.
+
   - [x] Unregister `synthesize` and `consolidate-topics`. Delete `cmd_consolidate_topics` and the `deprecated_synthesize` branch. Wire `cmd_synthesize` only to `synth`. Point `llmwiki/agent_kit/commands/wiki-synthesize.md` at `python3 -m llmwiki synth --sources-only`. **[Agent: general-purpose]**
   - [x] Delete tests for the alias and the retirement stub (`consolidate-topics` still-resolves / exit 2, `deprecated_synthesize`, coverage that required live `## synthesize` / `## consolidate-topics` headings). Keep live `synth` / known-names / slash-synth tests; retarget argv. Update `ALL_SUBCOMMANDS`. **[Agent: general-purpose]**
   - [x] Verify: `python3 -m pytest` on remaining synth / 147 / smoke / slash-parity tests that you touched `-q`; `ruff check` on touched files. **[Agent: general-purpose]**

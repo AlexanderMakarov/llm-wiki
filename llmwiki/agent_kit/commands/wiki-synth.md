@@ -2,7 +2,7 @@ Synthesize `wiki/sources/<slug>.md` pages from raw session transcripts and harve
 
 Wraps: `python3 -m llmwiki synth`
 
-Usage: `/wiki-synth` (preferred) or `/wiki-synthesize` (deprecated alias). Claude translates natural-language phrasing into flags.
+Usage: `/wiki-synth`. Claude translates natural-language phrasing into flags.
 
 A real sources pass is two language-model jobs (prepare known-names once at start, then one summary per queued raw file), then bookkeeping. Harvest is offline — parsers over Connections topic bullets; no classify call and no `consolidate-topics` step. Do **not** run `llmwiki consolidate-topics` (gone — known-names prepare is part of `synth`).
 

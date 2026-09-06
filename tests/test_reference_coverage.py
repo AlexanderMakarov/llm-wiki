@@ -2,9 +2,11 @@
 
 - Every CLI subcommand registered in ``llmwiki.cli.build_parser`` must
   appear as an ``## subcommand`` heading in ``docs/reference/cli.md``.
-- Every user-facing ``llmwiki/agent_kit/commands/*.md`` file and every
-  contributor ``.claude/commands/*.md`` file must appear as a
-  ``### /slash-command`` heading in ``docs/reference/slash-commands.md``.
+- Every user-facing ``llmwiki/agent_kit/commands/*.md`` file must appear
+  as a ``### /slash-command`` heading in
+  ``docs/reference/slash-commands.md``; every contributor
+  ``.claude/commands/*.md`` file must appear the same way in
+  ``docs/maintainers/slash-commands.md``.
 - Every top-level nav item in ``llmwiki/build.py`` must appear as a
   row in ``docs/reference/ui.md``.
 
@@ -15,12 +17,14 @@ tests fail with a clear message pointing at the missing entry.
 from __future__ import annotations
 
 import re
+from pathlib import Path
 
 from llmwiki import REPO_ROOT
 from llmwiki.cli import build_parser
 
 CLI_REF = REPO_ROOT / "docs" / "reference" / "cli.md"
 SLASH_REF = REPO_ROOT / "docs" / "reference" / "slash-commands.md"
+MAINTAINER_SLASH_REF = REPO_ROOT / "docs" / "maintainers" / "slash-commands.md"
 UI_REF = REPO_ROOT / "docs" / "reference" / "ui.md"
 CLAUDE_CMDS_DIR = REPO_ROOT / ".claude" / "commands"
 AGENT_KIT_CMDS_DIR = REPO_ROOT / "llmwiki" / "agent_kit" / "commands"
@@ -87,52 +91,146 @@ def test_every_cli_subcommand_gets_an_example():
 # ─── Slash command coverage ───────────────────────────────────────────
 
 
-def _all_slash_commands() -> set[str]:
-    names: set[str] = set()
-    for folder in (CLAUDE_CMDS_DIR, AGENT_KIT_CMDS_DIR):
-        if folder.is_dir():
-            names.update(p.stem for p in folder.glob("*.md"))
+def _commands_in(folder: Path) -> set[str]:
+    if not folder.is_dir():
+        return set()
+    return {p.stem for p in folder.glob("*.md")}
+
+
+def _documented_slash_order(ref: Path) -> list[str]:
+    """Slash names carrying an h3 heading in ``ref``, in page order.
+
+    Accepts ``### /name``, ``### `/name` `` and ``### `/name <arg>` ``;
+    returns the bare name (no backticks, no slash, no args).
+    """
+    return re.findall(
+        r"^###\s+`?/([a-z][a-z0-9-]*)",
+        ref.read_text(encoding="utf-8"),
+        re.MULTILINE,
+    )
+
+
+def _documented_slashes(ref: Path) -> set[str]:
+    """Set of slash names carrying an h3 heading in ``ref``."""
+    return set(_documented_slash_order(ref))
+
+
+def _summary_table_slash_order(ref: Path) -> list[str]:
+    """Slash names listed in the `| Command | What it does |` table, in row order.
+
+    Parsed tolerantly — every ``/wiki-…`` token inside the table block,
+    regardless of column layout — so reformatting the table does not
+    break the check.
+    """
+    names: list[str] = []
+    inside = False
+    for line in ref.read_text(encoding="utf-8").splitlines():
+        if re.match(r"^\|\s*Command\s*\|\s*What it does\s*\|", line):
+            inside = True
+            continue
+        if inside:
+            if not line.lstrip().startswith("|"):
+                break
+            names.extend(re.findall(r"/(wiki-[a-z0-9-]+)", line))
     return names
 
 
-def test_slash_reference_covers_every_command():
-    slash_text = SLASH_REF.read_text(encoding="utf-8")
+def _summary_table_slashes(ref: Path) -> set[str]:
+    """Set of slash names listed in the summary table."""
+    return set(_summary_table_slash_order(ref))
 
-    # Accept h3 headings in any of these shapes:
-    #   ### /name
-    #   ### `/name`
-    #   ### `/name <positional>`
-    # The regex captures the bare name (no backticks, no slash, no args).
-    documented = set(
-        re.findall(
-            r"^###\s+`?/([a-z][a-z0-9-]*)",
-            slash_text,
-            re.MULTILINE,
-        )
-    )
 
-    live = _all_slash_commands()
-
-    missing = live - documented
+def test_slash_reference_covers_every_vault_command():
+    missing = _commands_in(AGENT_KIT_CMDS_DIR) - _documented_slashes(SLASH_REF)
     assert not missing, (
         f"docs/reference/slash-commands.md is missing entries for these "
         f"shipped commands: {sorted(missing)}"
     )
 
 
+def test_maintainer_reference_covers_every_contributor_command():
+    missing = (
+        _commands_in(CLAUDE_CMDS_DIR)
+        - _documented_slashes(MAINTAINER_SLASH_REF)
+    )
+    assert not missing, (
+        f"docs/maintainers/slash-commands.md is missing entries for these "
+        f"contributor commands: {sorted(missing)}"
+    )
+
+
+def test_slash_reference_documents_only_shipped_vault_commands():
+    """Reverse parity for the vault slash reference (regression for #214).
+
+    ``/wiki-export-marp`` outlived its CLI subcommand in this doc because
+    only the shipped-but-undocumented direction was asserted. Guard the
+    other direction too.
+    """
+    orphaned = _documented_slashes(SLASH_REF) - _commands_in(AGENT_KIT_CMDS_DIR)
+    assert not orphaned, (
+        f"docs/reference/slash-commands.md documents these slash commands "
+        f"but llmwiki/agent_kit/commands/ ships no such file: "
+        f"{sorted(orphaned)}. The doc sends users to a slash command that "
+        f"will not exist on their machine after `llmwiki install-agent-kit` "
+        f"— drop the section or ship the command."
+    )
+
+
+def test_maintainer_reference_documents_only_shipped_contributor_commands():
+    """Reverse parity for the maintainer slash reference (#214).
+
+    Same shape as the vault check so neither half of the split reference
+    can drift into advertising a command that no longer exists.
+    """
+    orphaned = (
+        _documented_slashes(MAINTAINER_SLASH_REF)
+        - _commands_in(CLAUDE_CMDS_DIR)
+    )
+    assert not orphaned, (
+        f"docs/maintainers/slash-commands.md documents these slash commands "
+        f"but .claude/commands/ holds no such file: {sorted(orphaned)}. The "
+        f"doc points contributors at a command that will not exist — drop "
+        f"the section or add the command."
+    )
+
+
+def test_slash_reference_summary_table_matches_sections():
+    """The summary table and the `###` write-ups are two surfaces for the
+    same 12 commands — keep them in step, in the same order (#214).
+
+    The table is what carried the wrong command count when
+    ``/wiki-export-marp`` was removed, so drift here is the exact failure
+    mode this guards. The table also promises "in the order you meet
+    them", so the sequences — not just the sets — must agree.
+    """
+    tabled_order = _summary_table_slash_order(SLASH_REF)
+    assert tabled_order, (
+        "docs/reference/slash-commands.md should carry a "
+        "`| Command | What it does |` summary table"
+    )
+    sectioned_order = _documented_slash_order(SLASH_REF)
+    tabled, sectioned = set(tabled_order), set(sectioned_order)
+    assert tabled_order == sectioned_order, (
+        f"docs/reference/slash-commands.md summary table and `### /…` "
+        f"sections disagree — in the table only: "
+        f"{sorted(tabled - sectioned)}; in the sections only: "
+        f"{sorted(sectioned - tabled)}; table order: {tabled_order}; "
+        f"section order: {sectioned_order}"
+    )
+
+
 def test_slash_reference_counts_correctly():
-    """The summary table at the top of the slash ref claims a total
-    count — keep it honest."""
+    """The summary at the top of the slash ref claims a total count —
+    keep it honest."""
     slash_text = SLASH_REF.read_text(encoding="utf-8")
-    live_count = len(_all_slash_commands())
+    live_count = len(_commands_in(AGENT_KIT_CMDS_DIR))
     # Look for `**N commands in` — the summary line.
     m = re.search(r"\*\*(\d+)\s+commands?\s+in", slash_text)
     assert m, "slash-commands.md should have a `**N commands in …**` summary"
     claimed = int(m.group(1))
     assert claimed == live_count, (
         f"slash-commands.md says {claimed} commands but there are "
-        f"actually {live_count} .md files in llmwiki/agent_kit/commands/ "
-        f"+ .claude/commands/"
+        f"actually {live_count} .md files in llmwiki/agent_kit/commands/"
     )
 
 

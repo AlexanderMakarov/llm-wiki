@@ -14,6 +14,7 @@ first — it has the short version of what this folder covers in detail.
 | [`REVIEW_CHECKLIST.md`](REVIEW_CHECKLIST.md) | Canonical code-review criteria — apply to every incoming PR |
 | [`RELEASE_PROCESS.md`](RELEASE_PROCESS.md) | Version bump → CHANGELOG → tag → `release.yml` checklist (canonical order; cut via `/release` skill) |
 | [`TRIAGE.md`](TRIAGE.md) | Label taxonomy + triage rules + stale-issue policy |
+| [`slash-commands.md`](slash-commands.md) | The five maintainer / AWOS-delivery slash commands in `.claude/commands/` |
 | [`DECLINED.md`](DECLINED.md) | Graveyard of declined ideas with dates + reasons |
 | [`../../context/product/roadmap.md`](../../context/product/roadmap.md) | The roadmap — phases, what is next, and which issue delivers each item |
 | [`REFRESH_DEMO.md`](REFRESH_DEMO.md) | Local command that incrementally regenerates `demo/` from git-detected `docs/` changes — needs a working copy and a synth backend; never runs in CI |
@@ -29,7 +30,7 @@ Maintainer ops use slash wrappers plus skills under `.claude/`:
 
 Code review uses `REVIEW_CHECKLIST.md` directly (or via the single independent review stage inside `/implement-feature` / `/fix-bug`, where the coding agent picks its own most suitable review skill or command).
 
-See `.claude/commands/` (and `.cursor/commands/` for Cursor-facing wrappers) in the repo root for the source of each command.
+Full write-ups for all five commands (including the AWOS delivery pair `/fix-bug` and `/implement-feature`) live in [`slash-commands.md`](slash-commands.md). See `.claude/commands/` (and `.cursor/commands/` for Cursor-facing wrappers) in the repo root for the source of each command.
 
 ## When things go wrong
 

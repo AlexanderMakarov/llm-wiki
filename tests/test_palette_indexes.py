@@ -115,7 +115,7 @@ def test_palette_slash_includes_known_wrappers(search_index):
     }
     for expected in (
         "/wiki-build", "/wiki-sync", "/wiki-query", "/wiki-lint",
-        "/wiki-candidates", "/wiki-synth", "/wiki-synthesize",
+        "/wiki-candidates", "/wiki-synth",
     ):
         assert expected in slashes, f"missing slash in index: {expected}"
 
