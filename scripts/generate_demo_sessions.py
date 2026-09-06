@@ -14,8 +14,14 @@ the real `synth`, candidate harvest, review, `build` and `graph`.
 
 The corpus is deterministic — same inputs, same files — so regenerating it
 produces no spurious diff. Only `--today` changes the dates. The committed
-demo wiki cites filenames from `--today 2026-08-10`; use that anchor when
-refreshing `demo/raw/sessions/` so existing `source_file:` links stay valid.
+demo wiki historically cites filenames from `--today 2026-08-10`; keep that
+anchor only when you are rewriting sessions without a wiki resynth. For a
+**release that should look current on the public demo** (#225), pass a
+release-day `--today`, then re-run synth/build against `demo/` and commit
+both `demo/raw/sessions/` and the updated `demo/wiki/` so `source_file:`
+links stay valid. CI and `pages.yml` never regenerate this corpus — they
+only build what is committed. The `/release` skill and
+`docs/maintainers/RELEASE_PROCESS.md` list this as a pre-tag checklist item.
 
 Three authored sessions carry `#180` headless markers (`is_headless: true`).
 They stay in `raw/` for coverage but are skipped by default synth under
@@ -25,6 +31,8 @@ Run from the repository root:
 
     python3 scripts/generate_demo_sessions.py --dry-run
     python3 scripts/generate_demo_sessions.py --today 2026-08-10
+    # release cut that should look current — then synth/build demo/ and commit:
+    # python3 scripts/generate_demo_sessions.py --today YYYY-MM-DD
 """
 
 from __future__ import annotations
