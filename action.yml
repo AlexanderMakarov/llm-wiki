@@ -1,4 +1,8 @@
-# GitHub Action metadata — lets other repos use this as:
+# Composite GitHub Action for *other* repositories (not a workflow).
+# Must live at the repo root as `action.yml` (or under `.github/actions/<name>/`)
+# so consumers can `uses: AlexanderMakarov/llm-wiki@v2`. Files under
+# `.github/workflows/` are workflows that *run* in this repo; they cannot be
+# referenced that way. See https://docs.github.com/en/actions/sharing-automations/creating-actions/creating-a-composite-action
 #
 #   - uses: AlexanderMakarov/llm-wiki@v2
 #     with:

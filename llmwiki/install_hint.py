@@ -94,15 +94,17 @@ def install_target(extra: str, env: PythonEnv | None = None) -> str:
     return shlex.quote(f"{DIST_NAME}[{extra}]")
 
 
-def pip_install_command(extra: str) -> str:
-    """Return the generic ``pip install <dist>[extra]`` line for prose and prompts.
+def pip_install_command(extra: str | None = None) -> str:
+    """Return the generic ``pip install <dist>`` / ``…[extra]`` line for prose and prompts.
 
-    Interpreter-agnostic on purpose: this is the line shown as advice about an
-    extra the user has not installed yet, whereas :func:`install_hint` is the
-    command that fixes *this* process. Both read :data:`DIST_NAME`, so no
-    user-facing install string can drift from the published distribution.
+    Interpreter-agnostic on purpose: this is the line shown as install advice,
+    whereas :func:`install_hint` is the command that fixes *this* process. Both
+    read :data:`DIST_NAME`, so no user-facing install string can drift from the
+    published distribution. Pass ``extra=None`` (default) for the bare package.
     """
-    return f"pip install {DIST_NAME}[{extra}]"
+    if extra:
+        return f"pip install {DIST_NAME}[{extra}]"
+    return f"pip install {DIST_NAME}"
 
 
 def python_module_command(module: str, *args: str, env: PythonEnv | None = None) -> str:

@@ -1,5 +1,7 @@
 # Feature Matrix — Every Feature Across the 15 Prior Implementations
 
+> **Status (2026-09):** historical planning snapshot from the early competitive audit. Phase labels and "prior art" rows are stale relative to the shipped product; there is no open GitHub issue dedicated to refreshing this file (closest prior touch: #154 for the I4 eval row). Treat [`docs/feature-matrix.md`](feature-matrix.md) as archive research, not a live roadmap — prefer `context/product/roadmap.md` and open issues for current priorities.
+
 **Method:** Cloned and inspected every referenced repo. Listed every feature I found in any of them, rated each by target value to llmwiki (1–5), and marked which ones are already present in at least one reference implementation vs. which are a net-new invention for llmwiki.
 
 **Value legend:**

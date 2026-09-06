@@ -36,6 +36,7 @@ from llmwiki.automation_plan import AutomationPlan, LintFail, plan_command, plan
 from llmwiki.automation_status import load_status, status_path
 from llmwiki.build import render_automation_panel
 from llmwiki.cron_spec import parse_cron
+from llmwiki.install_hint import pip_install_command
 
 DAILY = parse_cron("0 8 * * *")
 WEEKDAYS = parse_cron("0 8 * * 1-5")
@@ -441,7 +442,7 @@ def test_wizard_warns_but_continues_when_graphify_is_not_installed(
     out = capsys.readouterr().out
     assert config["plan"] == AutomationPlan(job="maintain", graph="graphify")
     assert "falls back to the built-in builder" in out
-    assert "pip install llm-wiki-plus[graph]" in out
+    assert pip_install_command("graph") in out
 
 
 def test_wizard_weekday_preset_produces_a_weekday_cron(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):

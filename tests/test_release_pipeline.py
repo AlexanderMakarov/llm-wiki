@@ -133,10 +133,10 @@ def test_smoke_job_fails_when_publish_did_not_succeed(release_yml: str):
 
 def test_smoke_job_installs_the_published_distribution_from_pypi(release_yml: str):
     smoke = _job_block(release_yml, "smoke")
-    name = re.search(r'^name\s*=\s*"([^"]+)"', PYPROJECT.read_text(encoding="utf-8"), re.MULTILINE)
-    assert name is not None
-    assert f"{name.group(1)}==" in smoke, (
-        f"`smoke` must install {name.group(1)}=='<tag>' from PyPI — installing "
+    # Dist name comes from pyproject at runtime (not a second hardcoded string).
+    assert 'tomllib' in smoke and 'project"]["name"]' in smoke
+    assert '${dist}==${version}' in smoke or '"${dist}==${version}"' in smoke, (
+        "`smoke` must install <pyproject name>=='<tag>' from PyPI — installing "
         "an unpinned version or the local checkout proves nothing about the release"
     )
 

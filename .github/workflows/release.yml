@@ -106,22 +106,27 @@ jobs:
         with:
           python-version: "3.12"
 
+      # Need pyproject.toml so the install name comes from packaging, not a
+      # second hardcoded string that can drift from DIST_NAME / pyproject.
+      - uses: actions/checkout@v7
+
       - name: Install the published distribution from PyPI
         env:
           TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
           version="${TAG#v}"
+          dist="$(python3 -c 'import tomllib, pathlib; print(tomllib.loads(pathlib.Path("pyproject.toml").read_text())["project"]["name"])')"
           python -m venv /tmp/pypi-smoke
           # PyPI's CDN needs a moment to serve a just-uploaded release.
           for attempt in 1 2 3 4 5; do
-            if /tmp/pypi-smoke/bin/pip install "llm-wiki-plus==${version}"; then
+            if /tmp/pypi-smoke/bin/pip install "${dist}==${version}"; then
               exit 0
             fi
-            echo "attempt ${attempt}: llm-wiki-plus==${version} not installable yet"
+            echo "attempt ${attempt}: ${dist}==${version} not installable yet"
             [ "$attempt" -lt 5 ] && sleep 30
           done
-          echo "ERROR: llm-wiki-plus==${version} could not be installed from PyPI." >&2
+          echo "ERROR: ${dist}==${version} could not be installed from PyPI." >&2
           echo "The tag was pushed but the release never reached users." >&2
           exit 1
 

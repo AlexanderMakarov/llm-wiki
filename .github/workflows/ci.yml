@@ -70,10 +70,11 @@ jobs:
           fi
 
   action-smoke:
-    # Exercise the composite action in `action.yml` the way a consumer repo
-    # does, against this checkout instead of the published wheel (#210). The
-    # action installs, scaffolds, syncs and builds, so this is also the job
-    # that catches a wheel missing a data file it needs at runtime.
+    # PR/CI self-test of the *composite Action* (`action.yml` via `uses: ./`).
+    # This is not the PyPI release smoke in `release.yml` — that job runs only
+    # on version tags and installs the published wheel from the real index.
+    # This job never talks to PyPI: it installs the checkout (`package: .`) and
+    # proves init/sync/build work for Action consumers (#210).
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7

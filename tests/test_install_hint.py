@@ -91,6 +91,8 @@ def test_generic_pip_hint_names_the_distribution_pyproject_publishes():
     name = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]["name"]
     assert DIST_NAME == name
     assert pip_install_command("graph") == f"pip install {name}[graph]"
+    assert pip_install_command() == f"pip install {name}"
+    assert pip_install_command(None) == f"pip install {name}"
 
 
 # ── quoting ──────────────────────────────────────────────────────────

@@ -14,9 +14,7 @@ docs_shell: true
 
 ## Why this matters
 
-llmwiki runs **locally**. Every session transcript stays on your machine. No
-telemetry, no account, no network calls at build time. The install is
-deliberately boring: `pip install`, done.
+llmwiki runs **locally**. Every session transcript stays on your machine. No telemetry, no account, no network calls at build time. The install is deliberately boring: pick one path below, then verify.
 
 ---
 
@@ -27,12 +25,13 @@ python3 --version          # expect 3.12 or newer
 git --version
 ```
 
-macOS and most Linux distros already ship both. Windows: install Python from
-[python.org](https://python.org) and git from [git-scm.com](https://git-scm.com).
+macOS and most Linux distros already ship both. Windows: install Python from [python.org](https://python.org) and git from [git-scm.com](https://git-scm.com).
 
-## Step 2 — Install from PyPI (recommended)
+## Step 2 — Install (pick one)
 
-The distribution is `llm-wiki-plus`; the CLI it installs is `llmwiki`:
+The day-to-day command is always `llmwiki`. The PyPI distribution name is `llm-wiki-plus` (PyPI already has an unrelated `llmwiki`, and rejects `llm-wiki` as too similar).
+
+### Option A — PyPI (recommended)
 
 ```bash
 pip install llm-wiki-plus
@@ -45,7 +44,7 @@ Expected output (version string matches the latest tagged release):
 llmwiki <version>
 ```
 
-Each version tag publishes the matching release, so a brand-new version reaches PyPI when its tag is pushed — if `pip` cannot find the version you expect yet, it hasn't been tagged.
+Each version tag publishes the matching release. If `pip` cannot find the version you expect yet, that tag has not been pushed.
 
 Then scaffold a vault wherever you want it:
 
@@ -53,51 +52,40 @@ Then scaffold a vault wherever you want it:
 llmwiki init --vault .
 ```
 
-Or via Homebrew, once [#247](https://github.com/Pratiyush/llm-wiki/issues/247) is set up:
+### Option B — Homebrew
+
+Once the tap from [#212](https://github.com/AlexanderMakarov/llm-wiki/issues/212) is live:
 
 ```bash
-brew install Pratiyush/tap/llmwiki
+brew install AlexanderMakarov/tap/llmwiki
 ```
 
-## Step 3 — (Alternative) Clone and run the setup script
+The formula name stays `llmwiki` (not `llm-wiki-plus`); it installs from the GitHub release tarball.
 
-Use this path to run unreleased code or to change llmwiki itself:
+### Option C — Clone (unreleased code or contributing)
 
 ```bash
-git clone https://github.com/Pratiyush/llm-wiki.git
+git clone https://github.com/AlexanderMakarov/llm-wiki.git
 cd llm-wiki
 ```
 
-### macOS / Linux
+macOS / Linux:
 
 ```bash
 ./setup.sh
 ```
 
-### Windows
+Windows:
 
 ```cmd
 setup.bat
 ```
 
-The setup script is idempotent. Running it twice is safe.
+The setup script is idempotent. It scaffolds `raw/` / `wiki/` / `site/`, installs the `markdown` runtime dep, and checks `python3 -m llmwiki --version`.
 
-It will:
+### Option D — Docker
 
-- Create `raw/`, `wiki/`, `site/` directories if they don't exist
-- Seed `wiki/index.md`, `wiki/overview.md`, `wiki/log.md`, `wiki/CRITICAL_FACTS.md`
-- Install the `markdown` pip package (only runtime dep; everything else is stdlib)
-- Verify the CLI launches: `python3 -m llmwiki --version`
-
-## Step 4 — (Optional) Install via Docker
-
-Zero-touch, no Python on your machine:
-
-```bash
-docker run -v $PWD:/wiki ghcr.io/pratiyush/llm-wiki:latest build
-```
-
-See [deploy/docker.md](../deploy/docker.md) for the full Compose setup.
+Zero-touch, no Python on your machine. Image URLs are tracked in [#211](https://github.com/AlexanderMakarov/llm-wiki/issues/211); see [deploy/docker.md](../deploy/docker.md) for Compose and the current image name.
 
 ---
 
@@ -110,8 +98,7 @@ llmwiki adapters                       # lists every agent adapter and whether i
 
 From a clone, `python3 -m llmwiki <command>` does the same thing without the CLI being on your PATH.
 
-The `adapters` output tells you which agents have session stores on this
-machine — your first sync pulls from every one marked `configured ✓`.
+The `adapters` output tells you which agents have session stores on this machine — your first sync pulls from every one marked `configured ✓`.
 
 ---
 
