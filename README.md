@@ -50,6 +50,8 @@ llmwiki install-agent-kit --dest ~/.claude
 
 That is what a Homebrew or pip user runs so `/wiki-sync` and friends work from *their* project, not from this repository. See [docs/reference/cli.md](docs/reference/cli.md).
 
+The install also drops a small `.llmwiki-agent-kit.json` manifest in `--dest`, recording which files it wrote and their checksums. It is safe — and useful — to commit alongside `.claude/commands/`: it is what lets a later upgrade recognise its own files and remove ones it has retired, while leaving anything you wrote or edited alone.
+
 ## The loop
 
 ```text

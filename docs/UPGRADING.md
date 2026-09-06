@@ -394,7 +394,7 @@ None. JSON sibling files now correctly emit `int` and `bool` types for `user_mes
 
 - **`README.md` and `CONTRIBUTING.md` now compile as site pages.** `site/README.html` and `site/CONTRIBUTING.html` ship alongside `changelog.html`. Link rewriter routes to the compiled page instead of GitHub for these two files.
 
-- **`/wiki-synthesize` slash command** — wraps `llmwiki synth --sources-only` (prefer `/wiki-synth`). Copy via `llmwiki install-agent-kit --dest PATH`. (`llmwiki install-skills` was removed in v1.2.0.)
+- **`/wiki-synthesize` slash command** — wraps `llmwiki synth --sources-only` (prefer `/wiki-synth`). Copy via `llmwiki install-agent-kit --dest PATH`. (`llmwiki install-skills` was removed in v1.2.0.) (retired in #214 — use `/wiki-synth`)
 
 - **Dual-mode docs landing pages.** `docs/modes/api/` and `docs/modes/agent/` exist as skeletons; the actual API / Agent backends ship with #315 / #316.
 
