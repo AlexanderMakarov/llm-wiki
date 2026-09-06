@@ -51,16 +51,18 @@ jobs:
           python-version: ${{ inputs.python-version }}
 
       - name: Install llmwiki
-        run: pip install llm-notebook
+        run: pip install llm-wiki-plus
 
+      # `--vault .` for the same reason as action.yml: an installed llmwiki
+      # resolves an unnamed vault to site-packages, not the checkout (#210).
       - name: Initialise directory structure
-        run: llmwiki init
+        run: llmwiki init --vault .
 
       - name: Sync sessions
-        run: llmwiki sync ${{ inputs.sync-args }}
+        run: llmwiki sync --vault . ${{ inputs.sync-args }}
 
       - name: Build static site
-        run: llmwiki build ${{ inputs.build-args }}
+        run: llmwiki build --vault . ${{ inputs.build-args }}
 
       - name: Expose output paths
         id: paths

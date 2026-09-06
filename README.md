@@ -27,7 +27,7 @@ Page kinds and where each field comes from: [docs/reference/page-kinds.md](docs/
 Requires **Python ≥ 3.12** (CI runs 3.12 and 3.13). Runtime dependency is `markdown` only.
 
 ```bash
-pip install llm-wiki
+pip install llm-wiki-plus
 # or: brew install AlexanderMakarov/tap/llmwiki
 llmwiki init --vault ~/llmwiki-vault
 ```

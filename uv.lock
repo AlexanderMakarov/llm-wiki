@@ -521,7 +521,7 @@ wheels = [
 ]
 
 [[package]]
-name = "llm-wiki"
+name = "llm-wiki-plus"
 version = "1.5.0"
 source = { editable = "." }
 dependencies = [

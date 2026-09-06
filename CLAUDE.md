@@ -5,7 +5,7 @@ This file is for **people changing llmwiki itself**. It is the vault schema the 
 If you *use* llmwiki on your own sessions, do not work inside this repository. Install the package and the agent kit, then run `/wiki-sync` from your own project:
 
 ```bash
-pip install llm-wiki
+pip install llm-wiki-plus
 llmwiki install-agent-kit --dest ~/.claude
 ```
 
@@ -227,7 +227,7 @@ The `Processed:` detail may carry a short producer breakdown instead of a bare c
 
 ## Upgrading between versions
 
-After upgrading to a new `llmwiki` release (e.g., via `pip install -U llm-notebook` or `brew upgrade llmwiki`), **read `docs/UPGRADING.md` before running the first `sync` or `build`**. The guide documents schema migrations, config changes, and behaviour flips that might affect your wiki. Per-release detail is in `CHANGELOG.md`.
+After upgrading to a new `llmwiki` release (e.g., via `pip install -U llm-wiki-plus` or `brew upgrade llmwiki`), **read `docs/UPGRADING.md` before running the first `sync` or `build`**. The guide documents schema migrations, config changes, and behaviour flips that might affect your wiki. Per-release detail is in `CHANGELOG.md`.
 
 Most releases are drop-in upgrades. When migrations are needed, the upgrade guide lists them between your old and new version — apply any migrations listed before syncing, or your next run may fail or silently produce incorrect output.
 

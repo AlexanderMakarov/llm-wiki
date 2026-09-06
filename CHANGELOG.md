@@ -20,6 +20,15 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Fixed
 
+- **`pip install` instructions named a distribution nobody publishes (#210)** — the PyPI distribution is now **`llm-wiki-plus`**: `llmwiki` belongs to another author and PyPI's name-similarity rule rejects `llm-wiki` as too close to it, so neither shorter name could ever be uploaded. The Python import and the `llmwiki` CLI are unchanged. README, `CLAUDE.md`, `AGENTS.md`, the installation tutorial, the upgrade guide, the CLI reference, the cheatsheet, the PyPI deploy walkthrough and the runtime optional-extra hints all name the published distribution; `action.yml` and the reusable workflow no longer install upstream's `llm-notebook`. Tests pin the primary install docs to `pip_install_command()` / `DIST_NAME` (and the Action default + release smoke to the same packaging source), so the names cannot drift apart again.
+  - *Release note:* Install with `pip install llm-wiki-plus` (extras: `llm-wiki-plus[graph]`); the CLI is still `llmwiki` (#210).
+- **A tagged release could ship nothing and still go green (#210)** — `release.yml` gains a `smoke` job that installs `llm-wiki-plus==<tag>` from real PyPI and asserts `llmwiki --version` matches. It covers both halves of the old silent green: the job runs even when `publish` was skipped and its first step fails the run on any `publish` result other than `success`, while a publish that succeeded without reaching users — or that shipped a version other than the tagged one — fails the install assertion. No `continue-on-error` either way, so neither outcome hides behind the `if: always()` GitHub Release.
+  - *Release note:* Release runs now fail visibly when the tag didn't reach PyPI (#210).
+- **A pip-installed llmwiki crashed on its first `sync` or `build` (#210)** — `model_pricing.csv` lived at the repo root, outside the wheel, so an installed copy loaded an empty pricing table and every synth estimate died with `unknown model/family 'sonnet'`. The table now ships inside the package. Found by the new CI job that runs the composite action against a real install.
+  - *Release note:* `sync` and `build` work from a PyPI install, not just a git checkout (#210).
+- **The GitHub Action built its site into site-packages (#210)** — `action.yml` and `.github/workflows/llmwiki-action.yml` ran bare `llmwiki init`/`sync`/`build`, which resolve an unnamed vault to the directory above the installed package rather than the caller's checkout, so the advertised `site-dir` output pointed at a directory that was never created. Every step now passes `--vault .`. `action.yml` also takes an optional `package` input (default `llm-wiki-plus`) so CI can exercise the action against an unreleased checkout, which a new `action-smoke` CI job does on every PR.
+  - *Release note:* The `llm-wiki` action now writes `site/` into your checkout as documented (#210).
+
 ### Removed
 
 ## [2.1.0] — 2026-09-04

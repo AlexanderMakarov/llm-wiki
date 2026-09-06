@@ -4,9 +4,13 @@ Delegates graph building, community detection, and analysis to the
 ``graphify`` package (https://github.com/safishamsi/graphify) when
 installed.  Falls back gracefully when not available.
 
-Install:  pip install graphify          # or: pip install llm-notebook[graph]
+Install:  pip install graphify          # or llmwiki's ``graph`` extra
 Extras:   pip install graphify[mcp]     # MCP server
           pip install graphify[leiden]   # better community detection
+
+The exact command for that extra comes from
+:func:`llmwiki.install_hint.pip_install_command`, which reads the published
+distribution name rather than repeating it here.
 
 Usage from CLI:
     python3 -m llmwiki graph                  # graphify is default

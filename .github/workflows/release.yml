@@ -6,11 +6,13 @@ name: Release to PyPI
 #
 # Prerequisites (one-time manual setup): see docs/deploy/pypi-publishing.md
 # for the full walkthrough. TL;DR:
-#   1. Register `llm-notebook` on PyPI as a trusted publisher (the
-#      `llmwiki` name was already taken; the wheel is published as
-#      llm-notebook but the Python module + CLI stay `llmwiki`):
+#   1. Register `llm-wiki-plus` on PyPI as a trusted publisher:
 #      https://docs.pypi.org/trusted-publishers/creating-a-project-through-oidc/
 #      Owner: AlexanderMakarov · Repo: llm-wiki · Workflow: release.yml · Env: release
+#      Why that name: `llmwiki` is owned by another author, and PyPI's
+#      name-similarity rule rejects `llm-wiki` as too close to it. The
+#      distribution is `llm-wiki-plus`; the Python module and the CLI stay
+#      `llmwiki`, the same way `pillow` installs `import PIL`.
 #      (PyPI upload still gated on vars.PYPI_PUBLISHING=true — #69)
 #   2. Create a GitHub environment called "release" (Settings > Environments).
 #   3. Enable PyPI uploads: gh variable set PYPI_PUBLISHING --body "true"
@@ -57,9 +59,11 @@ jobs:
     permissions:
       id-token: write
     # Skip PyPI publish if the PYPI_PUBLISHING variable is not set to "true".
-    # One-time setup required on PyPI (trusted publisher) — see #101.
-    # Until configured, release tags still build + sign + create GitHub Release;
-    # only PyPI upload is deferred. Enable via: gh variable set PYPI_PUBLISHING --body "true"
+    # The gate is an escape hatch for a fork that has no trusted publisher, not
+    # a normal state for this repo: the variable is set, so a skipped publish
+    # here means someone turned releases off. When the gate is on, the `smoke`
+    # job below fails the run if the upload didn't reach PyPI (#210).
+    # Enable via: gh variable set PYPI_PUBLISHING --body "true"
     if: vars.PYPI_PUBLISHING == 'true'
     steps:
       - name: Download build artifacts
@@ -73,6 +77,74 @@ jobs:
         # by a moved release/v1 branch. Bump deliberately after auditing
         # upstream changelog.
         uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b  # release/v1
+
+  smoke:
+    name: Post-publish install smoke
+    # `build` is in `needs` only so the `if` below can read its result — the
+    # `needs` context carries direct dependencies only.
+    needs: [build, publish]
+    runs-on: ubuntu-latest
+    # `needs: publish` on its own would make a *skipped* publish skip this job
+    # too, which is exactly the silent-green path #210 exists to close. So the
+    # job runs whenever the build produced artifacts and its first step fails
+    # the run when publish didn't succeed. Deliberately no continue-on-error:
+    # a tag that publishes something uninstallable — or installs a version
+    # other than the one tagged — must turn the release workflow red.
+    if: always() && needs.build.result == 'success'
+    steps:
+      - name: Fail when the publish gate is off
+        run: |
+          set -euo pipefail
+          if [ "${{ needs.publish.result }}" != "success" ]; then
+            echo "ERROR: publish did not succeed (result: ${{ needs.publish.result }})." >&2
+            echo "A tag that skips publish ships nothing to PyPI." >&2
+            exit 1
+          fi
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      # Need pyproject.toml so the install name comes from packaging, not a
+      # second hardcoded string that can drift from DIST_NAME / pyproject.
+      - uses: actions/checkout@v7
+
+      - name: Install the published distribution from PyPI
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          version="${TAG#v}"
+          dist="$(python3 -c 'import tomllib, pathlib; print(tomllib.loads(pathlib.Path("pyproject.toml").read_text())["project"]["name"])')"
+          python -m venv /tmp/pypi-smoke
+          # PyPI's CDN needs a moment to serve a just-uploaded release.
+          for attempt in 1 2 3 4 5; do
+            if /tmp/pypi-smoke/bin/pip install "${dist}==${version}"; then
+              exit 0
+            fi
+            echo "attempt ${attempt}: ${dist}==${version} not installable yet"
+            [ "$attempt" -lt 5 ] && sleep 30
+          done
+          echo "ERROR: ${dist}==${version} could not be installed from PyPI." >&2
+          echo "The tag was pushed but the release never reached users." >&2
+          exit 1
+
+      - name: Assert the CLI reports the tagged version
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          version="${TAG#v}"
+          reported="$(/tmp/pypi-smoke/bin/llmwiki --version)"
+          echo "llmwiki --version -> ${reported}"
+          # The CLI prints "llmwiki <version>". Normalise both sides the same
+          # way so the comparison can't fail on spacing or letter case alone.
+          normalise() { printf '%s' "$1" | tr -cd '0-9a-zA-Z.' | tr 'A-Z' 'a-z'; }
+          if [ "$(normalise "$reported")" != "$(normalise "llmwiki${version}")" ]; then
+            echo "ERROR: expected version ${version}, got '${reported}'." >&2
+            exit 1
+          fi
 
   sign:
     name: Sign with Sigstore

@@ -5,7 +5,7 @@ This file is for **people changing llmwiki itself**. Codex CLI and other agents 
 If you *use* llmwiki on your own sessions, do not work inside this repository. Install the package and the agent kit, then run the wiki commands from your own project:
 
 ```bash
-pip install llm-wiki
+pip install llm-wiki-plus
 llmwiki install-agent-kit --dest ~/.codex
 ```
 

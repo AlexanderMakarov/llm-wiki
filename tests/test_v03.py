@@ -8,6 +8,7 @@ import pytest
 
 from llmwiki import __version__
 from llmwiki.cli import build_parser
+from llmwiki.install_hint import DIST_NAME
 from tests.conftest import REPO_ROOT
 
 # ─── version bump ────────────────────────────────────────────────────────
@@ -27,9 +28,9 @@ def test_pyproject_exists():
     assert p.exists()
     content = p.read_text(encoding="utf-8")
     # Minimal sanity
-    # Distribution name is `llm-wiki` (fork of upstream llm-notebook).
-    # Python module + CLI command remain `llmwiki`.
-    assert 'name = "llm-wiki"' in content
+    # Distribution name is DIST_NAME (`llmwiki` is another author's project;
+    # PyPI rejects `llm-wiki` as too similar). Module + CLI stay `llmwiki`.
+    assert f'name = "{DIST_NAME}"' in content
     assert 'requires-python = ">=3.12"' in content
     # Accept any valid semver — bumped to 1.0 in v1.0.0 release
     assert re.search(r'version = "\d+\.\d+\.\d+', content), "missing version string"

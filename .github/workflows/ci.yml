@@ -69,6 +69,39 @@ jobs:
             exit 1
           fi
 
+  action-smoke:
+    # PR/CI self-test of the *composite Action* (`action.yml` via `uses: ./`).
+    # This is not the PyPI release smoke in `release.yml` — that job runs only
+    # on version tags and installs the published wheel from the real index.
+    # This job never talks to PyPI: it installs the checkout (`package: .`) and
+    # proves init/sync/build work for Action consumers (#210).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # `llmwiki sync` exits 1 when no adapter has a session store to read, so
+      # a bare runner can't get past the action's sync step. Plant the
+      # synthetic Claude Code fixture where the adapter looks for it.
+      - name: Seed a synthetic Claude Code session store
+        run: |
+          set -euo pipefail
+          store="$HOME/.claude/projects/action-smoke"
+          mkdir -p "$store"
+          cp tests/fixtures/claude_code/minimal.jsonl \
+            "$store/00000000-0000-0000-0000-000000000001.jsonl"
+
+      - name: Run the composite action against this checkout
+        uses: ./
+        with:
+          package: "."
+
+      - name: Assert the action produced a site
+        run: |
+          set -euo pipefail
+          test -f site/index.html
+          test -f site/style.css
+          echo "action produced $(find site -name '*.html' | wc -l) HTML files"
+
   performance-budget:
     runs-on: ubuntu-latest
     needs: lint-and-test

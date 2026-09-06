@@ -1,5 +1,7 @@
 # Feature Matrix — Every Feature Across the 15 Prior Implementations
 
+> **Status (2026-09):** historical planning snapshot from the early competitive audit. Phase labels and "prior art" rows are stale relative to the shipped product; there is no open GitHub issue dedicated to refreshing this file (closest prior touch: #154 for the I4 eval row). Treat [`docs/feature-matrix.md`](feature-matrix.md) as archive research, not a live roadmap — prefer `context/product/roadmap.md` and open issues for current priorities.
+
 **Method:** Cloned and inspected every referenced repo. Listed every feature I found in any of them, rated each by target value to llmwiki (1–5), and marked which ones are already present in at least one reference implementation vs. which are a net-new invention for llmwiki.
 
 **Value legend:**
@@ -98,7 +100,7 @@
 | E4 | **Claude Code plugin** (marketplace install) | ⭐⭐⭐⭐⭐ | kfchou, sinzin91, remember-md | v0.2 |
 | E5 | Homebrew formula | ⭐⭐⭐ | raine (Go) | v0.3 |
 | E6 | Precompiled single binary (Go/Rust?) | ⭐⭐ | sinzin91 (Go) | won't (Python) |
-| E7 | `pip install llm-notebook` on PyPI | ⭐⭐⭐⭐ | lucasastorian | v0.3 |
+| E7 | `pip install llm-wiki-plus` on PyPI | ⭐⭐⭐⭐ | lucasastorian | v0.3 |
 | E8 | Docker image | ⭐⭐ | — | v0.4 |
 
 ## F · Multi-agent support

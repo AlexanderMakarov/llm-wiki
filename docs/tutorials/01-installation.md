@@ -14,9 +14,7 @@ docs_shell: true
 
 ## Why this matters
 
-llmwiki runs **locally**. Every session transcript stays on your machine. No
-telemetry, no account, no network calls at build time. The install is
-deliberately boring: clone, run the setup script, done.
+llmwiki runs **locally**. Every session transcript stays on your machine. No telemetry, no account, no network calls at build time. The install is deliberately boring: pick one path below, then verify.
 
 ---
 
@@ -27,38 +25,18 @@ python3 --version          # expect 3.12 or newer
 git --version
 ```
 
-macOS and most Linux distros already ship both. Windows: install Python from
-[python.org](https://python.org) and git from [git-scm.com](https://git-scm.com).
+macOS and most Linux distros already ship both. Windows: install Python from [python.org](https://python.org) and git from [git-scm.com](https://git-scm.com).
 
-## Step 2 — Clone the repo
+## Step 2 — Install (pick one)
 
-```bash
-git clone https://github.com/Pratiyush/llm-wiki.git
-cd llm-wiki
-```
+The day-to-day command is always `llmwiki`. The PyPI distribution name is `llm-wiki-plus` (PyPI already has an unrelated `llmwiki`, and rejects `llm-wiki` as too similar).
 
-## Step 3 — Run the setup script
-
-### macOS / Linux
+### Option A — PyPI (recommended)
 
 ```bash
-./setup.sh
+pip install llm-wiki-plus
+llmwiki --version
 ```
-
-### Windows
-
-```cmd
-setup.bat
-```
-
-The setup script is idempotent. Running it twice is safe.
-
-It will:
-
-- Create `raw/`, `wiki/`, `site/` directories if they don't exist
-- Seed `wiki/index.md`, `wiki/overview.md`, `wiki/log.md`, `wiki/CRITICAL_FACTS.md`
-- Install the `markdown` pip package (only runtime dep; everything else is stdlib)
-- Verify the CLI launches: `python3 -m llmwiki --version`
 
 Expected output (version string matches the latest tagged release):
 
@@ -66,44 +44,61 @@ Expected output (version string matches the latest tagged release):
 llmwiki <version>
 ```
 
-## Step 4 — (Optional) Install via PyPI instead
+Each version tag publishes the matching release. If `pip` cannot find the version you expect yet, that tag has not been pushed.
 
-Once [#246](https://github.com/Pratiyush/llm-wiki/issues/246) is set up:
-
-```bash
-pip install llm-notebook
-llmwiki --version
-```
-
-Or via Homebrew, once [#247](https://github.com/Pratiyush/llm-wiki/issues/247) is set up:
+Then scaffold a vault wherever you want it:
 
 ```bash
-brew install Pratiyush/tap/llmwiki
+llmwiki init --vault .
 ```
 
-Until then the clone-and-run path above is authoritative.
+### Option B — Homebrew
 
-## Step 5 — (Optional) Install via Docker
-
-Zero-touch, no Python on your machine:
+Once the tap from [#212](https://github.com/AlexanderMakarov/llm-wiki/issues/212) is live:
 
 ```bash
-docker run -v $PWD:/wiki ghcr.io/pratiyush/llm-wiki:latest build
+brew install AlexanderMakarov/tap/llmwiki
 ```
 
-See [deploy/docker.md](../deploy/docker.md) for the full Compose setup.
+The formula name stays `llmwiki` (not `llm-wiki-plus`); it installs from the GitHub release tarball.
+
+### Option C — Clone (unreleased code or contributing)
+
+```bash
+git clone https://github.com/AlexanderMakarov/llm-wiki.git
+cd llm-wiki
+```
+
+macOS / Linux:
+
+```bash
+./setup.sh
+```
+
+Windows:
+
+```cmd
+setup.bat
+```
+
+The setup script is idempotent. It scaffolds `raw/` / `wiki/` / `site/`, installs the `markdown` runtime dep, and checks `python3 -m llmwiki --version`.
+
+### Option D — Docker
+
+Zero-touch, no Python on your machine. Image URLs are tracked in [#211](https://github.com/AlexanderMakarov/llm-wiki/issues/211); see [deploy/docker.md](../deploy/docker.md) for Compose and the current image name.
 
 ---
 
 ## Verify
 
 ```bash
-python3 -m llmwiki --version           # → llmwiki <version>
-python3 -m llmwiki adapters            # lists every agent adapter and whether it's configured
+llmwiki --version                      # → llmwiki <version>
+llmwiki adapters                       # lists every agent adapter and whether it's configured
 ```
 
-The `adapters` output tells you which agents have session stores on this
-machine — your first sync pulls from every one marked `configured ✓`.
+From a clone, `python3 -m llmwiki <command>` does the same thing without the CLI being on your PATH.
+
+The `adapters` output tells you which agents have session stores on this machine — your first sync pulls from every one marked `configured ✓`.
 
 ---
 

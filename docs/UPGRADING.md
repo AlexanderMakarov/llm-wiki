@@ -316,7 +316,7 @@ Same migration as v1.4.0; use `scripts/migrate_state_v1_4_0.py`.
 Drop-in upgrade from any 1.2.x. v1.3.0 consolidates 38 in-tree patch versions (1.2.1 → 1.2.38) under one minor release tag — no breaking API changes, no schema migrations, no config changes.
 
 ```bash
-pip install -U llm-notebook   # → 1.3.0
+pip install -U llm-wiki-plus  # → 1.3.0
 llmwiki --version             # → 1.3.0
 ```
 
@@ -342,12 +342,13 @@ State files written by 1.2.x are read verbatim by 1.3.0.
 
 ### Install changes
 
-- **PyPI distribution name is `llm-notebook`** — the `llmwiki` name was taken on PyPI. The Python module + CLI command stay `llmwiki`, only the `pip install` line changes:
+- **PyPI distribution name is `llm-wiki-plus`** — `llmwiki` belongs to another author, and PyPI's name-similarity rule also rejects `llm-wiki` as too close to it, so the distribution carries a `-plus` suffix. The Python module + CLI command stay `llmwiki`, only the `pip install` line changes:
   ```bash
-  pip install llm-notebook        # was: pip install llmwiki
+  pip install llm-wiki-plus       # was: pip install llmwiki
   llmwiki --version               # → 1.2.0  (CLI name unchanged)
   python3 -c "import llmwiki"     # still works (import name unchanged)
   ```
+  Releases before the rename documented this distribution as `llm-notebook`; that name was never published for this fork and no longer appears in install instructions (#210).
 
 ### Removed CLI subcommands
 
