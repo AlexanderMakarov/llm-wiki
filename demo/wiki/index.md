@@ -9,7 +9,7 @@ page without descending into a tree. -->
 ## Overview (1)
 - [Overview](overview.md)
 
-## Sources (113)
+## Sources (148)
 - [00 · Quickstart Walkthrough](sources/00-quickstart-walkthrough/2026-08-10-00-quickstart-walkthrough.md) — 00-quickstart-walkthrough · 2026-08-10
 - [01 · Installation](sources/01-installation/2026-08-10-01-installation.md) — 01-installation · 2026-08-10
 - [02 · First sync](sources/02-first-sync/2026-08-10-02-first-sync.md) — 02-first-sync · 2026-08-10
@@ -118,41 +118,78 @@ page without descending into a tree. -->
 - [Add a rules engine for transaction categories](sources/pocket-ledger/2026-08-25-category-rules-engine.md) — pocket-ledger · 2026-08-25
 - [Validate image uploads before they reach storage](sources/recipe-box/2026-07-30-image-upload-limits.md) — recipe-box · 2026-07-30
 - [Scale ingredient quantities without mangling fractions](sources/recipe-box/2026-09-04-ingredient-scaling.md) — recipe-box · 2026-09-04
+- [CLI reference (part 1/15)](sources/reference-cli/2026-09-07-cli-reference-01.md) — reference-cli · 2026-09-07
+- [CLI reference (part 2/15: remove — cascade-remove a raw doc and everything derived (#B2))](sources/reference-cli/2026-09-07-cli-reference-02.md) — reference-cli · 2026-09-07
+- [CLI reference (part 3/15: usage — MCP tool-usage telemetry vs synthesis cost (#26))](sources/reference-cli/2026-09-07-cli-reference-03.md) — reference-cli · 2026-09-07
+- [CLI reference (part 4/15: graph — build the knowledge graph)](sources/reference-cli/2026-09-07-cli-reference-04.md) — reference-cli · 2026-09-07
+- [CLI reference (part 5/15: candidates — approval workflow)](sources/reference-cli/2026-09-07-cli-reference-05.md) — reference-cli · 2026-09-07
+- [CLI reference (part 6/15: synth — synthesize sources + harvest candidates)](sources/reference-cli/2026-09-07-cli-reference-06.md) — reference-cli · 2026-09-07
+- [CLI reference (part 7/15)](sources/reference-cli/2026-09-07-cli-reference-07.md) — reference-cli · 2026-09-07
+- [CLI reference (part 8/15: queue — inspect and run unified queue)](sources/reference-cli/2026-09-07-cli-reference-08.md) — reference-cli · 2026-09-07
+- [CLI reference (part 9/15: migrate — list or apply a named one-time vault repair)](sources/reference-cli/2026-09-07-cli-reference-09.md) — reference-cli · 2026-09-07
+- [CLI reference (part 10/15: topic-kinds — stamp entity/concept kinds onto older source Connections)](sources/reference-cli/2026-09-07-cli-reference-10.md) — reference-cli · 2026-09-07
+- [CLI reference (part 11/15: install-agent-kit — copy packaged slash commands and skills (#109))](sources/reference-cli/2026-09-07-cli-reference-11.md) — reference-cli · 2026-09-07
+- [CLI reference (part 12/15: all — run the full pipeline)](sources/reference-cli/2026-09-07-cli-reference-12.md) — reference-cli · 2026-09-07
+- [CLI reference (part 13/15: install-automation — set up the daily job)](sources/reference-cli/2026-09-07-cli-reference-13.md) — reference-cli · 2026-09-07
+- [CLI reference (part 14/15)](sources/reference-cli/2026-09-07-cli-reference-14.md) — reference-cli · 2026-09-07
+- [CLI reference (part 15/15: Exit codes (conventions))](sources/reference-cli/2026-09-07-cli-reference-15.md) — reference-cli · 2026-09-07
+- [Slash commands reference (part 1/4)](sources/reference-slash-commands/2026-09-07-slash-commands-reference-01.md) — reference-slash-commands · 2026-09-07
+- [Slash commands reference (part 2/4: Wiki pipeline)](sources/reference-slash-commands/2026-09-07-slash-commands-reference-02.md) — reference-slash-commands · 2026-09-07
+- [Slash commands reference (part 3/4: /wiki-build)](sources/reference-slash-commands/2026-09-07-slash-commands-reference-03.md) — reference-slash-commands · 2026-09-07
+- [Slash commands reference (part 4/4: How the slash commands get installed)](sources/reference-slash-commands/2026-09-07-slash-commands-reference-04.md) — reference-slash-commands · 2026-09-07
+- [Synthesis cost — what you pay per page, and why (part 1/3)](sources/reference-synthesis-cost/2026-09-07-synthesis-cost-what-you-pay-per-page-and-why-01.md) — reference-synthesis-cost · 2026-09-07
+- [Synthesis cost — what you pay per page, and why (part 2/3: The lean flags)](sources/reference-synthesis-cost/2026-09-07-synthesis-cost-what-you-pay-per-page-and-why-02.md) — reference-synthesis-cost · 2026-09-07
+- [Synthesis cost — what you pay per page, and why (part 3/3: What synth --estimate prices)](sources/reference-synthesis-cost/2026-09-07-synthesis-cost-what-you-pay-per-page-and-why-03.md) — reference-synthesis-cost · 2026-09-07
+- [UI reference (part 1/6)](sources/reference-ui/2026-09-07-ui-reference-01.md) — reference-ui · 2026-09-07
+- [UI reference (part 2/6: Candidates)](sources/reference-ui/2026-09-07-ui-reference-02.md) — reference-ui · 2026-09-07
+- [UI reference (part 3/6: Graph)](sources/reference-ui/2026-09-07-ui-reference-03.md) — reference-ui · 2026-09-07
+- [UI reference (part 4/6: Topic pages)](sources/reference-ui/2026-09-07-ui-reference-04.md) — reference-ui · 2026-09-07
+- [UI reference (part 5/6: Prototypes hub)](sources/reference-ui/2026-09-07-ui-reference-05.md) — reference-ui · 2026-09-07
+- [UI reference (part 6/6: Accessibility)](sources/reference-ui/2026-09-07-ui-reference-06.md) — reference-ui · 2026-09-07
 - [Detect and backfill gaps in the sensor stream](sources/sensor-mesh/2026-07-08-backfill-gap-detection.md) — sensor-mesh · 2026-07-08
 - [Add backoff to broker reconnection](sources/sensor-mesh/2026-09-02-mqtt-reconnect-backoff.md) — sensor-mesh · 2026-09-02
 - [Move list endpoints from offset to cursor pagination](sources/trailhead-api/2026-06-06-pagination-cursors.md) — trailhead-api · 2026-06-06
 - [Thread a request id through the log output](sources/trailhead-api/2026-08-10-request-id-logging.md) — trailhead-api · 2026-08-10
 - [Make migrations safe to run twice](sources/trailhead-api/2026-09-05-schema-migration-safety.md) — trailhead-api · 2026-09-05
+- [01 · Installation](sources/tutorials-01-installation/2026-09-07-01-installation.md) — tutorials-01-installation · 2026-09-07
+- [Upgrade guide (part 1/5)](sources/upgrading/2026-09-07-upgrade-guide-01.md) — upgrading · 2026-09-07
+- [Upgrade guide (part 2/5: 2.0.0 — static site, pipeline, and MCP (from v1.5.0))](sources/upgrading/2026-09-07-upgrade-guide-02.md) — upgrading · 2026-09-07
+- [Upgrade guide (part 3/5: v1.5.0 — index cwd restore + encoded-path redaction (#56))](sources/upgrading/2026-09-07-upgrade-guide-03.md) — upgrading · 2026-09-07
+- [Upgrade guide (part 4/5: v1.4.0 — unified queue + vault state (hard cutover))](sources/upgrading/2026-09-07-upgrade-guide-04.md) — upgrading · 2026-09-07
+- [Upgrade guide (part 5/5: v1.2.0 — first stable on the 1.x line)](sources/upgrading/2026-09-07-upgrade-guide-05.md) — upgrading · 2026-09-07
+- [Uptime Monitoring](sources/uptime/2026-09-07-uptime-monitoring.md) — uptime · 2026-09-07
 
-## Entities (2)
+## Entities (9)
 - [Claude Code](entities/Claude Code.md)
 - [Codex CLI](entities/Codex CLI.md)
+- [Frontmatter](entities/Frontmatter.md)
+- [GitHub Actions](entities/GitHub Actions.md)
+- [GitHub Pages](entities/GitHub Pages.md)
+- [Obsidian](entities/Obsidian.md)
+- [Ollama](entities/Ollama.md)
+- [Python](entities/Python.md)
+- [SQLite](entities/SQLite.md)
 
 ## Projects (0)
 
-## Concepts (3)
+## Concepts (4)
 - [Adapters](concepts/Adapters.md)
 - [Knowledge Graph](concepts/Knowledge Graph.md)
 - [Observability](concepts/Observability.md)
+- [Static Site](concepts/Static Site.md)
 
 ## Syntheses (0)
 
-## Candidates (18)
-- [Static Site](candidates/concepts/Static Site.md)
+## Candidates (12)
 - [Wiki Synthesis](candidates/concepts/Wiki Synthesis.md)
 - [Wikilinks](candidates/concepts/Wikilinks.md)
 - [CLAUDE.md](candidates/entities/CLAUDE.md.md)
-- [Configuration](candidates/entities/Configuration.md)
 - [Configuration Reference](candidates/entities/Configuration Reference.md)
+- [Configuration](candidates/entities/Configuration.md)
 - [Cursor](candidates/entities/Cursor.md)
-- [GitHub Actions](candidates/entities/GitHub Actions.md)
-- [GitHub Pages](candidates/entities/GitHub Pages.md)
 - [LLM Wiki](candidates/entities/LLM Wiki.md)
 - [Logseq](candidates/entities/Logseq.md)
-- [Obsidian](candidates/entities/Obsidian.md)
-- [Ollama](candidates/entities/Ollama.md)
-- [Python](candidates/entities/Python.md)
-- [SQLite](candidates/entities/SQLite.md)
 - [WCAG 2.1](candidates/entities/WCAG 2.1.md)
 - [llm-wiki](candidates/entities/llm-wiki.md)
 - [llmwiki](candidates/entities/llmwiki.md)
+- [prompt-caching](candidates/entities/prompt-caching.md)

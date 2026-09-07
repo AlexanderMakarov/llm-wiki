@@ -1,7 +1,7 @@
 ---
 title: "Static Site"
 type: concept
-status: candidate
+status: reviewed
 tags: []
 sources: [2026-07-24-topic-graph-sparsity, 2026-08-22-lint-rule-severities, 2026-08-28-static-site-offline, 2026-09-01-project-page-aggregation, 2026-09-04-search-index-chunks]
 last_updated: 2026-09-07

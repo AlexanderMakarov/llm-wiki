@@ -106,6 +106,11 @@ def format_plan(plan: list[PlanItem]) -> str:
     return "\n".join(lines)
 
 
+def added_doc_slugs(plan: list[PlanItem]) -> list[str]:
+    """Unique ``raw/docs/<slug>/`` project slugs this plan adds (sorted)."""
+    return sorted({slug for action, _path, slug in plan if action == "add"})
+
+
 def synth_argv_for_added_docs(vault: Path, plan: list[PlanItem]) -> list[str] | None:
     """Build a path-scoped ``synth --docs-only`` argv for docs this plan added.
 
@@ -114,7 +119,7 @@ def synth_argv_for_added_docs(vault: Path, plan: list[PlanItem]) -> list[str] | 
     skip-synth, not vault-wide fallback). Each ``--path`` is vault-relative so
     ``llmwiki synth`` resolves it under ``--vault``.
     """
-    add_slugs = sorted({slug for action, _path, slug in plan if action == "add"})
+    add_slugs = added_doc_slugs(plan)
     if not add_slugs:
         return None
     rel_paths: list[str] = []
@@ -130,6 +135,43 @@ def synth_argv_for_added_docs(vault: Path, plan: list[PlanItem]) -> list[str] | 
     for rel in rel_paths:
         argv.extend(["--path", rel])
     return argv
+
+
+def _wiki_page_covers_raw(wiki_dir: Path, raw: Path, vault: Path) -> bool:
+    """True when a page under ``wiki/sources/<slug>/`` covers this raw doc."""
+    if not wiki_dir.is_dir():
+        return False
+    rel = raw.relative_to(vault).as_posix()
+    stem = raw.stem
+    for wiki in wiki_dir.glob("*.md"):
+        if wiki.stem == stem or wiki.stem.endswith(f"-{stem}"):
+            return True
+        head = wiki.read_text(encoding="utf-8", errors="replace")[:1200]
+        if f"source_file: {rel}" in head:
+            return True
+    return False
+
+
+def missing_wiki_for_doc_slugs(vault: Path, slugs: list[str]) -> list[str]:
+    """Return gap messages for raw docs under each slug that lack a wiki source page.
+
+    Used after a path-scoped docs synth (and by ``--verify-slugs``) so a partial
+    or rate-limited synth cannot look “done” just because lint/build still pass.
+    Does **not** require clearing the vault-wide historical backlog — only the
+    slugs this cut refreshed.
+    """
+    gaps: list[str] = []
+    for slug in slugs:
+        raw_dir = vault / "raw" / "docs" / slug
+        wiki_dir = vault / "wiki" / "sources" / slug
+        if not raw_dir.is_dir():
+            continue
+        for raw in sorted(raw_dir.rglob("*.md")):
+            if not raw.is_file():
+                continue
+            if not _wiki_page_covers_raw(wiki_dir, raw, vault):
+                gaps.append(raw.relative_to(vault).as_posix())
+    return gaps
 
 
 def git_toplevel(cwd: Path | None = None) -> Path:
@@ -276,6 +318,24 @@ def run_refresh(
             print(f"error: llmwiki {argv[0]} failed (exit {proc.returncode})", file=sys.stderr)
             return proc.returncode
 
+    gaps = missing_wiki_for_doc_slugs(vault, added_doc_slugs(plan))
+    if gaps:
+        print(
+            "error: docs refresh synth is incomplete — every raw doc this plan "
+            "added needs a matching wiki/sources page before the pin advances.\n"
+            "Lint/build can still pass with gaps; do not treat that as done.\n"
+            "Missing coverage:",
+            file=sys.stderr,
+        )
+        for gap in gaps:
+            print(f"  {gap}", file=sys.stderr)
+        print(
+            "Re-run path-scoped synth for those slugs, or pass "
+            "`--verify-slugs <slug>,…` after a manual synth to re-check.",
+            file=sys.stderr,
+        )
+        return 1
+
     lint = _run_llmwiki(exe, repo, ["lint", "--vault", str(vault)])
     print("lint report:")
     if lint.stdout:
@@ -284,6 +344,27 @@ def run_refresh(
         print(lint.stderr, end="" if lint.stderr.endswith("\n") else "\n", file=sys.stderr)
 
     _write_source_rev(repo)
+    return 0
+
+
+def verify_doc_slugs(repo: Path, slugs: list[str]) -> int:
+    """Exit 0 when each slug's raw docs have wiki coverage; else print gaps and exit 1."""
+    vault = repo / DEMO_VAULT_REL
+    clean = [s.strip() for s in slugs if s.strip()]
+    if not clean:
+        print("error: --verify-slugs needs at least one slug", file=sys.stderr)
+        return 2
+    gaps = missing_wiki_for_doc_slugs(vault, clean)
+    if gaps:
+        print(
+            "error: demo docs synth incomplete for requested slugs "
+            f"({len(gaps)} raw file(s) without wiki/sources coverage):",
+            file=sys.stderr,
+        )
+        for gap in gaps:
+            print(f"  {gap}", file=sys.stderr)
+        return 1
+    print(f"ok: wiki coverage for {len(clean)} slug(s)")
     return 0
 
 
@@ -304,6 +385,15 @@ def main(argv: list[str] | None = None, *, cwd: Path | None = None) -> int:
         default=None,
         help="Override the revision in demo/.demo-source-rev",
     )
+    ap.add_argument(
+        "--verify-slugs",
+        metavar="SLUGS",
+        default=None,
+        help=(
+            "Comma-separated raw/docs project slugs; exit 1 if any lack "
+            "wiki/sources coverage (local release gate — does not run a refresh)"
+        ),
+    )
     args = ap.parse_args(argv)
 
     try:
@@ -311,6 +401,8 @@ def main(argv: list[str] | None = None, *, cwd: Path | None = None) -> int:
     except RefreshError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
+    if args.verify_slugs is not None:
+        return verify_doc_slugs(repo, args.verify_slugs.split(","))
     return run_refresh(repo, dry_run=args.dry_run, force=args.force, base=args.base)
 
 

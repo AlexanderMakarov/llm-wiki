@@ -1,13 +1,13 @@
 ---
-title: "Ollama"
+title: "Frontmatter"
 type: entity
-status: candidate
+status: reviewed
 tags: []
 sources: []
 last_updated: 2026-09-07
 ---
 
-# Ollama
+# Frontmatter
 
 ## Key Facts
 
