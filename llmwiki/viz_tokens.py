@@ -317,11 +317,11 @@ def render_project_token_card(
 def compute_site_stats(
     metas_by_project: dict[str, list[Mapping[str, object]]],
 ) -> dict[str, object]:
-    """Return the four numbers the index page wants:
+    """Return the numbers the Analytics Tokens tile wants:
 
-    * `total_tokens`: int — across every session everywhere
-    * `session_count`: int — total sessions contributing
-    * `avg_per_session`: int — rounded average
+    * `total_tokens`: int — sum of all token categories across sessions with data
+    * `session_count`: int — sessions with ≥1 non-zero token category (the avg divisor; not the hero session count)
+    * `avg_per_session`: int — ``total_tokens // session_count`` (0 when none)
     * `best_ratio_project`: (slug, ratio) or None
     * `heaviest_project`: (slug, total) or None
     """
@@ -384,11 +384,13 @@ def render_site_token_stats(
         '  <div class="container">',
         '    <div class="token-stat-grid">',
     ]
-    if stats["session_count"] > 0:
+    n_with_tokens = int(stats["session_count"])
+    if n_with_tokens > 0:
         parts.append(
             f'      <div class="token-stat"><div class="token-stat-label muted">Tokens</div>'
             f'<div class="token-stat-value">{format_tokens(total)}</div>'
-            f'<div class="token-stat-sub muted">{format_tokens(avg)} / session avg</div></div>'
+            f'<div class="token-stat-sub muted">{format_tokens(avg)} / session'
+            f' ({n_with_tokens} with token data)</div></div>'
         )
     if best is not None:
         slug, r = best
@@ -411,6 +413,11 @@ def render_site_token_stats(
     if extra_cards:
         parts.append(extra_cards)
     parts.append('    </div>')
+    if n_with_tokens > 0:
+        parts.append(
+            '    <p class="muted token-stats-note">Cumulative billed throughput'
+            ' (token categories including cache_read), not context-window occupancy.</p>'
+        )
     parts.append('  </div>')
     parts.append('</section>')
     return "\n".join(parts)
