@@ -20,8 +20,8 @@ Versions below 1.0 are pre-production — API and file formats may change.
 - **Release checklist remembers demo content refresh (#225)** — `RELEASE_PROCESS.md` and the `/release` skill now require an explicit choose: regenerate `demo/` sessions (`generate_demo_sessions.py`) and/or docs (`refresh_demo.py`) before tagging, or consciously skip; Pages version assert alone is not a content refresh. Script docstrings and `REFRESH_DEMO.md` cross-link the same path.
   - *Release note:* Before tagging, decide whether to regenerate the demo corpus; CI still never invents demo sessions (#225).
 
-- **Slash-commands reference is vault-only (#214)** — [`docs/reference/slash-commands.md`](docs/reference/slash-commands.md) now documents just the commands `install-agent-kit` ships, as one flat table in pipeline order with a count that a guardrail test keeps honest. Maintainer (`/maintainer`, `/release`, `/triage-issue`) and AWOS delivery (`/fix-bug`, `/implement-feature`) commands moved to [`docs/maintainers/slash-commands.md`](docs/maintainers/slash-commands.md), where they belong — they live in the repo's `.claude/commands/` and are never installed into a user's vault.
-  - *Release note:* Bookmarks into the governance sections of the slash reference now live in `docs/maintainers/slash-commands.md` (#214).
+- **Slash-commands reference is vault-only (#214)** — [`docs/reference/slash-commands.md`](docs/reference/slash-commands.md) now documents just the commands `install-agent-kit` ships, as one flat table in pipeline order with a count that a guardrail test keeps honest. Maintainer (`/maintainer`, `/release`, `/triage-issue`) and AWOS delivery (`/fix-bug`, `/implement-feature`) commands are described for contributors in [`docs/maintainers/README.md`](docs/maintainers/README.md) instead — they live in the repo's `.claude/commands/` and are never installed into a user's vault.
+  - *Release note:* The slash reference covers only the vault pipeline; contributor commands are in the maintainer guide (#214).
 
 ### Fixed
 

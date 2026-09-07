@@ -13,8 +13,8 @@ land in an agent directory via `llmwiki install-agent-kit --dest PATH`.
 
 Maintainer and AWOS delivery commands (`/maintainer`, `/release`,
 `/triage-issue`, `/fix-bug`, `/implement-feature`) are not part of the vault
-pipeline and are not installed by the agent kit — they are documented in
-[`../maintainers/slash-commands.md`](../maintainers/slash-commands.md).
+pipeline and are not installed by the agent kit — they are described in
+[`../maintainers/README.md`](../maintainers/README.md).
 
 All **12 commands in the vault pipeline**, in the order you meet them:
 
@@ -359,9 +359,8 @@ To add a new slash command:
 4. Document it here — the CI guard requires every
    `llmwiki/agent_kit/commands/*.md` file to have a matching `###` entry, and
    the count line above to match how many there are. A maintainer-only command
-   goes in `.claude/commands/` and is documented in
-   [`../maintainers/slash-commands.md`](../maintainers/slash-commands.md)
-   instead.
+   goes in `.claude/commands/` and is described in
+   [`../maintainers/README.md`](../maintainers/README.md) instead.
 
 ---
 

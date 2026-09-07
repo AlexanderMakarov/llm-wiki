@@ -54,7 +54,6 @@ CLAUDE_WRAPPER = REPO_ROOT / ".claude" / "commands" / "release.md"
 CURSOR_WRAPPER = REPO_ROOT / ".cursor" / "commands" / "release.md"
 AGENT_KIT_CMDS = REPO_ROOT / "llmwiki" / "agent_kit" / "commands"
 MAINTAINER_README = REPO_ROOT / "docs" / "maintainers" / "README.md"
-MAINTAINER_SLASH_REF = REPO_ROOT / "docs" / "maintainers" / "slash-commands.md"
 CHANGELOG = REPO_ROOT / "CHANGELOG.md"
 SCRIPTS_DIR = REPO_ROOT / "scripts"
 
@@ -424,16 +423,19 @@ def test_maintainer_readme_mentions_skill():
 
 
 def test_slash_ref_mentions_release():
-    """FR4-AC4: docs/maintainers/slash-commands.md must document /release."""
+    """FR4-AC4: the maintainer slash-command docs must describe /release."""
     # @regression
-    assert MAINTAINER_SLASH_REF.is_file(), (
-        "docs/maintainers/slash-commands.md must exist — it is the "
-        "slash-command reference for maintainer commands like /release"
+    assert MAINTAINER_README.is_file(), (
+        "docs/maintainers/README.md must exist — its Slash commands section "
+        "is where maintainer commands like /release are described"
     )
-    text = MAINTAINER_SLASH_REF.read_text(encoding="utf-8")
-    assert re.search(r"^###\s+`?/release(?![a-z0-9-])", text, re.MULTILINE), (
-        "docs/maintainers/slash-commands.md must document /release under "
-        "its own `### /release` heading"
+    text = MAINTAINER_README.read_text(encoding="utf-8")
+    assert re.search(r"`/release(?![a-z0-9-])", text), (
+        "docs/maintainers/README.md must describe /release in its "
+        "Slash commands section"
+    )
+    assert ".claude/skills/release/SKILL.md" in text, (
+        "docs/maintainers/README.md must point /release at the release skill"
     )
 
 

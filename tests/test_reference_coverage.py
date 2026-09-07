@@ -2,11 +2,12 @@
 
 - Every CLI subcommand registered in ``llmwiki.cli.build_parser`` must
   appear as an ``## subcommand`` heading in ``docs/reference/cli.md``.
-- Every user-facing ``llmwiki/agent_kit/commands/*.md`` file must appear
-  as a ``### /slash-command`` heading in
-  ``docs/reference/slash-commands.md``; every contributor
-  ``.claude/commands/*.md`` file must appear the same way in
-  ``docs/maintainers/slash-commands.md``.
+- ``docs/reference/slash-commands.md`` and the
+  ``llmwiki/agent_kit/commands/*.md`` files it describes must match in
+  both directions — every shipped command carries a
+  ``### /slash-command`` heading, no heading names a command the kit does
+  not ship — and its summary table and count must agree with those
+  sections.
 - Every top-level nav item in ``llmwiki/build.py`` must appear as a
   row in ``docs/reference/ui.md``.
 
@@ -24,9 +25,7 @@ from llmwiki.cli import build_parser
 
 CLI_REF = REPO_ROOT / "docs" / "reference" / "cli.md"
 SLASH_REF = REPO_ROOT / "docs" / "reference" / "slash-commands.md"
-MAINTAINER_SLASH_REF = REPO_ROOT / "docs" / "maintainers" / "slash-commands.md"
 UI_REF = REPO_ROOT / "docs" / "reference" / "ui.md"
-CLAUDE_CMDS_DIR = REPO_ROOT / ".claude" / "commands"
 AGENT_KIT_CMDS_DIR = REPO_ROOT / "llmwiki" / "agent_kit" / "commands"
 BUILD_PY = REPO_ROOT / "llmwiki" / "build.py"
 
@@ -148,17 +147,6 @@ def test_slash_reference_covers_every_vault_command():
     )
 
 
-def test_maintainer_reference_covers_every_contributor_command():
-    missing = (
-        _commands_in(CLAUDE_CMDS_DIR)
-        - _documented_slashes(MAINTAINER_SLASH_REF)
-    )
-    assert not missing, (
-        f"docs/maintainers/slash-commands.md is missing entries for these "
-        f"contributor commands: {sorted(missing)}"
-    )
-
-
 def test_slash_reference_documents_only_shipped_vault_commands():
     """Reverse parity for the vault slash reference (regression for #214).
 
@@ -173,24 +161,6 @@ def test_slash_reference_documents_only_shipped_vault_commands():
         f"{sorted(orphaned)}. The doc sends users to a slash command that "
         f"will not exist on their machine after `llmwiki install-agent-kit` "
         f"— drop the section or ship the command."
-    )
-
-
-def test_maintainer_reference_documents_only_shipped_contributor_commands():
-    """Reverse parity for the maintainer slash reference (#214).
-
-    Same shape as the vault check so neither half of the split reference
-    can drift into advertising a command that no longer exists.
-    """
-    orphaned = (
-        _documented_slashes(MAINTAINER_SLASH_REF)
-        - _commands_in(CLAUDE_CMDS_DIR)
-    )
-    assert not orphaned, (
-        f"docs/maintainers/slash-commands.md documents these slash commands "
-        f"but .claude/commands/ holds no such file: {sorted(orphaned)}. The "
-        f"doc points contributors at a command that will not exist — drop "
-        f"the section or add the command."
     )
 
 
