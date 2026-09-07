@@ -106,6 +106,32 @@ def format_plan(plan: list[PlanItem]) -> str:
     return "\n".join(lines)
 
 
+def synth_argv_for_added_docs(vault: Path, plan: list[PlanItem]) -> list[str] | None:
+    """Build a path-scoped ``synth --docs-only`` argv for docs this plan added.
+
+    Returns ``None`` when the plan has no ``add`` actions, or when no markdown
+    landed under ``vault/raw/docs/<slug>/`` yet (caller should treat that as
+    skip-synth, not vault-wide fallback). Each ``--path`` is vault-relative so
+    ``llmwiki synth`` resolves it under ``--vault``.
+    """
+    add_slugs = sorted({slug for action, _path, slug in plan if action == "add"})
+    if not add_slugs:
+        return None
+    rel_paths: list[str] = []
+    for slug in add_slugs:
+        docs_dir = vault / "raw" / "docs" / slug
+        if not docs_dir.is_dir():
+            continue
+        for path in sorted(docs_dir.rglob("*.md")):
+            rel_paths.append(path.relative_to(vault).as_posix())
+    if not rel_paths:
+        return None
+    argv = ["synth", "--vault", str(vault), "--docs-only"]
+    for rel in rel_paths:
+        argv.extend(["--path", rel])
+    return argv
+
+
 def git_toplevel(cwd: Path | None = None) -> Path:
     """Return the working-copy root, or raise ``RefreshError`` if there isn't one."""
     try:
@@ -189,17 +215,19 @@ def run_refresh(
         _write_source_rev(repo)
         return 0
 
-    check = _run_llmwiki(exe, repo, ["synth", "--check"])
-    if check.returncode != 0:
-        print(
-            "error: no synthesis backend is reachable — `llmwiki synth --check` failed.\n"
-            "Set synthesis.backend in config.json to claude or ollama and confirm it is running.\n"
-            "This command is a local maintainer tool; it cannot refresh the demo from a "
-            "release archive and never runs in CI.\n"
-            "Pass --dry-run to print the plan without calling a backend.",
-            file=sys.stderr,
-        )
-        return 1
+    needs_synth = any(action == "add" for action, _path, _slug in plan)
+    if needs_synth:
+        check = _run_llmwiki(exe, repo, ["synth", "--check"])
+        if check.returncode != 0:
+            print(
+                "error: no synthesis backend is reachable — `llmwiki synth --check` failed.\n"
+                "Set synthesis.backend in config.json to claude or ollama and confirm it is running.\n"
+                "This command is a local maintainer tool; it cannot refresh the demo from a "
+                "release archive and never runs in CI.\n"
+                "Pass --dry-run to print the plan without calling a backend.",
+                file=sys.stderr,
+            )
+            return 1
 
     # The plan lists remove before add for every modified/renamed doc.
     # That ordering is mandatory: re-adding an ingested document lands a second
@@ -232,11 +260,17 @@ def run_refresh(
             print(f"error: llmwiki {action} failed (exit {proc.returncode})", file=sys.stderr)
             return proc.returncode
 
-    for argv in (
-        ["synth", "--vault", str(vault), "--docs-only"],
+    # Synth only the docs this plan added — never a vault-wide --docs-only pass
+    # (that re-queues every pending raw/docs page and burns rate limits).
+    synth_argv = synth_argv_for_added_docs(vault, plan)
+    follow_ups: list[list[str]] = []
+    if synth_argv is not None:
+        follow_ups.append(synth_argv)
+    follow_ups.append(
         ["build", "--vault", str(vault), "--out", str(repo / DEMO_SITE_REL),
          "--local-root", LOCAL_ROOT],
-    ):
+    )
+    for argv in follow_ups:
         proc = _run_llmwiki(exe, repo, argv)
         if proc.returncode != 0:
             print(f"error: llmwiki {argv[0]} failed (exit {proc.returncode})", file=sys.stderr)

@@ -12,6 +12,9 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Changed
 
+- **`refresh_demo.py` synths only the docs in its plan** — after `add`/`remove`, it runs `llmwiki synth --docs-only` with repeatable `--path` for each newly ingested `raw/docs/<slug>/…` file instead of a vault-wide docs pass that re-queued every pending document. Remove-only plans skip synth (and the backend reachability check). See [REFRESH_DEMO.md](docs/maintainers/REFRESH_DEMO.md).
+  - *Release note:* Demo docs refresh no longer burns synthesis tokens on unchanged pending pages.
+
 ### Fixed
 
 ### Removed
