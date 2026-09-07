@@ -440,17 +440,13 @@ def test_slash_ref_mentions_release():
 
 
 def test_changelog_unreleased_mentions_release_skill():
-    """FR4-AC5: CHANGELOG.md Unreleased section must note the release skill addition."""
+    """FR4-AC5: CHANGELOG must note the release skill (Unreleased or a shipped version)."""
     # @regression
-    text = CHANGELOG.read_text(encoding="utf-8")
-    # Find the Unreleased section
-    unreleased_match = re.search(
-        r"## \[Unreleased\](.*?)(?=## \[|\Z)", text, re.DOTALL
-    )
-    assert unreleased_match, "CHANGELOG.md must have an [Unreleased] section"
-    unreleased = unreleased_match.group(1).lower()
-    assert "release" in unreleased or "skill" in unreleased, (
-        "CHANGELOG.md [Unreleased] section must note the release skill addition"
+    from tests.changelog_notes import shipping_section_text
+
+    text = shipping_section_text(CHANGELOG.read_text(encoding="utf-8")).lower()
+    assert "release" in text and "skill" in text, (
+        "CHANGELOG shipping notes must mention the release skill (#209)"
     )
 
 

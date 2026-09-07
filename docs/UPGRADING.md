@@ -6,9 +6,20 @@ docs_shell: true
 
 # Upgrade guide
 
-How to upgrade between `llmwiki` releases.  Most releases are drop-in (`pip install -U llmwiki` or `brew upgrade llmwiki`) — this page documents the exceptions: schema migrations, config changes, and behaviour flips that affect what happens on your next `sync`.
+How to upgrade between `llmwiki` releases. Most releases are drop-in (`pip install -U llm-wiki-plus` or `brew upgrade llmwiki`) — this page documents the exceptions: schema migrations, config changes, and behaviour flips that affect what happens on your next `sync`.
 
-The canonical per-release detail is [CHANGELOG.md](https://github.com/Pratiyush/llm-wiki/blob/master/CHANGELOG.md) — this guide focuses on "what might break".
+The canonical per-release detail is [CHANGELOG.md](https://github.com/AlexanderMakarov/llm-wiki/blob/main/CHANGELOG.md) — this guide focuses on "what might break".
+
+## 2.2.0 — install from PyPI as `llm-wiki-plus` (#210)
+
+The published distribution is **`llm-wiki-plus`** (`llmwiki` and `llm-wiki` are unavailable on PyPI). The import and CLI stay `llmwiki`.
+
+```bash
+pip install -U llm-wiki-plus
+llmwiki --version   # → 2.2.0
+```
+
+Optional graph extra: `pip install 'llm-wiki-plus[graph]'`. Re-run `llmwiki install-agent-kit --dest PATH` after upgrade so retired slash commands (`/wiki-export-marp`, `/wiki-synthesize`) are pruned from an older kit install (#214). Prefer `/wiki-synth` (add sources-only when you want the old synthesize path).
 
 ## 2.1.0 — CLI help as a lifecycle map (#112)
 

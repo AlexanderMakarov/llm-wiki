@@ -10,6 +10,18 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Added
 
+### Changed
+
+### Fixed
+
+### Removed
+
+## [2.2.0] — 2026-09-07
+
+Theme: First `llm-wiki-plus` PyPI publish, Pages republish on tags, cross-agent `/release` skill, agent-kit prune.
+
+### Added
+
 - **Cross-agent `/release` skill (#209)** — maintainer-only `.claude/skills/release/SKILL.md` scripts the tagged cut (preflight → bump → CHANGELOG/UPGRADING → commit/tag → human gate → watch `release.yml`); thin Claude and Cursor `/release` wrappers load the skill. Not part of `install-agent-kit`.
   - *Release note:* Maintainers cut releases with `/release <version>` (or the `release` skill); process doc matches `main` + tag automation (#209).
 

@@ -522,7 +522,7 @@ wheels = [
 
 [[package]]
 name = "llm-wiki-plus"
-version = "1.5.0"
+version = "2.2.0"
 source = { editable = "." }
 dependencies = [
     { name = "markdown" },
