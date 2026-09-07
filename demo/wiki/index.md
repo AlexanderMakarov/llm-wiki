@@ -9,7 +9,7 @@ page without descending into a tree. -->
 ## Overview (1)
 - [Overview](overview.md)
 
-## Sources (99)
+## Sources (113)
 - [00 · Quickstart Walkthrough](sources/00-quickstart-walkthrough/2026-08-10-00-quickstart-walkthrough.md) — 00-quickstart-walkthrough · 2026-08-10
 - [01 · Installation](sources/01-installation/2026-08-10-01-installation.md) — 01-installation · 2026-08-10
 - [02 · First sync](sources/02-first-sync/2026-08-10-02-first-sync.md) — 02-first-sync · 2026-08-10
@@ -28,6 +28,8 @@ page without descending into a tree. -->
 - [Architecture (part 3/3: Adding an adapter)](sources/architecture/2026-08-10-architecture-03.md) — architecture · 2026-08-10
 - [Cache tiers — load-priority frontmatter](sources/cache-tiers-load-priority-frontmatter/2026-08-10-cache-tiers-load-priority-frontmatter.md) — cache-tiers-load-priority-frontmatter · 2026-08-10
 - [ChatGPT adapter](sources/chatgpt-adapter/2026-08-10-chatgpt-adapter.md) — chatgpt-adapter · 2026-08-10
+- [Command cheatsheet (part 1/2)](sources/cheatsheet/2026-09-07-command-cheatsheet-01.md) — cheatsheet · 2026-09-07
+- [Command cheatsheet (part 2/2: Adapters)](sources/cheatsheet/2026-09-07-command-cheatsheet-02.md) — cheatsheet · 2026-09-07
 - [Claude CLI synthesis backend](sources/claude-cli-synthesis-backend/2026-08-10-claude-cli-synthesis-backend.md) — claude-cli-synthesis-backend · 2026-08-10
 - [Claude Code adapter](sources/claude-code-adapter/2026-08-10-claude-code-adapter.md) — claude-code-adapter · 2026-08-10
 - [CLI reference (part 1/8)](sources/cli-reference/2026-08-10-cli-reference-01.md) — cli-reference · 2026-08-10
@@ -50,17 +52,24 @@ page without descending into a tree. -->
 - [Configuration Reference (part 3/4)](sources/configuration-reference/2026-08-10-configuration-reference-03.md) — configuration-reference · 2026-08-10
 - [Configuration Reference (part 4/4: Environment variables)](sources/configuration-reference/2026-08-10-configuration-reference-04.md) — configuration-reference · 2026-08-10
 - [Cursor adapter](sources/cursor-adapter/2026-08-10-cursor-adapter.md) — cursor-adapter · 2026-08-10
+- [Deploying to GitHub Pages](sources/deploy-github-pages/2026-09-07-deploying-to-github-pages.md) — deploy-github-pages · 2026-09-07
+- [PyPI publishing — one-time setup](sources/deploy-pypi-publishing/2026-09-07-pypi-publishing-one-time-setup.md) — deploy-pypi-publishing · 2026-09-07
 - [Deploying to GitHub Pages](sources/deploying-to-github-pages/2026-08-10-deploying-to-github-pages.md) — deploying-to-github-pages · 2026-08-10
 - [Deploying to GitLab Pages](sources/deploying-to-gitlab-pages/2026-08-10-deploying-to-gitlab-pages.md) — deploying-to-gitlab-pages · 2026-08-10
 - [Deploying to Vercel or Netlify](sources/deploying-to-vercel-or-netlify/2026-08-10-deploying-to-vercel-or-netlify.md) — deploying-to-vercel-or-netlify · 2026-08-10
+- [Editorial brand system (part 1/2)](sources/design-brand-system/2026-09-07-editorial-brand-system-01.md) — design-brand-system · 2026-09-07
+- [Editorial brand system (part 2/2: 5. Spacing)](sources/design-brand-system/2026-09-07-editorial-brand-system-02.md) — design-brand-system · 2026-09-07
 - [Docker deployment](sources/docker-deployment/2026-08-10-docker-deployment.md) — docker-deployment · 2026-08-10
 - [Docs style guide](sources/docs-style-guide/2026-08-10-docs-style-guide.md) — docs-style-guide · 2026-08-10
-- [Cut shell startup time by deferring completions](sources/dotfiles/2026-05-31-shell-startup-profiling.md) — dotfiles · 2026-05-31
-- [Version the git hooks instead of copying them](sources/dotfiles/2026-08-02-git-hooks-sync.md) — dotfiles · 2026-08-02
+- [Cut shell startup time by deferring completions](sources/dotfiles/2026-06-28-shell-startup-profiling.md) — dotfiles · 2026-06-28
+- [Version the git hooks instead of copying them](sources/dotfiles/2026-08-30-git-hooks-sync.md) — dotfiles · 2026-08-30
 - [Editorial brand system (part 1/2)](sources/editorial-brand-system/2026-08-10-editorial-brand-system-01.md) — editorial-brand-system · 2026-08-10
 - [Editorial brand system (part 2/2: 5. Spacing)](sources/editorial-brand-system/2026-08-10-editorial-brand-system-02.md) — editorial-brand-system · 2026-08-10
 - [Entity schema reference (v0.7 · #55)](sources/entity-schema-reference-v0-7-55/2026-08-10-entity-schema-reference-v0-7-55.md) — entity-schema-reference-v0-7-55 · 2026-08-10
 - [FAQ](sources/faq/2026-08-10-faq.md) — faq · 2026-08-10
+- [Feature Matrix — Every Feature Across the 15 Prior Implementations (part 1/3)](sources/feature-matrix/2026-09-07-feature-matrix-every-feature-across-the-15-prior-implementations-01.md) — feature-matrix · 2026-09-07
+- [Feature Matrix — Every Feature Across the 15 Prior Implementations (part 2/3: F · Multi-agent support)](sources/feature-matrix/2026-09-07-feature-matrix-every-feature-across-the-15-prior-implementations-02.md) — feature-matrix · 2026-09-07
+- [Feature Matrix — Every Feature Across the 15 Prior Implementations (part 3/3: P · Novel inventions for llmwiki)](sources/feature-matrix/2026-09-07-feature-matrix-every-feature-across-the-15-prior-implementations-03.md) — feature-matrix · 2026-09-07
 - [Feature Matrix — Every Feature Across the 15 Prior Implementations (part 1/3)](sources/feature-matrix-every-feature-across-the-15-prior-implementations/2026-08-10-feature-matrix-every-feature-across-the-15-prior-implementations-01.md) — feature-matrix-every-feature-across-the-15-prior-implementations · 2026-08-10
 - [Feature Matrix — Every Feature Across the 15 Prior Implementations (part 2/3: G · Infrastructure)](sources/feature-matrix-every-feature-across-the-15-prior-implementations/2026-08-10-feature-matrix-every-feature-across-the-15-prior-implementations-02.md) — feature-matrix-every-feature-across-the-15-prior-implementations · 2026-08-10
 - [Feature Matrix — Every Feature Across the 15 Prior Implementations (part 3/3: P · Novel inventions for llmwiki)](sources/feature-matrix-every-feature-across-the-15-prior-implementations/2026-08-10-feature-matrix-every-feature-across-the-15-prior-implementations-03.md) — feature-matrix-every-feature-across-the-15-prior-implementations · 2026-08-10
@@ -69,18 +78,18 @@ page without descending into a tree. -->
 - [Getting started (part 2/2: Auto-sync on session start (optional))](sources/getting-started/2026-08-10-getting-started-02.md) — getting-started · 2026-08-10
 - [GitHub Copilot adapters](sources/github-copilot-adapters/2026-08-10-github-copilot-adapters.md) — github-copilot-adapters · 2026-08-10
 - [Homebrew tap — one-time setup](sources/homebrew-tap-one-time-setup/2026-08-10-homebrew-tap-one-time-setup.md) — homebrew-tap-one-time-setup · 2026-08-10
-- [Refactor the adapter registry so contrib adapters stay opt-in](sources/llm-wiki/2026-04-12-adapter-registry-refactor.md) — llm-wiki · 2026-04-12
-- [Stop re-synthesising sources that have not changed](sources/llm-wiki/2026-05-21-incremental-synth-state.md) — llm-wiki · 2026-05-21
-- [Fall back to the page graph when the topic vocabulary is thin](sources/llm-wiki/2026-06-26-topic-graph-sparsity.md) — llm-wiki · 2026-06-26
-- [Add the candidate review gate between harvest and promotion](sources/llm-wiki/2026-07-08-candidate-review-gate.md) — llm-wiki · 2026-07-08
-- [Expose the wiki over MCP so any agent can read it](sources/llm-wiki/2026-07-18-mcp-server-tools.md) — llm-wiki · 2026-07-18
-- [Sort the lint rules into errors, warnings and information](sources/llm-wiki/2026-07-25-lint-rule-severities.md) — llm-wiki · 2026-07-25
-- [Make the built site work without a server or a network](sources/llm-wiki/2026-07-31-static-site-offline.md) — llm-wiki · 2026-07-31
-- [Seed project pages from session metadata](sources/llm-wiki/2026-08-04-project-page-aggregation.md) — llm-wiki · 2026-08-04
-- [Constrain the Key Facts prompt to attributed bullets](sources/llm-wiki/2026-08-06-key-facts-prompt.md) — llm-wiki · 2026-08-06
-- [Split the search index into per-project chunks](sources/llm-wiki/2026-08-07-search-index-chunks.md) — llm-wiki · 2026-08-07
-- [Ingest arbitrary documents alongside sessions](sources/llm-wiki/2026-08-08-docs-ingest-pipeline.md) — llm-wiki · 2026-08-08
-- [Confirm how cross-references resolve before moving pages](sources/llm-wiki/2026-08-09-wikilink-resolution.md) — llm-wiki · 2026-08-09
+- [Refactor the adapter registry so contrib adapters stay opt-in](sources/llm-wiki/2026-05-10-adapter-registry-refactor.md) — llm-wiki · 2026-05-10
+- [Stop re-synthesising sources that have not changed](sources/llm-wiki/2026-06-18-incremental-synth-state.md) — llm-wiki · 2026-06-18
+- [Fall back to the page graph when the topic vocabulary is thin](sources/llm-wiki/2026-07-24-topic-graph-sparsity.md) — llm-wiki · 2026-07-24
+- [Add the candidate review gate between harvest and promotion](sources/llm-wiki/2026-08-05-candidate-review-gate.md) — llm-wiki · 2026-08-05
+- [Expose the wiki over MCP so any agent can read it](sources/llm-wiki/2026-08-15-mcp-server-tools.md) — llm-wiki · 2026-08-15
+- [Sort the lint rules into errors, warnings and information](sources/llm-wiki/2026-08-22-lint-rule-severities.md) — llm-wiki · 2026-08-22
+- [Make the built site work without a server or a network](sources/llm-wiki/2026-08-28-static-site-offline.md) — llm-wiki · 2026-08-28
+- [Seed project pages from session metadata](sources/llm-wiki/2026-09-01-project-page-aggregation.md) — llm-wiki · 2026-09-01
+- [Constrain the Key Facts prompt to attributed bullets](sources/llm-wiki/2026-09-03-key-facts-prompt.md) — llm-wiki · 2026-09-03
+- [Split the search index into per-project chunks](sources/llm-wiki/2026-09-04-search-index-chunks.md) — llm-wiki · 2026-09-04
+- [Ingest arbitrary documents alongside sessions](sources/llm-wiki/2026-09-05-docs-ingest-pipeline.md) — llm-wiki · 2026-09-05
+- [Confirm how cross-references resolve before moving pages](sources/llm-wiki/2026-09-06-wikilink-resolution.md) — llm-wiki · 2026-09-06
 - [llmwiki documentation](sources/llmwiki-documentation/2026-08-10-llmwiki-documentation.md) — llmwiki-documentation · 2026-08-10
 - [llmwiki Framework — Building an Agent-Native Dev Tool (part 1/3)](sources/llmwiki-framework-building-an-agent-native-dev-tool/2026-08-10-llmwiki-framework-building-an-agent-native-dev-tool-01.md) — llmwiki-framework-building-an-agent-native-dev-tool · 2026-08-10
 - [llmwiki Framework — Building an Agent-Native Dev Tool (part 2/3: Phase 3 — Structure)](sources/llmwiki-framework-building-an-agent-native-dev-tool/2026-08-10-llmwiki-framework-building-an-agent-native-dev-tool-02.md) — llmwiki-framework-building-an-agent-native-dev-tool · 2026-08-10
@@ -97,18 +106,23 @@ page without descending into a tree. -->
 - [Obsidian adapter](sources/obsidian-adapter/2026-08-10-obsidian-adapter.md) — obsidian-adapter · 2026-08-10
 - [Obsidian Integration Guide](sources/obsidian-integration-guide/2026-08-10-obsidian-integration-guide.md) — obsidian-integration-guide · 2026-08-10
 - [OpenClaw adapter](sources/openclaw-adapter/2026-08-10-openclaw-adapter.md) — openclaw-adapter · 2026-08-10
-- [Resolve citation key collisions on import](sources/paper-notes/2026-06-18-bibtex-key-collisions.md) — paper-notes · 2026-06-18
-- [Extract readable text from two-column PDFs](sources/paper-notes/2026-07-22-pdf-text-extraction.md) — paper-notes · 2026-07-22
+- [OpenCode / OpenClaw adapter](sources/opencode-openclaw-adapter/2026-08-10-opencode-openclaw-adapter.md) — opencode-openclaw-adapter · 2026-08-10
+- [Resolve citation key collisions on import](sources/paper-notes/2026-07-16-bibtex-key-collisions.md) — paper-notes · 2026-07-16
+- [Extract readable text from two-column PDFs](sources/paper-notes/2026-08-19-pdf-text-extraction.md) — paper-notes · 2026-08-19
 - [Performance Benchmarks](sources/performance-benchmarks/2026-08-10-performance-benchmarks.md) — performance-benchmarks · 2026-08-10
-- [Fix cent-rounding drift on imported statements](sources/pocket-ledger/2026-04-26-csv-import-rounding.md) — pocket-ledger · 2026-04-26
-- [Add a rules engine for transaction categories](sources/pocket-ledger/2026-07-28-category-rules-engine.md) — pocket-ledger · 2026-07-28
-- [Validate image uploads before they reach storage](sources/recipe-box/2026-07-02-image-upload-limits.md) — recipe-box · 2026-07-02
-- [Scale ingredient quantities without mangling fractions](sources/recipe-box/2026-08-07-ingredient-scaling.md) — recipe-box · 2026-08-07
-- [Detect and backfill gaps in the sensor stream](sources/sensor-mesh/2026-06-10-backfill-gap-detection.md) — sensor-mesh · 2026-06-10
-- [Add backoff to broker reconnection](sources/sensor-mesh/2026-08-05-mqtt-reconnect-backoff.md) — sensor-mesh · 2026-08-05
-- [Move list endpoints from offset to cursor pagination](sources/trailhead-api/2026-05-09-pagination-cursors.md) — trailhead-api · 2026-05-09
-- [Thread a request id through the log output](sources/trailhead-api/2026-07-13-request-id-logging.md) — trailhead-api · 2026-07-13
-- [Make migrations safe to run twice](sources/trailhead-api/2026-08-08-schema-migration-safety.md) — trailhead-api · 2026-08-08
+- [Phase 1.25 — Research Report (part 1/3)](sources/phase-1-25-research-report/2026-08-10-phase-1-25-research-report-01.md) — phase-1-25-research-report · 2026-08-10
+- [Phase 1.25 — Research Report (part 2/3: Per-repo analysis)](sources/phase-1-25-research-report/2026-08-10-phase-1-25-research-report-02.md) — phase-1-25-research-report · 2026-08-10
+- [Phase 1.25 — Research Report (part 3/3: The 10x gap (feature matrix))](sources/phase-1-25-research-report/2026-08-10-phase-1-25-research-report-03.md) — phase-1-25-research-report · 2026-08-10
+- [Pick your mode](sources/pick-your-mode/2026-08-10-pick-your-mode.md) — pick-your-mode · 2026-08-10
+- [Fix cent-rounding drift on imported statements](sources/pocket-ledger/2026-05-24-csv-import-rounding.md) — pocket-ledger · 2026-05-24
+- [Add a rules engine for transaction categories](sources/pocket-ledger/2026-08-25-category-rules-engine.md) — pocket-ledger · 2026-08-25
+- [Validate image uploads before they reach storage](sources/recipe-box/2026-07-30-image-upload-limits.md) — recipe-box · 2026-07-30
+- [Scale ingredient quantities without mangling fractions](sources/recipe-box/2026-09-04-ingredient-scaling.md) — recipe-box · 2026-09-04
+- [Detect and backfill gaps in the sensor stream](sources/sensor-mesh/2026-07-08-backfill-gap-detection.md) — sensor-mesh · 2026-07-08
+- [Add backoff to broker reconnection](sources/sensor-mesh/2026-09-02-mqtt-reconnect-backoff.md) — sensor-mesh · 2026-09-02
+- [Move list endpoints from offset to cursor pagination](sources/trailhead-api/2026-06-06-pagination-cursors.md) — trailhead-api · 2026-06-06
+- [Thread a request id through the log output](sources/trailhead-api/2026-08-10-request-id-logging.md) — trailhead-api · 2026-08-10
+- [Make migrations safe to run twice](sources/trailhead-api/2026-09-05-schema-migration-safety.md) — trailhead-api · 2026-09-05
 
 ## Entities (2)
 - [Claude Code](entities/Claude Code.md)
@@ -123,13 +137,23 @@ page without descending into a tree. -->
 
 ## Syntheses (0)
 
-## Candidates (9)
+## Candidates (19)
+- [Static Site](candidates/concepts/Static Site.md)
 - [Wiki Synthesis](candidates/concepts/Wiki Synthesis.md)
+- [Wikilinks](candidates/concepts/Wikilinks.md)
+- [CLAUDE.md](candidates/entities/CLAUDE.md.md)
+- [Configuration](candidates/entities/Configuration.md)
+- [Configuration Reference](candidates/entities/Configuration Reference.md)
 - [Cursor](candidates/entities/Cursor.md)
+- [GitHub Actions](candidates/entities/GitHub Actions.md)
 - [GitHub Pages](candidates/entities/GitHub Pages.md)
 - [LLM Wiki](candidates/entities/LLM Wiki.md)
+- [LLMWiki](candidates/entities/LLMWiki.md)
 - [Logseq](candidates/entities/Logseq.md)
 - [Obsidian](candidates/entities/Obsidian.md)
+- [Ollama](candidates/entities/Ollama.md)
 - [Python](candidates/entities/Python.md)
+- [SQLite](candidates/entities/SQLite.md)
+- [WCAG 2.1](candidates/entities/WCAG 2.1.md)
 - [llm-wiki](candidates/entities/llm-wiki.md)
 - [llmwiki](candidates/entities/llmwiki.md)

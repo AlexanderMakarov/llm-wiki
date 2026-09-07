@@ -4,7 +4,7 @@ type: entity
 status: candidate
 tags: []
 sources: [2026-08-10-06-bring-your-obsidian-logseq-vault, 2026-08-10-cli-reference-01, 2026-08-10-command-cheatsheet-02]
-last_updated: 2026-08-12
+last_updated: 2026-09-07
 ---
 
 # Logseq

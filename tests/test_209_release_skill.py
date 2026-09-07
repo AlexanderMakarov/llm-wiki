@@ -46,6 +46,7 @@ from __future__ import annotations
 import re
 
 from llmwiki import REPO_ROOT
+from tests.changelog_notes import shipping_section_text
 
 # ─── Paths ───────────────────────────────────────────────────────────────────
 
@@ -467,8 +468,6 @@ def test_slash_ref_mentions_release():
 def test_changelog_unreleased_mentions_release_skill():
     """FR4-AC5: CHANGELOG must note the release skill (Unreleased or a shipped version)."""
     # @regression
-    from tests.changelog_notes import shipping_section_text
-
     text = shipping_section_text(CHANGELOG.read_text(encoding="utf-8")).lower()
     assert "release" in text and "skill" in text, (
         "CHANGELOG shipping notes must mention the release skill (#209)"

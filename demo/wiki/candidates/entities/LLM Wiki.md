@@ -4,7 +4,7 @@ type: entity
 status: candidate
 tags: []
 sources: [2026-08-10-cli-reference-01, 2026-08-10-cli-reference-07, 2026-08-10-configuration-reference-03, 2026-08-10-feature-matrix-every-feature-across-the-15-prior-implementations-02]
-last_updated: 2026-08-12
+last_updated: 2026-09-07
 ---
 
 # LLM Wiki

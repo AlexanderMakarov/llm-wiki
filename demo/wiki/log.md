@@ -286,3 +286,41 @@
 ## [2026-08-10] add | Uptime Monitoring
 
 ## [2026-08-10] add | Windows setup
+
+## [2026-09-07] synthesize | 25 sessions across 7 projects
+- Processed: 15 Claude · 4 Cursor · 4 OpenClaw · 2 Codex
+- Created: dotfiles, llm-wiki, paper-notes, pocket-ledger, recipe-box, sensor-mesh, trailhead-api
+
+## [2026-09-07] add | Upgrade guide
+
+## [2026-09-07] add | Command cheatsheet
+
+## [2026-09-07] add | Deploying to GitHub Pages
+
+## [2026-09-07] add | PyPI publishing — one-time setup
+
+## [2026-09-07] add | Editorial brand system
+
+## [2026-09-07] add | Feature Matrix — Every Feature Across the 15 Prior Implementations
+
+## [2026-09-07] add | CLI reference
+
+## [2026-09-07] add | Slash commands reference
+
+## [2026-09-07] add | Synthesis cost — what you pay per page, and why
+
+## [2026-09-07] add | UI reference
+
+## [2026-09-07] add | 01 · Installation
+
+## [2026-09-07] add | Uptime Monitoring
+
+## [2026-09-07] synthesize | 57 sessions across 82 projects
+- Processed: 57 docs
+- Created: 00-quickstart-walkthrough, 01-installation, 02-first-sync, 03-use-with-claude-code, 04-use-with-codex-cli, 05-query-your-wiki, 06-bring-your-obsidian-logseq-vault, 07-example-workflows, 08-synthesize-wiki-pages-with-ollama, accessibility-audit-summary, accessibility-wcag-2-1-aa, api-guide, architecture, cache-tiers-load-priority-frontmatter, chatgpt-adapter, cheatsheet, claude-cli-synthesis-backend, claude-code-adapter, cli-reference, codex-cli-adapter, command-cheatsheet, competitor-landscape, configuration, configuration-reference, cursor-adapter, deploy-github-pages, deploy-pypi-publishing, deploying-to-github-pages, deploying-to-gitlab-pages, deploying-to-vercel-or-netlify, design-brand-system, docker-deployment, docs-style-guide, editorial-brand-system, entity-schema-reference-v0-7-55, faq, feature-matrix, feature-matrix-every-feature-across-the-15-prior-implementations, gemini-cli-adapter, getting-started, github-copilot-adapters, homebrew-tap-one-time-setup, llmwiki-documentation, llmwiki-framework-building-an-agent-native-dev-tool, llmwiki-public-roadmap, llmwiki-roadmap-phase-layer-item-prioritised, mode-b-agent, monthly-project-health-report-template, multi-agent-setup, obsidian-adapter, obsidian-integration-guide, openclaw-adapter, opencode-openclaw-adapter, performance-benchmarks, phase-1-25-research-report, pick-your-mode, privacy, prompt-caching-batch-api, pypi-publishing-one-time-setup, reader-api-contract-v1-2-preview, reader-first-article-shell, reference-cli, reference-slash-commands, reference-synthesis-cost, reference-ui, running-llmwiki-on-an-existing-obsidian-logseq-vault, seo-optimization-guide, setup-guide-your-first-llm-wiki-in-15-minutes, slash-commands-reference, star-history-tracking, state-persistence, synthesis-backends-v1-4-0, synthesis-cost-what-you-pay-per-page-and-why, troubleshooting, tutorials-01-installation, ui-reference, upgrade-guide, upgrading, uptime, uptime-monitoring, windows-setup, writing-a-new-adapter
+- Errors: 106
+
+## [2026-09-07] synthesize | 61 sessions across 72 projects
+- Processed: 61 docs
+- Created: 00-quickstart-walkthrough, 03-use-with-claude-code, 04-use-with-codex-cli, 05-query-your-wiki, 07-example-workflows, 08-synthesize-wiki-pages-with-ollama, accessibility-audit-summary, accessibility-wcag-2-1-aa, api-guide, architecture, chatgpt-adapter, cheatsheet, claude-cli-synthesis-backend, claude-code-adapter, cli-reference, command-cheatsheet, competitor-landscape, configuration, configuration-reference, deploy-github-pages, deploy-pypi-publishing, deploying-to-github-pages, design-brand-system, docker-deployment, docs-style-guide, faq, feature-matrix, feature-matrix-every-feature-across-the-15-prior-implementations, gemini-cli-adapter, getting-started, github-copilot-adapters, homebrew-tap-one-time-setup, llmwiki-documentation, llmwiki-framework-building-an-agent-native-dev-tool, llmwiki-public-roadmap, llmwiki-roadmap-phase-layer-item-prioritised, mode-b-agent, monthly-project-health-report-template, multi-agent-setup, obsidian-adapter, obsidian-integration-guide, openclaw-adapter, opencode-openclaw-adapter, performance-benchmarks, phase-1-25-research-report, pick-your-mode, privacy, prompt-caching-batch-api, pypi-publishing-one-time-setup, reader-api-contract-v1-2-preview, reader-first-article-shell, reference-cli, reference-slash-commands, reference-synthesis-cost, reference-ui, running-llmwiki-on-an-existing-obsidian-logseq-vault, seo-optimization-guide, setup-guide-your-first-llm-wiki-in-15-minutes, slash-commands-reference, star-history-tracking, state-persistence, synthesis-backends-v1-4-0, synthesis-cost-what-you-pay-per-page-and-why, troubleshooting, tutorials-01-installation, ui-reference, upgrade-guide, upgrading, uptime, uptime-monitoring, windows-setup, writing-a-new-adapter
+- Errors: 75
