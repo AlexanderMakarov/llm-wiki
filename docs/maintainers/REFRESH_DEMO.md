@@ -9,7 +9,7 @@ It is a **local maintainer tool**. It never runs in CI, is not a CLI subcommand,
 1. Reads the last-refreshed git revision from `demo/.demo-source-rev`.
 2. Asks git which files under `docs/` changed since that revision (`git diff --name-status`) and which still have uncommitted working-tree edits (`git status --porcelain`), so a maintainer can preview before committing.
 3. Builds a plan: added pages are added, deleted pages are removed, modified or renamed pages are removed and then re-added (llmwiki cannot update an already-ingested document in place).
-4. Drives the existing CLI against `demo/`: `add` / `remove`, then once per run `synth --docs-only`, `build --out demo/site`, and `lint`.
+4. Drives the existing CLI against `demo/`: `add` / `remove`, then `synth --docs-only` **scoped with `--path` to each raw doc this plan just added** (not every pending document in the vault), then `build --out demo/site`, and `lint`. Remove-only plans skip synth and do not require a reachable backend.
 5. Writes `HEAD` into `demo/.demo-source-rev`.
 6. Prints the full lint report. Warnings do not fail the run; they are the maintainer's sight of warning-severity defects under the errors-only CI gate.
 

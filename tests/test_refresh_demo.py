@@ -113,6 +113,73 @@ def test_added_then_deleted_in_working_tree_drops_out() -> None:
     assert plan == []
 
 
+def test_synth_argv_scopes_to_added_raw_docs(tmp_path: Path) -> None:
+    vault = tmp_path / "demo"
+    (vault / "raw" / "docs" / "guide").mkdir(parents=True)
+    (vault / "raw" / "docs" / "guide" / "guide.md").write_text("# Guide\n", encoding="utf-8")
+    (vault / "raw" / "docs" / "other").mkdir(parents=True)
+    (vault / "raw" / "docs" / "other" / "other.md").write_text("# Other\n", encoding="utf-8")
+    plan = [
+        ("remove", "docs/guide.md", "guide"),
+        ("add", "docs/guide.md", "guide"),
+    ]
+    argv = refresh.synth_argv_for_added_docs(vault, plan)
+    assert argv is not None
+    assert argv[:4] == ["synth", "--vault", str(vault), "--docs-only"]
+    assert argv.count("--path") == 1
+    assert "raw/docs/guide/guide.md" in argv
+    assert "raw/docs/other/other.md" not in argv
+
+
+def test_synth_argv_none_when_plan_is_remove_only(tmp_path: Path) -> None:
+    vault = tmp_path / "demo"
+    (vault / "raw" / "docs" / "keep").mkdir(parents=True)
+    (vault / "raw" / "docs" / "keep" / "keep.md").write_text("# Keep\n", encoding="utf-8")
+    plan = [("remove", "docs/keep.md", "keep")]
+    assert refresh.synth_argv_for_added_docs(vault, plan) is None
+
+
+def test_synth_argv_none_when_added_slug_has_no_raw_yet(tmp_path: Path) -> None:
+    vault = tmp_path / "demo"
+    vault.mkdir()
+    plan = [("add", "docs/guide.md", "guide")]
+    assert refresh.synth_argv_for_added_docs(vault, plan) is None
+
+
+def test_run_refresh_passes_path_scoped_synth(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Real refresh must not call vault-wide ``synth --docs-only`` without ``--path``."""
+    repo = _seed_repo(tmp_path)
+    (repo / "docs" / "guide.md").write_text("# Guide\n\nedited\n", encoding="utf-8")
+    _git(repo, ["add", "docs/guide.md"])
+    _git(repo, ["commit", "-m", "edit guide"])
+
+    calls: list[list[str]] = []
+
+    def fake_run_seeded(_exe: str, _repo: Path, argv: list[str]):
+        calls.append(list(argv))
+        if argv and argv[0] == "add":
+            # `--project <slug>` is the last flag pair in refresh_demo's add argv.
+            slug = argv[argv.index("--project") + 1]
+            dest = repo / "demo" / "raw" / "docs" / slug
+            dest.mkdir(parents=True, exist_ok=True)
+            (dest / "guide.md").write_text("# Guide\n", encoding="utf-8")
+        return subprocess.CompletedProcess(argv, 0, "", "")
+
+    monkeypatch.setattr(refresh, "_run_llmwiki", fake_run_seeded)
+    rc = refresh.run_refresh(repo, dry_run=False)
+    assert rc == 0
+    synth_calls = [c for c in calls if c[:1] == ["synth"] and "--check" not in c]
+    assert len(synth_calls) == 1
+    synth = synth_calls[0]
+    assert "--docs-only" in synth
+    assert "--path" in synth
+    assert "raw/docs/guide/guide.md" in synth
+    # Must not be the old vault-wide form: synth --vault … --docs-only with no --path.
+    assert synth != ["synth", "--vault", str(repo / "demo"), "--docs-only"]
+
+
 # ── git fixture / --dry-run ───────────────────────────────────────────────
 
 
