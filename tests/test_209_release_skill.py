@@ -316,6 +316,35 @@ def test_preflight_defaults_demo_refresh():
     )
 
 
+def test_skill_blocks_tag_on_incomplete_demo_synth():
+    """Incomplete / rate-limited demo synth must be a hard stop before tagging.
+
+    Lint/build alone passed on a hollow demo during the v2.2.0 cut; the skill
+    must refuse to treat “proceed with delivery” as a waiver.
+    """
+    # @regression
+    _, body = _skill_parts()
+    lower = body.lower()
+    assert "incomplete" in lower and "synth" in lower, (
+        "Skill must call out incomplete demo synth as a hard stop"
+    )
+    assert "verify-slugs" in lower or "--verify-slugs" in body, (
+        "Skill must point at refresh_demo.py --verify-slugs as the local coverage gate"
+    )
+    assert "proceed with delivery" in lower, (
+        "Skill must explicitly say 'proceed with delivery' does not waive incompleteness"
+    )
+    assert "human gate" in lower and (
+        "demo synth" in lower or "synth status" in lower or "blocked" in lower
+    ), (
+        "Human gate must require reporting demo synth status"
+    )
+    process = RELEASE_PROCESS.read_text(encoding="utf-8").lower()
+    assert "hard stop" in process or "verify-slugs" in process, (
+        "RELEASE_PROCESS.md must mirror the incomplete-synth hard stop / verify-slugs gate"
+    )
+
+
 def test_skill_proposes_version_and_theme():
     """FR2-AC2: skill must propose version + theme and wait for human confirmation."""
     _, body = _skill_parts()

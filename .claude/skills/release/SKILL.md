@@ -15,6 +15,7 @@ Cut a deliberate `vX.Y.Z` release for this repository. Available wherever `.clau
 - **No force-push** of `main` (or any shared branch) as part of a release.
 - **No amend** of the release commit after the tag exists.
 - **No unattended publish** — never `git push` of `main` or the version tag until the human explicitly approves in this session.
+- **No tagging on incomplete demo synth.** Lint/build green and CI green do **not** prove the release-day demo refresh finished. A rate-limited or partial synth leaves `demo/raw/` updated without matching `demo/wiki/sources/` pages; that is how a release can ship a hollow demo. Phrases like “proceed with delivery”, “ship anyway”, or “lint is green” do **not** waive this. Only an explicit opt-out in this session does (`skip demo refresh`, `version-only`, or `ship with unfinished synth`). When synth is incomplete: **stop**, report the gaps, and wait — do not tag or push.
 
 There is no `scripts/release-*.sh`; run the commands below with `gh`, `ruff`, `pytest`, `git`, and file edits.
 
@@ -36,8 +37,9 @@ Confirm all of the following; stop and fix before bumping if any fail:
 6. **Demo corpus (#225) — default ON:** refresh the public demo content before bumping version / tagging. Do **not** ask “should we refresh?” as an open choice. Skip **only** when the human explicitly opts out in this session (e.g. “skip demo refresh”, “version-only”). Silence means refresh. Pages version assert (#213) is not a content refresh.
    - Sessions (no LLM): `python3 scripts/generate_demo_sessions.py --dry-run`, then regenerate with a **release-day** `--today` (not the frozen `2026-08-10` anchor). New dates change filenames.
    - **Re-synth gate:** bumping `--today` and/or a non-empty docs refresh plan needs synth against `demo/` so `source_file:` / wiki pages stay valid. Prefer the narrow path: session sources whose filenames changed, plus `refresh_demo.py`’s docs-only pass for product-doc drift — not an unnecessary full-vault re-synth of unchanged pages. **Do not burn synthesis tokens yourself** when the human will run synth: after session regen (+ `refresh_demo.py --dry-run`), **stop and wait** for them to re-synth (and say when they are done). If they ask you to run synth and a backend is configured, run it then.
-   - Docs: `python3 scripts/refresh_demo.py --dry-run`, then a real refresh when the plan is non-empty ([REFRESH_DEMO.md](../../docs/maintainers/REFRESH_DEMO.md)); first-time / missing `demo/.demo-source-rev` uses `--force` (still needs a reachable backend — same wait-for-human rule).
-   - After synth: `python3 -m llmwiki build --vault demo --out /tmp/demo-site --local-root /home/user` and `python3 -m llmwiki lint --vault demo --fail-on-errors`. Commit `demo/` (sessions + wiki + `.demo-source-rev` when written) **before** the tag so Pages builds the refreshed vault.
+   - Docs: `python3 scripts/refresh_demo.py --dry-run`, then a real refresh when the plan is non-empty ([REFRESH_DEMO.md](../../docs/maintainers/REFRESH_DEMO.md)); first-time / missing `demo/.demo-source-rev` uses `--force` (still needs a reachable backend — same wait-for-human rule). `refresh_demo.py` itself refuses to advance `.demo-source-rev` when plan-added raw docs still lack wiki pages.
+   - **Completeness check (local, not CI):** after docs refresh / manual path-scoped synth, run `python3 scripts/refresh_demo.py --verify-slugs <slug>,…` with every slug this cut’s plan added. Exit 0 is required before tagging. For sessions: every non-headless regenerated `demo/raw/sessions/` file needs a matching `demo/wiki/sources/` page (known `#180` headless markers stay raw-only). Do **not** require clearing the vault-wide historical docs backlog — only the slugs/filenames this cut touched.
+   - After synth + completeness check: `python3 -m llmwiki build --vault demo --out /tmp/demo-site --local-root /home/user` and `python3 -m llmwiki lint --vault demo --fail-on-errors`. Commit `demo/` (sessions + wiki + `.demo-source-rev` when written) **before** the tag so Pages builds the refreshed vault.
    - If the human **explicitly** opted out, record that in the session notes and continue; live session dates may stay stale.
 7. Propose the version (`X.Y.Z`) and a one-line Theme; wait for the human to confirm or correct before editing files.
 
@@ -83,9 +85,10 @@ Stop. Show the human:
 
 - `git show --stat HEAD` (or equivalent)
 - Confirmed version and Theme
+- **Demo synth status** — one of: `complete` (list plan slugs + `--verify-slugs` exit 0 / session coverage), `explicitly opted out` (quote the opt-out phrase), or `blocked` (gaps remaining — do not ask to push the tag). Lint green alone is not “complete.”
 - Intended push: `git push origin main` and `git push origin vX.Y.Z` (or `git push origin main vX.Y.Z`)
 
-Push **only** after explicit approval in the session. Direct push of the release commit to `main` is the maintainer path for this cut (distinct from normal PR flow) — still requires that approval.
+Push **only** after explicit approval in the session. Direct push of the release commit to `main` is the maintainer path for this cut (distinct from normal PR flow) — still requires that approval. If demo synth is blocked, do not present a tag push as ready.
 
 ### 7. Post-push — watch automation
 

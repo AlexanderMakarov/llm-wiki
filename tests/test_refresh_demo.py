@@ -146,6 +146,50 @@ def test_synth_argv_none_when_added_slug_has_no_raw_yet(tmp_path: Path) -> None:
     assert refresh.synth_argv_for_added_docs(vault, plan) is None
 
 
+def test_missing_wiki_for_doc_slugs_reports_uncovered_raw(tmp_path: Path) -> None:
+    vault = tmp_path / "demo"
+    raw_dir = vault / "raw" / "docs" / "guide"
+    raw_dir.mkdir(parents=True)
+    (raw_dir / "guide.md").write_text("# Guide\n", encoding="utf-8")
+    gaps = refresh.missing_wiki_for_doc_slugs(vault, ["guide"])
+    assert gaps == ["raw/docs/guide/guide.md"]
+
+
+def test_missing_wiki_for_doc_slugs_accepts_dated_wiki_stem(tmp_path: Path) -> None:
+    vault = tmp_path / "demo"
+    raw_dir = vault / "raw" / "docs" / "guide"
+    wiki_dir = vault / "wiki" / "sources" / "guide"
+    raw_dir.mkdir(parents=True)
+    wiki_dir.mkdir(parents=True)
+    (raw_dir / "guide.md").write_text("# Guide\n", encoding="utf-8")
+    (wiki_dir / "2026-09-07-guide.md").write_text("# Guide\n", encoding="utf-8")
+    assert refresh.missing_wiki_for_doc_slugs(vault, ["guide"]) == []
+
+
+def test_run_refresh_fails_when_synth_leaves_wiki_gaps(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Incomplete synth must not advance the pin (lint alone is not enough)."""
+    repo = _seed_repo(tmp_path)
+    (repo / "docs" / "guide.md").write_text("# Guide\n\nedited\n", encoding="utf-8")
+    _git(repo, ["add", "docs/guide.md"])
+    _git(repo, ["commit", "-m", "edit guide"])
+    pin_before = (repo / "demo" / ".demo-source-rev").read_text(encoding="utf-8")
+
+    def fake_run(_exe: str, _repo: Path, argv: list[str]):
+        if argv and argv[0] == "add":
+            slug = argv[argv.index("--project") + 1]
+            dest = repo / "demo" / "raw" / "docs" / slug
+            dest.mkdir(parents=True, exist_ok=True)
+            (dest / "guide.md").write_text("# Guide\n", encoding="utf-8")
+        # synth succeeds but writes no wiki pages — the coverage gate must catch it
+        return subprocess.CompletedProcess(argv, 0, "", "")
+
+    monkeypatch.setattr(refresh, "_run_llmwiki", fake_run)
+    assert refresh.run_refresh(repo, dry_run=False) == 1
+    assert (repo / "demo" / ".demo-source-rev").read_text(encoding="utf-8") == pin_before
+
+
 def test_run_refresh_passes_path_scoped_synth(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -165,6 +209,17 @@ def test_run_refresh_passes_path_scoped_synth(
             dest = repo / "demo" / "raw" / "docs" / slug
             dest.mkdir(parents=True, exist_ok=True)
             (dest / "guide.md").write_text("# Guide\n", encoding="utf-8")
+        if argv and argv[0] == "synth" and "--check" not in argv:
+            # Coverage gate after synth needs a wiki page per added raw doc.
+            slug = "guide"
+            raw = repo / "demo" / "raw" / "docs" / slug / "guide.md"
+            wiki_dir = repo / "demo" / "wiki" / "sources" / slug
+            wiki_dir.mkdir(parents=True, exist_ok=True)
+            rel = raw.relative_to(repo / "demo").as_posix()
+            (wiki_dir / "2026-09-07-guide.md").write_text(
+                f"---\nsource_file: {rel}\n---\n# Guide\n",
+                encoding="utf-8",
+            )
         return subprocess.CompletedProcess(argv, 0, "", "")
 
     monkeypatch.setattr(refresh, "_run_llmwiki", fake_run_seeded)
