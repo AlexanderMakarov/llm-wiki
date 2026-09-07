@@ -33,11 +33,12 @@ Confirm all of the following; stop and fix before bumping if any fail:
 3. Lint: `ruff check llmwiki tests scripts`.
 4. Tests: `python3 -m pytest tests/ -q`.
 5. **Root `wiki/` pitfall:** if a gitignored leftover `wiki/` exists at the repo root, warn the human — demo self-containment / acceptance checks can fail against it. Do **not** delete user data without asking; rename/move aside only with explicit approval.
-6. **Demo corpus (#225):** ask whether this cut should refresh the public demo content (not only the version badge). If yes, before bumping version:
-   - `python3 scripts/generate_demo_sessions.py --dry-run`, then regenerate with a release-appropriate `--today` (bumping `--today` requires re-synth/build of `demo/` so `source_file:` links stay valid — see the script docstring).
-   - `python3 scripts/refresh_demo.py --dry-run`, then a real refresh when the plan is non-empty ([REFRESH_DEMO.md](../../docs/maintainers/REFRESH_DEMO.md)).
-   - Commit the `demo/` updates on `main` (or include them in the release commit) **before** the tag, so Pages builds the refreshed vault.
-   - If the human declines a content refresh, record that choice in the session notes — Pages will still assert `manifest.json` version (#213) but session dates can stay weeks old.
+6. **Demo corpus (#225) — default ON:** refresh the public demo content before bumping version / tagging. Do **not** ask “should we refresh?” as an open choice. Skip **only** when the human explicitly opts out in this session (e.g. “skip demo refresh”, “version-only”). Silence means refresh. Pages version assert (#213) is not a content refresh.
+   - Sessions (no LLM): `python3 scripts/generate_demo_sessions.py --dry-run`, then regenerate with a **release-day** `--today` (not the frozen `2026-08-10` anchor). New dates change filenames.
+   - **Re-synth gate:** bumping `--today` and/or a non-empty docs refresh plan needs synth against `demo/` so `source_file:` / wiki pages stay valid. Prefer the narrow path: session sources whose filenames changed, plus `refresh_demo.py`’s docs-only pass for product-doc drift — not an unnecessary full-vault re-synth of unchanged pages. **Do not burn synthesis tokens yourself** when the human will run synth: after session regen (+ `refresh_demo.py --dry-run`), **stop and wait** for them to re-synth (and say when they are done). If they ask you to run synth and a backend is configured, run it then.
+   - Docs: `python3 scripts/refresh_demo.py --dry-run`, then a real refresh when the plan is non-empty ([REFRESH_DEMO.md](../../docs/maintainers/REFRESH_DEMO.md)); first-time / missing `demo/.demo-source-rev` uses `--force` (still needs a reachable backend — same wait-for-human rule).
+   - After synth: `python3 -m llmwiki build --vault demo --out /tmp/demo-site --local-root /home/user` and `python3 -m llmwiki lint --vault demo --fail-on-errors`. Commit `demo/` (sessions + wiki + `.demo-source-rev` when written) **before** the tag so Pages builds the refreshed vault.
+   - If the human **explicitly** opted out, record that in the session notes and continue; live session dates may stay stale.
 7. Propose the version (`X.Y.Z`) and a one-line Theme; wait for the human to confirm or correct before editing files.
 
 Optional when the release touches the static site: `python3 -m llmwiki build` and a quick local preview (no new unexpected warnings).
@@ -97,7 +98,7 @@ Push **only** after explicit approval in the session. Direct push of the release
 ### 8. Pages deploy + announce
 
 1. Watch `pages.yml` for the tag (`gh run list --workflow=pages.yml --limit=3`). Post-deploy assert must be green (`manifest.json` == `__version__`).
-2. If this cut refreshed demo sessions, spot-check live session dates — version-only green is not a content refresh (#225).
+2. Unless the human explicitly skipped demo refresh, spot-check live session dates match the regenerated corpus — version-only green is not a content refresh (#225).
 3. Social announce is optional; follow `RELEASE_PROCESS.md` if the human wants it this cut.
 
 ## Rollback (after a bad tag is public)

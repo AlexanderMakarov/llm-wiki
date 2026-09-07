@@ -12,7 +12,8 @@ AC coverage matrix (FR<requirement>-AC<n> from functional-spec.md):
                test_claude_wrapper_loads_skill, test_cursor_wrapper_loads_skill
     FR1-AC3 → test_skill_not_in_agent_kit_commands
     FR2-AC1 → test_preflight_covers_main_ci, test_preflight_covers_critical_bugs,
-               test_preflight_covers_lint_and_tests, test_preflight_warns_root_wiki
+               test_preflight_covers_lint_and_tests, test_preflight_warns_root_wiki,
+               test_preflight_defaults_demo_refresh
     FR2-AC2 → test_skill_proposes_version_and_theme
     FR2-AC3 → test_human_gate_before_push
     FR2-AC4 → test_skill_mentions_watching_automation_and_release_url
@@ -287,6 +288,30 @@ def test_preflight_warns_root_wiki():
     assert "wiki/" in body or "wiki`" in body or "root.*wiki" in body.lower() or \
         re.search(r"\bwiki\b", body), (
         "Skill preflight must warn about leftover root wiki/ folder"
+    )
+
+
+def test_preflight_defaults_demo_refresh():
+    """#225: demo corpus refresh is default ON; skip only on explicit opt-out."""
+    # @regression
+    _, body = _skill_parts()
+    lower = body.lower()
+    assert "demo" in lower and "#225" in body, (
+        "Skill preflight must cover demo corpus refresh (#225)"
+    )
+    assert "default on" in lower or (
+        "default" in lower and ("opt out" in lower or "opts out" in lower or "explicitly" in lower)
+    ), (
+        "Skill must state demo refresh is default ON and skip only on explicit opt-out"
+    )
+    assert "ask whether" not in lower, (
+        "Skill must not ask whether to refresh the demo as an open choice"
+    )
+    process = RELEASE_PROCESS.read_text(encoding="utf-8").lower()
+    assert "default on" in process or (
+        "default" in process and "explicitly" in process and "opt" in process
+    ), (
+        "RELEASE_PROCESS.md must state demo refresh is the default"
     )
 
 
