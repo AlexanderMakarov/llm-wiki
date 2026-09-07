@@ -137,7 +137,7 @@ page without descending into a tree. -->
 
 ## Syntheses (0)
 
-## Candidates (19)
+## Candidates (18)
 - [Static Site](candidates/concepts/Static Site.md)
 - [Wiki Synthesis](candidates/concepts/Wiki Synthesis.md)
 - [Wikilinks](candidates/concepts/Wikilinks.md)
@@ -148,7 +148,6 @@ page without descending into a tree. -->
 - [GitHub Actions](candidates/entities/GitHub Actions.md)
 - [GitHub Pages](candidates/entities/GitHub Pages.md)
 - [LLM Wiki](candidates/entities/LLM Wiki.md)
-- [LLMWiki](candidates/entities/LLMWiki.md)
 - [Logseq](candidates/entities/Logseq.md)
 - [Obsidian](candidates/entities/Obsidian.md)
 - [Ollama](candidates/entities/Ollama.md)

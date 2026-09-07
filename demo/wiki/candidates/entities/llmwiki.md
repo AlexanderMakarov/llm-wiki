@@ -11,6 +11,10 @@ last_updated: 2026-09-07
 
 ## Key Facts
 
+## Aliases
+
+- LLMWiki — merged (case-fold collision with llmwiki.md)
+
 ## Connections
 
 Named by 45 source page(s), which is the evidence that
