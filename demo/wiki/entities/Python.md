@@ -1,7 +1,7 @@
 ---
 title: "Python"
 type: entity
-status: candidate
+status: reviewed
 tags: []
 sources: [2026-05-24-csv-import-rounding, 2026-06-06-pagination-cursors, 2026-08-10-request-id-logging]
 last_updated: 2026-08-12

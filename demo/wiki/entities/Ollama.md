@@ -1,13 +1,13 @@
 ---
-title: "GitHub Actions"
+title: "Ollama"
 type: entity
-status: candidate
+status: reviewed
 tags: []
 sources: []
 last_updated: 2026-09-07
 ---
 
-# GitHub Actions
+# Ollama
 
 ## Key Facts
 
