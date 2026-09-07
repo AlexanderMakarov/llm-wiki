@@ -281,19 +281,51 @@ def test_site_stats_block_returns_empty_when_no_data():
 
 
 def test_site_stats_block_renders_three_cards():
-    # #27: Site token stats render a single "Tokens" card (value + "<avg> / session avg"
-    # sub-line), plus Best cache hit and Heaviest project (by tokens).
+    # #27 / #223: Tokens card shows avg with explicit token-data divisor, plus Best cache hit
+    # and Heaviest project (by tokens); note clarifies billed throughput vs context occupancy.
     by_project = {
         "alpha": [{"token_totals": '{"input": 100, "cache_read": 900}'}],
         "beta": [{"token_totals": '{"input": 500, "cache_read": 10, "output": 2000}'}],
     }
     block = render_site_token_stats(by_project)
     assert "Tokens" in block
-    assert "/ session avg" in block
+    assert "/ session (2 with token data)" in block
+    assert "Cumulative billed throughput" in block
+    assert "not context-window occupancy" in block
     assert "Best cache hit" in block
     assert "Heaviest project (by tokens)" in block
     assert 'href="projects/alpha.html"' in block
     assert 'href="projects/beta.html"' in block
+
+
+def test_site_stats_labels_token_bearing_divisor_count():
+    """#223: avg divisor stays token-bearing sessions; sub-label must surface N.
+
+    Hero session count can exceed sessions with ≥1 non-zero token category.
+    Old unlabeled ``/ session avg`` hid that narrower population; Option 2 keeps
+    the divisor but labels it, plus a billed-throughput clarification note.
+    """
+    # 7 sessions total; only 4 have non-zero token categories (40.0K → 10.0K avg).
+    by_project = {
+        "alpha": [
+            {"token_totals": '{"input": 5000, "output": 5000}'},  # 10K
+            {"token_totals": '{"input": 10000}'},  # 10K
+            {"token_totals": "{}"},  # no data
+            {},  # missing token_totals
+        ],
+        "beta": [
+            {"token_totals": '{"input": 0, "output": 0, "cache_read": 0}'},  # all-zero
+            {"token_totals": '{"cache_read": 10000}'},  # 10K
+            {"token_totals": '{"input": 5000, "cache_creation": 5000}'},  # 10K
+        ],
+    }
+    block = render_site_token_stats(by_project)
+    assert "40.0K" in block
+    assert "10.0K / session (4 with token data)" in block
+    # Pre-#223 regression: bare avg label without the token-data population count.
+    assert "/ session avg" not in block
+    assert "Cumulative billed throughput" in block
+    assert "not context-window occupancy" in block
 
 
 def test_site_stats_block_respects_link_prefix():

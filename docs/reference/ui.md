@@ -274,7 +274,7 @@ Newest raw documents first, one row per logical document — chunked docs (`<slu
 
 URL: `/analytics.html`
 
-Session analytics plus usage-led wiki value (#52) and the candidates review gate (#84). The page opens with a hero line (main sessions · sub-agent runs · projects) and a row of stat cards — tokens (total + per-session average), best cache hit, heaviest project by tokens, and heaviest project by MCP usage.
+Session analytics plus usage-led wiki value (#52) and the candidates review gate (#84). The page opens with a hero line (main sessions · sub-agent runs · projects) and a row of stat cards — tokens (total + per-session average over sessions with token data, labeled e.g. `10.0K / session (4 with token data)`; cumulative billed throughput including cache_read, not context-window occupancy — #223), best cache hit, heaviest project by tokens, and heaviest project by MCP usage.
 
 Below that, sections appear in this order:
 
