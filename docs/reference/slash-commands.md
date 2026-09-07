@@ -6,17 +6,32 @@ docs_shell: true
 
 # Slash commands reference
 
-Every `/wiki-*` (plus governance commands),
-what it does, what it runs under the hood, and a realistic invocation
-example. Use these inside **Claude Code**. User-facing `/wiki-*` files ship in the installable package and land in an agent directory via `llmwiki install-agent-kit --dest PATH`; governance commands stay in this repository's `.claude/commands/`.
+Every `/wiki-*` command `llmwiki install-agent-kit` ships — what it does,
+what it runs under the hood, and a realistic invocation example. Use these
+inside **Claude Code**. The command files live in the installable package and
+land in an agent directory via `llmwiki install-agent-kit --dest PATH`.
 
-Summary of **19 commands in 5 groups**:
+Maintainer and AWOS delivery commands (`/maintainer`, `/release`,
+`/triage-issue`, `/fix-bug`, `/implement-feature`) are not part of the vault
+pipeline and are not installed by the agent kit — they are described in
+[`../maintainers/README.md`](../maintainers/README.md).
 
-| Group | Commands |
+All **12 commands in the vault pipeline**, in the order you meet them:
+
+| Command | What it does |
 |---|---|
-| **Wiki pipeline** (14) | `/wiki-init` `/wiki-sync` `/wiki-ingest` `/wiki-query` `/wiki-update` `/wiki-lint` `/wiki-candidates` `/wiki-synth` `/wiki-synthesize` `/wiki-graph` `/wiki-reflect` `/wiki-build` `/wiki-export-marp` `/wiki-all` |
-| **Governance / maintainer** (3) | `/maintainer` `/release` `/triage-issue` |
-| **AWOS delivery** (2) | `/fix-bug` `/implement-feature` |
+| [`/wiki-init`](#wiki-init) | Scaffold an empty vault (`raw/`, `wiki/`, `site/`) |
+| [`/wiki-sync`](#wiki-sync) | Convert new agent sessions into `raw/` |
+| [`/wiki-ingest`](#wiki-ingest-path) | Ingest one file or folder into `raw/` |
+| [`/wiki-synth`](#wiki-synth) | Synthesize pending raw into `wiki/sources/`, then harvest candidates |
+| [`/wiki-candidates`](#wiki-candidates) | Triage pending candidate stubs |
+| [`/wiki-query`](#wiki-query-question) | Answer a free-form question from the wiki |
+| [`/wiki-update`](#wiki-update-page) | Edit one wiki page in place |
+| [`/wiki-lint`](#wiki-lint) | Check wiki quality — orphans, broken links, stale pages |
+| [`/wiki-graph`](#wiki-graph) | Build the knowledge graph from `[[wikilinks]]` |
+| [`/wiki-reflect`](#wiki-reflect) | Higher-order reflection pass over the whole wiki |
+| [`/wiki-build`](#wiki-build) | Regenerate the static HTML site |
+| [`/wiki-all`](#wiki-all) | Run the whole pipeline end-to-end |
 
 ---
 
@@ -126,6 +141,43 @@ that triggers auto-ingest of new pages into `wiki/`.
 
 ---
 
+### `/wiki-synth`
+
+**What:** synthesize pending raw sessions/docs into `wiki/sources/`, then harvest entity/concept candidates into `wiki/candidates/` (default). Use `--sources-only` for the legacy sources-only path. Sources are two LLM jobs per run (known-names prepare + one ask per queued file); harvest is offline. Ctrl+C harvests from written pages (or prints `synth --candidates-only` after `--sources-only`) and exits 130. Do not run a separate consolidate-topics step — known-names prepare is part of `synth`.
+
+**Wraps:** `python3 -m llmwiki synth`.
+
+**Example:**
+
+```
+/wiki-synth
+/wiki-synth with a cost estimate
+/wiki-synth force a re-run of every source
+/wiki-synth sources only
+```
+
+---
+
+### `/wiki-candidates`
+
+**What:** triage pending candidates — `promote`, `flip-promote`, `merge`, `discard`, or batch `apply --actions`.
+
+**Wraps:** `python3 -m llmwiki candidates list` + follow-ups (`apply --actions` for batches). Same intents `site/candidates.html` lists, whose copyable batch feeds the same command.
+
+**When to use:** Home **Candidates** / Analytics **Candidates to review** is non-zero, `/wiki-lint` reported `stale_candidates`, or you just ran `llmwiki synth` / `synth --candidates-only`.
+
+Promote fills an empty `## Key Facts` offline from source `fact:` bullets (and harvest stubs); Dummy / no backend is fine (#147). Prefer the CLI action for the common case. Opt-in `llmwiki candidates rewrite-key-facts --slug <Name>` (or `--all`) still needs an LLM for trusted pages with regex-era Key Facts or pasted harvest-stub `## Candidate merge` blocks. Prefer `flip-promote` over hand-moving stubs between `candidates/entities` and `candidates/concepts`.
+
+**Example:**
+
+```
+/wiki-candidates
+```
+
+Claude will walk the queue one at a time and offer actions per candidate.
+
+---
+
 ### `/wiki-query <question>`
 
 **What:** answer a question from the wiki. Reads `wiki/index.md` +
@@ -202,47 +254,6 @@ want to re-run sync.
 
 ---
 
-### `/wiki-synth`
-
-**What:** synthesize pending raw sessions/docs into `wiki/sources/`, then harvest entity/concept candidates into `wiki/candidates/` (default). Use `--sources-only` for the legacy sources-only path. Sources are two LLM jobs per run (known-names prepare + one ask per queued file); harvest is offline. Ctrl+C harvests from written pages (or prints `synth --candidates-only` after `--sources-only`) and exits 130. Do not run a separate consolidate-topics step — known-names prepare is part of `synth`.
-
-**Wraps:** `python3 -m llmwiki synth`.
-
-**Example:**
-
-```
-/wiki-synth
-/wiki-synth with a cost estimate
-/wiki-synth force a re-run of every source
-/wiki-synth sources only
-```
-
-### `/wiki-synthesize`
-
-**Deprecated** alias for `/wiki-synth`. Prefer `/wiki-synth`. Still wraps `python3 -m llmwiki synth --sources-only` (legacy synthesize default).
-
----
-
-### `/wiki-candidates`
-
-**What:** triage pending candidates — `promote`, `flip-promote`, `merge`, `discard`, or batch `apply --actions`.
-
-**Wraps:** `python3 -m llmwiki candidates list` + follow-ups (`apply --actions` for batches). Same intents `site/candidates.html` lists, whose copyable batch feeds the same command.
-
-**When to use:** Home **Candidates** / Analytics **Candidates to review** is non-zero, `/wiki-lint` reported `stale_candidates`, or you just ran `llmwiki synth` / `synth --candidates-only`.
-
-Promote fills an empty `## Key Facts` offline from source `fact:` bullets (and harvest stubs); Dummy / no backend is fine (#147). Prefer the CLI action for the common case. Opt-in `llmwiki candidates rewrite-key-facts --slug <Name>` (or `--all`) still needs an LLM for trusted pages with regex-era Key Facts or pasted harvest-stub `## Candidate merge` blocks. Prefer `flip-promote` over hand-moving stubs between `candidates/entities` and `candidates/concepts`.
-
-**Example:**
-
-```
-/wiki-candidates
-```
-
-Claude will walk the queue one at a time and offer actions per candidate.
-
----
-
 ### `/wiki-graph`
 
 **What:** build the knowledge graph. Nodes = wiki pages, edges =
@@ -299,21 +310,6 @@ a fresh site without running the full sync pipeline.
 
 ---
 
-### `/wiki-export-marp`
-
-**What:** generate a Marp slide deck from wiki pages matching a topic.
-
-**Wraps:** `python3 -m llmwiki export-marp --topic …`.
-
-**Example:**
-
-```
-/wiki-export-marp topic "cache tiers"
-/wiki-export-marp topic Karpathy save to ~/slides/karpathy.marp.md
-```
-
----
-
 ### `/wiki-all`
 
 **What:** run the full pipeline end-to-end — sync → synth → build → graph → lint. Every stage runs unless you opt out of it. AI-consumable exports (`llms.txt`, `sitemap.xml`, etc.) are written by `build`, not a separate step.
@@ -336,68 +332,17 @@ Pass `--strict` to turn any lint warning into a non-zero exit, which is exactly 
 
 ---
 
-## Governance / maintainer
-
-### `/maintainer`
-
-Meta-skill that loads all llmwiki governance docs (`CONTRIBUTING.md`,
-`CODE_OF_CONDUCT.md`, `docs/maintainers/*`) and exposes the three
-maintainer slash commands below.
-
-Use before doing anything governance-related.
-
-### `/release`
-
-Maintainer-only. Thin wrapper around [`.claude/skills/release/SKILL.md`](../../.claude/skills/release/SKILL.md): preflight on `main`, version bump, CHANGELOG/UPGRADING editorial, local commit+tag, **human gate before push**, then watch `.github/workflows/release.yml` (GitHub Release + Sigstore; PyPI only when `PYPI_PUBLISHING` is enabled). Canonical checklist order: [`docs/maintainers/RELEASE_PROCESS.md`](../maintainers/RELEASE_PROCESS.md). Usage: `/release <version>`.
-
-### `/triage-issue`
-
-Apply labels + milestone + priority to a new GitHub issue using the
-llmwiki triage rules.
-
-**Example:**
-
-```
-/triage-issue 280
-```
-
----
-
-## AWOS delivery
-
-Hired via `/awos-hire` (#114). Decisions and stages live under `context/product/` (especially `delivery-flow.md`). Prefer Cursor `/awos-flow` / Claude `/awos:flow` when changing those decisions.
-
-### `/fix-bug`
-
-Drive one bug (GitHub Issue) through diagnosis → scoped fix + regression test → verify → independent review (full write-up printed in chat) → PR. Subagent-heavy; keeps the owning AWOS spec honest when behavior changes.
-
-**Example:**
-
-```
-/fix-bug 114
-```
-
-### `/implement-feature`
-
-Drive one feature (spec / issue) through implement → test → independent review (full write-up printed in chat) → PR per `context/product/delivery-flow.md`.
-
-**Example:**
-
-```
-/implement-feature <spec-or-issue>
-```
-
----
-
 ## How the slash commands get installed
 
-The repo ships `.claude/commands/*.md` — Claude Code picks them up
-automatically when it opens the repo (no separate install step).
+`llmwiki install-agent-kit --dest PATH` copies the packaged
+`wiki-*.md` command files into an agent directory — `--dest .claude` for the
+project you are working in, or a user-level agent directory. Claude Code picks
+them up from there with no further setup.
 
-For **Codex CLI / Cursor / Gemini CLI / other agents**, copy the
-`.claude/commands/wiki-*.md` files into the corresponding skill
-directory for that agent (typically `.codex/skills/` or
-`.agents/skills/`) — the file format is portable across agents.
+For **Codex CLI / Cursor / Gemini CLI / other agents**, point `--dest` at (or
+copy the installed `wiki-*.md` files into) the corresponding skill directory
+for that agent (typically `.codex/skills/` or `.agents/skills/`) — the file
+format is portable across agents.
 
 ---
 
@@ -405,14 +350,17 @@ directory for that agent (typically `.codex/skills/` or
 
 To add a new slash command:
 
-1. Create `.claude/commands/wiki-<name>.md` with a one-line docstring
-   on line 1 (that's the summary Claude Code surfaces).
+1. Create `llmwiki/agent_kit/commands/wiki-<name>.md` with a one-line
+   docstring on line 1 (that's the summary Claude Code surfaces).
 2. Describe the workflow in prose. Reference existing CLI commands
    rather than embedding shell in the body.
 3. Run `/wiki-lint` — the `docs/reference/` guardrail test (see
    `tests/test_docs_structure.py`) will pick up the new command.
-4. Document it here; the CI guard requires every `.claude/commands/*.md`
-   to have a matching entry.
+4. Document it here — the CI guard requires every
+   `llmwiki/agent_kit/commands/*.md` file to have a matching `###` entry, and
+   the count line above to match how many there are. A maintainer-only command
+   goes in `.claude/commands/` and is described in
+   [`../maintainers/README.md`](../maintainers/README.md) instead.
 
 ---
 

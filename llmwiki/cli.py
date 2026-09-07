@@ -2911,7 +2911,7 @@ def build_parser() -> argparse.ArgumentParser:
         """
         Start-here setup: copy packaged slash commands and skills into an agent directory (--dest, for example .claude or .codex) so the agent can run /wiki-sync and related workflows against this vault.
 
-        Do this after init when you want agent-facing commands on disk. Writes command and skill files under the destination; --dry-run reports would-write paths without changing anything.
+        Do this after init when you want agent-facing commands on disk. Writes command and skill files under the destination, backs up a differing file to <name>.bak first, and deletes commands the kit has retired using the install manifest it keeps at <dest>/.llmwiki-agent-kit.json. A retired path is deleted only while its content still hashes to a revision llmwiki shipped there, so only files this command installed are ever removed and nothing is backed up on the way out; a file you wrote or edited at the same name is left in place and reported as kept. --dry-run reports would-write and would-prune paths without changing anything.
 
         Not part of the daily loop. Does not convert sessions, summarise into wiki/, harvest candidates, or rebuild the site.
         """,

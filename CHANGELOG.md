@@ -20,6 +20,9 @@ Versions below 1.0 are pre-production — API and file formats may change.
 - **Release checklist remembers demo content refresh (#225)** — `RELEASE_PROCESS.md` and the `/release` skill now require an explicit choose: regenerate `demo/` sessions (`generate_demo_sessions.py`) and/or docs (`refresh_demo.py`) before tagging, or consciously skip; Pages version assert alone is not a content refresh. Script docstrings and `REFRESH_DEMO.md` cross-link the same path.
   - *Release note:* Before tagging, decide whether to regenerate the demo corpus; CI still never invents demo sessions (#225).
 
+- **Slash-commands reference is vault-only (#214)** — [`docs/reference/slash-commands.md`](docs/reference/slash-commands.md) now documents just the commands `install-agent-kit` ships, as one flat table in pipeline order with a count that a guardrail test keeps honest. Maintainer (`/maintainer`, `/release`, `/triage-issue`) and AWOS delivery (`/fix-bug`, `/implement-feature`) commands are described for contributors in [`docs/maintainers/README.md`](docs/maintainers/README.md) instead — they live in the repo's `.claude/commands/` and are never installed into a user's vault.
+  - *Release note:* The slash reference covers only the vault pipeline; contributor commands are in the maintainer guide (#214).
+
 ### Fixed
 
 - **README claimed CI runs Python 3.12 and 3.13** — leftover from before the matrix was narrowed to 3.12 only. README now matches `ci.yml` / CONTRIBUTING (verify 3.12; newer interpreters installable but not matrix-tested).
@@ -34,8 +37,15 @@ Versions below 1.0 are pre-production — API and file formats may change.
   - *Release note:* `sync` and `build` work from a PyPI install, not just a git checkout (#210).
 - **The GitHub Action built its site into site-packages (#210)** — `action.yml` and `.github/workflows/llmwiki-action.yml` ran bare `llmwiki init`/`sync`/`build`, which resolve an unnamed vault to the directory above the installed package rather than the caller's checkout, so the advertised `site-dir` output pointed at a directory that was never created. Every step now passes `--vault .`. `action.yml` also takes an optional `package` input (default `llm-wiki-plus`) so CI can exercise the action against an unreleased checkout, which a new `action-smoke` CI job does on every PR.
   - *Release note:* The `llm-wiki` action now writes `site/` into your checkout as documented (#210).
+- **`install-agent-kit` prunes retired commands (#214)** — the install now removes `/wiki-*` command and skill files it previously wrote that the kit no longer ships, so a destination set up before a removal stops offering broken commands (`/wiki-export-marp`, `/wiki-synthesize`). Deletion is gated on content, not on the name: a file goes only while it still hashes to a revision llmwiki shipped at that path. Those digests come from a packaged retired-path list (every revision of each retired file) plus a new `<dest>/.llmwiki-agent-kit.json` manifest recording the version and a `path → sha256` of what was installed. A file the command never installed is never touched, and neither is a retired command you edited — an unrecognised digest leaves it in place and reports it as `kept`. Because only bytes llmwiki wrote are ever deleted, the prune makes no backup. Manifest entries that escape the destination are ignored, an older list-shape manifest authorises no deletion, and `--dry-run` reports the prune without deleting anything.
+  - *Release note:* Re-run `llmwiki install-agent-kit --dest PATH` to clear retired `/wiki-*` commands from an older install; only untouched copies of files llmwiki itself wrote are removed, so anything you customised stays put. The new `<dest>/.llmwiki-agent-kit.json` manifest is safe and useful to commit alongside `.claude/commands/` — it is what lets the next upgrade recognise its own files (#214).
 
 ### Removed
+
+- **`/wiki-export-marp` slash command and `write_marp()` (#214)** — the slash wrapped `llmwiki export-marp`, a CLI subcommand removed in v1.2.0, so every invocation failed; the packaged command file and the now-unreachable `write_marp()` exporter are both gone. `install-agent-kit` ships 12 `/wiki-*` commands.
+  - *Release note:* There is no Marp slide export; drop `/wiki-export-marp` from any workflow that still calls it (#214).
+- **`/wiki-synthesize` deprecated alias (#214)** — retired in favour of `/wiki-synth`, which covers the same run (`--sources-only` for the legacy sources-only path).
+  - *Release note:* Replace `/wiki-synthesize` with `/wiki-synth` (add "sources only" when you want the old behaviour) (#214).
 
 ## [2.1.0] — 2026-09-04
 

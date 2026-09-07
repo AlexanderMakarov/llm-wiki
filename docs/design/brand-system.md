@@ -198,7 +198,6 @@ All generated artifacts must inherit the same tokens:
 | Static HTML site (`site/`) | Full CSS from `llmwiki/render/css.py` |
 | Graph viewer (`site/graph.html`) | `--g-*` palette mirroring the main site |
 | PDF export (future) | Print stylesheet adds explicit black-on-white + page breaks |
-| Marp slide export | Keeps Inter + JetBrains Mono + `#7C3AED` accent |
 | QMD export | Quarto theme sets body = Inter, mono = JetBrains Mono |
 | Obsidian vault (via symlink) | Reads `.obsidian/themes/llmwiki.css` (future) |
 | Screenshots in README | Taken in light mode for consistency |

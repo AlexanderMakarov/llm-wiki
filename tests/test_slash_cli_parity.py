@@ -42,17 +42,6 @@ NON_WRAPPER_SLASHES = {
     "implement-feature",  # AWOS delivery orchestration (#114)
 }
 
-# Slash files whose CLI subcommand was removed. They're excluded from
-# both wrapper-parity and non-wrapper-parity checks.
-LEGACY_SLASH_FILES = {
-    "wiki-export-marp",  # export-marp CLI subcommand removed
-}
-
-# Deprecated slash aliases: filename is not ``wiki-<cli-sub>``.
-SLASH_CLI_ALIASES = {
-    "wiki-synthesize": "synth",
-}
-
 
 def _cli_subcommands() -> set[str]:
     parser = build_parser()
@@ -119,7 +108,7 @@ def test_every_wrapper_slash_points_at_a_real_subcommand():
     cli = _cli_subcommands()
     offenders: list[str] = []
     for p in _all_slash_files():
-        if p.stem in NON_WRAPPER_SLASHES | LEGACY_SLASH_FILES:
+        if p.stem in NON_WRAPPER_SLASHES:
             continue
         sub = _wrapped_subcommand(p)
         if sub is None:
@@ -139,17 +128,10 @@ def test_wrapper_slash_name_matches_cli_subcommand():
     ``/wiki-review`` → ``candidates`` split that we fixed in #272."""
     mismatches: list[str] = []
     for p in _all_slash_files():
-        if p.stem in NON_WRAPPER_SLASHES | LEGACY_SLASH_FILES:
+        if p.stem in NON_WRAPPER_SLASHES:
             continue
         sub = _wrapped_subcommand(p)
         if sub is None:
-            continue
-        if p.stem in SLASH_CLI_ALIASES:
-            expected = SLASH_CLI_ALIASES[p.stem]
-            if sub != expected:
-                mismatches.append(
-                    f"{p.name} wraps `{sub}` but alias must wrap `{expected}`"
-                )
             continue
         expected_prefix = f"wiki-{sub}"
         if p.stem != expected_prefix:
@@ -168,7 +150,7 @@ def test_wrapper_slash_name_matches_cli_subcommand():
 def test_every_wrapper_slash_has_at_least_one_bash_example():
     offenders: list[str] = []
     for p in _all_slash_files():
-        if p.stem in NON_WRAPPER_SLASHES | LEGACY_SLASH_FILES:
+        if p.stem in NON_WRAPPER_SLASHES:
             continue
         text = p.read_text(encoding="utf-8")
         if "```" not in text and "python3" not in text:

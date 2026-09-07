@@ -673,6 +673,10 @@ Typical destinations: `.claude` in the project you are working in, or a user-lev
 
 Re-running after an upgrade refreshes the copies. A destination file whose content already matches the kit is left alone. A destination file that differs is saved as `<filename>.bak` beside it before the kit version is written, and the backup is reported, so a customisation is never overwritten silently. `--dry-run` prints the same report and writes nothing.
 
+The install also prunes commands and skills the kit has retired (#214), so an agent directory populated by an older install stops offering them. Pruning is gated on content, never on the name: a file is deleted only while it still hashes to a revision llmwiki is known to have written at that path. Two things supply those digests — a small list of retired paths carried in the package, each mapped to the digests of every revision it ever shipped, and `<dest>/.llmwiki-agent-kit.json`, a manifest of the llmwiki version and a `path → sha256` record of what this command installed, written after a pass. Anything the previous manifest recorded that the current kit no longer ships is pruned when its bytes are unchanged. A file this command never installed is never touched, whatever its name, so your own commands beside the kit's are safe; a retired command you customised is safe for the same reason — an unrecognised digest leaves the file alone and reports it as `kept`. Manifest entries that are absolute, escape the destination, or sit outside `commands/`/`skills/` are ignored, and a manifest that is missing, unreadable, or written in an older shape that carries no digests falls back to the retired list. Because only bytes llmwiki itself wrote are ever removed, a prune makes no backup; only files are removed — never directories. `--dry-run` reports the prune and deletes nothing.
+
+The manifest is a normal file in `--dest`. When that is a git-tracked `.claude/`, commit `.llmwiki-agent-kit.json` alongside `commands/` and `skills/`: it is what lets a later upgrade recognise its own files and clean them up.
+
 Contributor-only commands (`fix-bug`, `maintainer`, `release`, …) and skills (`docs-that-work`, `pytest-best-practices`, `release`, …) stay in this repository's `.claude/` tree and are not part of the kit. Cutting a tagged release uses `.claude/skills/release/SKILL.md` via `/release` (see [`docs/maintainers/RELEASE_PROCESS.md`](../maintainers/RELEASE_PROCESS.md)).
 
 ```bash
@@ -688,7 +692,7 @@ python3 -m llmwiki install-agent-kit --dest /path/to/agent-dir
 | `--dest PATH` | **Required.** Directory that will receive `commands/` and `skills/`. |
 | `--dry-run` | Report what would be written; write nothing. |
 
-The command prints every path written, every `.bak` it created, and a count of identical files left untouched. Exit `0` on success, `1` if a file could not be read or written.
+The command prints every path written, every path pruned, every `.bak` it created for an overwrite, every retired path it kept because the content was not its own, and a count of identical files left untouched. Exit `0` on success, `1` if a file could not be read or written.
 
 ---
 
