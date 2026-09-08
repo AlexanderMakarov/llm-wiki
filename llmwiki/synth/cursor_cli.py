@@ -162,6 +162,15 @@ class CursorCLISynthesizer(BaseSynthesizer):
             timeout=timeout,
         )
 
+    def overview_completion(
+        self, prompt: str, *, model: str | None = None
+    ) -> str:
+        """Site-overview one-shot (``model`` ignored — uses configured Cursor model)."""
+        del model  # Cursor overview uses ``self.model`` from synthesis.cursor_cli
+        return self.run_prompt(
+            prompt, timeout=min(float(self.timeout), 120.0)
+        )
+
     def run_prompt(self, prompt: str, *, timeout: float | None = None) -> str:
         """One-shot text completion via Agent CLI (shared by page synth + overview).
 

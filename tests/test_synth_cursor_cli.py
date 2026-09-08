@@ -7,12 +7,7 @@ from unittest.mock import patch
 
 import pytest
 
-from llmwiki.synth.base import PER_PAGE_MARKER, DummySynthesizer
-from llmwiki.synth.claude_cli import (
-    DEFAULT_CLAUDE_TIMEOUT,
-    ClaudeConfig,
-    load_claude_config,
-)
+from llmwiki.synth.base import PER_PAGE_MARKER
 from llmwiki.synth.cursor_cli import (
     _BODY_CHAR_CAP,
     _PROBE_PROMPT,
@@ -24,7 +19,6 @@ from llmwiki.synth.cursor_cli import (
     load_cursor_cli_config,
     resolve_cursor_agent_path,
 )
-from llmwiki.synth.pipeline import resolve_backend
 
 TEMPLATE = "Summarize:\n{body}\nMeta:\n{meta}\n"
 
@@ -46,70 +40,6 @@ def _completed(
         args=["agent"], returncode=returncode, stdout=stdout, stderr=stderr
     )
 
-# ─── Nested Claude config (shared nested-wins pattern) ─────────────────
-
-
-def test_load_claude_config_prefers_nested_block():
-    cfg = load_claude_config({
-        "synthesis": {
-            "claude": {
-                "model": "opus",
-                "timeout": 99,
-                "lean": False,
-                "effort": "low",
-                "path": "/nested/claude",
-            },
-            "claude_model": "sonnet",
-            "claude_timeout": 180,
-            "claude_lean": True,
-            "claude_effort": "high",
-            "claude_path": "/flat/claude",
-        }
-    })
-    assert isinstance(cfg, ClaudeConfig)
-    assert cfg.model == "opus"
-    assert cfg.timeout == 99
-    assert cfg.lean is False
-    assert cfg.effort == "low"
-    assert cfg.path == "/nested/claude"
-
-
-def test_load_claude_config_flat_fallback():
-    cfg = load_claude_config({
-        "synthesis": {
-            "claude_model": "haiku",
-            "claude_timeout": 120,
-            "claude_lean": False,
-            "claude_effort": "low",
-            "claude_path": "/flat/claude",
-        }
-    })
-    assert cfg.model == "haiku"
-    assert cfg.timeout == 120
-    assert cfg.lean is False
-    assert cfg.effort == "low"
-    assert cfg.path == "/flat/claude"
-
-
-def test_load_claude_config_ignores_shared_ollama_timeout():
-    cfg = load_claude_config({
-        "synthesis": {"backend": "claude", "timeout": 60}
-    })
-    assert cfg.timeout == DEFAULT_CLAUDE_TIMEOUT
-
-
-def test_resolve_backend_claude_reads_nested_block():
-    backend = resolve_backend({
-        "synthesis": {
-            "backend": "claude",
-            "claude": {"model": "nested-model", "timeout": 77, "path": "/n/claude"},
-            "claude_model": "flat-model",
-        }
-    })
-    assert backend.model == "nested-model"
-    assert backend.timeout == 77
-    assert backend.claude_path == "/n/claude"
-
 
 # ─── Cursor config defaults / nested ───────────────────────────────────
 
@@ -130,14 +60,6 @@ def test_load_cursor_cli_config_nested_values():
     })
     assert cfg.model == "composer-2.5-fast"
     assert cfg.timeout == 240
-
-
-def test_load_cursor_cli_config_ignores_shared_timeout():
-    """Flat Ollama ``timeout`` must not cap the Cursor per-page budget."""
-    cfg = load_cursor_cli_config({
-        "synthesis": {"backend": "cursor_cli", "timeout": 60}
-    })
-    assert cfg.timeout == DEFAULT_CURSOR_TIMEOUT
 
 
 # ─── PATH resolution ───────────────────────────────────────────────────
@@ -366,33 +288,3 @@ def test_synthesize_oserror_raises():
     ):
         with pytest.raises(CursorCLIError, match="failed to run"):
             CursorCLISynthesizer().synthesize_source_page("b", {}, TEMPLATE)
-
-
-# ─── resolve_backend wiring ────────────────────────────────────────────
-
-
-def test_resolve_backend_cursor_cli():
-    backend = resolve_backend({
-        "synthesis": {
-            "backend": "cursor_cli",
-            "cursor_cli": {"model": "composer-2.5-fast", "timeout": 90},
-        }
-    })
-    assert isinstance(backend, CursorCLISynthesizer)
-    assert backend.name == "cursor-cli"
-    assert backend.model == "composer-2.5-fast"
-    assert backend.timeout == 90
-
-
-def test_resolve_backend_cursor_cli_defaults():
-    backend = resolve_backend({"synthesis": {"backend": "cursor_cli"}})
-    assert isinstance(backend, CursorCLISynthesizer)
-    assert backend.model == "composer-2.5"
-    assert backend.timeout == 180
-
-
-def test_resolve_backend_unknown_still_warns_to_dummy(caplog):
-    with caplog.at_level("WARNING"):
-        backend = resolve_backend({"synthesis": {"backend": "not-a-backend"}})
-    assert isinstance(backend, DummySynthesizer)
-    assert any("Unknown synthesis.backend" in r.message for r in caplog.records)

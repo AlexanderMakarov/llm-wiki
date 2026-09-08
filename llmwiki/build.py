@@ -68,7 +68,7 @@ from llmwiki.changelog_timeline import (
     render_price_sparkline,
     render_recent_activity,
 )
-from llmwiki.claude_path import resolve_claude_path as _resolve_claude_path
+from llmwiki.claude_path import resolve_claude_path as _resolve_claude_path  # noqa: F401 — tests / back-compat (#58)
 from llmwiki.config_schedule import _load_sessions_config
 from llmwiki.context_md import is_context_file
 from llmwiki.convert import ENCODED_PATH_PREFIXES, HOME_PATH_PREFIXES
@@ -112,16 +112,9 @@ from llmwiki.state_store import (
     update_state,
 )
 from llmwiki.synth.base import BaseSynthesizer
-from llmwiki.synth.claude_cli import (
-    ClaudeCLISynthesizer,
-    overview_argv,
-    resolve_overview_model,
-)
-from llmwiki.synth.cursor_cli import (
-    CursorCLIError,
-    CursorCLISynthesizer,
-)
-from llmwiki.synth.ollama import OllamaSynthesizer
+from llmwiki.synth.claude_cli import ClaudeCLIError, ClaudeCLISynthesizer
+from llmwiki.synth.cursor_cli import CursorCLIError
+from llmwiki.synth.ollama import OllamaError
 from llmwiki.synth.pipeline import refresh_synth_pending, resolve_backend
 from llmwiki.tag_utils import NOISE_TAGS
 from llmwiki.topics import build_topic_graph, resolve_project_topic_urls, topic_slug
@@ -2836,8 +2829,8 @@ from llmwiki.render.js import JS  # noqa: F401 (re-exported)
 # control chars (0x00–0x1F minus tab) get rejected too because they
 # survive the rejection of `\n` and `\r` only by accident, and can
 # break log parsers / shell prompts in subtle ways.
-# Re-exported from llmwiki.claude_path for tests / back-compat (#58).
-# (_resolve_claude_path imported at module top.)
+# Claude path resolution is re-exported as ``_resolve_claude_path`` for
+# tests / back-compat (#58). Overview transport lives on synthesizers.
 
 
 # #486: validate slug shape before it lands in the synthesize_overview
@@ -2917,80 +2910,6 @@ def _build_overview_prompt(
     return prompt
 
 
-def _overview_via_claude(
-    backend: ClaudeCLISynthesizer,
-    prompt: str,
-    *,
-    model: str | None,
-) -> str | None:
-    """Run overview through Claude CLI (stdin prompt; path-safe)."""
-    resolved = _resolve_claude_path(backend.claude_path)
-    if resolved is None:
-        return None
-    overview_model = model or resolve_overview_model()
-    print("  calling claude CLI for overview synthesis…")
-    try:
-        # #486: prompt via stdin (`-p -`) — closes argv-length DoS.
-        result = subprocess.run(
-            overview_argv(str(resolved), overview_model),
-            input=prompt,
-            capture_output=True,
-            text=True,
-            timeout=120,
-        )
-    except subprocess.TimeoutExpired:
-        print("  warning: claude CLI timed out after 120s", file=sys.stderr)
-        return None
-    except (OSError, subprocess.SubprocessError) as e:
-        print(f"  warning: claude CLI failed: {e}", file=sys.stderr)
-        return None
-    if result.returncode != 0:
-        print(f"  warning: claude CLI exited {result.returncode}", file=sys.stderr)
-        return None
-    return result.stdout.strip() or None
-
-
-def _overview_via_cursor(
-    backend: CursorCLISynthesizer,
-    prompt: str,
-) -> str | None:
-    """Run overview through Cursor Agent CLI (no 8 KB page-body cap)."""
-    print("  calling Cursor Agent CLI for overview synthesis…")
-    try:
-        return backend.run_prompt(
-            prompt, timeout=min(float(backend.timeout), 120.0)
-        )
-    except CursorCLIError as e:
-        print(f"  warning: {e}", file=sys.stderr)
-        return None
-
-
-def _overview_via_ollama(
-    backend: OllamaSynthesizer,
-    prompt: str,
-) -> str | None:
-    """Run overview through Ollama generate (full capped prompt)."""
-    if not backend.is_available():
-        print("  warning: Ollama unavailable — skipping overview", file=sys.stderr)
-        return None
-    print(f"  calling Ollama ({backend.config.model}) for overview synthesis…")
-    try:
-        data = backend._call_generate(
-            {
-                "model": backend.config.model,
-                "prompt": prompt,
-                "stream": False,
-            }
-        )
-    except Exception as e:  # noqa: BLE001 — overview soft-fails like Claude
-        print(f"  warning: Ollama overview failed: {e}", file=sys.stderr)
-        return None
-    response = data.get("response", "")
-    if not isinstance(response, str):
-        return None
-    return response.strip() or None
-
-
 def synthesize_overview(
     groups: dict[str, list[tuple[Path, dict[str, Any], str]]],
     claude_path: str = "",
@@ -3006,6 +2925,10 @@ def synthesize_overview(
     Unavailable engines skip. ``claude_path`` (``build --claude``) overlays
     the Claude binary path only when the active backend is Claude — it does
     not select Claude when config says ``dummy``.
+
+    Transport is ``BaseSynthesizer.overview_completion`` — each LLM backend
+    owns its CLI/HTTP details; this function only builds the prompt and
+    soft-fails on errors.
     """
     cfg = config if config is not None else _load_sessions_config()
     backend: BaseSynthesizer = synthesizer if synthesizer is not None else resolve_backend(cfg)
@@ -3025,19 +2948,20 @@ def synthesize_overview(
         )
 
     prompt = _build_overview_prompt(groups)
-
-    if isinstance(backend, ClaudeCLISynthesizer):
-        return _overview_via_claude(backend, prompt, model=model)
-    if isinstance(backend, CursorCLISynthesizer):
-        return _overview_via_cursor(backend, prompt)
-    if isinstance(backend, OllamaSynthesizer):
-        return _overview_via_ollama(backend, prompt)
-
-    print(
-        f"  warning: overview LLM not supported for backend {backend.name!r}",
-        file=sys.stderr,
-    )
-    return None
+    print(f"  calling {backend.name} for overview synthesis…")
+    try:
+        text = backend.overview_completion(prompt, model=model)
+    except (
+        ClaudeCLIError,
+        CursorCLIError,
+        OllamaError,
+        NotImplementedError,
+        OSError,
+        subprocess.SubprocessError,
+    ) as e:
+        print(f"  warning: overview via {backend.name} failed: {e}", file=sys.stderr)
+        return None
+    return (text or "").strip() or None
 
 
 # ─── main ──────────────────────────────────────────────────────────────────

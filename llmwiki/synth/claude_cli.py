@@ -343,6 +343,39 @@ class ClaudeCLISynthesizer(BaseSynthesizer):
     def is_available(self) -> bool:
         return self._resolved() is not None
 
+    def overview_completion(
+        self, prompt: str, *, model: str | None = None
+    ) -> str:
+        """Site-overview one-shot via ``overview_argv`` (plain text, not JSON usage)."""
+        claude = self._resolved()
+        if claude is None:
+            raise ClaudeCLIError(
+                "claude CLI not found — install it, pass synthesis.claude.path, "
+                "or configure synthesis.backend=ollama / cursor_cli / dummy"
+            )
+        overview_model = model or resolve_overview_model()
+        argv = overview_argv(claude, overview_model)
+        try:
+            result = subprocess.run(
+                argv,
+                input=prompt,
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise ClaudeCLIError("claude CLI timed out after 120s") from exc
+        except (OSError, subprocess.SubprocessError) as exc:
+            raise ClaudeCLIError(f"claude CLI failed to run: {exc}") from exc
+        if result.returncode != 0:
+            raise ClaudeCLIError(
+                f"claude CLI exited {result.returncode}"
+            )
+        text = (result.stdout or "").strip()
+        if not text:
+            raise ClaudeCLIError("claude CLI returned an empty completion")
+        return text
+
     def synthesize_source_page(
         self,
         raw_body: str,

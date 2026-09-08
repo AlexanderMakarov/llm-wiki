@@ -101,6 +101,20 @@ class BaseSynthesizer(ABC):
         key is set, or the Ollama server is running)."""
         ...
 
+    def overview_completion(
+        self, prompt: str, *, model: str | None = None
+    ) -> str:
+        """One-shot completion for site-overview synthesis (#230).
+
+        LLM backends override. ``model`` is an optional override (Claude
+        overview defaults to ``synthesis.overview_model`` / haiku).
+        Callers soft-fail on raised errors. Non-LLM backends leave this
+        unimplemented — ``synthesize_overview`` skips them via ``is_llm``.
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__} does not support overview completion"
+        )
+
     @property
     def name(self) -> str:
         return self.__class__.__name__

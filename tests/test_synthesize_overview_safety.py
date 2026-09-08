@@ -1,7 +1,7 @@
 """Tests for #486 — synthesize_overview prompt-injection + argv DoS guards.
 
-Also #230 R4b: overview follows active ``synthesis.backend``; dummy spends
-nothing; claude / cursor_cli paths are exercised with mocks.
+Also #230 R4b: overview follows active ``synthesis.backend`` via
+``overview_completion``; dummy spends nothing.
 
 Three layered defences:
   1. _validate_overview_slug() — allowlist regex for slugs.
@@ -78,18 +78,29 @@ def _claude_backend(path: str = "/usr/bin/claude") -> ClaudeCLISynthesizer:
     return ClaudeCLISynthesizer(claude_path=path)
 
 
+def _patch_claude_run(fake_run):
+    """Overview shells out inside claude_cli, not build.py."""
+    return (
+        patch("llmwiki.synth.claude_cli.subprocess.run", side_effect=fake_run),
+        patch(
+            "llmwiki.synth.claude_cli._resolve_claude_path",
+            return_value=Path("/usr/bin/claude"),
+        ),
+    )
+
+
 def test_dummy_backend_skips_llm(capsys):
     """R4b: dummy / non-LLM backend spends nothing on overview."""
     groups = {
         "demo": [(Path("/raw/1.md"), _meta("slug-1"), "")],
     }
-    with patch("llmwiki.build.subprocess.run") as run:
+    with patch.object(DummySynthesizer, "overview_completion") as complete:
         out = synthesize_overview(
             groups,
             synthesizer=DummySynthesizer(),
         )
     assert out is None
-    run.assert_not_called()
+    complete.assert_not_called()
     assert "skipping overview LLM" in capsys.readouterr().out
 
 
@@ -98,14 +109,14 @@ def test_dummy_config_skips_even_with_claude_path(capsys):
     groups = {
         "demo": [(Path("/raw/1.md"), _meta("slug-1"), "")],
     }
-    with patch("llmwiki.build.subprocess.run") as run:
+    with patch.object(DummySynthesizer, "overview_completion") as complete:
         out = synthesize_overview(
             groups,
             claude_path="/usr/bin/claude",
             config={"synthesis": {"backend": "dummy"}},
         )
     assert out is None
-    run.assert_not_called()
+    complete.assert_not_called()
     assert "skipping overview LLM" in capsys.readouterr().out
 
 
@@ -121,8 +132,8 @@ def test_overview_passes_prompt_via_stdin_not_argv():
         captured["input"] = kwargs.get("input")
         return CompletedProcess(args=args[0], returncode=0, stdout="overview text", stderr="")
 
-    with patch("llmwiki.build.subprocess.run", side_effect=fake_run), \
-         patch("llmwiki.build._resolve_claude_path", return_value=Path("/usr/bin/claude")):
+    run_p, path_p = _patch_claude_run(fake_run)
+    with run_p, path_p:
         out = synthesize_overview(
             groups,
             claude_path="/usr/bin/claude",
@@ -132,11 +143,9 @@ def test_overview_passes_prompt_via_stdin_not_argv():
     assert out == "overview text"
     assert "-p" in captured["argv"]
     assert "-" in captured["argv"]
-    # Prompt body must NOT leak into argv
     assert all("Data:" not in str(a) for a in captured["argv"]), (
         f"prompt body leaked into argv: {captured['argv']}"
     )
-    # Prompt MUST appear in stdin
     assert "Data:" in captured["input"]
     assert "demo" in captured["input"]
 
@@ -153,9 +162,9 @@ def test_claude_config_backend_path(monkeypatch):
         captured["input"] = kwargs.get("input", "")
         return CompletedProcess(args=args[0], returncode=0, stdout="from-claude", stderr="")
 
-    monkeypatch.setattr("llmwiki.build.subprocess.run", fake_run)
+    monkeypatch.setattr("llmwiki.synth.claude_cli.subprocess.run", fake_run)
     monkeypatch.setattr(
-        "llmwiki.build._resolve_claude_path",
+        "llmwiki.synth.claude_cli._resolve_claude_path",
         lambda _p: Path("/usr/bin/claude"),
     )
     out = synthesize_overview(
@@ -171,13 +180,13 @@ def test_claude_config_backend_path(monkeypatch):
     assert "Data:" in captured["input"]
 
 
-def test_cursor_cli_overview_mocked():
-    """R4b: cursor_cli backend runs Agent CLI for overview (mocked)."""
+def test_cursor_cli_overview_via_completion():
+    """R4b: cursor_cli overview uses ``overview_completion`` (mocked)."""
     groups = {
         "demo": [(Path("/raw/1.md"), _meta("ok"), "")],
     }
     backend = CursorCLISynthesizer(model="composer-2.5", timeout=60)
-    with patch.object(backend, "run_prompt", return_value="cursor overview") as run:
+    with patch.object(backend, "overview_completion", return_value="cursor overview") as run:
         out = synthesize_overview(groups, synthesizer=backend)
 
     assert out == "cursor overview"
@@ -213,8 +222,8 @@ def test_malicious_slug_replaced_in_actual_call():
         captured["input"] = kwargs.get("input", "")
         return CompletedProcess(args=args[0], returncode=0, stdout="ok", stderr="")
 
-    with patch("llmwiki.build.subprocess.run", side_effect=fake_run), \
-         patch("llmwiki.build._resolve_claude_path", return_value=Path("/usr/bin/claude")):
+    run_p, path_p = _patch_claude_run(fake_run)
+    with run_p, path_p:
         synthesize_overview(
             groups,
             claude_path="/usr/bin/claude",
@@ -241,8 +250,8 @@ def test_prompt_size_capped():
         captured["input"] = kwargs.get("input", "")
         return CompletedProcess(args=args[0], returncode=0, stdout="ok", stderr="")
 
-    with patch("llmwiki.build.subprocess.run", side_effect=fake_run), \
-         patch("llmwiki.build._resolve_claude_path", return_value=Path("/usr/bin/claude")):
+    run_p, path_p = _patch_claude_run(fake_run)
+    with run_p, path_p:
         synthesize_overview(
             groups,
             claude_path="/usr/bin/claude",
@@ -270,8 +279,8 @@ def test_prompt_injection_string_treated_as_data():
         captured["input"] = kwargs.get("input", "")
         return CompletedProcess(args=args[0], returncode=0, stdout="ok", stderr="")
 
-    with patch("llmwiki.build.subprocess.run", side_effect=fake_run), \
-         patch("llmwiki.build._resolve_claude_path", return_value=Path("/usr/bin/claude")):
+    run_p, path_p = _patch_claude_run(fake_run)
+    with run_p, path_p:
         synthesize_overview(
             groups,
             claude_path="/usr/bin/claude",

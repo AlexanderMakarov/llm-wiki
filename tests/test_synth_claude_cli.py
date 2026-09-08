@@ -12,6 +12,8 @@ from llmwiki.synth.claude_cli import (
     DEFAULT_OVERVIEW_MODEL,
     ClaudeCLIError,
     ClaudeCLISynthesizer,
+    ClaudeConfig,
+    load_claude_config,
     overview_argv,
     resolve_overview_model,
 )
@@ -26,6 +28,61 @@ def _script(tmp_path, name, body):
     p.write_text(body)
     p.chmod(0o755)
     return p
+
+
+def test_load_claude_config_prefers_nested_block():
+    cfg = load_claude_config({
+        "synthesis": {
+            "claude": {
+                "model": "opus",
+                "timeout": 99,
+                "lean": False,
+                "effort": "low",
+                "path": "/nested/claude",
+            },
+            "claude_model": "sonnet",
+            "claude_timeout": 180,
+            "claude_lean": True,
+            "claude_effort": "high",
+            "claude_path": "/flat/claude",
+        }
+    })
+    assert isinstance(cfg, ClaudeConfig)
+    assert cfg.model == "opus"
+    assert cfg.timeout == 99
+    assert cfg.lean is False
+    assert cfg.effort == "low"
+    assert cfg.path == "/nested/claude"
+
+
+def test_load_claude_config_flat_fallback():
+    cfg = load_claude_config({
+        "synthesis": {
+            "claude_model": "haiku",
+            "claude_timeout": 120,
+            "claude_lean": False,
+            "claude_effort": "low",
+            "claude_path": "/flat/claude",
+        }
+    })
+    assert cfg.model == "haiku"
+    assert cfg.timeout == 120
+    assert cfg.lean is False
+    assert cfg.effort == "low"
+    assert cfg.path == "/flat/claude"
+
+
+def test_resolve_backend_claude_reads_nested_block():
+    backend = resolve_backend({
+        "synthesis": {
+            "backend": "claude",
+            "claude": {"model": "nested-model", "timeout": 77, "path": "/n/claude"},
+            "claude_model": "flat-model",
+        }
+    })
+    assert backend.model == "nested-model"
+    assert backend.timeout == 77
+    assert backend.claude_path == "/n/claude"
 
 
 def test_resolve_backend_claude():

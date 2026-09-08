@@ -53,3 +53,10 @@
 
 - Live-probed hidden Agent CLI flags on `composer-2.5`: `--system-prompt` / `--exclude-workspace-context` rejected for this account; `--allowed-tools truncated_tool_call` cuts prompt ~30k → ~21k.
 - Wired tiny allowlist into `lean_argv`; docs + CHANGELOG + tests updated.
+
+## refactor — shared overview + tests + config rows
+
+- Collapsed nested/legacy Claude rows in `configuration-reference.md`.
+- Replaced `_overview_via_*` with `BaseSynthesizer.overview_completion` on Claude / Cursor / Ollama.
+- Added `tests/test_synth_backends_shared.py` (parametrize resolve/CLI/overview); trimmed Cursor acceptance + backend CLI dupes; moved Claude nested-config tests into `test_synth_claude_cli.py`.
+- Next: local review.

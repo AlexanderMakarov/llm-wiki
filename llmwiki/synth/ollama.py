@@ -230,6 +230,32 @@ class OllamaSynthesizer(BaseSynthesizer):
             logger.debug("Ollama availability probe failed: %s", exc)
             return False
 
+    def overview_completion(
+        self, prompt: str, *, model: str | None = None
+    ) -> str:
+        """Site-overview one-shot via ``/api/generate`` (full capped prompt)."""
+        if not self.is_available():
+            raise OllamaUnavailableError(
+                f"Ollama is not reachable at {self.config.base_url}"
+            )
+        use_model = model or self.config.model
+        data = self._call_generate(
+            {
+                "model": use_model,
+                "prompt": prompt,
+                "stream": False,
+            }
+        )
+        response = data.get("response", "")
+        if not isinstance(response, str):
+            raise OllamaError(
+                f"Ollama returned non-string response: {type(response).__name__}"
+            )
+        text = response.strip()
+        if not text:
+            raise OllamaError("Ollama returned an empty completion")
+        return text
+
     def synthesize_source_page(
         self,
         raw_body: str,
