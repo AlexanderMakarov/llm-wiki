@@ -355,7 +355,7 @@ A wiki can switch off the rules that cannot apply to it, in a committed `<vault>
 
 `stub_source_pages` (#24) flags pages under `wiki/sources/` whose body is machine-generated filler — a pending sentinel (`<!-- llmwiki-pending: … -->`) or the dummy backend's `Auto-synthesized from session` body. Those sources still count as unsynthesized backlog; refill them with `llmwiki synth` on a real backend.
 
-`provenance_integrity` (#122) emits an **error** for each broken downward hop on pages that already carry `sources:` and/or `source_file:` — missing source-summary pages or missing raw files. Pages without those fields are skipped. Repair is guided by `doctor` (#110); this rule only reports.
+`provenance_integrity` (#122) emits an **error** for each broken downward hop on pages that already carry `sources:` and/or `source_file:` — missing source-summary pages or missing raw files. Pages without those fields are skipped. The message names the missing hop and points at `llmwiki trace`, `synth`, or `migrate broken-provenance` as appropriate; this rule only reports.
 
 `stale_reference_detection` (#303 / #87) flags living pages (entities, concepts, …) whose dated claim about a target predates that target's `last_updated`. Pages under `wiki/sources/` and pages with frontmatter `type: source` are skipped — they are dated session records and cannot be "un-staled" without rewriting history.
 
@@ -765,7 +765,7 @@ raw     Kickoff transcript  raw/sessions/2026-01-01T12-00-demo-kickoff.md
 | `1` | Starting page could not be resolved (or locator unsafe / empty). |
 | `2` | Configured `--vault` / default vault path is unusable. |
 
-Guided repair of broken hops will live under `doctor` (#110); this command only prints the chain.
+Use `trace` to inspect broken hops; repair them by hand or with `synth` / `migrate broken-provenance` as the lint message suggests. Guided repair under `doctor` (#110) is roadmap-only.
 
 ---
 
