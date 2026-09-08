@@ -10,6 +10,9 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Added
 
+- **Cursor Agent CLI synthesis backend (`cursor_cli`, #230)** — `synthesis.backend: cursor_cli` shells out to `agent` / `cursor-agent` on `$PATH` (default model `composer-2.5`, lean `-p` / `--mode ask` / `--sandbox enabled`). Nested config blocks `synthesis.claude` / `synthesis.cursor_cli` / `synthesis.ollama` (flat `claude_*` still works). `llmwiki synth --backend <name>` overlays for one run (check / estimate / run; no config write). Site overview follows the active backend (`dummy` skips the LLM). Rate card adds Cursor-published Composer 2.5 / Grok 4.5 / 4.6 (+ Fast) rows and `agent --model` aliases. Distinct from the `cursor_cli` / `cursor_ide` ingest adapters. Docs: configuration, CLI, synthesis-cost, UPGRADING; `install-automation` lists `cursor_cli`.
+  - *Release note:* Synthesize with Cursor Agent CLI via `synthesis.backend: cursor_cli` or `synth --backend cursor_cli` (#230).
+
 ### Changed
 
 - **`refresh_demo.py` synths only the docs in its plan** — after `add`/`remove`, it runs `llmwiki synth --docs-only` with repeatable `--path` for each newly ingested `raw/docs/<slug>/…` file instead of a vault-wide docs pass that re-queued every pending document. Remove-only plans skip synth (and the backend reachability check). See [REFRESH_DEMO.md](docs/maintainers/REFRESH_DEMO.md).

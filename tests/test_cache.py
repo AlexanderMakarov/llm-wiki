@@ -68,6 +68,43 @@ def test_cached_input_cheaper_than_fresh_input():
         )
 
 
+# ─── Cursor / Agent CLI rate-card aliases (#230) ───────────────────────
+
+
+@pytest.mark.parametrize(
+    ("requested", "canonical", "input_rate", "output_rate"),
+    [
+        ("composer-2.5", "composer-2.5", 0.5, 2.5),
+        ("composer", "composer-2.5", 0.5, 2.5),
+        ("composer-2.5-fast", "composer-2.5-fast", 3.0, 15.0),
+        ("cursor-grok-4.6-high", "grok-4.6", 2.0, 6.0),
+        ("cursor-grok-4.6-medium", "grok-4.6", 2.0, 6.0),
+        ("cursor-grok-4.6-high-fast", "grok-4.6-fast", 4.0, 12.0),
+        ("cursor-grok-4.5-high", "grok-4.5", 2.0, 6.0),
+        ("cursor-grok-4.5-high-fast", "grok-4.5-fast", 4.0, 18.0),
+        ("grok-4.5-fast", "grok-4.5-fast", 4.0, 18.0),
+    ],
+)
+def test_cursor_pricing_aliases_resolve(
+    requested: str, canonical: str, input_rate: float, output_rate: float,
+):
+    """# @layer: unit  # @spec: 226-cursor-cli-synth-backend"""
+    resolved = resolve_pricing_model(requested)
+    assert resolved == canonical
+    rates = MODEL_PRICING[resolved]
+    assert rates["input"] == pytest.approx(input_rate)
+    assert rates["output"] == pytest.approx(output_rate)
+    # Cursor publishes no separate cache-write fee → write == fresh input.
+    assert rates["cache_write"] == pytest.approx(rates["input"])
+    assert rates["cached_input"] < rates["input"]
+
+
+def test_cursor_composer_family_resolves_to_non_fast_default():
+    """Family ``composer`` must not pick the Fast row via reverse sort."""
+    assert resolve_pricing_model("composer") == "composer-2.5"
+    assert resolve_pricing_model("composer-fast") == "composer-2.5-fast"
+
+
 # ─── Content block builders ───────────────────────────────────────────
 
 

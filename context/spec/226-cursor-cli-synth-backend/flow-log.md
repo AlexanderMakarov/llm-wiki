@@ -23,3 +23,28 @@
 
 - Wrote `tasks.md` (6 slices; coding → `general-purpose`; QA → `testing-expert`). Informational summary only — no draft Approve gate under `/implement-feature`.
 - Next: commit-specs then `/awos:implement`
+
+## commit-specs
+
+- Commit `ea71f23` — docs: add spec for #230
+- Next: implement
+
+## local-review
+
+- Review file: `context/spec/226-cursor-cli-synth-backend/review.md` (session-only, not to be committed)
+- Verdict: Request changes — Blockers 1, Nits 1
+- Next: user keep/drop, then apply accepted findings before push
+
+
+## implement — Slice 5 (pricing + docs)
+
+- Extended `llmwiki/model_pricing.csv` with Cursor-published Composer 2.5 / Grok 4.5 / 4.6 (+ Fast) rates and `agent --model` aliases (cache_write=input where Cursor lists no separate write fee). No Kimi K3 stand-in needed for those ids.
+- Docs + CHANGELOG / UPGRADING / install-automation backend prompt; distinguish synth backend vs ingest adapters.
+- Pricing alias resolution tests; Slice 5 marked done in `tasks.md`.
+- Next: Slice 6 (feature testing / regression).
+
+## commit-push
+
+- Applied review keep: B1 (prepend stable prefix + regression test; corrected cache docs) and N1 (public `run_prompt` DRY).
+- Local review file remains gitignored / unstaged.
+- Next: push + open PR; stop appending flow-log after PR opens.

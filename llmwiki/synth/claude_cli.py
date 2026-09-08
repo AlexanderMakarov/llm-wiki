@@ -8,11 +8,11 @@ Claude Code / Codex session. The agent-delegate backend can't do that
 substitutes this backend whenever agent-delegate is configured.
 
 Also selectable outright with ``"synthesis": {"backend": "claude"}``.
-Optional config keys: ``claude_path`` (else $PATH lookup),
-``claude_model`` (defaults to ``sonnet``), ``claude_timeout`` (seconds
-per page, default 180), ``claude_effort`` (``--effort``; caps extended
-thinking, which is billed as output), and ``claude_lean`` (default true —
-strip the agent scaffolding from each call; see ``_LEAN_ARGV``).
+Documented shape is the nested ``synthesis.claude`` block
+(``model``, ``timeout``, ``lean``, ``effort``, ``path``). Legacy flat
+keys ``claude_path``, ``claude_model``, ``claude_timeout``,
+``claude_effort``, and ``claude_lean`` still work as a fallback
+(nested wins). Defaults: model ``sonnet``, timeout 180s, lean true.
 
 Reuses ``llmwiki.claude_path.resolve_claude_path`` (#421: shell-metachar
 rejection, PATH lookup) and passes the prompt via stdin (#486 precedent:
@@ -24,6 +24,7 @@ from __future__ import annotations
 import json
 import subprocess
 import threading
+from dataclasses import dataclass
 from typing import Any
 
 from llmwiki.claude_path import resolve_claude_path as _resolve_claude_path
@@ -31,7 +32,71 @@ from llmwiki.config_schedule import _load_sessions_config
 from llmwiki.synth.base import BaseSynthesizer, split_prompt_template
 from llmwiki.synth.ollama import _render_prompt
 
+DEFAULT_CLAUDE_MODEL = "sonnet"
 DEFAULT_CLAUDE_TIMEOUT = 180
+
+# Nested ``synthesis.claude`` key → legacy flat ``synthesis.claude_*`` key.
+_CLAUDE_FLAT_KEYS: dict[str, str] = {
+    "model": "claude_model",
+    "timeout": "claude_timeout",
+    "lean": "claude_lean",
+    "effort": "claude_effort",
+    "path": "claude_path",
+}
+
+
+@dataclass(frozen=True)
+class ClaudeConfig:
+    """Resolved configuration for :class:`ClaudeCLISynthesizer`."""
+
+    path: str | None = None
+    model: str = DEFAULT_CLAUDE_MODEL
+    timeout: int = DEFAULT_CLAUDE_TIMEOUT
+    lean: bool = True
+    effort: str | None = None
+
+
+def load_claude_config(cfg: dict[str, Any] | None) -> ClaudeConfig:
+    """Build a :class:`ClaudeConfig` from the ``synthesis`` block.
+
+    Prefer ``synthesis.claude.{model,timeout,lean,effort,path}``; fall
+    back to flat ``claude_*`` keys so existing configs keep working.
+    Nested wins when both are present. Deliberately ignores the shared
+    flat ``timeout`` key (that one belongs to the Ollama block).
+    """
+    synth = (cfg or {}).get("synthesis", {}) or {}
+    nested = synth.get("claude") or {}
+    if not isinstance(nested, dict):
+        nested = {}
+
+    def _key(name: str) -> Any:
+        if name in nested:
+            return nested[name]
+        return synth.get(_CLAUDE_FLAT_KEYS[name])
+
+    def _has(name: str) -> bool:
+        return name in nested or _CLAUDE_FLAT_KEYS[name] in synth
+
+    model = _key("model") or DEFAULT_CLAUDE_MODEL
+    raw_path = _key("path")
+    path = str(raw_path).strip() if raw_path else None
+    if not path:
+        path = None
+    # Falsy timeout (missing / 0 / "") keeps the historical default rather
+    # than crashing — matches the pre-nested ``or DEFAULT`` behaviour.
+    raw_timeout = _key("timeout") if _has("timeout") else None
+    timeout = int(raw_timeout) if raw_timeout else DEFAULT_CLAUDE_TIMEOUT
+    lean_raw = _key("lean") if _has("lean") else True
+    # Only an explicit False opts out — a typo'd value keeps the default.
+    lean = lean_raw is not False
+    effort = str(_key("effort") or "").strip() or None
+    return ClaudeConfig(
+        path=path,
+        model=str(model),
+        timeout=timeout,
+        lean=lean,
+        effort=effort,
+    )
 
 # Synthesis is text-in / text-out: the prompt carries everything the model
 # needs and we only ever read stdout, so the agent scaffolding `claude`

@@ -69,6 +69,7 @@ from llmwiki.changelog_timeline import (
     render_recent_activity,
 )
 from llmwiki.claude_path import resolve_claude_path as _resolve_claude_path
+from llmwiki.config_schedule import _load_sessions_config
 from llmwiki.context_md import is_context_file
 from llmwiki.convert import ENCODED_PATH_PREFIXES, HOME_PATH_PREFIXES
 from llmwiki.docs_pages import (
@@ -110,8 +111,18 @@ from llmwiki.state_store import (
     synth_pipeline_shape_ok,
     update_state,
 )
-from llmwiki.synth.claude_cli import overview_argv
-from llmwiki.synth.pipeline import refresh_synth_pending
+from llmwiki.synth.base import BaseSynthesizer
+from llmwiki.synth.claude_cli import (
+    ClaudeCLISynthesizer,
+    overview_argv,
+    resolve_overview_model,
+)
+from llmwiki.synth.cursor_cli import (
+    CursorCLIError,
+    CursorCLISynthesizer,
+)
+from llmwiki.synth.ollama import OllamaSynthesizer
+from llmwiki.synth.pipeline import refresh_synth_pending, resolve_backend
 from llmwiki.tag_utils import NOISE_TAGS
 from llmwiki.topics import build_topic_graph, resolve_project_topic_urls, topic_slug
 from llmwiki.topics_page import (
@@ -2865,16 +2876,10 @@ def _validate_overview_slug(s: Any) -> str:
     return s
 
 
-def synthesize_overview(
+def _build_overview_prompt(
     groups: dict[str, list[tuple[Path, dict[str, Any], str]]],
-    claude_path: str,
-    model: str | None = None,
-) -> str | None:
-    resolved = _resolve_claude_path(claude_path)
-    if resolved is None:
-        return None
-    claude_path = str(resolved)
-
+) -> str:
+    """Assemble the overview prompt (slug-safe + size-capped; #486)."""
     lines: list[str] = [
         "You are writing a short (200-300 word) overview for a personal knowledge-base",
         "landing page. Below is a JSON summary of the user's Claude Code session history",
@@ -2909,25 +2914,33 @@ def synthesize_overview(
         prompt = prompt.encode("utf-8")[:_MAX_OVERVIEW_PROMPT_BYTES].decode(
             "utf-8", errors="ignore"
         )
+    return prompt
 
+
+def _overview_via_claude(
+    backend: ClaudeCLISynthesizer,
+    prompt: str,
+    *,
+    model: str | None,
+) -> str | None:
+    """Run overview through Claude CLI (stdin prompt; path-safe)."""
+    resolved = _resolve_claude_path(backend.claude_path)
+    if resolved is None:
+        return None
+    overview_model = model or resolve_overview_model()
     print("  calling claude CLI for overview synthesis…")
     try:
-        # #486: pass the prompt via stdin (`-p -`) instead of argv so we
-        # dodge the OS argv-length limit entirely. The byte cap above is
-        # defence-in-depth — argv-length DoS path closed regardless.
-        # Same scaffolding-stripping flags as page synthesis: this call
-        # writes prose from a JSON brief and can't use a single tool.
+        # #486: prompt via stdin (`-p -`) — closes argv-length DoS.
         result = subprocess.run(
-            overview_argv(claude_path, model),
+            overview_argv(str(resolved), overview_model),
             input=prompt,
-            capture_output=True, text=True, timeout=120,
+            capture_output=True,
+            text=True,
+            timeout=120,
         )
     except subprocess.TimeoutExpired:
         print("  warning: claude CLI timed out after 120s", file=sys.stderr)
         return None
-    # #py-m4 (#590): narrow `except Exception` to the families we
-    # actually expect from a subprocess call. Catching MemoryError or
-    # ImportError silently here would mask real failures.
     except (OSError, subprocess.SubprocessError) as e:
         print(f"  warning: claude CLI failed: {e}", file=sys.stderr)
         return None
@@ -2935,6 +2948,96 @@ def synthesize_overview(
         print(f"  warning: claude CLI exited {result.returncode}", file=sys.stderr)
         return None
     return result.stdout.strip() or None
+
+
+def _overview_via_cursor(
+    backend: CursorCLISynthesizer,
+    prompt: str,
+) -> str | None:
+    """Run overview through Cursor Agent CLI (no 8 KB page-body cap)."""
+    print("  calling Cursor Agent CLI for overview synthesis…")
+    try:
+        return backend.run_prompt(
+            prompt, timeout=min(float(backend.timeout), 120.0)
+        )
+    except CursorCLIError as e:
+        print(f"  warning: {e}", file=sys.stderr)
+        return None
+
+
+def _overview_via_ollama(
+    backend: OllamaSynthesizer,
+    prompt: str,
+) -> str | None:
+    """Run overview through Ollama generate (full capped prompt)."""
+    if not backend.is_available():
+        print("  warning: Ollama unavailable — skipping overview", file=sys.stderr)
+        return None
+    print(f"  calling Ollama ({backend.config.model}) for overview synthesis…")
+    try:
+        data = backend._call_generate(
+            {
+                "model": backend.config.model,
+                "prompt": prompt,
+                "stream": False,
+            }
+        )
+    except Exception as e:  # noqa: BLE001 — overview soft-fails like Claude
+        print(f"  warning: Ollama overview failed: {e}", file=sys.stderr)
+        return None
+    response = data.get("response", "")
+    if not isinstance(response, str):
+        return None
+    return response.strip() or None
+
+
+def synthesize_overview(
+    groups: dict[str, list[tuple[Path, dict[str, Any], str]]],
+    claude_path: str = "",
+    model: str | None = None,
+    *,
+    synthesizer: BaseSynthesizer | None = None,
+    config: dict[str, Any] | None = None,
+) -> str | None:
+    """LLM site-overview synthesis via the active ``synthesis.backend`` (#230).
+
+    Resolves the backend from ``config`` / sessions config (or an injected
+    ``synthesizer``). ``dummy`` / non-LLM backends skip with no spend.
+    Unavailable engines skip. ``claude_path`` (``build --claude``) overlays
+    the Claude binary path only when the active backend is Claude — it does
+    not select Claude when config says ``dummy``.
+    """
+    cfg = config if config is not None else _load_sessions_config()
+    backend: BaseSynthesizer = synthesizer if synthesizer is not None else resolve_backend(cfg)
+
+    if not getattr(backend, "is_llm", False):
+        print("  skipping overview LLM (synthesis.backend is dummy / non-LLM)")
+        return None
+
+    # ``--claude`` path overlay — Claude backend only; keep path safety.
+    if claude_path and isinstance(backend, ClaudeCLISynthesizer):
+        backend = ClaudeCLISynthesizer(
+            claude_path=claude_path,
+            model=backend.model,
+            timeout=backend.timeout,
+            lean=backend.lean,
+            effort=backend.effort,
+        )
+
+    prompt = _build_overview_prompt(groups)
+
+    if isinstance(backend, ClaudeCLISynthesizer):
+        return _overview_via_claude(backend, prompt, model=model)
+    if isinstance(backend, CursorCLISynthesizer):
+        return _overview_via_cursor(backend, prompt)
+    if isinstance(backend, OllamaSynthesizer):
+        return _overview_via_ollama(backend, prompt)
+
+    print(
+        f"  warning: overview LLM not supported for backend {backend.name!r}",
+        file=sys.stderr,
+    )
+    return None
 
 
 # ─── main ──────────────────────────────────────────────────────────────────

@@ -465,12 +465,13 @@ Before the first page is synthesized, a real run announces the batch: `Synthesiz
 | `--candidates-only` | Harvest entity/concept **candidates** from already-synthesized `wiki/sources/` into `wiki/candidates/`, then exit (#90 / #147). Reads the source layer only — never `raw/` — so it runs no per-source synthesis and **no** classify LLM call; kind, description, and facts come from Connections topic bullets already on those pages. LLM cost is **zero**. Unreadable source pages still fail the run and write nothing. Mutually exclusive with `--sources-only` / `--check` / `--estimate`. |
 | `--min-refs N` | Candidate threshold: a `[[wikilink]]` target becomes a candidate when **N or more distinct source pages** name it (default: `3`). |
 | `--concurrency N` | Synthesize N source pages at once, overriding `synthesis.concurrency` (default: `2`; range `1`–`16`). `1` runs strictly sequentially. Pages are I/O-bound on the backend, so the wall clock shrinks roughly in proportion; raise it only as far as your provider's rate limits and your machine allow. `all` has no matching flag — its synth stage reads `synthesis.concurrency`. |
+| `--backend NAME` | One-run overlay of `synthesis.backend` (`dummy` \| `ollama` \| `claude` \| `cursor_cli`). Honoured by `--check`, `--estimate`, and a real run. Does **not** write `config.json`. Unknown names exit `2`. |
 | `--vault PATH` | Read/write under the vault root; configures the active `llmwiki-state.json`. |
 
-Backend is picked from `synthesis.backend` in `config.json` / `sessions_config.json` (`dummy` by default, `ollama` for local, `claude` for synchronous `claude -p`). See [`configuration.md`](../configuration.md#synthesis-backend).
+Backend is picked from `synthesis.backend` in `config.json` / `sessions_config.json` (`dummy` by default; `ollama` for local; `claude` for synchronous `claude -p`; `cursor_cli` for Cursor Agent CLI `agent -p`, default model `composer-2.5`). Nested blocks: `synthesis.claude`, `synthesis.cursor_cli`, `synthesis.ollama` (flat `claude_*` still works). This is the **synthesis** generator — not the `cursor_cli` / `cursor_ide` session-ingest adapters. See [`configuration.md`](../configuration.md#synthesis-backend).
 
 > **Removed in v1.4.0:** `--list-pending` and `--complete` (agent-delegate
-> pending prompts). Use `synthesis.backend: claude` instead.
+> pending prompts). Use `synthesis.backend: claude` (or `cursor_cli`) instead.
 
 ### Auto-tagging (#351)
 
@@ -908,7 +909,7 @@ python3 -m llmwiki install-automation --vault ~/my-vault
 | `--graph {none,builtin,graphify}` | Build the knowledge graph, and with which builder. Default: `none`. |
 | `--lint-fail {never,errors,warnings}` | Quality findings at this level report the scheduled job as failed. Default: `never`. Same spelling as the `all` flag. |
 | `--schedule "<cron>"` | When the job runs, as a 5-field cron expression. Default: `"0 8 * * *"`. An expression that cannot be translated exits `2` with the reason. |
-| `--synth-backend NAME` | Synthesis backend for automation status (interactive mode also writes `synthesis.backend` to `config.json`, after you confirm the summary). |
+| `--synth-backend NAME` | Synthesis backend for automation status (`dummy` / `ollama` / `claude` / `cursor_cli`). Interactive mode also writes `synthesis.backend` to `config.json`, after you confirm the summary. |
 | `--units-dir PATH` | Staging directory for rendered unit files before OS activation. Default: `~/.automation/`. Linux/macOS still install into the platform scheduler location unless `--no-activate`. |
 | `--watch-enabled` | Set `watch_enabled` in automation status so the site Automation panel shows Watch: on (does not install or start `llmwiki watch`). |
 | `--force-platform {linux,macos,windows}` | Override platform detection for unit format. |

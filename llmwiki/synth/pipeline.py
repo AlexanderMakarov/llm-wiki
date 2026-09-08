@@ -49,10 +49,8 @@ from llmwiki.state_store import read_state as _read_unified_state
 from llmwiki.state_store import resolve_state_file as _resolve_state_file
 from llmwiki.state_store import update_state as _update_unified_state
 from llmwiki.synth.base import BaseSynthesizer, DummySynthesizer
-from llmwiki.synth.claude_cli import (
-    DEFAULT_CLAUDE_TIMEOUT,
-    ClaudeCLISynthesizer,
-)
+from llmwiki.synth.claude_cli import ClaudeCLISynthesizer, load_claude_config
+from llmwiki.synth.cursor_cli import CursorCLISynthesizer, load_cursor_cli_config
 from llmwiki.synth.estimate import synthesize_estimate_report
 from llmwiki.synth.ollama import OllamaSynthesizer, load_ollama_config
 from llmwiki.synth.reporting import print_synth_run_start
@@ -204,8 +202,9 @@ def resolve_backend(
       - ``"dummy"`` (default) — canned offline backend for previews/tests
       - ``"ollama"`` — local Ollama HTTP backend (#35)
       - ``"claude"`` — synchronous ``claude -p`` CLI calls (#16).
-        Optional keys: ``claude_path``, ``claude_model``,
-        ``claude_timeout``, ``claude_lean``.
+        Nested ``synthesis.claude`` (flat ``claude_*`` fallback).
+      - ``"cursor_cli"`` — Cursor Agent CLI (#230). Nested
+        ``synthesis.cursor_cli`` only; binary from ``$PATH``.
 
     Unknown values fall back to the dummy backend with a warning so a
     typo in config.json doesn't crash sync.
@@ -217,15 +216,23 @@ def resolve_backend(
         return OllamaSynthesizer(config=load_ollama_config(cfg))
 
     if name == "claude":
-        # Deliberately NOT the shared `timeout` key: that one belongs to the
-        # Ollama block, and reading it here meant a 60s Ollama default
-        # silently capped every claude page at 60s instead of 180s.
+        # Nested ``synthesis.claude`` (or legacy flat ``claude_*``). Deliberately
+        # NOT the shared flat ``timeout`` key — that belongs to the Ollama
+        # block (see :func:`load_claude_config`).
+        claude_cfg = load_claude_config(cfg)
         return ClaudeCLISynthesizer(
-            claude_path=synth_cfg.get("claude_path"),
-            model=synth_cfg.get("claude_model") or "sonnet",
-            timeout=int(synth_cfg.get("claude_timeout") or DEFAULT_CLAUDE_TIMEOUT),
-            lean=synth_cfg.get("claude_lean", True) is not False,
-            effort=str(synth_cfg.get("claude_effort", "") or "").strip() or None,
+            claude_path=claude_cfg.path,
+            model=claude_cfg.model,
+            timeout=claude_cfg.timeout,
+            lean=claude_cfg.lean,
+            effort=claude_cfg.effort,
+        )
+
+    if name == "cursor_cli":
+        cursor_cfg = load_cursor_cli_config(cfg)
+        return CursorCLISynthesizer(
+            model=cursor_cfg.model,
+            timeout=cursor_cfg.timeout,
         )
 
     if name != "dummy":
