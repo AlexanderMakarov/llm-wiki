@@ -60,7 +60,7 @@ Raw files also carry `type: source`. That is the input layer (`raw/sessions/`, `
 
 ## `entity`
 
-A person, company, product, tool, or library. Harvest writes a stub under `wiki/candidates/entities/` when the same `[[Name]]` appears on enough source pages (default three). Kind, short description, and facts come from Connections topic bullets on those sources — no classify LLM call. A person then promotes it into `wiki/entities/`. The body is attributed fact bullets under `## Key Facts`; the opening description is the one harvest already recorded from the source pass.
+A person, company, product, tool, or library. Harvest writes a stub under `wiki/candidates/entities/` when enough source pages name the same target (default three), folding case/punctuation variants (`[[LLMWiki]]` / `[[llmwiki]]`) into one stub under the dominant spelling (#204). Kind, short description, and facts come from Connections topic bullets on those sources — no classify LLM call. A person then promotes it into `wiki/entities/`. The body is attributed fact bullets under `## Key Facts`; the opening description is the one harvest already recorded from the source pass.
 
 **Demo.** [`demo/wiki/entities/Claude Code.md`](../../demo/wiki/entities/Claude Code.md) is a promoted entity. Pending harvest stubs remain under [`demo/wiki/candidates/entities/`](../../demo/wiki/candidates/entities/).
 

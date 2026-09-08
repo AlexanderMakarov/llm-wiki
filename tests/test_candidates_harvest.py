@@ -124,6 +124,62 @@ def test_targets_resolving_to_existing_pages_are_dropped(tmp_path: Path) -> None
     assert names == {"Missing"}
 
 
+# ─── Case-folding harvest (#204) ───────────────────────────────────────
+
+
+def test_case_colliding_wikilink_spellings_fold_to_one_candidate(
+    tmp_path: Path,
+) -> None:
+    """#204: harvest must not emit two stubs that case-fold to the same path.
+
+    Old behaviour counted ``[[llmwiki]]`` and ``[[LLMWiki]]`` as separate
+    targets and wrote sibling files under ``candidates/entities/``. Folding
+    by ``_norm_slug`` yields one target and refreshes any pending stub whose
+    stem already matches that fold group.
+    """
+    wiki = tmp_path / "wiki"
+    pending = wiki / "candidates" / "entities" / "llmwiki.md"
+    pending.parent.mkdir(parents=True, exist_ok=True)
+    pending.write_text(
+        "---\n"
+        'title: "llmwiki"\n'
+        "type: entity\n"
+        "status: candidate\n"
+        "tags: []\n"
+        "sources: [old]\n"
+        "last_updated: 2026-01-01\n"
+        "---\n\n"
+        "# llmwiki\n\n"
+        "Pending stub from earlier spelling.\n\n"
+        "## Key Facts\n\n"
+        "## Connections\n\n"
+        "- [[old]]\n",
+        encoding="utf-8",
+    )
+    for slug in ("a", "b", "c"):
+        _mk_source(wiki, slug, ["llmwiki"])
+    for slug in ("d", "e", "f"):
+        _mk_source(wiki, slug, ["LLMWiki"])
+
+    targets = harvest_targets(wiki, min_refs=3)
+
+    assert len(targets) == 1
+    assert targets[0].refs == 6
+    assert targets[0].name == "LLMWiki"
+    assert {Path(s).stem for s in targets[0].sources} == set("abcdef")
+
+    written = write_stubs(wiki, targets)
+
+    stubs = sorted((wiki / "candidates" / "entities").glob("*.md"))
+    assert stubs == [pending]
+    assert written == [pending]
+    assert not (wiki / "candidates" / "entities" / "LLMWiki.md").exists()
+    text = pending.read_text(encoding="utf-8")
+    assert "Pending stub from earlier spelling." in text
+    for slug in "abcdef":
+        assert f"[[{slug}]]" in text
+
+
 # ─── Link syntax ───────────────────────────────────────────────────────
 
 
