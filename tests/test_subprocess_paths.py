@@ -23,6 +23,7 @@ from unittest.mock import patch
 
 from llmwiki.build import _resolve_claude_path, synthesize_overview
 from llmwiki.cli import build_parser
+from llmwiki.synth.claude_cli import ClaudeCLISynthesizer
 
 
 def test_claude_path_resolves_via_shutil_which_when_empty(tmp_path: Path):
@@ -149,18 +150,36 @@ def test_claude_path_accepts_windows_style(tmp_path: Path):
 
 
 def test_synthesize_overview_returns_none_on_bad_path(capsys):
-    """Top-level synthesize_overview wraps the resolver — a hostile
-    path returns None and warns instead of executing anything."""
-
-    result = synthesize_overview({}, claude_path="/usr/bin/claude; rm -rf /")
+    """Hostile ``--claude`` path with Claude backend → None, no exec."""
+    result = synthesize_overview(
+        {},
+        claude_path="/usr/bin/claude; rm -rf /",
+        synthesizer=ClaudeCLISynthesizer(claude_path="/usr/bin/claude; rm -rf /"),
+    )
     assert result is None
 
 
 def test_synthesize_overview_returns_none_when_not_on_path(monkeypatch, capsys):
-    """No claude binary on PATH and no --claude flag → None, no crash."""
-
+    """Claude backend + no binary on PATH → None, no crash."""
     monkeypatch.setattr("shutil.which", lambda _name: None)
-    assert synthesize_overview({}, claude_path="") is None
+    assert synthesize_overview(
+        {},
+        claude_path="",
+        synthesizer=ClaudeCLISynthesizer(claude_path=""),
+    ) is None
+
+
+def test_synthesize_overview_dummy_skips_without_path_lookup(monkeypatch):
+    """Default/dummy backend skips overview — no Claude path resolution."""
+    calls: list[str] = []
+
+    def boom(_path):
+        calls.append("resolved")
+        raise AssertionError("should not resolve Claude path for dummy")
+
+    monkeypatch.setattr("llmwiki.build._resolve_claude_path", boom)
+    assert synthesize_overview({}, config={"synthesis": {"backend": "dummy"}}) is None
+    assert calls == []
 
 
 def test_cli_build_default_claude_is_empty_string():

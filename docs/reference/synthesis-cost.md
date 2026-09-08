@@ -20,7 +20,9 @@ Two consequences drive every decision on this page:
 1. **Output is the expensive direction** — roughly 5x input per token. A model that "thinks" before answering can cost more than a pricier model that answers directly, even at a lower headline rate.
 2. **A cache write costs *more* than fresh input.** Caching only pays off if the same prefix is re-read. Each `claude -p` invocation is a separate process, so cache reuse across pages is partial at best.
 
-The rate card llmwiki prices against lives in [`llmwiki/model_pricing.csv`](../../llmwiki/model_pricing.csv), inside the package so it ships in the wheel (#210) — one row per model, with `aliases` mapping CLI names (`sonnet`, `claude-haiku-4-5-20251001`) onto pricing rows. Update that file when provider pricing changes; nothing else hardcodes rates.
+The rate card llmwiki prices against lives in [`llmwiki/model_pricing.csv`](../../llmwiki/model_pricing.csv), inside the package so it ships in the wheel (#210) — one row per model, with `aliases` mapping CLI names (`sonnet`, `claude-haiku-4-5-20251001`, `composer-2.5`, `cursor-grok-4.6-high`) onto pricing rows. Update that file when provider pricing changes; nothing else hardcodes rates.
+
+Cursor Agent CLI (`synthesis.backend: cursor_cli`) estimates use the **same static rate card**, not live Agent CLI billing. Rows for Composer 2.5 / Grok 4.5 / Grok 4.6 (and Fast variants) come from [Cursor models & pricing](https://cursor.com/docs/models-and-pricing). When an id has no published per-token rate, a temporary stand-in may mirror **Kimi K3** list rates and must say so in the row's `source` / `notes` — that is an approximate estimate aid, not measured Cursor billing.
 
 ## Where the money actually goes
 
@@ -91,6 +93,7 @@ The split is **not** Claude-specific. `split_prompt_template()` lives in `llmwik
 | Backend | Where the stable half goes | Mechanism |
 |---|---|---|
 | `claude` CLI | `--system-prompt` | 1h prompt cache, reused across invocations |
+| `cursor_cli` | leading stdin prompt text (stable half first) | Cursor bills cache read/write at the provider layer (hooks / usage APIs expose `cache_read` / `cache_write`); Agent CLI has no usable `--system-prompt` for normal accounts, so the stable half is prepended for correctness and best-effort automatic prefix caching. Lean argv is `-p` + `--mode ask` + `--sandbox enabled` + `--allowed-tools truncated_tool_call` (tiny allowlist cuts tool-schema tokens; agent system prompt remains) |
 | `ollama` | `system` field on `/api/generate` | KV-cache prefix reuse (no billing) |
 | OpenAI / OpenRouter *(not built)* | leading system message | automatic prefix caching, ~50% off repeated prefixes |
 | Anthropic API *(scaffolded)* | `cache_control` breakpoint after the prefix | explicit, see [`prompt-caching.md`](prompt-caching.md) |
@@ -174,7 +177,7 @@ The API-cache path in [`prompt-caching.md`](prompt-caching.md) is unaffected —
 
 ## The site overview call
 
-`llmwiki build --synthesize` makes one extra `claude` call to write the landing-page overview. It gets the same lean flags, and its model is `synthesis.overview_model` — defaulting to `haiku`, since writing three prose paragraphs from a JSON brief is the cheapest real task here and shows none of the `Connections` weakness that matters for source pages.
+`llmwiki build --synthesize` makes one extra LLM call to write the landing-page overview when the active synthesis backend is an LLM (`claude`, `cursor_cli`, `ollama`). With `claude` it gets the same lean flags, and its model is `synthesis.overview_model` — defaulting to `haiku`, since writing three prose paragraphs from a JSON brief is the cheapest real task here and shows none of the `Connections` weakness that matters for source pages. With `dummy` (or an unavailable backend) the overview LLM is skipped — spend nothing (#230).
 
 ## Reproduce these numbers
 

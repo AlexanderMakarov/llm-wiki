@@ -68,7 +68,8 @@ from llmwiki.changelog_timeline import (
     render_price_sparkline,
     render_recent_activity,
 )
-from llmwiki.claude_path import resolve_claude_path as _resolve_claude_path
+from llmwiki.claude_path import resolve_claude_path as _resolve_claude_path  # noqa: F401 — tests / back-compat (#58)
+from llmwiki.config_schedule import _load_sessions_config
 from llmwiki.context_md import is_context_file
 from llmwiki.convert import ENCODED_PATH_PREFIXES, HOME_PATH_PREFIXES
 from llmwiki.docs_pages import (
@@ -110,8 +111,11 @@ from llmwiki.state_store import (
     synth_pipeline_shape_ok,
     update_state,
 )
-from llmwiki.synth.claude_cli import overview_argv
-from llmwiki.synth.pipeline import refresh_synth_pending
+from llmwiki.synth.base import BaseSynthesizer
+from llmwiki.synth.claude_cli import ClaudeCLIError, ClaudeCLISynthesizer
+from llmwiki.synth.cursor_cli import CursorCLIError
+from llmwiki.synth.ollama import OllamaError
+from llmwiki.synth.pipeline import refresh_synth_pending, resolve_backend
 from llmwiki.tag_utils import NOISE_TAGS
 from llmwiki.topics import build_topic_graph, resolve_project_topic_urls, topic_slug
 from llmwiki.topics_page import (
@@ -2825,8 +2829,8 @@ from llmwiki.render.js import JS  # noqa: F401 (re-exported)
 # control chars (0x00–0x1F minus tab) get rejected too because they
 # survive the rejection of `\n` and `\r` only by accident, and can
 # break log parsers / shell prompts in subtle ways.
-# Re-exported from llmwiki.claude_path for tests / back-compat (#58).
-# (_resolve_claude_path imported at module top.)
+# Claude path resolution is re-exported as ``_resolve_claude_path`` for
+# tests / back-compat (#58). Overview transport lives on synthesizers.
 
 
 # #486: validate slug shape before it lands in the synthesize_overview
@@ -2865,16 +2869,10 @@ def _validate_overview_slug(s: Any) -> str:
     return s
 
 
-def synthesize_overview(
+def _build_overview_prompt(
     groups: dict[str, list[tuple[Path, dict[str, Any], str]]],
-    claude_path: str,
-    model: str | None = None,
-) -> str | None:
-    resolved = _resolve_claude_path(claude_path)
-    if resolved is None:
-        return None
-    claude_path = str(resolved)
-
+) -> str:
+    """Assemble the overview prompt (slug-safe + size-capped; #486)."""
     lines: list[str] = [
         "You are writing a short (200-300 word) overview for a personal knowledge-base",
         "landing page. Below is a JSON summary of the user's Claude Code session history",
@@ -2909,32 +2907,61 @@ def synthesize_overview(
         prompt = prompt.encode("utf-8")[:_MAX_OVERVIEW_PROMPT_BYTES].decode(
             "utf-8", errors="ignore"
         )
+    return prompt
 
-    print("  calling claude CLI for overview synthesis…")
-    try:
-        # #486: pass the prompt via stdin (`-p -`) instead of argv so we
-        # dodge the OS argv-length limit entirely. The byte cap above is
-        # defence-in-depth — argv-length DoS path closed regardless.
-        # Same scaffolding-stripping flags as page synthesis: this call
-        # writes prose from a JSON brief and can't use a single tool.
-        result = subprocess.run(
-            overview_argv(claude_path, model),
-            input=prompt,
-            capture_output=True, text=True, timeout=120,
+
+def synthesize_overview(
+    groups: dict[str, list[tuple[Path, dict[str, Any], str]]],
+    claude_path: str = "",
+    model: str | None = None,
+    *,
+    synthesizer: BaseSynthesizer | None = None,
+    config: dict[str, Any] | None = None,
+) -> str | None:
+    """LLM site-overview synthesis via the active ``synthesis.backend`` (#230).
+
+    Resolves the backend from ``config`` / sessions config (or an injected
+    ``synthesizer``). ``dummy`` / non-LLM backends skip with no spend.
+    Unavailable engines skip. ``claude_path`` (``build --claude``) overlays
+    the Claude binary path only when the active backend is Claude — it does
+    not select Claude when config says ``dummy``.
+
+    Transport is ``BaseSynthesizer.overview_completion`` — each LLM backend
+    owns its CLI/HTTP details; this function only builds the prompt and
+    soft-fails on errors.
+    """
+    cfg = config if config is not None else _load_sessions_config()
+    backend: BaseSynthesizer = synthesizer if synthesizer is not None else resolve_backend(cfg)
+
+    if not getattr(backend, "is_llm", False):
+        print("  skipping overview LLM (synthesis.backend is dummy / non-LLM)")
+        return None
+
+    # ``--claude`` path overlay — Claude backend only; keep path safety.
+    if claude_path and isinstance(backend, ClaudeCLISynthesizer):
+        backend = ClaudeCLISynthesizer(
+            claude_path=claude_path,
+            model=backend.model,
+            timeout=backend.timeout,
+            lean=backend.lean,
+            effort=backend.effort,
         )
-    except subprocess.TimeoutExpired:
-        print("  warning: claude CLI timed out after 120s", file=sys.stderr)
+
+    prompt = _build_overview_prompt(groups)
+    print(f"  calling {backend.name} for overview synthesis…")
+    try:
+        text = backend.overview_completion(prompt, model=model)
+    except (
+        ClaudeCLIError,
+        CursorCLIError,
+        OllamaError,
+        NotImplementedError,
+        OSError,
+        subprocess.SubprocessError,
+    ) as e:
+        print(f"  warning: overview via {backend.name} failed: {e}", file=sys.stderr)
         return None
-    # #py-m4 (#590): narrow `except Exception` to the families we
-    # actually expect from a subprocess call. Catching MemoryError or
-    # ImportError silently here would mask real failures.
-    except (OSError, subprocess.SubprocessError) as e:
-        print(f"  warning: claude CLI failed: {e}", file=sys.stderr)
-        return None
-    if result.returncode != 0:
-        print(f"  warning: claude CLI exited {result.returncode}", file=sys.stderr)
-        return None
-    return result.stdout.strip() or None
+    return (text or "").strip() or None
 
 
 # ─── main ──────────────────────────────────────────────────────────────────

@@ -125,7 +125,10 @@ from llmwiki.state_store import (
 from llmwiki.sync.status import (  # noqa: F401
     cmd_sync_status,
 )
+from llmwiki.synth.claude_cli import load_claude_config
+from llmwiki.synth.cursor_cli import load_cursor_cli_config
 from llmwiki.synth.estimate import synthesize_estimate_report  # noqa: F401
+from llmwiki.synth.ollama import load_ollama_config
 from llmwiki.synth.pipeline import (
     DEFAULT_SYNTH_CONCURRENCY,
     MAX_SYNTH_CONCURRENCY,
@@ -137,6 +140,10 @@ from llmwiki.synth.pipeline import (
     resolve_include_subagents,
     synthesize_new_sessions,
 )
+
+# One-run ``synth --backend`` override (#230). Config typos without the
+# flag still warn→dummy via ``resolve_backend``; the CLI flag rejects unknowns.
+SYNTH_BACKEND_CHOICES = ("dummy", "ollama", "claude", "cursor_cli")
 from llmwiki.synth.reporting import (
     print_candidates_pre_run,
     print_source_pages_current_state,
@@ -1116,7 +1123,8 @@ def cmd_install_automation(args: argparse.Namespace) -> int:
         schedule = _ask_schedule()
         print()
         backend = _ask_until(
-            f"Synth backend [dummy/ollama/claude] (default {load_synthesis_backend()}): ",
+            f"Synth backend [{'/'.join(SYNTH_BACKEND_CHOICES)}] "
+            f"(default {load_synthesis_backend()}): ",
             load_synthesis_backend(),
             str,
         )
@@ -1526,6 +1534,73 @@ def _run_candidate_harvest(args: argparse.Namespace) -> int:
     return rc
 
 
+def _overlay_synth_backend(config: dict[str, Any], backend: str) -> dict[str, Any]:
+    """Return a shallow copy with ``synthesis.backend`` set for this process only.
+
+    Does not write ``config.json``. Used by ``synth --backend`` (#230).
+    """
+    out = dict(config)
+    synth = dict(out.get("synthesis") or {})
+    synth["backend"] = backend
+    out["synthesis"] = synth
+    return out
+
+
+def _resolve_synth_backend_arg(args: argparse.Namespace) -> str | None:
+    """Normalize ``--backend``; ``None`` when omitted. Raise ``ValueError`` if unknown."""
+    raw = getattr(args, "backend", None)
+    if raw is None or str(raw).strip() == "":
+        return None
+    name = str(raw).strip().lower()
+    if name not in SYNTH_BACKEND_CHOICES:
+        raise ValueError(name)
+    return name
+
+
+def _estimate_model_for_backend(config: dict[str, Any]) -> tuple[str, bool]:
+    """Execution model (+ lean) for ``--estimate`` from the active backend (#230).
+
+    Reads nested ``synthesis.cursor_cli.model`` / ``synthesis.claude.model``
+    (flat ``claude_*`` fallback via :func:`load_claude_config`).
+    """
+    synth = config.get("synthesis")
+    if not isinstance(synth, dict):
+        synth = {}
+    backend = str(synth.get("backend") or "dummy").strip().lower()
+    if backend == "cursor_cli":
+        return load_cursor_cli_config(config).model, True
+    if backend == "claude":
+        claude_cfg = load_claude_config(config)
+        return claude_cfg.model, claude_cfg.lean
+    if backend == "ollama":
+        return load_ollama_config(config).model, True
+    return "", True
+
+
+def _config_with_synth_backend_override(
+    args: argparse.Namespace,
+    config: dict[str, Any] | None = None,
+) -> tuple[dict[str, Any] | None, int | None]:
+    """Load config and apply ``--backend`` overlay.
+
+    Returns ``(config, None)`` on success, or ``(None, exit_code)`` when the
+    override name is unknown (exit 2).
+    """
+    loaded = config if config is not None else _load_sessions_config()
+    try:
+        override = _resolve_synth_backend_arg(args)
+    except ValueError as exc:
+        print(
+            f"error: unknown synthesis backend {exc.args[0]!r} "
+            f"(expected one of: {', '.join(SYNTH_BACKEND_CHOICES)})",
+            file=sys.stderr,
+        )
+        return None, 2
+    if override is not None:
+        loaded = _overlay_synth_backend(loaded, override)
+    return loaded, None
+
+
 def cmd_synthesize(args: argparse.Namespace) -> int:
     """Synthesize wiki source pages and/or harvest candidates (#90 · #35).
 
@@ -1557,7 +1632,11 @@ def cmd_synthesize(args: argparse.Namespace) -> int:
     if candidates_only:
         return _run_candidate_harvest(args)
 
-    config: dict = _load_sessions_config()
+    config, override_rc = _config_with_synth_backend_override(args)
+    if override_rc is not None:
+        return override_rc
+    assert config is not None
+
     path_args = getattr(args, "paths", None) or None
     sessions_only = bool(getattr(args, "sessions_only", False))
     docs_only = bool(getattr(args, "docs_only", False))
@@ -1577,7 +1656,7 @@ def cmd_synthesize(args: argparse.Namespace) -> int:
                 file=sys.stderr,
             )
             return 2
-        return _synthesize_estimate(args)
+        return _synthesize_estimate(args, config=config)
 
     backend = resolve_backend(config)
     print(f"Backend: {backend.name}")
@@ -1977,13 +2056,20 @@ def cmd_remove(args: argparse.Namespace) -> int:
     return 0
 
 
-def _synthesize_estimate(args: argparse.Namespace | None = None) -> int:
+def _synthesize_estimate(
+    args: argparse.Namespace | None = None,
+    *,
+    config: dict[str, Any] | None = None,
+) -> int:
     """Print the G-07 incremental-vs-full-force cost report (v1.1.0 · #50 · #293).
 
     Transparency over one-liner: reads the state file so the user sees
     exactly which bucket gets billed next. The old ``--estimate`` printed
     a single number without saying whether it covered the whole corpus
     or just the delta.
+
+    ``config`` may be pre-loaded (and ``--backend``-overlaid) by
+    :func:`cmd_synthesize`; when omitted, this applies the same overlay.
     """
     args = args or argparse.Namespace(vault=None)
     _apply_default_vault(args)
@@ -1994,11 +2080,15 @@ def _synthesize_estimate(args: argparse.Namespace | None = None) -> int:
     execution_model = ""
     pricing_model = None
     pricing_fallback_msg = ""
-    loaded_cfg = _load_sessions_config()
+    loaded_cfg, override_rc = _config_with_synth_backend_override(args, config)
+    if override_rc is not None:
+        return override_rc
+    assert loaded_cfg is not None
     synth_cfg = (loaded_cfg.get("synthesis", {}) if isinstance(loaded_cfg, dict) else {})
     pricing_table = {k: dict(v) for k, v in MODEL_PRICING.items()}
+    lean = True
     if isinstance(synth_cfg, dict):
-        execution_model = str(synth_cfg.get("claude_model", "")).strip()
+        execution_model, lean = _estimate_model_for_backend(loaded_cfg)
         # Optional user override for rate-card drift:
         # synthesis.pricing = {"input": ..., "cached_input": ..., "cache_write": ..., "output": ...}
         pr = synth_cfg.get("pricing")
@@ -2037,9 +2127,7 @@ def _synthesize_estimate(args: argparse.Namespace | None = None) -> int:
     report = synthesize_estimate_report(
         raw_sessions=raw_sessions,
         state_keys=state_keys,
-        lean=synth_cfg.get("claude_lean", True) is not False
-        if isinstance(synth_cfg, dict)
-        else True,
+        lean=lean,
         model=pricing_model,
         pricing_table=pricing_table,
         wiki_sources_dir=wiki_sources_dir,
@@ -2601,11 +2689,16 @@ def build_parser() -> argparse.ArgumentParser:
         """,
     )
     build.add_argument("--out", type=Path, default=REPO_ROOT / "site", help="Output dir (default: site/)")
-    build.add_argument("--synthesize", action="store_true", help="Call claude CLI for overview synthesis")
+    build.add_argument(
+        "--synthesize",
+        action="store_true",
+        help="LLM site-overview via active synthesis.backend "
+             "(skips when backend is dummy / unavailable)",
+    )
     build.add_argument(
         "--claude", type=str, default="",
-        help="Path to claude CLI (defaults to `shutil.which('claude')` "
-             "so PATH-based / brew / nvm / Windows installs all work)",
+        help="Path to claude CLI when synthesis.backend=claude "
+             "(defaults to `shutil.which('claude')`; ignored for other backends)",
     )
     build.add_argument(
         "--search-mode", choices=["auto", "tree", "flat"], default="auto",
@@ -3020,6 +3113,17 @@ def build_parser() -> argparse.ArgumentParser:
         parser.add_argument(
             "--force", action="store_true",
             help="Ignore state file, re-synthesize all sessions",
+        )
+        parser.add_argument(
+            "--backend",
+            default=None,
+            choices=SYNTH_BACKEND_CHOICES,
+            metavar="NAME",
+            help=(
+                "Use this synthesis backend for this run only "
+                f"({'|'.join(SYNTH_BACKEND_CHOICES)}); does not write config.json. "
+                "Honored by synth, --check, and --estimate"
+            ),
         )
         parser.add_argument(
             "--concurrency", type=int, default=None, metavar="N",

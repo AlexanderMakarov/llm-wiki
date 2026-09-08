@@ -11,3 +11,9 @@ sonnet-4.6,sonnet,claude-sonnet-4-6,3.0,0.3,3.75,15.0,anthropic-pricing-2026-07,
 sonnet-4.5,sonnet,claude-sonnet-4-5,3.0,0.3,3.75,15.0,anthropic-pricing-2026-07,current
 haiku-4.5,haiku,claude-haiku-4|claude-haiku-4-5-20251001,1.0,0.1,1.25,5.0,anthropic-pricing-2026-07,current
 haiku-3.5,haiku,,0.8,0.08,1.0,4.0,anthropic-pricing-2026-07,retired in some platforms
+composer-2.5,composer,composer,0.5,0.2,0.5,2.5,cursor-pricing-2026-09,cursor.com/docs/models-and-pricing Cursor Models pool; no separate cache-write fee (cache_write=input); agent --model composer-2.5
+composer-2.5-fast,composer-fast,,3.0,0.5,3.0,15.0,cursor-pricing-2026-09,cursor.com/docs/models-and-pricing Composer 2.5 (Fast); agent --model composer-2.5-fast; no separate cache-write fee (cache_write=input)
+grok-4.6,cursor-grok-4.6,cursor-grok-4.6|cursor-grok-4.6-low|cursor-grok-4.6-medium|cursor-grok-4.6-high|cursor-grok-4.6-xhigh,2.0,0.5,2.0,6.0,cursor-pricing-2026-09,cursor.com/docs/models-and-pricing Grok 4.6; effort variants share rates; no separate cache-write fee (cache_write=input)
+grok-4.6-fast,cursor-grok-4.6-fast,cursor-grok-4.6-fast|cursor-grok-4.6-low-fast|cursor-grok-4.6-medium-fast|cursor-grok-4.6-high-fast|cursor-grok-4.6-xhigh-fast,4.0,1.0,4.0,12.0,cursor-pricing-2026-09,cursor.com/docs/models-and-pricing Grok 4.6 (Fast); no separate cache-write fee (cache_write=input)
+grok-4.5,cursor-grok-4.5,cursor-grok-4.5|cursor-grok-4.5-low|cursor-grok-4.5-medium|cursor-grok-4.5-high,2.0,0.5,2.0,6.0,cursor-pricing-2026-09,cursor.com/docs/models-and-pricing Grok 4.5; effort variants share rates; no separate cache-write fee (cache_write=input)
+grok-4.5-fast,cursor-grok-4.5-fast,cursor-grok-4.5-fast|cursor-grok-4.5-low-fast|cursor-grok-4.5-medium-fast|cursor-grok-4.5-high-fast,4.0,1.0,4.0,18.0,cursor-pricing-2026-09,cursor.com/docs/models-and-pricing Grok 4.5 (Fast) — output rate distinct from Grok 4.6 Fast; no separate cache-write fee (cache_write=input)

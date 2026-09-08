@@ -10,8 +10,13 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Added
 
+- **Cursor Agent CLI synthesis backend (`cursor_cli`, #230)** — `synthesis.backend: cursor_cli` shells out to `agent` / `cursor-agent` on `$PATH` (default model `composer-2.5`, lean `-p` / `--mode ask` / `--sandbox enabled` / `--allowed-tools truncated_tool_call`). Nested config blocks `synthesis.claude` / `synthesis.cursor_cli` / `synthesis.ollama` (flat `claude_*` still works). `llmwiki synth --backend <name>` overlays for one run (check / estimate / run; no config write). Site overview follows the active backend (`dummy` skips the LLM). Rate card adds Cursor-published Composer 2.5 / Grok 4.5 / 4.6 (+ Fast) rows and `agent --model` aliases. Distinct from the `cursor_cli` / `cursor_ide` ingest adapters. Docs: configuration, CLI, synthesis-cost, UPGRADING; `install-automation` lists `cursor_cli`.
+  - *Release note:* Synthesize with Cursor Agent CLI via `synthesis.backend: cursor_cli` or `synth --backend cursor_cli` (#230).
+
 ### Changed
 
+- **Cursor / Claude / Ollama overview share `overview_completion`** — `build.synthesize_overview` no longer has per-backend `_overview_via_*` helpers; each LLM synthesizer implements one-shot overview on the shared contract (#230 follow-up).
+- **`configuration-reference.md` nests Claude settings with flat aliases** — one row per setting (`synthesis.claude.model` alias `claude_model`, …) instead of duplicating nested and legacy flat keys.
 - **`refresh_demo.py` synths only the docs in its plan** — after `add`/`remove`, it runs `llmwiki synth --docs-only` with repeatable `--path` for each newly ingested `raw/docs/<slug>/…` file instead of a vault-wide docs pass that re-queued every pending document. Remove-only plans skip synth (and the backend reachability check). See [REFRESH_DEMO.md](docs/maintainers/REFRESH_DEMO.md).
   - *Release note:* Demo docs refresh no longer burns synthesis tokens on unchanged pending pages.
 - **`/release` hard-stops on incomplete demo synth** — the skill and `RELEASE_PROCESS.md` refuse to treat lint/build green or “proceed with delivery” as a waiver when release-day docs/sessions still lack wiki pages; human gate must report synth `complete` / `opted out` / `blocked`. `refresh_demo.py` fails (and does not advance `.demo-source-rev`) when plan-added raw docs lack coverage, and `--verify-slugs` is the local re-check after a manual path-scoped synth.
