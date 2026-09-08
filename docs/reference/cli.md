@@ -678,7 +678,7 @@ The install also prunes commands and skills the kit has retired (#214), so an ag
 
 The manifest is a normal file in `--dest`. When that is a git-tracked `.claude/`, commit `.llmwiki-agent-kit.json` alongside `commands/` and `skills/`: it is what lets a later upgrade recognise its own files and clean them up.
 
-Contributor-only commands (`fix-bug`, `maintainer`, `release`, …) and skills (`docs-that-work`, `pytest-best-practices`, `release`, …) stay in this repository's `.claude/` tree and are not part of the kit. Cutting a tagged release uses `.claude/skills/release/SKILL.md` via `/release` (see [`docs/maintainers/RELEASE_PROCESS.md`](../maintainers/RELEASE_PROCESS.md)).
+Contributor-only commands (`fix-bug`, `implement-feature`, `release`) and skills (`docs-that-work`, `pytest-best-practices`, `release`, …) stay in this repository's `.claude/` tree and are not part of the kit. Cutting a tagged release uses `.claude/skills/release/SKILL.md` via `/release` (see [`docs/maintainers/RELEASE_PROCESS.md`](../maintainers/RELEASE_PROCESS.md)).
 
 ```bash
 python3 -m llmwiki install-agent-kit --dest .claude --dry-run

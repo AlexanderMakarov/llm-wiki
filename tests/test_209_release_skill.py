@@ -8,8 +8,8 @@ AC coverage matrix (FR<requirement>-AC<n> from functional-spec.md):
 
     FR1-AC1 → test_skill_file_exists
     FR1-AC1 → test_skill_frontmatter_name_is_release
-    FR1-AC2 → test_claude_wrapper_exists, test_cursor_wrapper_exists,
-               test_claude_wrapper_loads_skill, test_cursor_wrapper_loads_skill
+    FR1-AC2 → test_claude_wrapper_exists, test_claude_wrapper_loads_skill,
+               test_cursor_resolves_release_from_the_claude_wrapper
     FR1-AC3 → test_skill_not_in_agent_kit_commands
     FR2-AC1 → test_preflight_covers_main_ci, test_preflight_covers_critical_bugs,
                test_preflight_covers_lint_and_tests, test_preflight_warns_root_wiki,
@@ -215,14 +215,6 @@ def test_claude_wrapper_exists():
     )
 
 
-def test_cursor_wrapper_exists():
-    """FR1-AC2: .cursor/commands/release.md must exist for Cursor /release discovery."""
-    # @regression
-    assert CURSOR_WRAPPER.is_file(), (
-        f"Missing Cursor release wrapper: {CURSOR_WRAPPER.relative_to(REPO_ROOT)}"
-    )
-
-
 def test_claude_wrapper_loads_skill():
     """FR1-AC2: Claude wrapper must reference the skill path."""
     # @regression
@@ -232,12 +224,21 @@ def test_claude_wrapper_loads_skill():
     )
 
 
-def test_cursor_wrapper_loads_skill():
-    """FR1-AC2: Cursor wrapper must reference the skill path."""
+def test_cursor_resolves_release_from_the_claude_wrapper():
+    """FR1-AC2: Cursor discovers /release from the top-level Claude wrapper, with no duplicate.
+
+    Cursor loads top-level ``.claude/commands/*.md`` and ``.claude/skills/``
+    natively, so one wrapper serves both harnesses. See
+    ``docs/maintainers/AWOS-CURSOR.md`` and ``tests/test_command_surface_parity.py``.
+    """
     # @regression
-    text = CURSOR_WRAPPER.read_text(encoding="utf-8")
-    assert ".claude/skills/release" in text or "skills/release/SKILL.md" in text, (
-        f"{CURSOR_WRAPPER.relative_to(REPO_ROOT)} must reference the skill path"
+    assert CLAUDE_WRAPPER.parent == REPO_ROOT / ".claude" / "commands", (
+        "the /release wrapper must stay top-level — Cursor does not descend "
+        "into a nested .claude/commands/<ns>/ namespace"
+    )
+    assert not CURSOR_WRAPPER.exists(), (
+        f"{CURSOR_WRAPPER.relative_to(REPO_ROOT)} is a redundant copy of a "
+        "top-level Claude command that Cursor already loads"
     )
 
 

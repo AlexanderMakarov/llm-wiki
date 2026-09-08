@@ -5,7 +5,7 @@ argument-hint: '[feature — ticket ID, link, or file path]'
 
 # Implement a Feature End-to-End
 
-Takes one feature — its requirements from a GitHub Issue, plain prompt, local file, or pre-written `context/spec/` directory — and drives it through spec, implementation, verification, local review, PR, and merge until Definition of Done. Decisions live in `context/product/delivery-flow.md`; re-run `/awos:flow` (Cursor: `/awos-flow`) to change them.
+Takes one feature — its requirements from a GitHub Issue, plain prompt, local file, or pre-written `context/spec/` directory — and drives it through spec, implementation, verification, local review, PR, and merge until Definition of Done. Decisions live in `context/product/delivery-flow.md`; re-run `/awos:flow` to change them — it ships with the `awos@awos-marketplace` plugin (Claude: `/plugin install awos@awos-marketplace`; Cursor: `./scripts/update-awos.sh --plugin`, then `/awos-flow`).
 
 ## Notifications
 

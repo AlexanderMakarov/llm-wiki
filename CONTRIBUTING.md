@@ -78,7 +78,7 @@ llmwiki/              # Python package
 ├── adapters/         # session-store adapters (one per agent)
 └── mcp/              # MCP server (12 tools, stdio transport)
 
-.claude/              # contributor commands, skills, rules (awos, maintainer, …)
+.claude/              # contributor commands, skills, rules (awos, release, …)
 .cursor/rules/        # Cursor project rules
 .kiro/steering/       # always-loaded rules
 .githooks/            # committed git hooks (pre-push lint)

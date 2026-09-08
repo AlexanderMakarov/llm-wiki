@@ -54,7 +54,7 @@ def test_kit_ships_slash_commands_and_skills() -> None:
 def test_contributor_commands_stay_in_dot_claude() -> None:
     contrib = REPO_ROOT / ".claude" / "commands"
     assert (contrib / "fix-bug.md").is_file()
-    assert (contrib / "maintainer.md").is_file()
+    assert (contrib / "implement-feature.md").is_file()
     assert not (contrib / "wiki-sync.md").exists()
     skills = REPO_ROOT / ".claude" / "skills"
     assert (skills / "docs-that-work" / "SKILL.md").is_file()

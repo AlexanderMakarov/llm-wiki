@@ -145,6 +145,8 @@ grows past 300.
 
 **Context:** #62 non-goal.
 
+**Update 2026-09-08:** the `/triage-issue` command was retired in #227 and `/fix-bug` is the entry point for working a bug issue; [`TRIAGE.md`](TRIAGE.md) remains the label-taxonomy reference for the rules it applied. Staying off automated triage bots is unchanged.
+
 ## 2026-08-09 — First-class open questions as a page kind
 
 **Reason:** `type: question` sat in the vocabulary for years without a
