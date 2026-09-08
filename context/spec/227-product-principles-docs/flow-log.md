@@ -1,0 +1,32 @@
+# Flow log — 227-product-principles-docs
+
+## fetch-ticket
+- Source: plain prompt (implement-feature + prior chat design A with corrections)
+- TICKET_ID: `prompt`
+- Title: Product principles and maintainer doc clarity
+- Next: resume-detection → workspace → specs
+
+## resume-detection
+- No prior completed artifacts for this SPEC_NAME; fresh chain
+- Next: workspace
+
+## workspace
+- BRANCH: `feat/docs-product-principles`
+- WT: `.claude/worktrees/feat-docs-product-principles`
+- TMP_VAULT: absolute `.worktree-vault` under WT (relative path nesting fixed)
+- Next: `/awos:spec` → user approval of `functional-spec.md`
+
+## specs (functional)
+- Wrote `functional-spec.md`; surfaced contradictions (triage file still on disk; Google Fonts CDN vs brand offline claim; DECLINED Python 3.9+ wording)
+- Operator amendments: skip triage changes; leave CDN alone; remove Python version from DECLINED; alignment OK
+- Status → Approved
+- Next: tech gate — `technical-considerations.md`
+
+## specs (tech)
+- Wrote `technical-considerations.md`; operator approved after rebase onto fresh `origin/main` (1a9ccb3, includes #237 — triage already fixed on main)
+- Status → Approved
+- Next: tasks.md → commit specs → implement
+
+## specs (tasks)
+- Wrote `tasks.md` (5 slices; triage out of scope)
+- Next: commit-specs
