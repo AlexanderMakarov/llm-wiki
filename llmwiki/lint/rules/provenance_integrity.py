@@ -1,6 +1,7 @@
 """provenance_integrity — broken sources:/source_file: hops are errors (#122).
 
-Report-only: guided repair belongs to ``doctor`` (#110).
+Report-only: operators repair hops by hand or with ``llmwiki trace`` /
+``llmwiki synth`` / ``llmwiki migrate broken-provenance``.
 """
 
 from __future__ import annotations
@@ -40,18 +41,24 @@ def _infer_vault(pages: dict) -> Path | None:
     return None
 
 
-def _missing_message(hop: TraceHop) -> str:
+def _missing_message(hop: TraceHop, locator: str) -> str:
     target = hop.location or hop.title or "(unknown)"
     if hop.role == "source":
         kind = "source summary"
+        hint = (
+            f"remove from sources: or run llmwiki synth if raw/ still has it "
+            f"(llmwiki trace {locator})"
+        )
     elif hop.role == "raw":
         kind = "raw file"
+        hint = (
+            f"fix source_file: or run llmwiki migrate broken-provenance "
+            f"(llmwiki trace {locator})"
+        )
     else:
         kind = "provenance hop"
-    return (
-        f"missing {kind} '{target}' — "
-        f"run doctor (#110) for guided repair"
-    )
+        hint = f"see llmwiki trace {locator}"
+    return f"missing {kind} '{target}' — {hint}"
 
 
 @register
@@ -61,7 +68,7 @@ class ProvenanceIntegrity(LintRule):
     Walks each page that already carries provenance metadata via
     :func:`llmwiki.trace.trace_page`. Emits one ``error`` per missing hop.
     Pages without ``sources:`` / ``source_file:`` are skipped. Healing is
-    out of scope here — see doctor (#110).
+    out of scope here — use ``llmwiki trace`` and repair hops by hand.
     """
 
     name = "provenance_integrity"
@@ -104,6 +111,6 @@ class ProvenanceIntegrity(LintRule):
                     "rule": self.name,
                     "severity": "error",
                     "page": rel,
-                    "message": _missing_message(hop),
+                    "message": _missing_message(hop, locator),
                 })
         return issues

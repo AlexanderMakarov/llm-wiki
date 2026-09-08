@@ -1168,8 +1168,8 @@ def test_provenance_integrity_flags_missing_source_slug(tmp_path: Path):
     assert issues[0]["severity"] == "error"
     assert issues[0]["page"] == "entities/Orphan.md"
     assert "gone-slug" in issues[0]["message"]
-    assert "doctor" in issues[0]["message"]
-    assert "#110" in issues[0]["message"]
+    assert "sources:" in issues[0]["message"]
+    assert "llmwiki trace" in issues[0]["message"]
 
 
 def test_provenance_integrity_flags_missing_raw(tmp_path: Path):
@@ -1187,6 +1187,9 @@ def test_provenance_integrity_flags_missing_raw(tmp_path: Path):
     assert issues[0]["severity"] == "error"
     assert "does-not-exist.md" in issues[0]["message"]
     assert "raw" in issues[0]["message"]
+    assert "llmwiki trace" in issues[0]["message"]
+    assert "migrate broken-provenance" in issues[0]["message"]
+    assert "doctor" not in issues[0]["message"].lower()
 
 
 def test_provenance_integrity_one_issue_per_broken_hop(tmp_path: Path):

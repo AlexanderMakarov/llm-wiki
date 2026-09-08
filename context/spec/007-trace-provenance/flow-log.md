@@ -46,3 +46,10 @@
 ## commit-push
 - Staged all #122 + waived #81 on_disk backfill; conventional commits; push branch; open PR with size/concern waivers.
 - Stop appending to this tracked log after the change request is open.
+
+## fix-bug — provenance_integrity lint hints (2026-09-08)
+- **Bug:** `provenance_integrity` errors said `run doctor (#110)` but `llmwiki doctor` is not shipped.
+- **Classification:** Divergence — amended `functional-spec.md` FR5 (lint hints now name shipped commands).
+- **Branch:** `fix/provenance-lint-doctor-hint`; WT=`.claude/worktrees/fix-provenance-lint-doctor-hint`
+- **Changed:** `llmwiki/lint/rules/provenance_integrity.py`, tests, `docs/reference/cli.md`, `CHANGELOG.md`, spec amendment.
+- **Next:** local review → commit-push → PR

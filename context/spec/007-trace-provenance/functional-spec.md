@@ -12,12 +12,12 @@ A synthesized wiki claim is only as valuable as the reader's ability to defend i
 
 Concretely: someone reading a person or idea page who asks "where did this come from?" must open nested metadata by hand — first the list of source summaries, then each summary's pointer to a raw transcript.
 
-**Desired outcome:** humans can click every listed Sources entry on the browsable site (preferring a built page, otherwise the raw file in a new tab). Operators and scripts can print the full downward chain with one command. Lint reports broken hops as errors; healing those problems is owned by `doctor` (#110), not this change.
+**Desired outcome:** humans can click every listed Sources entry on the browsable site (preferring a built page, otherwise the raw file in a new tab). Operators and scripts can print the full downward chain with one command. Lint reports broken hops as errors; messages point at shipped repair commands (`trace`, `synth`, `migrate broken-provenance`); guided `doctor` remains roadmap (#110).
 
 **Success measures:**
 - Topic pages list evidence under a Sources collapsible (sessions + documents from the graph). Session/document pages link every provenance Sources entry (HTML when available; otherwise raw, clearly marked, new tab). CLI `trace` prints the full chain.
 - `llmwiki trace` prints the full downward chain (titles and locations; missing hops marked) without body excerpts.
-- Lint fails with **errors** on broken provenance hops; docs point operators to #110 for guided fixes.
+- Lint fails with **errors** on broken provenance hops; error text points at shipped repair commands (`trace`, `synth`, `migrate broken-provenance`).
 
 ---
 
@@ -74,14 +74,15 @@ The command accepts a page path or name. It prints the full downward chain: the 
 
 Lint inspects every wiki page that already carries provenance metadata. It walks the full downward chain: listed source summaries must resolve to real source-summary pages, and each summary’s raw-file pointer must resolve to an existing raw file. Each broken hop is reported as an **error**. Pages without provenance metadata are skipped.
 
-Healing (suggested fix commands, pruning stale pointers, guided repair) is **not** implemented here — that belongs to `llmwiki doctor` (#110). This change documents that pointer for operators.
+Healing (pruning stale pointers, guided repair) is **not** automated in lint. Each error message names the missing hop and points at shipped commands: `llmwiki trace` to inspect the chain, `synth` when raw still exists but the source summary is missing, and `migrate broken-provenance` for broken `source_file:` on source summaries. Future guided repair may ship under `doctor` (#110).
 
 - **Acceptance Criteria:**
   - [ ] Given a higher-level page that lists a source summary that does not exist, when I run lint, then an error names that missing summary.
   - [ ] Given a source-summary page whose raw-file pointer does not exist on disk, when I run lint, then an error names that missing raw file.
   - [ ] Given a page with no provenance metadata, when I run lint, then this rule adds no issue for that page.
   - [ ] Given only valid provenance chains, when I run lint, then this rule reports no errors.
-  - [ ] Docs for this rule tell the operator that guided repair will live under `doctor` (#110).
+  - [ ] Given a missing source summary, when I run lint, then the error message points at `llmwiki trace` and removing the stale slug from `sources:` or running `synth` when raw still exists.
+  - [ ] Given a missing raw file on a source summary, when I run lint, then the error message points at `llmwiki trace` and fixing `source_file:` or running `migrate broken-provenance`.
 
 ---
 
@@ -92,7 +93,7 @@ Healing (suggested fix commands, pruning stale pointers, guided repair) is **not
 - Shared provenance walker used by CLI and lint (and by build for link targets).
 - Thin CLI `trace` (downward full chain; titles and locations; missing markers; no body excerpts).
 - Site: topic pages list graph evidence under Sources (Sessions / Documents); session/document pages link every provenance Sources entry — prefer HTML; else raw marked “(raw)”, new tab — plus CLI `trace`.
-- Lint rule: full-chain provenance integrity as **errors**; docs point to #110 for fixes.
+- Lint rule: full-chain provenance integrity as **errors**; messages point at shipped repair commands.
 - Support for any wiki page kind that already carries provenance metadata.
 
 ### Out-of-Scope
@@ -105,3 +106,12 @@ Healing (suggested fix commands, pruning stale pointers, guided repair) is **not
 - Large provenance panels or dashboards on the site.
 - Including transcript body excerpts in trace output.
 - Other roadmap / backlog items not named in this specification.
+
+---
+
+## Change Log
+
+### 2026-09-08 — provenance_integrity lint hints (divergence)
+
+- **Why:** `llmwiki doctor` (#110) is not shipped; lint errors that said `run doctor (#110)` were actionable dead ends.
+- **What changed:** FR5 acceptance criteria and operator docs now require error text to point at shipped commands (`trace`, `synth`, `migrate broken-provenance`) instead of `doctor`.

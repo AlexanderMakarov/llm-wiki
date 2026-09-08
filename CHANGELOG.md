@@ -15,6 +15,8 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Changed
 
+- **`provenance_integrity` lint hints use shipped commands** — error text no longer says `run doctor (#110)`; it points at `llmwiki trace`, `synth`, or `migrate broken-provenance` instead.
+  - *Release note:* Provenance lint errors now suggest existing repair commands instead of the unshipped `doctor` subcommand.
 - **Canonical clone and issue links point at `AlexanderMakarov/llm-wiki`** — CONTRIBUTING, README, setup/deploy docs, and AWOS delivery-flow no longer treat `Pratiyush/llm-wiki` as the working upstream or clone target. Historical credit remains in Acknowledgements / License.
   - *Release note:* Clone and file issues against `AlexanderMakarov/llm-wiki`; Pratiyush remains attribution for the original project only.
 - **CONTRIBUTING drops the outdated Releases section and the GPG checklist box** — maintainers cut releases with `/release`; the pre-merge list is a 16-box checklist (PR template aligned).

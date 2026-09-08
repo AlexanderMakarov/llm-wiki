@@ -258,8 +258,8 @@ def test_fr5_lint_run_all_reports_missing_source_as_error(tmp_path: Path) -> Non
     assert "gone" in issue["message"]
 
 
-def test_fr5_lint_run_all_mentions_doctor_110(tmp_path: Path) -> None:
-    """FR5: lint message references doctor (#110) for guided repair."""
+def test_fr5_lint_run_all_suggests_trace_repair(tmp_path: Path) -> None:
+    """FR5: lint message points at existing repair commands, not doctor (#110)."""
     vault = _vault(tmp_path)
     (vault / "wiki" / "entities").mkdir(parents=True, exist_ok=True)
     (vault / "wiki" / "entities" / "Bad.md").write_text(
@@ -270,7 +270,8 @@ def test_fr5_lint_run_all_mentions_doctor_110(tmp_path: Path) -> None:
     issues = run_all(pages, selected=["provenance_integrity"])
     assert issues
     msg = issues[0]["message"]
-    assert "doctor" in msg.lower() or "#110" in msg
+    assert "llmwiki trace" in msg
+    assert "doctor" not in msg.lower()
 
 
 def test_fr5_lint_run_all_silent_on_valid_chain(tmp_path: Path) -> None:
