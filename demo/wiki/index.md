@@ -194,7 +194,7 @@ page without descending into a tree. -->
 
 ## Syntheses (0)
 
-## Candidates (25)
+## Candidates (24)
 - [Lint Rules](candidates/concepts/Lint Rules.md)
 - [MCP Server](candidates/concepts/MCP Server.md)
 - [REST API](candidates/concepts/REST API.md)
@@ -209,7 +209,6 @@ page without descending into a tree. -->
 - [Gemini CLI](candidates/entities/Gemini CLI.md)
 - [GitHub Copilot](candidates/entities/GitHub Copilot.md)
 - [LLM Wiki](candidates/entities/LLM Wiki.md)
-- [LLMWiki](candidates/entities/LLMWiki.md)
 - [Logseq](candidates/entities/Logseq.md)
 - [WCAG 2.1](candidates/entities/WCAG 2.1.md)
 - [llm-wiki](candidates/entities/llm-wiki.md)
