@@ -2,7 +2,7 @@
 
 > **Audience:** whoever is cutting the next tag.
 >
-> **How to run the cut:** load the cross-agent skill [`.claude/skills/release/SKILL.md`](../../.claude/skills/release/SKILL.md) (Claude Code / Cursor: `/release <version>`). Wrappers live at `.claude/commands/release.md` and `.cursor/commands/release.md`. This document is the canonical checklist order; the skill is the operational walkthrough and must stay aligned with it.
+> **How to run the cut:** load the cross-agent skill [`.claude/skills/release/SKILL.md`](../../.claude/skills/release/SKILL.md) (Claude Code / Cursor: `/release <version>`). The wrapper lives at `.claude/commands/release.md`, which both harnesses load. This document is the canonical checklist order; the skill is the operational walkthrough and must stay aligned with it.
 
 llmwiki uses [semantic versioning](https://semver.org/). Past `1.0` / `2.x`, a normal `vX.Y.Z` tag is a full GitHub Release. Tags whose names contain `rc`, `alpha`, `beta`, or `dev` are marked prerelease by automation.
 

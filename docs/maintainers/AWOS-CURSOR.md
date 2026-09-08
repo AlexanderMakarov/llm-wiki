@@ -2,6 +2,41 @@
 
 Maintainer guide for running [provectus/awos](https://github.com/provectus/awos) in this repo from **Cursor Agent** as well as Claude Code. Product runtime for end users is unchanged — this is contributor / maintainer agent workflow only ([#114](https://github.com/AlexanderMakarov/llm-wiki/issues/114)).
 
+## Which harness loads what (and why a command looks "Cursor-only")
+
+| Path | Claude Code | Cursor Agent |
+|---|---|---|
+| `.claude/commands/*.md` (top level) | loads | **loads** |
+| `.claude/commands/<ns>/*.md` (nested) | loads, slash `/<ns>:<name>` | **does NOT load** |
+| `.cursor/commands/*.md` (top level) | ignores | loads |
+| `.claude/skills/`, `.claude/agents/` | loads | loads |
+
+The split is **flat vs nested**, not Claude vs Cursor. A **top-level** `.claude/commands/<name>.md` is invocable from both harnesses out of that one file — it needs no duplicate anywhere. Only a **nested** namespace, `.claude/commands/<ns>/<name>.md`, is invisible to Cursor, and that is the single case that earns a flat `.cursor/commands/<ns>-<name>.md` wrapper.
+
+### Symptom → cause
+
+- **"a command works in Claude Code but not in Cursor"** → it is nested under `.claude/commands/<ns>/`. Add (or regenerate) the flat `.cursor/commands/<ns>-<name>.md` wrapper. Living under `.claude/` is not the problem.
+- **"the slash does not appear in Cursor's `/` menu"** → check the file is top-level (`.claude/commands/<name>.md` or `.cursor/commands/<name>.md`, never a subdirectory), then reload the Cursor window so the command list is re-scanned.
+- **"duplicating a top-level command into `.cursor/commands/` to make it work"** → unnecessary, because Cursor already loaded the original; the copy is only a second body to keep in sync, and `tests/test_command_surface_parity.py` fails on it.
+- **"the Cursor slash name is wrong or collides"** → a converted plugin command kept its bare source filename (`flow.md` → `/flow`); prefix it with its source (`awos-flow.md` → `/awos-flow`).
+
+### How to re-verify this
+
+The table is empirical and **version-dependent** — measured against `cursor-agent` 2026.09.02 at time of writing. Anyone who suspects the model changed should re-run the probe rather than trust this page.
+
+Drop a probe command file at the path under test inside a scratch repo (`<scratch-dir>`, e.g. `/tmp/probe`), invoke its slash, and **count `tool_call` events** in the stream:
+
+```bash
+cursor-agent --trust --mode ask -p "/<probe>" --output-format stream-json
+```
+
+- **Zero `tool_call` events** → the harness loaded the command and expanded it client-side. That location is a real command root.
+- **Many `tool_call` events**, with the model narrating that it is looking up what the slash refers to → the harness did not load it. The model is merely searching the filesystem and happening to find the file.
+
+A **negative control is mandatory**: put an identical probe file in a plain directory no harness could treat as a command root (say `<scratch-dir>/randomdir/`) and run the same probe. Without it, a naive probe "confirms" discovery from any location, because the agent finds and reads the file either way. Measuring the **outcome** (did the right token come back) is confounded; measuring the **mechanism** (tool-call count) is not.
+
+[`tests/test_command_surface_parity.py`](../../tests/test_command_surface_parity.py) is the executable form of this rule: every nested namespace must keep its flat wrapper, and no top-level command may grow a redundant Cursor copy.
+
 ## Installer ≠ plugin
 
 `bunx @provectusinc/awos` (or `npx @provectusinc/awos`) does **not** install the `awos` Claude plugin. The installer:
@@ -68,7 +103,7 @@ flowchart TB
 
 Cursor has **no** `/awos:` namespace. Project commands are the basename of a **top-level** file under `.cursor/commands/` (e.g. `awos-product.md` → `/awos-product`). Nested `.cursor/commands/awos/*.md` works in some IDE builds but **not** in Cursor Agent CLI — keep wrappers flat. **Always prefix** converted plugin commands with `awos-` (or another source prefix) so slash names show where they came from — raw acplugin leaves `flow.md` → `/flow`, which is easy to miss and collide with.
 
-The same flat-only rule holds across harnesses: Cursor **does** load top-level `.claude/commands/*.md`, so a top-level command is invocable on both harnesses from that one file, but it does **not** descend into `.claude/commands/<ns>/`. That is why the AWOS commands, which live under `.claude/commands/awos/` for Claude, must also exist as flat `.cursor/commands/awos-*.md` wrappers.
+The same flat-only rule holds across harnesses — see [Which harness loads what](#which-harness-loads-what-and-why-a-command-looks-cursor-only): Cursor reads top-level `.claude/commands/*.md` but never descends into `.claude/commands/<ns>/`, which is why the AWOS commands need these flat wrappers.
 
 ### What is committed vs local
 
@@ -241,6 +276,7 @@ Details:
 - [ ] `/awos-hire` (or CLI) can install one skill; the skill directory is visible under `.claude/skills/` to Cursor.
 - [ ] No personal vault paths or usernames in committed AWOS docs or PR text.
 - [ ] After a second `./scripts/update-awos.sh`, wrappers still resolve (sync is idempotent).
+- [ ] A top-level `.claude/commands/*.md` command (e.g. `/release`) resolves in Cursor with no `.cursor/` duplicate of it present.
 
 ## Out of scope (still)
 

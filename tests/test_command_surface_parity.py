@@ -26,6 +26,12 @@ removals recorded in
 These tests are STRUCTURAL ONLY — file-level assertions against the repo
 tree. They never invoke ``claude``, ``cursor-agent``, or any agent, and
 never shell out to a network.
+
+The prose source for this discovery model — including how it was verified
+against ``cursor-agent`` and how to re-run that probe — is
+``docs/maintainers/AWOS-CURSOR.md``, section "Which harness loads what
+(and why a command looks 'Cursor-only')". Read it before changing an
+assertion here.
 """
 
 from __future__ import annotations
@@ -42,13 +48,7 @@ CURSOR_CMDS = REPO_ROOT / ".cursor" / "commands"
 # Top-level Claude commands that nonetheless keep a `.cursor/commands/`
 # file of the same name. Each entry needs a reason: the default is that no
 # such duplicate should exist at all.
-REDUNDANT_CURSOR_DUPLICATES: dict[str, str] = {
-    "release": (
-        "hand-written wrapper that predates the discovery that Cursor reads "
-        "top-level .claude/commands/*.md; kept deliberately for now, and "
-        "retiring it is tracked separately"
-    ),
-}
+REDUNDANT_CURSOR_DUPLICATES: dict[str, str] = {}
 
 # Removed in #227 — must never come back, and no live doc may reference
 # them as if they were still invocable.
@@ -117,9 +117,6 @@ def test_top_level_claude_commands_have_no_redundant_cursor_duplicate():
     offenders: list[str] = []
     for p in _top_level_claude_commands():
         if p.stem in REDUNDANT_CURSOR_DUPLICATES:
-            assert REDUNDANT_CURSOR_DUPLICATES[p.stem].strip(), (
-                f"REDUNDANT_CURSOR_DUPLICATES[{p.stem!r}] must carry a non-empty reason"
-            )
             continue
         duplicate = CURSOR_CMDS / f"{p.stem}.md"
         if duplicate.is_file():
@@ -130,6 +127,16 @@ def test_top_level_claude_commands_have_no_redundant_cursor_duplicate():
     assert not offenders, (
         "redundant Cursor copy of a top-level Claude command (delete it, or add a "
         "reason to REDUNDANT_CURSOR_DUPLICATES):\n  " + "\n  ".join(offenders)
+    )
+
+
+def test_redundant_cursor_duplicate_allowlist_entries_carry_a_reason():
+    # @regression
+    # The allowlist is empty by design; anything added back must say why, so
+    # the exemption cannot be granted by dropping a bare name into a set.
+    offenders = [name for name, reason in REDUNDANT_CURSOR_DUPLICATES.items() if not reason.strip()]
+    assert not offenders, (
+        "REDUNDANT_CURSOR_DUPLICATES entry without a reason: " + ", ".join(offenders)
     )
 
 
