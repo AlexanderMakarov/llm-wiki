@@ -22,6 +22,9 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Fixed
 
+- **Harvest folds case/punctuation-colliding wikilink spellings into one candidate stub (#204)** — `harvest_targets` unions sources for names that share a `_norm_slug` and keeps the dominant spelling (most citing pages); pending stubs under `wiki/candidates/` are refreshed by norm slug so an alternate-case re-harvest does not create a sibling file that collides on case-insensitive filesystems.
+  - *Release note:* Candidate harvest no longer writes two stubs that differ only by letter case (#204).
+
 ### Removed
 
 ## [2.3.0] — 2026-09-08

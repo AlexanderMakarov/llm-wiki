@@ -12,6 +12,7 @@ read from source topic bullets via :mod:`llmwiki.source_topics` — a pass over
 from __future__ import annotations
 
 import sys
+from collections import defaultdict
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -105,11 +106,30 @@ def harvest_targets(
     # deliberately so — see the note above on candidates/ and archive/.
     by_target = count_source_refs(texts_by_rel)
 
-    return [
-        HarvestedTarget(name=name, sources=tuple(sorted(pages)))
-        for name, pages in sorted(by_target.items())
-        if len(pages) >= min_refs and _norm_slug(name) not in resolved
-    ]
+    # Fold case/punctuation variants into one target before the threshold and
+    # resolved filters (#204). Counting stays exact-keyed; only harvest collapses.
+    by_norm: dict[str, dict[str, set[str]]] = defaultdict(dict)
+    for name, pages in by_target.items():
+        by_norm[_norm_slug(name)][name] = pages
+
+    harvested: list[HarvestedTarget] = []
+    for norm, spellings in by_norm.items():
+        if norm in resolved:
+            continue
+        unioned: set[str] = set()
+        for pages in spellings.values():
+            unioned |= pages
+        if len(unioned) < min_refs:
+            continue
+        # Dominant spelling: most citing pages, then stable name order on ties.
+        dominant = sorted(
+            spellings.items(),
+            key=lambda item: (-len(item[1]), item[0]),
+        )[0][0]
+        harvested.append(
+            HarvestedTarget(name=dominant, sources=tuple(sorted(unioned)))
+        )
+    return sorted(harvested, key=lambda t: t.name)
 
 
 #: Maps harvested names to ``"entity"`` or ``"concept"``. A classifier must
@@ -257,8 +277,9 @@ def _topic_records_for_target(
             text = (wiki_dir / rel).read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
+        want = _norm_slug(target.name)
         for record in parse_source_topics(text):
-            if record.name == target.name:
+            if _norm_slug(record.name) == want:
                 matched.append((slug, record))
     return matched
 
@@ -367,8 +388,8 @@ def write_stubs(
     # refiled it, and that decision outranks the model's. Resolve those first
     # so classification is only asked about genuinely new names: re-runs
     # otherwise pay for an answer they then discard.
-    filed = {t.name: _existing_subdir(wiki_dir, t.name) for t in targets}
-    unfiled = [name for name, subdir in filed.items() if subdir is None]
+    existing = {t.name: _existing_stub(wiki_dir, t.name) for t in targets}
+    unfiled = [name for name, hit in existing.items() if hit is None]
     kinds: dict[str, str] = {}
     if classify is not None:
         kinds = classify(unfiled)
@@ -382,11 +403,13 @@ def write_stubs(
 
     written: list[Path] = []
     for target in targets:
-        subdir = filed[target.name]
-        if subdir is None:
+        hit = existing[target.name]
+        if hit is not None:
+            subdir, path = hit
+        else:
             subdir = _KIND_DIRS.get(kinds.get(target.name, "entity"), "entities")
+            path = wiki_dir / "candidates" / subdir / f"{target.name}.md"
         kind = _DIR_KINDS.get(subdir, "entity")
-        path = wiki_dir / "candidates" / subdir / f"{target.name}.md"
         path.parent.mkdir(parents=True, exist_ok=True)
         if path.is_file():
             body = _preserved_body(path, target.name)
@@ -399,12 +422,29 @@ def write_stubs(
     return written
 
 
+def _existing_stub(wiki_dir: Path, name: str) -> tuple[str, Path] | None:
+    """Return ``(subdir, path)`` for a pending stub matching ``name`` by norm slug.
+
+    Alternate-case harvests must refresh the existing filename rather than
+    writing a sibling that collides on case-insensitive filesystems (#204).
+    """
+    want = _norm_slug(name)
+    for subdir in _KIND_DIRS.values():
+        folder = wiki_dir / "candidates" / subdir
+        if not folder.is_dir():
+            continue
+        for path in sorted(folder.glob("*.md")):
+            if path.name.startswith("_"):
+                continue
+            if _norm_slug(path.stem) == want:
+                return subdir, path
+    return None
+
+
 def _existing_subdir(wiki_dir: Path, name: str) -> str | None:
     """Return the candidates subfolder already holding ``name``, if any."""
-    for subdir in _KIND_DIRS.values():
-        if (wiki_dir / "candidates" / subdir / f"{name}.md").is_file():
-            return subdir
-    return None
+    hit = _existing_stub(wiki_dir, name)
+    return hit[0] if hit is not None else None
 
 
 #: Thresholds shown alongside the chosen one, so an operator can see the shape
