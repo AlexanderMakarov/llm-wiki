@@ -93,7 +93,7 @@ llmwiki build    # compile <vault>/raw/ + <vault>/wiki/ → <vault>/site/
 
 `llmwiki all` runs all three in one go, then builds the graph and reports quality findings.
 
-**Day-to-day for agents:** point your MCP client at `python3 -m llmwiki.mcp` so tools like `wiki_search` / `wiki_read_page` hit the same vault (see [MCP reference](reference/mcp.md)). **For humans:** after `build`, open `<vault>/site/index.html` (plain files; nothing has to keep running) to check pipeline state, metrics, and settled entities/concepts — and try:
+**Day-to-day for agents:** point your MCP client at `python3 -m llmwiki.mcp` so tools like `wiki_search` / `wiki_read_page` hit the same vault (see [MCP reference](reference/mcp.md)). **For humans:** Open `<vault>/site/index.html` after `build` (plain files; nothing has to keep running) to check pipeline state, metrics, and settled entities/concepts — and try:
 
 - **⌘K** or **Ctrl+K** — command palette
 - **/** — focus the search bar
