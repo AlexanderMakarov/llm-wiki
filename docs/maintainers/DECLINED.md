@@ -89,7 +89,7 @@ unmaintained.
 
 **Reason:** qmd is TypeScript/Node. llmwiki is stdlib Python plus
 `markdown`. Adding a Node runtime as a dep would destroy the
-"works on any 3.9+ Python, no other dependencies" promise.
+"stdlib Python plus `markdown`, no Node runtime" promise.
 
 **Context:** #59 non-goal.
 

@@ -5,7 +5,7 @@ llmwiki has two overlapping structures:
 1. The **Karpathy three-layer wiki** (conceptual): `raw/` → `wiki/` → `site/`
 2. The **eight-layer build** (implementation): how responsibilities are distributed across Python modules, HTML templates, scripts, CI, etc.
 
-This document covers both.
+This document covers both. For *why* the product is shaped this way (MCP for agents, site for humans, scriptable add, human candidate gate), see [Product principles](maintainers/principles.md).
 
 ## Layer 1: Karpathy's three-layer wiki
 

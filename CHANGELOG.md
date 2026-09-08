@@ -10,7 +10,15 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Added
 
+- **Product principles** — [`docs/maintainers/principles.md`](docs/maintainers/principles.md) (MCP for agents, site for humans, scriptable add, candidate gate).
+  - *Release note:* Product design intentions live in `docs/maintainers/principles.md`.
+
 ### Changed
+
+- **README / getting-started / PyPI** — MCP + human site framing; scriptable `llmwiki add`; vault as a secure unified store; package `description` set to “LLM wiki to turn multiple agentic tool sessions into knowledge base for agents and humans”.
+  - *Release note:* Docs and PyPI summary lead with multi-agent sessions → knowledge base for agents and humans.
+- **Brand system under maintainers** — `docs/design/brand-system.md` → [`docs/maintainers/brand-system.md`](docs/maintainers/brand-system.md); font preference + fallbacks (not OS-preinstall claims); CONTRIBUTING + style-guide link it for UI/CSS work; DECLINED qmd-as-dependency reason drops a pinned Python version.
+  - *Release note:* Brand tokens at `docs/maintainers/brand-system.md`; linked from CONTRIBUTING.
 
 ### Fixed
 

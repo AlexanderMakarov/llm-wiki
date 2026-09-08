@@ -93,13 +93,26 @@ llmwiki build    # compile <vault>/raw/ + <vault>/wiki/ → <vault>/site/
 
 `llmwiki all` runs all three in one go, then builds the graph and reports quality findings.
 
-Open `<vault>/site/index.html` in a browser — the site is plain files, so nothing has to be running and nothing is fetched — and click around. Try:
+**Day-to-day for agents:** point your MCP client at `python3 -m llmwiki.mcp` so tools like `wiki_search` / `wiki_read_page` hit the same vault (see [MCP reference](reference/mcp.md)). **For humans:** Open `<vault>/site/index.html` after `build` (plain files; nothing has to keep running) to check pipeline state, metrics, and settled entities/concepts — and try:
 
 - **⌘K** or **Ctrl+K** — command palette
 - **/** — focus the search bar
 - **g h / g p / g s** — jump to home / projects / sessions
 - **j / k** — navigate sessions table
 - **?** — keyboard shortcut help
+
+### Add a non-session document
+
+Session sync is the default path, but notes and external sources are first-class too. `llmwiki add` writes into `<vault>/raw/docs/`; the same `synth` → review candidates → `build` loop then folds them into wiki source pages alongside sessions. Mix kinds freely:
+
+```bash
+llmwiki add notes.md                  # local markdown file
+llmwiki add https://example.com/post  # web page
+llmwiki add ./paper.pdf               # PDF
+llmwiki add ./research-folder/        # folder of docs
+```
+
+By default `add` also synthesizes and rebuilds once for that run so the new docs show up in the site; pass `--no-synthesize` / `--no-build` if you prefer to batch with a later `llmwiki synth` and `llmwiki build`. Flags (`--title`, `--tag`, `--project`, `--dry-run`, and more): [CLI reference — add](reference/cli.md#add--add-a-document-to-the-wiki-16).
 
 ## Next: let it run itself
 

@@ -184,7 +184,7 @@ To opt a page in, add `reader_shell: true` to its frontmatter and rebuild with `
 
 - `llmwiki/reader_shell.py` — implementation
 - `llmwiki/render/css.py` — where `READER_SHELL_CSS` gets appended
-- `docs/design/brand-system.md` — the CSS tokens this shell inherits
+- `docs/maintainers/brand-system.md` — the CSS tokens this shell inherits
 - `docs/reference/cache-tiers.md` — sibling opt-in feature, now also has live adopters (#285)
 - `#112` — this issue
 - `#114` — static prototype hub (the sibling layout surface)

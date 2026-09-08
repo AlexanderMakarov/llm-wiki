@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "llm-wiki-plus"
 version = "2.3.0"
-description = "Karpathy-style LLM wiki from Claude Code, Codex CLI, Cursor, OpenClaw, and any Markdown"
+description = "LLM wiki to turn multiple agentic tool sessions into knowledge base for agents and humans"
 readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "MIT" }
