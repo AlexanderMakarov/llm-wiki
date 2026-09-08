@@ -14,13 +14,20 @@
 # Run after editing any command listed in COMMANDS below:
 #   ./scripts/sync-cursor-commands.sh
 #
-# Safe to re-run; overwrites generated wrappers only.
+# Safe to re-run; overwrites generated wrappers only. Wrappers carrying this
+# script's generator marker whose name is no longer in COMMANDS are pruned;
+# files without the marker (hand-written `release.md`, the `awos-*` family) are
+# never touched.
 
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SRC="$ROOT/.claude/commands"
 DST="$ROOT/.cursor/commands"
+
+# Marker embedded in every wrapper this script writes; the prune pass below
+# matches on it so hand-written wrappers stay put.
+MARKER="scripts/sync-cursor-commands.sh"
 
 # Top-level `.claude/commands/<name>.md` commands that need a Cursor wrapper.
 COMMANDS=(
@@ -40,25 +47,33 @@ for name in "${COMMANDS[@]}"; do
     exit 1
   fi
 
-  # Prefer description from the Claude command frontmatter.
+  # Prefer description from the Claude command frontmatter. Always emitted as a
+  # JSON-quoted (hence valid YAML double-quoted) scalar so a value containing
+  # `: ` or opening with an indicator character cannot corrupt the frontmatter.
   desc="$(
     python3 - "$src" <<'PY'
-import re, sys
+import json, re, sys
 from pathlib import Path
-text = Path(sys.argv[1]).read_text(encoding="utf-8")
+path = Path(sys.argv[1])
+text = path.read_text(encoding="utf-8")
 m = re.match(r"^---\n(.*?)\n---\n", text, re.S)
 if not m:
-    print(f"Claude command: {Path(sys.argv[1]).stem}")
+    print(json.dumps(f"Claude command: {path.stem}", ensure_ascii=False))
     raise SystemExit(0)
 block = m.group(1)
 dm = re.search(r'^description:\s*(.+)$', block, re.M)
 if not dm:
-    print(f"Claude command: {Path(sys.argv[1]).stem}")
+    print(json.dumps(f"Claude command: {path.stem}", ensure_ascii=False))
     raise SystemExit(0)
 val = dm.group(1).strip()
-if (val.startswith('"') and val.endswith('"')) or (val.startswith("'") and val.endswith("'")):
-    val = val[1:-1]
-print(val)
+if val in (">", "|", ">-", "|-", ">+", "|+"):
+    print(
+        f"error: {path} uses a YAML block scalar for `description:` — "
+        "put the description on one line so it can be copied into the wrapper",
+        file=sys.stderr,
+    )
+    raise SystemExit(1)
+print(json.dumps(val, ensure_ascii=False))
 PY
   )"
 
@@ -71,7 +86,7 @@ description: ${desc}
 
 # /${name} (Cursor)
 
-Follow \`.claude/commands/${name}.md\` as the source of truth and execute it end to end — every stage, gate, and check in that file applies here unchanged.
+Read \`.claude/commands/${name}.md\` in full before doing anything else, then execute it end to end — every stage, gate, and check in that file applies here unchanged.
 
 Apply the tool mapping in \`.cursor/rules/awos-cursor-runtime.mdc\`.
 
@@ -84,5 +99,25 @@ EOF
   written=$((written + 1))
 done
 
-echo "synced ${written} Cursor command wrapper(s) from .claude/commands/"
+# Prune wrappers this script generated for names since dropped from COMMANDS.
+pruned=0
+shopt -s nullglob
+for stale in "$DST"/*.md; do
+  name="$(basename "$stale" .md)"
+  grep -qF "$MARKER" "$stale" || continue
+  declared=0
+  for cmd in "${COMMANDS[@]}"; do
+    if [[ "$name" == "$cmd" ]]; then
+      declared=1
+      break
+    fi
+  done
+  if [[ "$declared" -eq 0 ]]; then
+    rm -f "$stale"
+    echo "pruned .cursor/commands/${name}.md  (no longer in COMMANDS)"
+    pruned=$((pruned + 1))
+  fi
+done
+
+echo "synced ${written} Cursor command wrapper(s) from .claude/commands/, pruned ${pruned}"
 echo "Tip: reload the Cursor window if the slash menu is stale."

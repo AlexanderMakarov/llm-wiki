@@ -139,6 +139,21 @@ def _declared_sync_commands() -> list[str]:
     return names
 
 
+def _frontmatter_description(path: Path) -> str | None:
+    """The unquoted ``description:`` value from a command file's frontmatter."""
+    text = path.read_text(encoding="utf-8")
+    m = re.match(r"^---\n(.*?)\n---\n", text, re.S)
+    if not m:
+        return None
+    dm = re.search(r"^description:\s*(.+)$", m.group(1), re.M)
+    if not dm:
+        return None
+    val = dm.group(1).strip()
+    if len(val) >= 2 and val[0] == val[-1] and val[0] in "\"'":
+        val = val[1:-1]
+    return val
+
+
 # ─── Allowlist hygiene ──────────────────────────────────────────────────
 
 
@@ -331,3 +346,24 @@ def test_removed_commands_unreferenced_as_invocable_in_live_docs():
     assert not offenders, (
         "removed command referenced as if still invocable:\n  " + "\n  ".join(offenders)
     )
+
+
+# ─── Property 7: generated descriptions track their source ─────────────
+
+
+def test_generated_wrappers_carry_their_source_description():
+    # @regression
+    # The generator copies `description:` out of the Claude command's
+    # frontmatter. Nothing else re-checks that copy, so editing the source
+    # description without re-running scripts/sync-cursor-commands.sh would
+    # otherwise leave a stale wrapper description with a green suite.
+    offenders: list[str] = []
+    for name in _declared_sync_commands():
+        want = _frontmatter_description(CLAUDE_CMDS / f"{name}.md")
+        got = _frontmatter_description(CURSOR_CMDS / f"{name}.md")
+        if want != got:
+            offenders.append(
+                f".cursor/commands/{name}.md description is stale: "
+                f"{got!r} != source {want!r} — re-run scripts/sync-cursor-commands.sh"
+            )
+    assert not offenders, "stale generated description:\n  " + "\n  ".join(offenders)

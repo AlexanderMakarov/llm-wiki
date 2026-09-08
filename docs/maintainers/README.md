@@ -26,8 +26,8 @@ Three commands drive maintainer work. Claude Code picks up `.claude/commands/` w
 | Command | Claude source | Cursor entry |
 |---|---|---|
 | `/release <version>` | [`.claude/commands/release.md`](../../.claude/commands/release.md) | [`.cursor/commands/release.md`](../../.cursor/commands/release.md) — hand-written |
-| `/fix-bug <issue>` | [`.claude/commands/fix-bug.md`](../../.claude/commands/fix-bug.md) | `.cursor/commands/fix-bug.md` — generated |
-| `/implement-feature <spec-or-issue>` | [`.claude/commands/implement-feature.md`](../../.claude/commands/implement-feature.md) | `.cursor/commands/implement-feature.md` — generated |
+| `/fix-bug <issue>` | [`.claude/commands/fix-bug.md`](../../.claude/commands/fix-bug.md) | [`.cursor/commands/fix-bug.md`](../../.cursor/commands/fix-bug.md) — generated |
+| `/implement-feature <spec-or-issue>` | [`.claude/commands/implement-feature.md`](../../.claude/commands/implement-feature.md) | [`.cursor/commands/implement-feature.md`](../../.cursor/commands/implement-feature.md) — generated |
 
 - `/release` — both wrappers are thin and load the shared [`.claude/skills/release/SKILL.md`](../../.claude/skills/release/SKILL.md) (Cursor reads `.claude/skills/` natively), then follow [`RELEASE_PROCESS.md`](RELEASE_PROCESS.md): preflight on `main` → version bump → CHANGELOG/UPGRADING editorial → local commit+tag → human gate before push → watch `release.yml`. Neither wrapper is generated.
 - `/fix-bug` — one bug through diagnosis → scoped fix + regression test → verify → independent review → PR, amending the owning spec when behaviour changed.
