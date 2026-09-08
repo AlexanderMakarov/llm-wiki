@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import fcntl
 import json
+import shutil
 from collections.abc import Iterator
 from contextlib import contextmanager
 from copy import deepcopy
@@ -13,7 +14,19 @@ from llmwiki import REPO_ROOT
 
 SCHEMA_VERSION = 1
 DEFAULT_BOUNDED_COMPLETED = 500
+#: Home Pipeline state shows ~6 lines of lint failure detail; store that budget.
+_LINT_ERROR_MAX_LINES = 6
 _ACTIVE_STATE_FILE: Path | None = None
+#: Ops string keys that default_state / _ensure_shape always keep as ``str``.
+_OPS_STRING_KEYS: tuple[str, ...] = (
+    "last_queue_run_at",
+    "last_lint_run_at",
+    "last_reflect_run_at",
+    "last_synth_at",
+    "last_build_at",
+    "last_lint_status",
+    "last_lint_error",
+)
 
 
 def _utc_now() -> str:
@@ -73,6 +86,10 @@ def default_state() -> dict[str, Any]:
             "last_queue_run_at": "",
             "last_lint_run_at": "",
             "last_reflect_run_at": "",
+            "last_synth_at": "",
+            "last_build_at": "",
+            "last_lint_status": "",
+            "last_lint_error": "",
         },
         "meta": {
             "schema_version": SCHEMA_VERSION,
@@ -351,8 +368,140 @@ def _ensure_shape(raw: dict[str, Any]) -> dict[str, Any]:
         out["synth"]["estimate"] = {}
     if not isinstance(out["quarantine"].get("entries"), list):
         out["quarantine"]["entries"] = []
+    for key in _OPS_STRING_KEYS:
+        if not isinstance(out["ops"].get(key), str):
+            out["ops"][key] = ""
     out["meta"]["schema_version"] = SCHEMA_VERSION
     return out
+
+
+def format_lint_error_for_ops(
+    console_text: str, *, max_lines: int = _LINT_ERROR_MAX_LINES
+) -> str:
+    """Truncate console-shaped lint text for Home (~6 lines) with an ellipsis.
+
+    Prefers the issues summary plus ``## rule`` / finding lines so a long
+    "skipped N of M rules" preamble does not crowd out the failures that
+    tripped the policy (#234 review N3).
+    """
+    lines = console_text.replace("\r\n", "\n").split("\n")
+    while lines and lines[-1] == "":
+        lines.pop()
+
+    head: list[str] = []
+    for ln in lines:
+        if ln.lstrip().startswith("skipped "):
+            break
+        if ln.startswith("## "):
+            break
+        if ln.strip() == "":
+            continue
+        head.append(ln)
+
+    rule_idx = next((i for i, ln in enumerate(lines) if ln.startswith("## ")), None)
+    if rule_idx is not None:
+        selected = head + lines[rule_idx:]
+    else:
+        selected = []
+        skipping = False
+        for ln in lines:
+            if ln.lstrip().startswith("skipped "):
+                skipping = True
+                continue
+            if skipping:
+                if ln.strip() == "":
+                    skipping = False
+                continue
+            selected.append(ln)
+
+    if len(selected) <= max_lines:
+        return "\n".join(selected)
+    return "\n".join(selected[:max_lines]) + "\n…"
+
+
+def copy_state_sidecar_to_site(
+    vault_root: Path, *, site_dir: Path | None = None
+) -> None:
+    """Copy vault ``llmwiki-state.js`` into ``site/`` when that directory exists.
+
+    Shared by :func:`~llmwiki.build.build_site` and lint record helpers so a
+    standalone lint can refresh Pipeline state data without rewriting HTML.
+    No-op when ``site_dir`` (default ``<vault>/site``) is missing.
+    """
+    out = site_dir if site_dir is not None else (vault_root / "site")
+    if not out.is_dir():
+        return
+    vault_sidecar = vault_root / "llmwiki-state.js"
+    site_sidecar = out / "llmwiki-state.js"
+    if vault_sidecar.is_file():
+        shutil.copy2(vault_sidecar, site_sidecar)
+    elif not site_sidecar.is_file():
+        site_sidecar.write_text(
+            "window.LLMWIKI_STATE_SNAPSHOT = {};\n", encoding="utf-8"
+        )
+
+
+def stamp_last_synth_at(
+    state_file: Path | None = None, *, when: str | None = None
+) -> dict[str, Any]:
+    """Record ``ops.last_synth_at`` after a synth backend actually ran."""
+    now = when or _utc_now()
+
+    def _mut(state: dict[str, Any]) -> dict[str, Any]:
+        state.setdefault("ops", {})["last_synth_at"] = now
+        return state
+
+    return update_state(_mut, state_file)
+
+
+def stamp_last_build_at(
+    state_file: Path | None = None,
+    *,
+    when: str | None = None,
+    site_dir: Path | None = None,
+) -> dict[str, Any]:
+    """Record ``ops.last_build_at`` on a successful build and sync site sidecar."""
+    now = when or _utc_now()
+
+    def _mut(state: dict[str, Any]) -> dict[str, Any]:
+        state.setdefault("ops", {})["last_build_at"] = now
+        return state
+
+    target = resolve_state_file(state_file)
+    updated = update_state(_mut, target)
+    copy_state_sidecar_to_site(target.parent, site_dir=site_dir)
+    return updated
+
+
+def record_lint_ops(
+    *,
+    failed: bool,
+    error_text: str = "",
+    state_file: Path | None = None,
+    site_dir: Path | None = None,
+    when: str | None = None,
+) -> dict[str, Any]:
+    """Record lint time/status/error in ops; sync ``site/llmwiki-state.js`` if present.
+
+    ``failed`` means the active fail policy tripped (not merely findings under
+    ``never``). On success, ``last_lint_error`` is cleared. Error text is the
+    console-shaped lint report, truncated for Home.
+    """
+    now = when or _utc_now()
+    status = "failed" if failed else "ok"
+    stored_error = format_lint_error_for_ops(error_text) if failed else ""
+
+    def _mut(state: dict[str, Any]) -> dict[str, Any]:
+        ops = state.setdefault("ops", {})
+        ops["last_lint_run_at"] = now
+        ops["last_lint_status"] = status
+        ops["last_lint_error"] = stored_error
+        return state
+
+    target = resolve_state_file(state_file)
+    updated = update_state(_mut, target)
+    copy_state_sidecar_to_site(target.parent, site_dir=site_dir)
+    return updated
 
 
 @contextmanager

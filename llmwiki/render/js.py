@@ -236,6 +236,16 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
       "<thead><tr><th>Source</th><th>Raw</th><th>To synthesize</th><th>Synthesized</th><th>On disk</th></tr></thead>" +
       "<tbody>" + bodyRows + "</tbody>" + footHtml + "</table></div>";
 
+    // #234: lint error note under the Candidates / knowledge table (not above counts).
+    var lintError = ops.last_lint_error ? String(ops.last_lint_error) : "";
+    var lintBanner = "";
+    if (lintError) {
+      lintBanner =
+        '<div class="error-banner state-lint-banner" role="alert">' +
+        escapeHtml(lintError) +
+        "</div>";
+    }
+
     var knowledgeHtml =
       '<div class="state-table-wrap" tabindex="0" role="region" aria-label="Knowledge layer">' +
       '<p class="muted">Knowledge layer: Candidates → Entities / Concepts. Review on the Candidates page (header/count below) or via agent Commands below.</p>' +
@@ -245,15 +255,24 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
       '<td><a href="candidates.html">' + stageCell(toReview, 0) + "</a></td>" +
       "<td>" + stageCell(trustedEntities, 0) + "</td>" +
       "<td>" + stageCell(trustedConcepts, 0) + "</td>" +
-      "</tr></tbody></table></div>";
+      "</tr></tbody></table>" +
+      lintBanner +
+      "</div>";
 
+    // #234: stage completion stamps live in the Timeline collapsible (not above tables).
+    var lintStamp = formatTs(ops.last_lint_run_at);
+    var lintStatus = ops.last_lint_status ? String(ops.last_lint_status) : "";
+    if (lintStatus === "failed" || lintStatus === "ok") {
+      lintStamp = lintStamp + " · " + lintStatus;
+    }
     var timelineBody =
-      "<ul class=\"queue-type-list\">" +
+      '<ul class="queue-type-list state-stage-stamps" aria-label="Pipeline timeline">' +
       "<li><strong>Oldest pending:</strong> " + escapeHtml(oldest || "none") + "</li>" +
       "<li><strong>Last sync:</strong> " + escapeHtml(formatTs(lastSync)) + "</li>" +
+      "<li><strong>Last synth:</strong> " + escapeHtml(formatTs(ops.last_synth_at)) + "</li>" +
+      "<li><strong>Last build:</strong> " + escapeHtml(formatTs(ops.last_build_at)) + "</li>" +
+      "<li><strong>Last lint:</strong> " + escapeHtml(lintStamp) + "</li>" +
       "<li><strong>Last queue run:</strong> " + escapeHtml(formatTs(ops.last_queue_run_at)) + "</li>" +
-      "<li><strong>Last lint run:</strong> " + escapeHtml(formatTs(ops.last_lint_run_at)) + "</li>" +
-      "<li><strong>Last reflect run:</strong> " + escapeHtml(formatTs(ops.last_reflect_run_at)) + "</li>" +
       "</ul>";
 
     var warningsBody = warnings.length
@@ -275,7 +294,7 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
       knowledgeHtml +
       estNote +
       '<div class="collapse-sections">' +
-      detailsSection("Timeline", 5, timelineBody) +
+      detailsSection("Timeline", 6, timelineBody) +
       detailsSection("Not synthesized sessions", pendingSessions.length, pendingListHtml(pendingSessions)) +
       detailsSection("Not synthesized docs", pendingDocs.length, pendingListHtml(pendingDocs)) +
       detailsSection("Candidates to review", toReview, reviewBreakdownHtml(pipeline)) +

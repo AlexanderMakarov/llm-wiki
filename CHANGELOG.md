@@ -15,6 +15,8 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Changed
 
+- **Home Timeline stamps vs Automation (#234)** — Home **Timeline** shows Last sync / Last synth / Last build / Last lint; a lint-error note appears under the Candidates table when `ops.last_lint_error` is set. The Automation panel is settings-only: short Synth backend line (spend hint), Agent hooks and Watch on separate lines, no lint-fail reminder or installer Updated line; Maintain states the site refreshes once after summarization. Standalone lint updates `llmwiki-state.json` / the site data sidecar only (no HTML rewrite). Docs: cli, ui, state-persistence, UPGRADING.
+  - *Release note:* Home stage timing lives under Timeline; lint failures surface under Candidates; Automation is a shorter settings panel (#234).
 - **`provenance_integrity` lint hints use shipped commands** — error text no longer says `run doctor (#110)`; it points at `llmwiki trace`, `synth`, or `migrate broken-provenance` instead.
   - *Release note:* Provenance lint errors now suggest existing repair commands instead of the unshipped `doctor` subcommand.
 - **Canonical clone and issue links point at `AlexanderMakarov/llm-wiki`** — CONTRIBUTING, README, setup/deploy docs, and AWOS delivery-flow no longer treat `Pratiyush/llm-wiki` as the working upstream or clone target. Historical credit remains in Acknowledgements / License.

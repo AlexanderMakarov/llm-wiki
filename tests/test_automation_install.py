@@ -738,23 +738,22 @@ def test_panel_reads_a_legacy_letter_only_status_as_words(tmp_path: Path):
 
 def test_panel_states_that_maintain_can_spend_money(tmp_path: Path):
     panel = _panel(tmp_path, plan_to_status(AutomationPlan(job="maintain")))
-    assert "can spend money at your AI provider" in panel
+    assert "this step may spend money" in panel
     assert "llmwiki synth --estimate" in panel
 
 
 def test_panel_states_that_ingest_cannot_spend_money(tmp_path: Path):
     panel = _panel(tmp_path, plan_to_status(AutomationPlan(job="ingest")))
-    assert "cannot spend money at your AI provider" in panel
+    assert "does not spend money" in panel
 
 
-@pytest.mark.parametrize(
-    ("lint_fail", "expected"),
-    [("never", False), ("errors", True), ("warnings", True)],
-)
-def test_panel_mentions_the_failure_policy_only_when_one_is_set(tmp_path: Path, lint_fail: LintFail, expected: bool):
+@pytest.mark.parametrize("lint_fail", ["never", "errors", "warnings"])
+def test_panel_never_shows_the_lint_fail_reminder(tmp_path: Path, lint_fail: LintFail):
+    """#234 R5: Automation is settings-only — no ``--lint-fail`` policy reminder."""
     plan = AutomationPlan(job="maintain", lint_fail=lint_fail)
     panel = _panel(tmp_path, plan_to_status(plan))
-    assert ("mark the scheduled run as failed" in panel) is expected
+    assert "mark the scheduled run as failed" not in panel
+    assert "--lint-fail" not in panel
 
 
 def test_panel_does_not_advertise_a_failure_policy_for_an_ingest_job(tmp_path: Path):
@@ -762,6 +761,54 @@ def test_panel_does_not_advertise_a_failure_policy_for_an_ingest_job(tmp_path: P
     panel = _panel(tmp_path, plan_to_status(AutomationPlan(job="ingest", lint_fail="errors")))
     assert "Ingest only" in panel
     assert "mark the scheduled run as failed" not in panel
+
+
+def test_panel_merges_cost_with_backend_and_hooks_with_watch(tmp_path: Path):
+    """#234 R5: short synth-backend line; hooks and watch on separate lines; no Updated."""
+    status = {
+        **plan_to_status(AutomationPlan(job="maintain")),
+        "synth_backend": "ollama",
+        "watch_enabled": True,
+        "hooks": ["SessionStart"],
+        "log_path": "/tmp/last-automation.log",
+        "updated_at": "2026-09-08T12:00:00Z",
+        "note": "should not appear for maintain",
+    }
+    panel = _panel(tmp_path, status)
+    assert "Synth backend: <code>ollama</code>" in panel
+    assert "this step may spend money" in panel
+    assert "llmwiki synth --estimate" in panel
+    assert "what that costs" in panel
+    assert "Cost / synth backend:" not in panel
+    assert "Agent hooks: SessionStart</li>" in panel
+    assert "(recommended)" not in panel
+    assert "Watch (near-real-time maintain): <strong>on</strong>" in panel
+    assert "Updated:" not in panel
+    assert "Last sync" not in panel
+    assert "Last synth" not in panel
+    assert "Last build" not in panel
+    assert "Last lint" not in panel
+    assert "Maintain refreshes the site once after summarization." in panel
+    assert "should not appear for maintain" not in panel
+
+
+def test_panel_ingest_keeps_status_note_without_maintain_contract(tmp_path: Path):
+    """Ingest is unchanged: status note stays; no Maintain site-once clause."""
+    status = {
+        **plan_to_status(AutomationPlan(job="ingest")),
+        "synth_backend": "dummy",
+        "watch_enabled": False,
+        "hooks": [],
+        "note": "Scheduled runs with no new sessions are a no-op.",
+    }
+    panel = _panel(tmp_path, status)
+    assert "Synth backend: <code>dummy</code>" in panel
+    assert "does not spend money" in panel
+    assert "Scheduled runs with no new sessions are a no-op." in panel
+    assert "Maintain refreshes the site once after summarization." not in panel
+    assert "Agent hooks: none</li>" in panel
+    assert "(recommended)" not in panel
+    assert "Watch (near-real-time maintain): <strong>off</strong>" in panel
 
 
 def test_panel_survives_a_malformed_status_file(tmp_path: Path):

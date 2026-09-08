@@ -797,7 +797,7 @@ python3 -m llmwiki all --skip-graph --lint-fail warnings   # fail CI on any lint
 | `--skip-lint` | Skip the lint step entirely. |
 | `--lint-fail {never,errors,warnings}` | When lint findings fail the run with exit `2`. Default: `never`. |
 | `--strict` | Spelling for `--lint-fail warnings`. When both are given, the stricter wins. |
-| `--fail-fast` | Stop at the first non-zero step. Default: continue, report the worst exit code. |
+| `--fail-fast` | Stop at the first non-zero step (useful for demo-vault / unattended runs where nobody will open the static site afterward). Default: continue later stages — e.g. if synth fails after a successful sync, **build still runs** — and report the worst exit code. |
 | `--with-sync`, `--with-synth` | Deprecated and inert — the stages they used to enable now run by default. Accepted so an already-installed scheduled command keeps parsing; each prints a one-line notice. |
 | `--vault PATH` | Run every step against this vault instead of the repo. |
 
@@ -810,6 +810,8 @@ python3 -m llmwiki all --skip-graph --lint-fail warnings   # fail CI on any lint
 | `never` (default) | Never — findings are reported and the run still exits `0`. |
 | `errors` | Lint reported at least one error-severity issue. |
 | `warnings` | Lint reported at least one error **or** warning. |
+
+When `--lint-fail` ends the run with exit `2`, the site HTML from the **preceding build in this run is kept** — lint does not undo or revert `site/`. Home surfaces the failure via Pipeline state (Last lint + banner); see [ui.md](ui.md#home).
 
 ### Conflicting flags
 
@@ -861,7 +863,7 @@ Sets up the job that keeps your wiki current so you do not have to run the steps
 | Job | What it does | Writes | Cost |
 |---|---|---|---|
 | **Ingest only** (default) | Collects new agent sessions into your vault and refreshes the site. | `raw/`, `site/` | Never contacts an AI provider — free. |
-| **Maintain** | Collects new sessions, summarises each one into a wiki page, gathers candidate topics for review, refreshes the site, and reports wiki quality findings into the run log. | `raw/`, `wiki/sources/`, `wiki/candidates/`, `site/` | Sends session text to your AI provider — this costs money once a real provider is configured. Run `llmwiki synth --estimate` to see how much before the job first fires. |
+| **Maintain** | Collects new sessions, summarises each one into a wiki page, gathers candidate topics for review, refreshes the browsable site **once per cycle at the build step after summarization**, and reports wiki quality findings into the run log. A separate sync-only path (including optional **Ingest** automation) is a different concern — not “Maintain finished.” | `raw/`, `wiki/sources/`, `wiki/candidates/`, `site/` | Sends session text to your AI provider — this costs money once a real provider is configured. Run `llmwiki synth --estimate` to see how much before the job first fires. |
 
 ### Optional extras (maintain only)
 
@@ -888,7 +890,7 @@ The wizard offers presets and translates each into a cron expression; `--schedul
 
 Supported grammar is standard 5-field cron: `*`, integers, lists (`1,15`), ranges (`1-5`), steps (`*/15`), day names `SUN`–`SAT`, month names `JAN`–`DEC`. Nicknames (`@daily`), Vixie/Quartz extensions (`L`, `W`, `#`), a seconds field, and any expression restricting both day-of-month and day-of-week are refused — the last one because cron ORs those two fields and no OS scheduler can express it.
 
-Linux systemd timers use `Persistent=true` so a missed run catches up once after wake (not every skipped day while the laptop stayed off). By default the installer writes rendered units to `~/.automation/`, copies them into your OS scheduler (`~/.config/systemd/user` on Linux, `~/Library/LaunchAgents` on macOS), and enables the job. Pass `--no-activate` to write unit files only and print manual enable commands. Each run appends to `<vault>/.llmwiki/last-automation.log` (truncated each run). `.llmwiki/automation-status.json` under the vault drives the Home Automation panel and records scheduler activation state. The wizard defaults to **Maintain** on Enter; choose **1** for ingest-only. Re-running replaces the existing job rather than adding a second one.
+Linux systemd timers use `Persistent=true` so a missed run catches up once after wake (not every skipped day while the laptop stayed off). By default the installer writes rendered units to `~/.automation/`, copies them into your OS scheduler (`~/.config/systemd/user` on Linux, `~/Library/LaunchAgents` on macOS), and enables the job. Pass `--no-activate` to write unit files only and print manual enable commands. Each run appends to `<vault>/.llmwiki/last-automation.log` (truncated each run). `.llmwiki/automation-status.json` under the vault drives the Home Automation panel (settings only — job, schedule, cost/backend, hooks/watch, log path; Maintain notes that the site refreshes once after summarization) and records scheduler activation state. Stage completion times live under Pipeline state, not Automation. The wizard defaults to **Maintain** on Enter; choose **1** for ingest-only. Re-running replaces the existing job rather than adding a second one.
 
 ```bash
 python3 -m llmwiki install-automation

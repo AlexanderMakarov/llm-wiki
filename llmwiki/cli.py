@@ -119,7 +119,9 @@ from llmwiki.state_store import (
     IncompatibleStateError,
     check_sync_state_compatible,
     read_state,
+    record_lint_ops,
     resolve_state_file,
+    stamp_last_synth_at,
     update_state,
 )
 from llmwiki.sync.status import (  # noqa: F401
@@ -711,27 +713,33 @@ def cmd_lint(args: argparse.Namespace) -> int:
 
     if args.json:
         print(_json.dumps(_render_lint_json(outcome, len(pages)), indent=2))
-    else:
-        print(_render_lint_text(
+        report_text = _render_lint_text(
             outcome, len(pages), settings_filename=VAULT_SETTINGS_FILENAME
-        ))
+        )
+    else:
+        report_text = _render_lint_text(
+            outcome, len(pages), settings_filename=VAULT_SETTINGS_FILENAME
+        )
+        print(report_text)
 
     _apply_default_vault(args)
 
-    now = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-    update_state(
-        lambda s: (s.setdefault("ops", {}).__setitem__("last_lint_run_at", now) or s),
-        resolve_state_file(),
-    )
-
     # Exit code last: returning early on a failing gate is what stopped a
-    # failing lint from ever recording that it ran (#150).
+    # failing lint from ever recording that it ran (#150). Fail policy tripped
+    # → status failed + console-shaped error; otherwise ok and clear error.
     summary = summarize(outcome.issues)
-    if args.fail_on_errors and summary.get("error", 0) > 0:
-        return 1
-    if getattr(args, "fail_on_warnings", False) and summary.get("warning", 0) > 0:
-        return 1
-    return 0
+    failed = bool(
+        (args.fail_on_errors and summary.get("error", 0) > 0)
+        or (
+            getattr(args, "fail_on_warnings", False)
+            and summary.get("warning", 0) > 0
+        )
+    )
+    record_lint_ops(
+        failed=failed,
+        error_text=report_text if failed else "",
+    )
+    return 1 if failed else 0
 
 
 def cmd_watch(args: argparse.Namespace) -> int:
@@ -1730,6 +1738,9 @@ def cmd_synthesize(args: argparse.Namespace) -> int:
         include_docs=include_docs,
         concurrency=concurrency,
     )
+    # Backend ran — stamp even when some files errored; never stamp above when
+    # unavailable / estimate / check.
+    stamp_last_synth_at()
     print(
         f"Scanned {summary['total_scanned']}, new {summary['new_files']}, "
         f"synthesized {summary['synthesized']}, skipped {summary['skipped']}"
