@@ -39,7 +39,3 @@ This document establishes the canonical visual design system for [[llmwiki]] v1.
   - fact: The design works identically in light mode, dark mode, print, and [[Obsidian]].
 - [[WCAG 2.1]] (standard) — Accessibility compliance is a core non-negotiable constraint.
   - fact: Every text/background pair must maintain AA minimum contrast; dark-mode muted text explicitly targets 6.97:1.
-
-## Contradictions
-
-None identified — this is a new canonical reference document establishing the visual system baseline.

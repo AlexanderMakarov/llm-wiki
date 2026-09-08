@@ -1,15 +1,38 @@
 ---
-title: "Synthesis cost — what you pay per page, and why (part 3/3: What synth --estimate prices)"
+title: "Synthesis cost — what you pay per page, and why (part 3/3: Why the default model is Sonnet, not Haiku)"
 slug: synthesis-cost-what-you-pay-per-page-and-why-03
 project: reference-synthesis-cost
 type: source
 tags: [wiki-add, raw-doc]
-date: 2026-09-07
+date: 2026-09-08
 source: "docs/reference/synthesis-cost.md"
-content_sha256: 1a1121ad2564a82e148b7f2ce239ec0df90210de358c5d9d5f46aacfd418084f
+content_sha256: 0fd6618636ab9b2d36be2b366a1a9e72bcc7d76a15e33e3ce61ad61c7a26f026
 ---
 
-> Part 3 of 3 of **Synthesis cost — what you pay per page, and why** — What synth --estimate prices.
+> Part 3 of 3 of **Synthesis cost — what you pay per page, and why** — Why the default model is Sonnet, not Haiku.
+
+## Why the default model is Sonnet, not Haiku
+
+Haiku is cheaper per token, and for the *extraction* half of a source page it is genuinely competitive. It degrades on the *judgment* half. Same prompt, same page, measured:
+
+| | Summary / Key Claims | Connections (`[[wikilinks]]`) |
+|---|---|---|
+| Sonnet | Accurate; caught a factual inconsistency between what the transcript claimed and what the code did | Linked the project entity and the language — the scopes a reader browses by |
+| Haiku | Accurate, effectively equivalent | Linked incidental libraries and coined lowercase-with-spaces pages, violating the TitleCase convention and the prompt's "significant scopes only" rule; missed the project entity |
+
+That regression is not cosmetic. `## Connections` is the only part of a source page that feeds `llmwiki graph` and the backlink index, and the topic vocabulary derived from it is injected back into *every subsequent* synthesis prompt. Bad links compound.
+
+Watch the output direction too. Haiku 4.5 runs with extended thinking by default, which is billed as output:
+
+| Configuration | Output tokens | $/page |
+|---|---|---|
+| Haiku, lean, default thinking | 4,278 | $0.028 |
+| Haiku, lean, `MAX_THINKING_TOKENS=0` | 378 | $0.009 |
+| Sonnet, lean | 730 | $0.042 |
+
+Haiku's headline rate is ~3x cheaper than Sonnet's, but with thinking left on it only saved ~33% — the reasoning tokens ate the advantage.
+
+**Recommendation:** keep `claude_model: "sonnet"` (the default). The lean flags already removed the dominant cost, and what remains buys measurably better graph structure. If your corpus is large and you accept weaker `Connections`, set `claude_model` to a Haiku id *and* `MAX_THINKING_TOKENS=0` — otherwise you pay for reasoning you did not want.
 
 ## What `synth --estimate` prices
 
@@ -49,7 +72,7 @@ The API-cache path in [`prompt-caching.md`](prompt-caching.md) is unaffected —
 
 ## The site overview call
 
-`llmwiki build --synthesize` makes one extra `claude` call to write the landing-page overview. It gets the same lean flags, and its model is `synthesis.overview_model` — defaulting to `haiku`, since writing three prose paragraphs from a JSON brief is the cheapest real task here and shows none of the `Connections` weakness that matters for source pages.
+`llmwiki build --synthesize` makes one extra LLM call to write the landing-page overview when the active synthesis backend is an LLM (`claude`, `cursor_cli`, `ollama`). With `claude` it gets the same lean flags, and its model is `synthesis.overview_model` — defaulting to `haiku`, since writing three prose paragraphs from a JSON brief is the cheapest real task here and shows none of the `Connections` weakness that matters for source pages. With `dummy` (or an unavailable backend) the overview LLM is skipped — spend nothing (#230).
 
 ## Reproduce these numbers
 

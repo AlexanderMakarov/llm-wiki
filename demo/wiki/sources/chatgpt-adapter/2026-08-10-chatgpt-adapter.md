@@ -38,7 +38,3 @@ Documents the exception to the general AI-session-opt-in rule and its justificat
 
 - [[Adapters]] — this is one of several adapters (alongside Claude Code, Codex, Cursor session types) in the llm-wiki ecosystem for ingesting AI conversations.
 - [[Session Documents]] — the adapter's output format, tagged with frontmatter and placed in the `raw/sessions/` directory.
-
-## Contradictions
-
-None identified.

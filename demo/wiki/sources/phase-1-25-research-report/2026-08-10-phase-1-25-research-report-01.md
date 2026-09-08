@@ -35,7 +35,3 @@ This establishes the research phase as foundational for understanding llmwiki's 
 - [[Adapters]] (concept) — a key differentiator; llmwiki's multi-source design contrasts with single-channel implementations.
 - [[Static Site]] (concept) — llmwiki's output target, aligned with the markdown-first + light-Python cluster but with enhanced generation.
 - [[GitHub Pages]] (platform) — likely deployment target for llmwiki's generated static wikis.
-
-## Contradictions
-
-- None identified. This is a research synthesis, not a design decision that conflicts with prior claims.

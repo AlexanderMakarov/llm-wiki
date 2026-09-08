@@ -33,7 +33,3 @@ This document specifies the design token system for the editorial brand: canonic
 
 - [[Design Tokens]] — this document establishes the token naming, spacing scale, color palette, and export rules for the system
 - [[Theme Toggle]] — the CSS variable architecture described here enables dynamic palette switching
-
-## Contradictions
-
-None identified.

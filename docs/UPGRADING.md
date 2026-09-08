@@ -10,7 +10,7 @@ How to upgrade between `llmwiki` releases. Most releases are drop-in (`pip insta
 
 The canonical per-release detail is [CHANGELOG.md](https://github.com/AlexanderMakarov/llm-wiki/blob/main/CHANGELOG.md) — this guide focuses on "what might break".
 
-## Unreleased — Home Pipeline state stamps + Automation panel shrink (#234)
+## 2.3.0 — Home Pipeline state stamps + Automation panel shrink (#234)
 
 No migration. After upgrade + rebuild:
 
@@ -19,7 +19,7 @@ No migration. After upgrade + rebuild:
 - **Standalone `llmwiki lint`** updates `llmwiki-state.json` and copies `site/llmwiki-state.js` — it does not rewrite HTML. `--lint-fail` on `all` does not undo the site built earlier in that run.
 - **`--fail-fast`** still stops the full pipeline at the first failure; without it, later stages (including build) continue after an earlier failure.
 
-## Unreleased — Cursor Agent CLI synthesis backend (#230)
+## 2.3.0 — Cursor Agent CLI synthesis backend (#230)
 
 `synthesis.backend` accepts `"cursor_cli"`: shells out to Cursor Agent CLI (`agent` / `cursor-agent` on `$PATH`) the same way `claude` uses `claude -p`. Defaults: model `composer-2.5`, timeout 180s. Settings live under nested `synthesis.cursor_cli` (and nested `synthesis.claude` / `synthesis.ollama`); flat `claude_*` keys still work as fallbacks.
 

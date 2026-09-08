@@ -37,7 +37,3 @@ This tutorial documents four installation paths for [[llmwiki]]: PyPI (`llm-wiki
 
 - [[Configuration]] (system) — setup and initialization of vaults and agent connections
   - fact: `llmwiki init --vault .` scaffolds directory structure; full agent configuration is deferred to the next tutorial.
-
-## Contradictions
-
-None. This tutorial introduces installation paths and prerequisites with no known conflicts to existing wiki content.

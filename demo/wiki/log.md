@@ -328,3 +328,135 @@
 ## [2026-09-07] synthesize | 35 sessions across 7 projects
 - Processed: 35 docs
 - Created: reference-cli, reference-slash-commands, reference-synthesis-cost, reference-ui, tutorials-01-installation, upgrading, uptime
+
+## [2026-09-08] synthesize | 17 sessions across 7 projects
+- Processed: 11 Claude · 3 Cursor · 3 OpenClaw
+- Created: dotfiles, llm-wiki, paper-notes, pocket-ledger, recipe-box, sensor-mesh, trailhead-api
+- Errors: 8
+
+## [2026-09-08] synthesize | 8 sessions across 4 projects
+- Processed: 4 Claude · 2 Codex · 1 Cursor · 1 OpenClaw
+- Created: pocket-ledger, recipe-box, sensor-mesh, trailhead-api
+
+## [2026-09-08] remove | 5 docs (upgrading)
+
+## [2026-09-08] add | Upgrade guide
+
+## [2026-09-08] remove | 4 docs (configuration-reference)
+
+## [2026-09-08] add | Configuration Reference
+
+## [2026-09-08] remove | 2 docs (configuration)
+
+## [2026-09-08] add | Configuration
+
+## [2026-09-08] add | Docker deployment
+
+## [2026-09-08] remove | 1 docs (deploy-github-pages)
+
+## [2026-09-08] add | Deploying to GitHub Pages
+
+## [2026-09-08] add | Comenzar (Getting started)
+
+## [2026-09-08] add | はじめに (Getting started)
+
+## [2026-09-08] add | 快速开始 (Getting started)
+
+## [2026-09-08] remove | 15 docs (reference-cli)
+
+## [2026-09-08] add | CLI reference
+
+## [2026-09-08] remove | 4 docs (reference-slash-commands)
+
+## [2026-09-08] add | Slash commands reference
+
+## [2026-09-08] add | State persistence
+
+## [2026-09-08] remove | 3 docs (reference-synthesis-cost)
+
+## [2026-09-08] add | Synthesis cost — what you pay per page, and why
+
+## [2026-09-08] remove | 6 docs (reference-ui)
+
+## [2026-09-08] add | UI reference
+
+## [2026-09-08] add | Docs style guide
+
+## [2026-09-08] add | Setup Guide — Your First LLM Wiki in 15 Minutes
+
+## [2026-09-08] remove | 1 docs (windows-setup)
+
+## [2026-09-08] add | Windows setup
+
+## [2026-09-08] remove | 5 docs (upgrading)
+
+## [2026-09-08] add | Upgrade guide
+
+## [2026-09-08] remove | 8 docs (configuration-reference)
+
+## [2026-09-08] add | Configuration Reference
+
+## [2026-09-08] remove | 3 docs (configuration)
+
+## [2026-09-08] add | Configuration
+
+## [2026-09-08] remove | 1 docs (deploy-docker)
+
+## [2026-09-08] add | Docker deployment
+
+## [2026-09-08] remove | 1 docs (deploy-github-pages)
+
+## [2026-09-08] add | Deploying to GitHub Pages
+
+## [2026-09-08] remove | 1 docs (i18n-es-getting-started)
+
+## [2026-09-08] add | Comenzar (Getting started)
+
+## [2026-09-08] remove | 1 docs (i18n-ja-getting-started)
+
+## [2026-09-08] add | はじめに (Getting started)
+
+## [2026-09-08] remove | 1 docs (i18n-zh-cn-getting-started)
+
+## [2026-09-08] add | 快速开始 (Getting started)
+
+## [2026-09-08] remove | 15 docs (reference-cli)
+
+## [2026-09-08] add | CLI reference
+
+## [2026-09-08] remove | 4 docs (reference-slash-commands)
+
+## [2026-09-08] add | Slash commands reference
+
+## [2026-09-08] remove | 1 docs (reference-state-persistence)
+
+## [2026-09-08] add | State persistence
+
+## [2026-09-08] remove | 3 docs (reference-synthesis-cost)
+
+## [2026-09-08] add | Synthesis cost — what you pay per page, and why
+
+## [2026-09-08] remove | 6 docs (reference-ui)
+
+## [2026-09-08] add | UI reference
+
+## [2026-09-08] remove | 1 docs (style-guide)
+
+## [2026-09-08] add | Docs style guide
+
+## [2026-09-08] remove | 2 docs (tutorials-setup-guide)
+
+## [2026-09-08] add | Setup Guide — Your First LLM Wiki in 15 Minutes
+
+## [2026-09-08] remove | 1 docs (windows-setup)
+
+## [2026-09-08] add | Windows setup
+
+## [2026-09-08] synthesize | 53 sessions across 16 projects
+- Processed: 53 docs
+- Created: configuration, configuration-reference, deploy-docker, deploy-github-pages, i18n-es-getting-started, i18n-ja-getting-started, i18n-zh-cn-getting-started, reference-cli, reference-slash-commands, reference-state-persistence, reference-synthesis-cost, reference-ui, style-guide, tutorials-setup-guide, upgrading, windows-setup
+- Errors: 1
+
+## [2026-09-08] synthesize | 52 sessions across 16 projects
+- Processed: 52 docs
+- Created: configuration, configuration-reference, deploy-docker, deploy-github-pages, i18n-es-getting-started, i18n-ja-getting-started, i18n-zh-cn-getting-started, reference-cli, reference-slash-commands, reference-state-persistence, reference-synthesis-cost, reference-ui, style-guide, tutorials-setup-guide, upgrading, windows-setup

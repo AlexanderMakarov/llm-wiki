@@ -33,7 +33,3 @@ This documentation covers five [[llmwiki]] CLI commands: the deprecated `synthes
 - [[llmwiki]] — this documents the core CLI command set for the tool
 - [[Vault Queue]] — the `queue` command is the primary interface for the unified task queue system  
 - [[State Migration]] — three commands handle upgrading vault state across versions
-
-## Contradictions
-
-None apparent in this documentation.

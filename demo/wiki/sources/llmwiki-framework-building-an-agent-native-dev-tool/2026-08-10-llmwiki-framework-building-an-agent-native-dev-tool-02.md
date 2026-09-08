@@ -34,7 +34,3 @@ This session documents the architectural specification for [[llmwiki]] (Phases 3
 ## Connections
 
 - [[llmwiki]] — the agent-native session analysis tool being architecturally specified
-
-## Contradictions
-
-None — this is specification documentation without prior wiki claims to contradict.

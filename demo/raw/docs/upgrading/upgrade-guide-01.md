@@ -4,9 +4,9 @@ slug: upgrade-guide-01
 project: upgrading
 type: source
 tags: [wiki-add, raw-doc]
-date: 2026-09-07
+date: 2026-09-08
 source: "docs/UPGRADING.md"
-content_sha256: 79fd93bf709421f37aa05c27a435cd601ed7f0443274f4ab0c06dc082831e232
+content_sha256: 8b7e0b10395116258bc93a8766d0f513016bcbe9a2de5dfdde2d069b78872957
 ---
 
 > Part 1 of 5 of **Upgrade guide**.
@@ -22,6 +22,25 @@ docs_shell: true
 How to upgrade between `llmwiki` releases. Most releases are drop-in (`pip install -U llm-wiki-plus` or `brew upgrade llmwiki`) — this page documents the exceptions: schema migrations, config changes, and behaviour flips that affect what happens on your next `sync`.
 
 The canonical per-release detail is [CHANGELOG.md](https://github.com/AlexanderMakarov/llm-wiki/blob/main/CHANGELOG.md) — this guide focuses on "what might break".
+
+## Unreleased — Home Pipeline state stamps + Automation panel shrink (#234)
+
+No migration. After upgrade + rebuild:
+
+- **Pipeline state** on Home: Eligible sources + Knowledge tables stay clean; **Timeline** holds Last sync / Last synth / Last build / Last lint. A lint-error note appears under the Candidates table when the last lint recorded an error.
+- **Automation** is settings-only (shorter): no stage timestamps, no lint-fail reminder, no installer Updated line; short Synth backend line (spend hint); Agent hooks and Watch on separate lines. Maintain wording: site refreshes once after summarization.
+- **Standalone `llmwiki lint`** updates `llmwiki-state.json` and copies `site/llmwiki-state.js` — it does not rewrite HTML. `--lint-fail` on `all` does not undo the site built earlier in that run.
+- **`--fail-fast`** still stops the full pipeline at the first failure; without it, later stages (including build) continue after an earlier failure.
+
+## Unreleased — Cursor Agent CLI synthesis backend (#230)
+
+`synthesis.backend` accepts `"cursor_cli"`: shells out to Cursor Agent CLI (`agent` / `cursor-agent` on `$PATH`) the same way `claude` uses `claude -p`. Defaults: model `composer-2.5`, timeout 180s. Settings live under nested `synthesis.cursor_cli` (and nested `synthesis.claude` / `synthesis.ollama`); flat `claude_*` keys still work as fallbacks.
+
+- **One-run override:** `llmwiki synth --backend cursor_cli` (also honoured by `--check` / `--estimate`) — does not write `config.json`.
+- **Not session ingest:** this is the synthesis *generator*. The contrib adapters `cursor_cli` (Agent CLI chats) and `cursor_ide` (IDE Composer) only convert transcripts into `raw/`.
+- **Cost estimates:** `--estimate` prices Cursor models from the packaged `model_pricing.csv` (Cursor-published Composer / Grok rates + `agent --model` aliases). No live Agent CLI price fetch. Stand-in rows (if any) are labeled in `source` / `notes`.
+- **Overview:** `build --synthesize` follows the active backend; `dummy` / unavailable skips the overview LLM.
+- **install-automation:** interactive backend prompt and `--synth-backend` accept `cursor_cli`.
 
 ## 2.2.0 — install from PyPI as `llm-wiki-plus` (#210)
 

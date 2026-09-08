@@ -35,7 +35,3 @@ llmwiki implements a three-layer architecture adapted from [[Karpathy]]'s LLM Wi
 
 - [[Karpathy]] — originator of the LLM Wiki gist that inspired this architecture
 - [[llmwiki]] — the system implementing this three-layer model
-
-## Contradictions
-
-(None identified)

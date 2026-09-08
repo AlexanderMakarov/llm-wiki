@@ -38,7 +38,3 @@ llmwiki ingests sessions from multiple coding agents through an adapter-based ar
 - [[Cursor]] — IDE adapter with SQLite record parsing in progress
 - [[Gemini CLI]] — Google's CLI; schema and paths under development
 - [[Obsidian]] — vault adapter with configurable paths, folder exclusions, and minimum content filtering
-
-## Contradictions
-
-None identified.

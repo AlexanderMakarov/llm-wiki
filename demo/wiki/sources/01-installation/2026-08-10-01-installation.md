@@ -34,7 +34,3 @@ Installation tutorial for [[llmwiki]], a local-first CLI tool for synthesizing A
 ## Connections
 
 - [[llmwiki]] — the main product being installed and configured
-
-## Contradictions
-
-None identified. The tutorial's header, its verification step, and its troubleshooting section all state Python 3.12 as the minimum, matching what the project requires.

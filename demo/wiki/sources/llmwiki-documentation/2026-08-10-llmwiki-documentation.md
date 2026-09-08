@@ -31,7 +31,3 @@ This page is the main documentation hub for [[llmwiki]], establishing its core v
 - [[llmwiki]] — this page is the primary documentation index for the project
 - Multiple coding agents (Claude Code, Codex CLI, Cursor, etc.) — all supported via adapters
 - Deployment platforms (GitHub Pages, GitLab Pages, Docker, Vercel, Netlify, Homebrew, PyPI) — documented endpoints for publishing
-
-## Contradictions
-
-- None noted.

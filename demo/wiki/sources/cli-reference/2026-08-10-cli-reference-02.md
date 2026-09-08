@@ -41,7 +41,3 @@ Explains why the [[MCP]] server's working directory cannot serve as caller conte
 - [[Claude Code]] — IDE with native support for automatic caller attribution via env var injection
 - [[Cursor]] — IDE mentioned as lacking zero-config attribution signal; currently relies on path heuristics or remains unattributed
 - [[MCP]] — Message Passing Protocol; the telemetry, tool calls, and caller attribution infrastructure
-
-## Contradictions
-
-None identified.

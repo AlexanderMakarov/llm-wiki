@@ -29,7 +29,3 @@ Formal specification for AI model entity pages in [[llm-wiki]]. Defines an opt-i
 ## Connections
 
 - [[llm-wiki]] — this entity schema enables structured model metadata, the models index, and model detail pages
-
-## Contradictions
-
-None identified.

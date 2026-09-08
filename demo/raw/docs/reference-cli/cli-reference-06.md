@@ -4,9 +4,9 @@ slug: cli-reference-06
 project: reference-cli
 type: source
 tags: [wiki-add, raw-doc]
-date: 2026-09-07
+date: 2026-09-08
 source: "docs/reference/cli.md"
-content_sha256: 68214fcdadc8d21482c73af718d17b4858152fb41607ffe75ccafc726af46640
+content_sha256: 186543f38f0258ea703f9ef68071d930f7135ea481068df5e5b46346e0f33e99
 ---
 
 > Part 6 of 15 of **CLI reference** — synth — synthesize sources + harvest candidates.
@@ -50,13 +50,12 @@ Before the first page is synthesized, a real run announces the batch: `Synthesiz
 | `--candidates-only` | Harvest entity/concept **candidates** from already-synthesized `wiki/sources/` into `wiki/candidates/`, then exit (#90 / #147). Reads the source layer only — never `raw/` — so it runs no per-source synthesis and **no** classify LLM call; kind, description, and facts come from Connections topic bullets already on those pages. LLM cost is **zero**. Unreadable source pages still fail the run and write nothing. Mutually exclusive with `--sources-only` / `--check` / `--estimate`. |
 | `--min-refs N` | Candidate threshold: a `[[wikilink]]` target becomes a candidate when **N or more distinct source pages** name it (default: `3`). |
 | `--concurrency N` | Synthesize N source pages at once, overriding `synthesis.concurrency` (default: `2`; range `1`–`16`). `1` runs strictly sequentially. Pages are I/O-bound on the backend, so the wall clock shrinks roughly in proportion; raise it only as far as your provider's rate limits and your machine allow. `all` has no matching flag — its synth stage reads `synthesis.concurrency`. |
+| `--backend NAME` | One-run overlay of `synthesis.backend` (`dummy` \| `ollama` \| `claude` \| `cursor_cli`). Honoured by `--check`, `--estimate`, and a real run. Does **not** write `config.json`. Unknown names exit `2`. |
 | `--vault PATH` | Read/write under the vault root; configures the active `llmwiki-state.json`. |
 
-Backend is picked from `synthesis.backend` in `config.json` / `sessions_config.json` (`dummy` by default, `ollama` for local, `claude` for synchronous `claude -p`). See [`configuration.md`](../configuration.md#synthesis-backend).
+Backend is picked from `synthesis.backend` in `config.json` / `sessions_config.json` (`dummy` by default; `ollama` for local; `claude` for synchronous `claude -p`; `cursor_cli` for Cursor Agent CLI `agent -p`, default model `composer-2.5`). Nested blocks: `synthesis.claude`, `synthesis.cursor_cli`, `synthesis.ollama` (flat `claude_*` still works). This is the **synthesis** generator — not the `cursor_cli` / `cursor_ide` session-ingest adapters. See [`configuration.md`](../configuration.md#synthesis-backend).
 
 > **Removed in v1.4.0:** `--list-pending` and `--complete` (agent-delegate
-> pending prompts). Use `synthesis.backend: claude` instead.
+> pending prompts). Use `synthesis.backend: claude` (or `cursor_cli`) instead.
 
 ### Auto-tagging (#351)
-
-Every `synthesize` call now produces **topical** tags alongside the deterministic baseline.  The synthesizer emits a `<!-- suggested-tags: prompt-caching, rag, github-actions -->` block as the first line of its response; the pipeline parses it, strips it from the body, and merges the tags into frontmatter with:

@@ -32,7 +32,3 @@ This technical reference documents [[llmwiki]]'s build performance and output me
 ## Connections
 
 - [[llmwiki]] — the system being benchmarked; this establishes build-time and runtime performance baselines and CI budgets
-
-## Contradictions
-
-None. This is technical reference documentation establishing baseline metrics.

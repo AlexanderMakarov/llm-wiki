@@ -31,7 +31,3 @@ Documented the adapter framework for [[llmwiki]], specifying a six-step standard
 - [[llmwiki]] — the project being architected
 - [[Adapter Framework]] — the primary system design topic of this document
 - [[Framework]] — contains the detailed adapter contract (framework.md §5.25 Adapter Flow)
-
-## Contradictions
-
-None identified. This is prescriptive forward-facing architecture documentation.

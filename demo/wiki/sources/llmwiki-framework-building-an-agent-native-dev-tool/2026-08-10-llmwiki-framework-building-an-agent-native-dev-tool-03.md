@@ -42,7 +42,3 @@ This document completes the [[llmwiki]] framework (phases 6.5–8) and defines p
 
 - [[llmwiki]] — this document defines phases 6.5–8 of its development framework and meta-patterns
 - [[Claude Code]] — upstream agent whose session `.jsonl` schema llmwiki must track and gracefully degrade when formats change
-
-## Contradictions
-
-None noted; this document explicitly states these extensions do not violate the parent framework but extend it with patterns specific to agent-native dev tools.

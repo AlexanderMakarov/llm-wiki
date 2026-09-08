@@ -46,7 +46,3 @@ Quantified, CI-enforced performance targets.
 - [[Model Context Protocol]] — MCP server elevated to Must-have tier; core integration platform
 - [[Claude Code]] — plugin packaging is Must-have; extends into Anthropic's editor ecosystem
 - [[GitHub Pages]] — deployment target for built wiki via tag-push workflow
-
-## Contradictions
-
-None identified. This document establishes project priorities rather than contradicting prior decisions.

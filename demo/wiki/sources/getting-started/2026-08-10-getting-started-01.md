@@ -35,7 +35,3 @@ This is the first part of the Getting started guide for [[llm-wiki]]. It covers 
 - [[Vault Architecture]] — introduces the concept of personal data isolation outside the repo
 - [[CLAUDE.md]] — referenced for the full Ingest Workflow when using Claude Code to build wiki pages from raw sessions
 - [[README.md]] — references the rationale section on personal data staying outside the repo
-
-## Contradictions
-
-- None detected (this is documentation, not a report of conflicting experiences).

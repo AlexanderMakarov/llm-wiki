@@ -4,9 +4,9 @@ slug: slash-commands-reference-02
 project: reference-slash-commands
 type: source
 tags: [wiki-add, raw-doc]
-date: 2026-09-07
+date: 2026-09-08
 source: "docs/reference/slash-commands.md"
-content_sha256: 89c2c1c8024aaf4a27741adc0fc10604afbc26da69181caedf1c1317103081ac
+content_sha256: 27e61bf4e1fec0567f035bd800d927b554d63ef2038d5014d6a732e649596f37
 ---
 
 > Part 2 of 4 of **Slash commands reference** — Wiki pipeline.

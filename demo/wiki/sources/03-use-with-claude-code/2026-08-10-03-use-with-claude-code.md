@@ -38,7 +38,3 @@ Reflects the conservative design: new entities are never lost, only archived wit
 - [[Wiki ingestion]] — the process converting `.jsonl` → raw pages
 - [[Candidates workflow]] — the editorial gate for entity promotion
 - [[Wiki lint]] — the health-check system for structural consistency
-
-## Contradictions
-
-None identified.

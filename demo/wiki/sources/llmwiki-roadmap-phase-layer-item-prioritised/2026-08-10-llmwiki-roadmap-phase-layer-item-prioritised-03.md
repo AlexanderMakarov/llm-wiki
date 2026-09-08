@@ -32,7 +32,3 @@ Part 3 of a 5-part prioritized roadmap for [[llmwiki]], organized as a systemati
 
 - [[llmwiki]] — the entire project being planned and architected
 - [[Karpathy Framework]] — ingest/query/lint workflows explicitly adopt the 10-step agent pattern
-
-## Contradictions
-
-None identified (early-phase roadmap document).

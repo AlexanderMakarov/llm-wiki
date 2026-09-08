@@ -4,9 +4,9 @@ slug: synthesis-cost-what-you-pay-per-page-and-why-02
 project: reference-synthesis-cost
 type: source
 tags: [wiki-add, raw-doc]
-date: 2026-09-07
+date: 2026-09-08
 source: "docs/reference/synthesis-cost.md"
-content_sha256: 1a1121ad2564a82e148b7f2ce239ec0df90210de358c5d9d5f46aacfd418084f
+content_sha256: 0fd6618636ab9b2d36be2b366a1a9e72bcc7d76a15e33e3ce61ad61c7a26f026
 ---
 
 > Part 2 of 3 of **Synthesis cost — what you pay per page, and why** — The lean flags.
@@ -67,6 +67,7 @@ The split is **not** Claude-specific. `split_prompt_template()` lives in `llmwik
 | Backend | Where the stable half goes | Mechanism |
 |---|---|---|
 | `claude` CLI | `--system-prompt` | 1h prompt cache, reused across invocations |
+| `cursor_cli` | leading stdin prompt text (stable half first) | Cursor bills cache read/write at the provider layer (hooks / usage APIs expose `cache_read` / `cache_write`); Agent CLI has no usable `--system-prompt` for normal accounts, so the stable half is prepended for correctness and best-effort automatic prefix caching. Lean argv is `-p` + `--mode ask` + `--sandbox enabled` + `--allowed-tools truncated_tool_call` (tiny allowlist cuts tool-schema tokens; agent system prompt remains) |
 | `ollama` | `system` field on `/api/generate` | KV-cache prefix reuse (no billing) |
 | OpenAI / OpenRouter *(not built)* | leading system message | automatic prefix caching, ~50% off repeated prefixes |
 | Anthropic API *(scaffolded)* | `cache_control` breakpoint after the prefix | explicit, see [`prompt-caching.md`](prompt-caching.md) |
@@ -88,26 +89,3 @@ Lean mode is on by default. Opt out only if you deliberately want the model to s
 ```
 
 Only an explicit `false` opts out; a missing or malformed value keeps the default on.
-
-## Why the default model is Sonnet, not Haiku
-
-Haiku is cheaper per token, and for the *extraction* half of a source page it is genuinely competitive. It degrades on the *judgment* half. Same prompt, same page, measured:
-
-| | Summary / Key Claims | Connections (`[[wikilinks]]`) |
-|---|---|---|
-| Sonnet | Accurate; caught a factual inconsistency between what the transcript claimed and what the code did | Linked the project entity and the language — the scopes a reader browses by |
-| Haiku | Accurate, effectively equivalent | Linked incidental libraries and coined lowercase-with-spaces pages, violating the TitleCase convention and the prompt's "significant scopes only" rule; missed the project entity |
-
-That regression is not cosmetic. `## Connections` is the only part of a source page that feeds `llmwiki graph` and the backlink index, and the topic vocabulary derived from it is injected back into *every subsequent* synthesis prompt. Bad links compound.
-
-Watch the output direction too. Haiku 4.5 runs with extended thinking by default, which is billed as output:
-
-| Configuration | Output tokens | $/page |
-|---|---|---|
-| Haiku, lean, default thinking | 4,278 | $0.028 |
-| Haiku, lean, `MAX_THINKING_TOKENS=0` | 378 | $0.009 |
-| Sonnet, lean | 730 | $0.042 |
-
-Haiku's headline rate is ~3x cheaper than Sonnet's, but with thinking left on it only saved ~33% — the reasoning tokens ate the advantage.
-
-**Recommendation:** keep `claude_model: "sonnet"` (the default). The lean flags already removed the dominant cost, and what remains buys measurably better graph structure. If your corpus is large and you accept weaker `Connections`, set `claude_model` to a Haiku id *and* `MAX_THINKING_TOKENS=0` — otherwise you pay for reasoning you did not want.

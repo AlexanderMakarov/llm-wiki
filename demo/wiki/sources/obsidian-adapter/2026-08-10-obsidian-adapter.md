@@ -37,7 +37,3 @@ The Obsidian adapter is an input-only [[llm-wiki]] adapter (v0.1) that reads `.m
 
 - [[llm-wiki]] — this adapter integrates Obsidian vaults into the wiki ingestion pipeline
 - [[Redaction Pipeline]] — the adapter applies the same privacy filtering to hand-written notes as to session transcripts
-
-## Contradictions
-
-None identified with documented wiki content (no prior records of Obsidian adapter design decisions in context).

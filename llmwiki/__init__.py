@@ -1,5 +1,5 @@
 """llmwiki — LLM-powered knowledge base from Claude Code, Codex CLI, Cursor,
-Gemini CLI, and Obsidian sessions.
+Gemini CLI, OpenClaw sessions, and any Markdown.
 
 Follows Andrej Karpathy's LLM Wiki pattern:
     https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f
@@ -14,7 +14,7 @@ Public API:
     - llmwiki.mcp.server.main()       — MCP server (stdio)
 """
 
-__version__ = "2.2.0"
+__version__ = "2.3.0"
 __author__ = "Alexander Makarov"
 __license__ = "MIT"
 

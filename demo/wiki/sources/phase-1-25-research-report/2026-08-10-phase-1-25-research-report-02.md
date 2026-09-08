@@ -49,7 +49,3 @@ Part 2 of Phase 1.25 research report, analyzing 20+ existing LLM wiki projects a
   - fact: Pure-markdown approaches are minimal but lack HTML output; markdown+Python hybrids add runtime dependencies; hosted approaches sacrifice simplicity for features.
 
 - [[Wikilinks]] (concept) — session-browser tools (claude-history, search-sessions) handle search; [[llmwiki]]'s wiki layer adds persistent cross-referenced structure
-
-## Contradictions
-
-None identified. This is exploratory research documenting existing tools' strengths, gaps, and design patterns—not contradicting prior [[llmwiki]] documentation.

@@ -36,7 +36,3 @@ This document introduces the cache-tiers feature (shipped v1.2.0, issue #52), an
 - [[prompt-caching]] — sibling feature at the Anthropic API level; cache-tiers is the application-layer equivalent for controlling context load
 - [[reader-shell]] — another opt-in wiki feature; mentioned as a related reference with similar adoption patterns  
 - [[llm-wiki]] — the project this feature belongs to; foundational for context management and token budgeting
-
-## Contradictions
-
-None. The design explicitly preserves byte-identical semantics for existing wikis via the L3 default.

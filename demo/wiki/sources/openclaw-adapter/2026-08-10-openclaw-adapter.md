@@ -29,7 +29,3 @@ Documentation for the OpenClaw adapter, an AI-session adapter that automatically
 ## Connections
 
 - [[OpenCode adapter]] — separate adapter for OpenCode app-config schema; this one handles OpenClaw's native agent gateway instead
-
-## Contradictions
-
-None identified.

@@ -41,7 +41,3 @@ This trade-off prioritizes robustness (frontmatter is stable) over completeness 
 - [[Page Schema]] — defines the five knowledge kinds and validation rules
 - [[Knowledge Graph]] — several commands (`consolidate-topics`, `query`, `all`) build and query the graph
 - [[Provenance]] — `trace` command exposes the chain from wiki pages back to raw sessions
-
-## Contradictions
-
-None identified. The document is reference material establishing CLI specifications and design rationale rather than making claims that could conflict with prior wiki entries.

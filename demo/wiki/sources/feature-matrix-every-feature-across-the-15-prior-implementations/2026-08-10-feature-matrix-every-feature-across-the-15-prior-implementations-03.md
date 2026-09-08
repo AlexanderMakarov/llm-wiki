@@ -33,7 +33,3 @@ This is part 3 of a comprehensive feature matrix documenting 15 novel inventions
 
 - [[LLMWiki]] — the system being specified; this documents its v0.1 feature scope
 - [[Feature specification]] — this is a structured specification of unique selling points vs. prior art (15 implementations compared against)
-
-## Contradictions
-
-- None identified; this is a primary source document defining intended behavior, not a report comparing against implemented reality.

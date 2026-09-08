@@ -59,7 +59,3 @@ This document synthesizes part 3 of a comprehensive feature audit that maps 161 
   - fact: Applied by default with no configuration burden
 
 - [[Performance budget]] (new concept) — P13 establishes measurable targets (9s cold, 0.4s no-op) enforced in CI
-
-## Contradictions
-
-None. This is a planning document consolidating feature scope; it does not contradict prior session decisions.

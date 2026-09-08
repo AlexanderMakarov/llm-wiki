@@ -36,7 +36,3 @@ Documents the `synth` CLI command (#90), which synthesizes pending sources into 
 - [[llmwiki]] — the tool/system whose CLI is being documented
 - [[Source Synthesis]] — the core synthesis process that populates `wiki/sources/` from raw sources
 - [[Candidate Harvesting]] — the harvesting process that derives entity/concept candidates from synthesized sources
-
-## Contradictions
-
-None detected.

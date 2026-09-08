@@ -1,15 +1,15 @@
 ---
-title: "Configuration (part 1/2)"
+title: "Configuration (part 1/3)"
 slug: configuration-01
 project: configuration
 type: source
 tags: [wiki-add, raw-doc]
-date: 2026-08-10
+date: 2026-09-08
 source: "docs/configuration.md"
-content_sha256: 83084a996152be16bc5a9cca106ed2175024bb9c13f7b4f553956e83e5667975
+content_sha256: 94ac6cbdc09d142adb44b67fe4e8fb1afc2956a82b7438f5476618e4ec72f3d8
 ---
 
-> Part 1 of 2 of **Configuration**.
+> Part 1 of 3 of **Configuration**.
 
 # Configuration
 
@@ -60,10 +60,10 @@ Minimal config:
       "progress"
     ],
 
-    // Skip headless `claude -p` / Agent-SDK sessions (entrypoint=sdk-cli
-    // or promptSource=sdk). These are not coding sessions worth a wiki
-    // page, and ingesting them creates a synthesis feedback loop when the
-    // synthesizer itself shells out to `claude -p`.
+    // Skip automated / headless agent launches (default on). Claude: SDK
+    // entrypoint / promptSource; Cursor Agent CLI: subagentInfo or
+    // approvalMode=auto-review; OpenClaw: never skipped. Applies at ingest
+    // and synthesis. See docs/multi-agent-setup.md § automated.
     "exclude_headless": true,
 
     // Skip sessions whose cwd is a throwaway temp dir (/tmp, /var/folders,
@@ -71,6 +71,12 @@ Minimal config:
     // don't silently drop it. Turn on only if your temp dirs hold nothing
     // but e2e/scratch junk.
     "exclude_temp_cwd": false
+
+    // Optional shared sync lookback as absolute YYYY-MM-DD (#192).
+    // Omit (default) = unlimited history. Per-adapter override:
+    // adapters.<name>.since as YYYY-MM-DD, or "all" for no date gate.
+    // CLI --since overrides both for one run. See configuration-reference.md.
+    // "since": "2026-07-31"
   },
 
   "redaction": {
@@ -111,7 +117,7 @@ Minimal config:
   // These are verbose and often redundant with the visible response.
   "drop_thinking_blocks": true,
 
-  // Per-adapter config
+  // Per-adapter config. Optional since: YYYY-MM-DD override or "all" (no date gate).
   "adapters": {
     "obsidian": {
       "vault_paths": ["~/Documents/Obsidian Vault"],
@@ -121,64 +127,3 @@ Minimal config:
   }
 }
 ```
-
-## Synthesis backend
-
-`llmwiki synth` turns each raw session/document into a
-`wiki/sources/` page. Which LLM (if any) writes those pages is picked by
-`synthesis.backend` in `config.json`:
-
-```jsonc
-{
-  "synthesis": {
-    // "dummy" (default) | "ollama" | "claude"
-    "backend": "claude",
-    "claude_model": "sonnet"
-  }
-}
-```
-
-| Backend | What it does | Needs |
-|---|---|---|
-| `dummy` | Canned stub page: metadata summary, one `[[ProjectEntity]]` link, plain-text `## Raw Mentions`. For previews/tests. | nothing |
-| `ollama` | Local LLM over the Ollama HTTP API. Configure `synthesis.ollama.{model,base_url,timeout,max_retries}`. | running `ollama serve` |
-| `claude` | Synchronous `claude -p` CLI calls (#16). Optional `claude_path` / `claude_model` (default `sonnet`) / `timeout` / `claude_lean`. Works from a plain terminal and nested inside agent sessions. | `claude` on `$PATH` (or `claude_path`) |
-
-Calls run in **lean mode** by default: tool schemas, MCP servers, skills, `CLAUDE.md`, and the agent system prompt are stripped from each invocation, since a synthesis call only reads stdout and can't use any of them. That is ~9x cheaper per page, measured — see [reference/synthesis-cost.md](reference/synthesis-cost.md) for the numbers and for why `claude_model` defaults to `sonnet` rather than a cheaper model. Set `"claude_lean": false` to opt out.
-
-The old `agent` / `agent_delegate` backend (pending-prompt files + `--list-pending` / `--complete`) was removed in v1.4.0 — use `claude` instead.
-
-Sanity-check what's active and what a run would cost:
-
-```bash
-llmwiki synth --check      # prints the resolved backend + availability
-llmwiki synth --estimate   # cached-vs-fresh token + dollar estimate (+ candidate backlog)
-llmwiki synth --sessions-only   # pending sessions only (skip docs)
-llmwiki synth --docs-only       # pending docs only (skip sessions)
-```
-
-**Synthesis is incremental.** `<vault>/llmwiki-state.json` (`synth.files`)
-records an mtime per raw file; a nightly `sync`/`synthesize` only processes
-files that are new or changed since the last run — the daily LLM bill is
-proportional to new content, not to corpus size. `--force` re-runs
-everything (use after switching backends, e.g. to replace dummy-stub
-pages with real ones — pages with only stub links produce a topic
-graph with no edges).
-
-**Downgrade protection:** `dummy` is the resolved default when
-`synthesis.backend` is unset (or a typo — unknown values warn and fall
-back), so a `--force` run in that state used to overwrite every real
-page with link-free stubs and silently empty the knowledge graph. The
-pipeline now refuses that downgrade: stub output is never written over
-a real page, even under `--force` — such pages are reported as
-`protected` in the run summary. To deliberately re-synthesize a real
-page, delete it first. (An unavailable backend does *not* fall back —
-the run aborts with an error.)
-
-## Environment variables
-
-| Variable | What it does |
-|---|---|
-| `LLMWIKI_CONFIG` | Override the config file path. Defaults to `./config.json` then `examples/sessions_config.json`. |
-
-Vault content root is **`vault.default_path` in `config.json`** (not an env var). The removed `LLMWIKI_ROOT` env var is no longer read.

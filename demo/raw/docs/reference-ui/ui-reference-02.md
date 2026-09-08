@@ -4,9 +4,9 @@ slug: ui-reference-02
 project: reference-ui
 type: source
 tags: [wiki-add, raw-doc]
-date: 2026-09-07
+date: 2026-09-08
 source: "docs/reference/ui.md"
-content_sha256: 5d23c1e6e61b910eb88351ef022ce42f6dd7cb3ca86429dc3872a58de758d661
+content_sha256: 7eb6298d7f4ad87999fa2453589b551356412dea6a6e4d19fc218921bf71850b
 ---
 
 > Part 2 of 6 of **UI reference** — Candidates.

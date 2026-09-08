@@ -2441,7 +2441,7 @@ def render_readme_page(out_dir: Path) -> Path | None:
         "README.md", "README.html",
         title="README",
         subtitle="The public README of llmwiki, rendered from `README.md`.",
-        meta_description="llmwiki — Karpathy-style LLM wiki from your Claude Code, Codex CLI, Cursor, and Obsidian sessions.",
+        meta_description="llmwiki — Karpathy-style LLM wiki from Claude Code, Codex CLI, Cursor, OpenClaw, and any Markdown.",
         out_dir=out_dir,
     )
 

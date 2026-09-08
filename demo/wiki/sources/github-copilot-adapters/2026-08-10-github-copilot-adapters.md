@@ -32,7 +32,3 @@ llmwiki ships two production-ready adapters (v0.6) for [[GitHub Copilot]], solvi
 
 - [[GitHub Copilot]] — the product being integrated
 - [[llmwiki]] — the project shipping these adapters
-
-## Contradictions
-
-None identified. Chat and CLI adapters' different slug derivation strategies (12-char hash truncation vs. direct session-id) are intentional and complementary, reflecting their respective Copilot products' distinct storage schemas.

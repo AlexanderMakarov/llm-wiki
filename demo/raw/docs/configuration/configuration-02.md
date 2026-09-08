@@ -1,134 +1,63 @@
 ---
-title: "Configuration (part 2/2: CLI flags)"
+title: "Configuration (part 2/3: Synthesis backend)"
 slug: configuration-02
 project: configuration
 type: source
 tags: [wiki-add, raw-doc]
-date: 2026-08-10
+date: 2026-09-08
 source: "docs/configuration.md"
-content_sha256: 83084a996152be16bc5a9cca106ed2175024bb9c13f7b4f553956e83e5667975
+content_sha256: 94ac6cbdc09d142adb44b67fe4e8fb1afc2956a82b7438f5476618e4ec72f3d8
 ---
 
-> Part 2 of 2 of **Configuration** — CLI flags.
+> Part 2 of 3 of **Configuration** — Synthesis backend.
 
-## CLI flags
+## Synthesis backend
 
-### `llmwiki sync`
-
-```bash
-python3 -m llmwiki sync [options]
-
---adapter <name...>       Only run the named adapter(s); default: all available
---since YYYY-MM-DD        Skip sessions with a last record older than this
---project <substring>     Only sync projects whose slug contains this substring
---include-current         Don't skip live (<60 min) sessions
---force                   Ignore the state file; reconvert everything
---fail-on-errors          Exit 1 if any file fails to convert
---vault PATH              Write into an external vault (also sets active state file)
---status                  Show last-sync + counters + quarantine (no sync)
-```
-
-Per-file conversion errors do not fail the run by default: each one is
-counted in the summary, recorded in `llmwiki-state.json` quarantine
-entries, and visible via `llmwiki sync --status`, while the rest of the
-corpus still converts. Pass `--fail-on-errors` for a hard gate (CI,
-scripted pipelines that must not proceed past a partial sync).
-
-There is **no** `sync --dry-run` — use `add --dry-run` for document intake
-previews, or inspect with `sync --status` / `synth --estimate`.
-
-### `llmwiki build`
-
-```bash
-python3 -m llmwiki build [options]
-
---out <dir>               Output directory; default: ./site
---synthesize              Call the `claude` CLI once to generate an Overview
---claude <path>           Path to the claude binary; default: /usr/local/bin/claude
-```
-
-### `llmwiki serve`
-
-```bash
-python3 -m llmwiki serve [options]
-
---dir <dir>               Directory to serve; default: ./site
---port N                  Port number; default: 8765
---host H                  Host to bind; default: 127.0.0.1 (localhost only)
---open                    Open the browser after starting
-```
-
-### `llmwiki init`
-
-No options. Scaffolds `raw/`, `wiki/`, `site/` and seeds `wiki/index.md`, `wiki/log.md`, `wiki/overview.md`.
-
-### `llmwiki adapters`
-
-No options. Lists every registered adapter and whether its session store is present on the current machine.
-
-## `.llmwikiignore`
-
-Gitignore-style file at the repo root. One pattern per line. Sessions matching any pattern are skipped during sync.
-
-Example:
-
-```
-# Skip a whole project
-confidential-client/*
-
-# Skip anything before a date
-*2025-11-*
-
-# Skip a specific session
-ai-newsletter/2026-04-04-*secret*
-```
-
-## Adapter configuration
-
-### Claude Code
-
-Default session store: `~/.claude/projects/`
-
-Override via the adapter config block (above).
-
-### Obsidian
-
-Default vault locations checked:
-
-1. `~/Documents/Obsidian Vault`
-2. `~/Obsidian`
-
-Override in `config.json`:
+`llmwiki synth` turns each raw session/document into a `wiki/sources/` page. Which LLM (if any) writes those pages is picked by `synthesis.backend` in `config.json`. Per-engine settings live in nested blocks (`synthesis.claude`, `synthesis.cursor_cli`, `synthesis.ollama`); legacy flat `claude_*` / Ollama keys still work as fallbacks. Override the backend for one run with `llmwiki synth --backend <name>` (does not write `config.json`).
 
 ```jsonc
 {
-  "adapters": {
-    "obsidian": {
-      "vault_paths": [
-        "~/Documents/Obsidian Vault",
-        "~/work/second-vault"
-      ],
-      "exclude_folders": [".obsidian", "Templates"],
-      "min_content_chars": 100
-    }
+  "synthesis": {
+    // "dummy" (default) | "ollama" | "claude" | "cursor_cli"
+    "backend": "cursor_cli",
+    "cursor_cli": { "model": "composer-2.5", "timeout": 180 },
+    "claude": { "model": "sonnet", "lean": true },
+    "ollama": { "model": "llama3.1:8b" }
   }
 }
 ```
 
-Files smaller than `min_content_chars` are skipped (mostly empty notes).
+| Backend | What it does | Needs |
+|---|---|---|
+| `dummy` | Canned stub page: metadata summary, one `[[ProjectEntity]]` link, plain-text `## Raw Mentions`. For previews/tests. | nothing |
+| `ollama` | Local LLM over the Ollama HTTP API. Configure `synthesis.ollama.{model,base_url,timeout,max_retries}` (flat legacy keys still work). | running `ollama serve` |
+| `claude` | Synchronous `claude -p` CLI calls (#16). Prefer nested `synthesis.claude.{model,path,timeout,lean,effort}`; flat `claude_*` keys remain as fallbacks. Default model `sonnet`. | `claude` on `$PATH` (or `synthesis.claude.path` / `claude_path`) |
+| `cursor_cli` | Synchronous Cursor Agent CLI (`agent -p` / `cursor-agent`) (#230). Nested `synthesis.cursor_cli.{model,timeout}` only (default model `composer-2.5`). Binary from `$PATH` — no path key. Lean flags: `-p`, `--mode ask`, `--sandbox enabled`, `--allowed-tools truncated_tool_call` (shrinks tool schemas; still no empty system-prompt / empty-MCP switch). | `agent` or `cursor-agent` on `$PATH`, authenticated |
 
-### Codex CLI
+**Not the same as session ingest.** `synthesis.backend: cursor_cli` is the *generator* that writes wiki pages. The contrib adapters `cursor_cli` (Agent CLI chats under `~/.cursor/chats/`) and `cursor_ide` (IDE Composer / `state.vscdb`) only *ingest* transcripts into `raw/` — configuring one does not select the other.
 
-**v0.1 stub.** The adapter imports and registers but does not yet parse records. Configuration will land in v0.2.
+Claude calls run in **lean mode** by default: tool schemas, MCP servers, skills, `CLAUDE.md`, and the agent system prompt are stripped from each invocation, since a synthesis call only reads stdout and can't use any of them. That is ~9x cheaper per page, measured — see [reference/synthesis-cost.md](reference/synthesis-cost.md) for the numbers and for why the Claude default model is `sonnet` rather than a cheaper model. Set `"lean": false` under `synthesis.claude` (or flat `"claude_lean": false`) to opt out. Cursor's lean set is ask + sandbox plus a tiny `--allowed-tools` allowlist (~25–30% less prompt than the full tool catalog on Composer); the agent system prompt still cannot be emptied for normal accounts.
 
-## Changing the theme
+The old `agent` / `agent_delegate` backend (pending-prompt files + `--list-pending` / `--complete`) was removed in v1.4.0 — use `claude` or `cursor_cli` instead.
 
-Theme colours live in `llmwiki/build.py` inside the `CSS` string constant, under the `:root` block. The main tokens:
+Sanity-check what's active and what a run would cost:
 
-```css
---accent: #7C3AED;     /* primary accent (purple) */
---accent-light: #a78bfa;
---accent-bg: #f5f3ff;
+```bash
+llmwiki synth --check                    # prints the resolved backend + availability
+llmwiki synth --estimate                 # cached-vs-fresh token + dollar estimate (+ candidate backlog)
+llmwiki synth --backend cursor_cli --estimate   # one-run backend overlay (no config write)
+llmwiki synth --sessions-only            # pending sessions only (skip docs)
+llmwiki synth --docs-only                # pending docs only (skip sessions)
 ```
 
-Change these and rebuild. The dark-mode variants auto-derive unless you override them too.
+**Synthesis is incremental.** `<vault>/llmwiki-state.json` (`synth.files`) records an mtime per raw file; a nightly `sync`/`synthesize` only processes files that are new or changed since the last run — the daily LLM bill is proportional to new content, not to corpus size. `--force` re-runs everything (use after switching backends, e.g. to replace dummy-stub pages with real ones — pages with only stub links produce a topic graph with no edges).
+
+**Downgrade protection:** `dummy` is the resolved default when `synthesis.backend` is unset (or a typo — unknown values warn and fall back), so a `--force` run in that state used to overwrite every real page with link-free stubs and silently empty the knowledge graph. The pipeline now refuses that downgrade: stub output is never written over a real page, even under `--force` — such pages are reported as `protected` in the run summary. To deliberately re-synthesize a real page, delete it first. (An unavailable backend does *not* fall back — the run aborts with an error.)
+
+## Environment variables
+
+| Variable | What it does |
+|---|---|
+| `LLMWIKI_CONFIG` | Override the config file path. Defaults to `./config.json` then `examples/sessions_config.json`. |
+
+Vault content root is **`vault.default_path` in `config.json`** (not an env var). The removed `LLMWIKI_ROOT` env var is no longer read.

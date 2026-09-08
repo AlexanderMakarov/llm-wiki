@@ -37,7 +37,3 @@ llm-wiki's internal code is organized into eight functional layers (Raw ingestio
 - [[CLAUDE.md]] — defines the agent schema and slash-command workflows that execute L1 (Wiki) writes
 - [[AGENTS.md]] — multi-agent mirror of CLAUDE.md for Codex/OpenCode/Gemini platforms
 - [[docs/roadmap.md]] — feature list organized by Phase × Layer × Item, enabling 1:1 mapping
-
-## Contradictions
-
-None noted — this is architectural specification.

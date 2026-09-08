@@ -4,9 +4,9 @@ slug: cli-reference-11
 project: reference-cli
 type: source
 tags: [wiki-add, raw-doc]
-date: 2026-09-07
+date: 2026-09-08
 source: "docs/reference/cli.md"
-content_sha256: 68214fcdadc8d21482c73af718d17b4858152fb41607ffe75ccafc726af46640
+content_sha256: 186543f38f0258ea703f9ef68071d930f7135ea481068df5e5b46346e0f33e99
 ---
 
 > Part 11 of 15 of **CLI reference** — install-agent-kit — copy packaged slash commands and skills (#109).
@@ -23,7 +23,7 @@ The install also prunes commands and skills the kit has retired (#214), so an ag
 
 The manifest is a normal file in `--dest`. When that is a git-tracked `.claude/`, commit `.llmwiki-agent-kit.json` alongside `commands/` and `skills/`: it is what lets a later upgrade recognise its own files and clean them up.
 
-Contributor-only commands (`fix-bug`, `maintainer`, `release`, …) and skills (`docs-that-work`, `pytest-best-practices`, `release`, …) stay in this repository's `.claude/` tree and are not part of the kit. Cutting a tagged release uses `.claude/skills/release/SKILL.md` via `/release` (see [`docs/maintainers/RELEASE_PROCESS.md`](../maintainers/RELEASE_PROCESS.md)).
+Contributor-only commands (`fix-bug`, `implement-feature`, `release`) and skills (`docs-that-work`, `pytest-best-practices`, `release`, …) stay in this repository's `.claude/` tree and are not part of the kit. Cutting a tagged release uses `.claude/skills/release/SKILL.md` via `/release` (see [`docs/maintainers/RELEASE_PROCESS.md`](../maintainers/RELEASE_PROCESS.md)).
 
 ```bash
 python3 -m llmwiki install-agent-kit --dest .claude --dry-run
@@ -110,6 +110,6 @@ raw     Kickoff transcript  raw/sessions/2026-01-01T12-00-demo-kickoff.md
 | `1` | Starting page could not be resolved (or locator unsafe / empty). |
 | `2` | Configured `--vault` / default vault path is unusable. |
 
-Guided repair of broken hops will live under `doctor` (#110); this command only prints the chain.
+Use `trace` to inspect broken hops; repair them by hand or with `synth` / `migrate broken-provenance` as the lint message suggests. Guided repair under `doctor` (#110) is roadmap-only.
 
 ---

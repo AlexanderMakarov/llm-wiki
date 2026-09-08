@@ -33,7 +33,3 @@ This tutorial explains how to configure [[llmwiki]] to synthesize wiki pages usi
 - [[llmwiki]] — the CLI tool whose synthesis feature is configured in this tutorial
 - [[Ollama]] — the local LLM inference framework that becomes the synthesis backend
 - [[Claude API]] — the cloud alternative for synthesis; offers higher accuracy but requires API key and billing
-
-## Contradictions
-
-None identified. The tutorial explicitly acknowledges the accuracy/cost tradeoff: local models are cheaper but less accurate, and recommends running `llmwiki lint` afterward to catch hallucinations.

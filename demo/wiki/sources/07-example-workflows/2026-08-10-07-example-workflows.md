@@ -36,7 +36,3 @@ The tutorial presents four end-to-end workflows for adopting [[llm-wiki]] across
 - [[Obsidian]] — Workflow 3 allows existing vault users to overlay llm-wiki without migration
 - [[Prompt Caching]] — the technical foundation for Workflow 4's cost estimation and ongoing 50–90 % savings
 - [[GitHub Pages]] — deployment mechanism in Workflow 2; triggered on master push via CI workflow
-
-## Contradictions
-
-None detected. Workflows are presented as complementary entry points for different user types and adoption phases.

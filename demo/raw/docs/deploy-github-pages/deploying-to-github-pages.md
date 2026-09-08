@@ -4,22 +4,22 @@ slug: deploying-to-github-pages
 project: deploy-github-pages
 type: source
 tags: [wiki-add, raw-doc]
-date: 2026-09-07
+date: 2026-09-08
 source: "docs/deploy/github-pages.md"
-content_sha256: 9aeafb33827166ee4cf343e600efc20236ac2675bbdd4980af4524cb607db622
+content_sha256: f7384bb306f4bc1048e52d4e9c5cbcf9cb3bcaa8b76b898eec459a4d13cd6d49
 ---
 
 # Deploying to GitHub Pages
 
 Host your llmwiki site on GitHub Pages for free, with automatic builds on every push to master.
 
-Live example (this fork): [alexandermakarov.github.io/llm-wiki](https://alexandermakarov.github.io/llm-wiki/) · upstream: [pratiyush.github.io/llm-wiki](https://pratiyush.github.io/llm-wiki/)
+Live example: [alexandermakarov.github.io/llm-wiki](https://alexandermakarov.github.io/llm-wiki/) (historical demo also at [pratiyush.github.io/llm-wiki](https://pratiyush.github.io/llm-wiki/)).
 
-> **This fork (#213):** `pages.yml` publishes on every version tag (`v*.*.*`) and on manual **Run workflow**. Deploy on every push to `main` stays off (#69) — the demo tracks releases, not merges; restore `push:` if you want each merge to republish. The published site is built from the committed `demo/` vault: `demo/raw/sessions/` (demo sessions), `demo/raw/docs/` (product docs), `demo/wiki/` (pre-synthesized pages, committed so CI stays free/deterministic) and `demo/usage/` (MCP telemetry fixtures for Analytics).
+> **This repository (#213):** `pages.yml` publishes on every version tag (`v*.*.*`) and on manual **Run workflow**. Deploy on every push to `main` stays off (#69) — the demo tracks releases, not merges; restore `push:` if you want each merge to republish. The published site is built from the committed `demo/` vault: `demo/raw/sessions/` (demo sessions), `demo/raw/docs/` (product docs), `demo/wiki/` (pre-synthesized pages, committed so CI stays free/deterministic) and `demo/usage/` (MCP telemetry fixtures for Analytics).
 
 ## Prerequisites
 
-- A GitHub repository (fork or clone of [Pratiyush/llm-wiki](https://github.com/Pratiyush/llm-wiki))
+- A GitHub repository (clone or fork of [AlexanderMakarov/llm-wiki](https://github.com/AlexanderMakarov/llm-wiki))
 - Python 3.12+ (only needed locally for `llmwiki sync`)
 - Some session data already synced (or the demo sessions under `demo/raw/sessions/`)
 
@@ -29,8 +29,8 @@ Live example (this fork): [alexandermakarov.github.io/llm-wiki](https://alexande
 # Option A: fork on GitHub, then clone your fork
 git clone https://github.com/<you>/llm-wiki.git
 
-# Option B: clone directly
-git clone https://github.com/Pratiyush/llm-wiki.git
+# Option B: clone this repository
+git clone https://github.com/AlexanderMakarov/llm-wiki.git
 ```
 
 ## Step 2: Enable GitHub Pages

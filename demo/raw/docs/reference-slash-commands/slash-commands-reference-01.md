@@ -4,9 +4,9 @@ slug: slash-commands-reference-01
 project: reference-slash-commands
 type: source
 tags: [wiki-add, raw-doc]
-date: 2026-09-07
+date: 2026-09-08
 source: "docs/reference/slash-commands.md"
-content_sha256: 89c2c1c8024aaf4a27741adc0fc10604afbc26da69181caedf1c1317103081ac
+content_sha256: 27e61bf4e1fec0567f035bd800d927b554d63ef2038d5014d6a732e649596f37
 ---
 
 > Part 1 of 4 of **Slash commands reference**.
@@ -24,10 +24,7 @@ what it runs under the hood, and a realistic invocation example. Use these
 inside **Claude Code**. The command files live in the installable package and
 land in an agent directory via `llmwiki install-agent-kit --dest PATH`.
 
-Maintainer and AWOS delivery commands (`/maintainer`, `/release`,
-`/triage-issue`, `/fix-bug`, `/implement-feature`) are not part of the vault
-pipeline and are not installed by the agent kit — they are described in
-[`../maintainers/README.md`](../maintainers/README.md).
+Maintainer and AWOS delivery commands (`/release`, `/fix-bug`, `/implement-feature`) are not part of the vault pipeline and are not installed by the agent kit — they are described in [`../maintainers/README.md`](../maintainers/README.md).
 
 All **12 commands in the vault pipeline**, in the order you meet them:
 

@@ -34,7 +34,3 @@ The document provides step-by-step instructions for deploying [[llmwiki]] to [[V
 - [[Vercel]] — static hosting platform with Python 3 runtime support and automatic HTTPS; configured via `vercel.json` at repo root
 - [[Netlify]] — alternative static hosting platform with Python 3.8+ support, SPA redirects, and `netlify.toml` configuration for reproducibility
 - [[llmwiki]] — the static site generator being deployed; outputs to `site/` directory via markdown rendering
-
-## Contradictions
-
-None identified.

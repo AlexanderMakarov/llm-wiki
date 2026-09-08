@@ -38,7 +38,3 @@ Comprehensive reference documentation for the `llmwiki` CLI package was created,
 - [[LLM Wiki]] — the main project whose CLI is comprehensively documented here
 - [[Obsidian]] — supported integration target via vault-overlay mode
 - [[Logseq]] — supported integration target via vault-overlay mode
-
-## Contradictions
-
-- None identified.

@@ -41,7 +41,3 @@ Comprehensive command reference for [[llmwiki]] documenting the 30-second bootst
   - fact: Builtin wikilink graph uses stdlib; Graphify (optional) adds semantic analysis and Leiden community detection.
 - [[GitHub Actions]] (automation) — implied deployment target for daily job scheduling.
 - [[Configuration Reference]] (documentation) — referenced for full `install-automation` flag table.
-
-## Contradictions
-
-None identified.

@@ -30,7 +30,3 @@ This indicates a planned refinement to replace hash-based slugs with human-reada
 
 - [[Adapter Architecture]] — documents a concrete adapter implementation following the llmwiki plugin pattern
 - [[llmwiki]] — the parent project providing adapter infrastructure and conventions
-
-## Contradictions
-
-None identified.

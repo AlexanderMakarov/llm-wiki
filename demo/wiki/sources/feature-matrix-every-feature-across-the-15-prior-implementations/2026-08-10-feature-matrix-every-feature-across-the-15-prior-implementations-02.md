@@ -37,7 +37,3 @@ Indicates the team chose to build its own fuzzy search rather than depend on ser
 - [[MCP Integration]] — called out as 5-star priority, appears in both infrastructure (G4) and documentation (K9)
 - [[Privacy by Design]] — section M establishes redaction, gitleaks scanning, and local-only operation as non-negotiable
 - [[Snapshot Testing]] — section I2 suggests a novel testing strategy for adapters with no prior art
-
-## Contradictions
-
-None identified; this is a forward-looking specification with no prior wiki pages to contradict.

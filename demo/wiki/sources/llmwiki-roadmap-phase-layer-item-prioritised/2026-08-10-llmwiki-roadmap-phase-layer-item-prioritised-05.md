@@ -33,7 +33,3 @@ The explicit scope cap prevents unlimited scope creep during v0.1 execution.
 
 - [[llmwiki]] — this is the authoritative roadmap defining the project's execution path through v1.0
 - [[Layer-Based Architecture]] — the 8-layer decomposition structures all 135 work items and defines build order
-
-## Contradictions
-
-None identified.

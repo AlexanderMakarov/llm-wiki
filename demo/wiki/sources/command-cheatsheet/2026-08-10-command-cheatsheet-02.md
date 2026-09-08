@@ -35,7 +35,3 @@ This documentation page provides a comprehensive reference for all configurable 
 
 - [[Obsidian]] and [[Logseq]] — vault systems supported for wiki export and integration
 - [[Ollama]] — optional LLM backend for synthesis features
-
-## Contradictions
-
-None identified in this page.

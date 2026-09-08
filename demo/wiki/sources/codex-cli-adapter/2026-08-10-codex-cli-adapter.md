@@ -36,7 +36,3 @@ Establishes the formal workflow for graduation from stub to stable release.
 - [[Claude-Code]] — record format baseline and output comparison target
 - `tests/fixtures/codex_cli/` — where real session samples are stored during development
 - `tests/snapshots/codex_cli/` — where expected output is validated
-
-## Contradictions
-
-None identified.

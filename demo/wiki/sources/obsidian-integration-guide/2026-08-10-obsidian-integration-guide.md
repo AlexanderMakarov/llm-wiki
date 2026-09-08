@@ -34,7 +34,3 @@ This guide explains how to integrate llmwiki into Obsidian via two simple setup 
 - [[Wikilinks]] — markdown link syntax that Obsidian renders natively for bidirectional linking and graph construction
 - [[Templater]] — enables keyboard-driven creation of new wiki pages from template files in `examples/obsidian-templates/`
 - [[Web Clipper]] — browser extension for capturing web articles directly into `raw/web/` for automated ingestion
-
-## Contradictions
-
-None identified.

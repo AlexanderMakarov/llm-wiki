@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "llm-wiki-plus"
-version = "2.2.0"
-description = "Karpathy-style LLM wiki from your Claude Code, Codex CLI, Cursor, and Obsidian sessions"
+version = "2.3.0"
+description = "Karpathy-style LLM wiki from Claude Code, Codex CLI, Cursor, OpenClaw, and any Markdown"
 readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "MIT" }
@@ -18,12 +18,18 @@ keywords = [
     "karpathy",
     "knowledge-base",
     "claude-code",
-    "codex-cli",
+    "codex",
     "cursor",
-    "obsidian",
-    "session-history",
+    "openclaw",
+    "markdown",
+    "agentic",
     "static-site",
     "mcp",
+    "lightweight",
+    "automation",
+    "metrics",
+    "synthesis",
+    "obsidian",
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",

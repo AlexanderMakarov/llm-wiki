@@ -32,7 +32,3 @@ Establishes the one-time PyPI configuration required to enable `pip install llm-
   - fact: Published to PyPI as `llm-wiki-plus`, with CLI/import/repo names unchanged.
 - [[GitHub Actions]] (platform) — the CI/CD workflow automating build, publish, and verification
   - fact: Uses OIDC trusted publisher instead of long-lived API tokens, with optional environment protection.
-
-## Contradictions
-
-None identified. (Historical references to `llm-notebook` as a distribution name are documented as upstream project history, not applicable to this fork's publishing scheme.)

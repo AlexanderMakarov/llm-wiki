@@ -4,9 +4,9 @@ slug: windows-setup
 project: windows-setup
 type: source
 tags: [wiki-add, raw-doc]
-date: 2026-08-10
+date: 2026-09-08
 source: "docs/windows-setup.md"
-content_sha256: a8ec624a0708106e7aa5adfebd07ad36ac20132528777aa5a099b11a4c7f54b3
+content_sha256: 3b42546334c3bcec2cb6615f16a426e50669001ec02e4c744f4816a638938475
 ---
 
 # Windows setup
@@ -41,7 +41,6 @@ Same as macOS / Linux, but with `.bat`:
 ```cmd
 sync.bat
 build.bat
-serve.bat
 ```
 
 Or run the Python module directly:
@@ -49,7 +48,6 @@ Or run the Python module directly:
 ```cmd
 python -m llmwiki sync
 python -m llmwiki build
-python -m llmwiki serve
 ```
 
 Note: on Windows the command is `python`, not `python3`. The `.bat` files use `python`.
@@ -104,12 +102,13 @@ If PowerShell complains "cannot be loaded because running scripts is disabled on
 Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 ```
 
-## Opening the browser
+## Opening the site
 
-`serve.bat --open` will try to open your default browser automatically. If that doesn't work:
+The built site is plain files — nothing needs to be running.
 
-1. The server is running at http://127.0.0.1:8765
-2. Just paste that into your browser
+```cmd
+start site\index.html
+```
 
 ## Known limitations
 
@@ -119,4 +118,4 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 
 ## Getting help
 
-If you hit a Windows-specific issue, open a [bug report](https://github.com/Pratiyush/llm-wiki/issues/new?template=bug_report.md) with the `windows` label.
+If you hit a Windows-specific issue, open a [bug report](https://github.com/AlexanderMakarov/llm-wiki/issues/new?template=bug_report.yml) with the `windows` label.

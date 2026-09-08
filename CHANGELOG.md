@@ -10,11 +10,25 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Added
 
+### Changed
+
+### Fixed
+
+### Removed
+
+## [2.3.0] — 2026-09-08
+
+Theme: Cursor Agent CLI synthesis, Home Timeline ops stamps, leaner maintainer command surface.
+
+### Added
+
 - **Cursor Agent CLI synthesis backend (`cursor_cli`, #230)** — `synthesis.backend: cursor_cli` shells out to `agent` / `cursor-agent` on `$PATH` (default model `composer-2.5`, lean `-p` / `--mode ask` / `--sandbox enabled` / `--allowed-tools truncated_tool_call`). Nested config blocks `synthesis.claude` / `synthesis.cursor_cli` / `synthesis.ollama` (flat `claude_*` still works). `llmwiki synth --backend <name>` overlays for one run (check / estimate / run; no config write). Site overview follows the active backend (`dummy` skips the LLM). Rate card adds Cursor-published Composer 2.5 / Grok 4.5 / 4.6 (+ Fast) rows and `agent --model` aliases. Distinct from the `cursor_cli` / `cursor_ide` ingest adapters. Docs: configuration, CLI, synthesis-cost, UPGRADING; `install-automation` lists `cursor_cli`.
   - *Release note:* Synthesize with Cursor Agent CLI via `synthesis.backend: cursor_cli` or `synth --backend cursor_cli` (#230).
 
 ### Changed
 
+- **PyPI summary and keywords** — package `description` now names OpenClaw and any Markdown (not Obsidian); keywords add openclaw / markdown / agentic / lightweight / automation / metrics / synthesis and keep obsidian for search.
+  - *Release note:* PyPI one-liner and keywords refreshed for OpenClaw, Markdown, and automation/metrics discovery.
 - **Home Timeline stamps vs Automation (#234)** — Home **Timeline** shows Last sync / Last synth / Last build / Last lint; a lint-error note appears under the Candidates table when `ops.last_lint_error` is set. The Automation panel is settings-only: short Synth backend line (spend hint), Agent hooks and Watch on separate lines, no lint-fail reminder or installer Updated line; Maintain states the site refreshes once after summarization. Standalone lint updates `llmwiki-state.json` / the site data sidecar only (no HTML rewrite). Docs: cli, ui, state-persistence, UPGRADING.
   - *Release note:* Home stage timing lives under Timeline; lint failures surface under Candidates; Automation is a shorter settings panel (#234).
 - **`provenance_integrity` lint hints use shipped commands** — error text no longer says `run doctor (#110)`; it points at `llmwiki trace`, `synth`, or `migrate broken-provenance` instead.

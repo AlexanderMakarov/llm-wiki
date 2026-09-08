@@ -32,7 +32,3 @@ This guide documents deploying an [[llmwiki]] site on [[GitLab Pages]], a free s
 
 - [[GitLab Pages]] — the deployment platform and primary subject of this guide
 - [[llmwiki]] — the static site generator being deployed
-
-## Contradictions
-
-None identified—this is new documentation.

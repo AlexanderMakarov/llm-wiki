@@ -46,7 +46,3 @@ This documentation provides a monitoring strategy for the llmwiki demo site that
 - [[Observability]] (concept) — umbrella for uptime and freshness monitoring
   - fact: Six endpoint categories monitored: home page, sitemap, llms.txt, search-index, manifest, and session content
   - fact: Exit codes enable programmatic discrimination between network, availability, and correctness failures
-
-## Contradictions
-
-- None identified with existing wiki content.

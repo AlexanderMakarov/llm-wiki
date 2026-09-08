@@ -44,7 +44,3 @@ This cheatsheet documents the practical operation of [[llmwiki]], covering the a
   - fact: Schema and defaults shown here; full descriptions and rationale in the referenced configuration reference
 - [[Codex CLI]] (tool) — listed as one of two core adapters sourcing from `~/.codex/sessions/`
 - [[Claude Code]] (tool) — listed as one of two core adapters sourcing from `~/.claude/projects/`
-
-## Contradictions
-
-None identified.

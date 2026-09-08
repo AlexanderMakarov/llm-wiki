@@ -32,7 +32,3 @@ This page establishes design guidelines and token inheritance rules for the [[ll
 - [[llmwiki]] (project) — the system being designed; render modules in `llmwiki/render/` implement these rules.
 - [[Static Site]] (topic) — the primary output format that inherits the full CSS token system.
 - [[Obsidian]] (topic) — an export target that will eventually integrate via `.obsidian/themes/llmwiki.css`.
-
-## Contradictions
-
-None identified.

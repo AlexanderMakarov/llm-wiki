@@ -4,9 +4,9 @@ slug: upgrade-guide-05
 project: upgrading
 type: source
 tags: [wiki-add, raw-doc]
-date: 2026-09-07
+date: 2026-09-08
 source: "docs/UPGRADING.md"
-content_sha256: 79fd93bf709421f37aa05c27a435cd601ed7f0443274f4ab0c06dc082831e232
+content_sha256: 8b7e0b10395116258bc93a8766d0f513016bcbe9a2de5dfdde2d069b78872957
 ---
 
 > Part 5 of 5 of **Upgrade guide** — v1.2.0 — first stable on the 1.x line.

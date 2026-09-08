@@ -4,12 +4,14 @@ slug: cli-reference-07
 project: reference-cli
 type: source
 tags: [wiki-add, raw-doc]
-date: 2026-09-07
+date: 2026-09-08
 source: "docs/reference/cli.md"
-content_sha256: 68214fcdadc8d21482c73af718d17b4858152fb41607ffe75ccafc726af46640
+content_sha256: 186543f38f0258ea703f9ef68071d930f7135ea481068df5e5b46346e0f33e99
 ---
 
 > Part 7 of 15 of **CLI reference**.
+
+Every `synthesize` call now produces **topical** tags alongside the deterministic baseline.  The synthesizer emits a `<!-- suggested-tags: prompt-caching, rag, github-actions -->` block as the first line of its response; the pipeline parses it, strips it from the body, and merges the tags into frontmatter with:
 
 - **Baseline preserved** — adapter, project slug, model family stay.
 - **Maintainer wins** — on `--force`, whatever you added via `llmwiki tag add` is kept at the front of the list.

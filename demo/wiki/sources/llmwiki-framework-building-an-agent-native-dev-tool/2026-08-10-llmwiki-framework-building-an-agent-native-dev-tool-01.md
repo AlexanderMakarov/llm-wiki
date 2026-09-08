@@ -37,7 +37,3 @@ Graceful degradation principle ensuring the pipeline remains robust to schema dr
 ## Connections
 
 - [[llmwiki]] — this framework specification is the definitive architecture and contribution guide for the project
-
-## Contradictions
-
-None identified. This is the source specification and does not contradict existing wiki content.

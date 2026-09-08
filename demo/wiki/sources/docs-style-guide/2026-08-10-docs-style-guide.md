@@ -30,7 +30,3 @@ A comprehensive style guide for documentation in the [[llm-wiki]] project establ
 ## Connections
 
 - [[llm-wiki]] — this is the authoritative style guide for the project's documentation
-
-## Contradictions
-
-None identified (no existing wiki topics to contradict).

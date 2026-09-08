@@ -29,7 +29,3 @@ This captures the core design principle: preventing auto-sync from interfering w
 
 - [[llm-wiki]] — the project for which this auto-sync configuration is designed
 - [[Claude Code]] — the integration that provides the SessionStart hook mechanism
-
-## Contradictions
-
-None noted.

@@ -4,9 +4,9 @@ slug: cli-reference-12
 project: reference-cli
 type: source
 tags: [wiki-add, raw-doc]
-date: 2026-09-07
+date: 2026-09-08
 source: "docs/reference/cli.md"
-content_sha256: 68214fcdadc8d21482c73af718d17b4858152fb41607ffe75ccafc726af46640
+content_sha256: 186543f38f0258ea703f9ef68071d930f7135ea481068df5e5b46346e0f33e99
 ---
 
 > Part 12 of 15 of **CLI reference** — all — run the full pipeline.
@@ -39,7 +39,7 @@ python3 -m llmwiki all --skip-graph --lint-fail warnings   # fail CI on any lint
 | `--skip-lint` | Skip the lint step entirely. |
 | `--lint-fail {never,errors,warnings}` | When lint findings fail the run with exit `2`. Default: `never`. |
 | `--strict` | Spelling for `--lint-fail warnings`. When both are given, the stricter wins. |
-| `--fail-fast` | Stop at the first non-zero step. Default: continue, report the worst exit code. |
+| `--fail-fast` | Stop at the first non-zero step (useful for demo-vault / unattended runs where nobody will open the static site afterward). Default: continue later stages — e.g. if synth fails after a successful sync, **build still runs** — and report the worst exit code. |
 | `--with-sync`, `--with-synth` | Deprecated and inert — the stages they used to enable now run by default. Accepted so an already-installed scheduled command keeps parsing; each prints a one-line notice. |
 | `--vault PATH` | Run every step against this vault instead of the repo. |
 
@@ -52,6 +52,8 @@ python3 -m llmwiki all --skip-graph --lint-fail warnings   # fail CI on any lint
 | `never` (default) | Never — findings are reported and the run still exits `0`. |
 | `errors` | Lint reported at least one error-severity issue. |
 | `warnings` | Lint reported at least one error **or** warning. |
+
+When `--lint-fail` ends the run with exit `2`, the site HTML from the **preceding build in this run is kept** — lint does not undo or revert `site/`. Home surfaces the failure via Pipeline state (Last lint + banner); see [ui.md](ui.md#home).
 
 ### Conflicting flags
 

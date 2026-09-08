@@ -4,9 +4,9 @@ slug: synthesis-cost-what-you-pay-per-page-and-why-01
 project: reference-synthesis-cost
 type: source
 tags: [wiki-add, raw-doc]
-date: 2026-09-07
+date: 2026-09-08
 source: "docs/reference/synthesis-cost.md"
-content_sha256: 1a1121ad2564a82e148b7f2ce239ec0df90210de358c5d9d5f46aacfd418084f
+content_sha256: 0fd6618636ab9b2d36be2b366a1a9e72bcc7d76a15e33e3ce61ad61c7a26f026
 ---
 
 > Part 1 of 3 of **Synthesis cost — what you pay per page, and why**.
@@ -33,7 +33,9 @@ Two consequences drive every decision on this page:
 1. **Output is the expensive direction** — roughly 5x input per token. A model that "thinks" before answering can cost more than a pricier model that answers directly, even at a lower headline rate.
 2. **A cache write costs *more* than fresh input.** Caching only pays off if the same prefix is re-read. Each `claude -p` invocation is a separate process, so cache reuse across pages is partial at best.
 
-The rate card llmwiki prices against lives in [`llmwiki/model_pricing.csv`](../../llmwiki/model_pricing.csv), inside the package so it ships in the wheel (#210) — one row per model, with `aliases` mapping CLI names (`sonnet`, `claude-haiku-4-5-20251001`) onto pricing rows. Update that file when provider pricing changes; nothing else hardcodes rates.
+The rate card llmwiki prices against lives in [`llmwiki/model_pricing.csv`](../../llmwiki/model_pricing.csv), inside the package so it ships in the wheel (#210) — one row per model, with `aliases` mapping CLI names (`sonnet`, `claude-haiku-4-5-20251001`, `composer-2.5`, `cursor-grok-4.6-high`) onto pricing rows. Update that file when provider pricing changes; nothing else hardcodes rates.
+
+Cursor Agent CLI (`synthesis.backend: cursor_cli`) estimates use the **same static rate card**, not live Agent CLI billing. Rows for Composer 2.5 / Grok 4.5 / Grok 4.6 (and Fast variants) come from [Cursor models & pricing](https://cursor.com/docs/models-and-pricing). When an id has no published per-token rate, a temporary stand-in may mirror **Kimi K3** list rates and must say so in the row's `source` / `notes` — that is an approximate estimate aid, not measured Cursor billing.
 
 ## Where the money actually goes
 

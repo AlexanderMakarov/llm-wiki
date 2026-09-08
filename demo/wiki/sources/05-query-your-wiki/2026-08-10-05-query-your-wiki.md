@@ -33,7 +33,3 @@ Tutorial documenting the nine slash commands that make [[llmwiki]] useful for qu
 ## Connections
 
 - [[llmwiki]] — the core tool; its query interface is the subject of this tutorial
-
-## Contradictions
-
-(none identified)

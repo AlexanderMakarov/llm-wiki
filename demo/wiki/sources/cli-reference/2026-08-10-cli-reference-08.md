@@ -35,7 +35,3 @@ Documents two CLI commands that automate [[LLM-Wiki]] maintenance workflows. `wa
 - Adapter completion signaling — leverages per-adapter semantics (Claude, Cursor, Codex) for robust session detection
 - File system monitoring — mtime settle provides a fallback for adapters without explicit completion signals
 - Concurrency control — single-flight pattern prevents overlapping maintain runs during high-frequency session completion
-
-## Contradictions
-
-None identified (wiki is still in early stages; no conflicting content on record).

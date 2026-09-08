@@ -56,7 +56,3 @@ This session documents Part 2 (feature categories F–O) of a three-part feature
 
 - [[GitHub Actions]] (platform) — comprehensive CI/CD pipeline with lint/test (J1), pages deployment (J2), release automation (J3), and Dependabot tracking (J7).
   - fact: All five core CI/CD features ship in v0.1–v0.2, establishing v0.1 as "production-ready."
-
-## Contradictions
-
-None. The feature matrix represents a deliberate roadmap rather than a statement of current implementation. Features marked "won't" (G6, G7, N7) and deferred to later phases are explicit design decisions, not contradictions with other documented claims.

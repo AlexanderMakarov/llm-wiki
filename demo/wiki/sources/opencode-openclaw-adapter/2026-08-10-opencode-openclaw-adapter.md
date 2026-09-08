@@ -38,7 +38,3 @@ The OpenCode/OpenClaw adapter for [[llmwiki]] ingests `.jsonl` session transcrip
   - fact: Auto-fires when a session store is detected, exemplifying AI-session adapter behavior
   - fact: Normalizes external agent schemas into [[llmwiki]]'s shared renderer format
   - fact: Expands support for external AI agents by composing heterogeneous session formats into a unified knowledge base
-
-## Contradictions
-
-None identified.

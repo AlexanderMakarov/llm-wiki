@@ -36,7 +36,3 @@ Addresses security concerns by confirming containerization introduces no additio
 
 - [[llm-wiki]] — the project whose containerized deployment this documents
 - Related deployment alternatives mentioned: GitHub Pages, GitLab Pages, Vercel/Netlify (each likely has its own documentation page)
-
-## Contradictions
-
-None identified.
