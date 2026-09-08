@@ -528,6 +528,20 @@ kbd { display: inline-block; padding: 2px 6px; font-family: var(--mono); font-si
 .queue-widget { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; box-shadow: var(--shadow-card); }
 .queue-widget-content { margin: 14px 0; }
 .state-widget { margin: 14px 0; }
+/* #234: lint failure note under Candidates / knowledge table; stage stamps in Timeline. */
+.state-table-wrap .state-lint-banner {
+  margin-top: 10px;
+  margin-bottom: 0;
+}
+.state-lint-banner {
+  white-space: pre-wrap;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 0.82rem;
+  line-height: 1.4;
+  margin: 0 0 14px;
+  max-height: calc(1.4em * 7);
+  overflow: auto;
+}
 .state-table-wrap { overflow-x: auto; margin-bottom: 14px; }
 .state-pipeline-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; min-width: 520px; }
 .state-pipeline-table th, .state-pipeline-table td { border: 1px solid var(--border); padding: 10px 12px; vertical-align: top; text-align: left; }

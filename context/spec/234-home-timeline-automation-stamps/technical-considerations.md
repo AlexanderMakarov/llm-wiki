@@ -11,7 +11,7 @@
 
 Extend the existing vault state snapshot (`llmwiki-state.json`, and the existing `llmwiki-state.js` wrapper that only embeds that same JSON for the browser — **not** an HTML edit) with explicit **stage completion stamps** and a **lint outcome** (`status` + optional multiline `error` text). Writers run at the end of sync (already), synth, build, and lint via **shared helpers** (DRY — one writer per concern, called from both standalone CLI and `all`). Home’s **Pipeline state** widget reads the new fields (not the Automation panel). After lint updates the JSON, keep the vault/site **data** sidecars in sync so standalone `llmwiki lint` refreshes Pipeline state **without rewriting any HTML pages**.
 
-**Required UI:** when `last_lint_error` is non-empty, show a **banner above Pipeline state**. Stage stamps (**Last sync / Last synth / Last build / Last lint**) live in the **Pipeline state** section. The **Automation** panel holds **settings only** (shrunk as already decided).
+**Required UI:** when `last_lint_error` is non-empty, show a note **under the Candidates / knowledge table**. Stage stamps (**Last sync / Last synth / Last build / Last lint**) live in the **Timeline** collapsible. The **Automation** panel holds **settings only** (shrunk as already decided).
 
 Do **not** add publish/rollback of `site/` on lint-fail. Confirm continue-after-failure unless `--fail-fast`. Under `--fail-fast`, console reporting is enough. No new runtime dependencies.
 
@@ -83,18 +83,16 @@ File: `llmwiki/state_store.py` — extend `default_state()["ops"]` (and `_ensure
 
 | Surface | Shows |
 | --- | --- |
-| **Pipeline state** (`#llmwiki-state-widget` / `renderStateWidget`) | Eligible-source tables **plus** Last sync / Last synth / Last build / Last lint (time + lint pass/fail). **Required** lint-error **banner above** this section when `last_lint_error` is non-empty (pre-wrap, ~6 lines). Empty error → no banner. |
-| **Automation** (`render_automation_panel`) | **Settings only** (job, schedule, merged cost/backend, merged hooks/watch, log path, Maintain one-liner). **No** stage timestamps, **no** lint outcome, **no** lint-fail policy reminder, **no** installer Updated line. |
-| **Timeline** (collapsible inside Pipeline state widget) | Must **not** duplicate Last sync/synth/build/lint. Keep non-stage items if useful (e.g. oldest pending, last queue run) or slim further; hide dead Last reflect. |
-
-Banner placement: immediately above the Pipeline state content (tables / stage stamps), so it is visible without expanding Timeline.
+| **Eligible sources / Knowledge tables** | Count tables only. Lint-error **note under the Candidates / knowledge table** when `last_lint_error` is non-empty (pre-wrap, ~6 lines). Empty error → no note. |
+| **Timeline** (collapsible) | Oldest pending, **Last sync / Last synth / Last build / Last lint** (time + lint pass/fail), Last queue run. Hide dead Last reflect. |
+| **Automation** (`render_automation_panel`) | **Settings only** — short Synth backend line, Agent hooks (no “(recommended)”), Watch on its own line, log path, Maintain one-liner. **No** stage timestamps / lint outcome / lint-fail reminder / Updated. |
 
 ### 2.5 Automation panel shrink (`llmwiki/build.py` `render_automation_panel`)
 
 - Remove `lint_fail_line` entirely.
 - Remove `Updated: …` list item.
-- Merge hooks + watch into one `<li>`.
-- Merge cost + synth backend into one `<li>`.
+- Short **Synth backend** line with spend hint (user wording); ingest gets a short “does not spend money” form.
+- **Agent hooks** without “(recommended)”; **Watch** on a separate line.
 - For Maintain: one short clause that Maintain refreshes the site once after summarization.
 - Do **not** add pipeline timestamps here.
 
@@ -131,7 +129,7 @@ None beyond existing state snapshot + Home widget + panel HTML. No new services,
 
 ## 4. Testing Strategy
 
-- **Widget:** Pipeline state shows Last sync/synth/build/lint; banner present iff `last_lint_error` non-empty (~6-line multiline); Timeline does not duplicate those four stamps; Automation HTML has no stage stamps / lint-fail reminder / Updated.
+- **Widget:** Timeline shows Last sync/synth/build/lint; lint note under Candidates iff `last_lint_error` non-empty (~6-line multiline); Automation HTML has no stage stamps / lint-fail reminder / Updated.
 - **DRY:** stamp helpers used from both CLI and `all` (assert via behavior, not duplicate code paths left behind).
 - **State writers:** synth/build/lint stamp `ops.*`.
 - **Lint → state data only:** JSON (+ `site/` data sidecar) updates; no HTML rewrite required.

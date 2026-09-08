@@ -8,7 +8,7 @@ from pathlib import Path
 from llmwiki import build as build_mod
 from llmwiki.build import build_site
 from llmwiki.raw_docs_site import render_dashboard_body
-from llmwiki.render import js
+from llmwiki.render import css, js
 from llmwiki.state_store import (
     pipeline_on_disk_mismatch,
     pipeline_rows_missing_on_disk,
@@ -105,6 +105,21 @@ def test_state_widget_js_has_pipeline_table_and_collapsibles():
     timeline_idx = js.JS.index('detailsSection("Timeline"')
     sessions_idx = js.JS.index('detailsSection("Not synthesized sessions"')
     assert timeline_idx < sessions_idx
+    # #234: Timeline holds stage stamps (count 6); lint banner sits under Candidates table.
+    assert 'detailsSection("Timeline", 6,' in js.JS
+    assert "state-stage-stamps" in js.JS
+    assert "state-lint-banner" in js.JS
+    assert "ops.last_lint_error" in js.JS
+    assert "Last synth:" in js.JS
+    assert "Last build:" in js.JS
+    assert "Last lint:" in js.JS
+    assert "Last reflect run:" not in js.JS
+    assert "Last lint run:" not in js.JS
+    assert 'aria-label="Pipeline timeline"' in js.JS
+    knowledge_html = js.JS[js.JS.index("var knowledgeHtml ="): js.JS.index("var timelineBody =")]
+    assert "state-knowledge-table" in knowledge_html
+    assert "lintBanner" in knowledge_html
+    assert knowledge_html.index("</table>") < knowledge_html.index("lintBanner")
     # Old dashboard chrome removed from the renderer.
     assert "Unsynth estimate" not in js.JS
     assert "Queue task types" not in js.JS
@@ -120,6 +135,58 @@ def test_state_widget_js_has_pipeline_table_and_collapsibles():
     # Combined static blurb moved into per-table captions in JS.
     assert "Knowledge layer: To review → Entities / Concepts (vault-wide)." not in js.JS
     assert "vault-wide — not split by agent" not in js.JS
+
+
+def test_state_widget_pipeline_stage_stamps_in_timeline():
+    """#234: Last sync/synth/build/lint live in Timeline collapsible (not above tables).
+
+    # @layer: unit  # @spec: 234-home-timeline-automation-stamps
+    """
+    assert 'aria-label="Pipeline timeline"' in js.JS
+    assert "ops.last_synth_at" in js.JS
+    assert "ops.last_build_at" in js.JS
+    assert "ops.last_lint_run_at" in js.JS
+    assert "ops.last_lint_status" in js.JS
+    timeline_body_idx = js.JS.index("var timelineBody =")
+    timeline_section_idx = js.JS.index('detailsSection("Timeline"')
+    timeline_body = js.JS[timeline_body_idx:timeline_section_idx]
+    assert "Oldest pending:" in timeline_body
+    assert "Last queue run:" in timeline_body
+    assert "Last sync:" in timeline_body
+    assert "Last synth:" in timeline_body
+    assert "Last build:" in timeline_body
+    assert "Last lint:" in timeline_body
+    assert "Last reflect" not in timeline_body
+    # Stamps are not rendered as a block before the eligible-sources table.
+    assert "var stageStampsHtml" not in js.JS
+    assert js.JS.index("tableHtml +") < js.JS.index('detailsSection("Timeline"')
+
+
+def test_state_widget_lint_banner_empty_vs_present():
+    """#234 R2: lint note under Candidates table only when last_lint_error is non-empty.
+
+    # @layer: unit  # @spec: 234-home-timeline-automation-stamps
+    """
+    assert "ops.last_lint_error" in js.JS
+    assert 'class="error-banner state-lint-banner"' in js.JS
+    assert 'role="alert"' in js.JS
+    assert "var lintError = ops.last_lint_error" in js.JS
+    assert "if (lintError)" in js.JS
+    # Appended after knowledge table markup, before Timeline.
+    knowledge_idx = js.JS.index("var knowledgeHtml =")
+    banner_in_knowledge = js.JS.index("lintBanner", knowledge_idx)
+    timeline_idx = js.JS.index('detailsSection("Timeline"')
+    assert knowledge_idx < banner_in_knowledge < timeline_idx
+    assert 'lintStatus === "failed"' in js.JS
+    assert 'lintStatus === "ok"' in js.JS
+
+
+def test_state_lint_banner_css_prewrap():
+    """#234: lint banner uses pre-wrap so console-shaped multiline stays readable."""
+    assert "state-lint-banner" in css.CSS
+    assert "white-space: pre-wrap" in css.CSS
+    # Tied to the shared error-banner look; class is composed in JS.
+    assert ".error-banner" in css.CSS
 
 
 def test_commands_table_offers_automation_before_the_manual_rows():

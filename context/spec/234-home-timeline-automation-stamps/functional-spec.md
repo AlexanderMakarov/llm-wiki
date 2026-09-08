@@ -13,46 +13,47 @@ After a scheduled Maintain run (or a manual full pipeline), Home’s pipeline ov
 
 A second pain: when quality (lint) runs — as part of Maintain or on its own — the operator often has to dig into the automation log or scheduler exit status to learn whether the last check passed or failed. Opening Home should show that outcome prominently. A third pain: the Home Automation panel mixes settings with noise (policy reminders, installer “Updated” timestamps, and related lines that could be one line each), while stage completion times do not belong there.
 
-**Desired outcome.** Looking at **Pipeline state** on Home, an operator can tell — from stamped completion times, not from backlog counts — when sync, summarization, site publish, and quality check last finished, and whether the last quality check passed or failed. When lint failed, a **banner above Pipeline state** shows the console-shaped error (up to about six lines). The Automation panel shows **automation settings only**. The site that build just published stays published even if a later lint step fails the job. A standalone lint run refreshes those lint results via the data snapshot (no HTML rewrite). The full pipeline keeps going after a failed stage unless `--fail-fast`.
+**Desired outcome.** Looking at Home **Timeline** (under Pipeline state), an operator can tell — from stamped completion times, not from backlog counts — when sync, summarization, site publish, and quality check last finished, and whether the last quality check passed or failed. When lint failed, a note **under the Candidates table** shows the console-shaped error (up to about six lines). The Automation panel shows **automation settings only**. The site that build just published stays published even if a later lint step fails the job. A standalone lint run refreshes those lint results via the data snapshot (no HTML rewrite). The full pipeline keeps going after a failed stage unless `--fail-fast`.
 
-**How we measure success.** After a successful Maintain / full-pipeline run, Pipeline state shows Last sync, Last synth, Last build, and Last lint in stage order. After lint policy fails the job, the newly built site is still what the browser opens, and Home shows the lint failure banner. After a standalone lint, Pipeline state lint fields update without a full Maintain cycle. Without `--fail-fast`, a failed synth still leaves build free to run. Automation no longer carries stage stamps or the removed boilerplate.
+**How we measure success.** After a successful Maintain / full-pipeline run, Timeline shows Last sync, Last synth, Last build, and Last lint in stage order. After lint policy fails the job, the newly built site is still what the browser opens, and Home shows the lint failure note under Candidates. After a standalone lint, Timeline lint fields update without a full Maintain cycle. Without `--fail-fast`, a failed synth still leaves build free to run. Automation no longer carries stage stamps or the removed boilerplate.
 
 ---
 
 ## 2. Functional Requirements (The "What")
 
-### R1 — Pipeline state shows distinct completion times for each major stage
+### R1 — Timeline shows distinct completion times for each major stage
 
-- **As an** operator opening Home after automation, **I want** separate “last finished” times for sync, summarization (synth), site publish (build), and quality check (lint) inside **Pipeline state**, **so that** I do not mistake a fresh sync for a finished Maintain cycle.
+- **As an** operator opening Home after automation, **I want** separate “last finished” times for sync, summarization (synth), site publish (build), and quality check (lint) inside the **Timeline** collapsible under Pipeline state, **so that** I do not mistake a fresh sync for a finished Maintain cycle and the count tables stay uncluttered.
 
-**Pipeline state** must show (or equivalent clear labels):
+**Timeline** must show (or equivalent clear labels), along with existing useful rows such as Oldest pending / Last queue run:
 
 - **Last sync**
 - **Last synth**
 - **Last build**
 - **Last lint**
 
-These times come from recorded completion stamps for each stage, not from inferring progress from pending counts. Empty / never-run stages stay empty or show the same “never” treatment used elsewhere. These four stamps must **not** live in the Automation panel, and must **not** be duplicated as the primary home for those values under a separate Timeline-only placement.
+These times come from recorded completion stamps for each stage, not from inferring progress from pending counts. Empty / never-run stages stay empty or show the same “never” treatment used elsewhere. These four stamps must **not** live in the Automation panel, and must **not** sit above the Eligible sources / Knowledge tables.
 
 - **Acceptance Criteria:**
-  - [ ] Given Home is open after at least one successful full pipeline (Maintain / `all`-equivalent), when the operator views **Pipeline state**, then they see distinct Last sync, Last synth, Last build, and Last lint values (labels may vary slightly but meaning must be unambiguous).
-  - [ ] Given only sync has ever completed, when the operator views Pipeline state, then Last sync has a time and Last synth / Last build remain empty (or “never”), so backlog counts alone are not the only signal.
+  - [ ] Given Home is open after at least one successful full pipeline (Maintain / `all`-equivalent), when the operator expands **Timeline**, then they see distinct Last sync, Last synth, Last build, and Last lint values (labels may vary slightly but meaning must be unambiguous).
+  - [ ] Given only sync has ever completed, when the operator expands Timeline, then Last sync has a time and Last synth / Last build remain empty (or “never”), so backlog counts alone are not the only signal.
   - [ ] Given a successful Maintain run completes sync, then synth, then build, then lint, when the operator compares the four times, then they are consistent with that order (sync ≤ synth ≤ build ≤ lint, allowing equal times when stages finish in the same second).
   - [ ] Given Home is open, when the operator reads the **Automation** panel, then it does **not** list Last sync / Last synth / Last build / Last lint as stage completion times.
+  - [ ] Given Home is open, when the operator views the Eligible sources and Knowledge tables, then those four stamps are **not** rendered above the tables.
 
-### R2 — Lint failure banner above Pipeline state; pass/fail on Last lint
+### R2 — Lint failure note under Candidates table; pass/fail on Last lint
 
-- **As an** operator, **I want** Last lint to show whether the last quality check passed or failed, and — when it failed — a **banner above Pipeline state** with the error detail, **so that** the failure is unmistakable without opening logs.
+- **As an** operator, **I want** Last lint to show whether the last quality check passed or failed, and — when it failed — a note **under the Candidates / Knowledge table** with the error detail, **so that** the failure is unmistakable without opening logs and without cluttering the count tables.
 
 Rules:
 
-- When the last quality check **passed** (or there is no failure detail), the banner / error note is **not shown** (empty → nothing rendered).
-- When the last quality check **failed**, Home shows a **required banner above Pipeline state** with the error text, using the **same wording shape the console already prints** (multiple lines; shortened with an ellipsis when long), roughly up to six lines. Last lint also shows failed (and may repeat a short indication).
+- When the last quality check **passed** (or there is no failure detail), the note is **not shown** (empty → nothing rendered).
+- When the last quality check **failed**, Home shows a **required note under the Candidates table** with the error text, using the **same wording shape the console already prints** (multiple lines; shortened with an ellipsis when long), roughly up to six lines. Last lint in Timeline also shows failed (and may repeat a short indication).
 
 - **Acceptance Criteria:**
-  - [ ] Given the last quality check completed successfully with no failure detail, when the operator views Home, then they see Last lint’s time (and a passed / OK indication if shown) and **no** lint-error banner.
-  - [ ] Given the last quality check failed under fail-on-errors or fail-on-warnings policy, when the operator views Home, then a banner **above Pipeline state** shows the multiline error (up to ~six lines), and Last lint shows failed with a time.
-  - [ ] Given quality checks have never run, when the operator views Home, then Last lint is empty / never and no banner appears.
+  - [ ] Given the last quality check completed successfully with no failure detail, when the operator views Home, then they see Last lint’s time in Timeline (and a passed / OK indication if shown) and **no** lint-error note under Candidates.
+  - [ ] Given the last quality check failed under fail-on-errors or fail-on-warnings policy, when the operator views Home, then a note **under the Candidates table** shows the multiline error (up to ~six lines), and Timeline Last lint shows failed with a time.
+  - [ ] Given quality checks have never run, when the operator views Home, then Last lint is empty / never and no note appears.
 
 ### R3 — Build stays published; lint updates the existing site’s lint status (data only)
 
@@ -92,14 +93,13 @@ Default (no `--fail-fast`): if synth fails but sync succeeded, build still execu
 
 - Removing the line that says quality findings can mark the scheduled run as failed (the `--lint-fail …` reminder).
 - Removing the installer “Updated: …” timestamp line.
-- Merging **Agent hooks** and **Watch** into one combined line / pair.
-- Merging **Cost** and **Synth backend** into one combined line / pair.
+- Short **Synth backend** line with spend hint (not a long Cost essay); **Agent hooks** without “(recommended)”; **Watch** on its own line.
 - Keeping **only automation settings** — no Last sync / synth / build / lint stamps here.
 
 - **Acceptance Criteria:**
   - [ ] Given the operator reads the install-automation / Maintain documentation updated by this work, when they look for when the site is rebuilt under Maintain, then the docs state it is once per cycle after summarization.
   - [ ] Given Home shows the Automation panel after install-automation, when the panel describes Maintain, then it states (briefly) that Maintain refreshes the site once after summarization — not that every sync alone means the pipeline is complete.
-  - [ ] Given the Automation panel is rendered, when the operator reads it, then it does **not** include the “Quality findings can mark the scheduled run as failed…” line, does **not** include an “Updated: …” installer timestamp, shows hooks+watch as one combined entry, shows cost+synth-backend as one combined entry, and does **not** list pipeline stage completion times.
+  - [ ] Given the Automation panel is rendered, when the operator reads it, then it does **not** include the “Quality findings can mark the scheduled run as failed…” line, does **not** include an “Updated: …” installer timestamp, shows a short Synth backend line (spend hint when applicable), shows Agent hooks without “(recommended)”, shows Watch on a separate line, and does **not** list pipeline stage completion times.
   - [ ] Given Ingest-only automation is already installed, when this feature ships, then Ingest’s scheduled behavior is unchanged by this work.
 
 ---
@@ -108,7 +108,7 @@ Default (no `--fail-fast`): if synth fails but sync succeeded, build still execu
 
 ### In-Scope
 
-- Pipeline state: Last sync, Last synth, Last build, Last lint; required lint-error banner above Pipeline state when failed.
+- Timeline: Last sync, Last synth, Last build, Last lint; required lint-error note under the Candidates table when failed.
 - Automation panel: settings only + shrink/merge as listed; Maintain one-liner.
 - Lint (pipeline or standalone) refreshes lint status via data snapshot only; build is not reverted when lint fails.
 - Full-pipeline continue-after-failure unless `--fail-fast` (confirm / document).
@@ -132,11 +132,11 @@ Default (no `--fail-fast`): if synth fails but sync succeeded, build still execu
 
 | Topic | Choice |
 | --- | --- |
-| Stage stamps location | **Pipeline state** (not Automation; not Timeline-as-primary) |
-| Lint failure UI | **Required banner above Pipeline state** + Last lint failed; console-shaped multiline (~6 lines) |
-| Lint-policy failure vs publish | Keep the newly built site; do **not** revert; show failure via banner / Last lint |
+| Stage stamps location | **Timeline** collapsible (not above tables; not Automation) |
+| Lint failure UI | **Note under Candidates table** + Last lint failed in Timeline; console-shaped multiline (~6 lines) |
+| Lint-policy failure vs publish | Keep the newly built site; do **not** revert; show failure via Candidates note / Last lint |
 | Standalone lint | Updates JSON/data snapshot only (no HTML rewrite) |
 | Pipeline after stage failure | Continue unless `--fail-fast` (console enough on fail-fast) |
 | Ingest-only automation | No behavior change |
-| Automation panel | Settings only; remove lint-fail reminder + Updated; merge hooks↔watch and cost↔synth-backend |
+| Automation panel | Settings only; short Synth backend line; hooks without “(recommended)”; Watch separate; drop lint-fail reminder + Updated |
 | Implementation style | DRY — reuse existing helpers across CLI / `all` |

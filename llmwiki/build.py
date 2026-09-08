@@ -104,10 +104,12 @@ from llmwiki.search_tree import (
     search_index_footer_badge,
 )
 from llmwiki.state_store import (
+    copy_state_sidecar_to_site,
     pipeline_on_disk_mismatch,
     pipeline_rows_missing_on_disk,
     read_state,
     resolve_state_file,
+    stamp_last_build_at,
     synth_pipeline_shape_ok,
     update_state,
 )
@@ -2178,7 +2180,12 @@ def _schedule_label(status: dict[str, Any]) -> str:
 
 
 def render_automation_panel(content_root: Path | None) -> str:
-    """HTML panel describing install-automation status for the Home page."""
+    """HTML panel describing install-automation status for the Home page.
+
+    Settings only (#234): job, schedule, short synth-backend line, hooks, watch,
+    log path, and a Maintain one-liner. No stage timestamps, lint outcome,
+    lint-fail policy reminder, or installer Updated line.
+    """
     if content_root is None:
         status = None
     else:
@@ -2197,43 +2204,41 @@ def render_automation_panel(content_root: Path | None) -> str:
     plan = automation_plan.plan_from_status(status)
     job_label = html.escape(automation_plan.plan_label(plan))
     schedule_label = html.escape(_schedule_label(status))
-    spend_line = (
-        "<li>Cost: <strong>can spend money at your AI provider</strong> — it sends session text for "
-        "synthesis. Run <code>llmwiki synth --estimate</code> to see what that costs.</li>"
+    backend = html.escape(str(status.get("synth_backend") or "dummy"))
+    backend_line = (
+        f"<li>Synth backend: <code>{backend}</code> (this step may spend money, "
+        "run <code>llmwiki synth --estimate</code> to see what that costs)</li>"
         if automation_plan.spends_tokens(plan)
-        else "<li>Cost: <strong>cannot spend money at your AI provider</strong> — it only converts new "
-        "sessions into <code>raw/</code>.</li>"
-    )
-    lint_fail_line = (
-        f"<li>Quality findings can mark the scheduled run as failed "
-        f"(<code>--lint-fail {html.escape(plan.lint_fail)}</code>).</li>"
-        if plan.lint_fail != "never"
-        else ""
+        else (
+            f"<li>Synth backend: <code>{backend}</code> "
+            "(does not spend money — ingest only)</li>"
+        )
     )
     watch = "on" if status.get("watch_enabled") else "off"
     hooks = status.get("hooks") or []
-    hooks_s = ", ".join(str(h) for h in hooks) if hooks else "none (recommended)"
-    backend = html.escape(str(status.get("synth_backend") or "dummy"))
+    hooks_s = ", ".join(str(h) for h in hooks) if hooks else "none"
     log_path = html.escape(str(status.get("log_path") or ""))
-    updated = html.escape(str(status.get("updated_at") or ""))
-    note = html.escape(str(status.get("note") or (
-        "Scheduled runs with no new sessions are a no-op."
-    )))
+    if plan.job == "maintain":
+        footer = (
+            '<p class="muted">Maintain refreshes the site once after summarization.</p>'
+        )
+    else:
+        note = html.escape(str(status.get("note") or (
+            "Scheduled runs with no new sessions are a no-op."
+        )))
+        footer = f'<p class="muted">{note}</p>'
     return (
         '<div class="automation-panel" aria-label="Automation">'
         "<h2>Automation</h2>"
         "<ul>"
         f"<li>Daily job: <strong>{job_label}</strong></li>"
         f"<li>Runs: <strong>{schedule_label}</strong> local time</li>"
-        f"{spend_line}"
-        f"{lint_fail_line}"
-        f"<li>Watch (near-real-time maintain, documented): <strong>{watch}</strong></li>"
+        f"{backend_line}"
         f"<li>Agent hooks: {html.escape(hooks_s)}</li>"
-        f"<li>Synth backend: <code>{backend}</code></li>"
+        f"<li>Watch (near-real-time maintain): <strong>{watch}</strong></li>"
         f"<li>Last-run log: <code>{log_path}</code></li>"
-        f"<li class=\"muted\">Updated: {updated}</li>"
         "</ul>"
-        f"<p class=\"muted\">{note}</p>"
+        f"{footer}"
         "</div>"
     )
 
@@ -3254,14 +3259,7 @@ def build_site(
     # Ship the Home State sidecar inside site/ so a site-only HTTP root
     # (e2e, GitHub Pages of site/) resolves {js_prefix}llmwiki-state.js.
     # Vault root still keeps its copy for sync/synthesize writers.
-    vault_sidecar = content_root / "llmwiki-state.js"
-    site_sidecar = out_dir / "llmwiki-state.js"
-    if vault_sidecar.is_file():
-        shutil.copy2(vault_sidecar, site_sidecar)
-    elif not site_sidecar.is_file():
-        site_sidecar.write_text(
-            "window.LLMWIKI_STATE_SNAPSHOT = {};\n", encoding="utf-8"
-        )
+    copy_state_sidecar_to_site(content_root, site_dir=out_dir)
 
     estimate: dict[str, Any] = {}
     try:
@@ -3476,6 +3474,8 @@ def build_site(
         f"==> build complete: {total_files} HTML files, {total_bytes / 1024:.0f} KB total"
     )
     print(f"    output: {out_dir}")
+    # Stamp after a successful publish; re-copy sidecar so site/ sees last_build_at.
+    stamp_last_build_at(content_root / "llmwiki-state.json", site_dir=out_dir)
     return 0
 
 

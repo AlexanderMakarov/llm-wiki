@@ -25,7 +25,6 @@ from __future__ import annotations
 import argparse
 import sys
 import time
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -41,7 +40,13 @@ from llmwiki.lint import LintOptions, UnknownRuleError, load_pages, run_lint, su
 from llmwiki.lint.report import render_text
 from llmwiki.pipeline_lock import pipeline_lock
 from llmwiki.reindex import reindex_wiki
-from llmwiki.state_store import read_state, resolve_state_file, update_state
+from llmwiki.state_store import (
+    read_state,
+    record_lint_ops,
+    resolve_state_file,
+    stamp_last_synth_at,
+    update_state,
+)
 from llmwiki.synth.base import BaseSynthesizer
 from llmwiki.synth.pipeline import refresh_synth_pending, resolve_backend, synthesize_new_sessions
 from llmwiki.synth.reporting import print_synth_run_summary
@@ -101,7 +106,11 @@ def _run_graph_step(*, wiki_dir: Path, graph_root: Path, engine: str) -> int:
 
 
 def _run_lint_step(
-    wiki_dir: Path, *, min_refs: int = DEFAULT_MIN_REFS
+    wiki_dir: Path,
+    *,
+    min_refs: int = DEFAULT_MIN_REFS,
+    lint_fail: str = "never",
+    site_dir: Path | None = None,
 ) -> tuple[int, dict[str, int]]:
     """Run every lint rule and print the same report ``llmwiki lint`` prints.
 
@@ -114,6 +123,13 @@ def _run_lint_step(
     or the vault's settings file cannot be used, else 0 — lint issues alone
     never fail the pipeline; ``--strict`` escalation is the caller's job
     (it needs the summary either way).
+
+    ``lint_fail`` is the active policy (``never``/``errors``/``warnings``);
+    when it trips, ops record ``failed`` plus truncated console-shaped text.
+
+    ``site_dir`` is the publish directory from this run's build (``--out``);
+    when set, the state sidecar is copied there so Home opened from that
+    tree sees lint fields (#234).
     """
     if not wiki_dir.is_dir():
         print(f"error: wiki directory not found: {wiki_dir}", file=sys.stderr)
@@ -142,16 +158,24 @@ def _run_lint_step(
         print(f"error: {vault_settings_path(settings_root)}: {exc}", file=sys.stderr)
         return 2, {}
 
-    print(render_text(
+    report_text = render_text(
         outcome, len(pages), settings_filename=VAULT_SETTINGS_FILENAME
-    ))
-
-    now = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-    update_state(
-        lambda s: (s.setdefault("ops", {}).__setitem__("last_lint_run_at", now) or s),
-        resolve_state_file(),
     )
-    return 0, summarize(outcome.issues)
+    print(report_text)
+
+    summary = summarize(outcome.issues)
+    if lint_fail == "errors":
+        failed = summary.get("error", 0) > 0
+    elif lint_fail == "warnings":
+        failed = summary.get("error", 0) > 0 or summary.get("warning", 0) > 0
+    else:
+        failed = False
+    record_lint_ops(
+        failed=failed,
+        error_text=report_text if failed else "",
+        site_dir=site_dir,
+    )
+    return 0, summary
 
 
 #: Lint failure policies, ordered from most permissive to strictest.
@@ -315,6 +339,8 @@ def run_pipeline(args: argparse.Namespace) -> int:
                     raw_dir=raw_sessions if vault_root else None,
                     wiki_sources_dir=(wiki_dir / "sources") if vault_root else None,
                 )
+                # Backend ran — stamp even when some files errored.
+                stamp_last_synth_at()
                 print(
                     f"Scanned {summary['total_scanned']}, new {summary['new_files']}, "
                     f"synthesized {summary['synthesized']}, skipped {summary['skipped']}"
@@ -386,7 +412,12 @@ def run_pipeline(args: argparse.Namespace) -> int:
             # honesty tests can grep banners in order (#170).
             lint_extra = "" if lint_fail == "never" else f" --lint-fail {lint_fail}"
             print(f"\n==> llmwiki lint{lint_extra}")
-            lint_rc, lint_summary = _run_lint_step(wiki_dir, min_refs=min_refs)
+            lint_rc, lint_summary = _run_lint_step(
+                wiki_dir,
+                min_refs=min_refs,
+                lint_fail=lint_fail,
+                site_dir=out_dir,
+            )
             overall_rc = _merge_rc(overall_rc, lint_rc)
 
             # The policy escalates lint findings into a pipeline failure,
