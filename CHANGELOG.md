@@ -15,8 +15,13 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Changed
 
+<<<<<<< HEAD
 - **Cursor / Claude / Ollama overview share `overview_completion`** — `build.synthesize_overview` no longer has per-backend `_overview_via_*` helpers; each LLM synthesizer implements one-shot overview on the shared contract (#230 follow-up).
 - **`configuration-reference.md` nests Claude settings with flat aliases** — one row per setting (`synthesis.claude.model` alias `claude_model`, …) instead of duplicating nested and legacy flat keys.
+=======
+- **Canonical clone and issue links point at `AlexanderMakarov/llm-wiki`** — CONTRIBUTING, README, setup/deploy docs, and AWOS delivery-flow no longer treat `Pratiyush/llm-wiki` as the working upstream or clone target. Historical credit remains in Acknowledgements / License.
+  - *Release note:* Clone and file issues against `AlexanderMakarov/llm-wiki`; Pratiyush remains attribution for the original project only.
+>>>>>>> e2d2224 (docs: point clone and issue links at AlexanderMakarov/llm-wiki)
 - **`refresh_demo.py` synths only the docs in its plan** — after `add`/`remove`, it runs `llmwiki synth --docs-only` with repeatable `--path` for each newly ingested `raw/docs/<slug>/…` file instead of a vault-wide docs pass that re-queued every pending document. Remove-only plans skip synth (and the backend reachability check). See [REFRESH_DEMO.md](docs/maintainers/REFRESH_DEMO.md).
   - *Release note:* Demo docs refresh no longer burns synthesis tokens on unchanged pending pages.
 - **`/release` hard-stops on incomplete demo synth** — the skill and `RELEASE_PROCESS.md` refuse to treat lint/build green or “proceed with delivery” as a waiver when release-day docs/sessions still lack wiki pages; human gate must report synth `complete` / `opted out` / `blocked`. `refresh_demo.py` fails (and does not advance `.demo-source-rev`) when plan-added raw docs lack coverage, and `--verify-slugs` is the local re-check after a manual path-scoped synth.

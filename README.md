@@ -117,8 +117,10 @@ This repository's `CLAUDE.md` and `AGENTS.md` are for people changing llmwiki it
 ## Acknowledgements
 
 - [Andrej Karpathy](https://twitter.com/karpathy) — [LLM Wiki idea](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)
-- [Pratiyush](https://github.com/Pratiyush/llm-wiki) — upstream this work extends
+- [Pratiyush](https://github.com/Pratiyush/llm-wiki) — original llm-wiki project this repository builds on
 
 ## License
 
-[MIT](LICENSE) © Alexander Makarov; based on upstream [Pratiyush/llm-wiki](https://github.com/Pratiyush/llm-wiki)
+[MIT](LICENSE) © Alexander Makarov; originally based on [Pratiyush/llm-wiki](https://github.com/Pratiyush/llm-wiki)
+
+Canonical repository for issues, PRs, and clones: [AlexanderMakarov/llm-wiki](https://github.com/AlexanderMakarov/llm-wiki).

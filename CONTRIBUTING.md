@@ -43,7 +43,7 @@ Be kind. Respect privacy. Prefer plain English to jargon. No scope creep.
 ## Dev setup
 
 ```bash
-git clone https://github.com/Pratiyush/llm-wiki.git
+git clone https://github.com/AlexanderMakarov/llm-wiki.git
 cd llm-wiki
 ./setup.sh                # installs markdown, scaffolds raw/ wiki/ site/,
                           # wires the pre-push lint hook
@@ -130,7 +130,7 @@ Adapted from the parent [Open Source Project Framework](docs/framework.md):
 
 ### Identity
 
-- `git config user.name "Pratiyush"` (on this fork — you should use your own name on your fork)
+- `git config user.name "Your Name"` (use your own GitHub identity)
 - **Never** add `Co-authored-by: Claude`, `Co-authored-by: AI`, or similar AI attribution lines. Commits from this project are human-authored.
 
 ### PR size
@@ -322,4 +322,4 @@ Release flow (Phase 6 of the framework):
 
 ## Questions?
 
-Open an issue with the `question` label. Or ping [@Pratiyush](https://github.com/Pratiyush) on X.
+Open an issue with the `question` label on [AlexanderMakarov/llm-wiki](https://github.com/AlexanderMakarov/llm-wiki/issues).

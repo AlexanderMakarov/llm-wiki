@@ -13,7 +13,7 @@ The canonical project config every generated flow command checks against. Flow-a
 
 - **Atlassian/Jira base URL:** n/a — no tracker; backlog is GitHub Issues
 - **Slack channel & handles:** n/a — exception notifications go to the pull request via `gh` when a PR already exists
-- **Code-host org/repo:** `AlexanderMakarov/llm-wiki` (`origin`); upstream reference remote `source` = `Pratiyush/llm-wiki`
+- **Code-host org/repo:** `AlexanderMakarov/llm-wiki` (`origin` only — no second remote for the original project)
 - **Format/lint gate scope:** Scoped — CI and CONTRIBUTING run `ruff check llmwiki tests scripts` and `python3 -m pytest tests/ -q` (not whole-repo Prettier). Versioned hook `.githooks/pre-push` runs `ruff check` on **changed `*.py` in the push only** when `core.hooksPath` is `.githooks` (via `./setup.sh`). AWOS working files under `context/` are outside that ruff package scope. Review dumps are gitignored via `context/.gitignore` so they never enter the format/lint path as tracked files.
 - **Live vault path (operator machine):** gitignored root `config.json` → `vault.default_path` in the primary checkout (never commit the path; never copy that `config.json` into a worktree). Use for operator-driven live verification commands and for agent **read-only** probe commands only.
 - **Spec Author (human operator):** resolve per run from the machine — see §10. Never tool/command/agent metadata in Author fields
