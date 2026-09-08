@@ -107,4 +107,4 @@ start site\index.html
 
 ## Getting help
 
-If you hit a Windows-specific issue, open a [bug report](https://github.com/Pratiyush/llm-wiki/issues/new?template=bug_report.md) with the `windows` label.
+If you hit a Windows-specific issue, open a [bug report](https://github.com/AlexanderMakarov/llm-wiki/issues/new?template=bug_report.yml) with the `windows` label.

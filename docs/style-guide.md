@@ -141,7 +141,7 @@ a subtle tinted background. No icons, no colored banners.
   (e.g. `[text](reference/cache-tiers.md#the-four-tiers)` with the
   relative prefix that suits the source file).
 - **External links**: use the canonical URL, no tracking params.
-  Prefer the project's own repo (`https://github.com/Pratiyush/llm-wiki/issues/N`)
+  Prefer the project's own repo (`https://github.com/AlexanderMakarov/llm-wiki/issues/N`)
   over screenshots of issues.
 - **Never link to `master`** when you could link to a tagged version.
   (`/v1.1.0-rc2/…` beats `/master/…`.)

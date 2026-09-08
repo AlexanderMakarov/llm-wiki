@@ -19,7 +19,7 @@ release tag. To run:
 
 ```bash
 # 1. Clone the repo (you need the Dockerfile + examples for the volume mounts)
-git clone https://github.com/Pratiyush/llm-wiki.git
+git clone https://github.com/AlexanderMakarov/llm-wiki.git
 cd llm-wiki
 
 # 2. Pull the latest image

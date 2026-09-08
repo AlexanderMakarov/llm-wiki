@@ -17,7 +17,7 @@ and deployed to GitHub Pages. By the end you'll have:
 ### 1.1 Clone the repo
 
 ```bash
-git clone https://github.com/Pratiyush/llm-wiki.git
+git clone https://github.com/AlexanderMakarov/llm-wiki.git
 cd llm-wiki
 ```
 
@@ -337,4 +337,4 @@ manually.
 - **[Configuration](../configuration.md)** — every tuning knob
 - **[Privacy](../privacy.md)** — redaction rules + `.llmwikiignore`
 
-If you hit a snag, check [GitHub Issues](https://github.com/Pratiyush/llm-wiki/issues) or file a new one.
+If you hit a snag, check [GitHub Issues](https://github.com/AlexanderMakarov/llm-wiki/issues) or file a new one.

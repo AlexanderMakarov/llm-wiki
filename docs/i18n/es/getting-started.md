@@ -19,7 +19,7 @@ Eso es todo. Sin `npm`, sin `brew`, sin base de datos, sin cuenta.
 ### macOS / Linux
 
 ```bash
-git clone https://github.com/Pratiyush/llm-wiki.git
+git clone https://github.com/AlexanderMakarov/llm-wiki.git
 cd llm-wiki
 ./setup.sh
 ```
@@ -27,7 +27,7 @@ cd llm-wiki
 ### Windows
 
 ```cmd
-git clone https://github.com/Pratiyush/llm-wiki.git
+git clone https://github.com/AlexanderMakarov/llm-wiki.git
 cd llm-wiki
 setup.bat
 ```
