@@ -16,7 +16,6 @@ Thanks for wanting to contribute. This project follows strict rules about commit
 - [Markdown conventions](#markdown-conventions)
 - [Linting](#linting)
 - [Testing](#testing)
-- [Releases](#releases)
 
 ## TL;DR rules of contribution
 
@@ -157,7 +156,7 @@ Conventional Commits. Types we accept:
 
 Optionally scope with a version: `feat(v0.8): tool chart`. Include the issue number: `Closes #65` in the body.
 
-### PR body — 17-box pre-merge checklist
+### PR body — 16-box pre-merge checklist
 
 Every box must be checked (or have a one-line waiver). [`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md) is the authoritative list; it covers:
 
@@ -176,8 +175,7 @@ Every box must be checked (or have a one-line waiver). [`.github/PULL_REQUEST_TE
 13. Release notes drafted — one line fit for the next `gh release create --notes`
 14. **UI verified in light AND dark mode** (for CSS/UI changes) — screenshots attached
 15. **A11y verified** — keyboard nav, focus rings, WCAG 2.1 AA (≥ 4.5:1 contrast)
-16. Commits GPG-signed, no AI co-author trailers, atomic
-17. Reviewer has read every changed line (no rubber-stamping)
+16. Reviewer has read every changed line (no rubber-stamping)
 
 ### Branch protection
 
@@ -307,18 +305,6 @@ Every adapter must ship with:
 - A fixture (synthetic or heavily redacted)
 - A snapshot test
 - A graceful-degradation test (passes an unknown record type)
-
-## Releases
-
-Current version is **2.1.0** — see `CHANGELOG.md` for what changed when.
-
-Release flow (Phase 6 of the framework):
-
-1. Bump `__version__` in `llmwiki/__init__.py` **and** `version` in `pyproject.toml` — they must match
-2. Update `CHANGELOG.md`
-3. `git tag v1.x.y && git push origin v1.x.y`
-4. Create a GitHub Release
-5. `.github/workflows/pages.yml` auto-deploys the demo site
 
 ## Questions?
 

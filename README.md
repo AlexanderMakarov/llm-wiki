@@ -122,5 +122,3 @@ This repository's `CLAUDE.md` and `AGENTS.md` are for people changing llmwiki it
 ## License
 
 [MIT](LICENSE) © Alexander Makarov; originally based on [Pratiyush/llm-wiki](https://github.com/Pratiyush/llm-wiki)
-
-Canonical repository for issues, PRs, and clones: [AlexanderMakarov/llm-wiki](https://github.com/AlexanderMakarov/llm-wiki).

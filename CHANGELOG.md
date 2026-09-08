@@ -17,6 +17,7 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 - **Canonical clone and issue links point at `AlexanderMakarov/llm-wiki`** — CONTRIBUTING, README, setup/deploy docs, and AWOS delivery-flow no longer treat `Pratiyush/llm-wiki` as the working upstream or clone target. Historical credit remains in Acknowledgements / License.
   - *Release note:* Clone and file issues against `AlexanderMakarov/llm-wiki`; Pratiyush remains attribution for the original project only.
+- **CONTRIBUTING drops the outdated Releases section and the GPG checklist box** — maintainers cut releases with `/release`; the pre-merge list is a 16-box checklist (PR template aligned).
 - **Cursor / Claude / Ollama overview share `overview_completion`** — `build.synthesize_overview` no longer has per-backend `_overview_via_*` helpers; each LLM synthesizer implements one-shot overview on the shared contract (#230 follow-up).
 - **`configuration-reference.md` nests Claude settings with flat aliases** — one row per setting (`synthesis.claude.model` alias `claude_model`, …) instead of duplicating nested and legacy flat keys.
 - **`refresh_demo.py` synths only the docs in its plan** — after `add`/`remove`, it runs `llmwiki synth --docs-only` with repeatable `--path` for each newly ingested `raw/docs/<slug>/…` file instead of a vault-wide docs pass that re-queued every pending document. Remove-only plans skip synth (and the backend reachability check). See [REFRESH_DEMO.md](docs/maintainers/REFRESH_DEMO.md).

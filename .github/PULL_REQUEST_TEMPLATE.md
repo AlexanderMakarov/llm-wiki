@@ -49,7 +49,6 @@ Every box below must be checked (or have a one-line waiver explaining why it doe
 - [ ] **Release notes drafted** — one line suitable for the next `gh release create --notes` text, either in the Unreleased CHANGELOG section or in this PR body.
 - [ ] **UI verified** (light AND dark mode) — for any change to `llmwiki/build.py` CSS or static site. Paste screenshots below.
 - [ ] **A11y verified** — keyboard nav works, focus rings visible, `axe` clean (for UI changes). WCAG 2.1 AA minimum (contrast ≥ 4.5:1).
-- [ ] **Commits GPG-signed** by the repo author; no AI co-author trailers; atomic commits (one logical change each)
 - [ ] **Reviewer has read every changed line** — no rubber-stamping
 
 ## Screenshots / output

@@ -84,13 +84,6 @@ def test_template_checklist_requires_a11y():
     assert "WCAG" in text
 
 
-def test_template_checklist_requires_gpg_signed():
-    text = TEMPLATE.read_text(encoding="utf-8")
-    assert "GPG-signed" in text
-    # Match exact template wording "no AI co-author trailers"
-    assert "no AI co-author trailers" in text
-
-
 def test_template_checklist_requires_reviewer_reads_lines():
     text = TEMPLATE.read_text(encoding="utf-8")
     assert "read every changed line" in text
