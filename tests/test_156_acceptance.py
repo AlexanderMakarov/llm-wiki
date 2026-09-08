@@ -417,7 +417,8 @@ def test_home_page_shows_a_readable_label_for_a_new_format_status(tmp_path: Path
     panel = render_automation_panel(tmp_path)
     assert "Maintain + graph (built-in)" in panel
     assert "Weekdays at 08:00" in panel
-    assert "can spend money at your AI provider" in panel
+    assert "this step may spend money" in panel
+    assert "llmwiki synth --estimate" in panel
 
 
 # ─── R10 -- newcomer docs point at automation instead of chores ───────────
