@@ -49,3 +49,10 @@
 
 ## commit-push (pre)
 - Implementation commit pending after local review keep/drop
+
+## local-review
+- Review file: context/spec/227-product-principles-docs/review.md (session-only, not committed)
+- Verdict: Request changes — B1 no linked issue; N1 PyPI description grammar
+- Keep/drop (operator deliver): B1 fixed by filing #241; N1 dropped — operator specified exact `description` string
+- Static gate: ruff green; full pytest exit 0
+- Next: push + PR Closes #241
