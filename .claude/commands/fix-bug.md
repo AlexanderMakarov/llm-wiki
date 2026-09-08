@@ -5,7 +5,7 @@ argument-hint: '[bug — report ID, link, or description]'
 
 # Fix a Bug End-to-End
 
-Takes one bug — a GitHub Issue — and drives it through diagnosis, a scoped fix with a regression test, re-verification of the touched acceptance criteria, local review, PR, and merge until Definition of Done. On the way it keeps the owning spec honest: when the fix changes documented behavior, it amends that spec rather than letting it drift. Decisions live in `context/product/delivery-flow.md`; re-run `/awos:flow` (Cursor: `/awos-flow`) to change them.
+Takes one bug — a GitHub Issue — and drives it through diagnosis, a scoped fix with a regression test, re-verification of the touched acceptance criteria, local review, PR, and merge until Definition of Done. On the way it keeps the owning spec honest: when the fix changes documented behavior, it amends that spec rather than letting it drift. Decisions live in `context/product/delivery-flow.md`; re-run `/awos:flow` to change them — it ships with the `awos@awos-marketplace` plugin (Claude: `/plugin install awos@awos-marketplace`; Cursor: `./scripts/update-awos.sh --plugin`, then `/awos-flow`).
 
 ## Notifications
 

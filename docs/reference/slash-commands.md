@@ -11,10 +11,7 @@ what it runs under the hood, and a realistic invocation example. Use these
 inside **Claude Code**. The command files live in the installable package and
 land in an agent directory via `llmwiki install-agent-kit --dest PATH`.
 
-Maintainer and AWOS delivery commands (`/maintainer`, `/release`,
-`/triage-issue`, `/fix-bug`, `/implement-feature`) are not part of the vault
-pipeline and are not installed by the agent kit — they are described in
-[`../maintainers/README.md`](../maintainers/README.md).
+Maintainer and AWOS delivery commands (`/release`, `/fix-bug`, `/implement-feature`) are not part of the vault pipeline and are not installed by the agent kit — they are described in [`../maintainers/README.md`](../maintainers/README.md).
 
 All **12 commands in the vault pipeline**, in the order you meet them:
 

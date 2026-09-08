@@ -145,6 +145,8 @@ grows past 300.
 
 **Context:** #62 non-goal.
 
+**Update 2026-09-08:** the `/triage-issue` command was retired in #227 — the label taxonomy and triage rules it applied are in [`TRIAGE.md`](TRIAGE.md), applied by hand or by asking the coding agent to apply them. Staying off automated triage bots is unchanged.
+
 ## 2026-08-09 — First-class open questions as a page kind
 
 **Reason:** `type: question` sat in the vocabulary for years without a

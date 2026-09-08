@@ -35,9 +35,7 @@ NON_WRAPPER_SLASHES = {
     "wiki-sync",       # bundles multiple CLI calls
     "wiki-update",     # in-place surgical edit
     "wiki-lint",       # prompt-driven grep workflow per CLAUDE.md
-    "maintainer",      # loader skill, not a CLI wrapper
     "release",         # orchestration
-    "triage-issue",    # prompt-driven
     "fix-bug",         # AWOS delivery orchestration (#114)
     "implement-feature",  # AWOS delivery orchestration (#114)
 }
@@ -91,7 +89,7 @@ def test_slash_dir_exists():
 
 def test_every_slash_has_wiki_prefix_or_is_governance():
     governance = {
-        "maintainer", "release", "triage-issue",
+        "release",
         "fix-bug", "implement-feature",  # AWOS delivery (#114)
     }
     for p in _all_slash_files():

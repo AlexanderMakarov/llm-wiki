@@ -1,8 +1,6 @@
 # Issue triage
 
-> **Audience:** maintainers working through the inbox. Run
-> `/triage-issue <number>` for a guided pass that applies the rules
-> below automatically.
+> **Audience:** maintainers working through the inbox. Apply the rules below by hand, or hand this doc to the coding agent and ask it to triage a given issue against them.
 
 Triage runs at most once a day when the queue is active. The goal is
 to give every new issue a label, a milestone, and a priority within

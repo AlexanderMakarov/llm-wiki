@@ -29,7 +29,13 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Fixed
 
+- **Cursor resolves `/fix-bug` and `/implement-feature` (#227)** — Cursor loads slash commands from `.cursor/commands/` only, so both delivery commands were Claude-only. `scripts/sync-cursor-commands.sh` now generates thin `.cursor/commands/<name>.md` wrappers that carry the source command's description and point Cursor at `.claude/commands/<name>.md` as the source of truth plus the `.cursor/rules/awos-cursor-runtime.mdc` tool mapping; `./scripts/update-awos.sh` runs it alongside the AWOS wrapper sync. Both generated commands, and [`docs/maintainers/README.md`](docs/maintainers/README.md), now also name the `awos@awos-marketplace` plugin that provides `/awos:flow` instead of implying it is built in.
+  - *Release note:* `/fix-bug` and `/implement-feature` work in Cursor; the maintainer guide records each command's per-surface state (#227).
+
 ### Removed
+
+- **`/maintainer` and `/triage-issue` slash commands (#227)** — the two governance prompts are gone from `.claude/commands/`. [`docs/maintainers/TRIAGE.md`](docs/maintainers/TRIAGE.md) remains the label-taxonomy source of truth and its rules are applied by hand or by asking the coding agent to apply them; [`docs/maintainers/README.md`](docs/maintainers/README.md) covers the remaining `/release`, `/fix-bug` and `/implement-feature`.
+  - *Release note:* Maintainer work runs through three commands now; triage rules live in the doc, not a command (#227).
 
 ## [2.2.0] — 2026-09-07
 
