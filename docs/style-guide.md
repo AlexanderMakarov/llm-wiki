@@ -16,7 +16,7 @@ written by one careful person.
 
 ## Voice
 
-**Minimalism + trust & authority.** That's the whole brand.
+**Minimalism + trust & authority.** That's the whole brand for *prose*. Visual tokens (type, colour, motion) live in [`maintainers/brand-system.md`](maintainers/brand-system.md) — use that when editing site CSS or UI chrome.
 
 | Do | Don't |
 |---|---|

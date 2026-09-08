@@ -10,22 +10,15 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Added
 
-- **Product principles maintainer doc** — [`docs/maintainers/principles.md`](docs/maintainers/principles.md) records evergreen design intentions (MCP for agents, site for humans, scriptable add, candidate gate). Linked from README, architecture, the docs hub, and the maintainers index (alongside [`DECLINED.md`](docs/maintainers/DECLINED.md)).
-  - *Release note:* Product design intentions now live in `docs/maintainers/principles.md` (docs-only).
+- **Product principles** — [`docs/maintainers/principles.md`](docs/maintainers/principles.md) (MCP for agents, site for humans, scriptable add, candidate gate).
+  - *Release note:* Product design intentions live in `docs/maintainers/principles.md`.
 
 ### Changed
 
-- **Brand system doc moved under maintainers** — `docs/design/brand-system.md` → [`docs/maintainers/brand-system.md`](docs/maintainers/brand-system.md) (empty `docs/design/` removed). Typography wording now states Inter / JetBrains Mono as preferred with system fallbacks, not preinstalled on all OSes; `tests/test_brand_system_doc.py` and UI/reader doc links follow the new path.
-  - *Release note:* Brand tokens docs live at `docs/maintainers/brand-system.md`; font claims are preference + fallbacks (docs-only).
-
-- **DECLINED qmd-as-dependency reason drops a pinned Python version** — the “Shipping qmd as a dependency” entry no longer cites a specific interpreter floor; the rationale stays stdlib Python plus `markdown` / no Node runtime.
-  - *Release note:* Declined qmd-as-dependency reason no longer pins a Python version (docs-only).
-
-- **README and getting-started elevate MCP, scriptable `add`, and the human site** — agents use the stdio MCP server; `llmwiki add` / `wiki_add` automate files, folders, URLs, and PDFs into digestible markdown; the static site is the human surface for state, metrics, and settled knowledge. Vault path framed as a secure place for the unified store.
-  - *Release note:* Docs lead with MCP for agents, scriptable `add` for extra sources, and the site for human state/metrics (docs-only).
-
-- **PyPI package `description`** — one-liner is now “LLM wiki to turn multiple agentic tool sessions into knowledge base for agents and humans” (`pyproject.toml`).
-  - *Release note:* PyPI summary reframed for multi-agent sessions → knowledge base for agents and humans (docs-only).
+- **README / getting-started / PyPI** — MCP + human site framing; scriptable `llmwiki add`; vault as a secure unified store; package `description` set to “LLM wiki to turn multiple agentic tool sessions into knowledge base for agents and humans”.
+  - *Release note:* Docs and PyPI summary lead with multi-agent sessions → knowledge base for agents and humans.
+- **Brand system under maintainers** — `docs/design/brand-system.md` → [`docs/maintainers/brand-system.md`](docs/maintainers/brand-system.md); font preference + fallbacks (not OS-preinstall claims); CONTRIBUTING + style-guide link it for UI/CSS work; DECLINED qmd-as-dependency reason drops a pinned Python version.
+  - *Release note:* Brand tokens at `docs/maintainers/brand-system.md`; linked from CONTRIBUTING.
 
 ### Fixed
 

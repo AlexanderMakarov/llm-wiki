@@ -14,6 +14,7 @@ Thanks for wanting to contribute. This project follows strict rules about commit
 - [Static-site error handling](#static-site-error-handling)
 - [Privacy rules](#privacy-rules)
 - [Markdown conventions](#markdown-conventions)
+- [Site look and feel](#site-look-and-feel)
 - [Linting](#linting)
 - [Testing](#testing)
 
@@ -173,7 +174,7 @@ Every box must be checked (or have a one-line waiver). [`.github/PULL_REQUEST_TE
 11. No machine-specific paths or secrets
 12. Docs updated for user-visible changes
 13. Release notes drafted — one line fit for the next `gh release create --notes`
-14. **UI verified in light AND dark mode** (for CSS/UI changes) — screenshots attached
+14. **UI verified in light AND dark mode** (for CSS/UI changes) — screenshots attached; match [`docs/maintainers/brand-system.md`](docs/maintainers/brand-system.md)
 15. **A11y verified** — keyboard nav, focus rings, WCAG 2.1 AA (≥ 4.5:1 contrast)
 16. Reviewer has read every changed line (no rubber-stamping)
 
@@ -262,6 +263,10 @@ llmwiki processes session transcripts that may contain PII, API keys, file paths
 **Never hard-wrap prose at a fixed column.** One paragraph is one line, however long. Line width is the renderer's job, not the file's, and a hard-wrapped paragraph turns a one-word edit into a diff that reflows every following line — which buries the actual change and causes needless merge conflicts. This applies to every `.md` file in the repo, including `CLAUDE.md`, `AGENTS.md`, and the agent rule files under `.claude/rules/`, `.cursor/rules/`, and `.kiro/steering/`.
 
 Wrapping is fine inside fenced code blocks, tables, and anywhere the line is not prose.
+
+## Site look and feel
+
+Changing how the generated site looks (CSS tokens, typography, colour, motion, export surfaces) must follow [`docs/maintainers/brand-system.md`](docs/maintainers/brand-system.md) — that file is the source of truth and is checked against `llmwiki/render/css.py` by `tests/test_brand_system_doc.py`. Docs prose voice is separate: [`docs/style-guide.md`](docs/style-guide.md).
 
 ## Linting
 
