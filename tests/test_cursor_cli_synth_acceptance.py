@@ -108,12 +108,13 @@ def test_nested_config_defaults_to_cheapest_composer() -> None:  # @regression
 
 
 def test_lean_argv_is_non_interactive_and_has_no_worktree_flags() -> None:  # @regression
-    """R3/R4: lean invocation uses ask + sandbox; no force/yolo/worktree switches."""
+    """R3/R4: lean invocation uses ask + sandbox + tiny allowlist; no force/yolo/worktree."""
     argv = lean_argv("/bin/agent", model="composer-2.5")
     assert argv[0] == "/bin/agent"
     assert "-p" in argv
     assert argv[argv.index("--mode") + 1] == "ask"
     assert argv[argv.index("--sandbox") + 1] == "enabled"
+    assert argv[argv.index("--allowed-tools") + 1] == "truncated_tool_call"
     assert argv[argv.index("--model") + 1] == "composer-2.5"
     forbidden = ("--force", "--yolo", "--approve-mcps", "--worktree")
     for flag in forbidden:

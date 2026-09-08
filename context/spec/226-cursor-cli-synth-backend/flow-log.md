@@ -48,3 +48,8 @@
 - Applied review keep: B1 (prepend stable prefix + regression test; corrected cache docs) and N1 (public `run_prompt` DRY).
 - Local review file remains gitignored / unstaged.
 - Next: push + open PR; stop appending flow-log after PR opens.
+
+## post-PR lean allowlist
+
+- Live-probed hidden Agent CLI flags on `composer-2.5`: `--system-prompt` / `--exclude-workspace-context` rejected for this account; `--allowed-tools truncated_tool_call` cuts prompt ~30k → ~21k.
+- Wired tiny allowlist into `lean_argv`; docs + CHANGELOG + tests updated.

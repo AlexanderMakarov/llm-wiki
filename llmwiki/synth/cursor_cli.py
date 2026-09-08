@@ -8,7 +8,8 @@ applies.
 
 Default model is the cheapest Composer id Agent CLI lists
 (``composer-2.5``). Lean invocation: ``-p``, ``--mode ask``,
-``--sandbox enabled``, ``--model``, ``--output-format text``.
+``--sandbox enabled``, tiny ``--allowed-tools`` allowlist,
+``--model``, ``--output-format text``.
 
 Prompt delivery: Agent CLI accepts a positional prompt *or* stdin when no
 prompt argv is given (verified). Prefer stdin so long pages stay under
@@ -28,6 +29,13 @@ from llmwiki.synth.ollama import _render_prompt
 
 DEFAULT_CURSOR_MODEL = "composer-2.5"
 DEFAULT_CURSOR_TIMEOUT = 180
+
+# Undocumented Agent CLI allowlist (snake_case ToolCall oneof names).
+# Full tool schemas add ~8k tokens on Composer; a one-tool allowlist is
+# the smallest measured cut that still works for regular accounts.
+# ``truncated_tool_call`` is never used for synth — it only shrinks argv.
+# Does not strip the agent system prompt (still ~21k floor on Composer).
+_LEAN_ALLOWED_TOOLS = "truncated_tool_call"
 
 # Same 8 KB body cap as Claude / Ollama / agent-delegate.
 _BODY_CHAR_CAP = 8000
@@ -85,8 +93,10 @@ def resolve_cursor_agent_path() -> str | None:
 def lean_argv(agent: str, *, model: str | None = None) -> list[str]:
     """Build a non-interactive Agent CLI command line for one-shot text.
 
-    Closest documented lean set: print mode, ask (read-only), sandbox on.
-    Does not pass ``--force`` / ``--yolo`` / ``--approve-mcps`` / ``--worktree``.
+    Closest lean set: print mode, ask (read-only), sandbox on, and a tiny
+    ``--allowed-tools`` allowlist so tool schemas are not billed on every
+    page. Does not pass ``--force`` / ``--yolo`` / ``--approve-mcps`` /
+    ``--worktree``. Cannot empty the agent system prompt for normal accounts.
     """
     argv = [
         agent,
@@ -95,6 +105,8 @@ def lean_argv(agent: str, *, model: str | None = None) -> list[str]:
         "ask",
         "--sandbox",
         "enabled",
+        "--allowed-tools",
+        _LEAN_ALLOWED_TOOLS,
     ]
     if model:
         argv += ["--model", model]

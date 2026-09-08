@@ -175,6 +175,7 @@ def test_lean_argv_contains_required_flags():
     assert "-p" in argv
     assert argv[argv.index("--mode") + 1] == "ask"
     assert argv[argv.index("--sandbox") + 1] == "enabled"
+    assert argv[argv.index("--allowed-tools") + 1] == "truncated_tool_call"
     assert argv[argv.index("--model") + 1] == "composer-2.5"
     assert argv[argv.index("--output-format") + 1] == "text"
 
@@ -257,6 +258,7 @@ def test_synthesize_success_uses_stdin_and_returns_text():
     assert "-p" in argv
     assert argv[argv.index("--mode") + 1] == "ask"
     assert argv[argv.index("--sandbox") + 1] == "enabled"
+    assert argv[argv.index("--allowed-tools") + 1] == "truncated_tool_call"
     assert argv[argv.index("--model") + 1] == "composer-2.5"
     assert argv[argv.index("--output-format") + 1] == "text"
     # Prompt is stdin, not a trailing argv token.

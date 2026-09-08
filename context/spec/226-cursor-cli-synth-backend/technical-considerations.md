@@ -44,10 +44,10 @@ Add a `BaseSynthesizer` that shells out to Cursor’s Agent CLI (`agent` on `$PA
 ### Lean Agent CLI invocation
 
 - Binary: `shutil.which("agent")` then `which("cursor-agent")` if needed.
-- Argv: `-p` / `--print`, `--mode ask`, `--sandbox enabled`, `--model <model>`, `--output-format text` (JSON only if usage parsing is stable and useful).
+- Argv: `-p` / `--print`, `--mode ask`, `--sandbox enabled`, `--allowed-tools truncated_tool_call`, `--model <model>`, `--output-format text` (JSON only if usage parsing is stable and useful).
 - Do **not** pass `--force` / `--yolo` / `--approve-mcps`; do **not** use `--worktree` (so `--skip-worktree-setup` unused).
 - Prompt: stdin if supported; else argv with Claude’s body char cap. Verify during implement.
-- Docs: Cursor has no Claude-equivalent empty-tools / empty-MCP / empty-settings; ask + sandbox is the closest documented lean set.
+- Docs: `--allowed-tools` is an undocumented Agent CLI flag (snake_case ToolCall oneof). Tiny allowlist cuts ~8k tool-schema tokens on Composer; `--system-prompt` / `--exclude-workspace-context` remain team-gated / rejected for normal accounts. Ask + sandbox + allowlist is the closest lean set.
 - `is_available` / `synth --check`: binary on PATH + tiny live probe (not PATH-only). Missing/unreachable → hard fail; no backend failover.
 
 ### `synth --backend`

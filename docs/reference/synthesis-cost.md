@@ -93,7 +93,7 @@ The split is **not** Claude-specific. `split_prompt_template()` lives in `llmwik
 | Backend | Where the stable half goes | Mechanism |
 |---|---|---|
 | `claude` CLI | `--system-prompt` | 1h prompt cache, reused across invocations |
-| `cursor_cli` | leading stdin prompt text (stable half first) | Cursor bills cache read/write at the provider layer (hooks / usage APIs expose `cache_read` / `cache_write`); Agent CLI has no documented `--system-prompt` flag, so the stable half is prepended for correctness and best-effort automatic prefix caching. Lean argv is `-p` + `--mode ask` + `--sandbox enabled` (no empty-tools / empty-MCP equivalent) |
+| `cursor_cli` | leading stdin prompt text (stable half first) | Cursor bills cache read/write at the provider layer (hooks / usage APIs expose `cache_read` / `cache_write`); Agent CLI has no usable `--system-prompt` for normal accounts, so the stable half is prepended for correctness and best-effort automatic prefix caching. Lean argv is `-p` + `--mode ask` + `--sandbox enabled` + `--allowed-tools truncated_tool_call` (tiny allowlist cuts tool-schema tokens; agent system prompt remains) |
 | `ollama` | `system` field on `/api/generate` | KV-cache prefix reuse (no billing) |
 | OpenAI / OpenRouter *(not built)* | leading system message | automatic prefix caching, ~50% off repeated prefixes |
 | Anthropic API *(scaffolded)* | `cache_control` breakpoint after the prefix | explicit, see [`prompt-caching.md`](prompt-caching.md) |
