@@ -33,25 +33,16 @@ CSS tokens: `--font` (body/headings), `--mono` (code).
 
 ### Rules
 
-- **Never ship web-font files.** Inter and JetBrains Mono have first-class
-  system support on all three major OSes or load via the user's browser; we
-  don't want a network request to render a wiki page.
-- **Line-height 1.7** for body copy — reading-first density. Denser UI
-  surfaces (nav, cards, tables) use 1.4–1.5.
-- **Heading weight 600, not 700, below h2.** Keeps the hierarchy readable
-  without shouting.
-- **Monospace blocks use 0.875rem (14 px) at 1.6 line-height.** Tools outputs
-  and code samples stay scannable without dominating the page.
+- **Never ship web-font files in the package.** Inter and JetBrains Mono are the preferred faces, with the system fallback stacks documented in the table above. They are not guaranteed to be preinstalled on every OS — users (or their browser) may need to install them, or rendering falls back to the listed system faces. Still never bundle `.woff` / `.ttf` files in the llmwiki package.
+- **Line-height 1.7** for body copy — reading-first density. Denser UI surfaces (nav, cards, tables) use 1.4–1.5.
+- **Heading weight 600, not 700, below h2.** Keeps the hierarchy readable without shouting.
+- **Monospace blocks use 0.875rem (14 px) at 1.6 line-height.** Tools outputs and code samples stay scannable without dominating the page.
 
 ### Why these two
 
-- **Inter** — the same type family used by GitHub, Anthropic, Linear, Vercel.
-  Neutral enough to disappear on long sessions, opinionated enough to feel
-  intentional. Ships on macOS/Windows/Android out of the box; Linux gets a
-  close match via the system fallback chain.
-- **JetBrains Mono** — designed for reading code and diff output. Ligatures
-  are left enabled (defaults to on in the typeface) because the audience is
-  engineers.
+- **Inter** — the same type family used by GitHub, Anthropic, Linear, Vercel. Neutral enough to disappear on long sessions, opinionated enough to feel intentional. Prefer installing Inter when you can; otherwise `-apple-system`, `BlinkMacSystemFont`, `Segoe UI`, and generic `sans-serif` keep body copy readable.
+- **JetBrains Mono** — designed for reading code and diff output. Ligatures are left enabled (defaults to on in the typeface) because the audience is engineers. Prefer installing JetBrains Mono when you can; otherwise `'SF Mono'`, `'Fira Code'`, and generic `monospace` cover code blocks.
+
 
 ---
 

@@ -277,6 +277,6 @@ At no point does the contract require a rewrite of `llmwiki/build.py` — every 
 - `llmwiki/exporters.py` — `llms.txt` + JSON-LD + site-level AI exports
 - `llmwiki/raw_docs_site.py` — `documents-tree.json|.js` for the Raw sidebar
 - `docs/reference/cache-tiers.md` — `cache_tier` invariant (#52)
-- `docs/design/brand-system.md` — theme tokens returned by `/bootstrap`
+- `docs/maintainers/brand-system.md` — theme tokens returned by `/bootstrap`
 - `#116` — this issue
 - `#112` — reader-first article shell (one client of this contract)

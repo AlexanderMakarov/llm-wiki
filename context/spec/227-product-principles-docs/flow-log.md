@@ -30,3 +30,22 @@
 ## specs (tasks)
 - Wrote `tasks.md` (5 slices; triage out of scope)
 - Next: commit-specs
+
+## commit-specs
+- Commit `5ff18ac` — `docs: add spec for product principles and maintainer doc clarity`
+- Next: implement
+
+## implement
+- Slices 1–4 implemented via general-purpose subagents; Slice 5 verify run in orchestrator (testing-expert hit usage limit)
+- ruff green; full pytest exit 0; acceptance greps all PASS
+- Operator feedback: README too static-site oriented — primary usage is MCP
+- Rebased onto fresh `origin/main` (v2.3.0 + demo fix); CHANGELOG conflict resolved
+- README + principles + getting-started reframed MCP-first; static site optional
+- Next: user re-confirm smoke → local review
+
+## verify / smoke
+- Operator confirmed framing (MCP + human site + pyproject description) and said deliver
+- Next: local review → commit implementation → push → PR
+
+## commit-push (pre)
+- Implementation commit pending after local review keep/drop

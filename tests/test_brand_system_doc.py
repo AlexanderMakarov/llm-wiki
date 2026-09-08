@@ -1,4 +1,4 @@
-"""Tests for docs/design/brand-system.md (v1.2.0 · #115).
+"""Tests for docs/maintainers/brand-system.md (v1.2.0 · #115).
 
 The doc is the canonical reference for typography/palette/motion, so it
 must stay aligned with the actual CSS tokens in ``llmwiki/render/css.py``.
@@ -15,13 +15,13 @@ import pytest
 from llmwiki import REPO_ROOT
 from llmwiki.render.css import CSS
 
-BRAND_DOC = REPO_ROOT / "docs" / "design" / "brand-system.md"
+BRAND_DOC = REPO_ROOT / "docs" / "maintainers" / "brand-system.md"
 
 
 @pytest.fixture(scope="module")
 def doc() -> str:
     assert BRAND_DOC.is_file(), (
-        "docs/design/brand-system.md missing — #115 landed it as the brand "
+        "docs/maintainers/brand-system.md missing — #115 landed it as the brand "
         "source of truth; re-create it rather than inlining values in code"
     )
     return BRAND_DOC.read_text(encoding="utf-8")

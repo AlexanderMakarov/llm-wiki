@@ -356,7 +356,7 @@ Press `?` on any page to see the shortcuts modal. Current set:
 
 ## Theming
 
-Site-wide CSS lives in `llmwiki/render/css.py`. All tokens inherit from the brand system — see [`../design/brand-system.md`](../design/brand-system.md).
+Site-wide CSS lives in `llmwiki/render/css.py`. All tokens inherit from the brand system — see [`../maintainers/brand-system.md`](../maintainers/brand-system.md).
 
 Theme toggle (top-right): `light` / `dark`, persists via `localStorage.theme`. System preference (`prefers-color-scheme`) is honoured when no override is set.
 

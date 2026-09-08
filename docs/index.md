@@ -75,6 +75,7 @@ llmwiki runs two interchangeable ways. Pick one, start — you can switch later.
 - **[UI reference](reference/ui.md)** — every screen on the compiled site, how to reach it, what it shows.
 - **[Page kinds](reference/page-kinds.md)** — every `type:` value, what it is for, and where each frontmatter field comes from.
 - **[Architecture](architecture.md)** — three layers (`raw/` / `wiki/` / `site/`).
+- **[Product principles](maintainers/principles.md)** — design intentions (MCP + human site, scriptable add, candidate gate); declined ideas in [`DECLINED.md`](maintainers/DECLINED.md).
 - **[State persistence](reference/state-persistence.md)** — vault usage logs, rollup, daily series, and state file.
 - **[Configuration](configuration.md)** · **[Full configuration reference](configuration-reference.md)**.
 - **[Cache tiers](reference/cache-tiers.md)** — L1 / L2 / L3 / L4 frontmatter.
@@ -94,7 +95,7 @@ llmwiki runs two interchangeable ways. Pick one, start — you can switch later.
 - **[FAQ](faq.md)** · **[Troubleshooting](troubleshooting.md)** · **[Privacy](privacy.md)**.
 - **[Accessibility](accessibility.md)** (WCAG 2.1 AA).
 - **[Benchmarks](benchmarks.md)** · **[Competitor landscape](competitor-landscape.md)**.
-- **Maintainers** — governance docs at [`docs/maintainers/`]({{__llmwiki_github_blob__}}/docs/maintainers).
+- **Maintainers** — [product principles](maintainers/principles.md) and governance docs at [`docs/maintainers/`]({{__llmwiki_github_blob__}}/docs/maintainers).
 
 ---
 

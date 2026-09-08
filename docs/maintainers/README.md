@@ -14,6 +14,8 @@ first — it has the short version of what this folder covers in detail.
 | [`REVIEW_CHECKLIST.md`](REVIEW_CHECKLIST.md) | Canonical code-review criteria — apply to every incoming PR |
 | [`RELEASE_PROCESS.md`](RELEASE_PROCESS.md) | Version bump → CHANGELOG → tag → `release.yml` checklist (canonical order; cut via `/release` skill) |
 | [`TRIAGE.md`](TRIAGE.md) | Label taxonomy + triage rules + stale-issue policy |
+| [`principles.md`](principles.md) | Evergreen product design intentions (MCP + human site, scriptable add, candidate gate) |
+| [`brand-system.md`](brand-system.md) | Canonical visual system — typography, palette, motion, export consistency (tokens mirrored from `llmwiki/render/css.py`) |
 | [`DECLINED.md`](DECLINED.md) | Graveyard of declined ideas with dates + reasons |
 | [`../../context/product/roadmap.md`](../../context/product/roadmap.md) | The roadmap — phases, what is next, and which issue delivers each item |
 | [`REFRESH_DEMO.md`](REFRESH_DEMO.md) | Local command that incrementally regenerates `demo/` from git-detected `docs/` changes — needs a working copy and a synth backend; never runs in CI |
