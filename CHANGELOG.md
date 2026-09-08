@@ -29,13 +29,13 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Fixed
 
-- **Cursor resolves `/fix-bug` and `/implement-feature` (#227)** — Cursor loads slash commands from `.cursor/commands/` only, so both delivery commands were Claude-only. `scripts/sync-cursor-commands.sh` now generates thin `.cursor/commands/<name>.md` wrappers that carry the source command's description and point Cursor at `.claude/commands/<name>.md` as the source of truth plus the `.cursor/rules/awos-cursor-runtime.mdc` tool mapping; `./scripts/update-awos.sh` runs it alongside the AWOS wrapper sync. Both generated commands, and [`docs/maintainers/README.md`](docs/maintainers/README.md), now also name the `awos@awos-marketplace` plugin that provides `/awos:flow` instead of implying it is built in.
-  - *Release note:* `/fix-bug` and `/implement-feature` work in Cursor; the maintainer guide records each command's per-surface state (#227).
+- **Per-surface slash-command discovery documented correctly (#227)** — Cursor loads top-level `.claude/commands/*.md` (as well as `.claude/skills/` and `.claude/agents/`), so `/fix-bug` and `/implement-feature` resolve there from their Claude files with no per-surface duplicate. Only nested `.claude/commands/<ns>/` is invisible to Cursor, which is why the nine `/awos:*` commands keep their flat `.cursor/commands/awos-*.md` wrappers from `scripts/sync-awos-cursor-commands.sh`. [`docs/maintainers/README.md`](docs/maintainers/README.md) and [`docs/maintainers/AWOS-CURSOR.md`](docs/maintainers/AWOS-CURSOR.md) now state that model, and both delivery commands plus the maintainer guide name the `awos@awos-marketplace` plugin that provides `/awos:flow` instead of implying it is built in. `tests/test_command_surface_parity.py` pins the nested-wrapper requirement and fails a redundant Cursor copy of a top-level command.
+  - *Release note:* `/fix-bug` and `/implement-feature` work in Cursor straight from `.claude/commands/`; the maintainer guide records the real per-surface discovery model (#227).
 
 ### Removed
 
-- **`/maintainer` and `/triage-issue` slash commands (#227)** — the two governance prompts are gone from `.claude/commands/`. [`docs/maintainers/TRIAGE.md`](docs/maintainers/TRIAGE.md) remains the label-taxonomy source of truth and its rules are applied by hand or by asking the coding agent to apply them; [`docs/maintainers/README.md`](docs/maintainers/README.md) covers the remaining `/release`, `/fix-bug` and `/implement-feature`.
-  - *Release note:* Maintainer work runs through three commands now; triage rules live in the doc, not a command (#227).
+- **`/maintainer` and `/triage-issue` slash commands (#227)** — the two governance prompts are gone from `.claude/commands/`. `/fix-bug` is the entry point for working a bug issue, and [`docs/maintainers/TRIAGE.md`](docs/maintainers/TRIAGE.md) remains the label-taxonomy reference for the rules `/triage-issue` applied; [`docs/maintainers/README.md`](docs/maintainers/README.md) covers the remaining `/release`, `/fix-bug` and `/implement-feature`.
+  - *Release note:* Maintainer work runs through three commands now; `/fix-bug` replaces `/triage-issue`, and the label taxonomy lives in the doc rather than a command (#227).
 
 ## [2.2.0] — 2026-09-07
 

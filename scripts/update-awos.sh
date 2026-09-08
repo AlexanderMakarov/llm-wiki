@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Install or update AWOS for this repo (Cursor + Claude).
 #
-#   ./scripts/update-awos.sh              # Layer A only (installer + /awos-* and Claude-command Cursor wrappers)
+#   ./scripts/update-awos.sh              # Layer A only (installer + flat /awos-* wrappers)
 #   ./scripts/update-awos.sh --plugin     # Layer A + Layer C (acplugin AWOS plugin → .cursor/ with awos- prefix)
 #   ./scripts/update-awos.sh --plugin-only
 #
@@ -42,7 +42,6 @@ run_installer() {
 if [[ "$DO_A" -eq 1 ]]; then
   run_installer
   "$ROOT/scripts/sync-awos-cursor-commands.sh"
-  "$ROOT/scripts/sync-cursor-commands.sh"
 fi
 
 if [[ "$DO_C" -eq 1 ]]; then

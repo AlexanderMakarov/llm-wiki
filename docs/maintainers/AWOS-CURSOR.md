@@ -68,6 +68,8 @@ flowchart TB
 
 Cursor has **no** `/awos:` namespace. Project commands are the basename of a **top-level** file under `.cursor/commands/` (e.g. `awos-product.md` → `/awos-product`). Nested `.cursor/commands/awos/*.md` works in some IDE builds but **not** in Cursor Agent CLI — keep wrappers flat. **Always prefix** converted plugin commands with `awos-` (or another source prefix) so slash names show where they came from — raw acplugin leaves `flow.md` → `/flow`, which is easy to miss and collide with.
 
+The same flat-only rule holds across harnesses: Cursor **does** load top-level `.claude/commands/*.md`, so a top-level command is invocable on both harnesses from that one file, but it does **not** descend into `.claude/commands/<ns>/`. That is why the AWOS commands, which live under `.claude/commands/awos/` for Claude, must also exist as flat `.cursor/commands/awos-*.md` wrappers.
+
 ### What is committed vs local
 
 | Path | Commit? | Why |

@@ -1,6 +1,6 @@
 # Issue triage
 
-> **Audience:** maintainers working through the inbox. Apply the rules below by hand, or hand this doc to the coding agent and ask it to triage a given issue against them.
+> **Audience:** maintainers working through the inbox. This doc is the label-taxonomy reference — apply the rules below when labelling an issue; `/fix-bug` is the entry point for actually working a bug issue.
 
 Triage runs at most once a day when the queue is active. The goal is
 to give every new issue a label, a milestone, and a priority within
