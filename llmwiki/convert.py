@@ -1261,11 +1261,161 @@ def render_tool_results(
     return out
 
 
+# Claude Code embeds XML-like control envelopes in user-message content
+# (slash commands, caveats, local-command stdout, background-task
+# notifications). #229: strip/collapse these at convert time so
+# description: and Conversation never show the raw tags as escaped prose
+# on the static site.
+_CLAUDE_CONTROL_TAGS = (
+    "local-command-caveat",
+    "command-name",
+    "command-message",
+    "command-args",
+    "local-command-stdout",
+    "local-command-stdin",
+    "local-command-stderr",
+    "task-notification",
+)
+_CLAUDE_CONTROL_BLOCK_RE = re.compile(
+    r"<(" + "|".join(_CLAUDE_CONTROL_TAGS) + r")(?:\s[^>]*)?>"
+    r"(.*?)"
+    r"</\1\s*>",
+    re.IGNORECASE | re.DOTALL,
+)
+_CLAUDE_CONTROL_ORPHAN_RE = re.compile(
+    r"</?(?:" + "|".join(_CLAUDE_CONTROL_TAGS) + r")(?:\s[^>]*)?/?>",
+    re.IGNORECASE,
+)
+_SLASH_COMMAND_LINE_RE = re.compile(r"^/[A-Za-z][\w-]*(?:\s+\S.*)?$")
+# Description skip: bare `/clear` *or* `/implement-feature https://…` — slash
+# invocations are chrome, not a human-readable session subtitle (#229 smoke).
+# (Bare-label-only matching used to live in ``_SLASH_COMMAND_LABEL_RE``; the
+# line form supersedes it for description skips.)
+# Background-task "user" turns start with this banner; the three boilerplate
+# lines that follow are fixed Claude wording, not human input.
+_SYSTEM_NOTIFICATION_HEADER_RE = re.compile(
+    r"\[SYSTEM NOTIFICATION[^\]]*\]",
+    re.IGNORECASE,
+)
+_SYSTEM_NOTIFICATION_BOILERPLATE_RE = re.compile(
+    r"(?:This is an automated background-task event[^\n]*\n?|"
+    r"Do NOT interpret this as user acknowledgement[^\n]*\n?|"
+    r"No human input has been received[^\n]*\n?)+",
+    re.IGNORECASE,
+)
+# Slash-command / skill markdown dumps Claude injects as list-shaped user
+# turns after ``/command`` — long ``# Title`` files with ``## Arguments``,
+# or ``@path/to/file.md`` + ``ARGUMENTS:`` payloads (#229 smoke).
+_INJECTED_DUMP_MIN_LEN = 2000
+
+
+def is_injected_command_dump(text: str) -> bool:
+    """True when ``text`` looks like an injected slash-command or skill dump.
+
+    These must not become ``description:`` — Conversation already skips
+    list-shaped content via ``is_real_user_prompt``, but ``derive_description``
+    still reads text blocks from lists.
+    """
+    if not text or not text.strip():
+        return False
+    stripped = text.lstrip()
+    if stripped.startswith("# "):
+        if "## Arguments" in text or "## Notifications" in text:
+            return True
+        if len(text) > _INJECTED_DUMP_MIN_LEN:
+            return True
+    if stripped.startswith("@"):
+        first_line = stripped.split("\n", 1)[0]
+        if ".md" in first_line.lower():
+            return True
+        if "ARGUMENTS:" in text or "/commands/" in text:
+            return True
+    return False
+
+
+def is_claude_ui_chrome(text: str) -> bool:
+    """True for short Claude UI status lines (not human prompts).
+
+    Example: ``[Request interrupted by user]`` — list-shaped in jsonl, so it
+    never appears in Conversation, but ``derive_description`` would otherwise
+    pick it as the hero subtitle (#229 smoke).
+    """
+    s = (text or "").strip()
+    if not s or "\n" in s:
+        return False
+    if not (s.startswith("[") and s.endswith("]")):
+        return False
+    low = s.lower()
+    return any(
+        needle in low
+        for needle in ("interrupt", "cancel", "not user input", "system notification")
+    )
+
+def preserve_prompt_newlines(text: str) -> str:
+    """Preserve jsonl line breaks as markdown hard breaks inside paragraphs.
+
+    Single ``\\n`` → trailing two spaces + newline (hard ``<br>`` after MD→HTML).
+    Blank-line paragraph breaks (``\\n\\n``) stay paragraph breaks.
+    """
+    if not text or "\n" not in text:
+        return text
+    paragraphs = re.split(r"\n\n+", text)
+    rebuilt: list[str] = []
+    for para in paragraphs:
+        lines = para.split("\n")
+        rebuilt.append("  \n".join(lines))
+    return "\n\n".join(rebuilt)
+
+
+def normalize_claude_control_content(text: str) -> str:
+    """Collapse Claude Code control envelopes to clean convert output (#229).
+
+    - Caveat / stdout / args-only / system-notification content → ``""`` (omit the turn).
+    - Slash-command envelopes → ``/name``; with non-empty ``<command-args>``,
+      ``/name <args>`` (e.g. ``/implement-feature https://…``). Empty args stay bare ``/clear``.
+    - ``<task-notification>`` envelopes stripped; leftover real prose kept.
+    - Real user prose mixed with tags → tags stripped, prose kept.
+    """
+    if not text or not text.strip():
+        return ""
+
+    working = text
+    if _SYSTEM_NOTIFICATION_HEADER_RE.search(working):
+        working = _SYSTEM_NOTIFICATION_HEADER_RE.sub("", working)
+        working = _SYSTEM_NOTIFICATION_BOILERPLATE_RE.sub("", working)
+
+    if "<" not in working:
+        return working.strip()
+
+    command_label = ""
+    command_args = ""
+    for match in _CLAUDE_CONTROL_BLOCK_RE.finditer(working):
+        tag = match.group(1).lower()
+        inner = (match.group(2) or "").strip()
+        if tag == "command-name" and inner:
+            command_label = inner if inner.startswith("/") else f"/{inner.lstrip('/')}"
+        elif tag == "command-args" and inner:
+            command_args = inner
+
+    stripped = _CLAUDE_CONTROL_BLOCK_RE.sub("", working)
+    stripped = _CLAUDE_CONTROL_ORPHAN_RE.sub("", stripped)
+    prose = stripped.strip()
+    if prose:
+        return prose
+    if command_label and command_args:
+        return f"{command_label} {command_args}"
+    return command_label
+
+
 def render_user_prompt(record: dict[str, Any], redact: Redactor, max_chars: int) -> str:
     content = record.get("message", {}).get("content", "")
     if not isinstance(content, str):
         return ""
-    return truncate_chars(redact(content.strip()), max_chars)
+    cleaned = normalize_claude_control_content(content)
+    if not cleaned:
+        return ""
+    cleaned = preserve_prompt_newlines(cleaned)
+    return truncate_chars(redact(cleaned), max_chars)
 
 
 # ─── full markdown renderer ────────────────────────────────────────────────
@@ -1444,6 +1594,11 @@ def derive_description(records: list[dict[str, Any]], redact: Redactor) -> str:
     noise, skips trivial openers ("hi", "thanks", "continue"), and
     truncates to ~120 chars at a word boundary.
 
+    #229: Claude Code control envelopes (caveat / command-name / …)
+    are normalized first so they never become the description; slash
+    invocations (bare `/clear` or `/cmd <args>`) are skipped in favour
+    of real prose; injected command/skill markdown dumps are skipped.
+
     Empty / un-derivable input returns ``""``; callers can fall back
     to the slug. Always passes the result through the same Redactor
     the body uses so the description doesn't leak any path / token
@@ -1478,6 +1633,19 @@ def derive_description(records: list[dict[str, Any]], redact: Redactor) -> str:
         if not text:
             continue
 
+        # Skip before normalize — dumps are plain markdown, not control XML.
+        if is_injected_command_dump(text):
+            continue
+        if is_claude_ui_chrome(text):
+            continue
+
+        text = normalize_claude_control_content(text)
+        if not text:
+            continue
+        # Slash invocations are not a useful hero subtitle (with or without args).
+        if _SLASH_COMMAND_LINE_RE.match(text.strip()):
+            continue
+
         # First non-empty line (skip code-fence opens + path-noise).
         for raw_line in text.splitlines():
             line = raw_line.strip()
@@ -1489,6 +1657,10 @@ def derive_description(records: list[dict[str, Any]], redact: Redactor) -> str:
             line = PATH_PREFIX_RE.sub("", line, count=1)
             # Skip trivial openers (case-insensitive).
             if line.lower().rstrip(" ?!.") in TRIVIAL:
+                continue
+            if _SLASH_COMMAND_LINE_RE.match(line):
+                continue
+            if is_claude_ui_chrome(line):
                 continue
             # Truncate at word boundary.
             if len(line) > MAX_CHARS:
@@ -1624,11 +1796,15 @@ def render_session_markdown(
     assistant_open = False
     for r in records:
         if is_real_user_prompt(r):
+            prompt = render_user_prompt(r, redact, max_user_chars)
+            if not prompt:
+                # #229: omit caveat-/command-envelope-only turns.
+                continue
             turn_idx += 1
             assistant_open = False
             body.append(f"### Turn {turn_idx} — User")
             body.append("")
-            body.append(render_user_prompt(r, redact, max_user_chars) or "_(empty)_")
+            body.append(prompt)
             body.append("")
         elif r.get("type") == "assistant":
             text, tools = render_assistant_message(r, redact, config)

@@ -974,15 +974,25 @@ def hero(
     size: str = "",
     subtitle_is_html: bool = False,
     main_class: str = "",
+    description: str = "",
+    description_is_html: bool = False,
 ) -> str:
     cls = f"hero {size}".strip()
     sub = subtitle if subtitle_is_html else html.escape(subtitle)
     main_attr = f' class="{main_class}"' if main_class else ""
+    # #229 / #471: session ``description:`` belongs *inside* the hero band
+    # (same ``.container`` as h1 / hero-sub). Emitting it as a sibling after
+    # ``</section>`` left a floating block between the hero chrome and the
+    # body section — the negative-margin CSS hack could not fix the markup.
+    desc_block = ""
+    if description:
+        desc = description if description_is_html else html.escape(description)
+        desc_block = f'\n    <p class="session-description">{desc}</p>'
     return f"""<main id="main-content"{main_attr}>
 <section class="{cls}">
   <div class="container">
     <h1>{html.escape(title)}</h1>
-    <p class="hero-sub">{sub}</p>
+    <p class="hero-sub">{sub}</p>{desc_block}
   </div>
 </section>
 """
@@ -1446,20 +1456,25 @@ def render_session(
             metadata_comment=metadata_comment,
         )
         + nav_bar("sessions", link_prefix="../../")
-        + hero(str(title_raw), meta_strip, size="hero-sm", subtitle_is_html=True)
-        # #471: human-readable description rendered as a subtitle below
-        # the hero, before the meta-strip. Only emit if frontmatter
-        # carries the field; older sessions skip this block cleanly.
-        + (
-            f'<div class="container session-description"><p>{html.escape(str(meta["description"]))}</p></div>'
-            if meta.get("description") else ""
+        + hero(
+            str(title_raw),
+            meta_strip,
+            size="hero-sm",
+            subtitle_is_html=True,
+            # #471 subtitle inside the hero band. Selection quality of
+            # ``description:`` is tracked in #246; layout belongs here (#229).
+            description=str(meta["description"]) if meta.get("description") else "",
         )
-        + f'<section class="section">\n  <div class="container">\n{breadcrumbs}\n{tools_preview}\n{actions_html}\n{tool_chart_block}\n{token_card_block}\n{sources_block}    <article class="content" itemscope itemtype="https://schema.org/Article">\n'
+        + f'<section class="section doctree-section">\n  <div class="container">\n{breadcrumbs}\n{tools_preview}\n{actions_html}\n{tool_chart_block}\n{token_card_block}\n{sources_block}'
+        + '    <div class="doctree-layout session-toc-layout">\n'
+        + '      <aside class="toc-sidebar" data-toc-mount aria-label="Page contents"></aside>\n'
+        + '      <div class="doctree-main">\n'
+        + '        <article class="content" itemscope itemtype="https://schema.org/Article">\n'
         + f'<meta itemprop="headline" content="{html.escape(str(title_raw))}">\n'
         + f'<meta itemprop="datePublished" content="{html.escape(str(meta.get("started") or date))}">\n'
         + '<meta itemprop="inLanguage" content="en">\n'
         + body_html
-        + '\n    </article>\n  </div>\n</section>\n</main>\n'
+        + '\n        </article>\n      </div>\n    </div>\n  </div>\n</section>\n</main>\n'
         + page_foot(js_prefix="../../")
     )
 
