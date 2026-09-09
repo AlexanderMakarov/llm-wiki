@@ -129,6 +129,7 @@ def test_resume_command_none_without_session_id_or_cwd():
 
 
 def test_session_page_shows_local_cwd_and_session_id(tmp_path: Path):
+    """#36: session HTML shows the local cwd and session id, never USER-redacted path."""
     path, meta, body = _src()
     out = render_session(path, meta, body, tmp_path, "demo-proj")
     html = out.read_text(encoding="utf-8")

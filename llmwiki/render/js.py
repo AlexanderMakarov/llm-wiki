@@ -565,19 +565,23 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
 })();
 
 // ─── TOC sidebar + scroll-spy (session pages only, desktop only) ─────────
+// #229: mount into the session doctree-layout aside (below hero), not body.
 (function () {
   document.addEventListener("DOMContentLoaded", function () {
+    const mount = document.querySelector("[data-toc-mount]");
     const article = document.querySelector(".content[itemscope]");
-    if (!article) return;
+    if (!mount || !article) return;
     const headings = article.querySelectorAll("h2[id], h3[id], h4[id]");
-    if (headings.length < 3) return;
-    const aside = document.createElement("aside");
-    aside.className = "toc-sidebar";
-    aside.setAttribute("aria-label", "Page contents");
+    // Threshold 2: Conversation + one Turn (short sessions) still get a TOC.
+    if (headings.length < 2) {
+      mount.remove();
+      return;
+    }
+    mount.classList.add("toc-ready");
     const title = document.createElement("div");
     title.className = "toc-title";
     title.textContent = "On this page";
-    aside.appendChild(title);
+    mount.appendChild(title);
     const ul = document.createElement("ul");
     const linkMap = new Map();
     headings.forEach(function (h) {
@@ -594,8 +598,7 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
       ul.appendChild(li);
       linkMap.set(h.id, a);
     });
-    aside.appendChild(ul);
-    document.body.appendChild(aside);
+    mount.appendChild(ul);
     // Scroll-spy via IntersectionObserver
     if (!("IntersectionObserver" in window)) return;
     const visible = new Set();

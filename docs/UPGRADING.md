@@ -10,6 +10,13 @@ How to upgrade between `llmwiki` releases. Most releases are drop-in (`pip insta
 
 The canonical per-release detail is [CHANGELOG.md](https://github.com/AlexanderMakarov/llm-wiki/blob/main/CHANGELOG.md) — this guide focuses on "what might break".
 
+## Unreleased — Claude control tags + session TOC (#229)
+
+No migration. After upgrade:
+
+- **Re-convert Claude sessions if tags leaked into `raw/`:** `llmwiki sync --force` then `llmwiki build`. Convert now strips Claude Code local-command / slash-command envelopes (`local-command-caveat`, `command-name`, …) and background-task `[SYSTEM NOTIFICATION …]` / `<task-notification>` blocks so they never become `description:` or Conversation prose. Non-empty `<command-args>` are kept on the slash label (`/implement-feature https://…`); injected command/skill markdown dumps are skipped for `description:`; user-prompt newlines become markdown hard breaks. Already-written `raw/sessions/*.md` keep the old text until force-synced.
+- **Session TOC:** rebuild alone is enough for layout — the “On this page” nav is sticky in a Raw-style left column below the hero (not fixed over the title band), appears when the article has ≥2 headings, and uses the same `max-width: 860px` collapse as Raw.
+
 ## 2.3.0 — Home Pipeline state stamps + Automation panel shrink (#234)
 
 No migration. After upgrade + rebuild:

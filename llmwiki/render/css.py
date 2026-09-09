@@ -317,7 +317,10 @@ kbd { display: inline-block; padding: 2px 6px; font-family: var(--mono); font-si
 /* #471: human-readable session description rendered as a subtitle on
    session detail pages and as a small line beneath the slug in the
    sessions index table. */
-.session-description { font-size: 0.95rem; color: var(--text-secondary); margin: -8px 0 16px; line-height: 1.5; }
+/* #471 / #229: session description sits inside ``.hero .container`` (not a
+   sibling after ``</section>``). Negative margin was a layout hack for the
+   old out-of-band markup — drop it once the text lives in the hero band. */
+.hero .session-description { font-size: 0.95rem; color: var(--text-secondary); margin: 8px 0 0; line-height: 1.5; }
 .session-cell-desc { font-size: 0.78rem; color: var(--text-muted); margin-top: 2px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* #476: richer tool-result collapsible card. Renders as
    `[badge] preview · N lines · X chars` so the user knows what's
@@ -986,8 +989,15 @@ mark { background: var(--accent-bg); color: var(--accent); padding: 0 2px; borde
 .timeline-block svg rect { transition: opacity 0.15s; }
 .timeline-block svg rect:hover { opacity: 1 !important; }
 
-/* TOC sidebar (session pages, desktop only, injected by JS) */
-.toc-sidebar { position: fixed; top: 88px; left: max(16px, calc((100vw - 1080px) / 2 - 240px)); width: 220px; max-height: calc(100vh - 120px); overflow-y: auto; padding: 12px 14px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); font-size: 0.82rem; z-index: 50; display: none; }
+/* TOC sidebar (session pages) — #229: sticky in doctree-layout below the hero
+   (same slot as .doctree-sidebar), not body-fixed over the hero. Two-column
+   when toc-ready; collapse at the same max-width: 860px as .doctree-layout. */
+.session-toc-layout { grid-template-columns: minmax(0, 1fr); }
+.session-toc-layout:has(> .toc-sidebar.toc-ready) {
+  grid-template-columns: 280px minmax(0, 1fr);
+}
+.toc-sidebar { position: sticky; top: 88px; max-height: calc(100vh - 120px); overflow-y: auto; padding: 14px 16px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); font-size: 0.82rem; display: none; }
+.toc-sidebar.toc-ready { display: block; }
 .toc-sidebar .toc-title { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); font-weight: 600; margin-bottom: 8px; }
 .toc-sidebar ul { list-style: none; padding: 0; margin: 0; }
 .toc-sidebar li { margin: 0; }
@@ -996,7 +1006,10 @@ mark { background: var(--accent-bg); color: var(--accent); padding: 0 2px; borde
 .toc-sidebar .toc-link { display: block; padding: 4px 8px; color: var(--text-secondary); border-left: 2px solid transparent; line-height: 1.4; text-decoration: none; border-radius: 0 4px 4px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .toc-sidebar .toc-link:hover { color: var(--text); background: var(--bg-alt); text-decoration: none; }
 .toc-sidebar .toc-link.active { color: var(--accent); border-left-color: var(--accent); background: var(--bg-alt); font-weight: 500; }
-@media (min-width: 1340px) { .toc-sidebar { display: block; } }
+@media (max-width: 860px) {
+  .session-toc-layout:has(> .toc-sidebar.toc-ready) { grid-template-columns: 1fr; }
+  .toc-sidebar.toc-ready { display: none; }
+}
 
 /* #460: Hamburger button + slide-down drawer for tablet/mobile.
    Desktop nav-links row hides at <1024 (existing rule), so without
