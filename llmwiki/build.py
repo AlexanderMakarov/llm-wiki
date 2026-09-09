@@ -1544,12 +1544,17 @@ def render_project_page(
     usage_totals: dict[str, Any] | None = None,
     doc_count: int = 0,
     connected_topics: list[tuple[str, int, str]] | None = None,
+    projects_meta_dir: Path | None = None,
 ) -> Path:
     """Write ``projects/<slug>.html`` for one project and return its path.
 
     ``connected_topics`` is ``[(topic, shared_sessions, href), ...]`` as
     :func:`project_connected_topics` returns it; omit it (or pass an empty
     list) and the page carries no connected-topics section at all.
+
+    ``projects_meta_dir`` overrides the module default
+    :data:`PROJECTS_META_DIR` when loading ``wiki/projects/<slug>.md``
+    profile metadata and topics; vault builds pass ``wiki_dir / "projects"``.
     """
     main_sessions = [s for s in sessions if not _is_subagent(s[1], s[0])]
     subagent_sessions = [s for s in sessions if s not in main_sessions]
@@ -1637,8 +1642,9 @@ def render_project_page(
     # Explicit profile via wiki/projects/<slug>.md wins over the
     # session-tag fallback. Projects with no topics render an empty
     # strip (no chip row at all).
-    proj_profile = load_project_profile(PROJECTS_META_DIR, project_slug)
-    proj_topics = get_project_topics(PROJECTS_META_DIR, project_slug, proj_entries)
+    meta_dir = projects_meta_dir or PROJECTS_META_DIR
+    proj_profile = load_project_profile(meta_dir, project_slug)
+    proj_topics = get_project_topics(meta_dir, project_slug, proj_entries)
     topics_html = render_topic_chips(
         proj_topics, max_visible=12, classname="project-topics project-hero-topics"
     )
@@ -1989,6 +1995,7 @@ def render_analytics(
     docs_by_project: dict[str, int] | None = None,
     wiki_dir: Path | None = None,
     wiki_value: dict[str, Any] | None = None,
+    projects_meta_dir: Path | None = None,
 ) -> Path:
     """Render ``analytics.html`` — hero stats, activity heatmaps, token
     stats, wiki usage (#52), recently-updated, projects grid."""
@@ -2094,7 +2101,8 @@ def render_analytics(
         # takes precedence, falls back to aggregated session tags with
         # noise filtered out. Rendered as chips below the card meta.
         proj_metas = [m for _, m, _ in sessions]
-        topics = get_project_topics(PROJECTS_META_DIR, project, proj_metas)
+        meta_dir = projects_meta_dir or (wiki_dir or (REPO_ROOT / "wiki")) / "projects"
+        topics = get_project_topics(meta_dir, project, proj_metas)
         topics_html = render_topic_chips(topics, max_visible=4,
                                          classname="project-topics card-topics")
         # #455: render the activity date range under the meta line so
@@ -3070,6 +3078,7 @@ def build_site(
     raw_sessions = RAW_SESSIONS if raw_sessions is None else raw_sessions
     raw_dir = RAW_DIR if raw_dir is None else raw_dir
     wiki_dir = (REPO_ROOT / "wiki") if wiki_dir is None else wiki_dir
+    projects_meta_dir = wiki_dir / "projects"
     if not raw_sessions.exists():
         print(
             f"error: {raw_sessions} does not exist. Run `llmwiki init` + `llmwiki sync` first.",
@@ -3093,7 +3102,7 @@ def build_site(
     # have already accepted mutation (sync, the new `--seed-project-stubs`
     # flag) request seeding explicitly; the default `build` is pure.
     if seed_project_stubs:
-        stubs_written = ensure_project_stubs(groups, PROJECTS_META_DIR)
+        stubs_written = ensure_project_stubs(groups, projects_meta_dir)
         if stubs_written:
             print(f"  seeded {len(stubs_written)} new wiki/projects/ stubs")
 
@@ -3313,6 +3322,7 @@ def build_site(
             connected_topics=project_connected_topics(
                 topic_graph if use_topic_graph else None, project
             ),
+            projects_meta_dir=projects_meta_dir,
         )
     print(f"  wrote {len(groups)} project pages")
 
@@ -3340,6 +3350,7 @@ def build_site(
         docs_by_project=docs_by_project,
         wiki_dir=wiki_dir,
         wiki_value=wiki_value,
+        projects_meta_dir=projects_meta_dir,
     )
     render_candidates_page(wiki_dir, out_dir)
     doc_pages = raw_docs_site.render_document_pages(
