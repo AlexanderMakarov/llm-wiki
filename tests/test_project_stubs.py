@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from llmwiki import REPO_ROOT
 from llmwiki import build as build_mod
 from llmwiki.build import _humanize_slug, build_site, ensure_project_stubs
 from llmwiki.cli import build_parser
@@ -220,6 +221,94 @@ def test_cli_build_flag_round_trips(tmp_path: Path):
     assert getattr(args, "seed_project_stubs", False) is True
     args_default = parser.parse_args(["build"])
     assert getattr(args_default, "seed_project_stubs", False) is False
+
+
+# ─── #239: seed_project_stubs uses vault wiki_dir, not REPO_ROOT ─────
+
+
+def test_build_site_seed_stubs_writes_vault_not_repo(tmp_path: Path):
+    """# @layer: integration
+    # @spec: 239-project-stubs-vault-path
+    # @regression
+
+    ``build --vault … --seed-project-stubs`` must seed ``wiki/projects/``
+    under the vault, not the git clone's ``REPO_ROOT/wiki/projects/``.
+    """
+    slug = "vault-stub-regression-239"
+    vault = tmp_path / "vault"
+    sessions = vault / "raw" / "sessions"
+    sessions.mkdir(parents=True)
+    (sessions / f"2026-09-08T12-00-{slug}-x.md").write_text(
+        f'---\ntitle: "S"\ntype: source\nproject: {slug}\n---\n# S\n',
+        encoding="utf-8",
+    )
+    wiki = vault / "wiki"
+    wiki.mkdir(parents=True)
+    site = vault / "site"
+
+    rc = build_site(
+        out_dir=site,
+        raw_sessions=sessions,
+        raw_dir=vault / "raw",
+        wiki_dir=wiki,
+        seed_project_stubs=True,
+    )
+    assert rc == 0
+
+    vault_stub = wiki / "projects" / f"{slug}.md"
+    assert vault_stub.is_file(), (
+        f"stub missing under vault wiki_dir: {list((wiki / 'projects').glob('*.md')) if (wiki / 'projects').exists() else 'no projects dir'}"
+    )
+    repo_stub = REPO_ROOT / "wiki" / "projects" / f"{slug}.md"
+    assert not repo_stub.exists(), (
+        f"stub wrongly written to REPO_ROOT: {repo_stub}"
+    )
+
+
+def test_build_site_reads_vault_project_profile_not_repo(tmp_path: Path):
+    """# @layer: integration
+    # @spec: 239-project-stubs-vault-path
+    # @regression
+
+    Hand-authored ``wiki/projects/<slug>.md`` under a vault must drive the
+    built project page (description/topics); REPO_ROOT must not be touched.
+    """
+    slug = "vault-profile-read-239"
+    distinctive = "Vault profile description for issue 239"
+    vault = tmp_path / "vault"
+    sessions = vault / "raw" / "sessions"
+    sessions.mkdir(parents=True)
+    (sessions / f"2026-09-08T12-00-{slug}-x.md").write_text(
+        f'---\ntitle: "S"\ntype: source\nproject: {slug}\n---\n# S\n',
+        encoding="utf-8",
+    )
+    wiki = vault / "wiki"
+    projects = wiki / "projects"
+    projects.mkdir(parents=True)
+    (projects / f"{slug}.md").write_text(
+        f'---\ntitle: "{slug}"\ntype: project\nproject: {slug}\n'
+        f"topics: [vault-only-topic]\n"
+        f'description: "{distinctive}"\nhomepage: ""\n---\n\n# {slug}\n',
+        encoding="utf-8",
+    )
+    site = vault / "site"
+
+    rc = build_site(
+        out_dir=site,
+        raw_sessions=sessions,
+        raw_dir=vault / "raw",
+        wiki_dir=wiki,
+    )
+    assert rc == 0
+
+    page = (site / "projects" / f"{slug}.html").read_text(encoding="utf-8")
+    assert distinctive in page
+    assert "vault-only-topic" in page
+
+    repo_profile = REPO_ROOT / "wiki" / "projects" / f"{slug}.md"
+    assert not repo_profile.exists(), (
+        f"profile wrongly expected under REPO_ROOT: {repo_profile}"
+    )
 
 
 # ─── #425: pre-populate stub topics + description from session metadata ──

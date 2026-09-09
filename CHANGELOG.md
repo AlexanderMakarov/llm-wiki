@@ -22,6 +22,8 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Fixed
 
+- **Project stub seeding and profile reads honor vault `wiki_dir` (#239)** — `build --seed-project-stubs` and project-page topic/profile loading now use the active vault's `wiki/projects/` instead of the git clone's `wiki/projects/`.
+  - *Release note:* `--seed-project-stubs` and project metadata reads follow the vault path (#239).
 - **Harvest folds case/punctuation-colliding wikilink spellings into one candidate stub (#204)** — `harvest_targets` unions sources for names that share a `_norm_slug` and keeps the dominant spelling (most citing pages); pending stubs under `wiki/candidates/` are refreshed by norm slug so an alternate-case re-harvest does not create a sibling file that collides on case-insensitive filesystems.
   - *Release note:* Candidate harvest no longer writes two stubs that differ only by letter case (#204).
 
