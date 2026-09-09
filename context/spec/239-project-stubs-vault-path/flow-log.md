@@ -59,4 +59,12 @@
 - Next: local-review
 
 ## local-review
+- Verdict: Request changes (2 Meta blockers = uncommitted work; 3 nits)
+- User: keep all nits; blockers resolved by commit-push
 - Applied nits 3–5: vault profile read regression test, `render_project_page` docstring for `projects_meta_dir`, `render_analytics` threads `projects_meta_dir` from `build_site`
+- review.md session-only — not staged (#159)
+- Next: commit-push
+
+## commit-push
+- Commit code + CHANGELOG + flow-log; exclude review.md / vault / config.json
+- Push BRANCH; open PR — stop appending this log after PR opens
