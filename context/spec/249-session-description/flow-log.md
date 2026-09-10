@@ -25,4 +25,26 @@
 
 ### specs — tasks (written)
 - `tasks.md` slices 1–5 (hooks → scored derive → eval → docs → regression).
-- Next: commit-specs → implement Slice 1.
+
+### implement — slices 1–4 (done)
+- Slice 1: adapter `assigned_session_name` + `normalize_user_prompt` (Claude + Cursor CLI).
+- Slice 2: scored `derive_description`; `New Agent` rejected; punctuation-only out; Cursor chrome normalize.
+- Slice 3: operator eval via `scripts/eval_session_descriptions.py` — **accepted** (assigned names look great); **scoring weights frozen as-is** (do not change `ARG_LONG_MIN` unless a test forces it).
+- Slice 4: CHANGELOG + UPGRADING + this log / tasks marked done.
+
+### implement / eval (done)
+- Operator accepted assigned-name examples (Cursor/Claude titles).
+- Weights frozen as shipped in convert.py (`ARG_LONG_MIN=4`, type/position/length as coded).
+- `New Agent` rejected; punctuation-only skipped; Cursor XML chrome stripped for description path.
+- Docs: CHANGELOG + UPGRADING inventory.
+
+### rebase (done)
+- `git fetch origin main` + rebase: already up to date on `origin/main` @ 7bc1391 (GitHub main tip).
+
+### implement — Slice 5 (done)
+- Acceptance/regression tests for R1–R4 in `tests/test_session_description.py` (`@spec: 249-session-description`).
+- Local review B1: multiline assigned names collapse to first line before frontmatter emit.
+- Full `ruff check llmwiki tests scripts` + `pytest tests/ -q` green.
+
+### next
+- Commit implementation; open PR; wait CI; ask operator for merge.

@@ -33,6 +33,7 @@ Fidelity notes:
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
@@ -48,6 +49,25 @@ from llmwiki.adapters.contrib.cursor_slug import cursor_workspace_slug
 _CURSOR_CLI_META_TYPE = "cursor_cli_meta"
 _AUTO_REVIEW_MODE = "auto-review"
 
+# Default store-meta title Cursor writes before the user renames the chat.
+# Exact store spelling plus any casefold match — not a user-assigned name (#249).
+_CURSOR_PLACEHOLDER_NAME = "New Agent"
+
+# Prefer inner ``<user_query>``; strip other XML-ish wrapper blocks entirely so
+# description scoring never picks ``<user_info>`` / ``<rules>`` / etc. (#249).
+_CURSOR_USER_QUERY_RE = re.compile(
+    r"<user_query(?:\s[^>]*)?>(.*?)</user_query\s*>",
+    re.DOTALL | re.IGNORECASE,
+)
+# Any other paired ``<tag>…</tag>`` block (non-greedy). Safe for description
+# cleanup only — Conversation rendering does not use this hook.
+_CURSOR_ANY_BLOCK_RE = re.compile(
+    r"<([A-Za-z][\w:-]*)(?:\s[^>]*)?>.*?</\1\s*>",
+    re.DOTALL,
+)
+_CURSOR_TAG_ONLY_LINE_RE = re.compile(
+    r"^</?[A-Za-z][\w:-]*(?:\s[^>]*)?\s*/?>$",
+)
 
 @register("cursor_cli", aliases=["cursor-cli"])
 class CursorCliAdapter(BaseAdapter):
@@ -153,6 +173,10 @@ class CursorCliAdapter(BaseAdapter):
         if am is not None and am != "":
             audit["approvalMode"] = am
 
+        name = store_meta.get("name")
+        if name is not None and str(name).strip():
+            audit["name"] = str(name).strip()
+
         if "subagentInfo" in store_meta and store_meta.get("subagentInfo") is not None:
             si = store_meta["subagentInfo"]
             # Presence alone marks headless. Strings / other non-dicts must not
@@ -241,6 +265,59 @@ class CursorCliAdapter(BaseAdapter):
             if isinstance(am, str) and am.strip().lower() == _AUTO_REVIEW_MODE:
                 return True
         return False
+
+    def assigned_session_name(
+        self, path: Path | str, records: list[dict[str, Any]]
+    ) -> str | None:
+        """Return store-meta ``name`` when it is a real assigned title (#249).
+
+        Cursor writes the placeholder ``New Agent`` (and casefold variants) for
+        unnamed chats — treat those as absent so scored user-prompt fallback
+        runs. Empty / whitespace-only names are also absent.
+        """
+        del path
+        for r in records:
+            if not isinstance(r, dict) or r.get("type") != _CURSOR_CLI_META_TYPE:
+                continue
+            name = r.get("name")
+            if not isinstance(name, str):
+                continue
+            cleaned = name.strip()
+            if not cleaned:
+                continue
+            if (
+                cleaned == _CURSOR_PLACEHOLDER_NAME
+                or cleaned.casefold() == _CURSOR_PLACEHOLDER_NAME.casefold()
+            ):
+                return None
+            return cleaned
+        return None
+
+    def normalize_user_prompt(self, text: str) -> str:
+        """Drop Cursor XML envelope chrome before description scoring (#249).
+
+        If ``<user_query>`` blocks exist, keep only their inner prose. Otherwise
+        strip every paired ``<tag>…</tag>`` wrapper (``user_info``, ``rules``,
+        ``cursor_commands``, …) and drop tag-only lines. Empty → ``""`` so the
+        turn is not a description candidate. Conversation rendering is unchanged
+        (this hook is description-path only).
+        """
+        if not text or not text.strip():
+            return ""
+        queries = _CURSOR_USER_QUERY_RE.findall(text)
+        if queries:
+            working = "\n".join(q.strip() for q in queries if q.strip())
+        else:
+            working = _CURSOR_ANY_BLOCK_RE.sub("", text)
+        kept: list[str] = []
+        for line in working.splitlines():
+            stripped = line.strip()
+            if not stripped:
+                continue
+            if _CURSOR_TAG_ONLY_LINE_RE.match(stripped):
+                continue
+            kept.append(stripped)
+        return "\n".join(kept).strip()
 
 
 def _created_at_to_iso(created: Any) -> str | None:

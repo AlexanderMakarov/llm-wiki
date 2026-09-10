@@ -17,7 +17,7 @@ import json
 import os
 import re
 import sys
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -1286,11 +1286,7 @@ _CLAUDE_CONTROL_ORPHAN_RE = re.compile(
     r"</?(?:" + "|".join(_CLAUDE_CONTROL_TAGS) + r")(?:\s[^>]*)?/?>",
     re.IGNORECASE,
 )
-_SLASH_COMMAND_LINE_RE = re.compile(r"^/[A-Za-z][\w-]*(?:\s+\S.*)?$")
-# Description skip: bare `/clear` *or* `/implement-feature https://…` — slash
-# invocations are chrome, not a human-readable session subtitle (#229 smoke).
-# (Bare-label-only matching used to live in ``_SLASH_COMMAND_LABEL_RE``; the
-# line form supersedes it for description skips.)
+_SLASH_CMD_RE = re.compile(r"^/([A-Za-z][\w-]*)(?:\s+(.*))?$")
 # Background-task "user" turns start with this banner; the three boilerplate
 # lines that follow are fixed Claude wording, not human input.
 _SYSTEM_NOTIFICATION_HEADER_RE = re.compile(
@@ -1303,53 +1299,77 @@ _SYSTEM_NOTIFICATION_BOILERPLATE_RE = re.compile(
     r"No human input has been received[^\n]*\n?)+",
     re.IGNORECASE,
 )
-# Slash-command / skill markdown dumps Claude injects as list-shaped user
-# turns after ``/command`` — long ``# Title`` files with ``## Arguments``,
-# or ``@path/to/file.md`` + ``ARGUMENTS:`` payloads (#229 smoke).
-_INJECTED_DUMP_MIN_LEN = 2000
+
+# ─── #249 session description scoring (frozen after operator eval) ───
+# Type band ≫ position ≫ length. Length uses min(len, 120) only.
+# ARG_LONG_MIN: arg char count after `/cmd` — ≤ mid-low (config-like);
+# > same high band as prose (so `/fix-bug xxxxx` beats later short prose).
+# Tunables change only if a regression forces it.
+ARG_LONG_MIN = 4
+TYPE_BASE_BARE = 0
+TYPE_BASE_SHORT_ARGS = 1_000
+TYPE_BASE_HIGH = 10_000  # prose + slash + long args
+POSITION_STEP = 200  # earlier user-prompt index → higher (position ≫ length)
+LENGTH_WEIGHT = 1
+DESC_MAX_CHARS = 120
 
 
-def is_injected_command_dump(text: str) -> bool:
-    """True when ``text`` looks like an injected slash-command or skill dump.
+def _description_candidate_has_alnum(text: str) -> bool:
+    """True when ``text`` contains at least one Unicode alphanumeric character.
 
-    These must not become ``description:`` — Conversation already skips
-    list-shaped content via ``is_real_user_prompt``, but ``derive_description``
-    still reads text blocks from lists.
+    Punctuation-only / whitespace-only strings (``-``, ``...``, ``???``, `` ``)
+    are invalid description candidates (#249).
     """
-    if not text or not text.strip():
-        return False
-    stripped = text.lstrip()
-    if stripped.startswith("# "):
-        if "## Arguments" in text or "## Notifications" in text:
-            return True
-        if len(text) > _INJECTED_DUMP_MIN_LEN:
-            return True
-    if stripped.startswith("@"):
-        first_line = stripped.split("\n", 1)[0]
-        if ".md" in first_line.lower():
-            return True
-        if "ARGUMENTS:" in text or "/commands/" in text:
-            return True
-    return False
+    return any(c.isalnum() for c in text)
 
 
-def is_claude_ui_chrome(text: str) -> bool:
-    """True for short Claude UI status lines (not human prompts).
+def _classify_description_candidate(line: str) -> int:
+    """Return type-band base score for one candidate line (#249)."""
+    m = _SLASH_CMD_RE.match(line.strip())
+    if not m:
+        return TYPE_BASE_HIGH
+    args = (m.group(2) or "").strip()
+    if not args:
+        return TYPE_BASE_BARE
+    if len(args) <= ARG_LONG_MIN:
+        return TYPE_BASE_SHORT_ARGS
+    return TYPE_BASE_HIGH
 
-    Example: ``[Request interrupted by user]`` — list-shaped in jsonl, so it
-    never appears in Conversation, but ``derive_description`` would otherwise
-    pick it as the hero subtitle (#229 smoke).
-    """
-    s = (text or "").strip()
-    if not s or "\n" in s:
-        return False
-    if not (s.startswith("[") and s.endswith("]")):
-        return False
-    low = s.lower()
-    return any(
-        needle in low
-        for needle in ("interrupt", "cancel", "not user input", "system notification")
-    )
+
+def _score_description_candidate(line: str, index: int) -> float:
+    """type_base + position_bonus + length_bonus(min(len, 120))."""
+    type_base = _classify_description_candidate(line)
+    position_bonus = -index * POSITION_STEP
+    length_bonus = LENGTH_WEIGHT * min(len(line), DESC_MAX_CHARS)
+    return type_base + position_bonus + length_bonus
+
+
+def _truncate_description(text: str, max_chars: int = DESC_MAX_CHARS) -> str:
+    """Truncate display text at a word boundary with ``...``."""
+    if not text or len(text) <= max_chars:
+        return text
+    cut = text.rfind(" ", 0, max_chars - 3)
+    if cut < max_chars // 2:
+        cut = max_chars - 3
+    return text[:cut].rstrip() + "..."
+
+
+def _user_turn_text(record: dict[str, Any]) -> str:
+    """Extract plain text from a user record (string or text-block list)."""
+    msg = record.get("message", {})
+    if not isinstance(msg, dict):
+        return ""
+    content = msg.get("content")
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        for block in content:
+            if isinstance(block, dict) and block.get("type") == "text":
+                return block.get("text") or ""
+            if isinstance(block, str):
+                return block
+    return ""
+
 
 def preserve_prompt_newlines(text: str) -> str:
     """Preserve jsonl line breaks as markdown hard breaks inside paragraphs.
@@ -1586,90 +1606,85 @@ def _adapter_tag(adapter_name: str) -> str:
     return normalised
 
 
-def derive_description(records: list[dict[str, Any]], redact: Redactor) -> str:
-    """#471: derive a 120-char human-readable description from the
-    first non-trivial user prompt in the session.
+def _description_band_label(line: str) -> str:
+    """Human label for eval tables (#249)."""
+    base = _classify_description_candidate(line)
+    if base == TYPE_BASE_BARE:
+        return "bare_slash"
+    if base == TYPE_BASE_SHORT_ARGS:
+        return "slash_short_args"
+    m = _SLASH_CMD_RE.match(line.strip())
+    if m:
+        return "slash_long_args"
+    return "prose"
 
-    Walks the records looking for the first user message, strips path
-    noise, skips trivial openers ("hi", "thanks", "continue"), and
-    truncates to ~120 chars at a word boundary.
 
-    #229: Claude Code control envelopes (caveat / command-name / …)
-    are normalized first so they never become the description; slash
-    invocations (bare `/clear` or `/cmd <args>`) are skipped in favour
-    of real prose; injected command/skill markdown dumps are skipped.
+def rank_description_candidates(
+    records: list[dict[str, Any]],
+    *,
+    normalize_user_prompt: Callable[[str], str] | None = None,
+) -> list[dict[str, Any]]:
+    """Return scored user-prompt candidates (best first) for eval / debugging.
 
-    Empty / un-derivable input returns ``""``; callers can fall back
-    to the slug. Always passes the result through the same Redactor
-    the body uses so the description doesn't leak any path / token
-    that the body would have redacted.
+    Each item: ``index``, ``text``, ``score``, ``band``.
     """
-    TRIVIAL = {"hi", "hello", "hey", "thanks", "thank you", "ok",
-               "continue", "go on", "ya", "yes", "no", "."}
-    MAX_CHARS = 120
-    PATH_PREFIX_RE = re.compile(r"^/?(?:Users|home|mnt/[a-z]|cygdrive/[a-z])/[^/\s]+/")
-
+    normalize = normalize_user_prompt or (lambda t: (t or "").strip())
+    ranked: list[dict[str, Any]] = []
+    user_index = 0
     for r in records:
-        if not isinstance(r, dict):
+        if not isinstance(r, dict) or r.get("type") != "user":
             continue
-        if r.get("type") != "user":
+        raw = _user_turn_text(r)
+        cleaned = normalize(raw) if raw else ""
+        if not cleaned:
             continue
-        msg = r.get("message", {})
-        if not isinstance(msg, dict):
-            continue
-        content = msg.get("content")
-        text = ""
-        if isinstance(content, str):
-            text = content
-        elif isinstance(content, list):
-            # Take the first text-shaped block.
-            for block in content:
-                if isinstance(block, dict) and block.get("type") == "text":
-                    text = block.get("text") or ""
-                    break
-                if isinstance(block, str):
-                    text = block
-                    break
-        if not text:
-            continue
-
-        # Skip before normalize — dumps are plain markdown, not control XML.
-        if is_injected_command_dump(text):
-            continue
-        if is_claude_ui_chrome(text):
-            continue
-
-        text = normalize_claude_control_content(text)
-        if not text:
-            continue
-        # Slash invocations are not a useful hero subtitle (with or without args).
-        if _SLASH_COMMAND_LINE_RE.match(text.strip()):
-            continue
-
-        # First non-empty line (skip code-fence opens + path-noise).
-        for raw_line in text.splitlines():
+        candidate = ""
+        for raw_line in cleaned.splitlines():
             line = raw_line.strip()
-            if not line:
-                continue
-            if line.startswith("```") or line.startswith("~~~"):
-                continue
-            # Strip leading absolute-path prefix from "two tasks in /Users/x/..." style.
-            line = PATH_PREFIX_RE.sub("", line, count=1)
-            # Skip trivial openers (case-insensitive).
-            if line.lower().rstrip(" ?!.") in TRIVIAL:
-                continue
-            if _SLASH_COMMAND_LINE_RE.match(line):
-                continue
-            if is_claude_ui_chrome(line):
-                continue
-            # Truncate at word boundary.
-            if len(line) > MAX_CHARS:
-                cut = line.rfind(" ", 0, MAX_CHARS - 3)
-                if cut < MAX_CHARS // 2:
-                    cut = MAX_CHARS - 3
-                line = line[:cut].rstrip() + "..."
-            return redact(line)
-    return ""
+            if line and _description_candidate_has_alnum(line):
+                candidate = line
+                break
+        if not candidate:
+            continue
+        score = _score_description_candidate(candidate, user_index)
+        ranked.append(
+            {
+                "index": user_index,
+                "text": candidate,
+                "score": score,
+                "band": _description_band_label(candidate),
+            }
+        )
+        user_index += 1
+    ranked.sort(key=lambda row: (-row["score"], row["index"]))
+    return ranked
+
+
+def derive_description(
+    records: list[dict[str, Any]],
+    redact: Redactor,
+    *,
+    normalize_user_prompt: Callable[[str], str] | None = None,
+) -> str:
+    """#249: score every user prompt; pick the highest for ``description:``.
+
+    Per user turn: extract text → ``normalize_user_prompt`` (default: strip) →
+    first non-empty line → candidate. Candidates with no Unicode alphanumeric
+    character are skipped. Score =
+    ``type_base + position_bonus + length_bonus(min(len, 120))``.
+    Max score wins; ties keep the earlier index. Winner is redacted and
+    truncated to ``DESC_MAX_CHARS`` on a word boundary. If every candidate is
+    rejected, returns ``""``.
+
+    Old English soft-ack / continuation / chrome-skip / dump-skip filters are
+    intentionally gone — type bands + position cover maintenance vs task.
+    """
+    ranked = rank_description_candidates(
+        records, normalize_user_prompt=normalize_user_prompt
+    )
+    if not ranked:
+        return ""
+    return redact(_truncate_description(str(ranked[0]["text"])))
 
 
 def render_session_markdown(
@@ -1681,6 +1696,7 @@ def render_session_markdown(
     is_subagent_file: bool,
     adapter_name: str = "claude_code",
     is_headless: bool | None = None,
+    adapter: Any | None = None,
 ) -> tuple[str, str, datetime]:
     started = first_record_time(records) or datetime.now(UTC)
     ended = latest_record_time(records) or started
@@ -1731,9 +1747,43 @@ def render_session_markdown(
     # sessions were mis-tagged and grouped under the wrong chip on
     # the compiled site.
     tag_adapter = _adapter_tag(adapter_name)
-    # #471: human-readable description from the first non-trivial user
-    # turn — replaces the opaque slug-date title in listings.
-    description = derive_description(records, redact)
+    # #249: assigned session name wins; else scored user-prompt fallback.
+    active = adapter
+    if active is None and adapter_name:
+        cls = REGISTRY.get(adapter_name)
+        if cls is not None:
+            try:
+                active = cls()
+            except Exception:
+                active = None
+    assigned = ""
+    if active is not None:
+        try:
+            getter = getattr(active, "assigned_session_name", None)
+            raw_name = getter(jsonl_path, records) if callable(getter) else None
+        except Exception:
+            raw_name = None
+        if isinstance(raw_name, str) and raw_name.strip():
+            # Single frontmatter-safe line (scored path already uses first line).
+            assigned = ""
+            for raw_line in raw_name.splitlines():
+                line = raw_line.strip()
+                if line:
+                    assigned = line
+                    break
+            # Punctuation-only assigned titles are not usable subtitles (#249).
+            if assigned and not _description_candidate_has_alnum(assigned):
+                assigned = ""
+    if assigned:
+        description = redact(_truncate_description(assigned))
+    else:
+        # Duck-typed test adapters may omit BaseAdapter hooks (#249).
+        normalize = getattr(active, "normalize_user_prompt", None) if active else None
+        if not callable(normalize):
+            normalize = None
+        description = derive_description(
+            records, redact, normalize_user_prompt=normalize
+        )
     # YAML-escape inner double quotes so the frontmatter parser doesn't
     # truncate at the first internal `"`.
     description_safe = description.replace("\\", "\\\\").replace('"', '\\"')
@@ -2149,6 +2199,7 @@ def convert_all(
                     is_subagent_file,
                     adapter_name=cls.name,
                     is_headless=headless,
+                    adapter=adapter,
                 )
             except Exception as e:
                 print(f"  error: {path.name}: {e}", file=sys.stderr)
