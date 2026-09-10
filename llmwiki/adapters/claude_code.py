@@ -13,6 +13,7 @@ We strip the common prefix to produce a friendly slug.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -90,3 +91,52 @@ class ClaudeCodeAdapter(BaseAdapter):
             return False
         # And the filename must start with 'agent-' (the canonical pattern).
         return parts[-1].startswith("agent-")
+
+    def assigned_session_name(
+        self, path: Path | str, records: list[dict[str, Any]]
+    ) -> str | None:
+        """Prefer ``custom-title.json`` ``customTitle``, else jsonl ``ai-title`` (#249).
+
+        Sidecar layouts observed on disk:
+        - ``<uuid>.jsonl`` with sibling dir ``<uuid>/custom-title.json``
+        - ``custom-title.json`` next to the session jsonl
+        """
+        jsonl = Path(path)
+        for sidecar in (
+            jsonl.parent / jsonl.stem / "custom-title.json",
+            jsonl.with_name("custom-title.json"),
+        ):
+            title = _read_custom_title(sidecar)
+            if title:
+                return title
+        for r in records:
+            if not isinstance(r, dict) or r.get("type") != "ai-title":
+                continue
+            ai = r.get("aiTitle")
+            if isinstance(ai, str) and ai.strip():
+                return ai.strip()
+        return None
+
+    def normalize_user_prompt(self, text: str) -> str:
+        """Collapse Claude Code control XML to ``/cmd`` / prose (#249 / #229)."""
+        # Local import: adapters ↔ convert cycle (same pattern as load_records).
+        from llmwiki.convert import (  # noqa: PLC0415
+            normalize_claude_control_content,
+        )
+
+        return normalize_claude_control_content(text)
+
+
+def _read_custom_title(sidecar: Path) -> str | None:
+    if not sidecar.is_file():
+        return None
+    try:
+        data = json.loads(sidecar.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    title = data.get("customTitle")
+    if isinstance(title, str) and title.strip():
+        return title.strip()
+    return None

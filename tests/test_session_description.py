@@ -1,38 +1,34 @@
-"""#471: derive_description extracts a 120-char human-readable summary
-from the first non-trivial user turn in a session.
+"""#249: session ``description:`` from assigned names + scored fallback.
 
-#229: Claude control envelopes (caveat, slash commands, stdout) are
-normalized before description derivation and Conversation rendering.
+#471 introduced the frontmatter field; #229 Claude control normalize still
+applies via adapter ``normalize_user_prompt``. Soft-ack / chrome-skip
+selection heuristics are gone.
 
 # @layer: unit
-# @spec: 229-session-tags-and-toc
+# @spec: 249-session-description
 # @regression
-
-Edge cases covered:
-
-  - Empty / no-user-turn sessions return "".
-  - Trivial openers ("hi", "thanks", "continue") get skipped — pick
-    the next non-trivial line instead.
-  - Path-noise prefixes (`/Users/x/...`) get stripped before truncation.
-  - Code-fence opens (```) get skipped.
-  - Long lines truncate at a word boundary with "...".
-  - Output is always passed through the Redactor.
-  - The frontmatter field gets emitted by render_session_markdown.
-  - #229: stdout-only / caveat-only / args-only / system-notification turns
-    omitted; slash commands collapse to ``/name`` (with args when present);
-    injected command/skill dumps skipped for description; user-prompt
-    newlines preserved as markdown hard breaks; mixed prose survives tag
-    stripping; ``<task-notification>`` envelopes stripped.
 """
 from __future__ import annotations
 
+import json
+import sqlite3
 from pathlib import Path
 
+from llmwiki._frontmatter import parse_frontmatter
+from llmwiki.adapters.claude_code import ClaudeCodeAdapter
+from llmwiki.adapters.contrib.cursor_cli import CursorCliAdapter
 from llmwiki.convert import (
+    ARG_LONG_MIN,
+    DESC_MAX_CHARS,
+    LENGTH_WEIGHT,
+    POSITION_STEP,
+    TYPE_BASE_BARE,
+    TYPE_BASE_HIGH,
+    TYPE_BASE_SHORT_ARGS,
     Redactor,
+    _classify_description_candidate,
+    _score_description_candidate,
     derive_description,
-    is_claude_ui_chrome,
-    is_injected_command_dump,
     normalize_claude_control_content,
     preserve_prompt_newlines,
     render_session_markdown,
@@ -55,74 +51,304 @@ def _redactor() -> Redactor:
     return Redactor({"redaction": {"real_username": "", "extra_patterns": []}})
 
 
-# ─── derive_description ───────────────────────────────────────────────
+def _claude_norm(text: str) -> str:
+    return ClaudeCodeAdapter().normalize_user_prompt(text)
 
 
-def test_returns_first_user_line() -> None:
-    records = [_u("Refactor the auth middleware to use JWT cookies.")]
-    assert derive_description(records, _redactor()) == \
-        "Refactor the auth middleware to use JWT cookies."
+def _derive(records: list, redact: Redactor | None = None) -> str:
+    """derive_description with Claude normalize (XML sessions in these tests)."""
+    return derive_description(
+        records,
+        redact or _redactor(),
+        normalize_user_prompt=_claude_norm,
+    )
 
 
-def test_empty_records_returns_empty_string() -> None:
-    assert derive_description([], _redactor()) == ""
+# ─── scoring invariants (#249) ────────────────────────────────────────
 
 
-def test_no_user_turn_returns_empty_string() -> None:
-    records = [{"type": "assistant", "message": {"content": "ack"}}]
-    assert derive_description(records, _redactor()) == ""
+def test_weights_documented_and_position_outranks_length() -> None:
+    assert ARG_LONG_MIN == 4
+    assert TYPE_BASE_HIGH > TYPE_BASE_SHORT_ARGS > TYPE_BASE_BARE
+    assert POSITION_STEP > DESC_MAX_CHARS * LENGTH_WEIGHT
 
 
-def test_skips_trivial_opener_picks_next_line() -> None:
-    records = [_u("hi\nactually, let's debug the failing migration test")]
-    out = derive_description(records, _redactor())
-    assert "debug the failing migration" in out
-    assert out.lower() != "hi"
+def test_fix_bug_long_args_beats_later_short_prose() -> None:
+    records = [_u("/fix-bug xxxxx"), _u("merge with --admin")]
+    assert _derive(records) == "/fix-bug xxxxx"
+    assert _classify_description_candidate("/fix-bug xxxxx") == TYPE_BASE_HIGH
+    assert _classify_description_candidate("merge with --admin") == TYPE_BASE_HIGH
+    assert _score_description_candidate("/fix-bug xxxxx", 0) > _score_description_candidate(
+        "merge with --admin", 1
+    )
 
 
-def test_skips_code_fence_opener() -> None:
-    records = [_u("```python\ndef foo():\n    pass\n```\nReview this code.")]
-    # First non-fence non-empty line is `def foo():`. We accept either
-    # that (line-by-line walk pre-fence-open) or "Review this code."
-    out = derive_description(records, _redactor())
-    assert out, "should derive something"
-    assert "```" not in out
+def test_clear_model_theme_then_prose_picks_prose() -> None:
+    records = [
+        _u("/clear"),
+        _u("/model opus"),
+        _u("/theme dark"),
+        _u("Refactor the auth middleware to use JWT cookies."),
+    ]
+    assert _derive(records) == "Refactor the auth middleware to use JWT cookies."
 
 
-def test_strips_path_prefix_noise() -> None:
-    records = [_u("/Users/alice/work/proj/src/auth.py needs a JWT cookie path")]
-    out = derive_description(records, _redactor())
-    assert out.startswith("auth.py needs a JWT cookie path") or "JWT cookie" in out
-    assert "/Users/alice" not in out
+def test_mcp_only_session_keeps_bare_slash() -> None:
+    assert _derive([_u("/mcp")]) == "/mcp"
+    assert _classify_description_candidate("/mcp") == TYPE_BASE_BARE
 
 
-def test_truncates_at_word_boundary_around_120_chars() -> None:
+def test_length_cap_equal_for_120_and_longer() -> None:
+    a = "x" * 120
+    b = "x" * 200
+    assert _score_description_candidate(a, 0) == _score_description_candidate(b, 0)
+
+
+def test_truncates_display_at_word_boundary_around_120_chars() -> None:
     long = (
         "We need to refactor the authentication middleware so that the "
         "JWT cookie path is configurable per-tenant and survives the "
         "session-revocation pass without breaking the existing token "
         "rotation policy that mobile clients depend on."
     )
-    records = [_u(long)]
-    out = derive_description(records, _redactor())
-    assert len(out) <= 124  # 120 + "..." headroom
+    out = _derive([_u(long)])
+    assert len(out) <= 124
     assert out.endswith("...")
-    # No mid-word truncation (last word should be whole).
     assert " " in out
 
 
+def test_punctuation_only_candidates_are_skipped() -> None:
+    """Candidates need ≥1 Unicode alphanumeric; all-punctuation → ``""`` (#249)."""
+    assert _derive([_u("-"), _u("..."), _u("???"), _u("   ")]) == ""
+    assert _derive([_u("---"), _u("Refactor the auth middleware")]) == (
+        "Refactor the auth middleware"
+    )
+    # First line punctuation-only; later line in same turn still usable.
+    assert _derive([_u("...\nFix the failing migration")]) == "Fix the failing migration"
+    assert _derive([_u("日本語のタスク")]) == "日本語のタスク"
+
+
+def test_punctuation_only_assigned_name_falls_back_to_scored() -> None:
+    records = [
+        {"type": "ai-title", "aiTitle": "???"},
+        _u("Install Zoom on staging"),
+    ]
+    md, _slug, _started = render_session_markdown(
+        records=records,
+        jsonl_path=Path("/tmp/dummy.jsonl"),
+        project_slug="demo",
+        redact=_redactor(),
+        config={},
+        is_subagent_file=False,
+        adapter=ClaudeCodeAdapter(),
+    )
+    assert 'description: "Install Zoom on staging"' in md
+
+
+# ─── derive_description basics ────────────────────────────────────────
+
+
+def test_returns_first_user_line() -> None:
+    records = [_u("Refactor the auth middleware to use JWT cookies.")]
+    assert _derive(records) == "Refactor the auth middleware to use JWT cookies."
+
+
+def test_empty_records_returns_empty_string() -> None:
+    assert _derive([]) == ""
+
+
+def test_no_user_turn_returns_empty_string() -> None:
+    records = [{"type": "assistant", "message": {"content": "ack"}}]
+    assert _derive(records) == ""
+
+
+def test_first_nonempty_line_is_candidate() -> None:
+    """Candidate is first non-empty line — no soft-ack skip (#249)."""
+    records = [_u("hi\nactually, let's debug the failing migration test")]
+    assert _derive(records) == "hi"
+
+
 def test_handles_content_as_block_list() -> None:
-    """Records sometimes carry content as a [{type:text, text:...}] list."""
     records = [_u_blocks([{"type": "text", "text": "Block-form prompt content"}])]
-    assert derive_description(records, _redactor()) == "Block-form prompt content"
+    assert _derive(records) == "Block-form prompt content"
 
 
 def test_passes_output_through_redactor() -> None:
-    """Real_username in the prompt must be redacted in the description."""
     red = Redactor({"redaction": {"real_username": "alice", "extra_patterns": []}})
     records = [_u("Run the test suite under /Users/alice/proj")]
-    out = derive_description(records, red)
+    out = _derive(records, red)
     assert "alice" not in out
+
+
+# ─── assigned name short-circuit ──────────────────────────────────────
+
+
+def test_claude_custom_title_sidecar_wins_over_user_turns(tmp_path: Path) -> None:
+    session = tmp_path / "sess-uuid.jsonl"
+    session.write_text("{}\n", encoding="utf-8")
+    side_dir = tmp_path / "sess-uuid"
+    side_dir.mkdir()
+    (side_dir / "custom-title.json").write_text(
+        json.dumps({"customTitle": "My Renamed Session"}),
+        encoding="utf-8",
+    )
+    records = [
+        _u("/clear"),
+        _u("noisy follow-up that must not win"),
+    ]
+    ad = ClaudeCodeAdapter()
+    assert ad.assigned_session_name(session, records) == "My Renamed Session"
+    md, _slug, _started = render_session_markdown(
+        records=records,
+        jsonl_path=session,
+        project_slug="demo",
+        redact=_redactor(),
+        config={},
+        is_subagent_file=False,
+        adapter_name="claude_code",
+        adapter=ad,
+    )
+    assert 'description: "My Renamed Session"' in md
+
+
+def test_multiline_assigned_name_is_single_frontmatter_line(tmp_path: Path) -> None:
+    """Multiline customTitle must not break YAML frontmatter (#249 review B1)."""
+    session = tmp_path / "multi.jsonl"
+    session.write_text("{}\n", encoding="utf-8")
+    side_dir = tmp_path / "multi"
+    side_dir.mkdir()
+    (side_dir / "custom-title.json").write_text(
+        json.dumps({"customTitle": "Title line\nwith newline"}),
+        encoding="utf-8",
+    )
+    records = [_u("later prose that must not win")]
+    ad = ClaudeCodeAdapter()
+    md, _slug, _started = render_session_markdown(
+        records=records,
+        jsonl_path=session,
+        project_slug="demo",
+        redact=_redactor(),
+        config={},
+        is_subagent_file=False,
+        adapter_name="claude_code",
+        adapter=ad,
+    )
+    meta, _body = parse_frontmatter(md)
+    assert meta.get("description") == "Title line"
+    assert "\n" not in str(meta.get("description"))
+
+
+def test_claude_ai_title_when_no_custom_title(tmp_path: Path) -> None:
+    session = tmp_path / "other.jsonl"
+    session.write_text("{}\n", encoding="utf-8")
+    records = [
+        {"type": "ai-title", "aiTitle": "Auto title from agent"},
+        _u("Refactor everything"),
+    ]
+    ad = ClaudeCodeAdapter()
+    assert ad.assigned_session_name(session, records) == "Auto title from agent"
+    md, _slug, _started = render_session_markdown(
+        records=records,
+        jsonl_path=session,
+        project_slug="demo",
+        redact=_redactor(),
+        config={},
+        is_subagent_file=False,
+        adapter=ad,
+    )
+    assert 'description: "Auto title from agent"' in md
+
+
+def test_claude_custom_title_precedes_ai_title(tmp_path: Path) -> None:
+    session = tmp_path / "both.jsonl"
+    session.write_text("{}\n", encoding="utf-8")
+    (tmp_path / "both").mkdir()
+    (tmp_path / "both" / "custom-title.json").write_text(
+        '{"customTitle": "User Rename"}',
+        encoding="utf-8",
+    )
+    records = [{"type": "ai-title", "aiTitle": "Auto title"}]
+    assert ClaudeCodeAdapter().assigned_session_name(session, records) == "User Rename"
+
+
+def test_cursor_cli_meta_name_assigned(tmp_path: Path) -> None:
+    records = [
+        {"type": "cursor_cli_meta", "name": "Issue Investigator", "sessionId": "abc"},
+        _u("later noisy turn"),
+    ]
+    ad = CursorCliAdapter()
+    assert ad.assigned_session_name(tmp_path / "store.db", records) == "Issue Investigator"
+    md, _slug, _started = render_session_markdown(
+        records=records,
+        jsonl_path=tmp_path / "store.db",
+        project_slug="demo",
+        redact=_redactor(),
+        config={},
+        is_subagent_file=False,
+        adapter_name="cursor_cli",
+        adapter=ad,
+    )
+    assert 'description: "Issue Investigator"' in md
+
+
+def test_cursor_cli_placeholder_new_agent_is_not_assigned(tmp_path: Path) -> None:
+    """Store default ``New Agent`` is not a user-assigned name (#249)."""
+    ad = CursorCliAdapter()
+    path = tmp_path / "store.db"
+    for name in ("New Agent", "new agent", "NEW AGENT"):
+        records = [
+            {"type": "cursor_cli_meta", "name": name, "sessionId": "abc"},
+            _u("Refactor the auth middleware"),
+        ]
+        assert ad.assigned_session_name(path, records) is None
+    records = [
+        {"type": "cursor_cli_meta", "name": "New Agent", "sessionId": "abc"},
+        _u("Refactor the auth middleware"),
+    ]
+    md, _slug, _started = render_session_markdown(
+        records=records,
+        jsonl_path=path,
+        project_slug="demo",
+        redact=_redactor(),
+        config={},
+        is_subagent_file=False,
+        adapter_name="cursor_cli",
+        adapter=ad,
+    )
+    assert 'description: "Refactor the auth middleware"' in md
+
+
+def test_cursor_cli_persists_name_on_audit_record(tmp_path: Path) -> None:
+    """Store meta ``name`` lands on the synthetic audit record."""
+    db = tmp_path / "store.db"
+    meta = {
+        "latestRootBlobId": "f" * 64,
+        "agentId": "agent-1",
+        "name": "Renamed Chat",
+        "createdAt": 1_700_000_000_000,
+    }
+    con = sqlite3.connect(db)
+    con.execute("CREATE TABLE blobs (id TEXT PRIMARY KEY, data BLOB)")
+    con.execute("CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT)")
+    bid = "0" * 64
+    con.execute(
+        "INSERT INTO blobs VALUES (?, ?)",
+        (bid, json.dumps({"role": "user", "content": "hello"}).encode()),
+    )
+    con.execute(
+        "INSERT INTO blobs VALUES (?, ?)",
+        (meta["latestRootBlobId"], bid.encode()),
+    )
+    con.execute(
+        "INSERT INTO meta VALUES (?, ?)",
+        ("0", json.dumps(meta).encode().hex()),
+    )
+    con.commit()
+    con.close()
+    raw = CursorCliAdapter().load_records(db)
+    assert raw[0]["type"] == "cursor_cli_meta"
+    assert raw[0]["name"] == "Renamed Chat"
+    assert CursorCliAdapter().assigned_session_name(db, raw) == "Renamed Chat"
 
 
 # ─── render_session_markdown emits the field ──────────────────────────
@@ -160,7 +386,7 @@ def test_render_session_markdown_emits_empty_description_for_no_user_turn() -> N
     assert 'description: ""' in md
 
 
-# ─── #229 Claude control envelopes ────────────────────────────────────
+# ─── #229 Claude control envelopes (normalize + scored derive) ────────
 
 
 def test_skips_caveat_for_description() -> None:
@@ -174,7 +400,7 @@ def test_skips_caveat_for_description() -> None:
         _u("<command-name>/clear</command-name><command-message>clear</command-message>"),
         _u("install Zoom on my machine"),
     ]
-    assert derive_description(records, _redactor()) == "install Zoom on my machine"
+    assert _derive(records) == "install Zoom on my machine"
 
 
 def test_render_collapses_command_omits_caveat() -> None:
@@ -236,7 +462,6 @@ def test_normalize_mixed_prose_strips_control_tags() -> None:
 
 
 def test_normalize_orphan_open_tag_collapses_to_slash_label() -> None:
-    """Orphan open ``<command-name>`` without closing ``</command-name>`` → ``/clear``."""
     orphan = "<command-name>/clear"
     out = normalize_claude_control_content(orphan)
     assert out == "/clear"
@@ -244,11 +469,6 @@ def test_normalize_orphan_open_tag_collapses_to_slash_label() -> None:
 
 
 def test_normalize_incomplete_open_tag_without_gt_is_left_alone() -> None:
-    """Truly broken ``<command-name`` (no ``>``) is not silently rewritten (#229 review N3).
-
-    Product choice: leave as-is — the orphan-open path only strips recognized
-    tag tokens; inventing a parse for malformed markup is out of scope.
-    """
     broken = "<command-name/clear"
     assert normalize_claude_control_content(broken) == broken
 
@@ -268,7 +488,6 @@ def test_normalize_command_envelope_collapses_to_slash_label() -> None:
 
 
 def test_normalize_command_name_plus_args_includes_url() -> None:
-    """Non-empty ``<command-args>`` append to the slash label (#229 smoke)."""
     envelope = (
         "<command-message>implement-feature</command-message>\n"
         "<command-name>/implement-feature</command-name>\n"
@@ -283,55 +502,64 @@ def test_normalize_command_name_plus_args_includes_url() -> None:
     )
 
 
-def test_derive_description_skips_list_shaped_command_dump() -> None:
-    """Injected ``# Title`` + ``## Arguments`` dump must not become description."""
-    dump = (
-        "# Implement a Feature End-to-End\n\n"
-        "Takes one feature through spec and PR.\n\n"
-        "## Arguments\n\n"
-        "- issue URL or prompt\n"
-    ) + ("x" * 100)
-    assert is_injected_command_dump(dump)
-    records = [
-        _u("<command-name>/clear</command-name><command-args></command-args>"),
-        _u_blocks([{"type": "text", "text": dump}]),
-        _u(
-            "<command-name>/implement-feature</command-name>"
-            "<command-args>https://github.com/example/repo/issues/1</command-args>"
-        ),
-        _u("few more items here:\n- if each call re-reads files\n- We should cache"),
-    ]
-    # Slash cmds (even with args) skipped for description — first real prose wins.
-    assert derive_description(records, _redactor()) == "few more items here:"
+def test_claude_normalize_user_prompt_smoke() -> None:
+    ad = ClaudeCodeAdapter()
+    assert ad.normalize_user_prompt(
+        "<command-name>/model</command-name><command-args>opus</command-args>"
+    ) == "/model opus"
 
 
-def test_derive_description_skips_request_interrupted_chrome() -> None:
-    assert is_claude_ui_chrome("[Request interrupted by user]")
-    records = [
-        _u(
-            "<command-name>/implement-feature</command-name>"
-            "<command-args>https://github.com/example/repo/issues/1</command-args>"
-        ),
-        _u_blocks([{"type": "text", "text": "[Request interrupted by user]"}]),
-        _u("few more items here:\n- cache search\n- seed keywords"),
-    ]
-    assert derive_description(records, _redactor()) == "few more items here:"
-
-
-def test_derive_description_skips_at_path_skill_dump_prefers_prose() -> None:
-    dump = (
-        "@.awos/commands/spec.md\n\n"
-        "ARGUMENTS: GitHub Issue #197 — measure search quality\n\n"
-        + ("body " * 200)
+def test_cursor_normalize_skips_user_info_chrome() -> None:
+    """Cursor envelope chrome is not a description candidate (#249)."""
+    ad = CursorCliAdapter()
+    chrome = (
+        "<user_info>\n"
+        "OS Version: linux\n"
+        "Workspace Path: /tmp/demo\n"
+        "</user_info>"
     )
-    assert is_injected_command_dump(dump)
-    records = [
-        _u_blocks([{"type": "text", "text": dump}]),
-        _u("few more items here: refine the search eval plan"),
-    ]
-    assert derive_description(records, _redactor()) == (
-        "few more items here: refine the search eval plan"
+    assert ad.normalize_user_prompt(chrome) == ""
+    assert ad.normalize_user_prompt(
+        "<cursor_commands>\n--- Cursor Command: fix-bug ---\n</cursor_commands>"
+    ) == ""
+    assert ad.normalize_user_prompt("<rules>\nBe helpful\n</rules>") == ""
+    mixed = (
+        "<system_reminder>\nYou are a subagent.\n</system_reminder>\n"
+        "<timestamp>Thursday, Sep 10, 2026</timestamp>\n"
+        "<user_query>\nRefactor the auth middleware\n</user_query>"
     )
+    assert ad.normalize_user_prompt(mixed) == "Refactor the auth middleware"
+    records = [
+        _u(chrome),
+        _u("<user_query>\nRefactor the auth middleware\n</user_query>"),
+    ]
+    out = derive_description(
+        records, _redactor(), normalize_user_prompt=ad.normalize_user_prompt
+    )
+    assert out == "Refactor the auth middleware"
+    assert out != "<user_info>"
+    assert "<rules>" not in out
+
+
+def test_long_arg_slash_beats_later_prose_via_claude_envelope() -> None:
+    """Slash+long-args (via Claude XML) still beats later short prose."""
+    records = [
+        _u(
+            "<command-name>/fix-bug</command-name>"
+            "<command-args>xxxxx</command-args>"
+        ),
+        _u("merge with --admin"),
+    ]
+    assert _derive(records) == "/fix-bug xxxxx"
+
+
+def test_short_arg_slash_loses_to_later_prose() -> None:
+    records = [
+        _u("<command-name>/model</command-name><command-message>model</command-message>"
+           "<command-args>opus</command-args>"),
+        _u("Switch to opus and refactor the parser"),
+    ]
+    assert _derive(records) == "Switch to opus and refactor the parser"
 
 
 def test_render_user_prompt_preserves_internal_newlines_as_hard_breaks() -> None:
@@ -343,7 +571,6 @@ def test_render_user_prompt_preserves_internal_newlines_as_hard_breaks() -> None
     out = render_user_prompt(_u(prompt), _redactor(), 4000)
     assert "  \n" in out
     assert out == preserve_prompt_newlines(prompt)
-    # Paragraph breaks stay double-newline (no hard-break between paras).
     para = "First paragraph.\n\nSecond paragraph with\nan internal break."
     assert preserve_prompt_newlines(para) == (
         "First paragraph.\n\nSecond paragraph with  \nan internal break."
@@ -378,7 +605,6 @@ def test_normalize_system_notification_only_returns_empty() -> None:
 
 
 def test_normalize_system_notification_header_only_returns_empty() -> None:
-    """Banner without XML still must not become description/Conversation prose."""
     header_only = (
         "[SYSTEM NOTIFICATION - NOT USER INPUT]\n"
         "This is an automated background-task event, NOT a message from the user.\n"
@@ -412,7 +638,7 @@ def test_derive_description_skips_system_notification_turn() -> None:
         _u(_SYSTEM_NOTIFICATION),
         _u("Fix the failing auth middleware test"),
     ]
-    assert derive_description(records, _redactor()) == "Fix the failing auth middleware test"
+    assert _derive(records) == "Fix the failing auth middleware test"
 
 
 def test_render_session_omits_system_notification_turns() -> None:
@@ -436,7 +662,6 @@ def test_render_session_omits_system_notification_turns() -> None:
     assert 'description: "install Zoom on my machine"' in md
     assert "### Turn 1 — User" in md
     assert "install Zoom on my machine" in md
-    # Notification-only turn omitted — only one user turn in Conversation.
     assert "### Turn 2 — User" not in md
 
 
@@ -448,15 +673,7 @@ def test_derive_description_skips_stdout_only_turn() -> None:
         _u(stdout),
         _u("Fix the failing auth middleware test"),
     ]
-    assert derive_description(records, _redactor()) == "Fix the failing auth middleware test"
-
-
-def test_derive_description_skips_slash_command_only_turn() -> None:
-    records = [
-        _u("<command-name>/model</command-name><command-message>model</command-message>"),
-        _u("Switch to opus and refactor the parser"),
-    ]
-    assert derive_description(records, _redactor()) == "Switch to opus and refactor the parser"
+    assert _derive(records) == "Fix the failing auth middleware test"
 
 
 def test_render_session_omits_stdout_and_caveat_turns() -> None:

@@ -332,3 +332,23 @@ class BaseAdapter:
         pipeline.
         """
         return records
+
+    def assigned_session_name(
+        self, path: Path | str, records: list[dict[str, Any]]
+    ) -> str | None:
+        """Return a user- or agent-assigned session name when the store has one (#249).
+
+        Convert prefers a non-empty result for frontmatter ``description:`` over
+        scored user-turn fallback. Default: no assigned name in this store.
+        """
+        del path, records
+        return None
+
+    def normalize_user_prompt(self, text: str) -> str:
+        """Per-agent cleanup of one user-turn string before description scoring (#249).
+
+        Default strips whitespace only. Adapters with agent-specific envelopes
+        (e.g. Claude Code control XML) override to collapse them into readable
+        ``/cmd`` / prose lines.
+        """
+        return (text or "").strip()

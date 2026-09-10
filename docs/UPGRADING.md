@@ -10,11 +10,25 @@ How to upgrade between `llmwiki` releases. Most releases are drop-in (`pip insta
 
 The canonical per-release detail is [CHANGELOG.md](https://github.com/AlexanderMakarov/llm-wiki/blob/main/CHANGELOG.md) — this guide focuses on "what might break".
 
+## Unreleased — Session `description:` assigned names + scored fallback (#249)
+
+No migration. After upgrade, optional refresh of existing raw sessions:
+
+- **Assigned names win:** when an adapter exposes a session title, that becomes `description:` (redacted). Claude Code: `customTitle` then `aiTitle`. Cursor CLI: store meta `name`, except the placeholder `New Agent` (treated as absent). Other adapters: none yet — ChatGPT already sets a conversation title on its own convert path.
+- **Scored fallback:** without an assigned name, convert ranks real user prompts (type bands → position → length 0..120) and picks the top. Punctuation-only turns are out. Cursor XML chrome is normalized off the description path so scores are not dominated by `<user_info>` wrappers.
+- **Refresh:** `llmwiki sync --force` then `llmwiki build` rewrites `raw/sessions/` and the site. No wiki synth required — `description:` is convert-time frontmatter only.
+
+| Adapter | Assigned-name source |
+|---|---|
+| `claude_code` | `customTitle` + `aiTitle` |
+| `cursor_cli` | store meta `name` (not `New Agent`) |
+| others | none yet (ChatGPT uses conversation title on its own path) |
+
 ## Unreleased — Claude control tags + session TOC (#229)
 
 No migration. After upgrade:
 
-- **Re-convert Claude sessions if tags leaked into `raw/`:** `llmwiki sync --force` then `llmwiki build`. Convert now strips Claude Code local-command / slash-command envelopes (`local-command-caveat`, `command-name`, …) and background-task `[SYSTEM NOTIFICATION …]` / `<task-notification>` blocks so they never become `description:` or Conversation prose. Non-empty `<command-args>` are kept on the slash label (`/implement-feature https://…`); injected command/skill markdown dumps are skipped for `description:`; user-prompt newlines become markdown hard breaks. Already-written `raw/sessions/*.md` keep the old text until force-synced.
+- **Re-convert Claude sessions if tags leaked into `raw/`:** `llmwiki sync --force` then `llmwiki build`. Convert now strips Claude Code local-command / slash-command envelopes (`local-command-caveat`, `command-name`, …) and background-task `[SYSTEM NOTIFICATION …]` / `<task-notification>` blocks so they never become `description:` or Conversation prose. Non-empty `<command-args>` are kept on the slash label (`/implement-feature https://…`); injected command/skill markdown dumps are skipped for `description:`; user-prompt newlines become markdown hard breaks. Already-written `raw/sessions/*.md` keep the old text until force-synced. (Under #249, `description:` may still select a scored slash turn when it outranks prose.)
 - **Session TOC:** rebuild alone is enough for layout — the “On this page” nav is sticky in a Raw-style left column below the hero (not fixed over the title band), appears when the article has ≥2 headings, and uses the same `max-width: 860px` collapse as Raw.
 
 ## 2.3.0 — Home Pipeline state stamps + Automation panel shrink (#234)
