@@ -47,4 +47,4 @@
 - Full `ruff check llmwiki tests scripts` + `pytest tests/ -q` green.
 
 ### next
-- Commit implementation; open PR; wait CI; ask operator for merge.
+- PR #251 open; wait CI; ask operator for merge confirmation.
