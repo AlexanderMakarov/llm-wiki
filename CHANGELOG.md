@@ -24,6 +24,7 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Fixed
 
+- **MCP search caps DRY (#197)** — `_MCP_SCAN_*` / `_SEARCH_*_CAP` in `llmwiki.mcp.server` are aliases of `llmwiki.search` defaults (no second copy of the 4 MiB / 50 MiB / 200 literals).
 - **Findability answer key (#197 local review)** — `select_present_terms` reads only scanned raw pages (no unbounded session `read_text`); `page_findability` also samples resolved `[[wikilink]]` lookups via the graph alias resolver and reports how many were checked.
   - *Release note:* Search consistency terms and wikilink findability checks stay within the searchable corpus (#197).
 - **Session `description:` prefers adapter assigned names, else scored user prompts (#249 / #246)** — Claude Code uses sidecar `customTitle` then `aiTitle`; Cursor CLI uses the store meta `name` when it is not the placeholder `New Agent`. Without an assigned name, convert scores every real user prompt (type bands → position → length capped 0..120) and takes the top; punctuation-only turns are skipped; Cursor XML chrome (`user_info` / `system_reminder` / …) is stripped on the description path via adapter normalize. Refresh existing `raw/sessions/` with optional `llmwiki sync --force` then `build` — **no wiki re-synth**.
