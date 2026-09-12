@@ -23,9 +23,7 @@ Ships as stdlib-only Python — no MCP SDK dependency.
 from __future__ import annotations
 
 import json
-import math
 import os
-import re
 import subprocess
 import sys
 import tempfile
@@ -37,14 +35,26 @@ from typing import Any
 from llmwiki import REPO_ROOT as SOURCE_ROOT
 from llmwiki import __version__
 from llmwiki import usage as _usage
-from llmwiki._frontmatter import parse_frontmatter_dict
-from llmwiki._system_pages import is_archived_path
 from llmwiki.add_doc import add_sources
 from llmwiki.categories import scan_tags
 from llmwiki.config_schedule import resolve_content_root
 from llmwiki.lint import LintOptions, UnknownRuleError, load_pages, run_lint
 from llmwiki.lint.report import render_json as render_lint_json
 from llmwiki.schema import PAGE_KINDS
+from llmwiki.search import (
+    DEFAULT_AGGREGATE_BUDGET,
+    DEFAULT_HIT_CAP,
+    DEFAULT_PAGE_CAP,
+    DEFAULT_PER_FILE_CAP,
+    CorpusWalkStats,
+    SearchContext,
+    iter_scan_files,
+    iter_scanned_pages,
+    read_capped,
+    scan_corpus,
+    search_extract,
+    search_match,
+)
 from llmwiki.vault_settings import (
     DEFAULT_MIN_REFS,
     VaultSettingsError,
@@ -551,7 +561,56 @@ def _is_read_page_allowed(p: Path) -> bool:
     return False
 
 
+# Output / scan caps — single source of truth is ``llmwiki.search`` (#197).
+# Module-level aliases stay so #483 / safety tests can monkeypatch these names
+# without redefining the numeric literals.
+_SEARCH_HIT_CAP = DEFAULT_HIT_CAP
+
+# A page rendered without any body line still costs one output row, so the
+# matching-line cap alone does not bound the response. Cap the pages too.
+_SEARCH_PAGE_CAP = DEFAULT_PAGE_CAP
+
+# #483: per-file + aggregate byte caps for wiki_search / wiki_query.
+# Without these, a single large file (e.g. a 100MB Obsidian transcript
+# with embedded video, or a malicious user-supplied .md) gets fully
+# read into memory by every MCP call. Hit/page caps above bound output
+# only — the loop still read every byte of every file. Cap inputs
+# explicitly so the worst-case is bounded regardless of corpus shape.
+_MCP_SCAN_PER_FILE_BYTES = DEFAULT_PER_FILE_CAP
+_MCP_SCAN_AGGREGATE_BYTES = DEFAULT_AGGREGATE_BUDGET
+
+
+def _read_capped(p: Path, *, remaining_budget: int) -> tuple[str, int]:
+    """Read up to min(per-file cap, remaining_budget) bytes of `p`.
+
+    Thin wrapper over :func:`llmwiki.search.read_capped` that reads the
+    monkeypatchable module-level caps. Returns (text, bytes_consumed).
+    ``bytes_consumed == 0`` signals the file was skipped entirely.
+    """
+    return read_capped(
+        p,
+        remaining_budget=remaining_budget,
+        per_file_cap=_MCP_SCAN_PER_FILE_BYTES,
+    )
+
+
+def _iter_scan_files(
+    roots: Iterable[Path], *, cold_storage_root: Path | None = None
+) -> Iterator[Path]:
+    """Yield every ``.md`` file under the given roots as one flat sequence.
+
+    Kept as a named export for tests; delegates to
+    :func:`llmwiki.search.iter_scan_files`.
+    """
+    return iter_scan_files(roots, cold_storage_root=cold_storage_root)
+
+
 def _wiki_search_extract(args: dict[str, Any]) -> dict[str, Any]:
+    """Extract-mode search: scan → engine → render (#197).
+
+    Equal scores order by ``(-score, rel_path)`` via the shared engine
+    (deterministic tiebreak; previously filesystem insertion order).
+    """
     question = (args.get("question") or "").strip()
     max_pages = int(args.get("max_pages", 5))
     if not question:
@@ -563,80 +622,28 @@ def _wiki_search_extract(args: dict[str, Any]) -> dict[str, Any]:
             "wiki/ does not exist yet — run `llmwiki init` and `/wiki-sync` first"
         )
 
-    # Read the index + overview
     index = (wiki / "index.md").read_text(encoding="utf-8") if (wiki / "index.md").exists() else ""
     overview = (wiki / "overview.md").read_text(encoding="utf-8") if (wiki / "overview.md").exists() else ""
 
-    # Scan every .md under wiki/ for matches on title + body.
-    # #418: ranking is now length-normalised — body matches are
-    # divided by ``log2(max(len(content), 256))`` so a 1MB log
-    # page can't beat a perfectly-relevant 1-paragraph entity page
-    # just by accidentally containing every query token. Title
-    # matches are unchanged since titles are already short and
-    # high-signal.
-    query_lower = question.lower()
-    tokens = [t for t in re.split(r"\W+", query_lower) if t]
-    matches: list[tuple[float, Path, str]] = []
-    # #483: bound input bytes so a single large file or a giant corpus
-    # can't OOM the MCP server.
-    budget = _MCP_SCAN_AGGREGATE_BYTES
-    skipped_oversize = 0
-    for page in wiki.rglob("*.md"):
-        if budget <= 0:
-            break
-        # Cold storage (#140): a discarded page must never be quoted back
-        # as an answer — the reviewer dismissed the term as noise.
-        if is_archived_path(page.relative_to(wiki).parts):
-            continue
-        content, consumed = _read_capped(page, remaining_budget=budget)
-        if consumed == 0:
-            try:
-                if page.stat().st_size > _MCP_SCAN_PER_FILE_BYTES:
-                    skipped_oversize += 1
-            except OSError:
-                pass
-            continue
-        budget -= consumed
-        content_lower = content.lower()
-        body_score = 0
-        if query_lower in content_lower:
-            body_score += 50
-        body_score += sum(10 for t in tokens if t in content_lower)
-        # Length normalisation: divide raw body score by
-        # log2(max(len, 256)). The 256-byte floor keeps very short
-        # pages (frontmatter-only) from getting a massive boost on
-        # zero-token queries.
-        if body_score > 0:
-            length_factor = math.log2(max(len(content), 256))
-            normalised_body = body_score / length_factor
-        else:
-            normalised_body = 0.0
-        # Title bonus — unchanged. Titles are already short and
-        # high-signal; no normalisation needed.
-        title_score = 0
-        title_match = re.search(r'^title:\s*"?([^"\n]+)', content, re.MULTILINE)
-        if title_match:
-            title = title_match.group(1).lower()
-            if query_lower in title:
-                title_score += 100
-            title_score += sum(20 for t in tokens if t in title)
-        score = normalised_body + title_score
-        if score > 0:
-            snippet = _extract_snippet(content, tokens, max_chars=400)
-            matches.append((score, page, snippet))
-
-    matches.sort(key=lambda x: -x[0])
-    top = matches[:max_pages]
+    scan = scan_corpus(
+        [wiki],
+        content_root=REPO_ROOT,
+        cold_storage_root=wiki,
+        per_file_cap=_MCP_SCAN_PER_FILE_BYTES,
+        aggregate_budget=_MCP_SCAN_AGGREGATE_BYTES,
+    )
+    top = search_extract(scan.pages, [question], max_pages=max_pages).get(
+        question, []
+    )
 
     out = [f"# Query: {question}\n"]
     if not top:
         out.append("No matching pages found.\n")
         out.append("\n## wiki/index.md\n\n" + index[:1500])
     else:
-        for score, page, snippet in top:
-            rel = page.relative_to(REPO_ROOT)
-            out.append(f"## `{rel}` (score: {score:.1f})\n")
-            out.append(snippet)
+        for hit in top:
+            out.append(f"## `{hit.rel_path}` (score: {hit.score:.1f})\n")
+            out.append(hit.snippet)
             out.append("")
     out.append("---\n")
     out.append("## Overview context\n")
@@ -649,98 +656,6 @@ def _wiki_search_extract(args: dict[str, Any]) -> dict[str, Any]:
     result = _ok("\n".join(out))
     result["_hits"] = len(top)
     return result
-
-
-def _extract_snippet(content: str, tokens: list[str], max_chars: int = 400) -> str:
-    """Return a ±max_chars window around the first token match, or the first
-    max_chars of the body if no match."""
-    content_lower = content.lower()
-    for t in tokens:
-        idx = content_lower.find(t)
-        if idx >= 0:
-            start = max(0, idx - max_chars // 2)
-            end = min(len(content), idx + max_chars // 2)
-            prefix = "…" if start > 0 else ""
-            suffix = "…" if end < len(content) else ""
-            return prefix + content[start:end] + suffix
-    return content[:max_chars] + ("…" if len(content) > max_chars else "")
-
-
-_SEARCH_HIT_CAP = 200
-
-# A page rendered without any body line still costs one output row, so the
-# matching-line cap alone does not bound the response. Cap the pages too.
-_SEARCH_PAGE_CAP = 200
-
-# #483: per-file + aggregate byte caps for wiki_search / wiki_query.
-# Without these, a single large file (e.g. a 100MB Obsidian transcript
-# with embedded video, or a malicious user-supplied .md) gets fully
-# read into memory by every MCP call. _SEARCH_HIT_CAP capped output
-# only — the loop still read every byte of every file. Cap inputs
-# explicitly so the worst-case is bounded regardless of corpus shape.
-_MCP_SCAN_PER_FILE_BYTES = 4 * 1024 * 1024   # 4 MiB / file
-_MCP_SCAN_AGGREGATE_BYTES = 50 * 1024 * 1024  # 50 MiB / call
-
-
-def _read_capped(p: Path, *, remaining_budget: int) -> tuple[str, int]:
-    """Read up to min(per-file cap, remaining_budget) bytes of `p`.
-
-    Returns (text, bytes_consumed). ``bytes_consumed == 0`` signals
-    the file was skipped entirely (over-budget or unreadable). Caller
-    decrements the aggregate budget by ``bytes_consumed`` and bails
-    when it hits zero.
-    """
-    try:
-        size = p.stat().st_size
-    except OSError:
-        return "", 0
-    cap = min(_MCP_SCAN_PER_FILE_BYTES, max(0, remaining_budget))
-    if size > _MCP_SCAN_PER_FILE_BYTES:
-        # Skip the file entirely — do not partial-read. The truncation
-        # would slice query tokens across the boundary and produce
-        # confusing partial hits.
-        return "", 0
-    if cap <= 0:
-        return "", 0
-    try:
-        with p.open("rb") as f:
-            raw = f.read(cap + 1)
-    except OSError:
-        return "", 0
-    # If we read more than cap, the file grew between stat and read.
-    # Trust the stat-based skip above; truncate defensively here.
-    if len(raw) > cap:
-        return "", 0
-    try:
-        return raw.decode("utf-8", errors="replace"), len(raw)
-    except Exception:
-        return "", 0
-
-
-def _iter_scan_files(
-    roots: Iterable[Path], *, cold_storage_root: Path | None = None
-) -> Iterator[Path]:
-    """Yield every ``.md`` file under the given roots as one flat sequence.
-
-    A single iterator gives the caller a single termination check, so one
-    hit cap applies across all roots instead of once per root (#413).
-    Missing roots are skipped silently.
-
-    ``cold_storage_root`` names the wiki root whose ``archive/`` subtree is
-    withheld (#140): a discarded candidate is a term the reviewer called
-    noise, so search must not offer it back. The test is per root rather
-    than per path because only ``wiki/archive/**`` is cold storage — a raw
-    transcript filed under a folder named ``archive`` is ordinary source
-    material and stays searchable.
-    """
-    for root in roots:
-        if not root.exists():
-            continue
-        cold = cold_storage_root is not None and root == cold_storage_root
-        for path in root.rglob("*.md"):
-            if cold and is_archived_path(path.relative_to(root).parts):
-                continue
-            yield path
 
 
 def tool_wiki_search(args: dict[str, Any]) -> dict[str, Any]:
@@ -794,6 +709,9 @@ def _wiki_search_match(args: dict[str, Any]) -> dict[str, Any]:
     Completeness is reported explicitly: ``truncated`` when output caps
     dropped matches, ``budget_exhausted`` when the scan stopped short of
     the corpus because the byte budget ran out (#483).
+
+    Implementation is scan → engine → render (#197); single-term contract
+    is the N=1 case of the multi-query engine.
     """
     term = (args.get("term") or "").strip()
     kind = str(args.get("kind") or "").strip().lower()
@@ -811,79 +729,36 @@ def _wiki_search_match(args: dict[str, Any]) -> dict[str, Any]:
     if include_raw:
         roots.append(REPO_ROOT / "raw" / "sessions")
 
-    term_lower = term.lower()
-    # Two buckets so the documented ranking is a property of collection,
-    # not a sort over whatever survived: name/path matches keep their own
-    # capacity and cannot be crowded out by body matches (#413 starvation).
-    name_pages: list[dict[str, Any]] = []
-    body_pages: list[dict[str, Any]] = []
-    hit_count = 0
-    line_cap_reached = False
-    dropped_pages = False
-    # #483: aggregate byte budget across all roots, plus a per-file cap
-    # via _read_capped. Output is capped by _SEARCH_HIT_CAP matching lines
-    # and _SEARCH_PAGE_CAP pages across every root (#413).
-    budget = _MCP_SCAN_AGGREGATE_BYTES
-    skipped_oversize = 0
-    budget_exhausted = False
-    for p in _iter_scan_files(roots, cold_storage_root=wiki_root):
-        if budget <= 0:
-            budget_exhausted = True
-            break
-        # With the line cap reached, only a name match can still add
-        # output; once those are capped too, nothing more can be collected.
-        if line_cap_reached and len(name_pages) >= _SEARCH_PAGE_CAP:
-            break
-        text, consumed = _read_capped(p, remaining_budget=budget)
-        if consumed == 0:
-            try:
-                size = p.stat().st_size
-            except OSError:
-                continue
-            if size > _MCP_SCAN_PER_FILE_BYTES:
-                skipped_oversize += 1
-            elif size > budget:
-                # In-spec file the call no longer has the budget to read.
-                budget_exhausted = True
-            continue
-        # Charge the budget before filtering: a file we read and then drop
-        # still consumed its bytes, in every corpus (#483).
-        budget -= consumed
-        meta = parse_frontmatter_dict(text)
-        if kind and str(meta.get("type", "")).strip().lower() != kind:
-            continue
-        rel = str(p.relative_to(REPO_ROOT))
-        title = str(meta.get("title", "") or "").strip()
-        name_match = term_lower in title.lower() or term_lower in rel.lower()
-        lines: list[tuple[int, str]] = []
-        # The hit cap stops body-line collection, not the walk — a page
-        # named for the term is still worth returning after the cap.
-        if not line_cap_reached:
-            for i, line in enumerate(text.splitlines(), start=1):
-                if term_lower in line.lower():
-                    lines.append((i, line.strip()[:200]))
-                    hit_count += 1
-                    if hit_count >= _SEARCH_HIT_CAP:
-                        line_cap_reached = True
-                        break
-        if not (lines or name_match):
-            continue
-        bucket = name_pages if name_match else body_pages
-        if len(bucket) >= _SEARCH_PAGE_CAP:
-            dropped_pages = True
-            continue
-        bucket.append({"path": rel, "title": title,
-                       "name_match": name_match, "lines": lines})
-
-    # Name matches first, then body-only matches; path order inside each
-    # group so the same corpus always renders the same way.
-    name_pages.sort(key=lambda pg: pg["path"])
-    body_pages.sort(key=lambda pg: pg["path"])
-    pages = name_pages + body_pages
-    if len(pages) > _SEARCH_PAGE_CAP:
-        pages = pages[:_SEARCH_PAGE_CAP]
-        dropped_pages = True
-    truncated = line_cap_reached or dropped_pages
+    # Stream the walk into the engine so match-mode caps can stop disk I/O
+    # early (pre-#197 behaviour). Extract mode still materialises — ranking
+    # needs the full readable corpus.
+    walk_stats = CorpusWalkStats()
+    match_result = search_match(
+        iter_scanned_pages(
+            roots,
+            content_root=REPO_ROOT,
+            cold_storage_root=wiki_root,
+            per_file_cap=_MCP_SCAN_PER_FILE_BYTES,
+            aggregate_budget=_MCP_SCAN_AGGREGATE_BYTES,
+            stats=walk_stats,
+        ),
+        [term],
+        kind=kind,
+        page_cap=_SEARCH_PAGE_CAP,
+        hit_cap=_SEARCH_HIT_CAP,
+    )[term]
+    pages = [
+        {
+            "path": pg.rel_path,
+            "title": pg.title,
+            "name_match": pg.name_match,
+            "lines": list(pg.lines),
+        }
+        for pg in match_result.pages
+    ]
+    truncated = match_result.truncated
+    budget_exhausted = walk_stats.budget_exhausted
+    skipped_oversize = walk_stats.skipped_oversize
 
     if fmt == "json":
         result = _ok(json.dumps({
@@ -1059,7 +934,11 @@ def tool_wiki_health(args: dict[str, Any]) -> dict[str, Any]:
             pages,
             selected=_lint_rule_selection(args),
             disabled=disabled,
-            options=LintOptions(min_refs=min_refs),
+            options=LintOptions(
+                min_refs=min_refs,
+                content_root=root,
+                search_context=SearchContext(content_root=root),
+            ),
         )
     except UnknownRuleError as exc:
         # Name the file when the bad name came from it — the reader is

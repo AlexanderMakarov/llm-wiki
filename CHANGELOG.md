@@ -10,11 +10,14 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Added
 
+- **`llmwiki search` and findability lint (#197)** — literal term/phrase CLI (`--mode`, bulk `--terms-file` / stdin, `--vault`) sharing the MCP search engine; lint rules `page_findability`, `title_ambiguity`, `search_consistency` (survival share is informational). Term and phrase modes share `extract_snippet` (~400 characters centred on the hit). Demo planted terms are regenerated with `scripts/generate_demo_sessions.py` into `tests/fixtures/demo_search_terms.json` (in-place by slug; convert-shaped bodies with varied `user_messages`); ranking baselines live only in `tests/fixtures/demo_search_baseline.json` (pytest gate, not docs).
+  - *Release note:* `llmwiki search` plus findability lint rules; demo search quality gated in CI (#197).
 - **Product principles** — [`docs/maintainers/principles.md`](docs/maintainers/principles.md) (MCP for agents, site for humans, scriptable add, candidate gate).
   - *Release note:* Product design intentions live in `docs/maintainers/principles.md`.
 
 ### Changed
 
+- **Demo ships `llmwiki-state` (#255 / #197)** — `demo/llmwiki-state.json` and `demo/llmwiki-state.js` are allowlisted in `.gitignore` and committed so Pages/Home Pipeline state is not an empty `synth.files` backlog. User vaults remain gitignored.
 - **README / getting-started / PyPI** — MCP + human site framing; scriptable `llmwiki add`; vault as a secure unified store; package `description` set to “LLM wiki to turn multiple agentic tool sessions into knowledge base for agents and humans”.
   - *Release note:* Docs and PyPI summary lead with multi-agent sessions → knowledge base for agents and humans.
 - **Brand system under maintainers** — `docs/design/brand-system.md` → [`docs/maintainers/brand-system.md`](docs/maintainers/brand-system.md); font preference + fallbacks (not OS-preinstall claims); CONTRIBUTING + style-guide link it for UI/CSS work; DECLINED qmd-as-dependency reason drops a pinned Python version.
@@ -22,6 +25,10 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Fixed
 
+- **CI build smoke no longer dirties tracked demo state (#255 / #197)** — `lint-and-test` copies `demo/` to `ci-demo-vault` before `build`, so stamping `llmwiki-state.*` cannot fail the working-tree-clean gate.
+- **MCP search caps DRY (#197)** — `_MCP_SCAN_*` / `_SEARCH_*_CAP` in `llmwiki.mcp.server` are aliases of `llmwiki.search` defaults (no second copy of the 4 MiB / 50 MiB / 200 literals).
+- **Findability answer key (#197 local review)** — `select_present_terms` reads only scanned raw pages (no unbounded session `read_text`); `page_findability` also samples resolved `[[wikilink]]` lookups via the graph alias resolver and reports how many were checked.
+  - *Release note:* Search consistency terms and wikilink findability checks stay within the searchable corpus (#197).
 - **Session `description:` prefers adapter assigned names, else scored user prompts (#249 / #246)** — Claude Code uses sidecar `customTitle` then `aiTitle`; Cursor CLI uses the store meta `name` when it is not the placeholder `New Agent`. Without an assigned name, convert scores every real user prompt (type bands → position → length capped 0..120) and takes the top; punctuation-only turns are skipped; Cursor XML chrome (`user_info` / `system_reminder` / …) is stripped on the description path via adapter normalize. Refresh existing `raw/sessions/` with optional `llmwiki sync --force` then `build` — **no wiki re-synth**.
   - *Release note:* Session subtitles use adapter titles when present, otherwise a scored prompt pick; `sync --force` + `build` refreshes raw (#249 / #246).
 - **Claude Code control tags no longer leak into session `description:` or Conversation (#229)** — convert strips / collapses `<local-command-caveat>`, `<command-name>`, `<command-message>`, `<command-args>`, `<local-command-stdout>` (and similar) envelopes, plus `[SYSTEM NOTIFICATION …]` banners and `<task-notification>` blocks from background-task events. Caveat-only / notification-only turns are omitted; slash-command turns become `/name` or `/name <args>` when `<command-args>` is non-empty; user-prompt newlines are preserved as markdown hard breaks so multi-line turns render as multiple lines. Subtitle selection (including whether an injected dump’s first line can win) is governed by #249 scoring / assigned names — not a separate dump-skip list on the description path. Already-synced vaults need `llmwiki sync --force` (then `build`) so `raw/sessions/` is re-converted.

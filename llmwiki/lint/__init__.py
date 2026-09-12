@@ -33,9 +33,13 @@ from llmwiki import REPO_ROOT
 # frontmatter, so every lint rule that read `meta["type"]` skipped it.
 from llmwiki._frontmatter import parse_frontmatter as _parse_fm
 from llmwiki._system_pages import is_archived_path
+from llmwiki.search.context import SearchContext
 from llmwiki.vault_settings import DEFAULT_MIN_REFS
 
 WIKI_DIR = REPO_ROOT / "wiki"
+
+#: Default cap for title findability / ambiguity sampling (#197).
+DEFAULT_FINDABILITY_SAMPLE_MAX = 300
 
 
 @dataclass(frozen=True)
@@ -43,10 +47,10 @@ class LintOptions:
     """Run-time settings handed to every rule instance by the runner (#150).
 
     Options travel on the rule *instance*, never as a new keyword argument to
-    :meth:`LintRule.run`: 16 of the 17 registered rules declare
+    :meth:`LintRule.run`: most registered rules declare
     ``run(self, pages, *, llm_callback=None)`` and the runner turns a rule
     exception into an error-severity issue, so a new kwarg would report a
-    clean vault as 16 errors instead of failing loudly.
+    clean vault as many errors instead of failing loudly.
     """
 
     #: How many distinct source pages must name a wikilink target before an
@@ -55,6 +59,16 @@ class LintOptions:
     #: that declines to materialize a target and the check that reports the
     #: missing page cannot disagree.
     min_refs: int = DEFAULT_MIN_REFS
+    #: Vault root (parent of ``wiki/``). Findability rules need this to reach
+    #: ``raw/sessions/`` — :func:`load_pages` never exposes it (#197).
+    content_root: Path | None = None
+    #: Lazy shared :class:`~llmwiki.search.context.SearchContext` for one lint
+    #: run. Absent (with ``content_root``) → findability rules skip via the
+    #: runner's skip channel rather than reporting a false clean.
+    search_context: SearchContext | None = None
+    #: Max titled wiki pages checked by ``page_findability`` /
+    #: ``title_ambiguity``; above this, sample evenly over sorted paths.
+    findability_sample_max: int = DEFAULT_FINDABILITY_SAMPLE_MAX
 
 
 class LintRule:
@@ -68,6 +82,15 @@ class LintRule:
     #: A class-level default means a rule constructed directly — as the tests
     #: and the perf suite do — always has one.
     options: LintOptions = LintOptions()
+
+    def skip_reason(self) -> str | None:
+        """Return a skip reason, or ``None`` to run.
+
+        Rules that need :attr:`LintOptions.content_root` /
+        :attr:`LintOptions.search_context` override this so an unrunnable
+        check is named in :attr:`LintOutcome.skipped` instead of looking clean.
+        """
+        return None
 
     def run(
         self,
@@ -262,9 +285,13 @@ def run_lint(
     for name in considered:
         if name in skipped:
             continue
-        ran.append(name)
         rule = REGISTRY[name]()
         rule.options = resolved_options
+        reason = rule.skip_reason()
+        if reason is not None:
+            skipped[name] = reason
+            continue
+        ran.append(name)
         try:
             issues.extend(sorted(rule.run(pages), key=_issue_sort_key))
         except Exception as e:

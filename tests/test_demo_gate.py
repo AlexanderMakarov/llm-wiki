@@ -5,19 +5,19 @@ warning-severity finding scroll past, because ``content_freshness`` asks "has
 this page gone untouched for three months?" and the demo is a committed
 snapshot — the answer turns true on a calendar date rather than on a defect.
 
-``demo/llmwiki.json`` now declares that one check as not applicable, with a
-written reason, and the workflow enforces warnings. The substance of that
+``demo/llmwiki.json`` now declares two checks as not applicable, with
+written reasons, and the workflow enforces warnings. The substance of that
 change is the four guarantees below:
 
 * the committed demo passes the enforced gate today;
-* the report says out loud which check was skipped, and why;
+* the report says out loud which checks were skipped, and why;
 * a real warning-severity defect still stops the gate;
 * moving the clock past the staleness threshold does not — which is the whole
-  reason the opt-out exists.
+  reason the ``content_freshness`` opt-out exists.
 
-The demo declares nothing else. A ``min_refs`` override would make the one
-published example the vault nobody's setup resembles, so the threshold stays
-stock and is pinned as such here.
+The demo declares nothing about ``min_refs``. A ``min_refs`` override would
+make the one published example the vault nobody's setup resembles, so the
+threshold stays stock and is pinned as such here.
 """
 
 from __future__ import annotations
@@ -116,16 +116,20 @@ def test_demo_carries_a_committed_settings_file() -> None:
     json.loads(path.read_text(encoding="utf-8"))
 
 
-def test_demo_disables_content_freshness_and_nothing_else() -> None:
+def test_demo_disables_content_freshness_and_title_ambiguity_only() -> None:
     disabled = disabled_lint_rules(load_vault_settings(DEMO))
-    assert list(disabled) == ["content_freshness"]
+    assert list(disabled) == ["content_freshness", "title_ambiguity"]
 
 
 def test_the_opt_out_records_why() -> None:
     """R1/R2: a silenced check carries a reason a reviewer can weigh."""
-    reason = disabled_lint_rules(load_vault_settings(DEMO))["content_freshness"]
-    assert "snapshot" in reason.lower()
-    assert reason.strip()
+    disabled = disabled_lint_rules(load_vault_settings(DEMO))
+    freshness = disabled["content_freshness"]
+    assert "snapshot" in freshness.lower()
+    assert freshness.strip()
+    ambiguity = disabled["title_ambiguity"]
+    assert "near-duplicate" in ambiguity.lower() or "duplicate" in ambiguity.lower()
+    assert ambiguity.strip()
 
 
 def test_demo_overrides_no_other_setting() -> None:
@@ -146,15 +150,17 @@ def test_committed_demo_passes_the_enforced_gate(
     capsys.readouterr()
 
 
-def test_the_gate_report_names_the_skipped_check(
+def test_the_gate_report_names_the_skipped_checks(
     demo_vault: Path, capsys: pytest.CaptureFixture
 ) -> None:
     """R2: a clean result must never read as "almost nothing was checked"."""
     _gate(demo_vault)
     out = capsys.readouterr().out
     assert "content_freshness" in out
-    reason = disabled_lint_rules(load_vault_settings(DEMO))["content_freshness"]
-    assert reason in out
+    assert "title_ambiguity" in out
+    disabled = disabled_lint_rules(load_vault_settings(DEMO))
+    assert disabled["content_freshness"] in out
+    assert disabled["title_ambiguity"] in out
 
 
 def test_the_gate_records_its_run_beside_the_copy_not_the_checkout(

@@ -27,7 +27,7 @@ python3 -m llmwiki              # same as --help
 | **Start here** | `init` · `configure-sources` · `install-agent-kit` |
 | **Daily loop (this order)** | `sync` · `add` · `synth` · `candidates` · `build` |
 | **Run the loop for me** | `all` · `watch` · `install-automation` |
-| **Look around** | `lint` · `query` · `trace` · `graph` · `adapters` · `usage` · `version` |
+| **Look around** | `lint` · `search` · `query` · `trace` · `graph` · `adapters` · `usage` · `version` |
 | **Take things out** | `remove` |
 | **Rare — one-time** | `migrate` · `queue` |
 
@@ -321,13 +321,14 @@ python3 -m llmwiki graph --format html
 
 ---
 
-## `lint` — run 17 wiki-quality rules
+## `lint` — run registered wiki-quality rules
 
 ```bash
 python3 -m llmwiki lint
 python3 -m llmwiki lint --json
 python3 -m llmwiki lint --fail-on-errors --fail-on-warnings
 python3 -m llmwiki lint --rules link_integrity,orphan_detection
+python3 -m llmwiki lint --rules page_findability,title_ambiguity,search_consistency
 python3 -m llmwiki lint --wiki-dir ~/another-wiki
 ```
 
@@ -347,7 +348,7 @@ A wiki can switch off the rules that cannot apply to it, in a committed `<vault>
 
 ### Rules
 
-17 structural rules (all deterministic — no LLM): `frontmatter_completeness`, `frontmatter_validity`, `link_integrity`, `orphan_detection`, `content_freshness`, `duplicate_detection`, `index_sync`, `contradiction_detection`, `claim_verification`, `summary_accuracy`, `stale_candidates`, `tags_topics_convention`, `stale_reference_detection`, `frontmatter_count_consistency`, `tools_consistency`, `stub_source_pages`, `provenance_integrity`.
+All rules are deterministic (no LLM). Structural: `frontmatter_completeness`, `frontmatter_validity`, `link_integrity`, `orphan_detection`, `content_freshness`, `duplicate_detection`, `index_sync`, `contradiction_detection`, `claim_verification`, `summary_accuracy`, `stale_candidates`, `tags_topics_convention`, `stale_reference_detection`, `frontmatter_count_consistency`, `tools_consistency`, `stub_source_pages`, `provenance_integrity`. Findability (#197): `page_findability`, `title_ambiguity`, `search_consistency`. The live count is whatever `llmwiki lint --help` prints.
 
 `contradiction_detection`, `claim_verification`, and `summary_accuracy` used to hide behind `--include-llm` and advertise an LLM callback that was never wired. As of #72 they always run as structural checks: non-filler `## Contradictions` sections, entity/concept claims without sources, and empty `summary:` frontmatter. Filler bodies like `None identified.`, `None detected.`, and multi-sentence `None identified. …` elaborations are not findings (unless the section also contains an *unnegated* affirmative conflict cue such as `Contradicts earlier…`). Cues that appear only inside negation (`does not conflict with prior…`, `no claims that conflict…`) stay filler (#86).
 
@@ -358,6 +359,18 @@ A wiki can switch off the rules that cannot apply to it, in a committed `<vault>
 `provenance_integrity` (#122) emits an **error** for each broken downward hop on pages that already carry `sources:` and/or `source_file:` — missing source-summary pages or missing raw files. Pages without those fields are skipped. The message names the missing hop and points at `llmwiki trace`, `synth`, or `migrate broken-provenance` as appropriate; this rule only reports.
 
 `stale_reference_detection` (#303 / #87) flags living pages (entities, concepts, …) whose dated claim about a target predates that target's `last_updated`. Pages under `wiki/sources/` and pages with frontmatter `type: source` are skipped — they are dated session records and cannot be "un-staled" without rewriting history.
+
+#### Findability rules (#197)
+
+These three share one corpus scan per lint run (same scoring path as `llmwiki search` / MCP `wiki_search`). They skip — rather than report clean — when the vault root is unavailable to the rule runner.
+
+| Rule | Severity | What it checks |
+|---|---|---|
+| `page_findability` | error | A titled wiki page is not returned at all when searched by its own title (score ≤ 0, absent from the search corpus, or cut short by the result cap). Also checks a sample of resolved `[[wikilink]]` anchors (same alias resolution as the graph): the link text must return the resolved target page. Reports how many wikilink lookups were checked at info severity. |
+| `title_ambiguity` | warning | A titled wiki page is not ranked first for its own title — names the outranking page, or reports a score tie. |
+| `search_consistency` | error | Match-mode search disagrees with a literal scan over wiki pages and session content (present terms must hit; absent terms must not). Prints both term groups in full. |
+
+`search_consistency` also reports a **survival share** at info severity: the fraction of sampled session terms that also appear in wiki pages. That share is information, never a defect — synthesis routinely drops wording, so a low share is expected until (or unless) those terms are rewritten into wiki pages.
 
 ### Expected output
 
@@ -708,12 +721,51 @@ Both print `llmwiki <version>`.
 
 ---
 
-## `query` — search the knowledge graph
+## `search` — literal term or phrase search (#197)
+
+Pre-AI-era literal search: score-weighted matching of the characters you type, found anywhere including inside longer words — for example `cat` matches `concatenate`. No stemming, no spelling correction, no meaning-based matching. Same engine agents use via MCP `wiki_search`.
+
+This is not `query`. `search` ranks pages by literal character overlap; `query` walks the knowledge graph in natural language via Graphify (`pip install llm-wiki-plus[graph]`).
+
+**Result text.** Both modes use the same centred snippet window (~400 characters around the first hit via `extract_snippet`). Term mode still returns matching *lines* (each line previewed that way); phrase mode returns one *page* snippet per hit.
+```bash
+python3 -m llmwiki search RAG --vault /path/to/vault
+python3 -m llmwiki search "reinforcement learning" --mode phrase --format json
+python3 -m llmwiki search --terms-file terms.txt --mode term
+python3 -m llmwiki search --terms-file phrases.txt --mode phrase
+python3 -m llmwiki search --terms-file - --mode phrase < phrases.txt
+```
+
+### Positional
+
+| Arg | What |
+|---|---|
+| `QUERY` | Single term (default `--mode term`) or phrase (`--mode phrase`). Omit when using `--terms-file`. |
+
+### Flags
+
+| Flag | What |
+|---|---|
+| `--mode {term,phrase}` | `term` → match mode (token-style); `phrase` → extract mode (multi-word / whole-phrase bonus). Default: `term`. |
+| `--terms-file PATH` | Bulk input, one term or phrase per line; `#` comments and blanks skipped; `-` reads stdin. Use with `--mode term` for a term list or `--mode phrase` for a phrase list. |
+| `--vault PATH` | Search this vault root read-only. Without it, uses `config.json` `vault.default_path` or the repo demo content. |
+| `--include-raw` | Also scan `raw/sessions/` (term mode). |
+| `--kind K` | Frontmatter `type` filter (term mode). |
+| `--max-pages N` | Result cap in phrase mode. Default: `5`. |
+| `--format {text,json}` | Text list or JSON payload matching the MCP tool shapes. Default: `text`. |
+
+Bulk runs group hits per entry and state which entries returned nothing. Always exits `0` on a successful search (including zero hits). Does not interpret expectations — use lint findability rules (`page_findability`, `title_ambiguity`, `search_consistency`) for pass/fail. Read-only: never modifies the vault.
+
+---
+
+## `query` — natural-language knowledge-graph walk (Graphify)
 
 ```bash
 python3 -m llmwiki query "what projects is Pratiyush working on"
 python3 -m llmwiki query "Flutter mobile" --depth 2 --budget 1000
 ```
+
+Asks a natural-language question over the Graphify knowledge graph. Distinct from `search`, which does literal term/phrase matching with no semantics.
 
 ### Flags
 

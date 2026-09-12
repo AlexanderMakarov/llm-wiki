@@ -1,7 +1,8 @@
 {
   "lint": {
     "disabled_rules": {
-      "content_freshness": "The demo is a committed snapshot, so this check measures elapsed calendar time since the snapshot was taken rather than a defect in it. Refreshing the demo more often is the honest cure and is tracked separately."
+      "content_freshness": "The demo is a committed snapshot, so this check measures elapsed calendar time since the snapshot was taken rather than a defect in it. Refreshing the demo more often is the honest cure and is tracked separately.",
+      "title_ambiguity": "The demo deliberately keeps near-duplicate titles (substring collisions, republished sources) so findability behaviour is visible; treating those as gate failures would redden the published example on every run. Exact findability for the demo is asserted by the #197 acceptance test instead."
     }
   }
 }

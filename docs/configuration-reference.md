@@ -308,7 +308,7 @@ Or an object mapping each rule to a written reason — preferred, because the re
 }
 ```
 
-Rule names are the ones the report prints as `## <rule>` headings; the full list is in [reference/cli.md](reference/cli.md#lint--run-17-wiki-quality-rules), and any run that rejects a name prints the valid ones.
+Rule names are the ones the report prints as `## <rule>` headings; the full list is in [reference/cli.md](reference/cli.md#lint--run-registered-wiki-quality-rules), and any run that rejects a name prints the valid ones.
 
 Keep a reason to a sentence or two. It is printed **verbatim, on one line** of every report the wiki produces, so a paragraph-length reason wraps badly in a CI log.
 

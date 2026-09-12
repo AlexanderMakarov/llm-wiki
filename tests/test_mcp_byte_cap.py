@@ -23,6 +23,7 @@ from llmwiki.mcp.server import (
     _read_capped,
     tool_wiki_search,
 )
+from llmwiki.search import DEFAULT_AGGREGATE_BUDGET, DEFAULT_PER_FILE_CAP
 
 
 def _result_text(result: dict) -> str:
@@ -171,7 +172,8 @@ def test_search_within_budget_reports_a_complete_scan(tmp_path: Path):
 
 
 def test_per_file_cap_constants_documented():
-    """The cap values are part of the contract — make a future
-    refactor that changes them notice this test."""
-    assert _MCP_SCAN_PER_FILE_BYTES == 4 * 1024 * 1024
-    assert _MCP_SCAN_AGGREGATE_BYTES == 50 * 1024 * 1024
+    """MCP aliases must track ``llmwiki.search`` defaults (no second literal)."""
+    assert _MCP_SCAN_PER_FILE_BYTES is DEFAULT_PER_FILE_CAP
+    assert _MCP_SCAN_AGGREGATE_BYTES is DEFAULT_AGGREGATE_BUDGET
+    assert DEFAULT_PER_FILE_CAP == 4 * 1024 * 1024
+    assert DEFAULT_AGGREGATE_BUDGET == 50 * 1024 * 1024

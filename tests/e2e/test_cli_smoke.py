@@ -93,6 +93,7 @@ ALL_SUBCOMMANDS = (
     "synth",
     "add",
     "remove",
+    "search",
     "query",
     "version",
     "all",

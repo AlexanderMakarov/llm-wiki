@@ -46,16 +46,17 @@ def _mk_page(meta: dict, body: str) -> dict:
 # ─── Registry ──────────────────────────────────────────────────────────
 
 
-def test_all_17_rules_registered():
+def test_all_20_rules_registered():
     # 10 v1.0 + stale_candidates (v1.1 #51)
     # + tags_topics_convention (G-16 · #302) + stale_reference_detection (G-17 · #303)
     # + frontmatter_count_consistency (issues.md #2)
     # + tools_consistency (issues.md #4)
     # + stub_source_pages (#24)
     # + provenance_integrity (#122)
+    # + page_findability / title_ambiguity / search_consistency (#197)
     # cache_tier_consistency removed (cache_tiers module deleted)
     # entity_consistency removed (#102 — entity-type taxonomy dropped)
-    assert len(REGISTRY) == 17
+    assert len(REGISTRY) == 20
 
 
 def test_registered_rule_names():
@@ -77,6 +78,9 @@ def test_registered_rule_names():
         "tools_consistency",             # issues.md #4
         "stub_source_pages",             # #24
         "provenance_integrity",          # #122
+        "page_findability",              # #197
+        "title_ambiguity",               # #197
+        "search_consistency",            # #197
     }
     assert set(REGISTRY.keys()) == expected
 

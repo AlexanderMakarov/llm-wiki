@@ -27,13 +27,17 @@ dist-site/
 !site/.gitkeep
 
 # Converter / synthesis state — tracks mtimes, pending work, topic cache.
-# All local-only; never commit.
+# Local vault / repo-root runs: never commit.
 # v1.4.0 unified state (#29): a repo-root run with no vault configured writes
 # these next to the code; keep them out of the clone.
 llmwiki-state.json
 llmwiki-state.js
 llmwiki-state.json.lock
 llmwiki-state.json.tmp
+# Demo vault is the exception (#255 / #197): committed so Pages Home Pipeline
+# state matches a built demo (empty synth.files → every source looks pending).
+!demo/llmwiki-state.json
+!demo/llmwiki-state.js
 .ingestion-state.json
 .llmwiki-state.json
 .llmwiki-synth-state.json

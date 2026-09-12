@@ -1,0 +1,7 @@
+{
+  "_doc": "Known-item ranking baseline for the committed demo/ vault (search findability). Measured with llmwiki.search over wiki pages only (title queries). mrr_* is mean reciprocal rank rounded to 6 decimal places; rank1_* is the share of titled pages ranked first for their own title. Not duplicated in docs — pytest only (tests/test_search_acceptance.py). Update deliberately when demo wiki content changes (exact comparison, no tolerance). MRR/rank1 are below 1.0 when another page's title also matches the query and scores higher (e.g. substring / near-duplicate titles), even though search is deterministic.",
+  "mrr_extract": 0.965825,
+  "mrr_match": 0.970443,
+  "rank1_extract": 0.935961,
+  "rank1_match": 0.940887
+}

@@ -98,12 +98,6 @@ The command palette and search are vanilla JS (~4 KB minified).
 
 ## Scaling notes
 
-- **1,000+ sessions**: build time scales linearly. Expect ~45 seconds.
-  Still well within the 30-second CI budget if the machine is faster
-  than a base M2.
-- **10,000+ sessions**: untested at this scale. The search index would
-  grow to ~4 MB total, which is still reasonable with chunked loading.
-  Build time would likely be 2-3 minutes.
-- **Disk-bound workloads**: on spinning disks or network-mounted
-  filesystems, sync time may dominate. The builder's I/O pattern is
-  sequential writes, which is friendly to HDDs.
+- **1,000+ sessions**: build time scales linearly. Expect ~45 seconds. Still well within the 30-second CI budget if the machine is faster than a base M2.
+- **10,000+ sessions**: untested at this scale. The search index would grow to ~4 MB total, which is still reasonable with chunked loading. Build time would likely be 2-3 minutes.
+- **Disk-bound workloads**: on spinning disks or network-mounted filesystems, sync time may dominate. The builder's I/O pattern is sequential writes, which is friendly to HDDs.

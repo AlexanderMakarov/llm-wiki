@@ -43,9 +43,18 @@ jobs:
           python -m llmwiki init --vault ./ci-vault
 
       - name: Build smoke test with fixtures
+        # Build a copy of demo/: ``build`` stamps ``llmwiki-state.*``, and
+        # those files are tracked for Pages Pipeline parity (#255). Mutating
+        # the checkout would fail the working-tree-clean gate below.
         run: |
-          python -m llmwiki build --vault demo --out ./ci-site || true
-          test -f ./ci-site/style.css || echo "build produced no output (no fixtures yet — this is ok in v0.1)"
+          if [ -d demo/raw/sessions ]; then
+            rm -rf ./ci-demo-vault
+            cp -a demo ./ci-demo-vault
+            python -m llmwiki build --vault ./ci-demo-vault --out ./ci-site
+            test -f ./ci-site/style.css
+          else
+            echo "no fixtures yet — skipping build smoke (ok in v0.1)"
+          fi
 
       - name: Run pytest
         run: |
