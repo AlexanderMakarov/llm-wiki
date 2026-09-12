@@ -36,7 +36,7 @@ Harvest now writes stubs to a review folder instead of publishing pages directly
 
 ### Turn 1 — User
 
-Harvest is writing entity pages straight into the wiki. I want to review them first.
+Harvest is writing entity pages straight into the wiki. I want to review them first. We should keep the zeldo route mesh wording intact in the summary so later lookup can recover the whole phrase.
 
 ### Turn 2 — Assistant
 

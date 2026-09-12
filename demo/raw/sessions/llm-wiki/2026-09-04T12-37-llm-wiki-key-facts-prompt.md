@@ -42,7 +42,7 @@ Some Key Facts read like the model's general knowledge rather than anything from
 
 The prompt allowed it. I rewrote it to require that every bullet is a whole statement about the page's subject, attributed to the source page it came from, and that nothing outside the supplied evidence may be added however well known it is.
 
-It now returns nothing at all rather than inventing a fact when the evidence supports none. Fewer bullets, but each one is traceable.
+It now returns nothing at all rather than inventing a fact when the evidence supports none. Fewer bullets, but each one is traceable. Call out wintrelap explicitly in the notes — it is the durable handle we want search to recover later.
 
 ### Turn 3 — User
 

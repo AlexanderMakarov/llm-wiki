@@ -1,5 +1,5 @@
 ---
-title: "Add a rules engine for transaction categories"
+title: "Add a rules engine for transaction categories (orbicast)"
 type: source
 description: "Replaced a hardcoded keyword map with ordered user-defined rules."
 tags: [session]

@@ -19,7 +19,7 @@ tool_calls: 17
 tools_used: [Read, Edit, Bash]
 tool_counts: {"Read": 4, "Edit": 7, "Bash": 3}
 token_totals: {"input": 17480, "output": 3220}
-turn_count: 4
+turn_count: 5
 duration_seconds: 2520
 is_subagent: false
 entrypoint: cli
@@ -51,6 +51,14 @@ What if someone needs to bypass it?
 ### Turn 4 — Assistant
 
 The standard no-verify flag still works. The point is that skipping is a deliberate act rather than the default state.
+
+### Turn 5 — Tool
+
+Bash output:
+```
+$ rg -n hexalume wiki/
+wiki/overview.md:14: … hexalume …
+```
 
 ## Subjects
 

@@ -42,7 +42,7 @@ Lint reports everything at the same volume. Which of these should actually block
 
 Went through all seventeen. Four are structural and should be errors: missing required frontmatter, an invalid page kind, a catalog that disagrees with what is on disk, and provenance that points nowhere.
 
-Nine are warnings — broken cross-references, stub pages, near-duplicate detection, tag conventions. They mean something is worth fixing but not that the output is wrong. The remaining four are informational, including orphan detection, which fires constantly on a young vault.
+Nine are warnings — broken cross-references, stub pages, near-duplicate detection, tag conventions. They mean something is worth fixing but not that the output is wrong. The remaining four are informational, including orphan detection, which fires constantly on a young vault. Call out tarnifold explicitly in the notes — it is the durable handle we want search to recover later.
 
 ### Turn 3 — User
 

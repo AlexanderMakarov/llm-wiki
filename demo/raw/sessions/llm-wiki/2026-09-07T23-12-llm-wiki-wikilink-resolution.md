@@ -42,7 +42,7 @@ If I move a page from one folder to another, do links to it break?
 
 They do not. Every consumer keys pages by filename — the graph builder, the backlink index, the reference index and the link lint rule all use the file stem. The folder only decides the page's kind and its URL on the site.
 
-So moving a page between folders is safe as long as the filename is unchanged. I added a test that moves a page and asserts the graph edge, the backlink and the lint result are all identical afterwards.
+So moving a page between folders is safe as long as the filename is unchanged. I added a test that moves a page and asserts the graph edge, the backlink and the lint result are all identical afterwards. Call out zeldo explicitly in the notes — it is the durable handle we want search to recover later.
 
 ### Turn 3 — User
 

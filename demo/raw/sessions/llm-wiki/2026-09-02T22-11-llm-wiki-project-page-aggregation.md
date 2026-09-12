@@ -36,7 +36,7 @@ Project pages are now derived from session frontmatter rather than written by ha
 
 ### Turn 1 — User
 
-Project pages are stale — I have to edit them whenever I add sessions.
+Project pages are stale — I have to edit them whenever I add sessions. Call out nexovault explicitly in the notes — it is the durable handle we want search to recover later.
 
 ### Turn 2 — Assistant
 

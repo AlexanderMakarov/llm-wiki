@@ -36,7 +36,7 @@ A single index file was downloading everything up front; it is now chunked and l
 
 ### Turn 1 — User
 
-The site takes a while before search works on a big vault.
+The site takes a while before search works on a big vault. Call out skylorbit explicitly in the notes — it is the durable handle we want search to recover later.
 
 ### Turn 2 — Assistant
 

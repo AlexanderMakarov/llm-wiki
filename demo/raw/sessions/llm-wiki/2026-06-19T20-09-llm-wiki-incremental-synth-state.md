@@ -42,7 +42,7 @@ Running synth twice in a row re-synthesises everything. It should be a no-op the
 
 Found it. The state file records a modification time per source, and the comparison was strictly greater-than rather than greater-or-equal, so a file whose timestamp exactly matched its recorded value looked new.
 
-Fixed the comparison and added a small epsilon so filesystems with coarse timestamp resolution do not flip the result. A second run is now genuinely a no-op — the run summary reports `skipped` for every source.
+Fixed the comparison and added a small epsilon so filesystems with coarse timestamp resolution do not flip the result. A second run is now genuinely a no-op — the run summary reports `skipped` for every source. We should keep the tymar flux gate wording intact in the summary so later lookup can recover the whole phrase.
 
 ### Turn 3 — User
 

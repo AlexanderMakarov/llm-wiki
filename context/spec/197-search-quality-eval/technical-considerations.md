@@ -1,7 +1,7 @@
 # Technical Specification: Search Command and Findability Checks
 
 - **Functional Specification:** [`functional-spec.md`](./functional-spec.md) — issue [#197](https://github.com/AlexanderMakarov/llm-wiki/issues/197)
-- **Status:** Approved
+- **Status:** Completed
 - **Author(s):** 4ellendger
 
 ---
@@ -37,7 +37,7 @@ Root-agnostic by rule: every entry point takes explicit paths and the package ho
 
 | File | Responsibility |
 |---|---|
-| `corpus.py` | `ScannedPage`, `CorpusScan`, `scan_corpus()` — the walk, the byte caps, cold-storage exclusion, frontmatter parse |
+| `corpus.py` | `ScannedPage`, `CorpusScan`, `CorpusWalkStats`, `iter_scanned_pages()`, `scan_corpus()` — streaming walk + materialised scan, byte caps, cold-storage exclusion, frontmatter parse |
 | `scoring.py` | `ExtractQuery`, `score_extract()`, `match_page()` — pure per-page functions, no I/O |
 | `engine.py` | `search_extract()`, `search_match()` — multi-query, single pass over an iterable of pages; owns per-query result caps and ordering |
 | `evaluate.py` | Answer-key derivation, deterministic sampling, metric computation |
@@ -47,7 +47,8 @@ Root-agnostic by rule: every entry point takes explicit paths and the package ho
 
 - `ScannedPage` — `rel_path: str` (relative to content root), `path: Path`, `text: str`, `text_lower: str`, `title: str`, `meta: dict`, `size: int`, `is_raw: bool`. `text_lower` is precomputed once because both modes lowercase every page on every call today.
 - `CorpusScan` — `pages: list[ScannedPage]`, `budget_exhausted: bool`, `skipped_oversize: int`. The two completeness flags the MCP contract already reports.
-- `scan_corpus(roots, *, content_root, cold_storage_root, per_file_cap, aggregate_budget) -> CorpusScan` — lifted from `_iter_scan_files` + `_read_capped`, behaviour unchanged. Caps stay at their current values (4 MiB/file, 50 MiB/call, `#483`).
+- `scan_corpus(roots, *, content_root, cold_storage_root, per_file_cap, aggregate_budget) -> CorpusScan` — materialises :func:`iter_scanned_pages` for extract/lint. Caps stay at their current values (4 MiB/file, 50 MiB/call, `#483`).
+- `iter_scanned_pages(..., stats=CorpusWalkStats) -> Iterator[ScannedPage]` — same walk, yielded one page at a time so match-mode consumers can break without reading the rest of the vault.
 - `ExtractQuery.parse(question)` — holds `raw`, `lower`, `tokens`. Tokenisation moves out of the per-page loop: it currently runs once per page, and must run once per **query**.
 - `score_extract(page, query) -> float` — the existing arithmetic verbatim: body +50 phrase, +10/token, ÷ `log2(max(len, 256))`; title +100 phrase, +20/token, unnormalised.
 - `match_page(page, term_lower, kind) -> MatchedPage | None` — `name_match` plus matching lines.
@@ -58,12 +59,12 @@ Drift risk lives entirely in `scoring.py`, which both consumers share. The reduc
 
 ### 2.2 MCP server changes
 
-`_wiki_search_extract` and `_wiki_search_match` become thin: resolve roots from `REPO_ROOT` → `scan_corpus` → engine → render text/JSON. Deliberately preserved:
+`_wiki_search_extract` and `_wiki_search_match` become thin: resolve roots from `REPO_ROOT` → scan → engine → render text/JSON. **Match mode streams** via `iter_scanned_pages` into `search_match`, so hit/page caps can stop the disk walk early (restoring pre-#197 I/O behaviour). **Extract mode materialises** via `scan_corpus` first — correct top-k ranking needs every readable page. Deliberately preserved:
 
 - The `REPO_ROOT` monkeypatch seam at `server.py:58` — many existing tests depend on it.
 - The `_hits` telemetry field on both handlers, including `match`'s "one row per matching line, or one per name-only page" rule (`#26`).
 - Every reported flag: `truncated`, `budget_exhausted`, `skipped_oversize_files`.
-- Byte-for-byte identical rendered output, held by the 245 existing tests that already exercise this surface (§4).
+- Output **shape** and ranking contract held by the existing MCP suite. Match-mode **line previews** are not byte-identical to the old `line.strip()[:200]` prefix: both modes now share `extract_snippet` (~400 characters centred on the first hit), documented in CHANGELOG and `docs/reference/cli.md`. Equal extract scores order by `(-score, rel_path)`.
 
 `_wiki_search_match` is deliberately reshaped to be multi-term internally, per the single-pass design above; its externally visible single-term contract is unchanged.
 

@@ -40,6 +40,7 @@ from llmwiki.lint import LintOptions, UnknownRuleError, load_pages, run_lint, su
 from llmwiki.lint.report import render_text
 from llmwiki.pipeline_lock import pipeline_lock
 from llmwiki.reindex import reindex_wiki
+from llmwiki.search.context import SearchContext
 from llmwiki.state_store import (
     read_state,
     record_lint_ops,
@@ -152,7 +153,13 @@ def _run_lint_step(
 
     try:
         outcome = run_lint(
-            pages, disabled=disabled, options=LintOptions(min_refs=min_refs)
+            pages,
+            disabled=disabled,
+            options=LintOptions(
+                min_refs=min_refs,
+                content_root=settings_root,
+                search_context=SearchContext(content_root=settings_root),
+            ),
         )
     except UnknownRuleError as exc:
         print(f"error: {vault_settings_path(settings_root)}: {exc}", file=sys.stderr)

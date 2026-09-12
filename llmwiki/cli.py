@@ -114,6 +114,20 @@ from llmwiki.reindex import (
     seed_index_text,
 )
 from llmwiki.remove_doc import RemoveIncompleteError, build_remove_plan, execute_remove_plan, format_plan
+from llmwiki.schema import PAGE_KINDS
+from llmwiki.search import (
+    DEFAULT_AGGREGATE_BUDGET,
+    DEFAULT_HIT_CAP,
+    DEFAULT_MAX_PAGES,
+    DEFAULT_PAGE_CAP,
+    DEFAULT_PER_FILE_CAP,
+    CorpusWalkStats,
+    SearchContext,
+    iter_scanned_pages,
+    scan_corpus,
+    search_extract,
+    search_match,
+)
 from llmwiki.source_checkout import SourceCheckoutError, ensure_not_source_checkout
 from llmwiki.state_store import (
     IncompatibleStateError,
@@ -582,6 +596,325 @@ def cmd_adapters(args: argparse.Namespace) -> int:
     return 0
 
 
+def _read_search_terms_file(path: str | Path) -> list[str]:
+    """Load bulk search entries: one per line; ``#`` comments and blanks skipped.
+
+    ``-`` reads stdin. Empty after filtering is an error (exit 2).
+    """
+    if str(path) == "-":
+        raw_lines = sys.stdin.read().splitlines()
+    else:
+        file_path = Path(path)
+        if not file_path.is_file():
+            print(f"error: terms file not found: {file_path}", file=sys.stderr)
+            raise SystemExit(2)
+        raw_lines = file_path.read_text(encoding="utf-8").splitlines()
+    terms: list[str] = []
+    for line in raw_lines:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        terms.append(stripped)
+    if not terms:
+        print("error: terms file contained no entries", file=sys.stderr)
+        raise SystemExit(2)
+    return terms
+
+
+def _resolve_search_queries(args: argparse.Namespace) -> list[str]:
+    """Return QUERY and/or ``--terms-file`` entries; exactly one source required."""
+    query = getattr(args, "query", None)
+    terms_file = getattr(args, "terms_file", None)
+    if query is not None and terms_file is not None:
+        print("error: provide QUERY or --terms-file, not both", file=sys.stderr)
+        raise SystemExit(2)
+    if terms_file is not None:
+        return _read_search_terms_file(terms_file)
+    if query is None or not str(query).strip():
+        print("error: QUERY or --terms-file is required", file=sys.stderr)
+        raise SystemExit(2)
+    return [str(query).strip()]
+
+
+def _format_match_text(
+    term: str,
+    *,
+    pages: list[dict[str, Any]],
+    kind: str,
+    truncated: bool,
+    budget_exhausted: bool,
+    skipped_oversize: int,
+) -> str:
+    """Match-mode text shape shared with MCP ``wiki_search`` (mode=match)."""
+    scope = f" (kind: {kind})" if kind else ""
+    out = [f"{len(pages)} page(s) matching {term!r}{scope}:", ""]
+    for pg in pages:
+        header = f"{pg['path']} — {pg['title']}" if pg["title"] else pg["path"]
+        out.append(header)
+        out.extend(f"  :{num}: {text_}" for num, text_ in pg["lines"])
+        out.append("")
+    out.append(f"truncated: {str(truncated).lower()}")
+    out.append(f"budget_exhausted: {str(budget_exhausted).lower()}")
+    out.append(f"skipped_oversize_files: {skipped_oversize}")
+    return "\n".join(out)
+
+
+def _format_match_json(
+    term: str,
+    *,
+    pages: list[dict[str, Any]],
+    kind: str,
+    include_raw: bool,
+    truncated: bool,
+    budget_exhausted: bool,
+    skipped_oversize: int,
+) -> dict[str, Any]:
+    """Match-mode JSON shape shared with MCP ``wiki_search`` (format=json)."""
+    return {
+        "term": term,
+        "kind": kind or None,
+        "include_raw": include_raw,
+        "pages": [
+            {
+                "path": pg["path"],
+                "title": pg["title"],
+                "name_match": pg["name_match"],
+                "lines": [{"line": n, "text": t} for n, t in pg["lines"]],
+            }
+            for pg in pages
+        ],
+        "truncated": truncated,
+        "budget_exhausted": budget_exhausted,
+        "skipped_oversize_files": skipped_oversize,
+    }
+
+
+def _format_extract_text(
+    question: str,
+    *,
+    hits: Sequence[Any],
+    root: Path,
+    single: bool,
+) -> str:
+    """Extract/phrase text shape aligned with MCP ``wiki_search`` (mode=extract).
+
+    For a single empty query, append index/overview context like the MCP tool.
+    Bulk empty entries stay short so the "which returned nothing" list stays readable.
+    """
+    out = [f"# Query: {question}\n"]
+    if not hits:
+        out.append("No matching pages found.\n")
+        if single:
+            wiki = root / "wiki"
+            index = (
+                (wiki / "index.md").read_text(encoding="utf-8")
+                if (wiki / "index.md").is_file()
+                else ""
+            )
+            overview = (
+                (wiki / "overview.md").read_text(encoding="utf-8")
+                if (wiki / "overview.md").is_file()
+                else ""
+            )
+            out.append("\n## wiki/index.md\n\n" + index[:1500])
+            out.append("---\n")
+            out.append("## Overview context\n")
+            out.append(overview[:1000] if overview else "(no overview.md)")
+    else:
+        for hit in hits:
+            out.append(f"## `{hit.rel_path}` (score: {hit.score:.1f})\n")
+            out.append(hit.snippet)
+            out.append("")
+        if single:
+            wiki = root / "wiki"
+            overview = (
+                (wiki / "overview.md").read_text(encoding="utf-8")
+                if (wiki / "overview.md").is_file()
+                else ""
+            )
+            out.append("---\n")
+            out.append("## Overview context\n")
+            out.append(overview[:1000] if overview else "(no overview.md)")
+    return "\n".join(out)
+
+
+def _format_extract_json(
+    question: str,
+    *,
+    hits: Sequence[Any],
+    budget_exhausted: bool,
+    skipped_oversize: int,
+) -> dict[str, Any]:
+    """Phrase-mode JSON: ranked hits plus the scan completeness flags."""
+    return {
+        "query": question,
+        "mode": "phrase",
+        "pages": [
+            {"path": h.rel_path, "score": h.score, "snippet": h.snippet}
+            for h in hits
+        ],
+        "budget_exhausted": budget_exhausted,
+        "skipped_oversize_files": skipped_oversize,
+    }
+
+
+def cmd_search(args: argparse.Namespace) -> int:
+    """Search a vault the way MCP ``wiki_search`` does (#197).
+
+    Pure lookup: no ``--expect``, exit 0 when the search itself succeeds
+    (including zero hits). Verdicts belong to lint, not this command.
+    """
+    mode = str(getattr(args, "mode", "term") or "term").strip().lower()
+    fmt = str(getattr(args, "format", "text") or "text").strip().lower()
+    kind = str(getattr(args, "kind", "") or "").strip().lower()
+    include_raw = bool(getattr(args, "include_raw", False))
+    max_pages = int(getattr(args, "max_pages", DEFAULT_MAX_PAGES))
+
+    if mode not in ("term", "phrase"):
+        print(f"error: unknown mode {mode!r} (expected term or phrase)", file=sys.stderr)
+        return 2
+    if fmt not in ("text", "json"):
+        print(f"error: unknown format {fmt!r} (expected text or json)", file=sys.stderr)
+        return 2
+    if kind and kind not in PAGE_KINDS:
+        print(
+            f"error: unknown kind {kind!r} (expected one of {list(PAGE_KINDS)})",
+            file=sys.stderr,
+        )
+        return 2
+    if kind and mode == "phrase":
+        print("error: --kind applies only to --mode term", file=sys.stderr)
+        return 2
+
+    queries = _resolve_search_queries(args)
+    root = _content_root(args)
+    wiki_root = root / "wiki"
+    roots = [wiki_root]
+    if include_raw and mode == "term":
+        roots.append(root / "raw" / "sessions")
+
+    bulk = len(queries) > 1
+    empty_queries: list[str] = []
+
+    if mode == "term":
+        # Stream so hit/page caps can stop reading the rest of the vault.
+        walk_stats = CorpusWalkStats()
+        results = search_match(
+            iter_scanned_pages(
+                roots,
+                content_root=root,
+                cold_storage_root=wiki_root,
+                per_file_cap=DEFAULT_PER_FILE_CAP,
+                aggregate_budget=DEFAULT_AGGREGATE_BUDGET,
+                stats=walk_stats,
+            ),
+            queries,
+            kind=kind,
+            page_cap=DEFAULT_PAGE_CAP,
+            hit_cap=DEFAULT_HIT_CAP,
+        )
+        budget_exhausted = walk_stats.budget_exhausted
+        skipped_oversize = walk_stats.skipped_oversize
+        if fmt == "json":
+            payload: list[dict[str, Any]] = []
+            for q in queries:
+                mr = results[q]
+                pages = [
+                    {
+                        "path": pg.rel_path,
+                        "title": pg.title,
+                        "name_match": pg.name_match,
+                        "lines": list(pg.lines),
+                    }
+                    for pg in mr.pages
+                ]
+                if not pages:
+                    empty_queries.append(q)
+                payload.append(
+                    _format_match_json(
+                        q,
+                        pages=pages,
+                        kind=kind,
+                        include_raw=include_raw,
+                        truncated=mr.truncated,
+                        budget_exhausted=budget_exhausted,
+                        skipped_oversize=skipped_oversize,
+                    )
+                )
+            print(_json.dumps(payload if bulk else payload[0], indent=2))
+        else:
+            blocks: list[str] = []
+            for q in queries:
+                mr = results[q]
+                pages = [
+                    {
+                        "path": pg.rel_path,
+                        "title": pg.title,
+                        "name_match": pg.name_match,
+                        "lines": list(pg.lines),
+                    }
+                    for pg in mr.pages
+                ]
+                if not pages:
+                    empty_queries.append(q)
+                body = _format_match_text(
+                    q,
+                    pages=pages,
+                    kind=kind,
+                    truncated=mr.truncated,
+                    budget_exhausted=budget_exhausted,
+                    skipped_oversize=skipped_oversize,
+                )
+                if bulk:
+                    blocks.append(f"=== {q} ===\n{body}")
+                else:
+                    blocks.append(body)
+            print("\n".join(blocks))
+            if bulk and empty_queries:
+                print("\n(no matches): " + ", ".join(repr(q) for q in empty_queries))
+    else:
+        scan = scan_corpus(
+            roots,
+            content_root=root,
+            cold_storage_root=wiki_root,
+            per_file_cap=DEFAULT_PER_FILE_CAP,
+            aggregate_budget=DEFAULT_AGGREGATE_BUDGET,
+        )
+        results_ex = search_extract(scan.pages, queries, max_pages=max_pages)
+        if fmt == "json":
+            payload_ex: list[dict[str, Any]] = []
+            for q in queries:
+                hits = results_ex.get(q, [])
+                if not hits:
+                    empty_queries.append(q)
+                payload_ex.append(
+                    _format_extract_json(
+                        q,
+                        hits=hits,
+                        budget_exhausted=scan.budget_exhausted,
+                        skipped_oversize=scan.skipped_oversize,
+                    )
+                )
+            print(_json.dumps(payload_ex if bulk else payload_ex[0], indent=2))
+        else:
+            blocks_ex: list[str] = []
+            for q in queries:
+                hits = results_ex.get(q, [])
+                if not hits:
+                    empty_queries.append(q)
+                body = _format_extract_text(
+                    q, hits=hits, root=root, single=not bulk
+                )
+                if bulk:
+                    blocks_ex.append(f"=== {q} ===\n{body}")
+                else:
+                    blocks_ex.append(body)
+            print("\n".join(blocks_ex))
+            if bulk and empty_queries:
+                print("\n(no matches): " + ", ".join(repr(q) for q in empty_queries))
+    return 0
+
+
 def cmd_query(args: argparse.Namespace) -> int:
     """Query the knowledge graph with a natural language question."""
     if not is_available():
@@ -700,7 +1033,11 @@ def cmd_lint(args: argparse.Namespace) -> int:
         return 0
 
     selected = [r.strip() for r in args.rules.split(",") if r.strip()] if args.rules else None
-    options = LintOptions(min_refs=getattr(args, "min_refs", DEFAULT_MIN_REFS))
+    options = LintOptions(
+        min_refs=getattr(args, "min_refs", DEFAULT_MIN_REFS),
+        content_root=settings_root,
+        search_context=SearchContext(content_root=settings_root),
+    )
     try:
         outcome = run_lint(pages, selected=selected, disabled=disabled, options=options)
     except UnknownRuleError as exc:
@@ -2550,6 +2887,8 @@ def _add_vault_arg(parser: argparse.ArgumentParser, *, role: str) -> None:
                           "instead of the repo's.",
             "trace": "Trace provenance under this vault's wiki/ → sources → "
                      "raw/, instead of the repo's.",
+            "search": "Search this vault's wiki/ (and optionally raw/sessions/) "
+                      "instead of the repo's demo content.",
             "watch": "Watch agent session stores and maintain this vault "
                      "(sync → synth → build) when sessions finish.",
             "install-automation": "Write automation status and schedulers "
@@ -2584,6 +2923,7 @@ def build_parser() -> argparse.ArgumentParser:
 
             Look around
               lint                 Check the wiki without changing pages
+              search               Literal term or phrase lookup over the vault
               query                Ask a natural-language question of the wiki
               trace                Show how a wiki page traces back to raw sources
               graph                Walk [[wikilinks]] into a browsable connection map
@@ -3237,6 +3577,64 @@ def build_parser() -> argparse.ArgumentParser:
     rm_p.set_defaults(func=cmd_remove)
 
     # query — natural-language graph query
+    # search — literal term/phrase lookup (#197); not graphify query
+    search_p = add_command(
+        "search",
+        """
+        Look around: search the vault the same way agents do via MCP wiki_search — score-weighted literal matching of the characters you type (including inside longer words). No stemming, spelling correction, or semantics.
+
+        --mode term (default) matches a word or fragment wherever it occurs. --mode phrase ranks pages that contain the whole phrase above pages that only contain some of its words. Pass one QUERY, or --terms-file (one entry per line; # comments and blanks skipped; - reads stdin) for a bulk run that groups results per entry.
+
+        Read-only. Does not edit pages, convert sessions, summarise, rebuild the site, or interpret expectations (use lint findability rules for pass/fail). Distinct from `query`, which asks the knowledge graph in natural language.
+        """,
+    )
+    search_p.add_argument(
+        "query",
+        nargs="?",
+        metavar="QUERY",
+        help="Term (default mode) or phrase (--mode phrase). Omit when using --terms-file.",
+    )
+    search_p.add_argument(
+        "--mode",
+        choices=["term", "phrase"],
+        default="term",
+        help="term → match mode; phrase → extract mode (default: term)",
+    )
+    search_p.add_argument(
+        "--terms-file",
+        type=Path,
+        default=None,
+        metavar="PATH",
+        help="Bulk input: one entry per line (# comments / blanks skipped). Use - for stdin.",
+    )
+    _add_vault_arg(search_p, role="search")
+    search_p.add_argument(
+        "--include-raw",
+        action="store_true",
+        help="Also scan raw/sessions/ (term mode only)",
+    )
+    search_p.add_argument(
+        "--kind",
+        type=str,
+        default="",
+        metavar="K",
+        help="Frontmatter type filter (term mode only)",
+    )
+    search_p.add_argument(
+        "--max-pages",
+        type=int,
+        default=DEFAULT_MAX_PAGES,
+        metavar="N",
+        help=f"Result cap in phrase mode (default: {DEFAULT_MAX_PAGES})",
+    )
+    search_p.add_argument(
+        "--format",
+        choices=["text", "json"],
+        default="text",
+        help="Output shape (default: text); json matches the MCP tool payloads",
+    )
+    search_p.set_defaults(func=cmd_search)
+
     qry = add_command(
         "query",
         """

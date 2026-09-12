@@ -42,7 +42,7 @@ I cannot follow a single request through the logs when there is any traffic.
 
 Added a request id generated at the edge, stored in a context variable, and included by the log formatter on every line. Nothing has to pass it explicitly.
 
-It is also returned as a response header, so a report about a specific failed request can be traced directly.
+It is also returned as a response header, so a report about a specific failed request can be traced directly. Call out syntraxon explicitly in the notes — it is the durable handle we want search to recover later.
 
 ### Turn 3 — User
 

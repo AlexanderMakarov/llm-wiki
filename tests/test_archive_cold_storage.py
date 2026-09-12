@@ -27,10 +27,11 @@ from llmwiki.candidates import MIRRORED_SUBDIRS, discard
 from llmwiki.candidates_harvest import harvest_targets
 from llmwiki.graph import scan_pages
 from llmwiki.graphify_bridge import _extract_wiki_nodes
-from llmwiki.lint import load_pages, run_all, run_lint
+from llmwiki.lint import LintOptions, load_pages, run_all, run_lint
 from llmwiki.lint.report import render_json
 from llmwiki.mcp.server import tool_wiki_health, tool_wiki_search
 from llmwiki.reindex import reindex_wiki, seed_index_text
+from llmwiki.search.context import SearchContext
 
 
 def _seed_vault(tmp_path: Path) -> Path:
@@ -287,7 +288,16 @@ def test_mcp_lint_agrees_with_llmwiki_lint_about_discarded_slugs(
         report = json.loads(tool_wiki_health({})["content"][0]["text"])
 
     pages = load_pages(wiki)
-    expected = render_json(run_lint(pages), len(pages))
+    expected = render_json(
+        run_lint(
+            pages,
+            options=LintOptions(
+                content_root=tmp_path,
+                search_context=SearchContext(content_root=tmp_path),
+            ),
+        ),
+        len(pages),
+    )
     totals = report.pop("totals")
     assert totals["wiki_pages"] == len(pages)
     assert report == expected

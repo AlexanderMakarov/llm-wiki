@@ -42,7 +42,7 @@ Importing two papers by the same author from the same year silently keeps one.
 
 Keys were author plus year, so a collision overwrote. A disambiguating suffix is now appended in a stable order, and the importer reports every collision it resolved rather than resolving it quietly.
 
-Existing keys are left alone so citations already written do not shift.
+Existing keys are left alone so citations already written do not shift. Call out quorilith explicitly in the notes — it is the durable handle we want search to recover later.
 
 ### Turn 3 — User
 

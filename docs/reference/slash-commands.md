@@ -54,7 +54,7 @@ Structural and content quality for the wiki is **`llmwiki lint`** / **`/wiki-lin
 
 | Command | Checks | Severity model | When to run |
 |---|---|---|---|
-| [`llmwiki lint`](../reference/cli.md#lint--run-13-wiki-quality-rules) / `/wiki-lint` | Frontmatter completeness, `[[wikilink]]` integrity, orphans, duplicate titles, stale pages, cache-tier consistency, tag-topic convention, stale references, and the rest of the registered rules | Rules with `error` / `warning` / `info` severities; `--fail-on-errors` exits non-zero only on errors | After every `/wiki-sync` or `/wiki-build`, and in CI |
+| [`llmwiki lint`](../reference/cli.md#lint--run-registered-wiki-quality-rules) / `/wiki-lint` | Frontmatter completeness, `[[wikilink]]` integrity, orphans, duplicate titles, stale pages, tag-topic convention, stale references, findability (`page_findability`, `title_ambiguity`, `search_consistency`), and the rest of the registered rules | Rules with `error` / `warning` / `info` severities; `--fail-on-errors` exits non-zero only on errors | After every `/wiki-sync` or `/wiki-build`, and in CI |
 
 Reach for lint when a page or the corpus looks wrong: orphans, broken `[[wikilinks]]`, missing frontmatter, stale summaries. Use `--fail-on-errors` (or the automation lint-fail policy) when a non-zero exit should block a pipeline.
 
@@ -219,7 +219,7 @@ want to re-run sync.
 
 ### `/wiki-lint`
 
-**What:** run every registered lint rule (16 at last count — all structural / deterministic). The live number is printed by `llmwiki lint --help`.
+**What:** run every registered lint rule (all deterministic — no LLM). The live number is printed by `llmwiki lint --help`.
 
 **Wraps:** `python3 -m llmwiki lint`.
 
@@ -241,6 +241,12 @@ want to re-run sync.
 14. `frontmatter_count_consistency`
 15. `tools_consistency`
 16. `stub_source_pages`
+17. `provenance_integrity` *(#122)*
+18. `page_findability` *(#197)* — titled page not returned for its own title; also samples resolved `[[wikilink]]` anchors against their graph-resolved target
+19. `title_ambiguity` *(#197)* — titled page not ranked first for its own title
+20. `search_consistency` *(#197)* — search vs literal scan; survival share is informational, not a defect
+
+See [`cli.md` lint](cli.md#lint--run-registered-wiki-quality-rules) for severities and findability detail.
 
 **Example:**
 

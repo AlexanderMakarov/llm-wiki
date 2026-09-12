@@ -1,5 +1,5 @@
 ---
-title: "Detect and backfill gaps in the sensor stream"
+title: "Detect and backfill gaps in the sensor stream (brexinode)"
 type: source
 description: "Dropped readings left silent gaps that looked like flat readings downstream."
 tags: [session]

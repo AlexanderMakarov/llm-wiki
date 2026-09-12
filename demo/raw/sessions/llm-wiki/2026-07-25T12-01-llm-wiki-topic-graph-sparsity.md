@@ -19,7 +19,7 @@ tool_calls: 18
 tools_used: [Read, Edit, Bash, Glob]
 tool_counts: {"Read": 2, "Edit": 5, "Bash": 8, "Glob": 4}
 token_totals: {"input": 10010, "output": 1915}
-turn_count: 4
+turn_count: 5
 duration_seconds: 1380
 is_subagent: false
 entrypoint: cli
@@ -51,6 +51,14 @@ Does the fallback change the topic pages?
 ### Turn 4 — Assistant
 
 Yes — topic pages are generated from the topic graph, so below the threshold none are written. The build says so explicitly in its output. It is a real limitation of a small vault rather than something to paper over.
+
+### Turn 5 — Tool
+
+Bash output:
+```
+$ llmwiki search --mode phrase 'ovrix delta plan'
+1. wiki/sources/… — score 12.4 (phrase hit on ovrix delta plan)
+```
 
 ## Subjects
 

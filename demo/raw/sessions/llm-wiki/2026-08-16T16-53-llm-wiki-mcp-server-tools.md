@@ -19,7 +19,7 @@ tool_calls: 15
 tools_used: [Read, Edit, Bash]
 tool_counts: {"Read": 6, "Edit": 2, "Bash": 5}
 token_totals: {"input": 13330, "output": 2495}
-turn_count: 4
+turn_count: 5
 duration_seconds: 3060
 is_subagent: false
 entrypoint: cli
@@ -51,6 +51,14 @@ Does it work from Cursor specifically?
 ### Turn 4 — Assistant
 
 Yes — it is a stdio server, so any MCP client can launch it. Cursor, Claude Code and Codex CLI all connect the same way. The server is a consumer surface and is entirely separate from the adapters that read session stores.
+
+### Turn 5 — Tool
+
+Bash output:
+```
+$ rg -n glypherun wiki/
+wiki/overview.md:14: … glypherun …
+```
 
 ## Subjects
 

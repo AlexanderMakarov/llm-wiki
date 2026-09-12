@@ -1,0 +1,179 @@
+{
+  "_doc": "Planted present / synthetic absent search terms for #197 acceptance (tests/test_197_acceptance.py). Written by scripts/generate_demo_sessions.py when regenerating demo/raw/sessions. present entries are keyed to a single (session, placement); absent entries were confirmed missing from the demo vault by literal scan at generation time. kind is term (match mode) or phrase (extract mode).",
+  "present": [
+    {
+      "value": "korvindex",
+      "kind": "term",
+      "session": "adapter-registry-refactor",
+      "placement": "title",
+      "adapter": "claude_code"
+    },
+    {
+      "value": "orbicast",
+      "kind": "term",
+      "session": "category-rules-engine",
+      "placement": "title",
+      "adapter": "cursor_cli"
+    },
+    {
+      "value": "marnitask",
+      "kind": "term",
+      "session": "shell-startup-profiling",
+      "placement": "title",
+      "adapter": "openclaw"
+    },
+    {
+      "value": "brexinode",
+      "kind": "term",
+      "session": "backfill-gap-detection",
+      "placement": "title",
+      "adapter": "codex_cli"
+    },
+    {
+      "value": "nexovault",
+      "kind": "term",
+      "session": "project-page-aggregation",
+      "placement": "user",
+      "adapter": "cursor_cli"
+    },
+    {
+      "value": "veldmark",
+      "kind": "term",
+      "session": "docs-ingest-pipeline",
+      "placement": "user",
+      "adapter": "openclaw"
+    },
+    {
+      "value": "plixbuffer",
+      "kind": "term",
+      "session": "static-site-offline",
+      "placement": "user",
+      "adapter": "claude_code"
+    },
+    {
+      "value": "skylorbit",
+      "kind": "term",
+      "session": "search-index-chunks",
+      "placement": "user",
+      "adapter": "claude_code"
+    },
+    {
+      "value": "tarnifold",
+      "kind": "term",
+      "session": "lint-rule-severities",
+      "placement": "assistant",
+      "adapter": "openclaw"
+    },
+    {
+      "value": "syntraxon",
+      "kind": "term",
+      "session": "request-id-logging",
+      "placement": "assistant",
+      "adapter": "codex_cli"
+    },
+    {
+      "value": "wintrelap",
+      "kind": "term",
+      "session": "key-facts-prompt",
+      "placement": "assistant",
+      "adapter": "claude_code"
+    },
+    {
+      "value": "quorilith",
+      "kind": "term",
+      "session": "bibtex-key-collisions",
+      "placement": "assistant",
+      "adapter": "cursor_cli"
+    },
+    {
+      "value": "glypherun",
+      "kind": "term",
+      "session": "mcp-server-tools",
+      "placement": "tool",
+      "adapter": "claude_code"
+    },
+    {
+      "value": "hexalume",
+      "kind": "term",
+      "session": "git-hooks-sync",
+      "placement": "tool",
+      "adapter": "cursor_cli"
+    },
+    {
+      "value": "farnodeck",
+      "kind": "term",
+      "session": "mqtt-reconnect-backoff",
+      "placement": "tool",
+      "adapter": "openclaw"
+    },
+    {
+      "value": "draxelume",
+      "kind": "term",
+      "session": "pdf-text-extraction",
+      "placement": "tool",
+      "adapter": "claude_code"
+    },
+    {
+      "value": "zeldo route mesh",
+      "kind": "phrase",
+      "session": "candidate-review-gate",
+      "placement": "user",
+      "adapter": "claude_code"
+    },
+    {
+      "value": "tymar flux gate",
+      "kind": "phrase",
+      "session": "incremental-synth-state",
+      "placement": "assistant",
+      "adapter": "claude_code"
+    },
+    {
+      "value": "ovrix delta plan",
+      "kind": "phrase",
+      "session": "topic-graph-sparsity",
+      "placement": "tool",
+      "adapter": "claude_code"
+    },
+    {
+      "value": "lundric scale map",
+      "kind": "phrase",
+      "session": "csv-import-rounding",
+      "placement": "title",
+      "adapter": "claude_code"
+    }
+  ],
+  "absent": [
+    {
+      "value": "zzqorvexil",
+      "kind": "term"
+    },
+    {
+      "value": "zznultramod",
+      "kind": "term"
+    },
+    {
+      "value": "zzphlentari",
+      "kind": "term"
+    },
+    {
+      "value": "zzgrobunex",
+      "kind": "term"
+    },
+    {
+      "value": "zzymeldora",
+      "kind": "term"
+    },
+    {
+      "value": "zzqorvexil zzmundrel",
+      "kind": "phrase"
+    },
+    {
+      "value": "zznultramod zzweaveor",
+      "kind": "phrase"
+    },
+    {
+      "value": "zzphlentari zzvaultor",
+      "kind": "phrase"
+    }
+  ]
+}

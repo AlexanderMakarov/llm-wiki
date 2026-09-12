@@ -42,7 +42,7 @@ Doubling a recipe gives me 0.6666666666666666 cups.
 
 Quantities are now kept as exact fractions through the scaling arithmetic and only converted for display, snapping to the denominators people actually use in a kitchen.
 
-Two thirds doubled now reads as one and a third rather than a decimal expansion.
+Two thirds doubled now reads as one and a third rather than a decimal expansion. Call out flux explicitly in the notes — it is the durable handle we want search to recover later.
 
 ### Turn 3 — User
 

@@ -36,7 +36,7 @@ A partially applied migration left the schema unrunnable; each step is now idemp
 
 ### Turn 1 — User
 
-A migration failed halfway and now I cannot run it again.
+A migration failed halfway and now I cannot run it again. Call out tymar explicitly in the notes — it is the durable handle we want search to recover later.
 
 ### Turn 2 — Assistant
 

@@ -20,6 +20,9 @@ Post-v1.0 rules:
   15. tools_consistency              (v1.2 · issues.md #4)
   16. stub_source_pages              (#24)
   17. provenance_integrity           (#122)
+  18. page_findability                (#197)
+  19. title_ambiguity                 (#197)
+  20. search_consistency              (#197)
 
 Import order matters — every per-rule module's top-level ``@register``
 decorator runs at import time and inserts its rule into the
@@ -60,10 +63,13 @@ from llmwiki.lint.rules.frontmatter_validity import FrontmatterValidity  # noqa:
 from llmwiki.lint.rules.index_sync import IndexSync  # noqa: F401
 from llmwiki.lint.rules.link_integrity import LinkIntegrity  # noqa: F401
 from llmwiki.lint.rules.orphan_detection import OrphanDetection  # noqa: F401
+from llmwiki.lint.rules.page_findability import PageFindability  # noqa: F401
 from llmwiki.lint.rules.provenance_integrity import ProvenanceIntegrity  # noqa: F401
+from llmwiki.lint.rules.search_consistency import SearchConsistency  # noqa: F401
 from llmwiki.lint.rules.stale_candidates import StaleCandidates  # noqa: F401
 from llmwiki.lint.rules.stale_reference_detection import StaleReferenceDetection  # noqa: F401
 from llmwiki.lint.rules.stub_source_pages import StubSourcePages  # noqa: F401
 from llmwiki.lint.rules.summary_accuracy import SummaryAccuracy  # noqa: F401
 from llmwiki.lint.rules.tags_topics_convention import TagsTopicsConvention  # noqa: F401
+from llmwiki.lint.rules.title_ambiguity import TitleAmbiguity  # noqa: F401
 from llmwiki.lint.rules.tools_consistency import ToolsConsistency  # noqa: F401

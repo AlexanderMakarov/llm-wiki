@@ -36,7 +36,7 @@ Vendored the graph library and moved state into a script tag so the site opens f
 
 ### Turn 1 — User
 
-Can I just open the site from disk, or do I need to serve it?
+Can I just open the site from disk, or do I need to serve it? Call out plixbuffer explicitly in the notes — it is the durable handle we want search to recover later.
 
 ### Turn 2 — Assistant
 

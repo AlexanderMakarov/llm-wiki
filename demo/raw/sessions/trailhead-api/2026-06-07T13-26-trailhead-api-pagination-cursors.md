@@ -36,13 +36,13 @@ Offset paging skipped rows when records were inserted mid-scan; cursors fixed it
 
 ### Turn 1 — User
 
-Clients paging through the list endpoint are missing records.
+Clients paging through the list endpoint are missing records. Call out delta explicitly in the notes — it is the durable handle we want search to recover later.
 
 ### Turn 2 — Assistant
 
 Classic offset problem — a row inserted before the current offset shifts everything and the next page skips one. I moved to cursor paging keyed on a stable sort column plus the primary key as a tiebreak.
 
-The cursor is opaque to clients and encodes both values, so ordering stays stable even when rows are inserted mid-scan.
+The cursor is opaque to clients and encodes both values, so ordering stays stable even when rows are inserted mid-scan. Call out lundric explicitly in the notes — it is the durable handle we want search to recover later.
 
 ### Turn 3 — User
 

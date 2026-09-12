@@ -225,4 +225,4 @@ cool" isn't a new argument.*
 
 **Reason:** Never implemented. Docs and roadmaps advertised an eval framework / `llmwiki eval` as shipped since v0.3, and CI once ran a no-op behind `|| true`, so the check reported success while measuring nothing. Structural and wiki quality remains `llmwiki lint` / `/wiki-lint`.
 
-**Context:** #154. Do not reintroduce a scoring CLI unless it is a real subcommand with tests; until then, lint is the quality gate.
+**Context:** #154. Do not reintroduce a scoring CLI unless it is a real subcommand with tests; until then, lint is the quality gate. #197 takes that escape clause with `llmwiki search` (real subcommand + tests) and findability lint / pytest gates — still no `eval` command. See [`SEARCH-FINDABILITY.md`](SEARCH-FINDABILITY.md).

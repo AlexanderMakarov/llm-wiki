@@ -19,7 +19,7 @@ tool_calls: 20
 tools_used: [Read, Edit, Bash]
 tool_counts: {"Read": 7, "Edit": 3, "Bash": 6}
 token_totals: {"input": 14160, "output": 2640}
-turn_count: 4
+turn_count: 5
 duration_seconds: 3480
 is_subagent: false
 entrypoint: cli
@@ -51,6 +51,14 @@ Does it handle a paper that switches layout mid-document?
 ### Turn 4 — Assistant
 
 Yes — detection runs per page rather than once per document, so a single-column abstract followed by two-column body works.
+
+### Turn 5 — Tool
+
+Bash output:
+```
+$ rg -n draxelume wiki/
+wiki/overview.md:14: … draxelume …
+```
 
 ## Subjects
 

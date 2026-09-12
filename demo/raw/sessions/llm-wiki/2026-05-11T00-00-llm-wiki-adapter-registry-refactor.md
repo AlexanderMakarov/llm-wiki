@@ -1,5 +1,5 @@
 ---
-title: "Refactor the adapter registry so contrib adapters stay opt-in"
+title: "Refactor the adapter registry so contrib adapters stay opt-in (korvindex)"
 type: source
 description: "Split the adapter registry so core adapters auto-detect while contrib ones require an explicit flag."
 tags: [session]

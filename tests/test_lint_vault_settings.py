@@ -140,15 +140,18 @@ def test_a_disabled_rule_does_not_run_and_finds_nothing(warning_vault: Path):
         i for i in outcome.issues if i["rule"] != "link_integrity"
     ]
     assert "link_integrity" not in outcome.ran
-    assert outcome.skipped == {"link_integrity": "not applicable"}
-    assert len(outcome.ran) == len(REGISTRY) - 1
+    assert outcome.skipped["link_integrity"] == "not applicable"
+    # #197 findability rules also skip when LintOptions lacks search context.
+    for name in ("page_findability", "title_ambiguity", "search_consistency"):
+        assert outcome.skipped[name] == "search options not provided"
+    assert len(outcome.ran) == len(REGISTRY) - 1 - 3
 
 
 def test_the_runner_accepts_both_declared_shapes(warning_vault: Path):
     pages = load_pages(warning_vault / "wiki")
-    assert run_lint(pages, disabled=["link_integrity"]).skipped == {
-        "link_integrity": ""
-    }
+    skipped = run_lint(pages, disabled=["link_integrity"]).skipped
+    assert skipped["link_integrity"] == ""
+    assert "page_findability" in skipped
 
 
 def test_an_unknown_disabled_name_fails_loudly(warning_vault: Path):

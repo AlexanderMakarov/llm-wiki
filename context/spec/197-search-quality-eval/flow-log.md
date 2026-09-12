@@ -211,3 +211,106 @@ User resumed `/implement-feature` with: technical-considerations look good — s
 All implementation tasks → `general-purpose` (no Python specialist hired). QA → `testing-expert`. Informational only — not a blocking gate.
 
 - Next: commit-specs, then `/awos:implement`.
+
+## commit-specs — done (2026-09-10)
+
+- Commit `3ea7d6e` (after rebase: was `05ac075`) — `docs: add spec for #197 search quality and findability checks`.
+- Rebased onto `origin/main` @ `7bc1391` before implement.
+- Next: `/awos:implement`.
+
+## implement — started (2026-09-10)
+
+- Delegating Slice 1 tasks via coding subagents in worktree.
+
+## implement — Slice 1 done (2026-09-10)
+
+- `llmwiki/search/` package + MCP thin handlers + `tests/test_search_package.py` (16).
+- Full suite 5104 passed; ruff clean. Existing MCP tests untouched.
+- Intentional: extract title scoring via frontmatter; match scan completes then engines (budget_exhausted = scan).
+- Next: Slice 2 CLI.
+
+## implement — Slices 2–3 done (2026-09-10)
+
+- Slice 2: `llmwiki search` CLI + `tests/test_cli_search.py` (11) + minimal `docs/reference/cli.md` row.
+- Slice 3: three lint rules + `SearchContext` / `LintOptions`; demo disables `title_ambiguity` for known near-duplicates; findability ranks wiki-only.
+- Next: Slice 4 fixtures + acceptance.
+
+## implement — Slice 4 done (2026-09-10)
+
+- Generator plants terms/phrases + tool turns; fixtures `demo_search_terms.json` / `demo_search_baseline.json`; `tests/test_197_acceptance.py`.
+- Baseline on demo: mrr_extract 0.965825, mrr_match 0.970443, rank1_extract 0.935961, rank1_match 0.940887 (203 pages).
+- Planted survival into wiki = 0% until demo resynth — reported only.
+- Next: Slice 5 docs.
+
+## implement — Slice 4 done (2026-09-10)
+
+- Generator plants terms/phrases + tool turns; fixtures `demo_search_terms.json` / `demo_search_baseline.json`; `tests/test_197_acceptance.py`.
+- Baseline on demo: mrr_extract 0.965825, mrr_match 0.970443, rank1_extract 0.935961, rank1_match 0.940887 (203 pages).
+- Planted survival into wiki = 0% until demo resynth — reported only.
+- Next: Slice 5 docs.
+
+## implement — all slices done (2026-09-10)
+
+- Slices 1–6 complete in `tasks.md`. Suite green (~5188 collected). Uncommitted implementation still in worktree.
+- Slice 6 used `general-purpose` after `testing-expert` hit a usage limit.
+
+## verify — done (2026-09-10)
+
+Evidence against R1–R7:
+- R1: `llmwiki search` on demo returns JSON pages; CLI tests + CLI↔MCP parity regression.
+- R2–R4: lint rules + SearchContext; demo lint `page_findability`/`search_consistency` → 0 errors; survival info printed.
+- R5–R6: fixtures + `test_197_acceptance.py` exact baseline.
+- R7: docs + CHANGELOG + reference coverage green.
+- Spec Status → Completed.
+- Next: user smoke confirm (Step 8), then local review.
+
+## smoke feedback — match preview fix (2026-09-10)
+
+User found term-mode line previews hid the hit on long tags lines (`[:200]` from start). Fixed: `match_line_preview` keeps 150 chars before + 150 after the term. Phrase mode already used centred `extract_snippet` (~400 chars) — that is why it looked longer. Still awaiting overall smoke confirm for local review.
+
+## smoke feedback — unify snippet helper (2026-09-10)
+
+User asked both modes to use phrase-style `extract_snippet` (~400 centred). Removed `match_line_preview`; term-mode matching lines now call `extract_snippet` with the same default. Structure unchanged: term → lines, phrase → page snippet.
+
+## local-review — smoke confirmed (2026-09-11)
+
+User confirmed live-vault `llmwiki search` works (including centred snippet fix). Dispatching independent local review on `origin/main...HEAD`.
+
+## local-review — written (2026-09-11)
+
+- Review file: `context/spec/197-search-quality-eval/review.md` (gitignored, session-only).
+- Verdict: Request changes — 2 Blockers, 3 Nits.
+- Next: user keep/drop.
+
+## local-review keep/drop (2026-09-11)
+
+User: explain B2; elevate N1→blocker and fix; amend N2 tech for extract_snippet; N3 no action. B1 not decided yet.
+
+- N1 fixed: `iter_scanned_pages` + MCP/CLI term streaming; saturation break after page; test asserts one file read when caps fill.
+- N2: tech §2.2 amended (shape/ranking preserved; snippets via shared extract_snippet).
+
+## local-review — B1 + B2 fixed (2026-09-11)
+
+- **B2:** `select_present_terms(pages)` tokenises first/last scanned raw pages only (no unbounded `Path.read_text`); regression for oversize-skipped sessions.
+- **B1:** `collect_wikilink_lookups` + graph `build_page_alias_map` / `resolve_wikilink_target`; `page_findability` samples lookups, info count, errors name anchor + target; cold archive excluded via scan.
+
+## local-review keep/drop — B1+B2 fixed (2026-09-11)
+
+User asked fix both blockers then re-review.
+- B2: `select_present_terms(pages)` from scanned raw pages only.
+- B1: wikilink lookups via alias map + resolve in `page_findability`.
+- Next: local review pass 2.
+
+## local-review pass 2 — written (2026-09-11)
+
+- Review file: `context/spec/197-search-quality-eval/review.md`
+- Verdict: Request changes — 1 Blocker, 2 Nits (prior B1/B2/N1/N2 marked resolved).
+- Next: user keep/drop.
+
+## local-review pass 2 — keep all applied (2026-09-12)
+
+User chose fix-all (1).
+- Rebased onto `origin/main` (includes #249); CHANGELOG keeps #249/#229 verbatim + #197 bullets.
+- N1: bare wikilink path already used `search_match`; added `test_page_findability_bare_wikilink_uses_corpus_cap`.
+- N2: unused `content_root` already dropped.
+- Next: static gate, commit-push, remote gates.

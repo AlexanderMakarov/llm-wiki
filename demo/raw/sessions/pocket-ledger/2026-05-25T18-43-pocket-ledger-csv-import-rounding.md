@@ -1,5 +1,5 @@
 ---
-title: "Fix cent-rounding drift on imported statements"
+title: "Fix cent-rounding drift on imported statements (lundric scale map)"
 type: source
 description: "Repeated float rounding was losing a cent per few hundred rows; switched to integer minor units."
 tags: [session]

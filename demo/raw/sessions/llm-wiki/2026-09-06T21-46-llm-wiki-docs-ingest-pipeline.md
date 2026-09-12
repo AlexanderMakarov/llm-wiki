@@ -36,7 +36,7 @@ Added a path for pulling documents into the vault so the wiki is not limited to 
 
 ### Turn 1 — User
 
-I want reference documents in the wiki, not just my sessions.
+I want reference documents in the wiki, not just my sessions. Call out veldmark explicitly in the notes — it is the durable handle we want search to recover later.
 
 ### Turn 2 — Assistant
 

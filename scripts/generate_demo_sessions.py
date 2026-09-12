@@ -31,22 +31,36 @@ They stay in `raw/` for coverage but are skipped by default synth under
 Run from the repository root:
 
     python3 scripts/generate_demo_sessions.py --dry-run
-    python3 scripts/generate_demo_sessions.py --today 2026-08-10
+    python3 scripts/generate_demo_sessions.py --today 2026-09-08
     # release cut (default) — then synth/build demo/ and commit:
     # python3 scripts/generate_demo_sessions.py --today YYYY-MM-DD
+
+Also emits ``tests/fixtures/demo_search_terms.json`` (#197): planted present
+terms/phrases and synthetic absents confirmed absent by scan. The committed
+demo corpus currently matches ``--today 2026-09-08`` filenames.
 """
 
 from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import shutil
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEMO_SESSIONS = REPO_ROOT / "demo" / "raw" / "sessions"
+DEMO_VAULT = REPO_ROOT / "demo"
+SEARCH_TERMS_FIXTURE = REPO_ROOT / "tests" / "fixtures" / "demo_search_terms.json"
+
+#: Turn role → Conversation heading label (R5 tool-output placement).
+_ROLE_LABELS = {
+    "user": "User",
+    "assistant": "Assistant",
+    "tool": "Tool",
+}
 
 
 @dataclass(frozen=True)
@@ -387,6 +401,244 @@ SESSIONS: list[Session] = [
 ]
 
 
+# ─── #197 planted search terms / phrases (static; independent of --today) ─
+# Invented subject-matter words that cannot collide with privacy greps.
+# Keyed by (session slug, placement). Each present value appears in exactly
+# one placement. Phrase component words are seeded separately (below) so
+# extract-mode's whole-phrase bonus is under test.
+
+@dataclass(frozen=True)
+class PlantedPresent:
+    """One term or phrase that acceptance must find (#197 R5)."""
+
+    session: str
+    placement: str  # title | user | assistant | tool
+    value: str
+    kind: str  # term | phrase
+
+
+# Spread across the four demo adapters and four placements (R5).
+PLANTED_PRESENT: tuple[PlantedPresent, ...] = (
+    # terms — title
+    PlantedPresent("adapter-registry-refactor", "title", "korvindex", "term"),
+    PlantedPresent("category-rules-engine", "title", "orbicast", "term"),
+    PlantedPresent("shell-startup-profiling", "title", "marnitask", "term"),
+    PlantedPresent("backfill-gap-detection", "title", "brexinode", "term"),
+    # terms — user
+    PlantedPresent("project-page-aggregation", "user", "nexovault", "term"),
+    PlantedPresent("docs-ingest-pipeline", "user", "veldmark", "term"),
+    PlantedPresent("static-site-offline", "user", "plixbuffer", "term"),
+    PlantedPresent("search-index-chunks", "user", "skylorbit", "term"),
+    # terms — assistant
+    PlantedPresent("lint-rule-severities", "assistant", "tarnifold", "term"),
+    PlantedPresent("request-id-logging", "assistant", "syntraxon", "term"),
+    PlantedPresent("key-facts-prompt", "assistant", "wintrelap", "term"),
+    PlantedPresent("bibtex-key-collisions", "assistant", "quorilith", "term"),
+    # terms — tool
+    PlantedPresent("mcp-server-tools", "tool", "glypherun", "term"),
+    PlantedPresent("git-hooks-sync", "tool", "hexalume", "term"),
+    PlantedPresent("mqtt-reconnect-backoff", "tool", "farnodeck", "term"),
+    PlantedPresent("pdf-text-extraction", "tool", "draxelume", "term"),
+    # phrases — contiguous plant; component words seeded elsewhere
+    PlantedPresent("candidate-review-gate", "user", "zeldo route mesh", "phrase"),
+    PlantedPresent("incremental-synth-state", "assistant", "tymar flux gate", "phrase"),
+    PlantedPresent("topic-graph-sparsity", "tool", "ovrix delta plan", "phrase"),
+    PlantedPresent("csv-import-rounding", "title", "lundric scale map", "phrase"),
+)
+
+# Silent seeds: phrase words that must also occur apart from the phrase page.
+# Not listed in the present fixture (those entries are unique).
+PHRASE_WORD_SEEDS: tuple[tuple[str, str, str], ...] = (
+    # zeldo route mesh — route/mesh already recur in the authored corpus
+    ("wikilink-resolution", "assistant", "zeldo"),
+    # tymar flux gate — gate already common; seed tymar + flux
+    ("schema-migration-safety", "user", "tymar"),
+    ("ingredient-scaling", "assistant", "flux"),
+    # ovrix delta plan — plan already present; seed ovrix + delta
+    ("image-upload-limits", "user", "ovrix"),
+    ("pagination-cursors", "user", "delta"),
+    # lundric scale map — scale/map already present; seed lundric
+    ("pagination-cursors", "assistant", "lundric"),
+)
+
+# Synthetic absents — confirmed by scan after write. Phrase tokens must
+# *all* be invented: extract mode scores individual tokens, so a common
+# word like "cycle" would produce hits even when the whole phrase is absent.
+ABSENT_CANDIDATES: tuple[tuple[str, str], ...] = (
+    ("zzqorvexil", "term"),
+    ("zznultramod", "term"),
+    ("zzphlentari", "term"),
+    ("zzgrobunex", "term"),
+    ("zzymeldora", "term"),
+    ("zzqorvexil zzmundrel", "phrase"),
+    ("zznultramod zzweaveor", "phrase"),
+    ("zzphlentari zzvaultor", "phrase"),
+)
+
+
+def _session_by_slug() -> dict[str, Session]:
+    return {s.slug: s for s in SESSIONS}
+
+
+def _inject_into_text(text: str, value: str, *, kind: str) -> str:
+    """Append a plausible subject-matter sentence carrying ``value``."""
+    if kind == "phrase":
+        sentence = (
+            f"We should keep the {value} wording intact in the summary "
+            f"so later lookup can recover the whole phrase."
+        )
+    else:
+        sentence = (
+            f"Call out {value} explicitly in the notes — it is the durable "
+            f"handle we want search to recover later."
+        )
+    if text.rstrip().endswith((".", "!", "?")):
+        return f"{text.rstrip()} {sentence}"
+    return f"{text.rstrip()}. {sentence}"
+
+
+def _inject_title(title: str, value: str) -> str:
+    """Embed a planted value in the session title without looking like scaffolding."""
+    return f"{title} ({value})"
+
+
+def _tool_turn_for(value: str, *, kind: str) -> tuple[str, str]:
+    """Authored tool-output turn that carries a planted term or phrase."""
+    if kind == "phrase":
+        body = (
+            "Bash output:\n"
+            "```\n"
+            f"$ llmwiki search --mode phrase {value!r}\n"
+            f"1. wiki/sources/… — score 12.4 (phrase hit on {value})\n"
+            "```"
+        )
+    else:
+        body = (
+            "Bash output:\n"
+            "```\n"
+            f"$ rg -n {value} wiki/\n"
+            f"wiki/overview.md:14: … {value} …\n"
+            "```"
+        )
+    return ("tool", body)
+
+
+def _apply_injection(
+    s: Session,
+    placement: str,
+    value: str,
+    *,
+    kind: str,
+) -> Session:
+    """Return a copy of ``s`` with ``value`` planted at ``placement``."""
+    if placement == "title":
+        return replace(s, title=_inject_title(s.title, value))
+
+    turns = list(s.turns)
+    if placement == "tool":
+        # Prefer extending with a tool turn so R5's tool-output placement exists.
+        turns.append(_tool_turn_for(value, kind=kind))
+        return replace(s, turns=tuple(turns))
+
+    # user / assistant — inject into the first matching turn, or append one.
+    for i, (role, text) in enumerate(turns):
+        if role == placement:
+            turns[i] = (role, _inject_into_text(text, value, kind=kind))
+            return replace(s, turns=tuple(turns))
+    turns.append(
+        (placement, _inject_into_text("Noted for the record.", value, kind=kind))
+    )
+    return replace(s, turns=tuple(turns))
+
+
+def sessions_with_plants() -> list[Session]:
+    """Apply the static plant table (and phrase-word seeds) to authored sessions."""
+    by_slug = {s.slug: s for s in SESSIONS}
+    for plant in PLANTED_PRESENT:
+        if plant.session not in by_slug:
+            raise KeyError(f"planted session missing: {plant.session}")
+        by_slug[plant.session] = _apply_injection(
+            by_slug[plant.session],
+            plant.placement,
+            plant.value,
+            kind=plant.kind,
+        )
+    for session, placement, word in PHRASE_WORD_SEEDS:
+        if session not in by_slug:
+            raise KeyError(f"phrase-seed session missing: {session}")
+        by_slug[session] = _apply_injection(
+            by_slug[session], placement, word, kind="term"
+        )
+    # Preserve the authored SESSIONS order.
+    return [by_slug[s.slug] for s in SESSIONS]
+
+
+def _adapter_for_slug(slug: str) -> str:
+    return _session_by_slug()[slug].adapter
+
+
+def build_present_fixture_rows() -> list[dict[str, str]]:
+    """Fixture rows for present terms/phrases (generator is the source of truth)."""
+    rows: list[dict[str, str]] = []
+    for plant in PLANTED_PRESENT:
+        rows.append({
+            "value": plant.value,
+            "kind": plant.kind,
+            "session": plant.session,
+            "placement": plant.placement,
+            "adapter": _adapter_for_slug(plant.session),
+        })
+    return rows
+
+
+def confirm_absent(
+    candidates: tuple[tuple[str, str], ...],
+    corpus_blob_lower: str,
+) -> list[dict[str, str]]:
+    """Keep candidates whose full string *and* every token are absent.
+
+    Extract mode awards per-token hits, so an absent phrase is only safe
+    when none of its tokens appear anywhere in the vault either.
+    """
+    out: list[dict[str, str]] = []
+    for value, kind in candidates:
+        lower = value.lower()
+        if lower in corpus_blob_lower:
+            raise RuntimeError(
+                f"absent candidate {value!r} unexpectedly present in demo corpus"
+            )
+        for token in lower.split():
+            if token in corpus_blob_lower:
+                raise RuntimeError(
+                    f"absent candidate token {token!r} from {value!r} "
+                    f"is present in demo corpus"
+                )
+        out.append({"value": value, "kind": kind})
+    return out
+
+
+def emit_search_terms_fixture(
+    present: list[dict[str, str]],
+    absent: list[dict[str, str]],
+    dest: Path = SEARCH_TERMS_FIXTURE,
+) -> None:
+    """Write ``tests/fixtures/demo_search_terms.json`` (#197 §2.6)."""
+    payload = {
+        "_doc": (
+            "Planted present / synthetic absent search terms for #197 acceptance "
+            "(tests/test_197_acceptance.py). Written by "
+            "scripts/generate_demo_sessions.py when regenerating demo/raw/sessions. "
+            "present entries are keyed to a single (session, placement); absent "
+            "entries were confirmed missing from the demo vault by literal scan "
+            "at generation time. kind is term (match mode) or phrase (extract mode)."
+        ),
+        "present": present,
+        "absent": absent,
+    }
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+
 def frontmatter(s: Session, when: datetime, index: int) -> str:
     digest = hashlib.sha256(f"{s.project}/{s.slug}".encode()).hexdigest()
     sid = f"{digest[:8]}-{digest[8:12]}-{digest[12:16]}-{digest[16:20]}-{digest[20:32]}"
@@ -445,7 +697,10 @@ def body(s: Session, when: datetime) -> str:
     turn = 0
     for role, text in s.turns:
         turn += 1
-        out += [f"### Turn {turn} — {'User' if role == 'user' else 'Assistant'}", "", text, ""]
+        label = _ROLE_LABELS.get(role)
+        if label is None:
+            raise ValueError(f"unknown turn role {role!r} in session {s.slug}")
+        out += [f"### Turn {turn} — {label}", "", text, ""]
     out += ["## Subjects", ""]
     out += [f"- [[{name}]]" for name in s.subjects]
     out += [""]
@@ -462,7 +717,8 @@ def main() -> int:
     today = (datetime.strptime(args.today, "%Y-%m-%d").replace(tzinfo=UTC)
              if args.today else datetime.now(UTC)).replace(hour=0, minute=0, second=0, microsecond=0)
 
-    ordered = sorted(SESSIONS, key=lambda s: (-s.age_days, s.project, s.slug))
+    planted = sessions_with_plants()
+    ordered = sorted(planted, key=lambda s: (-s.age_days, s.project, s.slug))
     # Clock offsets use interactive-only indices so adding headless fixtures
     # (#180) does not rename existing session files the wiki already cites.
     interactive = [s for s in ordered if not s.is_headless]
@@ -473,25 +729,57 @@ def main() -> int:
     print(f"{len(ordered)} sessions · {len(projects)} projects · {len(adapters)} adapters"
           f" · {len(headless)} headless")
     print(f"  projects: {', '.join(projects)}")
-    print(f"  adapters: {', '.join(adapters)}\n")
+    print(f"  adapters: {', '.join(adapters)}")
+    print(f"  planted present: {len(PLANTED_PRESENT)} "
+          f"({sum(1 for p in PLANTED_PRESENT if p.kind == 'term')} terms · "
+          f"{sum(1 for p in PLANTED_PRESENT if p.kind == 'phrase')} phrases)\n")
 
     if not args.dry_run and DEMO_SESSIONS.exists():
         shutil.rmtree(DEMO_SESSIONS)
 
+    written_texts: list[str] = []
     for i, s in enumerate(clock_order):
         when = today - timedelta(days=s.age_days, hours=(i * 5) % 12, minutes=(i * 17) % 60)
         fname = f"{when:%Y-%m-%dT%H-%M}-{s.project}-{s.slug}.md"
         mark = " headless" if s.is_headless else ""
         print(f"  {when:%Y-%m-%d}  {s.adapter:<11} {s.project:<14} {s.slug}{mark}")
+        content = frontmatter(s, when, i) + "\n\n" + body(s, when)
+        written_texts.append(content)
         if not args.dry_run:
             dest = DEMO_SESSIONS / s.project / fname
             dest.parent.mkdir(parents=True, exist_ok=True)
-            dest.write_text(frontmatter(s, when, i) + "\n\n" + body(s, when), encoding="utf-8")
+            dest.write_text(content, encoding="utf-8")
+
+    present_rows = build_present_fixture_rows()
+    # Confirm absents against sessions just produced plus the rest of demo/.
+    blob_parts = list(written_texts)
+    if DEMO_VAULT.is_dir():
+        for path in DEMO_VAULT.rglob("*.md"):
+            # Skip sessions we are about to replace (already in written_texts).
+            try:
+                rel = path.resolve().relative_to(DEMO_SESSIONS.resolve())
+            except ValueError:
+                rel = None
+            if rel is not None and not args.dry_run:
+                continue
+            if rel is not None and args.dry_run:
+                continue
+            try:
+                blob_parts.append(path.read_text(encoding="utf-8", errors="replace"))
+            except OSError:
+                continue
+    corpus_blob = "\n".join(blob_parts).lower()
+    absent_rows = confirm_absent(ABSENT_CANDIDATES, corpus_blob)
 
     if args.dry_run:
         print("\ndry run — nothing written")
+        print(f"would emit {SEARCH_TERMS_FIXTURE.relative_to(REPO_ROOT)} "
+              f"({len(present_rows)} present · {len(absent_rows)} absent)")
     else:
+        emit_search_terms_fixture(present_rows, absent_rows)
         print(f"\nwrote {len(ordered)} sessions to {DEMO_SESSIONS}")
+        print(f"wrote {SEARCH_TERMS_FIXTURE.relative_to(REPO_ROOT)} "
+              f"({len(present_rows)} present · {len(absent_rows)} absent)")
     return 0
 
 

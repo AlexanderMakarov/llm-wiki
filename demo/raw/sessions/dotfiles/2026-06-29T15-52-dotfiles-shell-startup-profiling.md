@@ -1,5 +1,5 @@
 ---
-title: "Cut shell startup time by deferring completions"
+title: "Cut shell startup time by deferring completions (marnitask)"
 type: source
 description: "Startup was dominated by loading completion scripts that were rarely used."
 tags: [session]

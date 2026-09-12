@@ -19,7 +19,7 @@ tool_calls: 27
 tools_used: [Read, Edit, Bash]
 tool_counts: {"Read": 6, "Edit": 2, "Bash": 5}
 token_totals: {"input": 19140, "output": 3510}
-turn_count: 4
+turn_count: 5
 duration_seconds: 3360
 is_subagent: false
 entrypoint: cli
@@ -51,6 +51,14 @@ Does it give up eventually?
 ### Turn 4 — Assistant
 
 No, it keeps retrying at the ceiling. For a background collector, continuing to try is more useful than exiting and needing supervision to restart it.
+
+### Turn 5 — Tool
+
+Bash output:
+```
+$ rg -n farnodeck wiki/
+wiki/overview.md:14: … farnodeck …
+```
 
 ## Subjects
 

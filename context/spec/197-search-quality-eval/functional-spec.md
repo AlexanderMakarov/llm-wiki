@@ -1,7 +1,7 @@
 # Functional Specification: Search Command and Findability Checks
 
 - **Roadmap Item:** Quality gate for wiki retrieval — issue [#197](https://github.com/AlexanderMakarov/llm-wiki/issues/197)
-- **Status:** Approved
+- **Status:** Completed
 - **Author:** 4ellendger
 
 ---

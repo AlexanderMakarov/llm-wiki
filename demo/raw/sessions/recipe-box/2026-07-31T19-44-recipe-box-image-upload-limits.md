@@ -36,7 +36,7 @@ Oversized and mistyped uploads were rejected only after being written.
 
 ### Turn 1 — User
 
-Someone uploaded a video and it was stored before anything complained.
+Someone uploaded a video and it was stored before anything complained. Call out ovrix explicitly in the notes — it is the durable handle we want search to recover later.
 
 ### Turn 2 — Assistant
 

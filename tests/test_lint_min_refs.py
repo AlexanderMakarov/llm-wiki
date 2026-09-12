@@ -210,7 +210,7 @@ def test_every_registered_rule_runs_under_the_new_runner(vault: Path):
     raised = [i for i in issues if "rule raised exception" in i["message"]]
     assert raised == []
     # Sanity: the run really did exercise every rule.
-    assert len(REGISTRY) == 17
+    assert len(REGISTRY) == 20
 
 
 def test_run_all_defaults_to_the_stock_threshold(vault: Path):
