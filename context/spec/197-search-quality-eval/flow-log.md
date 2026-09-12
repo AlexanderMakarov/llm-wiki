@@ -330,3 +330,8 @@ User asked to drop SEARCH-FINDABILITY.md (DECLINED note only), stop duplicating 
 ## DRY — MCP search caps (2026-09-12)
 
 - `_MCP_SCAN_PER_FILE_BYTES` / `_MCP_SCAN_AGGREGATE_BYTES` / `_SEARCH_HIT_CAP` / `_SEARCH_PAGE_CAP` now alias `llmwiki.search` defaults; literals live only in `corpus.py` / `engine.py`. Nearby check: CLI already imported the shared defaults; `PAGE_CAP_FOR_FINDABILITY` remains a named alias of `DEFAULT_PAGE_CAP` for lint monkeypatches.
+
+## CI fix — tracked demo state + build smoke (2026-09-12)
+
+- After committing `demo/llmwiki-state.*` (#255), `lint-and-test` failed: CI step `Build smoke test with fixtures` ran `build --vault demo`, which stamps `ops.last_build_at` / `meta.updated_at`, then `git diff --exit-code` failed.
+- Fix: copy `demo/` → `ci-demo-vault` before that smoke build so the tracked checkout stays clean.

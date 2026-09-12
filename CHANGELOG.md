@@ -25,6 +25,7 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Fixed
 
+- **CI build smoke no longer dirties tracked demo state (#255 / #197)** — `lint-and-test` copies `demo/` to `ci-demo-vault` before `build`, so stamping `llmwiki-state.*` cannot fail the working-tree-clean gate.
 - **MCP search caps DRY (#197)** — `_MCP_SCAN_*` / `_SEARCH_*_CAP` in `llmwiki.mcp.server` are aliases of `llmwiki.search` defaults (no second copy of the 4 MiB / 50 MiB / 200 literals).
 - **Findability answer key (#197 local review)** — `select_present_terms` reads only scanned raw pages (no unbounded session `read_text`); `page_findability` also samples resolved `[[wikilink]]` lookups via the graph alias resolver and reports how many were checked.
   - *Release note:* Search consistency terms and wikilink findability checks stay within the searchable corpus (#197).
