@@ -17,6 +17,7 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Changed
 
+- **Demo ships `llmwiki-state` (#255 / #197)** — `demo/llmwiki-state.json` and `demo/llmwiki-state.js` are allowlisted in `.gitignore` and committed so Pages/Home Pipeline state is not an empty `synth.files` backlog. User vaults remain gitignored.
 - **README / getting-started / PyPI** — MCP + human site framing; scriptable `llmwiki add`; vault as a secure unified store; package `description` set to “LLM wiki to turn multiple agentic tool sessions into knowledge base for agents and humans”.
   - *Release note:* Docs and PyPI summary lead with multi-agent sessions → knowledge base for agents and humans.
 - **Brand system under maintainers** — `docs/design/brand-system.md` → [`docs/maintainers/brand-system.md`](docs/maintainers/brand-system.md); font preference + fallbacks (not OS-preinstall claims); CONTRIBUTING + style-guide link it for UI/CSS work; DECLINED qmd-as-dependency reason drops a pinned Python version.
