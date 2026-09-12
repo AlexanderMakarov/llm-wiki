@@ -42,6 +42,10 @@ from llmwiki.lint import LintOptions, UnknownRuleError, load_pages, run_lint
 from llmwiki.lint.report import render_json as render_lint_json
 from llmwiki.schema import PAGE_KINDS
 from llmwiki.search import (
+    DEFAULT_AGGREGATE_BUDGET,
+    DEFAULT_HIT_CAP,
+    DEFAULT_PAGE_CAP,
+    DEFAULT_PER_FILE_CAP,
     CorpusWalkStats,
     SearchContext,
     iter_scan_files,
@@ -557,21 +561,23 @@ def _is_read_page_allowed(p: Path) -> bool:
     return False
 
 
-_SEARCH_HIT_CAP = 200
+# Output / scan caps — single source of truth is ``llmwiki.search`` (#197).
+# Module-level aliases stay so #483 / safety tests can monkeypatch these names
+# without redefining the numeric literals.
+_SEARCH_HIT_CAP = DEFAULT_HIT_CAP
 
 # A page rendered without any body line still costs one output row, so the
 # matching-line cap alone does not bound the response. Cap the pages too.
-_SEARCH_PAGE_CAP = 200
+_SEARCH_PAGE_CAP = DEFAULT_PAGE_CAP
 
 # #483: per-file + aggregate byte caps for wiki_search / wiki_query.
 # Without these, a single large file (e.g. a 100MB Obsidian transcript
 # with embedded video, or a malicious user-supplied .md) gets fully
-# read into memory by every MCP call. _SEARCH_HIT_CAP capped output
+# read into memory by every MCP call. Hit/page caps above bound output
 # only — the loop still read every byte of every file. Cap inputs
 # explicitly so the worst-case is bounded regardless of corpus shape.
-# Module-level so tests can monkeypatch the caps (#483).
-_MCP_SCAN_PER_FILE_BYTES = 4 * 1024 * 1024   # 4 MiB / file
-_MCP_SCAN_AGGREGATE_BYTES = 50 * 1024 * 1024  # 50 MiB / call
+_MCP_SCAN_PER_FILE_BYTES = DEFAULT_PER_FILE_CAP
+_MCP_SCAN_AGGREGATE_BYTES = DEFAULT_AGGREGATE_BUDGET
 
 
 def _read_capped(p: Path, *, remaining_budget: int) -> tuple[str, int]:

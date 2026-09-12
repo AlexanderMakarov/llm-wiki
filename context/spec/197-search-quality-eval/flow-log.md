@@ -326,3 +326,7 @@ User asked to drop SEARCH-FINDABILITY.md (DECLINED note only), stop duplicating 
 
 - Filed #255: demo Pipeline state on GitHub Pages should match a real vault (state gitignored → Pages shows full backlog).
 - Eval on updated sessions: 20/20 plants found in raw (0% wiki survival until session re-synth); wiki title MRR/rank1 still equals baseline (wiki unchanged); raw session title known-item MRR/rank1 = 1.0.
+
+## DRY — MCP search caps (2026-09-12)
+
+- `_MCP_SCAN_PER_FILE_BYTES` / `_MCP_SCAN_AGGREGATE_BYTES` / `_SEARCH_HIT_CAP` / `_SEARCH_PAGE_CAP` now alias `llmwiki.search` defaults; literals live only in `corpus.py` / `engine.py`. Nearby check: CLI already imported the shared defaults; `PAGE_CAP_FOR_FINDABILITY` remains a named alias of `DEFAULT_PAGE_CAP` for lint monkeypatches.
