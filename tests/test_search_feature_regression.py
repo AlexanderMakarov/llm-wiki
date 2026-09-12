@@ -1,14 +1,14 @@
-"""End-to-end / regression gaps for #197 (Slice 6).
+"""Search CLI / lint / MCP parity regression (beyond unit suites).
 
 # @layer: integration
 # @spec: 197-search-quality-eval
 # @regression
 
-Fills whole-feature gaps not owned by Slice 1–4 suites:
+Fills whole-feature gaps not owned by package/CLI/lint unit suites:
 CLI↔MCP result agreement, CLI lint on crafted defects, bulk phrase empty
 entries, vault content immutability, and ``query`` still distinct/working.
 
-Does **not** re-assert demo MRR / rank-1 baselines (see ``test_197_acceptance``).
+Does **not** re-assert demo MRR / rank-1 baselines (see ``test_search_acceptance``).
 Never targets a live Obsidian vault — only ``tmp_path`` fixtures.
 """
 

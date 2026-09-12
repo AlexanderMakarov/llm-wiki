@@ -1,4 +1,4 @@
-"""Whole-feature acceptance gate for #197 search quality (Slice 4 / R5–R6).
+"""Demo vault search findability acceptance (planted terms + ranking baseline).
 
 # @layer: integration
 # @spec: 197-search-quality-eval

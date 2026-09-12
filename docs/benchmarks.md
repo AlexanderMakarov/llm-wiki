@@ -96,41 +96,6 @@ The command palette and search are vanilla JS (~4 KB minified).
 6. **CDN fonts** — Inter and JetBrains Mono load from Google Fonts
    with `display=swap`
 
-## Findability (demo vault, #197)
-
-Known-item ranking for titled pages in the committed `demo/` vault, measured with `llmwiki.search` over **wiki pages only** (title queries). Source of truth: [`tests/fixtures/demo_search_baseline.json`](../tests/fixtures/demo_search_baseline.json). Exact comparison in CI — update the fixture deliberately when demo content changes.
-
-| Metric | match (term) | extract (phrase) |
-|---|---|---|
-| Mean reciprocal rank (MRR) | 0.970443 | 0.965825 |
-| Share ranked first for own title | 0.940887 | 0.935961 |
-
-Every titled demo page must be returned for its own title (found-rate = 1.0); that invariant is asserted directly and is not stored in the baseline.
-
-### Survival share by placement × adapter
-
-Share of planted *present* terms from [`tests/fixtures/demo_search_terms.json`](../tests/fixtures/demo_search_terms.json) that also appear in wiki page text. Reported by `tests/test_197_acceptance.py` without asserting a threshold — synthesis loss is normal.
-
-| Placement | Adapter | Survived / planted |
-|---|---|---|
-| assistant | claude_code | 0/2 |
-| assistant | codex_cli | 0/1 |
-| assistant | cursor_cli | 0/1 |
-| assistant | openclaw | 0/1 |
-| title | claude_code | 0/2 |
-| title | codex_cli | 0/1 |
-| title | cursor_cli | 0/1 |
-| title | openclaw | 0/1 |
-| tool | claude_code | 0/3 |
-| tool | cursor_cli | 0/1 |
-| tool | openclaw | 0/1 |
-| user | claude_code | 0/3 |
-| user | cursor_cli | 0/1 |
-| user | openclaw | 0/1 |
-| **overall** | | **0/20 (0%)** |
-
-Planted terms live in `demo/raw/sessions/` only until those sessions are re-synthesized into `demo/wiki/`. Until then, wiki survival stays at zero for every placement × adapter cell — that is expected corpus state, not a findability regression. Re-measure and refresh this table when demo wiki content changes.
-
 ## Scaling notes
 
 - **1,000+ sessions**: build time scales linearly. Expect ~45 seconds. Still well within the 30-second CI budget if the machine is faster than a base M2.

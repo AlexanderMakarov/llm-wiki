@@ -10,7 +10,7 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Added
 
-- **`llmwiki search` and findability lint (#197)** — literal term/phrase CLI (`--mode`, bulk `--terms-file` / stdin, `--vault`) sharing the MCP search engine; lint rules `page_findability`, `title_ambiguity`, `search_consistency` (survival share is informational). Term and phrase modes share `extract_snippet` (~400 characters centred on the hit). Demo baseline + acceptance gate; docs in CLI/slash reference, [`docs/benchmarks.md`](docs/benchmarks.md), [`docs/maintainers/SEARCH-FINDABILITY.md`](docs/maintainers/SEARCH-FINDABILITY.md).
+- **`llmwiki search` and findability lint (#197)** — literal term/phrase CLI (`--mode`, bulk `--terms-file` / stdin, `--vault`) sharing the MCP search engine; lint rules `page_findability`, `title_ambiguity`, `search_consistency` (survival share is informational). Term and phrase modes share `extract_snippet` (~400 characters centred on the hit). Demo planted terms are regenerated with `scripts/generate_demo_sessions.py` into `tests/fixtures/demo_search_terms.json` (in-place by slug; convert-shaped bodies with varied `user_messages`); ranking baselines live only in `tests/fixtures/demo_search_baseline.json` (pytest gate, not docs).
   - *Release note:* `llmwiki search` plus findability lint rules; demo search quality gated in CI (#197).
 - **Product principles** — [`docs/maintainers/principles.md`](docs/maintainers/principles.md) (MCP for agents, site for humans, scriptable add, candidate gate).
   - *Release note:* Product design intentions live in `docs/maintainers/principles.md`.

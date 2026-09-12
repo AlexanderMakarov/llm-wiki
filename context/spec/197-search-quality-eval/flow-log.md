@@ -314,3 +314,15 @@ User chose fix-all (1).
 - N1: bare wikilink path already used `search_match`; added `test_page_findability_bare_wikilink_uses_corpus_cap`.
 - N2: unused `content_root` already dropped.
 - Next: static gate, commit-push, remote gates.
+
+## review feedback — demo generator (2026-09-12)
+
+User asked to drop SEARCH-FINDABILITY.md (DECLINED note only), stop duplicating findability numbers in docs/benchmarks.md, rename `test_197_*` → feature names, and harden demo session generation:
+- In-place-by-slug writes (option B): filenames stick; `--today` only moves frontmatter dates.
+- Bodies match `llmwiki.convert` (shared turn index, `**Tools used:**` / `**Tool results:**`); activity profiles vary `user_messages` (1…15) so the sessions index is not a flat MSGS=2.
+- Plants apply after expansion so short profiles cannot drop tool plants; `demo_search_terms.json` still emitted every run.
+
+## follow-up (2026-09-12)
+
+- Filed #255: demo Pipeline state on GitHub Pages should match a real vault (state gitignored → Pages shows full backlog).
+- Eval on updated sessions: 20/20 plants found in raw (0% wiki survival until session re-synth); wiki title MRR/rank1 still equals baseline (wiki unchanged); raw session title known-item MRR/rank1 = 1.0.

@@ -1,5 +1,5 @@
 {
-  "_doc": "Planted present / synthetic absent search terms for #197 acceptance (tests/test_197_acceptance.py). Written by scripts/generate_demo_sessions.py when regenerating demo/raw/sessions. present entries are keyed to a single (session, placement); absent entries were confirmed missing from the demo vault by literal scan at generation time. kind is term (match mode) or phrase (extract mode).",
+  "_doc": "Planted present / synthetic absent search terms for demo search acceptance (tests/test_search_acceptance.py). Written by scripts/generate_demo_sessions.py on every regenerate of demo/raw/sessions \u2014 never hand-edit. present entries are keyed to a single (session, placement); absent entries were confirmed missing from the demo vault by literal scan at generation time. kind is term (match mode) or phrase (extract mode).",
   "present": [
     {
       "value": "korvindex",
