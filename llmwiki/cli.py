@@ -22,6 +22,7 @@ from contextlib import ExitStack
 from datetime import UTC, datetime
 from datetime import date as _date
 from pathlib import Path
+from types import ModuleType
 from typing import Any
 
 from llmwiki import (
@@ -1608,6 +1609,11 @@ _MIGRATIONS: tuple[tuple[str, str, str], ...] = (
         "Run when you publish or share raw/ and still see real usernames encoded in session paths (for example -Users-<you>-…). Prefer this over sync --force: agent stores are often short-lived, and a force re-sync can miss older files or trigger unnecessary synth. Does not touch wiki/ or call a synthesis backend.",
     ),
     (
+        "raw-unredaction",
+        "Rewrite already-synced raw/sessions/*.md so the USER placeholder in home-path and dash-encoded segments becomes your real username again (bare USER words in prose are left alone).",
+        "Run after upgrading to a release where private vaults keep real paths by default, if older raw/ files still show /Users/USER/… next to real paths. Skip it if you publish or share raw/. Does not touch wiki/ or call a synthesis backend.",
+    ),
+    (
         "tools-used",
         "Expand opaque CallMcpTool / GetMcpTools entries in raw/sessions frontmatter into concrete mcp__server__tool names by re-reading the originating agent session file when it still exists.",
         "Run after upgrading Analytics / tool-usage views if older synced sessions still show CallMcpTool stubs and the origin transcript is still on disk. Skips files whose origin store is gone (TTL or deleted). Does not synthesise wiki pages or invent tool names.",
@@ -1667,8 +1673,8 @@ def cmd_migrate_state(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_migrate_raw_redaction(args: argparse.Namespace) -> int:
-    """#56: deterministic username redaction rewrite of raw/sessions (no synth)."""
+def _load_raw_username_migrator() -> ModuleType | None:
+    """Load ``scripts/migrate_raw_encoded_username.py``; print an error and return None if missing."""
 
     script = REPO_ROOT / "scripts" / "migrate_raw_encoded_username.py"
     spec = importlib.util.spec_from_file_location(
@@ -1676,9 +1682,18 @@ def cmd_migrate_raw_redaction(args: argparse.Namespace) -> int:
     )
     if spec is None or spec.loader is None:
         print(f"error: migration script missing: {script}", file=sys.stderr)
-        return 2
+        return None
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
+    return mod
+
+
+def _run_raw_username_migration(args: argparse.Namespace, runner_name: str) -> int:
+    """Run the raw/sessions username migration ``runner_name`` and print its report."""
+
+    mod = _load_raw_username_migrator()
+    if mod is None:
+        return 2
     vault = getattr(args, "vault", None)
     if not vault:
         print(
@@ -1688,7 +1703,7 @@ def cmd_migrate_raw_redaction(args: argparse.Namespace) -> int:
         )
         return 2
     try:
-        report = mod.run_migration(
+        report = getattr(mod, runner_name)(
             vault=Path(vault),
             real_username=getattr(args, "real_username", None),
             replacement_username=getattr(args, "replacement_username", None),
@@ -1699,6 +1714,18 @@ def cmd_migrate_raw_redaction(args: argparse.Namespace) -> int:
         return 2
     mod.print_report(report)
     return 1 if report["errors"] else 0
+
+
+def cmd_migrate_raw_redaction(args: argparse.Namespace) -> int:
+    """#56: deterministic username redaction rewrite of raw/sessions (no synth)."""
+
+    return _run_raw_username_migration(args, "run_migration")
+
+
+def cmd_migrate_raw_unredaction(args: argparse.Namespace) -> int:
+    """#253: restore real usernames in raw/sessions paths (reverse of raw-redaction)."""
+
+    return _run_raw_username_migration(args, "run_unredaction")
 
 
 def cmd_migrate_tools_used(args: argparse.Namespace) -> int:
@@ -3275,6 +3302,33 @@ def build_parser() -> argparse.ArgumentParser:
         help="Override replacement placeholder (default USER)",
     )
     migrate_raw.set_defaults(func=cmd_migrate_raw_redaction)
+
+    migrate_unraw = add_migration(
+        "raw-unredaction", *_mig_by_name["raw-unredaction"],
+        short="Restore real usernames in raw/sessions paths (reverse of raw-redaction)",
+    )
+    migrate_unraw.add_argument(
+        "--vault",
+        type=Path,
+        required=True,
+        help="Vault root containing raw/sessions/",
+    )
+    migrate_unraw.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Report would-change files; write nothing",
+    )
+    migrate_unraw.add_argument(
+        "--real-username",
+        default=None,
+        help="Override redaction.real_username (the name to restore)",
+    )
+    migrate_unraw.add_argument(
+        "--replacement-username",
+        default=None,
+        help="Override the placeholder to replace (default USER)",
+    )
+    migrate_unraw.set_defaults(func=cmd_migrate_raw_unredaction)
 
     migrate_tools = add_migration(
         "tools-used", *_mig_by_name["tools-used"],

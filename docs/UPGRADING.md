@@ -10,6 +10,15 @@ How to upgrade between `llmwiki` releases. Most releases are drop-in (`pip insta
 
 The canonical per-release detail is [CHANGELOG.md](https://github.com/AlexanderMakarov/llm-wiki/blob/main/CHANGELOG.md) — this guide focuses on "what might break".
 
+## Unreleased — private vaults keep real home paths (#253)
+
+Behaviour flip, no required migration. `sync` (and `llmwiki add` `source:` paths) no longer rewrite the home-path username to `USER` by default: new key `redaction.redact_username` defaults to `false`. API key, token, and email redaction is unchanged and still always runs.
+
+- **Mixed vault after upgrade:** files synced before the upgrade keep `/Users/USER/…` / `-Users-USER-…`; new files carry real paths. The site restores cwd either way.
+- **Restore real paths in old files:** `llmwiki migrate raw-unredaction --vault PATH --dry-run`, then without `--dry-run`, then `llmwiki build --vault PATH`. It touches only home-path and dash-encoded positions, never a bare `USER` word, and is idempotent.
+- **Warning — repositories that commit `raw/`:** a vault synced by the composite Action (`action.yml`) or the reusable workflow (`.github/workflows/llmwiki-action.yml`) runs `llmwiki sync` inside the repository checkout, so real home paths land in committed files. Such repositories must set `"redact_username": true` under `redaction` in `config.json`. This matters most on self-hosted runners, whose home directory belongs to a real account.
+- **You share `raw/` or publish the site:** set `"redact_username": true` under `redaction` in `config.json` before the next sync, and run `llmwiki migrate raw-redaction --vault PATH` for files synced after the upgrade.
+
 ## Unreleased — Session `description:` assigned names + scored fallback (#249)
 
 No migration. After upgrade, optional refresh of existing raw sessions:
@@ -254,7 +263,7 @@ llmwiki build --vault /path/to/their/vault
 
 ### Config note
 
-If root `config.json` copied the examples placeholder `"redaction": { "real_username": "" }`, #56 re-autodetects after overlay so restore works again. No manual config edit required unless the user intentionally disabled username redaction.
+If root `config.json` copied the examples placeholder `"redaction": { "real_username": "" }`, #56 re-autodetects after overlay so restore works again. No manual config edit required unless the user wants username redaction, which needs `redaction.redact_username: true` (#253).
 
 ## Downgrading is guarded (#29)
 

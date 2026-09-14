@@ -250,7 +250,7 @@ The viewer is vanilla JS with no error boundary and no telemetry — a swallowed
 
 llmwiki processes session transcripts that may contain PII, API keys, file paths, and secrets. These rules are **non-negotiable**:
 
-1. **Redaction is on by default.** Username, API keys, tokens, passwords, and emails are redacted before anything hits `raw/`.
+1. **Secret redaction is on by default.** API keys, tokens, passwords, and emails are redacted before anything hits `raw/`. Home-path usernames stay real unless `redaction.redact_username: true`, which you set before sharing or committing `raw/` or publishing the site.
 2. **Never commit real session data.** `raw/` is gitignored. Fixtures under `tests/fixtures/` must be synthetic or heavily redacted.
 3. **Never commit machine-specific paths.** No `.claude/settings.local.json`, no `.ingestion-state.json`, no `.framework/`, no `.temp/`.
 4. **Privacy grep** runs in the test suite (`tests/test_privacy_username.py`): tracked `.md` / `.py` must not contain the upstream maintainer's real username (fixtures use `USER`).

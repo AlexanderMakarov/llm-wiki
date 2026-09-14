@@ -58,6 +58,7 @@ The default redaction config covers `/Users/<you>/` and `/home/<you>/` (Unix), b
 ```jsonc
 {
   "redaction": {
+    "redact_username": true,
     "real_username": "<YOUR_WINDOWS_USERNAME>",
     "extra_patterns": [
       "C:\\\\Users\\\\<YOUR_WINDOWS_USERNAME>\\\\[^\\\"]*",

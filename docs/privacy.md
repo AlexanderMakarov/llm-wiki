@@ -6,7 +6,7 @@ llmwiki processes session transcripts that can contain PII, API keys, file paths
 
 These are non-negotiable and enforced in both code and CI:
 
-1. **Redaction is ON by default.** Username, API keys, tokens, passwords, and emails are redacted before anything hits `raw/`.
+1. **Secret redaction is ON by default.** API keys, tokens, passwords, and emails are redacted before anything hits `raw/`. Home-path usernames stay real by default so a private vault keeps usable paths; set `redaction.redact_username: true` before sharing (see [Private vault vs. sharing](#private-vault-vs-sharing)).
 2. **Nothing listens.** llmwiki ships no server; the built site is files you open in a browser.
 3. **No telemetry, ever.** The tool never calls home. No usage counts, no adapter pings, no error uploads.
 4. **No network by default.** Everything runs offline after install. `--synthesize` is the one exception — it calls the local `claude` binary on your machine — and it's opt-in.
@@ -20,7 +20,7 @@ Everything in this table is redacted at the **converter** layer — the moment e
 
 | Pattern | What matches | Replacement |
 |---|---|---|
-| Username in paths | `/Users/<you>/…`, `/home/<you>/…`, and dash-encoded store segments (`-Users-<you>-…`, `-home-<you>-…`) | `/Users/USER/…`, `-Users-USER-…` |
+| Username in paths (only with `redaction.redact_username: true`; off by default) | `/Users/<you>/…`, `/home/<you>/…`, and dash-encoded store segments (`-Users-<you>-…`, `-home-<you>-…`) | `/Users/USER/…`, `-Users-USER-…` |
 | API key tokens | `(?i)(api[_-]?key\|secret\|token\|bearer\|password)[\"'\s:=]+[\w\-\.]{8,}` | `<REDACTED>` |
 | Anthropic/OpenAI keys | `sk-[A-Za-z0-9]{20,}` | `<REDACTED>` |
 | Emails | `[\w.+-]+@[a-zA-Z0-9-]+\.[\w.-]+` | `<REDACTED>` |
@@ -28,7 +28,15 @@ Everything in this table is redacted at the **converter** layer — the moment e
 
 All patterns live in `examples/sessions_config.json` under `redaction.extra_patterns`. You can add your own (company domain, customer names, internal hostnames, etc.).
 
-**Already-synced `raw/`:** new syncs apply encoded-segment redaction automatically. Files written before that change keep whatever was on disk (`raw/` is immutable during normal sync). To rewrite them without re-converting from agent stores (transcripts are often gone after ~30 days) and without re-synthesizing wiki pages, run `llmwiki migrate raw-redaction --vault PATH` — see [UPGRADING.md](UPGRADING.md) and [CLI reference](reference/cli.md#raw-redaction--deterministic-username-rewrite-in-raw).
+## Private vault vs. sharing
+
+A private vault is the default: `redaction.redact_username` is `false`, so `raw/` keeps your real home paths (`/home/<you>/…`), which agents and the site can use as-is. Token, key, and email redaction still runs on every sync regardless of this flag.
+
+Before you share or commit `raw/`, or publish the built site anywhere, set `"redact_username": true` under `redaction` in `config.json` so new syncs write the `USER` placeholder, and run `llmwiki migrate raw-redaction --vault PATH` to rewrite files already on disk. `redact_username` controls paths stored in `raw/` and in page bodies; the site's `cwd` display is resolved against the home directory of the machine running `build` (`display_cwd`), so publishers should build where that local root is what they want shown.
+
+To go back to real paths in a vault synced while username redaction was on, set `redact_username` to `false` (or leave the default), then run `llmwiki migrate raw-unredaction --vault PATH` followed by `llmwiki build --vault PATH`. It only rewrites the placeholder where it sits in a home-path or dash-encoded path segment; a bare `USER` word in prose is left alone. Placeholder paths typed on purpose (for example a quoted "use `/home/USER/…`") are rewritten too, and every file gets the one username of the current machine, so review the `--dry-run` output first (see [`raw-unredaction`](reference/cli.md)).
+
+**Already-synced `raw/`:** with `redact_username: true`, new syncs apply encoded-segment redaction automatically. Files written before that change keep whatever was on disk (`raw/` is immutable during normal sync). To rewrite them without re-converting from agent stores (transcripts are often gone after ~30 days) and without re-synthesizing wiki pages, run `llmwiki migrate raw-redaction --vault PATH` — see [UPGRADING.md](UPGRADING.md) and [CLI reference](reference/cli.md#raw-redaction--deterministic-username-rewrite-in-raw).
 
 ## What is NOT redacted by default
 
@@ -46,6 +54,7 @@ Edit `config.json`:
 ```jsonc
 {
   "redaction": {
+    "redact_username": true,  // only when sharing raw/ or the site
     "real_username": "your-unix-username",
     "replacement_username": "USER",
     "extra_patterns": [

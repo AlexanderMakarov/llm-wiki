@@ -472,8 +472,9 @@ If you have MCP access, the llmwiki MCP server exposes six tools
 
 Every session in `raw/` was converted from a `.jsonl` transcript by an
 agent-specific adapter (Claude Code, Codex CLI, Cursor, Obsidian,
-Gemini CLI, or PDF). The converter runs redaction on username, API keys,
-tokens, and emails before anything hits disk. The wiki layer was then
+Gemini CLI, or PDF). The converter redacts API keys, tokens, and emails
+(and, when `redaction.redact_username` is on, home-path usernames) before
+anything hits disk. The wiki layer was then
 compiled by an LLM (the user's coding agent) following the workflows in
 `CLAUDE.md` and `AGENTS.md`.
 

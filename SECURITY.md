@@ -66,9 +66,11 @@ Include:
 llmwiki is built around privacy. Before reporting, it helps to know
 what's already in place:
 
-- **Redaction is on by default** — username, API keys, tokens,
+- **Secret redaction is on by default** — API keys, tokens,
   passwords, and emails are regex-redacted before anything hits
-  `raw/sessions/`
+  `raw/sessions/`. Home-path usernames stay real unless
+  `redaction.redact_username: true` (set it before sharing or
+  committing `raw/`, or publishing the site)
 - **No telemetry, ever** — the tool never calls home
 - **Localhost-only binding** — the built-in server binds to `127.0.0.1`
   unless the user explicitly passes `--host 0.0.0.0`
@@ -84,3 +86,7 @@ what's already in place:
 
 Report anything that undermines these guarantees as a security issue,
 not a regular bug.
+
+Real home paths in a private vault's `raw/` under the default config are
+expected, not a redaction bypass. A bypass means leaked secrets, or
+usernames leaking while `redaction.redact_username: true`.

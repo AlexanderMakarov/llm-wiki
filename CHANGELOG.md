@@ -17,6 +17,8 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Changed
 
+- **Breaking:** **Private vaults keep real home paths in `raw/` (#253)** — new `redaction.redact_username` (default `false`) gates only the home-path username rewrite in `sync` and `llmwiki add` `source:` paths; token/key/email redaction stays unconditional. New `llmwiki migrate raw-unredaction` restores the real username in already-synced `raw/sessions/` (home-path and dash-encoded positions only; idempotent). `migrate raw-redaction` still redacts regardless of the key.
+  - *Release note:* `sync` no longer rewrites your username to `USER`; set `redaction.redact_username: true` before sharing `raw/`, or run `migrate raw-unredaction` to restore old files (#253).
 - **Release demo gate script (#240)** — `scripts/release_demo_gate.py` regenerates `demo/usage/` for release-day `--today`, builds a local demo site, prints a `file://` URL, runs case-fold pytest + demo lint; `/release` and `RELEASE_PROCESS.md` pause for human visual OK before tag push. Pages/CI still only deploy committed `demo/` (no content invention).
   - *Release note:* Maintainer release cut uses `release_demo_gate.py` + local demo review before tagging (#240).
 - **Demo ships `llmwiki-state` (#255 / #197)** — `demo/llmwiki-state.json` and `demo/llmwiki-state.js` are allowlisted in `.gitignore` and committed so Pages/Home Pipeline state is not an empty `synth.files` backlog. User vaults remain gitignored.

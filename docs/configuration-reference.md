@@ -154,6 +154,7 @@ cp examples/sessions_config.json config.json
   },
 
   "redaction": {
+    "redact_username": false,
     "real_username": "",
     "replacement_username": "USER",
     "extra_patterns": [
@@ -223,6 +224,7 @@ Optional absolute date gate so bare `llmwiki sync` does not ingest years of hist
 | `filters` | `since` | string | unset (unlimited) | Shared sync lookback as absolute `YYYY-MM-DD`. Absent or empty = no shared date gate. Overridden per run by CLI `--since`. See [Sync lookback](#sync-lookback) |
 | `filters` | `exclude_headless` | bool | true | Skip automated / headless launches across coding-agent adapters (Claude SDK markers; Cursor Agent CLI `subagentInfo` / `approvalMode=auto-review`; OpenClaw never skipped; others false until markers exist). Prevents the synthesis feedback loop. Applies at **both** ingest and synthesis. See [multi-agent-setup.md](multi-agent-setup.md#what-automated-headless-means) |
 | `filters` | `exclude_temp_cwd` | bool | false | Opt-in: skip sessions whose `cwd` is a throwaway temp dir (`/tmp`, `/var/folders`, …). Off by default — a git worktree under `/tmp` is often real work |
+| `redaction` | `redact_username` | bool | `false` | Rewrite the home-path username to `replacement_username` in `raw/` (and `llmwiki add` `source:` paths). Off keeps real paths for a private vault; turn on before sharing `raw/` or publishing the site. Token/email redaction runs either way (#253) |
 | `redaction` | `real_username` | string | `$USER` | Your OS username (auto-detected if empty) |
 | `redaction` | `replacement_username` | string | `USER` | Replacement in path redaction |
 | `redaction` | `extra_patterns` | list | [3 regexes] | Additional Python regex patterns to redact |

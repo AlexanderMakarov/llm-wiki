@@ -73,7 +73,7 @@ Same scoring (/25). llmwiki scored **22/25** on 2026-04-08 (see `_progress.md`).
 | Optional deps | `graphifyy` (advanced graph layout) | Detected, not required. PDF ingestion was removed in the simplification sweep. |
 | No-network by default | True | Privacy + offline-first |
 | Binding default | `127.0.0.1` only | Privacy-first — user must opt-in to LAN |
-| Redaction default | ON | Username, API keys, tokens, emails — all redacted |
+| Redaction default | ON | API keys, tokens, emails redacted; home-path username only with `redaction.redact_username: true` |
 | Config file | JSON, single file | TOML excluded because `tomllib` is 3.11+ only |
 | Distribution | Git-native (clone + `./setup.sh`) | v0.1. pip-installable from git in v0.2 |
 | Branch name | `master` | Matches author's other projects |
@@ -187,7 +187,7 @@ If any metric exceeds its budget, the offending change is blocked or must be pre
 
 ### Privacy-First rules (cross-cutting)
 
-1. **Redaction is on by default.** Username, API keys, tokens, and emails are redacted at the converter layer, before anything hits `raw/`.
+1. **Secret redaction is on by default.** API keys, tokens, and emails are redacted at the converter layer, before anything hits `raw/`. Home-path usernames stay real unless `redaction.redact_username: true` (for sharing or committing `raw/`, or publishing).
 2. **No telemetry, ever.** Not even anonymised "which adapter is used". The tool never calls home.
 3. **Binding default is `127.0.0.1`.** LAN or public binding requires an explicit `--host 0.0.0.0`.
 4. **No cloud features.** No auth, no accounts, no sync. Everything is local.

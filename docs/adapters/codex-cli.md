@@ -57,7 +57,7 @@ Codex-native record types (`response_item`, `event_msg`, …) are normalized int
 
 ## Privacy
 
-Redaction is the same as for Claude Code — username, API keys, tokens, and emails are scrubbed at convert time. Add Codex-specific path patterns to `redaction.extra_patterns` if needed.
+Redaction is the same as for Claude Code — API keys, tokens, and emails are scrubbed at convert time, and home-path usernames too when `redaction.redact_username: true`. Add Codex-specific path patterns to `redaction.extra_patterns` if needed.
 
 ## Testing
 

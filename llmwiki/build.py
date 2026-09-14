@@ -868,7 +868,7 @@ def _build_metadata_comment(
         if val is not None:
             fields.append(f"{key}: {val}")
     # #36: restore local username in cwd so agents scraping the HTML
-    # comment get a usable path (raw frontmatter keeps USER).
+    # comment get a usable path (raw frontmatter may store USER).
     cwd_local = local_cwd(meta)
     if cwd_local:
         fields.append(f"cwd: {cwd_local}")
@@ -1356,7 +1356,7 @@ def render_session(
         bits.append(f'<code>{html.escape(str(meta["model"]))}</code>')
     # #36: surface cwd + real sessionId in the hero (the page title is
     # llmwiki's 8-hex slug, useless for `claude --resume`). cwd is
-    # restored to the local absolute path (frontmatter stores USER).
+    # restored to the local absolute path (frontmatter may store USER).
     cwd_local = local_cwd(meta)
     if cwd_local:
         bits.append(f'cwd <code>{html.escape(cwd_local)}</code>')
@@ -1882,8 +1882,8 @@ def render_sessions_index(
         tcalls = meta.get("tool_calls", "")
         agent_label, _agent_css = detect_agent_label(meta)
         # #56: surface restored cwd so the index matches the detail page
-        # one click away (and so encoded ``-Users-USER-`` segments are
-        # reversed like the leading ``/Users/USER/``).
+        # one click away (and so encoded ``-Users-USER-`` segments, when
+        # raw/ stores redacted paths, are reversed like ``/Users/USER/``).
         cwd_local = local_cwd(meta)
         cwd_cell = (
             f"<code>{html.escape(cwd_local)}</code>" if cwd_local else ""

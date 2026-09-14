@@ -99,4 +99,4 @@ The `( ... &) ; exit 0` pattern ensures the hook runs in the background and neve
 
 - **Permission errors on `raw/`**: the converter writes to `<vault>/raw/sessions/`. Make sure that vault is writable.
 - **Nothing converted, only "live"**: the default 60-minute live filter is skipping recent sessions. Pass `--include-current` to override, or wait an hour.
-- **Privacy**: the converter redacts username, API keys, tokens, and emails by default. If you see unredacted PII, check `config.json` → `redaction.real_username`.
+- **Privacy**: the converter redacts API keys, tokens, and emails by default. Home-path usernames stay real unless `config.json` → `redaction.redact_username` is `true` (set it, plus `redaction.real_username`, before sharing `raw/`).

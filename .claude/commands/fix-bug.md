@@ -135,6 +135,8 @@ Automated verify is the flow's job on `$TMP_VAULT` (`python3 -m llmwiki build`, 
 
 **Smoke confirm:** ask the user to confirm the fix works as expected before local review. Include ready-to-paste live-vault commands using worktree code (`cd "$WT" && python3 -m llmwiki … --vault "$LIVE"`); do not run the mutating ones yourself. Skipped confirmation → stop.
 
+**Live smoke vs. worktree config (#253 hit):** the worktree `config.json` carries only the throwaway vault path, so a worktree `sync` / `all` / `synth` against `$LIVE` runs with default adapters and no lookback — it ingests stores the operator disabled. Prefer store-independent live commands (`migrate …`, `build`, `lint`). When a live `sync` is genuinely needed, first merge the primary `config.json`'s non-`vault` sections (`adapters`, `filters`, `synthesis`, …) into the worktree `config.json` (gitignored), and before any mutating live command — even when the operator asks the agent to run it — back up `llmwiki-state.json` and the `raw/` / `wiki/` subtrees it can touch.
+
 <!-- /awos:flow:stage -->
 
 <!-- awos:flow:stage=amend-spec -->

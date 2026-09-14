@@ -70,6 +70,11 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "include_subagents": "only-raw",
     },
     "redaction": {
+        # #253: a private vault keeps real home paths in raw/. Set true to
+        # rewrite the home-path username to replacement_username before
+        # sharing raw/ or publishing the site. Token/email redaction below
+        # runs regardless of this flag.
+        "redact_username": False,
         "real_username": "",
         "replacement_username": "USER",
         "extra_patterns": [
@@ -140,8 +145,9 @@ def _ensure_real_username(cfg: dict[str, Any]) -> None:
     #56: also re-run after config overlay. ``examples/sessions_config.json``
     ships ``"real_username": ""`` as a "please auto-detect" placeholder;
     users who copy that block into root ``config.json`` would otherwise
-    wipe the value ``load_config`` already filled, so ``raw/`` would keep
-    the real username in some paths and not others.
+    wipe the value ``load_config`` already filled, so username redaction
+    (``redact_username: true``) and build-time cwd restore would see an
+    empty name.
     """
     red = cfg.setdefault("redaction", {})
     if red.get("real_username"):
@@ -758,7 +764,9 @@ _DEFAULT_TOKEN_PATTERNS = [
 # legally sit — macOS / Linux / Windows / WSL / Cygwin (#416, #485). They are
 # NOT path guesses: convert stores the absolute ``cwd`` from the transcript
 # and redaction only rewrites the *username segment* inside these shapes
-# (``/home/<you>/…`` → ``/home/USER/…``) so raw/ can be committed. The site
+# (``/home/<you>/…`` → ``/home/USER/…``) when ``redaction.redact_username``
+# is on, so raw/ can be shared. The ``migrate raw-redaction`` /
+# ``raw-unredaction`` repairs rewrite the same shapes in either direction. The site
 # build reuses the same allowlist to find the head of a stored path it should
 # display against the local root.
 HOME_PATH_PREFIXES = (
@@ -788,6 +796,9 @@ ENCODED_PATH_PREFIXES = (
 class Redactor:
     def __init__(self, config: dict[str, Any]):
         red = config.get("redaction", {})
+        # #253: loaded configs default this to False (DEFAULT_CONFIG); a
+        # hand-built dict without the key keeps redacting usernames.
+        self.redact_username = bool(red.get("redact_username", True))
         self.real_user = red.get("real_username", "")
         self.repl_user = red.get("replacement_username", "USER")
         # #py-l6 (#604): one bad user-supplied pattern used to abort
@@ -809,7 +820,7 @@ class Redactor:
     def __call__(self, text: str) -> str:
         if not text:
             return text
-        if self.real_user:
+        if self.redact_username and self.real_user:
             text = self._redact_username(text)
         for pat in self.patterns:
             text = pat.sub("<REDACTED>", text)

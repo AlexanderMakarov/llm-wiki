@@ -17,13 +17,14 @@ Minimal config:
 ```json
 {
   "redaction": {
+    "redact_username": false,
     "real_username": "your-unix-username",
     "replacement_username": "USER"
   }
 }
 ```
 
-> Replace `your-unix-username` with the output of `whoami`. The converter uses it to scrub paths like `/Users/<name>/…` or `/home/<name>/…` before writing to `raw/`.
+> Replace `your-unix-username` with the output of `whoami`. With `redact_username: true` the converter uses it to scrub paths like `/Users/<name>/…` or `/home/<name>/…` before writing to `raw/`; the default `false` keeps real paths for a private vault.
 
 ## Full schema
 
@@ -67,8 +68,12 @@ Minimal config:
   },
 
   "redaction": {
-    // Your OS username. Paths like /Users/<you>/ become /Users/USER/.
-    // Auto-detected from $USER if left empty.
+    // false (default): raw/ keeps real home paths (private vault).
+    // true: paths like /Users/<you>/ become /Users/USER/ — use before
+    // sharing raw/ or publishing the site. Token/email redaction always runs.
+    "redact_username": false,
+
+    // Your OS username. Auto-detected from $USER if left empty.
     "real_username": "",
 
     // What to replace real_username with.
