@@ -556,3 +556,50 @@ def test_direct_push_to_main_is_acknowledged():
         "Skill must acknowledge that direct push to 'main' is the maintainer "
         "release path (distinct from normal PR flow)"
     )
+
+
+# ─── #240: release_demo_gate + local review pause ─────────────────────────────
+
+
+def test_skill_and_process_mention_release_demo_gate():
+    """#240: usage/build/URL/case-fold live in release_demo_gate.py."""
+    # @regression
+    # @spec: 250-release-demo-local-review
+    _, body = _skill_parts()
+    process = RELEASE_PROCESS.read_text(encoding="utf-8")
+    for label, text in (("skill", body), ("RELEASE_PROCESS.md", process)):
+        assert "release_demo_gate" in text, (
+            f"{label} must name scripts/release_demo_gate.py (#240)"
+        )
+
+
+def test_skill_pauses_for_local_demo_review():
+    """#240: human must OK the printed local demo URL before tag push."""
+    # @regression
+    # @spec: 250-release-demo-local-review
+    _, body = _skill_parts()
+    lower = body.lower()
+    assert "file://" in body or "index.html" in lower, (
+        "Skill must surface a concrete local demo URL (file:// or index.html)"
+    )
+    assert "local-review" in lower or "local demo review" in lower or (
+        "visual" in lower and "ok" in lower
+    ) or ("human ok" in lower) or ("pause" in lower and "demo" in lower), (
+        "Skill must pause for human demo review before push (#240)"
+    )
+    process = RELEASE_PROCESS.read_text(encoding="utf-8").lower()
+    assert "file://" in RELEASE_PROCESS.read_text(encoding="utf-8") or "local review" in process, (
+        "RELEASE_PROCESS.md must call out local demo review / file:// URL"
+    )
+
+
+def test_skill_and_process_say_ci_does_not_invent_demo_content():
+    """#240: Pages/CI never invent sessions or usage fixtures."""
+    # @regression
+    # @spec: 250-release-demo-local-review
+    combined = (
+        _skill_parts()[1] + "\n" + RELEASE_PROCESS.read_text(encoding="utf-8")
+    ).lower()
+    assert "invent" in combined and ("usage" in combined or "session" in combined), (
+        "Skill or RELEASE_PROCESS.md must state CI does not invent sessions/usage"
+    )

@@ -48,3 +48,4 @@ The command reports the plan before it does any work. `--dry-run` is the preview
 - The committed pre-push hook reminds you when a push includes product markdown under `docs/` (not `docs/maintainers/`). The reminder does not fail the push; applying the plan is still a local `refresh_demo.py` run.
 - It does not change how user vaults ingest documents. The remove-then-add workaround is demo-only.
 - It does **not** refresh authored demo **sessions**. On a release cut the default is to run `scripts/generate_demo_sessions.py` with a release-day `--today` (and re-synth when session *content* warrants it) unless the human explicitly opts out — see [RELEASE_PROCESS.md](RELEASE_PROCESS.md) and #225. Session writes are in-place by slug (filenames stick; calendar fields move in frontmatter).
+- It does **not** regenerate MCP **usage** fixtures or run the local review build. Those live in `scripts/release_demo_gate.py` on the release cut (#240).
