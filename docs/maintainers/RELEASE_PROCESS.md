@@ -21,8 +21,11 @@ Minor bumps (`X.Y.0`) ship when a coherent feature batch lands. Patch bumps (`X.
   - Re-synth: update wiki for changed session filenames and for any docs refresh plan — prefer session sources that moved plus path-scoped `synth --docs-only` / `refresh_demo.py`, not a blind full-vault re-synth of unchanged pages. When the human will run synth (token budget), stop after session regen + `refresh_demo.py --dry-run` and wait for them; do not spend synthesis tokens without that go-ahead.
   - Product docs drift: `python3 scripts/refresh_demo.py --dry-run`, then a real refresh when the plan is non-empty (needs a synthesis backend; see [REFRESH_DEMO.md](REFRESH_DEMO.md); use `--force` when `demo/.demo-source-rev` is missing). The script fails (and does not advance the pin) when plan-added raw docs still lack wiki pages.
   - Completeness (local): `python3 scripts/refresh_demo.py --verify-slugs <slug>,…` for every slug this cut’s plan added must exit 0; regenerated non-headless sessions need matching `demo/wiki/sources/` pages. Do not require clearing the historical vault-wide docs backlog.
-  - Spot-check newest session dates under `demo/raw/sessions/` and that `demo/` builds clean: `python3 -m llmwiki lint --vault demo --fail-on-errors` and `python3 -m llmwiki build --vault demo --out /tmp/demo-site --local-root /home/user`, then commit `demo/raw/sessions/` + updated `demo/wiki/` (+ `.demo-source-rev` when written). After regenerating sessions or wiki sources, refresh and commit `demo/llmwiki-state.json` / `demo/llmwiki-state.js` so Home Pipeline pending counts stay honest (#255).
-  - Human gate before push must state demo synth as `complete`, `explicitly opted out`, or `blocked` (do not present a tag push when blocked)
+  - **Mechanical demo gate (#240):** after synth + completeness, run `python3 scripts/release_demo_gate.py --today <release-day>` (same date as sessions). The script regenerates `demo/usage/` via `generate_demo_usage.py`, builds to `/tmp/demo-site` (or `--out`), prints a concrete `file://…/index.html` for review, runs `tests/test_case_insensitive_paths.py`, and `llmwiki lint --vault demo --fail-on-errors`. Non-zero exit = hard stop — do not present tag push. Prefer `--dry-run` first when checking the plan. Version-only / skip-usage cuts may pass `--skip-usage`.
+  - **Local review pause (#240):** open the printed `file://` URL (Home Timeline, Analytics MCP window, session dates, candidates). Wait for explicit human OK before committing refreshed `demo/` or the version bump / tag push gate. Lint/gate exit 0 alone is not visual OK.
+  - **After visual OK:** commit refreshed `demo/` before the tag: sessions + wiki (+ `.demo-source-rev` when written) + `demo/usage/` + `demo/llmwiki-state.json` / `demo/llmwiki-state.js` so Home Pipeline pending counts stay honest (#255). Spot-check newest session dates under `demo/raw/sessions/`.
+  - Human gate before push must state demo synth as `complete`, `explicitly opted out`, or `blocked`, and (when refresh was ON) that local demo review was OK (do not present a tag push when synth is blocked or review was skipped)
+  - Pages/CI only build and version-assert the committed `demo/` vault — they never invent sessions, usage fixtures, or ops stamps (#213 / #225 / #240)
 
 ## Bump version
 
@@ -97,7 +100,7 @@ The same tag push that triggers `release.yml` also triggers [`.github/workflows/
 - [ ] Spot-check the live demo shows the new version **and**, unless demo refresh was explicitly skipped, that session dates match what you committed (version-only green is not a content refresh — #225)
 - [ ] If the deploy failed, fix `main` first and re-run the workflow from **Actions → Deploy demo site to GitHub Pages → Run workflow**; do not hotfix by rewriting the tag
 
-There is no separate scheduled freshness workflow — the post-deploy assert on `pages.yml` is the version gate. Session/docs corpus freshness is still a pre-tag maintainer step (#225; see pre-flight above and [docs/uptime.md](../uptime.md)).
+There is no separate scheduled freshness workflow — the post-deploy assert on `pages.yml` is the version gate. Session/docs/usage corpus freshness is still a pre-tag maintainer step (#225 / #240; see pre-flight above, `scripts/release_demo_gate.py`, and [docs/uptime.md](../uptime.md)). CI never regenerates sessions or usage fixtures.
 
 ## Announce (optional)
 

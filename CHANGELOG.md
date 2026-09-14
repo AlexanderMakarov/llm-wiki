@@ -17,6 +17,8 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Changed
 
+- **Release demo gate script (#240)** — `scripts/release_demo_gate.py` regenerates `demo/usage/` for release-day `--today`, builds a local demo site, prints a `file://` URL, runs case-fold pytest + demo lint; `/release` and `RELEASE_PROCESS.md` pause for human visual OK before tag push. Pages/CI still only deploy committed `demo/` (no content invention).
+  - *Release note:* Maintainer release cut uses `release_demo_gate.py` + local demo review before tagging (#240).
 - **Demo ships `llmwiki-state` (#255 / #197)** — `demo/llmwiki-state.json` and `demo/llmwiki-state.js` are allowlisted in `.gitignore` and committed so Pages/Home Pipeline state is not an empty `synth.files` backlog. User vaults remain gitignored.
 - **README / getting-started / PyPI** — MCP + human site framing; scriptable `llmwiki add`; vault as a secure unified store; package `description` set to “LLM wiki to turn multiple agentic tool sessions into knowledge base for agents and humans”.
   - *Release note:* Docs and PyPI summary lead with multi-agent sessions → knowledge base for agents and humans.
