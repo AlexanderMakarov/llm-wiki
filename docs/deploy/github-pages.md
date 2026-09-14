@@ -75,7 +75,7 @@ It exits 0 on a match, 1 when the site is stale, 2 when the manifest is unreacha
 By default the workflow builds the committed `demo/` vault. To deploy your real sessions:
 
 1. Point the build at your own vault — change `--vault demo` in `pages.yml` to the path you sync into
-2. Commit that vault's `raw/sessions/` and `wiki/` (remove them from `.gitignore` first)
+2. Commit that vault's `raw/sessions/` and `wiki/` (remove them from `.gitignore` first). Set `"redact_username": true` under `redaction` in that vault's `config.json` first: by default `sync` keeps real home paths in `raw/`, and on a self-hosted runner that home belongs to a real account.
 3. Push to master
 
 Alternatively, keep sessions local and commit only the built `site/` directory.

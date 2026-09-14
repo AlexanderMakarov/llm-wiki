@@ -543,6 +543,7 @@ python3 -m llmwiki migrate
 python3 -m llmwiki migrate --list
 python3 -m llmwiki migrate state --state-file /path/to/vault/llmwiki-state.json
 python3 -m llmwiki migrate raw-redaction --vault /path/to/vault --dry-run
+python3 -m llmwiki migrate raw-unredaction --vault /path/to/vault --dry-run
 python3 -m llmwiki migrate tools-used --vault /path/to/vault
 python3 -m llmwiki migrate page-kinds --vault /path/to/vault --dry-run
 python3 -m llmwiki migrate topic-kinds --vault /path/to/vault
@@ -587,7 +588,32 @@ python3 -m llmwiki migrate raw-redaction --vault /path/to/vault
 | `--real-username NAME` | Override `redaction.real_username` (default: config / `$USER`). |
 | `--replacement-username NAME` | Override placeholder (default: `USER`). |
 
-Idempotent: already-redacted files count as `unchanged`. Private local vaults that never publish `raw/` can skip this and only run `llmwiki build` after upgrading (see [UPGRADING.md](../UPGRADING.md)).
+Runs regardless of `redaction.redact_username` — invoking it is the explicit request to redact. Idempotent: already-redacted files count as `unchanged`. Private local vaults that never publish `raw/` can skip this and only run `llmwiki build` after upgrading (see [UPGRADING.md](../UPGRADING.md)).
+
+### `raw-unredaction` — restore real usernames in raw/ paths
+
+Reverse of `raw-redaction` (#253). Rewrites already-synced `raw/sessions/*.md` so the `USER` placeholder in home-path and dash-encoded segments (`/home/USER/…`, `-Users-USER-…`) becomes your real username again. A bare `USER` word outside a path position is never touched. Same file scope and guarantees as `raw-redaction`: no re-convert, no `wiki/` changes, no synthesis.
+
+Use it on a private vault synced while `redaction.redact_username` was on (the default before #253). Refuses (exit 2) when the real username is empty or equals the placeholder. Prints a note when the effective config still has `redaction.redact_username: true`, since new syncs would write the placeholder again. Rebuild afterwards: `llmwiki build --vault PATH`.
+
+```bash
+python3 -m llmwiki migrate raw-unredaction --vault /path/to/vault --dry-run
+python3 -m llmwiki migrate raw-unredaction --vault /path/to/vault
+```
+
+| Flag | What |
+|---|---|
+| `--vault PATH` | **Required.** Vault root containing `raw/sessions/`. |
+| `--dry-run` | Report files that would change; write nothing. |
+| `--real-username NAME` | Username to restore (default: `redaction.real_username` / `$USER`). |
+| `--replacement-username NAME` | Placeholder to replace (default: `USER`). |
+
+Idempotent: files with no placeholder left count as `unchanged`.
+
+Limitations — review the `--dry-run` list before writing:
+
+- It cannot tell a redacted path from a placeholder path a person typed on purpose. Prose that quotes a rule such as "use `/home/USER/…`" is rewritten to your real home path too.
+- It restores one target username for every file. In a vault synced from several machines or accounts, that name is wrong for files that came from the others.
 
 ### `tools-used` — expand CallMcpTool frontmatter from origin stores
 

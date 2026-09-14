@@ -66,7 +66,7 @@ When a new version of Claude Code ships, the adapter's behaviour is:
 The default redaction config handles Claude Code sessions well because:
 
 - User prompts, file paths, and tool outputs all go through the same `Redactor`
-- `/Users/<you>/` is replaced before rendering
+- `/Users/<you>/` is replaced before rendering when `redaction.redact_username` is `true` (off by default, so a private vault keeps real paths)
 - API keys in Bash command outputs, Read/Write tool inputs, and assistant text are all caught by the `sk-...` and `api_key:...` patterns
 - Emails in tool results are caught by the email regex
 
@@ -110,7 +110,7 @@ python3 -m llmwiki sync --project ai-newsletter
 | `available: no` in adapters list | `~/.claude/projects/` doesn't exist | Run Claude Code at least once |
 | Zero sessions converted, all "live" | Live filter too aggressive | `--include-current` or lower `live_session_minutes` |
 | Sessions show wrong project name | Path marker not found | Check `derive_project_slug()` fallback |
-| Unredacted paths in output | `real_username` not set | Edit `config.json` |
+| Unredacted paths in output | `redaction.redact_username` is `false` (default) or `real_username` not set | Set both in `config.json` |
 | `module 'tomllib' not found` | Old converter version | Update to current version (uses `json`, not `tomllib`) |
 
 ## Reference

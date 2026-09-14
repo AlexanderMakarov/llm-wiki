@@ -81,7 +81,7 @@ Reads .jsonl from the agent's session store (via an adapter), filters out noise 
 Key properties:
 
 - **Idempotent** — mtime tracked in `<vault>/llmwiki-state.json` (unified queue + sync + synth + quarantine state)
-- **Privacy-first** — username + API keys + tokens + emails redacted by default
+- **Privacy-first** — API keys + tokens + emails redacted by default; home-path usernames redacted when `redaction.redact_username: true`
 - **Live-session safe** — skips files with a record younger than 60 minutes
 - **Agent-agnostic** — delegates discovery to the adapter registry
 

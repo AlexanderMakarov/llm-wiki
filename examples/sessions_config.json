@@ -19,6 +19,8 @@
   },
   "redaction": {
     "_comment": "Set real_username to the part of your home path to replace. Auto-detected from $USER if empty.",
+    "_redact_username_comment": "#253: false (default) keeps real home paths in raw/ for a private vault. Set true before sharing raw/ or publishing the site to rewrite /home/<you>/ to /home/USER/. Token and email redaction always runs.",
+    "redact_username": false,
     "real_username": "",
     "replacement_username": "USER",
     "extra_patterns": [

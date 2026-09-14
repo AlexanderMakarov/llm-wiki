@@ -461,12 +461,15 @@ class ConvertedDoc:
 
 def _source_path_label(path: Path) -> str:
     """Frontmatter ``source:`` for a local file — cwd-relative when possible,
-    username-redacted like ``sync`` (#141)."""
+    username-redacted like ``sync`` when ``redaction.redact_username`` is on
+    (#141, #253)."""
     try:
         label = path.relative_to(Path.cwd().resolve()).as_posix()
     except ValueError:
         label = path.as_posix()
     red = _resolve_convert_config(None).get("redaction", {})
+    if not red.get("redact_username", True):
+        return label
     return _substitute_path_username(
         label,
         from_user=red.get("real_username", ""),

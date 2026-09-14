@@ -131,7 +131,7 @@ python3 -m llmwiki sync --adapter obsidian            # run it
 
 ## Privacy
 
-The same redaction pipeline runs on Obsidian notes as on Claude Code sessions — username, API keys, tokens, and emails are redacted before anything hits `raw/`. If your notes contain company-internal names or client identifiers you want redacted too, add them to `extra_patterns` in `config.json`.
+The same redaction pipeline runs on Obsidian notes as on Claude Code sessions — API keys, tokens, and emails are redacted before anything hits `raw/`, and home-path usernames too when `redaction.redact_username: true`. If your notes contain company-internal names or client identifiers you want redacted too, add them to `extra_patterns` in `config.json`.
 
 ## Example config
 

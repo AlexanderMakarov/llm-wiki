@@ -200,7 +200,7 @@
 
 | # | Feature | Value | Prior art | llmwiki phase |
 |---|---|---|---|---|
-| M1 | **Username redaction** (`/Users/you/` → `/Users/USER/`) | ⭐⭐⭐⭐⭐ | **None** | v0.1 |
+| M1 | **Username redaction** (`/Users/you/` → `/Users/USER/`, opt-in via `redaction.redact_username: true`) | ⭐⭐⭐⭐⭐ | **None** | v0.1 |
 | M2 | **API key / token / password regex redaction** | ⭐⭐⭐⭐⭐ | **None** | v0.1 |
 | M3 | **Email redaction** | ⭐⭐⭐⭐⭐ | **None** | v0.1 |
 | M4 | **Gitleaks secret scan in CI** | ⭐⭐⭐⭐⭐ | sinzin91 | v0.1 |
@@ -253,7 +253,7 @@ These are features **no prior implementation has** that llmwiki will ship:
 | P9 | **Filter bar** on sessions table | ⭐⭐⭐⭐ | Project/date/model filters |
 | P10 | **Live-session skip (`<60min`)** | ⭐⭐⭐⭐⭐ | Prevents reading mid-write files |
 | P11 | **Adapter registry with schema version tracking** | ⭐⭐⭐⭐⭐ | Clean extensibility contract |
-| P12 | **Redaction by default (username, keys, tokens, emails)** | ⭐⭐⭐⭐⭐ | No other impl does this |
+| P12 | **Redaction by default (keys, tokens, emails; username opt-in)** | ⭐⭐⭐⭐⭐ | No other impl does this |
 | P13 | **Performance budget enforced in CI** | ⭐⭐⭐⭐ | 9s cold build, 0.4s no-op |
 | P14 | **Hover-to-preview wikilinks** | ⭐⭐⭐⭐ | Obsidian-inspired navigation |
 | P15 | **Self-demo via GitHub Pages on tag push** | ⭐⭐⭐⭐⭐ | Zero-effort marketing |

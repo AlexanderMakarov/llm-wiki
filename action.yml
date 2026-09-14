@@ -31,7 +31,11 @@ inputs:
     required: false
     default: "llm-wiki-plus"
   additional-args:
-    description: "Extra arguments forwarded to `llmwiki sync`"
+    description: >-
+      Extra arguments forwarded to `llmwiki sync`. `sync` keeps real home
+      paths in raw/ by default; repositories that commit raw/ (especially
+      on self-hosted runners) must set `redaction.redact_username: true`
+      in the vault's config.json.
     required: false
     default: ""
 
