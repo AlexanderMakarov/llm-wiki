@@ -22,7 +22,6 @@ dodges argv limits and injection-via-argv).
 from __future__ import annotations
 
 import json
-import re
 import subprocess
 import threading
 from dataclasses import dataclass
@@ -34,7 +33,9 @@ from llmwiki.synth.base import (
     BackendUsageLimitError,
     BaseSynthesizer,
     split_prompt_template,
+    usage_limit_from_text,
 )
+from llmwiki.synth.child_processes import TrackedChildren
 from llmwiki.synth.ollama import _render_prompt
 
 DEFAULT_CLAUDE_MODEL = "sonnet"
@@ -208,36 +209,28 @@ class ClaudeCLIError(RuntimeError):
     """One page failed to synthesize via the claude CLI."""
 
 
-# Result text `claude -p` prints when the account quota is exhausted, e.g.
-# "You've hit your session limit · resets 1:20pm (Asia/Yerevan)".
-_USAGE_LIMIT_TEXT_RE = re.compile(r"hit your [\w -]*limit|usage limit reached", re.IGNORECASE)
-_USAGE_LIMIT_RESET_RE = re.compile(r"\bresets\s+(.+?)\s*$", re.IGNORECASE)
+_USAGE_LIMIT_LABEL = "claude CLI"
 
 
 def _usage_limit_error(payload: dict[str, Any]) -> BackendUsageLimitError | None:
     """Return a usage-limit error when a ``-p --output-format json`` result is one.
 
-    A result is a usage limit when it carries ``api_error_status`` 429 or its
-    error text is the quota message. The reset time is the text after
-    ``resets``; ``None`` when the message has none.
+    The result's text decides, e.g. "You've hit your session limit · resets
+    1:20pm (Etc/UTC)" (see :func:`usage_limit_from_text`). ``api_error_status``
+    429 on its own is rate-limit throttling and does not qualify.
     """
     detail = payload.get("result")
-    text = detail.strip() if isinstance(detail, str) else ""
-    limited = payload.get("api_error_status") == 429 or (
-        payload.get("is_error") is True and bool(_USAGE_LIMIT_TEXT_RE.search(text))
-    )
-    if not limited:
-        return None
-    match = _USAGE_LIMIT_RESET_RE.search(text)
-    reset = match.group(1) if match else None
-    return BackendUsageLimitError(
-        f"claude CLI usage limit: {text or 'HTTP 429'}", reset=reset
+    return usage_limit_from_text(
+        detail if isinstance(detail, str) else None, label=_USAGE_LIMIT_LABEL
     )
 
 
-def _usage_limit_from_output(output: str) -> BackendUsageLimitError | None:
-    """Scan CLI output lines for a JSON result that reports a usage limit."""
-    for line in reversed((output or "").strip().splitlines()):
+def _usage_limit_from_output(stdout: str, stderr: str) -> BackendUsageLimitError | None:
+    """Usage limit reported by a failed ``claude -p`` run, or ``None``.
+
+    Prefers the last JSON result on stdout; without one, reads stderr.
+    """
+    for line in reversed((stdout or "").strip().splitlines()):
         line = line.strip()
         if not line.startswith("{"):
             continue
@@ -247,7 +240,7 @@ def _usage_limit_from_output(output: str) -> BackendUsageLimitError | None:
             continue
         if isinstance(payload, dict):
             return _usage_limit_error(payload)
-    return None
+    return usage_limit_from_text(stderr, label=_USAGE_LIMIT_LABEL)
 
 
 def _usage_token_total(usage: dict[str, Any]) -> int:
@@ -273,8 +266,8 @@ def _parse_claude_print_stdout(stdout: str) -> tuple[str, int | None, float | No
     ``total_cost_usd``). Fall back to plain text when the CLI (or a test
     stub) ignores the format flag — then tokens/cost stay unknown.
 
-    Raises ``BackendUsageLimitError`` when the payload reports an exhausted
-    quota, and ``ClaudeCLIError`` when stdout parses as a JSON object but is
+    Raises ``BackendUsageLimitError`` when an ``is_error`` payload's text
+    reports an exhausted quota, and ``ClaudeCLIError`` when stdout parses as a JSON object but is
     not a usable success payload (missing/empty ``result``, ``is_error``,
     or a non-success ``subtype``). Never returns the raw JSON envelope as
     page text.
@@ -291,11 +284,10 @@ def _parse_claude_print_stdout(stdout: str) -> tuple[str, int | None, float | No
     if not isinstance(payload, dict):
         return text, None, None
 
-    limit = _usage_limit_error(payload)
-    if limit is not None:
-        raise limit
-
     if payload.get("is_error") is True:
+        limit = _usage_limit_error(payload)
+        if limit is not None:
+            raise limit
         detail = payload.get("result")
         if not isinstance(detail, str) or not detail.strip():
             detail = "is_error without detail"
@@ -352,6 +344,11 @@ class ClaudeCLISynthesizer(BaseSynthesizer):
         # arithmetic only — never a subprocess call, which would serialize
         # the pages this backend is meant to overlap.
         self._usage_lock = threading.Lock()
+        self._children = TrackedChildren()
+
+    def kill_in_flight(self) -> int:
+        """Kill every ``claude -p`` page process still running (#181)."""
+        return self._children.kill_all()
 
     def reset_usage(self) -> None:
         """Clear accumulated usage before a multi-page synth run."""
@@ -449,13 +446,10 @@ class ClaudeCLISynthesizer(BaseSynthesizer):
         prompt = _render_prompt(per_page, raw_body=truncated_body, meta=meta)
         argv = self._argv(claude, stable or _LEAN_SYSTEM_PROMPT)
         try:
-            # A new session keeps a terminal Ctrl+C away from the child: only
-            # the synth run is interrupted, and this page still finishes.
-            # POSIX only; Windows ignores the flag.
-            result = subprocess.run(
-                argv, input=prompt, capture_output=True, text=True,
-                timeout=self.timeout, start_new_session=True,
-            )
+            # The child runs in a new session, so a terminal Ctrl+C interrupts
+            # only the synth run and this page still finishes; the run kills
+            # it through `kill_in_flight` when it abandons the drain.
+            result = self._children.run(argv, input=prompt, timeout=self.timeout)
         except subprocess.TimeoutExpired as exc:
             raise ClaudeCLIError(
                 f"claude CLI timed out after {self.timeout}s"
@@ -463,7 +457,7 @@ class ClaudeCLISynthesizer(BaseSynthesizer):
         except (OSError, subprocess.SubprocessError) as exc:
             raise ClaudeCLIError(f"claude CLI failed to run: {exc}") from exc
         if result.returncode != 0:
-            limit = _usage_limit_from_output(result.stdout)
+            limit = _usage_limit_from_output(result.stdout, result.stderr)
             if limit is not None:
                 raise limit
             tail = (result.stderr or result.stdout or "").strip().splitlines()

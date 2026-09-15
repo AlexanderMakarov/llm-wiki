@@ -24,7 +24,12 @@ import subprocess
 from dataclasses import dataclass
 from typing import Any
 
-from llmwiki.synth.base import BaseSynthesizer, split_prompt_template
+from llmwiki.synth.base import (
+    BaseSynthesizer,
+    split_prompt_template,
+    usage_limit_from_text,
+)
+from llmwiki.synth.child_processes import TrackedChildren
 from llmwiki.synth.ollama import _render_prompt
 
 DEFAULT_CURSOR_MODEL = "composer-2.5"
@@ -117,8 +122,9 @@ def lean_argv(agent: str, *, model: str | None = None) -> list[str]:
 class CursorCLIError(RuntimeError):
     """One page failed to synthesize via the Cursor Agent CLI.
 
-    Agent CLI exposes no distinct quota signal, so an exhausted account is a
-    per-page error here, never a ``BackendUsageLimitError``.
+    A non-zero exit whose output carries account-quota wording raises
+    ``BackendUsageLimitError`` instead (see ``usage_limit_from_text``); plain
+    rate-limit throttling stays this per-page error.
     """
 
 
@@ -132,6 +138,11 @@ class CursorCLISynthesizer(BaseSynthesizer):
     ) -> None:
         self.model = model or DEFAULT_CURSOR_MODEL
         self.timeout = timeout
+        self._children = TrackedChildren()
+
+    def kill_in_flight(self) -> int:
+        """Kill every Agent CLI process still running (#181)."""
+        return self._children.kill_all()
 
     @property
     def name(self) -> str:
@@ -151,27 +162,14 @@ class CursorCLISynthesizer(BaseSynthesizer):
         """Invoke Agent CLI once; prefer stdin when supported.
 
         The child starts in a new session so a terminal Ctrl+C interrupts only
-        the synth run and the page in flight still finishes (POSIX only;
-        Windows ignores the flag).
+        the synth run and the page in flight still finishes; the run kills it
+        through ``kill_in_flight`` when it abandons the drain.
         """
         argv = self._argv(agent)
         if _PROMPT_VIA_STDIN:
-            return subprocess.run(
-                argv,
-                input=prompt,
-                capture_output=True,
-                text=True,
-                timeout=timeout,
-                start_new_session=True,
-            )
+            return self._children.run(argv, input=prompt, timeout=timeout)
         # Argv fallback: same body cap already applied by the caller.
-        return subprocess.run(
-            argv + [prompt],
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            start_new_session=True,
-        )
+        return self._children.run(argv + [prompt], timeout=timeout)
 
     def overview_completion(
         self, prompt: str, *, model: str | None = None
@@ -186,7 +184,8 @@ class CursorCLISynthesizer(BaseSynthesizer):
         """One-shot text completion via Agent CLI (shared by page synth + overview).
 
         Raises :class:`CursorCLIError` on missing binary, timeout, nonzero
-        exit, or empty stdout.
+        exit, or empty stdout, and ``BackendUsageLimitError`` when a nonzero
+        exit's output reports an exhausted account quota.
         """
         agent = resolve_cursor_agent_path()
         if agent is None:
@@ -207,6 +206,12 @@ class CursorCLISynthesizer(BaseSynthesizer):
                 f"Cursor Agent CLI failed to run: {exc}"
             ) from exc
         if result.returncode != 0:
+            limit = usage_limit_from_text(
+                "\n".join(part for part in (result.stderr, result.stdout) if part),
+                label="Cursor Agent CLI",
+            )
+            if limit is not None:
+                raise limit
             tail = (result.stderr or result.stdout or "").strip().splitlines()
             detail = tail[-1] if tail else "no output"
             raise CursorCLIError(

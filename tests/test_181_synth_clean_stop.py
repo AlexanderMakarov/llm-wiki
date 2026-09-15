@@ -4,8 +4,10 @@
 # @spec: 009-one-call-per-source-synth
 
 Covers the stop in the sources pass (queue cancelled, in-flight pages
-recorded, success-path bookkeeping), the Claude CLI limit detection, the
-``synth`` / ``all`` exit codes, and the automation wrapper's real exit code.
+recorded, idempotent bookkeeping, a limit during known-names preparation),
+the second-Ctrl+C kill of in-flight synthesizer processes, usage-limit
+detection by message text in every backend, the ``synth`` / ``all`` exit
+codes, and the automation wrapper's real exit code.
 
 New names (``BackendUsageLimitError``) are resolved at call time rather than
 imported, so on a build without the fix each test fails on the missing
@@ -17,27 +19,33 @@ reached. Every vault lives under ``tmp_path``.
 
 from __future__ import annotations
 
+import builtins
 import json
 import os
 import subprocess
 import threading
+import time
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from llmwiki import cli
+from llmwiki import cli, topics_consolidate
 from llmwiki import pipeline as all_pipeline
 from llmwiki.automation_install import render_wrapper_script
 from llmwiki.automation_plan import AutomationPlan
 from llmwiki.cli import build_parser, cmd_synthesize
 from llmwiki.synth import base as synth_base
-from llmwiki.synth import claude_cli
+from llmwiki.synth import cursor_cli
 from llmwiki.synth import pipeline as synth_pipeline
+from llmwiki.synth.child_processes import TrackedChildren
 from llmwiki.synth.claude_cli import ClaudeCLIError, ClaudeCLISynthesizer
+from llmwiki.synth.cursor_cli import CursorCLIError, CursorCLISynthesizer
+from llmwiki.synth.ollama import OllamaConfig, OllamaHTTPError, OllamaSynthesizer
 from tests import test_synth_claude_cli as claude_tests
 from tests import test_synth_parallel as parallel_tests
 from tests import test_synth_run_summary as summary_tests
+from tests import test_topics as topics_tests
 
 _RESET = "1:20pm (Etc/UTC)"
 _LIMIT_TEXT = f"You've hit your session limit · resets {_RESET}"
@@ -211,24 +219,287 @@ def test_ctrl_c_drains_in_flight_pages_and_writes_the_log_entry(
     assert synth_pipeline.synth_stop_exit_code(summary) == 130
 
 
+# @regression
+@pytest.mark.parametrize("step", ["save-state", "progress-print"])
+def test_ctrl_c_during_result_bookkeeping_still_records_the_written_page(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, step: str
+) -> None:
+    """Ctrl+C while a landed page is being recorded: it is recorded on the next wait, counted once."""
+    vault = parallel_tests._mk_vault(tmp_path)
+    slugs = tuple(f"doc{i:02d}" for i in range(8))
+    parallel_tests._seed_docs(vault, slugs)
+    fired = {"n": 0}
+
+    if step == "save-state":
+        real_save_state = synth_pipeline._save_state
+
+        def _save_state(state, state_file=None):
+            if fired["n"] == 0:
+                fired["n"] = 1
+                raise KeyboardInterrupt
+            return real_save_state(state, state_file)
+
+        monkeypatch.setattr(synth_pipeline, "_save_state", _save_state)
+    else:
+
+        def _print(*args, **kwargs):
+            if fired["n"] == 0 and args and "synthesized:" in str(args[0]):
+                fired["n"] = 1
+                raise KeyboardInterrupt
+            builtins.print(*args, **kwargs)
+
+        monkeypatch.setattr(synth_pipeline, "print", _print, raising=False)
+
+    summary = parallel_tests._run_synth(
+        vault, parallel_tests._RealPageBackend(), concurrency=2
+    )
+
+    assert fired["n"] == 1
+    assert summary["interrupted"] is True
+    assert summary["errors"] == []
+    assert summary["synthesized"] >= 1
+    assert len(parallel_tests._pages(vault)) == summary["synthesized"]
+    assert len(parallel_tests._synth_state(vault)) == summary["synthesized"]
+    assert summary["deferred"] == len(slugs) - summary["synthesized"] - len(summary["errors"])
+
+
+class _KillableBackend(_HeldBackend):
+    """Holds every call until ``kill_in_flight``; a killed call fails like a killed child."""
+
+    def __init__(self, parties: int) -> None:
+        super().__init__(parties)
+        self.kill_calls = 0
+
+    def synthesize_source_page(self, raw_body, meta, prompt_template):  # noqa: D102
+        with self._lock:
+            self._live += 1
+            if self._live >= self._parties:
+                self.entered.set()
+        self.gate.wait(timeout=10.0)
+        raise RuntimeError("synthesizer process killed")
+
+    def kill_in_flight(self) -> int:  # noqa: D102
+        self.kill_calls += 1
+        self.gate.set()
+        return self._parties
+
+
+# @regression
+def test_second_ctrl_c_kills_in_flight_pages_and_reraises(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A second Ctrl+C during the drain calls the backend's kill hook, records nothing killed, and re-raises."""
+    vault = parallel_tests._mk_vault(tmp_path)
+    parallel_tests._seed_docs(vault, tuple(f"doc{i:02d}" for i in range(6)))
+    backend = _KillableBackend(parties=2)
+    waits = {"n": 0}
+
+    def _as_completed(futures):
+        waits["n"] += 1
+        if waits["n"] == 1:
+            assert backend.entered.wait(timeout=10.0), "pages never started"
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(synth_pipeline, "as_completed", _as_completed)
+    started = time.monotonic()
+
+    with pytest.raises(KeyboardInterrupt):
+        parallel_tests._run_synth(vault, backend, concurrency=2)
+
+    assert time.monotonic() - started < 5.0
+    assert backend.kill_calls == 1
+    assert parallel_tests._pages(vault) == {}
+    assert parallel_tests._synth_state(vault) == {}
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX process groups and sh")
+@pytest.mark.parametrize(
+    "script",
+    [
+        pytest.param("sleep 30", id="exits-on-sigterm"),
+        pytest.param("trap '' TERM; sleep 30", id="killed-after-grace"),
+    ],
+)
+def test_kill_all_stops_a_tracked_child_promptly(script: str) -> None:
+    """A live tracked child is gone within about a second of ``kill_all``, SIGTERM-deaf or not."""
+    children = TrackedChildren()
+    result: dict = {}
+    worker = threading.Thread(
+        target=lambda: result.setdefault(
+            "proc", children.run(["sh", "-c", script], timeout=60)
+        )
+    )
+    worker.start()
+    deadline = time.monotonic() + 5.0
+    while len(children) == 0 and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert len(children) == 1
+    time.sleep(0.2)  # let the shell install its trap
+    started = time.monotonic()
+
+    assert children.kill_all(grace=0.3) == 1
+    worker.join(timeout=5.0)
+
+    assert not worker.is_alive()
+    assert time.monotonic() - started < 1.5
+    assert result["proc"].returncode != 0
+    assert len(children) == 0
+
+
+# ─── known-names prep: usage limit and progress line ─────────────────────
+
+
+class _PrepLimitBackend(parallel_tests._RealPageBackend):
+    """The known-names call hits the usage limit; page calls are counted."""
+
+    def __init__(self) -> None:
+        self.page_calls = 0
+
+    def synthesize_source_page(self, raw_body, meta, prompt_template):  # noqa: D102
+        if meta.get("slug") == "known-names":
+            raise _usage_limit_error()
+        self.page_calls += 1
+        return super().synthesize_source_page(raw_body, meta, prompt_template)
+
+
+# @regression
+def test_usage_limit_during_known_names_prep_defers_every_source(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys
+) -> None:
+    """A limit on the prep call sends no page, defers the whole queue, and ``synth`` exits 75."""
+    vault = parallel_tests._mk_vault(tmp_path)
+    slugs = tuple(f"doc{i:02d}" for i in range(5))
+    parallel_tests._seed_docs(vault, slugs)
+    monkeypatch.setattr(topics_consolidate, "build_candidates", lambda wiki_dir=None: [{"name": "X"}])
+    monkeypatch.setattr(topics_consolidate, "render_consolidation_prompt", lambda wiki_dir=None: "prompt")
+    backend = _PrepLimitBackend()
+
+    summary = parallel_tests._run_synth(vault, backend, concurrency=2)
+
+    assert backend.page_calls == 0
+    assert summary["synthesized"] == 0
+    assert summary["errors"] == []
+    assert summary["deferred"] == len(slugs)
+    assert summary["usage_limit"] == {"reset": _RESET}
+    assert parallel_tests._pages(vault) == {}
+    assert len(_state_file(vault)["synth"]["pending"]) == len(slugs)
+    entries = _synthesize_entries(vault)
+    assert len(entries) == 1
+    assert "stopped early (backend usage limit)" in entries[0]
+    out = capsys.readouterr().out
+    assert f"Stopped after 0/{len(slugs)} source(s)" in out
+    assert f"usage limit (resets {_RESET})" in out
+
+    rc, harvest = _run_cmd_synth(summary_tests._mk_vault(tmp_path / "cli"), [], summary)
+
+    assert rc == 75
+    harvest.assert_called_once()
+
+
+def test_known_names_prep_prints_a_progress_line_before_the_call(tmp_path: Path, capsys) -> None:
+    """The prep announces its candidate count and prompt size before the model call."""
+    wiki = topics_tests._make_wiki(tmp_path, {"s1": ["OpenClaw", "Bun"], "s2": ["OpenClaw", "Bun"]})
+    candidates = topics_consolidate.build_candidates(wiki)
+    prompt = topics_consolidate.render_consolidation_prompt(wiki)
+    seen: list[str] = []
+
+    class _Llm:
+        is_llm = True
+
+        def synthesize_source_page(self, raw_body, meta, prompt_template):
+            seen.append(capsys.readouterr().out)
+            return '{"topics": [], "dropped": []}'
+
+    topics_consolidate.prepare_known_names(wiki, _Llm())
+
+    size = topics_consolidate.format_prompt_size(len(prompt.encode("utf-8")))
+    assert len(seen) == 1
+    assert f"Preparing known names from {len(candidates)} candidate topic(s)" in seen[0]
+    assert f"({size} prompt)" in seen[0]
+
+
+def test_known_names_prep_prints_nothing_without_candidates(tmp_path: Path, capsys) -> None:
+    """No candidates: no model call and no progress line."""
+    wiki = topics_tests._make_wiki(tmp_path, {})
+
+    class _Llm:
+        is_llm = True
+
+        def synthesize_source_page(self, raw_body, meta, prompt_template):
+            raise AssertionError("no candidates must not call the model")
+
+    topics_consolidate.prepare_known_names(wiki, _Llm())
+
+    assert "Preparing known names" not in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    ("n_bytes", "text"),
+    [(10, "~1 KB"), (95 * 1024, "~95 KB"), (int(1.25 * 1024 * 1024), "~1.2 MB")],
+)
+def test_prompt_size_is_compact(n_bytes: int, text: str) -> None:
+    """Prompt sizes print as whole KB below a megabyte and one-decimal MB above."""
+    assert topics_consolidate.format_prompt_size(n_bytes) == text
+
+
 # ─── Claude CLI backend: limit detection ─────────────────────────────────
 
 
-def _fake_claude_run(monkeypatch, *, returncode: int, payload: dict) -> list[dict]:
-    """Replace ``subprocess.run`` in the backend; return the recorded call kwargs."""
-    calls: list[dict] = []
-
-    def _run(argv, **kwargs):
-        calls.append(kwargs)
-        return subprocess.CompletedProcess(argv, returncode, json.dumps(payload) + "\n", "")
-
-    monkeypatch.setattr(claude_cli.subprocess, "run", _run)
-    return calls
-
-
-def _claude_backend(tmp_path: Path) -> ClaudeCLISynthesizer:
+def _claude_backend(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    returncode: int,
+    payload: dict | None,
+    stderr: str = "",
+) -> tuple[ClaudeCLISynthesizer, list[list[str]]]:
+    """A Claude backend whose page child is faked; returns it and the recorded argv."""
     script = claude_tests._script(tmp_path, "claude-stub", "#!/bin/sh\nexit 0\n")
-    return ClaudeCLISynthesizer(claude_path=str(script))
+    backend = ClaudeCLISynthesizer(claude_path=str(script))
+    calls: list[list[str]] = []
+    stdout = json.dumps(payload) + "\n" if payload is not None else ""
+
+    def _run(argv, *, input=None, timeout):
+        calls.append(list(argv))
+        return subprocess.CompletedProcess(argv, returncode, stdout, stderr)
+
+    monkeypatch.setattr(backend._children, "run", _run)
+    return backend, calls
+
+
+# @regression
+@pytest.mark.parametrize(
+    ("returncode", "payload", "stderr"),
+    [
+        pytest.param(
+            1,
+            {"type": "result", "subtype": "success", "is_error": True,
+             "api_error_status": 429, "result": _LIMIT_TEXT},
+            "",
+            id="nonzero-exit-429-quota-text",
+        ),
+        pytest.param(
+            0,
+            {"type": "result", "subtype": "success", "is_error": True, "result": _LIMIT_TEXT},
+            "",
+            id="exit0-is-error-quota-text",
+        ),
+        pytest.param(1, None, _LIMIT_TEXT, id="nonzero-exit-stderr-quota-text"),
+    ],
+)
+def test_claude_limit_result_raises_usage_limit_with_reset(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, returncode: int, payload, stderr: str
+) -> None:
+    """Every failure branch maps quota wording to ``BackendUsageLimitError`` carrying the reset time."""
+    backend, calls = _claude_backend(
+        tmp_path, monkeypatch, returncode=returncode, payload=payload, stderr=stderr
+    )
+
+    with pytest.raises(synth_base.BackendUsageLimitError) as info:
+        backend.synthesize_source_page("body", {"slug": "s1"}, claude_tests.TEMPLATE)
+
+    assert info.value.reset == _RESET
+    assert len(calls) == 1
 
 
 # @regression
@@ -237,49 +508,150 @@ def _claude_backend(tmp_path: Path) -> ClaudeCLISynthesizer:
     [
         pytest.param(
             1,
-            {"type": "result", "subtype": "success", "is_error": True,
-             "api_error_status": 429, "result": _LIMIT_TEXT},
-            id="nonzero-exit-429",
+            {"type": "result", "is_error": True, "api_error_status": 500,
+             "result": "Internal server error"},
+            id="nonzero-exit-500",
+        ),
+        pytest.param(
+            1,
+            {"type": "result", "is_error": True, "api_error_status": 429,
+             "result": "Rate limit exceeded"},
+            id="nonzero-exit-bare-429",
         ),
         pytest.param(
             0,
-            {"type": "result", "subtype": "success", "is_error": True, "result": _LIMIT_TEXT},
-            id="exit0-is-error-limit-text",
+            {"type": "result", "is_error": True, "api_error_status": 429,
+             "result": "API Error: 429 Too Many Requests"},
+            id="exit0-bare-429",
         ),
     ],
 )
-def test_claude_limit_result_raises_usage_limit_with_reset(
+def test_claude_non_limit_failure_stays_a_plain_cli_error(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, returncode: int, payload: dict
 ) -> None:
-    """Both CLI branches map the quota result to ``BackendUsageLimitError`` carrying the reset time."""
-    calls = _fake_claude_run(monkeypatch, returncode=returncode, payload=payload)
-    backend = _claude_backend(tmp_path)
-
-    with pytest.raises(synth_base.BackendUsageLimitError) as info:
-        backend.synthesize_source_page("body", {"slug": "s1"}, claude_tests.TEMPLATE)
-
-    assert info.value.reset == _RESET
-    assert len(calls) == 1
-    assert calls[0].get("start_new_session") is True
-
-
-# @regression
-def test_claude_non_limit_failure_stays_a_plain_cli_error(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """A non-zero exit without the quota signal is a per-page ``ClaudeCLIError``, never a usage limit."""
-    _fake_claude_run(
-        monkeypatch,
-        returncode=1,
-        payload={"type": "result", "is_error": True, "api_error_status": 500,
-                 "result": "Internal server error"},
+    """A failure without quota wording — a bare 429 included — is a per-page ``ClaudeCLIError``."""
+    backend, _calls = _claude_backend(
+        tmp_path, monkeypatch, returncode=returncode, payload=payload
     )
-    backend = _claude_backend(tmp_path)
 
     with pytest.raises(ClaudeCLIError) as info:
         backend.synthesize_source_page("body", {"slug": "s1"}, claude_tests.TEMPLATE)
 
     assert not isinstance(info.value, synth_base.BackendUsageLimitError)
+
+
+# ─── shared matcher + Cursor / Ollama limit detection ────────────────────
+
+
+# @regression
+@pytest.mark.parametrize(
+    ("text", "reset"),
+    [
+        pytest.param(_LIMIT_TEXT, _RESET, id="claude-session-limit"),
+        pytest.param("Claude AI usage limit reached", None, id="usage-limit-reached"),
+        pytest.param(
+            "You've hit your usage limit. Your limit resets at 5pm.", "5pm",
+            id="hit-your-limit-resets-at",
+        ),
+        pytest.param(
+            '{"error": "you have reached your weekly usage limit"}', None,
+            id="json-body-weekly-usage-limit",
+        ),
+        pytest.param("Error: quota exceeded for this account", None, id="quota-exceeded"),
+        pytest.param(
+            "You exceeded your current quota, please check your plan.", None,
+            id="exceeded-your-quota",
+        ),
+        pytest.param("Out of credits", None, id="out-of-credits"),
+    ],
+)
+def test_usage_limit_matcher_recognises_quota_wording(text: str, reset: str | None) -> None:
+    """Account / session quota messages become a usage limit, with the reset time when given."""
+    limit = synth_base.usage_limit_from_text(text, label="demo")
+
+    assert isinstance(limit, synth_base.BackendUsageLimitError)
+    assert limit.reset == reset
+    assert str(limit).startswith("demo usage limit: ")
+
+
+# @regression
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Rate limit exceeded",
+        "429 Too Many Requests",
+        "You've hit your rate limit, slow down",
+        "API Error: 429 rate_limit_error: request throttled",
+        "Internal server error",
+        "",
+        None,
+    ],
+)
+def test_usage_limit_matcher_ignores_throttling_and_other_errors(text) -> None:
+    """Short-lived throttling and unrelated failures are not a usage limit."""
+    assert synth_base.usage_limit_from_text(text) is None
+
+
+def _cursor_backend(monkeypatch: pytest.MonkeyPatch, *, returncode: int, stderr: str):
+    backend = CursorCLISynthesizer()
+    monkeypatch.setattr(cursor_cli, "resolve_cursor_agent_path", lambda: "/bin/agent")
+    monkeypatch.setattr(
+        backend._children,
+        "run",
+        lambda argv, *, input=None, timeout: subprocess.CompletedProcess(
+            argv, returncode, "", stderr
+        ),
+    )
+    return backend
+
+
+# @regression
+def test_cursor_quota_message_raises_usage_limit(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A Cursor Agent CLI exit carrying quota wording stops the run instead of failing one page."""
+    backend = _cursor_backend(monkeypatch, returncode=1, stderr=_LIMIT_TEXT)
+
+    with pytest.raises(synth_base.BackendUsageLimitError) as info:
+        backend.synthesize_source_page("body", {"slug": "s1"}, claude_tests.TEMPLATE)
+
+    assert info.value.reset == _RESET
+
+
+# @regression
+def test_cursor_throttling_stays_a_cursor_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A bare 429 from Cursor Agent CLI is its normal per-page error."""
+    backend = _cursor_backend(monkeypatch, returncode=1, stderr="429 Too Many Requests")
+
+    with pytest.raises(CursorCLIError) as info:
+        backend.synthesize_source_page("body", {"slug": "s1"}, claude_tests.TEMPLATE)
+
+    assert not isinstance(info.value, synth_base.BackendUsageLimitError)
+
+
+def _ollama_backend(status: int, body: str) -> OllamaSynthesizer:
+    return OllamaSynthesizer(
+        config=OllamaConfig(max_retries=1, backoff_base=0.0),
+        http_post=lambda url, payload, *, timeout: (status, body),
+    )
+
+
+# @regression
+def test_ollama_429_with_quota_body_raises_usage_limit() -> None:
+    """An Ollama error body with quota wording is a usage limit, not an HTTP error."""
+    backend = _ollama_backend(429, '{"error": "you have reached your weekly usage limit"}')
+
+    with pytest.raises(synth_base.BackendUsageLimitError):
+        backend.synthesize_source_page("body", {"slug": "s1"}, claude_tests.TEMPLATE)
+
+
+# @regression
+def test_ollama_bare_429_stays_an_http_error() -> None:
+    """A 429 whose body is plain throttling stays ``OllamaHTTPError``."""
+    backend = _ollama_backend(429, '{"error": "Too Many Requests"}')
+
+    with pytest.raises(OllamaHTTPError) as info:
+        backend.synthesize_source_page("body", {"slug": "s1"}, claude_tests.TEMPLATE)
+
+    assert info.value.status == 429
 
 
 # ─── CLI: synth exit codes ───────────────────────────────────────────────

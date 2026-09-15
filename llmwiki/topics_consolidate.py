@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Any
 
 from llmwiki import REPO_ROOT
+from llmwiki.synth.base import BackendUsageLimitError
 
 _VALID_KINDS = frozenset({"entity", "concept"})
 
@@ -146,27 +147,45 @@ def parse_and_cache(result_text: str, wiki_dir: Path | None = None) -> dict[str,
     return cache
 
 
+def format_prompt_size(n_bytes: int) -> str:
+    """Compact approximate size for a progress line, e.g. ``~95 KB`` or ``~1.2 MB``."""
+    if n_bytes >= 1024 * 1024:
+        return f"~{n_bytes / (1024 * 1024):.1f} MB"
+    return f"~{max(1, round(n_bytes / 1024))} KB"
+
+
 def prepare_known_names(wiki_dir: Path, backend: Any) -> None:
     """One consolidation LLM call per synth run (job 1 / #147).
 
     Skips when ``backend`` is missing, non-LLM (``is_llm`` is false), or
     ``build_candidates`` is empty. On success writes ``.llmwiki-topics.json``
-    via :func:`parse_and_cache`. On any failure prints a warning and returns
-    without raising so the caller can fall back to heuristic vocabulary
-    injection.
+    via :func:`parse_and_cache`. A :class:`BackendUsageLimitError` propagates
+    so the caller can stop the run before any page (#181); on any other
+    failure it prints a warning and returns without raising so the caller can
+    fall back to heuristic vocabulary injection.
     """
     if backend is None or not getattr(backend, "is_llm", False):
         return
     try:
-        if not build_candidates(wiki_dir):
+        candidates = build_candidates(wiki_dir)
+        if not candidates:
             return
         prompt = render_consolidation_prompt(wiki_dir)
+        # The call below can take a minute or more with no other output.
+        print(
+            f"Preparing known names from {len(candidates)} candidate topic(s) "
+            f"({format_prompt_size(len(prompt.encode('utf-8')))} prompt) — "
+            "one language-model call, may take a minute…",
+            flush=True,
+        )
         reply = backend.synthesize_source_page(
             "",
             {"slug": "known-names", "title": "known-names"},
             prompt,
         )
         parse_and_cache(reply, wiki_dir)
+    except BackendUsageLimitError:
+        raise
     except Exception as exc:
         print(
             f"  warning: prepare_known_names failed ({exc}); "

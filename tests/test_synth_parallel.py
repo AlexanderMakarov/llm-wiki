@@ -11,9 +11,9 @@ Grouped by slice so later slices can append their own sections:
 * abandoned drains — an interrupt or any other escape stops the queue and
   still accounts for the pages that reached disk.
 
-The ``claude`` CLI is never launched: the subprocess module the backend
-reaches for is replaced with an in-process stub, so there is no CLI
-invocation and no network.
+The ``claude`` CLI is never launched: the backend's child-process runner is
+replaced with an in-process stub, so there is no CLI invocation and no
+network.
 """
 
 from __future__ import annotations
@@ -24,7 +24,6 @@ import re
 import subprocess
 import threading
 import time
-import types
 from pathlib import Path
 from unittest.mock import patch
 
@@ -113,19 +112,12 @@ def stubbed_backend(monkeypatch: pytest.MonkeyPatch) -> _YieldingCounters:
 
     monkeypatch.setattr(
         claude_cli,
-        "subprocess",
-        types.SimpleNamespace(
-            run=_fake_run,
-            TimeoutExpired=subprocess.TimeoutExpired,
-            SubprocessError=subprocess.SubprocessError,
-        ),
-    )
-    monkeypatch.setattr(
-        claude_cli,
         "_resolve_claude_path",
         lambda *_args, **_kwargs: "/usr/bin/claude-stub",
     )
-    return _YieldingCounters(claude_path="/usr/bin/claude-stub")
+    backend = _YieldingCounters(claude_path="/usr/bin/claude-stub")
+    monkeypatch.setattr(backend._children, "run", _fake_run)
+    return backend
 
 
 def _drive_from_threads(

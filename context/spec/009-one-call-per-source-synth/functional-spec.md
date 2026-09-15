@@ -84,7 +84,7 @@ Consequence, accepted: if 100 sources are synthesized in one uninterrupted run, 
 
 - **As an** operator whose long run stops early — because I press Ctrl+C, or because the language-model service says my account's usage limit is reached — **I want** pending names collected from the source pages already written, the run's history to say it stopped early, and Home’s counts to match the disk after the next site rebuild, **so that** paid work is not thrown away, I can see what is left for the next run, and I do not need a costing command to unstick the dashboard.
 
-Both causes are one kind of stop. Sources that did not run are **deferred**, not failed: they stay pending and the next run picks them up. A usage-limit stop ends with its own result status — different from a failed run and from Ctrl+C — so a scheduled job can tell "retry after the reset" apart from "something broke". The full sync-to-site command passes that status on and still rebuilds the site for the pages that landed. Only the Claude synthesizer reports a usage limit; with other synthesizers an exhausted account still shows up as per-source failures.
+Both causes are one kind of stop. Sources that did not run are **deferred**, not failed: they stay pending and the next run picks them up. A usage-limit stop ends with its own result status — different from a failed run and from Ctrl+C — so a scheduled job can tell "retry after the reset" apart from "something broke". The full sync-to-site command passes that status on and still rebuilds the site for the pages that landed. Every synthesizer's usage-limit message is recognised, while short-lived "too many requests" throttling still counts as a per-source failure.
 
 - **Acceptance Criteria:**
   - [x] Given a multi-source synthesis stopped early after some pages have been written, when the command exits, then pending names have been collected from those written pages (or the operator is shown the exact one-line command that collects them), and the wiki’s pending-names folder is not left empty solely because the run did not finish.
@@ -92,6 +92,7 @@ Both causes are one kind of stop. Sources that did not run are **deferred**, not
   - [x] Given source pages on disk after an early stop, when the operator rebuilds the site, then Home’s synthesized counts match the pages on disk — they do not stay at zero until someone runs a costing/estimate command.
   - [x] Given a run that stopped early, when the operator reads the wiki's history log, then it holds one entry for that run, marked as stopped early (interrupted or usage limit), with the number of synthesized pages and the number of deferred sources.
   - [x] Given the usage limit is reached part-way through a scheduled run of the full sync-to-site command, when the run ends, then the site is still rebuilt for the pages that landed, and the run's result status is the usage-limit status — not success, not a generic failure, and not hidden by a later lint failure.
+  - [x] Given a run stopped early whose in-flight pages are still finishing, when the operator presses Ctrl+C a second time, then those pages are stopped immediately and the run ends — they are not recorded as finished and stay pending for the next run.
 
 ### FR7 — The separate merge-duplicates command is gone
 
@@ -157,11 +158,10 @@ That opening paragraph is **not** rebuilt when more facts accumulate, and there 
 - **Changing how many pages synthesize at once.** Parallel synthesis stays as it is today.
 - **Reintroducing fact bullets clipped from sentences near a name** (the path #103 removed).
 - Every other roadmap item — honest `--estimate` (#113), docs-link hygiene (#107), README/CLI map (#109 leftover, #112), `llmwiki doctor` (#110), Cursor session parsing (#2), and Later/deferred items.
-- **Recognising a usage limit from synthesizers other than Claude** (#181 follow-up). Their exhausted-account messages are not known yet; until then those show up as per-source failures.
 - **Rebuilding the site as part of synthesis.** Synthesis never rebuilds the site, whether it finishes or stops early; the full sync-to-site command does.
 
 ---
 
 ## Change Log
 
-- **2026-09-15 — #181 clean stop on Ctrl+C or usage limit.** FR5, FR6 and FR9 now cover two stop triggers: Ctrl+C and the language-model account's usage limit. On either, no new source starts, in-flight pages finish, the run keeps a finished run's wrap-up (one history entry marked stopped early with a deferred count), and unrun sources are deferred rather than failed. A usage-limit stop prints one line with the reset time and ends with its own result status, which the full sync-to-site command passes on while still rebuilding the site. In-Scope and Out-of-Scope updated to match. Status stays Completed.
+- **2026-09-15 — #181 clean stop on Ctrl+C or usage limit.** FR5, FR6 and FR9 now cover two stop triggers: Ctrl+C and the language-model account's usage limit. On either, no new source starts, in-flight pages finish, the run keeps a finished run's wrap-up (one history entry marked stopped early with a deferred count), and unrun sources are deferred rather than failed. A usage-limit stop prints one line with the reset time and ends with its own result status, which the full sync-to-site command passes on while still rebuilding the site. In-Scope and Out-of-Scope updated to match. Refined after local review: every synthesizer's usage-limit message is recognised (plain "too many requests" throttling stays a per-source failure), and a second Ctrl+C while in-flight pages finish stops those pages at once and ends the run. Status stays Completed.
