@@ -6,7 +6,6 @@ from pathlib import Path
 
 import pytest
 
-import llmwiki.lint.rules.page_findability as page_findability_mod
 import llmwiki.lint.rules.search_consistency as search_consistency_mod
 import llmwiki.search.context as search_context_mod
 from llmwiki.lint import (
@@ -28,7 +27,7 @@ from llmwiki.search.evaluate import (
     select_absent_terms,
     select_present_terms,
 )
-from llmwiki.search.scoring import match_page, score_extract
+from llmwiki.search.scoring import score_extract
 
 
 def _write(path: Path, text: str) -> None:
@@ -351,22 +350,15 @@ def test_page_findability_wikilink_alias_resolves_to_target(tmp_path: Path):
     )
     errors = [i for i in outcome.issues if i["severity"] == "error"]
     assert errors == [], errors
-    infos = [i["message"] for i in outcome.issues if i["severity"] == "info"]
-    assert any("wikilink lookups" in m for m in infos)
-    wl_info = next(m for m in infos if "wikilink lookups" in m)
-    assert "checked " in wl_info
-    assert "UniqueAliasNameXYZ" not in wl_info  # counts only; failures name anchors
 
 
-def test_page_findability_bare_wikilink_uses_corpus_cap(
+def test_page_findability_slug_links_do_not_error(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
-    """Bare anchors must go through capped search_match, not match_page(target) alone.
-
-    With page_cap=1, an earlier decoy body hit fills the result; the real
-    alias target still matches in isolation but is cut short in corpus search.
-    """
-    monkeypatch.setattr(page_findability_mod, "PAGE_CAP_FOR_FINDABILITY", 1)
+    """Bare slug/alias wikilinks must not trigger findability errors (#259)."""
+    monkeypatch.setattr(
+        "llmwiki.lint.rules.page_findability.PAGE_CAP_FOR_FINDABILITY", 1
+    )
     _wiki_page(
         tmp_path,
         "entities/AaaDecoy.md",
@@ -387,20 +379,16 @@ def test_page_findability_bare_wikilink_uses_corpus_cap(
         body="See [[SharedTokBareXYZ]].\n",
     )
 
-    ctx = SearchContext(content_root=tmp_path)
-    target = next(p for p in ctx.corpus().pages if p.rel_path.endswith("ZzzTarget.md"))
-    assert match_page(target, "sharedtokbarexyz") is not None
-
     outcome = run_lint(
         load_pages(tmp_path / "wiki"),
         selected=["page_findability"],
         options=_lint_options(tmp_path),
     )
     errors = [i for i in outcome.issues if i["severity"] == "error"]
-    assert any(
-        "SharedTokBareXYZ" in e["message"] and "cut short" in e["message"]
-        for e in errors
-    ), errors
+    wikilink_errors = [
+        e for e in errors if "wikilink" in e["message"].lower()
+    ]
+    assert wikilink_errors == [], errors
 
 
 def test_findability_sample_max_stated_in_output(tmp_path: Path):

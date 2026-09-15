@@ -118,8 +118,8 @@ def test_migrate_list_and_name_together_is_error():
     assert "--list cannot be combined" in stderr
 
 
-def test_migrate_catalog_contains_seven_expected_names():
-    """R4-AC: the seven migration names are present in _MIGRATIONS."""
+def test_migrate_catalog_contains_eight_expected_names():
+    """R4-AC: the eight migration names are present in _MIGRATIONS (same as today's commands)."""
     expected = {
         "state",
         "raw-redaction",
@@ -127,6 +127,7 @@ def test_migrate_catalog_contains_seven_expected_names():
         "tools-used",
         "page-kinds",
         "topic-kinds",
+        "wikilink-titles",
         "broken-provenance",
     }
     actual = {name for name, _purpose, _when in _MIGRATIONS}
@@ -136,8 +137,8 @@ def test_migrate_catalog_contains_seven_expected_names():
     assert not extra, f"_MIGRATIONS has unexpected extra names: {sorted(extra)}"
 
 
-def test_migrate_subparsers_register_seven_names():
-    """R4-AC: the migrate subparser tree registers all seven names (argparse level)."""
+def test_migrate_subparsers_register_eight_names():
+    """R4-AC: the migrate subparser tree registers all eight names (argparse level)."""
     expected = {
         "state",
         "raw-redaction",
@@ -145,6 +146,7 @@ def test_migrate_subparsers_register_seven_names():
         "tools-used",
         "page-kinds",
         "topic-kinds",
+        "wikilink-titles",
         "broken-provenance",
     }
     migrate_parser = _subparser_choices(build_parser())["migrate"]
@@ -166,7 +168,19 @@ def test_migrate_subparsers_register_seven_names():
     )
 
 
-@pytest.mark.parametrize("name", ["state", "raw-redaction", "raw-unredaction", "tools-used", "page-kinds", "topic-kinds", "broken-provenance"])
+@pytest.mark.parametrize(
+    "name",
+    [
+        "state",
+        "raw-redaction",
+        "raw-unredaction",
+        "tools-used",
+        "page-kinds",
+        "topic-kinds",
+        "wikilink-titles",
+        "broken-provenance",
+    ],
+)
 def test_each_migration_name_help_is_parseable(name: str):
     """R4-AC: each migration sub-subparser can format its own help without error."""
     migrate_parser = _subparser_choices(build_parser())["migrate"]

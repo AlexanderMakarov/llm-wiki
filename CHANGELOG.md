@@ -19,6 +19,10 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 - **Breaking:** **Private vaults keep real home paths in `raw/` (#253)** — new `redaction.redact_username` (default `false`) gates only the home-path username rewrite in `sync` and `llmwiki add` `source:` paths; token/key/email redaction stays unconditional. New `llmwiki migrate raw-unredaction` restores the real username in already-synced `raw/sessions/` (home-path and dash-encoded positions only; idempotent). `migrate raw-redaction` still redacts regardless of the key.
   - *Release note:* `sync` no longer rewrites your username to `USER`; set `redaction.redact_username: true` before sharing `raw/`, or run `migrate raw-unredaction` to restore old files (#253).
+- **Findability keyed on page title, not slug or raw link text (#259)** — `page_findability` checks only whether a page's frontmatter title is returned by search; the former R2 branch that searched raw wikilink anchor strings is removed. Slug/filename remains link-resolution metainfo (`link_integrity`); prefer `[[slug|Title]]` for visible text. Docs contract in `docs/reference/cli.md` and `docs/reference/slash-commands.md`.
+  - *Release note:* Findability lint and search use page title only; bare resolving slug links are not findability failures (#259).
+- **Optional offline `migrate wikilink-titles` (#259)** — rewrites resolving bare `[[slug]]` wikilinks to `[[slug|Title]]` using titles already on disk under `wiki/` (section anchors preserved; alias-only and syntax-breaking titles skipped). Zero LLM, `raw/` never written; cosmetic only — not required once findability is title-only. Catalog: `docs/reference/cli.md`; upgrade notes: `docs/UPGRADING.md`.
+  - *Release note:* Optional `llmwiki migrate wikilink-titles` adds title display text to bare slug wikilinks without an LLM call (#259).
 - **Release demo gate script (#240)** — `scripts/release_demo_gate.py` regenerates `demo/usage/` for release-day `--today`, builds a local demo site, prints a `file://` URL, runs case-fold pytest + demo lint; `/release` and `RELEASE_PROCESS.md` pause for human visual OK before tag push. Pages/CI still only deploy committed `demo/` (no content invention).
   - *Release note:* Maintainer release cut uses `release_demo_gate.py` + local demo review before tagging (#240).
 - **Demo ships `llmwiki-state` (#255 / #197)** — `demo/llmwiki-state.json` and `demo/llmwiki-state.js` are allowlisted in `.gitignore` and committed so Pages/Home Pipeline state is not an empty `synth.files` backlog. User vaults remain gitignored.
@@ -29,10 +33,12 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Fixed
 
+- **`page_findability` no longer errors on bare resolving slug wikilinks (#259)** — hub pages and source lists that link with `[[session-slug]]` or other bare stems no longer fail findability when the slug string is absent from search results; only title-based findability is checked.
+  - *Release note:* Bare `[[slug]]` links that resolve correctly no longer trigger findability lint errors (#259).
 - **CI build smoke no longer dirties tracked demo state (#255 / #197)** — `lint-and-test` copies `demo/` to `ci-demo-vault` before `build`, so stamping `llmwiki-state.*` cannot fail the working-tree-clean gate.
 - **MCP search caps DRY (#197)** — `_MCP_SCAN_*` / `_SEARCH_*_CAP` in `llmwiki.mcp.server` are aliases of `llmwiki.search` defaults (no second copy of the 4 MiB / 50 MiB / 200 literals).
-- **Findability answer key (#197 local review)** — `select_present_terms` reads only scanned raw pages (no unbounded session `read_text`); `page_findability` also samples resolved `[[wikilink]]` lookups via the graph alias resolver and reports how many were checked.
-  - *Release note:* Search consistency terms and wikilink findability checks stay within the searchable corpus (#197).
+- **Findability answer key (#197 local review)** — `select_present_terms` reads only scanned raw pages (no unbounded session `read_text`); title findability stays within the searchable corpus. Wikilink-anchor findability sampling was removed in #259 (title is the findability key).
+  - *Release note:* Search consistency terms stay within the searchable corpus (#197); findability is title-only after #259.
 - **Session `description:` prefers adapter assigned names, else scored user prompts (#249 / #246)** — Claude Code uses sidecar `customTitle` then `aiTitle`; Cursor CLI uses the store meta `name` when it is not the placeholder `New Agent`. Without an assigned name, convert scores every real user prompt (type bands → position → length capped 0..120) and takes the top; punctuation-only turns are skipped; Cursor XML chrome (`user_info` / `system_reminder` / …) is stripped on the description path via adapter normalize. Refresh existing `raw/sessions/` with optional `llmwiki sync --force` then `build` — **no wiki re-synth**.
   - *Release note:* Session subtitles use adapter titles when present, otherwise a scored prompt pick; `sync --force` + `build` refreshes raw (#249 / #246).
 - **Claude Code control tags no longer leak into session `description:` or Conversation (#229)** — convert strips / collapses `<local-command-caveat>`, `<command-name>`, `<command-message>`, `<command-args>`, `<local-command-stdout>` (and similar) envelopes, plus `[SYSTEM NOTIFICATION …]` banners and `<task-notification>` blocks from background-task events. Caveat-only / notification-only turns are omitted; slash-command turns become `/name` or `/name <args>` when `<command-args>` is non-empty; user-prompt newlines are preserved as markdown hard breaks so multi-line turns render as multiple lines. Subtitle selection (including whether an injected dump’s first line can win) is governed by #249 scoring / assigned names — not a separate dump-skip list on the description path. Already-synced vaults need `llmwiki sync --force` (then `build`) so `raw/sessions/` is re-converted.
@@ -45,6 +51,9 @@ Versions below 1.0 are pre-production — API and file formats may change.
   - *Release note:* Candidate harvest no longer writes two stubs that differ only by letter case (#204).
 
 ### Removed
+
+- **Wikilink-anchor findability check (R2) from `page_findability` (#259)** — the lint no longer searches for raw `[[wikilink]]` anchor strings; title-only findability remains. Prefer `[[slug|Title]]` for display text; optional `migrate wikilink-titles` rewrites existing bare resolving links offline.
+  - *Release note:* Findability no longer fails pages whose inbound link anchors are slug stems (#259).
 
 ## [2.3.0] — 2026-09-08
 

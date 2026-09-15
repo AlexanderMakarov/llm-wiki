@@ -366,7 +366,7 @@ These three share one corpus scan per lint run (same scoring path as `llmwiki se
 
 | Rule | Severity | What it checks |
 |---|---|---|
-| `page_findability` | error | A titled wiki page is not returned at all when searched by its own title (score ≤ 0, absent from the search corpus, or cut short by the result cap). Also checks a sample of resolved `[[wikilink]]` anchors (same alias resolution as the graph): the link text must return the resolved target page. Reports how many wikilink lookups were checked at info severity. |
+| `page_findability` | error | A titled wiki page is not returned at all when searched by its own title (score ≤ 0, absent from the search corpus, or cut short by the result cap). Findability is keyed on **title**, not slug/filename — bare `[[slug]]` links are link-resolution metainfo (`link_integrity`), not findability failures. Prefer `[[slug\|Title]]` so readers see the title. |
 | `title_ambiguity` | warning | A titled wiki page is not ranked first for its own title — names the outranking page, or reports a score tie. |
 | `search_consistency` | error | Match-mode search disagrees with a literal scan over wiki pages and session content (present terms must hit; absent terms must not). Prints both term groups in full. |
 
@@ -547,6 +547,7 @@ python3 -m llmwiki migrate raw-unredaction --vault /path/to/vault --dry-run
 python3 -m llmwiki migrate tools-used --vault /path/to/vault
 python3 -m llmwiki migrate page-kinds --vault /path/to/vault --dry-run
 python3 -m llmwiki migrate topic-kinds --vault /path/to/vault
+python3 -m llmwiki migrate wikilink-titles --vault /path/to/vault --dry-run
 python3 -m llmwiki migrate broken-provenance --vault /path/to/vault --dry-run
 ```
 
@@ -678,6 +679,26 @@ python3 -m llmwiki migrate topic-kinds --vault /path/to/vault
 | `--dry-run` | Report what would change; write nothing (no stamped JSON either). |
 
 Idempotent: a second run finds nothing to stamp and prints `nothing to migrate: no connection lines need topic kinds`. Preview with `--dry-run` before applying.
+
+### `wikilink-titles` — add title display text to bare resolving wikilinks
+
+Wiki search and the `page_findability` lint key on page **title** (frontmatter `title`), not on slug/filename. Bare `[[OpenAI]]` links still resolve correctly, but their visible text is the slug stem. This offline migration rewrites resolving bare `[[slug]]` links to `[[slug|Title]]` using titles already on disk under `wiki/` — no language model, no network call, and `raw/` is never written.
+
+Section anchors are preserved (`[[Page#Section]]` → `[[Page#Section|Title]]`). Links that already carry display text (`[[slug|alias]]`), unresolved targets, alias-only anchors (written name ≠ resolved slug), and titles that would break wikilink syntax (contain `|` or `]]`) are skipped and counted in the report. Fenced/example `[[slug]]` tokens are rewritten the same as prose — skim `--dry-run` changed pages before applying.
+
+Implementation: `llmwiki/migrate_wikilink_titles.py`. Cosmetic/readability only — not required for lint green once findability is title-only. Rebuild the site after applying if you want HTML to show the new display text: `llmwiki build --vault PATH`.
+
+```bash
+python3 -m llmwiki migrate wikilink-titles --vault /path/to/vault --dry-run
+python3 -m llmwiki migrate wikilink-titles --vault /path/to/vault
+```
+
+| Flag | What |
+|---|---|
+| `--vault PATH` | **Required.** Vault root containing `wiki/`. |
+| `--dry-run` | Report what would change; write nothing. |
+
+Idempotent: a second run finds nothing to rewrite and prints `nothing to migrate: no bare slug wikilinks need title display text`. Preview with `--dry-run` before applying.
 
 ### `broken-provenance` — remap or clear hops to missing raw sessions
 
