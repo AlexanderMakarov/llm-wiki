@@ -156,6 +156,7 @@ from llmwiki.synth.pipeline import (
     resolve_backend,
     resolve_exclude_headless,
     resolve_include_subagents,
+    synth_stop_exit_code,
     synthesize_new_sessions,
 )
 
@@ -2134,9 +2135,11 @@ def cmd_synthesize(args: argparse.Namespace) -> int:
         for err in summary["errors"]:
             print(f"  ! {err}", file=sys.stderr)
 
-    # Ctrl-C: in-flight pages were drained and recorded; collect pending names
-    # from what landed (or tell the operator how), then exit 130 — not 1.
-    if summary.get("interrupted"):
+    # Clean stop (#181): Ctrl-C or an exhausted backend quota. In-flight pages
+    # were drained and recorded; collect pending names from what landed (or
+    # tell the operator how), then exit 130 / 75 — not 1, even with errors.
+    stop_rc = synth_stop_exit_code(summary)
+    if stop_rc:
         if sources_only:
             print("llmwiki synth --candidates-only")
         else:
@@ -2157,11 +2160,11 @@ def cmd_synthesize(args: argparse.Namespace) -> int:
                 print("Pending names collected from written sources.")
             else:
                 print(
-                    "Harvest after interrupt failed; retry with:",
+                    "Harvest after stop failed; retry with:",
                     file=sys.stderr,
                 )
                 print("llmwiki synth --candidates-only")
-        return 130
+        return stop_rc
 
     if summary["errors"]:
         return 1

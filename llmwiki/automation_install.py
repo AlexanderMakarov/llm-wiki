@@ -234,6 +234,9 @@ def render_wrapper_script(
 ) -> str:
     """Bash wrapper running the plan's command line, truncating the log each run.
 
+    The log ends with ``EXIT:<code>`` carrying the command's real exit code,
+    and the wrapper exits with that same code so the scheduler sees it.
+
     ``vault`` is forwarded to :func:`~llmwiki.automation_plan.plan_command`, which
     appends it as ``--vault`` when the scheduled run must not resolve its vault
     from config.
@@ -244,7 +247,8 @@ def render_wrapper_script(
         "#!/usr/bin/env bash\n"
         "set -euo pipefail\n"
         f"mkdir -p \"$(dirname {log})\"\n"
-        f"{{ {cmd} ; echo EXIT:$?; }} >{log} 2>&1\n"
+        f"{{ rc=0; {cmd} || rc=$?; echo \"EXIT:$rc\"; }} >{log} 2>&1\n"
+        "exit \"$rc\"\n"
     )
 
 

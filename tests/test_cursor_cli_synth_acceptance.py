@@ -61,7 +61,7 @@ def _seed_vault(tmp_path: Path) -> Path:
 
 
 def _mock_agent_run(*, probe_ok: bool = True, page: str = _CURSOR_PAGE):
-    """Return a subprocess.run side_effect: probe then synth pages."""
+    """Return a tracked-child ``run`` side_effect: probe then synth pages."""
 
     def _side_effect(*_args, **kwargs):
         prompt = kwargs.get("input") or ""
@@ -107,7 +107,7 @@ def test_cli_synth_cursor_cli_writes_real_source_page(
         "llmwiki.synth.cursor_cli.resolve_cursor_agent_path",
         return_value="/bin/agent",
     ), patch(
-        "llmwiki.synth.cursor_cli.subprocess.run",
+        "llmwiki.synth.cursor_cli.TrackedChildren.run",
         side_effect=_mock_agent_run(),
     ):
         args = build_parser().parse_args([
@@ -139,7 +139,7 @@ def test_cli_unavailable_cursor_cli_fails_without_failover(
         "llmwiki.synth.cursor_cli.resolve_cursor_agent_path",
         return_value="/bin/agent",
     ), patch(
-        "llmwiki.synth.cursor_cli.subprocess.run",
+        "llmwiki.synth.cursor_cli.TrackedChildren.run",
         side_effect=_mock_agent_run(probe_ok=False),
     ):
         args = build_parser().parse_args([
@@ -166,7 +166,7 @@ def test_check_requires_successful_probe_not_binary_alone(
         "llmwiki.synth.cursor_cli.resolve_cursor_agent_path",
         return_value="/bin/agent",
     ), patch(
-        "llmwiki.synth.cursor_cli.subprocess.run",
+        "llmwiki.synth.cursor_cli.TrackedChildren.run",
         return_value=_completed(returncode=1, stderr="not logged in"),
     ):
         args = build_parser().parse_args(["synth", "--check", "--vault", str(vault)])
