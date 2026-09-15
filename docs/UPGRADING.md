@@ -18,6 +18,7 @@ No required migration. After upgrade:
 - **R2 removed:** `page_findability` no longer searches for raw wikilink anchor strings (e.g. hub pages that list many `[[session-slug]]` sources no longer fail findability solely because the slug string is not a search hit). Title-not-found / ranked-past-cap errors are unchanged.
 - **Prefer `[[slug|Title]]`:** visible link text should show the page title while the slug keeps resolution stable. Bare `[[slug]]` links that resolve correctly are not findability failures.
 - **Optional cosmetic migrate:** when you want display text to match titles across existing wiki pages, run offline `llmwiki migrate wikilink-titles --vault <vault> [--dry-run]` — reads titles already on disk under `wiki/`, rewrites resolving bare `[[slug]]` to `[[slug|Title]]`, zero LLM, `raw/` never written. Not required for lint green. Fenced/example `[[slug]]` tokens are rewritten the same as prose — skim `--dry-run` changed pages before apply. Rebuild after apply if you want HTML to show the new display text: `llmwiki build --vault <vault>`.
+- **Re-run after #262:** if an earlier `wikilink-titles` pass left case/punctuation variants bare (e.g. `[[LLM-Wiki]]` while the page is `llm-wiki`), run the migrate again — those uniquely fold to a page under the same `_norm_slug` key as `link_integrity` and rewrite to `[[canonical-slug|Title]]`. True aliases and ambiguous collisions stay skipped.
 
 ```bash
 llmwiki migrate wikilink-titles --vault /path/to/vault --dry-run

@@ -33,6 +33,8 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Fixed
 
+- **`migrate wikilink-titles` rewrites case/punctuation-variant bare links (#262)** — bare `[[LLM-Wiki]]` (and similar) uniquely matching a page under the same `_norm_slug` key as `link_integrity` become `[[canonical-slug|Title]]`; true aliases and ambiguous collisions stay skipped. Re-run the migrate on vaults already processed by #259.
+  - *Release note:* `migrate wikilink-titles` now titles case/punct-variant bare links that fold to a unique page (#262).
 - **`page_findability` no longer errors on bare resolving slug wikilinks (#259)** — hub pages and source lists that link with `[[session-slug]]` or other bare stems no longer fail findability when the slug string is absent from search results; only title-based findability is checked.
   - *Release note:* Bare `[[slug]]` links that resolve correctly no longer trigger findability lint errors (#259).
 - **CI build smoke no longer dirties tracked demo state (#255 / #197)** — `lint-and-test` copies `demo/` to `ci-demo-vault` before `build`, so stamping `llmwiki-state.*` cannot fail the working-tree-clean gate.
