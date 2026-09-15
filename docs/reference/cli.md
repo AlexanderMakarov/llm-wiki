@@ -443,7 +443,19 @@ See [`guides/existing-vault.md`](../guides/existing-vault.md) for the round-trip
 
 Primary command (#90 / #147). Default runs **both** phases: pending sources → `wiki/sources/`, then entity/concept candidates → `wiki/candidates/`.
 
-A real sources pass is **two language-model jobs**, then bookkeeping: (1) prepare known-names once at the start of the run (canonical name, aliases, kind, short description) from wiki already on disk — Dummy / `not is_llm` skips this and uses heuristic vocabulary inject; (2) **one** source-summary ask per queued raw file, with that frozen list in the prompt. Connections bullets name each topic with kind and nested `fact:` claims. Harvest after sources (and `--candidates-only`) is a parser over those bullets — **no** classify LLM call; cost for harvest alone is **zero** LLM. Ctrl+C drains in-flight pages, then harvests from what was written (unless `--sources-only`, which prints `llmwiki synth --candidates-only`) and exits **130** (#145).
+A real sources pass is **two language-model jobs**, then bookkeeping: (1) prepare known-names once at the start of the run (canonical name, aliases, kind, short description) from wiki already on disk — Dummy / `not is_llm` skips this and uses heuristic vocabulary inject; (2) **one** source-summary ask per queued raw file, with that frozen list in the prompt. Connections bullets name each topic with kind and nested `fact:` claims. Harvest after sources (and `--candidates-only`) is a parser over those bullets — **no** classify LLM call; cost for harvest alone is **zero** LLM.
+
+**Clean stop (#145 / #181).** Ctrl+C, or a backend usage limit (the Claude CLI reports that the account's session or usage quota is exhausted), stops the run from starting new sources. Queued sources are cancelled; pages already in flight finish and are recorded (page, state entry, pending removal). The run then does the same bookkeeping as a successful one — a single `wiki/log.md` entry marked `stopped early` with a `Deferred:` count, pending refresh, index rebuild — and harvests candidates from what was written (unless `--sources-only`, which prints `llmwiki synth --candidates-only`). A usage-limit stop prints one line, `Stopped after N/M source(s) — backend usage limit (resets <time>); waiting for K page(s) already in flight.`, instead of an error per remaining source. Sources that did not run are **deferred**, not errors: they stay pending and the next run picks them up. Only the Claude CLI backend reports a usage limit; Cursor Agent CLI and Ollama failures stay per-source errors. `synth` never rebuilds `site/` — after a successful run or a stop, run `llmwiki build`.
+
+Exit codes:
+
+- `0` — every queued source was synthesized (and harvested, unless `--sources-only`).
+- `1` — at least one source failed, or harvest failed.
+- `2` — usage error (bad flags or paths).
+- `75` — stopped on the backend's usage limit; retry after the reset time.
+- `130` — interrupted with Ctrl+C.
+
+A stop exits `75` / `130` even when some sources in the same run also failed; those errors are still printed.
 
 ```bash
 python3 -m llmwiki synth --check            # probe the backend
@@ -910,17 +922,21 @@ python3 -m llmwiki all --skip-graph --lint-fail warnings   # fail CI on any lint
 | `errors` | Lint reported at least one error-severity issue. |
 | `warnings` | Lint reported at least one error **or** warning. |
 
-When `--lint-fail` ends the run with exit `2`, the site HTML from the **preceding build in this run is kept** — lint does not undo or revert `site/`. Home surfaces the failure via Pipeline state (Last lint + banner); see [ui.md](ui.md#home).
+When `--lint-fail` fails the run (exit `2`, unless an earlier step already set a non-zero code), the site HTML from the **preceding build in this run is kept** — lint does not undo or revert `site/`. Home surfaces the failure via Pipeline state (Last lint + banner); see [ui.md](ui.md#home).
 
 ### Conflicting flags
 
 `--no-synth` wins over `--with-synth`, and `--no-sync` wins over `--with-sync`, in any order on the command line — the deprecated `--with-*` aliases are inert and cannot re-enable a stage you just switched off. `--strict` and `--lint-fail` resolve to whichever of the two is stricter.
 
-Exit codes:
+Exit codes — the **first** non-zero step's code wins, so a later lint failure never masks an earlier synth code:
 
 - `0` — every step succeeded.
-- non-zero — forwarded from the first (or worst) failing step.
+- `1` — a step failed (for example a synth source error).
 - `2` — the lint failure policy was met, or a required directory was missing.
+- `75` — synth stopped on the backend's usage limit. Harvest, `build`, `graph` and `lint` still run for the pages that landed; the deferred sources wait for the next run.
+- `130` — synth was interrupted with Ctrl+C. Later stages still run for the pages that landed.
+
+With `--fail-fast`, a synth stop harvests what landed and then ends the run with `75` / `130`.
 
 ---
 
@@ -1027,6 +1043,8 @@ Exit codes:
 - `1` — scheduler activation failed (`--activate` default); status file records `scheduler_error`.
 - `2` — the schedule is not an expression llmwiki can translate.
 
+The installed wrapper script ends its log with `EXIT:<code>`, the scheduled command's real exit code, and exits with that same code — so the scheduler can tell a usage-limit stop (`75`) from a failure (`1`). Wrappers installed by an older release always logged `EXIT:0`; re-run `install-automation` to regenerate them.
+
 **Status file fields** (under `<vault>/.llmwiki/automation-status.json`): in addition to job/schedule keys, activation adds `scheduler_activated` (bool), `scheduler_backend` (`systemd` / `launchd` / `schtasks`), `scheduler_units_dir` (install path), `scheduler_active` (read-back when available), and `scheduler_error` (string when activation failed).
 
 ---
@@ -1038,6 +1056,8 @@ Exit codes:
 | `0` | Success |
 | `1` | Operation failed (user-visible error) |
 | `2` | Usage error (bad flags, missing file, etc.) |
+| `75` | Temporary stop: the synthesis backend's usage limit was reached (`synth`, `all`); retry after the reset |
+| `130` | Interrupted with Ctrl+C after a clean stop (`synth`, `all`) |
 
 Subcommands document their own non-zero exit conditions where relevant (`lint --fail-on-errors`).
 

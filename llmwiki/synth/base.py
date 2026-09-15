@@ -48,6 +48,23 @@ def split_prompt_template(template: str) -> tuple[str, str]:
     return head.rstrip(), sep + tail
 
 
+class BackendUsageLimitError(RuntimeError):
+    """The backend's account or session quota is exhausted (#181).
+
+    Distinct from a per-page failure: every later page would fail the same
+    way until the quota resets, so the synth pipeline stops dispatching new
+    sources and defers the remainder to the next run. ``reset`` carries the
+    provider's reset time as text when it gave one.
+
+    Only the Claude CLI backend raises it. The Cursor Agent CLI and Ollama
+    expose no distinct quota signal, so their failures stay per-page errors.
+    """
+
+    def __init__(self, message: str, *, reset: str | None = None) -> None:
+        super().__init__(message)
+        self.reset = reset
+
+
 class BaseSynthesizer(ABC):
     """Interface for LLM-backed wiki-page synthesizers."""
 

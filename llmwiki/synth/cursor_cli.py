@@ -115,7 +115,11 @@ def lean_argv(agent: str, *, model: str | None = None) -> list[str]:
 
 
 class CursorCLIError(RuntimeError):
-    """One page failed to synthesize via the Cursor Agent CLI."""
+    """One page failed to synthesize via the Cursor Agent CLI.
+
+    Agent CLI exposes no distinct quota signal, so an exhausted account is a
+    per-page error here, never a ``BackendUsageLimitError``.
+    """
 
 
 class CursorCLISynthesizer(BaseSynthesizer):
@@ -144,7 +148,12 @@ class CursorCLISynthesizer(BaseSynthesizer):
         *,
         timeout: float,
     ) -> subprocess.CompletedProcess[str]:
-        """Invoke Agent CLI once; prefer stdin when supported."""
+        """Invoke Agent CLI once; prefer stdin when supported.
+
+        The child starts in a new session so a terminal Ctrl+C interrupts only
+        the synth run and the page in flight still finishes (POSIX only;
+        Windows ignores the flag).
+        """
         argv = self._argv(agent)
         if _PROMPT_VIA_STDIN:
             return subprocess.run(
@@ -153,6 +162,7 @@ class CursorCLISynthesizer(BaseSynthesizer):
                 capture_output=True,
                 text=True,
                 timeout=timeout,
+                start_new_session=True,
             )
         # Argv fallback: same body cap already applied by the caller.
         return subprocess.run(
@@ -160,6 +170,7 @@ class CursorCLISynthesizer(BaseSynthesizer):
             capture_output=True,
             text=True,
             timeout=timeout,
+            start_new_session=True,
         )
 
     def overview_completion(
