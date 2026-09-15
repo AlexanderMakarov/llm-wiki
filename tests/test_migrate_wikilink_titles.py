@@ -70,7 +70,7 @@ def test_build_title_map_from_wiki_scan(tmp_path: Path) -> None:
         type="concept",
     )
 
-    slug_to_title, _alias_map, slugs, _by_norm = build_title_map(wiki)
+    slug_to_title, _alias_map, slugs = build_title_map(wiki)
 
     assert "OpenAI" in slugs
     assert "RAG" in slugs
@@ -145,7 +145,7 @@ def test_skip_alias_only_non_bare_anchor(tmp_path: Path) -> None:
         title='"Survivor Entity"',
         type="entity",
     )
-    slug_to_title, alias_map, slugs, by_norm = build_title_map(wiki)
+    slug_to_title, alias_map, slugs = build_title_map(wiki)
     text = "Old name [[MergedAway]] still works."
 
     new_text, counters = rewrite_wikilink_titles(
@@ -153,7 +153,6 @@ def test_skip_alias_only_non_bare_anchor(tmp_path: Path) -> None:
         slug_to_title=slug_to_title,
         alias_map=alias_map,
         slugs=slugs,
-        by_norm=by_norm,
     )
 
     assert new_text == text
@@ -169,7 +168,7 @@ def test_rewrite_case_variant_normalizes_to_canonical_slug(tmp_path: Path) -> No
         title='"llm-wiki"',
         type="project",
     )
-    slug_to_title, alias_map, slugs, by_norm = build_title_map(wiki)
+    slug_to_title, alias_map, slugs = build_title_map(wiki)
     text = "- [[LLM-Wiki]] — document tagged for wiki addition\n"
 
     new_text, counters = rewrite_wikilink_titles(
@@ -177,7 +176,6 @@ def test_rewrite_case_variant_normalizes_to_canonical_slug(tmp_path: Path) -> No
         slug_to_title=slug_to_title,
         alias_map=alias_map,
         slugs=slugs,
-        by_norm=by_norm,
     )
 
     assert counters["links_rewritten"] == 1
@@ -192,14 +190,13 @@ def test_rewrite_case_variant_preserves_section_anchor(tmp_path: Path) -> None:
         title='"LLM Wiki Project"',
         type="project",
     )
-    slug_to_title, alias_map, slugs, by_norm = build_title_map(wiki)
+    slug_to_title, alias_map, slugs = build_title_map(wiki)
 
     new_text, counters = rewrite_wikilink_titles(
         "See [[LLM-Wiki#Setup]]",
         slug_to_title=slug_to_title,
         alias_map=alias_map,
         slugs=slugs,
-        by_norm=by_norm,
     )
 
     assert counters["links_rewritten"] == 1
@@ -209,14 +206,13 @@ def test_rewrite_case_variant_preserves_section_anchor(tmp_path: Path) -> None:
 def test_rewrite_punct_variant_space_to_hyphen_slug(tmp_path: Path) -> None:
     wiki = tmp_path / "wiki"
     _entity(wiki, "OpenAI", title="OpenAI Inc.")
-    slug_to_title, alias_map, slugs, by_norm = build_title_map(wiki)
+    slug_to_title, alias_map, slugs = build_title_map(wiki)
 
     new_text, counters = rewrite_wikilink_titles(
         "[[Open AI]]",
         slug_to_title=slug_to_title,
         alias_map=alias_map,
         slugs=slugs,
-        by_norm=by_norm,
     )
 
     assert counters["links_rewritten"] == 1
@@ -232,14 +228,13 @@ def test_ambiguous_norm_slug_stays_unresolved(tmp_path: Path) -> None:
         title='"Open AI concept"',
         type="concept",
     )
-    slug_to_title, alias_map, slugs, by_norm = build_title_map(wiki)
+    slug_to_title, alias_map, slugs = build_title_map(wiki)
 
     new_text, counters = rewrite_wikilink_titles(
         "[[openai]]",
         slug_to_title=slug_to_title,
         alias_map=alias_map,
         slugs=slugs,
-        by_norm=by_norm,
     )
 
     assert new_text == "[[openai]]"
@@ -249,7 +244,7 @@ def test_ambiguous_norm_slug_stays_unresolved(tmp_path: Path) -> None:
 def test_skip_unsafe_title_with_pipe(tmp_path: Path) -> None:
     wiki = tmp_path / "wiki"
     _entity(wiki, "BadTitle", title="Foo | Bar")
-    slug_to_title, alias_map, slugs, by_norm = build_title_map(wiki)
+    slug_to_title, alias_map, slugs = build_title_map(wiki)
     text = "Link [[BadTitle]] here."
 
     new_text, counters = rewrite_wikilink_titles(
@@ -257,7 +252,6 @@ def test_skip_unsafe_title_with_pipe(tmp_path: Path) -> None:
         slug_to_title=slug_to_title,
         alias_map=alias_map,
         slugs=slugs,
-        by_norm=by_norm,
     )
 
     assert new_text == text
@@ -267,14 +261,13 @@ def test_skip_unsafe_title_with_pipe(tmp_path: Path) -> None:
 def test_skip_unsafe_title_with_closing_brackets(tmp_path: Path) -> None:
     wiki = tmp_path / "wiki"
     _entity(wiki, "Broken", title='Say "hello]]world"')
-    slug_to_title, alias_map, slugs, by_norm = build_title_map(wiki)
+    slug_to_title, alias_map, slugs = build_title_map(wiki)
 
     new_text, counters = rewrite_wikilink_titles(
         "[[Broken]]",
         slug_to_title=slug_to_title,
         alias_map=alias_map,
         slugs=slugs,
-        by_norm=by_norm,
     )
 
     assert new_text == "[[Broken]]"
@@ -289,7 +282,7 @@ def test_skip_empty_title(tmp_path: Path) -> None:
         title='""',
         type="entity",
     )
-    slug_to_title, alias_map, slugs, by_norm = build_title_map(wiki)
+    slug_to_title, alias_map, slugs = build_title_map(wiki)
     # scan_pages falls back to stem when title empty — force empty in rewrite map
     slug_to_title["EmptyTitle"] = "   "
 
@@ -298,7 +291,6 @@ def test_skip_empty_title(tmp_path: Path) -> None:
         slug_to_title=slug_to_title,
         alias_map=alias_map,
         slugs=slugs,
-        by_norm=by_norm,
     )
 
     assert new_text == "[[EmptyTitle]]"

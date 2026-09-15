@@ -75,23 +75,21 @@ def _resolve_migrate_target(
     return hit  # str or None when missing/ambiguous
 
 
-def build_title_map(
-    wiki: Path,
-) -> tuple[dict[str, str], dict[str, str], set[str], dict[str, str | None]]:
-    """Return slug→title, alias map, slug set, and norm→slug index.
+def build_title_map(wiki: Path) -> tuple[dict[str, str], dict[str, str], set[str]]:
+    """Return slug→title, alias map, and slug set aligned with the graph scan.
 
     Uses :func:`llmwiki.graph.scan_pages` so stem collisions and archive skips
     match ``build_graph``. Titles fall back to the page stem when frontmatter
-    omits ``title`` (same as the graph). The norm index matches
-    ``link_integrity``'s case/punctuation folding (#262).
+    omits ``title`` (same as the graph). Callers pass the slug set into
+    :func:`rewrite_wikilink_titles`, which always builds the
+    ``link_integrity``-compatible norm index from those slugs (#262).
     """
     pages = scan_pages(wiki)
     slug_to_title = {slug: str(page["title"]) for slug, page in pages.items()}
     bodies = {slug: page["body"] for slug, page in pages.items()}
     slugs = set(pages)
     alias_map = build_page_alias_map(bodies)
-    by_norm = _build_norm_slug_index(slugs)
-    return slug_to_title, alias_map, slugs, by_norm
+    return slug_to_title, alias_map, slugs
 
 
 def _rewrite_wikilink_match(
@@ -146,9 +144,14 @@ def rewrite_wikilink_titles(
     slug_to_title: dict[str, str],
     alias_map: dict[str, str],
     slugs: set[str],
-    by_norm: dict[str, str | None] | None = None,
 ) -> tuple[str, dict[str, int]]:
-    """Rewrite bare resolving wikilinks in ``text``; return new text and counters."""
+    """Rewrite bare resolving wikilinks in ``text``; return new text and counters.
+
+    Always folds targets with the same ``_norm_slug`` index as
+    ``link_integrity`` (built from ``slugs``). There is no opt-out — migration
+    title display and page identity must stay aligned with how slugs are
+    matched (#262).
+    """
     counters = {
         "links_rewritten": 0,
         "links_skipped_display": 0,
@@ -156,8 +159,7 @@ def rewrite_wikilink_titles(
         "links_skipped_non_bare": 0,
         "links_skipped_unsafe_title": 0,
     }
-    if by_norm is None:
-        by_norm = _build_norm_slug_index(slugs)
+    by_norm = _build_norm_slug_index(slugs)
     if not WIKILINK_RE.search(text):
         return text, counters
 
@@ -236,7 +238,7 @@ def run_migration(*, vault: Path, dry_run: bool = False) -> dict[str, Any]:
         report["errors"].append(f"missing wiki dir: {wiki}")
         return report
 
-    slug_to_title, alias_map, slugs, by_norm = build_title_map(wiki)
+    slug_to_title, alias_map, slugs = build_title_map(wiki)
 
     for path in _iter_wiki_markdown(wiki):
         try:
@@ -250,7 +252,6 @@ def run_migration(*, vault: Path, dry_run: bool = False) -> dict[str, Any]:
             slug_to_title=slug_to_title,
             alias_map=alias_map,
             slugs=slugs,
-            by_norm=by_norm,
         )
         for key, value in counters.items():
             report[key] += value
