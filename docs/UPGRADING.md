@@ -14,9 +14,9 @@ The canonical per-release detail is [CHANGELOG.md](https://github.com/AlexanderM
 
 Behaviour flip, no data migration. Scripts and schedulers that read exit codes should check these:
 
-- **New exit code `75`:** `synth` and `all` exit `75` when the Claude CLI backend reports an exhausted usage quota. The run stops starting new sources, finishes the pages in flight, harvests what landed, and leaves the rest pending (`Deferred:` in `wiki/log.md`) instead of logging one error per remaining source. Treat `75` as "retry after the reset time", not as a failure.
-- **`all` no longer returns `0` after Ctrl+C:** an interrupted synth step now makes `all` exit `130` (later stages still run for the pages that landed).
-- **Lint failure no longer masks earlier codes:** `all --lint-fail …` used to return `2` even when an earlier step had failed; now the first non-zero code wins (`1`, `75`, `130`, then `2`).
+- **New exit code `75`:** `synth` and `all` exit `75` when the synthesis backend (Claude CLI, Cursor Agent CLI or Ollama) reports an exhausted usage quota in its error message. The run stops starting new sources, finishes the pages in flight, harvests what landed, and leaves the rest pending (`Deferred:` in `wiki/log.md`) instead of logging one error per remaining source. Treat `75` as "retry after the reset time", not as a failure. A plain rate-limit `429` ("Too Many Requests") is still a per-source error.
+- **`all` no longer returns `0` after Ctrl+C:** an interrupted synth step now makes `all` exit `130` (later stages still run for the pages that landed). A second Ctrl+C while in-flight pages finish kills the Claude / Cursor CLI processes and ends the run at once; with Ollama it waits for in-flight requests up to the Ollama timeout.
+- **Lint failure no longer masks earlier codes:** `all --lint-fail …` used to return `2` even when an earlier step had failed; now the code of the earliest failing step wins — lint's `2` applies only when no earlier step failed.
 - **Reinstall automation:** wrappers installed by `install-automation` before this release always logged `EXIT:0`. Run `llmwiki install-automation` again so the log's `EXIT:` line and the scheduler both see the real exit code.
 
 ## Unreleased — Findability by page title (#259)

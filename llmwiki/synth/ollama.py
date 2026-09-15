@@ -51,7 +51,11 @@ import urllib.request
 from dataclasses import dataclass
 from typing import Any
 
-from llmwiki.synth.base import BaseSynthesizer, split_prompt_template
+from llmwiki.synth.base import (
+    BaseSynthesizer,
+    split_prompt_template,
+    usage_limit_from_text,
+)
 
 # ─── Constants ─────────────────────────────────────────────────────────
 
@@ -272,6 +276,8 @@ class OllamaSynthesizer(BaseSynthesizer):
             DNS failure, etc.). Callers should skip synthesis and move on.
         OllamaHTTPError
             The server returned a non-2xx response after all retries.
+        BackendUsageLimitError
+            That non-2xx response's body reports an exhausted account quota.
         """
         # #py-h7 (#585): pipeline used to pre-render the prompt for us
         # (with `body[:8000]` truncation + a `key: value` meta format),
@@ -350,6 +356,11 @@ class OllamaSynthesizer(BaseSynthesizer):
                 time.sleep(self.config.backoff_base * (2 ** (attempt - 1)))
                 continue
 
+            # A quota message in the error body (a hosted model's weekly
+            # limit, say) stops the run; a bare 429 is a per-page error.
+            limit = usage_limit_from_text(body, label="Ollama")
+            if limit is not None:
+                raise limit
             raise OllamaHTTPError(status, body)
 
         # Unreachable if max_retries >= 1, but keep the type checker honest
