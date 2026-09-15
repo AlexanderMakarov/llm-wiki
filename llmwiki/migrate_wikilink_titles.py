@@ -5,7 +5,7 @@ under ``wiki/``. No synthesis backend or network call. Complements the
 title-only findability lint by making link display text match page titles.
 
 Exact slug matches keep the written target spelling. Case/punctuation
-variants that uniquely match a page under the same ``_norm_slug`` key as
+variants that uniquely match a page under the same :func:`~llmwiki.wikilinks.norm_page_key` fold as
 ``link_integrity`` (e.g. ``[[LLM-Wiki]]`` → page ``llm-wiki``) are rewritten
 to the canonical slug plus title. True aliases (different page identity)
 stay skipped.
@@ -24,10 +24,10 @@ from typing import Any
 
 from llmwiki._system_pages import is_archived_path
 from llmwiki.graph import scan_pages
-from llmwiki.lint.rules.link_integrity import _norm_slug
 from llmwiki.wikilinks import (
     WIKILINK_RE,
     build_page_alias_map,
+    norm_page_key,
     resolve_wikilink_target,
     strip_anchor,
 )
@@ -43,11 +43,11 @@ def _title_is_safe(title: str) -> bool:
     return "|" not in title and "]]" not in title
 
 
-def _build_norm_slug_index(slugs: set[str]) -> dict[str, str | None]:
-    """Map ``_norm_slug`` → canonical slug, or ``None`` when ambiguous."""
+def _build_page_key_index(slugs: set[str]) -> dict[str, str | None]:
+    """Map page-identity key → canonical slug, or ``None`` when ambiguous."""
     by_norm: dict[str, str | None] = {}
     for slug in slugs:
-        key = _norm_slug(slug)
+        key = norm_page_key(slug)
         if not key:
             continue
         if key not in by_norm:
@@ -64,11 +64,11 @@ def _resolve_migrate_target(
     alias_map: dict[str, str],
     by_norm: dict[str, str | None],
 ) -> str | None:
-    """Resolve ``anchor`` for migrate: exact, then unique norm-slug match."""
+    """Resolve ``anchor`` for migrate: exact, then unique ``norm_page_key`` match."""
     resolved = resolve_wikilink_target(anchor, slugs, alias_map)
     if resolved is not None:
         return resolved
-    key = _norm_slug(anchor)
+    key = norm_page_key(anchor)
     if not key:
         return None
     hit = by_norm.get(key)
@@ -82,7 +82,7 @@ def build_title_map(wiki: Path) -> tuple[dict[str, str], dict[str, str], set[str
     match ``build_graph``. Titles fall back to the page stem when frontmatter
     omits ``title`` (same as the graph). Callers pass the slug set into
     :func:`rewrite_wikilink_titles`, which always builds the
-    ``link_integrity``-compatible norm index from those slugs (#262).
+    shared ``norm_page_key`` index from those slugs (#262).
     """
     pages = scan_pages(wiki)
     slug_to_title = {slug: str(page["title"]) for slug, page in pages.items()}
@@ -120,7 +120,7 @@ def _rewrite_wikilink_match(
         return full, "skipped_unresolved"
 
     # Same page identity under link_integrity folding; true aliases differ.
-    if _norm_slug(anchor) != _norm_slug(resolved):
+    if norm_page_key(anchor) != norm_page_key(resolved):
         return full, "skipped_non_bare"
 
     title = slug_to_title.get(resolved, "")
@@ -147,8 +147,8 @@ def rewrite_wikilink_titles(
 ) -> tuple[str, dict[str, int]]:
     """Rewrite bare resolving wikilinks in ``text``; return new text and counters.
 
-    Always folds targets with the same ``_norm_slug`` index as
-    ``link_integrity`` (built from ``slugs``). There is no opt-out — migration
+    Always folds targets with :func:`~llmwiki.wikilinks.norm_page_key`
+    (built from ``slugs``; same key as ``link_integrity``). There is no opt-out — migration
     title display and page identity must stay aligned with how slugs are
     matched (#262).
     """
@@ -159,7 +159,7 @@ def rewrite_wikilink_titles(
         "links_skipped_non_bare": 0,
         "links_skipped_unsafe_title": 0,
     }
-    by_norm = _build_norm_slug_index(slugs)
+    by_norm = _build_page_key_index(slugs)
     if not WIKILINK_RE.search(text):
         return text, counters
 

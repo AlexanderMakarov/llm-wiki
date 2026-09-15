@@ -134,7 +134,7 @@ def test_case_colliding_wikilink_spellings_fold_to_one_candidate(
 
     Old behaviour counted ``[[llmwiki]]`` and ``[[LLMWiki]]`` as separate
     targets and wrote sibling files under ``candidates/entities/``. Folding
-    by ``_norm_slug`` yields one target and refreshes any pending stub whose
+    by ``norm_page_key`` yields one target and refreshes any pending stub whose
     stem already matches that fold group.
     """
     wiki = tmp_path / "wiki"

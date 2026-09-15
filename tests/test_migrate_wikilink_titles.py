@@ -160,7 +160,7 @@ def test_skip_alias_only_non_bare_anchor(tmp_path: Path) -> None:
 
 
 def test_rewrite_case_variant_normalizes_to_canonical_slug(tmp_path: Path) -> None:
-    """[[LLM-Wiki]] matches page llm-wiki via link_integrity _norm_slug (#262)."""
+    """[[LLM-Wiki]] matches page llm-wiki via shared norm_page_key (#262)."""
     wiki = tmp_path / "wiki"
     _page(
         wiki / "projects" / "llm-wiki.md",
@@ -219,7 +219,7 @@ def test_rewrite_punct_variant_space_to_hyphen_slug(tmp_path: Path) -> None:
     assert new_text == "[[OpenAI|OpenAI Inc.]]"
 
 
-def test_ambiguous_norm_slug_stays_unresolved(tmp_path: Path) -> None:
+def test_ambiguous_norm_page_key_stays_unresolved(tmp_path: Path) -> None:
     wiki = tmp_path / "wiki"
     _entity(wiki, "OpenAI", title="OpenAI Inc.")
     _page(

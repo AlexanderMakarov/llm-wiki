@@ -59,6 +59,7 @@ Copy the relevant section into the PR review comment. Local delivery flows (`/im
 
 ## Code quality
 
+- [ ] **Follows DRY** — new code must not re-implement logic that already lives in a shared helper or module. Prefer extending or calling the existing function (same package or a leaf module such as `wikilinks`) over copying a private helper across packages. Divergent copies of the same rule (e.g. two page-identity folds) are a review finding; inventing a second fold “for this PR only” needs an explicit why in the PR body.
 - [ ] **Functions have docstrings** — new public functions in
       `llmwiki/` need a one-paragraph docstring explaining what,
       how, and any non-obvious invariants.

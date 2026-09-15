@@ -18,17 +18,14 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
-from llmwiki.lint.rules.link_integrity import _norm_slug
 from llmwiki.reindex import reindex_wiki
 from llmwiki.source_topics import TopicRecord, parse_source_topics
 from llmwiki.vault_settings import DEFAULT_MIN_REFS
-from llmwiki.wikilinks import count_source_refs
+from llmwiki.wikilinks import count_source_refs, norm_page_key
 
 # ``DEFAULT_MIN_REFS`` is re-exported from :mod:`llmwiki.vault_settings` so
 # existing importers (``cli.py``, ``pipeline.py``) keep reading it here while
-# :mod:`llmwiki.lint` reads the same definition from vault_settings — a lint
-# import of this module would be a cycle, since ``_norm_slug`` above comes out
-# of the lint package (#150).
+# :mod:`llmwiki.lint` reads the same definition from vault_settings (#150).
 
 
 @dataclass(frozen=True)
@@ -84,7 +81,7 @@ def harvest_targets(
     # permanently, because discarding it again changes nothing.
     candidates_root = wiki_dir / "candidates"
     resolved = {
-        _norm_slug(p.stem)
+        norm_page_key(p.stem)
         for p in wiki_dir.rglob("*.md")
         if not p.is_relative_to(candidates_root)
     }
@@ -110,7 +107,7 @@ def harvest_targets(
     # resolved filters (#204). Counting stays exact-keyed; only harvest collapses.
     by_norm: dict[str, dict[str, set[str]]] = defaultdict(dict)
     for name, pages in by_target.items():
-        by_norm[_norm_slug(name)][name] = pages
+        by_norm[norm_page_key(name)][name] = pages
 
     harvested: list[HarvestedTarget] = []
     for norm, spellings in by_norm.items():
@@ -277,9 +274,9 @@ def _topic_records_for_target(
             text = (wiki_dir / rel).read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
-        want = _norm_slug(target.name)
+        want = norm_page_key(target.name)
         for record in parse_source_topics(text):
-            if _norm_slug(record.name) == want:
+            if norm_page_key(record.name) == want:
                 matched.append((slug, record))
     return matched
 
@@ -428,7 +425,7 @@ def _existing_stub(wiki_dir: Path, name: str) -> tuple[str, Path] | None:
     Alternate-case harvests must refresh the existing filename rather than
     writing a sibling that collides on case-insensitive filesystems (#204).
     """
-    want = _norm_slug(name)
+    want = norm_page_key(name)
     for subdir in _KIND_DIRS.values():
         folder = wiki_dir / "candidates" / subdir
         if not folder.is_dir():
@@ -436,7 +433,7 @@ def _existing_stub(wiki_dir: Path, name: str) -> tuple[str, Path] | None:
         for path in sorted(folder.glob("*.md")):
             if path.name.startswith("_"):
                 continue
-            if _norm_slug(path.stem) == want:
+            if norm_page_key(path.stem) == want:
                 return subdir, path
     return None
 

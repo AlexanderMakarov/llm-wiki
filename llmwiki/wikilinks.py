@@ -19,6 +19,7 @@ __all__ = [
     "WIKILINK_RE",
     "build_page_alias_map",
     "count_source_refs",
+    "norm_page_key",
     "parse_page_aliases",
     "resolve_wikilink_target",
     "strip_anchor",
@@ -29,6 +30,9 @@ __all__ = [
 #: target as written, including any ``#section`` anchor.
 WIKILINK_RE = re.compile(r"\[\[([^\]|]+)(?:\|[^\]]*)?\]\]")
 
+#: Strip everything except ``a-z0-9`` after lowercasing — page identity fold.
+_PAGE_KEY_RE = re.compile(r"[^a-z0-9]")
+
 
 def strip_anchor(target: str) -> str:
     """Return ``target`` without its ``#section`` anchor, whitespace trimmed.
@@ -37,6 +41,20 @@ def strip_anchor(target: str) -> str:
     the empty string.
     """
     return target.split("#")[0].strip()
+
+
+def norm_page_key(name: str) -> str:
+    """Case/punctuation-insensitive key for wiki **page identity**.
+
+    ``LLM-Wiki``, ``llm wiki``, and ``llm-wiki`` all become ``llmwiki``. Used
+    by ``link_integrity``, candidate harvest, and ``migrate wikilink-titles``
+    so case/punct variants of a wikilink target resolve to one page.
+
+    This folds the written **link target** (slug / stem), not topic vocabulary
+    labels. Topic HTML paths use :func:`llmwiki.topics.topic_slug` instead
+    (hyphenated, keeps separators as ``-``).
+    """
+    return _PAGE_KEY_RE.sub("", name.lower())
 
 
 def wikilink_targets(text: str) -> set[str]:
