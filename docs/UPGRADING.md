@@ -10,6 +10,15 @@ How to upgrade between `llmwiki` releases. Most releases are drop-in (`pip insta
 
 The canonical per-release detail is [CHANGELOG.md](https://github.com/AlexanderMakarov/llm-wiki/blob/main/CHANGELOG.md) — this guide focuses on "what might break".
 
+## Unreleased — synth clean stop on Ctrl+C or backend usage limit (#181)
+
+Behaviour flip, no data migration. Scripts and schedulers that read exit codes should check these:
+
+- **New exit code `75`:** `synth` and `all` exit `75` when the Claude CLI backend reports an exhausted usage quota. The run stops starting new sources, finishes the pages in flight, harvests what landed, and leaves the rest pending (`Deferred:` in `wiki/log.md`) instead of logging one error per remaining source. Treat `75` as "retry after the reset time", not as a failure.
+- **`all` no longer returns `0` after Ctrl+C:** an interrupted synth step now makes `all` exit `130` (later stages still run for the pages that landed).
+- **Lint failure no longer masks earlier codes:** `all --lint-fail …` used to return `2` even when an earlier step had failed; now the first non-zero code wins (`1`, `75`, `130`, then `2`).
+- **Reinstall automation:** wrappers installed by `install-automation` before this release always logged `EXIT:0`. Run `llmwiki install-automation` again so the log's `EXIT:` line and the scheduler both see the real exit code.
+
 ## Unreleased — Findability by page title (#259)
 
 No required migration. After upgrade:

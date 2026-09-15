@@ -269,7 +269,7 @@ def test_wrapper_command_line_is_plan_command(tmp_path: Path, plan: AutomationPl
     expected = plan_command(plan, python_bin="python3", working_dir=tmp_path)
     wrapper_lines = (units / "llmwiki-maintain.sh").read_text(encoding="utf-8").splitlines()
     command_line = next(line for line in wrapper_lines if line.startswith("{ "))
-    assert command_line.startswith(f"{{ {expected} ; echo EXIT:$?; }}")
+    assert command_line.startswith(f"{{ rc=0; {expected} || rc=$?; echo \"EXIT:$rc\"; }}")
 
 
 def test_status_carries_new_and_legacy_keys(tmp_path: Path):
@@ -694,7 +694,7 @@ def test_the_default_vault_leaves_the_scheduled_command_unchanged(
     wrapper = (units / "llmwiki-maintain.sh").read_text(encoding="utf-8")
     assert "--vault" not in wrapper
     expected = plan_command(AutomationPlan(job="ingest"), python_bin=sys.executable, working_dir=tmp_path)
-    assert f"{{ {expected} ; echo EXIT:$?; }}" in wrapper
+    assert f"{{ rc=0; {expected} || rc=$?; echo \"EXIT:$rc\"; }}" in wrapper
 
 
 def test_extras_flags_are_not_noted_for_a_maintain_job(
