@@ -62,7 +62,7 @@
 
 ## What maintainers CAN accept
 
-Read [`REVIEW_CHECKLIST.md`](REVIEW_CHECKLIST.md) for the full bar.
+Read [`REVIEW_CHECKLIST.md`](REVIEW_CHECKLIST.md) for the full bar (including the DRY check under Code quality).
 TL;DR:
 
 - New feature behind a clear issue (link in PR body)

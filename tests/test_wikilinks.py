@@ -22,6 +22,7 @@ from llmwiki.references import build_index
 from llmwiki.wikilinks import (
     WIKILINK_RE,
     build_page_alias_map,
+    norm_page_key,
     parse_page_aliases,
     resolve_wikilink_target,
     wikilink_targets,
@@ -52,6 +53,21 @@ _ORDINARY = [c for c in _CASES if c[0] != "anchor-only"]
 )
 def test_wikilink_targets(text: str, expected: set[str]) -> None:
     assert wikilink_targets(text) == expected
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("LLM-Wiki", "llmwiki"),
+        ("llm-wiki", "llmwiki"),
+        ("llm wiki", "llmwiki"),
+        ("OpenAI", "openai"),
+        ("Open AI", "openai"),
+    ],
+)
+def test_norm_page_key_folds_case_and_punctuation(raw: str, expected: str) -> None:
+    """Page-identity fold shared by lint, harvest, and wikilink-titles migrate."""
+    assert norm_page_key(raw) == expected
 
 
 @pytest.mark.parametrize(

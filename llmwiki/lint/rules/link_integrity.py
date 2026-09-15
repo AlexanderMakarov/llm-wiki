@@ -2,24 +2,16 @@
 
 from __future__ import annotations
 
-import re
-
 from llmwiki.lint import LintRule, register
 from llmwiki.lint.rules._helpers import _page_slug
 from llmwiki.wikilinks import (
     WIKILINK_RE,
     build_page_alias_map,
     count_source_refs,
+    norm_page_key,
     resolve_wikilink_target,
     strip_anchor,
 )
-
-_NORM_RE = re.compile(r"[^a-z0-9]")
-
-
-def _norm_slug(s: str) -> str:
-    """Case/punct-insensitive key: ``LLM-Wiki`` / ``llm wiki`` → ``llmwiki``."""
-    return _NORM_RE.sub("", s.lower())
 
 
 def _under_sources(rel: str) -> bool:
@@ -44,7 +36,7 @@ class LinkIntegrity(LintRule):
         slugs = {_page_slug(rel) for rel in pages}
         by_norm: dict[str, str] = {}
         for slug in slugs:
-            key = _norm_slug(slug)
+            key = norm_page_key(slug)
             if key and key not in by_norm:
                 by_norm[key] = slug
         alias_map = build_page_alias_map(
@@ -68,7 +60,7 @@ class LinkIntegrity(LintRule):
                     continue
                 if resolve_wikilink_target(t, slugs, alias_map) is not None:
                     continue
-                if t in slugs or _norm_slug(t) in by_norm:
+                if t in slugs or norm_page_key(t) in by_norm:
                     continue
                 n_refs = len(refs.get(t, ()))
                 if 0 < n_refs < min_refs:

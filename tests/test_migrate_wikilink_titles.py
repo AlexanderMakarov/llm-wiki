@@ -159,6 +159,88 @@ def test_skip_alias_only_non_bare_anchor(tmp_path: Path) -> None:
     assert counters["links_skipped_non_bare"] == 1
 
 
+def test_rewrite_case_variant_normalizes_to_canonical_slug(tmp_path: Path) -> None:
+    """[[LLM-Wiki]] matches page llm-wiki via shared norm_page_key (#262)."""
+    wiki = tmp_path / "wiki"
+    _page(
+        wiki / "projects" / "llm-wiki.md",
+        "# llm-wiki\n",
+        title='"llm-wiki"',
+        type="project",
+    )
+    slug_to_title, alias_map, slugs = build_title_map(wiki)
+    text = "- [[LLM-Wiki]] — document tagged for wiki addition\n"
+
+    new_text, counters = rewrite_wikilink_titles(
+        text,
+        slug_to_title=slug_to_title,
+        alias_map=alias_map,
+        slugs=slugs,
+    )
+
+    assert counters["links_rewritten"] == 1
+    assert new_text == "- [[llm-wiki|llm-wiki]] — document tagged for wiki addition\n"
+
+
+def test_rewrite_case_variant_preserves_section_anchor(tmp_path: Path) -> None:
+    wiki = tmp_path / "wiki"
+    _page(
+        wiki / "projects" / "llm-wiki.md",
+        "# llm-wiki\n",
+        title='"LLM Wiki Project"',
+        type="project",
+    )
+    slug_to_title, alias_map, slugs = build_title_map(wiki)
+
+    new_text, counters = rewrite_wikilink_titles(
+        "See [[LLM-Wiki#Setup]]",
+        slug_to_title=slug_to_title,
+        alias_map=alias_map,
+        slugs=slugs,
+    )
+
+    assert counters["links_rewritten"] == 1
+    assert new_text == "See [[llm-wiki#Setup|LLM Wiki Project]]"
+
+
+def test_rewrite_punct_variant_space_to_hyphen_slug(tmp_path: Path) -> None:
+    wiki = tmp_path / "wiki"
+    _entity(wiki, "OpenAI", title="OpenAI Inc.")
+    slug_to_title, alias_map, slugs = build_title_map(wiki)
+
+    new_text, counters = rewrite_wikilink_titles(
+        "[[Open AI]]",
+        slug_to_title=slug_to_title,
+        alias_map=alias_map,
+        slugs=slugs,
+    )
+
+    assert counters["links_rewritten"] == 1
+    assert new_text == "[[OpenAI|OpenAI Inc.]]"
+
+
+def test_ambiguous_norm_page_key_stays_unresolved(tmp_path: Path) -> None:
+    wiki = tmp_path / "wiki"
+    _entity(wiki, "OpenAI", title="OpenAI Inc.")
+    _page(
+        wiki / "concepts" / "Open-AI.md",
+        "# Open-AI\n",
+        title='"Open AI concept"',
+        type="concept",
+    )
+    slug_to_title, alias_map, slugs = build_title_map(wiki)
+
+    new_text, counters = rewrite_wikilink_titles(
+        "[[openai]]",
+        slug_to_title=slug_to_title,
+        alias_map=alias_map,
+        slugs=slugs,
+    )
+
+    assert new_text == "[[openai]]"
+    assert counters["links_skipped_unresolved"] == 1
+
+
 def test_skip_unsafe_title_with_pipe(tmp_path: Path) -> None:
     wiki = tmp_path / "wiki"
     _entity(wiki, "BadTitle", title="Foo | Bar")
