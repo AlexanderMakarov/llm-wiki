@@ -10,6 +10,20 @@ How to upgrade between `llmwiki` releases. Most releases are drop-in (`pip insta
 
 The canonical per-release detail is [CHANGELOG.md](https://github.com/AlexanderMakarov/llm-wiki/blob/main/CHANGELOG.md) — this guide focuses on "what might break".
 
+## Unreleased — Findability by page title (#259)
+
+No required migration. After upgrade:
+
+- **Title is the findability key:** `llmwiki search`, MCP `wiki_search`, and the `page_findability` lint rule judge findability by each page's frontmatter **title**, not by slug/filename or bare link text. Slug/filename stays filesystem and `[[wikilink]]` resolution metainfo (`link_integrity` still covers broken links).
+- **R2 removed:** `page_findability` no longer searches for raw wikilink anchor strings (e.g. hub pages that list many `[[session-slug]]` sources no longer fail findability solely because the slug string is not a search hit). Title-not-found / ranked-past-cap errors are unchanged.
+- **Prefer `[[slug|Title]]`:** visible link text should show the page title while the slug keeps resolution stable. Bare `[[slug]]` links that resolve correctly are not findability failures.
+- **Optional cosmetic migrate:** when you want display text to match titles across existing wiki pages, run offline `llmwiki migrate wikilink-titles --vault <vault> [--dry-run]` — reads titles already on disk under `wiki/`, rewrites resolving bare `[[slug]]` to `[[slug|Title]]`, zero LLM, `raw/` never written. Not required for lint green. Fenced/example `[[slug]]` tokens are rewritten the same as prose — skim `--dry-run` changed pages before apply. Rebuild after apply if you want HTML to show the new display text: `llmwiki build --vault <vault>`.
+
+```bash
+llmwiki migrate wikilink-titles --vault /path/to/vault --dry-run
+llmwiki migrate wikilink-titles --vault /path/to/vault
+```
+
 ## Unreleased — private vaults keep real home paths (#253)
 
 Behaviour flip, no required migration. `sync` (and `llmwiki add` `source:` paths) no longer rewrite the home-path username to `USER` by default: new key `redaction.redact_username` defaults to `false`. API key, token, and email redaction is unchanged and still always runs.

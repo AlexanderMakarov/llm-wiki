@@ -242,7 +242,7 @@ want to re-run sync.
 15. `tools_consistency`
 16. `stub_source_pages`
 17. `provenance_integrity` *(#122)*
-18. `page_findability` *(#197)* — titled page not returned for its own title; also samples resolved `[[wikilink]]` anchors against their graph-resolved target
+18. `page_findability` *(#197)* — titled page not returned for its own title (findability key is title, not slug; prefer `[[slug|Title]]`)
 19. `title_ambiguity` *(#197)* — titled page not ranked first for its own title
 20. `search_consistency` *(#197)* — search vs literal scan; survival share is informational, not a defect
 

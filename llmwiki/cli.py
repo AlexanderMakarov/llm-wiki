@@ -32,6 +32,7 @@ from llmwiki import (
     migrate_broken_provenance,
     migrate_page_kinds,
     migrate_topic_kinds,
+    migrate_wikilink_titles,
     usage,
 )
 from llmwiki.adapters import REGISTRY, discover_all
@@ -1629,6 +1630,11 @@ _MIGRATIONS: tuple[tuple[str, str, str], ...] = (
         "Run when source pages still list bare [[wikilinks]] in Connections without a kind label, after an upgrade that expects those stamps for harvest and display. Reads only existing wiki pages — no LLM call and no new candidate creation.",
     ),
     (
+        "wikilink-titles",
+        "Rewrite bare resolving [[slug]] wikilinks to [[slug|Title]] using frontmatter titles from existing wiki pages.",
+        "Run when wiki pages still use bare slug wikilinks and you want display text to match page titles for readability and findability. Reads only existing wiki pages — no LLM call and raw/ is never written.",
+    ),
+    (
         "broken-provenance",
         "Fix or clear wiki source_file pointers that still name raw/sessions files which are no longer on disk (remap to a same-date candidate when one exists, otherwise clear the hop).",
         "Run after a re-sync or adapter rename left wiki pages pointing at missing raw transcripts (broken Trace / provenance). Does not delete wiki pages and does not convert new sessions.",
@@ -1799,6 +1805,21 @@ def cmd_migrate_topic_kinds(args: argparse.Namespace) -> int:
         dry_run=bool(getattr(args, "dry_run", False)),
     )
     migrate_topic_kinds.print_report(report)
+    return 1 if report["errors"] else 0
+
+
+def cmd_migrate_wikilink_titles(args: argparse.Namespace) -> int:
+    """Rewrite bare resolving wikilinks to carry title display text (#259).
+
+    Package-local like ``migrate-topic-kinds``: pip/Homebrew installs have no
+    ``scripts/`` checkout. Titles come from existing wiki frontmatter only —
+    no synthesis backend or network call.
+    """
+    report = migrate_wikilink_titles.run_migration(
+        vault=Path(args.vault),
+        dry_run=bool(getattr(args, "dry_run", False)),
+    )
+    migrate_wikilink_titles.print_report(report)
     return 1 if report["errors"] else 0
 
 
@@ -3386,6 +3407,23 @@ def build_parser() -> argparse.ArgumentParser:
         help="Report would-change files; write nothing",
     )
     migrate_topic.set_defaults(func=cmd_migrate_topic_kinds)
+
+    migrate_wikilink = add_migration(
+        "wikilink-titles", *_mig_by_name["wikilink-titles"],
+        short="Add title display text to bare resolving wikilinks",
+    )
+    migrate_wikilink.add_argument(
+        "--vault",
+        type=Path,
+        required=True,
+        help="Vault root containing wiki/",
+    )
+    migrate_wikilink.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Report would-change files; write nothing",
+    )
+    migrate_wikilink.set_defaults(func=cmd_migrate_wikilink_titles)
 
     migrate_prov = add_migration(
         "broken-provenance", *_mig_by_name["broken-provenance"],
