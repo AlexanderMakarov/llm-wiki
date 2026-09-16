@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from llmwiki.synth.pipeline import _inject_vocabulary
+from llmwiki.synth.pipeline import PROMPT_TEMPLATE_PATH, _inject_vocabulary
 from llmwiki.topics import (
     Topic,
     TopicPage,
@@ -228,6 +228,90 @@ def test_consolidation_cache_drives_merge_and_descriptions(tmp_path: Path):
     # Regular synth vocab now carries the cached description.
     out = _inject_vocabulary("{vocabulary}\n{body}\n{meta}", wiki)
     assert 'name="kbbuilder" desc="Doc-ingest CLI."' in out
+
+
+def _topic_page(wiki: Path, folder: str, name: str, *, page_type: str) -> None:
+    path = wiki / folder / f"{name}.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        f"---\ntitle: \"{name}\"\ntype: {page_type}\nlast_updated: 2026-08-01\n---\n\n"
+        f"# {name}\n\n## Connections\n- [[demo]]\n",
+        encoding="utf-8",
+    )
+
+
+def test_inject_vocabulary_emits_cache_kind(tmp_path: Path):
+    wiki = _make_wiki(tmp_path, {
+        "s1": ["OpenClaw", "Bun"],
+        "s2": ["OpenClaw", "Bun"],
+    })
+    reply = (
+        '{"topics": [{"canonical": "OpenClaw", "kind": "entity",'
+        ' "description": "Agent platform.", "aliases": []},'
+        '{"canonical": "Bun", "kind": "concept",'
+        ' "description": "JS runtime.", "aliases": []}], "dropped": []}'
+    )
+    parse_and_cache(reply, wiki)
+    out = _inject_vocabulary("{vocabulary}", wiki)
+    assert 'name="OpenClaw" kind="entity"' in out
+    assert 'name="Bun" kind="concept"' in out
+    assert "aka=" not in out
+
+
+def test_inject_vocabulary_page_filing_fallback(tmp_path: Path):
+    wiki = _make_wiki(tmp_path, {
+        "s1": ["OpenClaw", "Bun"],
+        "s2": ["OpenClaw", "Bun"],
+    })
+    _topic_page(wiki, "entities", "OpenClaw", page_type="entity")
+    _topic_page(wiki, "candidates/concepts", "Bun", page_type="concept")
+    out = _inject_vocabulary("{vocabulary}", wiki)
+    assert 'name="OpenClaw" kind="entity"' in out
+    assert 'name="Bun" kind="concept"' in out
+
+
+def test_inject_vocabulary_cache_kind_wins_over_page_filing(tmp_path: Path):
+    wiki = _make_wiki(tmp_path, {
+        "s1": ["OpenClaw", "Bun"],
+        "s2": ["OpenClaw", "Bun"],
+    })
+    # Page says concept; cache says entity — cache wins.
+    _topic_page(wiki, "concepts", "OpenClaw", page_type="concept")
+    reply = (
+        '{"topics": [{"canonical": "OpenClaw", "kind": "entity",'
+        ' "description": "Agent platform.", "aliases": []},'
+        '{"canonical": "Bun", "description": "JS runtime.", "aliases": []}],'
+        ' "dropped": []}'
+    )
+    parse_and_cache(reply, wiki)
+    out = _inject_vocabulary("{vocabulary}", wiki)
+    assert 'name="OpenClaw" kind="entity"' in out
+    assert 'name="OpenClaw" kind="concept"' not in out
+
+
+def test_inject_vocabulary_omits_kind_on_ambiguous_dual_filing(tmp_path: Path):
+    wiki = _make_wiki(tmp_path, {
+        "s1": ["OpenClaw", "Bun"],
+        "s2": ["OpenClaw", "Bun"],
+    })
+    _topic_page(wiki, "entities", "OpenClaw", page_type="entity")
+    _topic_page(wiki, "concepts", "OpenClaw", page_type="concept")
+    out = _inject_vocabulary("{vocabulary}", wiki)
+    openclaw = next(
+        line for line in out.splitlines() if 'name="OpenClaw"' in line
+    )
+    assert "kind=" not in openclaw
+    # Bun has no filing and no cache kind — also omit.
+    bun = next(line for line in out.splitlines() if 'name="Bun"' in line)
+    assert "kind=" not in bun
+
+
+def test_source_page_prompt_forbids_free_form_kinds_and_requires_copy() -> None:
+    """#257 FR2: prompt documents kind= and forbids free-form Connections kinds."""
+    text = PROMPT_TEMPLATE_PATH.read_text(encoding="utf-8")
+    assert 'kind="entity|concept"' in text
+    assert "no free-form type nouns" in text
+    assert "copy that kind" in text
 
 
 def test_parse_and_cache_persists_kind_when_present(tmp_path: Path):

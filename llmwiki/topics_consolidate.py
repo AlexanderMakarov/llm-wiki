@@ -198,8 +198,9 @@ def load_cache(wiki_dir: Path | None = None) -> dict[str, Any] | None:
     """Load the consolidation cache, or ``None`` when absent/unreadable.
 
     Returns ``{"topics": [...], "alias_map": {lower_spelling: canonical},
-    "descriptions": {canonical: text}, "dropped": [noise, ...]}`` for easy
-    consumption.
+    "descriptions": {canonical: text}, "kinds": {canonical: entity|concept},
+    "dropped": [noise, ...]}`` for easy consumption. ``kinds`` only includes
+    topics whose cached ``kind`` is in :data:`_VALID_KINDS`.
     """
     p = cache_path(wiki_dir)
     if not p.is_file():
@@ -211,6 +212,7 @@ def load_cache(wiki_dir: Path | None = None) -> dict[str, Any] | None:
     topics = raw.get("topics") or []
     alias_map: dict[str, str] = {}
     descriptions: dict[str, str] = {}
+    kinds: dict[str, str] = {}
     for t in topics:
         canon = t.get("canonical")
         if not canon:
@@ -219,9 +221,15 @@ def load_cache(wiki_dir: Path | None = None) -> dict[str, Any] | None:
         alias_map[canon.lower()] = canon
         for a in t.get("aliases", []):
             alias_map[str(a).lower()] = canon
+        kind_raw = t.get("kind")
+        if isinstance(kind_raw, str):
+            kind = kind_raw.strip().lower()
+            if kind in _VALID_KINDS:
+                kinds[canon] = kind
     return {
         "topics": topics,
         "alias_map": alias_map,
         "descriptions": descriptions,
+        "kinds": kinds,
         "dropped": raw.get("dropped") or [],
     }
