@@ -48,7 +48,11 @@ from llmwiki.state_store import mtime_from_state, mtime_to_iso
 from llmwiki.state_store import read_state as _read_unified_state
 from llmwiki.state_store import resolve_state_file as _resolve_state_file
 from llmwiki.state_store import update_state as _update_unified_state
-from llmwiki.synth.base import BaseSynthesizer, DummySynthesizer
+from llmwiki.synth.base import (
+    BackendUsageLimitError,
+    BaseSynthesizer,
+    DummySynthesizer,
+)
 from llmwiki.synth.claude_cli import ClaudeCLISynthesizer, load_claude_config
 from llmwiki.synth.cursor_cli import CursorCLISynthesizer, load_cursor_cli_config
 from llmwiki.synth.estimate import synthesize_estimate_report
@@ -801,6 +805,8 @@ def _append_log(
             lines.append(f"- Entities extracted: {', '.join(details['entities'])}\n")
         if details.get("errors"):
             lines.append(f"- Errors: {len(details['errors'])}\n")
+        if details.get("deferred"):
+            lines.append(f"- Deferred: {details['deferred']}\n")
     with open(target, "a", encoding="utf-8") as f:
         f.writelines(lines)
 
@@ -1258,6 +1264,7 @@ def _synthesize_one(
     sources_out: Path,
     chunk_max: int,
     write_lock: threading.Lock,
+    stop_event: threading.Event,
 ) -> dict[str, Any]:
     """Synthesize one raw source into its wiki page(s) and report what happened.
 
@@ -1266,7 +1273,13 @@ def _synthesize_one(
     caller, which applies them from the record returned here::
 
         {rel, mtime, project, is_doc, meta, slug,
-         written, protected, protected_pages, error}
+         written, protected, protected_pages, error,
+         deferred, usage_limit, usage_reset}
+
+    ``stop_event`` is the run's clean-stop signal (#181). A worker that finds
+    it set returns ``deferred`` without calling the backend; a worker whose
+    backend raises :class:`BackendUsageLimitError` sets it, so no later
+    source reaches the exhausted backend.
 
     ``written`` and ``protected_pages`` name the pages this source wrote and
     the ones a real page kept it from overwriting. Any failure lands in
@@ -1293,7 +1306,16 @@ def _synthesize_one(
         "protected": 0,
         "protected_pages": [],
         "error": None,
+        # #181: a deferred source was not synthesized and stays pending —
+        # either the backend's quota ran out on it (`usage_limit`) or the run
+        # was already stopping when a worker picked it up.
+        "deferred": False,
+        "usage_limit": False,
+        "usage_reset": None,
     }
+    if stop_event.is_set():
+        result["deferred"] = True
+        return result
 
     try:
         # G-21 (#307): slug is normalised (spaces → hyphens, filesystem-unsafe
@@ -1346,9 +1368,86 @@ def _synthesize_one(
         # Read once per source, after all parts succeed: the caller stores it
         # as this source's state entry.
         result["mtime"] = p.stat().st_mtime
+    except BackendUsageLimitError as e:
+        # Not this source's fault: it stays pending with no state entry, and
+        # no worker that has not reached the backend yet calls it.
+        stop_event.set()
+        result["deferred"] = True
+        result["usage_limit"] = True
+        result["usage_reset"] = e.reset
     except Exception as e:
         result["error"] = str(e)
     return result
+
+
+#: Exit code of a synth run stopped by Ctrl+C (#145).
+SYNTH_INTERRUPT_EXIT = 130
+#: Exit code of a synth run stopped by an exhausted backend quota (#181);
+#: EX_TEMPFAIL, so a scheduler can retry after the reset.
+SYNTH_USAGE_LIMIT_EXIT = 75
+
+
+def synth_stop_exit_code(summary: Mapping[str, Any]) -> int:
+    """Return the exit code a clean stop maps to, or 0 when the run was not stopped.
+
+    ``summary`` is what :func:`synthesize_new_sessions` returned: an
+    ``interrupted`` run exits 130, a ``usage_limit`` run exits 75.
+    """
+    if summary.get("interrupted"):
+        return SYNTH_INTERRUPT_EXIT
+    if summary.get("usage_limit") is not None:
+        return SYNTH_USAGE_LIMIT_EXIT
+    return 0
+
+
+def _landed_on_disk(res: Mapping[str, Any], sources_out: Path) -> bool:
+    """True when a source's result wrote pages that are all on disk.
+
+    Requires ``error is None``, a non-empty ``written`` list, a recorded
+    ``mtime``, and each named file under ``sources_out/<project>/``. A source
+    whose only outcome was a protected stub (nothing new on disk) does not
+    qualify, so a resume re-attempts it.
+    """
+    written = res.get("written") or []
+    if res.get("error") is not None or not written or res.get("mtime") is None:
+        return False
+    out_dir = sources_out / str(res["project"])
+    return all((out_dir / f"{name}.md").is_file() for name in written)
+
+
+def _kill_in_flight(backend: BaseSynthesizer) -> None:
+    """Ask the backend to stop its in-flight provider calls; never raises (#181)."""
+    kill = getattr(backend, "kill_in_flight", None)
+    if not callable(kill):
+        return
+    try:
+        killed = kill()
+    except Exception:
+        return
+    if isinstance(killed, int) and killed > 0:
+        print(
+            f"Stopped {killed} in-flight synthesizer process(es); "
+            "their pages stay pending.",
+            file=sys.stderr,
+        )
+
+
+def _print_stop_line(
+    reason: str, *, completed: int, total: int, in_flight: int, reset: str | None
+) -> None:
+    """Print the single line announcing a clean stop (#181)."""
+    if reason == "interrupt":
+        print(
+            f"\nInterrupted after {completed}/{total} source(s) — "
+            f"waiting for {in_flight} page(s) already in flight."
+        )
+        return
+    resets = f" (resets {reset})" if reset else ""
+    print(
+        f"\nStopped after {completed}/{total} source(s) — backend "
+        f"usage limit{resets}; waiting for {in_flight} page(s) "
+        "already in flight."
+    )
 
 
 def _record_abandoned_pages(
@@ -1365,10 +1464,8 @@ def _record_abandoned_pages(
     ran and are ignored; every other future is awaited (the executor's
     shutdown joins those threads anyway).
 
-    A source is recorded only when ``error is None``, ``written`` is non-empty,
-    and each named file exists under ``sources_out/<project>/``. Protected-
-    withheld empty writes (stub refused, nothing new on disk) are not marked
-    done, so a resume re-attempts them.
+    A source is recorded only when :func:`_landed_on_disk` holds for it, so a
+    page killed or failed mid-call is never marked done.
 
     Returns True when at least one written page was found on disk (whether or
     not the state file save succeeds).
@@ -1385,11 +1482,7 @@ def _record_abandoned_pages(
             res = future.result()
         except (Exception, CancelledError):
             continue
-        written = res.get("written") or []
-        if res["error"] is not None or not written or res.get("mtime") is None:
-            continue
-        out_dir = sources_out / str(res["project"])
-        if not all((out_dir / f"{name}.md").is_file() for name in written):
+        if not _landed_on_disk(res, sources_out):
             continue
         any_written = True
         state[str(res["rel"])] = res["mtime"]
@@ -1427,8 +1520,14 @@ def synthesize_new_sessions(
         "synthesized": int,
         "skipped": int,
         "errors": list[str],
+        "deferred": int,
         "backend": str,
     }
+
+    A clean stop (#181) adds ``interrupted: True`` for Ctrl+C or
+    ``usage_limit: {"reset": str | None}`` for an exhausted backend quota.
+    Pages already in flight are drained as usual; ``deferred`` counts the
+    sources that were not synthesized and stay pending for the next run.
 
     ``include_sessions`` / ``include_docs`` — restrict the scan to one
     corpus (CLI ``--sessions-only`` / ``--docs-only``). Both default True.
@@ -1633,6 +1732,7 @@ def synthesize_new_sessions(
         "skipped": dedup_skipped,
         "protected": 0,
         "errors": [],
+        "deferred": 0,
         "backend": backend.name,
     }
 
@@ -1651,13 +1751,29 @@ def synthesize_new_sessions(
     # shares one byte-identical `{vocabulary}` prefix. Dummy / empty queue skip
     # the LLM call and still inject heuristic/cache vocabulary.
     wiki_dir = sources_out.parent
+    total = len(new_items)
+    # #181: a clean stop — Ctrl+C or an exhausted backend quota — cancels the
+    # queue once and keeps draining the pages already in flight through the
+    # normal handling below, then falls through to the regular tail.
+    stop_reason: str | None = None
     if new_items and getattr(backend, "is_llm", False):
-        prepare_known_names(wiki_dir, backend)
-    prompt_template = _inject_vocabulary(prompt_template, wiki_dir)
-
-    print_synth_run_start(
-        total=len(new_items), backend_name=backend.name, concurrency=concurrency
-    )
+        try:
+            prepare_known_names(wiki_dir, backend)
+        except BackendUsageLimitError as e:
+            # The quota is already gone: no page would get through, so the
+            # whole queue is deferred before a single page call.
+            stop_reason = "usage_limit"
+            summary["usage_limit"] = {"reset": e.reset}
+            _print_stop_line(
+                stop_reason, completed=0, total=total, in_flight=0, reset=e.reset
+            )
+            summary["deferred"] = total
+            print(f"{total} source(s) deferred to the next run.")
+    if stop_reason is None:
+        prompt_template = _inject_vocabulary(prompt_template, wiki_dir)
+        print_synth_run_start(
+            total=total, backend_name=backend.name, concurrency=concurrency
+        )
 
     # #27: tally what each successful synthesis produced (raw doc vs which
     # agent's session) so the log entry carries a producer breakdown the
@@ -1668,11 +1784,38 @@ def synthesize_new_sessions(
     # mutation — state, summary, producers, stdout — happens here in the
     # draining thread, so none of them needs a lock. `write_lock` guards only
     # the per-page read-modify-write inside the workers.
-    total = len(new_items)
-    if new_items:
+    if new_items and stop_reason is None:
         write_lock = threading.Lock()
+        stop_event = threading.Event()
         completed = 0
+        source_errors = 0
+        # Bookkeeping is idempotent per source, so a Ctrl+C that lands while a
+        # result is being applied re-applies it on the next wait instead of
+        # leaving its page on disk with no state entry: `handled` holds futures
+        # fully applied, `counted` those already in the progress counters, and
+        # `recorded` the sources whose state entry is written.
+        handled: set[Future[dict[str, Any]]] = set()
+        counted: set[Future[dict[str, Any]]] = set()
+        recorded: set[str] = set()
         with ThreadPoolExecutor(max_workers=concurrency) as pool:
+
+            def _stop(reason: str, reset: str | None = None) -> None:
+                nonlocal stop_reason
+                stop_reason = reason
+                stop_event.set()
+                pool.shutdown(wait=False, cancel_futures=True)
+                if reason == "interrupt":
+                    summary["interrupted"] = True
+                else:
+                    summary["usage_limit"] = {"reset": reset}
+                in_flight = sum(
+                    1 for f in futures if not f.cancelled() and f not in handled
+                )
+                _print_stop_line(
+                    reason, completed=completed, total=total,
+                    in_flight=in_flight, reset=reset,
+                )
+
             futures = [
                 pool.submit(
                     _synthesize_one,
@@ -1682,13 +1825,58 @@ def synthesize_new_sessions(
                     sources_out=sources_out,
                     chunk_max=chunk_max,
                     write_lock=write_lock,
+                    stop_event=stop_event,
                 )
                 for it in new_items
             ]
-            try:
-                for future in as_completed(futures):
-                    res = future.result()
+
+            def _record_source(res: dict[str, Any]) -> None:
+                # State is updated once per source, after all its parts
+                # succeeded, so an interrupted run resumes at the remainder.
+                rel = str(res["rel"])
+                if rel in recorded:
+                    return
+                state[rel] = res["mtime"]
+                _save_state(state, state_file)
+                key = "docs" if res["is_doc"] else detect_agent_label(res["meta"])[0]
+                summary["synthesized"] += 1
+                producers[key] = producers.get(key, 0) + 1
+                recorded.add(rel)
+                try:
+                    target_state = _resolve_state_file(state_file)
+                    def _drop_pending(s: dict[str, Any], rel=rel) -> dict[str, Any]:
+                        synth = s.setdefault("synth", {})
+                        rows = synth.setdefault("pending", [])
+                        if isinstance(rows, list):
+                            rows = [r for r in rows if not (isinstance(r, dict) and str(r.get("rel", "")) == rel)]
+                            synth["pending"] = rows
+                            synth["pending_total"] = len(rows)
+                        return s
+                    _update_unified_state(_drop_pending, target_state)
+                except Exception:
+                    pass
+
+            def _apply_result(future: Future[dict[str, Any]]) -> bool:
+                """Apply one finished source; True when the wait must restart."""
+                nonlocal completed, source_errors
+                res = future.result()
+                if res["deferred"]:
+                    # Deferred, not failed: no state entry, still pending.
+                    handled.add(future)
+                    if res["usage_limit"] and stop_reason is None:
+                        _stop("usage_limit", res["usage_reset"])
+                        # Cancelled futures never complete, so restart the
+                        # wait over the ones still in flight.
+                        return True
+                    return False
+                if future not in counted:
                     completed += 1
+                    summary["protected"] += res["protected"]
+                    if res["error"] is not None:
+                        summary["errors"].append(f"{res['slug']}: {res['error']}")
+                        summary["skipped"] += 1
+                        source_errors += 1
+                    counted.add(future)
                     # Position counts completed SOURCES, so a chunked doc's
                     # part-pages share one and the last one is always N/N.
                     pos = f"[{completed}/{total}]"
@@ -1697,93 +1885,88 @@ def synthesize_new_sessions(
                         # don't break awk/sed parsing. See G-20/#306 for the
                         # batched summary emitted after the drain.
                         print(f"  {pos} synthesized: {res['project']} → {name}")
-                    summary["protected"] += res["protected"]
                     for name in res["protected_pages"]:
                         print(
                             f"  {pos} protected: {res['project']} → {name} "
                             "(kept real page; stub not written)"
                         )
                     if res["error"] is not None:
-                        summary["errors"].append(f"{res['slug']}: {res['error']}")
-                        summary["skipped"] += 1
                         print(f"  {pos} error: {res['slug']}: {res['error']}")
-                        continue
+                if res["error"] is None:
+                    _record_source(res)
+                handled.add(future)
+                return False
 
-                    # State is updated once per source, after all its parts
-                    # succeeded, so an interrupted run resumes at the remainder.
-                    rel = str(res["rel"])
-                    state[rel] = res["mtime"]
-                    _save_state(state, state_file)
+            def _drain_results() -> None:
+                pending = [f for f in futures if f not in handled and not f.cancelled()]
+                for future in as_completed(pending):
+                    if _apply_result(future):
+                        return
+
+            try:
+                while any(f not in handled and not f.cancelled() for f in futures):
                     try:
-                        target_state = _resolve_state_file(state_file)
-                        def _drop_pending(s: dict[str, Any], rel=rel) -> dict[str, Any]:
-                            synth = s.setdefault("synth", {})
-                            rows = synth.setdefault("pending", [])
-                            if isinstance(rows, list):
-                                rows = [r for r in rows if not (isinstance(r, dict) and str(r.get("rel", "")) == rel)]
-                                synth["pending"] = rows
-                                synth["pending_total"] = len(rows)
-                            return s
-                        _update_unified_state(_drop_pending, target_state)
-                    except Exception:
-                        pass
-                    summary["synthesized"] += 1
-                    key = "docs" if res["is_doc"] else detect_agent_label(res["meta"])[0]
-                    producers[key] = producers.get(key, 0) + 1
-            except BaseException as exc:
-                # Any escape from the drain abandons the queue — Ctrl-C, an
-                # OSError saving state, a closed stdout. Leaving it to the
-                # executor's `__exit__` would instead run every remaining page
-                # through the backend, at full provider cost, before the
-                # traceback ever surfaced. Queued pages are dropped; the ones
-                # already running cannot be killed.
+                        _drain_results()
+                    except KeyboardInterrupt:
+                        # A second Ctrl+C while waiting abandons the drain.
+                        if stop_reason is not None:
+                            raise
+                        _stop("interrupt")
+                # Safety net after the drain: a source whose pages landed but
+                # whose state entry is missing is recorded now.
+                for future in futures:
+                    if future.cancelled() or not future.done():
+                        continue
+                    res = future.result()
+                    if (
+                        not res["deferred"]
+                        and str(res["rel"]) not in recorded
+                        and _landed_on_disk(res, sources_out)
+                    ):
+                        _record_source(res)
+            except BaseException:
+                # Any other escape from the drain abandons the queue — an
+                # OSError saving state, a closed stdout, a repeated Ctrl+C.
+                # Leaving it to the executor's `__exit__` would instead run
+                # every remaining page through the backend, at full provider
+                # cost, before the traceback ever surfaced. Queued pages are
+                # dropped, and the backend kills the child processes of the
+                # pages still running so the run ends promptly; a killed page
+                # fails, so it is not recorded below.
                 pool.shutdown(wait=False, cancel_futures=True)
-                if isinstance(exc, KeyboardInterrupt):
-                    in_flight = sum(1 for f in futures if f.running())
-                    print(
-                        f"\nInterrupted after {completed}/{total} source(s) — "
-                        f"waiting for {in_flight} page(s) already in flight."
-                    )
-                    any_written = _record_abandoned_pages(
-                        futures, state, state_file, sources_out
-                    )
-                    refresh_synth_pending(
-                        raw_dir=raw_dir,
-                        docs_dir=docs_dir,
-                        wiki_sources_dir=wiki_sources_dir,
-                        state_file=state_file,
-                        include_subagents=include_subagents,
-                    )
-                    if summary.get("synthesized", 0) > 0 or any_written:
-                        try:
-                            _rebuild_index(sources_out.parent)
-                        except (OSError, ValueError, RuntimeError) as e:
-                            summary["errors"].append(f"index rebuild: {e}")
-                    summary["interrupted"] = True
-                    return summary
+                _kill_in_flight(backend)
                 _record_abandoned_pages(futures, state, state_file, sources_out)
                 raise
+        # Deferred = queued sources that neither landed nor failed.
+        summary["deferred"] = total - summary["synthesized"] - source_errors
+        if stop_reason is not None:
+            print(f"{summary['deferred']} source(s) deferred to the next run.")
 
     # G-20 (#306): emit ONE summary log entry per invocation, not one
     # per page. Includes project counts + error count. The old per-page
     # entries flooded wiki/log.md (60+ lines per run).
-    if summary["synthesized"] > 0 or summary["errors"]:
+    if summary["synthesized"] > 0 or summary["errors"] or stop_reason is not None:
         projects_touched: dict[str, int] = {}
         for it in new_items:
             projects_touched[it["project"]] = projects_touched.get(it["project"], 0) + 1
+        title = f"{summary['synthesized']} sessions across {len(projects_touched)} projects"
+        if stop_reason is not None:
+            cause = "interrupted" if stop_reason == "interrupt" else "backend usage limit"
+            title += f" — stopped early ({cause})"
         # The entry belongs to the wiki whose pages this run wrote, which is
         # the one `sources_out` points into — the same directory the index
         # rebuild below reconciles. Callers that scope a run to a vault pass
         # `wiki_sources_dir` and nothing else, so deriving the log from it is
         # what keeps a vault's history inside that vault.
         _append_log(
-            f"{summary['synthesized']} sessions across {len(projects_touched)} projects",
+            title,
             log_path=log_path or (sources_out.parent / "log.md"),
             operation="synthesize",
             details={
                 "processed": _format_producer_breakdown(producers) or summary["synthesized"],
                 "created": sorted(projects_touched.keys()),
                 "errors": summary["errors"],
+                "deferred": summary["deferred"],
             },
         )
 

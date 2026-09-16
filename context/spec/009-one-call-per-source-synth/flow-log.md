@@ -88,3 +88,62 @@ Memory of the `/implement-feature` run outside the context window. One entry per
 - `ruff check` + full `pytest tests/ -q` green in worktree (2026-08-23).
 - Committing product implementation (exclude `config.json` / `.worktree-vault/`); rebase onto `origin/main` (#155 roadmap); open PR; wait CI.
 - Do not merge without explicit user approval.
+
+## #181 fix-bug — fetch-bug / resume-detection / workspace / classify (2026-09-15)
+
+- **Bug:** https://github.com/AlexanderMakarov/llm-wiki/issues/181 — synth clean stop on Ctrl+C **or backend usage limit**: finish in-flight pages, match success-path bookkeeping. Issue body extended the same day to cover the usage-limit trigger (a scheduled run hit the Claude session limit part-way through its queue and still dispatched every remaining source, each failing in under a second).
+- **Resume preflight:** issue open; no PR references #181; no prior #181 entries in this log.
+- **SPEC_NAME:** `009-one-call-per-source-synth` (FR5 in-flight pages on Ctrl+C, FR6 interrupt recovery, FR9 progress/failure reporting). No `skip-tests` marker in `tasks.md`.
+- **Workspace:** branch `fix/181-synth-clean-stop`, worktree `.claude/worktrees/fix-181-synth-clean-stop` from `origin/main` @ `f764777`; throwaway vault `.worktree-vault` (absolute path in worktree `config.json`).
+- **Classification: divergence.** Spec 009 defines the clean stop for Ctrl+C only, and FR9 says a failed source pass is reported while other sources still complete. A backend usage limit becomes a second clean-stop trigger that halts the queue instead of continuing, with its own reporting and exit code → amend FR6/FR9 (and FR5's in-flight criterion) via `/awos:spec` update mode after the fix.
+- **Next:** diagnose (subagent running) → fix.
+
+## #181 fix-bug — diagnose (2026-09-15)
+
+- **Repro (usage limit):** fake backend succeeds 3× then raises the real 429 `ClaudeCLIError` text; 20 sources, concurrency 2 → 20 backend calls, 3 synthesized, 17 errors, not interrupted. All futures are submitted up front; `_synthesize_one` (`llmwiki/synth/pipeline.py`) catches every `Exception` into `result["error"]` and the drain `continue`s.
+- **Backends:** no shared error base in `synth/base.py`. Claude surfaces a limit on the non-zero-exit branch and on the `is_error` branch of `_parse_claude_print_stdout` (neither reads `api_error_status`). Cursor/Ollama have no recognisable limit signal.
+- **Ctrl+C gaps:** no recording race (`_record_abandoned_pages` blocks on `result()`), but the interrupt path skips the `wiki/log.md` summary entry and `take_usage`, undercounts `synthesized` for pages recorded after the interrupt, and skips `print_synth_run_summary`; `llmwiki all` ignores `summary["interrupted"]` (can exit 0 after Ctrl+C). Terminal Ctrl+C also SIGINTs `claude -p` / `cursor-agent` children (same process group), so in-flight pages likely fail instead of finishing (inferred, not run). `synth` never builds `site/` on success — confirmed.
+- **Exit codes:** synth 0/1/2/130; `all` merges first non-zero but a lint policy failure returns 2 directly, masking earlier codes; the automation wrapper's `EXIT:$?` line never prints a non-zero code under `set -e`.
+- **Scope decision (orchestrator):** in — `BackendUsageLimitError` (reset time) raised by the Claude backend; pipeline stops dispatching on the first one and drains in-flight work through the normal success tail; Ctrl+C moved onto the same tail; `deferred` + `usage_limit` in the summary with one stop line; `synth` exits **75** (EX_TEMPFAIL) after harvesting; `all` propagates 130/75 and lint merges instead of overriding; child CLIs start in their own session so a terminal Ctrl+C lets them finish; automation wrapper records the real exit code; docs/CHANGELOG/UPGRADING. Out — second Ctrl+C during drain, Ollama 429 mapping, stale #171 test.
+- **Next:** fix (subagent) → regression tests.
+
+## #181 fix-bug — fix (2026-09-15)
+
+- **Changed:** `llmwiki/synth/base.py` (`BackendUsageLimitError` + `reset`), `synth/claude_cli.py` (limit detection on exit-1 and `is_error` branches; page calls `start_new_session=True`), `synth/cursor_cli.py` (`start_new_session=True`), `synth/pipeline.py` (one stop path for both triggers: shared `stop_event` checked by workers before the backend call, queue cancelled once, in-flight drained through normal handling, then the success tail; `deferred` / `usage_limit` summary keys; log title suffix `— stopped early (…)` + `- Deferred: N`; `synth_stop_exit_code()` → 130/75), `cli.py` (synth harvests on either stop, returns 130/75), `pipeline.py` (`all` propagates 130/75; lint failure merges via `_merge_rc`), `automation_install.py` (wrapper logs and exits with the real code), docs (`docs/reference/cli.md`, `docs/UPGRADING.md`, CHANGELOG **Breaking:**, `agent_kit/commands/wiki-synth.md`), existing-test updates (`tests/test_automation_install.py`, `tests/test_synth_run_summary.py`).
+- **Evidence:** repro through the real Claude CLI parser → 3 synthesized, 17 deferred, 0 errors, exit 75, reset parsed; SIGINT to the parent's process group — child in its own session finishes (rc 0) vs killed without (rc -2); timeout still kills the child. `ruff` clean; pytest 5212 passed / 48 skipped / 0 failed (wheel test needing `pip` deselected).
+- **Decisions:** `stop_event` needed because cancelling futures does not stop a worker that already dequeued; a second Ctrl+C during drain keeps the save-and-reraise path (`_record_abandoned_pages` kept); `all --fail-fast` on a stop harvests then returns 75/130; the Claude overview call keeps the default session; limit text matched only inside the JSON result.
+- **Next:** regression tests (testing subagent).
+
+## #181 fix-bug — regression-test / verify-criteria (2026-09-15)
+
+- **Regression tests:** `tests/test_181_synth_clean_stop.py` — 13 tests (pipeline usage-limit stop, generic failure still continues, Ctrl+C drain + log entry, Claude limit parsing on both branches + `start_new_session`, `synth` exit 75/130 with harvest / `--sources-only` hint, `all` propagates 75/130 over a lint failure, wrapper logs and exits with the real code). Core tests red on `origin/main` (scratch worktree), green on the fix; with neighbouring suites 127 passed; ruff clean.
+- **Verify (real CLI, throwaway vault, stub `claude` emitting the real 429 JSON):** `synth` over 12 docs, 3 successes then limit → one stop line with reset time, 3 synthesized, 9 deferred, 5 backend calls (2 limit hits = concurrency), exit **75**, harvest ran, one `wiki/log.md` entry `— stopped early (backend usage limit)` + `- Deferred: 9`. `all --no-sync --skip-graph --lint-fail warnings` with the limit from the first call → known-names prep warns and falls back to heuristic vocabulary, first page round stops the run, build + lint still run, lint policy fails but exit stays **75**.
+- **Verify incident:** a first `all` run without `--no-sync` synced local agent sessions into the throwaway `.worktree-vault` (worktree config carries no adapter filters). Vault deleted and re-initialised; nothing tracked or pushed. Use `--no-sync` for `all` verifies in worktrees.
+- **Observed nits (for review):** the stop line's in-flight count misses a page that finished but is not drained yet; when the limit hits known-names prep, one round of page calls still goes out before the stop.
+- **Next:** user smoke confirm (live Ctrl+C with the real `claude`), then local review.
+
+## #181 fix-bug — smoke confirm (2026-09-15)
+
+- **Operator smoke on a private vault with the real `claude` CLI (state + wiki backed up first), terminal Ctrl+C, worktree code:** works — in-flight pages finished, deferred count printed, rc 130, log entry `N sessions across M projects — stopped early (interrupted)`. Worktree config confirmed restored afterwards.
+- **Operator questions answered:** (a) the ~1 min pause before `Synthesizing N source(s)` is the known-names preparation LLM call (`.llmwiki-topics.json` written just before the run's first page), not an adapter — candidate for a separate issue (progress line / size or timeout); (b) `synth` does not build `site/` on success or stop — unchanged, `all` builds; (c) Ctrl+C clean stop works for every backend; usage-limit detection is Claude-only (Cursor exposes no recognised quota output, Ollama has no quota).
+- **Noted (pre-existing, not in scope):** the synth log title counts projects across all queued sources, not the synthesized ones — more visible on an early stop.
+- **Next:** amend spec 009 (divergence) → local review.
+
+## #181 fix-bug — amend-spec (2026-09-15)
+
+- **Divergence amendment** applied to `functional-spec.md`: FR5 in-flight criterion covers both stop triggers; FR6 retitled "Stopping synthesis early…", requirement text + two new criteria (single stopped-early history entry with deferred count; scheduled full run keeps the usage-limit status and still rebuilds the site); FR9 non-limit failure carve-out + usage-limit stop-line criterion; In-Scope interrupt bullet generalised; Out-of-Scope adds non-Claude limit recognition and site rebuild inside synthesis; new `## Change Log` entry. Status stays Completed; Author unchanged.
+- **AWOS framework defect (reported to the user, not patched):** `/fix-bug` Step 9 says `/awos:spec` has an Update Mode reached via Mode Detection, but the in-repo `.awos/commands/spec.md` only creates new specs (no mode detection, no Change Log step). Amendment was done by hand in the documented shape.
+- **Next:** local review (independent subagent).
+
+## #181 fix-bug — local review (2026-09-15)
+
+- **Review:** independent reviewer, `review.md` (session-only, not committed). Verdict Request changes — 1 blocker, 6 nits.
+- **Operator keep/drop:** B1 (real timezone in a code comment) kept; N6 (live-vault stats in this log) kept; N1 (Ctrl+C during result bookkeeping could drop a written page from state) kept; N4 (usage limit during known-names prep still sent a page round; approximate in-flight count) kept; N2 changed by operator — a second Ctrl+C kills in-flight synthesizer child processes; N3 changed by operator — usage-limit detection by message text in every backend (Claude, Cursor, Ollama), a bare HTTP 429 is not enough; N5 dropped — regular PR, no label, no size waiver. Orchestrator addition: UPGRADING exit-code wording (earliest failing step wins, not a priority list).
+- **Next:** static gate → commit-push.
+
+## #181 fix-bug — review fixes / commit-push (2026-09-15)
+
+- **Applied:** B1 + N6 privacy scrub; N1 idempotent per-result recording + post-drain reconcile, `deferred` = total − synthesized − failed; N4 usage limit during known-names prep stops before any page call; N2 tracked synthesizer child processes (`llmwiki/synth/child_processes.py`), second Ctrl+C / abandon path kills their process groups; N3 shared usage-limit text matcher in `synth/base.py` used by Claude, Cursor and Ollama (bare 429 / throttling stays a per-source error); operator follow-up — progress line before known-names preparation with candidate count and prompt size. Docs, CHANGELOG, UPGRADING wording and spec 009 FR6/Out-of-Scope/Change Log updated.
+- **Follow-ups filed:** #264 (bound known-names preparation — candidate cap, incremental reuse, own timeout), #265 (migration for source pages filed under a stale slug that synth skips every run).
+- **Gate:** `ruff check` clean; full pytest green (wheel test needing `pip` deselected — shared venv has no `pip`).
+- **Next:** commit, rebase onto `origin/main`, push, open PR. No further entries in this log after the PR opens.

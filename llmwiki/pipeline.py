@@ -49,7 +49,12 @@ from llmwiki.state_store import (
     update_state,
 )
 from llmwiki.synth.base import BaseSynthesizer
-from llmwiki.synth.pipeline import refresh_synth_pending, resolve_backend, synthesize_new_sessions
+from llmwiki.synth.pipeline import (
+    refresh_synth_pending,
+    resolve_backend,
+    synth_stop_exit_code,
+    synthesize_new_sessions,
+)
 from llmwiki.synth.reporting import print_synth_run_summary
 from llmwiki.vault import describe_vault, resolve_vault
 from llmwiki.vault_settings import (
@@ -261,11 +266,13 @@ def run_pipeline(args: argparse.Namespace) -> int:
     :func:`~llmwiki.build.build_site`, so this pipeline has no separate
     export step.
 
-    Exit codes:
-      0  every step succeeded (lint warnings are informational).
-      1  at least one step returned a non-zero exit status.
-      2  the lint failure policy (``--lint-fail`` / ``--strict``) was met,
-         or a required directory (wiki/vault) was missing.
+    Exit codes — the first non-zero step's code wins:
+      0    every step succeeded (lint warnings are informational).
+      1    at least one step returned a non-zero exit status.
+      2    the lint failure policy (``--lint-fail`` / ``--strict``) was met,
+           or a required directory (wiki/vault) was missing.
+      75   synth stopped on the backend's usage limit; later stages ran.
+      130  synth was interrupted with Ctrl+C; later stages ran.
     """
     vault_arg = getattr(args, "vault", None)
     vault_root: Path | None = None
@@ -355,10 +362,14 @@ def run_pipeline(args: argparse.Namespace) -> int:
                 if summary["errors"]:
                     for err in summary["errors"]:
                         print(f"  ! {err}", file=sys.stderr)
-                    overall_rc = _merge_rc(overall_rc, 1)
-                    if args.fail_fast:
-                        print("error: step 'synth' exited 1; stopping (--fail-fast).", file=sys.stderr)
-                        return overall_rc
+                # A clean stop (#181) reports 130 / 75 like `synth` does, and
+                # still harvests what landed; later stages run for those pages.
+                stop_rc = synth_stop_exit_code(summary)
+                synth_rc = stop_rc or (1 if summary["errors"] else 0)
+                overall_rc = _merge_rc(overall_rc, synth_rc)
+                if synth_rc == 1 and args.fail_fast:
+                    print("error: step 'synth' exited 1; stopping (--fail-fast).", file=sys.stderr)
+                    return overall_rc
                 # Default synth also harvests candidates (#90).
                 harvest_rc = run_harvest(
                     wiki_dir,
@@ -375,13 +386,19 @@ def run_pipeline(args: argparse.Namespace) -> int:
                             file=sys.stderr,
                         )
                         return overall_rc
-                elif not summary["errors"]:
+                elif not synth_rc:
                     print_synth_run_summary(
                         synthesized=summary["synthesized"],
                         duration_s=time.monotonic() - t0,
                         tokens=summary.get("tokens"),
                         cost_usd=summary.get("cost_usd"),
                     )
+                if stop_rc and args.fail_fast:
+                    print(
+                        f"error: step 'synth' exited {stop_rc}; stopping (--fail-fast).",
+                        file=sys.stderr,
+                    )
+                    return overall_rc
 
         search_mode = args.search_mode or "auto"
         print(f"\n==> llmwiki build --out {out_dir} --search-mode {search_mode}")
@@ -444,6 +461,6 @@ def run_pipeline(args: argparse.Namespace) -> int:
                     f"{errors} error(s) + {warnings} warning(s).",
                     file=sys.stderr,
                 )
-                return 2
+                overall_rc = _merge_rc(overall_rc, 2)
 
     return overall_rc

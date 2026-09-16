@@ -234,7 +234,7 @@ def test_interrupted_synth_harvest_failure_prints_retry_not_success(
     refresh.assert_not_called()
     captured = capsys.readouterr()
     assert "Pending names collected from written sources." not in captured.out
-    assert "Harvest after interrupt failed" in captured.err
+    assert "Harvest after stop failed" in captured.err
     assert "llmwiki synth --candidates-only" in captured.out
 
 

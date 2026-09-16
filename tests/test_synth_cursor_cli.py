@@ -127,7 +127,7 @@ def test_is_available_true_after_successful_probe():
         "llmwiki.synth.cursor_cli.resolve_cursor_agent_path",
         return_value="/bin/agent",
     ), patch(
-        "llmwiki.synth.cursor_cli.subprocess.run",
+        "llmwiki.synth.cursor_cli.TrackedChildren.run",
         return_value=_completed(stdout="OK\n"),
     ) as run:
         assert CursorCLISynthesizer().is_available() is True
@@ -139,7 +139,7 @@ def test_is_available_false_on_probe_nonzero_exit():
         "llmwiki.synth.cursor_cli.resolve_cursor_agent_path",
         return_value="/bin/agent",
     ), patch(
-        "llmwiki.synth.cursor_cli.subprocess.run",
+        "llmwiki.synth.cursor_cli.TrackedChildren.run",
         return_value=_completed(returncode=1, stdout="", stderr="auth failed"),
     ):
         assert CursorCLISynthesizer().is_available() is False
@@ -150,7 +150,7 @@ def test_is_available_false_on_probe_timeout():
         "llmwiki.synth.cursor_cli.resolve_cursor_agent_path",
         return_value="/bin/agent",
     ), patch(
-        "llmwiki.synth.cursor_cli.subprocess.run",
+        "llmwiki.synth.cursor_cli.TrackedChildren.run",
         side_effect=subprocess.TimeoutExpired(cmd="agent", timeout=30),
     ):
         assert CursorCLISynthesizer().is_available() is False
@@ -165,7 +165,7 @@ def test_synthesize_success_uses_stdin_and_returns_text():
         "llmwiki.synth.cursor_cli.resolve_cursor_agent_path",
         return_value="/bin/agent",
     ), patch(
-        "llmwiki.synth.cursor_cli.subprocess.run",
+        "llmwiki.synth.cursor_cli.TrackedChildren.run",
         return_value=_completed(stdout="## Summary\n\nPage body.\n"),
     ) as run:
         out = synth.synthesize_source_page(
@@ -194,7 +194,7 @@ def test_synthesize_timeout_raises():
         "llmwiki.synth.cursor_cli.resolve_cursor_agent_path",
         return_value="/bin/agent",
     ), patch(
-        "llmwiki.synth.cursor_cli.subprocess.run",
+        "llmwiki.synth.cursor_cli.TrackedChildren.run",
         side_effect=subprocess.TimeoutExpired(cmd="agent", timeout=12),
     ):
         with pytest.raises(CursorCLIError, match="timed out after 12s"):
@@ -212,7 +212,7 @@ def test_synthesize_sends_stable_half_as_leading_prefix():
     with patch(
         "llmwiki.synth.cursor_cli.resolve_cursor_agent_path",
         return_value="/bin/agent",
-    ), patch("llmwiki.synth.cursor_cli.subprocess.run", side_effect=_capture):
+    ), patch("llmwiki.synth.cursor_cli.TrackedChildren.run", side_effect=_capture):
         assert CursorCLISynthesizer().synthesize_source_page(
             "body-here", {"slug": "s"}, _SPLIT_TEMPLATE
         ) == "ok"
@@ -240,7 +240,7 @@ def test_synthesize_nonzero_exit_raises():
         "llmwiki.synth.cursor_cli.resolve_cursor_agent_path",
         return_value="/bin/agent",
     ), patch(
-        "llmwiki.synth.cursor_cli.subprocess.run",
+        "llmwiki.synth.cursor_cli.TrackedChildren.run",
         return_value=_completed(returncode=3, stdout="", stderr="doom"),
     ):
         with pytest.raises(CursorCLIError, match="exited 3.*doom"):
@@ -252,7 +252,7 @@ def test_synthesize_empty_completion_raises():
         "llmwiki.synth.cursor_cli.resolve_cursor_agent_path",
         return_value="/bin/agent",
     ), patch(
-        "llmwiki.synth.cursor_cli.subprocess.run",
+        "llmwiki.synth.cursor_cli.TrackedChildren.run",
         return_value=_completed(stdout="  \n"),
     ):
         with pytest.raises(CursorCLIError, match="empty"):
@@ -270,7 +270,7 @@ def test_synthesize_truncates_body_to_char_cap():
     with patch(
         "llmwiki.synth.cursor_cli.resolve_cursor_agent_path",
         return_value="/bin/agent",
-    ), patch("llmwiki.synth.cursor_cli.subprocess.run", side_effect=_capture):
+    ), patch("llmwiki.synth.cursor_cli.TrackedChildren.run", side_effect=_capture):
         assert CursorCLISynthesizer().synthesize_source_page(
             body, {}, TEMPLATE
         ) == "ok"
@@ -283,7 +283,7 @@ def test_synthesize_oserror_raises():
         "llmwiki.synth.cursor_cli.resolve_cursor_agent_path",
         return_value="/bin/agent",
     ), patch(
-        "llmwiki.synth.cursor_cli.subprocess.run",
+        "llmwiki.synth.cursor_cli.TrackedChildren.run",
         side_effect=OSError("exec failed"),
     ):
         with pytest.raises(CursorCLIError, match="failed to run"):

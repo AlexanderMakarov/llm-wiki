@@ -48,6 +48,72 @@ def split_prompt_template(template: str) -> tuple[str, str]:
     return head.rstrip(), sep + tail
 
 
+class BackendUsageLimitError(RuntimeError):
+    """The backend's account or session quota is exhausted (#181).
+
+    Distinct from a per-page failure: every later page would fail the same
+    way until the quota resets, so the synth pipeline stops dispatching new
+    sources and defers the remainder to the next run. ``reset`` carries the
+    provider's reset time as text when it gave one.
+
+    Every backend (Claude CLI, Cursor Agent CLI, Ollama) raises it when the
+    provider's error message carries account-quota wording, as recognised by
+    :func:`usage_limit_from_text`. A bare HTTP 429 or short-lived rate-limit
+    throttling is not a usage limit and stays a per-page error.
+    """
+
+    def __init__(self, message: str, *, reset: str | None = None) -> None:
+        super().__init__(message)
+        self.reset = reset
+
+
+# Account / session quota wording. Throttling ("Rate limit exceeded", "429 Too
+# Many Requests", "hit your rate limit") deliberately does not match: it clears
+# within seconds, so it is one page's failure, not a reason to stop the run.
+_USAGE_LIMIT_TEXT_RE = re.compile(
+    r"hit your (?:(?!rate\b)[\w-]+ )*limit"
+    r"|\busage limit"
+    r"|\bsession limit"
+    r"|\bquota (?:exceeded|exhausted|reached)"
+    r"|\bexceeded your (?:current )?quota"
+    r"|\binsufficient[_ ]quota"
+    r"|\bout of credits"
+    r"|\bcredit balance is too low",
+    re.IGNORECASE,
+)
+# Reset time as the provider states it, e.g. "resets 1:20pm (Etc/UTC)".
+_USAGE_LIMIT_RESET_RE = re.compile(
+    r"\bresets\s+(?:at\s+)?(.+?)[\s.]*$", re.IGNORECASE | re.MULTILINE
+)
+_USAGE_LIMIT_DETAIL_MAX = 300
+
+
+def usage_limit_from_text(
+    text: str | None, *, label: str = "backend"
+) -> BackendUsageLimitError | None:
+    """Return a :class:`BackendUsageLimitError` when ``text`` reports an exhausted quota.
+
+    ``text`` is a provider error message (CLI stderr, a JSON error result, an
+    HTTP error body). The error's message is ``"<label> usage limit: <line>"``
+    for the line that carries the quota wording; ``reset`` is the text after
+    ``resets`` when the message has one, else ``None``. Returns ``None`` for
+    anything else, including plain rate-limit throttling.
+    """
+    if not text:
+        return None
+    match = _USAGE_LIMIT_TEXT_RE.search(text)
+    if match is None:
+        return None
+    line_start = text.rfind("\n", 0, match.start()) + 1
+    line_end = text.find("\n", match.end())
+    line = text[line_start : line_end if line_end != -1 else len(text)].strip()
+    reset_match = _USAGE_LIMIT_RESET_RE.search(text)
+    reset = reset_match.group(1) if reset_match else None
+    return BackendUsageLimitError(
+        f"{label} usage limit: {line[:_USAGE_LIMIT_DETAIL_MAX]}", reset=reset
+    )
+
+
 class BaseSynthesizer(ABC):
     """Interface for LLM-backed wiki-page synthesizers."""
 
@@ -114,6 +180,17 @@ class BaseSynthesizer(ABC):
         raise NotImplementedError(
             f"{type(self).__name__} does not support overview completion"
         )
+
+    def kill_in_flight(self) -> int:
+        """Stop the provider calls this backend has in flight; return how many (#181).
+
+        The synth run calls this when it abandons its drain (a second Ctrl+C),
+        so the run exits promptly instead of waiting for each page up to the
+        backend timeout. Backends that run child processes kill them; the
+        default does nothing and returns 0 — an in-process or HTTP call (Ollama)
+        is waited for, up to its own timeout.
+        """
+        return 0
 
     @property
     def name(self) -> str:
