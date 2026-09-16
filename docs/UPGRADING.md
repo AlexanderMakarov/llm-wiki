@@ -173,7 +173,7 @@ Full parameter tables: [mcp.md](reference/mcp.md). Historical telemetry rows kee
 ### Synthesis and candidates
 
 - Prefer **`llmwiki synth`** — `synthesize` is removed (#112); use `--sources-only` when you want the old sources-only default (#90).
-- **Next `synth` rewrites source pages** lacking parseable topic bullets once (#147); optional `migrate topic-kinds` for cheap catch-up (#174).
+- **Next `synth` rewrites source pages** lacking parseable topic bullets once (#147); optional `migrate topic-kinds` for cheap catch-up (#174). Vocabulary now carries known kind into each source pass (#257); pages that only lack kinds still use `migrate topic-kinds`, not a full re-synth.
 - **Promote needs no LLM** — empty Key Facts copy from source `fact:` bullets; `rewrite-key-facts` still needs a backend (#147, #103).
 - **`wiki/archive/` is cold storage** — discarded candidates stay resolved in harvest; first lint after upgrade may report more broken links (#140).
 - **`synth --estimate` Already synthesized** follows synth state, not pages-on-disk alone (#163).

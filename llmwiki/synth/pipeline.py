@@ -59,8 +59,9 @@ from llmwiki.synth.estimate import synthesize_estimate_report
 from llmwiki.synth.ollama import OllamaSynthesizer, load_ollama_config
 from llmwiki.synth.reporting import print_synth_run_start
 from llmwiki.tags import TagEntry, near_duplicate_tags
+from llmwiki.topic_kinds import build_kind_map
 from llmwiki.topics import build_topic_graph
-from llmwiki.topics_consolidate import prepare_known_names
+from llmwiki.topics_consolidate import load_cache, prepare_known_names
 
 # Same matcher every other link consumer uses, so "a link" means the same thing
 # to the de-duplicator and to the thing that consumes the links.
@@ -381,9 +382,10 @@ def _inject_vocabulary(template: str, wiki_dir: Path, *, limit: int = _VOCAB_LIM
 
     Regular synth needs just enough to pick the RIGHT topic, not to merge
     spellings (that's job 1 ``prepare_known_names``) — so each entry carries
-    ``name`` + ``desc`` (a one-line description, present once the known-names
-    cache exists) + ``with`` (co-occurring topics, for disambiguation). No
-    ``aka`` noise. All derived from the corpus + cache — no LLM call here.
+    ``name`` + optional ``kind`` (cache first, else unique page/pending filing)
+    + ``desc`` (a one-line description, present once the known-names cache
+    exists) + ``with`` (co-occurring topics, for disambiguation). No ``aka``
+    noise. All derived from the corpus + cache — no LLM call here.
     The ``consolidate-topics`` CLI is retired (#147).
 
     No-op (placeholder removed) when the template lacks the marker or the wiki
@@ -401,6 +403,11 @@ def _inject_vocabulary(template: str, wiki_dir: Path, *, limit: int = _VOCAB_LIM
     if not nodes:
         return template.replace("{vocabulary}", "  <!-- none yet — this is an early session -->")
 
+    cache = load_cache(wiki_dir)
+    kinds = (cache or {}).get("kinds") or {}
+    alias_map = (cache or {}).get("alias_map") or {}
+    kind_map, _ = build_kind_map(wiki_dir)
+
     # Top co-occurring topics per node, for the `with` attribute.
     related: dict[str, list[tuple[int, str]]] = {}
     for e in (graph.get("edges") or []):
@@ -413,6 +420,12 @@ def _inject_vocabulary(template: str, wiki_dir: Path, *, limit: int = _VOCAB_LIM
         if not name:
             continue
         attrs = f'name="{name}"'
+        canon = alias_map.get(name.lower())
+        kind = kinds.get(canon) if canon is not None else None
+        if not kind:
+            kind = kind_map.get(name.casefold())
+        if kind:
+            attrs += f' kind="{_vocab_attr(kind)}"'
         desc = _vocab_attr(str(n.get("description", "")))
         if desc:
             attrs += f' desc="{desc}"'

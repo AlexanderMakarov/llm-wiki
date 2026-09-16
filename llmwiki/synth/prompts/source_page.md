@@ -64,10 +64,9 @@ decisions made, problems solved, and tools/libraries chosen.
   <!--
     The wiki already uses these canonical topics. Rules for linking:
     - If the session is about one, link it with its EXACT `name` attribute.
-    - `desc` says what the topic is — use it to pick the RIGHT topic and to
-      avoid linking a different thing that merely shares a word.
-    - `with` lists the topics it most often co-occurs with — extra context for
-      disambiguation.
+    - Optional `kind="entity|concept"` — when present, Connections parentheses for that name must copy it.
+    - `desc` says what the topic is — use it to pick the RIGHT topic and to avoid linking a different thing that merely shares a word.
+    - `with` lists the topics it most often co-occurs with — extra context for disambiguation.
     - Only coin a brand-new [[Topic]] (TitleCase) when none below fits.
     Topics are ordered by how many sessions mention them (most first).
   -->
@@ -78,15 +77,11 @@ decisions made, problems solved, and tools/libraries chosen.
 
 1. Do NOT copy the conversation verbatim — synthesize
 2. Every claim must be traceable to something said in the session
-3. Use `[[wikilinks]]` for **significant scopes only** — the projects,
-   products, major systems/services, people, and organisations the session is
-   actually about. Do NOT tag every incidental command, flag, or file. Prefer a
-   spelling from the "Existing topics" list above; TitleCase a genuinely new
-   one. Aim for the handful of scopes a reader would browse by, not an
-   exhaustive index.
-4. If the session contradicts known wiki content, record BOTH claims
-   under ## Contradictions. Never silently overwrite.
-5. Keep it concise — the source page is a summary, not a transcript.
+3. Use `[[wikilinks]]` for **significant scopes only** — the projects, products, major systems/services, people, and organisations the session is actually about. Do NOT tag every incidental command, flag, or file. Prefer a spelling from the "Existing topics" list above; TitleCase a genuinely new one. Aim for the handful of scopes a reader would browse by, not an exhaustive index.
+4. On ## Connections, the `(…)` after each `[[wikilink]]` must be exactly `entity` or `concept` — no free-form type nouns (never invent labels like `(desktop environment)` or `(library)`).
+5. When linking a topic from the Existing topics list that carries `kind="…"`, copy that kind into the parentheses. Brand-new names not in the list still use only `entity` or `concept`.
+6. If the session contradicts known wiki content, record BOTH claims under ## Contradictions. Never silently overwrite.
+7. Keep it concise — the source page is a summary, not a transcript.
 
 ## Session to synthesize
 

@@ -34,20 +34,20 @@ from llmwiki.synth.pipeline import (
     source_page_paths,
     synth_page_filename,
 )
+from llmwiki.topic_kinds import _CONTEXT_FILE, build_kind_map
 from llmwiki.wikilinks import WIKILINK_RE, strip_anchor
 
 #: Vault-root JSON listing pages stamped by a successful non-dry-run.
 STAMPED_LIST_FILENAME = ".llmwiki-topic-kinds-stamped.json"
 
-#: Folder relative to ``wiki/`` → kind stamped onto Connections bullets.
-_KIND_FOLDERS: tuple[tuple[str, str], ...] = (
-    ("entities", "entity"),
-    ("concepts", "concept"),
-    ("candidates/entities", "entity"),
-    ("candidates/concepts", "concept"),
+# Re-export for callers/tests that import from this module (#257 leaf extract).
+__all__ = (
+    "STAMPED_LIST_FILENAME",
+    "build_kind_map",
+    "print_report",
+    "run_migration",
+    "stamp_connections_body",
 )
-
-_CONTEXT_FILE = "_context.md"
 
 #: Same spirit as ``synth.pipeline._CONNECTIONS_HEADING_RE`` (copied to avoid
 #: importing the synth package).
@@ -56,39 +56,6 @@ _NEXT_HEADING_RE = re.compile(r"^##[ \t]+", re.M)
 
 #: List item that may open a topic bullet (wikilink must lead the body).
 _LIST_ITEM_RE = re.compile(r"^(\s*-\s+)(.*)$")
-
-
-def build_kind_map(wiki: Path) -> tuple[dict[str, str], list[str]]:
-    """Return case-folded stem→kind and ambiguous names skipped.
-
-    Scans ``entities``, ``concepts``, and the candidates mirrors. A stem that
-    appears under both kinds is removed from the map and listed as ambiguous
-    (never guessed). ``_context.md`` and non-files are ignored.
-    """
-    kind_map: dict[str, str] = {}
-    display: dict[str, str] = {}
-    ambiguous_keys: set[str] = set()
-
-    for rel, kind in _KIND_FOLDERS:
-        folder = wiki / rel
-        if not folder.is_dir():
-            continue
-        for path in sorted(folder.glob("*.md")):
-            if not path.is_file() or path.name == _CONTEXT_FILE:
-                continue
-            key = path.stem.casefold()
-            display.setdefault(key, path.stem)
-            if key in ambiguous_keys:
-                continue
-            existing = kind_map.get(key)
-            if existing is None:
-                kind_map[key] = kind
-            elif existing != kind:
-                del kind_map[key]
-                ambiguous_keys.add(key)
-
-    ambiguous = sorted(display[k] for k in ambiguous_keys)
-    return kind_map, ambiguous
 
 
 def _connections_span(body: str) -> tuple[int, int] | None:
