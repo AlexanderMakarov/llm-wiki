@@ -27,7 +27,7 @@ Every page in the site carries the same header nav. Keyboard: `⌘K` opens the c
 | 7 | **Models** | `/models/index.html` | structured model-profile cards (provider, pricing, benchmarks) |
 | 8 | **Docs** | `/docs/index.html` | editorial docs hub — tutorials, references, deployment guides |
 | 9 | **Prototypes** | `/prototypes/index.html` | review-ready UI states (page-shell, article-anatomy, …) for UX iteration |
-| — | **Search** | `⌘K` | fuzzy-match command palette over the whole corpus |
+| — | **Search** | `⌘K` | command palette — wiki-page matches and site pages, in two groups |
 | — | **Theme toggle** | button on the right | light / dark (persists via `localStorage.theme`) |
 
 Mobile: the six middle links collapse into a bottom-nav below 768 px; Search + Theme stay in the top bar.
@@ -185,11 +185,19 @@ Red is deliberately not a kind colour: the map already spends it on two states �
 
 URLs: `/topics/<slug>.html`, `/topics/index.html`
 
-A **topic** is a `[[wikilink]]` target found in `wiki/sources/*.md`, with spelling variants clustered into one canonical name. Topics are therefore *not* wiki pages: a topic exists because sessions cited the name, and a topic page renders whether or not any page under `wiki/` describes it — an un-promoted candidate, or a name a reviewer declined, keeps its page indefinitely. Reach them by double-clicking a node in the [Graph](#graph), from `⌘K` (`type:topic`), from `topics/index.html`, or from the Connected topics list on any other topic or project page.
+Two things make a **topic**. A name sessions cited: a `[[wikilink]]` target found in `wiki/sources/*.md`, with spelling variants clustered into one canonical name. Or — since #248 — a curated page that describes one: every page under `wiki/entities/` and `wiki/concepts/` becomes a topic whether or not any session cites it, so promoting a candidate always produces something a reader can open. A topic is therefore not the same thing as a wiki page in either direction: a derived topic renders whether or not any page under `wiki/` describes it — an un-promoted candidate, or a name a reviewer declined, keeps its page indefinitely — while every curated entity and concept gets one regardless of reach. Two page sets stay out: `wiki/archive/` (cold storage is never published) and `_`-prefixed folder-context stubs such as `wiki/entities/_context.md`, which exist only to orient an assistant. Reach topics by double-clicking a node in the [Graph](#graph), from `⌘K` (`type:topic`), from the **Topics** nav entry, or from the Connected topics list on any other topic or project page.
 
-`/topics/index.html` lists every topic by reach — session count and link count per row.
+`/topics/index.html` lists every topic in three sections, in this order — **Entities**, **Concepts**, **Other topics** — each heading carrying that section's count. Rows keep today's reach ordering (session count, then link count) *within* each section, and a curated row carries the same kind chip the topic page's identity line shows, so a reviewed page is distinguishable from a name sessions happened to mention. An empty section renders its heading and `No topics in this group.` rather than disappearing. There are no filter or sort controls.
 
-Two thresholds decide which topics get a page: a topic mentioned by fewer than 2 sessions is dropped from the graph, and a vault yielding fewer than 5 topic nodes falls back to the page graph, in which case `build` writes no topic pages at all.
+Three numbers are easy to conflate here. They gate different things, and only the first is configurable per vault:
+
+| Constant | Value | Gates | Per-vault? |
+|---|---|---|---|
+| `DEFAULT_MIN_REFS` (`llmwiki/vault_settings.py`) | 3 | how many pages must cite a name before harvest materialises a candidate stub, and before `link_integrity` calls an unresolved link a defect | **yes** — via `llmwiki.json` |
+| `min_sessions` (`llmwiki/topics.py`) | 2 | how many sessions must mention a *derived* name before it becomes a graph node | no |
+| `_TOPIC_GRAPH_MIN_NODES` (`llmwiki/build.py`) | 5 | whether `graph.html` renders the topic graph at all, or falls back to the page graph | no |
+
+A curated entity or concept page is exempt from `min_sessions`: it is seeded as a node with whatever session count it has, including zero (#248). And topic *pages* no longer follow the third number — `build` writes `topics/<slug>.html` whenever the graph carries a curated-backed node, so a vault too small for the topic viewer still gets pages for its entities and concepts while `graph.html` falls back to the page graph. The `⌘K` index carries exactly the topic pages that build wrote.
 
 ### Layout
 
@@ -294,13 +302,18 @@ There is no daily bar chart — trends are read from the heatmaps. Durable count
 
 Press `⌘K` (or `Ctrl+K` on Linux/Windows) from any page.
 
-- Fuzzy match over **every** page title + body — including topic pages (`type: topic`) and their alias spellings (#50).
+- Results arrive in two groups, **Wiki** first and **Site** second, each with a heading and its result count. Both groups always render: a group with nothing to show keeps its heading and states that it found nothing, so "the wiki has no such page" stays distinguishable from "search is broken" (#248).
+- The **Wiki** group runs the same algorithm as `wiki_search` `mode=match` over the same corpus (see [mcp.md](mcp.md)): a literal, case-insensitive substring, no scoring. A page matches by name — its title or its vault-relative path — or by any body line containing the term; name matches come first, then body-only matches, each sorted by path. These semantics replaced the palette's earlier fuzzy scoring for wiki results, so a query of several words that appears nowhere as a literal string returns nothing rather than a best guess; matching what an assistant answers means matching it exactly.
+- A Wiki row shows the page's frontmatter `type` as its badge (`wiki` when the page declares none), its title (its path when it has none), the path itself, and its first matching lines with line numbers, folded into `+N more matching lines` past the third. A wiki page the site has no reader page for — `wiki/overview.md`, `wiki/log.md`, `candidates/`, `syntheses/`, `categories/` — is still listed with its path and lines but is **not** clickable, and `↑ / ↓` step over it. That is how the group keeps the assistant's full coverage without offering dead ends.
+- Caps are the assistant's: 200 pages and 200 matching lines per search, after which the group appends a line saying matches were dropped. A capped group routinely reports *fewer* than 200 pages — the line cap trips first, and from then on only a name match can still admit a page. That is the search engine's own behaviour, mirrored deliberately rather than smoothed over.
+- The **Site** group is everything the palette indexes that is not a wiki page — static pages, projects, sessions, documents, editorial docs, slash commands, and topic pages (`type: topic`) with their alias spellings (#50) — matched and ordered by the same rule. An empty query browses the head of that index instead of searching; the Wiki group asks for a term instead.
 - The badge on each result reads its `kind` when the entry carries one and its `type` otherwise, so a topic result says `Entity`, `Concept`, `Project` … — or `Unclassified topic` — matching what the map and the topic page call it (#108). The underlying `type` is unchanged.
 - Top result on Enter navigates.
 - Shows facet chips: `Project`, `Entity type`, `Lifecycle`, `Confidence`, `Tags` — click a facet to filter.
 - Footer shows the current mode (`flat` / `tree`) from `search-index.json._mode` and the deep-page ratio (see [`reference/cache-tiers.md`](cache-tiers.md) for the tree-mode heuristic).
 - Keyboard: `↑ / ↓` navigate, `Enter` open, `Esc` close.
 - Filter by type: `type:topic` / `type:session` / `type:project` / `type:docs` / `type:document` / `type:slash` / `type:page`. `type:topic` still matches every topic result whatever its badge says — the badge reads `kind`, the filter reads `type`.
+- The structured filters `type:` / `project:` / `model:` / `date:` / `tags:` / `sort:` narrow the **Site** group only: match mode has no equivalent, so honouring them in the Wiki group would diverge from the assistant. `kind:` is the one filter both groups honour — it is the frontmatter `type`, exactly as `wiki_search`'s own `kind` argument reads it.
 
 ---
 
@@ -310,8 +323,11 @@ Two levels:
 
 - `site/search-index.json` — ~7 KB meta index (projects, static pages, documents, docs, slash commands, **topics**) + chunk manifest + facet counts + mode badge.
 - `site/search-chunks/<project>.json` — per-project session entries with `title`, `url`, `type`, `project`, `date`, `model`, `body`, `heading_max_depth`, `heading_count_by_depth`.
+- `site/search-wiki-corpus.json` — the wiki corpus the palette's **Wiki** group searches (#248): every `.md` under `wiki/` except `archive/`, `_context.md` included because `wiki_search` scans it too and the two must not diverge. Each entry is `{path, title, url, kind, text}` — `path` vault-relative as the assistant reports it, `kind` the lowercased frontmatter `type`, `text` the page in full and uncapped (substring matching and returning matching lines both need it), and `url` the reader page or `null` where the site has none.
 
 Topic entries (`type: "topic"`) point at `topics/<slug>.html` — or at `projects/<slug>.html` for a topic that [routes to a project page](#project-topics-route-to-the-project-page); their `body` includes session count plus `also: …` aliases so a query using any non-canonical spelling still hits the right page, and their `kind` carries the human-readable singular label the palette badge shows (`Entity`, `Concept`, `Project`, … or `Unclassified topic`). `kind` is present on topic entries only. The same payloads ship as `.js` sidecars for `file://` (#20).
+
+The wiki corpus is lazy — it is fetched on first `⌘K`, never on a page view — and `search-index.json` points at it through the **optional** `_wiki_corpus` manifest key. Optional because a site built before #248 carries no such key: the viewer then reports the gap on the page and renders the Wiki group as broken rather than as silently empty, and it does the same when the payload itself fails to load.
 
 The palette lazy-loads chunks as the query narrows. See [`reference/reader-api.md`](reader-api.md) for the stable shape.
 
