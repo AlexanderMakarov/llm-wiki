@@ -916,6 +916,7 @@ def nav_bar(active: str, link_prefix: str = "") -> str:
 {drawer_link("raw.html", "Raw", "raw")}
 {drawer_link("candidates.html", "Candidates", "candidates")}
 {drawer_link("graph.html", "Graph", "graph")}
+{drawer_link("topics/index.html", "Topics", "topics")}
 {drawer_link("projects/index.html", "Projects", "projects")}
 {drawer_link("sessions/index.html", "Sessions", "sessions")}
 {drawer_link("analytics.html", "Analytics", "analytics")}
@@ -937,6 +938,7 @@ def nav_bar(active: str, link_prefix: str = "") -> str:
       {link("raw.html", "Raw", "raw")}
       {link("candidates.html", "Candidates", "candidates")}
       {link("graph.html", "Graph", "graph")}
+      {link("topics/index.html", "Topics", "topics")}
       {link("projects/index.html", "Projects", "projects")}
       {link("sessions/index.html", "Sessions", "sessions")}
       {link("analytics.html", "Analytics", "analytics")}

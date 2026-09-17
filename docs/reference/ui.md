@@ -20,6 +20,7 @@ Every page in the site carries the same header nav. Keyboard: `⌘K` opens the c
 | 2 | **Raw** | `/raw.html` | file tree browser of raw documents (wiki-add layer) |
 | — | **Candidates** | `/candidates.html` | what is pending under `wiki/candidates/`, a per-row Decision control, and an Apply that assembles the `candidates apply` command + JSON batch for the rows you decided |
 | 3 | **Graph** | `/graph.html` | interactive force-directed knowledge graph (vis-network) |
+| — | **Topics** | `/topics/index.html` | every topic grouped into curated entities, curated concepts and derived topics, counted per section and ordered by reach within each |
 | 4 | **Projects** | `/projects/index.html` | filterable card grid of every project + freshness badge |
 | 5 | **Sessions** | `/sessions/index.html` | sortable table of every session, agent badge, project, model, tool-call count |
 | 6 | **Analytics** | `/analytics.html` | activity heatmaps, wiki usage, recent activity, project grid |

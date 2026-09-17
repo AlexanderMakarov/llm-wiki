@@ -793,3 +793,96 @@ def test_topic_page_alias_note_uses_hover_not_inline_explanation(tmp_path: Path)
     assert "Also tagged as</strong></span>:" in page
     assert "before consolidation merged them under this topic." in page
     assert "[[wikilinks]]</code> before consolidation" not in page
+
+
+# ─── #248 FR4: the topics listing separates curated from derived ──────
+
+
+def _index_section(index_html: str, heading: str) -> str:
+    """Return the markup between one index heading and the next (or the end)."""
+    start = index_html.index(f">{heading} ")
+    rest = index_html[start:]
+    nxt = rest.find('<h2 class="topic-index-heading">', 1)
+    return rest if nxt == -1 else rest[:nxt]
+
+
+def _grouped_index(tmp_path: Path) -> str:
+    """Build a listing holding two entities, two concepts and two derived
+    topics, each pair with distinct reach so ordering is observable."""
+    wiki = _make_wiki(tmp_path, {
+        "s1": ["Hazel", "Bun", "Caching", "Batching", "Unfiled", "Gamma"],
+        "s2": ["Hazel", "Bun", "Caching", "Batching", "Unfiled", "Gamma"],
+        "s3": ["Hazel", "Caching", "Unfiled"],
+    })
+    for name in ("Hazel", "Bun"):
+        _curated_page_file(wiki, "entities", name)
+    for name in ("Caching", "Batching"):
+        _curated_page_file(wiki, "concepts", name)
+    g = build_topic_graph(wiki, min_sessions=2)
+    out = tmp_path / "site"
+    build_topic_pages(g, out, wiki_dir=wiki)
+    return (out / "topics" / "index.html").read_text(encoding="utf-8")
+
+
+def test_topics_index_groups_entities_concepts_and_derived_topics(tmp_path: Path):
+    index = _grouped_index(tmp_path)
+    headings = [
+        '<h2 class="topic-index-heading">Entities <span class="muted">(2)</span></h2>',
+        '<h2 class="topic-index-heading">Concepts <span class="muted">(2)</span></h2>',
+        '<h2 class="topic-index-heading">Other topics <span class="muted">(2)</span></h2>',
+    ]
+    for h in headings:
+        assert h in index
+    positions = [index.index(h) for h in headings]
+    assert positions == sorted(positions), "curated knowledge comes first (FR4)"
+
+    assert "Hazel" in _index_section(index, "Entities")
+    assert "Caching" in _index_section(index, "Concepts")
+    assert "Unfiled" in _index_section(index, "Other topics")
+
+
+def test_topics_index_chips_curated_rows_and_leaves_derived_rows_bare(
+    tmp_path: Path,
+):
+    index = _grouped_index(tmp_path)
+    entities = _index_section(index, "Entities")
+    concepts = _index_section(index, "Concepts")
+    other = _index_section(index, "Other topics")
+
+    assert entities.count('<span class="topic-kind-chip">Entity</span>') == 2
+    assert concepts.count('<span class="topic-kind-chip">Concept</span>') == 2
+    # A derived topic carries no chip at all — the absence is the signal that
+    # nobody reviewed it, so it must not fall back to `Unclassified topic`.
+    assert "topic-kind-chip" not in other
+    assert KIND_OTHER_LABEL not in other
+
+
+def test_topics_index_keeps_reach_order_inside_each_section(tmp_path: Path):
+    index = _grouped_index(tmp_path)
+    for heading, first, second in (
+        ("Entities", "Hazel", "Bun"),
+        ("Concepts", "Caching", "Batching"),
+        ("Other topics", "Unfiled", "Gamma"),
+    ):
+        section = _index_section(index, heading)
+        assert section.index(f">{first}</a>") < section.index(f">{second}</a>"), (
+            f"{heading}: the more widely referenced topic must come first"
+        )
+
+
+def test_topics_index_renders_every_section_even_when_one_is_empty(
+    tmp_path: Path,
+):
+    """A missing section would read as a broken page; "(0)" reads as a fact."""
+    wiki = _make_wiki(tmp_path, {
+        "s1": ["Unfiled", "Gamma"],
+        "s2": ["Unfiled", "Gamma"],
+    })
+    g = build_topic_graph(wiki, min_sessions=2)
+    out = tmp_path / "site"
+    build_topic_pages(g, out)
+    index = (out / "topics" / "index.html").read_text(encoding="utf-8")
+    assert '>Entities <span class="muted">(0)</span></h2>' in index
+    assert '>Concepts <span class="muted">(0)</span></h2>' in index
+    assert '>Other topics <span class="muted">(2)</span></h2>' in index
+    assert index.count('<p class="muted">No topics in this group.</p>') == 2
