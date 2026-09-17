@@ -119,7 +119,12 @@ from llmwiki.synth.cursor_cli import CursorCLIError
 from llmwiki.synth.ollama import OllamaError
 from llmwiki.synth.pipeline import refresh_synth_pending, resolve_backend
 from llmwiki.tag_utils import NOISE_TAGS
-from llmwiki.topics import build_topic_graph, resolve_project_topic_urls, topic_slug
+from llmwiki.topics import (
+    CURATED_KIND_FOLDERS,
+    build_topic_graph,
+    resolve_project_topic_urls,
+    topic_slug,
+)
 from llmwiki.topics_page import (
     build_topic_pages,
     kind_chip,
@@ -3318,11 +3323,20 @@ def build_site(
     _TOPIC_GRAPH_MIN_NODES = 5
     topic_graph: dict[str, Any] | None = None
     try:
-        topic_graph = build_topic_graph(wiki_dir)
+        # #248: every curated entity/concept page becomes a node, however
+        # few sessions cite it, so the site never drops a reviewed page.
+        topic_graph = build_topic_graph(wiki_dir, include_curated_pages=True)
     except Exception as e:  # noqa: BLE001 — never fail the build over the graph
         print(f"  warning: topic graph build failed: {e}", file=sys.stderr)
     topic_nodes = (topic_graph or {}).get("nodes") or []
     use_topic_graph = bool(topic_graph) and len(topic_nodes) >= _TOPIC_GRAPH_MIN_NODES
+    # #248: rendering the map and writing the topic pages are separate calls.
+    # A topic page is the only reader-facing page a curated entity or concept
+    # has, so it is written whenever a curated page backs a node — even on the
+    # small vaults whose graph is too sparse for the viewer below.
+    write_topic_pages = use_topic_graph or any(
+        node.get("kind") in CURATED_KIND_FOLDERS for node in topic_nodes
+    )
     # #108 FR4: a topic backed by a wiki project page routes to that project's
     # own page. Resolved once here so the search index below, the viewer's
     # double-click target, and the topic pages all agree on one URL.
@@ -3403,7 +3417,10 @@ def build_site(
         out_dir,
         search_mode=search_mode,
         doc_files=doc_files,
-        topics=topic_nodes if use_topic_graph else None,
+        # #248 FR2: index exactly the topic pages this build writes — a
+        # curated page on a sparse vault gets its palette entry, and a vault
+        # that writes no topic pages still indexes no topic URL.
+        topics=topic_nodes if write_topic_pages else None,
     )
 
     # v0.4: AI-consumable exports (llms.txt, llms-full.txt, graph.jsonld,
@@ -3452,6 +3469,10 @@ def build_site(
             graph_path = copy_graph_to_site(out_dir, wiki_dir=wiki_dir)
             if graph_path:
                 print(f"  wrote {graph_path.relative_to(out_dir.parent)} (interactive graph viewer)")
+            if write_topic_pages and topic_graph is not None:
+                tpages = build_topic_pages(topic_graph, out_dir, wiki_dir=wiki_dir)
+                print(f"  wrote {len(tpages)} topic pages "
+                      "(curated pages keep a page under the sparse-graph floor)")
     except (OSError, ValueError, RuntimeError) as e:
         print(f"  warning: graph viewer copy failed: {e}", file=sys.stderr)
 
