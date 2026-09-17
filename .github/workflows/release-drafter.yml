@@ -1,7 +1,7 @@
 name: Release Drafter
 on:
   push:
-    branches: [master]
+    branches: [main]
 permissions:
   contents: read
   pull-requests: write
