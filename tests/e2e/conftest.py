@@ -306,6 +306,10 @@ last_updated: 2026-04-09
 
 A route that answers a liveness probe with a fixed payload.
 
+Throughput was measured in zanzibarine units — a word that appears in the
+wiki and nowhere in the session transcripts, so a search for it can only be
+answered by the WIKI result group (#248).
+
 ## Connections
 - [[FastAPI]] — framework that serves it
 """

@@ -161,3 +161,109 @@ def test_palette_input_has_accessible_role(page: Page, site_url: str) -> None:
     assert has_a11y, (
         f"#palette-input has no accessible name: {role_or_type}"
     )
+
+
+# ── #248: the WIKI and SITE result groups ─────────────────────────────────
+
+
+def _group(page: Page, group: str) -> dict:
+    """Read one result group back out of the palette.
+
+    Returns the heading text, how many openable rows it carries, and whether
+    it rendered a zero-results / error line.
+    """
+    return page.evaluate(
+        """(group) => {
+            const items = Array.from(document.querySelectorAll('#palette-results > li'));
+            const start = items.findIndex(li => li.dataset.group === group);
+            if (start === -1) return null;
+            const rest = items.slice(start + 1);
+            const endRel = rest.findIndex(li => li.dataset.group);
+            const rows = endRel === -1 ? rest : rest.slice(0, endRel);
+            return {
+                heading: items[start].textContent.trim(),
+                openable: rows.filter(li => li.hasAttribute('data-i')).length,
+                inert: rows.filter(li => li.classList.contains('palette-row-static')).length,
+                message: rows.filter(li => li.dataset.groupMessage === group)
+                             .map(li => li.textContent.trim())[0] || '',
+            };
+        }""",
+        group,
+    )
+
+
+def _search(page: Page, site_url: str, query: str) -> None:
+    page.goto(f"{site_url}/index.html", wait_until="domcontentloaded")
+    _open_palette(page)
+    page.keyboard.type(query, delay=10)
+    page.wait_for_function(
+        """() => document.querySelector('#palette-results li[data-group="wiki"]') !== null""",
+        timeout=5000,
+    )
+
+
+def test_both_groups_render_for_a_wiki_only_term(page: Page, site_url: str) -> None:
+    """`zanzibarine` is seeded into the wiki and into no transcript. The SITE
+    group must still show its heading and say it found nothing — a reader who
+    cannot see the empty group cannot tell it apart from a broken search."""
+    _search(page, site_url, "zanzibarine")
+    wiki, site = _group(page, "wiki"), _group(page, "site")
+    assert wiki and site
+    assert wiki["openable"] >= 1, f"wiki group found nothing: {wiki}"
+    assert site["message"], f"site group vanished instead of reporting zero hits: {site}"
+
+
+def test_both_groups_render_for_a_site_only_term(page: Page, site_url: str, site_has) -> None:
+    """The mirror image: a static page title the seeded wiki never mentions."""
+    if not site_has("/analytics.html"):
+        pytest.skip("this build has no Analytics page to match on")
+    _search(page, site_url, "analytics")
+    wiki, site = _group(page, "wiki"), _group(page, "site")
+    assert site and site["openable"] >= 1, f"site group found nothing: {site}"
+    assert wiki and wiki["message"], f"wiki group vanished instead of reporting zero hits: {wiki}"
+
+
+def test_both_groups_render_when_nothing_matches(page: Page, site_url: str) -> None:
+    """Neither group disappears on a miss."""
+    _search(page, site_url, "qwertyzzzznothing")
+    for name in ("wiki", "site"):
+        g = _group(page, name)
+        assert g and g["openable"] == 0 and g["message"], f"{name} group: {g}"
+
+
+def test_a_wiki_page_with_no_reader_page_is_listed_but_inert(page: Page, site_url: str) -> None:
+    """`wiki/overview.md` has no page on the site. #248 keeps MCP's full
+    coverage by listing it anyway — without a link, without `data-i`, and so
+    without a stop on the arrow-key path."""
+    _search(page, site_url, "overview")
+    row = page.evaluate(
+        """() => {
+            const li = Array.from(document.querySelectorAll('#palette-results li'))
+                .find(el => el.textContent.includes('wiki/overview.md'));
+            if (!li) return null;
+            return {
+                static: li.classList.contains('palette-row-static'),
+                disabled: li.getAttribute('aria-disabled'),
+                hasIndex: li.hasAttribute('data-i'),
+                anchors: li.querySelectorAll('a').length,
+            };
+        }"""
+    )
+    assert row is not None, "wiki/overview.md is missing from the WIKI group"
+    assert row["static"] is True
+    assert row["disabled"] == "true"
+    assert row["hasIndex"] is False
+    assert row["anchors"] == 0
+
+
+def test_arrow_keys_skip_the_rows_that_cannot_open(page: Page, site_url: str) -> None:
+    """Every highlighted row must be one Enter can act on."""
+    _search(page, site_url, "overview")
+    for _ in range(6):
+        page.keyboard.press("ArrowDown")
+    highlighted = page.evaluate(
+        """() => Array.from(document.querySelectorAll('#palette-results li.active'))
+                .map(li => li.hasAttribute('data-i'))"""
+    )
+    assert highlighted, "no row is highlighted after ArrowDown"
+    assert all(highlighted), "an unopenable row took the highlight"

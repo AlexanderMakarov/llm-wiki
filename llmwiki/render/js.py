@@ -906,6 +906,217 @@ document.addEventListener("DOMContentLoaded", function () {
   };
 })();
 
+// ─── Wiki match mode (#248) ── BEGIN ──────────────────────────────────────
+// The palette's WIKI group runs the same algorithm as `wiki_search`
+// mode=match: literal case-insensitive substring, no tokenising and no
+// scoring; pages matching by title or path first, then pages matching only
+// in the body, each group sorted by path; caps of 200 pages and 200 lines
+// with a note when they drop matches. Mirrors
+// `llmwiki/search/scoring.py::match_page` and
+// `llmwiki/search/engine.py::search_match`, which stay the originals.
+//
+// Everything between the BEGIN and END markers is DOM-free and
+// self-contained so `tests/test_248_palette_match.py` can lift it out and
+// run it under node against those originals. Keep it that way: no
+// `document`, and no call out to a helper defined elsewhere.
+var LLMWIKI_MATCH = (function () {
+  var PAGE_CAP = 200;       // search/engine.py DEFAULT_PAGE_CAP
+  var HIT_CAP = 200;        // search/engine.py DEFAULT_HIT_CAP
+  var SNIPPET_CHARS = 400;  // search/scoring.py extract_snippet max_chars
+  var LINES_SHOWN = 3;      // matching lines a row shows before folding
+
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  // scoring.py::extract_snippet — a ~400-char window centred on the hit.
+  function snippet(content, termLower) {
+    var half = Math.floor(SNIPPET_CHARS / 2);
+    var at = content.toLowerCase().indexOf(termLower);
+    if (at >= 0) {
+      var start = Math.max(0, at - half);
+      var end = Math.min(content.length, at + half);
+      return (start > 0 ? "…" : "") + content.slice(start, end) +
+             (end < content.length ? "…" : "");
+    }
+    return content.slice(0, SNIPPET_CHARS) +
+           (content.length > SNIPPET_CHARS ? "…" : "");
+  }
+
+  // scoring.py::match_page. `page` carries {path, title, kind, text}.
+  function matchPage(page, termLower, kindLower) {
+    if (kindLower && String(page.kind || "").trim().toLowerCase() !== kindLower) return null;
+    var title = String(page.title || "");
+    var path = String(page.path || "");
+    var nameMatch = title.toLowerCase().indexOf(termLower) !== -1 ||
+                    path.toLowerCase().indexOf(termLower) !== -1;
+    var lines = [];
+    var raw = String(page.text || "").split("\n");
+    for (var i = 0; i < raw.length; i++) {
+      var stripped = raw[i].trim();
+      if (stripped.toLowerCase().indexOf(termLower) !== -1) {
+        lines.push([i + 1, snippet(stripped, termLower)]);
+      }
+    }
+    if (!lines.length && !nameMatch) return null;
+    return { page: page, path: path, title: title, nameMatch: nameMatch, lines: lines };
+  }
+
+  function byPath(a, b) { return a.path < b.path ? -1 : (a.path > b.path ? 1 : 0); }
+
+  // engine.py::search_match for one term — the N=1 case of the engine.
+  function searchMatch(pages, term, kind, pageCap, hitCap) {
+    pageCap = pageCap == null ? PAGE_CAP : pageCap;
+    hitCap = hitCap == null ? HIT_CAP : hitCap;
+    var termLower = String(term || "").toLowerCase();
+    var kindLower = String(kind || "").trim().toLowerCase();
+    if (!termLower) return { pages: [], truncated: false };
+    var namePages = [], bodyPages = [];
+    var hitCount = 0, lineCapReached = false, droppedPages = false;
+    for (var i = 0; i < pages.length; i++) {
+      // The engine stops walking once its only query is saturated.
+      if (lineCapReached && namePages.length >= pageCap) break;
+      var m = matchPage(pages[i], termLower, kindLower);
+      if (!m) continue;
+      if (lineCapReached) {
+        // Past the line cap only a name match can still add a page, and it
+        // carries the lines it collected: engine.py builds an empty tuple
+        // here but never rebuilds the match from it.
+        if (!m.nameMatch) continue;
+      } else {
+        var kept = [];
+        for (var l = 0; l < m.lines.length; l++) {
+          if (hitCount >= hitCap) { lineCapReached = true; break; }
+          kept.push(m.lines[l]);
+          hitCount++;
+        }
+        m.lines = kept;
+        if (!kept.length && !m.nameMatch) continue;
+      }
+      var bucket = m.nameMatch ? namePages : bodyPages;
+      if (bucket.length >= pageCap) { droppedPages = true; continue; }
+      bucket.push(m);
+    }
+    namePages.sort(byPath);
+    bodyPages.sort(byPath);
+    var out = namePages.concat(bodyPages);
+    var dropped = droppedPages;
+    if (out.length > pageCap) { out = out.slice(0, pageCap); dropped = true; }
+    return { pages: out, truncated: lineCapReached || dropped };
+  }
+
+  // The SITE group runs the same matcher over palette index entries. `url`
+  // stands in for the wiki corpus's `path`: it is what addresses the entry
+  // and what makes the sort stable. Slash commands carry no url and fall
+  // back to their title.
+  function searchMatchEntries(entries, term, kind) {
+    var pages = [];
+    for (var i = 0; i < entries.length; i++) {
+      var e = entries[i];
+      pages.push({
+        path: String(e.url || e.title || ""),
+        title: String(e.title || ""),
+        kind: String(e.kind || e.type || ""),
+        text: String(e.body || ""),
+        entry: e
+      });
+    }
+    return searchMatch(pages, term, kind);
+  }
+
+  function linesHtml(lines) {
+    if (!lines || !lines.length) return "";
+    var shown = lines.slice(0, LINES_SHOWN);
+    var more = lines.length - shown.length;
+    var html = shown.map(function (ln) {
+      return '<span class="result-line"><span class="result-line-no">' +
+        esc(ln[0]) + '</span>' + esc(ln[1]) + '</span>';
+    }).join("");
+    if (more > 0) {
+      html += '<span class="result-line result-line-more">+' + more +
+        ' more matching line' + (more === 1 ? '' : 's') + '</span>';
+    }
+    return '<span class="result-lines">' + html + '</span>';
+  }
+
+  // A wiki page with no reader page is still listed — that is how the group
+  // keeps MCP's full coverage — but it is inert: no `data-i`, so a click
+  // and the arrow keys both pass it by, and nothing in it is a link.
+  function wikiRowHtml(m, index) {
+    var clickable = index >= 0;
+    var kind = String((m.page && m.page.kind) || "") || "wiki";
+    return '<li class="palette-row' + (clickable ? '' : ' palette-row-static') + '"' +
+      (clickable ? ' data-i="' + index + '"' : ' aria-disabled="true"') + '>' +
+      '<span class="result-type">' + esc(kind) + '</span>' +
+      '<span class="result-title">' + esc(m.title || m.path) + '</span>' +
+      (clickable ? '' : '<span class="result-nolink">no page on this site</span>') +
+      '<span class="result-meta">' + esc(m.path) + '</span>' +
+      linesHtml(m.lines) +
+      '</li>';
+  }
+
+  function siteRowHtml(entry, index) {
+    var meta = [entry.project, entry.date, entry.model].filter(Boolean).join(" · ");
+    return '<li class="palette-row" data-i="' + index + '">' +
+      // #108: a topic entry carries the kind the map and its page name
+      // (Entity, Concept, …); everything else badges its type.
+      '<span class="result-type">' + esc(entry.kind || entry.type || 'page') + '</span>' +
+      '<span class="result-title">' + esc(entry.title) + '</span>' +
+      (meta ? '<span class="result-meta">' + esc(meta) + '</span>' : '') +
+      '</li>';
+  }
+
+  // Both groups always render, WIKI first: a heading plus either rows or a
+  // one-line explanation. A group never disappears, so "nothing in the
+  // wiki" stays distinguishable from "search is broken".
+  function buildHtml(view) {
+    var openable = [];
+    var html = "";
+    [view.wiki, view.site].forEach(function (g) {
+      var rows = g.rows || [];
+      html += '<li class="palette-group" data-group="' + esc(g.id) + '">' +
+        '<span class="palette-group-label">' + esc(g.label) + '</span>' +
+        '<span class="palette-group-count">' + rows.length +
+        (rows.length === 1 ? ' result' : ' results') + '</span></li>';
+      for (var i = 0; i < rows.length; i++) {
+        if (g.id === "wiki") {
+          var m = rows[i];
+          var url = m.page && m.page.url ? String(m.page.url) : "";
+          html += wikiRowHtml(m, url ? openable.length : -1);
+          if (url) openable.push({ type: "wiki", url: url, title: m.title || m.path });
+        } else {
+          html += siteRowHtml(rows[i], openable.length);
+          openable.push(rows[i]);
+        }
+      }
+      if (g.message) {
+        html += '<li class="' +
+          (g.messageKind === "error" ? "palette-note" : "palette-empty") +
+          '" data-group-message="' + esc(g.id) + '">' + esc(g.message) + '</li>';
+      }
+      if (g.truncated) {
+        html += '<li class="palette-empty palette-truncated" data-group-truncated="' +
+          esc(g.id) + '">Capped at ' + PAGE_CAP + ' pages and ' + HIT_CAP +
+          ' lines — more matched than are shown.</li>';
+      }
+    });
+    return { html: html, openable: openable };
+  }
+
+  var api = {
+    PAGE_CAP: PAGE_CAP,
+    HIT_CAP: HIT_CAP,
+    searchMatch: searchMatch,
+    searchMatchEntries: searchMatchEntries,
+    buildHtml: buildHtml
+  };
+  if (typeof window !== "undefined") window.__llmwikiMatch = api;
+  return api;
+})();
+// ─── Wiki match mode (#248) ── END ────────────────────────────────────────
+
 // ─── Command palette (Cmd+K) + search index loader ─────────────────────
 (function () {
   let idx = null;
@@ -915,6 +1126,13 @@ document.addEventListener("DOMContentLoaded", function () {
   let currentResults = [];
   let idxFailed = false;   // index unreachable — every search is meaningless
   let idxPartial = false;  // some chunks missing — results are incomplete
+  // #248: the wiki corpus is its own lazy payload. `null` means "not loaded
+  // yet"; `[]` with the failed flag means the WIKI group has nothing to
+  // search and the reader has already been told why.
+  let wikiCorpus = null;
+  let wikiCorpusFailed = false;
+  const WIKI_CORPUS_KEY = "_wiki_corpus";
+  const SITE_BROWSE_CAP = 10;
 
   // Lazy-chunked loader (#47): loads the small meta index first (projects +
   // static pages), then pulls per-project session chunks in parallel on first
@@ -927,13 +1145,15 @@ document.addEventListener("DOMContentLoaded", function () {
     const base = jsUrl.substring(0, jsUrl.lastIndexOf("/") + 1);
     idxPromise = window.__llmwikiLoadData(jsUrl, "search-index")
       .then(function (data) {
-        // Old format: flat array → return as-is
-        if (Array.isArray(data)) { idx = data; return idx; }
-        // New format: {entries: [...], _chunks: ["search-chunks/foo.json", ...]}
+        // Old format: flat array → return as-is. It predates #248, so it
+        // names no wiki corpus and the WIKI group says so out loud.
+        if (Array.isArray(data)) { idx = data; noteMissingWikiCorpus(); return idx; }
+        // New format: {entries: [...], _chunks: ["search-chunks/foo.json", ...],
+        // _wiki_corpus: "search-wiki-corpus.json"}
         metaEntries = data.entries || [];
         var chunkUrls = data._chunks || [];
-        if (!chunkUrls.length) { idx = metaEntries; return idx; }
-        return Promise.all(chunkUrls.map(function (cu) {
+        var corpusLoad = loadWikiCorpus(base, data[WIKI_CORPUS_KEY]);
+        var chunkLoads = Promise.all(chunkUrls.map(function (cu) {
           // The manifest lists .json paths; the executable twin sits beside
           // it and is keyed by that same manifest path.
           return window.__llmwikiLoadData(base + cu.replace(/\.json$/, ".js"), cu)
@@ -944,9 +1164,10 @@ document.addEventListener("DOMContentLoaded", function () {
               window.__llmwikiReportError("Search chunk " + cu + " failed to load", e);
               return [];
             });
-        })).then(function (chunks) {
+        }));
+        return Promise.all([chunkLoads, corpusLoad]).then(function (loaded) {
           idx = metaEntries.slice();
-          chunks.forEach(function (c) {
+          loaded[0].forEach(function (c) {
             if (Array.isArray(c)) { for (var i = 0; i < c.length; i++) idx.push(c[i]); }
           });
           return idx;
@@ -956,6 +1177,9 @@ document.addEventListener("DOMContentLoaded", function () {
         idxFailed = true;
         window.__llmwikiReportError("Search index failed to load", e);
         idx = [];
+        // The manifest that names the corpus never arrived either.
+        wikiCorpus = [];
+        wikiCorpusFailed = true;
         return idx;
       });
     return idxPromise;
@@ -963,44 +1187,54 @@ document.addEventListener("DOMContentLoaded", function () {
   // Expose the shared loader so wikilink-preview + related-pages can reuse it
   window.__llmwikiLoadIndex = loadIndex;
 
-  // Return the meta entries (projects + pages) synchronously if available,
-  // otherwise trigger a full load. Used for instant palette rendering before
-  // session chunks arrive.
-  function getMetaSync() { return metaEntries || idx || []; }
+  // A site built before #248 carries no corpus key. That is a real gap in
+  // what the reader can search, so it is reported on the page rather than
+  // swallowed into an empty WIKI group (CONTRIBUTING rule 9).
+  function noteMissingWikiCorpus() {
+    wikiCorpus = [];
+    wikiCorpusFailed = true;
+    window.__llmwikiReportError(
+      "Wiki search corpus is missing from this site's search index",
+      new Error("no " + WIKI_CORPUS_KEY + " entry — rebuild the site")
+    );
+  }
 
-  function score(entry, query) {
-    if (!query) return 0;
-    const q = query.toLowerCase();
-    const title = (entry.title || "").toLowerCase();
-    const project = (entry.project || "").toLowerCase();
-    const body = (entry.body || "").toLowerCase();
-    let s = 0;
-    if (title === q) s += 100;
-    else if (title.indexOf(q) === 0) s += 60;
-    else if (title.indexOf(q) !== -1) s += 40;
-    if (project.indexOf(q) !== -1) s += 20;
-    if (body.indexOf(q) !== -1) s += 10;
-    // Token match
-    const tokens = q.split(/\s+/).filter(Boolean);
-    let allMatch = true;
-    tokens.forEach(function (t) {
-      if (title.indexOf(t) === -1 && project.indexOf(t) === -1 && body.indexOf(t) === -1) allMatch = false;
-    });
-    if (allMatch && tokens.length > 1) s += 30;
-    return s;
+  function loadWikiCorpus(base, rel) {
+    if (!rel) { noteMissingWikiCorpus(); return Promise.resolve([]); }
+    return window.__llmwikiLoadData(base + rel.replace(/\.json$/, ".js"), rel)
+      .then(function (c) {
+        wikiCorpus = Array.isArray(c) ? c : [];
+        if (!Array.isArray(c)) {
+          wikiCorpusFailed = true;
+          window.__llmwikiReportError(
+            "Wiki search corpus " + rel + " is not a list",
+            new Error("unexpected payload shape")
+          );
+        }
+        return wikiCorpus;
+      })
+      .catch(function (e) {
+        wikiCorpus = [];
+        wikiCorpusFailed = true;
+        window.__llmwikiReportError("Wiki search corpus " + rel + " failed to load", e);
+        return wikiCorpus;
+      });
   }
 
   // v0.8 (#97): Dataview-style structured queries. Users can type
   // key:value pairs alongside free text to filter by metadata:
   //   type:session project:llm-wiki model:claude date:>2026-03-01 sort:date rust
-  // Supported keys: type, project, model, date (range with > / <), tags, sort
-  // Anything that doesn't match key:value is treated as free-text fuzzy search.
+  // Supported keys: type, project, model, date (range with > / <), tags, sort,
+  // kind. Anything that doesn't match key:value is the literal search term.
+  // #248: every key but `kind` filters the SITE group only — match mode has
+  // no equivalent, so honouring them in the WIKI group would diverge from
+  // `wiki_search`. `kind` is MCP's own frontmatter-`type` filter.
   function parseStructuredQuery(raw) {
     var filters = {};
     var freeText = [];
     var tokens = raw.split(/\s+/).filter(Boolean);
     tokens.forEach(function (t) {
-      var m = t.match(/^(type|project|model|date|tags|sort):(.+)$/i);
+      var m = t.match(/^(type|project|model|date|tags|sort|kind):(.+)$/i);
       if (m) { filters[m[1].toLowerCase()] = m[2]; }
       else { freeText.push(t); }
     });
@@ -1009,6 +1243,10 @@ document.addEventListener("DOMContentLoaded", function () {
 
   function matchesFilters(entry, filters) {
     if (filters.type && (entry.type || "").toLowerCase() !== filters.type.toLowerCase()) return false;
+    // #108 entries badge a kind (Entity, Concept, …); everything else is
+    // filtered on its type, which is what the wiki corpus calls `kind` too.
+    if (filters.kind &&
+        (entry.kind || entry.type || "").toLowerCase() !== filters.kind.toLowerCase()) return false;
     if (filters.project && (entry.project || "").toLowerCase().indexOf(filters.project.toLowerCase()) === -1) return false;
     if (filters.model && (entry.model || "").toLowerCase().indexOf(filters.model.toLowerCase()) === -1) return false;
     if (filters.tags) {
@@ -1026,66 +1264,83 @@ document.addEventListener("DOMContentLoaded", function () {
     return true;
   }
 
-  function search(query) {
-    if (!idx) return [];
-    if (!query) return idx.slice(0, 10);
-    var parsed = parseStructuredQuery(query);
-    var filtered = idx;
-    if (Object.keys(parsed.filters).length > 0) {
-      filtered = idx.filter(function (e) { return matchesFilters(e, parsed.filters); });
-    }
-    var sortKey = parsed.filters.sort;
-    if (sortKey === "date") {
-      return filtered
-        .slice()
-        .sort(function (a, b) { return (b.date || "").localeCompare(a.date || ""); })
-        .slice(0, 20);
-    }
-    if (!parsed.freeText) return filtered.slice(0, 20);
-    return filtered
-      .map(function (e) { return { entry: e, score: score(e, parsed.freeText) }; })
-      .filter(function (r) { return r.score > 0; })
-      .sort(function (a, b) { return b.score - a.score; })
-      .slice(0, 15)
-      .map(function (r) { return r.entry; });
+  // #248 FR7: one query, two always-present groups. WIKI runs match mode
+  // over the lazy wiki corpus; SITE runs the same matcher over the palette
+  // index. Neither group is allowed to vanish — a heading with a
+  // zero-results line is how the reader tells an empty wiki from a broken
+  // search.
+  function buildView(query) {
+    var parsed = parseStructuredQuery(query || "");
+    return {
+      wiki: wikiGroup(parsed.freeText, parsed.filters.kind || ""),
+      site: siteGroup(parsed, parsed.freeText)
+    };
   }
 
-  function renderResults(results) {
+  function wikiGroup(term, kind) {
+    var g = { id: "wiki", label: "Wiki", rows: [], truncated: false,
+              message: null, messageKind: "info" };
+    if (wikiCorpusFailed) {
+      g.message = "Wiki search data could not be loaded — this group is broken, not empty.";
+      g.messageKind = "error";
+      return g;
+    }
+    if (wikiCorpus === null) { g.message = "Loading wiki pages…"; return g; }
+    if (!term) { g.message = "Type a term to search wiki pages."; return g; }
+    var r = LLMWIKI_MATCH.searchMatch(wikiCorpus, term, kind);
+    g.rows = r.pages;
+    g.truncated = r.truncated;
+    if (!r.pages.length) g.message = 'No wiki page contains "' + term + '".';
+    return g;
+  }
+
+  function siteGroup(parsed, term) {
+    var g = { id: "site", label: "Site", rows: [], truncated: false,
+              message: null, messageKind: "info" };
+    if (idxFailed) {
+      g.message = "Search data could not be loaded — this page is broken, not empty.";
+      g.messageKind = "error";
+      return g;
+    }
+    var entries = idx || metaEntries || [];
+    var filtered = entries;
+    if (Object.keys(parsed.filters).length > 0) {
+      filtered = entries.filter(function (e) { return matchesFilters(e, parsed.filters); });
+    }
+    if (parsed.filters.sort === "date") {
+      g.rows = filtered.slice()
+        .sort(function (a, b) { return String(b.date || "").localeCompare(String(a.date || "")); })
+        .slice(0, 20);
+    } else if (!term) {
+      // No term is a browse, not a search: show the head of the index.
+      g.rows = filtered.slice(0, SITE_BROWSE_CAP);
+    } else {
+      var r = LLMWIKI_MATCH.searchMatchEntries(filtered, term, "");
+      g.rows = r.pages.map(function (m) { return m.page.entry; });
+      g.truncated = r.truncated;
+    }
+    if (!g.rows.length) {
+      g.message = term ? 'No site page contains "' + term + '".' : "Nothing indexed yet.";
+      // #20: an unreachable chunk produces zero matches for a query that
+      // should have had some. Say which one it is.
+      if (idxPartial) g.message += " Part of the search data failed to load.";
+    }
+    return g;
+  }
+
+  function render(view) {
     const ul = document.getElementById("palette-results");
     if (!ul) return;
-    currentResults = results;
+    const built = LLMWIKI_MATCH.buildHtml(view);
+    ul.innerHTML = built.html;
+    currentResults = built.openable;
     activeIdx = 0;
-    // #20: an unreachable index produces zero matches for every query, which
-    // is indistinguishable from an empty corpus. Say which one it is.
-    if (!results.length && (idxFailed || idxPartial)) {
-      ul.innerHTML = '<li class="palette-note">' + escapeHtml(idxFailed
-        ? "Search data could not be loaded — this page is broken, not empty."
-        : "No matches, but part of the search data failed to load.") + '</li>';
-      currentResults = [];
-      return;
-    }
-    ul.innerHTML = results.map(function (r, i) {
-      const meta = [r.project, r.date, r.model].filter(Boolean).join(" · ");
-      return '<li data-i="' + i + '" class="' + (i === 0 ? 'active' : '') + '">' +
-        // #108: a topic entry carries the kind the map and its page name
-        // (Entity, Concept, …); everything else badges its type.
-        '<span class="result-type">' + escapeHtml(r.kind || r.type || 'page') + '</span>' +
-        '<span class="result-title">' + escapeHtml(r.title) + '</span>' +
-        (meta ? '<div class="result-meta">' + escapeHtml(meta) + '</div>' : '') +
-        '</li>';
-    }).join("");
-    ul.querySelectorAll("li").forEach(function (li) {
+    ul.querySelectorAll("li[data-i]").forEach(function (li) {
       li.addEventListener("click", function () {
-        const i = parseInt(li.getAttribute("data-i"));
-        openResult(i);
+        openResult(parseInt(li.getAttribute("data-i"), 10));
       });
     });
-  }
-
-  function escapeHtml(s) {
-    return String(s || "").replace(/[&<>"']/g, function (c) {
-      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
-    });
+    updateActive();
   }
 
   function openResult(i) {
@@ -1195,10 +1450,11 @@ document.addEventListener("DOMContentLoaded", function () {
     const input = document.getElementById("palette-input");
     if (input) { input.value = ""; }
     __openDialog(p, input);
-    // Show meta entries immediately while chunks load
-    var meta = getMetaSync();
-    if (meta.length && !idx) renderResults(meta.slice(0, 10));
-    loadIndex().then(function () { renderResults(search(input ? input.value : "")); });
+    // Render immediately off whatever is already in hand (meta entries, and
+    // a "loading" WIKI group) so the palette is never blank while the lazy
+    // payloads arrive.
+    render(buildView(input ? input.value : ""));
+    loadIndex().then(function () { render(buildView(input ? input.value : "")); });
   }
 
   function closePalette() {
@@ -1227,9 +1483,9 @@ document.addEventListener("DOMContentLoaded", function () {
 
     const input = document.getElementById("palette-input");
     if (input) {
-      input.addEventListener("input", function () { renderResults(search(input.value)); });
+      input.addEventListener("input", function () { render(buildView(input.value)); });
       input.addEventListener("keydown", function (e) {
-        const items = document.querySelectorAll("#palette-results li");
+        const items = document.querySelectorAll("#palette-results li[data-i]");
         if (e.key === "ArrowDown") { e.preventDefault(); activeIdx = Math.min(items.length - 1, activeIdx + 1); updateActive(); }
         else if (e.key === "ArrowUp") { e.preventDefault(); activeIdx = Math.max(0, activeIdx - 1); updateActive(); }
         else if (e.key === "Enter") { e.preventDefault(); openResult(activeIdx); }
@@ -1250,7 +1506,10 @@ document.addEventListener("DOMContentLoaded", function () {
   });
 
   function updateActive() {
-    const items = document.querySelectorAll("#palette-results li");
+    // Only openable rows carry `data-i`. Group headings, zero-results lines
+    // and wiki rows with no reader page are stepped over rather than
+    // highlighted into a dead end.
+    const items = document.querySelectorAll("#palette-results li[data-i]");
     items.forEach(function (li, i) { li.classList.toggle("active", i === activeIdx); });
     const active = items[activeIdx];
     if (active) active.scrollIntoView({ block: "nearest" });
@@ -1545,8 +1804,8 @@ document.addEventListener("DOMContentLoaded", function () {
   // string-concatenates `data-date` and `data-count` into HTML; while
   // the values come from controlled `data-date` row attributes (built
   // in build.py from frontmatter dates), defense-in-depth escapes them
-  // anyway. The palette IIFE has its own `escapeHtml` but it's out of
-  // scope here, hence the local copy.
+  // anyway. Every IIFE that writes HTML keeps its own escaper rather than
+  // reaching across scopes, hence the local copy.
   function escAttr(s) {
     return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
       return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
