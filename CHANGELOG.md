@@ -37,6 +37,8 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Fixed
 
+- **Default-branch CI push triggers use `main` (#270)** — `release-drafter.yml`, `cross-browser.yml`, and `agents-e2e.yml` fire on push to `main` (not `master`-only); dual-branch `ci.yml` / `e2e.yml` / `gitleaks.yml` unchanged. Regression test derives the expected branch from CONTRIBUTING / RELEASE_PROCESS.
+  - *Release note:* Release-drafter and Playwright CI push triggers follow the repo default branch `main` (#270).
 - **`migrate wikilink-titles` rewrites case/punctuation-variant bare links (#262)** — bare `[[LLM-Wiki]]` (and similar) uniquely matching a page under shared `llmwiki.wikilinks.norm_page_key` (same fold as `link_integrity` / harvest) become `[[canonical-slug|Title]]`; true aliases and ambiguous collisions stay skipped. Re-run the migrate on vaults already processed by #259.
   - *Release note:* `migrate wikilink-titles` now titles case/punct-variant bare links that fold to a unique page (#262).
 - **Page-identity fold lives in `wikilinks.norm_page_key` (#262)** — `link_integrity`, candidate harvest, and `migrate wikilink-titles` share one helper instead of importing a private lint `_norm_slug` (distinct from `topics.topic_slug`).

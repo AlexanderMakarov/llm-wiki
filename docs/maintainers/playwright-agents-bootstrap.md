@@ -158,7 +158,7 @@ on:
       - "package.json"
       - "package-lock.json"
   push:
-    branches: [master]
+    branches: [main]
     paths:
       - "llmwiki/build.py"
       - "llmwiki/render/**"

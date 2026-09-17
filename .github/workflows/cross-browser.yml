@@ -15,7 +15,7 @@ on:
       - "tests/e2e/test_cross_browser_smoke.py"
       - ".github/workflows/cross-browser.yml"
   push:
-    branches: ["master"]
+    branches: ["main"]
     paths:
       - "llmwiki/build.py"
       - "llmwiki/render/css.py"
