@@ -2592,9 +2592,101 @@ def render_models_section(out_dir: Path) -> tuple[Path | None, int]:
 
 # ─── search index ──────────────────────────────────────────────────────────
 
-# #20: search payloads are emitted as .js sidecars too, so the site works
-# when opened over file://. Re-exported for callers importing it from here.
+# `write_js_sidecar` (#20): search payloads are emitted as .js sidecars too,
+# so the site works when opened over file://. Re-exported for callers
+# importing it from here.
+#
+# #248 FR7: the palette's WIKI group mirrors `wiki_search` mode=match, so the
+# site must scan the corpus MCP scans. `iter_scan_files` *is* that rule —
+# reused rather than re-derived so the two can never drift. `_compute_site_url`
+# is the same reader-URL mapping the graph viewer clicks through (the
+# `llmwiki/trace.py` precedent for importing it).
+from llmwiki._frontmatter import parse_frontmatter_dict  # noqa: E402
+from llmwiki.graph import _compute_site_url  # noqa: E402
 from llmwiki.render.data import write_js_sidecar  # noqa: E402
+from llmwiki.search.corpus import (  # noqa: E402
+    DEFAULT_PER_FILE_CAP,
+    iter_scan_files,
+    read_capped,
+)
+
+# Manifest key + payload path for the wiki corpus. The key is optional: a site
+# built before #248 carries no such key and the viewer must tolerate that.
+WIKI_CORPUS_MANIFEST_KEY = "_wiki_corpus"
+WIKI_CORPUS_REL = "search-wiki-corpus.json"
+
+
+def build_wiki_corpus_entries(
+    wiki_dir: Path,
+    topics: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
+    """Return the wiki corpus exactly as ``wiki_search`` match mode sees it.
+
+    Every ``.md`` under ``wiki_dir`` except ``archive/`` — no underscore
+    filter, so ``_context.md`` is in, because MCP scans it (#248 FR7).
+
+    Each entry is deliberately minimal — five fields, each one something
+    match mode needs and none of which the client could derive:
+
+    ``path``   ``rel_path`` as MCP reports it (relative to the vault root).
+               Both the row label and MCP's tiebreak sort key.
+    ``title``  frontmatter ``title``, empty when absent — MCP's own rule.
+               Half of the name-match test alongside ``path``.
+    ``url``    the reader page, or ``None`` when none exists. Carried through
+               as null rather than dropping the page, so the WIKI group keeps
+               full MCP coverage with the row simply not clickable.
+    ``kind``   frontmatter ``type``, lowercased — MCP's ``kind`` filter, the
+               one structured filter both result groups honour.
+    ``text``   the whole page, uncapped. Substring matching and returning
+               every matching line both need it; nothing smaller would do.
+
+    Entries are sorted by ``path`` so two builds of one vault are
+    byte-identical (#150) — ``rglob`` order is filesystem order.
+    """
+    wiki_root = wiki_dir.resolve()
+    content_root = wiki_root.parent
+    # A curated entity or concept has no page of its own: its reader page is
+    # the topic page this build writes for it. Keyed on `wiki_path`, which
+    # `build_topic_graph` already reports in the same vault-relative form.
+    topic_urls: dict[str, str] = {}
+    for node in (topics or []):
+        wiki_path = str(node.get("wiki_path") or "")
+        site_url = str(node.get("site_url") or "")
+        if wiki_path and site_url:
+            topic_urls.setdefault(wiki_path, site_url)
+
+    entries: list[dict[str, Any]] = []
+    for path in iter_scan_files([wiki_dir], cold_storage_root=wiki_dir):
+        # Same per-file cap MCP reads under; no aggregate budget, because the
+        # build reads the corpus once and must emit all of it.
+        text, consumed = read_capped(
+            path,
+            remaining_budget=DEFAULT_PER_FILE_CAP,
+            per_file_cap=DEFAULT_PER_FILE_CAP,
+        )
+        if consumed == 0:
+            continue
+        resolved = path.resolve()
+        try:
+            rel_path = str(resolved.relative_to(content_root))
+            wiki_rel = resolved.relative_to(wiki_root).parts
+        except ValueError:
+            continue
+        meta = parse_frontmatter_dict(text)
+        slug = path.stem
+        type_ = wiki_rel[0] if len(wiki_rel) > 1 else "root"
+        url = _compute_site_url(text, wiki_rel, slug, type_)
+        if url is None:
+            url = topic_urls.get(rel_path)
+        entries.append({
+            "path": rel_path,
+            "title": str(meta.get("title", "") or "").strip(),
+            "url": url or None,
+            "kind": str(meta.get("type", "") or "").strip().lower(),
+            "text": text,
+        })
+    entries.sort(key=lambda e: e["path"])
+    return entries
 
 
 def build_search_index(
@@ -2605,6 +2697,7 @@ def build_search_index(
     search_mode: str = "auto",
     doc_files: list[raw_docs_site.RawDocFile] | None = None,
     topics: list[dict[str, Any]] | None = None,
+    wiki_dir: Path | None = None,
 ) -> Path:
     """Build a chunked search index for lazy loading (#47).
 
@@ -2616,6 +2709,14 @@ def build_search_index(
                                   _chunks manifest + _mode + _tree_eligible_ratio (#53)
       search-chunks/<project>.json — session entries per project, each
                                     carrying heading_max_depth + count_by_depth
+      search-wiki-corpus.json     — the wiki corpus `wiki_search` match mode
+                                    scans (#248 FR7), written only when
+                                    ``wiki_dir`` is given
+
+``wiki_dir`` is the ``wiki/`` whose pages the palette's WIKI group searches.
+    Its payload is lazy — referenced from the optional ``_wiki_corpus``
+    manifest key beside ``_chunks``, never inlined into the eager meta
+    entries, which keep their short bodies.
 
     `search_mode` accepts ``auto`` (default, heuristic), ``tree``, or
     ``flat`` — matches the `llmwiki build --search-mode` flag.
@@ -2819,6 +2920,20 @@ def build_search_index(
     mode, tree_ratio = decide_search_mode(all_entries, override=search_mode)
     mode_badge = search_index_footer_badge(mode, tree_ratio)
 
+    # #248 FR7: the wiki corpus rides its own lazy payload. Off the eager
+    # path — `search-index.json` is fetched on every page view, this is not.
+    wiki_corpus_bytes = 0
+    wiki_corpus_rel: str | None = None
+    if wiki_dir is not None and wiki_dir.is_dir():
+        wiki_entries = build_wiki_corpus_entries(wiki_dir, topics)
+        corpus_path = out_dir / WIKI_CORPUS_REL
+        corpus_json = json.dumps(wiki_entries, ensure_ascii=False)
+        corpus_path.write_text(corpus_json, encoding="utf-8")
+        # Keyed by its manifest path, exactly as the chunks are (#20).
+        write_js_sidecar(corpus_path, WIKI_CORPUS_REL, corpus_json)
+        wiki_corpus_bytes = len(corpus_json.encode("utf-8"))
+        wiki_corpus_rel = WIKI_CORPUS_REL
+
     index_obj = {
         "entries": meta_entries,
         "_chunks": chunk_manifest,
@@ -2827,6 +2942,8 @@ def build_search_index(
         "_tree_eligible_ratio": round(tree_ratio, 4),
         "_mode_badge": mode_badge,
     }
+    if wiki_corpus_rel is not None:
+        index_obj[WIKI_CORPUS_MANIFEST_KEY] = wiki_corpus_rel
     out_path = out_dir / "search-index.json"
     index_json = json.dumps(index_obj, ensure_ascii=False)
     out_path.write_text(index_json, encoding="utf-8")
@@ -2834,9 +2951,15 @@ def build_search_index(
 
     meta_kb = len(json.dumps(index_obj).encode("utf-8")) // 1024
     chunks_kb = total_chunk_bytes // 1024
+    corpus_note = (
+        f" + {WIKI_CORPUS_REL} ({wiki_corpus_bytes // 1024} KB wiki corpus)"
+        if wiki_corpus_rel
+        else ""
+    )
     print(
         f"  wrote search-index.json ({meta_kb} KB meta) + "
-        f"{len(chunk_manifest)} chunks ({chunks_kb} KB total) · {mode_badge}"
+        f"{len(chunk_manifest)} chunks ({chunks_kb} KB total)"
+        f"{corpus_note} · {mode_badge}"
     )
 
     return out_path
@@ -3423,6 +3546,8 @@ def build_site(
         # curated page on a sparse vault gets its palette entry, and a vault
         # that writes no topic pages still indexes no topic URL.
         topics=topic_nodes if write_topic_pages else None,
+        # #248 FR7: the WIKI result group's corpus.
+        wiki_dir=wiki_dir,
     )
 
     # v0.4: AI-consumable exports (llms.txt, llms-full.txt, graph.jsonld,
