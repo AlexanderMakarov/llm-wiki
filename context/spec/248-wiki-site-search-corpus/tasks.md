@@ -69,11 +69,11 @@ Spec: [`functional-spec.md`](functional-spec.md) · [`technical-considerations.m
   - [x] `CHANGELOG.md` under `## [Unreleased]` with a one-line release-note bullet, following the existing entry style (issue number, user-visible behaviour, breaking flags where applicable). **[Agent: general-purpose]**
   - [x] Verify: run the repo's link-check hygiene over the touched docs and confirm no committed `*.md`/`*.py` trips the CI privacy grep (`.github/workflows/ci.yml` holds the enforced list — read it rather than guessing). **[Agent: general-purpose]**
 
-- [ ] **Slice 8: Feature Testing & Regression**
+- [x] **Slice 8: Feature Testing & Regression**
 
   > Verifies the whole feature end-to-end against functional-spec.md, run after all implementation slices are complete.
-  - [ ] Read functional-spec.md acceptance criteria in full. Generate acceptance-level tests that verify the entire feature as a whole — not individual slices. Cover applicable layers (unit for pure logic, integration for service interactions, e2e for user flows) based on the project's testing stack. Write tests with RED validation (must fail before implementation is confirmed done). Annotate each test with `@spec: 248-wiki-site-search-corpus` and `@regression` if suitable for long-term regression. **[Agent: testing-expert]**
-  - [ ] Run all generated tests. All must pass. Fix any failures before proceeding. **[Agent: testing-expert]**
+  - [x] Read functional-spec.md acceptance criteria in full. Generate acceptance-level tests that verify the entire feature as a whole — not individual slices. Cover applicable layers (unit for pure logic, integration for service interactions, e2e for user flows) based on the project's testing stack. Write tests with RED validation (must fail before implementation is confirmed done). Annotate each test with `@spec: 248-wiki-site-search-corpus` and `@regression` if suitable for long-term regression. **[Agent: testing-expert]**
+  - [x] Run all generated tests. All must pass. Fix any failures before proceeding. **[Agent: testing-expert]**
 
 ---
 
