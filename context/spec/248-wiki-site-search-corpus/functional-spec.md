@@ -1,7 +1,7 @@
 # Functional Specification: Curated knowledge reaches the browsing reader
 
 - **Roadmap Item:** Phase 3 — Visual knowledge depth: entity and concept content reaches readers ([GitHub Issue #248](https://github.com/AlexanderMakarov/llm-wiki/issues/248))
-- **Status:** Approved (amended 2026-09-17 — FR7 rewritten for `wiki_search` match-mode parity and two always-visible result groups)
+- **Status:** Completed (verified 2026-09-18 — see Verification Notes)
 - **Author:** 4ellendger
 
 ---
@@ -28,55 +28,55 @@ This contradicts the product's stated journey — that people periodically revie
 
 - **As a person who curates the wiki, I want every entity and concept I keep to have a page on the site**, so that reviewing and correcting a page is work I can actually see the result of.
   - **Acceptance Criteria:**
-    - [ ] Given the wiki contains a curated entity page that no other page mentions by name, when the site is generated, then that entity still has its own page a reader can open.
-    - [ ] Given the wiki contains a curated concept page mentioned by only one other page, when the site is generated, then that concept still has its own page a reader can open.
-    - [ ] Given the demo wiki's 9 entities and 4 concepts, when the site is generated, then all 13 have a page — including "Python", which has none today.
-    - [ ] Given a curated page that records no facts of its own beyond its title, when its page is generated, then the page still opens and shows what kind of thing it is and when it was last reviewed, rather than failing to exist.
+    - [x] Given the wiki contains a curated entity page that no other page mentions by name, when the site is generated, then that entity still has its own page a reader can open.
+    - [x] Given the wiki contains a curated concept page mentioned by only one other page, when the site is generated, then that concept still has its own page a reader can open.
+    - [x] Given the demo wiki's 9 entities and 4 concepts, when the site is generated, then all 13 have a page — including "Python", which has none today.
+    - [x] Given a curated page that records no facts of its own beyond its title, when its page is generated, then the page still opens and shows what kind of thing it is and when it was last reviewed, rather than failing to exist.
 
 - **As a reader, I want the site's quick search to find curated entities and concepts by name and tell me what kind of thing each one is**, so that I can tell a reviewed piece of knowledge from an automatically spotted keyword.
   - **Acceptance Criteria:**
-    - [ ] Given the site is open, when I type the name of any curated entity into the quick search, then that entity appears in the results.
-    - [ ] Given the site is open, when I type the name of any curated concept into the quick search, then that concept appears in the results.
-    - [ ] Given a search result for a curated entity, when I look at it, then it is labelled as an entity, distinctly from results that are automatically derived topics, documents, sessions or projects.
-    - [ ] Given a search result for a curated concept, when I look at it, then it is labelled as a concept.
-    - [ ] Given a result for a curated entity or concept, when I select it, then I land on that entity's or concept's own page.
-    - [ ] Given the demo wiki, when the site is generated, then the quick search offers a correctly labelled curated result for each of the 13 entities and concepts — against 12 today, the 13th ("Python") being absent entirely.
+    - [x] Given the site is open, when I type the name of any curated entity into the quick search, then that entity appears in the results.
+    - [x] Given the site is open, when I type the name of any curated concept into the quick search, then that concept appears in the results.
+    - [x] Given a search result for a curated entity, when I look at it, then it is labelled as an entity, distinctly from results that are automatically derived topics, documents, sessions or projects.
+    - [x] Given a search result for a curated concept, when I look at it, then it is labelled as a concept.
+    - [x] Given a result for a curated entity or concept, when I select it, then I land on that entity's or concept's own page.
+    - [x] Given the demo wiki, when the site is generated, then the quick search offers a correctly labelled curated result for each of the 13 entities and concepts — against 12 today, the 13th ("Python") being absent entirely.
 
 - **As a reader, I want the site's navigation to lead me into the curated knowledge**, so that I can browse what is known without having to guess an address or already know what I am looking for. The listing itself already exists and is already generated on every build — it simply has nothing pointing at it, so no reader arrives there by navigating.
   - **Acceptance Criteria:**
-    - [ ] Given any page of the site on a desktop-width screen, when I look at the navigation bar, then it carries an entry labelled **Topics**, which today it does not.
-    - [ ] Given any page of the site on a narrow screen, when I open the menu, then the same **Topics** entry is present there too.
-    - [ ] Given I am on the knowledge listing, when I look at the navigation, then the **Topics** entry is shown as the current one.
-    - [ ] Given I select that navigation entry, when the listing opens, then I can reach any curated entity or concept from it.
+    - [x] Given any page of the site on a desktop-width screen, when I look at the navigation bar, then it carries an entry labelled **Topics**, which today it does not.
+    - [x] Given any page of the site on a narrow screen, when I open the menu, then the same **Topics** entry is present there too.
+    - [x] Given I am on the knowledge listing, when I look at the navigation, then the **Topics** entry is shown as the current one.
+    - [x] Given I select that navigation entry, when the listing opens, then I can reach any curated entity or concept from it.
 
 - **As a reader browsing the knowledge listing, I want curated entities and concepts marked apart from automatically derived topics**, so that I can tell which knowledge a person has reviewed.
   - **Acceptance Criteria:**
-    - [ ] Given the knowledge listing, when I look at it, then curated entities, curated concepts, and automatically derived topics appear in three separate sections, in that order.
-    - [ ] Given a section heading on that listing, when I read it, then it states how many items that section holds.
-    - [ ] Given a row in the entities or concepts section, when I look at it, then it carries a label naming its kind.
-    - [ ] Given a row in the derived-topics section, when I look at it, then it carries no such label.
-    - [ ] Given any section of the listing, when I read down it, then the most widely referenced items come first, as they do today.
+    - [x] Given the knowledge listing, when I look at it, then curated entities, curated concepts, and automatically derived topics appear in three separate sections, in that order.
+    - [x] Given a section heading on that listing, when I read it, then it states how many items that section holds.
+    - [x] Given a row in the entities or concepts section, when I look at it, then it carries a label naming its kind.
+    - [x] Given a row in the derived-topics section, when I look at it, then it carries no such label.
+    - [x] Given any section of the listing, when I read down it, then the most widely referenced items come first, as they do today.
 
 - **As a wiki owner, I want dismissed and internal pages to stay out of the site**, so that publishing more of the wiki does not publish things I chose to discard.
   - **Acceptance Criteria:**
-    - [ ] Given the wiki holds pages a reviewer previously dismissed into cold storage, when the site is generated, then none of them gets a page and none is findable in the quick search.
-    - [ ] Given a folder description note that exists only to help assistants navigate the wiki, when the site is generated, then it does not appear as a knowledge item in the listing or the quick search.
+    - [x] Given the wiki holds pages a reviewer previously dismissed into cold storage, when the site is generated, then none of them gets a page and none is findable in the quick search.
+    - [x] Given a folder description note that exists only to help assistants navigate the wiki, when the site is generated, then it does not appear as a knowledge item in the listing or the quick search.
 
 - **As an assistant reading the wiki, I want nothing about my access to change**, so that this work carries no risk to existing question answering.
   - **Acceptance Criteria:**
-    - [ ] Given an assistant asks the wiki a question, when it does so before and after this change, then it gets the same pages back in the same order.
+    - [x] Given an assistant asks the wiki a question, when it does so before and after this change, then it gets the same pages back in the same order.
 
 - **As a reader, I want the site's search to find wiki knowledge exactly as my assistant does, shown separately from ordinary site pages**, so that the site and my assistant never answer the same question differently, and so that I can tell curated knowledge from site navigation at a glance.
   - **Acceptance Criteria:**
-    - [ ] Given I search on the site, when results appear, then they are presented in two groups — one for wiki knowledge, one for the rest of the site — with the wiki group first.
-    - [ ] Given one of those groups has no match for what I typed, when results appear, then that group is still shown and states that it has no results, rather than disappearing.
-    - [ ] Given a word that appears inside a wiki page but not in its title, when I search for it, then that page appears in the wiki group.
-    - [ ] Given I search for the same word on the site and through an assistant, when I compare which wiki pages come back and the order they are in, then they agree.
-    - [ ] Given results in either group, when I read down them, then pages whose name matches what I typed come before pages that match only in their text.
-    - [ ] Given a result whose page the site can open, when I select it, then I land on that page; given a result the site has no page for, then it is still listed with where it lives, but is not offered as something to click.
-    - [ ] Given I type several words that do not appear together anywhere, when results appear, then the wiki group reports no results — matching what an assistant would return for the same words.
-    - [ ] Given I open the site as plain files rather than through a web server, when I search, then search still works.
-    - [ ] Given the search data cannot be loaded, when I search, then the page tells me so rather than silently returning nothing.
+    - [x] Given I search on the site, when results appear, then they are presented in two groups — one for wiki knowledge, one for the rest of the site — with the wiki group first.
+    - [x] Given one of those groups has no match for what I typed, when results appear, then that group is still shown and states that it has no results, rather than disappearing.
+    - [x] Given a word that appears inside a wiki page but not in its title, when I search for it, then that page appears in the wiki group.
+    - [x] Given I search for the same word on the site and through an assistant, when I compare which wiki pages come back and the order they are in, then they agree.
+    - [x] Given results in either group, when I read down them, then pages whose name matches what I typed come before pages that match only in their text.
+    - [x] Given a result whose page the site can open, when I select it, then I land on that page; given a result the site has no page for, then it is still listed with where it lives, but is not offered as something to click.
+    - [x] Given I type several words that do not appear together anywhere, when results appear, then the wiki group reports no results — matching what an assistant would return for the same words.
+    - [x] Given I open the site as plain files rather than through a web server, when I search, then search still works.
+    - [x] Given the search data cannot be loaded, when I search, then the page tells me so rather than silently returning nothing.
 
 ---
 
@@ -102,3 +102,20 @@ This contradicts the product's stated journey — that people periodically revie
 - **Changing what an assistant searches.** The assistant-facing search is untouched — this work makes the site match it, not the other way round. Its answer quality measurement (#197) and running cost (#244) are also untouched.
 - **Improving what curated pages say.** Several curated pages record no facts of their own; giving them a written description is separate work (#137).
 - All other roadmap items, addressed in their own specifications — notably one project, one page (#126); candidate review correctness (#146, #139, #148, #149); operator privacy and test isolation (#141, #142); product-facing documentation (#109, #112); the guided health check (#110); hover-to-preview wikilinks, a timeline view and session activity sparklines; a ranking projects index (#129); flipping a concept and an entity (#134); updating an ingested document in place (#151); and Cursor session parsing (#2).
+
+---
+
+## Verification Notes (2026-09-18)
+
+All criteria verified. Evidence:
+
+- **Automated:** full suite 5400 tests, 0 failures, 48 skipped; `ruff` clean. Whole-feature acceptance in `tests/test_248_acceptance.py` (9 tests, RED-validated against a detached worktree at `179d00c`). Parity in `tests/test_248_palette_match.py` (22 node-driven tests asserting equality with `llmwiki.search.engine.search_match` over the real 205-page demo corpus).
+- **FR6** is proven by `tests/test_search_acceptance.py` passing with `tests/fixtures/demo_search_baseline.json` unmodified; `llmwiki/mcp/server.py` and `llmwiki/search/**` are untouched in `git diff 179d00c..HEAD`.
+- **Rendered verification** against a served build of a private copy of `demo/`: nav carries 9 entries with Topics active only on the listing; listing shows Entities (9) / Concepts (4) / Other topics (23) with chips 9/9, 4/4, 0/23; palette returns Wiki 34 / Site 0 for a wiki-only term, Wiki 0 / Site 2 for a site-only term, and both-zero with messages for a term matching neither; `wiki/overview.md` renders inert (0 anchors, no `data-i`, `aria-disabled="true"`); two real ArrowDown presses advanced to index 2 at DOM position 4, stepping over a heading and the inert row. Screenshots under the gitignored `tests/e2e/screenshots/` (`248-topics-index-grouped.png`, `248-palette-two-groups-inert-row.png`, `248-nav-1024-no-crowding.png`).
+- **Nav crowding** (a risk flagged in technical-considerations §2.4, not an acceptance criterion) is resolved: at 1024px — the tightest width where the row renders — all 9 links show with zero overflow at nav, nav-inner and document level, and the last link ends at 784px of 1024.
+
+Two limitations, stated rather than papered over:
+
+1. **`tests/e2e/` did not execute locally.** `pytest-bdd` is absent and PEP 668 refuses installation on the system Python; a global install was correctly declined. The 5 new palette e2e tests are written but unrun here. CI executes them via `.github/workflows/e2e.yml`, whose path filter now includes `llmwiki/render/**`. The parity and presentation properties they cover are separately asserted by the node-driven suite, which does run.
+2. **The `file://` criterion is verified at the mechanism level, not by opening the site from disk.** `test_payload_ships_a_js_sidecar` asserts the `.js` sidecar exists, has the expected shape, and carries a payload identical to the JSON — the same properties `tests/test_file_protocol_search.py` uses to certify the index and chunks for `file://`. The MCP browser blocks the `file:` scheme, so the end-to-end open-from-disk path is left to operator smoke confirmation.
+

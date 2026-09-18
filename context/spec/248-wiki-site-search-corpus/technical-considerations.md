@@ -1,7 +1,7 @@
 # Technical Specification: Curated knowledge reaches the browsing reader
 
 - **Functional Specification:** [`functional-spec.md`](functional-spec.md)
-- **Status:** Approved
+- **Status:** Completed
 - **Author(s):** 4ellendger
 - **Issue:** [#248](https://github.com/AlexanderMakarov/llm-wiki/issues/248)
 
