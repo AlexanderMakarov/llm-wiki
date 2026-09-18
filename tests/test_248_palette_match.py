@@ -416,6 +416,22 @@ def test_every_occurrence_in_a_line_is_marked(node_runner, corpus):
     assert built["html"].count("<mark>widget</mark>") == 3
 
 
+def test_a_hit_late_in_a_line_is_windowed_into_view(node_runner, corpus):
+    """The match must not exist only beyond the row's clipped right edge.
+
+    The matcher still returns its full 400-character snippet; this assertion
+    is about the narrower presentation window applied while rendering it.
+
+    # @spec: 248-wiki-site-search-corpus @regression
+    """
+    line = "x" * 94 + "Obsidian" + " after the match"
+    row = _wiki_row(corpus[1], name_match=False, lines=[[20, line]])
+    built = node_runner({"op": "html", "view": _view(
+        wiki={"rows": [row]}, term="obsidian")})
+    assert ('result-line-no">20</span>…' + "x" * 24 +
+            "<mark>Obsidian</mark>") in built["html"]
+
+
 def test_a_case_insensitive_match_keeps_the_pages_own_casing(node_runner, corpus):
     """Matching folds case; the reader still sees what the page wrote.
 
@@ -479,6 +495,29 @@ def test_site_rows_are_marked_the_same_way(node_runner):
     row = _row_for(built["html"], "notes")
     assert '<span class="result-title"><mark>Widget</mark> notes</span>' in row
     assert "<mark>widget</mark>-app" in row
+
+
+def test_a_site_row_is_not_repeated_when_wiki_opens_the_same_page(node_runner):
+    """Two searchable records may share one reader destination; show it once.
+
+    # @spec: 248-wiki-site-search-corpus @regression
+    """
+    url = "documents/deploying-to-gitlab-pages/deploying-to-gitlab-pages.html"
+    wiki = _page(
+        "wiki/sources/deploying-to-gitlab-pages.md",
+        "Deploying to GitLab Pages",
+        "# Deploying to GitLab Pages\n",
+        url=url,
+    )
+    site = {"title": "Deploying to GitLab Pages", "url": url, "type": "document"}
+    built = node_runner({"op": "html", "view": _view(
+        wiki={"rows": [_wiki_row(wiki)]}, site={"rows": [site]}, term="deploying")})
+    assert built["html"].count("<mark>Deploying</mark> to GitLab Pages") == 1
+    assert 'data-group="site"' in built["html"]
+    assert "0 results" in built["html"]
+    assert "Matching site page already shown in Wiki." in built["html"]
+    assert built["openable"] == [{"type": "wiki", "url": url,
+                                  "title": "Deploying to GitLab Pages"}]
 
 
 def test_a_term_that_matches_nothing_renders_exactly_the_escaped_text(node_runner, corpus):

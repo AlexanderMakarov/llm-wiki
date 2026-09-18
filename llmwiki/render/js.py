@@ -924,6 +924,8 @@ var LLMWIKI_MATCH = (function () {
   var HIT_CAP = 200;        // search/engine.py DEFAULT_HIT_CAP
   var SNIPPET_CHARS = 400;  // search/scoring.py extract_snippet max_chars
   var LINES_SHOWN = 3;      // matching lines a row shows before folding
+  var LINE_CONTEXT_BEFORE = 24; // keep the first mark inside the visible row
+  var LINE_DISPLAY_CHARS = 160; // presentation only; matcher data stays intact
 
   function esc(s) {
     return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
@@ -968,6 +970,23 @@ var LLMWIKI_MATCH = (function () {
     }
     return content.slice(0, SNIPPET_CHARS) +
            (content.length > SNIPPET_CHARS ? "…" : "");
+  }
+
+  // A 400-character matcher snippet is wider than the palette. Its mark can
+  // therefore exist in the DOM but be clipped off the right edge. Keep the
+  // matcher result untouched and take a second, presentation-only window
+  // whose first occurrence sits near the start of the rendered line.
+  function visibleLine(content, termLower) {
+    var s = String(content == null ? "" : content);
+    if (!termLower) return s;
+    var lower = s.toLowerCase();
+    if (lower.length !== s.length) return s;
+    var at = lower.indexOf(termLower);
+    if (at < 0) return s;
+    var start = Math.max(0, at - LINE_CONTEXT_BEFORE);
+    var end = Math.min(s.length, start + LINE_DISPLAY_CHARS);
+    return (start > 0 ? "…" : "") + s.slice(start, end) +
+           (end < s.length ? "…" : "");
   }
 
   // scoring.py::match_page. `page` carries {path, title, kind, text}.
@@ -1057,7 +1076,7 @@ var LLMWIKI_MATCH = (function () {
     var more = lines.length - shown.length;
     var html = shown.map(function (ln) {
       return '<span class="result-line"><span class="result-line-no">' +
-        esc(ln[0]) + '</span>' + markTerm(ln[1], termLower) + '</span>';
+        esc(ln[0]) + '</span>' + markTerm(visibleLine(ln[1], termLower), termLower) + '</span>';
     }).join("");
     if (more > 0) {
       html += '<span class="result-line result-line-more">+' + more +
@@ -1105,8 +1124,26 @@ var LLMWIKI_MATCH = (function () {
     // `view.term` is the free text both groups matched on; with no term
     // nothing is marked and every row renders exactly as it did before.
     var termLower = String((view && view.term) || "").toLowerCase();
+    // A wiki summary and its raw session/document are different searchable
+    // records, but often open the same reader page. Keep both corpora intact
+    // and collapse only the rendered duplicate, with the Wiki row winning.
+    var wikiDestinations = Object.create(null);
+    (view.wiki.rows || []).forEach(function (m) {
+      var url = m.page && m.page.url ? String(m.page.url) : "";
+      if (url) wikiDestinations[url] = true;
+    });
     [view.wiki, view.site].forEach(function (g) {
       var rows = g.rows || [];
+      var message = g.message;
+      if (g.id === "site") {
+        rows = rows.filter(function (entry) {
+          var url = entry && entry.url ? String(entry.url) : "";
+          return !url || !wikiDestinations[url];
+        });
+        if (!rows.length && (g.rows || []).length && !message) {
+          message = "Matching site page already shown in Wiki.";
+        }
+      }
       html += '<li class="palette-group" data-group="' + esc(g.id) + '">' +
         '<span class="palette-group-label">' + esc(g.label) + '</span>' +
         '<span class="palette-group-count">' + rows.length +
@@ -1122,10 +1159,10 @@ var LLMWIKI_MATCH = (function () {
           openable.push(rows[i]);
         }
       }
-      if (g.message) {
+      if (message) {
         html += '<li class="' +
           (g.messageKind === "error" ? "palette-note" : "palette-empty") +
-          '" data-group-message="' + esc(g.id) + '">' + esc(g.message) + '</li>';
+          '" data-group-message="' + esc(g.id) + '">' + esc(message) + '</li>';
       }
       if (g.truncated) {
         html += '<li class="palette-empty palette-truncated" data-group-truncated="' +

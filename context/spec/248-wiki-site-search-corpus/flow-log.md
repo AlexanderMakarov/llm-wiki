@@ -78,3 +78,7 @@
 - FR7 split across slices 5/6 so the build half is independently verifiable before any viewer JS exists.
 - Agents: `testing-expert` (registered) for slice 8; everything else `general-purpose` — hired-agents.md records Python/CLI and static-site roles as partial/missing by the operator's own earlier choice. Recorded in the tasks.md Recommendations table.
 - Next: commit specs, then `/awos:implement`
+
+## operator smoke fixes — visible hit and shared destination (2026-09-18)
+- The `file://` demo smoke exposed two presentation defects after the first verified build. A 400-character matcher snippet could contain the correct `<mark>` beyond the palette row's clipped right edge, so rendering now takes a second, narrower window with the first hit near its start; matcher data and Python/JavaScript parity are unchanged.
+- A synthesized source page in Wiki and its raw session/document record in Site can resolve to the same reader URL. Both searchable corpora remain intact, but the shared destination now renders once with Wiki precedence; a Site row still appears when its raw text matches and the wiki summary does not.
