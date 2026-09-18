@@ -931,6 +931,31 @@ var LLMWIKI_MATCH = (function () {
     });
   }
 
+  // Escape-then-wrap: every slice of the RAW text is escaped on its own and
+  // joined with literal <mark> tags, so page content can never inject markup
+  // and the tags can never be escaped away. Marks every occurrence, not just
+  // the first, and slices from the original string so the reader keeps the
+  // casing the page actually uses.
+  function markTerm(text, termLower) {
+    var s = String(text == null ? "" : text);
+    if (!termLower) return esc(s);
+    var lower = s.toLowerCase();
+    // A few characters change length when lowercased (Turkish İ, ẞ, …),
+    // which would misalign every index below. Highlighting is presentation:
+    // fall back to plain escaped text rather than mark the wrong span.
+    if (lower.length !== s.length) return esc(s);
+    var out = "";
+    var from = 0;
+    var at = lower.indexOf(termLower);
+    while (at !== -1) {
+      out += esc(s.slice(from, at)) +
+        "<mark>" + esc(s.slice(at, at + termLower.length)) + "</mark>";
+      from = at + termLower.length;
+      at = lower.indexOf(termLower, from);
+    }
+    return out + esc(s.slice(from));
+  }
+
   // scoring.py::extract_snippet — a ~400-char window centred on the hit.
   function snippet(content, termLower) {
     var half = Math.floor(SNIPPET_CHARS / 2);
@@ -1026,13 +1051,13 @@ var LLMWIKI_MATCH = (function () {
     return searchMatch(pages, term, kind);
   }
 
-  function linesHtml(lines) {
+  function linesHtml(lines, termLower) {
     if (!lines || !lines.length) return "";
     var shown = lines.slice(0, LINES_SHOWN);
     var more = lines.length - shown.length;
     var html = shown.map(function (ln) {
       return '<span class="result-line"><span class="result-line-no">' +
-        esc(ln[0]) + '</span>' + esc(ln[1]) + '</span>';
+        esc(ln[0]) + '</span>' + markTerm(ln[1], termLower) + '</span>';
     }).join("");
     if (more > 0) {
       html += '<span class="result-line result-line-more">+' + more +
@@ -1044,27 +1069,30 @@ var LLMWIKI_MATCH = (function () {
   // A wiki page with no reader page is still listed — that is how the group
   // keeps MCP's full coverage — but it is inert: no `data-i`, so a click
   // and the arrow keys both pass it by, and nothing in it is a link.
-  function wikiRowHtml(m, index) {
+  // Title and path are both highlighted because a name match is
+  // `term in title` OR `term in path` — marking only the body would leave a
+  // path-only match looking unexplained.
+  function wikiRowHtml(m, index, termLower) {
     var clickable = index >= 0;
     var kind = String((m.page && m.page.kind) || "") || "wiki";
     return '<li class="palette-row' + (clickable ? '' : ' palette-row-static') + '"' +
       (clickable ? ' data-i="' + index + '"' : ' aria-disabled="true"') + '>' +
       '<span class="result-type">' + esc(kind) + '</span>' +
-      '<span class="result-title">' + esc(m.title || m.path) + '</span>' +
+      '<span class="result-title">' + markTerm(m.title || m.path, termLower) + '</span>' +
       (clickable ? '' : '<span class="result-nolink">no page on this site</span>') +
-      '<span class="result-meta">' + esc(m.path) + '</span>' +
-      linesHtml(m.lines) +
+      '<span class="result-meta">' + markTerm(m.path, termLower) + '</span>' +
+      linesHtml(m.lines, termLower) +
       '</li>';
   }
 
-  function siteRowHtml(entry, index) {
+  function siteRowHtml(entry, index, termLower) {
     var meta = [entry.project, entry.date, entry.model].filter(Boolean).join(" · ");
     return '<li class="palette-row" data-i="' + index + '">' +
       // #108: a topic entry carries the kind the map and its page name
       // (Entity, Concept, …); everything else badges its type.
       '<span class="result-type">' + esc(entry.kind || entry.type || 'page') + '</span>' +
-      '<span class="result-title">' + esc(entry.title) + '</span>' +
-      (meta ? '<span class="result-meta">' + esc(meta) + '</span>' : '') +
+      '<span class="result-title">' + markTerm(entry.title, termLower) + '</span>' +
+      (meta ? '<span class="result-meta">' + markTerm(meta, termLower) + '</span>' : '') +
       '</li>';
   }
 
@@ -1074,6 +1102,9 @@ var LLMWIKI_MATCH = (function () {
   function buildHtml(view) {
     var openable = [];
     var html = "";
+    // `view.term` is the free text both groups matched on; with no term
+    // nothing is marked and every row renders exactly as it did before.
+    var termLower = String((view && view.term) || "").toLowerCase();
     [view.wiki, view.site].forEach(function (g) {
       var rows = g.rows || [];
       html += '<li class="palette-group" data-group="' + esc(g.id) + '">' +
@@ -1084,10 +1115,10 @@ var LLMWIKI_MATCH = (function () {
         if (g.id === "wiki") {
           var m = rows[i];
           var url = m.page && m.page.url ? String(m.page.url) : "";
-          html += wikiRowHtml(m, url ? openable.length : -1);
+          html += wikiRowHtml(m, url ? openable.length : -1, termLower);
           if (url) openable.push({ type: "wiki", url: url, title: m.title || m.path });
         } else {
-          html += siteRowHtml(rows[i], openable.length);
+          html += siteRowHtml(rows[i], openable.length, termLower);
           openable.push(rows[i]);
         }
       }
@@ -1272,6 +1303,9 @@ var LLMWIKI_MATCH = (function () {
   function buildView(query) {
     var parsed = parseStructuredQuery(query || "");
     return {
+      // The free text both groups matched on, carried through so the
+      // renderer can mark it in the rows it draws.
+      term: parsed.freeText,
       wiki: wikiGroup(parsed.freeText, parsed.filters.kind || ""),
       site: siteGroup(parsed, parsed.freeText)
     };
@@ -2039,29 +2073,6 @@ document.addEventListener("DOMContentLoaded", function () {
 // llmwiki/viz_heatmap.py and inlined into index.html + each project page.
 // The page CSS (--heatmap-0..4) picks up the current theme automatically —
 // no JS wiring needed.
-
-// ─── v0.4: Search result highlights ──────────────────────────────────────
-// When showing search palette results, highlight the matched query in the
-// title and body snippet.
-(function () {
-  function highlight(text, query) {
-    if (!query || !text) return escapeLocalHtml(text);
-    const q = query.toLowerCase();
-    const lower = text.toLowerCase();
-    const i = lower.indexOf(q);
-    if (i === -1) return escapeLocalHtml(text);
-    return escapeLocalHtml(text.slice(0, i)) +
-      '<mark>' + escapeLocalHtml(text.slice(i, i + q.length)) + '</mark>' +
-      escapeLocalHtml(text.slice(i + q.length));
-  }
-  function escapeLocalHtml(s) {
-    return String(s || "").replace(/[&<>"']/g, function (c) {
-      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
-    });
-  }
-  // Expose so the palette renderer can call it if it chooses
-  window.llmwikiHighlight = highlight;
-})();
 
 // ─── Documents tree (lazy load — one payload for all document pages) ───────
 (function () {

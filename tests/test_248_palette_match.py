@@ -305,9 +305,10 @@ def test_parity_over_the_committed_demo_vault(node_runner, term):
 # ── presentation ──────────────────────────────────────────────────────────
 
 
-def _view(*, wiki: dict | None = None, site: dict | None = None) -> dict:
+def _view(*, wiki: dict | None = None, site: dict | None = None, term: str = "") -> dict:
     base = {"rows": [], "truncated": False, "message": None, "messageKind": "info"}
     return {
+        "term": term,
         "wiki": {**base, "id": "wiki", "label": "Wiki", **(wiki or {})},
         "site": {**base, "id": "site", "label": "Site", **(site or {})},
     }
@@ -387,6 +388,110 @@ def test_a_failed_corpus_renders_the_error_row_not_an_empty_list(node_runner):
     )})
     assert "palette-note" in built["html"]
     assert built["openable"] == []
+
+
+# ── highlighting (FR7) ────────────────────────────────────────────────────
+#
+# Presentation only: `view.term` reaches the renderer, never the matcher, so
+# none of the parity assertions above may move. These assert the marking
+# itself — every occurrence, original casing, and escaping that holds when
+# the term matches inside markup the page happens to contain.
+
+
+def _row_for(html: str, needle: str) -> str:
+    """The one ``palette-row`` fragment that mentions ``needle``."""
+    rows = [r for r in html.split('<li class="palette-row') if needle in r]
+    assert len(rows) == 1, f"expected one row mentioning {needle!r}, got {len(rows)}"
+    return rows[0]
+
+
+def test_every_occurrence_in_a_line_is_marked(node_runner, corpus):
+    """One line usually carries the term more than once.
+
+    # @spec: 248-wiki-site-search-corpus @regression
+    """
+    row = _wiki_row(corpus[1], name_match=False,
+                    lines=[[4, "widget beside widget beside widget"]])
+    built = node_runner({"op": "html", "view": _view(wiki={"rows": [row]}, term="widget")})
+    assert built["html"].count("<mark>widget</mark>") == 3
+
+
+def test_a_case_insensitive_match_keeps_the_pages_own_casing(node_runner, corpus):
+    """Matching folds case; the reader still sees what the page wrote.
+
+    # @spec: 248-wiki-site-search-corpus @regression
+    """
+    row = _wiki_row(corpus[1], name_match=False,
+                    lines=[[4, "Widget, then WIDGET, then widget"]])
+    built = node_runner({"op": "html", "view": _view(wiki={"rows": [row]}, term="WiDgEt")})
+    html = built["html"]
+    assert "<mark>Widget</mark>" in html
+    assert "<mark>WIDGET</mark>" in html
+    assert "<mark>widget</mark>" in html
+
+
+def test_markup_in_a_line_is_escaped_even_when_the_term_matches_inside_it(
+    node_runner, corpus
+):
+    """Slices of the raw line are escaped and joined with literal tags, so a
+    page that contains markup cannot inject any — including when the term
+    lands inside a tag name and splits it.
+
+    # @spec: 248-wiki-site-search-corpus @regression
+    """
+    line = [[4, "<script>alert(1)</script>"]]
+    row = _wiki_row(corpus[1], name_match=False, lines=line)
+
+    inside_tag = node_runner({"op": "html", "view": _view(
+        wiki={"rows": [row]}, term="script")})["html"]
+    assert "<script" not in inside_tag and "</script>" not in inside_tag
+    assert "&lt;" in inside_tag and "&gt;" in inside_tag
+    assert inside_tag.count("<mark>script</mark>") == 2
+
+    between_tags = node_runner({"op": "html", "view": _view(
+        wiki={"rows": [row]}, term="alert")})["html"]
+    assert "<script" not in between_tags
+    assert "&lt;script&gt;<mark>alert</mark>(1)&lt;/script&gt;" in between_tags
+
+
+def test_the_title_and_the_path_are_highlighted_too(node_runner, corpus):
+    """A name match is ``term in title`` OR ``term in path``, so both carry
+    the mark — otherwise a path-only hit reads as unexplained.
+
+    # @spec: 248-wiki-site-search-corpus @regression
+    """
+    built = node_runner({"op": "html", "view": _view(
+        wiki={"rows": [_wiki_row(corpus[0])]}, term="hazel")})
+    row = _row_for(built["html"], "wiki/entities/")
+    assert '<span class="result-title"><mark>Hazel</mark></span>' in row
+    assert 'wiki/entities/<mark>Hazel</mark>.md' in row
+
+
+def test_site_rows_are_marked_the_same_way(node_runner):
+    """Both groups read alike — the SITE group marks its title and meta.
+
+    # @spec: 248-wiki-site-search-corpus @regression
+    """
+    built = node_runner({"op": "html", "view": _view(
+        site={"rows": [{"title": "Widget notes", "url": "sessions/w.html",
+                        "type": "session", "project": "widget-app", "date": "2026-01-01"}]},
+        term="widget")})
+    row = _row_for(built["html"], "notes")
+    assert '<span class="result-title"><mark>Widget</mark> notes</span>' in row
+    assert "<mark>widget</mark>-app" in row
+
+
+def test_a_term_that_matches_nothing_renders_exactly_the_escaped_text(node_runner, corpus):
+    """No hit, no markup change: the row is byte-identical to the unmarked one.
+
+    # @spec: 248-wiki-site-search-corpus @regression
+    """
+    rows = {"rows": [_wiki_row(corpus[0], lines=[[4, "a & b < c"]])]}
+    marked = node_runner({"op": "html", "view": _view(wiki=rows, term="zanzibarine")})
+    plain = node_runner({"op": "html", "view": _view(wiki=rows)})
+    assert marked["html"] == plain["html"]
+    assert "<mark>" not in marked["html"]
+    assert "a &amp; b &lt; c" in marked["html"]
 
 
 # ── the viewer and the build agree on the manifest ────────────────────────
