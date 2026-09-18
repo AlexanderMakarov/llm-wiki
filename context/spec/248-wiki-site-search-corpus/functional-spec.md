@@ -80,6 +80,8 @@ This contradicts the product's stated journey — that people periodically revie
     - [x] Given I type several words that do not appear together anywhere, when results appear, then the wiki group reports no results — matching what an assistant would return for the same words.
     - [x] Given I open the site as plain files rather than through a web server, when I search, then search still works.
     - [x] Given the search data cannot be loaded, when I search, then the page tells me so rather than silently returning nothing.
+    - [x] Given the wiki corpus exceeds the assistant's 4 MiB per-page or 50 MiB aggregate read limits, when I search, then the site and assistant retain the same deterministic corpus and the site warns that results may be incomplete.
+    - [x] Given an explicit Site query has more than 200 matches, when results appear, then 200 are shown and the cap is stated; an empty query remains a 10-row browse preview.
 
 ---
 

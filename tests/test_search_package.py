@@ -177,6 +177,36 @@ def test_scan_corpus_budget_exhausted(tmp_path: Path):
     assert scan.pages == []
 
 
+def test_scan_never_passes_an_external_symlink_target_to_the_reader(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """A vault symlink must not turn search or build into a host-file reader."""
+    wiki = tmp_path / "wiki"
+    wiki.mkdir()
+    outside = tmp_path / "outside-secret.md"
+    outside.write_text("private marker\n", encoding="utf-8")
+    link = wiki / "borrowed.md"
+    try:
+        link.symlink_to(outside)
+    except OSError as exc:  # pragma: no cover - platform policy
+        pytest.skip(f"symlinks unavailable: {exc}")
+
+    assert corpus_mod.read_capped(link, remaining_budget=1024) == ("", 0)
+
+    seen: list[Path] = []
+    original = corpus_mod.read_capped
+
+    def recording_reader(path: Path, **kwargs):
+        seen.append(path)
+        return original(path, **kwargs)
+
+    monkeypatch.setattr(corpus_mod, "read_capped", recording_reader)
+    pages = list(iter_scanned_pages([wiki], content_root=tmp_path))
+
+    assert pages == []
+    assert seen == []
+
+
 # ── extract tiebreak ────────────────────────────────────────────────────
 
 

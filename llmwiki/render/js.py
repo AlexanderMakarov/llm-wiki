@@ -922,6 +922,7 @@ document.addEventListener("DOMContentLoaded", function () {
 var LLMWIKI_MATCH = (function () {
   var PAGE_CAP = 200;       // search/engine.py DEFAULT_PAGE_CAP
   var HIT_CAP = 200;        // search/engine.py DEFAULT_HIT_CAP
+  var SITE_BROWSE_CAP = 10; // empty-query preview only
   var SNIPPET_CHARS = 400;  // search/scoring.py extract_snippet max_chars
   var LINES_SHOWN = 3;      // matching lines a row shows before folding
   var LINE_CONTEXT_BEFORE = 24; // keep the first mark inside the visible row
@@ -1070,6 +1071,109 @@ var LLMWIKI_MATCH = (function () {
     return searchMatch(pages, term, kind);
   }
 
+  // v0.8 (#97): Dataview-style structured queries. Kept in this DOM-free
+  // block so the exact shipped selection logic can run under node tests.
+  function parseStructuredQuery(raw) {
+    var filters = {};
+    var freeText = [];
+    var tokens = String(raw || "").split(/\s+/).filter(Boolean);
+    tokens.forEach(function (t) {
+      var m = t.match(/^(type|project|model|date|tags|sort|kind):(.+)$/i);
+      if (m) { filters[m[1].toLowerCase()] = m[2]; }
+      else { freeText.push(t); }
+    });
+    return { filters: filters, freeText: freeText.join(" ") };
+  }
+
+  function matchesFilters(entry, filters) {
+    if (filters.type && (entry.type || "").toLowerCase() !== filters.type.toLowerCase()) return false;
+    if (filters.kind &&
+        (entry.kind || entry.type || "").toLowerCase() !== filters.kind.toLowerCase()) return false;
+    if (filters.project && (entry.project || "").toLowerCase().indexOf(filters.project.toLowerCase()) === -1) return false;
+    if (filters.model && (entry.model || "").toLowerCase().indexOf(filters.model.toLowerCase()) === -1) return false;
+    if (filters.tags) {
+      var want = filters.tags.toLowerCase();
+      var entryBody = ((entry.body || "") + " " + (entry.title || "")).toLowerCase();
+      if (entryBody.indexOf(want) === -1) return false;
+    }
+    if (filters.date) {
+      var d = entry.date || "";
+      var op = filters.date.charAt(0);
+      if (op === ">" && d <= filters.date.substring(1)) return false;
+      if (op === "<" && d >= filters.date.substring(1)) return false;
+      if (op !== ">" && op !== "<" && d.indexOf(filters.date) === -1) return false;
+    }
+    return true;
+  }
+
+  // Empty input is a compact browse preview. Any explicit query — text,
+  // filters, or sort — may return the normal 200-result search cap. Filter-
+  // only queries know their exact population, so their truncation note can
+  // say how many matches exist rather than only that some were dropped.
+  function siteResults(entries, parsed) {
+    var filters = parsed.filters || {};
+    var term = parsed.freeText || "";
+    var hasFilters = Object.keys(filters).length > 0;
+    var filtered = hasFilters
+      ? entries.filter(function (e) { return matchesFilters(e, filters); })
+      : entries;
+    if (filters.sort === "date") {
+      filtered = filtered.slice().sort(function (a, b) {
+        return String(b.date || "").localeCompare(String(a.date || ""));
+      });
+      var sortTruncated = filtered.length > PAGE_CAP;
+      return {
+        rows: filtered.slice(0, PAGE_CAP),
+        truncated: sortTruncated,
+        total: filtered.length,
+        truncationMessage: sortTruncated
+          ? "Showing " + PAGE_CAP + " of " + filtered.length + " matching results."
+          : null
+      };
+    }
+    if (!term) {
+      if (!hasFilters) {
+        return {
+          rows: filtered.slice(0, SITE_BROWSE_CAP),
+          truncated: false,
+          total: filtered.length,
+          truncationMessage: null
+        };
+      }
+      var cap = PAGE_CAP;
+      var truncated = filtered.length > cap;
+      return {
+        rows: filtered.slice(0, cap),
+        truncated: truncated,
+        total: filtered.length,
+        truncationMessage: truncated
+          ? "Showing " + cap + " of " + filtered.length + " matching results."
+          : null
+      };
+    }
+    var matched = searchMatchEntries(filtered, term, "");
+    return {
+      rows: matched.pages.map(function (m) { return m.page.entry; }),
+      truncated: matched.truncated,
+      total: null,
+      truncationMessage: null
+    };
+  }
+
+  function corpusIncompleteMessage(status) {
+    status = status || {};
+    var reasons = [];
+    if (status.budget_exhausted) reasons.push("the 50 MiB corpus limit was reached");
+    var skipped = Number(status.skipped_oversize_files) || 0;
+    if (skipped) {
+      reasons.push(skipped + " page" + (skipped === 1 ? "" : "s") +
+        " over 4 MiB were skipped");
+    }
+    return reasons.length
+      ? "Wiki results may be incomplete: " + reasons.join("; ") + "."
+      : null;
+  }
+
   function linesHtml(lines, termLower) {
     if (!lines || !lines.length) return "";
     var shown = lines.slice(0, LINES_SHOWN);
@@ -1161,13 +1265,15 @@ var LLMWIKI_MATCH = (function () {
       }
       if (message) {
         html += '<li class="' +
-          (g.messageKind === "error" ? "palette-note" : "palette-empty") +
+          (g.messageKind === "error" || g.messageKind === "warning"
+            ? "palette-note" : "palette-empty") +
           '" data-group-message="' + esc(g.id) + '">' + esc(message) + '</li>';
       }
       if (g.truncated) {
         html += '<li class="palette-empty palette-truncated" data-group-truncated="' +
-          esc(g.id) + '">Capped at ' + PAGE_CAP + ' pages and ' + HIT_CAP +
-          ' lines — more matched than are shown.</li>';
+          esc(g.id) + '">' + esc(g.truncationMessage ||
+          ('Capped at ' + PAGE_CAP + ' pages and ' + HIT_CAP +
+           ' lines — more matched than are shown.')) + '</li>';
       }
     });
     return { html: html, openable: openable };
@@ -1178,6 +1284,10 @@ var LLMWIKI_MATCH = (function () {
     HIT_CAP: HIT_CAP,
     searchMatch: searchMatch,
     searchMatchEntries: searchMatchEntries,
+    parseStructuredQuery: parseStructuredQuery,
+    matchesFilters: matchesFilters,
+    siteResults: siteResults,
+    corpusIncompleteMessage: corpusIncompleteMessage,
     buildHtml: buildHtml
   };
   if (typeof window !== "undefined") window.__llmwikiMatch = api;
@@ -1199,8 +1309,9 @@ var LLMWIKI_MATCH = (function () {
   // search and the reader has already been told why.
   let wikiCorpus = null;
   let wikiCorpusFailed = false;
+  let wikiCorpusStatus = { budget_exhausted: false, skipped_oversize_files: 0 };
   const WIKI_CORPUS_KEY = "_wiki_corpus";
-  const SITE_BROWSE_CAP = 10;
+  const WIKI_CORPUS_STATUS_KEY = "_wiki_corpus_status";
 
   // Lazy-chunked loader (#47): loads the small meta index first (projects +
   // static pages), then pulls per-project session chunks in parallel on first
@@ -1217,8 +1328,15 @@ var LLMWIKI_MATCH = (function () {
         // names no wiki corpus and the WIKI group says so out loud.
         if (Array.isArray(data)) { idx = data; noteMissingWikiCorpus(); return idx; }
         // New format: {entries: [...], _chunks: ["search-chunks/foo.json", ...],
-        // _wiki_corpus: "search-wiki-corpus.json"}
+        // _wiki_corpus: "search-wiki-corpus.json", _wiki_corpus_status: {...}}
         metaEntries = data.entries || [];
+        var status = data[WIKI_CORPUS_STATUS_KEY];
+        if (status && typeof status === "object") {
+          wikiCorpusStatus = {
+            budget_exhausted: status.budget_exhausted === true,
+            skipped_oversize_files: Number(status.skipped_oversize_files) || 0
+          };
+        }
         var chunkUrls = data._chunks || [];
         var corpusLoad = loadWikiCorpus(base, data[WIKI_CORPUS_KEY]);
         var chunkLoads = Promise.all(chunkUrls.map(function (cu) {
@@ -1297,48 +1415,13 @@ var LLMWIKI_MATCH = (function () {
   // #248: every key but `kind` filters the SITE group only — match mode has
   // no equivalent, so honouring them in the WIKI group would diverge from
   // `wiki_search`. `kind` is MCP's own frontmatter-`type` filter.
-  function parseStructuredQuery(raw) {
-    var filters = {};
-    var freeText = [];
-    var tokens = raw.split(/\s+/).filter(Boolean);
-    tokens.forEach(function (t) {
-      var m = t.match(/^(type|project|model|date|tags|sort|kind):(.+)$/i);
-      if (m) { filters[m[1].toLowerCase()] = m[2]; }
-      else { freeText.push(t); }
-    });
-    return { filters: filters, freeText: freeText.join(" ") };
-  }
-
-  function matchesFilters(entry, filters) {
-    if (filters.type && (entry.type || "").toLowerCase() !== filters.type.toLowerCase()) return false;
-    // #108 entries badge a kind (Entity, Concept, …); everything else is
-    // filtered on its type, which is what the wiki corpus calls `kind` too.
-    if (filters.kind &&
-        (entry.kind || entry.type || "").toLowerCase() !== filters.kind.toLowerCase()) return false;
-    if (filters.project && (entry.project || "").toLowerCase().indexOf(filters.project.toLowerCase()) === -1) return false;
-    if (filters.model && (entry.model || "").toLowerCase().indexOf(filters.model.toLowerCase()) === -1) return false;
-    if (filters.tags) {
-      var want = filters.tags.toLowerCase();
-      var entryBody = ((entry.body || "") + " " + (entry.title || "")).toLowerCase();
-      if (entryBody.indexOf(want) === -1) return false;
-    }
-    if (filters.date) {
-      var d = entry.date || "";
-      var op = filters.date.charAt(0);
-      if (op === ">" && d <= filters.date.substring(1)) return false;
-      if (op === "<" && d >= filters.date.substring(1)) return false;
-      if (op !== ">" && op !== "<" && d.indexOf(filters.date) === -1) return false;
-    }
-    return true;
-  }
-
   // #248 FR7: one query, two always-present groups. WIKI runs match mode
   // over the lazy wiki corpus; SITE runs the same matcher over the palette
   // index. Neither group is allowed to vanish — a heading with a
   // zero-results line is how the reader tells an empty wiki from a broken
   // search.
   function buildView(query) {
-    var parsed = parseStructuredQuery(query || "");
+    var parsed = LLMWIKI_MATCH.parseStructuredQuery(query || "");
     return {
       // The free text both groups matched on, carried through so the
       // renderer can mark it in the rows it draws.
@@ -1361,7 +1444,13 @@ var LLMWIKI_MATCH = (function () {
     var r = LLMWIKI_MATCH.searchMatch(wikiCorpus, term, kind);
     g.rows = r.pages;
     g.truncated = r.truncated;
-    if (!r.pages.length) g.message = 'No wiki page contains "' + term + '".';
+    var incomplete = LLMWIKI_MATCH.corpusIncompleteMessage(wikiCorpusStatus);
+    if (incomplete) {
+      g.message = incomplete;
+      g.messageKind = "warning";
+    } else if (!r.pages.length) {
+      g.message = 'No wiki page contains "' + term + '".';
+    }
     return g;
   }
 
@@ -1374,24 +1463,14 @@ var LLMWIKI_MATCH = (function () {
       return g;
     }
     var entries = idx || metaEntries || [];
-    var filtered = entries;
-    if (Object.keys(parsed.filters).length > 0) {
-      filtered = entries.filter(function (e) { return matchesFilters(e, parsed.filters); });
-    }
-    if (parsed.filters.sort === "date") {
-      g.rows = filtered.slice()
-        .sort(function (a, b) { return String(b.date || "").localeCompare(String(a.date || "")); })
-        .slice(0, 20);
-    } else if (!term) {
-      // No term is a browse, not a search: show the head of the index.
-      g.rows = filtered.slice(0, SITE_BROWSE_CAP);
-    } else {
-      var r = LLMWIKI_MATCH.searchMatchEntries(filtered, term, "");
-      g.rows = r.pages.map(function (m) { return m.page.entry; });
-      g.truncated = r.truncated;
-    }
+    var r = LLMWIKI_MATCH.siteResults(entries, parsed);
+    g.rows = r.rows;
+    g.truncated = r.truncated;
+    g.truncationMessage = r.truncationMessage;
     if (!g.rows.length) {
-      g.message = term ? 'No site page contains "' + term + '".' : "Nothing indexed yet.";
+      if (term) g.message = 'No site page contains "' + term + '".';
+      else if (Object.keys(parsed.filters).length) g.message = "No site page matches these filters.";
+      else g.message = "Nothing indexed yet.";
       // #20: an unreachable chunk produces zero matches for a query that
       // should have had some. Say which one it is.
       if (idxPartial) g.message += " Part of the search data failed to load.";

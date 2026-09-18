@@ -14,9 +14,18 @@ from pathlib import Path
 from llmwiki.build import (
     WIKI_CORPUS_MANIFEST_KEY,
     WIKI_CORPUS_REL,
+    WIKI_CORPUS_STATUS_KEY,
     build_search_index,
+    build_wiki_corpus_entries,
 )
-from llmwiki.search.corpus import iter_scan_files
+from llmwiki.search import corpus as corpus_mod
+from llmwiki.search.corpus import (
+    DEFAULT_AGGREGATE_BUDGET,
+    DEFAULT_PER_FILE_CAP,
+    CorpusWalkStats,
+    iter_scan_files,
+    scan_corpus,
+)
 
 _MARKER = "zanzibarine telemetry cadence"
 
@@ -121,8 +130,8 @@ def test_paths_are_reported_as_mcp_reports_them(tmp_path: Path):
 # ── entry shape ───────────────────────────────────────────────────────────
 
 
-def test_entries_carry_full_page_text_uncapped(tmp_path: Path):
-    """Substring matching and returning every matching line both need it all."""
+def test_entries_carry_a_full_page_that_fits_the_shared_caps(tmp_path: Path):
+    """Retained pages are whole, never partial reads at a cap boundary."""
     wiki = _wiki(tmp_path)
     long_body = "\n".join(f"line {i} {_MARKER}" for i in range(5000))
     _page(wiki, "sources/2026-02-02-long.md", 'title: "Long"\ntype: source\n', long_body)
@@ -132,6 +141,84 @@ def test_entries_carry_full_page_text_uncapped(tmp_path: Path):
     )
     assert entry["text"].count(_MARKER) == 5000
     assert entry["text"].endswith("line 4999 " + _MARKER)
+
+
+def test_build_and_search_share_deterministic_cap_aware_traversal(tmp_path: Path):
+    """Ordering decides which pages fit, so it is part of browser/MCP parity."""
+    wiki = tmp_path / "wiki"
+    wiki.mkdir()
+    # Deliberately create these out of lexical order. The first path is too
+    # large, the second exactly consumes the aggregate budget, and the third
+    # proves the shared walk stops at the same deterministic boundary.
+    (wiki / "30-last.md").write_text("last\n", encoding="utf-8")
+    (wiki / "10-too-large.md").write_text("x" * 20, encoding="utf-8")
+    (wiki / "20-kept.md").write_text("kept\n", encoding="utf-8")
+
+    assistant = scan_corpus(
+        [wiki], content_root=tmp_path, cold_storage_root=wiki,
+        per_file_cap=10, aggregate_budget=5,
+    )
+    browser_stats = CorpusWalkStats()
+    browser = build_wiki_corpus_entries(
+        wiki, per_file_cap=10, aggregate_budget=5, stats=browser_stats
+    )
+
+    assert [entry["path"] for entry in browser] == [p.rel_path for p in assistant.pages]
+    assert [entry["path"] for entry in browser] == ["wiki/20-kept.md"]
+    assert browser_stats.budget_exhausted == assistant.budget_exhausted is True
+    assert browser_stats.skipped_oversize == assistant.skipped_oversize == 1
+
+
+def test_more_than_the_match_cap_is_emitted_in_path_order(tmp_path: Path):
+    """The match engine caps while walking, so corpus order must be stable."""
+    wiki = tmp_path / "wiki"
+    wiki.mkdir()
+    for i in reversed(range(250)):
+        (wiki / f"{i:04d}.md").write_text("widget\n", encoding="utf-8")
+
+    paths = [entry["path"] for entry in build_wiki_corpus_entries(wiki)]
+
+    assert len(paths) == 250
+    assert paths == sorted(paths)
+
+
+def test_build_skips_a_page_over_the_default_four_mib_limit(tmp_path: Path):
+    wiki = tmp_path / "wiki"
+    wiki.mkdir()
+    (wiki / "small.md").write_text("small\n", encoding="utf-8")
+    (wiki / "oversize.md").write_bytes(b"x" * (DEFAULT_PER_FILE_CAP + 1))
+    stats = CorpusWalkStats()
+
+    entries = build_wiki_corpus_entries(wiki, stats=stats)
+
+    assert [entry["path"] for entry in entries] == ["wiki/small.md"]
+    assert stats.skipped_oversize == 1
+
+
+def test_build_stops_at_the_default_fifty_mib_aggregate_limit(
+    tmp_path: Path, monkeypatch
+):
+    """Exercise the production-size accounting without reading 50 MiB in CI."""
+    wiki = tmp_path / "wiki"
+    wiki.mkdir()
+    for i in reversed(range(13)):
+        path = wiki / f"{i:02d}.md"
+        with path.open("wb") as handle:
+            handle.truncate(DEFAULT_PER_FILE_CAP)
+
+    def sparse_reader(path: Path, *, remaining_budget: int, per_file_cap: int):
+        if remaining_budget < DEFAULT_PER_FILE_CAP:
+            return "", 0
+        return f"---\ntitle: {path.stem}\n---\n", DEFAULT_PER_FILE_CAP
+
+    monkeypatch.setattr(corpus_mod, "read_capped", sparse_reader)
+    stats = CorpusWalkStats()
+    entries = build_wiki_corpus_entries(wiki, stats=stats)
+
+    assert DEFAULT_AGGREGATE_BUDGET == 50 * 1024 * 1024
+    assert len(entries) == 12  # 12 × 4 MiB fit; the 13th exceeds the 2 MiB remainder.
+    assert [entry["path"] for entry in entries] == sorted(entry["path"] for entry in entries)
+    assert stats.budget_exhausted is True
 
 
 def test_entries_carry_title_and_kind_from_frontmatter(tmp_path: Path):
@@ -219,6 +306,10 @@ def test_manifest_key_points_at_the_payload(tmp_path: Path):
     assert (out / index[WIKI_CORPUS_MANIFEST_KEY]).is_file()
     # Untouched: the corpus sits beside the chunk manifest, not inside it.
     assert WIKI_CORPUS_REL not in index["_chunks"]
+    assert index[WIKI_CORPUS_STATUS_KEY] == {
+        "budget_exhausted": False,
+        "skipped_oversize_files": 0,
+    }
 
 
 def test_payload_ships_a_js_sidecar(tmp_path: Path):

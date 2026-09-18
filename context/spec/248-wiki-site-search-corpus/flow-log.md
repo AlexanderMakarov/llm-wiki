@@ -82,3 +82,19 @@
 ## operator smoke fixes — visible hit and shared destination (2026-09-18)
 - The `file://` demo smoke exposed two presentation defects after the first verified build. A 400-character matcher snippet could contain the correct `<mark>` beyond the palette row's clipped right edge, so rendering now takes a second, narrower window with the first hit near its start; matcher data and Python/JavaScript parity are unchanged.
 - A synthesized source page in Wiki and its raw session/document record in Site can resolve to the same reader URL. Both searchable corpora remain intact, but the shared destination now renders once with Wiki precedence; a Site row still appears when its raw text matches and the wiki summary does not.
+
+## independent review keep/drop — 2026-09-18
+- Independent verdict: **Request changes** — 1 blocker and 4 nits recorded in the session-only `review.md`.
+- Operator decision: keep B1 and N1–N3; waive N4 (PR size), because #248 intentionally delivers the approved end-to-end curated browsing and search-parity flow in one branch. Record the waiver in the PR body.
+- B1 + N1 resolution: harden and deterministically sort the shared corpus traversal before reads, then make the site build reuse `iter_scanned_pages` with the same 4 MiB per-file and 50 MiB aggregate caps as assistant search. Publish completeness flags so the static UI warns when pages were omitted.
+- N2 product decision: empty input stays a 10-row browse preview; every explicit Site text/filter/sort query may return up to 200 rows. Filter-only and sort-only overflow states say `Showing 200 of N matching results.`; text retains the 200-page / 200-line matcher caps.
+- N3 resolution: README now names Topics and the two-group Wiki/Site quick search.
+- The earlier “full text, effectively uncapped” decision is superseded by the shared cap-aware traversal above; retained pages remain whole and are never partially read.
+
+## commit-push — accepted review remediation (2026-09-18)
+- Implemented accepted findings B1 and N1–N3; N4 remains explicitly waived by the operator.
+- Security/DRY: `iter_scan_files` now resolves and contains candidates before reads, skips final symlinks, sorts paths deterministically, and `read_capped` uses a no-follow regular-file descriptor where the platform provides it. `build_wiki_corpus_entries` now consumes `iter_scanned_pages` rather than maintaining a second reader.
+- Parity/completeness: browser corpus uses the shared 4 MiB/file and 50 MiB aggregate caps and emits `_wiki_corpus_status`; palette warnings replace definitive no-match claims when the static corpus is incomplete. Boundary coverage includes symlink rejection, over-4-MiB pages, the 50 MiB budget, and more than 200 files created out of order.
+- Site cap: empty input stays a 10-row preview; explicit text/filter/sort queries use the 200-result ceiling, with exact totals for filter-only/sort-only truncation.
+- Static gate: `ruff check llmwiki tests scripts` passed. Full pytest had only the same three environment-only failures (one real-home write blocked by the read-only sandbox; two isolated wheel builds blocked from dependency downloads). The full suite passed with exactly those three cases deselected. Fresh demo build: 205 corpus entries, no input cap reached, zero oversized skips.
+- Next: commit and push, rebase against current `origin/main`, open PR, and watch required checks. Do not append to this tracked log after the PR opens.

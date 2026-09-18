@@ -47,6 +47,12 @@ if (input.op === "match") {
     };
   }
   process.stdout.write(JSON.stringify(out));
+} else if (input.op === "site") {
+  process.stdout.write(JSON.stringify(
+    M.siteResults(input.entries, M.parseStructuredQuery(input.query))
+  ));
+} else if (input.op === "status") {
+  process.stdout.write(JSON.stringify(M.corpusIncompleteMessage(input.status)));
 } else {
   process.stdout.write(JSON.stringify(M.buildHtml(input.view)));
 }
@@ -272,6 +278,8 @@ def test_the_page_cap_drops_matches_and_says_so(node_runner):
     ]
     js = _assert_parity(node_runner, big, ["widget"])
     assert len(js["widget"]["pages"]) == DEFAULT_PAGE_CAP
+    assert js["widget"]["pages"][0]["path"] == "wiki/sources/0000-widget.md"
+    assert js["widget"]["pages"][-1]["path"] == "wiki/sources/0199-widget.md"
     assert js["widget"]["truncated"] is True
 
 
@@ -287,6 +295,65 @@ def test_the_kind_filter_is_mcps_frontmatter_type_filter(node_runner, corpus):
     """# @spec: 248-wiki-site-search-corpus @regression"""
     js = _assert_parity(node_runner, corpus, ["cadence"], kind="entity")
     assert [p["path"] for p in js["cadence"]["pages"]] == ["wiki/entities/Cadence.md"]
+
+
+def _site_entries(count: int, *, type_: str = "session") -> list[dict]:
+    return [
+        {
+            "title": f"Widget {i:03d}",
+            "url": f"sessions/widget-{i:03d}.html",
+            "type": type_,
+            "project": "demo",
+            "date": f"2026-01-{(i % 28) + 1:02d}",
+            "body": "widget body",
+        }
+        for i in range(count)
+    ]
+
+
+def test_empty_site_query_is_only_a_ten_row_browse_preview(node_runner):
+    """No input is not a request for all results; it is the compact preview."""
+    result = node_runner({"op": "site", "entries": _site_entries(250), "query": ""})
+    assert len(result["rows"]) == 10
+    assert result["truncated"] is False
+    assert result["truncationMessage"] is None
+
+
+def test_filter_only_site_query_returns_up_to_the_normal_search_cap(node_runner):
+    """# @spec: 248-wiki-site-search-corpus @regression"""
+    result = node_runner({
+        "op": "site", "entries": _site_entries(250), "query": "type:session"
+    })
+    assert len(result["rows"]) == DEFAULT_PAGE_CAP
+    assert result["total"] == 250
+    assert result["truncated"] is True
+    assert result["truncationMessage"] == "Showing 200 of 250 matching results."
+
+
+def test_sort_only_site_query_returns_the_newest_two_hundred(node_runner):
+    """``sort:date`` is explicit too; it no longer has a separate 20-row cap."""
+    entries = _site_entries(250)
+    result = node_runner({"op": "site", "entries": entries, "query": "sort:date"})
+    assert len(result["rows"]) == DEFAULT_PAGE_CAP
+    assert result["truncated"] is True
+    dates = [row["date"] for row in result["rows"]]
+    assert dates == sorted(dates, reverse=True)
+
+
+def test_common_site_text_is_still_capped_at_two_hundred(node_runner):
+    """Short/common terms cannot make the palette return an unbounded list."""
+    result = node_runner({"op": "site", "entries": _site_entries(250), "query": "widget"})
+    assert len(result["rows"]) == DEFAULT_PAGE_CAP
+    assert result["truncated"] is True
+
+
+def test_incomplete_corpus_status_has_a_visible_specific_warning(node_runner):
+    message = node_runner({
+        "op": "status",
+        "status": {"budget_exhausted": True, "skipped_oversize_files": 2},
+    })
+    assert "50 MiB" in message
+    assert "2 pages over 4 MiB" in message
 
 
 @pytest.mark.skipif(not DEMO_WIKI.is_dir(), reason="demo vault not checked out")
