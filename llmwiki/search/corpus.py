@@ -7,6 +7,8 @@ every entry point takes explicit paths and caps.
 
 from __future__ import annotations
 
+import os
+import stat
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -69,20 +71,26 @@ def read_capped(
     are never partial-read — a truncated token at the cap boundary would
     produce confusing hits.
     """
-    try:
-        size = path.stat().st_size
-    except OSError:
-        return "", 0
     cap = min(per_file_cap, max(0, remaining_budget))
-    if size > per_file_cap:
-        return "", 0
     if cap <= 0:
         return "", 0
+    flags = os.O_RDONLY
+    for name in ("O_BINARY", "O_CLOEXEC", "O_NOFOLLOW", "O_NONBLOCK"):
+        flags |= getattr(os, name, 0)
+    fd = -1
     try:
-        with path.open("rb") as f:
+        fd = os.open(path, flags)
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode) or info.st_size > per_file_cap:
+            return "", 0
+        with os.fdopen(fd, "rb") as f:
+            fd = -1  # ownership moved to the file object
             raw = f.read(cap + 1)
     except OSError:
         return "", 0
+    finally:
+        if fd >= 0:
+            os.close(fd)
     if len(raw) > cap:
         return "", 0
     try:
@@ -96,18 +104,43 @@ def iter_scan_files(
     *,
     cold_storage_root: Path | None = None,
 ) -> Iterator[Path]:
-    """Yield every ``.md`` under ``roots`` as one flat sequence.
+    """Yield every safe ``.md`` under ``roots`` in deterministic order.
 
     ``cold_storage_root`` names the wiki root whose ``archive/`` subtree is
     withheld (#140). Only that root's archive is cold — a folder named
     ``archive`` under ``raw/`` stays searchable.
+
+    Candidates are resolved and checked before they reach the reader. Final
+    symlinks are skipped, and a path reached through a symlinked directory is
+    accepted only when its resolved target remains inside the scan root. This
+    keeps an untrusted vault from making search read an arbitrary host file.
     """
     for root in roots:
-        if not root.exists():
+        try:
+            resolved_root = root.resolve(strict=True)
+        except OSError:
             continue
-        cold = cold_storage_root is not None and root == cold_storage_root
-        for path in root.rglob("*.md"):
-            if cold and is_archived_path(path.relative_to(root).parts):
+        if not resolved_root.is_dir():
+            continue
+        cold = False
+        if cold_storage_root is not None:
+            try:
+                cold = resolved_root == cold_storage_root.resolve(strict=True)
+            except OSError:
+                pass
+        for candidate in sorted(resolved_root.rglob("*.md")):
+            try:
+                relative = candidate.relative_to(resolved_root)
+            except ValueError:
+                continue
+            if cold and is_archived_path(relative.parts):
+                continue
+            try:
+                if candidate.is_symlink():
+                    continue
+                path = candidate.resolve(strict=True)
+                path.relative_to(resolved_root)
+            except (OSError, ValueError):
                 continue
             yield path
 

@@ -194,6 +194,11 @@ TOPIC_KIND_FOLDERS = frozenset({
 })
 KIND_OTHER = "other"
 
+# The kinds a reviewer curates by hand. `projects` route to their own project
+# page (#108 FR4) and `sources` / `syntheses` are not knowledge topics, so only
+# these two qualify for the `include_curated_pages` bypass below.
+CURATED_KIND_FOLDERS = frozenset({"entities", "concepts"})
+
 
 @dataclass(frozen=True, slots=True)
 class TopicPage:
@@ -204,6 +209,7 @@ class TopicPage:
     path: str
     last_updated: str | None = None
     site_url: str | None = None
+    title: str = ""
 
 
 def topic_kind_lookup(wiki_dir: Path | None = None) -> dict[str, TopicPage]:
@@ -223,17 +229,18 @@ def topic_kind_lookup(wiki_dir: Path | None = None) -> dict[str, TopicPage]:
         kind = str(page.get("type", ""))
         if kind not in TOPIC_KIND_FOLDERS:
             continue
+        title = str(page.get("title", "")).strip()
         record = TopicPage(
             kind=kind,
             slug=slug,
             path=str(page.get("path", "")),
             last_updated=page.get("last_updated") or None,
             site_url=page.get("site_url") or None,
+            title=title,
         )
         lookup.setdefault(slug.strip().lower(), record)
-        title = str(page.get("title", "")).strip().lower()
         if title:
-            lookup.setdefault(title, record)
+            lookup.setdefault(title.lower(), record)
     return lookup
 
 
@@ -250,6 +257,38 @@ def resolve_topic_page(topic: Topic, lookup: dict[str, TopicPage]) -> TopicPage 
         if record is not None:
             return record
     return None
+
+
+def _curated_page(topic: Topic, lookup: dict[str, TopicPage]) -> TopicPage | None:
+    """The curated entity/concept page backing ``topic``, if there is one.
+
+    Narrower than :func:`resolve_topic_page`: it also rejects the folder-context
+    stubs (``wiki/entities/_context.md``) that exist only to orient an
+    assistant. ``scan_pages`` has no underscore filter — it special-cases
+    ``README`` alone — so without this guard those stubs would be published as
+    knowledge pages.
+    """
+    page = resolve_topic_page(topic, lookup)
+    if page is None or page.kind not in CURATED_KIND_FOLDERS:
+        return None
+    if page.slug.startswith("_"):
+        return None
+    return page
+
+
+def _curated_pages(lookup: dict[str, TopicPage]) -> dict[str, TopicPage]:
+    """Curated entity/concept pages keyed by the name a wikilink would target.
+
+    That name is the page's title, falling back to its slug when the
+    frontmatter carries none. Insertion order follows ``scan_pages``' sorted
+    walk, so the result is deterministic.
+    """
+    curated: dict[str, TopicPage] = {}
+    for record in lookup.values():
+        if record.kind not in CURATED_KIND_FOLDERS or record.slug.startswith("_"):
+            continue
+        curated.setdefault(record.title or record.slug, record)
+    return curated
 
 
 def resolve_project_topic_urls(
@@ -290,6 +329,7 @@ def build_topic_graph(
     min_sessions: int = 2,
     max_neighbors: int = 12,
     similarity: float = _DEFAULT_SIMILARITY,
+    include_curated_pages: bool = False,
 ) -> dict[str, Any]:
     """Build the topic-only co-occurrence graph.
 
@@ -298,6 +338,13 @@ def build_topic_graph(
     everything clears this anyway). ``max_neighbors``: keep only each topic's
     strongest co-occurrence edges so dense graphs stay readable.
 
+    ``include_curated_pages`` (#248, off by default): also admit every curated
+    ``wiki/entities/`` and ``wiki/concepts/`` page as a node, whatever the
+    sessions cite — a reviewed page nothing links to is seeded with zero
+    sessions rather than vanishing. Only the site build turns this on; the
+    candidate harvest must keep the default, or promoted names would re-enter
+    the stream the consolidator is asked to decide.
+
     Returns ``{nodes, edges, sessions, stats}`` ready for the viewer + the
     topic-page generator. ``sessions`` maps session slug → {title, url, date}
     for drill-down rendering; each node's ``first_seen`` / ``last_seen`` are
@@ -305,7 +352,23 @@ def build_topic_graph(
     mentioning the topic carries one.
     """
     topics, raw_to_canonical = derive_vocabulary(wiki_dir, similarity=similarity)
-    kept = [t for t in topics if t.count >= min_sessions]
+    # Hoisted above the threshold filter so curated pages can be exempted from
+    # it; it is a pure read and its result is reused to decorate nodes below.
+    kind_lookup = topic_kind_lookup(wiki_dir)
+    if include_curated_pages:
+        # Seeded here, after `derive_vocabulary` ran `_cluster_aliases`, so the
+        # clustering heuristic sees exactly the input it sees with the flag off.
+        described = {p.path for t in topics if (p := _curated_page(t, kind_lookup))}
+        topics += [
+            Topic(canonical=name)
+            for name, record in _curated_pages(kind_lookup).items()
+            if record.path not in described
+        ]
+    kept = [
+        t for t in topics
+        if t.count >= min_sessions
+        or (include_curated_pages and _curated_page(t, kind_lookup) is not None)
+    ]
     kept_names = {t.canonical for t in kept}
 
     pages = _session_pages(wiki_dir)
@@ -363,7 +426,6 @@ def build_topic_graph(
         degree[e["source"]] += 1
         degree[e["target"]] += 1
 
-    kind_lookup = topic_kind_lookup(wiki_dir)
     nodes = []
     for t in kept:
         page = resolve_topic_page(t, kind_lookup)

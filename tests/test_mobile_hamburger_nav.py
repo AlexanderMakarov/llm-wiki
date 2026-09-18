@@ -13,6 +13,7 @@ from __future__ import annotations
 from llmwiki.build import nav_bar
 from llmwiki.render.css import CSS
 from llmwiki.render.js import JS
+from llmwiki.topics_page import build_topic_pages
 
 # ─── Markup contract ──────────────────────────────────────────────────
 
@@ -44,6 +45,53 @@ def test_nav_emits_drawer_with_all_links() -> None:
             f"{target} should appear in both .nav-links AND .nav-drawer "
             "so it's reachable on every viewport"
         )
+
+
+def test_nav_offers_topics_in_the_row_and_the_drawer() -> None:
+    """#248 FR3: the topics listing is generated on every build but had
+    nothing pointing at it — no reader arrived there by navigating."""
+    html_text = nav_bar(active="home")
+    assert html_text.count('href="topics/index.html"') >= 2, (
+        "Topics must appear in both .nav-links AND .nav-drawer so it is "
+        "reachable on every viewport"
+    )
+    assert ">Topics</a>" in html_text
+    # It sits beside Graph — both are ways into the same knowledge set.
+    assert html_text.index('href="graph.html"') < html_text.index(
+        'href="topics/index.html"'
+    ) < html_text.index('href="projects/index.html"')
+
+
+def test_nav_marks_topics_active_in_both_surfaces() -> None:
+    html_text = nav_bar(active="topics")
+    assert '<a href="topics/index.html" class="active">Topics</a>' in html_text
+    assert 'class="nav-drawer-link active">Topics</a>' in html_text
+
+
+def test_topics_index_page_marks_topics_as_the_current_entry(tmp_path) -> None:
+    """The listing must highlight itself, not Graph (tech-considerations §5.3).
+
+    Individual topic pages deliberately keep highlighting Graph, which this
+    test pins alongside so the two are not "fixed" into agreement.
+    """
+    graph = {
+        "nodes": [{
+            "id": "Hazel", "label": "Hazel", "type": "topic", "kind": "entities",
+            "site_url": "topics/hazel.html", "session_count": 1, "degree": 0,
+            "aliases": [], "description": "", "sessions": [],
+        }],
+        "edges": [],
+        "sessions": {},
+        "stats": {"total_sessions": 1, "kinds": {"entities": 1}},
+    }
+    out = tmp_path / "site"
+    build_topic_pages(graph, out)
+    index = (out / "topics" / "index.html").read_text(encoding="utf-8")
+    assert '<a href="../topics/index.html" class="active">Topics</a>' in index
+    assert 'class="nav-drawer-link active">Topics</a>' in index
+
+    topic_page = (out / "topics" / "hazel.html").read_text(encoding="utf-8")
+    assert '<a href="../graph.html" class="active">Graph</a>' in topic_page
 
 
 def test_drawer_marks_active_link() -> None:

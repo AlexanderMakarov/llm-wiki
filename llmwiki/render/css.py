@@ -483,6 +483,24 @@ kbd { display: inline-block; padding: 2px 6px; font-family: var(--mono); font-si
    doesn't masquerade as "no matches". Not selectable — it isn't a result. */
 .palette-results li.palette-note { cursor: default; border-left-color: #b91c1c; color: #b91c1c; font-size: 0.85rem; }
 .palette-results li.palette-note:hover { background: transparent; }
+/* #248: two always-visible result groups, WIKI then SITE. Headings and
+   zero-results lines are ordinary rows so one <ul> still carries the list;
+   only `li[data-i]` is selectable, which is what keeps the keyboard off
+   headings, notes, and wiki pages that have no reader page. */
+.palette-results li.palette-group { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; cursor: default; padding: 10px 16px 4px; border-top: 1px solid var(--border-subtle); font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); }
+.palette-results li.palette-group:first-child { border-top: none; }
+.palette-results li.palette-group:hover { background: transparent; }
+.palette-results .palette-group-label { font-weight: 600; color: var(--text); }
+.palette-results li.palette-empty { cursor: default; border-left-color: transparent; color: var(--text-muted); font-size: 0.85rem; }
+.palette-results li.palette-empty:hover { background: transparent; }
+.palette-results li.palette-row-static { cursor: default; }
+.palette-results li.palette-row-static:hover { background: transparent; }
+.palette-results .result-meta { display: block; }
+.palette-results .result-nolink { display: inline-block; margin-left: 6px; padding: 1px 6px; border: 1px dashed var(--border); border-radius: 3px; font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); }
+.palette-results .result-lines { display: block; margin-top: 4px; padding-left: 8px; border-left: 2px solid var(--border-subtle); }
+.palette-results .result-line { display: block; font-family: var(--mono); font-size: 0.72rem; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.palette-results .result-line-no { display: inline-block; min-width: 2.75em; color: var(--text-muted); }
+.palette-results .result-line-more { font-family: var(--font); font-style: italic; color: var(--text-muted); }
 .palette-footer { display: flex; gap: 16px; padding: 10px 16px; border-top: 1px solid var(--border); font-size: 0.75rem; background: var(--bg-alt); }
 
 /* Help dialog */

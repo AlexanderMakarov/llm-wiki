@@ -4,7 +4,8 @@ For every topic node in :func:`llmwiki.topics.build_topic_graph` we emit
 ``site/topics/<slug>.html`` — the static equivalent of the MCP
 ``wiki_search`` tool: the sessions that mention the topic (linked to
 their compiled session pages) plus the topics it co-occurs with. A
-``topics/index.html`` lists every topic by reach.
+``topics/index.html`` lists them in three counted sections — curated
+entities, curated concepts, then derived topics — by reach within each.
 
 Reuses the site shell helpers in :mod:`llmwiki.build` (imported lazily to
 avoid a circular import — ``build`` calls this module).
@@ -399,6 +400,70 @@ def _backing_page_markdown(node: dict[str, Any], wiki_root: Path | None) -> str 
     return page_content(text)
 
 
+def prune_empty_isolated_topics(
+    graph: dict[str, Any], wiki_dir: Path | None = None
+) -> list[str]:
+    """Drop every topic with no connected topics *and* no content of its own.
+
+    A topic page that shows neither a connection nor a line the curator wrote
+    tells a reader — or an agent — nothing the listing did not already say, so
+    the site writes none. Both halves are required: a page with facts but no
+    co-citation is knowledge someone reviewed, and a page with no facts but
+    many connections is the hub of a neighbourhood. Only their conjunction is
+    an empty page.
+
+    "No connected topics" is having no edge in the co-occurrence graph; "no
+    content of its own" is :func:`page_content` returning ``None`` for the
+    backing page — a topic no wiki page backs at all has none either.
+
+    Mutates ``graph`` in place, dropping the nodes and refreshing the
+    ``stats`` the topics index counts from, and returns the dropped topic ids
+    in node order. Edges never need touching: a dropped node has none by
+    definition. Call it once, before anything reads ``graph["nodes"]``, so the
+    topic pages, the search index, the wiki corpus' URL fallback and the graph
+    viewer all see the same list and none of them can offer a link to a page
+    this build did not write.
+    """
+    nodes = graph.get("nodes") or []
+    if not nodes:
+        return []
+    wiki_root = wiki_dir.parent if wiki_dir is not None else None
+    connected: set[str] = set()
+    for edge in graph.get("edges") or ():
+        connected.add(str(edge.get("source", "")))
+        connected.add(str(edge.get("target", "")))
+
+    kept: list[dict[str, Any]] = []
+    dropped: list[str] = []
+    for node in nodes:
+        name = str(node.get("id", ""))
+        if name in connected or _backing_page_markdown(node, wiki_root):
+            kept.append(node)
+        else:
+            dropped.append(name)
+    if not dropped:
+        return []
+
+    graph["nodes"] = kept
+    stats = graph.get("stats")
+    if isinstance(stats, dict):
+        kind_counts: dict[str, int] = {}
+        for node in kept:
+            kind = str(node.get("kind") or KIND_OTHER)
+            kind_counts[kind] = kind_counts.get(kind, 0) + 1
+        stats["total_topics"] = len(kept)
+        stats["kinds"] = dict(sorted(kind_counts.items()))
+        stats["top_topics"] = [
+            {
+                "id": n["id"],
+                "count": n.get("session_count", 0),
+                "degree": n.get("degree", 0),
+            }
+            for n in kept[:8]
+        ]
+    return dropped
+
+
 def _topic_link_index(nodes: list[dict[str, Any]]) -> dict[str, str]:
     """Map every topic name and alias (lowercased) → its canonical topic id."""
     index: dict[str, str] = {}
@@ -459,6 +524,72 @@ def _resolve_wikilinks(
         out.append(block.group(0))
         pos = block.end()
     out.append(WIKILINK_RE.sub(resolve, rendered[pos:]))
+    return "".join(out)
+
+
+# The topics index splits curated knowledge from what sessions merely cited
+# (FR4). Order matters: a reader looks for reviewed pages first.
+_INDEX_SECTIONS: tuple[tuple[str, str | None], ...] = (
+    ("Entities", "entities"),
+    ("Concepts", "concepts"),
+    ("Other topics", None),
+)
+
+
+def _index_row(node: dict[str, Any], node_urls: dict[str, str]) -> str:
+    """One topic row for the index: name, kind chip when curated, reach.
+
+    The chip is the same one the topic page's identity line carries, so a
+    reader recognises it across surfaces. A topic no wiki page describes gets
+    none — the absence *is* the signal that it was derived, not reviewed.
+    """
+    href = html.escape(_topic_href(str(node["id"]), node_urls), quote=True)
+    kind = str(node.get("kind") or KIND_OTHER)
+    chip = f" {kind_chip(kind)}" if kind != KIND_OTHER else ""
+    return (
+        f'<li><a href="{href}">{html.escape(node["id"])}</a>{chip}'
+        f' <span class="muted">· {node["session_count"]} sources'
+        f' · {node["degree"]} links</span></li>'
+    )
+
+
+def _index_sections(
+    nodes: list[dict[str, Any]],
+    node_urls: dict[str, str],
+    kind_counts: dict[str, int],
+) -> str:
+    """Render the three counted sections of ``topics/index.html``.
+
+    Counts come from ``graph["stats"]["kinds"]``, already computed on every
+    run, and fall back to the rows themselves for a caller that hands over a
+    graph without stats — a heading must never disagree with the list under
+    it. Every section is rendered even when empty, so "no concepts yet" reads
+    as a fact rather than as a missing section.
+    """
+    curated = {kind for _, kind in _INDEX_SECTIONS if kind}
+    out: list[str] = []
+    for heading, kind in _INDEX_SECTIONS:
+        if kind is None:
+            group = [n for n in nodes if str(n.get("kind") or KIND_OTHER) not in curated]
+            count = (
+                sum(c for k, c in kind_counts.items() if k not in curated)
+                if kind_counts
+                else len(group)
+            )
+        else:
+            group = [n for n in nodes if n.get("kind") == kind]
+            count = kind_counts.get(kind, len(group))
+        body = (
+            '<ul class="topic-index-list">\n'
+            + "\n".join(_index_row(n, node_urls) for n in group)
+            + "\n</ul>\n"
+            if group
+            else '<p class="muted">No topics in this group.</p>\n'
+        )
+        out.append(
+            f'<h2 class="topic-index-heading">{html.escape(heading)} '
+            f'<span class="muted">({count})</span></h2>\n' + body
+        )
     return "".join(out)
 
 
@@ -546,23 +677,19 @@ def build_topic_pages(
         path.write_text(body, encoding="utf-8")
         written.append(path)
 
-    # Index page — every topic by reach. `topics/index.html` sits in the same
-    # directory as the topic pages, so it uses the same href rules and routes a
-    # project topic to its project page like every other link does (FR4).
-    rows = []
-    for node in nodes:
-        href = html.escape(_topic_href(str(node["id"]), node_urls), quote=True)
-        rows.append(
-            f'<li><a href="{href}">{html.escape(node["id"])}</a>'
-            f' <span class="muted">· {node["session_count"]} sources · {node["degree"]} links</span></li>'
-        )
+    # Index page — curated knowledge first, derived topics last (FR4). Reach
+    # order survives the split untouched: `nodes` arrives sorted by
+    # (-session_count, id) from `build_topic_graph`, and partitioning is
+    # stable. `topics/index.html` sits in the same directory as the topic
+    # pages, so it uses the same href rules and routes a project topic to its
+    # project page like every other link does (FR4).
     index_body = (
         page_head("Topics", "Every topic in the wiki by reach", css_prefix="../")
-        + nav_bar(active="graph", link_prefix="../")
+        + nav_bar(active="topics", link_prefix="../")
         + hero("Topics", f"{len(nodes)} topics across {graph.get('stats', {}).get('total_sessions', 0)} sessions")
-        + '<section class="container topic-index">\n<ul class="topic-index-list">\n'
-        + "\n".join(rows)
-        + "\n</ul>\n</section>\n</main>\n"
+        + '<section class="container topic-index">\n'
+        + _index_sections(nodes, node_urls, graph.get("stats", {}).get("kinds") or {})
+        + "</section>\n</main>\n"
         + page_foot(js_prefix="../")
     )
     index_path = topics_dir / "index.html"

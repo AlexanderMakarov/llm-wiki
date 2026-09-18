@@ -20,6 +20,7 @@ from llmwiki.topics import (
     topic_slug,
 )
 from llmwiki.topics_consolidate import (
+    build_candidates,
     parse_and_cache,
     prepare_known_names,
     render_consolidation_prompt,
@@ -108,6 +109,149 @@ def test_min_sessions_threshold_drops_one_offs(tmp_path: Path):
     assert {n["id"] for n in g["nodes"]} == {"OpenClaw"}
     g_all = build_topic_graph(wiki, min_sessions=1)
     assert "OneOff" in {n["id"] for n in g_all["nodes"]}
+
+
+_CURATED_TYPE = {"entities": "entity", "concepts": "concept"}
+
+
+def _curated_page_file(wiki: Path, kind: str, name: str, *, folder: str = "") -> Path:
+    """Write one curated wiki page (`entities/`/`concepts/`) and return its path."""
+    page = wiki / (folder or kind) / f"{name}.md"
+    page.parent.mkdir(parents=True, exist_ok=True)
+    page.write_text(
+        f'---\ntitle: "{name}"\ntype: {_CURATED_TYPE[kind]}\n'
+        f"last_updated: 2026-02-03\n---\n\n# {name}\n",
+        encoding="utf-8",
+    )
+    return page
+
+
+def test_curated_entity_with_no_inbound_links_is_a_node_only_under_the_flag(
+    tmp_path: Path,
+):
+    """#248 FR1: a reviewed page nothing cites still reaches the reader."""
+    wiki = _make_wiki(tmp_path, {
+        "s1": ["OpenClaw"],
+        "s2": ["OpenClaw"],
+    })
+    _curated_page_file(wiki, "entities", "Python")
+
+    default = build_topic_graph(wiki, min_sessions=2)
+    assert "Python" not in {n["id"] for n in default["nodes"]}
+
+    bypassed = build_topic_graph(wiki, min_sessions=2, include_curated_pages=True)
+    assert {n["id"] for n in bypassed["nodes"]} == {"OpenClaw", "Python"}
+
+
+def test_curated_concept_with_one_inbound_link_is_a_node_under_the_flag(
+    tmp_path: Path,
+):
+    wiki = _make_wiki(tmp_path, {
+        "s1": ["OpenClaw", "Batching"],
+        "s2": ["OpenClaw"],
+    })
+    _curated_page_file(wiki, "concepts", "Batching")
+
+    assert "Batching" not in {
+        n["id"] for n in build_topic_graph(wiki, min_sessions=2)["nodes"]
+    }
+    g = build_topic_graph(wiki, min_sessions=2, include_curated_pages=True)
+    batching = next(n for n in g["nodes"] if n["id"] == "Batching")
+    assert batching["kind"] == "concepts"
+    assert batching["session_count"] == 1
+
+
+def test_derived_one_off_without_a_curated_page_stays_out_under_the_flag(
+    tmp_path: Path,
+):
+    """The noise guard: the bypass admits curated pages, not every one-off."""
+    wiki = _make_wiki(tmp_path, {
+        "s1": ["OpenClaw", "OneOff"],
+        "s2": ["OpenClaw"],
+    })
+    _curated_page_file(wiki, "entities", "Python")
+
+    g = build_topic_graph(wiki, min_sessions=2, include_curated_pages=True)
+    assert {n["id"] for n in g["nodes"]} == {"OpenClaw", "Python"}
+
+
+def test_bypassed_node_carries_page_metadata_and_no_edges(tmp_path: Path):
+    wiki = _make_wiki(tmp_path, {
+        "s1": ["OpenClaw", "Bun"],
+        "s2": ["OpenClaw", "Bun"],
+    })
+    _curated_page_file(wiki, "entities", "Python")
+
+    g = build_topic_graph(wiki, min_sessions=2, include_curated_pages=True)
+    python = next(n for n in g["nodes"] if n["id"] == "Python")
+    assert python["kind"] == "entities"
+    assert python["wiki_path"] == "wiki/entities/Python.md"
+    assert python["site_url"] == "topics/python.html"
+    assert python["session_count"] == 0
+    assert python["degree"] == 0
+    assert python["sessions"] == []
+    assert python["last_updated"] == "2026-02-03"
+    # Zero sessions means zero activity dates, not empty strings.
+    assert "first_seen" not in python and "last_seen" not in python
+    assert not [e for e in g["edges"]
+                if "Python" in (e["source"], e["target"])]
+
+
+def test_archived_curated_pages_never_become_nodes(tmp_path: Path):
+    """`wiki/archive/` is cold storage — a dismissal must stay dismissed."""
+    wiki = _make_wiki(tmp_path, {"s1": ["OpenClaw"], "s2": ["OpenClaw"]})
+    _curated_page_file(wiki, "entities", "Dismissed", folder="archive/entities")
+
+    g = build_topic_graph(wiki, min_sessions=2, include_curated_pages=True)
+    assert {n["id"] for n in g["nodes"]} == {"OpenClaw"}
+
+
+def test_underscore_context_stubs_never_become_nodes(tmp_path: Path):
+    """`_context.md` orients assistants; it is not knowledge to publish."""
+    wiki = _make_wiki(tmp_path, {"s1": ["OpenClaw"], "s2": ["OpenClaw"]})
+    _curated_page_file(wiki, "entities", "_context")
+    _curated_page_file(wiki, "concepts", "_context")
+
+    g = build_topic_graph(wiki, min_sessions=2, include_curated_pages=True)
+    assert {n["id"] for n in g["nodes"]} == {"OpenClaw"}
+
+
+def test_curated_bypass_keeps_node_and_edge_order_deterministic(tmp_path: Path):
+    """#150: two runs over one vault must agree byte for byte."""
+    wiki = _make_wiki(tmp_path, {
+        "s1": ["OpenClaw", "Bun", "Tailscale"],
+        "s2": ["OpenClaw", "Bun"],
+        "s3": ["OpenClaw", "Tailscale"],
+    })
+    for name in ("Python", "SQLite", "Ollama"):
+        _curated_page_file(wiki, "entities", name)
+    _curated_page_file(wiki, "concepts", "Batching")
+
+    first = build_topic_graph(wiki, min_sessions=2, include_curated_pages=True)
+    second = build_topic_graph(wiki, min_sessions=2, include_curated_pages=True)
+    assert [n["id"] for n in first["nodes"]] == [n["id"] for n in second["nodes"]]
+    assert first["edges"] == second["edges"]
+    # Zero-count seeds land last, alphabetically, with no bespoke sort.
+    assert [n["id"] for n in first["nodes"]][-4:] == [
+        "Batching", "Ollama", "Python", "SQLite",
+    ]
+
+
+def test_build_candidates_ignores_the_curated_bypass(tmp_path: Path):
+    """The synth path must keep the default — promoted names stay settled.
+
+    If the site's bypass leaked into `topics_consolidate`, already-promoted
+    entities and concepts would re-enter the candidate stream and the
+    consolidator would be asked to re-decide them (the #146 bug class).
+    """
+    sessions = {"s1": ["OpenClaw", "Bun"], "s2": ["OpenClaw", "Bun"]}
+    before = _make_wiki(tmp_path / "before", sessions)
+    after = _make_wiki(tmp_path / "after", sessions)
+    _curated_page_file(after, "entities", "Python")
+    _curated_page_file(after, "concepts", "Batching")
+
+    assert build_candidates(after) == build_candidates(before)
+    assert {c["name"] for c in build_candidates(after)} == {"OpenClaw", "Bun"}
 
 
 def test_build_topic_pages_writes_pages_and_index(tmp_path: Path):
@@ -649,3 +793,96 @@ def test_topic_page_alias_note_uses_hover_not_inline_explanation(tmp_path: Path)
     assert "Also tagged as</strong></span>:" in page
     assert "before consolidation merged them under this topic." in page
     assert "[[wikilinks]]</code> before consolidation" not in page
+
+
+# ─── #248 FR4: the topics listing separates curated from derived ──────
+
+
+def _index_section(index_html: str, heading: str) -> str:
+    """Return the markup between one index heading and the next (or the end)."""
+    start = index_html.index(f">{heading} ")
+    rest = index_html[start:]
+    nxt = rest.find('<h2 class="topic-index-heading">', 1)
+    return rest if nxt == -1 else rest[:nxt]
+
+
+def _grouped_index(tmp_path: Path) -> str:
+    """Build a listing holding two entities, two concepts and two derived
+    topics, each pair with distinct reach so ordering is observable."""
+    wiki = _make_wiki(tmp_path, {
+        "s1": ["Hazel", "Bun", "Caching", "Batching", "Unfiled", "Gamma"],
+        "s2": ["Hazel", "Bun", "Caching", "Batching", "Unfiled", "Gamma"],
+        "s3": ["Hazel", "Caching", "Unfiled"],
+    })
+    for name in ("Hazel", "Bun"):
+        _curated_page_file(wiki, "entities", name)
+    for name in ("Caching", "Batching"):
+        _curated_page_file(wiki, "concepts", name)
+    g = build_topic_graph(wiki, min_sessions=2)
+    out = tmp_path / "site"
+    build_topic_pages(g, out, wiki_dir=wiki)
+    return (out / "topics" / "index.html").read_text(encoding="utf-8")
+
+
+def test_topics_index_groups_entities_concepts_and_derived_topics(tmp_path: Path):
+    index = _grouped_index(tmp_path)
+    headings = [
+        '<h2 class="topic-index-heading">Entities <span class="muted">(2)</span></h2>',
+        '<h2 class="topic-index-heading">Concepts <span class="muted">(2)</span></h2>',
+        '<h2 class="topic-index-heading">Other topics <span class="muted">(2)</span></h2>',
+    ]
+    for h in headings:
+        assert h in index
+    positions = [index.index(h) for h in headings]
+    assert positions == sorted(positions), "curated knowledge comes first (FR4)"
+
+    assert "Hazel" in _index_section(index, "Entities")
+    assert "Caching" in _index_section(index, "Concepts")
+    assert "Unfiled" in _index_section(index, "Other topics")
+
+
+def test_topics_index_chips_curated_rows_and_leaves_derived_rows_bare(
+    tmp_path: Path,
+):
+    index = _grouped_index(tmp_path)
+    entities = _index_section(index, "Entities")
+    concepts = _index_section(index, "Concepts")
+    other = _index_section(index, "Other topics")
+
+    assert entities.count('<span class="topic-kind-chip">Entity</span>') == 2
+    assert concepts.count('<span class="topic-kind-chip">Concept</span>') == 2
+    # A derived topic carries no chip at all — the absence is the signal that
+    # nobody reviewed it, so it must not fall back to `Unclassified topic`.
+    assert "topic-kind-chip" not in other
+    assert KIND_OTHER_LABEL not in other
+
+
+def test_topics_index_keeps_reach_order_inside_each_section(tmp_path: Path):
+    index = _grouped_index(tmp_path)
+    for heading, first, second in (
+        ("Entities", "Hazel", "Bun"),
+        ("Concepts", "Caching", "Batching"),
+        ("Other topics", "Unfiled", "Gamma"),
+    ):
+        section = _index_section(index, heading)
+        assert section.index(f">{first}</a>") < section.index(f">{second}</a>"), (
+            f"{heading}: the more widely referenced topic must come first"
+        )
+
+
+def test_topics_index_renders_every_section_even_when_one_is_empty(
+    tmp_path: Path,
+):
+    """A missing section would read as a broken page; "(0)" reads as a fact."""
+    wiki = _make_wiki(tmp_path, {
+        "s1": ["Unfiled", "Gamma"],
+        "s2": ["Unfiled", "Gamma"],
+    })
+    g = build_topic_graph(wiki, min_sessions=2)
+    out = tmp_path / "site"
+    build_topic_pages(g, out)
+    index = (out / "topics" / "index.html").read_text(encoding="utf-8")
+    assert '>Entities <span class="muted">(0)</span></h2>' in index
+    assert '>Concepts <span class="muted">(0)</span></h2>' in index
+    assert '>Other topics <span class="muted">(2)</span></h2>' in index
+    assert index.count('<p class="muted">No topics in this group.</p>') == 2

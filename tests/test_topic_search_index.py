@@ -108,7 +108,7 @@ def test_topic_entries_carry_the_kind_the_badge_shows(tmp_path: Path):
 
 def test_palette_badge_prefers_the_kind_over_the_type():
     """The rendered badge reads the kind when the entry carries one (FR11)."""
-    assert "escapeHtml(r.kind || r.type || 'page')" in JS
+    assert "esc(entry.kind || entry.type || 'page')" in JS
 
 
 def test_topic_entries_ride_js_sidecar(tmp_path: Path):
