@@ -130,6 +130,7 @@ from llmwiki.topics_page import (
     kind_chip,
     kind_label,
     neighbors,
+    prune_empty_isolated_topics,
     topic_node_urls,
     topic_url,
 )
@@ -3453,6 +3454,18 @@ def build_site(
         topic_graph = build_topic_graph(wiki_dir, include_curated_pages=True)
     except Exception as e:  # noqa: BLE001 — never fail the build over the graph
         print(f"  warning: topic graph build failed: {e}", file=sys.stderr)
+    if topic_graph is not None:
+        # #248 (post-verification amendment): a topic with no connected topics
+        # and no content of its own would render a page saying nothing, so it
+        # gets none. Pruned here, before any consumer reads the node list, so
+        # the topic pages, the search index, the wiki corpus' URL fallback and
+        # the graph viewer all agree on which topics exist.
+        empty_topics = prune_empty_isolated_topics(topic_graph, wiki_dir)
+        if empty_topics:
+            print(
+                f"  skipped {len(empty_topics)} topic pages "
+                "(no connected topics and no content of their own)"
+            )
     topic_nodes = (topic_graph or {}).get("nodes") or []
     use_topic_graph = bool(topic_graph) and len(topic_nodes) >= _TOPIC_GRAPH_MIN_NODES
     # #248: rendering the map and writing the topic pages are separate calls.

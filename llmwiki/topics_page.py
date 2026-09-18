@@ -400,6 +400,70 @@ def _backing_page_markdown(node: dict[str, Any], wiki_root: Path | None) -> str 
     return page_content(text)
 
 
+def prune_empty_isolated_topics(
+    graph: dict[str, Any], wiki_dir: Path | None = None
+) -> list[str]:
+    """Drop every topic with no connected topics *and* no content of its own.
+
+    A topic page that shows neither a connection nor a line the curator wrote
+    tells a reader — or an agent — nothing the listing did not already say, so
+    the site writes none. Both halves are required: a page with facts but no
+    co-citation is knowledge someone reviewed, and a page with no facts but
+    many connections is the hub of a neighbourhood. Only their conjunction is
+    an empty page.
+
+    "No connected topics" is having no edge in the co-occurrence graph; "no
+    content of its own" is :func:`page_content` returning ``None`` for the
+    backing page — a topic no wiki page backs at all has none either.
+
+    Mutates ``graph`` in place, dropping the nodes and refreshing the
+    ``stats`` the topics index counts from, and returns the dropped topic ids
+    in node order. Edges never need touching: a dropped node has none by
+    definition. Call it once, before anything reads ``graph["nodes"]``, so the
+    topic pages, the search index, the wiki corpus' URL fallback and the graph
+    viewer all see the same list and none of them can offer a link to a page
+    this build did not write.
+    """
+    nodes = graph.get("nodes") or []
+    if not nodes:
+        return []
+    wiki_root = wiki_dir.parent if wiki_dir is not None else None
+    connected: set[str] = set()
+    for edge in graph.get("edges") or ():
+        connected.add(str(edge.get("source", "")))
+        connected.add(str(edge.get("target", "")))
+
+    kept: list[dict[str, Any]] = []
+    dropped: list[str] = []
+    for node in nodes:
+        name = str(node.get("id", ""))
+        if name in connected or _backing_page_markdown(node, wiki_root):
+            kept.append(node)
+        else:
+            dropped.append(name)
+    if not dropped:
+        return []
+
+    graph["nodes"] = kept
+    stats = graph.get("stats")
+    if isinstance(stats, dict):
+        kind_counts: dict[str, int] = {}
+        for node in kept:
+            kind = str(node.get("kind") or KIND_OTHER)
+            kind_counts[kind] = kind_counts.get(kind, 0) + 1
+        stats["total_topics"] = len(kept)
+        stats["kinds"] = dict(sorted(kind_counts.items()))
+        stats["top_topics"] = [
+            {
+                "id": n["id"],
+                "count": n.get("session_count", 0),
+                "degree": n.get("degree", 0),
+            }
+            for n in kept[:8]
+        ]
+    return dropped
+
+
 def _topic_link_index(nodes: list[dict[str, Any]]) -> dict[str, str]:
     """Map every topic name and alias (lowercased) → its canonical topic id."""
     index: dict[str, str] = {}

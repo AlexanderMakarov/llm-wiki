@@ -20,7 +20,7 @@ This contradicts the product's stated journey — that people periodically revie
 
 **Desired outcome.** Every curated entity and concept a person keeps is reachable on the site, the navigation offers a way to browse the whole set, and searching the site returns the same knowledge in the same order as asking an assistant.
 
-**How we measure success.** On the demo wiki, all 13 curated entities and concepts have a page a reader can open and are findable by name in the site's quick search — against 12 of 13 today on both counts, with "Python" missing from each. A reader can get from the site's navigation to a list of curated knowledge in one click. And for a set of sample searches, the wiki pages the site returns — and the order they come back in — match what an assistant returns for the same words.
+**How we measure success.** On the demo wiki, 12 of the 13 curated entities and concepts have a page a reader can open and are findable by name in the site's quick search — every one that records something of its own or is co-cited with another topic. The thirteenth, "Python", records nothing and is co-cited with nothing, so it gets no page by the empty-page rule below (it is still searchable in the wiki result group, listed without a link). Today's count is also 12 of 13, but a *different* 12: "Python" is missing because nothing links to it, while pages such as "Obsidian" — no facts of their own, 21 connected topics — are absent from the site for the same reach-based reason and return. A reader can get from the site's navigation to a list of curated knowledge in one click. And for a set of sample searches, the wiki pages the site returns — and the order they come back in — match what an assistant returns for the same words.
 
 ---
 
@@ -28,10 +28,11 @@ This contradicts the product's stated journey — that people periodically revie
 
 - **As a person who curates the wiki, I want every entity and concept I keep to have a page on the site**, so that reviewing and correcting a page is work I can actually see the result of.
   - **Acceptance Criteria:**
-    - [x] Given the wiki contains a curated entity page that no other page mentions by name, when the site is generated, then that entity still has its own page a reader can open.
+    - [x] Given the wiki contains a curated entity page that no other page mentions by name, when the site is generated, then that entity still has its own page a reader can open — provided the page records something of its own, or is co-cited with another topic.
     - [x] Given the wiki contains a curated concept page mentioned by only one other page, when the site is generated, then that concept still has its own page a reader can open.
-    - [x] Given the demo wiki's 9 entities and 4 concepts, when the site is generated, then all 13 have a page — including "Python", which has none today.
-    - [x] Given a curated page that records no facts of its own beyond its title, when its page is generated, then the page still opens and shows what kind of thing it is and when it was last reviewed, rather than failing to exist.
+    - [x] Given the demo wiki's 9 entities and 4 concepts, when the site is generated, then the 12 that record something of their own or are co-cited have a page, and "Python" — which does neither — has none.
+    - [x] Given a curated page that records no facts of its own beyond its title but is co-cited with other topics, when its page is generated, then the page still opens and shows what kind of thing it is and when it was last reviewed, rather than failing to exist.
+    - [x] Given a curated page that records nothing of its own *and* is co-cited with nothing, when the site is generated, then it gets no page, nothing anywhere on the site links to one, and it stays searchable in the wiki result group as a row with no link.
 
 - **As a reader, I want the site's quick search to find curated entities and concepts by name and tell me what kind of thing each one is**, so that I can tell a reviewed piece of knowledge from an automatically spotted keyword.
   - **Acceptance Criteria:**
@@ -104,6 +105,18 @@ This contradicts the product's stated journey — that people periodically revie
 - All other roadmap items, addressed in their own specifications — notably one project, one page (#126); candidate review correctness (#146, #139, #148, #149); operator privacy and test isolation (#141, #142); product-facing documentation (#109, #112); the guided health check (#110); hover-to-preview wikilinks, a timeline view and session activity sparklines; a ranking projects index (#129); flipping a concept and an entity (#134); updating an ingested document in place (#151); and Cursor session parsing (#2).
 
 ---
+
+## Amendment — the empty-page rule (2026-09-18, post-verification)
+
+Approved by the product owner after reviewing the built demo site. Three of the 37 topic pages the verified build wrote — `topics/python.html`, `topics/dotfiles.html`, `topics/recipe-box.html` — carried a title, `No connected topics.` and an empty evidence list. They help neither a human nor an agent, so the site now writes no page for a topic that has **zero connected topics** *and* **no content of its own** (nothing left of its backing page once the title, `## Connections`, `## Sessions` and `## Sources` are dropped; a topic with no backing page has no content of its own either). Both conditions must hold, and if either is false the page is written as before.
+
+Why the conjunction, measured on the demo vault rather than assumed:
+
+- **Content alone would delete `Obsidian`.** 7 of the 13 curated pages record no facts of their own, `Obsidian` among them — yet it names 29 sources and is co-cited with 21 topics. Its page is one of the most useful on the site.
+- **Connections alone would delete a well-written page.** A page someone reviewed and filled in is knowledge worth reading whether or not other sessions happen to mention it in the same breath.
+- Only the conjunction isolates the three dead pages: they are the only 3 of 37 with no connected topics, and none of them records anything.
+
+Consequences, all consistent with FR5's "publishing more of the wiki does not publish things I chose to discard": a suppressed topic gets no page, no quick-search entry, no row or count on the knowledge listing, and no node in the graph view. Its wiki page is **not** removed from the wiki search corpus — an assistant still reads it, and FR7 requires the site and the assistant to agree on what the wiki contains — so it is listed in the wiki result group with its path and matching lines and no link, the same treatment FR7 already specifies for a page the site has no page for. Nothing in `wiki/` changes; this is a rendering rule.
 
 ## Verification Notes (2026-09-18)
 

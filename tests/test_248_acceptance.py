@@ -20,13 +20,18 @@ purpose-built scratch vault, to check the properties that only hold once
 every slice is wired together through the real pipeline:
 
 * the functional spec's own "How we measure success" bullets (9 entities +
-  4 concepts = 13 curated pages, all with a page and a correctly labelled
-  search entry, against 12 of 13 today) hold on the actual vault a build
-  produces — not a fixture shaped to make them true;
-* the grouped listing (FR4) counts the same 13 pages the bypass (FR1)
-  creates, the nav (FR3) points at that listing, and the wiki corpus (FR7)
-  routes the previously-invisible page to the topic page the same build
-  wrote (FR1+FR7 chained through ``_compute_site_url``'s fallback);
+  4 concepts = 13 curated pages, 12 of which record something of their own
+  or are co-cited and so get a page and a correctly labelled search entry)
+  hold on the actual vault a build produces — not a fixture shaped to make
+  them true;
+* the empty-page rule (functional-spec.md §1, amended 2026-09-18) holds from
+  every side at once: the one curated page with neither content nor a
+  connection gets no page, no search entry and no listing row, while its
+  wiki-corpus entry stays in the corpus with a ``null`` URL;
+* the grouped listing (FR4) counts the same pages the bypass (FR1) creates,
+  the nav (FR3) points at that listing, and the wiki corpus (FR7) routes a
+  curated page to the topic page the same build wrote (FR1+FR7 chained
+  through ``_compute_site_url``'s fallback);
 * cold storage and folder-context stubs (FR5) stay out of the topic graph,
   the topic pages, and the search index when driven through the real
   ``build.py:3321`` call site rather than through ``build_topic_graph``
@@ -43,6 +48,7 @@ every slice is wired together through the real pipeline:
 from __future__ import annotations
 
 import json
+import re
 import shutil
 from pathlib import Path
 
@@ -63,6 +69,15 @@ _CURATED = {
         "GitHub Pages", "Obsidian", "Ollama", "Python", "SQLite",
     ],
     "concepts": ["Adapters", "Knowledge Graph", "Observability", "Static Site"],
+}
+# The one demo page the empty-page rule suppresses: it records nothing of its
+# own and no other topic is co-cited with it, so a page for it would show a
+# title and two empty lists. Every other curated page clears one half or the
+# other — `Obsidian` records nothing either, but is co-cited with 21 topics.
+_EMPTY_ISOLATED = {"Python"}
+_CURATED_WITH_PAGE = {
+    kind: [n for n in names if n not in _EMPTY_ISOLATED]
+    for kind, names in _CURATED.items()
 }
 
 
@@ -128,38 +143,65 @@ def _wiki_corpus(site: Path) -> list[dict]:
 # ── FR1 + FR2: the demo vault's own success metric ─────────────────────────
 
 
-def test_all_13_demo_curated_pages_open(demo_build: Path):
-    """functional-spec.md §1: "all 13 curated entities and concepts have a
-    page a reader can open ... against 12 of 13 today".
+def test_every_curated_demo_page_worth_opening_opens(demo_build: Path):
+    """functional-spec.md §1: 12 of the 13 curated entities and concepts have
+    a page a reader can open — every one that records something of its own or
+    is co-cited with another topic.
     """
-    for kind, names in _CURATED.items():
+    assert sum(len(v) for v in _CURATED_WITH_PAGE.values()) == 12
+    for kind, names in _CURATED_WITH_PAGE.items():
         for name in names:
             page = demo_build / "topics" / f"{topic_slug(name)}.html"
             assert page.is_file(), f"{name} ({kind}) has no page a reader can open"
             assert name in page.read_text(encoding="utf-8")
 
 
-def test_python_specifically_is_no_longer_the_missing_thirteenth(demo_build: Path):
-    """The functional spec names this exact page as today's one gap — the
-    demo entity three sources cite but no session's ``[[wikilink]]`` reaches
-    (technical-considerations.md §2.1).
+def test_a_curated_page_with_no_content_but_connections_still_opens(demo_build: Path):
+    """The conjunction, from the connections side. ``Obsidian`` records no
+    facts of its own — ``page_content`` returns ``None`` for it — yet it is
+    co-cited with 21 topics, so suppressing on emptiness alone would delete a
+    page a reader plainly wants.
     """
-    page = demo_build / "topics" / "python.html"
+    page = demo_build / "topics" / "obsidian.html"
     assert page.is_file()
+    assert "Connected topics" in page.read_text(encoding="utf-8")
+
+
+def test_python_has_no_page_because_it_has_neither_content_nor_connections(
+    demo_build: Path,
+):
+    """The empty-page rule, asserted from all four sides at once.
+
+    ``Python`` is the demo entity three sources name but no session's
+    ``[[wikilink]]`` reaches (technical-considerations.md §2.1), and its
+    ``## Key Facts`` is empty. A page for it would carry a title, "No
+    connected topics." and nothing else, so the build writes none — and
+    nothing anywhere may offer a link to the page it did not write.
+    """
+    assert not (demo_build / "topics" / "python.html").exists()
+
     idx = _search_index(demo_build)
-    python_entries = [
-        e for e in idx["entries"] if e.get("type") == "topic" and e.get("title") == "Python"
-    ]
-    assert python_entries, "Python has no palette entry"
-    assert python_entries[0]["kind"] == "Entity"
-    assert (demo_build / python_entries[0]["url"]).is_file()
+    topic_entries = [e for e in idx["entries"] if e.get("type") == "topic"]
+    assert not [e for e in topic_entries if e.get("title") == "Python"]
+
+    listing = (demo_build / "topics" / "index.html").read_text(encoding="utf-8")
+    assert ">Python</a>" not in listing
+    assert "python.html" not in listing
+
+    assert "topics/python.html" not in (demo_build / "graph.html").read_text(encoding="utf-8")
+
+    # Still in the corpus — MCP scans the page, so the site must not diverge
+    # on membership — but with no URL, which the palette renders inert.
+    entry = {e["path"]: e for e in _wiki_corpus(demo_build)}["wiki/entities/Python.md"]
+    assert entry["url"] is None
+    assert entry["title"] == "Python"
 
 
-def test_all_13_curated_entries_are_labelled_and_resolve_to_a_real_page(demo_build: Path):
-    """FR2, for every one of the 13 named in the spec — not a sample."""
+def test_the_12_curated_entries_are_labelled_and_resolve_to_a_real_page(demo_build: Path):
+    """FR2, for every curated page that gets one — not a sample."""
     idx = _search_index(demo_build)
     topic_entries = {e["title"]: e for e in idx["entries"] if e.get("type") == "topic"}
-    for kind, names in _CURATED.items():
+    for kind, names in _CURATED_WITH_PAGE.items():
         expected_kind = "Entity" if kind == "entities" else "Concept"
         for name in names:
             entry = topic_entries.get(name)
@@ -171,19 +213,28 @@ def test_all_13_curated_entries_are_labelled_and_resolve_to_a_real_page(demo_bui
 # ── FR4: the grouped listing counts what FR1's bypass actually created ────
 
 
-def test_demo_topics_index_groups_all_9_entities_and_4_concepts(demo_build: Path):
-    """FR4 chained onto FR1: the same 13 pages the bypass creates must be
-    the same 13 the index counts and chips — not merely equal counts by
-    coincidence.
+def test_demo_topics_index_groups_the_8_entities_and_4_concepts_with_pages(demo_build: Path):
+    """FR4 chained onto FR1: the pages the bypass creates must be exactly the
+    pages the index counts and chips — not merely equal counts by coincidence,
+    and never a row for a page the build did not write.
     """
     html = (demo_build / "topics" / "index.html").read_text(encoding="utf-8")
-    assert '<h2 class="topic-index-heading">Entities <span class="muted">(9)</span></h2>' in html
+    assert '<h2 class="topic-index-heading">Entities <span class="muted">(8)</span></h2>' in html
     assert '<h2 class="topic-index-heading">Concepts <span class="muted">(4)</span></h2>' in html
     assert 'Other topics <span class="muted">(' in html
-    assert html.count('<span class="topic-kind-chip">Entity</span>') == 9
+    assert html.count('<span class="topic-kind-chip">Entity</span>') == 8
     assert html.count('<span class="topic-kind-chip">Concept</span>') == 4
-    for name in _CURATED["entities"] + _CURATED["concepts"]:
+    for name in _CURATED_WITH_PAGE["entities"] + _CURATED_WITH_PAGE["concepts"]:
         assert f">{name}</a>" in html, f"{name} absent from the grouped listing"
+
+
+def test_demo_topics_index_never_links_a_page_the_build_did_not_write(demo_build: Path):
+    """Every row on the listing is a page on disk, whatever suppressed it."""
+    listing = (demo_build / "topics" / "index.html").read_text(encoding="utf-8")
+    hrefs = set(re.findall(r'<li><a href="([^"]+)"', listing))
+    assert hrefs
+    for href in hrefs:
+        assert (demo_build / "topics" / href).resolve().is_file(), href
 
 
 # ── FR3: navigation, on real generated pages ───────────────────────────────
@@ -202,17 +253,25 @@ def test_demo_nav_carries_topics_and_marks_it_active_only_on_the_index(demo_buil
 # ── FR1 + FR7 chained: the corpus adopts the page the bypass wrote ────────
 
 
-def test_demo_wiki_corpus_routes_python_to_the_topic_page_this_build_wrote(demo_build: Path):
+def test_demo_wiki_corpus_routes_curated_pages_to_the_pages_this_build_wrote(
+    demo_build: Path,
+):
     """technical-considerations.md §2.6: ``_compute_site_url`` returns
     ``None`` for ``entities``/``concepts``, so the corpus falls back to the
     backing topic node's own ``site_url``. That fallback only has a URL to
     adopt because FR1's bypass wrote the page in the same build — this is
-    the one place FR1 and FR7 depend on each other.
+    the one place FR1 and FR7 depend on each other. The fallback is read off
+    the node list the build actually wrote pages from, so a suppressed page
+    finds no node and keeps a ``null`` URL rather than a path to nothing.
     """
     by_path = {e["path"]: e for e in _wiki_corpus(demo_build)}
-    entry = by_path["wiki/entities/Python.md"]
-    assert entry["url"] == "topics/python.html"
-    assert (demo_build / entry["url"]).is_file()
+    for kind, names in _CURATED_WITH_PAGE.items():
+        for name in names:
+            entry = by_path[f"wiki/{kind}/{name}.md"]
+            assert entry["url"] == f"topics/{topic_slug(name)}.html", name
+            assert (demo_build / entry["url"]).is_file(), name
+    for entry in by_path.values():
+        assert entry["url"] is None or (demo_build / entry["url"]).is_file(), entry["path"]
 
 
 # ── determinism (#150), for the whole pipeline ────────────────────────────

@@ -42,6 +42,14 @@ def _wiki_source(stem: str, links: list[str]) -> str:
 
 
 def _curated_entity(name: str) -> str:
+    """A reviewed page nothing links to — and which records a fact of its own.
+
+    The Key Facts bullet is load-bearing, not decoration: a curated page with
+    neither content nor a connected topic gets no page at all (the empty-page
+    rule, `tests/test_topic_empty_page_rule.py`). Without it this fixture
+    would exercise that rule instead of the sparse-graph floor it is here to
+    pin.
+    """
     return (
         f'---\ntitle: "{name}"\ntype: entity\ntags: []\n'
         "last_updated: 2026-07-01\n---\n\n"

@@ -65,6 +65,20 @@ When true:
 
 **Ordering.** No bespoke sort — `topics.py:405` already sorts nodes `(-session_count, id.lower())`, edges at `topics.py:352`/`358`. Seeded zero-count nodes land deterministically last, alphabetically.
 
+**Empty topics get no page (amendment, 2026-09-18 — see functional-spec.md).** A node with **no edges** *and* **no content of its own** would render a page carrying a name, `No connected topics.` and an empty evidence list. `topics_page.prune_empty_isolated_topics(graph, wiki_dir)` drops those nodes, using `_backing_page_markdown` — i.e. `page_content()` — for the content half and the edge list for the connection half, and refreshes `stats["total_topics"] / ["kinds"] / ["top_topics"]` so the listing's headings cannot disagree with the rows under them. Edges need no fixing: a dropped node has none by definition.
+
+It lives in `topics_page.py` rather than `topics.py` because it needs `page_content`, and `topics_page` already imports `topics` (the reverse import would be a cycle). It is **not** folded into `build_topic_graph`: the graph is also the candidate harvest's input (§3), and suppression is a rendering decision about pages, not about what the vocabulary contains.
+
+`build.py` calls it once, immediately after `build_topic_graph` and before `topic_nodes` is read, so the single pruned node list reaches every consumer:
+
+| Consumer | How it sees the suppression |
+|---|---|
+| `build_topic_pages` | node absent → no `topics/<slug>.html`; the index's sections and counts come from the same list plus the refreshed `stats["kinds"]` |
+| `build_search_index(topics=…)` | node absent → no `type: "topic"` entry, so the frozen key set is untouched and the standing invariant ("never index a topic URL this build did not write") holds |
+| `build_wiki_corpus_entries(wiki_dir, topics)` | the `site_url` fallback is keyed on `wiki_path` from that same list, so a suppressed page finds no node and keeps `url: null` — the row is listed inert, never pointed at an unwritten page |
+| `write_graph_html` / `graph.html` | node absent. Dropped deliberately: the viewer opens `node.site_url` on double-click (`render/graph_viewer.py:294`), so leaving the node in would put an isolated dot on the map whose only gesture is a 404. `use_topic_graph` counts the pruned nodes, which is the count the viewer would actually draw |
+| `resolve_project_topic_urls`, `project_connected_topics` | unaffected — both key on edges or on `kind == "projects"`, and a suppressed node has no edges |
+
 ### 2.3 Sparse-vault fallback (FR1)
 
 **Three thresholds are easy to confuse — they gate different things, and only one is per-vault configurable:**
@@ -226,6 +240,7 @@ All settled with the product owner during specification; recorded so a reviewer 
 5. **The WIKI group keeps MCP's full wiki coverage.** Including `candidates/`, `syntheses/`, `categories/` and root files. Pages with no reader page are listed but not clickable, which supersedes an earlier proposal to exclude `syntheses/`.
 6. **Raw session search is untouched.** `wiki_search` reads raw only behind `include_raw`, and no requirement here covers it.
 7. **Grouped topics index, no controls** (§2.5). Filtering and sorting are separate work.
+8. **An empty isolated topic gets no page** (§2.2, amendment 2026-09-18). Suppression is a conjunction — zero edges *and* no content of its own — computed once over the node list so every consumer, including the graph viewer, agrees. The backing wiki page stays in the wiki search corpus with `url: null`.
 
 ## 6. Assumptions Flagged
 
