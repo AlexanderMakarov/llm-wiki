@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import io
 import subprocess
 import sys
 from pathlib import Path
 
+import llmwiki.add_pipeline as pipe
 import llmwiki.cli as cli_mod
 from llmwiki import __version__
 
@@ -133,22 +135,52 @@ def _run_add(cli_mod, vault, *argv):
     return args.func(args)
 
 
-def test_add_configured_claude_backend_synthesizes_synchronously(tmp_path, monkeypatch, capsys):
-    """`add` uses THE backend configured once for the whole repository
-    (config.json synthesis.backend) and produces a real page in the same
-    invocation — from a plain terminal or inside an agent session."""
+def test_add_default_writes_raw_and_builds_without_synth(tmp_path, monkeypatch, capsys):
+    """Bare `add` lands raw docs and rebuilds the site; no wiki/sources (#273)."""
+    vault = _add_vault(tmp_path)
+    src = tmp_path / "doc.md"
+    src.write_text("# Raw Default Doc\n\nbody\n")
 
+    synth_called = {"n": 0}
+    build_called = {"n": 0}
+    monkeypatch.setattr(
+        pipe,
+        "synthesize_new_sessions",
+        lambda **kw: (synth_called.__setitem__("n", synth_called["n"] + 1) or {
+            "synthesized": 0, "skipped": 0, "errors": [],
+        }),
+    )
+    monkeypatch.setattr(
+        pipe,
+        "build_site",
+        lambda **kw: (build_called.__setitem__("n", build_called["n"] + 1) or 0),
+    )
+
+    rc = _run_add(cli_mod, vault, str(src))
+    out = capsys.readouterr()
+    assert rc == 0, out.err
+    assert synth_called["n"] == 0
+    assert build_called["n"] == 1
+    assert (vault / "raw" / "docs" / "raw-default-doc" / "raw-default-doc.md").exists()
+    assert not list((vault / "wiki" / "sources").rglob("*.md")) if (
+        vault / "wiki" / "sources"
+    ).exists() else True
+
+
+def test_add_configured_claude_backend_synthesizes_synchronously(tmp_path, monkeypatch, capsys):
+    """With ``--synthesize``, `add` uses the configured backend and produces
+    a real page in the same invocation."""
     vault = _add_vault(tmp_path)
     src = tmp_path / "doc.md"
     src.write_text("# Sync Doc\n\nbody\n")
 
     claude = _fake_claude(tmp_path)
-    monkeypatch.setattr(cli_mod, "_load_sessions_config", lambda: {
+    monkeypatch.setattr(pipe, "_load_sessions_config", lambda: {
         "synthesis": {"backend": "claude", "claude_path": str(claude)},
     })
-    monkeypatch.setattr(cli_mod, "build_site", lambda **kw: 0)
+    monkeypatch.setattr(pipe, "build_site", lambda **kw: 0)
 
-    rc = _run_add(cli_mod, vault, str(src))
+    rc = _run_add(cli_mod, vault, "--synthesize", str(src))
     out = capsys.readouterr()
     assert rc == 0, out.err
     assert "claude-cli" in out.out
@@ -159,8 +191,7 @@ def test_add_configured_claude_backend_synthesizes_synchronously(tmp_path, monke
 
 
 def test_add_synthesizes_only_written_docs(tmp_path, monkeypatch, capsys):
-    """`add` must not drain the unsynthesized backlog — only the docs it wrote."""
-
+    """`add --synthesize` must not drain the unsynthesized backlog — only the docs it wrote."""
     vault = _add_vault(tmp_path)
     # Pre-existing unsynthesized doc that must NOT be touched by this add.
     backlog = vault / "raw" / "docs" / "old-backlog" / "old-backlog.md"
@@ -188,30 +219,30 @@ def test_add_synthesizes_only_written_docs(tmp_path, monkeypatch, capsys):
         def is_available(self):
             return True
 
-    monkeypatch.setattr(cli_mod, "_load_sessions_config", lambda: {
+    monkeypatch.setattr(pipe, "_load_sessions_config", lambda: {
         "synthesis": {"backend": "dummy"},
     })
-    monkeypatch.setattr(cli_mod, "resolve_backend", lambda _cfg: _Ok())
-    monkeypatch.setattr(cli_mod, "synthesize_new_sessions", _fake_synth)
-    monkeypatch.setattr(cli_mod, "build_site", lambda **kw: 0)
+    monkeypatch.setattr(pipe, "resolve_backend", lambda _cfg: _Ok())
+    monkeypatch.setattr(pipe, "synthesize_new_sessions", _fake_synth)
+    monkeypatch.setattr(pipe, "build_site", lambda **kw: 0)
     # expected_source_page check: create the page so rollback doesn't fire
     def _expected(raw_path, sources_dir):
         p = Path(sources_dir) / "docs" / "brand-new.md"
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text("# Brand New\n", encoding="utf-8")
         return p
-    monkeypatch.setattr(cli_mod, "expected_source_page", _expected)
+    monkeypatch.setattr(pipe, "expected_source_page", _expected)
 
-    rc = _run_add(cli_mod, vault, str(src))
+    rc = _run_add(cli_mod, vault, "--synthesize", str(src))
     assert rc == 0
     assert "only_paths" in captured
     only = {str(p) for p in captured["only_paths"]}
     assert any("brand-new" in p for p in only)
     assert not any("old-backlog" in p for p in only)
 
+
 def test_add_readd_unchanged_skips_without_synth(tmp_path, monkeypatch, capsys):
     """Re-adding identical content exits 0 and does not synthesize/build (#22)."""
-
     vault = _add_vault(tmp_path)
     src = tmp_path / "doc.md"
     src.write_text("# Repeat Doc\n\nsame body\n")
@@ -219,12 +250,12 @@ def test_add_readd_unchanged_skips_without_synth(tmp_path, monkeypatch, capsys):
     synth_called = {"n": 0}
     build_called = {"n": 0}
 
-    monkeypatch.setattr(cli_mod, "synthesize_new_sessions",
+    monkeypatch.setattr(pipe, "synthesize_new_sessions",
                         lambda **kw: (synth_called.__setitem__("n", synth_called["n"] + 1) or {}))
-    monkeypatch.setattr(cli_mod, "build_site",
+    monkeypatch.setattr(pipe, "build_site",
                         lambda **kw: (build_called.__setitem__("n", build_called["n"] + 1) or 0))
 
-    rc1 = _run_add(cli_mod, vault, "--no-synthesize", "--no-build", str(src))
+    rc1 = _run_add(cli_mod, vault, "--no-build", str(src))
     assert rc1 == 0
     assert synth_called["n"] == 0
     assert build_called["n"] == 0
@@ -239,10 +270,7 @@ def test_add_readd_unchanged_skips_without_synth(tmp_path, monkeypatch, capsys):
 
 
 def test_add_unavailable_backend_rolls_back_raw_docs(tmp_path, monkeypatch, capsys):
-    """No half-added docs: when the configured backend can't synthesize,
-    the just-added raw docs are removed and add fails — only
-    --no-synthesize skips synthesis."""
-
+    """With ``--synthesize``, an unavailable backend rolls back raw docs."""
     vault = _add_vault(tmp_path)
     src = tmp_path / "doc.md"
     src.write_text("# Orphan Doc\n\nbody\n")
@@ -252,16 +280,16 @@ def test_add_unavailable_backend_rolls_back_raw_docs(tmp_path, monkeypatch, caps
         def is_available(self):
             return False
 
-    monkeypatch.setattr(cli_mod, "_load_sessions_config", lambda: {
+    monkeypatch.setattr(pipe, "_load_sessions_config", lambda: {
         "synthesis": {"backend": "dummy"},
     })
-    monkeypatch.setattr(cli_mod, "resolve_backend", lambda _cfg: _Unavailable())
-    monkeypatch.setattr(cli_mod, "build_site", lambda **kw: 0)
+    monkeypatch.setattr(pipe, "resolve_backend", lambda _cfg: _Unavailable())
+    monkeypatch.setattr(pipe, "build_site", lambda **kw: 0)
 
-    rc = _run_add(cli_mod, vault, str(src))
+    rc = _run_add(cli_mod, vault, "--synthesize", str(src))
     out = capsys.readouterr()
     assert rc == 2
-    assert "--no-synthesize" in out.err
+    assert "omit --synthesize" in out.err
     assert "olled back" in out.err
     assert not (vault / "raw" / "docs" / "orphan-doc").exists()
     log = vault / "wiki" / "log.md"
@@ -269,9 +297,7 @@ def test_add_unavailable_backend_rolls_back_raw_docs(tmp_path, monkeypatch, caps
 
 
 def test_add_failed_synthesis_rolls_back_raw_docs(tmp_path, monkeypatch, capsys):
-    """A backend that errors per page (claude CLI exiting 1) leaves no
-    wiki page — the raw doc must be rolled back, not left half-added."""
-
+    """A backend that errors per page leaves no wiki page — raw doc rolled back."""
     vault = _add_vault(tmp_path)
     src = tmp_path / "doc.md"
     src.write_text("# Broken Doc\n\nbody\n")
@@ -279,29 +305,50 @@ def test_add_failed_synthesis_rolls_back_raw_docs(tmp_path, monkeypatch, capsys)
     broken = tmp_path / "claude-broken"
     broken.write_text("#!/bin/sh\ncat > /dev/null\necho boom >&2\nexit 1\n")
     broken.chmod(0o755)
-    monkeypatch.setattr(cli_mod, "_load_sessions_config", lambda: {
+    monkeypatch.setattr(pipe, "_load_sessions_config", lambda: {
         "synthesis": {"backend": "claude", "claude_path": str(broken)},
     })
-    monkeypatch.setattr(cli_mod, "build_site", lambda **kw: 0)
+    monkeypatch.setattr(pipe, "build_site", lambda **kw: 0)
 
-    rc = _run_add(cli_mod, vault, str(src))
+    rc = _run_add(cli_mod, vault, "--synthesize", str(src))
     out = capsys.readouterr()
     assert rc == 2
     assert "olled back" in out.err
     assert not (vault / "raw" / "docs" / "broken-doc").exists()
 
 
-def test_add_no_synthesize_keeps_docs(tmp_path, monkeypatch, capsys):
-    """--no-synthesize is the explicit opt-out: docs stay raw-only."""
-
+def test_add_no_synthesize_warns_and_keeps_docs(tmp_path, monkeypatch, capsys):
+    """``--no-synthesize`` is a warn+no-op alias; docs stay raw-only (#273)."""
     vault = _add_vault(tmp_path)
     src = tmp_path / "doc.md"
     src.write_text("# Raw Only Doc\n\nbody\n")
-    monkeypatch.setattr(cli_mod, "build_site", lambda **kw: 0)
+    monkeypatch.setattr(pipe, "build_site", lambda **kw: 0)
 
     rc = _run_add(cli_mod, vault, "--no-synthesize", str(src))
+    out = capsys.readouterr()
     assert rc == 0
+    assert "no-op" in out.err
+    assert "already off by default" in out.err
     assert (vault / "raw" / "docs" / "raw-only-doc" / "raw-only-doc.md").exists()
+    assert not list((vault / "wiki" / "sources").rglob("*.md")) if (
+        vault / "wiki" / "sources"
+    ).exists() else True
+
+
+def test_add_stdin_sentinel_piped_provenance(tmp_path, monkeypatch, capsys):
+    """``add -`` reads stdin and records ``source: piped`` (#273)."""
+    vault = _add_vault(tmp_path)
+    monkeypatch.setattr(pipe, "build_site", lambda **kw: 0)
+    monkeypatch.setattr(sys, "stdin", io.StringIO("# Piped CLI Doc\n\nhello from stdin\n"))
+
+    rc = _run_add(cli_mod, vault, "--no-build", "-")
+    out = capsys.readouterr()
+    assert rc == 0, out.err
+    written = list((vault / "raw" / "docs").rglob("*.md"))
+    assert written, out.out
+    text = written[0].read_text(encoding="utf-8")
+    assert 'source: "piped"' in text or "source: piped" in text
+    assert "hello from stdin" in text
 
 
 def test_pyproject_add_extra_includes_markitdown_backends():

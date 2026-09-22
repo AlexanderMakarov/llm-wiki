@@ -39,4 +39,21 @@
 - Next: commit-specs → `/awos:implement`
 
 ## commit-specs
-- Pending: commit `context/spec/273-mcp-wiki-add-cli-proxy/` on `feat/273-mcp-wiki-add-raw-only`
+- Commit `73433d1` on `feat/273-mcp-wiki-add-raw-only`: `docs: add spec for #273 MCP add as CLI proxy`
+- Paths: `context/spec/273-mcp-wiki-add-cli-proxy/{functional-spec,technical-considerations,tasks,flow-log}.md`
+- Next: `/awos:implement`
+
+## implement
+- All slices 1–5 complete (`tasks.md` fully `[x]`)
+- Key deliverables: `llmwiki/add_pipeline.py` `run_add`; `convert_text` / piped; CLI+MCP default raw+build / `--synthesize` opt-in; MCP proxy; docs+CHANGELOG; `tests/test_mcp_add_cli_proxy.py`
+- Next: verify → user smoke confirm
+
+## verify
+- `ruff check llmwiki tests scripts` — pass
+- `python3 -m pytest tests/ -q` — exit 0 (~full suite)
+- Live smoke (operator-requested): merged primary non-`vault` config into worktree `config.json`, then `add -` against live vault
+  - `--no-build`: raw `source: "piped"`, no `/tmp` leak, exit 0
+  - default build: site rebuilt, `wiki/sources` count unchanged (815), zero smoke-273 source pages, state mentions `smoke-273` pending
+  - worktree `config.json` restored to throwaway vault after smoke
+  - leftover raw docs under live `raw/docs/smoke-273/` (operator may remove)
+- Next: user confirm smoke OK → local review

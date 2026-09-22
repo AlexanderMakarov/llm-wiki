@@ -112,7 +112,7 @@ llmwiki add ./paper.pdf               # PDF
 llmwiki add ./research-folder/        # folder of docs
 ```
 
-By default `add` also synthesizes and rebuilds once for that run so the new docs show up in the site; pass `--no-synthesize` / `--no-build` if you prefer to batch with a later `llmwiki synth` and `llmwiki build`. Flags (`--title`, `--tag`, `--project`, `--dry-run`, and more): [CLI reference — add](reference/cli.md#add--add-a-document-to-the-wiki-16).
+By default `add` writes raw docs and rebuilds the site so they show up under Raw / Home; it does **not** synthesize `wiki/sources/` unless you pass `--synthesize`. Run `llmwiki synth` later (or opt in on the same add) when you want wiki source pages. Pass `--no-build` to skip the site rebuild. Flags (`--title`, `--tag`, `--project`, `--dry-run`, stdin `-`, and more): [CLI reference — add](reference/cli.md#add--add-a-document-to-the-wiki-16--273).
 
 ## Next: let it run itself
 

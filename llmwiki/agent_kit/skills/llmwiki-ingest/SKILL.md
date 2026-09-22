@@ -9,7 +9,7 @@ description: Ingest one source document (or a folder of them) into the llmwiki. 
 
 Turns a source (file, folder, URL, or PDF) into wiki content following the Karpathy LLM Wiki pattern. The path taken depends on what kind of source it is:
 
-- **Documents** (files, folders, URLs, PDFs that are not `raw/sessions/` transcripts) route through the `llmwiki add` CLI, which converts, lands the raw doc, synthesizes the `wiki/sources/<slug>.md` page, and rebuilds — you do not hand-write the source page yourself.
+- **Documents** (files, folders, URLs, PDFs that are not `raw/sessions/` transcripts) route through the `llmwiki add` CLI, which converts and lands the raw doc, then (by default) rebuilds the site — **no** `wiki/sources/` page unless you pass `--synthesize` or run `llmwiki synth` afterward. You do not hand-write the source page yourself.
 - **Session transcripts** already under `raw/sessions/` are summarized by hand per the existing workflow (they were already converted by `llmwiki sync`; there's nothing left to "add").
 - **Entity, concept, and project pages**, for either path, are written manually by you.
 
@@ -23,12 +23,12 @@ Turns a source (file, folder, URL, or PDF) into wiki content following the Karpa
 
 Anything that isn't already a `raw/sessions/` transcript is a **document**. Do not hand-write a `wiki/sources/*` page for it — route it through the CLI:
 
-1. Run the add command:
+1. Run the add command. For a full ingest that needs a synthesized source page in the same pass, opt in with `--synthesize`; otherwise bare `add` only writes raw + rebuilds the site, and you run `llmwiki synth` later:
    ```bash
-   python3 -m llmwiki add <src> --project <slug>
+   python3 -m llmwiki add <src> --project <slug> --synthesize
    ```
-   `<src>` may be a URL, a file path, or a folder (repeatable — pass several sources in one invocation to batch the synthesize/build pass). `--project <slug>` groups the doc under `raw/docs/<slug>/` instead of letting it derive its own slug; pick a slug that matches the topic/project being ingested. Useful extra flags: `--title` (override title derivation, single source only), `--tag` (repeatable), `--note` (blockquote prepended to the body), `--dry-run` (convert and report, write nothing), `--no-synthesize` / `--no-build` (skip those passes if you intend to batch several `add` calls before a final build).
-2. `llmwiki add` resolves the vault itself (see the warning below), writes the converted doc under `raw/docs/`, records synth state, synthesizes the `wiki/sources/<slug>.md` page, updates `wiki/index.md` / `wiki/overview.md`, and rebuilds the site — that's the whole document pipeline in one command.
+   `<src>` may be a URL, a file path, a folder (repeatable — pass several sources in one invocation to batch the convert/build pass), or `-` for UTF-8 stdin (`source: "piped"`; cannot mix `-` with other sources). `--project <slug>` groups the doc under `raw/docs/<slug>/` instead of letting it derive its own slug; pick a slug that matches the topic/project being ingested. Useful extra flags: `--title` (override title derivation, single source only), `--tag` (repeatable), `--note` (blockquote prepended to the body), `--dry-run` (convert and report, write nothing), `--no-build` (skip the post-add site rebuild). `--no-synthesize` is a deprecated warn+no-op (synthesis is already off by default).
+2. `llmwiki add` resolves the vault itself (see the warning below), writes the converted doc under `raw/docs/`, records synth state, rebuilds the site by default, and — only with `--synthesize` — produces `wiki/sources/<slug>.md` and updates index/overview for those docs. Without `--synthesize`, run `python3 -m llmwiki synth` before continuing to entity/concept work.
 3. Read the resulting `wiki/sources/<slug>.md` page in the resolved vault to see what was synthesized.
 4. Create/update entity pages (`wiki/entities/<TitleCase>.md`) for any people, companies, products, tools, libraries mentioned in the synthesized page.
 5. Create/update concept pages (`wiki/concepts/<TitleCase>.md`) for any ideas, patterns, or decisions discussed.
@@ -36,6 +36,8 @@ Anything that isn't already a `raw/sessions/` transcript is a **document**. Do n
 7. Cross-link everything with `[[wikilinks]]` under `## Connections`.
 8. Flag contradictions under `## Contradictions` if the new source conflicts with existing wiki content.
 9. Append to `wiki/log.md`: `## [YYYY-MM-DD] ingest | <title>`
+
+**Source-layer guardrail:** pass the user's exact path, URL, or text to `add` / MCP `wiki_add`. Do not reconstruct input from `wiki/sources/` or other derived pages unless the user asked.
 
 ### ⚠️ Vault resolution — read before writing anything by hand
 

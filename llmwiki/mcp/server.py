@@ -12,7 +12,8 @@ Production tool surface (6 tools, #196):
 - `wiki_health(rules?, min_refs?)` — lint JSON report plus headline totals
 - `wiki_sync(dry_run?, confirm?)` — trigger a converter sync
 - `wiki_export(format)` — return an AI-consumable export file
-- `wiki_add(url | path | content)` — ingest one source into raw/docs/
+- `wiki_add(url | path | content)` — proxy for CLI ``add`` (raw + build by
+  default; opt-in synthesize)
 
 Protocol: Model Context Protocol, stdio transport, JSON-RPC 2.0.
 Reference: https://modelcontextprotocol.io/
@@ -26,20 +27,23 @@ import json
 import os
 import subprocess
 import sys
-import tempfile
 import time
 from collections.abc import Iterable, Iterator
+from contextlib import redirect_stdout
+from io import StringIO
 from pathlib import Path
 from typing import Any
 
 from llmwiki import REPO_ROOT as SOURCE_ROOT
 from llmwiki import __version__
 from llmwiki import usage as _usage
-from llmwiki.add_doc import add_sources
+from llmwiki.add_doc import AddError
+from llmwiki.add_pipeline import run_add
 from llmwiki.categories import scan_tags
 from llmwiki.config_schedule import resolve_content_root
 from llmwiki.lint import LintOptions, UnknownRuleError, load_pages, run_lint
 from llmwiki.lint.report import render_json as render_lint_json
+from llmwiki.pipeline_lock import pipeline_lock
 from llmwiki.schema import PAGE_KINDS
 from llmwiki.search import (
     DEFAULT_AGGREGATE_BUDGET,
@@ -450,16 +454,21 @@ TOOLS = [
             "required": ["format"],
         },
     },
-    # #37 A3: the one write tool other than wiki_sync — MCP-only agents
-    # otherwise have no supported way to land a new document.
+    # #37 A3 / #273: proxy for CLI ``llmwiki add`` — same defaults and
+    # shared ``run_add`` orchestration (raw + site build; synth opt-in).
     {
         "name": "wiki_add",
         "description": (
-            "Ingest one source into the wiki via the add pipeline — the "
-            "same conversion/write path the `llmwiki add` CLI uses. "
-            "Converts the source to markdown and writes it under the "
-            "resolved vault's raw/docs/ (never the repo's own wiki/). "
-            "Exactly one of url, path, or content is required."
+            "Proxy for CLI `llmwiki add`: convert one source and write under "
+            "the resolved vault's raw/docs/, then rebuild the site. By default "
+            "does NOT synthesize wiki source pages — pass synthesize=true to "
+            "opt in (mirrors `--synthesize`). Pass no_build=true to skip the "
+            "site rebuild (mirrors `--no-build`). Long documents may become "
+            "multiple raw pieces via the shared add chunker (~7k chars). "
+            "Exactly one of url, path, or content is required. content uses "
+            "the piped-text path (frontmatter source: piped), not a temp file. "
+            "Use the user's named path/URL/text — do not reconstruct input "
+            "from existing wiki pages unless the user asked."
         ),
         "inputSchema": {
             "type": "object",
@@ -474,7 +483,10 @@ TOOLS = [
                 },
                 "content": {
                     "type": "string",
-                    "description": "Literal markdown/text content to land directly.",
+                    "description": (
+                        "Literal markdown/text (piped provenance; same as "
+                        "CLI `llmwiki add -`)."
+                    ),
                 },
                 "title": {
                     "type": "string",
@@ -492,6 +504,22 @@ TOOLS = [
                 "note": {
                     "type": "string",
                     "description": "Blockquote note prepended to the document body.",
+                },
+                "synthesize": {
+                    "type": "boolean",
+                    "description": (
+                        "Opt in to synthesize wiki pages after add "
+                        "(default false; mirrors CLI --synthesize)."
+                    ),
+                    "default": False,
+                },
+                "no_build": {
+                    "type": "boolean",
+                    "description": (
+                        "Skip the site rebuild after add "
+                        "(default false; mirrors CLI --no-build)."
+                    ),
+                    "default": False,
                 },
             },
         },
@@ -1058,13 +1086,12 @@ def tool_wiki_export(args: dict[str, Any]) -> dict[str, Any]:
 
 
 def tool_wiki_add(args: dict[str, Any]) -> dict[str, Any]:
-    """Ingest one source (url | path | content) via the add pipeline
-    (#37 A3). A thin wrapper around ``add_sources`` — the same
-    conversion/write path the ``llmwiki add`` CLI and the queue's
-    ``add_doc`` task use — so MCP-only agents have a supported write
-    path. Runs synchronously and only writes raw/docs/: post-steps
-    (synthesize, build) are the caller's job, exactly like the queue's
-    ``add_doc`` task leaves them to a separate ``synthesize`` task.
+    """Proxy for CLI ``llmwiki add`` via shared :func:`run_add` (#273 / #37 A3).
+
+    Defaults match the CLI: write raw doc(s) and rebuild the site; synthesize
+    only when ``synthesize`` is true. ``content`` uses the piped-text path
+    (``source: piped``) — no tempfile. Stdout from the shared pipeline is
+    redirected so progress lines cannot corrupt JSON-RPC on stdio.
     """
 
     url = (args.get("url") or "").strip()
@@ -1081,31 +1108,40 @@ def tool_wiki_add(args: dict[str, Any]) -> dict[str, Any]:
     project = args.get("project")
     tags = tuple(args.get("tags") or ())
     note = args.get("note")
+    synthesize = bool(args.get("synthesize", False))
+    no_build = bool(args.get("no_build", False))
 
     docs_dir = REPO_ROOT / "raw" / "docs"
+    if content:
+        sources = ["-"]
+        stdin_text: str | None = content if isinstance(content, str) else str(content)
+    else:
+        sources = [url or path]
+        stdin_text = None
 
-    tmp_path: Path | None = None
     try:
-        if content:
-            fd, tmp_name = tempfile.mkstemp(suffix=".md", prefix="wiki-add-content-")
-            os.close(fd)
-            tmp_path = Path(tmp_name)
-            tmp_path.write_text(content, encoding="utf-8")
-            source = str(tmp_path)
-        else:
-            source = url or path
+        # MCP speaks JSON-RPC on stdout — silence run_add progress prints.
+        with pipeline_lock(REPO_ROOT), redirect_stdout(StringIO()):
+            result = run_add(
+                sources,
+                docs_dir,
+                vault_root=REPO_ROOT,
+                title=title,
+                project=project,
+                tags=tags,
+                note=note,
+                synthesize=synthesize,
+                build=not no_build,
+                stdin_text=stdin_text,
+            )
+    except AddError as exc:
+        return _err(str(exc))
 
-        result = add_sources(
-            [source], docs_dir,
-            title=title, project=project, tags=tags, note=note,
-            dry_run=False,
+    if result.get("exit_code") or result["errors"]:
+        detail = "; ".join(result["errors"]) if result["errors"] else (
+            f"add failed with exit_code {result.get('exit_code')}"
         )
-    finally:
-        if tmp_path is not None:
-            tmp_path.unlink(missing_ok=True)
-
-    if result["errors"]:
-        return _err("; ".join(result["errors"]))
+        return _err(detail)
 
     written_rel = [str(p.relative_to(REPO_ROOT)) for p in result["written"]]
     payload = {

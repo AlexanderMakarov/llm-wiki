@@ -17,7 +17,7 @@ The llmwiki **MCP** server (`python3 -m llmwiki.mcp`) exposes six production too
 | `wiki_health` | Run lint checks and return headline wiki totals |
 | `wiki_sync` | Pull new agent sessions into `raw/sessions/` (dry-run by default) |
 | `wiki_export` | Return a built `site/` export (`llms-txt`, `jsonld`, …) |
-| `wiki_add` | Ingest one URL, file, or literal content into `raw/docs/` |
+| `wiki_add` | Proxy for CLI `add`: land one URL, file, or literal content under `raw/docs/` (default raw + site rebuild; synth opt-in) |
 
 ## `wiki_search`
 
@@ -83,7 +83,23 @@ Defaults to **dry-run**. To write, pass `dry_run: false` **and** `confirm: true`
 
 ## `wiki_add`
 
-Exactly one of `url`, `path`, or `content` is required. Optional: `title`, `project`, `tags`, `note`.
+Thin proxy onto the same shared `run_add` orchestration as CLI `llmwiki add` (#273). Defaults match the CLI: write raw doc(s) under the resolved vault's `raw/docs/` and rebuild the site; **do not** synthesize `wiki/sources/` unless `synthesize` is true. Long documents may become multiple raw pieces via the shared add chunker (~7k chars).
+
+Exactly one of `url`, `path`, or `content` is required.
+
+| Argument | Required | Description |
+|---|---|---|
+| `url` | one of three | HTTP(S) URL to fetch and convert |
+| `path` | one of three | Local file path to convert |
+| `content` | one of three | Literal markdown/text — uses the piped-text path (frontmatter `source: "piped"`), same as CLI `llmwiki add -`; never a tempfile provenance |
+| `title` | no | Override title derivation |
+| `project` | no | Group under `raw/docs/<project>/` |
+| `tags` | no | Extra frontmatter tags (array) |
+| `note` | no | Blockquote prepended to the body |
+| `synthesize` | no | Opt in to synthesize wiki source pages after add (default `false`; mirrors CLI `--synthesize`) |
+| `no_build` | no | Skip the site rebuild after add (default `false`; mirrors CLI `--no-build`) |
+
+**Source-layer guardrail:** use the user's named path, URL, or text. Do not reconstruct input from existing wiki pages (`wiki/sources/` or other derived pages) unless the user asked.
 
 ## Migration from retired tools (#196)
 
