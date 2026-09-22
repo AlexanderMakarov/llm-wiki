@@ -9,11 +9,15 @@ same raw file (#37). These tests cover the dedup guard:
 
 * a REAL (non-stub) page claiming the source suppresses a second page;
 * a STUB claiming the source does NOT suppress — its slot is backlog;
-* ``--force`` still re-synthesizes past a real page.
+* ``--force`` still re-synthesizes past a real page;
+* every skipped source is reported by ONE summary line pointing at
+  ``migrate source-page-paths`` (#265), not one line per source.
 """
 from __future__ import annotations
 
 from pathlib import Path
+
+import pytest
 
 from llmwiki.synth.base import DummySynthesizer
 from llmwiki.synth.pipeline import synthesize_new_sessions
@@ -131,3 +135,29 @@ def test_force_resynthesizes_past_real_page(tmp_path: Path):
 
     assert summary["synthesized"] == 1
     assert (sources / "docs" / "openclaw-openclaw.md").exists()
+
+
+def test_skipped_sources_share_one_summary_line(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    docs = _seed_doc(tmp_path)
+    (docs / "second-doc.md").write_text(
+        DOC.replace("openclaw-openclaw", "second-doc"), encoding="utf-8"
+    )
+    sources, log = _wiki(tmp_path)
+    _write_manual(sources, MANUAL_REAL_PAGE)
+    second = sources / "manual" / "second-notes.md"
+    second.write_text(
+        MANUAL_REAL_PAGE.replace("openclaw-openclaw", "second-doc"),
+        encoding="utf-8",
+    )
+
+    summary = _run(tmp_path, docs, sources, log)
+
+    out = capsys.readouterr().out
+    assert summary["skipped"] == 2
+    assert "not duplicating" not in out
+    lines = [ln for ln in out.splitlines() if "already claimed by a real page" in ln]
+    assert len(lines) == 1
+    assert "skipped 2 source(s)" in lines[0]
+    assert f"llmwiki migrate source-page-paths --vault {tmp_path.resolve()}" in lines[0]

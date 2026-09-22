@@ -347,7 +347,7 @@ def test_start_count_excludes_dedup_claimed_sources_over_the_cli(
     start = _START_LINE.search(out)
     assert start is not None, out
     assert int(start.group(1)) == 2
-    assert "not duplicating)" in out
+    assert "skipped 1 source(s) already claimed by a real page" in out
     assert len(_SYNTH_LINE.findall(out)) == 2
 
 

@@ -118,8 +118,8 @@ def test_migrate_list_and_name_together_is_error():
     assert "--list cannot be combined" in stderr
 
 
-def test_migrate_catalog_contains_eight_expected_names():
-    """R4-AC: the eight migration names are present in _MIGRATIONS (same as today's commands)."""
+def test_migrate_catalog_contains_the_expected_names():
+    """R4-AC: every expected migration name is present in _MIGRATIONS."""
     expected = {
         "state",
         "raw-redaction",
@@ -128,6 +128,7 @@ def test_migrate_catalog_contains_eight_expected_names():
         "page-kinds",
         "topic-kinds",
         "wikilink-titles",
+        "source-page-paths",
         "broken-provenance",
     }
     actual = {name for name, _purpose, _when in _MIGRATIONS}
@@ -137,8 +138,8 @@ def test_migrate_catalog_contains_eight_expected_names():
     assert not extra, f"_MIGRATIONS has unexpected extra names: {sorted(extra)}"
 
 
-def test_migrate_subparsers_register_eight_names():
-    """R4-AC: the migrate subparser tree registers all eight names (argparse level)."""
+def test_migrate_subparsers_register_the_expected_names():
+    """R4-AC: the migrate subparser tree registers every expected name (argparse level)."""
     expected = {
         "state",
         "raw-redaction",
@@ -147,6 +148,7 @@ def test_migrate_subparsers_register_eight_names():
         "page-kinds",
         "topic-kinds",
         "wikilink-titles",
+        "source-page-paths",
         "broken-provenance",
     }
     migrate_parser = _subparser_choices(build_parser())["migrate"]
@@ -178,6 +180,7 @@ def test_migrate_subparsers_register_eight_names():
         "page-kinds",
         "topic-kinds",
         "wikilink-titles",
+        "source-page-paths",
         "broken-provenance",
     ],
 )

@@ -1511,6 +1511,11 @@ def derive_session_slug(records: list[dict[str, Any]], jsonl_path: Path) -> str:
     return stem[:12]
 
 
+def session_title(slug: str, date_str: str) -> str:
+    """Frontmatter ``title`` the converter gives a session transcript."""
+    return f"Session: {slug} — {date_str}"
+
+
 def flat_output_name(
     started: datetime,
     project_slug: str,
@@ -1752,7 +1757,7 @@ def render_session_markdown(
     hour_buckets = compute_hour_buckets(records)
     duration_seconds = compute_duration_seconds(records)
 
-    title = f"Session: {slug} — {date_str}"
+    title = session_title(slug, date_str)
     # #346: emit the actual adapter name instead of hardcoding
     # ``claude-code`` — codex_cli / cursor / copilot-chat / gemini_cli
     # sessions were mis-tagged and grouped under the wrong chip on

@@ -392,9 +392,9 @@ def test_run_start_count_excludes_dedup_skipped_sources(
 ) -> None:
     """A source dropped by the dedup guard is not counted in the batch.
 
-    The guard runs while the queue is still being built, so its
-    ``skipped:`` line legitimately prints before the start line — what
-    matters is that the announced count covers only real work.
+    The guard runs while the queue is still being built, so its one summary
+    line legitimately prints before the start line — what matters is that
+    the announced count covers only real work.
     """
     vault = _mk_vault(tmp_path)
     _seed_docs(vault, ("alpha", "beta", "gamma"))
@@ -407,7 +407,8 @@ def test_run_start_count_excludes_dedup_skipped_sources(
     assert start is not None, out
     assert summary["skipped"] == 1
     assert int(start.group(1)) == summary["new_files"] == 2
-    assert out.count("not duplicating)") == 1
+    assert out.count("already claimed by a real page") == 1
+    assert "llmwiki migrate source-page-paths --vault" in out
     assert len(_PAGE_LINE.findall(out)) == 2
 
 

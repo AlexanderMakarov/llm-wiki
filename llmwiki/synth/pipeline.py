@@ -106,21 +106,39 @@ def _is_stub_page(text: str) -> bool:
     return any(marker in text for marker in _STUB_MARKERS)
 
 
-def synth_page_filename(meta: dict[str, Any], fallback_stem: str) -> str:
+def synth_page_filename(meta: Mapping[str, Any], fallback_stem: str) -> str:
     """Filename stem (no extension) of the wiki source page for a raw file.
 
     Single slug scheme for the whole pipeline: the estimate report, the
-    stub detector and the writer all resolve a raw file to the same
-    ``wiki/sources/<project>/<filename>.md`` target. YAML parses
-    numeric-looking session slugs (``15824711``, ``6051e147``) as
-    int/float, so a non-string slug falls back to the filename stem.
+    stub detector, the writer and ``migrate source-page-paths`` all resolve a
+    raw file to the same ``wiki/sources/<project>/<filename>.md`` target. The
+    frontmatter reader keeps ``slug:`` as written; a slug set by other code
+    as a non-string is used as its text.
     """
-    raw_slug = meta.get("slug", fallback_stem)
-    if not isinstance(raw_slug, str):
-        raw_slug = fallback_stem
-    slug = _normalise_slug(raw_slug)
+    slug = _normalise_slug(str(meta.get("slug", fallback_stem)))
     date = str(meta.get("date", "")).strip()
     return f"{date}-{slug}" if date else slug
+
+
+#: Separator between a doc's page filename and its chunk number.
+PART_PAGE_SEP = "--part-"
+
+
+def part_page_name(filename: str, idx: int) -> str:
+    """Filename stem of chunk ``idx`` (1-based) of an oversized doc's pages."""
+    return f"{filename}{PART_PAGE_SEP}{idx:02d}"
+
+
+def split_part_page(stem: str) -> tuple[str, str]:
+    """Split a page stem into ``(filename, part suffix)``.
+
+    The suffix is ``""`` for a page that is not a doc chunk, so
+    ``base + suffix == stem`` always holds.
+    """
+    base, sep, number = stem.rpartition(PART_PAGE_SEP)
+    if sep and base and number.isdigit():
+        return base, sep + number
+    return stem, ""
 
 
 def page_is_stub(page_path: Path) -> bool:
@@ -170,7 +188,9 @@ def source_page_paths(
     if single.is_file():
         paths.append(single)
     if is_doc:
-        paths.extend(sorted(out_dir.glob(f"{glob.escape(filename)}--part-*.md")))
+        paths.extend(
+            sorted(out_dir.glob(f"{glob.escape(filename)}{PART_PAGE_SEP}*.md"))
+        )
     return paths
 
 
@@ -336,7 +356,10 @@ RAW_SESSIONS = REPO_ROOT / "raw" / "sessions"
 # Synthesis distils these alongside session transcripts.
 RAW_DOCS = REPO_ROOT / "raw" / "docs"
 WIKI_SOURCES = REPO_ROOT / "wiki" / "sources"
-WIKI_LOG = REPO_ROOT / "wiki" / "log.md"
+#: Wiki log filename, and the prefix of the yearly archives it rolls into.
+LOG_FILENAME = "log.md"
+LOG_ARCHIVE_PREFIX = "log-archive-"
+WIKI_LOG = REPO_ROOT / "wiki" / LOG_FILENAME
 
 # #1: ceiling on the body size handed to a single synthesis backend call.
 # Oversized docs (e.g. a multi-MB concatenated `llms-full.txt`) are split
@@ -827,6 +850,13 @@ def _append_log(
 LOG_ARCHIVE_THRESHOLD = 50 * 1024  # 50 KB
 
 
+def is_log_page(name: str) -> bool:
+    """True for the wiki log or one of its yearly archives (a filename)."""
+    return name == LOG_FILENAME or (
+        name.startswith(LOG_ARCHIVE_PREFIX) and name.endswith(".md")
+    )
+
+
 def _auto_archive_log(log_path: Path) -> Path | None:
     """Archive log.md when it exceeds 50 KB. Returns archive path or None."""
     if not log_path.is_file():
@@ -835,7 +865,7 @@ def _auto_archive_log(log_path: Path) -> Path | None:
         return None
 
     year = datetime.now(UTC).strftime("%Y")
-    archive = log_path.parent / f"log-archive-{year}.md"
+    archive = log_path.parent / f"{LOG_ARCHIVE_PREFIX}{year}.md"
 
     content = log_path.read_text(encoding="utf-8")
     # Keep the header (first 5 lines), archive the rest
@@ -1335,10 +1365,7 @@ def _synthesize_one(
         # chars stripped) and G-06 (#292): date-prefixed so Claude Code's
         # 3-word auto-slugs can't silently collide. Output path is
         # `wiki/sources/<project>/<YYYY-MM-DD>-<slug>.md`.
-        raw_slug = meta.get("slug", p.stem)
-        result["slug"] = _normalise_slug(
-            raw_slug if isinstance(raw_slug, str) else p.stem
-        )
+        result["slug"] = _normalise_slug(str(meta.get("slug", p.stem)))
         filename = synth_page_filename(meta, p.stem)
         # #1: oversized docs are split on headings into part-pages so each
         # chunk fits one backend call. Sessions are never chunked.
@@ -1354,7 +1381,7 @@ def _synthesize_one(
             synthesized = backend.synthesize_source_page(
                 chunk, meta, prompt_template
             )
-            name = f"{filename}--part-{idx:02d}" if multi else filename
+            name = part_page_name(filename, idx) if multi else filename
             out_path = out_dir / f"{name}.md"
             with write_lock:
                 # #351: pass the existing path so maintainer-curated tags
@@ -1730,13 +1757,18 @@ def synthesize_new_sessions(
             and not derived_has_real
             and not derived_needs_topics_rewrite
         ):
-            print(
-                f"  skipped: {it['project']} → {source_key} "
-                "(real source page already claims this source; not duplicating)"
-            )
             dedup_skipped += 1
             continue
         new_items.append(it)
+    if dedup_skipped:
+        # One line for the lot (#265): these are pages filed under a name the
+        # writer no longer derives, and the offline migration re-files them.
+        vault_root = Path(sources_out).resolve().parent.parent
+        print(
+            f"  skipped {dedup_skipped} source(s) already claimed by a real page "
+            "under another name; run "
+            f"`llmwiki migrate source-page-paths --vault {vault_root}` to move them"
+        )
 
     summary: dict[str, Any] = {
         "total_scanned": len(items),

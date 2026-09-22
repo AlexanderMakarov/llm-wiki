@@ -57,8 +57,21 @@ def parse_frontmatter(text: str) -> tuple[dict[str, Any], str]:
         if not mm:
             continue
         key, raw = mm.group(1), mm.group(2).strip()
-        meta[key] = _parse_scalar(raw)
+        meta[key] = _parse_text(raw) if key in TEXT_KEYS else _parse_scalar(raw)
     return meta, body
+
+
+#: Keys whose value is always text. A session ``slug:`` names a file, so
+#: ``0123`` or ``12e4`` must not become a number (#265).
+TEXT_KEYS: frozenset[str] = frozenset({"slug"})
+
+
+def _parse_text(raw: str) -> str:
+    """Return a scalar as text: surrounding quotes removed, nothing coerced."""
+    s = raw.strip()
+    if len(s) >= 2 and s[0] == s[-1] and s[0] in "\"'":
+        return s[1:-1]
+    return s
 
 
 def is_subagent(meta: dict[str, Any], path: Path) -> bool:
