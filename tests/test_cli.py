@@ -126,6 +126,7 @@ def _fake_claude(tmp_path, body="## Summary\\nSynthesized synchronously."):
 def _add_vault(tmp_path):
     vault = tmp_path / "vault"
     (vault / "raw" / "docs").mkdir(parents=True)
+    (vault / "raw" / "sessions").mkdir(parents=True, exist_ok=True)
     (vault / "wiki").mkdir()
     return vault
 
@@ -162,9 +163,9 @@ def test_add_default_writes_raw_and_builds_without_synth(tmp_path, monkeypatch, 
     assert synth_called["n"] == 0
     assert build_called["n"] == 1
     assert (vault / "raw" / "docs" / "raw-default-doc" / "raw-default-doc.md").exists()
-    assert not list((vault / "wiki" / "sources").rglob("*.md")) if (
-        vault / "wiki" / "sources"
-    ).exists() else True
+    sources_dir = vault / "wiki" / "sources"
+    sources_dir.mkdir(parents=True, exist_ok=True)
+    assert list(sources_dir.rglob("*.md")) == []
 
 
 def test_add_configured_claude_backend_synthesizes_synchronously(tmp_path, monkeypatch, capsys):
@@ -330,9 +331,9 @@ def test_add_no_synthesize_warns_and_keeps_docs(tmp_path, monkeypatch, capsys):
     assert "no-op" in out.err
     assert "already off by default" in out.err
     assert (vault / "raw" / "docs" / "raw-only-doc" / "raw-only-doc.md").exists()
-    assert not list((vault / "wiki" / "sources").rglob("*.md")) if (
-        vault / "wiki" / "sources"
-    ).exists() else True
+    sources_dir = vault / "wiki" / "sources"
+    sources_dir.mkdir(parents=True, exist_ok=True)
+    assert list(sources_dir.rglob("*.md")) == []
 
 
 def test_add_stdin_sentinel_piped_provenance(tmp_path, monkeypatch, capsys):

@@ -57,7 +57,7 @@ Long-document chunking remains exclusively in `add_doc` (`DEFAULT_CHUNK_MAX_CHAR
 | Frontmatter | `source:` continues to serialize `doc.source_label` |
 | Path / URL | Unchanged provenance |
 
-CLI stdin: `llmwiki add -` reads UTF-8 from `sys.stdin`. Mixing `-` with other sources in one invocation: **reject**. `--title` recommended; else derive from first heading / body start.
+CLI stdin: `llmwiki add -` reads `sys.stdin` in the process locale encoding (not forced UTF-8). Mixing `-` with other sources in one invocation: **reject**. `--title` recommended; else derive from first heading / body start.
 
 ### 2.4 MCP tool contract
 
@@ -123,3 +123,12 @@ Tool description: proxy-to-CLI-add; default raw+build; opt-in synthesize; opt-ou
 - **Docs:** reference + ingest skill match new defaults.
 
 No new runtime dependencies. No schema migrations.
+
+## Amendments (local-review keep)
+
+Status remains **Approved**. Post-implement local-review keep decisions:
+
+- **`build_site`:** do not fail solely because `discover_sources(raw/sessions)` is empty; proceed when `raw/docs/` has ≥1 markdown file; still require `raw/sessions/` to exist.
+- **`run_add`:** optional `writer: Callable[[str], None] | None`; accumulate `messages: list[str]`; record `build_failed` distinctly from add/synth failure; `exit_code` non-zero when either fails (CLI); MCP maps build-only failure → `_ok` + warning.
+- **MCP timeouts:** shared config `mcp.tool_timeouts.<tool>` (defaults 120) for `wiki_add` and `wiki_sync`.
+

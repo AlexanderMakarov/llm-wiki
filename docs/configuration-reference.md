@@ -268,6 +268,9 @@ Optional absolute date gate so bare `llmwiki sync` does not ingest years of hist
 | `web_clipper` | `extensions` | list | `[".md"]` | File extensions to pick up |
 | `web_clipper` | `auto_queue` | bool | true | Auto-enqueue into unified `llmwiki-state.json` queue |
 | `site` | `github_repo` | string | `""` | Optional `owner/name` for CHANGELOG / edit-on-GitHub / source-code links in compiled docs. Empty = detect from `git remote get-url origin`, else `Pratiyush/llm-wiki` |
+| `mcp` | `tool_timeouts` | object | see keys | Per-tool wall-clock budgets (seconds) for long-running MCP tools. Missing keys use 120. See [mcp.md § Tool timeouts](reference/mcp.md#tool-timeouts). |
+| `mcp.tool_timeouts` | `wiki_add` | number (s) | 120 | Timeout for MCP `wiki_add` (convert + optional synth + site build) |
+| `mcp.tool_timeouts` | `wiki_sync` | number (s) | 120 | Timeout for MCP `wiki_sync` subprocess |
 
 ## Vault file (`llmwiki.json`)
 

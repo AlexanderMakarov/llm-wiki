@@ -2206,8 +2206,8 @@ def cmd_add(args: argparse.Namespace) -> int:
     """Add documents: convert to Markdown under raw/docs/, rebuild the
     site by default, synthesize only with ``--synthesize`` (#273 / #16).
 
-    Sources may be URLs, files, folders, or ``-`` (UTF-8 stdin / piped
-    text). Conversion runs per source; optional synthesize and build run
+    Sources may be URLs, files, folders, or ``-`` (stdin in the process
+    locale encoding / piped text). Conversion runs per source; optional synthesize and build run
     once for the batch via :func:`llmwiki.add_pipeline.run_add`.
     """
     _apply_default_vault(args)
@@ -3507,7 +3507,7 @@ def build_parser() -> argparse.ArgumentParser:
         """,
     )
     add_p.add_argument("sources", nargs="+", metavar="SOURCE",
-                       help="URL (http/https), file, folder, or '-' for UTF-8 stdin. Repeatable (not mixed with '-').")
+                       help="URL (http/https), file, folder, or '-' for stdin in the process locale encoding. Repeatable (not mixed with '-').")
     add_p.add_argument("--title", default=None,
                        help="Override title derivation (single source only)")
     add_p.add_argument("--project", default=None,

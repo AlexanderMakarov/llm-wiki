@@ -117,7 +117,7 @@ python3 -m llmwiki sync --force
 
 ## `add` — add a document to the wiki (#16 / #273)
 
-Converts a URL, file, folder, or UTF-8 stdin (`-`) into raw Markdown under `raw/docs/`, then (by default) rebuilds the site so the new material is visible on Raw / Home. **Does not** synthesize `wiki/sources/` unless you pass `--synthesize`. Path and URL sources may be freely mixed and repeated; `-` (stdin) must be the only source in that invocation. MCP `wiki_add` is a thin proxy onto the same shared `run_add` path — see [mcp.md](mcp.md#wiki_add).
+Converts a URL, file, folder, or stdin in the process locale encoding (`-`) into raw Markdown under `raw/docs/`, then (by default) rebuilds the site so the new material is visible on Raw / Home. **Does not** synthesize `wiki/sources/` unless you pass `--synthesize`. Path and URL sources may be freely mixed and repeated; `-` (stdin) must be the only source in that invocation. MCP `wiki_add` is a thin proxy onto the same shared `run_add` path — see [mcp.md](mcp.md#wiki_add).
 
 ```bash
 python3 -m llmwiki add https://example.com/some-article
@@ -139,7 +139,7 @@ Stdin (`add -`) and MCP `content` use the piped-text conversion path: frontmatte
 
 | Flag | What |
 |---|---|
-| `SOURCE` | URL (`http`/`https`), file, folder, or `-` for UTF-8 stdin. Repeatable except `-` (cannot mix with other sources). |
+| `SOURCE` | URL (`http`/`https`), file, folder, or `-` for stdin in the process locale encoding. Repeatable except `-` (cannot mix with other sources). |
 | `--title TEXT` | Override title derivation (single source only). |
 | `--project NAME` | Group under `raw/docs/<NAME>/` instead of the doc's own slug. |
 | `--tag TAG` | Extra frontmatter tag (repeatable). |

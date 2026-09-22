@@ -23,14 +23,13 @@ Ships as stdlib-only Python — no MCP SDK dependency.
 
 from __future__ import annotations
 
+import concurrent.futures
 import json
 import os
 import subprocess
 import sys
 import time
 from collections.abc import Iterable, Iterator
-from contextlib import redirect_stdout
-from io import StringIO
 from pathlib import Path
 from typing import Any
 
@@ -40,7 +39,7 @@ from llmwiki import usage as _usage
 from llmwiki.add_doc import AddError
 from llmwiki.add_pipeline import run_add
 from llmwiki.categories import scan_tags
-from llmwiki.config_schedule import resolve_content_root
+from llmwiki.config_schedule import _load_sessions_config, resolve_content_root
 from llmwiki.lint import LintOptions, UnknownRuleError, load_pages, run_lint
 from llmwiki.lint.report import render_json as render_lint_json
 from llmwiki.pipeline_lock import pipeline_lock
@@ -70,6 +69,32 @@ from llmwiki.vault_settings import (
 CONTENT_ROOT = resolve_content_root()
 # Back-compat test seam: many MCP tests monkeypatch llmwiki.mcp.server.REPO_ROOT.
 REPO_ROOT = CONTENT_ROOT
+
+# Default wall-clock budget for long-running MCP tools (sync / add+build).
+# Overridable per tool via ``mcp.tool_timeouts.<tool_name>`` in config.json.
+_DEFAULT_MCP_TOOL_TIMEOUT_S = 120.0
+
+
+def _mcp_tool_timeout(tool_name: str) -> float:
+    """Return the configured timeout (seconds) for an MCP tool.
+
+    Reads ``mcp.tool_timeouts.<tool_name>`` from the merged sessions config.
+    Missing / invalid / non-positive values fall back to
+    :data:`_DEFAULT_MCP_TOOL_TIMEOUT_S` (120).
+    """
+    cfg = _load_sessions_config()
+    mcp_block = cfg.get("mcp")
+    if not isinstance(mcp_block, dict):
+        return _DEFAULT_MCP_TOOL_TIMEOUT_S
+    timeouts = mcp_block.get("tool_timeouts")
+    if not isinstance(timeouts, dict):
+        return _DEFAULT_MCP_TOOL_TIMEOUT_S
+    raw = timeouts.get(tool_name, _DEFAULT_MCP_TOOL_TIMEOUT_S)
+    try:
+        val = float(raw)
+    except (TypeError, ValueError):
+        return _DEFAULT_MCP_TOOL_TIMEOUT_S
+    return val if val > 0 else _DEFAULT_MCP_TOOL_TIMEOUT_S
 
 
 SERVER_INFO = {
@@ -1010,9 +1035,10 @@ def tool_wiki_sync(args: dict[str, Any]) -> dict[str, Any]:
             cwd=str(SOURCE_ROOT),
         )
         # Read line-by-line so a hung child doesn't block forever — the
-        # outer try wraps a 120s timeout via proc.wait below.
+        # outer try wraps a configurable timeout via proc.wait below.
         assert proc.stdout is not None
-        deadline = time.time() + 120.0
+        timeout_s = _mcp_tool_timeout("wiki_sync")
+        deadline = time.time() + timeout_s
         for line in proc.stdout:
             if captured_bytes < OUTPUT_CAP_BYTES:
                 captured.append(line)
@@ -1021,14 +1047,14 @@ def tool_wiki_sync(args: dict[str, Any]) -> dict[str, Any]:
                 truncated = True
             if time.time() > deadline:
                 proc.kill()
-                return _err("sync timed out after 120s")
+                return _err(f"sync timed out after {timeout_s:.0f}s")
         proc.wait(timeout=max(0.1, deadline - time.time()))
     except subprocess.TimeoutExpired:
         try:
             proc.kill()  # type: ignore[name-defined]
         except Exception:
             pass
-        return _err("sync timed out after 120s")
+        return _err(f"sync timed out after {_mcp_tool_timeout('wiki_sync'):.0f}s")
     except (OSError, subprocess.SubprocessError) as e:
         return _err(f"sync failed: {e}")
     output = "".join(captured)
@@ -1090,8 +1116,12 @@ def tool_wiki_add(args: dict[str, Any]) -> dict[str, Any]:
 
     Defaults match the CLI: write raw doc(s) and rebuild the site; synthesize
     only when ``synthesize`` is true. ``content`` uses the piped-text path
-    (``source: piped``) — no tempfile. Stdout from the shared pipeline is
-    redirected so progress lines cannot corrupt JSON-RPC on stdio.
+    (``source: piped``) — no tempfile. Progress lines go to ``run_add``'s
+    ``messages`` list via a silent writer so they never corrupt JSON-RPC
+    stdout. Wall-clock budget: ``mcp.tool_timeouts.wiki_add`` (default 120s).
+    When the doc lands but only the post-add site build fails, returns
+    success with a warning (``build_failed``); genuine add failures stay
+    ``isError``.
     """
 
     url = (args.get("url") or "").strip()
@@ -1119,10 +1149,12 @@ def tool_wiki_add(args: dict[str, Any]) -> dict[str, Any]:
         sources = [url or path]
         stdin_text = None
 
-    try:
-        # MCP speaks JSON-RPC on stdout — silence run_add progress prints.
-        with pipeline_lock(REPO_ROOT), redirect_stdout(StringIO()):
-            result = run_add(
+    timeout_s = _mcp_tool_timeout("wiki_add")
+
+    def _do_add() -> dict[str, Any]:
+        # Silent writer: accumulate in result["messages"]; keep stdout clean.
+        with pipeline_lock(REPO_ROOT):
+            return run_add(
                 sources,
                 docs_dir,
                 vault_root=REPO_ROOT,
@@ -1133,21 +1165,45 @@ def tool_wiki_add(args: dict[str, Any]) -> dict[str, Any]:
                 synthesize=synthesize,
                 build=not no_build,
                 stdin_text=stdin_text,
+                writer=lambda _line: None,
             )
+
+    try:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            fut = pool.submit(_do_add)
+            try:
+                result = fut.result(timeout=timeout_s)
+            except concurrent.futures.TimeoutError:
+                return _err(f"add timed out after {timeout_s:.0f}s")
     except AddError as exc:
         return _err(str(exc))
 
-    if result.get("exit_code") or result["errors"]:
+    msgs = [m for m in (result.get("messages") or []) if m]
+    # Genuine add/synth failure: non-zero exit that is not solely build_failed.
+    if result["errors"] or (
+        result.get("exit_code") and not result.get("build_failed")
+    ):
         detail = "; ".join(result["errors"]) if result["errors"] else (
-            f"add failed with exit_code {result.get('exit_code')}"
+            "; ".join(msgs) if msgs else (
+                f"add failed with exit_code {result.get('exit_code')}"
+            )
         )
         return _err(detail)
 
     written_rel = [str(p.relative_to(REPO_ROOT)) for p in result["written"]]
+    warnings = list(result["warnings"])
+    if result.get("build_failed"):
+        warnings.append(
+            "site build failed after add; raw doc(s) were written — "
+            "run `llmwiki build` to retry"
+        )
+        for m in msgs:
+            if "site build failed" in m and m not in warnings:
+                warnings.append(m)
     payload = {
         "written": written_rel,
         "titles": result["titles"],
-        "warnings": result["warnings"],
+        "warnings": warnings,
     }
     out = _ok(json.dumps(payload, indent=2))
     out["_hits"] = len(written_rel)

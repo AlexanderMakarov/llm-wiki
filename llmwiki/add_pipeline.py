@@ -12,6 +12,7 @@ requested; site rebuild **on** unless skipped.
 from __future__ import annotations
 
 import sys
+from collections.abc import Callable
 from datetime import UTC, datetime
 from datetime import date as _date
 from pathlib import Path
@@ -46,12 +47,30 @@ def run_add(
     synthesize: bool = False,
     build: bool = True,
     stdin_text: str | None = None,
+    writer: Callable[[str], None] | None = None,
 ) -> dict[str, Any]:
     """Run the shared add pipeline (caller holds ``pipeline_lock`` when needed).
 
-    Returns a dict with ``exit_code`` plus the ``add_sources`` result fields
-    (``written``, ``titles``, ``docs``, ``warnings``, ``errors``, ``skipped``).
+    Returns a dict with ``exit_code``, ``build_failed``, ``messages``, plus the
+    ``add_sources`` result fields (``written``, ``titles``, ``docs``,
+    ``warnings``, ``errors``, ``skipped``).
+
+    ``writer`` receives every human-readable progress/diagnostic line (default
+    ``print`` to stdout, or stderr for error lines). MCP passes a sink so
+    progress never touches JSON-RPC stdout; callers can also read
+    ``result["messages"]``.
     """
+    messages: list[str] = []
+
+    def _emit(line: str, *, err: bool = False) -> None:
+        messages.append(line)
+        if writer is not None:
+            writer(line)
+        elif err:
+            print(line, file=sys.stderr)
+        else:
+            print(line)
+
     state_target = resolve_state_file()
     now_ts = datetime.now(UTC)
     task_id = f"add-sync-{int(now_ts.timestamp() * 1000)}"
@@ -98,17 +117,19 @@ def run_add(
         force_new=force_new,
         stdin_text=stdin_text,
     )
+    result["messages"] = messages
+    result["build_failed"] = False
 
     for title_line in result["titles"]:
-        print(f"  + {title_line}")
+        _emit(f"  + {title_line}")
     for w in result["warnings"]:
-        print(f"  ~ {w}")
+        _emit(f"  ~ {w}")
     for e in result["errors"]:
-        print(f"  ! {e}", file=sys.stderr)
+        _emit(f"  ! {e}", err=True)
     if dry_run:
         result["exit_code"] = 2 if result["errors"] else 0
         return result
-    print(f"  wrote {len(result['written'])} file(s) under {docs_dir}")
+    _emit(f"  wrote {len(result['written'])} file(s) under {docs_dir}")
     _track("running", result_msg=f"wrote {len(result['written'])} file(s)")
 
     failed = bool(result["errors"])
@@ -128,29 +149,29 @@ def run_add(
             sources_dir = wiki_sources_dir
         if not backend.is_available():
             removed = remove_raw_docs(result["written"])
-            print(
+            msg = (
                 f"  ! backend {backend.name} is not available — cannot "
                 f"synthesize. Rolled back {len(removed)} just-added raw "
                 "doc file(s). Set synthesis.backend in config.json "
                 "(claude / ollama / dummy), or omit --synthesize for "
-                "raw-only add.",
-                file=sys.stderr,
+                "raw-only add."
             )
+            _emit(msg, err=True)
             result["exit_code"] = 2
             return result
-        print(f"Synthesizing with backend: {backend.name}")
+        _emit(f"Synthesizing with backend: {backend.name}")
         summary = synthesize_new_sessions(
             backend=backend,
             raw_dir=raw_dir,
             wiki_sources_dir=wiki_sources_dir,
             only_paths=set(result["written"]),
         )
-        print(
+        _emit(
             f"  synthesized {summary['synthesized']}, "
             f"skipped {summary['skipped']}"
         )
         for err in summary["errors"]:
-            print(f"  ! {err}", file=sys.stderr)
+            _emit(f"  ! {err}", err=True)
         missing = [
             p
             for p in result["written"]
@@ -158,10 +179,10 @@ def run_add(
         ]
         if missing:
             removed = remove_raw_docs(missing)
-            print(
+            _emit(
                 f"  ! rolled back {len(removed)} raw doc file(s) whose "
                 "synthesis produced no wiki page",
-                file=sys.stderr,
+                err=True,
             )
             failed = True
             _track(
@@ -187,7 +208,8 @@ def run_add(
             wiki_dir=wiki_dir,
         )
         if code:
-            failed = True
+            result["build_failed"] = True
+            _emit(f"  ! site build failed (exit {code})", err=True)
 
     log_path = (vault_root or REPO_ROOT) / "wiki" / "log.md"
     if log_path.parent.is_dir():
@@ -204,9 +226,11 @@ def run_add(
         state_file=state_target,
     )
 
-    if failed:
+    # ``failed`` is add/synth only; ``build_failed`` is recorded separately so
+    # MCP can return success when the doc landed and only the site build failed.
+    if failed or result["build_failed"]:
         _track("error", error_msg="add command finished with errors")
     else:
         _track("done", result_msg=f"added {len(result['written'])} file(s)")
-    result["exit_code"] = 2 if failed else 0
+    result["exit_code"] = 2 if (failed or result["build_failed"]) else 0
     return result

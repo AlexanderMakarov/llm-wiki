@@ -289,3 +289,21 @@ Theme colours live in `llmwiki/build.py` inside the `CSS` string constant, under
 ```
 
 Change these and rebuild. The dark-mode variants auto-derive unless you override them too.
+
+## MCP tool timeouts
+
+Long-running MCP tools (`wiki_add`, `wiki_sync`) default to a **120-second** wall-clock budget. Override per tool under `mcp.tool_timeouts` in `config.json`:
+
+```json
+{
+  "mcp": {
+    "tool_timeouts": {
+      "wiki_add": 120,
+      "wiki_sync": 120
+    }
+  }
+}
+```
+
+See [reference/mcp.md](reference/mcp.md#tool-timeouts) and the [configuration reference](configuration-reference.md) table rows.
+

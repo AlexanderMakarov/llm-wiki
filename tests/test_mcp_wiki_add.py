@@ -15,6 +15,7 @@ from unittest.mock import patch
 import llmwiki.add_pipeline as pipe
 from llmwiki.add_pipeline import run_add
 from llmwiki.mcp.server import TOOL_IMPLS, TOOLS, tool_wiki_add
+from llmwiki.state_store import configure_state_file
 
 
 def _result_text(result: dict) -> str:
@@ -28,6 +29,7 @@ def _result_json(result: dict):
 def _vault(tmp_path: Path) -> Path:
     vault = tmp_path / "vault"
     (vault / "raw" / "docs").mkdir(parents=True)
+    (vault / "raw" / "sessions").mkdir(parents=True, exist_ok=True)
     (vault / "wiki").mkdir()
     return vault
 
@@ -172,7 +174,8 @@ def test_wiki_add_default_builds_without_synth(tmp_path: Path, monkeypatch):
     assert synth_called["n"] == 0
     assert build_called["n"] == 1
     sources = vault / "wiki" / "sources"
-    assert not list(sources.rglob("*.md")) if sources.exists() else True
+    sources.mkdir(parents=True, exist_ok=True)
+    assert list(sources.rglob("*.md")) == []
 
 
 def test_wiki_add_no_build_skips_site_rebuild(tmp_path: Path, monkeypatch):
@@ -247,7 +250,8 @@ def test_wiki_add_content_does_not_synthesize_wiki_sources(tmp_path: Path, monke
         result = tool_wiki_add({"content": "# Another Note\n\nBody text.\n"})
     assert result["isError"] is False, _result_text(result)
     sources = vault / "wiki" / "sources"
-    assert not list(sources.rglob("*.md")) if sources.exists() else True
+    sources.mkdir(parents=True, exist_ok=True)
+    assert list(sources.rglob("*.md")) == []
 
 
 def test_wiki_add_content_honors_title_and_project(tmp_path: Path, monkeypatch):
@@ -297,3 +301,44 @@ def test_wiki_add_missing_path_reports_error(tmp_path: Path, monkeypatch):
     with patch("llmwiki.mcp.server.REPO_ROOT", vault):
         result = tool_wiki_add({"path": str(tmp_path / "does-not-exist.md")})
     assert result["isError"] is True
+
+
+def test_wiki_add_docs_only_vault_real_build_succeeds(tmp_path: Path, monkeypatch):
+    """Docs-only vault (empty sessions/): real build_site must not make wiki_add fail (#273 B1).
+
+    Does **not** monkeypatch ``build_site`` — exercises the docs-or-sessions gate.
+    """
+    vault = _vault(tmp_path)
+    # sessions/ exists but is empty; wiki/ minimal.
+    assert (vault / "raw" / "sessions").is_dir()
+    assert not any((vault / "raw" / "sessions").iterdir())
+
+    # Point state away from unrelated paths during build bookkeeping.
+    configure_state_file(vault / "llmwiki-state.json")
+
+    with patch("llmwiki.mcp.server.REPO_ROOT", vault):
+        result = tool_wiki_add({"content": "# Docs Only Note\n\nbody for real build\n"})
+    assert result["isError"] is False, _result_text(result)
+    payload = _result_json(result)
+    assert payload["written"], payload
+    written = vault / payload["written"][0]
+    assert written.is_file()
+    assert (vault / "site" / "index.html").is_file()
+    # No synth by default
+    sources = vault / "wiki" / "sources"
+    sources.mkdir(parents=True, exist_ok=True)
+    assert list(sources.rglob("*.md")) == []
+
+
+def test_wiki_add_build_failed_returns_ok_with_warning(tmp_path: Path, monkeypatch):
+    """Doc landed + build_failed → isError False with warning (#273 B1)."""
+    vault = _vault(tmp_path)
+    monkeypatch.setattr(pipe, "build_site", lambda **kw: 2)
+    with patch("llmwiki.mcp.server.REPO_ROOT", vault):
+        result = tool_wiki_add({"content": "# Build Fail Doc\n\nbody\n"})
+    assert result["isError"] is False, _result_text(result)
+    payload = _result_json(result)
+    assert payload["written"]
+    assert any("site build failed" in w for w in payload["warnings"])
+    assert (vault / payload["written"][0]).is_file()
+

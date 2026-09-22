@@ -77,6 +77,8 @@ Optional: `rules` (subset of checks), `min_refs` (broken-link threshold; default
 
 Defaults to **dry-run**. To write, pass `dry_run: false` **and** `confirm: true`.
 
+Wall-clock budget defaults to **120 seconds**, overridable via `mcp.tool_timeouts.wiki_sync` in `config.json` (see [configuration-reference.md](../configuration-reference.md) and [Tool timeouts](#tool-timeouts)).
+
 ## `wiki_export`
 
 `format` is one of `llms-txt`, `llms-full-txt`, `jsonld`, `sitemap`, `rss`, `manifest`, or `list` (catalog of files present under `site/`). Run `llmwiki build` first when exports are missing.
@@ -100,6 +102,33 @@ Exactly one of `url`, `path`, or `content` is required.
 | `no_build` | no | Skip the site rebuild after add (default `false`; mirrors CLI `--no-build`) |
 
 **Source-layer guardrail:** use the user's named path, URL, or text. Do not reconstruct input from existing wiki pages (`wiki/sources/` or other derived pages) unless the user asked.
+
+When the document lands under `raw/docs/` but the post-add site build fails, `wiki_add` still returns success (`isError: false`) with the written paths and a warning — reserve `isError` for genuine add failures. Pass `no_build: true` when you need a faster round-trip and will rebuild later.
+
+Wall-clock budget for the whole add orchestration (including site build) defaults to **120 seconds**, overridable via `mcp.tool_timeouts.wiki_add`.
+
+## Tool timeouts
+
+Long-running MCP tools share one config section:
+
+```json
+{
+  "mcp": {
+    "tool_timeouts": {
+      "wiki_add": 120,
+      "wiki_sync": 120
+    }
+  }
+}
+```
+
+| Key | Default | Applies to |
+|---|---|---|
+| `mcp.tool_timeouts.wiki_add` | `120` | `wiki_add` (convert + optional synth + site build) |
+| `mcp.tool_timeouts.wiki_sync` | `120` | `wiki_sync` subprocess |
+
+Missing or invalid values fall back to 120. For latency-sensitive add callers that do not need an immediate site refresh, pass `no_build: true`.
+
 
 ## Migration from retired tools (#196)
 

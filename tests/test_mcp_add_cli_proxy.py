@@ -40,6 +40,7 @@ from llmwiki.mcp.server import TOOLS, tool_wiki_add
 def _vault(tmp_path: Path) -> Path:
     vault = tmp_path / "vault"
     (vault / "raw" / "docs").mkdir(parents=True)
+    (vault / "raw" / "sessions").mkdir(parents=True, exist_ok=True)
     (vault / "wiki").mkdir()
     return vault
 

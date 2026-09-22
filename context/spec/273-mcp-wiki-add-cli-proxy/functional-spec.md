@@ -63,3 +63,13 @@ Success means:
 - New MCP tools unrelated to Add
 - Closing the GitHub issue from this flow
 - Unrelated roadmap items
+
+## Amendments (local-review keep)
+
+Status remains **Approved**. Post-implement local-review keep decisions:
+
+- **Build gate:** site build must succeed on a docs-only vault (empty `raw/sessions/` that still exists, non-empty `raw/docs/`); fail only when both sessions and docs are empty.
+- **MCP vs CLI on build failure:** when the doc landed and only the post-add site build failed, MCP `wiki_add` returns success with a warning; CLI may still exit non-zero.
+- **Stdin encoding:** document stdin as process locale encoding (not forced UTF-8); leave `sys.stdin.read()` as-is.
+- **MCP timeouts:** `mcp.tool_timeouts.wiki_add` / `wiki_sync` (default 120s each).
+

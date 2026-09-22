@@ -41,6 +41,11 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Fixed
 
+- **`build_site` accepts docs-only vaults (#273)** — an empty `raw/sessions/` no longer fails the build when `raw/docs/` has at least one markdown file; fail only when both corpora are empty (sessions directory must still exist). MCP `wiki_add` returns success with a warning when the doc landed and only the post-add site build failed (`build_failed` in `run_add`); CLI still exits non-zero on build failure.
+  - *Release note:* Docs-only vaults build cleanly; MCP `wiki_add` no longer reports a successful add as an error when only the site build fails (#273).
+- **MCP tool timeouts are configurable (#273)** — `mcp.tool_timeouts.wiki_add` and `mcp.tool_timeouts.wiki_sync` (default 120s each) replace the hardcoded sync budget and cap add+build orchestration.
+  - *Release note:* Configure MCP `wiki_add` / `wiki_sync` timeouts under `mcp.tool_timeouts` (default 120s) (#273).
+
 - **Default-branch CI push triggers use `main` (#270)** — `release-drafter.yml`, `cross-browser.yml`, and `agents-e2e.yml` fire on push to `main` (not `master`-only); dual-branch `ci.yml` / `e2e.yml` / `gitleaks.yml` unchanged. Regression test derives the expected branch from CONTRIBUTING / RELEASE_PROCESS.
   - *Release note:* Release-drafter and Playwright CI push triggers follow the repo default branch `main` (#270).
 - **`migrate wikilink-titles` rewrites case/punctuation-variant bare links (#262)** — bare `[[LLM-Wiki]]` (and similar) uniquely matching a page under shared `llmwiki.wikilinks.norm_page_key` (same fold as `link_integrity` / harvest) become `[[canonical-slug|Title]]`; true aliases and ambiguous collisions stay skipped. Re-run the migrate on vaults already processed by #259.

@@ -290,7 +290,6 @@ def run_refresh(
                     "--vault",
                     str(vault),
                     "--no-build",
-                    "--no-synthesize",
                     "--project",
                     slug,
                 ],

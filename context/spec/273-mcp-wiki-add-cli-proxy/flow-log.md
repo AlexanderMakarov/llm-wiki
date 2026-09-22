@@ -48,12 +48,22 @@
 - Key deliverables: `llmwiki/add_pipeline.py` `run_add`; `convert_text` / piped; CLI+MCP default raw+build / `--synthesize` opt-in; MCP proxy; docs+CHANGELOG; `tests/test_mcp_add_cli_proxy.py`
 - Next: verify → user smoke confirm
 
-## verify
-- `ruff check llmwiki tests scripts` — pass
-- `python3 -m pytest tests/ -q` — exit 0 (~full suite)
-- Live smoke (operator-requested): merged primary non-`vault` config into worktree `config.json`, then `add -` against live vault
-  - `--no-build`: raw `source: "piped"`, no `/tmp` leak, exit 0
-  - default build: site rebuilt, `wiki/sources` count unchanged (815), zero smoke-273 source pages, state mentions `smoke-273` pending
-  - worktree `config.json` restored to throwaway vault after smoke
-  - leftover raw docs under live `raw/docs/smoke-273/` (operator may remove)
-- Next: user confirm smoke OK → local review
+## local-review
+- Smoke confirmed by operator; leftovers removed via `llmwiki remove smoke-273`
+- Review written: `context/spec/273-mcp-wiki-add-cli-proxy/review.md` (session-only, not committed)
+- Verdict: Request changes — 1 Blocker, 8 Nits
+- Next: keep/drop with operator
+
+## local-review keep/drop
+- Operator keep: B1 expanded (build docs-or-sessions gate + MCP success on build-only fail + `build_failed` in `run_add`); N1+N5 (`writer` + `messages`); N2 (docs locale encoding, leave stdin as-is); N3 (drop `--no-synthesize` from refresh_demo); N4 (stale one-liners); N6 (`mcp.tool_timeouts` for wiki_add + wiki_sync, default 120); N7 (strengthen weak rglob asserts)
+- Operator drop: N8
+- Regression: real `build_site` on docs-only vault via MCP `wiki_add`; unit tests for build empty corpora
+- Next: verify (ruff + focused pytest) → user smoke / PR refresh
+
+## local-review (keep/drop applied)
+- Operator: B1 expand — fix `build_site` docs-or-sessions gate + MCP success when doc landed; N2 docs locale encoding (no UTF-8 force); N6 `mcp.tool_timeouts.*` default 120; keep N1/N3/N4/N5/N7; skip N8
+- Review file session-only (not staged)
+- Next: commit-push → remote gates
+
+## commit-push
+- Pending push of review fixes + prior feat commits
