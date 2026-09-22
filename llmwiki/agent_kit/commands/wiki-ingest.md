@@ -12,15 +12,15 @@ Usage: /wiki-ingest <path>
 
 ## Documents (files, folders, URLs, PDFs — anything not already under `raw/sessions/`)
 
-Route the source through the `llmwiki add` CLI instead of hand-writing a `wiki/sources/*` page:
+Route the source through the `llmwiki add` CLI instead of hand-writing a `wiki/sources/*` page. Bare `add` writes raw and rebuilds the site; it does **not** synthesize unless you opt in. For a full ingest that needs `wiki/sources/` in the same pass:
 
 ```bash
-python3 -m llmwiki add <src> --project <slug>
+python3 -m llmwiki add <src> --project <slug> --synthesize
 ```
 
-`<src>` is `$ARGUMENTS` (URL, file, or folder — repeatable). `--project <slug>` groups the doc under `raw/docs/<slug>/`; choose a slug matching the topic. The command resolves the vault (`--vault` / `config.json` → `vault.default_path`), converts the source, lands it under `raw/docs/`, synthesizes the `wiki/sources/<slug>.md` page, updates the index/overview, and rebuilds the site in one pass. Other useful flags: `--title`, `--tag` (repeatable), `--note`, `--dry-run`, `--no-synthesize`, `--no-build`.
+`<src>` is `$ARGUMENTS` (URL, file, folder — repeatable — or `-` for stdin in the process locale encoding with `source: "piped"`; do not mix `-` with other sources). `--project <slug>` groups the doc under `raw/docs/<slug>/`; choose a slug matching the topic. The command resolves the vault (`--vault` / `config.json` → `vault.default_path`), converts the source, lands it under `raw/docs/`, rebuilds the site by default, and with `--synthesize` produces `wiki/sources/<slug>.md` and updates index/overview. Without `--synthesize`, run `llmwiki synth` before the steps below. Other useful flags: `--title`, `--tag` (repeatable), `--note`, `--dry-run`, `--no-build`. `--no-synthesize` is a deprecated warn+no-op. Pass the user's exact path/URL/text — do not reconstruct from derived wiki pages unless asked.
 
-After it runs:
+After it runs (and synthesis has produced a source page):
 
 1. Read the synthesized `wiki/sources/<slug>.md` page (in the resolved vault) to see what was produced.
 2. Create or update `wiki/entities/<Name>.md` for any people, companies, products, tools, libraries mentioned.

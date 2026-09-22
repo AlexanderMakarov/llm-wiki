@@ -462,7 +462,7 @@ If you have MCP access, the llmwiki MCP server exposes six tools
 - `wiki_health(rules?, min_refs?)` — lint report + headline totals
 - `wiki_sync(dry_run?, confirm?)` — trigger the converter
 - `wiki_export(format)` — export the whole wiki in a named format
-- `wiki_add(url | path | content)` — ingest one source into raw/docs/
+- `wiki_add(url | path | content)` — proxy for CLI add (raw + site rebuild; synth opt-in)
 
 ## Projects
 

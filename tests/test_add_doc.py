@@ -130,7 +130,23 @@ from llmwiki.add_doc import (
     _source_path_label,
     assert_readable_path,
     convert_path,
+    convert_text,
 )
+
+
+def test_convert_text_source_label_is_piped():
+    doc = convert_text("# Hello\n\nbody\n")
+    assert isinstance(doc, ConvertedDoc)
+    assert doc.source_label == "piped"
+    assert doc.markdown.startswith("# Hello")
+    assert doc.url is None
+    assert doc.path_name is None
+
+
+def test_convert_text_note_prepended():
+    doc = convert_text("body", note="from paste")
+    assert doc.markdown.startswith("> from paste\n\n")
+    assert doc.source_label == "piped"
 
 
 def test_source_path_label_redacts_username_and_prefers_relative(
@@ -924,3 +940,43 @@ def test_add_sources_reports_unreachable_urls_without_landing_them(monkeypatch, 
     assert any("no reachable content" in e and "https://ex.com/gone" in e
                for e in res["errors"])
     assert list(docs.rglob("*.md")) == []
+
+
+# ── piped / stdin text (#273) ────────────────────────────────────────
+
+
+def test_add_sources_stdin_sentinel_piped_provenance(tmp_path):
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    result = add_sources(
+        ["-"], docs, stdin_text="# Piped Doc\n\nhello\n",
+        title="Piped Doc", today="2026-07-04",
+    )
+    assert len(result["written"]) == 1
+    text = result["written"][0].read_text(encoding="utf-8")
+    meta, _ = parse_frontmatter(text)
+    assert meta["source"] == "piped"
+    assert "/tmp" not in text
+
+
+def test_add_sources_long_piped_text_chunks_share_provenance(tmp_path):
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    body = "".join(f"## Sec{i}\n\n" + ("x" * 2000) + "\n\n" for i in range(5))
+    result = add_sources(
+        ["-"], docs, stdin_text="# Long Piped\n\n" + body,
+        title="Long Piped", today="2026-07-04",
+    )
+    assert len(result["written"]) > 1
+    for path in result["written"]:
+        meta, _ = parse_frontmatter(path.read_text(encoding="utf-8"))
+        assert meta["source"] == "piped"
+
+
+def test_add_sources_rejects_mixing_stdin_sentinel_with_other_sources(tmp_path):
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    src = tmp_path / "a.md"
+    src.write_text("# A\n\n", encoding="utf-8")
+    with pytest.raises(AddError, match=r'stdin sentinel "-"'):
+        add_sources(["-", str(src)], docs, stdin_text="x", today="2026-07-04")

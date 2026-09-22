@@ -19,6 +19,7 @@ import re as _re  # aliased: `re` is shadowed by hot loop locals in later sectio
 import shutil
 import socket
 import subprocess
+import sys
 import tempfile
 import urllib.error
 import urllib.request
@@ -47,6 +48,7 @@ __all__ = [
     "ConvertedDoc",
     "assert_readable_path",
     "convert_path",
+    "convert_text",
     "AGENT_UA",
     "BROWSER_UA",
     "CHALLENGE_MARKERS",
@@ -573,6 +575,19 @@ def convert_path(value: str, note: str | None = None) -> ConvertedDoc:
                         path_name=real.name)
 
 
+def convert_text(text: str, note: str | None = None) -> ConvertedDoc:
+    """Convert in-memory / stdin text to one markdown document.
+
+    Provenance is the literal ``piped`` label — never a temp-file path —
+    so MCP content and CLI ``add -`` share the same source-of-record.
+    """
+    return ConvertedDoc(
+        title="",
+        markdown=_note_header(note) + (text or "").strip() + "\n",
+        source_label="piped",
+    )
+
+
 # ── layered URL pipeline ─────────────────────────────────────────────
 # Layer 1: content negotiation — Accept: text/markdown unlocks
 #   Cloudflare "Markdown for Agents" / Read the Docs served markdown.
@@ -949,10 +964,21 @@ def add_sources(
     renderer=None,
     today: str | None = None,
     force_new: bool = False,
+    stdin_text: str | None = None,
 ) -> dict:
     """Convert + write a batch of sources. Post-steps (synthesize/build)
     are the CLI's job — this function only lands raw docs. Per-source
-    failures are collected, not fatal: the rest of the batch lands."""
+    failures are collected, not fatal: the rest of the batch lands.
+
+    The sentinel ``"-"`` means piped/pasted text: pass ``stdin_text`` for
+    in-process callers (tests, MCP), otherwise UTF-8 is read from
+    ``sys.stdin``. Mixing ``"-"`` with other sources in one call raises
+    ``AddError``."""
+    if any(src == "-" for src in sources) and sources != ["-"]:
+        raise AddError(
+            'cannot mix stdin sentinel "-" with other sources; '
+            'pass only "-" for piped text'
+        )
     written: list[Path] = []
     titles: list[str] = []
     docs: list[dict] = []
@@ -961,7 +987,13 @@ def add_sources(
     skipped: list[dict[str, str]] = []
     for src in sources:
         try:
-            if _re.match(r"^https?://", src):
+            if src == "-":
+                if stdin_text is not None:
+                    text = stdin_text
+                else:
+                    text = sys.stdin.read()
+                doc = convert_text(text, note)
+            elif _re.match(r"^https?://", src):
                 doc = convert_url(src, note, fetch=fetch, renderer=renderer, render=render)
             else:
                 doc = convert_path(src, note)

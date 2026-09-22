@@ -10,6 +10,16 @@ How to upgrade between `llmwiki` releases. Most releases are drop-in (`pip insta
 
 The canonical per-release detail is [CHANGELOG.md](https://github.com/AlexanderMakarov/llm-wiki/blob/main/CHANGELOG.md) — this guide focuses on "what might break".
 
+## Unreleased — `add` / `wiki_add` no longer synthesize by default (#273)
+
+Behaviour flip, no data migration. Scripts and agents that expected synth-on-add must opt in:
+
+- **Default:** `llmwiki add` and MCP `wiki_add` write raw docs and rebuild the site; they do **not** create `wiki/sources/` pages.
+- **Opt in:** pass `--synthesize` (CLI) or `synthesize: true` (MCP) on the same invocation, or run `llmwiki synth` afterward.
+- **`--no-synthesize`:** warn+no-op for one release (synthesis is already off); remove it when convenient.
+- **`--no-build` / `no_build`:** still skip the site rebuild.
+- **Stdin / MCP text:** `llmwiki add -` and MCP `content` record `source: "piped"` (no tempfile provenance).
+
 ## Unreleased — synth clean stop on Ctrl+C or backend usage limit (#181)
 
 Behaviour flip, no data migration. Scripts and schedulers that read exit codes should check these:

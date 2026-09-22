@@ -3247,10 +3247,17 @@ def build_site(
 
     print(f"==> scanning {raw_sessions}")
     sources = discover_sources(raw_sessions)
-    if not sources:
+    # Docs-only vaults (empty sessions dir, but raw/docs present) are valid —
+    # MCP wiki_add / llmwiki add land documents without session transcripts (#273).
+    # Fail only when both corpora are empty. sessions/ must still exist (init).
+    has_docs = bool(raw_docs_site.scan_raw_docs(raw_dir / "docs"))
+    if not sources and not has_docs:
         print("  no sources found.", file=sys.stderr)
         return 2
-    print(f"  found {len(sources)} source markdowns")
+    if sources:
+        print(f"  found {len(sources)} source markdowns")
+    else:
+        print("  found 0 session markdowns; proceeding with raw/docs only")
     groups = group_by_project(sources)
     print(f"  grouped into {len(groups)} projects")
 

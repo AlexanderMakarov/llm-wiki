@@ -20,7 +20,6 @@ import time
 from collections.abc import Callable, Sequence
 from contextlib import ExitStack
 from datetime import UTC, datetime
-from datetime import date as _date
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -43,7 +42,7 @@ from llmwiki.adapters import REGISTRY, discover_all
 # for any caller still importing from llmwiki.cli.
 from llmwiki.adapters.status import adapter_status as _adapter_status  # noqa: F401
 from llmwiki.adapters.status import print_adapters_table
-from llmwiki.add_doc import add_sources, expected_source_page, remove_raw_docs
+from llmwiki.add_pipeline import run_add
 from llmwiki.automation_install import (
     AutomationActivationError,
     default_staging_units_dir,
@@ -2204,13 +2203,12 @@ cmd_synth = cmd_synthesize
 
 
 def cmd_add(args: argparse.Namespace) -> int:
-    """Add documents to the wiki: convert to Markdown, land under
-    raw/docs/ (kbbuilder-compatible layout), then batch synthesize +
-    rebuild the site (issue #16).
+    """Add documents: convert to Markdown under raw/docs/, rebuild the
+    site by default, synthesize only with ``--synthesize`` (#273 / #16).
 
-    Sources may be URLs, files, or folders, freely mixed. Conversion
-    and writing happen per source; synthesis and build run ONCE for
-    the whole batch. --no-synthesize / --no-build opt out.
+    Sources may be URLs, files, folders, or ``-`` (stdin in the process
+    locale encoding / piped text). Conversion runs per source; optional synthesize and build run
+    once for the batch via :func:`llmwiki.add_pipeline.run_add`.
     """
     _apply_default_vault(args)
 
@@ -2218,6 +2216,13 @@ def cmd_add(args: argparse.Namespace) -> int:
         print("error: --title needs a single source (got "
               f"{len(args.sources)})", file=sys.stderr)
         return 2
+
+    if getattr(args, "no_synthesize", False):
+        print(
+            "warning: --no-synthesize is a no-op; synthesis is already "
+            "off by default. Pass --synthesize to run synthesis after add.",
+            file=sys.stderr,
+        )
 
     docs_dir = REPO_ROOT / "raw" / "docs"
     vault_root = None
@@ -2241,7 +2246,6 @@ def cmd_add(args: argparse.Namespace) -> int:
     # mutating pipeline entry points on the vault lock; dry-run writes
     # nothing, so it stays lock-free.
 
-
     with ExitStack() as stack:
         if not args.dry_run:
             stack.enter_context(pipeline_lock(vault_root or REPO_ROOT))
@@ -2251,144 +2255,21 @@ def cmd_add(args: argparse.Namespace) -> int:
 def _cmd_add_locked(args: argparse.Namespace, docs_dir: Path,
                     vault_root: Path | None, render: str) -> int:
     """Body of cmd_add that runs under the pipeline lock (except dry-run)."""
-
-
-    state_target = resolve_state_file()
-    now_ts = datetime.now(UTC)
-    task_id = f"add-sync-{int(now_ts.timestamp() * 1000)}"
-
-    def _track(status: str, *, result_msg: str = "", error_msg: str = "") -> None:
-        stamp = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-        def _mut(s: dict[str, Any]) -> dict[str, Any]:
-            items = s.setdefault("queue", {}).setdefault("items", [])
-            row = None
-            for it in items:
-                if isinstance(it, dict) and it.get("id") == task_id:
-                    row = it
-                    break
-            if row is None:
-                row = {
-                    "id": task_id,
-                    "task_type": "add_doc_sync",
-                    "payload": {"sources": list(args.sources)},
-                    "created_at": stamp,
-                    "attempts": 1,
-                }
-                items.append(row)
-            row["status"] = status
-            row["updated_at"] = stamp
-            if result_msg:
-                row["result"] = result_msg
-            if error_msg:
-                row["last_error"] = error_msg
-            s.setdefault("ops", {})["last_queue_run_at"] = stamp
-            return s
-        update_state(_mut, state_target)
-
-    result = add_sources(
-        list(args.sources), docs_dir,
-        title=args.title, project=args.project, tags=tuple(args.tag or ()),
-        note=args.note, render=render, dry_run=args.dry_run,
+    result = run_add(
+        list(args.sources),
+        docs_dir,
+        vault_root=vault_root,
+        title=args.title,
+        project=args.project,
+        tags=tuple(args.tag or ()),
+        note=args.note,
+        render=render,
+        dry_run=args.dry_run,
         force_new=args.force_new,
+        synthesize=bool(getattr(args, "synthesize", False)),
+        build=not bool(getattr(args, "no_build", False)),
     )
-
-    for title in result["titles"]:
-        print(f"  + {title}")
-    for w in result["warnings"]:
-        print(f"  ~ {w}")
-    for e in result["errors"]:
-        print(f"  ! {e}", file=sys.stderr)
-    if args.dry_run:
-        return 2 if result["errors"] else 0
-    print(f"  wrote {len(result['written'])} file(s) under {docs_dir}")
-    _track("running", result_msg=f"wrote {len(result['written'])} file(s)")
-
-    failed = bool(result["errors"])
-    if not result["written"]:
-        return 2 if failed else 0
-
-    # Post-steps run once for the whole batch. `add` is synchronous by
-    # contract: the docs must come out the other end as real wiki pages
-    # in THIS invocation, using the one backend configured for the whole
-    # repository (config.json `synthesis.backend`). When synthesis can't
-    # deliver, the just-added raw docs are ROLLED BACK — a raw doc with
-    # no wiki page is a half-added state nothing else on the machine may
-    # ever repair. --no-synthesize is the only way to opt out.
-    if not args.no_synthesize:
-        backend = resolve_backend(_load_sessions_config())
-        raw_dir = wiki_sources_dir = None
-        sources_dir = REPO_ROOT / "wiki" / "sources"
-        if vault_root:
-            raw_dir = vault_root / "raw" / "sessions"
-            wiki_sources_dir = vault_root / "wiki" / "sources"
-            sources_dir = wiki_sources_dir
-        if not backend.is_available():
-            removed = remove_raw_docs(result["written"])
-            print(f"  ! backend {backend.name} is not available — cannot "
-                  f"synthesize. Rolled back {len(removed)} just-added raw "
-                  "doc file(s). Set synthesis.backend in config.json "
-                  "(claude / ollama / dummy), or re-run with --no-synthesize.",
-                  file=sys.stderr)
-            return 2
-        print(f"Synthesizing with backend: {backend.name}")
-        # Only synthesize the docs this `add` just wrote — never drain
-        # the whole unsynthesized backlog from an add invocation.
-        summary = synthesize_new_sessions(
-            backend=backend, raw_dir=raw_dir,
-            wiki_sources_dir=wiki_sources_dir,
-            only_paths=set(result["written"]),
-        )
-        print(f"  synthesized {summary['synthesized']}, skipped {summary['skipped']}")
-        for err in summary["errors"]:
-            print(f"  ! {err}", file=sys.stderr)
-        # No half-added docs: every raw doc this run wrote must now have
-        # its wiki page. (Pipeline errors about OTHER pending sources are
-        # reported above but don't fail the add or touch its docs.)
-        missing = [p for p in result["written"]
-                   if not expected_source_page(p, sources_dir).exists()]
-        if missing:
-            removed = remove_raw_docs(missing)
-            print(f"  ! rolled back {len(removed)} raw doc file(s) whose "
-                  "synthesis produced no wiki page", file=sys.stderr)
-            failed = True
-            _track("error", error_msg=f"rolled back {len(removed)} unsynthesized raw doc file(s)")
-
-    if not args.no_build:
-        raw_sessions, raw_dir_b = RAW_SESSIONS, RAW_DIR
-        wiki_dir = REPO_ROOT / "wiki"
-        out_dir = REPO_ROOT / "site"
-        if vault_root:
-            raw_dir_b = vault_root / "raw"
-            raw_sessions = raw_dir_b / "sessions"
-            wiki_dir = vault_root / "wiki"
-            out_dir = vault_root / "site"
-        code = build_site(out_dir=out_dir, raw_sessions=raw_sessions,
-                          raw_dir=raw_dir_b, wiki_dir=wiki_dir)
-        if code:
-            failed = True
-
-    # Observability: same grep-parseable format as sync/synthesize.
-    # Rolled-back docs are not logged — they are no longer in the wiki.
-    log_path = (vault_root or REPO_ROOT) / "wiki" / "log.md"
-    if log_path.parent.is_dir():
-        day = _date.today().isoformat()
-        with log_path.open("a", encoding="utf-8") as fh:
-            for rec in result["docs"]:
-                if any(p.exists() for p in rec["paths"]):
-                    fh.write(f"\n## [{day}] add | {rec['title']}\n")
-
-    refresh_synth_pending(
-        raw_dir=(vault_root / "raw" / "sessions") if vault_root else None,
-        docs_dir=(vault_root / "raw" / "docs") if vault_root else None,
-        wiki_sources_dir=(vault_root / "wiki" / "sources") if vault_root else None,
-        state_file=state_target,
-    )
-
-    if failed:
-        _track("error", error_msg="add command finished with errors")
-    else:
-        _track("done", result_msg=f"added {len(result['written'])} file(s)")
-    return 2 if failed else 0
+    return int(result["exit_code"])
 
 
 def cmd_remove(args: argparse.Namespace) -> int:
@@ -3616,17 +3497,17 @@ def build_parser() -> argparse.ArgumentParser:
     _add_synth_arguments(syn)
     syn.set_defaults(func=cmd_synthesize)
 
-    # add — ingest a document into the wiki (#16)
+    # add — ingest a document into the wiki (#16 / #273)
     add_p = add_command(
         "add",
         """
-        Alternative ingest path for documents (not agent transcripts): fetch or copy a URL, file, or folder into raw/docs/, then by default synthesise those paths and rebuild the site so the new material shows up in the wiki and on Home.
+        Alternative ingest path for documents (not agent transcripts): fetch or copy a URL, file, folder, or piped text (-) into raw/docs/, then by default rebuild the site so new raw material is browsable. Synthesis is off unless you pass --synthesize.
 
-        Converts each SOURCE into markdown under raw/docs/ (optionally grouped with --project) and records state, then runs the default follow-on steps unless flags say otherwise.
+        Converts each SOURCE into markdown under raw/docs/ (optionally grouped with --project) and records state. Use --synthesize to also write wiki/sources pages for the new docs; use --no-build to skip the site rebuild.
         """,
     )
     add_p.add_argument("sources", nargs="+", metavar="SOURCE",
-                       help="URL (http/https), file, or folder. Repeatable.")
+                       help="URL (http/https), file, folder, or '-' for stdin in the process locale encoding. Repeatable (not mixed with '-').")
     add_p.add_argument("--title", default=None,
                        help="Override title derivation (single source only)")
     add_p.add_argument("--project", default=None,
@@ -3635,8 +3516,10 @@ def build_parser() -> argparse.ArgumentParser:
                        help="Extra frontmatter tag (repeatable)")
     add_p.add_argument("--note", default=None,
                        help="Blockquote note prepended to the document body")
+    add_p.add_argument("--synthesize", action="store_true",
+                       help="Run synthesis on the docs this add wrote (off by default)")
     add_p.add_argument("--no-synthesize", action="store_true",
-                       help="Skip the post-add synthesis pass")
+                       help=argparse.SUPPRESS)  # deprecated: warn+no-op (#273)
     add_p.add_argument("--no-build", action="store_true",
                        help="Skip the post-add site rebuild")
     render_group = add_p.add_mutually_exclusive_group()

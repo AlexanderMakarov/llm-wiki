@@ -29,7 +29,7 @@ files + `synthesize --list-pending` / `--complete`) was **removed in v1.4.0**.
 }
 ```
 
-Then run `llmwiki synth` (or `llmwiki add` / `llmwiki all`).
+Then run `llmwiki synth` (or `llmwiki all`). `llmwiki add` lands raw docs and rebuilds the site by default — pass `--synthesize` when you want wiki source pages in the same invocation.
 One configured backend serves every command.
 
 ## Setup

@@ -11,7 +11,7 @@ Six production tools (#196):
     - wiki_health(rules?, min_refs?) — lint JSON + headline totals
     - wiki_sync(dry_run?, confirm?)  — trigger the converter
     - wiki_export(format)        — return any AI-consumable export
-    - wiki_add(url | path | content) — ingest one source into raw/docs/
+    - wiki_add(url | path | content) — proxy for CLI add (raw + site rebuild; synth opt-in)
 
 Protocol: Model Context Protocol, stdio transport, JSON-RPC 2.0.
 See the MCP spec at: https://modelcontextprotocol.io/
