@@ -13,30 +13,33 @@ tmp vault so nothing leaks into the repository's own ``wiki/``.
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
 from llmwiki.cli import build_parser
+from llmwiki.convert import flat_output_name, session_title
 from llmwiki.migrate_source_page_paths import print_report, run_migration
 from llmwiki.synth import base as synth_base
 from llmwiki.synth.base import DummySynthesizer
 from llmwiki.synth.pipeline import (
     _load_state,
     discover_unsynth_session_rels,
+    part_page_name,
     synthesize_new_sessions,
 )
 
 PROJECT = "demo-proj"
 DATE = "2026-07-01"
 SLUG = "a1b2c3d4"
-RAW_STEM = f"{DATE}T10-00-{PROJECT}-{SLUG}"
-RAW_REL = f"{RAW_STEM}.md"
+STARTED = datetime(2026, 7, 1, 10, 0, tzinfo=UTC)
+RAW_REL = flat_output_name(STARTED, PROJECT, SLUG)
 SOURCE_FILE = f"raw/sessions/{RAW_REL}"
 OLD_STEM = f"{DATE}-generic-task"
 NEW_STEM = f"{DATE}-{SLUG}"
-OLD_TITLE = f"Session: generic-task — {DATE}"
-RAW_TITLE = f"Session: {SLUG} — {DATE}"
+OLD_TITLE = session_title("generic-task", DATE)
+RAW_TITLE = session_title(SLUG, DATE)
 
 RAW_SESSION = """---
 title: "{title}"
@@ -88,14 +91,13 @@ def _write(path: Path, text: str) -> Path:
 
 
 def _raw_session(
-    vault: Path, *, slug: str = SLUG, project: str = PROJECT, date: str = DATE,
-    time: str = "10-00",
+    vault: Path, *, slug: str = SLUG, project: str = PROJECT, disambiguator: str = "",
 ) -> Path:
-    stem = f"{date}T{time}-{project}-{slug}"
+    name = flat_output_name(STARTED, project, slug, disambiguator=disambiguator)
     return _write(
-        vault / "raw" / "sessions" / f"{stem}.md",
+        vault / "raw" / "sessions" / name,
         RAW_SESSION.format(
-            title=f"Session: {slug} — {date}", date=date, stem=stem,
+            title=session_title(slug, DATE), date=DATE, stem=name.removesuffix(".md"),
             slug=slug, project=project,
         ),
     )
@@ -646,7 +648,7 @@ def test_a_vault_without_a_wiki_is_an_error(tmp_path: Path) -> None:
 
 def test_doubled_date_page_of_a_numeric_slug_moves(tmp_path: Path) -> None:
     vault = tmp_path / "vault"
-    raw = _raw_session(vault, slug="0123")
+    raw = _raw_session(vault, slug="0123", disambiguator="abcd1234")
     source_file = f"raw/sessions/{raw.name}"
     doubled = f"{DATE}-{raw.stem}"
     _real_page(vault, f"{PROJECT}/{doubled}.md", source_file=source_file)
@@ -672,13 +674,13 @@ def test_doc_part_pages_move_as_a_group(tmp_path: Path) -> None:
     _write(vault / "raw" / "docs" / "field-guide.md", DOC_RAW)
     for n in (1, 2):
         _real_page(
-            vault, f"docs/old-guide--part-{n:02d}.md",
+            vault, f"docs/{part_page_name('old-guide', n)}.md",
             source_file="raw/docs/field-guide.md", project="docs",
             title="Field guide", date="2026-07-02",
         )
     _write(
         vault / "wiki" / "concepts" / "Guides.md",
-        "---\ntitle: Guides\ntype: concept\n---\n\n- [[old-guide--part-02]]\n",
+        f"---\ntitle: Guides\ntype: concept\n---\n\n- [[{part_page_name('old-guide', 2)}]]\n",
     )
     _write(vault / "wiki" / "log.md", "# Wiki Log\n")
 
@@ -686,12 +688,12 @@ def test_doc_part_pages_move_as_a_group(tmp_path: Path) -> None:
 
     docs = vault / "wiki" / "sources" / "docs"
     assert sorted(p.name for p in docs.iterdir()) == [
-        "2026-07-02-field-guide--part-01.md",
-        "2026-07-02-field-guide--part-02.md",
+        f"{part_page_name('2026-07-02-field-guide', 1)}.md",
+        f"{part_page_name('2026-07-02-field-guide', 2)}.md",
     ]
     assert report["state_upserts"] == ["docs::field-guide.md"]
     concept = (vault / "wiki" / "concepts" / "Guides.md").read_text(encoding="utf-8")
-    assert "[[2026-07-02-field-guide--part-02]]" in concept
+    assert f"[[{part_page_name('2026-07-02-field-guide', 2)}]]" in concept
 
 
 # ─── CLI wiring ─────────────────────────────────────────────────────────

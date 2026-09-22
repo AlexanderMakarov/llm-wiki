@@ -41,27 +41,26 @@ from typing import Any
 
 from llmwiki._frontmatter import parse_frontmatter
 from llmwiki._system_pages import is_archived_path
+from llmwiki.convert import session_title
 from llmwiki.state_store import resolve_state_file
 from llmwiki.synth.pipeline import (
     _append_log,
     _load_state,
     _rebuild_index,
     _save_state,
+    is_log_page,
     page_is_stub,
     refresh_synth_pending,
+    split_part_page,
     synth_page_filename,
 )
 from llmwiki.wikilinks import WIKILINK_RE, norm_page_key, wikilink_targets
 
-_PART_SUFFIX = re.compile(r"--part-\d+$")
-_DATE_PREFIX = re.compile(r"^(\d{4}-\d{2}-\d{2})-(.+)$")
 _FENCE = re.compile(r"^---[ \t]*$")
 _TITLE_LINE = re.compile(r"^title:[ \t]*")
 _SOURCES_INLINE = re.compile(r"^(sources:[ \t]*\[)(.*)(\][ \t]*)$")
 _SOURCES_BLOCK_KEY = re.compile(r"^sources:[ \t]*$")
 _BLOCK_ITEM = re.compile(r"^([ \t]*-[ \t]+)(.*?)([ \t]*)$")
-#: Wiki files that record history rather than link to pages.
-_LOG_FILE = re.compile(r"^log(-archive-.*)?\.md$")
 
 
 def _relative(path: Path, root: Path) -> str:
@@ -140,10 +139,17 @@ def _raw_source(vault: Path, source_file: str) -> tuple[Path, str, bool] | None:
     return None
 
 
-def _old_converter_title(stem: str) -> str | None:
-    """``Session: <token> — <date>`` for a ``<date>-<token>`` page stem."""
-    m = _DATE_PREFIX.match(_PART_SUFFIX.sub("", stem))
-    return f"Session: {m.group(2)} — {m.group(1)}" if m else None
+def _old_converter_title(base: str, meta: dict[str, Any]) -> str | None:
+    """The converter's title for a page filed as ``<date>-<old token>``.
+
+    ``date`` is the page's own ``date:``; ``None`` when the stem does not open
+    with it.
+    """
+    date = str(meta.get("date") or "").strip()
+    prefix = f"{date}-"
+    if not date or not base.startswith(prefix) or base == prefix:
+        return None
+    return session_title(base[len(prefix):], date)
 
 
 def _plan_sources(
@@ -205,7 +211,7 @@ def _plan_sources(
                 "raw_title_line": raw_title_line,
                 "groups": defaultdict(list),
             }
-        base = _PART_SUFFIX.sub("", page.stem) if is_doc else page.stem
+        base = split_part_page(page.stem)[0] if is_doc else page.stem
         entry["groups"][(page.parent, base)].append(page)
     return sources, stub_claims
 
@@ -255,7 +261,6 @@ def _plan_moves(
                     })
                 continue
             claimed.update(dests)
-            old_title_shape = _old_converter_title(base)
             for page, dest in zip(pages, dests, strict=True):
                 moves.append({
                     "key": key,
@@ -265,7 +270,7 @@ def _plan_moves(
                     "to": _relative(dest, wiki),
                     "old_stem": page.stem,
                     "new_stem": dest.stem,
-                    "old_title_shape": old_title_shape,
+                    "old_base": base,
                     "raw_title": entry["raw_title"],
                     "raw_title_line": entry["raw_title_line"],
                 })
@@ -590,7 +595,7 @@ def run_migration(*, vault: Path, dry_run: bool = False) -> dict[str, Any]:
         raw_title = move["raw_title"]
         title_updated = (
             isinstance(old_title, str)
-            and old_title == move["old_title_shape"]
+            and old_title == _old_converter_title(move["old_base"], meta)
             and isinstance(raw_title, str)
             and bool(raw_title.strip())
             and raw_title != old_title
@@ -693,7 +698,7 @@ def _plan_rewrites(
     ambiguous: dict[str, set[str]] = defaultdict(set)
     hits: Counter[str] = Counter()
     for page in all_pages:
-        if page in replaced or (page.parent == wiki and _LOG_FILE.match(page.name)):
+        if page in replaced or (page.parent == wiki and is_log_page(page.name)):
             continue
         text = moved_texts.get(page)
         if text is None:
