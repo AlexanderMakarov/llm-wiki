@@ -572,6 +572,7 @@ python3 -m llmwiki migrate tools-used --vault /path/to/vault
 python3 -m llmwiki migrate page-kinds --vault /path/to/vault --dry-run
 python3 -m llmwiki migrate topic-kinds --vault /path/to/vault
 python3 -m llmwiki migrate wikilink-titles --vault /path/to/vault --dry-run
+python3 -m llmwiki migrate source-page-paths --vault /path/to/vault --dry-run
 python3 -m llmwiki migrate broken-provenance --vault /path/to/vault --dry-run
 ```
 
@@ -723,6 +724,32 @@ python3 -m llmwiki migrate wikilink-titles --vault /path/to/vault
 | `--dry-run` | Report what would change; write nothing. |
 
 Idempotent: a second run finds nothing to rewrite and prints `nothing to migrate: no bare slug wikilinks need title display text`. Preview with `--dry-run` before applying.
+
+### `source-page-paths` — move source pages filed under a stale name
+
+A real `wiki/sources/` page is tied to its raw file by `source_file:`. When its filename differs from the one synth derives for that raw file today (`<date>-<slug>` under `wiki/sources/<project>/`), synth's duplicate guard skips the source on every run — reported as one `skipped N source(s) already claimed by a real page under another name` line — and `synth --estimate` / Home keep counting it as pending. Earlier naming schemes (a session description shared by many sessions, the whole raw filename after the date, a number-shaped slug that fell back to the raw filename) left such pages behind.
+
+This offline migration, with no language model and no network call:
+
+1. Finds every real (non-stub) source page whose `source_file:` names an existing `raw/sessions/` or `raw/docs/` file and whose path differs from the derived one. A doc's `--part-NN` pages move as one group, keeping their part suffixes.
+2. Moves each page to its derived path with body and frontmatter intact. `title` changes only while it still reads `Session: <old name> — <date>` (the converter's title for the old name); it then becomes the raw file's current title.
+3. Rewrites `[[old-stem]]`, `[[old-stem|label]]` and `[[old-stem#anchor]]` links across `wiki/`, and the stem in frontmatter `sources:` lists. A label changes only when it equals the old title. When more than one page answers to a bare stem, the link (or `sources:` entry) in page P follows the one source page with that stem whose body links back to P (matched with the same case/punctuation fold as `link_integrity`); if that back-linker stays put the link is left as it is, and with no back-linker, several, or a back-linker whose new name would itself be ambiguous, the link is reported as ambiguous and left alone — the report counts links disambiguated by backlink, links still ambiguous, and those that will break because every page of that name moves; a path-qualified link (`[[sources/<project>/<stem>]]`, `[[<project>/<stem>]]`) is rewritten when its path matches exactly one page. `wiki/archive/` and the log are never edited.
+4. Records synth state (`synth.files` in `<vault>/llmwiki-state.json`, the raw file's mtime, never lowering a newer value) for each moved source, and for a real page already at its derived path whose state entry is missing. Then refreshes the Home pending count, rebuilds `wiki/index.md` when the vault keeps one, and appends a `migrate | source page paths` entry to `wiki/log.md`.
+5. Reports a collision — and changes nothing for that source — when a real page already sits at the derived path. A stub at the derived path for the same source is replaced.
+
+Implementation: `llmwiki/migrate_source_page_paths.py`. `raw/` is never written. Rebuild the site afterwards: `llmwiki build --vault PATH`.
+
+```bash
+python3 -m llmwiki migrate source-page-paths --vault /path/to/vault --dry-run
+python3 -m llmwiki migrate source-page-paths --vault /path/to/vault
+```
+
+| Flag | What |
+|---|---|
+| `--vault PATH` | **Required.** Vault root containing `wiki/` and `raw/`. |
+| `--dry-run` | Print planned moves, collisions, link rewrites, ambiguous links and state upserts; write nothing. |
+
+Idempotent: a second run finds nothing to move and prints `nothing to migrate: every source page sits at its derived path`.
 
 ### `broken-provenance` — remap or clear hops to missing raw sessions
 

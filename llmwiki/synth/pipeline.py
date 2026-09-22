@@ -38,7 +38,12 @@ from llmwiki import REPO_ROOT
 # #py-m1 (#587) / #arch-h5 (#610): import directly from _frontmatter
 # instead of via build.py. The build module pulls in 145+ transitive
 # imports; the parser sits cleanly in _frontmatter.py with no deps.
-from llmwiki._frontmatter import is_headless, is_subagent, parse_frontmatter
+from llmwiki._frontmatter import (
+    _parse_scalar,
+    is_headless,
+    is_subagent,
+    parse_frontmatter,
+)
 from llmwiki.agent_label import detect_agent_label
 from llmwiki.candidates import apply_review_summary_to_pipeline
 from llmwiki.config_schedule import _load_sessions_config
@@ -106,19 +111,45 @@ def _is_stub_page(text: str) -> bool:
     return any(marker in text for marker in _STUB_MARKERS)
 
 
-def synth_page_filename(meta: dict[str, Any], fallback_stem: str) -> str:
+#: ``YYYY-MM-DDTHH-MM-`` stamp that opens every converted session filename.
+_RAW_STAMP_PREFIX = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-")
+#: ``--<hash8>`` the converter appends when two sessions share a filename.
+_RAW_DISAMBIGUATOR = re.compile(r"--[0-9a-f]{8}$")
+
+
+def synth_slug_text(meta: Mapping[str, Any], fallback_stem: str) -> str:
+    """The raw file's ``slug:`` exactly as written, before normalisation.
+
+    The frontmatter parser coerces number-shaped values, so ``slug: 0123``
+    reads back as ``123`` and ``slug: 12e4`` as ``120000.0``. The converter
+    names the raw file ``<stamp>-<project>-<slug>[--<hash8>]``, so the written
+    text is recovered from the tail of ``fallback_stem``: the longest
+    ``-``-delimited suffix that parses back to the same value. When no suffix
+    does, the whole stem stands in for the slug.
+    """
+    raw_slug = meta.get("slug", fallback_stem)
+    if isinstance(raw_slug, str):
+        return raw_slug
+    tail = _RAW_DISAMBIGUATOR.sub("", _RAW_STAMP_PREFIX.sub("", fallback_stem, count=1))
+    wanted = repr(raw_slug)
+    starts = [0] + [i + 1 for i, ch in enumerate(tail) if ch == "-"]
+    for start in starts:
+        candidate = tail[start:]
+        if candidate and repr(_parse_scalar(candidate)) == wanted:
+            return candidate
+    return fallback_stem
+
+
+def synth_page_filename(meta: Mapping[str, Any], fallback_stem: str) -> str:
     """Filename stem (no extension) of the wiki source page for a raw file.
 
     Single slug scheme for the whole pipeline: the estimate report, the
-    stub detector and the writer all resolve a raw file to the same
-    ``wiki/sources/<project>/<filename>.md`` target. YAML parses
-    numeric-looking session slugs (``15824711``, ``6051e147``) as
-    int/float, so a non-string slug falls back to the filename stem.
+    stub detector, the writer and ``migrate source-page-paths`` all resolve a
+    raw file to the same ``wiki/sources/<project>/<filename>.md`` target.
+    The slug keeps its written text even when it looks like a number
+    (:func:`synth_slug_text`).
     """
-    raw_slug = meta.get("slug", fallback_stem)
-    if not isinstance(raw_slug, str):
-        raw_slug = fallback_stem
-    slug = _normalise_slug(raw_slug)
+    slug = _normalise_slug(synth_slug_text(meta, fallback_stem))
     date = str(meta.get("date", "")).strip()
     return f"{date}-{slug}" if date else slug
 
@@ -1335,10 +1366,7 @@ def _synthesize_one(
         # chars stripped) and G-06 (#292): date-prefixed so Claude Code's
         # 3-word auto-slugs can't silently collide. Output path is
         # `wiki/sources/<project>/<YYYY-MM-DD>-<slug>.md`.
-        raw_slug = meta.get("slug", p.stem)
-        result["slug"] = _normalise_slug(
-            raw_slug if isinstance(raw_slug, str) else p.stem
-        )
+        result["slug"] = _normalise_slug(synth_slug_text(meta, p.stem))
         filename = synth_page_filename(meta, p.stem)
         # #1: oversized docs are split on headings into part-pages so each
         # chunk fits one backend call. Sessions are never chunked.
@@ -1730,13 +1758,18 @@ def synthesize_new_sessions(
             and not derived_has_real
             and not derived_needs_topics_rewrite
         ):
-            print(
-                f"  skipped: {it['project']} → {source_key} "
-                "(real source page already claims this source; not duplicating)"
-            )
             dedup_skipped += 1
             continue
         new_items.append(it)
+    if dedup_skipped:
+        # One line for the lot (#265): these are pages filed under a name the
+        # writer no longer derives, and the offline migration re-files them.
+        vault_root = Path(sources_out).resolve().parent.parent
+        print(
+            f"  skipped {dedup_skipped} source(s) already claimed by a real page "
+            "under another name; run "
+            f"`llmwiki migrate source-page-paths --vault {vault_root}` to move them"
+        )
 
     summary: dict[str, Any] = {
         "total_scanned": len(items),

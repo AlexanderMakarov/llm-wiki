@@ -30,6 +30,7 @@ from llmwiki import (
     install_agent_kit,
     migrate_broken_provenance,
     migrate_page_kinds,
+    migrate_source_page_paths,
     migrate_topic_kinds,
     migrate_wikilink_titles,
     usage,
@@ -1635,6 +1636,11 @@ _MIGRATIONS: tuple[tuple[str, str, str], ...] = (
         "Run when wiki pages still use bare slug wikilinks and you want display text to match page titles for readability and findability. Reads only existing wiki pages — no LLM call and raw/ is never written.",
     ),
     (
+        "source-page-paths",
+        "Move real wiki/sources pages whose filename differs from the one synth derives for their source_file today to that derived path, rewrite the [[links]] and sources: entries that point at them, and record synth state for those sources.",
+        "Run when every synth prints that sources were skipped because a real page already claims them, or when synth --estimate / Home keep counting sources as pending that already have a real page. Reads only existing wiki pages and raw frontmatter — no LLM call, and raw/ is never written.",
+    ),
+    (
         "broken-provenance",
         "Fix or clear wiki source_file pointers that still name raw/sessions files which are no longer on disk (remap to a same-date candidate when one exists, otherwise clear the hop).",
         "Run after a re-sync or adapter rename left wiki pages pointing at missing raw transcripts (broken Trace / provenance). Does not delete wiki pages and does not convert new sessions.",
@@ -1820,6 +1826,20 @@ def cmd_migrate_wikilink_titles(args: argparse.Namespace) -> int:
         dry_run=bool(getattr(args, "dry_run", False)),
     )
     migrate_wikilink_titles.print_report(report)
+    return 1 if report["errors"] else 0
+
+
+def cmd_migrate_source_page_paths(args: argparse.Namespace) -> int:
+    """Move source pages filed under a stale name to their derived path (#265).
+
+    Package-local like ``migrate-topic-kinds``: pip/Homebrew installs have no
+    ``scripts/`` checkout. Offline — no synthesis backend or network call.
+    """
+    report = migrate_source_page_paths.run_migration(
+        vault=Path(args.vault),
+        dry_run=bool(getattr(args, "dry_run", False)),
+    )
+    migrate_source_page_paths.print_report(report)
     return 1 if report["errors"] else 0
 
 
@@ -3308,6 +3328,23 @@ def build_parser() -> argparse.ArgumentParser:
         help="Report would-change files; write nothing",
     )
     migrate_wikilink.set_defaults(func=cmd_migrate_wikilink_titles)
+
+    migrate_paths = add_migration(
+        "source-page-paths", *_mig_by_name["source-page-paths"],
+        short="Move source pages filed under a stale name to their derived path",
+    )
+    migrate_paths.add_argument(
+        "--vault",
+        type=Path,
+        required=True,
+        help="Vault root containing wiki/ and raw/",
+    )
+    migrate_paths.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Report planned moves and rewrites; write nothing",
+    )
+    migrate_paths.set_defaults(func=cmd_migrate_source_page_paths)
 
     migrate_prov = add_migration(
         "broken-provenance", *_mig_by_name["broken-provenance"],
