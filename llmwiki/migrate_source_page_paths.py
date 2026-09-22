@@ -17,8 +17,11 @@ This migration is offline — no synthesis backend is called:
   more than one page is reported as ambiguous and left alone; a path-qualified
   link is rewritten when its path matches exactly one page. ``wiki/archive/``
   and the log are never touched;
-* synth state records each moved source, and a real page already at its
-  derived path whose state entry is missing gets one too;
+* synth state records each moved source, and each real page already at its
+  derived path, that has no entry yet — an existing entry is kept, since one
+  older than the raw file marks a raw re-converted after synthesis;
+* moves are applied first; a failed move is undone and dropped along with
+  its link rewrites and state entry;
 * a real page already at the derived path is a collision: both pages stay
   untouched and the source gets no state entry.
 
@@ -566,12 +569,19 @@ def run_migration(*, vault: Path, dry_run: bool = False) -> dict[str, Any]:
     planned, collisions, heal = _plan_moves(sources, stub_claims, wiki)
     report["collisions"] = collisions
 
+    original: dict[Path, str | None] = {}
+
+    def _original(page: Path) -> str | None:
+        if page not in original:
+            original[page] = _read(page, errors, vault)
+        return original[page]
+
     # Title updates first: link labels that quote the old title follow them.
     moves: list[dict[str, Any]] = []
-    new_texts: dict[Path, str] = {}
+    moved_texts: dict[Path, str] = {}
     new_titles: dict[str, tuple[str, str]] = {}
     for move in planned:
-        text = _read(move["path"], errors, vault)
+        text = _original(move["path"])
         if text is None:
             continue
         moves.append(move)
@@ -589,31 +599,105 @@ def run_migration(*, vault: Path, dry_run: bool = False) -> dict[str, Any]:
         if title_updated:
             text = _replace_title_line(text, move["raw_title_line"])
             new_titles[move["old_stem"]] = (old_title, raw_title)
-        new_texts[move["path"]] = text
-        report["moves"].append({
-            "from": move["from"],
-            "to": move["to"],
-            "title_updated": title_updated,
-        })
+        moved_texts[move["path"]] = text
+        move["title_updated"] = title_updated
 
     all_pages = _wiki_pages(wiki)
-    bare, qualified, shared = _link_rewriter(moves, all_pages, wiki)
-    original: dict[Path, str | None] = {}
+    state_file = resolve_state_file(vault)
+    try:
+        state = _load_state(state_file)
+    except (OSError, ValueError, TypeError) as exc:
+        errors.append(f"state load: {exc}")
+        state = {}
 
-    def _original(page: Path) -> str | None:
-        if page not in original:
-            original[page] = _read(page, errors, vault)
-        return original[page]
+    rewrites = _plan_rewrites(moves, all_pages, wiki, moved_texts, new_titles, _original)
+    updates = _state_updates(moves, heal, sources, state, errors)
+    _fill_report(report, moves, rewrites, updates)
+    if dry_run or not report["changed"]:
+        return report
 
-    backlinker = _Backlinks(shared, {m["path"] for m in moves}, _original)
-    ambiguous: dict[str, set[str]] = defaultdict(set)
-    ambiguous_hits: Counter[str] = Counter()
-    for page in all_pages:
-        if page.parent == wiki and _LOG_FILE.match(page.name):
+    # Moves land first; a move that fails is rolled back and dropped, and the
+    # link rewrites and state entries are then planned for the moves that held.
+    landed = _apply_moves(moves, moved_texts, _original, wiki, errors)
+    if len(landed) != len(moves):
+        moves = landed
+        rewrites = _plan_rewrites(
+            moves, all_pages, wiki, moved_texts, new_titles, _original
+        )
+        updates = _state_updates(moves, heal, sources, state, errors)
+        _fill_report(report, moves, rewrites, updates)
+
+    by_path = {m["path"]: m for m in moves}
+    for path, text in rewrites["texts"].items():
+        move = by_path.get(path)
+        target = move["dest"] if move else path
+        if move and text == moved_texts[path]:
             continue
-        text = new_texts.get(page)
+        try:
+            target.write_text(text, encoding="utf-8")
+        except OSError as exc:
+            errors.append(f"{_relative(target, wiki)}: {exc}")
+
+    if updates:
+        try:
+            _save_state({**state, **updates}, state_file)
+        except OSError as exc:
+            errors.append(f"{state_file.name}: {exc}")
+
+    if moves and (wiki / "index.md").is_file():
+        try:
+            _rebuild_index(wiki)
+        except (OSError, ValueError, RuntimeError) as exc:
+            errors.append(f"index rebuild: {exc}")
+    if report["changed"]:
+        try:
+            refresh_synth_pending(
+                raw_dir=vault / "raw" / "sessions",
+                docs_dir=vault / "raw" / "docs",
+                wiki_sources_dir=wiki / "sources",
+                state_file=state_file,
+            )
+        except (OSError, ValueError) as exc:
+            errors.append(f"pending refresh: {exc}")
+        _append_log("source page paths", log_path=wiki / "log.md", operation="migrate")
+    return report
+
+
+def _plan_rewrites(
+    moves: list[dict[str, Any]],
+    all_pages: list[Path],
+    wiki: Path,
+    moved_texts: dict[Path, str],
+    new_titles: dict[str, tuple[str, str]],
+    read: Callable[[Path], str | None],
+) -> dict[str, Any]:
+    """Plan the link and ``sources:`` rewrites that follow ``moves``.
+
+    ``texts`` maps each page to write — keyed by its path before the pass —
+    to its new text; a moved page always appears, with its title update. A
+    page a move replaces (a stub at the derived path) is left out: the move
+    overwrites it.
+    """
+    bare, qualified, shared = _link_rewriter(moves, all_pages, wiki)
+    moved_paths = {m["path"] for m in moves}
+    replaced = {m["dest"] for m in moves} - moved_paths
+    backlinker = _Backlinks(shared, moved_paths, read)
+    plan: dict[str, Any] = {
+        "texts": {},
+        "rewritten_pages": [],
+        "links": 0,
+        "sources": 0,
+        "disambiguated": 0,
+        "disambiguated_kept": 0,
+    }
+    ambiguous: dict[str, set[str]] = defaultdict(set)
+    hits: Counter[str] = Counter()
+    for page in all_pages:
+        if page in replaced or (page.parent == wiki and _LOG_FILE.match(page.name)):
+            continue
+        text = moved_texts.get(page)
         if text is None:
-            text = _original(page)
+            text = read(page)
             if text is None:
                 continue
 
@@ -627,103 +711,153 @@ def run_migration(*, vault: Path, dry_run: bool = False) -> dict[str, Any]:
             rewritten, bare, _resolve
         )
         backlinks = bl_links + bl_listed
-        report["disambiguated"] += backlinks["rewritten"]
-        report["disambiguated_kept"] += backlinks["kept"]
-        ambiguous_hits.update(amb_links)
-        ambiguous_hits.update(amb_listed)
+        plan["disambiguated"] += backlinks["rewritten"]
+        plan["disambiguated_kept"] += backlinks["kept"]
+        hits.update(amb_links)
+        hits.update(amb_listed)
         for stem in amb_links | amb_listed:
             ambiguous[stem].add(_relative(page, wiki))
         if links or listed:
-            report["links_rewritten"] += links
-            report["sources_rewritten"] += listed
-            report["rewritten_pages"].append({
+            plan["links"] += links
+            plan["sources"] += listed
+            plan["rewritten_pages"].append({
                 "page": _relative(page, wiki),
                 "links": links,
                 "sources": listed,
             })
-        if rewritten != text or page in new_texts:
-            new_texts[page] = rewritten
-    moved_paths = {m["path"] for m in moves}
+        if rewritten != text or page in moved_paths:
+            plan["texts"][page] = rewritten
     kept_stems = {p.stem for p in all_pages if p not in moved_paths}
-    report["ambiguous"] = [
+    plan["ambiguous"] = [
         {
             "stem": stem,
             "referrers": sorted(refs),
-            "occurrences": ambiguous_hits[stem],
+            "occurrences": hits[stem],
             "dangling": stem not in kept_stems,
         }
         for stem, refs in sorted(ambiguous.items())
     ]
-    report["still_ambiguous"] = sum(ambiguous_hits.values())
-    report["would_break"] = sum(
-        a["occurrences"] for a in report["ambiguous"] if a["dangling"]
-    )
+    return plan
 
-    state_file = resolve_state_file(vault)
-    try:
-        state = _load_state(state_file)
-    except (OSError, ValueError, TypeError) as exc:
-        errors.append(f"state load: {exc}")
-        state = {}
-    moved_keys = {m["key"] for m in moves}
+
+def _state_updates(
+    moves: list[dict[str, Any]],
+    heal: list[str],
+    sources: dict[str, dict[str, Any]],
+    state: dict[str, float],
+    errors: list[str],
+) -> dict[str, float]:
+    """Synth state entries to record: moved or healed sources with no entry yet.
+
+    An existing entry is kept even when it is older than the raw file — the
+    raw was re-converted after synthesis, so synth must still see it as stale.
+    """
     updates: dict[str, float] = {}
-    for key in sorted(moved_keys | set(heal)):
+    for key in sorted({m["key"] for m in moves} | set(heal)):
+        if key in state:
+            continue
         try:
-            mtime = float(sources[key]["raw"].stat().st_mtime)
+            updates[key] = float(sources[key]["raw"].stat().st_mtime)
         except OSError as exc:
             errors.append(f"{sources[key]['source_file']}: {exc}")
-            continue
-        prev = state.get(key)
-        if key in moved_keys:
-            if prev is not None and (prev + 1e-6) >= mtime:
-                continue
-        elif prev is not None:
-            continue
-        updates[key] = mtime
-    report["state_upserts"] = sorted(updates)
+    return updates
 
+
+def _fill_report(
+    report: dict[str, Any],
+    moves: list[dict[str, Any]],
+    rewrites: dict[str, Any],
+    updates: dict[str, float],
+) -> None:
+    report["moves"] = [
+        {"from": m["from"], "to": m["to"], "title_updated": m["title_updated"]}
+        for m in moves
+    ]
+    report["rewritten_pages"] = rewrites["rewritten_pages"]
+    report["links_rewritten"] = rewrites["links"]
+    report["sources_rewritten"] = rewrites["sources"]
+    report["disambiguated"] = rewrites["disambiguated"]
+    report["disambiguated_kept"] = rewrites["disambiguated_kept"]
+    report["ambiguous"] = rewrites["ambiguous"]
+    report["still_ambiguous"] = sum(a["occurrences"] for a in rewrites["ambiguous"])
+    report["would_break"] = sum(
+        a["occurrences"] for a in rewrites["ambiguous"] if a["dangling"]
+    )
+    report["state_upserts"] = sorted(updates)
     report["changed"] = bool(
         report["moves"] or report["rewritten_pages"] or report["state_upserts"]
     )
-    if dry_run or not report["changed"]:
-        return report
 
-    by_path = {m["path"]: m for m in moves}
-    for path, text in new_texts.items():
-        move = by_path.get(path)
-        try:
-            if move is None:
-                path.write_text(text, encoding="utf-8")
-                continue
+
+def _apply_moves(
+    moves: list[dict[str, Any]],
+    moved_texts: dict[Path, str],
+    read: Callable[[Path], str | None],
+    wiki: Path,
+    errors: list[str],
+) -> list[dict[str, Any]]:
+    """Move pages source by source; return the moves that landed.
+
+    A doc's part pages move together: when any page of a source fails to
+    write or to leave its old path, the pages already moved for that source
+    go back and whatever sat at their targets is restored.
+    """
+    by_key: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for move in moves:
+        by_key[move["key"]].append(move)
+    landed: list[dict[str, Any]] = []
+    for key in sorted(by_key):
+        done: list[tuple[dict[str, Any], str | None]] = []
+        failed = False
+        for move in by_key[key]:
+            path: Path = move["path"]
             dest: Path = move["dest"]
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            dest.write_text(text, encoding="utf-8")
-            path.unlink()
-        except OSError as exc:
-            errors.append(f"{_relative(path, wiki)}: {exc}")
+            try:
+                prior = dest.read_text(encoding="utf-8") if dest.is_file() else None
+            except (OSError, UnicodeDecodeError) as exc:
+                errors.append(f"{move['to']}: {exc}; not moved")
+                failed = True
+                break
+            try:
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                dest.write_text(moved_texts[path], encoding="utf-8")
+            except OSError as exc:
+                errors.append(f"{move['from']} → {move['to']}: {exc}; not moved")
+                failed = True
+                _restore(dest, prior, wiki, errors)
+                break
+            try:
+                path.unlink()
+            except OSError as exc:
+                errors.append(f"{move['from']}: {exc}; move undone")
+                failed = True
+                _restore(dest, prior, wiki, errors)
+                break
+            done.append((move, prior))
+        if not failed:
+            landed.extend(by_key[key])
+            continue
+        for move, prior in reversed(done):
+            text = read(move["path"])
+            try:
+                if text is not None:
+                    move["path"].write_text(text, encoding="utf-8")
+            except OSError as exc:
+                errors.append(f"{move['from']}: {exc}; could not put the page back")
+                continue
+            _restore(move["dest"], prior, wiki, errors)
+    return landed
 
-    if updates:
-        try:
-            _save_state({**state, **updates}, state_file)
-        except OSError as exc:
-            errors.append(f"{state_file.name}: {exc}")
 
-    if moves and (wiki / "index.md").is_file():
-        try:
-            _rebuild_index(wiki)
-        except (OSError, ValueError, RuntimeError) as exc:
-            errors.append(f"index rebuild: {exc}")
+def _restore(dest: Path, prior: str | None, wiki: Path, errors: list[str]) -> None:
+    """Put back what sat at ``dest`` before a move wrote there."""
     try:
-        refresh_synth_pending(
-            raw_dir=vault / "raw" / "sessions",
-            docs_dir=vault / "raw" / "docs",
-            wiki_sources_dir=wiki / "sources",
-            state_file=state_file,
-        )
-    except (OSError, ValueError) as exc:
-        errors.append(f"pending refresh: {exc}")
-    _append_log("source page paths", log_path=wiki / "log.md", operation="migrate")
-    return report
+        if prior is None:
+            dest.unlink(missing_ok=True)
+        else:
+            dest.write_text(prior, encoding="utf-8")
+    except OSError as exc:
+        errors.append(f"{_relative(dest, wiki)}: {exc}; could not undo the write")
 
 
 def print_report(report: dict[str, Any]) -> None:

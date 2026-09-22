@@ -29,3 +29,12 @@
 ## smoke (operator asked agent to run it on the live vault; backup taken first)
 - estimate pending 23→3 (remaining 3 = #257 topic rewrites); migrate: 41 moves, 0 collisions, 57 links + 43 sources rewritten, 0 would break; lint link_integrity 688→688, title_ambiguity 16→11; re-run "nothing to migrate"; stale scan 0; build OK; 1618 dated source links in entities/concepts all resolve.
 - Next: local review.
+
+## local-review
+- Reviewer verdict: Request changes (2 blockers, 2 nits). Live vault checked: B1 did not occur (41 moved pages all real).
+- Operator keep/drop: keep B1 (stub-overwrite fix + test), N1 (state upsert only when missing), N2 (transactional moves); B2 resolved by filing #279 for the numeric-slug fix and closing both #265 and #279 from this PR — operator decision: both fix stale-slug consequences, so one PR; size justified in PR body.
+- Next: apply fixes, re-run gates, commit-push, open PR.
+- Review fixes applied: B1 (replaced stubs excluded from rewrite pass), N1 (state upsert only when missing), N2 (moves first, per-source rollback, rewrites/state re-planned for landed moves). Full suite 5452 passed, 48 skipped; ruff clean. Filed #279 (numeric-slug) and #280 (test-suite reduction, unrelated follow-up).
+
+## commit-push
+- Branch `fix/265-source-page-paths` pushed; PR closes #265 and #279. Tracked flow-log ends here (Context Discipline).

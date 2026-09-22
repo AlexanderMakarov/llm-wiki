@@ -336,6 +336,26 @@ def test_newer_state_value_is_not_regressed(tmp_path: Path) -> None:
     )
 
 
+def test_older_state_value_is_kept_so_the_page_stays_stale(tmp_path: Path) -> None:
+    """The raw was re-converted after synthesis: synth must still see that."""
+    vault = _vault(tmp_path)
+    raw = vault / "raw" / "sessions" / RAW_REL
+    past = raw.stat().st_mtime - 1000
+    _write(
+        vault / "llmwiki-state.json",
+        json.dumps({"synth": {"files": {RAW_REL: past}}}),
+    )
+
+    report = run_migration(vault=vault)
+
+    assert len(report["moves"]) == 1
+    assert report["state_upserts"] == []
+    assert _load_state(vault / "llmwiki-state.json")[RAW_REL] == pytest.approx(
+        past, abs=1e-3
+    )
+    assert _pending(vault) == {RAW_REL}
+
+
 def test_page_already_at_target_without_state_is_healed(tmp_path: Path) -> None:
     vault = tmp_path / "vault"
     _raw_session(vault)
@@ -426,6 +446,82 @@ def test_stub_at_target_for_the_same_source_is_replaced(tmp_path: Path) -> None:
     assert report["collisions"] == []
     assert len(report["moves"]) == 1
     assert "A real synthesized summary." in stub.read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize(
+    "stub_extra",
+    [
+        f"\nSee [[{OLD_STEM}]] for the old notes.\n",
+        None,
+    ],
+    ids=["body-link", "sources-entry"],
+)
+def test_stub_at_target_that_links_the_old_stem_does_not_win(
+    tmp_path: Path, stub_extra: str | None
+) -> None:
+    vault = _vault(tmp_path)
+    stub_text = STUB_PAGE.format(source_file=SOURCE_FILE, project=PROJECT)
+    if stub_extra is None:
+        stub_text = stub_text.replace(
+            f"project: {PROJECT}\n", f"project: {PROJECT}\nsources: [{OLD_STEM}]\n"
+        )
+    else:
+        stub_text += stub_extra
+    target = _write(vault / "wiki" / "sources" / PROJECT / f"{NEW_STEM}.md", stub_text)
+
+    report = run_migration(vault=vault)
+
+    assert report["errors"] == []
+    text = target.read_text(encoding="utf-8")
+    assert "A real synthesized summary." in text
+    assert "llmwiki-pending" not in text
+
+
+def test_failed_move_is_undone_and_its_rewrites_dropped(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    vault = _vault(tmp_path)
+    stale = vault / "wiki" / "sources" / PROJECT / f"{OLD_STEM}.md"
+    before = _snapshot(vault)
+    real_unlink = Path.unlink
+
+    def _unlink(self: Path, *args, **kwargs):
+        if self == stale:
+            raise PermissionError("read-only")
+        return real_unlink(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "unlink", _unlink)
+
+    report = run_migration(vault=vault)
+
+    assert report["moves"] == []
+    assert report["links_rewritten"] == 0
+    assert report["state_upserts"] == []
+    assert any("move undone" in e for e in report["errors"])
+    assert not (vault / "wiki" / "sources" / PROJECT / f"{NEW_STEM}.md").exists()
+    assert _snapshot(vault) == before
+
+
+def test_failed_write_leaves_the_vault_as_it_was(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    vault = _vault(tmp_path)
+    dest = vault / "wiki" / "sources" / PROJECT / f"{NEW_STEM}.md"
+    before = _snapshot(vault)
+    real_write = Path.write_text
+
+    def _write_text(self: Path, *args, **kwargs):
+        if self == dest:
+            raise OSError("disk full")
+        return real_write(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "write_text", _write_text)
+
+    report = run_migration(vault=vault)
+
+    assert report["moves"] == []
+    assert any("not moved" in e for e in report["errors"])
+    assert _snapshot(vault) == before
 
 
 def test_ambiguous_bare_stem_is_reported_not_rewritten(tmp_path: Path) -> None:
