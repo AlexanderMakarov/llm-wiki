@@ -2,7 +2,8 @@
 
 Build emits ``site/candidates.html``: two tables (entities, concepts) with a
 **Decision** control on every row — promote, flip-promote, merge into a named
-page, or discard with a reason. Decisions are DOM state, so the page needs
+page, or discard with a reason (optionally redirecting its links to an
+existing page). Decisions are DOM state, so the page needs
 nothing running. **Apply** assembles the chosen rows into a ready-to-paste
 ``llmwiki candidates apply --vault … --actions -`` command plus the JSON batch
 to pipe into it. Rows left at "No decision" stay out of the batch and stay
@@ -19,6 +20,8 @@ from typing import Any
 
 from llmwiki.candidates import (
     Candidate,
+    DiscardBatch,
+    DiscardResult,
     KeyFactsBackendError,
     candidate_review_summary,
     discard,
@@ -34,6 +37,21 @@ _HEADING_RE = re.compile(r"^#+\s+.*$", re.MULTILINE)
 _VALID_ACTIONS = frozenset({"promote", "flip-promote", "discard", "merge"})
 # Same set as ``_VALID_ACTIONS``; name marks rows that conflict with a merge target.
 _BATCH_PEER_ACTIONS = _VALID_ACTIONS
+
+
+def check_redirect_action(action: str, redirect: str, *, where: str = "") -> None:
+    """Refuse a ``redirect`` on any action but ``discard``.
+
+    Only a discard has links to move, so a redirect anywhere else is a
+    mistake the caller should hear about rather than a field to drop. Shared
+    by the one-off CLI line, the batch line, and batch validation so all
+    three refuse the same combination.
+    """
+    if redirect and action != "discard":
+        prefix = f"{where}: " if where else ""
+        raise ValueError(
+            f"{prefix}redirect applies only to discard, not {action!r}"
+        )
 
 
 def candidate_description(cand: Candidate) -> str:
@@ -80,10 +98,12 @@ def cli_command_for_action(item: dict[str, Any]) -> str:
     kind = str(item.get("kind") or "").strip()
     into = str(item.get("into") or "").strip()
     reason = str(item.get("reason") or "").strip()
+    redirect = str(item.get("redirect") or "").strip()
     if not action or not slug:
         raise ValueError("action and slug are required")
     if action not in _VALID_ACTIONS:
         raise ValueError(f"unknown action {action!r}")
+    check_redirect_action(action, redirect)
     kind_flag = f" --kind {kind}" if kind else ""
     if action == "promote":
         return f"llmwiki candidates promote --slug {_shell_single_quote(slug)}{kind_flag}"
@@ -96,9 +116,12 @@ def cli_command_for_action(item: dict[str, Any]) -> str:
         reason_flag = (
             f" --reason {_shell_single_quote(reason)}" if reason else ""
         )
+        redirect_flag = (
+            f" --redirect {_shell_single_quote(redirect)}" if redirect else ""
+        )
         return (
             f"llmwiki candidates discard --slug {_shell_single_quote(slug)}"
-            f"{kind_flag}{reason_flag}"
+            f"{kind_flag}{reason_flag}{redirect_flag}"
         )
     if not into:
         raise ValueError("merge requires into")
@@ -130,6 +153,7 @@ def cli_command_for_actions(
             raise ValueError("slug is required")
         if action == "merge" and not str(item.get("into") or "").strip():
             raise ValueError("merge requires into")
+        check_redirect_action(action, str(item.get("redirect") or "").strip())
     payload = json.dumps(actions, ensure_ascii=False, separators=(",", ":"))
     vault_flag = f" --vault {_shell_single_quote(vault)}" if vault else ""
     return f"llmwiki candidates apply{vault_flag} --actions {_shell_single_quote(payload)}"
@@ -153,17 +177,21 @@ def vault_display_path(wiki_dir: Path | None) -> str:
 
 
 def validate_candidate_batch(actions: list[dict[str, Any]]) -> None:
-    """Refuse a batch before mutation when a merge target is also acted on.
+    """Refuse a batch before mutation when it cannot run as written.
 
-    A ``merge`` with ``into=T`` conflicts with another row whose ``slug`` is
-    ``T`` and whose ``action`` is promote, flip-promote, discard, or merge.
-    Slugs and ``into`` values are normalised the same way ``apply`` passes
-    them to ``merge()`` — stripped strings, exact match.
+    A ``redirect`` on any row but a ``discard`` is refused. A ``merge`` with
+    ``into=T`` conflicts with another row whose ``slug`` is ``T`` and whose
+    ``action`` is promote, flip-promote, discard, or merge. Slugs and ``into``
+    values are normalised the same way ``apply`` passes them to ``merge()`` —
+    stripped strings, exact match.
     """
     for i, raw in enumerate(actions):
         if not isinstance(raw, dict):
             continue
         action = str(raw.get("action") or "").strip()
+        check_redirect_action(
+            action, str(raw.get("redirect") or "").strip(), where=f"batch row {i}",
+        )
         if action != "merge":
             continue
         merge_slug = str(raw.get("slug") or "").strip()
@@ -198,9 +226,16 @@ def apply_candidate_actions(
     Raises ``ValueError`` before any mutation when :func:`validate_candidate_batch`
     finds a merge target that another row in the batch also promotes,
     flip-promotes, discards, or merges away.
+
+    Every discard in the batch shares one :class:`DiscardBatch`, so the wiki
+    is scanned once for the live-page index and rewritten once for all their
+    links instead of twice per row. Each row still reports its own link count
+    and changed pages, filled in when the shared pass runs.
     """
     validate_candidate_batch(actions)
     results: list[dict[str, Any]] = []
+    batch: DiscardBatch | None = None
+    discarded: list[tuple[dict[str, Any], DiscardResult]] = []
     for raw in actions:
         if not isinstance(raw, dict):
             results.append({
@@ -214,6 +249,7 @@ def apply_candidate_actions(
         kind_s = str(kind).strip() if kind else None
         into = str(raw.get("into") or "").strip()
         reason = str(raw.get("reason") or "").strip()
+        redirect = str(raw.get("redirect") or "").strip() or None
         entry: dict[str, Any] = {"ok": False, "slug": slug, "action": action}
         try:
             if action not in _VALID_ACTIONS:
@@ -227,7 +263,16 @@ def apply_candidate_actions(
                     slug, wiki_dir, kind=kind_s, synthesizer=synthesizer,
                 )
             elif action == "discard":
-                path = discard(slug, wiki_dir, reason=reason, kind=kind_s)
+                if batch is None:
+                    batch = DiscardBatch(wiki_dir)
+                result = discard(
+                    slug, wiki_dir, reason=reason, kind=kind_s, redirect=redirect,
+                    batch=batch,
+                )
+                path = result.path
+                discarded.append((entry, result))
+                if result.redirect:
+                    entry["redirect"] = result.redirect
             else:
                 if not into:
                     raise ValueError("merge requires into")
@@ -243,6 +288,12 @@ def apply_candidate_actions(
         ) as exc:
             entry["error"] = str(exc)
         results.append(entry)
+    if batch is not None:
+        batch.flush()
+        for entry, result in discarded:
+            entry["links_rewritten"] = result.links_rewritten
+            if result.skipped:
+                entry["skipped"] = list(result.skipped)
     return results
 
 
@@ -284,7 +335,8 @@ def _decision_controls_html(row: dict[str, Any], kind: str, index: int) -> str:
     """The Decision cell: an action select plus the field that action needs.
 
     *Merge into…* reveals a combobox over the merge targets for ``kind``, and
-    *Discard* reveals the reason the archived stub keeps beside itself.
+    *Discard* reveals the reason the archived stub keeps beside itself plus an
+    optional existing page to redirect the discarded name's links to.
     """
     slug = html.escape(row["slug"])
     kind_esc = html.escape(kind)
@@ -314,6 +366,10 @@ def _decision_controls_html(row: dict[str, Any], kind: str, index: int) -> str:
         f'<input class="cand-discard-reason" type="text" aria-required="true"'
         f' placeholder="why it is rejected"'
         f' aria-label="Reason for discarding {slug}"></label>'
+        f'<label class="cand-redirect-wrap muted" hidden>Redirect links to '
+        f'<input class="cand-discard-redirect" type="text"'
+        f' placeholder="leave empty to unlink"'
+        f' aria-label="Existing page to redirect links to {slug} to"></label>'
         "</div>"
     )
 
@@ -487,12 +543,14 @@ _REVIEW_SCRIPT = """<script>
     var value = decisionOf(wrap);
     var mergeWrap = wrap.querySelector(".cand-merge-wrap");
     var reasonWrap = wrap.querySelector(".cand-reason-wrap");
+    var redirectWrap = wrap.querySelector(".cand-redirect-wrap");
     if (mergeWrap) {
       mergeWrap.hidden = value !== "merge";
       var combo = mergeWrap.querySelector(".cand-combo");
       if (combo && combo.llmwikiClose && value !== "merge") combo.llmwikiClose();
     }
     if (reasonWrap) reasonWrap.hidden = value !== "discard";
+    if (redirectWrap) redirectWrap.hidden = value !== "discard";
     if (value !== "merge") markField(wrap.querySelector(".cand-merge-into"), false);
     if (value !== "discard") {
       markField(wrap.querySelector(".cand-discard-reason"), false);
@@ -525,6 +583,8 @@ _REVIEW_SCRIPT = """<script>
         item.into = fieldValue(wrap, ".cand-merge-into");
       } else if (action === "discard") {
         item.reason = fieldValue(wrap, ".cand-discard-reason");
+        var redirect = fieldValue(wrap, ".cand-discard-redirect");
+        if (redirect) item.redirect = redirect;
       }
       actions.push(item);
     });

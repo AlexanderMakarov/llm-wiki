@@ -40,10 +40,12 @@ Usage: `/wiki-candidates`
 
    - **discard** — candidate is a hallucination or noise.
      Moves it to `wiki/archive/candidates/<timestamp>/` with a
-     `.reason.txt` audit-trail file. Reconciles `wiki/index.md`.
+     `.reason.txt` audit-trail file, and turns every `[[link]]` to the name into plain text. When the name really means an existing page, add `--redirect <page>`: links become `[[page|text]]` and the name is recorded under that page's `## Aliases`. Reconciles `wiki/index.md`.
      ```
      python3 -m llmwiki candidates discard --slug BogusEntity \
        --reason "not a real company; LLM hallucinated"
+     python3 -m llmwiki candidates discard --slug "Old Name" \
+       --reason "duplicate of ExistingPage" --redirect ExistingPage
      ```
 
    - **apply** — batch several intents in one process (same JSON as `site/candidates.html` prints):

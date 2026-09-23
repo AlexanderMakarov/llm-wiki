@@ -28,9 +28,10 @@ from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any
 
-from llmwiki.graph import scan_pages
+from llmwiki.candidates import discarded_names
+from llmwiki.graph import WIKI_DIR, scan_pages
 from llmwiki.topics_consolidate import load_cache
-from llmwiki.wikilinks import strip_anchor
+from llmwiki.wikilinks import build_page_alias_map, norm_page_key, strip_anchor
 
 # Mirrors tags.near_duplicate_tags' SequenceMatcher comparison; 0.90 merges
 # pure-case, plural, and hyphen/space variants (llm-wiki≈llmwiki 0.93,
@@ -65,11 +66,16 @@ class Topic:
         return len(self.sessions)
 
 
-def _session_pages(wiki_dir: Path | None) -> dict[str, dict[str, Any]]:
-    """Return ``{slug: page}`` for session/source pages only."""
+def _session_pages(
+    wiki_dir: Path | None, pages: dict[str, dict[str, Any]] | None = None,
+) -> dict[str, dict[str, Any]]:
+    """Return ``{slug: page}`` for session/source pages only.
+
+    ``pages`` is a :func:`scan_pages` result the caller already holds.
+    """
     return {
         slug: p
-        for slug, p in scan_pages(wiki_dir).items()
+        for slug, p in (pages if pages is not None else scan_pages(wiki_dir)).items()
         if p.get("type") == "sources"
     }
 
@@ -133,8 +139,14 @@ def derive_vocabulary(
     Returns ``(topics_sorted_by_count_desc, raw_spelling -> canonical)``.
     Pure CPU — no file, no LLM. This is the "known-topic list" fed back into
     the synth prompt and used to normalize the graph.
+
+    Reviewer decisions outrank every heuristic (#282): a name discarded under
+    ``wiki/archive/candidates/`` is never offered, in any casing, and a name a
+    live page lists under ``## Aliases`` (merge or discard ``--redirect``)
+    folds into that page's topic, so the next synth links the page instead.
     """
-    sessions = _session_pages(wiki_dir)
+    pages = scan_pages(wiki_dir)
+    sessions = _session_pages(wiki_dir, pages)
     # raw topic → set of session slugs (presence, not occurrence count).
     raw_sessions: dict[str, set[str]] = defaultdict(set)
     for slug, page in sessions.items():
@@ -153,15 +165,50 @@ def derive_vocabulary(
     descriptions = cache.get("descriptions", {}) if cache else {}
     dropped = {str(d).lower() for d in (cache.get("dropped", []) if cache else [])}
 
+    # Page aliases name the survivor for a merged or redirected name; keyed by
+    # the same `norm_page_key` fold links resolve with.
+    page_alias_map = build_page_alias_map(
+        {slug: str(page.get("body", "")) for slug, page in pages.items()}
+    )
+    redirects = {
+        norm_page_key(alias): slug
+        for alias, slug in page_alias_map.items()
+        if slug in pages and norm_page_key(alias)
+    }
+    live_keys = {norm_page_key(slug) for slug in pages} | set(redirects)
+    discarded = set(discarded_names(wiki_dir or WIKI_DIR, live_keys=live_keys))
+
+    def _reviewed(name: str) -> bool:
+        key = norm_page_key(name)
+        return key in discarded or key in redirects
+
     heuristic_raw = {t: len(s) for t, s in raw_sessions.items()
-                     if t.lower() not in alias_map and t.lower() not in dropped}
+                     if t.lower() not in alias_map and t.lower() not in dropped
+                     and not _reviewed(t)}
     raw_to_canonical = _cluster_aliases(heuristic_raw, similarity=similarity)
     for raw in raw_sessions:
         low = raw.lower()
+        if _reviewed(raw):
+            continue  # settled below, after every other spelling is mapped
         if low in alias_map:
             raw_to_canonical[raw] = alias_map[low]
         elif low in dropped:
             continue  # consolidator removed this as noise
+
+    # A redirected name adopts whatever canonical its target page's spelling
+    # already has, else the target slug; a discarded name (or one the cache
+    # folded onto a discarded canonical) leaves the vocabulary entirely.
+    canonical_by_key = {norm_page_key(raw): c for raw, c in raw_to_canonical.items()}
+    for raw in raw_sessions:
+        key = norm_page_key(raw)
+        canonical = raw_to_canonical.get(raw)
+        canon_key = norm_page_key(canonical) if canonical is not None else ""
+        if key in discarded or canon_key in discarded:
+            raw_to_canonical.pop(raw, None)
+            continue
+        target = redirects.get(key) or redirects.get(canon_key)
+        if target is not None:
+            raw_to_canonical[raw] = canonical_by_key.get(norm_page_key(target), target)
 
     topics: dict[str, Topic] = {}
     for raw, sess in raw_sessions.items():

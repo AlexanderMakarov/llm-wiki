@@ -10,6 +10,19 @@ How to upgrade between `llmwiki` releases. Most releases are drop-in (`pip insta
 
 The canonical per-release detail is [CHANGELOG.md](https://github.com/AlexanderMakarov/llm-wiki/blob/main/CHANGELOG.md) — this guide focuses on "what might break".
 
+## Unreleased — discard rewrites links to the discarded name (#282)
+
+Optional one-time cleanup. `candidates discard` now turns every `[[link]]` to the discarded name into plain text (or, with `--redirect PAGE`, into `[[PAGE|text]]` plus a `## Aliases` entry on that page), and the synth topic vocabulary no longer offers discarded names. Candidates you discarded **before** this release still have links pointing into `wiki/archive/`, which `lint` reports under `link_integrity`. Clean them up offline — no LLM call, `raw/` never written, safe to re-run:
+
+```bash
+llmwiki migrate discarded-topic-links --vault /path/to/vault --dry-run
+llmwiki migrate discarded-topic-links --vault /path/to/vault
+# point some names at an existing page instead of unlinking them:
+llmwiki migrate discarded-topic-links --vault /path/to/vault --redirect "Old Name=ExistingPage"
+```
+
+The same run moves candidate stubs that a `/` in their name had filed into a subfolder (`candidates/entities/A/B thing.md`) to their flat path (`candidates/entities/A-B thing.md`); an existing file at the flat path is never overwritten and is reported as a conflict. Rebuild afterwards: `llmwiki build --vault <vault>`. `discard()` callers in Python now receive a `DiscardResult` — use `.path` for the archived file.
+
 ## Unreleased — `add` / `wiki_add` no longer synthesize by default (#273)
 
 Behaviour flip, no data migration. Scripts and agents that expected synth-on-add must opt in:

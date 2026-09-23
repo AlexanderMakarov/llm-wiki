@@ -17,6 +17,7 @@ from pathlib import Path
 
 import pytest
 
+from llmwiki import candidates as candidates_mod
 from llmwiki.build import render_candidates_page
 from llmwiki.candidates_site import (
     _REVIEW_SCRIPT,  # noqa: PLC2701
@@ -63,6 +64,7 @@ function mkRow(spec) {
       if (sel === ".cand-decision") return { value: spec.decision || "" };
       if (sel === ".cand-merge-into") return { value: spec.into || "" };
       if (sel === ".cand-discard-reason") return { value: spec.reason || "" };
+      if (sel === ".cand-discard-redirect") return { value: spec.redirect || "" };
       return null;
     }
   };
@@ -374,6 +376,29 @@ def test_apply_candidate_actions_batch(tmp_path: Path) -> None:
     assert (wiki / "entities" / "Keep.md").is_file()
     assert not (wiki / "candidates" / "entities" / "Keep.md").exists()
     assert not (wiki / "candidates" / "entities" / "Drop.md").exists()
+
+
+def test_apply_refuses_a_batch_row_whose_slug_escapes_the_wiki(tmp_path: Path) -> None:
+    """# @layer: unit  # @spec: 282-discarded-topic-links"""
+    wiki = _mk_wiki(tmp_path)
+    _write_candidate(wiki, "entities", "Keep")
+    outside = tmp_path / "outside.md"
+    outside.write_text("untouchable\n", encoding="utf-8")
+
+    results = apply_candidate_actions(wiki, [
+        {"action": "promote", "slug": "../../outside", "kind": "entities"},
+        {"action": "flip-promote", "slug": "../../outside"},
+        {"action": "discard", "slug": "../../outside", "reason": "noise"},
+    ])
+    # Own batch: an escaping `into` would otherwise read as a peer conflict.
+    results += apply_candidate_actions(wiki, [
+        {"action": "merge", "slug": "Keep", "into": "../../outside"},
+    ])
+
+    assert [r["ok"] for r in results] == [False, False, False, False]
+    assert all(r["error"] for r in results)
+    assert outside.read_text(encoding="utf-8") == "untouchable\n"
+    assert (wiki / "candidates" / "entities" / "Keep.md").is_file()
 
 
 def test_cli_candidates_apply_batch(tmp_path: Path) -> None:
@@ -689,3 +714,138 @@ def test_render_candidates_page_writes_html(tmp_path: Path) -> None:
     assert "Gamma" in text
     assert "cand-command" in text
     assert 'class="nav' in text or "candidates.html" in text
+
+
+# ─── discard --redirect (#282) ──────────────────────────────────────────
+
+
+@needs_node
+def test_apply_carries_an_optional_discard_redirect(tmp_path: Path) -> None:
+    """# @layer: unit  # @spec: 282-discarded-topic-links"""
+    out = _collect_actions([
+        {"slug": "Noise", "kind": "entities", "decision": "discard", "reason": "dup",
+         "redirect": "Proper"},
+        {"slug": "Quiet", "kind": "concepts", "decision": "discard", "reason": "junk"},
+    ], tmp_path)
+    assert out["ok"], out.get("error")
+    assert out["actions"] == [
+        {"action": "discard", "slug": "Noise", "kind": "entities", "reason": "dup",
+         "redirect": "Proper"},
+        {"action": "discard", "slug": "Quiet", "kind": "concepts", "reason": "junk"},
+    ]
+
+
+def test_discard_row_offers_a_redirect_field(tmp_path: Path) -> None:
+    wiki = _mk_wiki(tmp_path)
+    _write_candidate(wiki, "entities", "Alpha")
+    html_out = render_candidates_body(wiki)
+    assert 'class="cand-redirect-wrap muted" hidden' in html_out
+    assert 'class="cand-discard-redirect"' in html_out
+
+
+def test_cli_command_for_discard_with_redirect() -> None:
+    cmd = cli_command_for_action({
+        "action": "discard", "slug": "Old Name", "reason": "dup", "redirect": "Proper",
+    })
+    assert cmd == (
+        "llmwiki candidates discard --slug 'Old Name' --reason 'dup' --redirect 'Proper'"
+    )
+
+
+@pytest.mark.parametrize("action", ["promote", "flip-promote", "merge"])
+def test_redirect_is_refused_on_anything_but_discard(action: str) -> None:
+    """Every entry point refuses the same combination. # @layer: unit  # @spec: 282-discarded-topic-links"""
+    item = {"action": action, "slug": "X", "into": "Y", "redirect": "Proper"}
+    for call in (
+        lambda: cli_command_for_action(item),
+        lambda: cli_command_for_actions([item]),
+        lambda: validate_candidate_batch([item]),
+    ):
+        with pytest.raises(ValueError, match="redirect applies only to discard"):
+            call()
+
+
+def test_apply_scans_the_wiki_once_for_a_batch_of_discards(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """N discards cost one index pass plus one rewrite pass, not 2N of each.
+
+    # @layer: integration  # @spec: 282-discarded-topic-links
+    """
+    wiki = _mk_wiki(tmp_path)
+    (wiki / "sources").mkdir(parents=True, exist_ok=True)
+    slugs = ["One", "Two", "Three"]
+    for slug in slugs:
+        _write_candidate(wiki, "entities", slug)
+        (wiki / "sources" / f"src-{slug}.md").write_text(
+            f"See [[{slug}]] twice: [[{slug}|it]].\n", encoding="utf-8",
+        )
+    walks: list[Path] = []
+    real_walk = candidates_mod._iter_live_markdown  # noqa: SLF001
+
+    def _counted(wiki_dir: Path) -> list[Path]:
+        walks.append(wiki_dir)
+        return real_walk(wiki_dir)
+
+    monkeypatch.setattr(candidates_mod, "_iter_live_markdown", _counted)
+
+    results = apply_candidate_actions(wiki, [
+        {"action": "discard", "slug": slug, "kind": "entities", "reason": "noise"}
+        for slug in slugs
+    ])
+
+    assert all(r["ok"] for r in results), results
+    assert len(walks) == 2
+    # Per-row counts survive the shared pass.
+    assert [r["links_rewritten"] for r in results] == [2, 2, 2]
+    for slug in slugs:
+        text = (wiki / "sources" / f"src-{slug}.md").read_text(encoding="utf-8")
+        assert text == f"See {slug} twice: it.\n"
+
+
+def test_batched_discards_of_two_stubs_sharing_a_name_report_per_row(
+    tmp_path: Path,
+) -> None:
+    """The shared pass keeps each row's own count. # @layer: integration  # @spec: 282-discarded-topic-links"""
+    wiki = _mk_wiki(tmp_path)
+    (wiki / "sources").mkdir(parents=True, exist_ok=True)
+    _write_candidate(wiki, "entities", "Dup")
+    _write_candidate(wiki, "concepts", "dup")
+    (wiki / "entities" / "Keeper.md").write_text("# Keeper\n", encoding="utf-8")
+    (wiki / "sources" / "s.md").write_text("See [[Dup]].\n", encoding="utf-8")
+
+    first, second = apply_candidate_actions(wiki, [
+        {"action": "discard", "slug": "Dup", "kind": "entities", "reason": "noise"},
+        {"action": "discard", "slug": "dup", "kind": "concepts", "reason": "noise",
+         "redirect": "Keeper"},
+    ])
+
+    assert first["ok"] and second["ok"], (first, second)
+    # The first row leaves the links alone: its peer stub still answers to the
+    # name. Only the row that discards the last claim on it rewrites them.
+    assert first["links_rewritten"] == 0
+    assert second["links_rewritten"] == 1
+    assert (
+        (wiki / "sources" / "s.md").read_text(encoding="utf-8")
+        == "See [[Keeper|Dup]].\n"
+    )
+
+
+def test_apply_candidate_actions_discard_redirect(tmp_path: Path) -> None:
+    """# @layer: integration  # @spec: 282-discarded-topic-links"""
+    wiki = _mk_wiki(tmp_path)
+    _write_candidate(wiki, "entities", "Drop")
+    (wiki / "entities" / "Proper.md").write_text("# Proper\n", encoding="utf-8")
+    (wiki / "sources").mkdir(exist_ok=True)
+    (wiki / "sources" / "s.md").write_text("See [[Drop]].\n", encoding="utf-8")
+
+    [result] = apply_candidate_actions(wiki, [
+        {"action": "discard", "slug": "Drop", "kind": "entities", "reason": "dup",
+         "redirect": "Proper"},
+    ])
+
+    assert result["ok"], result.get("error")
+    assert result["redirect"] == "Proper"
+    assert result["links_rewritten"] == 1
+    assert (wiki / "sources" / "s.md").read_text(encoding="utf-8") == "See [[Proper|Drop]].\n"
+    assert "Drop" in (wiki / "entities" / "Proper.md").read_text(encoding="utf-8")
