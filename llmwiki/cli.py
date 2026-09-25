@@ -1638,7 +1638,7 @@ _MIGRATIONS: tuple[tuple[str, str, str], ...] = (
     ),
     (
         "discarded-topic-links",
-        "Turn [[links]] to candidates discarded into wiki/archive/ into plain text (or, with --redirect NAME=PAGE, point them at an existing page recorded under its ## Aliases), and move candidate stubs a slash in their name filed into a subfolder back to a flat path.",
+        "Turn [[links]] to candidates discarded into wiki/archive/ into plain text (or, with --redirect NAME=PAGE, point them at an existing page recorded under its ## Aliases), and move candidate stubs a slash in their name filed into a subfolder back to a flat path. A name whose reason file records a merge, whose survivor page no longer answers to it, keeps its links and is reported with a suggested --redirect (--force unlinks it anyway).",
         "Run once after upgrading past the release where discard started rewriting links, when lint link_integrity is dominated by links to discarded candidates, or when a candidate with a slash in its name is missing from candidates list. Reads only existing wiki pages — no LLM call, and raw/ is never written. Safe to re-run.",
     ),
     (
@@ -1850,9 +1850,10 @@ def cmd_migrate_discarded_topic_links(args: argparse.Namespace) -> int:
         vault=Path(args.vault),
         dry_run=bool(getattr(args, "dry_run", False)),
         redirects=redirects,
+        force=bool(getattr(args, "force", False)),
     )
     migrate_discarded_topic_links.print_report(report)
-    return 1 if report["errors"] else 0
+    return 1 if report["errors"] or report["merges_skipped"] else 0
 
 
 def cmd_migrate_source_page_paths(args: argparse.Namespace) -> int:
@@ -3417,6 +3418,12 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="NAME=PAGE",
         help="Point links to discarded NAME at existing PAGE instead of "
              "unlinking them (repeatable)",
+    )
+    migrate_discarded.add_argument(
+        "--force",
+        action="store_true",
+        help="Unlink names a reason file records as merged even when no live "
+             "page answers to them, instead of reporting a suggested --redirect",
     )
     migrate_discarded.set_defaults(func=cmd_migrate_discarded_topic_links)
 

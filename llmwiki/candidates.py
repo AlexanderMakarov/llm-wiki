@@ -24,6 +24,8 @@ Public API:
   - ``DiscardBatch(wiki_dir)`` → one wiki scan and one rewrite pass shared by
     a run of discards, instead of two passes each
   - ``discarded_names(wiki_dir)`` → names a reviewer dismissed for good
+  - ``merged_intents(wiki_dir)`` → merged-away name → the target its reason
+    file recorded, for a survivor that no longer answers to the name
   - ``candidate_filename(name)`` → the flat, path-safe stub filename for a name
   - ``stale_candidates(wiki_dir, threshold_days=30)`` → list pages flagged stale
   - ``is_candidate(page_path)`` → bool
@@ -1024,7 +1026,7 @@ def merge(
     target.write_text(meta_text + body, encoding="utf-8")
 
     # Discard candidate by moving it to archive with a merge-reason file
-    _archive_candidate(candidate, wiki_dir, reason=f"merged into {into_slug}")
+    _archive_candidate(candidate, wiki_dir, reason=_format_merge_reason(into_slug))
     _reconcile_catalog(wiki_dir)
     return target
 
@@ -1308,6 +1310,46 @@ def discarded_names(
     }
 
 
+def merged_intents(
+    wiki_dir: Path, *, errors: list[str] | None = None,
+) -> dict[str, str]:
+    """``norm_page_key -> recorded target`` for archived candidates a merge folded.
+
+    Reads back the reason :func:`merge` wrote beside the stub, through the
+    same formatter, so the reviewer's intent survives even when the survivor
+    page was later renamed or re-filed and no longer answers to the
+    merged-away name. Merges made before survivors recorded an ``## Aliases``
+    entry have nothing else left to go on. ``migrate discarded-topic-links``
+    uses this to tell a merge apart from a dismissal (#282). A stub that
+    cannot be read is appended to ``errors`` instead of being dropped without
+    a word.
+    """
+    root = archive_dir(wiki_dir)
+    intents: dict[str, str] = {}
+    if not root.is_dir():
+        return intents
+    for path in sorted(root.rglob("*.md")):
+        reason_file = _reason_file(path)
+        if not reason_file.is_file():
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+            reason = reason_file.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            _note_skip(errors, wiki_dir, path, exc)
+            continue
+        target = _parse_merge_reason(
+            _reason_field_value(reason, _REASON_FIELD_REASON)
+        )
+        if not target:
+            continue
+        meta, _ = _parse_frontmatter(text)
+        key = norm_page_key(meta.get("title") or path.stem)
+        if key:
+            intents.setdefault(key, target)
+    return intents
+
+
 @dataclass(frozen=True)
 class LinkRewrite:
     """What one :func:`rewrite_links_in_wiki` pass changed."""
@@ -1380,24 +1422,35 @@ def rewrite_links_to(
     return rewrite.counts, rewrite.pages
 
 
+def redirect_target_pages(wiki_dir: Path) -> list[Path]:
+    """Every page a redirect may land on, in walk order.
+
+    Live means outside ``wiki/candidates/`` and ``wiki/archive/``: a redirect
+    must land on a page that is staying, and a ``_``-prefixed folder-context
+    stub is not a page. Shared by :func:`find_live_page` and the redirect
+    suggestions of ``migrate discarded-topic-links`` so both offer the same
+    set of pages.
+    """
+    candidates_root = candidates_dir(wiki_dir)
+    return [
+        path for path in _iter_live_markdown(wiki_dir)
+        if not path.is_relative_to(candidates_root)
+        and not path.name.startswith("_")
+    ]
+
+
 def find_live_page(wiki_dir: Path, name: str) -> Path:
     """Locate the existing live page a redirect names.
 
-    Live means outside ``wiki/candidates/`` and ``wiki/archive/``: a redirect
-    must land on a page that is staying. Exact stem first, then a unique
+    Searches :func:`redirect_target_pages`: exact stem first, then a unique
     ``norm_page_key`` match. Raises ``FileNotFoundError`` when nothing
     matches and ``ValueError`` when the folded name is ambiguous.
     """
-    candidates_root = candidates_dir(wiki_dir)
     return _resolve_page_file(
         name.strip(),
         wiki_dir,
         (),
-        pool=(
-            path for path in _iter_live_markdown(wiki_dir)
-            if not path.is_relative_to(candidates_root)
-            and not path.name.startswith("_")
-        ),
+        pool=redirect_target_pages(wiki_dir),
         label="redirect target",
         not_found=(
             f"redirect target not found: {name!r} is not an existing page under "
@@ -1596,6 +1649,50 @@ def _rewrite_type(text: str, *, new: str) -> str:
     return text
 
 
+#: Field label of the reason file line that says why a candidate was archived.
+_REASON_FIELD_REASON = "Reason"
+
+#: What :func:`merge` records as its reason, ahead of the target it folded the
+#: candidate into. The only thing that tells a merge apart from a free-text
+#: dismissal once the stub is in cold storage.
+_MERGE_REASON_PREFIX = "merged into "
+
+
+def _reason_file(archived: Path) -> Path:
+    """The reason file that belongs beside an archived candidate stub."""
+    return archived.with_suffix(".reason.txt")
+
+
+def _reason_field(label: str, value: object) -> str:
+    """One ``<label>: <value>`` line of an archived candidate's reason file."""
+    return f"{label}: {value}"
+
+
+def _reason_field_value(text: str, label: str) -> str:
+    """Value ``label`` carries in a reason file, ``""`` when it carries none.
+
+    Reads the line :func:`_reason_field` writes, through the same formatter,
+    so no caller has to restate the file's layout.
+    """
+    prefix = _reason_field(label, "")
+    for line in text.splitlines():
+        if line.startswith(prefix):
+            return line[len(prefix):].strip()
+    return ""
+
+
+def _format_merge_reason(into_slug: str) -> str:
+    """The reason :func:`merge` records for the candidate it folded away."""
+    return f"{_MERGE_REASON_PREFIX}{into_slug}"
+
+
+def _parse_merge_reason(reason: str) -> str:
+    """Target in a :func:`_format_merge_reason` reason, ``""`` when it is not one."""
+    if not reason.startswith(_MERGE_REASON_PREFIX):
+        return ""
+    return reason[len(_MERGE_REASON_PREFIX):].strip()
+
+
 def _archive_candidate(
     candidate: Path,
     wiki_dir: Path,
@@ -1616,13 +1713,13 @@ def _archive_candidate(
     shutil.move(str(candidate), str(dest))
 
     if reason or redirect:
-        reason_file = dest.with_suffix(".reason.txt")
+        reason_file = _reason_file(dest)
         lines = [
-            f"Discarded at: {datetime.now(UTC).isoformat()}",
-            f"Reason: {reason}",
-            f"Original path: {original}",
+            _reason_field("Discarded at", datetime.now(UTC).isoformat()),
+            _reason_field(_REASON_FIELD_REASON, reason),
+            _reason_field("Original path", original),
         ]
         if redirect:
-            lines.append(f"Redirected to: {redirect}")
+            lines.append(_reason_field("Redirected to", redirect))
         reason_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return dest

@@ -10,6 +10,15 @@ rewrite as ``candidates discard``. Every ``--redirect`` pair is checked before
 the first write: a bad one stops the run with nothing changed, and a name a
 live page already answers to is reported as skipped rather than dropped.
 
+A name a reviewer *merged* away is not a dismissal. Its reason file records
+the target (:func:`llmwiki.candidates.merged_intents`), so when the survivor
+page was later renamed or re-filed and no longer answers to the name, the run
+leaves those links alone and reports a ready-to-paste ``--redirect`` line
+instead of flattening links whose intended target is still on disk. That
+partition exits non-zero; ``--force`` unlinks them anyway. Everything else in
+the same run — the flatten, the plain dismissals, the explicit redirects —
+still applies.
+
 It also moves candidate stubs a ``/`` in their name filed into a subfolder
 (``candidates/entities/A/B thing.md``) to the flat path
 :func:`llmwiki.candidates.candidate_filename` gives them, never overwriting an
@@ -39,7 +48,9 @@ from llmwiki.candidates import (
     candidates_dir,
     discarded_names,
     find_live_page,
+    merged_intents,
     record_redirect_alias,
+    redirect_target_pages,
     rewrite_links_to,
 )
 from llmwiki.wikilinks import norm_page_key
@@ -96,19 +107,60 @@ def _flatten_nested_stubs(
                 parent = parent.parent
 
 
+#: Shortest key half of a containment match may be. A one- or two-letter page
+#: name is a substring of almost every target and suggests nothing.
+_MIN_NEAR_KEY_LEN = 3
+
+
+def _suggested_redirect(pages: list[Path], target: str) -> str | None:
+    """Stem of the live page a recorded merge target most likely means.
+
+    The page answering to the target name, else the one page whose
+    ``norm_page_key`` contains or is contained by the target's — a survivor
+    that was renamed or re-filed (``foo`` merged, page now
+    ``projects/code-foo.md``). ``None`` when nothing matches, or when several
+    pages do and picking one would be a guess.
+    """
+    key = norm_page_key(target)
+    if not key:
+        return None
+    exact = [page for page in pages if norm_page_key(page.stem) == key]
+    if len(exact) == 1:
+        return exact[0].stem
+    near = [
+        page for page in pages
+        if (page_key := norm_page_key(page.stem))
+        and min(len(key), len(page_key)) >= _MIN_NEAR_KEY_LEN
+        and (key in page_key or page_key in key)
+    ]
+    return near[0].stem if len(near) == 1 else None
+
+
 def run_migration(
     *,
     vault: Path,
     dry_run: bool = False,
     redirects: dict[str, str] | None = None,
+    force: bool = False,
 ) -> dict[str, Any]:
     """Unlink / redirect links to discarded candidates and flatten nested stubs.
 
     ``redirects`` maps a discarded candidate name to the existing live page its
     links should point at. Every pair is validated before anything is written,
     so a bad one leaves the vault untouched (``report["aborted"]``) instead of
-    half-migrated. Dry-run computes the same report without writing. Never
-    touches ``raw/``.
+    half-migrated.
+
+    A name whose reason file records a merge, that no live page answers to and
+    that no ``--redirect`` covers, is reported under
+    ``report["recorded_merges"]`` with a suggested redirect and its links are
+    left alone (``report["merges_skipped"]``); the rest of the run still
+    applies. A recorded merge with zero links anywhere in the wiki needs no
+    operator decision, so it is left out of ``report["recorded_merges"]`` and
+    never sets ``report["merges_skipped"]`` on its own. ``force`` unlinks
+    those names like any other dismissal.
+
+    Dry-run computes the same report, including the same partition, without
+    writing. Never touches ``raw/``.
     """
     vault = Path(vault).expanduser().resolve()
     wiki = vault / "wiki"
@@ -123,6 +175,8 @@ def run_migration(
         "flattened": [],
         "conflicts": [],
         "skipped": [],
+        "recorded_merges": [],
+        "merges_skipped": False,
         "errors": [],
         "aborted": False,
         "changed": False,
@@ -169,6 +223,44 @@ def run_migration(
         report["aborted"] = True
         return report
 
+    # A merged-away name is not a dismissal: its links have a target on disk
+    # even when the survivor was renamed and stopped answering to the name.
+    recorded: list[dict[str, Any]] = []
+    live_pages = redirect_target_pages(wiki)
+    for key, merged_into in merged_intents(wiki, errors=errors).items():
+        if key not in targets or key in redirect_pages:
+            continue
+        recorded.append({
+            "key": key,
+            "name": discarded[key],
+            "merged_into": merged_into,
+            "suggestion": _suggested_redirect(live_pages, merged_into),
+            "links": 0,
+        })
+    recorded.sort(key=lambda entry: entry["name"])
+
+    if recorded:
+        # Counted, not rewritten: the operator decides on a number, but only
+        # once we know there is a number to decide on.
+        probe_targets: dict[str, str | None] = dict.fromkeys(
+            entry["key"] for entry in recorded
+        )
+        probe_counts, _ = rewrite_links_to(
+            wiki, probe_targets, dry_run=True, errors=errors,
+        )
+        for entry in recorded:
+            entry["links"] = probe_counts.get(entry["key"], 0)
+        if not force:
+            for entry in recorded:
+                del targets[entry["key"]]
+
+    # A recorded merge with no links to rewrite has nothing for an operator
+    # to preserve or flatten: it is not a pending suggestion and must not
+    # trip the exit code below.
+    actionable = [entry for entry in recorded if entry["links"] > 0]
+    report["recorded_merges"] = actionable
+    report["merges_skipped"] = bool(actionable) and not force
+
     _flatten_nested_stubs(wiki, report, dry_run=dry_run)
 
     counts, pages = rewrite_links_to(wiki, targets, dry_run=dry_run, errors=errors)
@@ -199,6 +291,7 @@ def print_report(report: dict[str, Any]) -> None:
         and not report["errors"]
         and not report["conflicts"]
         and not report["skipped"]
+        and not report["recorded_merges"]
     ):
         print("nothing to migrate: no links to discarded candidates and no nested stubs")
         return
@@ -228,14 +321,40 @@ def print_report(report: dict[str, Any]) -> None:
         print(f"skipped:           {len(report['skipped'])}")
         for entry in report["skipped"]:
             print(f"  - {entry}")
+    if report["recorded_merges"]:
+        merges = report["recorded_merges"]
+        kept = report["merges_skipped"]
+        header = "merged, left linked" if kept else "merged, unlinked anyway"
+        print(f"{header}: {len(merges)}")
+        for entry in merges:
+            line = f"  - {entry['name']} — merged into {entry['merged_into']}"
+            if kept:
+                line += f" ({entry['links']} links)"
+            print(line)
+            if kept and entry["suggestion"]:
+                print(f"      --redirect \"{entry['name']}={entry['suggestion']}\"")
+            elif kept:
+                print(
+                    f"      no live page matches {entry['merged_into']!r}: pick one "
+                    f"with --redirect \"{entry['name']}=<page>\""
+                )
+        if kept:
+            print(
+                "  a reviewer merged these names into a page that no longer "
+                "answers to them, so their links were left as they are: "
+                "re-run with the --redirect lines above, or --force to unlink "
+                "them like a dismissal"
+            )
     if report["errors"]:
         print(f"errors:            {len(report['errors'])}")
         for err in report["errors"][:10]:
             print(f"  ! {err}")
         if report["aborted"]:
             print("  nothing was written: fix the errors above and re-run")
-        else:
+        elif not report["dry_run"]:
             print(
                 "  the changes above were applied; the files named above were "
                 "left as they are"
             )
+    if report["dry_run"] and not report["aborted"]:
+        print("dry run: nothing was written")

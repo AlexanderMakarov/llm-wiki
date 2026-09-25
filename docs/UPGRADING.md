@@ -23,6 +23,16 @@ llmwiki migrate discarded-topic-links --vault /path/to/vault --redirect "Old Nam
 
 The same run moves candidate stubs that a `/` in their name had filed into a subfolder (`candidates/entities/A/B thing.md`) to their flat path (`candidates/entities/A-B thing.md`); an existing file at the flat path is never overwritten and is reported as a conflict. Rebuild afterwards: `llmwiki build --vault <vault>`. `discard()` callers in Python now receive a `DiscardResult` — use `.path` for the archived file.
 
+**Expect suggestions on the first run if you ever used `candidates merge`.** A merged candidate's links belong on the page it was merged into, and a survivor page only answers to the merged-away name through the `## Aliases` entry that merges started recording in #139. For an older merge — or one whose survivor you later renamed or re-filed — the archived `reason.txt` is the last record of where those links point. The migration therefore leaves such a name linked and prints what it thinks the page is, exiting 1:
+
+```text
+merged, left linked: 1
+  - Old Name — merged into foo (587 links)
+      --redirect "Old Name=code-foo"
+```
+
+Check each suggested page, then re-run with those `--redirect` lines (`--redirect "Old Name=code-foo"`), which points the links at the survivor and records the alias so the next run reports nothing. If a name really was noise rather than a merge, `--force` unlinks it like any dismissal. The rest of the run applies either way, so you can take the redirects in a second pass.
+
 ## Unreleased — `add` / `wiki_add` no longer synthesize by default (#273)
 
 Behaviour flip, no data migration. Scripts and agents that expected synth-on-add must opt in:

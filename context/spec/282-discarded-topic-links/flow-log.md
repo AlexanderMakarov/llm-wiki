@@ -82,3 +82,19 @@
 - Deferred by operator decision: none of the applied set. Not applied: nothing from the review except fence-skipping (docstring instead, N10) — N7 was applied, not deferred
 - Known leftovers recorded by the batches: `archived_candidate_names` skips surface only to callers passing `errors` (harvest does not); `_reconcile_catalog` still runs per row inside a batch
 - Next: commit-push (this is the log's last committed state) → live smoke confirm (user) → PR
+
+## smoke-confirm (live vault)
+- Backup taken before any write (wiki.tgz + llmwiki-state.json); vault at 1041 pages, 712 `link_integrity` issues
+- Dry run wanted 955 unlinks across 457 pages. Evaluation of the 15 archived names against live pages + recorded reasons found 4 that were **merged**, not discarded, whose survivor no longer answers (merges predate #139 alias recording): `Kbbuilder`→`code-kbbuilder` (315), `Wikilinks`→`WikiLink` (259), `Model Context Protocol`→`MCP` (12), `GSD-Workflow`→`GSD` (1). The other 11 carry deliberate reasons ("textbook-generic concept", "tool-name artifact", "not a concept", "too broad") — unlinking is correct for them
+- First operator run lost the `--redirect` flags to a paste/line split (`--redirect: command not found`) and unlinked all 955; restored from the backup and re-ran from a script (single line) — no data lost
+- Result: 587 redirected + 368 unlinked + 1 nested stub flattened; aliases recorded on all 4 targets; display text preserved; zero self-links on targets (N2 holds on real data); second run "nothing to migrate"; `build` clean (1364 HTML); `link_integrity` 712 → 2 (both unrelated genuine breaks)
+- Finding worth acting on: a name whose archive reason records a merge but whose survivor no longer answers is treated exactly like noise, so a default run silently flattens links a redirect would preserve. Proposed guard: print it as a suggested `--redirect` and refuse to unlink those without an explicit redirect or `--force`
+- Next: decide the guard, then push + PR
+
+## merge-guard (post-smoke hardening)
+- Operator chose "guard + refuse" after the live run showed a default migration silently flattens links a redirect would preserve
+- `merged_intents(wiki_dir)` reads the merge target from the archived stub's reason file through the same formatter `merge` writes it with (`_MERGE_REASON_PREFIX` / `_format_merge_reason` / `_parse_merge_reason` + `_reason_field`), so reader and writer cannot drift; `redirect_target_pages` exposes the pool `find_live_page` searches, so a suggestion can only name a page `--redirect` would accept
+- `run_migration` partitions: a discarded name whose reason records a merge, that no live page answers, with no `--redirect` given → links left alone, reported with a ready-to-paste `--redirect`, exit 1. `--force` unlinks them like a dismissal. Plain dismissals, explicit redirects and the flatten pass still run in the same call
+- Convergence defect caught by re-running the guard against the pre-migration snapshot: zero-link recorded merges kept the run permanently at exit 1 (the intended apply and every re-run), contradicting documented idempotence. Fixed — link counts are probed before the actionable decision, and a zero-link merge is neither reported nor exit-affecting
+- Verified on the real pre-migration snapshot: guard dry-run exit 1 listing only the 4 linked merges; apply with the 4 suggested redirects exit 0 (587 redirected / 368 unlinked); immediate re-run exit 0 "nothing to migrate"; `link_integrity` 2 — matching the live vault outcome
+- Next: commit-push → PR

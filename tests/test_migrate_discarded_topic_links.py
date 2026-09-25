@@ -273,3 +273,310 @@ def test_cli_registration(vault: Path) -> None:
     assert "[[Old Name]]" in (vault / "wiki" / "sources" / "a.md").read_text(encoding="utf-8")
     with pytest.raises(SystemExit):
         build_parser().parse_args(["migrate", "discarded-topic-links"])
+
+
+# ─── merged names whose survivor stopped answering to them (#282) ──────
+
+_MERGED = "Tailnet"
+_SURVIVOR = "Tailscale"
+_RENAMED = "Tailscale-Overlay"
+
+
+def _cli(vault: Path, *flags: str) -> int:
+    args = build_parser().parse_args([
+        "migrate", "discarded-topic-links", "--vault", str(vault), *flags,
+    ])
+    return args.func(args)
+
+
+def _nested_stub(wiki: Path) -> Path:
+    """A stub an older ``write_stubs`` filed under a subfolder of its kind."""
+    nested = wiki / "candidates" / "entities" / "A" / "B thing.md"
+    nested.parent.mkdir(parents=True, exist_ok=True)
+    nested.write_text('---\ntitle: "A/B thing"\ntype: entity\n---\n\n# A/B thing\n',
+                      encoding="utf-8")
+    return nested
+
+
+@pytest.fixture
+def merged_vault(vault: Path) -> Path:
+    """``vault`` plus a candidate a reviewer really merged into a live page."""
+    wiki = vault / "wiki"
+    _source(wiki, "notes-one", f"Runs on [[{_MERGED}]] here.")
+    _source(wiki, "notes-two", "Runs on [[tailnet|the overlay]] there.")
+    (wiki / "entities").mkdir(parents=True, exist_ok=True)
+    (wiki / "entities" / f"{_SURVIVOR}.md").write_text(
+        f'---\ntitle: "{_SURVIVOR}"\ntype: entity\n---\n\n# {_SURVIVOR}\n',
+        encoding="utf-8",
+    )
+    write_stubs(wiki, harvest_targets(wiki, min_refs=2))
+    candidates_mod.merge(_MERGED, wiki, into_slug=_SURVIVOR)
+    return vault
+
+
+def _refile_survivor_losing_its_alias(wiki: Path) -> Path:
+    """Put the survivor where a pre-#139 merge plus a rename leaves it.
+
+    Merges older than the alias mechanism recorded no ``## Aliases`` entry, so
+    once the page is renamed nothing on disk but the reason file still ties the
+    merged-away name to it.
+    """
+    page = wiki / "entities" / f"{_SURVIVOR}.md"
+    kept, _, _ = page.read_text(encoding="utf-8").partition("## Aliases")
+    dest = page.with_name(f"{_RENAMED}.md")
+    dest.write_text(kept.rstrip() + "\n", encoding="utf-8")
+    page.unlink()
+    return dest
+
+
+def test_a_merge_whose_survivor_still_answers_is_left_alone(merged_vault: Path) -> None:
+    """The alias resolves the links, so there is nothing to report.
+
+    # @layer: integration  # @spec: 282-discarded-topic-links
+    """
+    wiki = merged_vault / "wiki"
+
+    report = run_migration(vault=merged_vault)
+
+    assert report["recorded_merges"] == []
+    assert report["merges_skipped"] is False
+    assert report["unlinked"] == {"Junk": 2, "Old Name": 2}
+    assert f"[[{_MERGED}]]" in (wiki / "sources" / "notes-one.md").read_text(
+        encoding="utf-8")
+    assert _cli(merged_vault) == 0
+
+
+def test_a_merged_name_whose_survivor_was_refiled_is_reported_not_unlinked(
+    merged_vault: Path, capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The reason file is the only record of where those links belong.
+
+    # @layer: integration  # @spec: 282-discarded-topic-links
+    """
+    wiki = merged_vault / "wiki"
+    _refile_survivor_losing_its_alias(wiki)
+    nested = _nested_stub(wiki)
+
+    report = run_migration(vault=merged_vault)
+
+    assert report["merges_skipped"] is True
+    assert report["recorded_merges"] == [{
+        "key": "tailnet",
+        "name": _MERGED,
+        "merged_into": _SURVIVOR,
+        "suggestion": _RENAMED,
+        "links": 2,
+    }]
+    # Left linked, while the run's other work went through.
+    assert f"[[{_MERGED}]]" in (wiki / "sources" / "notes-one.md").read_text(
+        encoding="utf-8")
+    assert report["unlinked"] == {"Junk": 2, "Old Name": 2}
+    assert "[[Junk]]" not in (wiki / "sources" / "a.md").read_text(encoding="utf-8")
+    assert not nested.exists()
+    assert (wiki / "candidates" / "entities" / "A-B thing.md").is_file()
+
+    print_report(report)
+    out = capsys.readouterr().out
+    assert f'--redirect "{_MERGED}={_RENAMED}"' in out
+    assert "--force" in out
+    assert _cli(merged_vault) == 1
+
+
+def test_the_suggested_redirect_lands_the_links_on_the_survivor(
+    merged_vault: Path,
+) -> None:
+    """# @layer: integration  # @spec: 282-discarded-topic-links"""
+    wiki = merged_vault / "wiki"
+    survivor = _refile_survivor_losing_its_alias(wiki)
+
+    assert _cli(merged_vault, "--redirect", f"{_MERGED}={_RENAMED}") == 0
+
+    text = (wiki / "sources" / "notes-one.md").read_text(encoding="utf-8")
+    assert f"[[{_RENAMED}|{_MERGED}]]" in text
+    body = survivor.read_text(encoding="utf-8")
+    alias_map = build_page_alias_map({_RENAMED: body})
+    assert resolve_wikilink_target("tailnet", {_RENAMED}, alias_map) == _RENAMED
+    report = run_migration(vault=merged_vault)
+    assert report["recorded_merges"] == []
+
+
+def test_force_unlinks_a_recorded_merge_like_a_dismissal(
+    merged_vault: Path, capsys: pytest.CaptureFixture[str],
+) -> None:
+    """# @layer: integration  # @spec: 282-discarded-topic-links"""
+    wiki = merged_vault / "wiki"
+    _refile_survivor_losing_its_alias(wiki)
+
+    assert _cli(merged_vault, "--force") == 0
+
+    text = (wiki / "sources" / "notes-one.md").read_text(encoding="utf-8")
+    assert f"[[{_MERGED}]]" not in text
+    assert f"Runs on {_MERGED} here." in text
+    out = capsys.readouterr().out
+    assert "merged, unlinked anyway" in out
+    assert "--redirect" not in out
+
+
+def test_dry_run_shows_the_recorded_merge_partition_and_writes_nothing(
+    merged_vault: Path, capsys: pytest.CaptureFixture[str],
+) -> None:
+    """# @layer: integration  # @spec: 282-discarded-topic-links"""
+    _refile_survivor_losing_its_alias(merged_vault / "wiki")
+    before = _snapshot(merged_vault)
+
+    report = run_migration(vault=merged_vault, dry_run=True)
+
+    assert report["merges_skipped"] is True
+    assert [e["name"] for e in report["recorded_merges"]] == [_MERGED]
+    assert report["unlinked"] == {"Junk": 2, "Old Name": 2}
+    assert _snapshot(merged_vault) == before
+    print_report(report)
+    out = capsys.readouterr().out
+    assert f'--redirect "{_MERGED}={_RENAMED}"' in out
+    assert "dry run: nothing was written" in out
+    assert _cli(merged_vault, "--dry-run") == 1
+
+
+def test_a_recorded_merge_with_no_matching_page_asks_for_one(
+    merged_vault: Path, capsys: pytest.CaptureFixture[str],
+) -> None:
+    """# @layer: integration  # @spec: 282-discarded-topic-links"""
+    (merged_vault / "wiki" / "entities" / f"{_SURVIVOR}.md").unlink()
+
+    report = run_migration(vault=merged_vault)
+
+    assert [e["suggestion"] for e in report["recorded_merges"]] == [None]
+    print_report(report)
+    out = capsys.readouterr().out
+    assert f'--redirect "{_MERGED}=<page>"' in out
+
+
+def test_a_recorded_merge_with_zero_links_is_not_actionable(
+    merged_vault: Path, capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A merge with nothing to rewrite needs no operator decision (#282).
+
+    Regression: the merge guard used to count every recorded merge toward
+    ``merges_skipped`` regardless of link count, so a name with zero links
+    still tripped the non-zero exit forever.
+
+    # @layer: integration  # @spec: 282-discarded-topic-links
+    """
+    wiki = merged_vault / "wiki"
+    _refile_survivor_losing_its_alias(wiki)
+    for slug, needle, replacement in (
+        ("notes-one", f"[[{_MERGED}]]", _MERGED),
+        ("notes-two", "[[tailnet|the overlay]]", "the overlay"),
+    ):
+        path = wiki / "sources" / f"{slug}.md"
+        path.write_text(
+            path.read_text(encoding="utf-8").replace(needle, replacement),
+            encoding="utf-8",
+        )
+
+    report = run_migration(vault=merged_vault)
+
+    assert report["recorded_merges"] == []
+    assert report["merges_skipped"] is False
+    # The base vault's own dismissals still went through.
+    assert report["unlinked"] == {"Junk": 2, "Old Name": 2}
+    assert f"Runs on {_MERGED} here." in (
+        wiki / "sources" / "notes-one.md"
+    ).read_text(encoding="utf-8")
+    print_report(report)
+    assert "merged" not in capsys.readouterr().out
+    assert _cli(merged_vault) == 0
+
+
+def test_zero_link_merge_does_not_hide_a_linked_one(
+    vault: Path,
+) -> None:
+    """Mixing a quiet and a reportable merge only surfaces the reportable one.
+
+    # @layer: integration  # @spec: 282-discarded-topic-links
+    """
+    wiki = vault / "wiki"
+    wiki.joinpath("entities").mkdir(parents=True, exist_ok=True)
+
+    # A merge whose links disappear afterward: no decision to make.
+    _source(wiki, "quiet-one", f"Runs on [[{_MERGED}]] here.")
+    (wiki / "entities" / f"{_SURVIVOR}.md").write_text(
+        f'---\ntitle: "{_SURVIVOR}"\ntype: entity\n---\n\n# {_SURVIVOR}\n',
+        encoding="utf-8",
+    )
+    write_stubs(wiki, harvest_targets(wiki, min_refs=1))
+    candidates_mod.merge(_MERGED, wiki, into_slug=_SURVIVOR)
+    _refile_survivor_losing_its_alias(wiki)
+    quiet_path = wiki / "sources" / "quiet-one.md"
+    quiet_path.write_text(
+        quiet_path.read_text(encoding="utf-8").replace(f"[[{_MERGED}]]", _MERGED),
+        encoding="utf-8",
+    )
+
+    # A second merge whose links are still there: needs an operator decision.
+    loud_merged, loud_survivor = "Skylink", "Meshnet"
+    _source(wiki, "loud-one", f"Runs on [[{loud_merged}]] here.")
+    (wiki / "entities" / f"{loud_survivor}.md").write_text(
+        f'---\ntitle: "{loud_survivor}"\ntype: entity\n---\n\n# {loud_survivor}\n',
+        encoding="utf-8",
+    )
+    write_stubs(wiki, harvest_targets(wiki, min_refs=1))
+    candidates_mod.merge(loud_merged, wiki, into_slug=loud_survivor)
+    loud_page = wiki / "entities" / f"{loud_survivor}.md"
+    kept, _, _ = loud_page.read_text(encoding="utf-8").partition("## Aliases")
+    loud_page.with_name(f"{loud_survivor}-Core.md").write_text(
+        kept.rstrip() + "\n", encoding="utf-8",
+    )
+    loud_page.unlink()
+
+    report = run_migration(vault=vault)
+
+    assert [entry["name"] for entry in report["recorded_merges"]] == [loud_merged]
+    assert report["merges_skipped"] is True
+    assert _cli(vault) == 1
+
+
+def test_redirect_then_rerun_converges_to_a_clean_report(
+    merged_vault: Path, capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Applying the suggested ``--redirect`` leaves nothing pending on a re-run.
+
+    Regression for the merge guard trapping every future run at exit 1 even
+    after the operator did everything the report asked for (#282).
+
+    # @layer: integration  # @spec: 282-discarded-topic-links
+    """
+    wiki = merged_vault / "wiki"
+    _refile_survivor_losing_its_alias(wiki)
+
+    assert _cli(merged_vault, "--redirect", f"{_MERGED}={_RENAMED}") == 0
+    capsys.readouterr()
+
+    assert _cli(merged_vault) == 0
+    out = capsys.readouterr().out
+    assert "merged" not in out
+    report = run_migration(vault=merged_vault)
+    assert report["recorded_merges"] == []
+    assert report["merges_skipped"] is False
+
+
+@pytest.mark.parametrize("target", ["Nord — Star", "A/B Thing"])
+def test_the_reader_round_trips_a_punctuated_merge_target(
+    vault: Path, target: str,
+) -> None:
+    """A merge target with an em dash or a slash comes back verbatim.
+
+    # @layer: unit  # @spec: 282-discarded-topic-links
+    """
+    wiki = vault / "wiki"
+    _source(wiki, "notes-one", f"Uses [[{_MERGED}]].")
+    _source(wiki, "notes-two", f"Uses [[{_MERGED}]] too.")
+    page = wiki / "entities" / candidates_mod.candidate_filename(target)
+    page.parent.mkdir(parents=True, exist_ok=True)
+    page.write_text(f'---\ntitle: "{target}"\ntype: entity\n---\n\n# {target}\n',
+                    encoding="utf-8")
+    write_stubs(wiki, harvest_targets(wiki, min_refs=2))
+
+    candidates_mod.merge(_MERGED, wiki, into_slug=target)
+
+    assert candidates_mod.merged_intents(wiki) == {"tailnet": target}
