@@ -19,7 +19,14 @@ Public API:
   - ``strip_harvest_merge_sections(text)`` → drop pasted harvest-stub merge blocks
   - ``merge(slug, wiki_dir, into_slug)`` → fold candidate into an existing page
     (trusted or another pending stub of the same kind)
-  - ``discard(slug, wiki_dir, reason)`` → move to archive/
+  - ``discard(slug, wiki_dir, reason, redirect=None)`` → move to archive/,
+    then unlink (or retarget to ``redirect``) every ``[[link]]`` to it
+  - ``DiscardBatch(wiki_dir)`` → one wiki scan and one rewrite pass shared by
+    a run of discards, instead of two passes each
+  - ``discarded_names(wiki_dir)`` → names a reviewer dismissed for good
+  - ``merged_intents(wiki_dir)`` → merged-away name → the target its reason
+    file recorded, for a survivor that no longer answers to the name
+  - ``candidate_filename(name)`` → the flat, path-safe stub filename for a name
   - ``stale_candidates(wiki_dir, threshold_days=30)`` → list pages flagged stale
   - ``is_candidate(page_path)`` → bool
 
@@ -29,7 +36,10 @@ Design choices:
   - ``## Connections`` links from candidates stay as-is when promoted;
     callers run `llmwiki lint` afterward to catch any stale pointers.
   - Discard is non-destructive: pages move to ``wiki/archive/candidates/``
-    with a timestamped reason file so you can recover them later.
+    with a timestamped reason file so you can recover them later. Links to a
+    discarded name are rewritten to plain text (or to the ``redirect`` page,
+    which records the name under ``## Aliases``) so nothing keeps pointing
+    into cold storage (#282).
   - Promote fills an empty ``## Key Facts`` from ``fact:`` lines on cited
     source pages (#147); non-empty reviewer facts are never overwritten.
     Use ``rewrite_key_facts`` (LLM, opt-in) to replace bullets on a page
@@ -40,14 +50,23 @@ from __future__ import annotations
 
 import re
 import shutil
+from collections import defaultdict
+from collections.abc import Collection, Iterable, Mapping, Sequence
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TypedDict
 
-from llmwiki._system_pages import ARCHIVE_FOLDER
+from llmwiki._system_pages import ARCHIVE_FOLDER, is_archived_path
 from llmwiki.reindex import reindex_wiki
 from llmwiki.source_topics import parse_source_topics
 from llmwiki.synth.base import BaseSynthesizer
+from llmwiki.wikilinks import (
+    format_alias_bullet,
+    norm_page_key,
+    parse_page_aliases,
+    rewrite_wikilinks,
+)
 
 # ─── constants ─────────────────────────────────────────────────────────
 
@@ -152,6 +171,34 @@ def candidates_dir(wiki_dir: Path) -> Path:
 def archive_dir(wiki_dir: Path) -> Path:
     """Return wiki/archive/candidates/."""
     return wiki_dir / ARCHIVE_DIR_NAME / ARCHIVED_CANDIDATES_SUBDIR
+
+
+#: Characters no stub filename may carry: path separators (``A/B`` would
+#: become a folder), Windows-reserved punctuation, and control characters.
+_UNSAFE_FILENAME_RE = re.compile(r'[/\\:*?"<>|\x00-\x1f]')
+
+#: Device names Windows refuses as a filename whatever the extension.
+_RESERVED_STEM_RE = re.compile(r"CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9]", re.IGNORECASE)
+
+
+def candidate_filename(name: str) -> str:
+    """Return the flat ``<stem>.md`` filename a candidate named ``name`` uses.
+
+    Every path-unsafe character becomes ``-``, and leading dots plus trailing
+    dots and spaces are dropped, so a stub never lands in a subfolder, as a
+    hidden file, or under a name Windows cannot open. A stem Windows reserves
+    for a device (``CON``, ``LPT1``, …) gains a trailing ``-``. The name itself
+    is kept verbatim in the stub's frontmatter ``title``. The mapping is
+    idempotent — a stem it produced maps to itself — so a slug read back off
+    disk locates the same file, and :func:`llmwiki.wikilinks.norm_page_key`
+    folds ``[[A/B thing]]`` onto the ``A-B thing`` stem.
+    """
+    stem = _UNSAFE_FILENAME_RE.sub("-", name).strip().lstrip(". ").rstrip(". ")
+    if not stem:
+        return "candidate.md"
+    if _RESERVED_STEM_RE.fullmatch(stem):
+        stem = f"{stem}-"
+    return f"{stem}.md"
 
 
 # ─── public API ────────────────────────────────────────────────────────
@@ -783,15 +830,21 @@ def _find_trusted_page(
     wiki_dir: Path,
     kind: str | None,
 ) -> Path:
-    """Locate ``wiki/<kind>/<slug>.md`` (entities/concepts by default)."""
+    """Locate ``wiki/<kind>/<slug>.md`` (entities/concepts by default).
+
+    Same slug handling as the pending-stub lookup: sanitized, exact filename
+    first, then a unique ``norm_page_key`` fold of the folder's filenames.
+    """
     subs = [kind] if kind else ["entities", "concepts"]
-    for sub in subs:
-        path = wiki_dir / sub / f"{slug}.md"
-        if path.is_file():
-            return path
-    raise FileNotFoundError(
-        f"trusted page not found: {slug!r} under {wiki_dir}"
-        + (f" (kind={kind})" if kind else " (entities|concepts)")
+    return _resolve_page_file(
+        slug,
+        wiki_dir,
+        subs,
+        label="trusted page",
+        not_found=(
+            f"trusted page not found: {slug!r} under {wiki_dir}"
+            + (f" (kind={kind})" if kind else " (entities|concepts)")
+        ),
     )
 
 
@@ -890,9 +943,11 @@ def _union_connections(body: str, slugs: list[str]) -> str:
     return body[:end].rstrip() + "\n" + addition + "\n" + body[end:]
 
 
-def _record_alias(body: str, alias: str, source_count: int, today: str) -> str:
-    """Note the merged-away name under ``## Aliases``."""
-    entry = f"- {alias} — merged {today} ({source_count} source pages)"
+def _record_alias(
+    body: str, alias: str, source_count: int, today: str, *, verb: str = "merged",
+) -> str:
+    """Note the merged-away (or redirected) name under ``## Aliases``."""
+    entry = format_alias_bullet(alias, f"{verb} {today} ({source_count} source pages)")
     span = _section_span(body, "Aliases")
     if span is None:
         return body.rstrip() + f"\n\n## Aliases\n\n{entry}\n"
@@ -933,17 +988,18 @@ def merge(
 
     candidate = _find_candidate(slug, wiki_dir, kind)
     inferred_kind = candidate.parent.name
-    trusted = wiki_dir / inferred_kind / f"{into_slug}.md"
-    pending = wiki_dir / CANDIDATES_DIR_NAME / inferred_kind / f"{into_slug}.md"
-    if trusted.is_file():
-        target = trusted
-    elif pending.is_file():
-        target = pending
-    else:
-        raise FileNotFoundError(
+    target = _resolve_page_file(
+        into_slug,
+        wiki_dir,
+        [inferred_kind, f"{CANDIDATES_DIR_NAME}/{inferred_kind}"],
+        label="merge target",
+        not_found=(
             f"merge target not found: {into_slug!r} under "
             f"{inferred_kind}/ or candidates/{inferred_kind}/"
-        )
+        ),
+    )
+    if target == candidate:
+        raise ValueError("cannot merge a candidate into itself")
 
     candidate_text = candidate.read_text(encoding="utf-8")
     candidate_meta, candidate_body = _parse_frontmatter(candidate_text)
@@ -957,7 +1013,9 @@ def merge(
     merged_meta, _ = _parse_frontmatter(meta_text + "\n")
     all_evidence = _evidence_source_slugs(merged_meta, body, wiki_dir)
     body = _refresh_harvest_boilerplate(body, all_evidence)
-    body = _record_alias(body, slug, len(evidence), today)
+    body = _record_alias(
+        body, candidate_meta.get("title") or slug, len(evidence), today,
+    )
     if prose:
         body = (
             body.rstrip() +
@@ -968,9 +1026,88 @@ def merge(
     target.write_text(meta_text + body, encoding="utf-8")
 
     # Discard candidate by moving it to archive with a merge-reason file
-    _archive_candidate(candidate, wiki_dir, reason=f"merged into {into_slug}")
+    _archive_candidate(candidate, wiki_dir, reason=_format_merge_reason(into_slug))
     _reconcile_catalog(wiki_dir)
     return target
+
+
+@dataclass
+class DiscardResult:
+    """What :func:`discard` did: where the stub went and which links it fixed.
+
+    The link counts are filled in when the rewrite runs — at return time for
+    a lone discard, at :meth:`DiscardBatch.flush` for a batched one.
+    """
+
+    path: Path
+    #: The candidate's name — its frontmatter ``title``, else its stem.
+    name: str
+    #: Stem of the page links now point at, or ``None`` when they were unlinked.
+    redirect: str | None = None
+    links_rewritten: int = 0
+    #: Pages whose links were rewritten, relative to ``wiki/``.
+    pages_changed: list[str] = field(default_factory=list)
+    #: ``<page>: <error>`` for every page that could not be read and was left
+    #: alone. Shared with the other results of the same :class:`DiscardBatch`.
+    skipped: list[str] = field(default_factory=list)
+
+
+@dataclass
+class DiscardBatch:
+    """Shared wiki state for a run of :func:`discard` calls (#282).
+
+    A lone discard walks every live page twice — once to see whether another
+    page already answers to the name, once to rewrite that name's links — so
+    a review batch of N discards costs 2N full reads. A batch reads the live
+    pages once, keeps that index current as stubs are archived and aliases
+    recorded, and collects the rewrites so :meth:`flush` applies them all in
+    one further pass. Each result's counts are filled in by that flush.
+    """
+
+    wiki_dir: Path
+    #: ``<page>: <error>`` for every page the passes could not read.
+    errors: list[str] = field(default_factory=list)
+    #: ``norm_page_key`` → the live pages answering to it.
+    owners: dict[str, list[Path]] = field(init=False)
+    _pending: dict[str, str | None] = field(init=False, default_factory=dict)
+    _results: dict[str, list[DiscardResult]] = field(init=False, default_factory=dict)
+
+    def __post_init__(self) -> None:
+        self.owners = _live_page_owners(self.wiki_dir, errors=self.errors)
+
+    def retire(self, path: Path) -> None:
+        """Drop a page that just left the live set, such as an archived stub."""
+        for key, paths in list(self.owners.items()):
+            kept = [p for p in paths if p != path]
+            if kept:
+                self.owners[key] = kept
+            else:
+                del self.owners[key]
+
+    def record_name(self, name: str, page: Path) -> None:
+        """Note that ``page`` now answers to ``name`` too, via a new alias."""
+        key = norm_page_key(name)
+        if key and page not in self.owners.setdefault(key, []):
+            self.owners[key].append(page)
+
+    def defer(self, key: str, replacement: str | None, result: DiscardResult) -> None:
+        """Collect one discard's rewrite into the shared pass."""
+        if self._pending.get(key, replacement) != replacement:
+            self.flush()
+        self._pending[key] = replacement
+        self._results.setdefault(key, []).append(result)
+
+    def flush(self) -> None:
+        """Apply every collected rewrite in one pass and fill in the counts."""
+        if not self._pending:
+            return
+        pending, results = self._pending, self._results
+        self._pending, self._results = {}, {}
+        rewrite = rewrite_links_in_wiki(self.wiki_dir, pending, errors=self.errors)
+        for key, rows in results.items():
+            for result in rows:
+                result.links_rewritten = rewrite.counts.get(key, 0)
+                result.pages_changed = list(rewrite.pages_by_key.get(key, ()))
 
 
 def discard(
@@ -979,18 +1116,392 @@ def discard(
     *,
     reason: str = "",
     kind: str | None = None,
-) -> Path:
+    redirect: str | None = None,
+    batch: DiscardBatch | None = None,
+) -> DiscardResult:
     """Move the candidate to ``wiki/archive/candidates/<timestamp>/<slug>.md``
-    with an adjacent ``<slug>.reason.txt`` capturing why.
+    with an adjacent ``<slug>.reason.txt`` capturing why, then fix its links.
 
-    Reconciles ``wiki/index.md`` afterward (#101).
+    Every ``[[link]]`` to the candidate's name outside ``wiki/archive/``
+    (case/punctuation-insensitive) becomes plain text — its label, else the
+    name as written — so the discard leaves no link into cold storage (#282).
+    With ``redirect``, the links point at that existing live page instead,
+    keep their visible text, and the name is recorded under the page's
+    ``## Aliases`` so later links to it resolve there too. Links are left
+    alone when another live page or alias already answers to the name.
 
-    Returns the archived path.
+    ``batch`` shares one live-page index and one rewrite pass across several
+    discards; the result's link counts are filled in by
+    :meth:`DiscardBatch.flush`.
+
+    Raises ``FileNotFoundError`` when the candidate or the redirect page is
+    missing and ``ValueError`` when the redirect is ambiguous, names the
+    candidate itself, or when another live page already answers to the
+    discarded name — all before anything moves, since recording the alias
+    anyway would leave two live pages claiming one name. Reconciles
+    ``wiki/index.md`` afterward (#101).
     """
     candidate = _find_candidate(slug, wiki_dir, kind)
-    path = _archive_candidate(candidate, wiki_dir, reason=reason)
+    meta, body = _parse_frontmatter(candidate.read_text(encoding="utf-8"))
+    name = meta.get("title") or candidate.stem
+    source_count = len(_evidence_source_slugs(meta, body, wiki_dir))
+    target = find_live_page(wiki_dir, redirect) if redirect else None
+    if target is not None and norm_page_key(target.stem) == norm_page_key(name):
+        raise ValueError(f"cannot redirect {name!r} to itself")
+
+    skipped = batch.errors if batch is not None else []
+    key = norm_page_key(name)
+    owners = (
+        batch.owners if batch is not None
+        else _live_page_owners(wiki_dir, errors=skipped)
+    )
+    # The stub is still live here, so it answers to its own name: ignore it.
+    resolvers = [page for page in owners.get(key, ()) if page != candidate]
+    if target is not None:
+        claimed = next((page for page in resolvers if page != target), None)
+        if claimed is not None:
+            raise ValueError(
+                f"cannot redirect {name!r} to {target.stem!r}: "
+                f"{claimed.relative_to(wiki_dir).as_posix()} already answers to "
+                f"that name"
+            )
+
+    path = _archive_candidate(
+        candidate, wiki_dir, reason=reason,
+        redirect=target.stem if target is not None else None,
+    )
+    if batch is not None:
+        batch.retire(candidate)
+    result = DiscardResult(
+        path=path,
+        name=name,
+        redirect=target.stem if target is not None else None,
+        skipped=skipped,
+    )
+    if target is not None:
+        record_redirect_alias(target, name, source_count=source_count)
+        if batch is not None:
+            batch.record_name(name, target)
+    if key and not resolvers:
+        replacement = target.stem if target is not None else None
+        if batch is not None:
+            batch.defer(key, replacement, result)
+        else:
+            rewrite = rewrite_links_in_wiki(
+                wiki_dir, {key: replacement}, errors=skipped,
+            )
+            result.links_rewritten = sum(rewrite.counts.values())
+            result.pages_changed = rewrite.pages
     _reconcile_catalog(wiki_dir)
-    return path
+    return result
+
+
+def _iter_live_markdown(wiki_dir: Path) -> list[Path]:
+    """Every ``*.md`` under ``wiki/`` outside cold storage, sorted."""
+    if not wiki_dir.is_dir():
+        return []
+    return [
+        path for path in sorted(wiki_dir.rglob("*.md"))
+        if path.is_file() and not is_archived_path(path.relative_to(wiki_dir).parts)
+    ]
+
+
+def _note_skip(
+    errors: list[str] | None, wiki_dir: Path, path: Path, exc: Exception,
+) -> None:
+    """Record a page a pass could not read, so no caller skips it silently.
+
+    One entry per page however many passes trip over it.
+    """
+    if errors is None:
+        return
+    try:
+        rel = path.relative_to(wiki_dir).as_posix()
+    except ValueError:
+        rel = str(path)
+    entry = f"{rel}: {exc}"
+    if entry not in errors:
+        errors.append(entry)
+
+
+def _live_page_owners(
+    wiki_dir: Path, *, errors: list[str] | None = None,
+) -> dict[str, list[Path]]:
+    """``norm_page_key`` → the live pages answering to it: stems + aliases.
+
+    Pending candidates count — their names are still under review. A page
+    that cannot be read still owns its stem; only its aliases are lost, and
+    the failure is appended to ``errors``.
+    """
+    owners: dict[str, list[Path]] = defaultdict(list)
+    for path in _iter_live_markdown(wiki_dir):
+        names = [path.stem]
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            _note_skip(errors, wiki_dir, path, exc)
+        else:
+            names.extend(parse_page_aliases(text))
+        for name in names:
+            key = norm_page_key(name)
+            if key and path not in owners[key]:
+                owners[key].append(path)
+    owners.pop("", None)
+    return dict(owners)
+
+
+def _live_page_keys(wiki_dir: Path, *, errors: list[str] | None = None) -> set[str]:
+    """``norm_page_key`` of every name a live page answers to: stems + aliases."""
+    return set(_live_page_owners(wiki_dir, errors=errors))
+
+
+def archived_candidate_names(
+    wiki_dir: Path, *, errors: list[str] | None = None,
+) -> dict[str, str]:
+    """``norm_page_key -> name`` for every stub under ``wiki/archive/candidates/``.
+
+    The name is the stub's frontmatter ``title``, else its stem. Merged and
+    discarded stubs alike: this is the dismissal ledger harvest consults.
+    A stub that cannot be read is appended to ``errors`` instead of being
+    dropped without a word.
+    """
+    root = archive_dir(wiki_dir)
+    names: dict[str, str] = {}
+    if not root.is_dir():
+        return names
+    for path in sorted(root.rglob("*.md")):
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            _note_skip(errors, wiki_dir, path, exc)
+            continue
+        meta, _ = _parse_frontmatter(text)
+        name = meta.get("title") or path.stem
+        key = norm_page_key(name)
+        if key:
+            names.setdefault(key, name)
+    return names
+
+
+def discarded_names(
+    wiki_dir: Path,
+    *,
+    live_keys: Collection[str] | None = None,
+    errors: list[str] | None = None,
+) -> dict[str, str]:
+    """``norm_page_key -> name`` for candidates a reviewer discarded for good.
+
+    Archived stubs whose name no live page answers to — neither by stem nor
+    under ``## Aliases``. Merged and redirected names are excluded: they
+    resolve through the alias the survivor page records. Shared by the topic
+    vocabulary and ``migrate discarded-topic-links`` so both agree on what
+    was dismissed (#282). ``live_keys`` lets a caller that already scanned
+    the wiki pass its stem/alias keys instead of re-reading every page, and
+    ``errors`` collects the pages neither pass could read.
+    """
+    live = (
+        set(live_keys) if live_keys is not None
+        else _live_page_keys(wiki_dir, errors=errors)
+    )
+    return {
+        key: name
+        for key, name in archived_candidate_names(wiki_dir, errors=errors).items()
+        if key not in live
+    }
+
+
+def merged_intents(
+    wiki_dir: Path, *, errors: list[str] | None = None,
+) -> dict[str, str]:
+    """``norm_page_key -> recorded target`` for archived candidates a merge folded.
+
+    Reads back the reason :func:`merge` wrote beside the stub, through the
+    same formatter, so the reviewer's intent survives even when the survivor
+    page was later renamed or re-filed and no longer answers to the
+    merged-away name. Merges made before survivors recorded an ``## Aliases``
+    entry have nothing else left to go on. ``migrate discarded-topic-links``
+    uses this to tell a merge apart from a dismissal (#282). A stub that
+    cannot be read is appended to ``errors`` instead of being dropped without
+    a word.
+    """
+    root = archive_dir(wiki_dir)
+    intents: dict[str, str] = {}
+    if not root.is_dir():
+        return intents
+    for path in sorted(root.rglob("*.md")):
+        reason_file = _reason_file(path)
+        if not reason_file.is_file():
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+            reason = reason_file.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            _note_skip(errors, wiki_dir, path, exc)
+            continue
+        target = _parse_merge_reason(
+            _reason_field_value(reason, _REASON_FIELD_REASON)
+        )
+        if not target:
+            continue
+        meta, _ = _parse_frontmatter(text)
+        key = norm_page_key(meta.get("title") or path.stem)
+        if key:
+            intents.setdefault(key, target)
+    return intents
+
+
+@dataclass(frozen=True)
+class LinkRewrite:
+    """What one :func:`rewrite_links_in_wiki` pass changed."""
+
+    #: Links rewritten per ``norm_page_key``.
+    counts: dict[str, int]
+    #: Every page changed, relative to ``wiki/``, in walk order.
+    pages: list[str]
+    #: The pages changed for each key, so a batched caller can report per row.
+    pages_by_key: dict[str, list[str]]
+
+
+def rewrite_links_in_wiki(
+    wiki_dir: Path,
+    targets: Mapping[str, str | None],
+    *,
+    dry_run: bool = False,
+    errors: list[str] | None = None,
+) -> LinkRewrite:
+    """Apply :func:`llmwiki.wikilinks.rewrite_wikilinks` to every live page.
+
+    Walks ``wiki/**/*.md`` outside ``wiki/archive/`` — pending candidates
+    included, so their evidence lists stop naming a dismissed page too. Each
+    page is rewritten as itself, so a link retargeted at the page it already
+    sits on becomes plain text instead of a self-link. ``dry_run`` counts
+    without writing, and a page that cannot be read is appended to ``errors``
+    rather than skipped without a word.
+    """
+    totals: dict[str, int] = defaultdict(int)
+    changed: list[str] = []
+    by_key: dict[str, list[str]] = defaultdict(list)
+    if not targets:
+        return LinkRewrite(counts={}, pages=changed, pages_by_key={})
+    for path in _iter_live_markdown(wiki_dir):
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            _note_skip(errors, wiki_dir, path, exc)
+            continue
+        new_text, counts = rewrite_wikilinks(text, targets, self_stem=path.stem)
+        if not counts or new_text == text:
+            continue
+        if not dry_run:
+            path.write_text(new_text, encoding="utf-8")
+        rel = path.relative_to(wiki_dir).as_posix()
+        for key, n in counts.items():
+            totals[key] += n
+            by_key[key].append(rel)
+        changed.append(rel)
+    return LinkRewrite(
+        counts=dict(totals), pages=changed, pages_by_key=dict(by_key),
+    )
+
+
+def rewrite_links_to(
+    wiki_dir: Path,
+    targets: Mapping[str, str | None],
+    *,
+    dry_run: bool = False,
+    errors: list[str] | None = None,
+) -> tuple[dict[str, int], list[str]]:
+    """``(links rewritten per key, pages changed)`` of one rewrite pass.
+
+    Thin view over :func:`rewrite_links_in_wiki` for callers that report a
+    whole pass rather than per key.
+    """
+    rewrite = rewrite_links_in_wiki(
+        wiki_dir, targets, dry_run=dry_run, errors=errors,
+    )
+    return rewrite.counts, rewrite.pages
+
+
+def redirect_target_pages(wiki_dir: Path) -> list[Path]:
+    """Every page a redirect may land on, in walk order.
+
+    Live means outside ``wiki/candidates/`` and ``wiki/archive/``: a redirect
+    must land on a page that is staying, and a ``_``-prefixed folder-context
+    stub is not a page. Shared by :func:`find_live_page` and the redirect
+    suggestions of ``migrate discarded-topic-links`` so both offer the same
+    set of pages.
+    """
+    candidates_root = candidates_dir(wiki_dir)
+    return [
+        path for path in _iter_live_markdown(wiki_dir)
+        if not path.is_relative_to(candidates_root)
+        and not path.name.startswith("_")
+    ]
+
+
+def find_live_page(wiki_dir: Path, name: str) -> Path:
+    """Locate the existing live page a redirect names.
+
+    Searches :func:`redirect_target_pages`: exact stem first, then a unique
+    ``norm_page_key`` match. Raises ``FileNotFoundError`` when nothing
+    matches and ``ValueError`` when the folded name is ambiguous.
+    """
+    return _resolve_page_file(
+        name.strip(),
+        wiki_dir,
+        (),
+        pool=redirect_target_pages(wiki_dir),
+        label="redirect target",
+        not_found=(
+            f"redirect target not found: {name!r} is not an existing page under "
+            f"{wiki_dir} (candidates and archive do not count)"
+        ),
+    )
+
+
+def record_redirect_alias(
+    page: Path, name: str, *, source_count: int, dry_run: bool = False,
+) -> bool:
+    """List ``name`` under ``page``'s ``## Aliases`` unless it already is.
+
+    Uses the same ``## Aliases`` bullet as ``merge`` so
+    :func:`llmwiki.wikilinks.build_page_alias_map` resolves the name to
+    ``page``. ``source_count`` is the number of source pages that backed the
+    redirected name, computed by the caller before any links were rewritten.
+    Returns whether the page changed (or would, under ``dry_run``).
+    """
+    text = page.read_text(encoding="utf-8")
+    key = norm_page_key(name)
+    if any(norm_page_key(alias) == key for alias in parse_page_aliases(text)):
+        return False
+    if not dry_run:
+        meta_text, body = _split_frontmatter_text(text)
+        today = datetime.now(UTC).strftime("%Y-%m-%d")
+        body = _record_alias(body, name, source_count, today, verb="redirected")
+        page.write_text(meta_text + body, encoding="utf-8")
+    return True
+
+
+def archived_candidate_source_count(wiki_dir: Path, key: str) -> int:
+    """Evidence-source count for the archived stub answering to ``key``.
+
+    Mirrors what :func:`merge` counts under ``## Aliases`` — the discarded
+    candidate's own evidence sources — so a migrated ``--redirect`` records
+    the same total a live ``discard --redirect`` would.
+    """
+    root = archive_dir(wiki_dir)
+    if not root.is_dir():
+        return 0
+    for path in sorted(root.rglob("*.md")):
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        meta, body = _parse_frontmatter(text)
+        name = meta.get("title") or path.stem
+        if norm_page_key(name) == key:
+            return len(_evidence_source_slugs(meta, body, wiki_dir))
+    return 0
 
 
 def stale_candidates(
@@ -1009,21 +1520,104 @@ def stale_candidates(
 # ─── internals ─────────────────────────────────────────────────────────
 
 
+def _contained(path: Path, root: Path) -> Path:
+    """Return ``path`` once it is known to sit inside ``root``.
+
+    Backstop for every reviewer-supplied slug: a name that walks out of the
+    vault (``../../elsewhere``) is refused instead of read or written.
+    """
+    if not path.resolve().is_relative_to(root.resolve()):
+        raise ValueError(f"path escapes {root}: {path}")
+    return path
+
+
+def _resolve_page_file(
+    slug: str,
+    wiki_dir: Path,
+    subdirs: Sequence[str],
+    *,
+    pool: Iterable[Path] | None = None,
+    label: str,
+    not_found: str,
+) -> Path:
+    """Resolve a reviewer-supplied ``slug`` to one markdown page under ``wiki_dir``.
+
+    The one slug→path resolver every ``candidates`` action shares: the stub
+    lookup, the trusted-page lookup, the ``merge --into`` target, and the
+    ``discard --redirect`` target. ``slug`` is sanitized through
+    :func:`candidate_filename`, so a name carrying a path separator can only
+    ever name a file inside the searched folders, and the returned path is
+    checked against ``wiki_dir`` as a backstop.
+
+    ``subdirs`` are the folders under ``wiki_dir`` to search, in priority
+    order. Pass ``pool`` to search a ready-made set of pages instead (a
+    whole-tree walk, say); ``subdirs`` is then empty and unused.
+
+    An exact filename match wins. Failing that, a unique
+    :func:`llmwiki.wikilinks.norm_page_key` fold of the searched filenames
+    resolves, so a differently-cased or differently-punctuated slug still
+    finds its page. ``_``-prefixed files are folder-context stubs, not pages,
+    and never resolve. ``label`` names the thing being looked up in the
+    ambiguity message; ``not_found`` is raised verbatim as
+    ``FileNotFoundError``.
+    """
+    if not slug.strip():
+        raise FileNotFoundError(not_found)
+    filename = candidate_filename(slug)
+    key = norm_page_key(slug)
+    folded: list[Path] = []
+    if pool is None:
+        for sub in subdirs:
+            path = wiki_dir / sub / filename
+            if path.is_file() and not path.name.startswith("_"):
+                return _contained(path, wiki_dir)
+        if key:
+            for sub in subdirs:
+                sub_dir = wiki_dir / sub
+                if not sub_dir.is_dir():
+                    continue
+                for path in sorted(sub_dir.glob("*.md")):
+                    if path.name.startswith("_"):
+                        continue
+                    if norm_page_key(path.stem) == key:
+                        folded.append(path)
+    else:
+        for path in pool:
+            if path.name == filename:
+                return _contained(path, wiki_dir)
+            if key and norm_page_key(path.stem) == key:
+                folded.append(path)
+    if len(folded) == 1:
+        return _contained(folded[0], wiki_dir)
+    if folded:
+        found = ", ".join(p.relative_to(wiki_dir).as_posix() for p in folded)
+        raise ValueError(f"{label} {slug!r} is ambiguous: {found}")
+    raise FileNotFoundError(not_found)
+
+
 def _find_candidate(
     slug: str,
     wiki_dir: Path,
     kind: str | None,
 ) -> Path:
-    """Locate ``<slug>.md`` under wiki/candidates/, optionally filtered by kind."""
-    root = candidates_dir(wiki_dir)
+    """Locate a pending stub under wiki/candidates/, optionally filtered by kind.
+
+    Exact filename match wins first. Failing that, falls back to a unique
+    :func:`llmwiki.wikilinks.norm_page_key` fold of pending stub filenames, so
+    a case or punctuation variant of the stub's name (``Junk`` for a stub
+    written ``JUNK.md``, or a sanitized ``/`` in the name) still resolves.
+    Raises ``ValueError`` when the fold matches more than one pending stub.
+    """
     subs = [kind] if kind else MIRRORED_SUBDIRS
-    for sub in subs:
-        path = root / sub / f"{slug}.md"
-        if path.is_file():
-            return path
-    raise FileNotFoundError(
-        f"candidate not found: {slug!r} under {root}"
-        + (f" (kind={kind})" if kind else "")
+    return _resolve_page_file(
+        slug,
+        wiki_dir,
+        [f"{CANDIDATES_DIR_NAME}/{sub}" for sub in subs],
+        label="candidate",
+        not_found=(
+            f"candidate not found: {slug!r} under {candidates_dir(wiki_dir)}"
+            + (f" (kind={kind})" if kind else "")
+        ),
     )
 
 
@@ -1055,26 +1649,77 @@ def _rewrite_type(text: str, *, new: str) -> str:
     return text
 
 
+#: Field label of the reason file line that says why a candidate was archived.
+_REASON_FIELD_REASON = "Reason"
+
+#: What :func:`merge` records as its reason, ahead of the target it folded the
+#: candidate into. The only thing that tells a merge apart from a free-text
+#: dismissal once the stub is in cold storage.
+_MERGE_REASON_PREFIX = "merged into "
+
+
+def _reason_file(archived: Path) -> Path:
+    """The reason file that belongs beside an archived candidate stub."""
+    return archived.with_suffix(".reason.txt")
+
+
+def _reason_field(label: str, value: object) -> str:
+    """One ``<label>: <value>`` line of an archived candidate's reason file."""
+    return f"{label}: {value}"
+
+
+def _reason_field_value(text: str, label: str) -> str:
+    """Value ``label`` carries in a reason file, ``""`` when it carries none.
+
+    Reads the line :func:`_reason_field` writes, through the same formatter,
+    so no caller has to restate the file's layout.
+    """
+    prefix = _reason_field(label, "")
+    for line in text.splitlines():
+        if line.startswith(prefix):
+            return line[len(prefix):].strip()
+    return ""
+
+
+def _format_merge_reason(into_slug: str) -> str:
+    """The reason :func:`merge` records for the candidate it folded away."""
+    return f"{_MERGE_REASON_PREFIX}{into_slug}"
+
+
+def _parse_merge_reason(reason: str) -> str:
+    """Target in a :func:`_format_merge_reason` reason, ``""`` when it is not one."""
+    if not reason.startswith(_MERGE_REASON_PREFIX):
+        return ""
+    return reason[len(_MERGE_REASON_PREFIX):].strip()
+
+
 def _archive_candidate(
     candidate: Path,
     wiki_dir: Path,
     *,
     reason: str,
+    redirect: str | None = None,
 ) -> Path:
-    """Move candidate into archive with reason file."""
+    """Move candidate into archive with reason file.
+
+    The reason file is written whenever there is a reason or a redirect.
+    """
     stamp = datetime.now(UTC).strftime("%Y-%m-%dT%H-%M-%S")
     dest_dir = archive_dir(wiki_dir) / stamp
     dest_dir.mkdir(parents=True, exist_ok=True)
 
+    original = candidate.relative_to(wiki_dir).as_posix()
     dest = dest_dir / candidate.name
     shutil.move(str(candidate), str(dest))
 
-    if reason:
-        reason_file = dest.with_suffix(".reason.txt")
-        reason_file.write_text(
-            f"Discarded at: {datetime.now(UTC).isoformat()}\n"
-            f"Reason: {reason}\n"
-            f"Original path: candidates/{candidate.parent.name}/{candidate.name}\n",
-            encoding="utf-8",
-        )
+    if reason or redirect:
+        reason_file = _reason_file(dest)
+        lines = [
+            _reason_field("Discarded at", datetime.now(UTC).isoformat()),
+            _reason_field(_REASON_FIELD_REASON, reason),
+            _reason_field("Original path", original),
+        ]
+        if redirect:
+            lines.append(_reason_field("Redirected to", redirect))
+        reason_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return dest

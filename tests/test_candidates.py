@@ -16,29 +16,40 @@ from llmwiki.candidates import (
     MIRRORED_SUBDIRS,
     KeyFactsBackendError,
     _age_days,
+    _find_candidate,
     _parse_frontmatter,
     _rewrite_status,
     apply_review_summary_to_pipeline,
     archive_dir,
+    candidate_filename,
     candidate_review_summary,
     candidates_dir,
     discard,
+    discarded_names,
     fill_key_facts_from_evidence,
+    find_live_page,
     flip_and_promote,
     is_candidate,
     list_candidates,
     merge,
     promote,
+    record_redirect_alias,
     rewrite_key_facts,
     stale_candidates,
     strip_harvest_merge_sections,
 )
+from llmwiki.candidates_harvest import harvest_targets, write_stubs
 from llmwiki.cli import build_parser
 from llmwiki.lint import (
     REGISTRY,
     rules,  # noqa: F401
 )
 from llmwiki.synth.base import BaseSynthesizer, DummySynthesizer
+from llmwiki.wikilinks import (
+    build_page_alias_map,
+    parse_page_aliases,
+    resolve_wikilink_target,
+)
 
 # ─── Fixtures ──────────────────────────────────────────────────────────
 
@@ -251,6 +262,28 @@ def test_promote_raises_when_candidate_missing(tmp_path: Path):
     wiki = _mk_wiki(tmp_path)
     with pytest.raises(FileNotFoundError):
         promote("Ghost", wiki)
+
+
+def test_cli_promote_unknown_slug_is_an_error(tmp_path: Path, capsys):
+    """# @layer: integration  # @spec: 282-discarded-topic-links"""
+    wiki = _mk_wiki(tmp_path)
+    args = build_parser().parse_args([
+        "candidates", "promote", "--slug", "Ghost", "--wiki-dir", str(wiki),
+    ])
+    assert args.func(args) == 2
+    assert capsys.readouterr().err.startswith("error: candidate not found")
+
+
+def test_cli_promote_ambiguous_slug_is_an_error(tmp_path: Path, capsys):
+    """# @layer: integration  # @spec: 282-discarded-topic-links"""
+    wiki = _mk_wiki(tmp_path)
+    _write_candidate(wiki, "entities", "Junk")
+    _write_candidate(wiki, "entities", "junk")
+    args = build_parser().parse_args([
+        "candidates", "promote", "--slug", "JUNK", "--wiki-dir", str(wiki),
+    ])
+    assert args.func(args) == 2
+    assert "is ambiguous" in capsys.readouterr().err
 
 
 def _write_subject_with_evidence(wiki: Path) -> Path:
@@ -729,13 +762,39 @@ def test_merge_raises_when_target_missing(tmp_path: Path):
         merge("Dup", wiki, into_slug="Nonexistent")
 
 
+def test_cli_merge_unknown_slug_is_an_error(tmp_path: Path, capsys):
+    """# @layer: integration  # @spec: 282-discarded-topic-links"""
+    wiki = _mk_wiki(tmp_path)
+    _write_candidate(wiki, "entities", "Main")
+    args = build_parser().parse_args([
+        "candidates", "merge", "--slug", "Ghost", "--into", "Main",
+        "--wiki-dir", str(wiki),
+    ])
+    assert args.func(args) == 2
+    assert capsys.readouterr().err.startswith("error: candidate not found")
+
+
+def test_cli_merge_ambiguous_slug_is_an_error(tmp_path: Path, capsys):
+    """# @layer: integration  # @spec: 282-discarded-topic-links"""
+    wiki = _mk_wiki(tmp_path)
+    _write_candidate(wiki, "entities", "Junk")
+    _write_candidate(wiki, "entities", "junk")
+    _write_candidate(wiki, "entities", "Main")
+    args = build_parser().parse_args([
+        "candidates", "merge", "--slug", "JUNK", "--into", "Main",
+        "--wiki-dir", str(wiki),
+    ])
+    assert args.func(args) == 2
+    assert "is ambiguous" in capsys.readouterr().err
+
+
 # ─── discard ────────────────────────────────────────────────────────
 
 
 def test_discard_moves_to_archive(tmp_path: Path):
     wiki = _mk_wiki(tmp_path)
     candidate = _write_candidate(wiki, "entities", "Bogus")
-    archived = discard("Bogus", wiki, reason="hallucinated")
+    archived = discard("Bogus", wiki, reason="hallucinated").path
 
     assert not candidate.exists()
     assert archived.is_file()
@@ -748,7 +807,7 @@ def test_discard_moves_to_archive(tmp_path: Path):
 def test_discard_writes_reason_file(tmp_path: Path):
     wiki = _mk_wiki(tmp_path)
     _write_candidate(wiki, "entities", "Fake")
-    archived = discard("Fake", wiki, reason="not a real thing")
+    archived = discard("Fake", wiki, reason="not a real thing").path
 
     reason_file = archived.with_suffix(".reason.txt")
     assert reason_file.is_file()
@@ -761,6 +820,436 @@ def test_discard_raises_when_candidate_missing(tmp_path: Path):
     wiki = _mk_wiki(tmp_path)
     with pytest.raises(FileNotFoundError):
         discard("Ghost", wiki, reason="x")
+
+
+# ─── _find_candidate case-fold resolution (#282) ───────────────────────
+
+
+def test_find_candidate_exact_match_wins_over_fold(tmp_path: Path):
+    """# @layer: unit  # @spec: 282-discarded-topic-links"""
+    wiki = _mk_wiki(tmp_path)
+    exact = _write_candidate(wiki, "entities", "Junk")
+    _write_candidate(wiki, "entities", "JUNK")
+    assert _find_candidate("Junk", wiki, None) == exact
+
+
+def test_find_candidate_resolves_case_insensitively(tmp_path: Path):
+    """# @layer: integration  # @spec: 282-discarded-topic-links"""
+    wiki = _mk_wiki(tmp_path)
+    stubs = _harvest(wiki, {"a": "Uses [[JUNK]] a lot.", "b": "More on [[JUNK]]."})
+    stub = next(p for p in stubs if p.stem == "JUNK")
+    assert _find_candidate("Junk", wiki, None) == stub
+    result = discard("Junk", wiki, reason="noise")
+    assert result.path.name == "JUNK.md"
+
+
+def test_find_candidate_resolves_sanitized_slash_name(tmp_path: Path):
+    """# @layer: integration  # @spec: 282-discarded-topic-links"""
+    wiki = _mk_wiki(tmp_path)
+    stubs = _harvest(
+        wiki, {"a": "See [[A/B thing]].", "b": "Also [[A/B thing]] again."}
+    )
+    stub = next(p for p in stubs if p.stem == "A-B thing")
+    assert _find_candidate("A/B thing", wiki, None) == stub
+
+
+def test_find_candidate_ambiguous_fold_raises_with_both_names(tmp_path: Path):
+    """# @layer: unit  # @spec: 282-discarded-topic-links"""
+    wiki = _mk_wiki(tmp_path)
+    _write_candidate(wiki, "entities", "Junk")
+    _write_candidate(wiki, "entities", "junk")
+    with pytest.raises(ValueError) as excinfo:
+        _find_candidate("JUNK", wiki, None)
+    message = str(excinfo.value)
+    assert "Junk.md" in message
+    assert "junk.md" in message
+
+
+def test_find_candidate_fold_respects_kind_filter(tmp_path: Path):
+    """Fold resolution stays inside the requested kind, same as exact match."""
+    wiki = _mk_wiki(tmp_path)
+    entity = _write_candidate(wiki, "entities", "Junk")
+    _write_candidate(wiki, "concepts", "JUNK")
+    assert _find_candidate("junk", wiki, "entities") == entity
+
+
+def test_find_candidate_unknown_slug_still_errors(tmp_path: Path):
+    wiki = _mk_wiki(tmp_path)
+    with pytest.raises(FileNotFoundError, match="candidate not found: 'Ghost'"):
+        _find_candidate("Ghost", wiki, None)
+
+
+# ─── discard rewrites links (#282) ───────────────────────────────────
+
+
+def _harvest(wiki: Path, sources: dict[str, str]) -> list[Path]:
+    """Write source pages, then harvest + write stubs through the real code."""
+    for slug, body in sources.items():
+        path = wiki / "sources" / f"{slug}.md"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            f'---\ntitle: "{slug}"\ntype: source\n---\n\n{body}\n', encoding="utf-8"
+        )
+    return write_stubs(wiki, harvest_targets(wiki, min_refs=2))
+
+
+def _live_text(wiki: Path) -> str:
+    return "\n".join(
+        p.read_text(encoding="utf-8")
+        for p in wiki.rglob("*.md")
+        if "archive" not in p.relative_to(wiki).parts
+    )
+
+
+@pytest.mark.parametrize(
+    ("name", "expected"),
+    [
+        ("Plain Name", "Plain Name.md"),
+        ("A/B thing", "A-B thing.md"),
+        ("back\\slash", "back-slash.md"),
+        ("C: D", "C- D.md"),
+        ("..hidden", "hidden.md"),
+        ("nul\x00byte", "nul-byte.md"),
+        # Windows refuses a trailing dot or space, and every device name.
+        ("Foo.", "Foo.md"),
+        ("Foo . ", "Foo.md"),
+        ("CON", "CON-.md"),
+        ("com1", "com1-.md"),
+        ("Console", "Console.md"),
+    ],
+)
+def test_candidate_filename_is_flat_and_path_safe(name: str, expected: str):
+    """# @layer: unit  # @spec: 282-discarded-topic-links"""
+    assert candidate_filename(name) == expected
+    # Idempotent: the stem read back off disk locates the same file.
+    assert candidate_filename(expected.removesuffix(".md")) == expected
+
+
+def test_review_actions_refuse_a_slug_that_escapes_the_wiki(tmp_path: Path):
+    """Every reviewer slug is sanitized and contained. # @layer: unit  # @spec: 282-discarded-topic-links"""
+    wiki = _mk_wiki(tmp_path)
+    outside = tmp_path / "outside.md"
+    outside.write_text("untouchable\n", encoding="utf-8")
+    (wiki / "candidates" / "entities" / "Junk.md").write_text(
+        '---\ntitle: "Junk"\ntype: entity\nstatus: candidate\n---\n\n# Junk\n',
+        encoding="utf-8",
+    )
+    escaping = "../../outside"
+
+    calls = {
+        "promote": lambda: promote(escaping, wiki),
+        "flip-promote": lambda: flip_and_promote(escaping, wiki),
+        "discard": lambda: discard(escaping, wiki, reason="noise"),
+        "merge-slug": lambda: merge(escaping, wiki, into_slug="Junk"),
+        "merge-into": lambda: merge("Junk", wiki, into_slug=escaping),
+        "rewrite-key-facts": lambda: rewrite_key_facts(
+            escaping, wiki, synthesizer=_FakeSynthesizer()
+        ),
+        "redirect": lambda: find_live_page(wiki, escaping),
+    }
+    for name, call in calls.items():
+        with pytest.raises((FileNotFoundError, ValueError)):
+            call()
+        assert outside.read_text(encoding="utf-8") == "untouchable\n", name
+
+
+def test_slug_resolution_refuses_a_page_symlinked_out_of_the_wiki(tmp_path: Path):
+    """Containment backstop for every caller. # @layer: unit  # @spec: 282-discarded-topic-links"""
+    wiki = tmp_path / "wiki"
+    wiki.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "Escaped.md").write_text(
+        '---\ntitle: "Escaped"\ntype: entity\n---\n\n# Escaped\n\n## Key Facts\n',
+        encoding="utf-8",
+    )
+    (wiki / "entities").symlink_to(outside, target_is_directory=True)
+
+    with pytest.raises(ValueError, match="escapes"):
+        rewrite_key_facts("Escaped", wiki, synthesizer=_FakeSynthesizer())
+
+
+def test_rewrite_key_facts_slug_folds_case_and_punctuation(tmp_path: Path):
+    """The `--slug` fold covers trusted pages too. # @layer: unit  # @spec: 282-discarded-topic-links"""
+    wiki = _mk_wiki(tmp_path)
+    _write_subject_with_evidence(wiki)
+    promote("Subject", wiki)
+
+    path = rewrite_key_facts(
+        "sub-ject", wiki, synthesizer=_FakeSynthesizer("- A fact. [[alpha]]\n"),
+    )
+    assert path == wiki / "entities" / "Subject.md"
+
+
+def test_rewrite_key_facts_refuses_an_ambiguous_slug(tmp_path: Path):
+    """# @layer: unit  # @spec: 282-discarded-topic-links"""
+    wiki = _mk_wiki(tmp_path)
+    for sub, stem in (("entities", "My-Entity"), ("concepts", "My Entity")):
+        (wiki / sub / f"{stem}.md").write_text(
+            f'---\ntitle: "{stem}"\ntype: {sub[:-1]}\n---\n\n# {stem}\n\n## Key Facts\n',
+            encoding="utf-8",
+        )
+
+    with pytest.raises(ValueError, match="trusted page 'MyEntity' is ambiguous"):
+        rewrite_key_facts("MyEntity", wiki, synthesizer=_FakeSynthesizer())
+
+
+def test_slug_resolution_never_lands_on_a_folder_context_stub(tmp_path: Path):
+    """`_context.md` describes a folder, it is not a page. # @layer: unit  # @spec: 282-discarded-topic-links"""
+    wiki = _mk_wiki(tmp_path)
+    (wiki / "entities" / "_context.md").write_text(
+        "Entities live here.\n", encoding="utf-8",
+    )
+    (wiki / "candidates" / "entities" / "_context.md").write_text(
+        "Pending stubs live here.\n", encoding="utf-8",
+    )
+
+    for slug in ("context", "_context"):
+        with pytest.raises(FileNotFoundError):
+            rewrite_key_facts(slug, wiki, synthesizer=_FakeSynthesizer())
+        with pytest.raises(FileNotFoundError):
+            _find_candidate(slug, wiki, None)
+
+
+def test_discard_leaves_no_link_outside_archive(tmp_path: Path):
+    """# @layer: integration  # @spec: 282-discarded-topic-links"""
+    wiki = _mk_wiki(tmp_path)
+    _harvest(wiki, {
+        "a": "Uses [[Junk]] and [[Keep]].",
+        "b": "Mentions [[junk|the junk]] and [[Keep]].",
+        "c": "See [[Junk#Usage]].",
+    })
+    (wiki / "entities" / "Keep.md").write_text(
+        '---\ntitle: "Keep"\ntype: entity\n---\n\n# Keep\n\n## Connections\n- [[Junk]]\n',
+        encoding="utf-8",
+    )
+
+    result = discard("Junk", wiki, reason="noise")
+
+    live = _live_text(wiki)
+    assert "[[Junk" not in live and "[[junk" not in live
+    assert "Mentions the junk and [[Keep]]." in live
+    assert "See Junk." in live
+    assert result.links_rewritten == 4
+    assert result.redirect is None
+    assert sorted(result.pages_changed) == [
+        "entities/Keep.md", "sources/a.md", "sources/b.md", "sources/c.md",
+    ]
+    reason = result.path.with_suffix(".reason.txt").read_text(encoding="utf-8")
+    assert "Original path: candidates/entities/Junk.md" in reason
+    assert "Redirected to" not in reason
+
+
+def test_discard_keeps_links_a_live_page_still_answers(tmp_path: Path):
+    """A same-named trusted page means the links are not dangling."""
+    wiki = _mk_wiki(tmp_path)
+    _write_candidate(wiki, "concepts", "Bash")
+    (wiki / "entities" / "bash.md").write_text("# bash\n", encoding="utf-8")
+    (wiki / "sources" / "s.md").write_text("Run [[Bash]].\n", encoding="utf-8")
+
+    result = discard("Bash", wiki, reason="duplicate")
+
+    assert result.links_rewritten == 0
+    assert (wiki / "sources" / "s.md").read_text(encoding="utf-8") == "Run [[Bash]].\n"
+
+
+def test_discard_redirect_points_links_at_page_and_records_alias(tmp_path: Path):
+    """# @layer: integration  # @spec: 282-discarded-topic-links"""
+    wiki = _mk_wiki(tmp_path)
+    _harvest(wiki, {"a": "Uses [[Old Name]].", "b": "Uses [[old name|it]]."})
+    target = wiki / "concepts" / "Proper.md"
+    target.write_text('---\ntitle: "Proper"\ntype: concept\n---\n\n# Proper\n', encoding="utf-8")
+
+    result = discard("Old Name", wiki, reason="duplicate", redirect="proper")
+
+    assert result.redirect == "Proper"
+    assert result.links_rewritten == 2
+    live = _live_text(wiki)
+    assert "Uses [[Proper|Old Name]]." in live
+    assert "Uses [[Proper|it]]." in live
+    body = target.read_text(encoding="utf-8")
+    alias_map = build_page_alias_map({"Proper": body})
+    assert resolve_wikilink_target("old-name", {"Proper"}, alias_map) == "Proper"
+    assert "- Old Name — redirected " in body
+    assert "(2 source pages)" in body
+    reason = result.path.with_suffix(".reason.txt").read_text(encoding="utf-8")
+    assert "Redirected to: Proper" in reason
+    # Redirected names resolve through the alias, so they are not "discarded".
+    assert discarded_names(wiki) == {}
+
+
+def test_discard_redirect_always_writes_reason_file(tmp_path: Path):
+    wiki = _mk_wiki(tmp_path)
+    _write_candidate(wiki, "entities", "Dup")
+    (wiki / "entities" / "Main.md").write_text("# Main\n", encoding="utf-8")
+    result = discard("Dup", wiki, redirect="Main")
+    assert "Redirected to: Main" in result.path.with_suffix(".reason.txt").read_text(
+        encoding="utf-8"
+    )
+
+
+@pytest.mark.parametrize("redirect", ["Nowhere", "Pending"])
+def test_discard_redirect_refuses_non_live_target_before_moving(
+    tmp_path: Path, redirect: str
+):
+    """A redirect must land on a page that stays — not a candidate, not missing."""
+    wiki = _mk_wiki(tmp_path)
+    stub = _write_candidate(wiki, "entities", "Dup")
+    _write_candidate(wiki, "entities", "Pending")
+    with pytest.raises(FileNotFoundError):
+        discard("Dup", wiki, redirect=redirect)
+    assert stub.is_file()
+
+
+def test_discard_redirect_refuses_itself(tmp_path: Path):
+    wiki = _mk_wiki(tmp_path)
+    stub = _write_candidate(wiki, "entities", "dup")
+    (wiki / "entities" / "Dup.md").write_text("# Dup\n", encoding="utf-8")
+    with pytest.raises(ValueError):
+        discard("dup", wiki, redirect="Dup")
+    assert stub.is_file()
+
+
+def test_discarded_names_excludes_merged_candidates(tmp_path: Path):
+    """# @layer: unit  # @spec: 282-discarded-topic-links"""
+    wiki = _mk_wiki(tmp_path)
+    _write_candidate(wiki, "entities", "Noise")
+    _write_candidate(wiki, "entities", "Dup")
+    (wiki / "entities" / "Main.md").write_text("# Main\n", encoding="utf-8")
+    discard("Noise", wiki, reason="noise")
+    merge("Dup", wiki, into_slug="Main")
+    assert discarded_names(wiki) == {"noise": "Noise"}
+
+
+def test_cli_discard_redirect_prints_counts(tmp_path: Path, capsys):
+    wiki = _mk_wiki(tmp_path)
+    _write_candidate(wiki, "entities", "Dup")
+    (wiki / "entities" / "Main.md").write_text("# Main\n", encoding="utf-8")
+    (wiki / "sources" / "s.md").write_text("See [[Dup]].\n", encoding="utf-8")
+    args = build_parser().parse_args([
+        "candidates", "discard", "--slug", "Dup", "--redirect", "Main",
+        "--wiki-dir", str(wiki),
+    ])
+    assert args.func(args) == 0
+    out = capsys.readouterr().out
+    assert "redirected 1 link(s) to [[Main]] in 1 page(s)" in out
+    assert (wiki / "sources" / "s.md").read_text(encoding="utf-8") == "See [[Main|Dup]].\n"
+
+
+def test_cli_discard_unknown_redirect_is_an_error(tmp_path: Path, capsys):
+    wiki = _mk_wiki(tmp_path)
+    _write_candidate(wiki, "entities", "Dup")
+    args = build_parser().parse_args([
+        "candidates", "discard", "--slug", "Dup", "--redirect", "Nowhere",
+        "--wiki-dir", str(wiki),
+    ])
+    assert args.func(args) == 2
+    assert "redirect target not found" in capsys.readouterr().err
+
+
+def test_discard_redirect_refuses_a_name_another_live_page_owns(tmp_path: Path):
+    """Two live pages must never answer to one name. # @layer: unit  # @spec: 282-discarded-topic-links"""
+    wiki = _mk_wiki(tmp_path)
+    stub = _write_candidate(wiki, "entities", "Dup")
+    (wiki / "entities" / "Main.md").write_text("# Main\n", encoding="utf-8")
+    (wiki / "concepts" / "dup.md").write_text("# dup\n", encoding="utf-8")
+    (wiki / "sources" / "s.md").write_text("See [[Dup]].\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="concepts/dup.md already answers"):
+        discard("Dup", wiki, redirect="Main")
+
+    assert stub.is_file()
+    assert "## Aliases" not in (wiki / "entities" / "Main.md").read_text(encoding="utf-8")
+    assert (wiki / "sources" / "s.md").read_text(encoding="utf-8") == "See [[Dup]].\n"
+
+
+def test_discard_redirect_leaves_the_target_unlinked_to_itself(tmp_path: Path):
+    """The redirect target's own mention reads as text, not a self-link. # @layer: integration  # @spec: 282-discarded-topic-links"""
+    wiki = _mk_wiki(tmp_path)
+    _harvest(wiki, {"a": "Uses [[Old Name]].", "b": "Uses [[old name|it]]."})
+    target = wiki / "concepts" / "Proper.md"
+    target.write_text(
+        '---\ntitle: "Proper"\ntype: concept\n---\n\n# Proper\n\n'
+        "## Connections\n- [[Old Name]] — the same thing\n",
+        encoding="utf-8",
+    )
+
+    result = discard("Old Name", wiki, reason="duplicate", redirect="proper")
+
+    body = target.read_text(encoding="utf-8")
+    assert "- Old Name — the same thing" in body
+    assert "[[Proper|Old Name]]" not in body
+    assert result.links_rewritten == 3
+    assert "concepts/Proper.md" in result.pages_changed
+    # The alias still resolves the name, without the page linking to itself.
+    assert parse_page_aliases(body) == ["Old Name"]
+
+
+def test_record_redirect_alias_round_trips_a_name_with_an_em_dash(tmp_path: Path):
+    """Re-running a redirect appends nothing. # @layer: unit  # @spec: 282-discarded-topic-links"""
+    wiki = _mk_wiki(tmp_path)
+    page = wiki / "entities" / "Main.md"
+    page.write_text('---\ntitle: "Main"\ntype: entity\n---\n\n# Main\n', encoding="utf-8")
+
+    assert record_redirect_alias(page, "A — B", source_count=2) is True
+    assert record_redirect_alias(page, "a—b", source_count=2) is False
+
+    body = page.read_text(encoding="utf-8")
+    assert body.count("redirected") == 1
+    assert parse_page_aliases(body) == ["A — B"]
+
+
+def _write_undecodable_page(wiki: Path, rel: str) -> Path:
+    path = wiki / rel
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(b'---\ntitle: "bad"\n---\n\n\xff\xfe See [[Junk]].\n')
+    return path
+
+
+def test_discard_names_the_pages_it_could_not_read(tmp_path: Path):
+    """A page that cannot be read is reported, not skipped in silence. # @layer: unit  # @spec: 282-discarded-topic-links"""
+    wiki = _mk_wiki(tmp_path)
+    _write_candidate(wiki, "entities", "Junk")
+    (wiki / "sources" / "s.md").write_text("See [[Junk]].\n", encoding="utf-8")
+    _write_undecodable_page(wiki, "sources/broken.md")
+
+    result = discard("Junk", wiki, reason="noise")
+
+    assert result.links_rewritten == 1
+    assert result.skipped
+    assert all(entry.startswith("sources/broken.md:") for entry in result.skipped)
+
+
+def test_cli_discard_warns_about_pages_it_could_not_read(tmp_path: Path, capsys):
+    wiki = _mk_wiki(tmp_path)
+    _write_candidate(wiki, "entities", "Junk")
+    _write_undecodable_page(wiki, "sources/broken.md")
+    args = build_parser().parse_args([
+        "candidates", "discard", "--slug", "Junk", "--wiki-dir", str(wiki),
+    ])
+
+    assert args.func(args) == 0
+
+    err = capsys.readouterr().err
+    assert "could not be read" in err
+    assert "sources/broken.md" in err
+
+
+@pytest.mark.parametrize("action", ["promote", "flip-promote", "merge", "list"])
+def test_cli_candidates_refuses_redirect_on_anything_but_discard(
+    tmp_path: Path, capsys, action: str,
+):
+    """The one-off CLI refuses the flag instead of dropping it. # @layer: unit  # @spec: 282-discarded-topic-links"""
+    wiki = _mk_wiki(tmp_path)
+    _write_candidate(wiki, "entities", "Dup")
+    args = build_parser().parse_args([
+        "candidates", action, "--slug", "Dup", "--into", "Main",
+        "--redirect", "Main", "--wiki-dir", str(wiki),
+    ])
+
+    assert args.func(args) == 2
+    assert "redirect applies only to discard" in capsys.readouterr().err
+    assert (wiki / "candidates" / "entities" / "Dup.md").is_file()
 
 
 # ─── stale_candidates ────────────────────────────────────────────────
@@ -902,6 +1391,28 @@ def test_cli_flip_promote_action_registered() -> None:
     parser = build_parser()
     args = parser.parse_args(["candidates", "flip-promote", "--slug", "X"])
     assert args.action == "flip-promote"
+
+
+def test_cli_flip_promote_unknown_slug_is_an_error(tmp_path: Path, capsys):
+    """# @layer: integration  # @spec: 282-discarded-topic-links"""
+    wiki = _mk_wiki(tmp_path)
+    args = build_parser().parse_args([
+        "candidates", "flip-promote", "--slug", "Ghost", "--wiki-dir", str(wiki),
+    ])
+    assert args.func(args) == 2
+    assert capsys.readouterr().err.startswith("error: candidate not found")
+
+
+def test_cli_flip_promote_ambiguous_slug_is_an_error(tmp_path: Path, capsys):
+    """# @layer: integration  # @spec: 282-discarded-topic-links"""
+    wiki = _mk_wiki(tmp_path)
+    _write_candidate(wiki, "entities", "Junk")
+    _write_candidate(wiki, "entities", "junk")
+    args = build_parser().parse_args([
+        "candidates", "flip-promote", "--slug", "JUNK", "--wiki-dir", str(wiki),
+    ])
+    assert args.func(args) == 2
+    assert "is ambiguous" in capsys.readouterr().err
 
 
 # ─── CLI integration ────────────────────────────────────────────────

@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+from llmwiki.candidates import discard, list_candidates
 from llmwiki.candidates_harvest import (
     SourceReadError,
     classify_names,
@@ -18,6 +19,8 @@ from llmwiki.candidates_harvest import (
     summarize_backlog,
     write_stubs,
 )
+from llmwiki.lint import LintOptions, load_pages
+from llmwiki.lint.rules import LinkIntegrity
 
 # ─── Fixtures ──────────────────────────────────────────────────────────
 
@@ -734,3 +737,49 @@ def test_legacy_connection_bullets_still_count_toward_min_refs(tmp_path: Path) -
     names = {t.name for t in harvest_targets(wiki, min_refs=3)}
 
     assert names == {"Legacy"}
+
+
+# ─── Slash names and discarded names (#282) ────────────────────────────
+
+
+def test_slash_name_is_written_flat_and_its_link_resolves(tmp_path: Path) -> None:
+    """# @layer: integration  # @spec: 282-discarded-topic-links
+
+    ``A/B thing`` must not become folder ``A`` holding ``B thing.md``: that stub
+    is invisible to ``candidates list`` and its link never resolves.
+    """
+    wiki = tmp_path / "wiki"
+    _mk_source(wiki, "a", ["A/B thing"])
+    _mk_source(wiki, "b", ["A/B thing"])
+
+    [path] = write_stubs(wiki, harvest_targets(wiki, min_refs=2))
+
+    assert path == wiki / "candidates" / "entities" / "A-B thing.md"
+    assert 'title: "A/B thing"' in path.read_text(encoding="utf-8")
+    assert not (wiki / "candidates" / "entities" / "A").exists()
+    assert [c["title"] for c in list_candidates(wiki)] == ["A/B thing"]
+    rule = LinkIntegrity()
+    rule.options = LintOptions(min_refs=1)
+    assert rule.run(load_pages(wiki)) == []
+    # Re-harvest refreshes the same flat stub instead of writing a sibling.
+    assert write_stubs(wiki, harvest_targets(wiki, min_refs=2)) == [path]
+
+
+def test_discarded_slash_name_is_not_re_proposed(tmp_path: Path) -> None:
+    """The archived stem ``A-B thing`` is not the name; its title is."""
+    wiki = tmp_path / "wiki"
+    for slug in ("a", "b"):
+        (wiki / "sources").mkdir(parents=True, exist_ok=True)
+        (wiki / "sources" / f"{slug}.md").write_text(
+            "---\ntitle: x\ntype: source\n---\n\n## Connections\n- [[A/B thing]]\n",
+            encoding="utf-8",
+        )
+    write_stubs(wiki, harvest_targets(wiki, min_refs=2))
+    discard("A/B thing", wiki, reason="noise")
+    # discard unlinks the name; put a fresh mention back to prove the ledger.
+    for slug in ("a", "b"):
+        (wiki / "sources" / f"{slug}.md").write_text(
+            "---\ntitle: x\ntype: source\n---\n\n## Connections\n- [[a/b Thing]]\n",
+            encoding="utf-8",
+        )
+    assert harvest_targets(wiki, min_refs=2) == []

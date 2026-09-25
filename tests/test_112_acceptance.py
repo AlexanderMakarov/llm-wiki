@@ -128,6 +128,7 @@ def test_migrate_catalog_contains_the_expected_names():
         "page-kinds",
         "topic-kinds",
         "wikilink-titles",
+        "discarded-topic-links",
         "source-page-paths",
         "broken-provenance",
     }
@@ -148,6 +149,7 @@ def test_migrate_subparsers_register_the_expected_names():
         "page-kinds",
         "topic-kinds",
         "wikilink-titles",
+        "discarded-topic-links",
         "source-page-paths",
         "broken-provenance",
     }
@@ -180,6 +182,7 @@ def test_migrate_subparsers_register_the_expected_names():
         "page-kinds",
         "topic-kinds",
         "wikilink-titles",
+        "discarded-topic-links",
         "source-page-paths",
         "broken-provenance",
     ],

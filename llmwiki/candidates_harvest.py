@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
+from llmwiki.candidates import archived_candidate_names, candidate_filename
 from llmwiki.reindex import reindex_wiki
 from llmwiki.source_topics import TopicRecord, parse_source_topics
 from llmwiki.vault_settings import DEFAULT_MIN_REFS
@@ -79,12 +80,17 @@ def harvest_targets(
     # resolved. Route this through `is_archived_path` and every dismissed
     # term is re-proposed on the next synth, and on every synth after —
     # permanently, because discarding it again changes nothing.
+    #
+    # Archived names are read from each stub's `title` as well as its stem:
+    # a name the filename cannot carry verbatim (`A/B thing` is filed as
+    # `A-B thing.md`) must still count as judged (#282).
     candidates_root = wiki_dir / "candidates"
     resolved = {
         norm_page_key(p.stem)
         for p in wiki_dir.rglob("*.md")
         if not p.is_relative_to(candidates_root)
     }
+    resolved |= set(archived_candidate_names(wiki_dir))
 
     texts_by_rel: dict[str, str] = {}
     unreadable: list[tuple[str, str]] = []
@@ -405,7 +411,7 @@ def write_stubs(
             subdir, path = hit
         else:
             subdir = _KIND_DIRS.get(kinds.get(target.name, "entity"), "entities")
-            path = wiki_dir / "candidates" / subdir / f"{target.name}.md"
+            path = wiki_dir / "candidates" / subdir / candidate_filename(target.name)
         kind = _DIR_KINDS.get(subdir, "entity")
         path.parent.mkdir(parents=True, exist_ok=True)
         if path.is_file():

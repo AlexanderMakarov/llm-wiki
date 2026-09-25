@@ -86,7 +86,7 @@ def test_discarding_a_candidate_leaves_no_archive_entries_in_the_index(
     wiki = _seed_vault(tmp_path)
     _write_candidate(wiki, "entities", "Bogus")
 
-    archived = discard("Bogus", wiki, reason="hallucinated")
+    archived = discard("Bogus", wiki, reason="hallucinated").path
     reindex_wiki(wiki)
 
     assert archived.is_file()

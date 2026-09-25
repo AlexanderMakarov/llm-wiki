@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections import defaultdict
+
 from llmwiki.lint import LintRule, register
 from llmwiki.lint.rules._helpers import _page_slug
 from llmwiki.wikilinks import (
@@ -46,9 +48,14 @@ class LinkIntegrity(LintRule):
         # Honour the same min_refs threshold as candidate harvest (#150).
         # Zero source refs → always report; 1..min_refs-1 → expected decline.
         min_refs = self.options.min_refs
-        refs = count_source_refs({
+        # Case/punctuation variants are one target, folded the same way as
+        # harvest (#204): `[[Foo]]` on one page and `[[foo]]` on another are
+        # two references, not two targets each under the threshold (#282).
+        refs: dict[str, set[str]] = defaultdict(set)
+        for name, citing in count_source_refs({
             rel: page["text"] for rel, page in pages.items() if _under_sources(rel)
-        })
+        }).items():
+            refs[norm_page_key(name)] |= citing
 
         issues = []
         for rel, page in pages.items():
@@ -62,7 +69,7 @@ class LinkIntegrity(LintRule):
                     continue
                 if t in slugs or norm_page_key(t) in by_norm:
                     continue
-                n_refs = len(refs.get(t, ()))
+                n_refs = len(refs.get(norm_page_key(t), ()))
                 if 0 < n_refs < min_refs:
                     continue
                 issues.append({

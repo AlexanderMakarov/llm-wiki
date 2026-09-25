@@ -177,6 +177,18 @@ def test_archived_slug_still_reads_as_broken(vault: Path):
     assert _targets(issues) == {"Thrice"}
 
 
+def test_case_variants_count_toward_one_threshold(tmp_path: Path):
+    """# @layer: unit  # @spec: 282-discarded-topic-links
+
+    ``[[Split]]`` on one page and ``[[split]]`` on another are two references to
+    one target — folded like harvest (#204) — not two under the threshold.
+    """
+    _source(tmp_path, "a", "See [[Split]].")
+    _source(tmp_path, "b", "See [[split]].")
+    assert _targets(_rule(2).run(load_pages(tmp_path))) == {"Split", "split"}
+    assert _targets(_rule(3).run(load_pages(tmp_path))) == set()
+
+
 # ─── Shared counting ───────────────────────────────────────────────────
 
 

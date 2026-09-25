@@ -12,6 +12,7 @@ Covers:
 from __future__ import annotations
 
 import re
+import unicodedata
 from pathlib import Path
 
 import pytest
@@ -22,9 +23,11 @@ from llmwiki.references import build_index
 from llmwiki.wikilinks import (
     WIKILINK_RE,
     build_page_alias_map,
+    format_alias_bullet,
     norm_page_key,
     parse_page_aliases,
     resolve_wikilink_target,
+    rewrite_wikilinks,
     wikilink_targets,
 )
 
@@ -63,11 +66,24 @@ def test_wikilink_targets(text: str, expected: set[str]) -> None:
         ("llm wiki", "llmwiki"),
         ("OpenAI", "openai"),
         ("Open AI", "openai"),
+        ("Мой-Проект", "мойпроект"),
+        ("мой проект", "мойпроект"),
     ],
 )
 def test_norm_page_key_folds_case_and_punctuation(raw: str, expected: str) -> None:
     """Page-identity fold shared by lint, harvest, and wikilink-titles migrate."""
     assert norm_page_key(raw) == expected
+
+
+def test_norm_page_key_folds_unicode_spellings_and_full_case() -> None:
+    """One identity per name: NFC == NFD, and case folding beyond ``.lower()``."""
+    nfc = unicodedata.normalize("NFC", "Café Münster")
+    nfd = unicodedata.normalize("NFD", "Café Münster")
+    assert nfc != nfd  # two spellings of the same name
+    assert norm_page_key(nfc) == norm_page_key(nfd)
+    # Full case folding: ß and the Greek final sigma fold like their peers.
+    assert norm_page_key("Straße") == norm_page_key("STRASSE") == "strasse"
+    assert norm_page_key("Οδός") == norm_page_key("οδόσ")
 
 
 @pytest.mark.parametrize(
@@ -227,3 +243,77 @@ def test_references_attribute_alias_links_to_canonical() -> None:  # @regression
     assert "Tailscale" in idx
     assert idx["Tailscale"][0].source == "sources/older.md"
     assert "Tailnet" not in idx
+
+
+# ─── rewrite_wikilinks (#282) ──────────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("see [[Junk]] here", "see Junk here"),
+        ("see [[junk]] here", "see junk here"),
+        ("see [[Junk|the junk]] here", "see the junk here"),
+        ("see [[Junk#Usage]] here", "see Junk here"),
+        ("see [[Junk#Usage|how]] here", "see how here"),
+        ("keep [[Other]] and [[Junk]]", "keep [[Other]] and Junk"),
+    ],
+    ids=["bare", "case-variant", "label", "anchor", "anchor-label", "untouched-peer"],
+)
+def test_rewrite_wikilinks_unlinks_to_visible_text(text: str, expected: str) -> None:
+    """# @layer: unit  # @spec: 282-discarded-topic-links"""
+    new, counts = rewrite_wikilinks(text, {norm_page_key("Junk"): None})
+    assert new == expected
+    assert counts == {"junk": 1}
+
+
+def test_rewrite_wikilinks_redirect_keeps_display_text() -> None:
+    """# @layer: unit  # @spec: 282-discarded-topic-links"""
+    new, counts = rewrite_wikilinks(
+        "[[Junk]], [[junk|the junk]], [[Other]]", {"junk": "Target"}
+    )
+    assert new == "[[Target|Junk]], [[Target|the junk]], [[Other]]"
+    assert counts == {"junk": 2}
+
+
+def test_rewrite_wikilinks_never_links_a_page_to_itself() -> None:
+    """# @layer: unit  # @spec: 282-discarded-topic-links"""
+    new, counts = rewrite_wikilinks(
+        "- [[Junk]] and [[junk|the junk]]", {"junk": "Target"}, self_stem="tar-get",
+    )
+    assert new == "- Junk and the junk"
+    assert counts == {"junk": 2}
+
+
+def test_rewrite_wikilinks_still_retargets_on_other_pages() -> None:
+    """# @layer: unit  # @spec: 282-discarded-topic-links"""
+    new, _ = rewrite_wikilinks("[[Junk]]", {"junk": "Target"}, self_stem="Elsewhere")
+    assert new == "[[Target|Junk]]"
+
+
+def test_alias_bullet_round_trips_a_name_with_an_em_dash() -> None:
+    """The writer and the reader of ``## Aliases`` agree. # @layer: unit  # @spec: 282-discarded-topic-links"""
+    bullet = format_alias_bullet("A — B", "merged 2026-08-27 (2 source pages)")
+    body = f"## Aliases\n\n{bullet}\n"
+    assert parse_page_aliases(body) == ["A — B"]
+    assert build_page_alias_map({"Survivor": body}) == {"A — B": "Survivor"}
+
+
+def test_format_alias_bullet_refuses_a_note_that_breaks_the_round_trip() -> None:
+    """# @layer: unit  # @spec: 282-discarded-topic-links"""
+    with pytest.raises(ValueError, match="alias note"):
+        format_alias_bullet("Name", "merged — 2026-08-27")
+
+
+def test_rewrite_wikilinks_keeps_distinct_non_latin_names_apart() -> None:
+    """A non-Latin name must not fold onto every other non-Latin name."""
+    new, _ = rewrite_wikilinks("[[Мусор]] и [[Проект]]", {norm_page_key("Мусор"): None})
+    assert new == "Мусор и [[Проект]]"
+
+
+def test_alias_lookup_folds_case_and_punctuation() -> None:
+    """# @layer: unit  # @spec: 282-discarded-topic-links"""
+    alias_map = build_page_alias_map({"Target": "## Aliases\n\n- Old-Name — redirected\n"})
+    assert resolve_wikilink_target("old name", {"Target"}, alias_map) == "Target"
+    assert resolve_wikilink_target("Old-Name#x", {"Target"}, alias_map) == "Target"
+    assert resolve_wikilink_target("Other", {"Target"}, alias_map) is None

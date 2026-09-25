@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from llmwiki.candidates import discard
+from llmwiki.candidates_harvest import harvest_targets, write_stubs
 from llmwiki.synth.pipeline import PROMPT_TEMPLATE_PATH, _inject_vocabulary
 from llmwiki.topics import (
     Topic,
@@ -886,3 +888,60 @@ def test_topics_index_renders_every_section_even_when_one_is_empty(
     assert '>Concepts <span class="muted">(0)</span></h2>' in index
     assert '>Other topics <span class="muted">(2)</span></h2>' in index
     assert index.count('<p class="muted">No topics in this group.</p>') == 2
+
+
+# ─── Reviewer decisions outrank the vocabulary heuristics (#282) ────────
+
+
+def _harvest_and_discard(wiki: Path, name: str, **kwargs) -> None:
+    """Harvest stubs through the real code, then discard ``name``."""
+    write_stubs(wiki, harvest_targets(wiki, min_refs=2))
+    discard(name, wiki, reason="noise", **kwargs)
+
+
+def _add_session(wiki: Path, stem: str, links: list[str]) -> None:
+    """A later synth run naming ``links`` again."""
+    (wiki / "sources" / "proj" / f"{stem}.md").write_text(
+        _session(links, stem=stem), encoding="utf-8"
+    )
+
+
+def test_discarded_name_leaves_vocabulary_under_any_casing(tmp_path: Path):
+    """# @layer: integration  # @spec: 282-discarded-topic-links"""
+    wiki = _make_wiki(tmp_path, {
+        "s1": ["OpenClaw", "Junk"],
+        "s2": ["OpenClaw", "Junk"],
+    })
+    _harvest_and_discard(wiki, "Junk")
+    # A later synth coins the name again, in other casings.
+    _add_session(wiki, "s3", ["OpenClaw", "junk"])
+    _add_session(wiki, "s4", ["OpenClaw", "JUNK"])
+
+    topics, raw_to_canonical = derive_vocabulary(wiki)
+    assert {t.canonical for t in topics} == {"OpenClaw"}
+    assert "junk" not in raw_to_canonical and "JUNK" not in raw_to_canonical
+    graph = build_topic_graph(wiki, min_sessions=1)
+    assert {n["id"] for n in graph["nodes"]} == {"OpenClaw"}
+    out = _inject_vocabulary("{vocabulary}", wiki)
+    assert "junk" not in out.lower()
+
+
+def test_redirected_name_maps_onto_the_target_topic(tmp_path: Path):
+    """# @layer: integration  # @spec: 282-discarded-topic-links"""
+    wiki = _make_wiki(tmp_path, {
+        "s1": ["OpenClaw", "Claw Thing"],
+        "s2": ["OpenClaw", "Claw Thing"],
+    })
+    (wiki / "entities").mkdir()
+    (wiki / "entities" / "OpenClaw.md").write_text(
+        '---\ntitle: "OpenClaw"\n---\n\n# OpenClaw\n', encoding="utf-8"
+    )
+    _harvest_and_discard(wiki, "Claw Thing", redirect="OpenClaw")
+    _add_session(wiki, "s3", ["claw thing"])
+
+    topics, raw_to_canonical = derive_vocabulary(wiki)
+    assert raw_to_canonical["claw thing"] == "OpenClaw"
+    [topic] = topics
+    assert topic.canonical == "OpenClaw"
+    assert "claw thing" in topic.aliases
+    assert topic.sessions == {"s1", "s2", "s3"}

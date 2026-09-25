@@ -64,7 +64,7 @@ llmwiki candidates apply --vault <vault> --actions -
 
 *Merge into…* reveals a **filterable dropdown** of every page `merge --into` resolves for that table — the trusted pages under `wiki/<kind>/` first, then the same-table pending stubs. Press the ▾ button or `↓` to browse the whole list without typing, type any part of a name to narrow it (case-insensitive substring), `↑` / `↓` to move, `Enter` to choose, `Esc` to close. The list is the closed set of valid targets: text naming no page is marked as you type, and a row holding one is named on the page instead of going into a batch that would fail at the CLI.
 
-*Discard* reveals a **required reason**. `discard` files that reason beside the archived stub, so a blank one throws the decision away — a row set to *Discard* with no reason is held back the same way an unresolved merge target is.
+*Discard* reveals a **required reason**. `discard` files that reason beside the archived stub, so a blank one throws the decision away — a row set to *Discard* with no reason is held back the same way an unresolved merge target is. Beside it, an optional **Redirect links to** field names an existing page: filled, the batch row carries `redirect` and links to the discarded name point at that page; left empty, they become plain text. `redirect` belongs to a discard, so a batch row carrying it on any other decision is refused before any row runs, and a redirect whose name another live page already answers to fails that row by name instead of quietly recording a second claim on it.
 
 A row left at **No decision** is absent from the batch and stays pending, so a half-finished review can be applied and resumed. Apply refuses an empty batch; when a decided row is not yet executable it names the row, marks the field and moves focus to it, and emits nothing until you finish it. `llmwiki candidates apply` rebuilds `site/` after a successful batch, so reload the page (or reopen the file) to see the remaining queue. Pass `--no-rebuild` if you are applying several batches and will `llmwiki build` once at the end. One-off CLI actions and `/wiki-candidates` do the same wiki work; only `apply` rebuilds.
 
@@ -72,7 +72,7 @@ A row left at **No decision** is absent from the batch and stays pending, so a h
 |---|---|
 | **promote** | Move into trusted `wiki/entities/` or `wiki/concepts/`; `status: reviewed` |
 | **flip-promote** | Wrong kind → promote into the opposite trusted folder and rewrite `type:` (do not hand-`mv` stubs between candidate folders) |
-| **discard** | Archive under `wiki/archive/candidates/` |
+| **discard** | Archive under `wiki/archive/candidates/`; links to it become plain text, or point at the *Redirect links to* page |
 | **merge** | Fold into another page of the same kind, then archive the stub |
 
 ---

@@ -17,7 +17,7 @@ import sys
 import sys as _sys
 import textwrap
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from contextlib import ExitStack
 from datetime import UTC, datetime
 from pathlib import Path
@@ -29,6 +29,7 @@ from llmwiki import (
     __version__,
     install_agent_kit,
     migrate_broken_provenance,
+    migrate_discarded_topic_links,
     migrate_page_kinds,
     migrate_source_page_paths,
     migrate_topic_kinds,
@@ -80,7 +81,7 @@ from llmwiki.candidates_harvest import (
     run_harvest,
     summarize_backlog,
 )
-from llmwiki.candidates_site import apply_candidate_actions
+from llmwiki.candidates_site import apply_candidate_actions, check_redirect_action
 
 # #691 / #arch-h8: extracted business logic moves out of cli.py.
 # cli.py keeps thin re-export wrappers for back-compat with anyone
@@ -1636,6 +1637,11 @@ _MIGRATIONS: tuple[tuple[str, str, str], ...] = (
         "Run when wiki pages still use bare slug wikilinks and you want display text to match page titles for readability and findability. Reads only existing wiki pages — no LLM call and raw/ is never written.",
     ),
     (
+        "discarded-topic-links",
+        "Turn [[links]] to candidates discarded into wiki/archive/ into plain text (or, with --redirect NAME=PAGE, point them at an existing page recorded under its ## Aliases), and move candidate stubs a slash in their name filed into a subfolder back to a flat path. A name whose reason file records a merge, whose survivor page no longer answers to it, keeps its links and is reported with a suggested --redirect (--force unlinks it anyway).",
+        "Run once after upgrading past the release where discard started rewriting links, when lint link_integrity is dominated by links to discarded candidates, or when a candidate with a slash in its name is missing from candidates list. Reads only existing wiki pages — no LLM call, and raw/ is never written. Safe to re-run.",
+    ),
+    (
         "source-page-paths",
         "Move real wiki/sources pages whose filename differs from the one synth derives for their source_file today to that derived path, rewrite the [[links]] and sources: entries that point at them, and record synth state for those sources.",
         "Run when every synth prints that sources were skipped because a real page already claims them, or when synth --estimate / Home keep counting sources as pending that already have a real page. Reads only existing wiki pages and raw frontmatter — no LLM call, and raw/ is never written.",
@@ -1827,6 +1833,27 @@ def cmd_migrate_wikilink_titles(args: argparse.Namespace) -> int:
     )
     migrate_wikilink_titles.print_report(report)
     return 1 if report["errors"] else 0
+
+
+def cmd_migrate_discarded_topic_links(args: argparse.Namespace) -> int:
+    """Unlink or redirect links to discarded candidates; flatten nested stubs (#282).
+
+    Offline like ``migrate-wikilink-titles``: reads existing wiki pages only,
+    no synthesis backend or network call.
+    """
+    try:
+        redirects = migrate_discarded_topic_links.parse_redirects(args.redirect or [])
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    report = migrate_discarded_topic_links.run_migration(
+        vault=Path(args.vault),
+        dry_run=bool(getattr(args, "dry_run", False)),
+        redirects=redirects,
+        force=bool(getattr(args, "force", False)),
+    )
+    migrate_discarded_topic_links.print_report(report)
+    return 1 if report["errors"] or report["merges_skipped"] else 0
 
 
 def cmd_migrate_source_page_paths(args: argparse.Namespace) -> int:
@@ -2570,6 +2597,20 @@ def _synthesize_estimate(
     return 0
 
 
+def _print_skipped_pages(skipped: Iterable[str]) -> None:
+    """Name the pages a link rewrite could not read, so none is lost in silence."""
+    entries = sorted(set(skipped))
+    if not entries:
+        return
+    print(
+        f"  warning: {len(entries)} page(s) could not be read and still may link "
+        f"to the discarded name:",
+        file=sys.stderr,
+    )
+    for entry in entries:
+        print(f"    ! {entry}", file=sys.stderr)
+
+
 def cmd_candidates(args: argparse.Namespace) -> int:
     """List / promote / merge / discard candidate pages (v1.1.0 · #51)."""
 
@@ -2580,6 +2621,11 @@ def cmd_candidates(args: argparse.Namespace) -> int:
         return 2
 
     action = args.action
+    try:
+        check_redirect_action(action, str(getattr(args, "redirect", None) or ""))
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
 
     if action == "list":
         items = (
@@ -2641,6 +2687,9 @@ def cmd_candidates(args: argparse.Namespace) -> int:
                     f"  fail {act} {slug}: {r.get('error') or 'unknown error'}",
                     file=sys.stderr,
                 )
+        _print_skipped_pages(
+            entry for r in results for entry in r.get("skipped") or ()
+        )
         if any_ok:
             _refresh_review_counts(wiki_dir)
             if not getattr(args, "no_rebuild", False):
@@ -2658,7 +2707,7 @@ def cmd_candidates(args: argparse.Namespace) -> int:
                 args.slug, wiki_dir, kind=args.kind,
                 synthesizer=resolve_backend(_load_sessions_config()),
             )
-        except KeyFactsBackendError as exc:
+        except (FileNotFoundError, ValueError, KeyFactsBackendError) as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 2
         print(f"  promoted → {path.relative_to(wiki_dir)}")
@@ -2674,7 +2723,7 @@ def cmd_candidates(args: argparse.Namespace) -> int:
                 args.slug, wiki_dir, kind=args.kind,
                 synthesizer=resolve_backend(_load_sessions_config()),
             )
-        except (ValueError, KeyFactsBackendError) as exc:
+        except (FileNotFoundError, ValueError, KeyFactsBackendError) as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 2
         print(f"  flip-promoted → {path.relative_to(wiki_dir)}")
@@ -2708,7 +2757,7 @@ def cmd_candidates(args: argparse.Namespace) -> int:
                 path = rewrite_key_facts(
                     slug, wiki_dir, kind=args.kind, synthesizer=backend,
                 )
-            except (FileNotFoundError, KeyFactsBackendError) as exc:
+            except (FileNotFoundError, ValueError, KeyFactsBackendError) as exc:
                 print(f"error: {exc}", file=sys.stderr)
                 continue
             print(f"  rewrote Key Facts → {path.relative_to(wiki_dir)}")
@@ -2723,7 +2772,7 @@ def cmd_candidates(args: argparse.Namespace) -> int:
             path = merge_candidate(
                 args.slug, wiki_dir, into_slug=args.into, kind=args.kind
             )
-        except ValueError as exc:
+        except (FileNotFoundError, ValueError) as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 2
         print(f"  merged into → {path.relative_to(wiki_dir)}")
@@ -2734,8 +2783,27 @@ def cmd_candidates(args: argparse.Namespace) -> int:
         if not args.slug:
             print("error: --slug is required for discard", file=sys.stderr)
             return 2
-        path = discard(args.slug, wiki_dir, reason=args.reason, kind=args.kind)
-        print(f"  discarded → {path.relative_to(wiki_dir)}")
+        try:
+            result = discard(
+                args.slug, wiki_dir, reason=args.reason, kind=args.kind,
+                redirect=args.redirect,
+            )
+        except (FileNotFoundError, ValueError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        print(f"  discarded → {result.path.relative_to(wiki_dir)}")
+        if result.redirect:
+            print(
+                f"  redirected {result.links_rewritten} link(s) to "
+                f"[[{result.redirect}]] in {len(result.pages_changed)} page(s); "
+                f"{result.name!r} recorded under its ## Aliases"
+            )
+        else:
+            print(
+                f"  unlinked {result.links_rewritten} link(s) to "
+                f"{result.name!r} in {len(result.pages_changed)} page(s)"
+            )
+        _print_skipped_pages(result.skipped)
         _refresh_review_counts(wiki_dir)
         return 0
 
@@ -3329,6 +3397,36 @@ def build_parser() -> argparse.ArgumentParser:
     )
     migrate_wikilink.set_defaults(func=cmd_migrate_wikilink_titles)
 
+    migrate_discarded = add_migration(
+        "discarded-topic-links", *_mig_by_name["discarded-topic-links"],
+        short="Unlink or redirect links to discarded candidates; flatten nested stubs",
+    )
+    migrate_discarded.add_argument(
+        "--vault",
+        type=Path,
+        required=True,
+        help="Vault root containing wiki/",
+    )
+    migrate_discarded.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Report would-change files; write nothing",
+    )
+    migrate_discarded.add_argument(
+        "--redirect",
+        action="append",
+        metavar="NAME=PAGE",
+        help="Point links to discarded NAME at existing PAGE instead of "
+             "unlinking them (repeatable)",
+    )
+    migrate_discarded.add_argument(
+        "--force",
+        action="store_true",
+        help="Unlink names a reason file records as merged even when no live "
+             "page answers to them, instead of reporting a suggested --redirect",
+    )
+    migrate_discarded.set_defaults(func=cmd_migrate_discarded_topic_links)
+
     migrate_paths = add_migration(
         "source-page-paths", *_mig_by_name["source-page-paths"],
         short="Move source pages filed under a stale name to their derived path",
@@ -3392,7 +3490,7 @@ def build_parser() -> argparse.ArgumentParser:
         """
         Daily-loop review gate: promote, flip-promote, merge, discard, list, or batch-apply stubs under wiki/candidates/ after harvest. Runs after synth; rebuilding the site after review keeps the Candidates page in sync, unless you pass --no-rebuild on batch apply.
 
-        Actions operate on pending candidate markdown: promote moves a stub into entities/ or concepts/, merge folds one slug into another, discard archives noise, and apply runs a JSON action list (the shape site/candidates.html prints). Successful apply rebuilds site/ by default so candidates.html matches the wiki.
+        Actions operate on pending candidate markdown: promote moves a stub into entities/ or concepts/, merge folds one slug into another, discard archives noise and turns every [[link]] to it into plain text (or, with --redirect PAGE, points those links at an existing page and records the name under its ## Aliases), and apply runs a JSON action list (the shape site/candidates.html prints). Successful apply rebuilds site/ by default so candidates.html matches the wiki.
 
         Does not harvest new stubs from sources — that is synth. Does not convert sessions or summarise raw/ into wiki/sources/.
         """,
@@ -3414,6 +3512,10 @@ def build_parser() -> argparse.ArgumentParser:
                       help="For merge: slug of the page to merge into")
     cand.add_argument("--reason", type=str, default="",
                       help="For discard: why the candidate is being rejected")
+    cand.add_argument("--redirect", type=str, default=None, metavar="PAGE",
+                      help="For discard: point links to the discarded name at this "
+                           "existing page (and record the name under its "
+                           "## Aliases) instead of unlinking them")
     cand.add_argument("--kind", type=str, default=None,
                       choices=["entities", "concepts", "sources", "syntheses"],
                       help="Subtree (auto-detected if omitted)")
@@ -3426,7 +3528,7 @@ def build_parser() -> argparse.ArgumentParser:
     cand.add_argument("--json", action="store_true", help="JSON output for list")
     cand.add_argument(
         "--actions", type=str, default=None, metavar="JSON",
-        help="For apply: JSON array of {action,slug,kind?,into?,reason?} "
+        help="For apply: JSON array of {action,slug,kind?,into?,reason?,redirect?} "
              "(the shape site/candidates.html prints); pass - to read stdin",
     )
     cand.add_argument(

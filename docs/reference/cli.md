@@ -399,11 +399,15 @@ These three share one corpus scan per lint run (same scoring path as `llmwiki se
 
 Positional `action` picks `list` / `promote` / `flip-promote` / `merge` / `discard` / `apply` / `rewrite-key-facts`.
 
+`--slug` on `promote` / `flip-promote` / `merge` / `discard` / `rewrite-key-facts` (and `merge --into`, `discard --redirect`) matches the searched filename exactly first; failing that, it falls back to a unique `norm_page_key` fold of those filenames (case and punctuation insensitive, same fold `link_integrity` and harvest use), so `--slug Junk` still finds a stub written `JUNK.md`. The searched files are the pending stubs under `wiki/candidates/<kind>/` for the review actions and the trusted pages under `wiki/entities/` and `wiki/concepts/` for `rewrite-key-facts`. A fold matching more than one page raises, naming every match, instead of guessing. A slug is sanitized the way a stub filename is and the resolved page must sit inside the wiki, so `--slug ../../outside` resolves to nothing rather than to a file beside the vault (#282).
+
 Successful `promote` / `flip-promote` / `merge` / `discard` / `apply` reconcile `wiki/index.md` (#101): dead `candidates/…` bullets are dropped, an empty `## Candidates` section is removed, and newly trusted pages are listed under Entities/Concepts. `/wiki-candidates` should call these same actions — do not run idle `sync`/`synth` just to refresh the catalog after review. Site UI: open `site/candidates.html` — it lists everything pending, takes a decision per row, and its **Apply** button prints the `candidates apply --vault … --actions -` command plus the JSON batch for the rows you decided (#97). A successful `apply` then rebuilds `site/` so the open candidates page, Home, and Analytics match the wiki; pass `--no-rebuild` to skip that (for example when applying several batches before one `llmwiki build`).
 
 `promote` fills an empty (or heading-only) `## Key Facts` from nested `fact:` bullets on the cited source pages' Connections topics (#147 / #103). That path is offline — Dummy / `None` backends are fine. Non-empty reviewer Key Facts are left alone. Opt-in rewrite of trusted pages still needs a model: `rewrite-key-facts` uses the backend named by `synthesis.backend` (override the prompt per vault at `wiki/prompts/key_facts.md`).
 
 `merge` folds a harvest stub into the target by unioning its `sources:` and Connections links and recording the name under `## Aliases` (inbound `[[merged-away]]` links resolve to the survivor via that section in graph, lint, backlinks, and references); a candidate containing reviewer prose still has that prose appended under `## Candidate merge — <date>`. Target may be a trusted page or another pending stub in the same kind.
+
+`discard` archives the stub and rewrites every `[[link]]` to its name outside `wiki/archive/` (any casing, labels and anchors included) to plain text — the label when there is one, else the name as written — so no link points into cold storage (#282). With `--redirect PAGE` those links become `[[PAGE|text]]` instead and the name is recorded under `PAGE`'s `## Aliases`, so later links to it resolve there and the synth vocabulary maps the name onto that page. `PAGE` must be an existing page outside `wiki/candidates/` and `wiki/archive/`. Links are left alone when another live page or alias already answers to the name, and `--redirect` is then refused before the stub moves — the error names the page that already owns the name, since recording the alias anyway would leave two live pages answering to it. `PAGE`'s own mention of the discarded name becomes plain text rather than a link to itself. The command prints how many links it rewrote in how many pages, and warns on stderr naming every page it could not read (those may still link to the discarded name). `--redirect` only applies to `discard`: combined with another action it is refused, on the command line and in an `apply` batch alike.
 
 `apply` runs a **batch** of the same intents in one process (the JSON shape `site/candidates.html` prints). A batch that merges into a peer slug the same batch also promotes, flip-promotes, discards, or merges away is refused before any row runs — the CLI prints the conflicting actions and exits non-zero (#149).
 
@@ -425,6 +429,7 @@ python3 -m llmwiki candidates promote --slug NewEntity --kind concepts
 python3 -m llmwiki candidates flip-promote --slug Misfiled
 python3 -m llmwiki candidates merge --slug DuplicateFoo --into Foo
 python3 -m llmwiki candidates discard --slug BogusEntity --reason "LLM hallucinated"
+python3 -m llmwiki candidates discard --slug "Old Name" --reason "duplicate" --redirect ExistingPage
 python3 -m llmwiki candidates rewrite-key-facts --slug ExistingEntity
 python3 -m llmwiki candidates rewrite-key-facts --all
 ```
@@ -437,12 +442,13 @@ python3 -m llmwiki candidates rewrite-key-facts --all
 | `--all` | For `rewrite-key-facts`: every entity/concept page. |
 | `--into NAME` | For `merge`: target slug (trusted page or another pending stub in the same kind). |
 | `--reason TEXT` | For `discard`: why (written to archive's `.reason.txt`). |
+| `--redirect PAGE` | For `discard`: point every `[[link]]` to the discarded name at existing live page `PAGE` (keeping the visible text) and record the name under its `## Aliases`. Without it, discard turns those links into plain text. |
 | `--kind {entities,concepts,sources,syntheses}` | Subtree. Auto-detected if omitted. |
 | `--wiki-dir PATH` | Wiki dir. Default: `./wiki`. |
 | `--stale` | With `list`: only stale candidates. |
 | `--stale-days N` | Staleness threshold. Default: 30. |
 | `--json` | JSON output for `list`. |
-| `--actions JSON` | For `apply`: JSON array of `{action,slug,kind?,into?,reason?}`. Pass `-` to read the array from stdin. |
+| `--actions JSON` | For `apply`: JSON array of `{action,slug,kind?,into?,reason?,redirect?}` (`redirect` only with `discard`). Pass `-` to read the array from stdin. |
 | `--no-rebuild` | For `apply`: skip rebuilding `site/` after a successful batch. Default is to rebuild so `candidates.html` drops the rows that were just promoted, merged, or discarded. |
 
 See [`guides/existing-vault.md`](../guides/existing-vault.md) for the round-trip semantics when a candidate lives inside a vault.
@@ -572,6 +578,7 @@ python3 -m llmwiki migrate tools-used --vault /path/to/vault
 python3 -m llmwiki migrate page-kinds --vault /path/to/vault --dry-run
 python3 -m llmwiki migrate topic-kinds --vault /path/to/vault
 python3 -m llmwiki migrate wikilink-titles --vault /path/to/vault --dry-run
+python3 -m llmwiki migrate discarded-topic-links --vault /path/to/vault --dry-run
 python3 -m llmwiki migrate source-page-paths --vault /path/to/vault --dry-run
 python3 -m llmwiki migrate broken-provenance --vault /path/to/vault --dry-run
 ```
@@ -724,6 +731,41 @@ python3 -m llmwiki migrate wikilink-titles --vault /path/to/vault
 | `--dry-run` | Report what would change; write nothing. |
 
 Idempotent: a second run finds nothing to rewrite and prints `nothing to migrate: no bare slug wikilinks need title display text`. Preview with `--dry-run` before applying.
+
+### `discarded-topic-links` — unlink or redirect links to discarded candidates
+
+Since #282 `candidates discard` rewrites the links to the name it archives. Candidates discarded before that still have `[[links]]` pointing into `wiki/archive/`, which `link_integrity` reports. This offline migration finds every archived candidate that no live page answers to (by stem or `## Aliases` — merged and redirected names are left alone) and turns each `[[Name]]`, `[[name|label]]` or `[[Name#section]]` outside `wiki/archive/` into plain text: the label when the link has one, otherwise the name as written. `--redirect NAME=PAGE` (repeatable) points that name's links at an existing live page instead (`[[PAGE|text]]`) and records the name under the page's `## Aliases`, exactly like `candidates discard --redirect`. It also moves candidate stubs a `/` in their name filed into a subfolder to the flat path harvest now writes (`A/B thing` → `candidates/<kind>/A-B thing.md`), reporting a conflict instead of overwriting an existing file. No language model, no network call, `raw/` never written.
+
+Implementation: `llmwiki/migrate_discarded_topic_links.py`. Rebuild the site afterwards: `llmwiki build --vault PATH`.
+
+```bash
+python3 -m llmwiki migrate discarded-topic-links --vault /path/to/vault --dry-run
+python3 -m llmwiki migrate discarded-topic-links --vault /path/to/vault --redirect "Old Name=ExistingPage"
+```
+
+| Flag | What |
+|---|---|
+| `--vault PATH` | **Required.** Vault root containing `wiki/`. |
+| `--dry-run` | Report what would change; write nothing. |
+| `--redirect NAME=PAGE` | Point links to discarded `NAME` at existing `PAGE` (and record the alias) instead of unlinking them. Repeatable. |
+| `--force` | Unlink a name whose `reason.txt` records a merge even when no live page answers to it, instead of reporting a suggested `--redirect`. |
+
+Every `--redirect` pair is checked before the first write: a name with no archived candidate, or a `PAGE` that is missing or ambiguous, stops the run with nothing written (`nothing was written: fix the errors above and re-run`) and exit code 1. A pair whose name a live page already answers to — including a re-run of the same command, once the alias exists — needs no redirect and is listed under `skipped:` rather than dropped. Pages the run could not read are listed under `errors:` and exit code 1, with the changes that did apply printed above them, so a vault with one unreadable page never reports success while links to a discarded name are left behind.
+
+**Merged names are guarded.** A candidate a reviewer *merged* is archived with `Reason: merged into <target>`, and its links belong on the survivor page. The survivor normally answers to the merged-away name through its `## Aliases` entry, so the migration never touches those links. When the survivor was later renamed or re-filed — or when the merge predates the alias entry entirely — nothing but that reason file still ties the name to a page, and flattening its links to plain text would throw the target away. Such a name keeps its links, is listed under `merged, left linked:` with the page the run believes it means, and the run exits 1 so a script notices:
+
+```text
+merged, left linked: 1
+  - Old Name — merged into foo (587 links)
+      --redirect "Old Name=code-foo"
+  a reviewer merged these names into a page that no longer answers to them, so their links were left as they are: re-run with the --redirect lines above, or --force to unlink them like a dismissal
+```
+
+Re-run with the suggested `--redirect` lines to point the links at the survivor (which then records the alias, so a third run reports nothing), or pass `--force` to unlink them like any other dismissal. The suggestion is the live page answering to the recorded target, else the single live page whose `norm_page_key` contains or is contained by it; when nothing matches, the report asks for a page (`--redirect "Old Name=<page>"`). Everything else in the same run — the flatten, plain dismissals, explicit redirects — still applies, and `--dry-run` prints the same partition.
+
+A recorded merge with no links anywhere in the wiki needs no `--redirect`: it is left out of `merged, left linked:` entirely and never makes the run exit 1 on its own — there is nothing for an operator to preserve or flatten.
+
+Idempotent: a second run finds nothing to rewrite and prints `nothing to migrate: no links to discarded candidates and no nested stubs`.
 
 ### `source-page-paths` — move source pages filed under a stale name
 
