@@ -6,7 +6,7 @@ redaction layer and the surrounding privacy guarantees are the single
 most important thing about the project.
 
 If you find a vulnerability that affects any of the following, **please
-report it privately** before filing a public issue:
+report it privately** rather than filing a public issue:
 
 - **Redaction bypass** — input that contains sensitive data but ends up
   in `raw/sessions/` unredacted
@@ -41,14 +41,16 @@ Out of scope:
 
 ## How to report
 
-Email the maintainer directly: `pratiyush1 [at] gmail [dot] com`
+Use GitHub private vulnerability reporting: [open a draft security advisory](https://github.com/AlexanderMakarov/llm-wiki/security/advisories/new). The draft stays visible only to you and the maintainers until a fix is released, and the form asks for everything listed below.
+
+**Do not open a public issue for a security problem.** A public issue *is* the disclosure: it hands the exploit to every reader of the tracker at the moment when no fix exists yet. Use the advisory form even if you are not sure the bug really is a vulnerability — a false alarm triaged privately costs far less than a real one triaged in public.
 
 Include:
 
 1. **What** — a one-line description of the vulnerability
 2. **Where** — file path + line number if possible
 3. **Repro** — minimal input that triggers the bug (redact any real
-   session data before sending)
+   session data before attaching it)
 4. **Impact** — what an attacker could do
 5. **Fix suggestion** — optional, but appreciated
 

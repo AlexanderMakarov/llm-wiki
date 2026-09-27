@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "minAppVersion": "1.4.0",
   "description": "Sync your llm-wiki knowledge base into Obsidian as a vault folder",
-  "author": "Pratiyush",
-  "authorUrl": "https://github.com/nicobailey",
+  "author": "Alexander Makarov",
+  "authorUrl": "https://github.com/AlexanderMakarov",
   "isDesktopOnly": false
 }

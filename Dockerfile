@@ -16,9 +16,9 @@ FROM python:3.12-slim
 # OCI-standard labels — registries + security scanners use these.
 LABEL org.opencontainers.image.title="llmwiki" \
       org.opencontainers.image.description="Karpathy-style LLM wiki from Claude Code, Codex, Cursor, Gemini, Copilot, and Obsidian sessions" \
-      org.opencontainers.image.source="https://github.com/Pratiyush/llm-wiki" \
+      org.opencontainers.image.source="https://github.com/AlexanderMakarov/llm-wiki" \
       org.opencontainers.image.licenses="MIT" \
-      org.opencontainers.image.authors="Pratiyush <pratiyush1@gmail.com>"
+      org.opencontainers.image.authors="Alexander Makarov <4ellendger@gmail.com>"
 
 # Non-root user for runtime safety. UID 1000 matches the default Linux
 # host user so mounted volumes don't end up root-owned.

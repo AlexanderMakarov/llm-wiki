@@ -93,7 +93,7 @@ None.
   { "obsidian": { "enabled": true } }
   ```
 
-  Context: [#326](https://github.com/Pratiyush/llm-wiki/issues/326). Runs as of rc3; surfaced in `llmwiki adapters` column `will_fire`.
+  Context: [#326](https://github.com/AlexanderMakarov/llm-wiki/issues/326). Runs as of rc3; surfaced in `llmwiki adapters` column `will_fire`.
 
 - **Graph clicks respect compiled-site existence.** Nodes whose corresponding page wasn't rendered to HTML show a tooltip instead of opening a 404. No action needed — if you see the tooltip on entity / concept / nav pages that's the new design.
 
@@ -121,7 +121,7 @@ No breaking CLI or config changes. Every test pre-upgrade keeps passing post-upg
 
 ## v1.1.0-rc3
 
-See the [release notes](https://github.com/Pratiyush/llm-wiki/releases/tag/v1.1.0-rc3) for the full rc3 gap-sweep bundle. No migration required.
+See the [release notes](https://github.com/AlexanderMakarov/llm-wiki/releases/tag/v1.1.0-rc3) for the full rc3 gap-sweep bundle. No migration required.
 
 ## v1.0.0 → v1.1.0-rc1
 

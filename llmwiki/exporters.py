@@ -200,7 +200,10 @@ def write_graph_jsonld(
             "@type": "CreativeWork",
             "name": "llmwiki",
             "description": "Karpathy-style LLM Wiki from Claude Code and Codex CLI sessions",
-            "creator": {"@type": "Person", "name": "Pratiyush"},
+            # No `creator`: this node describes the wiki the user generated,
+            # so naming any Person here asserts something false about every
+            # site built with llmwiki. schema.org makes the field optional
+            # and an absent claim beats a wrong one (#211).
             "license": "https://opensource.org/licenses/MIT",
             "version": __version__,
         }

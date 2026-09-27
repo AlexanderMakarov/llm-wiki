@@ -1,8 +1,8 @@
 """Backlink injection: every wiki page that's linked-to gets a managed
 ``## Referenced by`` section listing its referrers (#328).
 
-Today a source page links out to ``[[Pratiyush]]`` but the
-``entities/Pratiyush.md`` page doesn't know about it — 95% of pages
+Today a source page links out to ``[[SomeEntity]]`` but the
+``entities/SomeEntity.md`` page doesn't know about it — 95% of pages
 end up as graph orphans (575 / 596 sources with zero inbound links).
 
 This module rebuilds the reverse-reference index

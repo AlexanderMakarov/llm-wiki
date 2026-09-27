@@ -53,8 +53,8 @@ class Llmwiki < Formula
         Codex CLI:    ~/.codex/sessions/
         Cursor:       ~/Library/Application Support/Cursor/
 
-      Docs: https://github.com/Pratiyush/llm-wiki
-      Demo: https://pratiyush.github.io/llm-wiki/
+      Docs: https://github.com/AlexanderMakarov/llm-wiki
+      Demo: https://alexandermakarov.github.io/llm-wiki/
     EOS
   end
 

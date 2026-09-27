@@ -30,7 +30,12 @@ from llmwiki.docs_pages import (
     "CHANGELOG.md",
     "_progress.md",
     "user_profile.md",
-    "user_pratiyush.md",
+    # ``user_profile.md`` is a literal basename, so it matches at any depth.
+    "notes/user_profile.md",
+    "../notes/user_profile.md",
+    # Any bare ``user_<name>.md``, not just the literals we happen to know.
+    "user_someone.md",
+    "RELEASE-NOTES.md",
     "notes.md",
     "TODO.md",
     "plan.md",
@@ -89,8 +94,12 @@ def test_bare_build_files_stripped(href):
 
 @pytest.mark.parametrize("href", [
     "http://example.com/x.md",
-    "https://github.com/Pratiyush/llm-wiki/blob/master/README.md",
+    "https://github.com/ExampleOwner/llm-wiki/blob/master/README.md",
     "mailto:user@example.com",
+    # The ``user_`` rule is bare-basename only: a path-prefixed doc is a
+    # plausible published page, so it keeps its anchor.
+    "docs/user_guide.md",
+    "notes/user_someone.md",
     "/absolute/site/path.html",
     "projects/index.html",
     "sessions/foo/bar.html",

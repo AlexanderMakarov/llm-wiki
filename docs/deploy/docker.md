@@ -14,7 +14,7 @@ supported setups:
 
 ## Quick start — pre-built image
 
-The image is published to `ghcr.io/pratiyush/llm-wiki:latest` on every
+The image is published to `ghcr.io/alexandermakarov/llm-wiki:latest` on every
 release tag. To run:
 
 ```bash
@@ -87,7 +87,7 @@ This uses the repo `Dockerfile` and re-builds the image on every code change.
 
 ## Publishing your own image
 
-Only the repo maintainer can publish to `ghcr.io/pratiyush/llm-wiki`.
+Only the repo maintainer can publish to `ghcr.io/alexandermakarov/llm-wiki`.
 To publish under your own namespace:
 
 ```bash

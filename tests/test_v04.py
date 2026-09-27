@@ -161,6 +161,40 @@ def test_graph_jsonld_is_valid_json():
     assert isinstance(data["@graph"], list)
 
 
+def test_graph_jsonld_names_no_person_as_creator(tmp_path):
+    """The top-level CreativeWork describes the wiki the *user* generated.
+    Naming a Person as its creator asserts something false about every site
+    built with llmwiki, so the field is omitted (#211). Per-session
+    `creator` nodes stay — those name the model, a SoftwareApplication."""
+    # One synthetic session, so the *preserved* half of the contract below
+    # is asserted against a graph that actually has a per-session node.
+    sources = [(
+        tmp_path / "2026-01-01-demo.md",
+        {"project": "demo", "slug": "demo", "title": "Demo", "model": "claude-x"},
+        "body",
+    )]
+    out = write_graph_jsonld(tmp_path, {}, sources)
+    data = json.loads(out.read_text(encoding="utf-8"))
+    root = data["@graph"][0]
+    assert root["@id"] == "llmwiki"
+    assert "creator" not in root, f"top-level node still claims a creator: {root['creator']}"
+    # Keys the node must keep.
+    for key in ("@type", "name", "description", "license", "version"):
+        assert key in root, f"missing {key} on the top-level node"
+
+    sessions = [n for n in data["@graph"] if str(n["@id"]).startswith("session/")]
+    assert len(sessions) == 1, f"expected one session node, got {sessions}"
+    assert sessions[0]["creator"] == {"@type": "SoftwareApplication", "name": "claude-x"}, (
+        "a session's creator must still name the model that produced it"
+    )
+
+    persons = [
+        n for n in data["@graph"]
+        if isinstance(n.get("creator"), dict) and n["creator"].get("@type") == "Person"
+    ]
+    assert not persons, f"JSON-LD names a Person as creator: {persons}"
+
+
 def test_manifest_has_files_and_hashes():
     site = REPO_ROOT / "site"
     p = site / "manifest.json"

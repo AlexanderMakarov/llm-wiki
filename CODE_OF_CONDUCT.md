@@ -39,7 +39,7 @@ Examples of unacceptable behavior include:
 ## Enforcement
 
 Instances of abusive, harassing, or otherwise unacceptable behavior may
-be reported to the maintainer at [@Pratiyush](https://github.com/Pratiyush).
+be reported to the maintainer at [@AlexanderMakarov](https://github.com/AlexanderMakarov).
 All complaints will be reviewed and investigated promptly and fairly.
 
 All maintainers are obligated to respect the privacy and security of the

@@ -21,13 +21,13 @@ Embed a live chart on any page:
 **Interactive link:**
 
 ```
-https://star-history.com/#Pratiyush/llm-wiki&Date
+https://star-history.com/#AlexanderMakarov/llm-wiki&Date
 ```
 
 **Embeddable image (for blog posts):**
 
 ```markdown
-[![Star History Chart](https://api.star-history.com/svg?repos=Pratiyush/llm-wiki&type=Date)](https://star-history.com/#Pratiyush/llm-wiki&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=AlexanderMakarov/llm-wiki&type=Date)](https://star-history.com/#AlexanderMakarov/llm-wiki&Date)
 ```
 
 **For the README:**
@@ -35,7 +35,7 @@ https://star-history.com/#Pratiyush/llm-wiki&Date
 ```markdown
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=Pratiyush/llm-wiki&type=Date)](https://star-history.com/#Pratiyush/llm-wiki&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=AlexanderMakarov/llm-wiki&type=Date)](https://star-history.com/#AlexanderMakarov/llm-wiki&Date)
 ```
 
 Add this section to the README once the repo has 50+ stars (before that
@@ -46,7 +46,7 @@ the chart is too sparse to be meaningful).
 Add a live star-count badge to the badge row:
 
 ```markdown
-[![GitHub stars](https://img.shields.io/github/stars/Pratiyush/llm-wiki?style=flat&color=7C3AED)](https://github.com/Pratiyush/llm-wiki/stargazers)
+[![GitHub stars](https://img.shields.io/github/stars/AlexanderMakarov/llm-wiki?style=flat&color=7C3AED)](https://github.com/AlexanderMakarov/llm-wiki/stargazers)
 ```
 
 This uses shields.io and updates automatically. The `color=7C3AED`
@@ -58,7 +58,7 @@ star-history.com supports multi-repo charts. Useful for competitive
 positioning:
 
 ```
-https://star-history.com/#Pratiyush/llm-wiki&mem0ai/mem0&nichochar/hivemind&Date
+https://star-history.com/#AlexanderMakarov/llm-wiki&mem0ai/mem0&nichochar/hivemind&Date
 ```
 
 ## Monthly check-in template
@@ -110,7 +110,7 @@ jobs:
     steps:
       - name: Get star count
         run: |
-          STARS=$(gh api repos/Pratiyush/llm-wiki --jq '.stargazers_count')
+          STARS=$(gh api repos/AlexanderMakarov/llm-wiki --jq '.stargazers_count')
           echo "$(date +%Y-%m-%d): $STARS stars" >> star-history.log
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

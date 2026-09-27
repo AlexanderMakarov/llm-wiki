@@ -73,7 +73,7 @@ Both print `llmwiki <version>`.
 ## `query` — search the knowledge graph
 
 ```bash
-python3 -m llmwiki query "what projects is Pratiyush working on"
+python3 -m llmwiki query "what projects is AlexanderMakarov working on"
 python3 -m llmwiki query "Flutter mobile" --depth 2 --budget 1000
 ```
 

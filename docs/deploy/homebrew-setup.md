@@ -1,8 +1,10 @@
 # Homebrew tap — one-time setup
 
+> **Not yet available.** No tap exists under our own account yet: creating one was filed as #102, and repointing this surface off the upstream owner is tracked as #212. The commands below still name the upstream tap and will install a different project.
+
 > Status: the formula is shipped at `homebrew/llmwiki.rb`. This doc is the
 > checklist for creating the **Homebrew tap repository** that unblocks
-> `brew install Pratiyush/tap/llmwiki` (#102).
+> `brew install Pratiyush/tap/llmwiki`.
 
 ## Why a tap?
 

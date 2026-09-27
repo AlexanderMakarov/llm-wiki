@@ -21,7 +21,7 @@ docs_shell: true
 
 How to upgrade between `llmwiki` releases.  Most releases are drop-in (`pip install -U llmwiki` or `brew upgrade llmwiki`) — this page documents the exceptions: schema migrations, config changes, and behaviour flips that affect what happens on your next `sync`.
 
-The canonical per-release detail is [CHANGELOG.md](https://github.com/Pratiyush/llm-wiki/blob/master/CHANGELOG.md) — this guide focuses on "what might break".
+The canonical per-release detail is [CHANGELOG.md](https://github.com/AlexanderMakarov/llm-wiki/blob/master/CHANGELOG.md) — this guide focuses on "what might break".
 
 ## Unreleased — auto-generated `/vs/` model comparisons removed (#138)
 

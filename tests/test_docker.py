@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import re
+
+import pytest
+
 from llmwiki import REPO_ROOT
 
 DOCKERFILE = REPO_ROOT / "Dockerfile"
@@ -139,11 +143,14 @@ def test_publish_uses_gha_cache():
     assert "type=gha" in text
 
 
-def test_publish_tags_include_latest_only_for_stable():
+def test_publish_dispatch_requires_a_tag():
+    """A tag-less dispatch has no version to publish or smoke-test."""
     text = PUBLISH_WORKFLOW.read_text(encoding="utf-8")
-    # `latest` must NOT apply to rc/alpha/beta/dev pre-releases
-    assert "!contains(github.ref, 'rc')" in text
-    assert "!contains(github.ref, 'alpha')" in text
+    dispatch = text.partition("  workflow_dispatch:\n")[2].partition("\npermissions:")[0]
+    assert "required: true" in dispatch, (
+        "the `tag` dispatch input is optional again — a tag-less dispatch "
+        "would publish an empty `type=raw` row"
+    )
 
 
 def test_publish_logs_into_ghcr():
@@ -167,6 +174,13 @@ def test_docker_docs_cover_pull_mode():
 def test_docker_docs_cover_build_mode():
     text = DOCS.read_text(encoding="utf-8")
     assert "docker compose build" in text
+
+
+def test_docker_docs_name_the_image_compose_pulls():
+    """A reader following the guide must not pull a different image."""
+    image = re.search(r"^\s*image:\s*(\S+?)(?::\S+)?$", COMPOSE.read_text(encoding="utf-8"), re.MULTILINE)
+    assert image, "docker-compose.yml declares no image:"
+    assert image.group(1) in DOCS.read_text(encoding="utf-8")
 
 
 def test_docker_docs_list_image_details():
@@ -198,3 +212,306 @@ def test_docker_docs_troubleshooting_section():
 def test_docker_docs_mentions_no_telemetry():
     text = DOCS.read_text(encoding="utf-8")
     assert "no telemetry" in text.lower()
+
+
+# ─── Publish workflow: least privilege + post-publish proof (#211) ────
+
+
+def test_publish_grants_no_id_token_permission():
+    """No OIDC token: nothing in this workflow signs anything.
+
+    ``id-token: write`` was granted for Cosign keyless signing that was never
+    wired up, so it advertised a guarantee the workflow did not provide.
+    """
+    text = PUBLISH_WORKFLOW.read_text(encoding="utf-8")
+    assert "id-token:" not in text
+
+
+def test_publish_does_not_mention_cosign():
+    text = PUBLISH_WORKFLOW.read_text(encoding="utf-8")
+    assert "cosign" not in text.lower()
+
+
+def test_publish_smoke_tests_the_published_image():
+    """The workflow must run what it shipped before reporting success."""
+    text = PUBLISH_WORKFLOW.read_text(encoding="utf-8")
+    assert "needs: build-and-push" in text, "no job depends on the publish job"
+    assert "docker pull" in text, "the published tag is never pulled back"
+    assert re.search(r"docker run\b.*\bversion\b", text), (
+        "the published image is never executed to assert its version"
+    )
+    # A smoke test that can go green while failing proves nothing.
+    assert "continue-on-error" not in text
+
+
+def test_publish_smoke_authenticates_to_ghcr():
+    """A GHCR package is private until its first visibility flip (#211).
+
+    Without a login the very first publish from a fork cannot be pulled back,
+    so the smoke job fails on an image that is in fact fine.
+    """
+    smoke = _smoke_job_text()
+    assert "docker/login-action" in smoke, "smoke job never logs in to GHCR"
+    assert "registry: ghcr.io" in smoke
+    assert "${{ secrets.GITHUB_TOKEN }}" in smoke
+
+
+def test_publish_smoke_drops_package_write():
+    """Least privilege: reading a package back needs no write scope."""
+    smoke = _smoke_job_text()
+    assert re.search(r"^    permissions:$", smoke, re.MULTILINE), (
+        "smoke job has no job-level permissions block, so it inherits "
+        "the workflow-level `packages: write`"
+    )
+    assert re.search(r"^      packages: read$", smoke, re.MULTILINE)
+    assert not re.search(r"^\s*packages: write$", smoke, re.MULTILINE), (
+        "smoke job re-grants `packages: write`"
+    )
+
+
+def test_publish_smoke_compares_the_whole_version_line():
+    """`grep -F "1.2"` matches inside "llmwiki 1.20.0" — anchor the check."""
+    smoke = _smoke_job_text()
+    assert "grep -qF" not in smoke, "substring match: 1.2 would pass against 1.20.0"
+    assert '"llmwiki $expected"' in smoke, (
+        "the smoke test no longer compares the full `llmwiki <version>` line"
+    )
+
+
+# ─── Dispatch tag override: the build publishes what the smoke pulls ──
+#
+# The bug this pins (#211 review): `build-and-push` ignored `inputs.tag`, so a
+# `workflow_dispatch` published only `latest` while the smoke job pulled the
+# override — a tag that run never pushed. Asserting a literal expression
+# string cannot catch that; these tests *evaluate* both expressions against
+# the three ways this workflow runs and require the sets to line up.
+
+
+def _smoke_job_text() -> str:
+    """Return the ``smoke-published-image`` job block.
+
+    Bounded at the next top-level job so the assertions below keep meaning
+    what they say if a job is ever appended after this one.
+    """
+    text = PUBLISH_WORKFLOW.read_text(encoding="utf-8")
+    _, _, smoke = text.partition("\n  smoke-published-image:\n")
+    assert smoke, "the workflow has no smoke-published-image job"
+    return re.split(r"^  \S", smoke, maxsplit=1, flags=re.MULTILINE)[0]
+
+
+def _meta_tag_rows() -> list[str]:
+    """Return the ``docker/metadata-action`` ``tags:`` rows, comments dropped."""
+    text = PUBLISH_WORKFLOW.read_text(encoding="utf-8")
+    _, _, after = text.partition("\n          tags: |\n")
+    assert after, "the metadata step declares no tags: block"
+    rows: list[str] = []
+    for line in after.splitlines():
+        if not line.startswith("            "):
+            break
+        row = line.strip()
+        if row and not row.startswith("#"):
+            rows.append(row)
+    assert rows, "the tags: block is empty"
+    return rows
+
+
+def _smoke_tag_expression() -> str:
+    """Return the ``TAG:`` expression the smoke job resolves its image from."""
+    match = re.search(r"^          TAG: (.+)$", _smoke_job_text(), re.MULTILINE)
+    assert match, "the smoke job does not set a TAG env var"
+    return match.group(1).strip()
+
+
+#: A deliberately narrow model of the GitHub-expression *subset* this workflow
+#: uses — string literals, `==`/`!=`, `contains()`, `&&`, `||`, `!` — not a
+#: general evaluator. `&&`/`||` do share Python's operand-returning semantics,
+#: so the spellings map across, but four divergences are known and only hold
+#: because nothing in this workflow exercises them. Check them before
+#: extending the workflow's expressions:
+#:   1. Precedence of `!`: GitHub binds it tighter than `==`, so `!a == b`
+#:      means `(!a) == b`; Python's `not a == b` means `not (a == b)`.
+#:      No expression here writes `!x == y`.
+#:   2. Case: GitHub compares strings and evaluates `contains()`
+#:      case-insensitively; this model is case-sensitive, so a tag
+#:      `v2.4.0-RC1` would disable `latest` in reality but not here.
+#:   3. Substitution: values are injected through a replacement *function*,
+#:      not a template string, so a value containing `\` or `\g` cannot be
+#:      reinterpreted as an `re.sub` escape.
+#:   4. Literal contamination: the spelling rewrites run over the whole
+#:      expression, quoted literals included, so a literal containing `!`,
+#:      `&&` or `||` would be mangled. None currently does.
+def _gha_eval(expression: str, ctx: dict[str, str]) -> object:
+    """Evaluate one ``${{ … }}`` expression against a scenario context."""
+    body = expression.strip()
+    if body.startswith("${{") and body.endswith("}}"):
+        body = body[3:-2]
+    body = re.sub(r"contains\(([^,]+),\s*([^)]+)\)", r"(\2 in \1)", body)
+    body = body.replace("&&", " and ").replace("||", " or ").replace("!", " not ")
+    body = re.sub(r"\bnot =", "!=", body)  # undo `!=` mangled by the line above
+    for name, value in ctx.items():
+        body = re.sub(rf"\b{re.escape(name)}\b", lambda _m, v=value: repr(v), body)
+    assert not re.search(r"\b(github|inputs)\.", body), (
+        f"unmodelled context in {expression!r}: {body!r}"
+    )
+    # Input is a workflow expression from this repository, reduced above to
+    # string literals and operators, with builtins removed.
+    return eval(body, {"__builtins__": {}}, {})
+
+
+def _published_tags(ctx: dict[str, str]) -> set[str]:
+    """Model the tags ``docker/metadata-action`` would push for a scenario.
+
+    ``type=semver`` rows are aliases of the same released version and are not
+    modelled; the contract under test is which *distinct* tags exist at all.
+    """
+    tags: set[str] = set()
+    for row in _meta_tag_rows():
+        if row == "type=ref,event=tag":
+            if ctx["github.ref"].startswith("refs/tags/"):
+                tags.add(ctx["github.ref_name"])
+        elif row.startswith("type=raw,"):
+            value, _, enable = row[len("type=raw,"):].partition(",enable=")
+            assert value.startswith("value="), row
+            rendered = value[len("value="):]
+            for name, ctx_value in ctx.items():
+                rendered = rendered.replace(f"${{{{ {name} }}}}", ctx_value)
+            # An assumption about `docker/metadata-action`, not an
+            # observation: a disabled row renders as `type=raw,value=,…` and
+            # we model that as pushing nothing. If the action ever errored on
+            # an empty `value=`, or emitted an empty tag, this model would
+            # stay green while every dispatch rebuild broke. Confirm against
+            # a real `workflow_dispatch` run once the workflow is on the
+            # default branch.
+            if not enable or _gha_eval(enable, ctx):
+                tags.add(rendered)
+        elif not row.startswith("type=semver,"):
+            raise AssertionError(f"unmodelled metadata-action row: {row!r}")
+    return tags
+
+
+#: (label, context, the tag the run is expected to publish *and* smoke).
+_RUNS = [
+    (
+        "tag push",
+        {
+            "github.event_name": "push",
+            "github.ref": "refs/tags/v1.2.3",
+            "github.ref_name": "v1.2.3",
+            "inputs.tag": "",
+        },
+        "v1.2.3",
+    ),
+    (
+        "dispatch with a tag override",
+        {
+            "github.event_name": "workflow_dispatch",
+            "github.ref": "refs/heads/main",
+            "github.ref_name": "main",
+            "inputs.tag": "v1.2.3",
+        },
+        "v1.2.3",
+    ),
+]
+
+
+def _run_ctx(label: str) -> dict[str, str]:
+    """Return a copy of one named scenario's context."""
+    for name, ctx, _expected in _RUNS:
+        if name == label:
+            return dict(ctx)
+    raise AssertionError(f"no such scenario: {label!r}")
+
+
+@pytest.mark.parametrize(("label", "ctx", "expected"), _RUNS, ids=[r[0] for r in _RUNS])
+def test_build_publishes_the_tag_the_smoke_job_pulls(label, ctx, expected):
+    """Every way this workflow runs, the smoke job pulls a tag it just pushed."""
+    published = _published_tags(ctx)
+    smoked = _gha_eval(_smoke_tag_expression(), ctx)
+
+    assert expected in published, (
+        f"{label}: build-and-push publishes {sorted(published)}, "
+        f"which does not include {expected!r}"
+    )
+    assert smoked == expected, (
+        f"{label}: the smoke job resolves TAG to {smoked!r}, expected {expected!r}"
+    )
+    assert smoked in published, (
+        f"{label}: the smoke job pulls {smoked!r} but the build published "
+        f"{sorted(published)} — the job can only go red"
+    )
+
+
+def test_tag_push_moves_latest():
+    """`latest` follows the newest release, and only a tag push cuts one."""
+    assert "latest" in _published_tags(_run_ctx("tag push"))
+
+
+def test_smoke_compares_one_exact_version_and_nothing_looser():
+    """Only `vMAJOR.MINOR.PATCH` reaches this workflow, so the smoke job has
+    exactly one comparison to make. A second, looser branch could only ever
+    let a wrong version through."""
+    smoke = _smoke_job_text()
+    assert '[ "$actual" != "llmwiki $expected" ]' in smoke, (
+        "the smoke job no longer compares the whole `llmwiki <version>` line"
+    )
+    assert "=~ ^llmwiki" not in smoke, (
+        "the smoke job grew a loose version branch again — a tag that cannot "
+        "be compared exactly must be rejected by the guard step instead"
+    )
+
+
+def _tag_guard() -> re.Match[str]:
+    """Return the match for the step that enforces the release tag format."""
+    text = PUBLISH_WORKFLOW.read_text(encoding="utf-8")
+    guard = re.search(
+        r"- name: Validate the release tag\n"
+        r"\s+env:\n\s+TAG: (?P<expr>\$\{\{.+\}\})\n"
+        r"\s+run: \|\n(?:.*\n)*?.*\[\[ \"\$TAG\" =~ (?P<regex>\S+) \]\]",
+        text,
+    )
+    assert guard, "no step validates the release tag"
+    return guard
+
+
+def test_tag_guard_enforces_the_single_release_tag_format():
+    """`on.push.tags` is a glob, not a regex — `v*.*.*` still matches
+    `v2.4.0-rc1`. This step is the enforcement, for both events."""
+    pattern = _tag_guard().group("regex")
+    assert pattern == r"^v[0-9]+\.[0-9]+\.[0-9]+$", (
+        f"the guard regex is {pattern!r}, not the single "
+        "vMAJOR.MINOR.PATCH form"
+    )
+    accept = re.compile(pattern)
+    assert accept.search("v2.4.0")
+    for rejected in ("v2.4.0-rc1", "v2.4.0rc1", "2.4.0", "v2.4", "latest", "vX.Y.Z"):
+        assert not accept.search(rejected), f"the guard admits {rejected!r}"
+
+
+def test_tag_guard_runs_before_the_metadata_step():
+    """`inputs.tag` lands in a YAML block scalar, where a newline in the
+    dispatch input would inject an extra `type=raw` row (#211 review)."""
+    text = PUBLISH_WORKFLOW.read_text(encoding="utf-8")
+    # `uses:`, not a bare mention: prose above the guard names the step too.
+    assert _tag_guard().start() < text.index("uses: docker/metadata-action"), (
+        "the tag is validated after it has already been interpolated into "
+        "the metadata step"
+    )
+
+
+@pytest.mark.parametrize(("label", "_ctx", "expected"), _RUNS, ids=[r[0] for r in _RUNS])
+def test_tag_guard_checks_the_tag_the_run_publishes(label, _ctx, expected):
+    """Validating some *other* string than the one that gets published would
+    leave the publish path unguarded."""
+    guarded = _gha_eval(_tag_guard().group("expr"), _run_ctx(label))
+    assert guarded == expected, (
+        f"{label}: the guard validates {guarded!r}, but the run publishes "
+        f"{expected!r}"
+    )
+
+
+def test_dispatch_override_does_not_clobber_latest():
+    """A rebuild of an old version must not move `latest` onto it."""
+    ctx = _run_ctx("dispatch with a tag override")
+    assert "latest" not in _published_tags(ctx), (
+        "a dispatch that names an explicit tag also republished `latest`"
+    )

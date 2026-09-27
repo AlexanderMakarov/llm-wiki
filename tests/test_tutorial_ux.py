@@ -134,12 +134,12 @@ def test_footer_middle_has_both_prev_and_next():
 def test_footer_edit_on_github_link_present(monkeypatch):
     monkeypatch.setattr(
         "llmwiki.docs_pages.resolve_github_repo",
-        lambda: "Pratiyush/llm-wiki",
+        lambda: "ExampleOwner/llm-wiki",
     )
     pages = [_tutorial_page(1, "T1"), _tutorial_page(2, "T2")]
     html = _tutorial_footer_html(pages[0], pages, "../")
     assert 'class="edit-on-github"' in html
-    assert 'github.com/Pratiyush/llm-wiki/edit/master/docs' in html
+    assert 'github.com/ExampleOwner/llm-wiki/edit/master/docs' in html
     assert 'tutorials/01-x.md' in html
     # Edit link always opens in new tab.
     assert 'target="_blank"' in html

@@ -105,7 +105,7 @@ head -50 graphify-out/GRAPH_REPORT.md
 Query the graph:
 
 ```
-llmwiki query "what projects is Pratiyush working on"
+llmwiki query "what projects am I working on"
 ```
 
 ---

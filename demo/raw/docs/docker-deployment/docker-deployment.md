@@ -25,12 +25,12 @@ supported setups:
 
 ## Quick start — pre-built image
 
-The image is published to `ghcr.io/pratiyush/llm-wiki:latest` on every
+The image is published to `ghcr.io/alexandermakarov/llm-wiki:latest` on every
 release tag. To run:
 
 ```bash
 # 1. Clone the repo (you need the Dockerfile + examples for the volume mounts)
-git clone https://github.com/Pratiyush/llm-wiki.git
+git clone https://github.com/AlexanderMakarov/llm-wiki.git
 cd llm-wiki
 
 # 2. Pull the latest image
@@ -98,7 +98,7 @@ This uses the repo `Dockerfile` and re-builds on every code change.
 
 ## Publishing your own image
 
-Only the repo maintainer can publish to `ghcr.io/pratiyush/llm-wiki`.
+Only the repo maintainer can publish to `ghcr.io/alexandermakarov/llm-wiki`.
 To publish under your own namespace:
 
 ```bash

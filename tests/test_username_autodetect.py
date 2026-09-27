@@ -95,9 +95,9 @@ def test_long_specific_homedir_used(tmp_path: Path, monkeypatch):
     """Real user names (≥3 chars, not generic) ARE trusted as fallback."""
     monkeypatch.delenv("USER", raising=False)
     monkeypatch.delenv("USERNAME", raising=False)
-    monkeypatch.setattr(Path, "home", classmethod(lambda cls: Path("/home/pratiyush")))
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: Path("/home/testuser")))
     cfg = load_config(_config_path(tmp_path))
-    assert cfg["redaction"]["real_username"] == "pratiyush"
+    assert cfg["redaction"]["real_username"] == "testuser"
 
 
 def test_explicit_config_value_overrides_autodetect(tmp_path: Path, monkeypatch):

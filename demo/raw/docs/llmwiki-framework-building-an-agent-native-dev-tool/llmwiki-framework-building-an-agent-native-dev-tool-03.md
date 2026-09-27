@@ -55,7 +55,7 @@ Same as parent. Platform strategies for a dev tool:
 
 **The wiki built during development IS a growth engine.** Publish it.
 
-- The author's own `wiki/` (synthetic or hand-curated) becomes a public knowledge base at `https://pratiyush.github.io/llmwiki/wiki/`.
+- The author's own `wiki/` (synthetic or hand-curated) becomes a public knowledge base at `https://alexandermakarov.github.io/llmwiki/wiki/`.
 - Every release refreshes the public wiki with new insights, decisions, and patterns extracted from dev sessions.
 - Visitors who land on the demo can also browse the **living documentation of how the tool is built** — a form of meta-transparency that doubles as SEO.
 

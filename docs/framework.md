@@ -192,7 +192,7 @@ If any metric exceeds its budget, the offending change is blocked or must be pre
 3. **Binding default is `127.0.0.1`.** LAN or public binding requires an explicit `--host 0.0.0.0`.
 4. **No cloud features.** No auth, no accounts, no sync. Everything is local.
 5. **Config never stores secrets.** The config file only stores regex patterns and truncation limits.
-6. **CI must pass `grep -r "pratiyush1" site/` with zero hits** on any build produced from fixtures.
+6. **CI must pass `grep -rF "$REAL_USERNAME" site/` with zero hits** on any build produced from fixtures, where `$REAL_USERNAME` is the configured `redaction.real_username`.
 
 ### Schema-Versioning rules (cross-cutting)
 
@@ -209,8 +209,8 @@ Same as parent plus one addition: **adapter contribution flow** (Phase 5.25).
 
 ### PR rules (reiterated from parent)
 
-- git config user.name: `Pratiyush`
-- git config user.email: `pratiyush1@gmail.com`
+- git config user.name: `Your Name`
+- git config user.email: `<your@email>`
 - No AI co-authored-by lines
 - One PR per concern
 - Small commits (one file group per commit)
@@ -281,7 +281,7 @@ Same as parent. For llmwiki specifically:
 - [ ] Dark mode toggle works and persists
 - [ ] Copy-code button works on a code block
 - [ ] Copy-as-markdown button works on a session page
-- [ ] `grep -r pratiyush1 site/` returns zero hits (privacy check)
+- [ ] `grep -rF "$REAL_USERNAME" site/` returns zero hits (privacy check — `$REAL_USERNAME` is the configured `redaction.real_username`)
 - [ ] All links in README return HTTP 200
 - [ ] `python3 -m llmwiki --version` prints the version
 - [ ] `python3 -m llmwiki adapters` lists claude_code as available
@@ -294,7 +294,7 @@ Same as parent:
 
 1. `git init`
 2. Atomic commits per file group (README separate from code, tests separate from adapters, etc.)
-3. `gh repo create Pratiyush/llmwiki --public`
+3. `gh repo create AlexanderMakarov/llm-wiki --public`
 4. `git push -u origin master`
 5. `git tag v0.1.0 && git push origin v0.1.0`
 6. Create GitHub Release (mark as pre-release for 0.x)
@@ -345,7 +345,7 @@ Same as parent. Platform strategies for a dev tool:
 
 **The wiki built during development IS a growth engine.** Publish it.
 
-- The author's own `wiki/` (synthetic or hand-curated) becomes a public knowledge base at `https://pratiyush.github.io/llmwiki/wiki/`.
+- The author's own `wiki/` (synthetic or hand-curated) becomes a public knowledge base at `https://alexandermakarov.github.io/llm-wiki/wiki/`.
 - Every release refreshes the public wiki with new insights, decisions, and patterns extracted from dev sessions.
 - Visitors who land on the demo can also browse the **living documentation of how the tool is built** — a form of meta-transparency that doubles as SEO.
 

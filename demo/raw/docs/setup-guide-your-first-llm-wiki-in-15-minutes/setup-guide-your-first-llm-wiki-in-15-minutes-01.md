@@ -30,7 +30,7 @@ and deployed to GitHub Pages. By the end you'll have:
 ### 1.1 Clone the repo
 
 ```bash
-git clone https://github.com/Pratiyush/llm-wiki.git
+git clone https://github.com/AlexanderMakarov/llm-wiki.git
 cd llm-wiki
 ```
 

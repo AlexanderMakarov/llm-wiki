@@ -121,7 +121,7 @@ If you want to share `<vault>/site` with a colleague, copy it or publish it to a
 
 ## GitHub Pages (Self-Demo)
 
-The `.github/workflows/pages.yml` workflow deploys a public demo site to `https://pratiyush.github.io/llm-wiki/` on every tag push. It uses the **synthetic corpus** committed under `demo/`, not your real session history. Your actual wiki is never touched by this workflow.
+The `.github/workflows/pages.yml` workflow deploys a public demo site to `https://alexandermakarov.github.io/llm-wiki/` on every tag push. It uses the **synthetic corpus** committed under `demo/`, not your real session history. Your actual wiki is never touched by this workflow.
 
 ## Incident response
 

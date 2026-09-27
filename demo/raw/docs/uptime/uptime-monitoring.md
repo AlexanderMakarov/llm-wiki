@@ -35,7 +35,7 @@ jobs:
       - name: Check demo site
         run: |
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-            https://pratiyush.github.io/llm-wiki/)
+            https://alexandermakarov.github.io/llm-wiki/)
           echo "HTTP status: $STATUS"
           if [ "$STATUS" -ne 200 ]; then
             echo "::error::Demo site returned HTTP $STATUS"
@@ -45,7 +45,7 @@ jobs:
       - name: Check sitemap
         run: |
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-            https://pratiyush.github.io/llm-wiki/sitemap.xml)
+            https://alexandermakarov.github.io/llm-wiki/sitemap.xml)
           echo "Sitemap HTTP status: $STATUS"
           if [ "$STATUS" -ne 200 ]; then
             echo "::warning::Sitemap returned HTTP $STATUS"
@@ -54,7 +54,7 @@ jobs:
       - name: Check llms.txt
         run: |
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-            https://pratiyush.github.io/llm-wiki/llms.txt)
+            https://alexandermakarov.github.io/llm-wiki/llms.txt)
           echo "llms.txt HTTP status: $STATUS"
           if [ "$STATUS" -ne 200 ]; then
             echo "::warning::llms.txt returned HTTP $STATUS"
@@ -75,7 +75,7 @@ Add this step after the checks to post to Slack on failure:
         run: |
           curl -X POST "${{ secrets.SLACK_WEBHOOK_URL }}" \
             -H 'Content-type: application/json' \
-            -d '{"text":"llmwiki demo site is DOWN. Check: https://github.com/Pratiyush/llm-wiki/actions/workflows/uptime.yml"}'
+            -d '{"text":"llmwiki demo site is DOWN. Check: https://github.com/AlexanderMakarov/llm-wiki/actions/workflows/uptime.yml"}'
 ```
 
 ## Version freshness (a reachable site can still be wrong)
@@ -121,7 +121,7 @@ job locally:
 Add an uptime badge using the GitHub Actions workflow status:
 
 ```markdown
-[![Uptime](https://github.com/Pratiyush/llm-wiki/actions/workflows/uptime.yml/badge.svg)](https://github.com/Pratiyush/llm-wiki/actions/workflows/uptime.yml)
+[![Uptime](https://github.com/AlexanderMakarov/llm-wiki/actions/workflows/uptime.yml/badge.svg)](https://github.com/AlexanderMakarov/llm-wiki/actions/workflows/uptime.yml)
 ```
 
 This badge reflects the most recent workflow run. Green means the last

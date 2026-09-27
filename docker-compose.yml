@@ -4,7 +4,7 @@
 #   • Pull published image (recommended):
 #       docker compose pull && docker compose run --rm llmwiki build
 #   • Build locally (for development / custom changes):
-#       docker compose -f docker-compose.yml -f docker-compose.build.yml run --rm llmwiki build
+#       docker compose build && docker compose run --rm llmwiki build
 #
 # See docs/deploy/docker.md for the full walk-through.
 

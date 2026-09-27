@@ -910,7 +910,7 @@ Bulk runs group hits per entry and state which entries returned nothing. Always 
 ## `query` — natural-language knowledge-graph walk (Graphify)
 
 ```bash
-python3 -m llmwiki query "what projects is Pratiyush working on"
+python3 -m llmwiki query "what projects am I working on"
 python3 -m llmwiki query "Flutter mobile" --depth 2 --budget 1000
 ```
 

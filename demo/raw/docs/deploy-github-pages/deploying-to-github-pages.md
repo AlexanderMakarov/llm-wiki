@@ -13,7 +13,7 @@ content_sha256: f7384bb306f4bc1048e52d4e9c5cbcf9cb3bcaa8b76b898eec459a4d13cd6d49
 
 Host your llmwiki site on GitHub Pages for free, with automatic builds on every push to master.
 
-Live example: [alexandermakarov.github.io/llm-wiki](https://alexandermakarov.github.io/llm-wiki/) (historical demo also at [pratiyush.github.io/llm-wiki](https://pratiyush.github.io/llm-wiki/)).
+Live example: [alexandermakarov.github.io/llm-wiki](https://alexandermakarov.github.io/llm-wiki/) (historical demo also at [alexandermakarov.github.io/llm-wiki](https://alexandermakarov.github.io/llm-wiki/)).
 
 > **This repository (#213):** `pages.yml` publishes on every version tag (`v*.*.*`) and on manual **Run workflow**. Deploy on every push to `main` stays off (#69) — the demo tracks releases, not merges; restore `push:` if you want each merge to republish. The published site is built from the committed `demo/` vault: `demo/raw/sessions/` (demo sessions), `demo/raw/docs/` (product docs), `demo/wiki/` (pre-synthesized pages, committed so CI stays free/deterministic) and `demo/usage/` (MCP telemetry fixtures for Analytics).
 

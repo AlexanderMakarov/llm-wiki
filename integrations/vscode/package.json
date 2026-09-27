@@ -3,11 +3,11 @@
   "displayName": "llm-wiki",
   "description": "Browse and sync your llm-wiki knowledge base from VS Code",
   "version": "0.1.0",
-  "publisher": "pratiyush",
+  "publisher": "alexandermakarov",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/nicobailey/llm-wiki"
+    "url": "https://github.com/AlexanderMakarov/llm-wiki"
   },
   "engines": {
     "vscode": "^1.85.0"

@@ -1,6 +1,6 @@
 name: Release to PyPI
 
-# Triggered by pushing a version tag (e.g. v0.9.0, v1.0.0-rc1).
+# Triggered by pushing a release tag (`vMAJOR.MINOR.PATCH`, e.g. v2.4.0).
 # Builds sdist + wheel, signs with Sigstore, publishes to PyPI via
 # OIDC trusted publisher, and attaches artifacts to the GitHub Release.
 #
@@ -31,6 +31,23 @@ jobs:
     name: Build sdist + wheel
     runs-on: ubuntu-latest
     steps:
+      # `vMAJOR.MINOR.PATCH` is the only release tag this project cuts, and
+      # `on.push.tags` is a glob, not a regex, so `v*.*.*` still admits
+      # `v2.4.0-rc1`. Without this step such a tag builds, publishes and cuts
+      # a GitHub Release, and only goes red at the post-publish smoke, where
+      # `pip install llm-wiki-plus==2.4.0-rc1` finds nothing. Reject it here,
+      # before anything is built or published. Same regex as the guard in
+      # `docker-publish.yml`, so the two workflows accept exactly the same
+      # tags; this workflow has no `workflow_dispatch`, so the tag is always
+      # `github.ref_name`.
+      - name: Validate the release tag
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+            echo "::error::'$TAG' is not a release tag; expected vMAJOR.MINOR.PATCH."; exit 1; }
+
       - uses: actions/checkout@v7
 
       - name: Set up Python 3.12
@@ -195,11 +212,6 @@ jobs:
         run: |
           set -e
           tag="${GITHUB_REF_NAME}"
-          # Pre-release if tag contains rc, alpha, beta, dev
-          prerelease=""
-          if echo "$tag" | grep -qiE '(rc|alpha|beta|dev)'; then
-            prerelease="--prerelease"
-          fi
 
           # Collect artifacts — missing dirs/files are tolerated.
           assets=()
@@ -222,6 +234,5 @@ jobs:
               --repo "$GITHUB_REPOSITORY" \
               --title "$tag" \
               --generate-notes \
-              $prerelease \
               "${assets[@]}"
           fi

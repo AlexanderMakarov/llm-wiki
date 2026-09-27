@@ -16,7 +16,7 @@ Part 6 of the configuration reference documents opt-in intake for ChatGPT (`conv
 
 - The ChatGPT source is opt-in and only applies when `conversations_json` points at an export file path.
 - Web Clipper defaults to off (`enabled: false`), watches `"raw/web"`, accepts `[".md"]`, and with `auto_queue: true` enqueues picked-up files into the unified `llmwiki-state.json` queue.
-- `site.github_repo` is optional `owner/name`; when empty, llmwiki resolves from `git remote get-url origin`, otherwise falls back to `Pratiyush/llm-wiki` for CHANGELOG and GitHub-facing links in compiled output.
+- `site.github_repo` is optional `owner/name`; when empty, llmwiki resolves from `git remote get-url origin`, otherwise falls back to `AlexanderMakarov/llm-wiki` for CHANGELOG and GitHub-facing links in compiled output.
 
 ## Key Quotes
 
@@ -24,7 +24,7 @@ Part 6 of the configuration reference documents opt-in intake for ChatGPT (`conv
 
 > "Auto-enqueue into unified `llmwiki-state.json` queue" — ties Web Clipper file pickup to the same processing queue as other sources.
 
-> "Empty = detect from `git remote get-url origin`, else `Pratiyush/llm-wiki`" — defines resolution order for repo metadata on the static site.
+> "Empty = detect from `git remote get-url origin`, else `AlexanderMakarov/llm-wiki`" — defines resolution order for repo metadata on the static site.
 
 ## Connections
 

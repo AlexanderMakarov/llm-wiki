@@ -25,15 +25,15 @@ from llmwiki.docs_pages import (
     rewrite_source_code_links_to_github,
 )
 
-_GH = "https://github.com/Pratiyush/llm-wiki/blob/master"
+_GH = "https://github.com/ExampleOwner/llm-wiki/blob/master"
 
 
 @pytest.fixture(autouse=True)
 def _pin_upstream_github(monkeypatch):
-    """Pin the rewriter to upstream so local fork remotes don't drift assertions."""
+    """Pin the rewriter to a fixed owner so local remotes don't drift assertions."""
     monkeypatch.setattr(
         "llmwiki.docs_pages.resolve_github_repo",
-        lambda: "Pratiyush/llm-wiki",
+        lambda: "ExampleOwner/llm-wiki",
     )
 
 
@@ -103,7 +103,7 @@ def test_rewrite_one_to_github_leaves_other_paths_alone(href):
 def test_rewrites_source_code_ref_in_href():
     html = 'See <a href="../../llmwiki/convert.py">convert.py</a>.'
     out = rewrite_source_code_links_to_github(html)
-    assert 'href="https://github.com/Pratiyush/llm-wiki/blob/master/llmwiki/convert.py"' in out
+    assert 'href="https://github.com/ExampleOwner/llm-wiki/blob/master/llmwiki/convert.py"' in out
 
 
 def test_rewrites_repo_root_md():

@@ -30,7 +30,7 @@ Every time a version tag (`v*.*.*`) is pushed:
 
 The package is uploaded as **`llm-notebook`** — `llmwiki` was already
 taken on PyPI. The CLI command, the Python import (`import llmwiki`),
-and the GitHub repo (`Pratiyush/llm-wiki`) all stay unchanged. Same
+and the GitHub repo (`AlexanderMakarov/llm-wiki`) all stay unchanged. Same
 pattern as `pillow` → `import PIL`.
 
 A future cleanup may unify all three — see the open issue for the full
@@ -57,7 +57,7 @@ own Publishing tab once it exists):
 | Field | Value |
 |---|---|
 | PyPI Project Name | `llm-notebook` |
-| Owner | `Pratiyush` |
+| Owner | `AlexanderMakarov` |
 | Repository name | `llm-wiki` |
 | Workflow name | `release.yml` |
 | Environment name | `release` |
@@ -67,7 +67,7 @@ upload without a long-lived API token.
 
 ### 3. Create the `release` GitHub environment
 
-1. **[Repository settings → Environments → New environment](https://github.com/Pratiyush/llm-wiki/settings/environments)**
+1. **[Repository settings → Environments → New environment](https://github.com/AlexanderMakarov/llm-wiki/settings/environments)**
 2. Name: **`release`**
 3. Optional protection rules:
    - **Required reviewers** — add your own handle so every PyPI upload
@@ -79,9 +79,9 @@ upload without a long-lived API token.
 ### 4. Flip the publishing gate on
 
 ```bash
-gh variable set PYPI_PUBLISHING --body "true" --repo Pratiyush/llm-wiki
+gh variable set PYPI_PUBLISHING --body "true" --repo AlexanderMakarov/llm-wiki
 # Verify
-gh variable list --repo Pratiyush/llm-wiki | grep PYPI_PUBLISHING
+gh variable list --repo AlexanderMakarov/llm-wiki | grep PYPI_PUBLISHING
 ```
 
 ### 5. Cut a real release tag
@@ -98,7 +98,7 @@ git push origin v1.1.0
 ```
 
 Watch the workflow at:
-<https://github.com/Pratiyush/llm-wiki/actions/workflows/release.yml>
+<https://github.com/AlexanderMakarov/llm-wiki/actions/workflows/release.yml>
 
 The `publish` job should now run and show `uploading` + `success`.
 
@@ -120,7 +120,7 @@ something other than `"true"`. Fix:
 
 **`publish` fails with "invalid-publisher"** — the OIDC binding on
 pypi.org doesn't match what GitHub sent. Double-check: owner =
-`Pratiyush`, repo = `llm-wiki`, workflow = `release.yml`, environment
+`AlexanderMakarov`, repo = `llm-wiki`, workflow = `release.yml`, environment
 = `release`. Casing matters.
 
 **`publish` fails with "403 Forbidden: User ... isn't allowed to upload
