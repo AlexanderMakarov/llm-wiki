@@ -9,6 +9,8 @@ module global), never the operator live vault.
 from __future__ import annotations
 
 import json
+import threading
+import time
 from pathlib import Path
 from unittest.mock import patch
 
@@ -341,4 +343,83 @@ def test_wiki_add_build_failed_returns_ok_with_warning(tmp_path: Path, monkeypat
     assert payload["written"]
     assert any("site build failed" in w for w in payload["warnings"])
     assert (vault / payload["written"][0]).is_file()
+
+
+# ─── Timeout budget ─────────────────────────────────────────────────
+
+
+def test_wiki_add_timeout_returns_within_budget(tmp_path: Path, monkeypatch):
+    """The timeout error comes back on the budget, not when the add ends (#286).
+
+    A slow add used to be waited out anyway: the worker pool was entered as a
+    context manager, whose ``__exit__`` joins the worker, so the client saw a
+    transport timeout instead of this error. Guarded by wall clock.
+    """
+    vault = _vault(tmp_path)
+    release = threading.Event()
+    slow_seconds = 30.0
+
+    def _slow_add(*args, **kwargs):
+        release.wait(slow_seconds)
+        return {
+            "written": [], "titles": [], "warnings": [], "errors": [],
+            "messages": [], "exit_code": 0, "build_failed": False,
+        }
+
+    monkeypatch.setattr("llmwiki.mcp.server.run_add", _slow_add)
+    monkeypatch.setattr("llmwiki.mcp.server._mcp_tool_timeout", lambda _name: 0.2)
+
+    started = time.monotonic()
+    try:
+        with patch("llmwiki.mcp.server.REPO_ROOT", vault):
+            result = tool_wiki_add({"content": "# Slow Doc\n\nbody\n"})
+        elapsed = time.monotonic() - started
+    finally:
+        release.set()
+
+    assert result["isError"] is True
+    text = _result_text(result)
+    assert "budget" in text
+    assert "mcp.tool_timeouts.wiki_add" in text
+    # Verify-before-retry guidance, so an agent does not duplicate the doc.
+    assert "wiki_search" in text and "raw/docs/" in text
+    assert elapsed < slow_seconds / 3, (
+        f"wiki_add waited {elapsed:.1f}s for a worker it had already given "
+        "up on — the timeout must not join the add"
+    )
+
+
+def test_wiki_add_blocked_on_lock_reports_the_holder(tmp_path: Path, monkeypatch):
+    """A call that never got the lock must not wear the timeout message (#286).
+
+    ``pipeline_lock`` waits up to its own 300s default, far past the tool
+    budget; bounded to the budget it raises, and that must come back as a
+    lock error naming the holder, not as "still running in the background".
+    """
+    vault = _vault(tmp_path)
+    seen: dict[str, float | None] = {}
+
+    def _held_lock(root, timeout=None, poll=0.5):
+        seen["timeout"] = timeout
+        raise RuntimeError(
+            f"timed out after {timeout:.0f}s waiting for pipeline lock "
+            f"{root}/.llmwiki-pipeline.lock (held by pid 4242); remove the "
+            "directory if no llmwiki process is running"
+        )
+
+    monkeypatch.setattr("llmwiki.mcp.server.pipeline_lock", _held_lock)
+    monkeypatch.setattr("llmwiki.mcp.server._mcp_tool_timeout", lambda _name: 30.0)
+
+    with patch("llmwiki.mcp.server.REPO_ROOT", vault):
+        result = tool_wiki_add({"content": "# Blocked Doc\n\nbody\n"})
+
+    assert result["isError"] is True
+    text = _result_text(result)
+    assert "pipeline lock" in text
+    assert "pid 4242" in text
+    assert "never started" in text
+    # Must not claim an add of its own is running in the background.
+    assert "budget" not in text
+    # The lock wait is bounded by the tool budget, not pipeline_lock's default.
+    assert seen["timeout"] is not None and 0 < seen["timeout"] <= 30.0
 

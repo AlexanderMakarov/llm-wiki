@@ -43,7 +43,7 @@ def test_kit_ships_slash_commands_and_skills() -> None:
     assert (COMMANDS_DIR / KIT_COMMAND).is_file()
     assert not (COMMANDS_DIR / "wiki-serve.md").exists()
     assert (SKILLS_DIR / KIT_SKILL).is_file()
-    assert (SKILLS_DIR / "wiki-all" / "SKILL.md").is_file()
+    assert (SKILLS_DIR / "llmwiki-all" / "SKILL.md").is_file()
     assert not (SKILLS_DIR / "wiki-add").exists()
     names = {rel for rel, _src in kit_files()}
     assert f"commands/{KIT_COMMAND}" in names
@@ -93,7 +93,7 @@ def test_cli_writes_to_dest(tmp_path: Path, capsys: pytest.CaptureFixture[str]) 
     assert f"commands/{KIT_COMMAND}" in out
     assert "wrote" in out
     assert (dest / "commands" / KIT_COMMAND).is_file()
-    assert (dest / "skills" / "wiki-all" / "SKILL.md").is_file()
+    assert (dest / "skills" / "llmwiki-all" / "SKILL.md").is_file()
 
 
 def test_cli_requires_dest() -> None:
@@ -242,7 +242,7 @@ def test_wheel_contains_agent_kit_commands_and_skills(tmp_path: Path) -> None:
     assert "llmwiki/agent_kit/skills/llmwiki-sync/SKILL.md" in names
     assert "llmwiki/agent_kit/skills/llmwiki-ingest/SKILL.md" in names
     assert "llmwiki/agent_kit/skills/llmwiki-query/SKILL.md" in names
-    assert "llmwiki/agent_kit/skills/wiki-all/SKILL.md" in names
+    assert "llmwiki/agent_kit/skills/llmwiki-all/SKILL.md" in names
     assert "llmwiki/agent_kit/commands/wiki-serve.md" not in names
     assert not any("docs-that-work" in n for n in names)
     assert not any(n.startswith("llmwiki/agent_kit/") and n.endswith("wiki-add/SKILL.md") for n in names)

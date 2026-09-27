@@ -32,4 +32,13 @@ RETIRED_PATHS: dict[str, frozenset[str]] = {
             "fa3595550e73a84f5b76188f60830757c69391213d190c9dcf77639b09cb5bf2",
         }
     ),
+    # Renamed to skills/llmwiki-all/SKILL.md (#286) so every packaged skill
+    # carries the llmwiki- prefix; the /wiki-all slash command keeps its name.
+    "skills/wiki-all/SKILL.md": frozenset(
+        {
+            "895c48708d83b150e537ed716ebcb186f0f8d6da731c94bdd27954a27b407db1",
+            "75cfcc67e766dbacf81412172a3e1cfdc332bb3adb8cf9ae4612a3a6d8427688",
+            "d2e21b152f7620d0b25fc1a40d556c627a9a0688eadae119f9b22dfdd51d498c",
+        }
+    ),
 }

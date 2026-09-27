@@ -1,4 +1,4 @@
-"""Regression guard for #170: wiki-all skill must mirror ``PIPELINE_STAGES``.
+"""Regression guard for #170: llmwiki-all skill must mirror ``PIPELINE_STAGES``.
 
 # @layer: unit
 # @spec: 170-wiki-all-skill-pipeline
@@ -16,7 +16,7 @@ import pytest
 from llmwiki.pipeline import PIPELINE_STAGES, run_pipeline
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-WIKI_ALL_SKILL = REPO_ROOT / "llmwiki" / "agent_kit" / "skills" / "wiki-all" / "SKILL.md"
+WIKI_ALL_SKILL = REPO_ROOT / "llmwiki" / "agent_kit" / "skills" / "llmwiki-all" / "SKILL.md"
 WIKI_ALL_CMD = REPO_ROOT / "llmwiki" / "agent_kit" / "commands" / "wiki-all.md"
 
 STALE_OBSIDIAN_PATH = "Documents/Obsidian Vault/Temp/Graph"
@@ -70,10 +70,10 @@ def _assert_first_invocation_is_all(text: str, *, label: str) -> None:
 
 def test_wiki_all_skill_matches_pipeline_contract() -> None:
     text = WIKI_ALL_SKILL.read_text(encoding="utf-8")
-    _assert_stages_in_order(text, label="wiki-all SKILL.md")
-    _assert_no_numbered_init_stage(text, label="wiki-all SKILL.md")
-    _assert_no_stale_obsidian_path(text, label="wiki-all SKILL.md")
-    _assert_first_invocation_is_all(text, label="wiki-all SKILL.md")
+    _assert_stages_in_order(text, label="llmwiki-all SKILL.md")
+    _assert_no_numbered_init_stage(text, label="llmwiki-all SKILL.md")
+    _assert_no_stale_obsidian_path(text, label="llmwiki-all SKILL.md")
+    _assert_first_invocation_is_all(text, label="llmwiki-all SKILL.md")
 
 
 def test_wiki_all_command_matches_pipeline_stages() -> None:

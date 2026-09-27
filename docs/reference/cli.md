@@ -823,7 +823,16 @@ The report prints `remapped` / `cleared` / `unresolved` counts. Idempotent once 
 
 A pip or Homebrew install carries the user-facing `/wiki-*` slash commands and skills inside the package (`llmwiki/agent_kit/`). This command copies `commands/` and `skills/` beneath a directory you name so Claude Code (or any agent that reads that layout) can see them. `--dest` is **required** — the command does not guess at agent directory conventions.
 
-Typical destinations: `.claude` in the project you are working in, or a user-level agent directory. Contributors working in this clone who want `/wiki-*` locally run `llmwiki install-agent-kit --dest .claude`.
+Typical destinations, by where you want the commands and skills to be visible:
+
+| `--dest` | Who reads it |
+|---|---|
+| `~/.claude` | Claude Code, every project on the machine |
+| `~/.cursor` | Cursor, every project on the machine (it reads top-level `commands/` and `skills/`) |
+| `~/.codex` | Codex CLI, every project on the machine |
+| `.claude` | Claude Code, this project only — what contributors in this clone use to get `/wiki-*` locally |
+
+Point `--dest` at whichever agent directory you actually use; install into more than one if you switch between agents. The files are plain markdown and the format is portable, so an agent with a different layout can take the same `commands/` and `skills/` folders. The packaged skills themselves are catalogued in [`slash-commands.md`](slash-commands.md#agent-kit-skills).
 
 Re-running after an upgrade refreshes the copies. A destination file whose content already matches the kit is left alone. A destination file that differs is saved as `<filename>.bak` beside it before the kit version is written, and the backup is reported, so a customisation is never overwritten silently. `--dry-run` prints the same report and writes nothing.
 

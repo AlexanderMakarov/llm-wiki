@@ -493,7 +493,13 @@ TOOLS = [
             "Exactly one of url, path, or content is required. content uses "
             "the piped-text path (frontmatter source: piped), not a temp file. "
             "Use the user's named path/URL/text — do not reconstruct input "
-            "from existing wiki pages unless the user asked."
+            "from existing wiki pages unless the user asked. "
+            "Runs under a wall-clock budget (mcp.tool_timeouts.wiki_add, "
+            "default 120s) and holds the vault pipeline lock while it works, "
+            "so a large source or synthesize=true can exceed it. On timeout "
+            "the add keeps running in the background: verify whether the doc "
+            "landed (wiki_search, or the raw/docs/ path) before retrying, "
+            "and raise the timeout rather than repeating the call."
         ),
         "inputSchema": {
             "type": "object",
@@ -1111,6 +1117,16 @@ def tool_wiki_export(args: dict[str, Any]) -> dict[str, Any]:
     return _ok(content)
 
 
+def _lock_holder_suffix(exc: Exception) -> str:
+    """`` (pid N)`` when the lock error names its holder, else ``""``."""
+    marker = "held by pid "
+    msg = str(exc)
+    if marker not in msg:
+        return ""
+    pid = msg.split(marker, 1)[1].split(")", 1)[0].strip()
+    return f" (pid {pid})" if pid else ""
+
+
 def tool_wiki_add(args: dict[str, Any]) -> dict[str, Any]:
     """Proxy for CLI ``llmwiki add`` via shared :func:`run_add` (#273 / #37 A3).
 
@@ -1118,7 +1134,12 @@ def tool_wiki_add(args: dict[str, Any]) -> dict[str, Any]:
     only when ``synthesize`` is true. ``content`` uses the piped-text path
     (``source: piped``) — no tempfile. Progress lines go to ``run_add``'s
     ``messages`` list via a silent writer so they never corrupt JSON-RPC
-    stdout. Wall-clock budget: ``mcp.tool_timeouts.wiki_add`` (default 120s).
+    stdout. Wall-clock budget: ``mcp.tool_timeouts.wiki_add`` (default 120s),
+    enforced by returning the timeout error without waiting for the worker
+    (#286) — the add runs on and holds ``pipeline_lock``, so the error tells
+    the caller to verify before retrying. A call that blocks on another run's
+    lock instead fails inside the same budget with a distinct lock error,
+    rather than waiting out ``pipeline_lock``'s own 300s default.
     When the doc lands but only the post-add site build fails, returns
     success with a warning (``build_failed``); genuine add failures stay
     ``isError``.
@@ -1151,9 +1172,17 @@ def tool_wiki_add(args: dict[str, Any]) -> dict[str, Any]:
 
     timeout_s = _mcp_tool_timeout("wiki_add")
 
+    # The lock wait gets a slice of the tool budget, not pipeline_lock's own
+    # 300s default: a call that blocks on another run's lock must fail with
+    # the lock error below, not sit past the budget and come back wearing the
+    # timeout message of an add it never started. Kept under the budget so the
+    # lock wait loses to nothing — the outer ``fut.result`` timeout fires at
+    # exactly ``timeout_s`` and would otherwise win the race every time.
+    lock_timeout_s = timeout_s * 0.9
+
     def _do_add() -> dict[str, Any]:
         # Silent writer: accumulate in result["messages"]; keep stdout clean.
-        with pipeline_lock(REPO_ROOT):
+        with pipeline_lock(REPO_ROOT, timeout=lock_timeout_s):
             return run_add(
                 sources,
                 docs_dir,
@@ -1168,15 +1197,48 @@ def tool_wiki_add(args: dict[str, Any]) -> dict[str, Any]:
                 writer=lambda _line: None,
             )
 
+    # Not a context manager: ``__exit__`` is ``shutdown(wait=True)``, which
+    # joins the worker and makes the timeout return wait for the very add it
+    # gave up on (#286). ``wait=False`` returns within the budget; the worker
+    # runs on and keeps ``pipeline_lock`` until it finishes, which is what the
+    # timeout message tells the caller to check for. The process still joins
+    # that worker at interpreter exit (``concurrent.futures.thread`` registers
+    # an atexit hook for its non-daemon threads), so a server told to shut
+    # down after a timeout lingers for the rest of the add — deliberate, so an
+    # in-flight add is never killed mid-write and left as a half-written vault
+    # behind a stale lock directory.
+    pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
     try:
-        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-            fut = pool.submit(_do_add)
-            try:
-                result = fut.result(timeout=timeout_s)
-            except concurrent.futures.TimeoutError:
-                return _err(f"add timed out after {timeout_s:.0f}s")
-    except AddError as exc:
-        return _err(str(exc))
+        fut = pool.submit(_do_add)
+        try:
+            result = fut.result(timeout=timeout_s)
+        except concurrent.futures.TimeoutError:
+            return _err(
+                f"add exceeded its {timeout_s:.0f}s budget and is still "
+                "running in the background — it holds the vault pipeline "
+                "lock until it finishes and may still write the doc. Do not "
+                "retry blindly: check whether it landed (wiki_search for the "
+                "title, or look under raw/docs/) before adding the same "
+                "source again, or you get a duplicate or a lock conflict. "
+                "Raise mcp.tool_timeouts.wiki_add in config.json for large "
+                "sources or when synthesize is on."
+            )
+        except AddError as exc:
+            return _err(str(exc))
+        except RuntimeError as exc:
+            # pipeline_lock gave up waiting: another llmwiki run owns the
+            # vault. Nothing of this add ran, so say that instead of the
+            # timeout text above, which claims a background add is writing.
+            return _err(
+                "another llmwiki run holds the vault pipeline lock"
+                f"{_lock_holder_suffix(exc)} and this add never started — an "
+                "earlier add may still be finishing. Verify whether the doc "
+                "landed (wiki_search for the title, or look under raw/docs/) "
+                "before retrying, and remove the lock directory named in "
+                f"the underlying error if no llmwiki process is running: {exc}"
+            )
+    finally:
+        pool.shutdown(wait=False)
 
     msgs = [m for m in (result.get("messages") or []) if m]
     # Genuine add/synth failure: non-zero exit that is not solely build_failed.
