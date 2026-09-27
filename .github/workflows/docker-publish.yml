@@ -27,15 +27,15 @@ jobs:
     name: Build + push multi-arch image
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-
       # `vMAJOR.MINOR.PATCH` is the only release tag this project cuts, and
       # this step is the enforcement for both events: `on.push.tags` is a glob,
-      # not a regex, so `v*.*.*` still admits `v2.4.0-rc1`. Run it before
-      # `docker/metadata-action`, because `inputs.tag` is interpolated into
-      # that step's `tags:` block scalar, where a newline would inject a second
-      # `type=raw` row (e.g. a stray `type=raw,value=latest` moving `latest`
-      # onto an old rebuild).
+      # not a regex, so `v*.*.*` still admits `v2.4.0-rc1`. It is the first
+      # step because everything downstream interpolates the tag: the checkout
+      # below resolves it as a git ref, where a bad value fails with a far
+      # blunter message than the `::error::` here, and `docker/metadata-action`
+      # drops it into a `tags:` block scalar, where a newline would inject a
+      # second `type=raw` row (e.g. a stray `type=raw,value=latest` moving
+      # `latest` onto an old rebuild). It needs no working tree.
       - name: Validate the release tag
         env:
           TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
@@ -43,6 +43,21 @@ jobs:
           set -euo pipefail
           [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
             echo "::error::'$TAG' is not a release tag; expected vMAJOR.MINOR.PATCH."; exit 1; }
+
+      - uses: actions/checkout@v7
+        with:
+          # Build the tag being rebuilt, not the branch the dispatch ran from
+          # (#291). A `workflow_dispatch` ref is a branch, so the default
+          # checkout would build `main` and publish it under the requested
+          # tag. The dispatch ref is qualified as `refs/tags/…` because
+          # `actions/checkout` resolves a bare name as a branch first, so a
+          # branch sharing the tag's name would shadow it. The event test
+          # matches the guard's above, so both answer "which tag is this run
+          # about" the same way. On a tag push the fallback is `github.ref` —
+          # the same *ref* checkout resolves with no `ref:` at all; the
+          # default additionally pins `github.sha`, so a tag force-moved
+          # between the push event and this step would now be re-resolved.
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.tag) || github.ref }}
 
       - name: Set up QEMU (for arm64 emulation on amd64 runner)
         uses: docker/setup-qemu-action@v4
@@ -84,8 +99,14 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # Scope the buildx cache by what is being built, not by
+          # `GITHUB_REF`: a dispatch runs from a branch, so an unscoped
+          # rebuild would read and write that branch's cache while building
+          # an old tag's source (near-zero hit rate, and it competes for the
+          # per-repo cache cap). This wants the tag's *name*, so it is the
+          # guard's expression rather than the checkout's `refs/tags/…` ref.
+          cache-from: type=gha,scope=${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+          cache-to: type=gha,mode=max,scope=${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
 
   smoke-published-image:
     name: Smoke-test the published image

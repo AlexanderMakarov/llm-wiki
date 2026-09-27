@@ -250,7 +250,7 @@ def test_publish_smoke_authenticates_to_ghcr():
     Without a login the very first publish from a fork cannot be pulled back,
     so the smoke job fails on an image that is in fact fine.
     """
-    smoke = _smoke_job_text()
+    smoke = _job_text("smoke-published-image")
     assert "docker/login-action" in smoke, "smoke job never logs in to GHCR"
     assert "registry: ghcr.io" in smoke
     assert "${{ secrets.GITHUB_TOKEN }}" in smoke
@@ -258,7 +258,7 @@ def test_publish_smoke_authenticates_to_ghcr():
 
 def test_publish_smoke_drops_package_write():
     """Least privilege: reading a package back needs no write scope."""
-    smoke = _smoke_job_text()
+    smoke = _job_text("smoke-published-image")
     assert re.search(r"^    permissions:$", smoke, re.MULTILINE), (
         "smoke job has no job-level permissions block, so it inherits "
         "the workflow-level `packages: write`"
@@ -271,7 +271,7 @@ def test_publish_smoke_drops_package_write():
 
 def test_publish_smoke_compares_the_whole_version_line():
     """`grep -F "1.2"` matches inside "llmwiki 1.20.0" — anchor the check."""
-    smoke = _smoke_job_text()
+    smoke = _job_text("smoke-published-image")
     assert "grep -qF" not in smoke, "substring match: 1.2 would pass against 1.20.0"
     assert '"llmwiki $expected"' in smoke, (
         "the smoke test no longer compares the full `llmwiki <version>` line"
@@ -287,16 +287,43 @@ def test_publish_smoke_compares_the_whole_version_line():
 # the three ways this workflow runs and require the sets to line up.
 
 
-def _smoke_job_text() -> str:
-    """Return the ``smoke-published-image`` job block.
+def _job_text(job: str) -> str:
+    """Return one top-level job block.
 
     Bounded at the next top-level job so the assertions below keep meaning
     what they say if a job is ever appended after this one.
     """
     text = PUBLISH_WORKFLOW.read_text(encoding="utf-8")
-    _, _, smoke = text.partition("\n  smoke-published-image:\n")
-    assert smoke, "the workflow has no smoke-published-image job"
-    return re.split(r"^  \S", smoke, maxsplit=1, flags=re.MULTILINE)[0]
+    _, _, block = text.partition(f"\n  {job}:\n")
+    assert block, f"the workflow has no {job} job"
+    return re.split(r"^  \S", block, maxsplit=1, flags=re.MULTILINE)[0]
+
+
+def _checkout_ref_expression() -> str:
+    """Return the git ref the build job checks out before building (#291)."""
+    # Any `with:` key may precede `ref:` — comments, blank lines and other
+    # settings such as `fetch-depth:`. The repetition cannot run past the
+    # step, because a step's `- ` opener matches none of its alternatives.
+    match = re.search(
+        r"- uses: actions/checkout@\S+\n"
+        r"\s+with:\n"
+        r"(?:[ \t]*(?:#.*)?\n|[ \t]+[\w-]+:.*\n)*?"
+        r"[ \t]+ref: (.+)$",
+        _job_text("build-and-push"),
+        re.MULTILINE,
+    )
+    assert match, (
+        "build-and-push names no checkout ref, so a workflow_dispatch builds "
+        "the branch it ran from and publishes that under the requested tag"
+    )
+    return match.group(1).strip()
+
+
+def _tag_name(ref: object) -> object:
+    """Reduce a git ref to its tag name, leaving anything else untouched."""
+    if isinstance(ref, str) and ref.startswith("refs/tags/"):
+        return ref[len("refs/tags/"):]
+    return ref
 
 
 def _meta_tag_rows() -> list[str]:
@@ -317,17 +344,20 @@ def _meta_tag_rows() -> list[str]:
 
 def _smoke_tag_expression() -> str:
     """Return the ``TAG:`` expression the smoke job resolves its image from."""
-    match = re.search(r"^          TAG: (.+)$", _smoke_job_text(), re.MULTILINE)
+    match = re.search(
+        r"^          TAG: (.+)$", _job_text("smoke-published-image"), re.MULTILINE
+    )
     assert match, "the smoke job does not set a TAG env var"
     return match.group(1).strip()
 
 
 #: A deliberately narrow model of the GitHub-expression *subset* this workflow
 #: uses — string literals, `==`/`!=`, `contains()`, `&&`, `||`, `!` — not a
-#: general evaluator. `&&`/`||` do share Python's operand-returning semantics,
-#: so the spellings map across, but four divergences are known and only hold
-#: because nothing in this workflow exercises them. Check them before
-#: extending the workflow's expressions:
+#: general evaluator, and `format()` is modelled by Python's `str.format`.
+#: `&&`/`||` do share Python's operand-returning semantics, so the spellings
+#: map across, but five divergences are known and only hold because nothing
+#: in this workflow exercises them. Check them before extending the
+#: workflow's expressions:
 #:   1. Precedence of `!`: GitHub binds it tighter than `==`, so `!a == b`
 #:      means `(!a) == b`; Python's `not a == b` means `not (a == b)`.
 #:      No expression here writes `!x == y`.
@@ -340,6 +370,10 @@ def _smoke_tag_expression() -> str:
 #:   4. Literal contamination: the spelling rewrites run over the whole
 #:      expression, quoted literals included, so a literal containing `!`,
 #:      `&&` or `||` would be mangled. None currently does.
+#:   5. `format()`: Python's `str.format` accepts more than GitHub's does —
+#:      format specs (`{0:>5}`), attribute and index access (`{0.x}`,
+#:      `{0[k]}`) — and renders non-string arguments Python's way. Every
+#:      call here is a bare positional `{0}` on a string.
 def _gha_eval(expression: str, ctx: dict[str, str]) -> object:
     """Evaluate one ``${{ … }}`` expression against a scenario context."""
     body = expression.strip()
@@ -354,8 +388,10 @@ def _gha_eval(expression: str, ctx: dict[str, str]) -> object:
         f"unmodelled context in {expression!r}: {body!r}"
     )
     # Input is a workflow expression from this repository, reduced above to
-    # string literals and operators, with builtins removed.
-    return eval(body, {"__builtins__": {}}, {})
+    # string literals and operators, with builtins removed. `format` is
+    # supplied explicitly because GitHub has it and the empty builtins do not.
+    globals_ = {"__builtins__": {}, "format": lambda tmpl, *args: tmpl.format(*args)}
+    return eval(body, globals_, {})
 
 
 def _published_tags(ctx: dict[str, str]) -> set[str]:
@@ -423,11 +459,21 @@ def _run_ctx(label: str) -> dict[str, str]:
 
 
 @pytest.mark.parametrize(("label", "ctx", "expected"), _RUNS, ids=[r[0] for r in _RUNS])
-def test_build_publishes_the_tag_the_smoke_job_pulls(label, ctx, expected):
-    """Every way this workflow runs, the smoke job pulls a tag it just pushed."""
+def test_build_checks_out_and_publishes_the_tag_the_smoke_job_pulls(label, ctx, expected):
+    """Every way this workflow runs, one tag names the source that is built,
+    the tag it is published under, and the image the smoke job pulls back.
+
+    A dispatch that checked out the branch it ran from (#291) satisfies the
+    last two and still ships `main`'s code under an old version's tag.
+    """
     published = _published_tags(ctx)
     smoked = _gha_eval(_smoke_tag_expression(), ctx)
+    built = _gha_eval(_checkout_ref_expression(), ctx)
 
+    assert _tag_name(built) == expected, (
+        f"{label}: the build checks out {built!r}, but publishes and smokes "
+        f"{expected!r} — the image would carry another commit's code"
+    )
     assert expected in published, (
         f"{label}: build-and-push publishes {sorted(published)}, "
         f"which does not include {expected!r}"
@@ -441,6 +487,34 @@ def test_build_publishes_the_tag_the_smoke_job_pulls(label, ctx, expected):
     )
 
 
+def test_tag_push_checks_out_the_same_ref_the_default_would_have():
+    """Naming a ref must leave the tag-push path alone. The event is not a
+    dispatch, so the fallback is `github.ref` — the same *ref* that
+    `actions/checkout` resolves when given no `ref:` at all. Only the ref:
+    the default also pins `github.sha`, so a tag force-moved between the push
+    event and this step is now re-resolved rather than built as pushed."""
+    ctx = _run_ctx("tag push")
+    ref = _gha_eval(_checkout_ref_expression(), ctx)
+    assert ref == ctx["github.ref"], (
+        f"a tag push would check out {ref!r}, not {ctx['github.ref']!r} — "
+        "naming a ref changed the path that was already correct"
+    )
+
+
+def test_dispatch_checks_out_a_tag_ref_not_a_bare_name():
+    """`actions/checkout` resolves an unqualified ref as a *branch* before a
+    tag, so a branch sharing a release tag's name would be built and shipped
+    under that tag — #291's failure mode with a narrower trigger. The format
+    guard does not cover this: it validates the name's shape, not what the
+    name resolves to."""
+    ctx = _run_ctx("dispatch with a tag override")
+    ref = _gha_eval(_checkout_ref_expression(), ctx)
+    assert ref == f"refs/tags/{ctx['inputs.tag']}", (
+        f"a dispatch checks out {ref!r}, which does not say `tag` — a branch "
+        f"named {ctx['inputs.tag']!r} would shadow the tag being rebuilt"
+    )
+
+
 def test_tag_push_moves_latest():
     """`latest` follows the newest release, and only a tag push cuts one."""
     assert "latest" in _published_tags(_run_ctx("tag push"))
@@ -450,7 +524,7 @@ def test_smoke_compares_one_exact_version_and_nothing_looser():
     """Only `vMAJOR.MINOR.PATCH` reaches this workflow, so the smoke job has
     exactly one comparison to make. A second, looser branch could only ever
     let a wrong version through."""
-    smoke = _smoke_job_text()
+    smoke = _job_text("smoke-published-image")
     assert '[ "$actual" != "llmwiki $expected" ]' in smoke, (
         "the smoke job no longer compares the whole `llmwiki <version>` line"
     )
@@ -460,9 +534,14 @@ def test_smoke_compares_one_exact_version_and_nothing_looser():
     )
 
 
-def _tag_guard() -> re.Match[str]:
-    """Return the match for the step that enforces the release tag format."""
-    text = PUBLISH_WORKFLOW.read_text(encoding="utf-8")
+def _tag_guard(text: str | None = None) -> re.Match[str]:
+    """Return the match for the step that enforces the release tag format.
+
+    Searches the whole workflow unless given one job's text, which is how a
+    caller asserts *where in a job* the guard sits.
+    """
+    if text is None:
+        text = PUBLISH_WORKFLOW.read_text(encoding="utf-8")
     guard = re.search(
         r"- name: Validate the release tag\n"
         r"\s+env:\n\s+TAG: (?P<expr>\$\{\{.+\}\})\n"
@@ -487,15 +566,25 @@ def test_tag_guard_enforces_the_single_release_tag_format():
         assert not accept.search(rejected), f"the guard admits {rejected!r}"
 
 
-def test_tag_guard_runs_before_the_metadata_step():
+def test_tag_guard_runs_before_anything_consumes_the_tag():
     """`inputs.tag` lands in a YAML block scalar, where a newline in the
-    dispatch input would inject an extra `type=raw` row (#211 review)."""
-    text = PUBLISH_WORKFLOW.read_text(encoding="utf-8")
-    # `uses:`, not a bare mention: prose above the guard names the step too.
-    assert _tag_guard().start() < text.index("uses: docker/metadata-action"), (
-        "the tag is validated after it has already been interpolated into "
-        "the metadata step"
-    )
+    dispatch input would inject an extra `type=raw` row (#211 review), and in
+    the checkout's `ref:`, where a bad value fails with a blunter message
+    than the guard's `::error::` (#291).
+
+    Scoped to one job's text: textual order is a proxy for execution order
+    only among steps of the same job, so a guard moved out of
+    `build-and-push` fails here rather than passing on a file-layout
+    coincidence.
+    """
+    job = _job_text("build-and-push")
+    guard = _tag_guard(job).start()
+    # `uses:`, not a bare mention: prose above the guard names the steps too.
+    for consumer in ("uses: actions/checkout@", "uses: docker/metadata-action"):
+        assert guard < job.index(consumer), (
+            f"the tag is validated after `{consumer}` has already "
+            "interpolated it"
+        )
 
 
 @pytest.mark.parametrize(("label", "_ctx", "expected"), _RUNS, ids=[r[0] for r in _RUNS])
