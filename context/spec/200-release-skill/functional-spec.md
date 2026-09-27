@@ -50,7 +50,7 @@ Maintainers cut tagged product releases with an AI coding agent. Today the writt
 - **As a** maintainer reading the release process doc, **I want** instructions that match the default branch and post-tag automation, **so that** I am not told to push `master`, always pre-release, or create the GitHub Release twice.
   - **Acceptance Criteria:**
     - [ ] Release process doc and skill say the default branch is `main`.
-    - [ ] Post-tag: trust the release workflow for GitHub Release + signing; optional PyPI when publishing is enabled; no blanket always-prerelease after 1.0.
+    - [ ] Post-tag: trust the release workflow for GitHub Release + signing; optional PyPI when publishing is enabled; `vMAJOR.MINOR.PATCH` is the only tag shape the project cuts — both `release.yml` and `docker-publish.yml` reject anything else fail-fast, before they build or publish — and no release is ever marked prerelease.
     - [ ] Claude slash `/release` (if kept) is a thin wrapper that loads the skill / process — not a second divergent checklist.
     - [ ] Maintainer README and slash-command reference describe the skill accurately.
     - [ ] CHANGELOG Unreleased notes the addition.
@@ -82,3 +82,13 @@ Maintainers cut tagged product releases with an AI coding agent. Today the writt
 - Enabling PyPI publishing itself
 - Separate `scripts/release-*.sh` helpers (this change scripts the flow via the skill; bash wrappers are a later decision if wanted)
 - End-user agent-kit packaging of `/wiki-*` commands
+
+---
+
+## Change Log
+
+### 2026-09-27 — one release tag format, never a prerelease ([#211](https://github.com/AlexanderMakarov/llm-wiki/issues/211))
+
+- **What changed:** FR4-AC2 said "no blanket always-prerelease after 1.0", which read as though rc/alpha/beta/dev tags were still a supported path taken less often. They are not: `vMAJOR.MINOR.PATCH` is the only tag shape the project cuts, and no release is ever marked prerelease. The criterion now says that, and names the enforcement.
+- **Why:** `on.push.tags` is a glob, not a regex, so `v*.*.*` still admitted `v2.4.0-rc1`. #211 added a "Validate the release tag" step to `docker-publish.yml` and then to `release.yml`; both check `^v[0-9]+\.[0-9]+\.[0-9]+$` and fail before anything is built, published, or released, instead of letting a malformed tag reach the post-publish smoke.
+- **Scope of the amendment:** FR4-AC2's wording only. No requirement was added or dropped, the delivered behaviour is unchanged for well-formed tags, and `tasks.md` stays as the historical delivery record of the original cut.

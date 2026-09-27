@@ -143,11 +143,14 @@ def test_publish_uses_gha_cache():
     assert "type=gha" in text
 
 
-def test_publish_tags_include_latest_only_for_stable():
+def test_publish_dispatch_requires_a_tag():
+    """A tag-less dispatch has no version to publish or smoke-test."""
     text = PUBLISH_WORKFLOW.read_text(encoding="utf-8")
-    # `latest` must NOT apply to rc/alpha/beta/dev pre-releases
-    assert "!contains(github.ref, 'rc')" in text
-    assert "!contains(github.ref, 'alpha')" in text
+    dispatch = text.partition("  workflow_dispatch:\n")[2].partition("\npermissions:")[0]
+    assert "required: true" in dispatch, (
+        "the `tag` dispatch input is optional again — a tag-less dispatch "
+        "would publish an empty `type=raw` row"
+    )
 
 
 def test_publish_logs_into_ghcr():
@@ -401,30 +404,6 @@ _RUNS = [
         },
         "v1.2.3",
     ),
-    (
-        # Prereleases are a supported release path (release.yml flips
-        # `--prerelease` on these names), and the smoke job's exact-version
-        # branch must not claim them: the tag spells `v2.4.0-rc1` while the
-        # package reports the PEP 440 `2.4.0rc1`.
-        "prerelease tag push",
-        {
-            "github.event_name": "push",
-            "github.ref": "refs/tags/v2.4.0-rc1",
-            "github.ref_name": "v2.4.0-rc1",
-            "inputs.tag": "",
-        },
-        "v2.4.0-rc1",
-    ),
-    (
-        "dispatch without a tag override",
-        {
-            "github.event_name": "workflow_dispatch",
-            "github.ref": "refs/heads/main",
-            "github.ref_name": "main",
-            "inputs.tag": "",
-        },
-        "latest",
-    ),
 ]
 
 
@@ -455,39 +434,71 @@ def test_build_publishes_the_tag_the_smoke_job_pulls(label, ctx, expected):
     )
 
 
-def test_prerelease_tag_does_not_republish_latest():
-    """`latest` must keep pointing at the newest *stable* release."""
-    ctx = _run_ctx("prerelease tag push")
-    assert "latest" not in _published_tags(ctx), (
-        "a prerelease tag push also moved `latest`"
-    )
+def test_tag_push_moves_latest():
+    """`latest` follows the newest release, and only a tag push cuts one."""
+    assert "latest" in _published_tags(_run_ctx("tag push"))
 
 
-def test_smoke_exact_version_check_is_anchored():
-    r"""An unanchored `^[0-9]+\.[0-9]+\.[0-9]+` sends `2.4.0-rc1` into the
-    exact-match branch, where it is compared against the PEP 440 `2.4.0rc1`
-    the image reports — a false red on a perfectly good prerelease."""
+def test_smoke_compares_one_exact_version_and_nothing_looser():
+    """Only `vMAJOR.MINOR.PATCH` reaches this workflow, so the smoke job has
+    exactly one comparison to make. A second, looser branch could only ever
+    let a wrong version through."""
     smoke = _smoke_job_text()
-    assert r"=~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]" in smoke, (
-        "the smoke job's exact-version branch is no longer anchored at `$`"
+    assert '[ "$actual" != "llmwiki $expected" ]' in smoke, (
+        "the smoke job no longer compares the whole `llmwiki <version>` line"
+    )
+    assert "=~ ^llmwiki" not in smoke, (
+        "the smoke job grew a loose version branch again — a tag that cannot "
+        "be compared exactly must be rejected by the guard step instead"
     )
 
 
-def test_dispatch_tag_is_validated_before_it_reaches_the_metadata_step():
+def _tag_guard() -> re.Match[str]:
+    """Return the match for the step that enforces the release tag format."""
+    text = PUBLISH_WORKFLOW.read_text(encoding="utf-8")
+    guard = re.search(
+        r"- name: Validate the release tag\n"
+        r"\s+env:\n\s+TAG: (?P<expr>\$\{\{.+\}\})\n"
+        r"\s+run: \|\n(?:.*\n)*?.*\[\[ \"\$TAG\" =~ (?P<regex>\S+) \]\]",
+        text,
+    )
+    assert guard, "no step validates the release tag"
+    return guard
+
+
+def test_tag_guard_enforces_the_single_release_tag_format():
+    """`on.push.tags` is a glob, not a regex — `v*.*.*` still matches
+    `v2.4.0-rc1`. This step is the enforcement, for both events."""
+    pattern = _tag_guard().group("regex")
+    assert pattern == r"^v[0-9]+\.[0-9]+\.[0-9]+$", (
+        f"the guard regex is {pattern!r}, not the single "
+        "vMAJOR.MINOR.PATCH form"
+    )
+    accept = re.compile(pattern)
+    assert accept.search("v2.4.0")
+    for rejected in ("v2.4.0-rc1", "v2.4.0rc1", "2.4.0", "v2.4", "latest", "vX.Y.Z"):
+        assert not accept.search(rejected), f"the guard admits {rejected!r}"
+
+
+def test_tag_guard_runs_before_the_metadata_step():
     """`inputs.tag` lands in a YAML block scalar, where a newline in the
     dispatch input would inject an extra `type=raw` row (#211 review)."""
     text = PUBLISH_WORKFLOW.read_text(encoding="utf-8")
-    guard = re.search(
-        r"if: github\.event_name == 'workflow_dispatch' && inputs\.tag != ''\n"
-        r"\s+env:\n\s+TAG: \$\{\{ inputs\.tag \}\}\n"
-        r"\s+run: \|\n(?:.*\n)*?.*\[\[ \"\$TAG\" =~ \^\[A-Za-z0-9\]",
-        text,
+    # `uses:`, not a bare mention: prose above the guard names the step too.
+    assert _tag_guard().start() < text.index("uses: docker/metadata-action"), (
+        "the tag is validated after it has already been interpolated into "
+        "the metadata step"
     )
-    assert guard, "no step validates the dispatch tag override"
-    metadata = text.index("docker/metadata-action")
-    assert guard.start() < metadata, (
-        "the dispatch tag is validated after it has already been "
-        "interpolated into the metadata step"
+
+
+@pytest.mark.parametrize(("label", "_ctx", "expected"), _RUNS, ids=[r[0] for r in _RUNS])
+def test_tag_guard_checks_the_tag_the_run_publishes(label, _ctx, expected):
+    """Validating some *other* string than the one that gets published would
+    leave the publish path unguarded."""
+    guarded = _gha_eval(_tag_guard().group("expr"), _run_ctx(label))
+    assert guarded == expected, (
+        f"{label}: the guard validates {guarded!r}, but the run publishes "
+        f"{expected!r}"
     )
 
 

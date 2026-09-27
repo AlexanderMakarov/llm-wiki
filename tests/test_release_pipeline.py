@@ -167,6 +167,66 @@ def _job_block(release_yml: str, job: str) -> str:
     return "\n".join(lines[start:])
 
 
+# ─── Release tag format guard (#211) ──────────────────────────────────
+#
+# `on.push.tags` is a glob, not a regex: `v*.*.*` still admits `v2.4.0-rc1`.
+# Without a guard such a tag builds, publishes and cuts a GitHub Release, and
+# only fails at the smoke job, where `pip install <dist>==2.4.0-rc1` finds
+# nothing. These tests pin the fail-fast step that rejects it up front.
+
+
+def _tag_guard(release_yml: str) -> re.Match[str]:
+    """Return the match for the step that enforces the release tag format."""
+    guard = re.search(
+        r"- name: Validate the release tag\n"
+        r"\s+env:\n\s+TAG: (?P<expr>\$\{\{.+\}\})\n"
+        r"\s+run: \|\n(?:.*\n)*?.*\[\[ \"\$TAG\" =~ (?P<regex>\S+) \]\]",
+        release_yml,
+    )
+    assert guard, "no step in release.yml validates the release tag format"
+    return guard
+
+
+def test_tag_guard_enforces_the_single_release_tag_format(release_yml: str):
+    # Same regex as docker-publish.yml's guard, so both workflows accept
+    # exactly the same tags. Compiled and exercised rather than compared as
+    # prose: an equivalent-looking rewrite still has to reject these.
+    pattern = _tag_guard(release_yml).group("regex")
+    assert pattern == r"^v[0-9]+\.[0-9]+\.[0-9]+$", (
+        f"the guard regex is {pattern!r}, not the single vMAJOR.MINOR.PATCH form"
+    )
+    accept = re.compile(pattern)
+    assert accept.search("v2.4.0")
+    for rejected in ("v2.4.0-rc1", "v2.4.0rc1", "2.4.0", "v2.4", "latest", "vX.Y.Z"):
+        assert not accept.search(rejected), f"the guard admits {rejected!r}"
+
+
+def test_tag_guard_validates_the_tag_the_run_publishes(release_yml: str):
+    # This workflow is push-tag-triggered only, so there is one source for
+    # the tag. Guarding some other string would leave the publish unguarded.
+    assert _tag_guard(release_yml).group("expr") == "${{ github.ref_name }}", (
+        "the guard must validate the same `github.ref_name` the smoke job "
+        "strips the `v` from"
+    )
+
+
+def test_tag_guard_runs_before_anything_is_built_or_published(release_yml: str):
+    # Fail-fast means the first step of the job every other job waits on —
+    # a guard downstream of the build still lets a bad tag reach PyPI.
+    build = _job_block(release_yml, "build")
+    assert _tag_guard(release_yml).group(0) in build, (
+        "the guard must live in the `build` job, which every other job needs"
+    )
+    assert build.index("Validate the release tag") < build.index("python -m build"), (
+        "the tag is validated only after the distribution has been built"
+    )
+    for job in ("publish", "sign", "smoke", "github-release"):
+        needs = re.search(r"^    needs:\s*(.+)$", _job_block(release_yml, job), re.MULTILINE)
+        assert needs is not None and "build" in needs.group(1), (
+            f"`{job}` does not wait on `build`, so the tag guard cannot gate it"
+        )
+
+
 # ─── pyproject.toml must be publishable ───────────────────────────────
 
 
@@ -177,15 +237,17 @@ def test_pyproject_has_required_metadata(pyproject: str):
         assert field in pyproject, f"pyproject.toml missing {field!r}"
 
 
-def test_pyproject_version_is_pep440_compatible(pyproject: str):
+def test_pyproject_version_is_major_minor_patch(pyproject: str):
     m = re.search(r'^version\s*=\s*"([^"]+)"', pyproject, re.MULTILINE)
     assert m is not None
     v = m.group(1)
-    # PEP 440: digits-only release, plus optional pre-release tag
-    # (aN/bN/rcN), plus optional post/dev. No hyphens before rc.
-    assert re.fullmatch(r"\d+(\.\d+)*((a|b|rc)\d+)?(\.post\d+)?(\.dev\d+)?", v), (
-        f"pyproject.toml version {v!r} isn't PEP 440 — PyPI will reject "
-        "the upload. Use e.g. '1.1.0rc2' not 'v1.1.0-rc2'."
+    # `vMAJOR.MINOR.PATCH` is the only release tag the workflows accept, and
+    # the smoke jobs compare the packaged version against the tag minus its
+    # `v`. A PEP 440 pre/post/dev spelling here is valid for PyPI but can
+    # never match a tag, so it would only ever red a release.
+    assert re.fullmatch(r"\d+\.\d+\.\d+", v), (
+        f"pyproject.toml version {v!r} isn't MAJOR.MINOR.PATCH — it can never "
+        "match a vMAJOR.MINOR.PATCH release tag."
     )
 
 

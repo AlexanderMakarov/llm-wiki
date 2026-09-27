@@ -4,7 +4,7 @@
 >
 > **How to run the cut:** load the cross-agent skill [`.claude/skills/release/SKILL.md`](../../.claude/skills/release/SKILL.md) (Claude Code / Cursor: `/release <version>`). The wrapper lives at `.claude/commands/release.md`, which both harnesses load. This document is the canonical checklist order; the skill is the operational walkthrough and must stay aligned with it.
 
-llmwiki uses [semantic versioning](https://semver.org/). Past `1.0` / `2.x`, a normal `vX.Y.Z` tag is a full GitHub Release. Tags whose names contain `rc`, `alpha`, `beta`, or `dev` are marked prerelease by automation.
+llmwiki uses [semantic versioning](https://semver.org/). **`vMAJOR.MINOR.PATCH` (e.g. `v2.4.0`) is the only supported release tag format** — there are no prerelease tags, and both [`release.yml`](../../.github/workflows/release.yml) and [`docker-publish.yml`](../../.github/workflows/docker-publish.yml) fail fast on a tag that does not match. Every tag is a full GitHub Release.
 
 Minor bumps (`X.Y.0`) ship when a coherent feature batch lands. Patch bumps (`X.Y.Z`) ship when a fix cannot wait for the next minor.
 
@@ -77,8 +77,6 @@ Pushing the `v*.*.*` tag triggers [`.github/workflows/release.yml`](../../.githu
 4. Publishes to PyPI via OIDC **only when** repository variable `PYPI_PUBLISHING` is `true` (otherwise the publish job is skipped; the GitHub Release still ships)
 5. Runs a post-publish `smoke` job that installs `llm-wiki-plus==X.Y.Z` from real PyPI and asserts `llmwiki --version` matches the tag — it also fails the run outright when `publish` was skipped, so a gate-off tag can't pass quietly
 
-Prerelease: the workflow passes `--prerelease` only when the tag name matches `rc` / `alpha` / `beta` / `dev`. Stable tags are full releases.
-
 - [ ] Confirm the workflow: `gh run list --workflow=release.yml --limit=3` (watch the run for this tag)
 - [ ] Open the GitHub Release for this repo and confirm title, notes, and assets
 - [ ] Confirm the `smoke` job went green — it is the check that the tag actually reached users as `pip install llm-wiki-plus==X.Y.Z`. `PYPI_PUBLISHING` is enabled on this repo, so a **skipped** `publish` is no longer normal: it means releases were turned off and the tag shipped nothing to PyPI, which `smoke` now fails on rather than skipping alongside it (see `docs/deploy/pypi-publishing.md`)
@@ -88,7 +86,6 @@ Prerelease: the workflow passes `--prerelease` only when the tag name matches `r
 
 ```bash
 gh release create vX.Y.Z --title "vX.Y.Z" --generate-notes
-# add --prerelease only for rc/alpha/beta/dev tags
 ```
 
 ## Verify Pages deploy (expected, not optional)
@@ -112,7 +109,7 @@ There is no separate scheduled freshness workflow — the post-deploy assert on 
 If a release is broken, do not delete the tag. Do:
 
 1. Cut a patch release (`vX.Y.Z+1`) that reverts the bad change
-2. Mark the broken release superseded in the GitHub Release notes (use Pre-release only when appropriate)
+2. Mark the broken release superseded in the GitHub Release notes
 3. Never delete tags — downstream packages may pin to them
 4. Never force-push `main` to rewrite the cut
 
@@ -124,5 +121,5 @@ If a release is broken, do not delete the tag. Do:
 | Shipping without regenerating demo sessions | Default is refresh; skip only on an explicit human opt-out (#225). Pages version assert does not rewrite session dates |
 | Emptying Unreleased | Keep shipping bullets under the new version section; rely on `shipping_section_text` scanning versioned sections |
 | Double-creating the GitHub Release | Trust `release.yml` after the tag push |
-| Always marking prerelease | Only for rc/alpha/beta/dev tags — not every release past 1.0 |
+| Inventing a tag shape | `vMAJOR.MINOR.PATCH` only — a suffixed tag is rejected by `release.yml` and `docker-publish.yml` |
 | Pushing without approval | Human gate is mandatory; no unattended publish |

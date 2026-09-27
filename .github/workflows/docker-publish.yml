@@ -3,7 +3,7 @@ name: Docker — publish to GHCR
 # Builds a multi-arch image (amd64 + arm64) on every tag push and
 # publishes to GitHub Container Registry as
 #   ghcr.io/<owner>/llm-wiki:<tag>
-#   ghcr.io/<owner>/llm-wiki:latest    (only on non-prerelease tags)
+#   ghcr.io/<owner>/llm-wiki:latest    (tag pushes only)
 #
 # Image namespace follows `github.repository` so forks publish under
 # their own GHCR namespace (#69). See docs/deploy/docker.md.
@@ -14,8 +14,8 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Override tag (useful for rebuilds without a new version)"
-        required: false
+        description: "Release tag to rebuild, as vMAJOR.MINOR.PATCH (e.g. v2.3.0)"
+        required: true
         type: string
 
 permissions:
@@ -29,18 +29,20 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # `inputs.tag` is interpolated into the metadata step's `tags:` block
-      # scalar, where a newline would inject a second `type=raw` row (e.g. a
-      # stray `type=raw,value=latest` moving `latest` onto an old rebuild).
-      # Reject anything that is not a plain Docker tag before we get there.
-      - name: Validate the dispatch tag override
-        if: github.event_name == 'workflow_dispatch' && inputs.tag != ''
+      # `vMAJOR.MINOR.PATCH` is the only release tag this project cuts, and
+      # this step is the enforcement for both events: `on.push.tags` is a glob,
+      # not a regex, so `v*.*.*` still admits `v2.4.0-rc1`. Run it before
+      # `docker/metadata-action`, because `inputs.tag` is interpolated into
+      # that step's `tags:` block scalar, where a newline would inject a second
+      # `type=raw` row (e.g. a stray `type=raw,value=latest` moving `latest`
+      # onto an old rebuild).
+      - name: Validate the release tag
         env:
-          TAG: ${{ inputs.tag }}
+          TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
         run: |
           set -euo pipefail
-          [[ "$TAG" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$ ]] || {
-            echo "::error::'$TAG' is not a valid Docker tag."; exit 1; }
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+            echo "::error::'$TAG' is not a release tag; expected vMAJOR.MINOR.PATCH."; exit 1; }
 
       - name: Set up QEMU (for arm64 emulation on amd64 runner)
         uses: docker/setup-qemu-action@v4
@@ -63,15 +65,15 @@ jobs:
           # Dispatch tagging (#211): a `workflow_dispatch` ref is a *branch*, so
           # the tag rows below never fire. Without the `type=raw` override row
           # a dispatch publishes nothing the smoke job could pull back.
-          #   dispatch + tag input -> that tag only (never clobbers `latest`)
-          #   dispatch, no input   -> `latest` (a rebuild of latest)
-          #   tag push             -> unchanged
+          #   dispatch -> the requested tag only; rebuilding an old version
+          #               must not move `latest`
+          #   tag push -> that tag, its semver aliases, and `latest`
           tags: |
             type=ref,event=tag
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=${{ inputs.tag }},enable=${{ github.event_name == 'workflow_dispatch' && inputs.tag != '' }}
-            type=raw,value=latest,enable=${{ (github.event_name == 'workflow_dispatch' && inputs.tag == '') || (github.event_name != 'workflow_dispatch' && !contains(github.ref, 'rc') && !contains(github.ref, 'alpha') && !contains(github.ref, 'beta') && !contains(github.ref, 'dev')) }}
+            type=raw,value=${{ inputs.tag }},enable=${{ github.event_name == 'workflow_dispatch' }}
+            type=raw,value=latest,enable=${{ github.event_name != 'workflow_dispatch' }}
 
       - name: Build + push
         id: build
@@ -106,10 +108,9 @@ jobs:
 
       - name: Pull the published tag and run the CLI through it
         env:
-          # Must resolve to a tag `build-and-push` actually published:
-          # the dispatch override, else `latest` on a tag-less dispatch,
-          # else the pushed git tag.
-          TAG: ${{ inputs.tag || (github.event_name == 'workflow_dispatch' && 'latest' || github.ref_name) }}
+          # Must resolve to a tag `build-and-push` actually published: the
+          # required dispatch input, else the pushed git tag.
+          TAG: ${{ inputs.tag || github.ref_name }}
         run: |
           set -euo pipefail
           image="ghcr.io/${GITHUB_REPOSITORY,,}:${TAG}"
@@ -133,22 +134,11 @@ jobs:
           # ENTRYPOINT is `llmwiki`, and `version` prints exactly
           # "llmwiki <version>". Compare the whole line: a substring test
           # would let "1.2" pass against "llmwiki 1.20.0".
+          # The guard step above admits only `vMAJOR.MINOR.PATCH`, so
+          # `$expected` is always a full version the image can be held to.
           actual="$(docker run --rm "$image" version)"
           echo "Image reported: $actual"
-          # Anchored: a prerelease tag (`v2.4.0-rc1`) carries a tag spelling
-          # that PEP 440 normalises differently in the package (`2.4.0rc1`),
-          # so it belongs in the loose branch, not the exact-match one.
-          if [[ "$expected" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            if [ "$actual" != "llmwiki $expected" ]; then
-              echo "::error::Published image reported '$actual', expected exactly 'llmwiki $expected'."
-              exit 1
-            fi
-          else
-            # `latest`, a `{{major}}.{{minor}}` alias or an arbitrary rebuild
-            # tag carries no full version to compare against, so assert only
-            # that the CLI ran and named itself with a version.
-            if [[ ! "$actual" =~ ^llmwiki\ [0-9]+\.[0-9]+ ]]; then
-              echo "::error::Published image reported '$actual', expected 'llmwiki <version>'."
-              exit 1
-            fi
+          if [ "$actual" != "llmwiki $expected" ]; then
+            echo "::error::Published image reported '$actual', expected exactly 'llmwiki $expected'."
+            exit 1
           fi

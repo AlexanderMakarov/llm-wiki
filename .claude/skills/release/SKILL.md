@@ -6,7 +6,7 @@ description: Maintainer skill for cutting a tagged llmwiki release. Use when the
 
 # Release — scripted tagged cut
 
-Cut a deliberate `vX.Y.Z` release for this repository. Available wherever `.claude/skills/release` is installed (Cursor and Claude Code read that tree; Codex and peers via skill install that mirrors it).
+Cut a deliberate `vX.Y.Z` release for this repository. `vMAJOR.MINOR.PATCH` is the only supported tag format; the release and GHCR publish workflows reject anything else. Available wherever `.claude/skills/release` is installed (Cursor and Claude Code read that tree; Codex and peers via skill install that mirrors it).
 
 **Canonical checklist order** lives in `docs/maintainers/RELEASE_PROCESS.md`. Load that doc first; this skill is the operational walkthrough and must not contradict it. Pass `$ARGUMENTS` (or the version the human confirms) as `X.Y.Z` without a leading `v` in file bumps; tags use `vX.Y.Z`.
 
@@ -98,7 +98,7 @@ Push **only** after explicit approval in the session. Direct push of the release
 
 1. Watch the tag workflow: `gh run list --workflow=release.yml --limit 3` (or `gh run watch` on the run for `vX.Y.Z`). `.github/workflows/release.yml` builds artifacts, signs with Sigstore, creates/updates the GitHub Release, and publishes to PyPI only when `vars.PYPI_PUBLISHING == 'true'`.
 2. Report the public GitHub Release URL for this repo (or failure logs). Do **not** run `gh release create` as the happy path — automation owns that. Manual `gh release create` is fallback only if the workflow is broken.
-3. Prerelease flag is automatic for tags whose name matches `rc` / `alpha` / `beta` / `dev`; stable `vX.Y.Z` tags are full releases.
+3. Every release is a full GitHub Release. `vMAJOR.MINOR.PATCH` is the only tag shape the automation accepts — there are no prerelease tags.
 4. Watch CI on the release commit SHA (`gh pr checks` is N/A for a direct `main` push — use `gh run list --branch main` / the commit’s Actions tab).
 5. Note when PyPI was skipped because publishing is not enabled.
 

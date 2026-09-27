@@ -23,7 +23,7 @@ AC coverage matrix (FR<requirement>-AC<n> from functional-spec.md):
     FR3-AC4 → test_skill_is_scripted_steps_not_freeform
     FR3-AC5 → test_no_release_shell_scripts
     FR4-AC1 → test_default_branch_is_main, test_process_doc_mentions_main
-    FR4-AC2 → test_no_always_prerelease, test_prerelease_only_for_rc_alpha_beta_dev
+    FR4-AC2 → test_no_always_prerelease, test_single_release_tag_format_is_documented
     FR4-AC3 → test_claude_wrapper_is_thin
     FR4-AC4 → test_maintainer_readme_mentions_skill, test_slash_ref_mentions_release
     FR4-AC5 → test_changelog_unreleased_mentions_release_skill
@@ -176,19 +176,25 @@ def test_no_always_prerelease():
             )
 
 
-def test_prerelease_only_for_rc_alpha_beta_dev():
-    """FR4-AC2: skill/process doc must clarify prerelease is only for rc/alpha/beta/dev tags."""
+def test_single_release_tag_format_is_documented():
+    """FR4-AC2: the docs must name `vMAJOR.MINOR.PATCH` as the only tag format.
+
+    `release.yml` and `docker-publish.yml` reject anything else, so a doc that
+    still offers an rc/alpha/beta/dev tag sends a maintainer into a red run.
+    """
     # @regression
     combined = (
         SKILL_FILE.read_text(encoding="utf-8")
         + RELEASE_PROCESS.read_text(encoding="utf-8")
     )
-    # At least one of these qualifier words must appear near 'prerelease'
-    qualifiers = ["rc", "alpha", "beta", "dev"]
-    for q in qualifiers:
-        assert q in combined.lower(), (
-            f"Expected qualifier {q!r} (prerelease condition) in skill or process doc"
-        )
+    assert "vMAJOR.MINOR.PATCH" in combined, (
+        "neither the skill nor the process doc states the single supported "
+        "release tag format"
+    )
+    assert "--prerelease" not in combined, (
+        "the release docs still hand the maintainer a `--prerelease` flag; "
+        "the workflow no longer passes one"
+    )
 
 
 # ─── Slice 3 smoke: spec boundary — no implement-feature in skill body ────────

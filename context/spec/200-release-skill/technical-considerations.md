@@ -46,7 +46,7 @@ Keep `release` in `tests/test_slash_cli_parity.py` governance / `NON_WRAPPER_SLA
 
 Update in the same PR (current tense):
 
-- `docs/maintainers/RELEASE_PROCESS.md` — `main` not `master`; tag push triggers `.github/workflows/release.yml` (GitHub Release + Sigstore; PyPI if enabled); prerelease only for tags matching rc/alpha/beta/dev; drop “always `--prerelease` until 1.0” as the default path now that we are past 1.0/2.x; human approval before push; pitfalls appendix (root `wiki/`, changelog helper).
+- `docs/maintainers/RELEASE_PROCESS.md` — `main` not `master`; tag push triggers `.github/workflows/release.yml` (GitHub Release + Sigstore; PyPI if enabled); `vMAJOR.MINOR.PATCH` is the only accepted tag shape and no release is ever marked prerelease — `release.yml` and `docker-publish.yml` each validate the tag against `^v[0-9]+\.[0-9]+\.[0-9]+$` and fail before building or publishing anything else; human approval before push; pitfalls appendix (root `wiki/`, changelog helper).
 - `docs/maintainers/README.md` — `/release` loads the skill.
 - `docs/reference/slash-commands.md` — `/release` blurb matches skill (no “always invent a second create”).
 - `CHANGELOG.md` Unreleased — Added/Changed for the skill + process doc fix.
@@ -82,7 +82,7 @@ No new installer path. Existing `llmwiki` skill installer already mirrors `.clau
 ## 4. Testing Strategy
 
 - **Docs / packaging:** extend or add a small test that `.claude/skills/release/SKILL.md` exists and frontmatter has `name: release`; keep slash parity (`release` still under `.claude/commands/`).
-- **Content smoke:** assert skill or `RELEASE_PROCESS.md` mentions `main` and does **not** instruct `git push origin master` as the happy path; assert no “always `--prerelease`” for every release after 1.0 (or equivalent stale phrase removed).
+- **Content smoke:** assert skill or `RELEASE_PROCESS.md` mentions `main` and does **not** instruct `git push origin master` as the happy path; assert the docs name `vMAJOR.MINOR.PATCH` as the single supported tag format and hand the maintainer no `--prerelease` flag at all, since no release is ever a prerelease.
 - **Manual:** dry-run reading the skill against the v2.1.0 checklist in review (no second live tag in this PR).
 - No E2E that pushes tags.
 
