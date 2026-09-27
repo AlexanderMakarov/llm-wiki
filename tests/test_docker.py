@@ -176,6 +176,13 @@ def test_docker_docs_cover_build_mode():
     assert "docker compose build" in text
 
 
+def test_docker_docs_name_the_image_compose_pulls():
+    """A reader following the guide must not pull a different image."""
+    image = re.search(r"^\s*image:\s*(\S+?)(?::\S+)?$", COMPOSE.read_text(encoding="utf-8"), re.MULTILINE)
+    assert image, "docker-compose.yml declares no image:"
+    assert image.group(1) in DOCS.read_text(encoding="utf-8")
+
+
 def test_docker_docs_list_image_details():
     text = DOCS.read_text(encoding="utf-8")
     assert "Image details" in text
