@@ -222,7 +222,7 @@ def test_user_kit_ships_in_the_package_not_the_plugin_manifest() -> None:
     assert (KIT_COMMANDS / "wiki-query.md").is_file()
     assert not (KIT_COMMANDS / "wiki-serve.md").exists()
     assert (KIT_SKILLS / "llmwiki-sync" / "SKILL.md").is_file()
-    assert (KIT_SKILLS / "wiki-all" / "SKILL.md").is_file()
+    assert (KIT_SKILLS / "llmwiki-all" / "SKILL.md").is_file()
     assert not (KIT_SKILLS / "docs-that-work").exists()
     assert not (REPO_ROOT / ".claude-plugin").exists()
     assert (REPO_ROOT / ".claude" / "commands" / "fix-bug.md").is_file()

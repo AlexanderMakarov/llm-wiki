@@ -65,7 +65,7 @@ from llmwiki.vault_settings import (
     vault_settings_path,
 )
 
-# Canonical stage order for ``llmwiki all`` / the wiki-all agent skill (#170).
+# Canonical stage order for ``llmwiki all`` / the llmwiki-all agent skill (#170).
 # Opt-out flags may skip a stage; init is not part of this pipeline.
 PIPELINE_STAGES = ("sync", "synth", "build", "graph", "lint")
 

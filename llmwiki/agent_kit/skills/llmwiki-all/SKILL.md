@@ -1,9 +1,9 @@
 ---
-name: wiki-all
-description: Run the full llmwiki pipeline end-to-end — sync → synth → build → graph → lint. Use when the user says "run everything", "full pipeline", "wiki-all", or wants a one-shot CI-ready site rebuild.
+name: llmwiki-all
+description: Run the full llmwiki pipeline end-to-end — sync → synth → build → graph → lint. Use when the user says "run everything", "full pipeline", "run the whole wiki pipeline", "llmwiki all", or "wiki-all", runs the `/wiki-all` slash command, or wants a one-shot CI-ready site rebuild.
 ---
 
-# wiki-all
+# llmwiki-all
 
 ## When to use
 
