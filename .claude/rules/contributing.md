@@ -32,6 +32,7 @@ You are changing **this repository's own code or docs**, not a user's vault. [`C
 5. **No real session data and no personal machine details.** Fixtures are synthetic or heavily redacted. Absolute home paths, OS usernames, hostnames, and vault roots stay out of code, tests, commits, PR bodies, and the CHANGELOG — use placeholders like `/home/USER/…`, `<vault>`, `<user>`.
 6. **Verify before fixing an old issue.** Reproduce it on the current default branch first; if it no longer reproduces, close it with the resolving commit instead of shipping a speculative fix.
 7. **Never fail silently in the browser.** Runtime failures in the generated site must surface on the page via `window.__llmwikiReportError`, not just in the console. See CONTRIBUTING's *Static-site error handling* section.
+8. **Check for existing test coverage before adding a test.** Search `tests/` and extend what is there rather than adding beside it. A test for a new rule must fail when that rule is removed — if it still passes, it is exercising a different code path — and a test that can pass over an empty input covers nothing. See CONTRIBUTING's *Testing* section.
 
 ## Markdown formatting
 

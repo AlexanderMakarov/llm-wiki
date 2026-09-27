@@ -14,6 +14,7 @@ Pay special attention to:
 3. New CLI subcommands / config keys / lint rules → matching row in `docs/reference/*.md` (CI enforces CLI coverage)
 4. No new runtime deps — stdlib plus `markdown` only
 5. No real session data; no personal vault paths / usernames in PRs or commits
+6. Before adding a test, check `tests/` for existing coverage — extend it rather than duplicating; a test for a new rule must fail when that rule is removed
 
 ## Markdown formatting
 

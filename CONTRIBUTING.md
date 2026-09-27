@@ -311,6 +311,23 @@ Every adapter must ship with:
 - A snapshot test
 - A graceful-degradation test (passes an unknown record type)
 
+### Before adding a test, find out whether it already exists
+
+A new test is only worth its maintenance cost if it covers something nothing else does. Before writing one for a change — in code, docs, CI config, or anywhere else — search for existing coverage and prefer extending it:
+
+```bash
+grep -rn "<symbol-or-filename>" tests/     # who already exercises this?
+python3 -m pytest tests/ -q -k "<keyword>" # what runs when I touch it?
+```
+
+Three failure modes this catches, all of them observed in this repo:
+
+1. **The duplicate.** Two tests asserting the same contract drift apart, and the weaker one starts passing for the wrong reason. Extend the existing test — a new parametrize case usually beats a new function.
+2. **The test that exercises nothing.** A case can pass entirely through some *other* code path and never reach the line you added. A test for a new rule must fail when that rule is removed — check by removing it. One rule in this repo shipped unreachable (an earlier branch already matched every input it could) and its test passed the whole time, because a different rule downstream returned the same answer.
+3. **The test that asserts over an empty input.** Fixtures that skip when their input is missing, or assertions that iterate a list the test never populated, report green without ever running the code. If a test can pass on an empty corpus, it is not covering the corpus.
+
+When existing coverage is close but wrong-shaped, change it rather than adding beside it, and say so in the PR body. Deleting a test that no longer describes real behaviour is a legitimate part of a change — leaving it to rot next to its replacement is not.
+
 ## Questions?
 
 Open an issue with the `question` label on [AlexanderMakarov/llm-wiki](https://github.com/AlexanderMakarov/llm-wiki/issues).
