@@ -32,7 +32,7 @@ This documentation provides a monitoring strategy for the llmwiki demo site that
 ## Connections
 
 - [[llmwiki]] (project) — the demo site subject to this monitoring strategy
-  - fact: Demo hosted at https://pratiyush.github.io/llm-wiki/
+  - fact: Demo hosted at https://alexandermakarov.github.io/llm-wiki/
   - fact: Requires both HTTP availability and version freshness verification
 
 - [[GitHub Actions]] (tool) — implements scheduled uptime checks and post-deploy verification

@@ -15,7 +15,7 @@ This documentation describes how to run [[llm-wiki]] in Docker containers, elimi
 ## Key Claims
 
 - llm-wiki can run containerized with no local Python, pip, or virtual environment installation required
-- Pre-built images are published to `ghcr.io/pratiyush/llm-wiki:latest` on every release tag
+- Pre-built images are published to `ghcr.io/alexandermakarov/llm-wiki:latest` on every release tag
 - The container runs as a non-root user (UID 1000) to preserve host volume ownership when mounted
 - All output directories (raw/, wiki/, site/) are bind-mounted, so container changes immediately appear on the host
 - The Docker setup provides identical privacy guarantees to the CLI version: no telemetry or external API calls

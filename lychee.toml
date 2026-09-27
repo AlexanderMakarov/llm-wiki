@@ -33,17 +33,17 @@ exclude_path = [
 # endpoints that 403 from GitHub Actions runners.
 exclude = [
   # Release tags may not exist yet
-  "^https://github\\.com/Pratiyush/llm-wiki/releases/tag/v1\\.1",
-  "^https://github\\.com/Pratiyush/llm-wiki/releases/tag/v1\\.2",
+  "^https://github\\.com/AlexanderMakarov/llm-wiki/releases/tag/v1\\.1",
+  "^https://github\\.com/AlexanderMakarov/llm-wiki/releases/tag/v1\\.2",
   # Security advisory template (only resolves when filed)
-  "^https://github\\.com/Pratiyush/llm-wiki/security/advisories/new",
+  "^https://github\\.com/AlexanderMakarov/llm-wiki/security/advisories/new",
   # PyPI (pre-first-release)
   "^https://pypi\\.org/project/llmwiki/",
   # Homebrew tap (pre-creation)
-  "^https://github\\.com/Pratiyush/homebrew-llmwiki",
+  "^https://github\\.com/AlexanderMakarov/homebrew-llmwiki",
   # Repo settings URLs (auth-gated, only visible to admins — CI runner
   # can't authenticate so every settings link 404s)
-  "^https://github\\.com/Pratiyush/llm-wiki/settings",
+  "^https://github\\.com/AlexanderMakarov/llm-wiki/settings",
   # Localhost references in docs
   "^http://127\\.0\\.0\\.1",
   "^http://localhost",

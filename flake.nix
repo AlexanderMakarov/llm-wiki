@@ -41,7 +41,7 @@
 
           meta = with pkgs.lib; {
             description = "LLM Wiki — Karpathy-style knowledge base from your AI coding sessions";
-            homepage = "https://github.com/Pratiyush/llm-wiki";
+            homepage = "https://github.com/AlexanderMakarov/llm-wiki";
             license = licenses.mit;
             maintainers = [ ];
           };

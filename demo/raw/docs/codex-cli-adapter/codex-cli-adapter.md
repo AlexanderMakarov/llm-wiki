@@ -14,7 +14,7 @@ content_sha256: 95df671edec83f1679316d672d5c7736d8bd1bebb377e852aeaf4d794210d1a3
 **Status:** 🚧 **v0.1 stub — not yet production-ready**
 **Module:** `llmwiki.adapters.codex_cli`
 **Source:** [`llmwiki/adapters/codex_cli.py`](../../llmwiki/adapters/codex_cli.py)
-**Tracking issue:** [LMW-13 · Codex CLI adapter (stub)](https://github.com/Pratiyush/llm-wiki/issues) (to be filled in when the v0.2 work starts)
+**Tracking issue:** [LMW-13 · Codex CLI adapter (stub)](https://github.com/AlexanderMakarov/llm-wiki/issues) (to be filled in when the v0.2 work starts)
 
 ## What "stub" means
 
@@ -88,5 +88,5 @@ Redaction runs the same way for Codex sessions as for Claude Code — username, 
 
 ## Tracking
 
-- [Epic: v0.2.0 — Extensions](https://github.com/Pratiyush/llm-wiki/issues/2) — this adapter's graduation
+- [Epic: v0.2.0 — Extensions](https://github.com/AlexanderMakarov/llm-wiki/issues/2) — this adapter's graduation
 - Pull requests welcome. See [CONTRIBUTING.md](../../CONTRIBUTING.md) §"Adding a new adapter" for the full contract.

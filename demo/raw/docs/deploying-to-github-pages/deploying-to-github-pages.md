@@ -13,13 +13,13 @@ content_sha256: e276a2df37d7c3ac1555f8edc0b47d964d16ab4f7047b37f292901f161098084
 
 Host your llmwiki site on GitHub Pages for free, with automatic builds on every push to master.
 
-Live example (this fork): [alexandermakarov.github.io/llm-wiki](https://alexandermakarov.github.io/llm-wiki/) · upstream: [pratiyush.github.io/llm-wiki](https://pratiyush.github.io/llm-wiki/)
+Live example (this fork): [alexandermakarov.github.io/llm-wiki](https://alexandermakarov.github.io/llm-wiki/) · upstream: [alexandermakarov.github.io/llm-wiki](https://alexandermakarov.github.io/llm-wiki/)
 
 > **This fork (#69):** `pages.yml` is `workflow_dispatch`-only by default (restore `push:` if you want every merge to republish). The published site is built from the committed `demo/` vault: `demo/raw/sessions/` (demo sessions), `demo/raw/docs/` (product docs), `demo/wiki/` (pre-synthesized pages, committed so CI stays free/deterministic) and `demo/usage/` (MCP telemetry fixtures for Analytics).
 
 ## Prerequisites
 
-- A GitHub repository (fork or clone of [Pratiyush/llm-wiki](https://github.com/Pratiyush/llm-wiki))
+- A GitHub repository (fork or clone of [AlexanderMakarov/llm-wiki](https://github.com/AlexanderMakarov/llm-wiki))
 - Python 3.12+ (only needed locally for `llmwiki sync`)
 - Some session data already synced (or the demo sessions under `demo/raw/sessions/`)
 
@@ -30,7 +30,7 @@ Live example (this fork): [alexandermakarov.github.io/llm-wiki](https://alexande
 git clone https://github.com/<you>/llm-wiki.git
 
 # Option B: clone directly
-git clone https://github.com/Pratiyush/llm-wiki.git
+git clone https://github.com/AlexanderMakarov/llm-wiki.git
 ```
 
 ## Step 2: Enable GitHub Pages

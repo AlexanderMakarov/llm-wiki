@@ -44,7 +44,7 @@ macOS and most Linux distros already ship both. Windows: install Python from
 ## Step 2 — Clone the repo
 
 ```bash
-git clone https://github.com/Pratiyush/llm-wiki.git
+git clone https://github.com/AlexanderMakarov/llm-wiki.git
 cd llm-wiki
 ```
 
@@ -79,17 +79,17 @@ llmwiki <version>
 
 ## Step 4 — (Optional) Install via PyPI instead
 
-Once [#246](https://github.com/Pratiyush/llm-wiki/issues/246) is set up:
+Once [#246](https://github.com/AlexanderMakarov/llm-wiki/issues/246) is set up:
 
 ```bash
 pip install llm-notebook
 llmwiki --version
 ```
 
-Or via Homebrew, once [#247](https://github.com/Pratiyush/llm-wiki/issues/247) is set up:
+Or via Homebrew, once [#247](https://github.com/AlexanderMakarov/llm-wiki/issues/247) is set up:
 
 ```bash
-brew install Pratiyush/tap/llmwiki
+brew install AlexanderMakarov/tap/llmwiki
 ```
 
 Until then the clone-and-run path above is authoritative.
@@ -99,7 +99,7 @@ Until then the clone-and-run path above is authoritative.
 Zero-touch, no Python on your machine:
 
 ```bash
-docker run -p 8765:8765 -v $PWD/wiki:/wiki ghcr.io/pratiyush/llm-wiki:latest
+docker run -p 8765:8765 -v $PWD/wiki:/wiki ghcr.io/alexandermakarov/llm-wiki:latest
 ```
 
 See [deploy/docker.md](../deploy/docker.md) for the full Compose setup.

@@ -11,7 +11,6 @@ requires-python = ">=3.12"
 license = { text = "MIT" }
 authors = [
     { name = "Alexander Makarov", email = "4ellendger@gmail.com" },
-    { name = "Pratiyush", email = "pratiyush1@gmail.com" },
 ]
 keywords = [
     "llm-wiki",

@@ -152,4 +152,4 @@ manually.
 - **[Configuration](../configuration.md)** — every tuning knob
 - **[Privacy](../privacy.md)** — redaction rules + `.llmwikiignore`
 
-If you hit a snag, check [GitHub Issues](https://github.com/Pratiyush/llm-wiki/issues) or file a new one.
+If you hit a snag, check [GitHub Issues](https://github.com/AlexanderMakarov/llm-wiki/issues) or file a new one.

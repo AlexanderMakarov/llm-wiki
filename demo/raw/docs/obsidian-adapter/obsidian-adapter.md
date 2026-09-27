@@ -112,7 +112,7 @@ Obsidian's `[[wikilink]]` syntax is native to the llmwiki format, so your existi
 - Aliased wikilinks (`[[target|alias]]`) render with the alias.
 - Embed wikilinks (`![[attachment.png]]`) are treated as images and will 404 in the built site unless you also copy the attachments.
 
-**Attachment handling is not yet implemented.** See [Epic: v0.2.0 — Extensions](https://github.com/Pratiyush/llm-wiki/issues/2).
+**Attachment handling is not yet implemented.** See [Epic: v0.2.0 — Extensions](https://github.com/AlexanderMakarov/llm-wiki/issues/2).
 
 ## Bidirectional sync (v0.2 roadmap)
 
@@ -120,7 +120,7 @@ Currently the Obsidian adapter is **input-only**: it reads your vault into llmwi
 
 In v0.2 we plan to add **output mode**: write the compiled wiki (`wiki/sources/`, `wiki/entities/`, `wiki/concepts/`) back into your vault so you can browse llmwiki's output alongside your other notes, with Obsidian's graph view, backlinks panel, and search.
 
-Tracking: [LMW-107 Obsidian output (bidirectional sync)](https://github.com/Pratiyush/llm-wiki/issues).
+Tracking: [LMW-107 Obsidian output (bidirectional sync)](https://github.com/AlexanderMakarov/llm-wiki/issues).
 
 ## Testing the adapter
 

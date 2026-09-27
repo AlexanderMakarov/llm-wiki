@@ -148,9 +148,9 @@ Ranked by upvotes on open issues:
    ```
 3. **PyPI downloads:** [pepy.tech](https://pepy.tech/project/llmwiki)
    or `pip install pypistats && pypistats overall llmwiki --last-month`
-4. **Lighthouse:** run `npx lighthouse https://pratiyush.github.io/llm-wiki/ --output=json`
+4. **Lighthouse:** run `npx lighthouse https://alexandermakarov.github.io/llm-wiki/ --output=json`
    or check the Chrome DevTools Lighthouse tab
-5. **Stars:** `gh api repos/Pratiyush/llm-wiki --jq '.stargazers_count'`
+5. **Stars:** `gh api repos/AlexanderMakarov/llm-wiki --jq '.stargazers_count'`
 
 ## Where to publish
 

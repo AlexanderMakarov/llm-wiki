@@ -22,8 +22,8 @@ pause() { sleep "${1:-1.5}"; }
 
 clear
 echo "╔══════════════════════════════════════════════════════╗"
-echo "║  llm-wiki — Turn AI coding sessions into a wiki     ║"
-echo "║  github.com/Pratiyush/llm-wiki                      ║"
+echo "║  llm-wiki — Turn AI coding sessions into a wiki      ║"
+echo "║  github.com/AlexanderMakarov/llm-wiki                ║"
 echo "╚══════════════════════════════════════════════════════╝"
 pause 2
 
@@ -89,6 +89,6 @@ echo "          Ollama-ready synthesis pipeline."
 pause 2
 
 echo ""
-echo "★ Star the repo: github.com/Pratiyush/llm-wiki"
-echo "★ Live demo: pratiyush.github.io/llm-wiki"
+echo "★ Star the repo: github.com/AlexanderMakarov/llm-wiki"
+echo "★ Live demo: alexandermakarov.github.io/llm-wiki"
 pause 2

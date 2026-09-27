@@ -497,13 +497,13 @@ def test_synthesize_rebuilds_index_md(tmp_path: Path):
     wiki_dir = tmp_path / "wiki"
     wiki_sources = wiki_dir / "sources"
     wiki_sources.mkdir(parents=True)
-    entity = wiki_dir / "entities" / "Pratiyush.md"
+    entity = wiki_dir / "entities" / "Testperson.md"
     entity.parent.mkdir(parents=True)
-    entity.write_text('---\ntitle: "Pratiyush"\n---\n\n# Pratiyush\n', encoding="utf-8")
+    entity.write_text('---\ntitle: "Testperson"\n---\n\n# Testperson\n', encoding="utf-8")
     # Seed an index.md with hand-curated content that must survive.
     (wiki_dir / "index.md").write_text(
         "# Wiki Index\n\n## Overview\n- curated\n\n## Sources\n*(none)*\n"
-        "\n## Entities\n- [Pratiyush](entities/Pratiyush.md) — keep me\n",
+        "\n## Entities\n- [Testperson](entities/Testperson.md) — keep me\n",
         encoding="utf-8",
     )
     log_file = wiki_dir / "log.md"
@@ -518,7 +518,7 @@ def test_synthesize_rebuilds_index_md(tmp_path: Path):
     # Source is listed
     assert "sources/test-proj/2026-04-09-test-synth.md" in idx
     # Hand-curated Entities entry survived, description included (#71)
-    assert "[Pratiyush](entities/Pratiyush.md) — keep me" in idx
+    assert "[Testperson](entities/Testperson.md) — keep me" in idx
     # Overview line survived
     assert "- curated" in idx
 

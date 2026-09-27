@@ -10,13 +10,13 @@ last_updated: 2026-09-08
 ---
 ## Summary
 
-This source documents how to run **llmwiki** in Docker so users avoid a local Python install, pip, or venv. The recommended path is pulling a pre-built image from GitHub Container Registry (`ghcr.io/pratiyush/llm-wiki:latest`) on release tags and driving CLI work through `docker compose run`; an alternative is building from the repo `Dockerfile` for development or unreleased changes. The repo’s `raw/`, `wiki/`, and `site/` directories are bind-mounted so builds and sync output land on the host as plain files, with no long-running service or exposed ports.
+This source documents how to run **llmwiki** in Docker so users avoid a local Python install, pip, or venv. The recommended path is pulling a pre-built image from GitHub Container Registry (`ghcr.io/alexandermakarov/llm-wiki:latest`) on release tags and driving CLI work through `docker compose run`; an alternative is building from the repo `Dockerfile` for development or unreleased changes. The repo’s `raw/`, `wiki/`, and `site/` directories are bind-mounted so builds and sync output land on the host as plain files, with no long-running service or exposed ports.
 
 ## Key Claims
 
 - The published image uses base `python:3.12-slim`, runs as non-root user `app` (UID 1000), and declares runtime dependency on `markdown` only (stdlib plus optional `graphify` extra).
 - Default container entrypoint is `python -m llmwiki` with default CMD `build`; any subcommand (`build`, `sync`, `lint`, `graph`, etc.) can be run via `docker compose run --rm llmwiki <subcommand>`.
-- Official GHCR publishing to `ghcr.io/pratiyush/llm-wiki` is maintainer-only; forks can publish under their own namespace on tag push via the release workflow, or manually with `docker build` / `docker push`.
+- Official GHCR publishing to `ghcr.io/alexandermakarov/llm-wiki` is maintainer-only; forks can publish under their own namespace on tag push via the release workflow, or manually with `docker build` / `docker push`.
 - Container behavior matches CLI privacy: it only reads bind-mounted directories and does not send telemetry or make external API calls.
 - Permission errors on mounted volumes are expected when the host UID differs from 1000; remediation is matching UID in the image or `chown` on `raw/`, `wiki/`, and `site/` to `1000:1000`.
 

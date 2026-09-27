@@ -701,8 +701,8 @@ def most_common_model(records: list[dict[str, Any]]) -> str:
 # - AWS access key IDs: `AKIA*` (20 chars total)
 # - Slack tokens: `xoxb-*`, `xoxp-*`, `xoxa-*`, `xoxr-*`, `xoxs-*`
 #
-# Extended (#484) — added the patterns Pratiyush's developers most
-# commonly paste into Claude sessions ("here's my .env, why isn't
+# Extended (#484) — added the patterns developers most commonly
+# paste into Claude sessions ("here's my .env, why isn't
 # auth working?"). Anything below this comment is one PEM-encoded
 # / one prefix-shaped paste away from being committed to raw/ and
 # served at the public GitHub Pages URL by the pages.yml workflow:

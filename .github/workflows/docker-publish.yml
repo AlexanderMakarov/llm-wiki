@@ -21,7 +21,6 @@ on:
 permissions:
   contents: read
   packages: write   # push to ghcr.io
-  id-token: write   # OIDC token for cosign keyless signing
 
 jobs:
   build-and-push:
@@ -29,6 +28,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+
+      # `inputs.tag` is interpolated into the metadata step's `tags:` block
+      # scalar, where a newline would inject a second `type=raw` row (e.g. a
+      # stray `type=raw,value=latest` moving `latest` onto an old rebuild).
+      # Reject anything that is not a plain Docker tag before we get there.
+      - name: Validate the dispatch tag override
+        if: github.event_name == 'workflow_dispatch' && inputs.tag != ''
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          [[ "$TAG" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$ ]] || {
+            echo "::error::'$TAG' is not a valid Docker tag."; exit 1; }
 
       - name: Set up QEMU (for arm64 emulation on amd64 runner)
         uses: docker/setup-qemu-action@v4
@@ -48,11 +60,18 @@ jobs:
         uses: docker/metadata-action@v6
         with:
           images: ghcr.io/${{ github.repository }}
+          # Dispatch tagging (#211): a `workflow_dispatch` ref is a *branch*, so
+          # the tag rows below never fire. Without the `type=raw` override row
+          # a dispatch publishes nothing the smoke job could pull back.
+          #   dispatch + tag input -> that tag only (never clobbers `latest`)
+          #   dispatch, no input   -> `latest` (a rebuild of latest)
+          #   tag push             -> unchanged
           tags: |
             type=ref,event=tag
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest,enable=${{ !contains(github.ref, 'rc') && !contains(github.ref, 'alpha') && !contains(github.ref, 'beta') && !contains(github.ref, 'dev') }}
+            type=raw,value=${{ inputs.tag }},enable=${{ github.event_name == 'workflow_dispatch' && inputs.tag != '' }}
+            type=raw,value=latest,enable=${{ (github.event_name == 'workflow_dispatch' && inputs.tag == '') || (github.event_name != 'workflow_dispatch' && !contains(github.ref, 'rc') && !contains(github.ref, 'alpha') && !contains(github.ref, 'beta') && !contains(github.ref, 'dev')) }}
 
       - name: Build + push
         id: build
@@ -65,3 +84,71 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  smoke-published-image:
+    name: Smoke-test the published image
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    # Least privilege: this job only reads a package back, so it must not
+    # inherit the workflow-level `packages: write`.
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      # A GHCR package is private until its first manual visibility flip, so
+      # a fork's very first publish is not anonymously pullable.
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull the published tag and run the CLI through it
+        env:
+          # Must resolve to a tag `build-and-push` actually published:
+          # the dispatch override, else `latest` on a tag-less dispatch,
+          # else the pushed git tag.
+          TAG: ${{ inputs.tag || (github.event_name == 'workflow_dispatch' && 'latest' || github.ref_name) }}
+        run: |
+          set -euo pipefail
+          image="ghcr.io/${GITHUB_REPOSITORY,,}:${TAG}"
+          expected="${TAG#v}"
+          echo "Expecting '$image' to report version '$expected'."
+
+          # GHCR can lag a few seconds behind the push, so bound a retry on
+          # the pull only. Anything after this must stay red on failure.
+          for attempt in 1 2 3 4 5; do
+            if docker pull "$image"; then
+              break
+            fi
+            if [ "$attempt" = 5 ]; then
+              echo "::error::Could not pull $image after 5 attempts."
+              exit 1
+            fi
+            echo "Pull failed (attempt $attempt/5); retrying in 15s."
+            sleep 15
+          done
+
+          # ENTRYPOINT is `llmwiki`, and `version` prints exactly
+          # "llmwiki <version>". Compare the whole line: a substring test
+          # would let "1.2" pass against "llmwiki 1.20.0".
+          actual="$(docker run --rm "$image" version)"
+          echo "Image reported: $actual"
+          # Anchored: a prerelease tag (`v2.4.0-rc1`) carries a tag spelling
+          # that PEP 440 normalises differently in the package (`2.4.0rc1`),
+          # so it belongs in the loose branch, not the exact-match one.
+          if [[ "$expected" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            if [ "$actual" != "llmwiki $expected" ]; then
+              echo "::error::Published image reported '$actual', expected exactly 'llmwiki $expected'."
+              exit 1
+            fi
+          else
+            # `latest`, a `{{major}}.{{minor}}` alias or an arbitrary rebuild
+            # tag carries no full version to compare against, so assert only
+            # that the CLI ran and named itself with a version.
+            if [[ ! "$actual" =~ ^llmwiki\ [0-9]+\.[0-9]+ ]]; then
+              echo "::error::Published image reported '$actual', expected 'llmwiki <version>'."
+              exit 1
+            fi
+          fi

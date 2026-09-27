@@ -235,15 +235,16 @@ def _breadcrumb(page: DocsPage) -> str:
     )
 
 
-_DEFAULT_GITHUB_REPO = "Pratiyush/llm-wiki"
+_DEFAULT_GITHUB_REPO = "AlexanderMakarov/llm-wiki"
 
 
 def resolve_github_repo() -> str:
     """Return ``owner/repo`` for GitHub links in the compiled docs.
 
     Order: ``site.github_repo`` in config → ``git remote get-url origin``
-    → upstream default. Forks set ``site.github_repo`` (or rely on origin)
-    so CHANGELOG / edit-on-GitHub / source-code links point at their repo.
+    → :data:`_DEFAULT_GITHUB_REPO`, this repository. Forks set
+    ``site.github_repo`` (or rely on origin) so CHANGELOG /
+    edit-on-GitHub / source-code links point at their repo.
     """
     try:
         site = _load_sessions_config().get("site") or {}
@@ -600,7 +601,7 @@ def _rewrite_one_to_github(href: str) -> str | None:
 
 _SESSION_LOCAL_BASENAMES = {
     "tasks.md", "CHANGELOG.md", "_progress.md",
-    "user_profile.md", "user_pratiyush.md",
+    "user_profile.md",
     "RELEASE-NOTES.md", "notes.md", "TODO.md",
     "plan.md", "roadmap.md",
 }

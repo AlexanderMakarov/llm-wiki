@@ -145,7 +145,7 @@ Local models have lower accuracy. Run `llmwiki lint` after to catch
 the obvious hallucinations (`frontmatter_validity`, `duplicate_detection`).
 
 For higher quality, switch to API mode — the Claude API backend is
-tracked under [#315](https://github.com/Pratiyush/llm-wiki/issues/315).
+tracked under [#315](https://github.com/AlexanderMakarov/llm-wiki/issues/315).
 
 ## Next
 

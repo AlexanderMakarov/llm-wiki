@@ -71,7 +71,7 @@ If any metric exceeds its budget, the offending change is blocked or must be pre
 3. **Binding default is `127.0.0.1`.** LAN or public binding requires an explicit `--host 0.0.0.0`.
 4. **No cloud features.** No auth, no accounts, no sync. Everything is local.
 5. **Config never stores secrets.** The config file only stores regex patterns and truncation limits.
-6. **CI must pass `grep -r "pratiyush1" site/` with zero hits** on any build produced from fixtures.
+6. **CI must pass `grep -rF "$REAL_USERNAME" site/` with zero hits** on any build produced from fixtures.
 
 ### Schema-Versioning rules (cross-cutting)
 
@@ -88,8 +88,8 @@ Same as parent plus one addition: **adapter contribution flow** (Phase 5.25).
 
 ### PR rules (reiterated from parent)
 
-- git config user.name: `Pratiyush`
-- git config user.email: `pratiyush1@gmail.com`
+- git config user.name: `AlexanderMakarov`
+- git config user.email: `4ellendger@gmail.com`
 - No AI co-authored-by lines
 - One PR per concern
 - Small commits (one file group per commit)
@@ -160,7 +160,7 @@ Same as parent. For llmwiki specifically:
 - [ ] Dark mode toggle works and persists
 - [ ] Copy-code button works on a code block
 - [ ] Copy-as-markdown button works on a session page
-- [ ] `grep -r pratiyush1 site/` returns zero hits (privacy check)
+- [ ] `grep -rF "$REAL_USERNAME" site/` returns zero hits (privacy check)
 - [ ] All links in README return HTTP 200
 - [ ] `python3 -m llmwiki --version` prints the version
 - [ ] `python3 -m llmwiki adapters` lists claude_code as available
@@ -173,7 +173,7 @@ Same as parent:
 
 1. `git init`
 2. Atomic commits per file group (README separate from code, tests separate from adapters, etc.)
-3. `gh repo create Pratiyush/llmwiki --public`
+3. `gh repo create AlexanderMakarov/llmwiki --public`
 4. `git push -u origin master`
 5. `git tag v0.1.0 && git push origin v0.1.0`
 6. Create GitHub Release (mark as pre-release for 0.x)

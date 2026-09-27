@@ -153,7 +153,7 @@ def _add_source_backlink(content: str, source_path: Path) -> str:
         rel = source_path
     backlink = (
         f"\n\n---\n\n## llmwiki Source\n\n"
-        f"Generated from `{rel}` by [llmwiki](https://github.com/Pratiyush/llm-wiki).\n"
+        f"Generated from `{rel}` by [llmwiki](https://github.com/AlexanderMakarov/llm-wiki).\n"
         f"Do not edit directly — re-run `llmwiki build` and `export-obsidian` "
         f"to refresh.\n"
     )
@@ -167,7 +167,7 @@ def _build_readme(n_pages: int, wiki_source: Path) -> str:
     return f"""# LLM Wiki (exported)
 
 This folder contains a **read-only export** of an LLM Wiki compiled by
-[llmwiki](https://github.com/Pratiyush/llm-wiki) from Claude Code session
+[llmwiki](https://github.com/AlexanderMakarov/llm-wiki) from Claude Code session
 transcripts.
 
 - **{n_pages}** pages exported

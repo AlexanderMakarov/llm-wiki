@@ -13,7 +13,7 @@ content_sha256: 461162c80bfedc4050a4974fd22a0e2b455975bc4fe60b9845bdb57b3f56e59e
 
 > Status: the formula is shipped at `homebrew/llmwiki.rb`. This doc is the
 > checklist for creating the **Homebrew tap repository** that unblocks
-> `brew install Pratiyush/tap/llmwiki` (#102).
+> `brew install AlexanderMakarov/tap/llmwiki` (#102).
 
 ## Why a tap?
 
@@ -24,8 +24,8 @@ age, stability). Small-but-useful CLIs like `llmwiki` ship via third-party
 
 Users install with:
 ```bash
-brew tap Pratiyush/tap             # one-time
-brew install llmwiki               # or: brew install Pratiyush/tap/llmwiki
+brew tap AlexanderMakarov/tap             # one-time
+brew install llmwiki               # or: brew install AlexanderMakarov/tap/llmwiki
 ```
 
 ## One-time setup
@@ -33,12 +33,12 @@ brew install llmwiki               # or: brew install Pratiyush/tap/llmwiki
 ### 1. Create the tap repo
 
 **[Create a new public GitHub repo](https://github.com/new)** called exactly
-`homebrew-tap` under the `Pratiyush` account (the name **must** start
+`homebrew-tap` under the `AlexanderMakarov` account (the name **must** start
 with `homebrew-`):
 
 ```
 Repository name: homebrew-tap
-Description:     Homebrew tap for Pratiyush/llm-wiki and friends.
+Description:     Homebrew tap for AlexanderMakarov/llm-wiki and friends.
 Visibility:      Public
 Add README:      yes (you can replace the contents in step 3)
 ```
@@ -46,7 +46,7 @@ Add README:      yes (you can replace the contents in step 3)
 ### 2. Clone it locally
 
 ```bash
-git clone git@github.com:Pratiyush/homebrew-tap.git ~/src/homebrew-tap
+git clone git@github.com:AlexanderMakarov/homebrew-tap.git ~/src/homebrew-tap
 cd ~/src/homebrew-tap
 mkdir -p Formula
 ```
@@ -80,7 +80,7 @@ git push
 From any machine with Homebrew:
 
 ```bash
-brew tap Pratiyush/tap
+brew tap AlexanderMakarov/tap
 brew install llmwiki
 llmwiki --version        # should match the tag
 llmwiki adapters
@@ -118,11 +118,11 @@ brew update && brew upgrade llmwiki
 If you want every release tag to auto-update the tap repo:
 
 1. Generate a **personal access token** with `repo` scope for the
-   `Pratiyush/homebrew-tap` repo (or a fine-grained token scoped to
+   `AlexanderMakarov/homebrew-tap` repo (or a fine-grained token scoped to
    "Contents: write" on just that repo).
 2. Add it as a secret `HOMEBREW_TAP_TOKEN` on the `llm-wiki` repo:
    ```bash
-   gh secret set HOMEBREW_TAP_TOKEN --repo Pratiyush/llm-wiki
+   gh secret set HOMEBREW_TAP_TOKEN --repo AlexanderMakarov/llm-wiki
    ```
 3. The `.github/workflows/homebrew-bump.yml` workflow will then, on
    each `v*.*.*` tag push, regenerate the formula, commit to the
