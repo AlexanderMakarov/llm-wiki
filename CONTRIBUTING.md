@@ -118,7 +118,7 @@ User-facing `/wiki-*` slash commands and skills live in `llmwiki/agent_kit/` and
 python3 -m llmwiki install-agent-kit --dest .claude
 ```
 
-That copies `commands/` and `skills/` under `.claude/`. Re-run after pulling an upgrade; a file you edited that now differs from the packaged version is saved as `<file>.bak` beside it.
+That copies `commands/` and `skills/` under `.claude/`. Re-run after pulling an upgrade: a copy an older install left behind is reported as outdated and replaced in place, while a file you edited is saved as `<file>.bak` beside it before the packaged version lands.
 
 ### Optional: AWOS (spec → hire → implement)
 
