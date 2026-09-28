@@ -132,3 +132,7 @@ if [ -t 0 ] && [ "${LLMWIKI_SKIP_AUTOMATION:-}" != "1" ]; then
       ;;
   esac
 fi
+
+# Optional TAB completion for the llmwiki command (#294; skip when non-TTY / CI)
+. "$SCRIPT_DIR/scripts/setup-completion.sh"
+llmwiki_offer_completion

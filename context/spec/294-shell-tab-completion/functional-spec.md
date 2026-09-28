@@ -1,7 +1,7 @@
 # Functional Specification: Shell TAB Completion for llmwiki Commands
 
 - **Roadmap Item:** GitHub Issue #294 — shell TAB completion for llmwiki subcommands
-- **Status:** Approved
+- **Status:** Completed
 - **Author:** Alexander Makarov
 
 ---

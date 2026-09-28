@@ -1,7 +1,7 @@
 # Technical Specification: Shell TAB Completion for llmwiki Commands
 
 - **Functional Specification:** [functional-spec.md](functional-spec.md)
-- **Status:** Approved
+- **Status:** Completed
 - **Author(s):** Alexander Makarov
 
 ---

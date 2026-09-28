@@ -1,0 +1,24 @@
+# Tasks: Shell TAB Completion for llmwiki Commands (#294)
+
+- [x] **Slice 1: Manual bash completion from the documented line**
+  - [x] Add `llmwiki/shell_completion.py` with `command_names()` (root subparser choices from `build_parser()`, registration order) and `completion_line("bash")` per the technical spec's line contract (function answers only at `COMP_CWORD == 1`, `complete -o default -F _llmwiki_complete llmwiki`, trailing `# llmwiki-completion` marker). Stdlib only; public functions carry docstrings. **[Agent: general-purpose]**
+  - [x] Add a **Shell completion** section to `docs/getting-started.md` containing the exact bash line produced by the helper, plus a one-sentence pointer from the *Top-level* section of `docs/reference/cli.md`; add a `CHANGELOG.md` `[Unreleased]` → *Added* entry. One paragraph per line (no hard wraps). **[Agent: general-purpose]**
+  - [x] Add `tests/test_shell_completion.py`: `command_names()` equals the parser's root subcommands (spot-check `sync`, `synth`, `migrate`); real `bash -c` completion with the line sourced and `COMP_WORDS`/`COMP_CWORD` set (`llmwiki sy` → `sync synth`; `llmwiki ` → every name; `llmwiki sync ` → no command names); docs drift check that `completion_line("bash")` appears verbatim in `docs/getting-started.md` (substring, no regex). **[Agent: general-purpose]**
+  - [x] Verify: run `python3 -m pytest tests/test_shell_completion.py -q` and `ruff check llmwiki tests scripts`; in a scratch `bash --rcfile <tmp rc containing the line> -i -c` run `compgen`-driven checks of the three cases above; delete the tmp rc file afterwards. **[Agent: general-purpose]**
+
+- [x] **Slice 2: Manual zsh completion from the documented line**
+  - [x] Extend `completion_line` with `"zsh"`: guard that loads `compinit` only when `compdef` is missing, then `compdef` a function using `_arguments '1:command:(<names>)' '*::arg:_files'` for `llmwiki`; same trailing marker. Add the zsh line to the docs section next to the bash one. **[Agent: general-purpose]**
+  - [x] Tests: docs drift check for `completion_line("zsh")`; `zsh -n` parse smoke test, skipped when `zsh` is not on PATH. **[Agent: general-purpose]**
+  - [x] Verify: run the new tests; if `zsh` is available, start `zsh -f -i` with the line and confirm it loads without errors; otherwise record that the zsh smoke test was skipped locally. Delete any tmp rc files. **[Agent: general-purpose]**
+
+- [x] **Slice 3: setup.sh offers, adds and refreshes the line**
+  - [x] Add `install_rc_line(rc, shell)` to `llmwiki/shell_completion.py`: drop every line containing the marker, append the current line, create the file when missing, preserve every other byte; return `"added"` / `"updated"` / `"unchanged"`. **[Agent: general-purpose]**
+  - [x] Add the optional step to `setup.sh` next to the existing configure-sources / automation prompts: runs only when `[ -t 0 ]` and `LLMWIKI_SKIP_COMPLETION != 1`; picks `~/.bashrc` / `~/.zshrc` from `basename "$SHELL"`, otherwise prints the documented bash line and changes nothing; prompts `Add llmwiki TAB completion to <file>? [Y/n]`; on yes calls `install_rc_line` via `python3 -c` and prints the result plus the path. Factor the step so tests can drive it without a real TTY. Document the skip variable and setup behavior in the docs section. **[Agent: general-purpose]**
+  - [x] Tests: `install_rc_line` cases (missing file → added; existing content preserved byte-for-byte; second run → unchanged, one marker line; stale marker line → updated); setup step with `HOME=<tmp>`, `SHELL=/bin/bash`, answer `y` → one line in tmp `.bashrc`; answer `n` → unchanged; non-TTY and `LLMWIKI_SKIP_COMPLETION=1` → no change and no prompt; `SHELL=/bin/fish` → no file changed, line printed. **[Agent: general-purpose]**
+  - [x] Verify: run the setup-step tests plus the full `python3 -m pytest tests/ -q` and `ruff check llmwiki tests scripts`; delete tmp HOME dirs. Never touch the operator's real `~/.bashrc` / `~/.zshrc`. **[Agent: general-purpose]**
+
+- [x] **Slice 4: Feature Testing & Regression**
+
+  > Verifies the whole feature end-to-end against functional-spec.md, run after all implementation slices are complete.
+  - [x] Read functional-spec.md acceptance criteria in full. Generate acceptance-level tests that verify the entire feature as a whole — not individual slices. Cover applicable layers (unit for pure logic, integration for service interactions, e2e for user flows) based on the project's testing stack. Write tests with RED validation (must fail before implementation is confirmed done). Annotate each test with `@spec: 294-shell-tab-completion` and `@regression` if suitable for long-term regression. **[Agent: testing-expert]**
+  - [x] Run all generated tests. All must pass. Fix any failures before proceeding. **[Agent: testing-expert]**
