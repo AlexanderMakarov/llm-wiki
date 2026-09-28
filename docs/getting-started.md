@@ -81,6 +81,26 @@ Registered adapters:
 
 Run `llmwiki configure-sources` after install to probe stores and write `adapters.<name>` settings. The interview asks a shared lookback first (default today−30) and shows Sessions · Earliest · In last 30 days per source before Enable; skip configure to keep unlimited history. Full support map: [multi-agent-setup.md](multi-agent-setup.md). Lookback keys: [configuration-reference.md](configuration-reference.md#sync-lookback).
 
+### Shell completion
+
+Pressing TAB after `llmwiki ` lists every command, and a typed prefix narrows the list (`llmwiki sy` offers `sync` and `synth`). Only command names complete — not flags, and not names under a command. Only the `llmwiki` entry point completes; `python3 -m llmwiki` does not.
+
+On macOS / Linux, `./setup.sh` offers this at the end when run in an interactive terminal: it asks `Add llmwiki TAB completion to ~/.bashrc? [Y/n]` (or `~/.zshrc` when your login shell is zsh), and on yes writes the line below and prints which file it changed. Re-running setup replaces that line with the current command list instead of adding a second one, and leaves the rest of the file alone. On macOS, bash users get `~/.bash_profile` instead of `~/.bashrc`, because Terminal and iTerm start bash as a login shell, which does not read `~/.bashrc`. For any other shell it changes nothing and prints the bash line for you to add yourself. Set `LLMWIKI_SKIP_COMPLETION=1` to skip the question; it is never asked when setup runs non-interactively.
+
+To enable it by hand (for example after `pip install` or Homebrew), paste the line for your shell into its startup file and open a new terminal.
+
+bash — `~/.bashrc` (`~/.bash_profile` on macOS):
+
+```bash
+_llmwiki_complete() { COMPREPLY=(); if [ "$COMP_CWORD" -eq 1 ]; then COMPREPLY=($(compgen -W "init sync build usage adapters configure-sources graph lint queue migrate install-agent-kit candidates synth add remove search query trace version all watch install-automation" -- "${COMP_WORDS[1]}")); fi; }; complete -o default -F _llmwiki_complete llmwiki # llmwiki-completion
+```
+
+zsh — `~/.zshrc`:
+
+```zsh
+(( $+functions[compdef] )) || { autoload -Uz compinit && compinit; }; _llmwiki_complete() { _arguments '1:command:(init sync build usage adapters configure-sources graph lint queue migrate install-agent-kit candidates synth add remove search query trace version all watch install-automation)' '*::arg:_files'; }; compdef _llmwiki_complete llmwiki # llmwiki-completion
+```
+
 ## Three commands after install
 
 With `vault.default_path` set (step 2 above), these all read and write the vault, not the clone:

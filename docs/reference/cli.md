@@ -33,6 +33,8 @@ python3 -m llmwiki              # same as --help
 
 The shorter alias `llmwiki` works too once the package is installed (`pip install llm-wiki-plus` or via Homebrew — see [`deploy/pypi-publishing.md`](../deploy/pypi-publishing.md) / [`deploy/homebrew-setup.md`](../deploy/homebrew-setup.md)).
 
+TAB completion of these command names in bash and zsh is one line in your shell startup file, which `./setup.sh` offers to add — see [Shell completion](../getting-started.md#shell-completion).
+
 ---
 
 ## `init` — scaffold `raw/` / `wiki/` / `site/`
