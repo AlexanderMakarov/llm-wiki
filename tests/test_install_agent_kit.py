@@ -133,7 +133,7 @@ def test_cli_conflict_reports_bak(
 
     assert args.func(args) == 0
     out = capsys.readouterr().out
-    assert "backup" in out
+    assert "backed_up:  1" in out
     assert f"commands/{KIT_COMMAND}.bak" in out
     assert (dest / "commands" / f"{KIT_COMMAND}.bak").is_file()
 
@@ -329,9 +329,7 @@ def test_users_own_file_at_a_retired_name_survives_and_is_reported(
     assert report["pruned"] == []
     assert mine.is_file()
     assert mine.read_text(encoding="utf-8").startswith("MY OWN COMMAND")
-    assert report["kept"] == [
-        f"{RETIRED_COMMAND}: retired, but modified — left in place"
-    ]
+    assert report["kept"] == [RETIRED_COMMAND]
     assert not list(dest.rglob("*.bak"))
 
 
@@ -347,7 +345,7 @@ def test_customised_retired_command_is_kept(
 
     assert report["pruned"] == []
     assert stale.is_file()
-    assert any("left in place" in note for note in report["kept"])
+    assert report["kept"] == [RETIRED_COMMAND]
 
 
 def test_user_own_command_is_never_touched(tmp_path: Path) -> None:
@@ -399,9 +397,7 @@ def test_manifest_path_modified_since_install_is_not_pruned(tmp_path: Path) -> N
 
     assert report["pruned"] == []
     assert dropped.read_bytes() == b"as installed\nplus my edit\n"
-    assert report["kept"] == [
-        "commands/wiki-gone.md: no longer shipped, but modified — left in place"
-    ]
+    assert report["kept"] == ["commands/wiki-gone.md"]
 
 
 def test_old_list_shape_manifest_prunes_nothing(tmp_path: Path) -> None:
@@ -449,8 +445,8 @@ def test_cli_reports_pruned_paths(
 
     assert args.func(args) == 0
     out = capsys.readouterr().out
-    assert f"pruned    {RETIRED_COMMAND}" in out
-    assert "pruned:    1" in out
+    assert f"pruned     {dest / RETIRED_COMMAND}" in out
+    assert "pruned:     1" in out
 
 
 def test_cli_reports_kept_paths(
@@ -465,7 +461,7 @@ def test_cli_reports_kept_paths(
 
     assert args.func(args) == 0
     out = capsys.readouterr().out
-    assert "kept      " in out
+    assert f"kept       {mine}" in out
     assert "left in place" in out
     assert mine.is_file()
 
@@ -583,7 +579,7 @@ def test_manifest_records_only_what_landed(tmp_path: Path) -> None:
 
     report = run_install(dest=dest)
 
-    assert any(rel.startswith(f"commands/{KIT_COMMAND}") for rel in report["errors"])
+    assert any(err.startswith(f"{blocked}") for err in report["errors"])
     paths = _read_manifest(dest)["paths"]
     assert f"commands/{KIT_COMMAND}" not in paths
     assert f"skills/{KIT_SKILL.as_posix()}" in paths
@@ -595,3 +591,234 @@ def test_dry_run_writes_no_manifest(tmp_path: Path) -> None:
     run_install(dest=dest, dry_run=True)
 
     assert not (dest / MANIFEST_NAME).exists()
+
+
+# ─── Outdated vs customised (#286) ────────────────────────────────────
+
+OLD_VERSION = "0.0.1-old"
+OLD_REVISION = b"# /wiki-sync\n\nThe revision an older llmwiki installed here.\n"
+
+
+def _make_outdated(dest: Path, rel: str, *, version: str = OLD_VERSION) -> bytes:
+    """Leave the state an older install does: our own bytes, recorded as ours."""
+    run_install(dest=dest)
+    (dest / rel).write_bytes(OLD_REVISION)
+    manifest = _read_manifest(dest)
+    manifest["version"] = version
+    manifest["paths"] = {**manifest["paths"], rel: _digest(OLD_REVISION)}
+    (dest / MANIFEST_NAME).write_text(json.dumps(manifest), encoding="utf-8")
+    return OLD_REVISION
+
+
+def test_outdated_file_is_reported_and_replaced_without_a_backup(
+    tmp_path: Path,
+) -> None:
+    dest = tmp_path / "agent"
+    rel = f"commands/{KIT_COMMAND}"
+    _make_outdated(dest, rel)
+
+    report = run_install(dest=dest)
+
+    assert report["errors"] == []
+    assert report["outdated"] == [rel]
+    assert report["customised"] == []
+    assert rel in report["written"]
+    assert report["backed_up"] == []
+    assert not (dest / f"{rel}.bak").exists()
+    assert not list(dest.rglob("*.bak"))
+    assert (dest / rel).read_bytes() == (COMMANDS_DIR / KIT_COMMAND).read_bytes()
+
+
+def test_customised_file_is_reported_and_its_bytes_are_backed_up(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    dest = tmp_path / "agent"
+    rel = f"commands/{KIT_COMMAND}"
+    run_install(dest=dest)
+    mine = b"# /wiki-sync\n\nmy own step\n"
+    (dest / rel).write_bytes(mine)
+    capsys.readouterr()
+
+    report = run_install(dest=dest)
+    install_agent_kit.print_report(report)
+    out = capsys.readouterr().out
+
+    assert report["customised"] == [rel]
+    assert report["outdated"] == []
+    assert rel in report["written"]
+    assert report["backed_up"] == [f"{rel}.bak"]
+    assert (dest / f"{rel}.bak").read_bytes() == mine
+    assert "customised" in out
+    assert "your edits cannot be merged" in out
+    assert f"saved to {dest / rel}.bak" in out
+
+
+def test_report_prints_absolute_paths(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    dest = tmp_path / "agent"
+    outdated_rel = f"commands/{KIT_COMMAND}"
+    customised_rel = f"skills/{KIT_SKILL.as_posix()}"
+    _make_outdated(dest, outdated_rel)
+    (dest / customised_rel).write_bytes(b"my own step\n")
+    kept = dest / RETIRED_COMMAND
+    kept.parent.mkdir(parents=True, exist_ok=True)
+    kept.write_text("mine\n", encoding="utf-8")
+    untouched = next(
+        rel for rel, _src in kit_files() if rel not in {outdated_rel, customised_rel}
+    )
+    capsys.readouterr()
+    args = build_parser().parse_args(["install-agent-kit", "--dest", str(dest)])
+
+    assert args.func(args) == 0
+    out = capsys.readouterr().out
+    assert f"dest:       {dest}" in out
+    assert f"wrote      {dest / outdated_rel}" in out
+    assert f"outdated   {dest / outdated_rel}" in out
+    assert f"customised {dest / customised_rel}" in out
+    assert f"kept       {kept}" in out
+    assert f"unchanged  {dest / untouched}" in out
+
+
+def test_outdated_report_names_the_version_that_installed_it(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    dest = tmp_path / "agent"
+    rel = f"commands/{KIT_COMMAND}"
+    _make_outdated(dest, rel)
+    capsys.readouterr()
+
+    report = run_install(dest=dest)
+    install_agent_kit.print_report(report)
+    out = capsys.readouterr().out
+
+    assert report["installed_version"] == OLD_VERSION
+    assert report["package_version"] == __version__
+    assert report["attributed_versions"] == {rel: OLD_VERSION}
+    assert f"(installed by {OLD_VERSION})" in out
+
+
+def test_customised_report_names_the_version_the_user_patched(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    dest = tmp_path / "agent"
+    rel = f"commands/{KIT_COMMAND}"
+    run_install(dest=dest)
+    (dest / rel).write_bytes(b"my own step\n")
+    capsys.readouterr()
+
+    report = run_install(dest=dest)
+    install_agent_kit.print_report(report)
+    out = capsys.readouterr().out
+
+    assert report["attributed_versions"] == {rel: __version__}
+    assert f"(patched from {__version__})" in out
+
+
+def test_no_manifest_attributes_no_version(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    dest = tmp_path / "agent"
+    rel = f"commands/{KIT_COMMAND}"
+    (dest / "commands").mkdir(parents=True)
+    (dest / rel).write_bytes(b"mine, from before any manifest\n")
+    capsys.readouterr()
+
+    report = run_install(dest=dest)
+    install_agent_kit.print_report(report)
+    out = capsys.readouterr().out
+
+    assert report["installed_version"] is None
+    assert report["attributed_versions"] == {}
+    assert report["customised"] == [rel]
+    assert "installed by" not in out
+    assert "patched from" not in out
+
+
+def test_dry_run_classifies_outdated_and_customised_and_writes_nothing(
+    tmp_path: Path,
+) -> None:
+    dest = tmp_path / "agent"
+    outdated_rel = f"commands/{KIT_COMMAND}"
+    customised_rel = f"skills/{KIT_SKILL.as_posix()}"
+    stale = _make_outdated(dest, outdated_rel)
+    mine = b"my own skill\n"
+    (dest / customised_rel).write_bytes(mine)
+    before = _snapshot(dest)
+
+    report = run_install(dest=dest, dry_run=True)
+
+    assert report["outdated"] == [outdated_rel]
+    assert report["customised"] == [customised_rel]
+    assert report["backed_up"] == [f"{customised_rel}.bak"]
+    # Both attributions read OLD_VERSION because _make_outdated stamps that
+    # version over a manifest the current kit wrote, which is a pairing
+    # _write_manifest never produces on its own.
+    assert report["attributed_versions"] == {
+        outdated_rel: OLD_VERSION,
+        customised_rel: OLD_VERSION,
+    }
+    assert (dest / outdated_rel).read_bytes() == stale
+    assert (dest / customised_rel).read_bytes() == mine
+    assert _snapshot(dest) == before
+
+
+def test_a_backup_that_could_not_be_written_is_never_claimed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A failed ``.bak`` reports the error alone, never a rescue that did not happen."""
+    dest = tmp_path / "agent"
+    rel = f"commands/{KIT_COMMAND}"
+    run_install(dest=dest)
+    mine = b"# /wiki-sync\n\nmy own step\n"
+    (dest / rel).write_bytes(mine)
+    write_bytes = Path.write_bytes
+
+    def refuse_backups(self: Path, data: bytes) -> int:
+        if self.suffix == ".bak":
+            raise OSError(13, "Permission denied")
+        return write_bytes(self, data)
+
+    monkeypatch.setattr(Path, "write_bytes", refuse_backups)
+    capsys.readouterr()
+
+    report = run_install(dest=dest)
+    install_agent_kit.print_report(report)
+    out = capsys.readouterr().out
+
+    assert report["customised"] == []
+    assert report["backed_up"] == []
+    assert rel not in report["written"]
+    assert report["errors"] == [
+        f"{dest / rel}.bak: [Errno 13] Permission denied"
+    ]
+    assert not (dest / f"{rel}.bak").exists()
+    assert (dest / rel).read_bytes() == mine
+    assert "saved to" not in out
+
+
+def test_a_retired_digest_never_replaces_a_shipped_file_unbacked(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Only the manifest says what llmwiki put at a path the kit still ships.
+
+    A name that was retired and later resurrected fails safe: bytes matching
+    the retired revision are somebody's edit until the manifest says otherwise,
+    so they are backed up rather than replaced silently.
+    """
+    dest = tmp_path / "agent"
+    rel = f"commands/{KIT_COMMAND}"
+    resurrected = b"# /wiki-sync\n\nA revision retired under this name.\n"
+    run_install(dest=dest)
+    (dest / rel).write_bytes(resurrected)
+    monkeypatch.setattr(
+        install_agent_kit,
+        "RETIRED_PATHS",
+        {rel: frozenset({_digest(resurrected)})},
+    )
+
+    report = run_install(dest=dest)
+
+    assert report["outdated"] == []
+    assert report["customised"] == [rel]
+    assert (dest / f"{rel}.bak").read_bytes() == resurrected

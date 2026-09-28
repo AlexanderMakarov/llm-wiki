@@ -96,3 +96,62 @@
 - Two commits planned: (1) timeout + ingest + docs/catalog + review nits; (2) skill rename wiki-all → llmwiki-all
 - review.md session-only, not staged
 - Next: remote-gates (stop writing flow-log after PR opens)
+
+---
+
+## resume-detection (run 2, 2026-09-28)
+- PR #287 merged (`Refs #286`, not `Closes`); issue 286 still open with two ACs unshipped
+- AC4 (thin `wiki-add` alias skill): declined by operator in run 1 — stays declined
+- AC5 (installer reports an outdated install): deferred in run 1 to a follow-up issue that was never filed (#288/#289/#290 are unrelated) — this run's scope
+- SPEC_NAME unchanged: `286-wiki-add-timeout`
+- Next: workspace
+
+## workspace (run 2)
+- BRANCH: `fix/286-installer-outdated-report` off `origin/main` @ 33cfa04
+- WT: `/home/USER/code/llm-wiki/.claude/worktrees/fix-286-installer-outdated-report`
+- TMP_VAULT: `$WT/.worktree-vault`; worktree `config.json` vault-only; `llmwiki init` seeded
+- Next: diagnose
+
+## diagnose (run 2)
+- `run_install` treats every destination file that differs from the kit identically: write `<name>.bak`, overwrite. It never asks *why* the file differs.
+- The installer already knows the answer. `.llmwiki-agent-kit.json` records `version` plus a `path -> sha256` of what llmwiki last installed, and `RETIRED_PATHS` holds historical digests — but `known_digests()` filters that evidence down to paths the kit *no longer ships*, so the install path cannot consult it.
+- Consequence: an install that is merely out of date is indistinguishable from one the user hand-edited. Both are reported as a plain write plus a backup, so nothing tells the operator their install was stale, and a pointless `.bak` of llmwiki's own bytes can clobber a real one (#224).
+- Next: classify
+
+## classify (run 2)
+- **Conformance.** No functional spec documents `install-agent-kit`'s backup or reporting behaviour (`grep '\.bak' context/spec/*/functional-spec.md` → no hits); the contract lives only in the module docstring and `docs/reference/cli.md`. Nothing to amend — docstring and reference docs move with the code.
+- Operator decisions this run:
+  - outdated (digest is one llmwiki authored) → report + overwrite + **no** `.bak`; mirrors the existing prune rule that our own bytes need no backup. Partially defuses #224.
+  - customised (digest is nobody's we know) → report must **say the edits cannot be merged into the kit update** and point at the `.bak`.
+  - report prints **absolute** paths, not dest-relative ones.
+  - name the version the file came from wherever the manifest allows it.
+- Next: fix
+
+## fix (run 2)
+- `llmwiki/install_agent_kit.py`: a destination file that differs from the kit is classified `outdated` (its digest is the one the manifest records for that path) or `customised` (anything else). Outdated is replaced with no `.bak`; customised is backed up first and the report says the edits cannot be merged.
+- Provenance for the install decision is the manifest alone. `_authored_digests` is gone; `known_digests` inlines the manifest ∪ `RETIRED_PATHS` merge and keeps it to the prune path, where a retired digest is the only kind that can describe a path. A retired-then-resurrected name therefore fails safe as `customised`.
+- Version attribution is the manifest's `version`, applied only when the manifest records that path: `installed by <v>` for outdated, `patched from <v>` for customised, and nothing at all with no manifest.
+- Report gains `outdated`, `customised`, `installed_version`, `package_version`, `attributed_versions`; `kept` carries paths so `print_report` can render them absolute. Every printed path, errors included, is absolute.
+- Docs: `docs/reference/cli.md` classification table, manifest trust-surface note, report paragraph; `CONTRIBUTING.md` install note; `CHANGELOG.md` `[Unreleased] → Fixed`.
+- Next: regression-test
+
+## regression-test (run 2)
+- `tests/test_install_agent_kit.py`: outdated replaced without a `.bak`; customised backed up with the un-mergeable explanation; absolute paths across dest/wrote/outdated/customised/kept/unchanged; both version wordings; no manifest attributes no version; dry-run classifies and writes nothing; a `.bak` that could not be written is never claimed; a retired digest never replaces a shipped file unbacked.
+- Updated for the accepted findings: `test_cli_conflict_reports_bak`, `test_cli_reports_pruned_paths`, `test_cli_reports_kept_paths`, `test_manifest_records_only_what_landed`, `test_report_prints_absolute_paths` (column widths, dropped duplicate backup line, absolute error paths).
+- Next: verify-criteria
+
+## verify-criteria (run 2)
+- AC5 "installer reports the outdated files": PASS. Drove `install-agent-kit` against a scratch dest staged with one file holding llmwiki's own older bytes (manifest stamped to an older version) and one patched by hand. Dry-run and real run both classify 1 outdated + 1 customised; real run leaves no `.bak` beside the outdated file, a `.bak` holding the patch beside the customised one, and the next run reports nothing to write.
+- Gates: `ruff check llmwiki tests scripts` clean; full `python3 -m pytest tests/ -q` exit 0.
+- Next: local-review
+
+## local-review (run 2)
+- One independent reviewer, pre-push. Verdict Comment — 0 Blockers, 10 Nits. Written to `review.md` (session-only, never staged).
+- Operator accepted all ten. N8 and N9 collapsed into one change: the install-path lookup is manifest-only, which removes the guessed version and shrinks the no-backup trust surface together; N9's documentation half still applied.
+- Applied in the worktree, gates re-run green. Deviation from the flow: the Agent tool's safety classifier returned no verdict six times across Agent/Bash/Edit, so the orchestrator applied the findings inline rather than through a specialist. Recorded per the Self-Improvement Loop as a harness failure, not a flow defect.
+- Next: commit-push (stop writing this log once the PR is open)
+
+## commit-push (run 2)
+- One commit: installer classification + tests + docs. `review.md` session-only, not staged.
+- `Closes #286` — ACs 1–3 shipped in PR #287, AC4 declined by the operator, AC5 here.
+- Next: remote-gates
