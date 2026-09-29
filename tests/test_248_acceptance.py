@@ -20,12 +20,11 @@ purpose-built scratch vault, to check the properties that only hold once
 every slice is wired together through the real pipeline:
 
 * the functional spec's own "How we measure success" bullets (9 entities +
-  4 concepts = 13 curated pages, 12 of which record something of their own
-  or are co-cited and so get a page and a correctly labelled search entry)
-  hold on the actual vault a build produces — not a fixture shaped to make
-  them true;
+  4 concepts = 13 curated pages; every one that records something of its own
+  or is co-cited gets a page and a correctly labelled search entry) hold on
+  the actual vault a build produces — not a fixture shaped to make them true;
 * the empty-page rule (functional-spec.md §1, amended 2026-09-18) holds from
-  every side at once: the one curated page with neither content nor a
+  every side at once: each curated page with neither content nor a
   connection gets no page, no search entry and no listing row, while its
   wiki-corpus entry stays in the corpus with a ``null`` URL;
 * the grouped listing (FR4) counts the same pages the bypass (FR1) creates,
@@ -56,8 +55,9 @@ import pytest
 
 import llmwiki.build as build_mod
 from llmwiki.build import WIKI_CORPUS_REL, build_site
-from llmwiki.topics import topic_slug
+from llmwiki.topics import build_topic_graph, topic_slug
 from llmwiki.topics_consolidate import build_candidates
+from llmwiki.topics_page import page_content
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEMO = REPO_ROOT / "demo"
@@ -70,11 +70,30 @@ _CURATED = {
     ],
     "concepts": ["Adapters", "Knowledge Graph", "Observability", "Static Site"],
 }
-# The one demo page the empty-page rule suppresses: it records nothing of its
-# own and no other topic is co-cited with it, so a page for it would show a
-# title and two empty lists. Every other curated page clears one half or the
-# other — `Obsidian` records nothing either, but is co-cited with 21 topics.
-_EMPTY_ISOLATED = {"Python"}
+
+
+def _empty_isolated_curated() -> set[str]:
+    """Curated pages the empty-page rule must suppress on the committed demo.
+
+    Read off the committed vault, not hard-coded: which topics a source page
+    ``[[links]]`` is synthesis output, so a demo re-synth can move a topic
+    across the line (on the v2.4.0 refresh ``SQLite`` lost its three linking
+    sources and ``Python`` gained one). The rule is the conjunction — no edge
+    in the co-occurrence graph *and* no content of its own; the tests below
+    check that every consumer of one real build agrees with this set.
+    """
+    graph = build_topic_graph(DEMO / "wiki", include_curated_pages=True)
+    connected = {str(e[end]) for e in graph["edges"] for end in ("source", "target")}
+    empty: set[str] = set()
+    for kind, names in _CURATED.items():
+        for name in names:
+            text = (DEMO / "wiki" / kind / f"{name}.md").read_text(encoding="utf-8")
+            if name not in connected and page_content(text) is None:
+                empty.add(name)
+    return empty
+
+
+_EMPTY_ISOLATED = _empty_isolated_curated()
 _CURATED_WITH_PAGE = {
     kind: [n for n in names if n not in _EMPTY_ISOLATED]
     for kind, names in _CURATED.items()
@@ -144,11 +163,10 @@ def _wiki_corpus(site: Path) -> list[dict]:
 
 
 def test_every_curated_demo_page_worth_opening_opens(demo_build: Path):
-    """functional-spec.md §1: 12 of the 13 curated entities and concepts have
-    a page a reader can open — every one that records something of its own or
-    is co-cited with another topic.
+    """functional-spec.md §1: every curated entity and concept that records
+    something of its own or is co-cited with another topic has a page a
+    reader can open.
     """
-    assert sum(len(v) for v in _CURATED_WITH_PAGE.values()) == 12
     for kind, names in _CURATED_WITH_PAGE.items():
         for name in names:
             page = demo_build / "topics" / f"{topic_slug(name)}.html"
@@ -167,37 +185,47 @@ def test_a_curated_page_with_no_content_but_connections_still_opens(demo_build: 
     assert "Connected topics" in page.read_text(encoding="utf-8")
 
 
-def test_python_has_no_page_because_it_has_neither_content_nor_connections(
-    demo_build: Path,
-):
+def test_the_demo_exercises_both_sides_of_the_empty_page_rule():
+    """The demo must keep at least one curated page the rule suppresses and
+    at least one it keeps, or the tests below pass without exercising it.
+    A re-synth that empties this set needs a demo change, not a test change.
+    """
+    all_curated = {n for names in _CURATED.values() for n in names}
+    assert _EMPTY_ISOLATED, "no curated demo page is empty and isolated"
+    assert _EMPTY_ISOLATED < all_curated
+
+
+def test_an_empty_isolated_curated_page_has_no_page_anywhere(demo_build: Path):
     """The empty-page rule, asserted from all four sides at once.
 
-    ``Python`` is the demo entity three sources name but no session's
-    ``[[wikilink]]`` reaches (technical-considerations.md §2.1), and its
-    ``## Key Facts`` is empty. A page for it would carry a title, "No
-    connected topics." and nothing else, so the build writes none — and
-    nothing anywhere may offer a link to the page it did not write.
+    A curated page with an empty ``## Key Facts`` that no co-cited topic
+    reaches would carry a title, "No connected topics." and nothing else, so
+    the build writes none — and nothing anywhere may offer a link to the
+    page it did not write.
     """
-    assert not (demo_build / "topics" / "python.html").exists()
-
     idx = _search_index(demo_build)
-    topic_entries = [e for e in idx["entries"] if e.get("type") == "topic"]
-    assert not [e for e in topic_entries if e.get("title") == "Python"]
-
+    topic_titles = {e.get("title") for e in idx["entries"] if e.get("type") == "topic"}
     listing = (demo_build / "topics" / "index.html").read_text(encoding="utf-8")
-    assert ">Python</a>" not in listing
-    assert "python.html" not in listing
+    graph_html = (demo_build / "graph.html").read_text(encoding="utf-8")
+    corpus = {e["path"]: e for e in _wiki_corpus(demo_build)}
+    for kind, names in _CURATED.items():
+        for name in sorted(_EMPTY_ISOLATED.intersection(names)):
+            slug = topic_slug(name)
+            assert not (demo_build / "topics" / f"{slug}.html").exists(), name
+            assert name not in topic_titles, name
+            assert f">{name}</a>" not in listing, name
+            assert f"{slug}.html" not in listing, name
+            assert f"topics/{slug}.html" not in graph_html, name
 
-    assert "topics/python.html" not in (demo_build / "graph.html").read_text(encoding="utf-8")
+            # Still in the corpus — MCP scans the page, so the site must not
+            # diverge on membership — but with no URL, which the palette
+            # renders inert.
+            entry = corpus[f"wiki/{kind}/{name}.md"]
+            assert entry["url"] is None, name
+            assert entry["title"] == name
 
-    # Still in the corpus — MCP scans the page, so the site must not diverge
-    # on membership — but with no URL, which the palette renders inert.
-    entry = {e["path"]: e for e in _wiki_corpus(demo_build)}["wiki/entities/Python.md"]
-    assert entry["url"] is None
-    assert entry["title"] == "Python"
 
-
-def test_the_12_curated_entries_are_labelled_and_resolve_to_a_real_page(demo_build: Path):
+def test_every_curated_entry_with_a_page_is_labelled_and_resolves(demo_build: Path):
     """FR2, for every curated page that gets one — not a sample."""
     idx = _search_index(demo_build)
     topic_entries = {e["title"]: e for e in idx["entries"] if e.get("type") == "topic"}
@@ -213,17 +241,20 @@ def test_the_12_curated_entries_are_labelled_and_resolve_to_a_real_page(demo_bui
 # ── FR4: the grouped listing counts what FR1's bypass actually created ────
 
 
-def test_demo_topics_index_groups_the_8_entities_and_4_concepts_with_pages(demo_build: Path):
+def test_demo_topics_index_groups_every_curated_topic_with_a_page(demo_build: Path):
     """FR4 chained onto FR1: the pages the bypass creates must be exactly the
     pages the index counts and chips — not merely equal counts by coincidence,
     and never a row for a page the build did not write.
     """
     html = (demo_build / "topics" / "index.html").read_text(encoding="utf-8")
-    assert '<h2 class="topic-index-heading">Entities <span class="muted">(8)</span></h2>' in html
-    assert '<h2 class="topic-index-heading">Concepts <span class="muted">(4)</span></h2>' in html
+    n_entities = len(_CURATED_WITH_PAGE["entities"])
+    n_concepts = len(_CURATED_WITH_PAGE["concepts"])
+    heading = '<h2 class="topic-index-heading">{} <span class="muted">({})</span></h2>'
+    assert heading.format("Entities", n_entities) in html
+    assert heading.format("Concepts", n_concepts) in html
     assert 'Other topics <span class="muted">(' in html
-    assert html.count('<span class="topic-kind-chip">Entity</span>') == 8
-    assert html.count('<span class="topic-kind-chip">Concept</span>') == 4
+    assert html.count('<span class="topic-kind-chip">Entity</span>') == n_entities
+    assert html.count('<span class="topic-kind-chip">Concept</span>') == n_concepts
     for name in _CURATED_WITH_PAGE["entities"] + _CURATED_WITH_PAGE["concepts"]:
         assert f">{name}</a>" in html, f"{name} absent from the grouped listing"
 
