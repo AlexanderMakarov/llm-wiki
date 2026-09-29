@@ -4,9 +4,9 @@ slug: configuration-reference-05
 project: configuration-reference
 type: source
 tags: [wiki-add, raw-doc]
-date: 2026-09-08
+date: 2026-09-28
 source: "docs/configuration-reference.md"
-content_sha256: 037667c9a64c03e7e116aad5677fbb0f9c2a8a529294787eae7fbe5f06d78089
+content_sha256: a94f88e12736fb1eb7ca6bf1d509cef2af5bfc5ca59c974abbe8c0cbb274a294
 ---
 
 > Part 5 of 8 of **Configuration Reference**.
@@ -20,6 +20,7 @@ content_sha256: 037667c9a64c03e7e116aad5677fbb0f9c2a8a529294787eae7fbe5f06d78089
 | `filters` | `since` | string | unset (unlimited) | Shared sync lookback as absolute `YYYY-MM-DD`. Absent or empty = no shared date gate. Overridden per run by CLI `--since`. See [Sync lookback](#sync-lookback) |
 | `filters` | `exclude_headless` | bool | true | Skip automated / headless launches across coding-agent adapters (Claude SDK markers; Cursor Agent CLI `subagentInfo` / `approvalMode=auto-review`; OpenClaw never skipped; others false until markers exist). Prevents the synthesis feedback loop. Applies at **both** ingest and synthesis. See [multi-agent-setup.md](multi-agent-setup.md#what-automated-headless-means) |
 | `filters` | `exclude_temp_cwd` | bool | false | Opt-in: skip sessions whose `cwd` is a throwaway temp dir (`/tmp`, `/var/folders`, …). Off by default — a git worktree under `/tmp` is often real work |
+| `redaction` | `redact_username` | bool | `false` | Rewrite the home-path username to `replacement_username` in `raw/` (and `llmwiki add` `source:` paths). Off keeps real paths for a private vault; turn on before sharing `raw/` or publishing the site. Token/email redaction runs either way (#253) |
 | `redaction` | `real_username` | string | `$USER` | Your OS username (auto-detected if empty) |
 | `redaction` | `replacement_username` | string | `USER` | Replacement in path redaction |
 | `redaction` | `extra_patterns` | list | [3 regexes] | Additional Python regex patterns to redact |
@@ -51,9 +52,4 @@ content_sha256: 037667c9a64c03e7e116aad5677fbb0f9c2a8a529294787eae7fbe5f06d78089
 | `meeting` | `source_dirs` | list | `["~/Meetings"]` | Directories to scan |
 | `meeting` | `extensions` | list | `[".vtt", ".srt"]` | File extensions to consider |
 | `jira` | `enabled` | bool | false | Opt-in; non-AI adapter |
-| `jira` | `server` | string | — | Jira Cloud/Server URL |
-| `jira` | `email` | string | — | Account email |
-| `jira` | `api_token` | string | `""` | Prefer `api_token_env` + `.env` |
-| `jira` | `jql` | string | sensible default | Query for tickets to sync |
-| `jira` | `max_results` | int | 50 | Pagination cap |
-| `chatgpt` | `enabled` | bool
+| `jira` | `server` | string | — | Jira Clou

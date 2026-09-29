@@ -4,9 +4,9 @@ slug: docker-deployment
 project: deploy-docker
 type: source
 tags: [wiki-add, raw-doc]
-date: 2026-09-08
+date: 2026-09-28
 source: "docs/deploy/docker.md"
-content_sha256: b1c90763244c4dfc686f89e35de905e3af2cc4d05933ea341074a55cd37a804c
+content_sha256: b29341b000074d6f146b8ece65e83b8fef3c1097756b8be3a63d5192a8242faa
 ---
 
 # Docker deployment

@@ -4,9 +4,9 @@ slug: windows-setup
 project: windows-setup
 type: source
 tags: [wiki-add, raw-doc]
-date: 2026-09-08
+date: 2026-09-28
 source: "docs/windows-setup.md"
-content_sha256: 3b42546334c3bcec2cb6615f16a426e50669001ec02e4c744f4816a638938475
+content_sha256: 23b20f67015b15b07244312163bade385c04e17dd2206ce4eed6652c9edeb88b
 ---
 
 # Windows setup
@@ -69,6 +69,7 @@ The default redaction config covers `/Users/<you>/` and `/home/<you>/` (Unix), b
 ```jsonc
 {
   "redaction": {
+    "redact_username": true,
     "real_username": "<YOUR_WINDOWS_USERNAME>",
     "extra_patterns": [
       "C:\\\\Users\\\\<YOUR_WINDOWS_USERNAME>\\\\[^\\\"]*",

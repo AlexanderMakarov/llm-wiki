@@ -94,10 +94,9 @@ def test_lychee_skips_known_future_urls():
     assert "v1\\\\.1" in text or "v1.1" in text
 
 
-def test_lychee_skips_pypi_and_homebrew_placeholders():
+def test_lychee_skips_pypi_placeholder():
     text = LYCHEE.read_text(encoding="utf-8")
     assert "pypi" in text
-    assert "homebrew-llmwiki" in text
 
 
 def test_lychee_skips_build_time_template_tokens():

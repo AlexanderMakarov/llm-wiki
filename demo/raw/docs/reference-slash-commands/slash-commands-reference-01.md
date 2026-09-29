@@ -4,9 +4,9 @@ slug: slash-commands-reference-01
 project: reference-slash-commands
 type: source
 tags: [wiki-add, raw-doc]
-date: 2026-09-08
+date: 2026-09-28
 source: "docs/reference/slash-commands.md"
-content_sha256: 27e61bf4e1fec0567f035bd800d927b554d63ef2038d5014d6a732e649596f37
+content_sha256: f3ee075d173ec4adfbd89b4e36ec37e1e0338ff4a016aa6702da2f7ac518551e
 ---
 
 > Part 1 of 4 of **Slash commands reference**.
@@ -67,7 +67,7 @@ Structural and content quality for the wiki is **`llmwiki lint`** / **`/wiki-lin
 
 | Command | Checks | Severity model | When to run |
 |---|---|---|---|
-| [`llmwiki lint`](../reference/cli.md#lint--run-13-wiki-quality-rules) / `/wiki-lint` | Frontmatter completeness, `[[wikilink]]` integrity, orphans, duplicate titles, stale pages, cache-tier consistency, tag-topic convention, stale references, and the rest of the registered rules | Rules with `error` / `warning` / `info` severities; `--fail-on-errors` exits non-zero only on errors | After every `/wiki-sync` or `/wiki-build`, and in CI |
+| [`llmwiki lint`](../reference/cli.md#lint--run-registered-wiki-quality-rules) / `/wiki-lint` | Frontmatter completeness, `[[wikilink]]` integrity, orphans, duplicate titles, stale pages, tag-topic convention, stale references, findability (`page_findability`, `title_ambiguity`, `search_consistency`), and the rest of the registered rules | Rules with `error` / `warning` / `info` severities; `--fail-on-errors` exits non-zero only on errors | After every `/wiki-sync` or `/wiki-build`, and in CI |
 
 Reach for lint when a page or the corpus looks wrong: orphans, broken `[[wikilinks]]`, missing frontmatter, stale summaries. Use `--fail-on-errors` (or the automation lint-fail policy) when a non-zero exit should block a pipeline.
 

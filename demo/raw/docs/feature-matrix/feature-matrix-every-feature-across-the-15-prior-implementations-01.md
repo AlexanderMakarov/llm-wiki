@@ -4,9 +4,9 @@ slug: feature-matrix-every-feature-across-the-15-prior-implementations-01
 project: feature-matrix
 type: source
 tags: [wiki-add, raw-doc]
-date: 2026-09-07
+date: 2026-09-28
 source: "docs/feature-matrix.md"
-content_sha256: 79f71540270bee63f53a9dc51238d1a04d015a8fabcaf8aaf1ec48f097bc44a8
+content_sha256: 6df428c4615c7076326997a5fa09cba57685dceee8dc92c4e4881e9bfbf1f4d7
 ---
 
 > Part 1 of 3 of **Feature Matrix — Every Feature Across the 15 Prior Implementations**.

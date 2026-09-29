@@ -1,115 +1,98 @@
 ---
-title: "Upgrade guide (part 4/5: v1.4.0 — unified queue + vault state (hard cutover))"
+title: "Upgrade guide (part 4/8: 2.1.0 — MCP tool consolidation (#196))"
 slug: upgrade-guide-04
 project: upgrading
 type: source
 tags: [wiki-add, raw-doc]
-date: 2026-09-08
+date: 2026-09-28
 source: "docs/UPGRADING.md"
-content_sha256: 8b7e0b10395116258bc93a8766d0f513016bcbe9a2de5dfdde2d069b78872957
+content_sha256: c3075657888a257c11c0c2658857c42e4c57a45b7e70f26eac2aec1c3b5b4614
 ---
 
-> Part 4 of 5 of **Upgrade guide** — v1.4.0 — unified queue + vault state (hard cutover).
+> Part 4 of 8 of **Upgrade guide** — 2.1.0 — MCP tool consolidation (#196).
 
-## v1.4.0 — unified queue + vault state (hard cutover)
+## 2.1.0 — MCP tool consolidation (#196)
 
-**Requires Python ≥ 3.12.**
+The stdio MCP server registers **six** tools: `wiki_search`, `wiki_read_page`, `wiki_health`, `wiki_sync`, `wiki_export`, `wiki_add`. There are no alias stubs for retired names.
 
-**One-time migration required** if your vault still has legacy dotfiles:
-
-```bash
-python3 scripts/migrate_state_v1_4_0.py --state-file /path/to/vault/llmwiki-state.json
-# or:
-llmwiki migrate state --state-file /path/to/vault/llmwiki-state.json
-# optional cleanup after verifying:
-# rm -rf /path/to/vault/.llmwiki-state.json ...
-```
-
-### What changed
-
-| Before | After |
+| Retired | Replacement |
 |---|---|
-| `.llmwiki-state.json`, `.llmwiki-synth-state.json`, `.llmwiki-queue.json`, `.llmwiki-pending-prompts/` | `<vault>/llmwiki-state.json` (+ `llmwiki-state.js` sidecar) |
-| `LLMWIKI_ROOT` env var | `vault.default_path` in `config.json` |
-| SessionStart auto-sync hook | Manual `llmwiki queue run` |
-| `synthesis.backend: agent_delegate` | Removed — use `dummy`, `ollama`, or `claude` |
-| external `wiki_tasks` queue ownership | `llmwiki queue enqueue` into vault state |
-| Python 3.9–3.11 | **Python ≥ 3.12** |
-| `llmwiki add` synthesized whole backlog | `add` synthesizes **only** the docs it just wrote |
+| `wiki_query` | `wiki_search` with `question` or `mode=extract` |
+| `wiki_list_sources` | `wiki_search` with `list_sources=true` |
+| `wiki_confidence` / `wiki_lifecycle` / `wiki_category_browse` | `wiki_search` with `mode=filter` and the matching `filter_by` |
+| `wiki_lint` | `wiki_health` (same lint JSON keys; adds `totals`) |
+| `wiki_dashboard` | `wiki_health` (`totals` field) |
 
-### New commands
+Full parameter tables: [mcp.md](reference/mcp.md). Historical telemetry rows keep the logged tool name; `llmwiki usage` and Analytics fold retired names into the canonical six-tool surface.
 
-```bash
-llmwiki queue status
-llmwiki queue enqueue --task-type add_doc --source https://example.com
-llmwiki queue run --limit 20
-```
+## 2.0.0 — static site, pipeline, and MCP (from v1.5.0)
 
-Rebuild the site after upgrading so the Home page loads `llmwiki-state.js` from `site/` (build copies the vault sidecar into the site tree).
+### Read this first
 
-### State path isolation (v1.4.0+)
+1. **Re-run `llmwiki install-automation`** if you schedule `llmwiki all` — bare `all` now includes `sync` and `synth`. With a real synthesis backend, add `--no-synth` (or `--no-sync --no-synth`) to keep the old behaviour (#156).
+2. **Run `llmwiki configure-sources`** after upgrade if you use Cursor Agent CLI, OpenClaw, Codex, or other non-Claude stores (#182).
+3. **Stop using `llmwiki serve`** — open `<vault>/site/index.html`. Candidate decisions on `/candidates.html` execute via `llmwiki candidates apply --vault <vault> --actions -` (#109).
+4. **Update MCP clients** — replace `wiki_entity_search` with `wiki_search`; parse `wiki_lint` as `llmwiki lint --json` (#102, #150).
+5. **Run migrations when applicable:**
+   - `llmwiki migrate page-kinds --vault <vault>` if you have `wiki/questions/` or `wiki/comparisons/`
+   - `llmwiki migrate topic-kinds --vault <vault>` for #147 catch-up on older source pages (#174)
+   - `llmwiki migrate broken-provenance --vault <vault>` after Cursor CLI re-sync left broken `source_file` hops (#180)
+6. **Re-sync Cursor Agent CLI** (`llmwiki sync --force` or targeted re-convert) so `is_headless`, `sessionId`, and timestamps are correct (#180).
+7. **Rebuild the site** — `llmwiki build --vault <vault>` refreshes vendored assets, topic pages, pipeline widgets, and provenance links.
 
-The active state file is **process-scoped**: `llmwiki` CLI entry points call `configure_state_file` once from `--vault` / `--state-file` / `config.json` `vault.default_path`. Library code and tests must pass an explicit `state_file=` override or rely on that configured path — there are no import-time vault bindings.
+### Breaking changes
 
-If `llmwiki-state.json` looks truncated (e.g. only a handful of `synth.files` keys after a test run), re-run the migration against your vault:
+- **`llmwiki serve` / `POST /api/candidates` / `/wiki-serve` gone** — static files + CLI review (#109).
+- **`llmwiki all` default pipeline** is `sync` → `synth` → `build` → `graph` → `lint` (#156).
+- **Lint default on `all`** is `--lint-fail never` (report only) (#156).
+- **MCP `wiki_lint` JSON shape** matches CLI (**BREAKING**); filter `issues` by `rule`; old keys `orphans` / `broken_links` are gone (#150).
+- **`wiki_entity_search` removed** — `wiki_search(term, kind=…, format=…)` (#102).
+- **`llmwiki consolidate-topics` is gone** (#147 / #112) — known-names prepare is part of `synth`.
+- **`synth --allow-unclassified` removed** (#102).
+- **`type: question` / `type: comparison` invalid** — `migrate page-kinds` (#109).
+- **`entity_consistency` lint rule removed**; unknown `--rules` names fail (#102).
 
-```bash
-PYTHONPATH=/path/to/llm-wiki python3 scripts/migrate_state_v1_4_0.py \
-  --state-file /path/to/vault/llmwiki-state.json
-```
+### Session sources and adapters
 
-Legacy dotfiles (`.llmwiki-state.json`, `.llmwiki-synth-state.json`, …) are merged in; verify `sync.files` / `synth.files` counts before deleting them.
+- Bare **`llmwiki sync` loads every enabled ingest-ready adapter** whose store exists; `enabled: false` is honoured (#182).
+- **Obsidian and ChatGPT export stay opt-in** (`adapters.*.enabled: true`).
+- **`filters.exclude_headless` (default on)** skips automated launches for every coding-agent adapter; re-sync to classify older Cursor CLI rows (#180).
+- **Cursor IDE Composer ingest works via bare `llmwiki sync` after `configure-sources` Enable** (or `llmwiki sync --adapter cursor_ide`) (#2 / #192) — parses global `state.vscdb`. Set `filters.since` / `adapters.cursor_ide.since` (or pass `--since`) before the first large run. Alias `--adapter cursor` / legacy `adapters.cursor` still resolve. Cursor Agent CLI remains `cursor_cli`.
 
-### Re-run `migrate state` to repair dead `synth_request` items (#23)
+### Synthesis and candidates
 
-Vaults migrated with the first v1.4.0 migrator carry queue items with `task_type: "synth_request"`. The queue runner has no handler for that type, so `llmwiki queue run` marks every one of them `status: error`. Re-run the migration — it purges them, and enqueues a single `synthesize` task if (and only if) real backlog remains:
+- Prefer **`llmwiki synth`** — `synthesize` is removed (#112); use `--sources-only` when you want the old sources-only default (#90).
+- **Next `synth` rewrites source pages** lacking parseable topic bullets once (#147); optional `migrate topic-kinds` for cheap catch-up (#174). Vocabulary now carries known kind into each source pass (#257); pages that only lack kinds still use `migrate topic-kinds`, not a full re-synth.
+- **Promote needs no LLM** — empty Key Facts copy from source `fact:` bullets; `rewrite-key-facts` still needs a backend (#147, #103).
+- **`wiki/archive/` is cold storage** — discarded candidates stay resolved in harvest; first lint after upgrade may report more broken links (#140).
+- **`synth --estimate` Already synthesized** follows synth state, not pages-on-disk alone (#163).
+- **Ctrl+C during `synth`** exits 130 after recording pages that reached disk (#145).
 
-```bash
-llmwiki migrate state --state-file /path/to/vault/llmwiki-state.json
-llmwiki queue run --vault /path/to/vault
-```
+### Site and review
 
-The migration resolves each legacy `.llmwiki-pending-prompts/<uuid>.md` against the pending sentinel pages left in `wiki/sources/`, so it is safe to `rm -rf .llmwiki-pending-prompts/` afterwards — the prompts themselves are never needed again.
+- **Open `site/index.html`** (or `file://`) — highlight.js and vis-network are vendored (#109, #127).
+- **`llmwiki build --local-root PATH`** for portable published paths (#109).
+- **`candidates apply` rebuilds `site/`** unless `--no-rebuild` (#109).
+- **`llmwiki export` / `llmwiki reindex` CLI removed** — use `build`; catalog reconciles on `sync` / `synth` / candidate actions (#82).
 
-### Check `synthesis.backend` before syncing (#23)
+### Lint and MCP
 
-`agent`, `agent-delegate`, and `agent_delegate` were **removed** in v1.4.0. `resolve_backend()` reads them as a typo and silently falls back to `dummy`, which writes stub pages (`Auto-synthesized from session`) into `wiki/sources/`. `migrate state` prints a `WARNING:` when your `config.json` still names one — set `synthesis.backend` to `claude`, `ollama`, or `dummy`, then re-synthesize:
+- **`<vault>/llmwiki.json`** — `lint.disabled_rules` to opt out of named checks (#150).
+- **`llmwiki lint --min-refs N`** and **`llmwiki all --min-refs N`** share harvest threshold (default 3) (#150).
+- **`llmwiki lint --fail-on-warnings`** for warning-severity gate (#150).
+- **`llmwiki lint --include-llm` removed** — drop the flag from scripts (#72).
+- **`provenance_integrity`** may report new errors on broken `sources:` / `source_file:` chains (#122).
 
-```bash
-llmwiki synth --vault /path/to/vault
-```
+### Automation
 
-Stub pages left behind by the dummy backend count as **unsynthesized** backlog (#24): `llmwiki queue status` reports them under `unsynth_total`, `llmwiki lint` flags them with the `stub_source_pages` rule, and `llmwiki synth` refills them with a real backend.
+- **`install-automation`** plain-language wizard, cron `--schedule`, `--job {ingest,maintain}` (#156).
+- **`--with-sync` / `--with-synth` still parse** but are inert — use `--no-sync` / `--no-synth` to opt out (#156).
+- **`--profile {A,B,C}` deprecated** — `A`→ingest, `B`/`C`→maintain; `--hour`/`--minute` superseded by `--schedule`.
+- **`llmwiki install-agent-kit --dest PATH`** replaces manual `.claude/commands` copy and `.claude-plugin/` (#109).
 
-## v1.3.83+ — unified queue preview (superseded by v1.4.0)
+### No action needed
 
-Same migration as v1.4.0; use `scripts/migrate_state_v1_4_0.py`.
-
-## v1.3.0 — consolidated 1.2.x patch roll-up
-
-**Released: 2026-04-26.**
-
-### Summary
-
-Drop-in upgrade from any 1.2.x. v1.3.0 consolidates 38 in-tree patch versions (1.2.1 → 1.2.38) under one minor release tag — no breaking API changes, no schema migrations, no config changes.
-
-```bash
-pip install -U llm-wiki-plus  # → 1.3.0
-llmwiki --version             # → 1.3.0
-```
-
-### What's in it
-
-The full per-fix detail is preserved under the [1.2.x] entries in `CHANGELOG.md`. Two themes:
-
-1. **Opus 4.7 deep code-review backlog (#403, ~26 issues)** — every correctness, perf, and observability finding got a one-issue-one-PR fix. Headliners: `is_subagent` strict path check (#406), `derive_session_slug` UUID-prefix collision (#424), tilde-fence counting in `_close_open_fence` (#419), `wiki_query` ranking length normalisation (#418), `wiki_search` cap (#413), per-vault synth state (#420), `--force` sync persisting `_meta`/`_counters` (#426), subprocess `claude_path` resolved via `shutil.which` (#421).
-
-2. **Performance + features** — `DuplicateDetection` lint rule rewritten with bucket+fingerprint+SequenceMatcher (1s vs minutes on 500 pages, #412), perf-budget test suite (`-m slow`, #429), `md_to_plain_text` cache (#417), auto-seeded project stubs pre-populated from session metadata (#425), 2 new lint rules (`frontmatter_count_consistency`, `tools_consistency`, #378), `wiki-all` slash command, `_context.md` folder convention (#60).
-
-### Breaking — none
-
-Same CLI surface, same config schema, same on-disk state format. The only thing that changed is that the next plain `sync` after a forced re-sync will now correctly identify already-processed files as unchanged (was: re-processed every time, #426).
-
-### Schema migrations — none
-
-State files written by 1.2.x are read verbatim by 1.3.0.
+- **`/vs/` removed** — never wired into normal builds (#138).
+- **Honest Home pipeline counts** — eligible sources and On disk column (#81).
+- **Estimate Candidates** labelled pre-run state, not a harvest forecast (#113).
+- **`entity_type` on existing pages** — inert metadata; optional re-stamp `wiki/projects/` to `type: project` (#102).

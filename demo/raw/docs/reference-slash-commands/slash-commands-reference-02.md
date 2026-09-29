@@ -4,9 +4,9 @@ slug: slash-commands-reference-02
 project: reference-slash-commands
 type: source
 tags: [wiki-add, raw-doc]
-date: 2026-09-08
+date: 2026-09-28
 source: "docs/reference/slash-commands.md"
-content_sha256: 27e61bf4e1fec0567f035bd800d927b554d63ef2038d5014d6a732e649596f37
+content_sha256: f3ee075d173ec4adfbd89b4e36ec37e1e0338ff4a016aa6702da2f7ac518551e
 ---
 
 > Part 2 of 4 of **Slash commands reference** — Wiki pipeline.
@@ -170,7 +170,7 @@ want to re-run sync.
 
 ### `/wiki-lint`
 
-**What:** run every registered lint rule (16 at last count — all structural / deterministic). The live number is printed by `llmwiki lint --help`.
+**What:** run every registered lint rule (all deterministic — no LLM). The live number is printed by `llmwiki lint --help`.
 
 **Wraps:** `python3 -m llmwiki lint`.
 
@@ -192,6 +192,12 @@ want to re-run sync.
 14. `frontmatter_count_consistency`
 15. `tools_consistency`
 16. `stub_source_pages`
+17. `provenance_integrity` *(#122)*
+18. `page_findability` *(#197)* — titled page not returned for its own title (findability key is title, not slug; prefer `[[slug|Title]]`)
+19. `title_ambiguity` *(#197)* — titled page not ranked first for its own title
+20. `search_consistency` *(#197)* — search vs literal scan; survival share is informational, not a defect
+
+See [`cli.md` lint](cli.md#lint--run-registered-wiki-quality-rules) for severities and findability detail.
 
 **Example:**
 
@@ -203,25 +209,3 @@ want to re-run sync.
 ---
 
 ### `/wiki-graph`
-
-**What:** build the knowledge graph. Nodes = wiki pages, edges =
-`[[wikilinks]]`. Emits `graph/graph.json` + `graph/graph.html`.
-
-**Wraps:** `python3 -m llmwiki graph`.
-
-**Example:**
-
-```
-/wiki-graph
-```
-
-Then open `site/graph.html` (auto-copied from `graph/graph.html` during
-build) in a browser.
-
----
-
-### `/wiki-reflect`
-
-**What:** higher-order self-reflection pass over the whole wiki. Looks
-for gaps, patterns, duplicated-topic clusters, areas where a synthesis
-page would help.

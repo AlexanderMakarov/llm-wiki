@@ -3,13 +3,13 @@ title: "Cut shell startup time by deferring completions (marnitask)"
 type: source
 description: "Startup was dominated by loading completion scripts that were rarely used."
 tags: [session-transcript, session]
-date: 2026-06-29
+date: 2026-07-19
 source_file: raw/sessions/dotfiles/2026-06-29T15-52-dotfiles-shell-startup-profiling.md
 sessionId: a15bb9e8-8df4-5256-6393-57ad5c4e897a
 slug: shell-startup-profiling
 project: dotfiles
-started: 2026-06-29T15:52:00+00:00
-ended: 2026-06-29T17:09:00+00:00
+started: 2026-07-19T15:52:00+00:00
+ended: 2026-07-19T17:09:00+00:00
 cwd: /home/USER/code/dotfiles
 gitBranch: perf/startup
 permissionMode: default
@@ -28,7 +28,7 @@ is_headless: false
 agent: openclaw
 ---
 
-# Session: 4e8cdec3 — 2026-06-29
+# Session: 4e8cdec3 — 2026-07-19
 
 **Project:** `dotfiles` · **Branch:** `perf/startup` · **Mode:** `default` · **Model:** `claude-opus-5`
 

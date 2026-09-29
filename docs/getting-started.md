@@ -87,7 +87,7 @@ Pressing TAB after `llmwiki ` lists every command, and a typed prefix narrows th
 
 On macOS / Linux, `./setup.sh` offers this at the end when run in an interactive terminal: it asks `Add llmwiki TAB completion to ~/.bashrc? [Y/n]` (or `~/.zshrc` when your login shell is zsh), and on yes writes the line below and prints which file it changed. Re-running setup replaces that line with the current command list instead of adding a second one, and leaves the rest of the file alone. On macOS, bash users get `~/.bash_profile` instead of `~/.bashrc`, because Terminal and iTerm start bash as a login shell, which does not read `~/.bashrc`. For any other shell it changes nothing and prints the bash line for you to add yourself. Set `LLMWIKI_SKIP_COMPLETION=1` to skip the question; it is never asked when setup runs non-interactively.
 
-To enable it by hand (for example after `pip install` or Homebrew), paste the line for your shell into its startup file and open a new terminal.
+To enable it by hand (for example after `pip install`), paste the line for your shell into its startup file and open a new terminal.
 
 bash — `~/.bashrc` (`~/.bash_profile` on macOS):
 

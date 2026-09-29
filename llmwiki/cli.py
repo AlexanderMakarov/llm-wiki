@@ -1780,7 +1780,7 @@ def cmd_install_agent_kit(args: argparse.Namespace) -> int:
 
     ``--dest`` is required: the command never guesses at agent directory
     conventions. The kit ships inside the package, so this works from a
-    pip or Homebrew install with no checkout on disk.
+    pip install with no checkout on disk.
     """
     report = install_agent_kit.run_install(
         dest=Path(args.dest),
@@ -1795,7 +1795,7 @@ def cmd_migrate_page_kinds(args: argparse.Namespace) -> int:
 
     Unlike the other ``migrate-*`` commands this one lives in the package
     rather than under ``scripts/``: only ``llmwiki*`` is packaged, and a user
-    upgrading from pip or Homebrew has no checkout to load a script from.
+    upgrading from pip has no checkout to load a script from.
     """
     report = migrate_page_kinds.run_migration(
         vault=Path(args.vault),
@@ -1808,7 +1808,7 @@ def cmd_migrate_page_kinds(args: argparse.Namespace) -> int:
 def cmd_migrate_topic_kinds(args: argparse.Namespace) -> int:
     """Stamp ``(entity|concept)`` onto older source Connections bullets (#174).
 
-    Package-local like ``migrate-page-kinds``: pip/Homebrew installs have no
+    Package-local like ``migrate-page-kinds``: pip installs have no
     ``scripts/`` checkout. Kinds come from existing wiki pages only — no
     synthesis backend or network call.
     """
@@ -1823,7 +1823,7 @@ def cmd_migrate_topic_kinds(args: argparse.Namespace) -> int:
 def cmd_migrate_wikilink_titles(args: argparse.Namespace) -> int:
     """Rewrite bare resolving wikilinks to carry title display text (#259).
 
-    Package-local like ``migrate-topic-kinds``: pip/Homebrew installs have no
+    Package-local like ``migrate-topic-kinds``: pip installs have no
     ``scripts/`` checkout. Titles come from existing wiki frontmatter only —
     no synthesis backend or network call.
     """
@@ -1859,7 +1859,7 @@ def cmd_migrate_discarded_topic_links(args: argparse.Namespace) -> int:
 def cmd_migrate_source_page_paths(args: argparse.Namespace) -> int:
     """Move source pages filed under a stale name to their derived path (#265).
 
-    Package-local like ``migrate-topic-kinds``: pip/Homebrew installs have no
+    Package-local like ``migrate-topic-kinds``: pip installs have no
     ``scripts/`` checkout. Offline — no synthesis backend or network call.
     """
     report = migrate_source_page_paths.run_migration(
@@ -1873,7 +1873,7 @@ def cmd_migrate_source_page_paths(args: argparse.Namespace) -> int:
 def cmd_migrate_broken_provenance(args: argparse.Namespace) -> int:
     """Remap or clear wiki hops to missing ``raw/sessions/`` files (#180).
 
-    Package-local like ``migrate-topic-kinds``: pip/Homebrew installs have no
+    Package-local like ``migrate-topic-kinds``: pip installs have no
     ``scripts/`` checkout. Prefers same-date / non-headless raw candidates;
     clears unbroken-unmatchable ``source_file`` values without deleting pages.
     """

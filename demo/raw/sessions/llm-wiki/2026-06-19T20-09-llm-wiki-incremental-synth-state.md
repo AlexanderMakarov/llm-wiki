@@ -3,13 +3,13 @@ title: "Stop re-synthesising sources that have not changed"
 type: source
 description: "Traced why a second synth run re-processed everything and fixed the state comparison."
 tags: [session-transcript, session]
-date: 2026-06-19
+date: 2026-07-09
 source_file: raw/sessions/llm-wiki/2026-06-19T20-09-llm-wiki-incremental-synth-state.md
 sessionId: 4afa19bd-7b56-2c1a-0bcc-3cfe33e62874
 slug: incremental-synth-state
 project: llm-wiki
-started: 2026-06-19T20:09:00+00:00
-ended: 2026-06-19T20:57:00+00:00
+started: 2026-07-09T20:09:00+00:00
+ended: 2026-07-09T20:57:00+00:00
 cwd: /home/USER/code/llm-wiki
 gitBranch: fix/synth-state
 permissionMode: default
@@ -28,7 +28,7 @@ is_headless: false
 agent: claude-code
 ---
 
-# Session: 9ca1b8e1 — 2026-06-19
+# Session: 9ca1b8e1 — 2026-07-09
 
 **Project:** `llm-wiki` · **Branch:** `fix/synth-state` · **Mode:** `default` · **Model:** `claude-opus-5`
 

@@ -4,9 +4,9 @@ slug: configuration-reference-08
 project: configuration-reference
 type: source
 tags: [wiki-add, raw-doc]
-date: 2026-09-08
+date: 2026-09-28
 source: "docs/configuration-reference.md"
-content_sha256: 037667c9a64c03e7e116aad5677fbb0f9c2a8a529294787eae7fbe5f06d78089
+content_sha256: a94f88e12736fb1eb7ca6bf1d509cef2af5bfc5ca59c974abbe8c0cbb274a294
 ---
 
 > Part 8 of 8 of **Configuration Reference** — .llmwikiignore.

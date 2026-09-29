@@ -1,19 +1,15 @@
 ---
-title: "Architecture (part 3/3: Adding an adapter)"
+title: "Architecture (part 3/3: Design principles)"
 slug: architecture-03
 project: architecture
 type: source
 tags: [wiki-add, raw-doc]
-date: 2026-08-10
+date: 2026-09-28
 source: "docs/architecture.md"
-content_sha256: f9d60b3a6d2545eb672aff3ec89271d5d5daf460c4cf2aa42001fe5d6fdfe471
+content_sha256: 2bd3b154da7e9af93b24c396f171de63229075237be0402eb58bbb79eb5f9688
 ---
 
-> Part 3 of 3 of **Architecture** — Adding an adapter.
-
-## Adding an adapter
-
-See [framework.md §5.25 Adapter Flow](framework.md) for the full contract. TL;DR: one new file at `llmwiki/adapters/<agent>.py`, one fixture, one snapshot test, one doc page, one README line, one CHANGELOG entry.
+> Part 3 of 3 of **Architecture** — Design principles.
 
 ## Design principles
 

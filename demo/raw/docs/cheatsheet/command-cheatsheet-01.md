@@ -4,9 +4,9 @@ slug: command-cheatsheet-01
 project: cheatsheet
 type: source
 tags: [wiki-add, raw-doc]
-date: 2026-09-07
+date: 2026-09-28
 source: "docs/cheatsheet.md"
-content_sha256: e6ca298f4ad85f23bafd0499940f3b1e08825b0d0b77066af98d7d09137a327f
+content_sha256: 6c0269b30e8df4229a5b81a22e113d9970567484b7d63f3068dfc57d6c186aeb
 ---
 
 > Part 1 of 2 of **Command cheatsheet**.
@@ -83,8 +83,9 @@ llmwiki all --lint-fail errors         # exit 2 when lint reports an error
 | `candidates` | Approval workflow (list / promote / merge / discard) |
 | `build` | Compile `wiki/` markdown into `site/` HTML + AI exports (`llms.txt`, `sitemap.xml`, …) |
 | `graph` | Build the knowledge graph (Graphify default, builtin fallback) |
-| `lint` | Run 17 wiki-quality rules |
-| `query` | Search the knowledge graph with a question |
+| `lint` | Run registered wiki-quality rules |
+| `search` | Literal term/phrase search (same engine as MCP) |
+| `query` | Natural-language knowledge-graph walk (Graphify) |
 | `add` | Add a URL, file, or folder to the wiki |
 | `watch` | Near-real-time sync → synth → build when a session finishes |
 | `adapters` | List every adapter + its status |
@@ -116,10 +117,13 @@ llmwiki build                          # HTML site + llms.txt, llms-full.txt, gr
 ## Quality
 
 ```bash
-llmwiki lint                           # 17 wiki-quality rules
+llmwiki lint                           # registered wiki-quality rules
 llmwiki lint --json --fail-on-errors   # CI-friendly
 llmwiki lint --rules link_integrity,orphan_detection
+llmwiki lint --rules page_findability,title_ambiguity,search_consistency
 llmwiki lint --vault /path/to/vault --fail-on-warnings   # rules switched off in <vault>/llmwiki.json never run
+llmwiki search RAG --vault /path/to/vault                # literal term search
+llmwiki search "reinforcement learning" --mode phrase    # literal phrase search
 ```
 
 ## Candidate workflow

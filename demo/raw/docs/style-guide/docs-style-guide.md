@@ -4,9 +4,9 @@ slug: docs-style-guide
 project: style-guide
 type: source
 tags: [wiki-add, raw-doc]
-date: 2026-09-08
+date: 2026-09-28
 source: "docs/style-guide.md"
-content_sha256: c0aebb19e133a74d130ca00d3c275b4426e3fe5c48c66c3281ccdcc8302f713d
+content_sha256: 3cf22586999f138b34b2caab87e0d5c4cd3094882e373d6f36fdbe3946ea1806
 ---
 
 ---
@@ -27,7 +27,7 @@ written by one careful person.
 
 ## Voice
 
-**Minimalism + trust & authority.** That's the whole brand.
+**Minimalism + trust & authority.** That's the whole brand for *prose*. Visual tokens (type, colour, motion) live in [`maintainers/brand-system.md`](maintainers/brand-system.md) — use that when editing site CSS or UI chrome.
 
 | Do | Don't |
 |---|---|

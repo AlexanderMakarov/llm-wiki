@@ -75,3 +75,64 @@ def test_plant_tables_reference_existing_sessions(gen):
         assert plant.session in slugs, plant
     for session, _placement, _word in gen.PHRASE_WORD_SEEDS:
         assert session in slugs, session
+
+
+def _seed_dated_vault(gen, root: Path, monkeypatch) -> tuple[Path, Path]:
+    """A demo-shaped vault whose one session page is named for an old date."""
+    raw_rel = "llm-wiki/2026-09-07T23-12-llm-wiki-wikilink-resolution.md"
+    raw = root / "raw" / "sessions" / raw_rel
+    raw.parent.mkdir(parents=True)
+    raw.write_text("---\nslug: wikilink-resolution\n---\n", encoding="utf-8")
+    page = root / "wiki" / "sources" / "llm-wiki" / "2026-09-07-wikilink-resolution.md"
+    page.parent.mkdir(parents=True)
+    page.write_text(
+        "---\n"
+        'title: "Session: wikilink-resolution — 2026-09-07"\n'
+        "type: source\n"
+        "date: 2026-09-07\n"
+        f"source_file: raw/sessions/{raw_rel}\n"
+        "project: llm-wiki\n"
+        "---\n\n## Summary\n\nA real synthesized summary.\n",
+        encoding="utf-8",
+    )
+    linker = root / "wiki" / "concepts" / "Wikilinks.md"
+    linker.parent.mkdir(parents=True)
+    linker.write_text(
+        "---\ntitle: Wikilinks\ntype: concept\n---\n\n"
+        "## Connections\n\n- [[2026-09-07-wikilink-resolution]]\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(gen, "DEMO_VAULT", root)
+    monkeypatch.setattr(gen, "DEMO_SESSIONS", root / "raw" / "sessions")
+    monkeypatch.setattr(gen, "emit_search_terms_fixture", lambda *a, **k: None)
+    return raw, linker
+
+
+def test_release_day_write_rehomes_source_pages(gen, tmp_path: Path, monkeypatch):
+    """--today moves a session's date, so its source page moves with it.
+
+    Without the re-home pass, the next session synth skips every re-dated
+    source as "already claimed by a real page under another name".
+    """
+    raw, linker = _seed_dated_vault(gen, tmp_path, monkeypatch)
+    monkeypatch.setattr(sys, "argv", ["generate_demo_sessions.py", "--today", "2026-09-28"])
+
+    assert gen.main() == 0
+
+    new_date = re.search(r"^date: (\S+)$", raw.read_text(encoding="utf-8"), re.M).group(1)
+    assert new_date != "2026-09-07"
+    sources = tmp_path / "wiki" / "sources" / "llm-wiki"
+    assert not (sources / "2026-09-07-wikilink-resolution.md").exists()
+    assert (sources / f"{new_date}-wikilink-resolution.md").is_file()
+    assert f"[[{new_date}-wikilink-resolution]]" in linker.read_text(encoding="utf-8")
+
+
+def test_dry_run_leaves_source_pages_in_place(gen, tmp_path: Path, monkeypatch):
+    _seed_dated_vault(gen, tmp_path, monkeypatch)
+    monkeypatch.setattr(
+        sys, "argv", ["generate_demo_sessions.py", "--dry-run", "--today", "2026-09-28"]
+    )
+
+    assert gen.main() == 0
+
+    assert (tmp_path / "wiki" / "sources" / "llm-wiki" / "2026-09-07-wikilink-resolution.md").is_file()

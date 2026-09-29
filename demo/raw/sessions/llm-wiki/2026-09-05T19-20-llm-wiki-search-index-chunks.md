@@ -3,13 +3,13 @@ title: "Split the search index into per-project chunks"
 type: source
 description: "A single index file was downloading everything up front; it is now chunked and loaded on demand."
 tags: [session-transcript, session]
-date: 2026-09-05
+date: 2026-09-25
 source_file: raw/sessions/llm-wiki/2026-09-05T19-20-llm-wiki-search-index-chunks.md
 sessionId: daa52c18-cbda-2583-4da8-7bb0c4081ffd
 slug: search-index-chunks
 project: llm-wiki
-started: 2026-09-05T19:20:00+00:00
-ended: 2026-09-05T20:34:00+00:00
+started: 2026-09-25T19:20:00+00:00
+ended: 2026-09-25T20:34:00+00:00
 cwd: /home/USER/code/llm-wiki
 gitBranch: perf/search
 permissionMode: default
@@ -28,7 +28,7 @@ is_headless: false
 agent: claude-code
 ---
 
-# Session: 70a5992d — 2026-09-05
+# Session: 70a5992d — 2026-09-25
 
 **Project:** `llm-wiki` · **Branch:** `perf/search` · **Mode:** `default` · **Model:** `claude-opus-5`
 

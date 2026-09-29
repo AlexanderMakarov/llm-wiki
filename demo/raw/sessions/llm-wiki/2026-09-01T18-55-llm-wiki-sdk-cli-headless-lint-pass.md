@@ -3,13 +3,13 @@ title: "Headless SDK lint pass over a synthetic fixture vault"
 type: source
 description: "Synthetic Claude SDK-CLI headless run that would be skipped under exclude_headless."
 tags: [session-transcript, claude-code, session]
-date: 2026-09-01
+date: 2026-09-21
 source_file: raw/sessions/llm-wiki/2026-09-01T18-55-llm-wiki-sdk-cli-headless-lint-pass.md
 sessionId: 617d1b10-c14e-41db-7407-170564f312c8
 slug: sdk-cli-headless-lint-pass
 project: llm-wiki
-started: 2026-09-01T18:55:00+00:00
-ended: 2026-09-01T19:20:00+00:00
+started: 2026-09-21T18:55:00+00:00
+ended: 2026-09-21T19:20:00+00:00
 cwd: /home/USER/code/llm-wiki
 gitBranch: chore/headless-demo
 permissionMode: default
@@ -28,7 +28,7 @@ is_headless: true
 agent: claude-code
 ---
 
-# Session: 229802be — 2026-09-01
+# Session: 229802be — 2026-09-21
 
 **Project:** `llm-wiki` · **Branch:** `chore/headless-demo` · **Mode:** `default` · **Model:** `claude-opus-5`
 

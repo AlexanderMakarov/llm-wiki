@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import re
 import subprocess
 from pathlib import Path
 
@@ -111,6 +112,80 @@ def test_porcelain_rename() -> None:
 def test_added_then_deleted_in_working_tree_drops_out() -> None:
     plan = refresh.plan_from_git("A\tdocs/ephemeral.md\n", " D docs/ephemeral.md\n")
     assert plan == []
+
+
+def _raw_doc(docs: Path, rel: str, source: str) -> None:
+    path = docs / rel
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(f'---\ntitle: "Doc"\nsource: "{source}"\n---\n\n# Doc\n', encoding="utf-8")
+
+
+def test_remove_also_takes_other_dirs_holding_the_same_source(tmp_path: Path) -> None:
+    """A seed copy under a title-derived dir goes with the path-derived one (#298)."""
+    docs = tmp_path / "raw" / "docs"
+    _raw_doc(docs, "adapters-claude-code/claude-code-adapter.md", "docs/adapters/claude-code.md")
+    _raw_doc(docs, "claude-code-adapter/claude-code-adapter.md", "docs/adapters/claude-code.md")
+    _raw_doc(docs, "guide/guide.md", "docs/guide.md")
+    plan = refresh.plan_from_git("M\tdocs/adapters/claude-code.md\n", "")
+
+    assert refresh.expand_removes(plan, docs) == [
+        ("remove", "docs/adapters/claude-code.md", "adapters-claude-code"),
+        ("remove", "docs/adapters/claude-code.md", "claude-code-adapter"),
+        ("add", "docs/adapters/claude-code.md", "adapters-claude-code"),
+    ]
+
+
+def test_remove_of_a_seed_only_doc_takes_its_seed_dir(tmp_path: Path) -> None:
+    """A doc never refreshed before lives only under its seed dir; without
+    the source lookup the remove matched nothing and the add duplicated it."""
+    docs = tmp_path / "raw" / "docs"
+    _raw_doc(docs, "docs-style-guide/docs-style-guide.md", "docs/style-guide.md")
+    plan = refresh.plan_from_git("M\tdocs/style-guide.md\n", "")
+
+    assert refresh.expand_removes(plan, docs) == [
+        ("remove", "docs/style-guide.md", "style-guide"),
+        ("remove", "docs/style-guide.md", "docs-style-guide"),
+        ("add", "docs/style-guide.md", "style-guide"),
+    ]
+
+
+def test_add_only_plan_is_not_expanded(tmp_path: Path) -> None:
+    docs = tmp_path / "raw" / "docs"
+    _raw_doc(docs, "docs-style-guide/docs-style-guide.md", "docs/style-guide.md")
+    plan = refresh.plan_from_git("A\tdocs/style-guide.md\n", "")
+
+    assert refresh.expand_removes(plan, docs) == plan
+
+
+def test_committed_demo_holds_each_product_doc_once() -> None:
+    """Two raw-doc dirs for one ``source:`` ship the doc twice: two source
+    pages with one title, competing in search and harvest (#298)."""
+    by_source = refresh.doc_dirs_by_source(REPO / "demo" / "raw" / "docs")
+    shared = {src: sorted(dirs) for src, dirs in by_source.items() if len(dirs) > 1}
+    assert shared == {}
+
+
+_HOME_DIR = re.compile(r"(?:/home/|/Users/)([A-Za-z0-9._-]+)")
+_PLACEHOLDER_USERS = {"USER", "user", "you"}
+
+
+def test_committed_demo_carries_no_real_home_directory() -> None:
+    """demo/ is published: every home path in it must be a placeholder.
+
+    The refresh once passed ``llmwiki add`` absolute paths, and ``add``
+    records them in the vault's queue, so ``llmwiki-state.json`` shipped the
+    maintainer's home directory.
+    """
+    listed = _git(REPO, ["ls-files", "-co", "--exclude-standard", "--", "demo"]).stdout
+    found: dict[str, set[str]] = {}
+    for rel in listed.splitlines():
+        path = REPO / rel
+        if not path.is_file() or path.suffix not in {".md", ".json", ".js", ".jsonl", ".txt"}:
+            continue
+        for user in _HOME_DIR.findall(path.read_text(encoding="utf-8", errors="replace")):
+            if user not in _PLACEHOLDER_USERS:
+                found.setdefault(rel, set()).add(user)
+    assert found == {}
 
 
 def test_synth_argv_scopes_to_added_raw_docs(tmp_path: Path) -> None:
@@ -233,6 +308,10 @@ def test_run_refresh_passes_path_scoped_synth(
     assert "raw/docs/guide/guide.md" in synth
     # Must not be the old vault-wide form: synth --vault … --docs-only with no --path.
     assert synth != ["synth", "--vault", str(repo / "demo"), "--docs-only"]
+    # `add` records the path it is given in the published demo state, so it
+    # must be the repo-relative doc path, never an absolute one.
+    add_calls = [c for c in calls if c[:1] == ["add"]]
+    assert [c[1] for c in add_calls] == ["docs/guide.md"]
 
 
 # ── git fixture / --dry-run ───────────────────────────────────────────────

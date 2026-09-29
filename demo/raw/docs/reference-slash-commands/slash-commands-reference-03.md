@@ -1,15 +1,37 @@
 ---
-title: "Slash commands reference (part 3/4: /wiki-build)"
+title: "Slash commands reference (part 3/4: /wiki-reflect)"
 slug: slash-commands-reference-03
 project: reference-slash-commands
 type: source
 tags: [wiki-add, raw-doc]
-date: 2026-09-08
+date: 2026-09-28
 source: "docs/reference/slash-commands.md"
-content_sha256: 27e61bf4e1fec0567f035bd800d927b554d63ef2038d5014d6a732e649596f37
+content_sha256: f3ee075d173ec4adfbd89b4e36ec37e1e0338ff4a016aa6702da2f7ac518551e
 ---
 
-> Part 3 of 4 of **Slash commands reference** — /wiki-build.
+> Part 3 of 4 of **Slash commands reference** — /wiki-reflect.
+
+**What:** build the knowledge graph. Nodes = wiki pages, edges =
+`[[wikilinks]]`. Emits `graph/graph.json` + `graph/graph.html`.
+
+**Wraps:** `python3 -m llmwiki graph`.
+
+**Example:**
+
+```
+/wiki-graph
+```
+
+Then open `site/graph.html` (auto-copied from `graph/graph.html` during
+build) in a browser.
+
+---
+
+### `/wiki-reflect`
+
+**What:** higher-order self-reflection pass over the whole wiki. Looks
+for gaps, patterns, duplicated-topic clusters, areas where a synthesis
+page would help.
 
 **No CLI wrapper** — it's a model-orchestrated workflow that reads the
 index + overview + sample of pages and outputs suggestions.

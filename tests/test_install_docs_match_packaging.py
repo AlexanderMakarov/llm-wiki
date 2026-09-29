@@ -45,8 +45,7 @@ def test_installation_tutorial_is_one_install_step_with_options():
     text = (REPO_ROOT / "docs/tutorials/01-installation.md").read_text(encoding="utf-8")
     assert "## Step 2 — Install (pick one)" in text
     assert "### Option A — PyPI" in text
-    assert "### Option B — Homebrew" in text
-    assert "### Option C — Clone" in text
+    assert "### Option B — Clone" in text
     # Must not reintroduce parallel "Step N — Install from …" siblings.
     assert not re.search(r"^## Step \d+ — Install from ", text, re.MULTILINE)
 

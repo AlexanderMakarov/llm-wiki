@@ -3,13 +3,13 @@ title: "Version the git hooks instead of copying them"
 type: source
 description: "Hooks drifted between machines because they lived outside the repository."
 tags: [session-transcript, session]
-date: 2026-08-31
+date: 2026-09-20
 source_file: raw/sessions/dotfiles/2026-08-31T15-28-dotfiles-git-hooks-sync.md
 sessionId: 2ea379b6-df3d-18f9-9f70-dac6b22c8792
 slug: git-hooks-sync
 project: dotfiles
-started: 2026-08-31T15:28:00+00:00
-ended: 2026-08-31T15:56:00+00:00
+started: 2026-09-20T15:28:00+00:00
+ended: 2026-09-20T15:56:00+00:00
 cwd: /home/USER/code/dotfiles
 gitBranch: feat/hooks
 permissionMode: default
@@ -28,7 +28,7 @@ is_headless: false
 agent: cursor-cli
 ---
 
-# Session: e69a9815 — 2026-08-31
+# Session: e69a9815 — 2026-09-20
 
 **Project:** `dotfiles` · **Branch:** `feat/hooks` · **Mode:** `default` · **Model:** `claude-opus-5`
 

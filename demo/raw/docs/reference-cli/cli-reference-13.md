@@ -1,82 +1,58 @@
 ---
-title: "CLI reference (part 13/15: install-automation — set up the daily job)"
+title: "CLI reference (part 13/19: broken-provenance — remap or clear hops to missing raw sessions)"
 slug: cli-reference-13
 project: reference-cli
 type: source
 tags: [wiki-add, raw-doc]
-date: 2026-09-08
+date: 2026-09-28
 source: "docs/reference/cli.md"
-content_sha256: 186543f38f0258ea703f9ef68071d930f7135ea481068df5e5b46346e0f33e99
+content_sha256: 80394a36c35bb48cc2c8a5640d51d9180b601f9274c4cb944e18a4be261b1dbc
 ---
 
-> Part 13 of 15 of **CLI reference** — install-automation — set up the daily job.
+> Part 13 of 19 of **CLI reference** — broken-provenance — remap or clear hops to missing raw sessions.
 
-## `install-automation` — set up the daily job
+1. Finds every real (non-stub) source page whose `source_file:` names an existing `raw/sessions/` or `raw/docs/` file and whose path differs from the derived one. A doc's `--part-NN` pages move as one group, keeping their part suffixes.
+2. Moves each page to its derived path with body and frontmatter intact. `title` changes only while it still reads `Session: <old name> — <date>` (the converter's title for the old name); it then becomes the raw file's current title.
+3. Rewrites `[[old-stem]]`, `[[old-stem|label]]` and `[[old-stem#anchor]]` links across `wiki/`, and the stem in frontmatter `sources:` lists. A label changes only when it equals the old title. When more than one page answers to a bare stem, the link (or `sources:` entry) in page P follows the one source page with that stem whose body links back to P (matched with the same case/punctuation fold as `link_integrity`); if that back-linker stays put the link is left as it is, and with no back-linker, several, or a back-linker whose new name would itself be ambiguous, the link is reported as ambiguous and left alone — the report counts links disambiguated by backlink, links still ambiguous, and those that will break because every page of that name moves; a path-qualified link (`[[sources/<project>/<stem>]]`, `[[<project>/<stem>]]`) is rewritten when its path matches exactly one page. `wiki/archive/` and the log are never edited.
+4. Records synth state (`synth.files` in `<vault>/llmwiki-state.json`, the raw file's mtime) for each moved source, and for a real page already at its derived path, when the source has no state entry yet. An existing entry is kept as it is — one older than the raw file means the raw was re-converted after synthesis, and synth still has to see that page as stale. Moves are applied first; a move that fails to write or to leave its old path is undone, reported, and dropped together with its link rewrites and state entry. Then refreshes the Home pending count, rebuilds `wiki/index.md` when the vault keeps one, and appends a `migrate | source page paths` entry to `wiki/log.md`.
+5. Reports a collision — and changes nothing for that source — when a real page already sits at the derived path. A stub at the derived path for the same source is replaced.
 
-Sets up the job that keeps your wiki current so you do not have to run the steps by hand. Interactive by default: it asks what the daily job should do, when it should run, and shows you the exact command line before writing anything. Pass `--yes` with the flags below for an unattended install.
-
-### What the daily job can do
-
-| Job | What it does | Writes | Cost |
-|---|---|---|---|
-| **Ingest only** (default) | Collects new agent sessions into your vault and refreshes the site. | `raw/`, `site/` | Never contacts an AI provider — free. |
-| **Maintain** | Collects new sessions, summarises each one into a wiki page, gathers candidate topics for review, refreshes the browsable site **once per cycle at the build step after summarization**, and reports wiki quality findings into the run log. A separate sync-only path (including optional **Ingest** automation) is a different concern — not “Maintain finished.” | `raw/`, `wiki/sources/`, `wiki/candidates/`, `site/` | Sends session text to your AI provider — this costs money once a real provider is configured. Run `llmwiki synth --estimate` to see how much before the job first fires. |
-
-### Optional extras (maintain only)
-
-Nothing here is on by default; the wizard offers them as one comma-separated question and each has a flag.
-
-| Extra | Flag | Effect |
-|---|---|---|
-| Build the knowledge graph | `--graph builtin` / `--graph graphify` | The job also builds the graph, with the built-in builder or the richer `graphify` one (`pip install llm-wiki-plus[graph]`; the job falls back to the built-in builder until that extra is installed). Writes `graph/`. |
-| Fail the job on quality errors | `--lint-fail errors` | The scheduled job reports failure when the quality check finds errors. |
-| Fail the job on quality warnings | `--lint-fail warnings` | The scheduled job reports failure on any warning or error. Stricter than `errors`. |
-
-Without a failure policy the quality check still runs and its full report lands in the run log — findings simply never mark the job as failed.
-
-### When it runs
-
-The wizard offers presets and translates each into a cron expression; `--schedule` takes the same expression directly. Whatever the route, the schedule is validated before any unit file is written — an expression llmwiki cannot translate into your OS scheduler's own format is refused with the reason (exit code `2`).
-
-| Preset | Cron | Example |
-|---|---|---|
-| Every day | `M H * * *` | `"0 8 * * *"` — every day at 08:00 (the default) |
-| Weekdays only | `M H * * 1-5` | `"30 7 * * 1-5"` — weekdays at 07:30 |
-| Once a week | `M H * * D` | `"0 18 * * 3"` — Wednesdays at 18:00 |
-| Custom cron expression | as typed | `"0 */6 * * *"` — every six hours |
-
-Supported grammar is standard 5-field cron: `*`, integers, lists (`1,15`), ranges (`1-5`), steps (`*/15`), day names `SUN`–`SAT`, month names `JAN`–`DEC`. Nicknames (`@daily`), Vixie/Quartz extensions (`L`, `W`, `#`), a seconds field, and any expression restricting both day-of-month and day-of-week are refused — the last one because cron ORs those two fields and no OS scheduler can express it.
-
-Linux systemd timers use `Persistent=true` so a missed run catches up once after wake (not every skipped day while the laptop stayed off). By default the installer writes rendered units to `~/.automation/`, copies them into your OS scheduler (`~/.config/systemd/user` on Linux, `~/Library/LaunchAgents` on macOS), and enables the job. Pass `--no-activate` to write unit files only and print manual enable commands. Each run appends to `<vault>/.llmwiki/last-automation.log` (truncated each run). `.llmwiki/automation-status.json` under the vault drives the Home Automation panel (settings only — job, schedule, cost/backend, hooks/watch, log path; Maintain notes that the site refreshes once after summarization) and records scheduler activation state. Stage completion times live under Pipeline state, not Automation. The wizard defaults to **Maintain** on Enter; choose **1** for ingest-only. Re-running replaces the existing job rather than adding a second one.
+Implementation: `llmwiki/migrate_source_page_paths.py`. `raw/` is never written. Rebuild the site afterwards: `llmwiki build --vault PATH`.
 
 ```bash
-python3 -m llmwiki install-automation
-python3 -m llmwiki install-automation --yes --job maintain
-python3 -m llmwiki install-automation --yes --job maintain --graph builtin --lint-fail errors --schedule "0 8 * * 1-5"
-python3 -m llmwiki install-automation --yes --job ingest --schedule "30 7 * * *" --units-dir ~/.config/systemd/user
-python3 -m llmwiki install-automation --yes --job maintain --synth-backend ollama --watch-enabled
-python3 -m llmwiki install-automation --yes --no-activate
-python3 -m llmwiki install-automation --vault ~/my-vault
+python3 -m llmwiki migrate source-page-paths --vault /path/to/vault --dry-run
+python3 -m llmwiki migrate source-page-paths --vault /path/to/vault
 ```
-
-### Flags
 
 | Flag | What |
 |---|---|
-| `--yes` | Non-interactive: use the flags and defaults below; never installs hooks. |
-| `--job {ingest,maintain}` | What the daily job does. Default: `ingest`. |
-| `--graph {none,builtin,graphify}` | Build the knowledge graph, and with which builder. Default: `none`. |
-| `--lint-fail {never,errors,warnings}` | Quality findings at this level report the scheduled job as failed. Default: `never`. Same spelling as the `all` flag. |
-| `--schedule "<cron>"` | When the job runs, as a 5-field cron expression. Default: `"0 8 * * *"`. An expression that cannot be translated exits `2` with the reason. |
-| `--synth-backend NAME` | Synthesis backend for automation status (`dummy` / `ollama` / `claude` / `cursor_cli`). Interactive mode also writes `synthesis.backend` to `config.json`, after you confirm the summary. |
-| `--units-dir PATH` | Staging directory for rendered unit files before OS activation. Default: `~/.automation/`. Linux/macOS still install into the platform scheduler location unless `--no-activate`. |
-| `--watch-enabled` | Set `watch_enabled` in automation status so the site Automation panel shows Watch: on (does not install or start `llmwiki watch`). |
-| `--force-platform {linux,macos,windows}` | Override platform detection for unit format. |
-| `--activate` | Copy units into the OS scheduler location and enable the job (default). |
-| `--no-activate` | Write unit files only; print copy-paste enable commands. |
-| `--vault PATH` | Vault the job runs against: `automation-status.json` is written under it, and the scheduled command carries `--vault PATH` whenever it differs from `vault.default_path` in `config.json`, so the job and its status file always mean the same vault. Omitted, the job resolves its vault from config. |
-| `--profile {A,B,C}` | **Deprecated** — use `--job`. `A` maps to `ingest`, `B` and `C` to `maintain`. Prints a notice; `--job` wins when both are given. |
-| `--hour N` | **Deprecated** — use `--schedule`. Translated to `"{minute} {hour} * * *"`, and ignored with a notice when `--schedule` is given. |
-| `--minute N` | **Deprecated** — use `--schedule`. See `--hour`. |
+| `--vault PATH` | **Required.** Vault root containing `wiki/` and `raw/`. |
+| `--dry-run` | Print planned moves, collisions, link rewrites, ambiguous links and state upserts; write nothing. |
 
-Exit codes:
+Idempotent: a second run finds nothing to move and prints `nothing to migrate: every source page sits at its derived path`.
+
+### `broken-provenance` — remap or clear hops to missing raw sessions
+
+After a Cursor Agent CLI re-sync that used the filesystem stem `store` as `sessionId`, force-convert can leave wiki pages pointing at deleted `raw/sessions/…` paths while newer raw files exist under the same project slug (`cursor-<hash>`). This offline migration walks wiki pages that carry `source_file:` / `sources:` provenance and, when a hop targets a missing `raw/sessions/` file:
+
+1. Parses the project slug from the missing path (for example `cursor-<hash>`).
+2. Finds existing raw files whose names contain that project slug.
+3. Restricts candidates to the **same calendar day** (`YYYY-MM-DD` prefix). Never remaps across days (that used to point every June stub at a single January session).
+4. Remaps only among same-day **interactive** raw files: explicit `is_headless: false`, or legacy unmarked (no `is_headless` field — same eligibility rule as synth). When several remain, remaps to the uniquely closest HH-MM in that shortlist.
+5. Otherwise clears the broken `source_file` (same-day headless-only pools, ambiguous closest-time ties, or no same-day interactive candidate) and drops matching `sources:` list aliases. Wiki pages themselves are never deleted. Never remaps to a row that is explicitly `is_headless: true`.
+
+Implementation: `llmwiki/migrate_broken_provenance.py`. Preview with `--dry-run`. Prefer a Cursor Agent CLI re-sync first so raw filenames carry real chat dates and `is_headless` is stamped; unmarked legacy same-day files remain remap-eligible until then.
+
+```bash
+python3 -m llmwiki migrate broken-provenance --vault /path/to/vault --dry-run
+python3 -m llmwiki migrate broken-provenance --vault /path/to/vault
+```
+
+| Flag | What |
+|---|---|
+| `--vault PATH` | **Required.** Vault root containing `wiki/` and `raw/`. |
+| `--dry-run` | Report what would change; write nothing. |
+
+The report prints `remapped` / `cleared` / `unresolved` counts. Idempotent once hops are healed or cleared.
+
+---

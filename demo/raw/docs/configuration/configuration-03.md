@@ -4,9 +4,9 @@ slug: configuration-03
 project: configuration
 type: source
 tags: [wiki-add, raw-doc]
-date: 2026-09-08
+date: 2026-09-28
 source: "docs/configuration.md"
-content_sha256: 94ac6cbdc09d142adb44b67fe4e8fb1afc2956a82b7438f5476618e4ec72f3d8
+content_sha256: c44e78c6153be900dabea562bac4d92c695a124f5e266068784df84392622af5
 ---
 
 > Part 3 of 3 of **Configuration** — CLI flags.
@@ -129,3 +129,20 @@ Theme colours live in `llmwiki/build.py` inside the `CSS` string constant, under
 ```
 
 Change these and rebuild. The dark-mode variants auto-derive unless you override them too.
+
+## MCP tool timeouts
+
+Long-running MCP tools (`wiki_add`, `wiki_sync`) default to a **120-second** wall-clock budget. Override per tool under `mcp.tool_timeouts` in `config.json`:
+
+```json
+{
+  "mcp": {
+    "tool_timeouts": {
+      "wiki_add": 120,
+      "wiki_sync": 120
+    }
+  }
+}
+```
+
+See [reference/mcp.md](reference/mcp.md#tool-timeouts) and the [configuration reference](configuration-reference.md) table rows.

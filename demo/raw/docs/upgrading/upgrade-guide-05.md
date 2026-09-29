@@ -1,134 +1,93 @@
 ---
-title: "Upgrade guide (part 5/5: v1.2.0 — first stable on the 1.x line)"
+title: "Upgrade guide (part 5/8: v1.5.0 — Analytics layout + CallMcpTool migration)"
 slug: upgrade-guide-05
 project: upgrading
 type: source
 tags: [wiki-add, raw-doc]
-date: 2026-09-08
+date: 2026-09-28
 source: "docs/UPGRADING.md"
-content_sha256: 8b7e0b10395116258bc93a8766d0f513016bcbe9a2de5dfdde2d069b78872957
+content_sha256: c3075657888a257c11c0c2658857c42e4c57a45b7e70f26eac2aec1c3b5b4614
 ---
 
-> Part 5 of 5 of **Upgrade guide** — v1.2.0 — first stable on the 1.x line.
+> Part 5 of 8 of **Upgrade guide** — v1.5.0 — Analytics layout + CallMcpTool migration.
 
-## v1.2.0 — first stable on the 1.x line
+## v1.5.0 — Analytics layout + CallMcpTool migration
 
-**Released: 2026-04-25.**
-
-### Install changes
-
-- **PyPI distribution name is `llm-wiki-plus`** — `llmwiki` belongs to another author, and PyPI's name-similarity rule also rejects `llm-wiki` as too close to it, so the distribution carries a `-plus` suffix. The Python module + CLI command stay `llmwiki`, only the `pip install` line changes:
-  ```bash
-  pip install llm-wiki-plus       # was: pip install llmwiki
-  llmwiki --version               # → 1.2.0  (CLI name unchanged)
-  python3 -c "import llmwiki"     # still works (import name unchanged)
-  ```
-  Releases before the rename documented this distribution as `llm-notebook`; that name was never published for this fork and no longer appears in install instructions (#210).
-
-### Removed CLI subcommands
-
-The CLI was slimmed in #362. If you scripted any of these, replace as noted:
-
-- `llmwiki schedule` — removed. Schedule `llmwiki sync` directly via your OS's job runner (launchd / systemd / Task Scheduler).
-- `llmwiki install-skills` — removed. Manually copy `.claude/commands/wiki-*.md` into `~/.claude/commands/` for global availability.
-- `llmwiki check-links` — removed. Use the GitHub Actions link-check workflow instead.
-- `llmwiki watch`, `llmwiki manifest`, `llmwiki link-obsidian`, `llmwiki export-obsidian`, `llmwiki export-marp`, `llmwiki export-qmd`, `llmwiki eval` — also removed. (`llmwiki eval` was never a live CLI — structural scoring never shipped; use `llmwiki lint` for wiki quality.)
-
-### Removed adapters
-
-`jira_adapter`, `meeting`, `pdf` were removed in #363. If you depended on any of them, pin v1.1.0-rc8 until you migrate.
-
-### Demo data correctness
-
-`user_messages` / `tool_calls` counts on the 8 demo session files were 2–10× higher than the body actually contained. The values are now recomputed from body content. Two new lint rules (`#16 frontmatter_count_consistency`, `#17 tools_consistency`) prevent regression.
-
-### `sync --force` no longer drops colliding sessions
-
-If you ran `sync --force` against a corpus where two sources had the same canonical filename (rare but real on large corpora), one of them was silently overwritten. Fix: per-run filename tracking now disambiguates regardless of `--force`. Affected ~200 of 495 sessions on a real corpus we tested.
-
-### New: `llmwiki all`
-
-One-shot pipeline runner for CI:
+After upgrading the engine, rebuild the vault site so Analytics picks up the new section order and heatmaps:
 
 ```bash
-llmwiki all                  # build → graph → lint
-llmwiki all --strict         # exit 2 on any lint warning
+llmwiki build --vault /path/to/vault
+# or, when vault.default_path is already configured:
+llmwiki build
 ```
 
-### Schema migrations
+`build` also one-shot backfills `synth.pipeline` in `llmwiki-state.json` / `llmwiki-state.js` when that key is missing (state last written by v1.4.0). That fills the Home **State** widget without a separate `synth --estimate`. The refresh is local-only (no API / no tokens) and runs only on a shape mismatch — later builds skip it once the snapshot exists. Sync / add / estimate still refresh the snapshot when content changes.
 
-None. JSON sibling files now correctly emit `int` and `bool` types for `user_messages` / `tool_calls` / `is_subagent` (were strings); any downstream that string-compared `is_subagent == "false"` now needs `is_subagent is False`.
+**Optional:** expand `CallMcpTool` entries in already-synced `raw/sessions/*.md` when the originating agent session file still exists:
 
-## v1.1.0-rc5
+```bash
+llmwiki migrate tools-used --vault /path/to/vault --dry-run
+llmwiki migrate tools-used --vault /path/to/vault
+llmwiki build --vault /path/to/vault
+```
 
-**Released: 2026-04-21.**
+When the origin store is gone (TTL / deleted sessions), rows are skipped safely — the migrator never invents MCP tool names. Prefer this over `sync --force` for the same TTL reasons as other raw rewrites: agent transcripts are usually retained only ~30 days, so force re-convert often has nothing left to read.
 
-### New behaviour
+See [`reference/state-persistence.md`](reference/state-persistence.md) for how usage logs, rollup, daily series, and state file relate.
 
-- **Session transcripts strip project-local file refs.** Anchors pointing at `tasks.md`, `user_profile.md`, `settings.gradle.kts`, `.kiro/…`, `/Users/…`, etc. are unwrapped into inline `<span class="session-ref dead-link">` — the filename stays visible but the anchor doesn't 404. No action required.
+## v1.5.0 — index cwd restore + encoded-path redaction (#56)
 
-- **`README.md` and `CONTRIBUTING.md` now compile as site pages.** `site/README.html` and `site/CONTRIBUTING.html` ship alongside `changelog.html`. Link rewriter routes to the compiled page instead of GitHub for these two files.
+**For AI agents maintaining a user's vault:** after the user upgrades `llm-wiki` (pull / `pip install -U` / brew), fix **their** vault — not the llm-wiki git clone. The engine change alone does not rewrite `site/` or `raw/`.
 
-- **`/wiki-synthesize` slash command** — wraps `llmwiki synth --sources-only` (prefer `/wiki-synth`). Copy via `llmwiki install-agent-kit --dest PATH`. (`llmwiki install-skills` was removed in v1.2.0.) (retired in #214 — use `/wiki-synth`)
+### Required: rebuild the site
 
-- **Dual-mode docs landing pages.** `docs/modes/api/` and `docs/modes/agent/` exist as skeletons; the actual API / Agent backends ship with #315 / #316.
+```bash
+llmwiki build --vault /path/to/their/vault
+# or, if vault.default_path is already set in that checkout's config.json:
+llmwiki build
+```
 
-### Schema migrations
+That regenerates `site/projects/index.html` and `site/sessions/index.html` with restored local cwds (and a **Cwd** column on the sessions table).
 
-None. Fully backwards-compatible with rc4 state files.
+**If you skip the rebuild** (engine updated, old `site/` left as-is):
 
-### Breaking
+| Symptom | Why |
+|---|---|
+| `projects/index.html` still mixes `/Users/USER/…` (or `/home/USER/…`) with real paths | Stale HTML from before restore/autodetect fixes |
+| Session detail shows a usable `cd … && claude --resume …`, but the sessions index does not | Index never restored paths until #56; old build has no Cwd column |
+| Descriptions on the sessions table still contain `…/USER/…` | Same — restore runs at **build** time |
+| Grep checks from #56 stay non-zero (`grep -c '/Users/USER/' site/sessions/index.html`) | Expected until rebuild |
 
-None.
+Nothing in `raw/` or `wiki/` is harmed by skipping rebuild; only the browsable site stays wrong / inconsistent with session heroes.
 
-## v1.1.0-rc4
+### Optional: deterministic raw/ redaction rewrite (no LLM)
 
-**Released: 2026-04-20.**
+#56 also teaches convert to rewrite dash-encoded agent-store segments
+(`~/.claude/projects/-Users-<name>-…` → `-Users-USER-…`). **New** syncs do that automatically.
 
-### New behaviour
+Existing `raw/sessions/*.md` are immutable during normal sync. For a vault that stays private and local, leaving old `raw/` alone is fine — site restore already shows usable local cwds after rebuild.
 
-- **Obsidian is opt-in now.** Past versions fired the Obsidian adapter on every `sync` by default. If your workflow relied on that, add this to `sessions_config.json`:
+When the user intends to **publish or share `raw/`** (or otherwise wants the `USER` placeholder complete in every path shape already on disk), run the **deterministic** migrator — it rewrites path strings in place, does **not** call the LLM, does **not** enqueue `synthesize`, and does **not** touch `wiki/`:
 
-  ```json
-  { "obsidian": { "enabled": true } }
-  ```
+```bash
+# preview
+llmwiki migrate raw-redaction --vault /path/to/their/vault --dry-run
+# or: python3 scripts/migrate_raw_encoded_username.py --vault … --dry-run
 
-  Context: [#326](https://github.com/AlexanderMakarov/llm-wiki/issues/326). Runs as of rc3; surfaced in `llmwiki adapters` column `will_fire`.
+llmwiki migrate raw-redaction --vault /path/to/their/vault
+llmwiki build --vault /path/to/their/vault
+```
 
-- **Graph clicks respect compiled-site existence.** Nodes whose corresponding page wasn't rendered to HTML show a tooltip instead of opening a 404. No action needed — if you see the tooltip on entity / concept / nav pages that's the new design.
+**Do not** use `llmwiki sync --force` / re-convert from `~/.claude/projects/` or Cursor session folders for this:
 
-- **Backlinks now propagate.** Run `llmwiki backlinks` once to inject managed `## Referenced by` sections into every linked-to page. Idempotent, dry-runnable, prune-able:
+- Agent stores usually retain transcripts only ~**30 days** (Claude Code retention; Cursor similar). Older sessions in `raw/` often have **no** source file left to re-convert from — force-sync silently skips or fails those rows while still looking like “migration work”.
+- Force-sync is the wrong tool anyway: agents may follow it with `synth` / queue digest and **burn LLM tokens** rewriting wiki pages that did not need to change. The path-string rewrite above is enough.
 
-  ```bash
-  llmwiki backlinks --dry-run --verbose   # preview
-  llmwiki backlinks                       # commit writes
-  llmwiki backlinks --prune               # strip every block
-  ```
+**If you skip the raw migrator** (normal for private vaults):
 
-### Schema migrations
+- Day-to-day browsing and resume: **unaffected** after rebuild.
+- Old `raw/` rows that already contain `-Users-<real-username>-…` next to a redacted `/Users/USER/…` prefix keep that incomplete masking until `migrate raw-redaction` (or a future sync of still-present sources). That is a redaction-contract gap for publish/share workflows, not data escaping a private vault.
 
-- `.llmwiki-state.json` keys rewrite from absolute paths to `<adapter>::<home-relative-path>` on first load under rc3+. Migration is automatic and idempotent. If you moved your repo to a new machine, old state will be preserved verbatim — re-sync to reindex.
+### Config note
 
-- `.llmwiki-quarantine.json` is a new local file (gitignored). First appears when a convert error happens. Inspect with `llmwiki quarantine list`.
-
-- Frontmatter `tags:` / `topics:` convention is lint-enforced (rule
-  #14 `tags_topics_convention`) — projects use `topics:`, everything
-  else uses `tags:`. Run `llmwiki tag convention` to see violations. `llmwiki tag rename <old> <new>` rewrites across every page.
-
-### Breaking — none
-
-No breaking CLI or config changes. Every test pre-upgrade keeps passing post-upgrade.
-
-## v1.1.0-rc3
-
-See the [release notes](https://github.com/AlexanderMakarov/llm-wiki/releases/tag/v1.1.0-rc3) for the full rc3 gap-sweep bundle. No migration required.
-
-## v1.0.0 → v1.1.0-rc1
-
-Config: `synthesis.backend` now accepts `"ollama"` in addition to the default `"dummy"`. See `docs/reference/prompt-caching.md` for the ollama setup.
-
-`wiki/candidates/` directory is new — created automatically by ingest when it sees a brand-new entity/concept. Triage with `/wiki-candidates` (renamed from `/wiki-review` in rc3).
-
-## Older versions
-
-Pre-v1.0 milestones shipped under internal sprint tags. Upgrade from v0.9.x to v1.0.0 in one step — no intermediate migration required. If you're on a pre-0.9 build, start fresh: `llmwiki init` in a new tree and re-run `sync`.
+If root `config.json` copied the examples placeholder `"redaction": { "real_username": "" }`, #56 re-autodetects after overlay so restore works again. No manual config edit required unless the user wants username redaction, which needs `redaction.redact_username: true` (#253).

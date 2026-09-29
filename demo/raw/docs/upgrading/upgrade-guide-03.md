@@ -1,97 +1,77 @@
 ---
-title: "Upgrade guide (part 3/5: v1.5.0 — index cwd restore + encoded-path redaction (#56))"
+title: "Upgrade guide (part 3/8: Unreleased — Claude control tags + session TOC (#229))"
 slug: upgrade-guide-03
 project: upgrading
 type: source
 tags: [wiki-add, raw-doc]
-date: 2026-09-08
+date: 2026-09-28
 source: "docs/UPGRADING.md"
-content_sha256: 8b7e0b10395116258bc93a8766d0f513016bcbe9a2de5dfdde2d069b78872957
+content_sha256: c3075657888a257c11c0c2658857c42e4c57a45b7e70f26eac2aec1c3b5b4614
 ---
 
-> Part 3 of 5 of **Upgrade guide** — v1.5.0 — index cwd restore + encoded-path redaction (#56).
+> Part 3 of 8 of **Upgrade guide** — Unreleased — Claude control tags + session TOC (#229).
 
-## v1.5.0 — index cwd restore + encoded-path redaction (#56)
+## Unreleased — Claude control tags + session TOC (#229)
 
-**For AI agents maintaining a user's vault:** after the user upgrades `llm-wiki` (pull / `pip install -U` / brew), fix **their** vault — not the llm-wiki git clone. The engine change alone does not rewrite `site/` or `raw/`.
+No migration. After upgrade:
 
-### Required: rebuild the site
+- **Re-convert Claude sessions if tags leaked into `raw/`:** `llmwiki sync --force` then `llmwiki build`. Convert now strips Claude Code local-command / slash-command envelopes (`local-command-caveat`, `command-name`, …) and background-task `[SYSTEM NOTIFICATION …]` / `<task-notification>` blocks so they never become `description:` or Conversation prose. Non-empty `<command-args>` are kept on the slash label (`/implement-feature https://…`); injected command/skill markdown dumps are skipped for `description:`; user-prompt newlines become markdown hard breaks. Already-written `raw/sessions/*.md` keep the old text until force-synced. (Under #249, `description:` may still select a scored slash turn when it outranks prose.)
+- **Session TOC:** rebuild alone is enough for layout — the “On this page” nav is sticky in a Raw-style left column below the hero (not fixed over the title band), appears when the article has ≥2 headings, and uses the same `max-width: 860px` collapse as Raw.
+
+## 2.3.0 — Home Pipeline state stamps + Automation panel shrink (#234)
+
+No migration. After upgrade + rebuild:
+
+- **Pipeline state** on Home: Eligible sources + Knowledge tables stay clean; **Timeline** holds Last sync / Last synth / Last build / Last lint. A lint-error note appears under the Candidates table when the last lint recorded an error.
+- **Automation** is settings-only (shorter): no stage timestamps, no lint-fail reminder, no installer Updated line; short Synth backend line (spend hint); Agent hooks and Watch on separate lines. Maintain wording: site refreshes once after summarization.
+- **Standalone `llmwiki lint`** updates `llmwiki-state.json` and copies `site/llmwiki-state.js` — it does not rewrite HTML. `--lint-fail` on `all` does not undo the site built earlier in that run.
+- **`--fail-fast`** still stops the full pipeline at the first failure; without it, later stages (including build) continue after an earlier failure.
+
+## 2.3.0 — Cursor Agent CLI synthesis backend (#230)
+
+`synthesis.backend` accepts `"cursor_cli"`: shells out to Cursor Agent CLI (`agent` / `cursor-agent` on `$PATH`) the same way `claude` uses `claude -p`. Defaults: model `composer-2.5`, timeout 180s. Settings live under nested `synthesis.cursor_cli` (and nested `synthesis.claude` / `synthesis.ollama`); flat `claude_*` keys still work as fallbacks.
+
+- **One-run override:** `llmwiki synth --backend cursor_cli` (also honoured by `--check` / `--estimate`) — does not write `config.json`.
+- **Not session ingest:** this is the synthesis *generator*. The contrib adapters `cursor_cli` (Agent CLI chats) and `cursor_ide` (IDE Composer) only convert transcripts into `raw/`.
+- **Cost estimates:** `--estimate` prices Cursor models from the packaged `model_pricing.csv` (Cursor-published Composer / Grok rates + `agent --model` aliases). No live Agent CLI price fetch. Stand-in rows (if any) are labeled in `source` / `notes`.
+- **Overview:** `build --synthesize` follows the active backend; `dummy` / unavailable skips the overview LLM.
+- **install-automation:** interactive backend prompt and `--synth-backend` accept `cursor_cli`.
+
+## 2.2.0 — install from PyPI as `llm-wiki-plus` (#210)
+
+The published distribution is **`llm-wiki-plus`** (`llmwiki` and `llm-wiki` are unavailable on PyPI). The import and CLI stay `llmwiki`.
 
 ```bash
-llmwiki build --vault /path/to/their/vault
-# or, if vault.default_path is already set in that checkout's config.json:
-llmwiki build
+pip install -U llm-wiki-plus
+llmwiki --version   # → 2.2.0
 ```
 
-That regenerates `site/projects/index.html` and `site/sessions/index.html` with restored local cwds (and a **Cwd** column on the sessions table).
+Optional graph extra: `pip install 'llm-wiki-plus[graph]'`. Re-run `llmwiki install-agent-kit --dest PATH` after upgrade so retired slash commands (`/wiki-export-marp`, `/wiki-synthesize`) are pruned from an older kit install (#214). Prefer `/wiki-synth` (add sources-only when you want the old synthesize path).
 
-**If you skip the rebuild** (engine updated, old `site/` left as-is):
+## 2.1.0 — CLI help as a lifecycle map (#112)
 
-| Symptom | Why |
+`llmwiki --help` is grouped into six lifecycle sections. Command renames that affect scripts and muscle memory:
+
+| Old name | Replacement |
 |---|---|
-| `projects/index.html` still mixes `/Users/USER/…` (or `/home/USER/…`) with real paths | Stale HTML from before restore/autodetect fixes |
-| Session detail shows a usable `cd … && claude --resume …`, but the sessions index does not | Index never restored paths until #56; old build has no Cwd column |
-| Descriptions on the sessions table still contain `…/USER/…` | Same — restore runs at **build** time |
-| Grep checks from #56 stay non-zero (`grep -c '/Users/USER/' site/sessions/index.html`) | Expected until rebuild |
+| `synthesize` | `synth` (old default was sources-only; today's `synth` does sources + harvest unless you pass `--sources-only`) |
+| `consolidate-topics` | gone — `synth` prepares known names at the start of each sources pass |
+| `migrate-state` | `migrate state` |
+| `migrate-raw-redaction` | `migrate raw-redaction` |
+| `migrate-tools-used` | `migrate tools-used` |
+| `migrate-page-kinds` | `migrate page-kinds` |
+| `migrate-topic-kinds` | `migrate topic-kinds` |
+| `migrate-broken-provenance` | `migrate broken-provenance` |
 
-Nothing in `raw/` or `wiki/` is harmed by skipping rebuild; only the browsable site stays wrong / inconsistent with session heroes.
+List migrations with `llmwiki migrate` or `llmwiki migrate --list`. Nothing runs until you pick a name. Prefer `--dry-run` first. The `/wiki-synthesize` slash alias is retired — `/wiki-synth` is the command, and `synth --sources-only` is the flag for the sources-only pass.
 
-### Optional: deterministic raw/ redaction rewrite (no LLM)
+## 2.1.0 — durable sync lookback (#192)
 
-#56 also teaches convert to rewrite dash-encoded agent-store segments
-(`~/.claude/projects/-Users-<name>-…` → `-Users-USER-…`). **New** syncs do that automatically.
+Optional shared `filters.since` and per-adapter `adapters.<name>.since` (`YYYY-MM-DD`, or `"all"` to skip the date gate for one source). Unset still means unlimited history.
 
-Existing `raw/sessions/*.md` are immutable during normal sync. For a vault that stays private and local, leaving old `raw/` alone is fine — site restore already shows usable local cwds after rebuild.
-
-When the user intends to **publish or share `raw/`** (or otherwise wants the `USER` placeholder complete in every path shape already on disk), run the **deterministic** migrator — it rewrites path strings in place, does **not** call the LLM, does **not** enqueue `synthesize`, and does **not** touch `wiki/`:
-
-```bash
-# preview
-llmwiki migrate raw-redaction --vault /path/to/their/vault --dry-run
-# or: python3 scripts/migrate_raw_encoded_username.py --vault … --dry-run
-
-llmwiki migrate raw-redaction --vault /path/to/their/vault
-llmwiki build --vault /path/to/their/vault
-```
-
-**Do not** use `llmwiki sync --force` / re-convert from `~/.claude/projects/` or Cursor session folders for this:
-
-- Agent stores usually retain transcripts only ~**30 days** (Claude Code retention; Cursor similar). Older sessions in `raw/` often have **no** source file left to re-convert from — force-sync silently skips or fails those rows while still looking like “migration work”.
-- Force-sync is the wrong tool anyway: agents may follow it with `synth` / queue digest and **burn LLM tokens** rewriting wiki pages that did not need to change. The path-string rewrite above is enough.
-
-**If you skip the raw migrator** (normal for private vaults):
-
-- Day-to-day browsing and resume: **unaffected** after rebuild.
-- Old `raw/` rows that already contain `-Users-<real-username>-…` next to a redacted `/Users/USER/…` prefix keep that incomplete masking until `migrate raw-redaction` (or a future sync of still-present sources). That is a redaction-contract gap for publish/share workflows, not data escaping a private vault.
-
-### Config note
-
-If root `config.json` copied the examples placeholder `"redaction": { "real_username": "" }`, #56 re-autodetects after overlay so restore works again. No manual config edit required unless the user intentionally disabled username redaction.
-
-## Downgrading is guarded (#29)
-
-Pointing an **older** checkout at a vault a **newer** engine wrote used to silently reconvert everything under the old slug scheme, duplicating `raw/`. As of #29, `sync` refuses to run when the vault's `llmwiki-state.json` was written by a newer `meta.schema_version`, or is present but unreadable:
-
-```
-error: <vault>/llmwiki-state.json: state file was written by a newer llmwiki
-(schema_version=2 > 1). Upgrade llmwiki, or pass --force-resync to reconvert
-from scratch ...
-```
-
-The fix is to **upgrade the engine** to match the vault. Only pass `sync --force-resync` if you genuinely want a full reconvert from scratch (it implies `--force` and may duplicate an already-populated `raw/`). This guard protects the newer→older direction; the older engine that lacks it still can't see the unified file, so keep engines at or ahead of the version that last wrote the vault.
-
-### Moving an in-clone wiki into a vault (pre-v1.5.0 checkouts only)
-
-#29 shipped in **v1.5.0**, so a fresh install is vault-first and nothing here applies to it. If you ran a pre-release checkout that kept `raw/` and `wiki/` inside the git clone and you are now setting `vault.default_path`, move the content by hand — there is no migration command, and two trees holding the same wiki drift silently:
-
-```bash
-llmwiki init --vault /path/to/vault          # scaffold + seed the vault
-cp -r raw/ wiki/ /path/to/vault/             # move your content across
-llmwiki sync --vault /path/to/vault --no-auto-build   # reconcile index after copy
-llmwiki lint --vault /path/to/vault --rules index_sync
-```
-
-Two things to do explicitly, because neither is obvious:
-
-- **Delete the demo entries from the copied `index.md`.** The clone's `wiki/index.md` catalogs the repo's demo pages (`entities/Anthropic.md`, `concepts/CachePricing.md`, `projects/demo-*.md`). Copied into a vault that has none of them, every one becomes a dead index link. `llmwiki sync --no-auto-build` reconciles the catalog for you — that is the reason to run it right after the copy.
-- **Remove the leftover ignored pages from the clone.** `raw/` and `wiki/` are gitignored, so anything left behind is invisible to `git status` but still real on disk. A command run without a vault (or from a script with a different config) writes there, and you end up with pages that exist in only one of the two trees.
+- **Set a lookback before enabling a long-retention store** so the first bare sync does not convert years of history. CLI `--since` still overrides for one run.
+- **`llmwiki configure-sources`** asks shared start date first (Enter = today−30, or keep a stored date), then per source shows **Sessions · Earliest · In last 30 days** before Enable / path / start date. Enable means the source is on the next bare `sync` (Cursor IDE included). Skipped interviews invent no dates.
+- **The next successful sync with a durable lookback** prunes that coding-agent adapter’s `sync.files` stamps older than the window (CLI `--since` does not GC; notes intake is not GC’d). Lookback-only skips are never remembered as done, so widening the date later can pick them up. GC does not delete `raw/` or queue/synth/quarantine/ops.
+- **Cursor IDE registry name is `cursor_ide`** (was `cursor`) so it is distinct from `cursor_cli`. `--adapter cursor` and a legacy `adapters.cursor` config block still work. Prefer `adapters.cursor_ide` in new configs. Existing `sync.files` keys prefixed `cursor::` are rewritten to `cursor_ide::` on the next state load so Composer threads are not re-converted.
+- **`llmwiki adapters` enabled column is yes/no** (will the next bare sync include this source). The old `active` column and `auto` / `explicit` / `off` labels are gone.
+Keys and inheritance: [configuration-reference.md — Sync lookback](configuration-reference.md#sync-lookback).

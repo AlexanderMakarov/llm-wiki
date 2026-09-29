@@ -61,7 +61,7 @@ def test_pyproject_package_data_includes_vendor_assets(pyproject: str):
 def test_pyproject_package_data_includes_vendor_stylesheets(pyproject: str):
     # @regression
     """A JS-only glob ships highlight.min.js and silently drops both themes —
-    invisible in a source checkout, broken for every pip/Homebrew user."""
+    invisible in a source checkout, broken for every pip user."""
     block = re.search(
         r"\[tool\.setuptools\.package-data\]\s*\nllmwiki\s*=\s*\[(.*?)\]",
         pyproject,

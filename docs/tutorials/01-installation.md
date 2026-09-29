@@ -52,17 +52,7 @@ Then scaffold a vault wherever you want it:
 llmwiki init --vault .
 ```
 
-### Option B — Homebrew
-
-Once the tap from [#212](https://github.com/AlexanderMakarov/llm-wiki/issues/212) is live:
-
-```bash
-brew install AlexanderMakarov/tap/llmwiki
-```
-
-The formula name stays `llmwiki` (not `llm-wiki-plus`); it installs from the GitHub release tarball.
-
-### Option C — Clone (unreleased code or contributing)
+### Option B — Clone (unreleased code or contributing)
 
 ```bash
 git clone https://github.com/AlexanderMakarov/llm-wiki.git

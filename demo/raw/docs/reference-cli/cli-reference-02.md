@@ -1,15 +1,57 @@
 ---
-title: "CLI reference (part 2/15: remove — cascade-remove a raw doc and everything derived (#B2))"
+title: "CLI reference (part 2/19: add — add a document to the wiki (#16 / #273))"
 slug: cli-reference-02
 project: reference-cli
 type: source
 tags: [wiki-add, raw-doc]
-date: 2026-09-08
+date: 2026-09-28
 source: "docs/reference/cli.md"
-content_sha256: 186543f38f0258ea703f9ef68071d930f7135ea481068df5e5b46346e0f33e99
+content_sha256: 80394a36c35bb48cc2c8a5640d51d9180b601f9274c4cb944e18a4be261b1dbc
 ---
 
-> Part 2 of 15 of **CLI reference** — remove — cascade-remove a raw doc and everything derived (#B2).
+> Part 2 of 19 of **CLI reference** — add — add a document to the wiki (#16 / #273).
+
+## `add` — add a document to the wiki (#16 / #273)
+
+Converts a URL, file, folder, or stdin in the process locale encoding (`-`) into raw Markdown under `raw/docs/`, then (by default) rebuilds the site so the new material is visible on Raw / Home. **Does not** synthesize `wiki/sources/` unless you pass `--synthesize`. Path and URL sources may be freely mixed and repeated; `-` (stdin) must be the only source in that invocation. MCP `wiki_add` is a thin proxy onto the same shared `run_add` path — see [mcp.md](mcp.md#wiki_add).
+
+```bash
+python3 -m llmwiki add https://example.com/some-article
+python3 -m llmwiki add ./notes.pdf ./research-folder/
+python3 -m llmwiki add https://example.com/post --title "Custom Title" --tag research
+python3 -m llmwiki add ./doc.md --project my-project --note "Imported from Slack"
+python3 -m llmwiki add https://example.com/post --dry-run
+python3 -m llmwiki add ./doc.md --synthesize          # opt in to wiki/sources for this run
+cat notes.md | python3 -m llmwiki add - --title "Piped notes"
+```
+
+Default outcome: raw file(s) written, synth-pending refreshed, site rebuilt. No new `wiki/sources/` pages from that add. Pass `--synthesize` to run synthesis on only the docs this add wrote (same rollback rules as before). Pass `--no-build` to skip the site rebuild. `--no-synthesize` is a deprecated warn+no-op alias (synthesis is already off by default) so old scripts keep working for one release.
+
+Stdin (`add -`) and MCP `content` use the piped-text conversion path: frontmatter `source: "piped"` (never a `/tmp/…` provenance). Prefer `--title` for stdin; otherwise title derives from the first heading / body start.
+
+**Source-layer guardrail:** pass the user's exact path, URL, or text. Do not reconstruct input from `wiki/sources/` or other derived pages unless the user asked.
+
+### Flags
+
+| Flag | What |
+|---|---|
+| `SOURCE` | URL (`http`/`https`), file, folder, or `-` for stdin in the process locale encoding. Repeatable except `-` (cannot mix with other sources). |
+| `--title TEXT` | Override title derivation (single source only). |
+| `--project NAME` | Group under `raw/docs/<NAME>/` instead of the doc's own slug. |
+| `--tag TAG` | Extra frontmatter tag (repeatable). |
+| `--note TEXT` | Blockquote note prepended to the document body. |
+| `--synthesize` | Opt in to synthesize `wiki/sources/` for the docs this add wrote (off by default). |
+| `--no-synthesize` | Deprecated warn+no-op; synthesis is already off by default (#273). |
+| `--no-build` | Skip the post-add site rebuild. |
+| `--render` | Force the headless-browser layer for URLs (needs playwright). |
+| `--no-render` | Never use the headless-browser layer. |
+| `--dry-run` | Convert and report, write nothing, run nothing. |
+| `--force-new` | Always land a new snapshot even when the converted body matches an existing doc (#22). |
+| `--vault PATH` | Write under the given vault's `raw/docs/` instead of the repo. |
+
+URL sources go through a layered pipeline (markdown negotiation → extraction → render escalation) before landing as Markdown.
+
+---
 
 ## `remove` — cascade-remove a raw doc and everything derived (#B2)
 
