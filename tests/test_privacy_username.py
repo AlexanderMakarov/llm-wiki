@@ -38,7 +38,6 @@ UPSTREAM_OWNER_ALLOWLIST: tuple[str, ...] = (
     "RELEASE-NOTES",
     "context/",
     ".github/workflows/homebrew-bump.yml",
-    "docs/deploy/homebrew-setup.md",
     "scripts/bump-homebrew-formula.sh",
     "tests/test_homebrew_tap.py",
 )

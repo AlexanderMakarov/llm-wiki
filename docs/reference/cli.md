@@ -31,7 +31,7 @@ python3 -m llmwiki              # same as --help
 | **Take things out** | `remove` |
 | **Rare — one-time** | `migrate` · `queue` |
 
-The shorter alias `llmwiki` works too once the package is installed (`pip install llm-wiki-plus` or via Homebrew — see [`deploy/pypi-publishing.md`](../deploy/pypi-publishing.md) / [`deploy/homebrew-setup.md`](../deploy/homebrew-setup.md)).
+The shorter alias `llmwiki` works too once the package is installed (`pip install llm-wiki-plus` — see [`deploy/pypi-publishing.md`](../deploy/pypi-publishing.md)).
 
 TAB completion of these command names in bash and zsh is one line in your shell startup file, which `./setup.sh` offers to add — see [Shell completion](../getting-started.md#shell-completion).
 

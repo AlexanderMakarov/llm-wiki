@@ -75,4 +75,4 @@ echo "  1. Review the updated $formula in this repo (commit it on the release PR
 echo "  2. Do NOT push to Pratiyush/homebrew-tap — that tap is upstream's (#69)."
 echo "  3. If you maintain a private tap, copy the formula there by hand."
 echo ""
-echo "See docs/deploy/homebrew-setup.md for background (upstream tap flow)."
+echo "Registering this fork's own tap is tracked in #212."

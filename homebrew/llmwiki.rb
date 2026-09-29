@@ -9,8 +9,8 @@
 # and update the `url` + `sha256` on every release.
 #
 # Use `scripts/bump-homebrew-formula.sh vX.Y.Z` to regenerate the `url`
-# and `sha256` fields for a given tag; see docs/deploy/homebrew-setup.md
-# for the full release flow.
+# and `sha256` fields for a given tag. Registering this fork's tap is
+# tracked in #212.
 #
 # Users who install via Homebrew get:
 # - `llmwiki` command on PATH (all subcommands: init, sync, synth, build, …)

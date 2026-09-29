@@ -5,7 +5,7 @@ name: Bump Homebrew formula
 # disabled (#69): auto-pushing would collide with upstream
 # Pratiyush/homebrew-tap, and this fork has no separate tap to publish
 # into. Copy the printed formula by hand if you maintain a private tap.
-# See docs/deploy/homebrew-setup.md.
+# Registering this fork's own tap is tracked in #212.
 
 on:
   push:

@@ -154,4 +154,3 @@ version. Bump to the next patch (`v2.1.2`), update the changelog, re-tag.
 - `#101` — original publishing issue
 - `#210` — distribution rename to `llm-wiki-plus` + post-publish smoke
 - `.github/workflows/release.yml` — the pipeline
-- `docs/deploy/homebrew-setup.md` — sibling doc for the Homebrew tap (#102)

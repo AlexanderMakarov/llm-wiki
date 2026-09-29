@@ -6,7 +6,6 @@ maintainer owns — we can't reach that from CI. What we CAN test:
 - The formula in this repo stays syntactically + semantically sound.
 - The bump script is executable and enforces its input contract.
 - The auto-bump workflow stays aligned with the bump script + docs.
-- The setup doc documents every user-facing command it mentions.
 """
 
 from __future__ import annotations
@@ -23,7 +22,6 @@ from llmwiki import REPO_ROOT
 FORMULA = REPO_ROOT / "homebrew" / "llmwiki.rb"
 BUMP_SCRIPT = REPO_ROOT / "scripts" / "bump-homebrew-formula.sh"
 WORKFLOW = REPO_ROOT / ".github" / "workflows" / "homebrew-bump.yml"
-DOC = REPO_ROOT / "docs" / "deploy" / "homebrew-setup.md"
 
 
 @pytest.fixture(scope="module")
@@ -39,11 +37,6 @@ def bump_script() -> str:
 @pytest.fixture(scope="module")
 def workflow() -> str:
     return WORKFLOW.read_text(encoding="utf-8")
-
-
-@pytest.fixture(scope="module")
-def doc() -> str:
-    return DOC.read_text(encoding="utf-8")
 
 
 # ─── Formula shape ────────────────────────────────────────────────────
@@ -172,41 +165,3 @@ def test_workflow_does_not_push_to_homebrew_tap(workflow: str):
     # upstream Pratiyush/homebrew-tap (#69).
     assert "homebrew-tap.git" not in workflow
     assert "Pratiyush/homebrew-tap" not in workflow or "do not push" in workflow.lower() or "collide" in workflow.lower()
-
-
-# ─── Setup doc ────────────────────────────────────────────────────────
-
-
-def test_doc_covers_tap_repo_creation(doc: str):
-    # Must mention the literal repo name and the `homebrew-` prefix rule.
-    assert "homebrew-tap" in doc
-    # The prefix is load-bearing: Homebrew requires the repo name to
-    # start with `homebrew-` for `brew tap` to accept it.
-    assert re.search(
-        r"start with.*homebrew-|name.*must.*homebrew-|homebrew-.*must",
-        doc,
-        re.IGNORECASE,
-    ), "doc should flag that the tap repo name must start with `homebrew-`"
-
-
-def test_doc_covers_on_every_release_flow(doc: str):
-    assert "On every new release" in doc
-    assert "bump-homebrew-formula.sh" in doc
-
-
-def test_doc_covers_auto_bump_optional_path(doc: str):
-    assert "HOMEBREW_TAP_TOKEN" in doc
-    assert "gh secret set" in doc
-
-
-def test_doc_covers_troubleshooting(doc: str):
-    assert "Troubleshooting" in doc
-    # Three documented failure modes
-    for k in ("404", "brew test", "class name"):
-        assert k in doc, f"doc missing troubleshooting section for {k!r}"
-
-
-def test_doc_cross_links_pypi_sibling(doc: str):
-    # Both deploy docs should cross-reference each other so users
-    # discover the PyPI path from the Homebrew doc and vice versa.
-    assert "docs/deploy/pypi-publishing.md" in doc or "pypi-publishing" in doc
