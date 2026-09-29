@@ -4,86 +4,62 @@ argument-hint: "<version>"
 description: Use when a maintainer invokes /release or asks to cut, tag, or ship the next llmwiki version (vX.Y.Z) — including bumping the version and CHANGELOG for a release, or resuming a release cut that stopped part-way. Maintainer-only; not part of the end-user agent kit.
 ---
 
-# Release — scripted tagged cut
+# Release — tagged cut
 
-Cut a deliberate `vX.Y.Z` release for this repository. `vMAJOR.MINOR.PATCH` is the only supported tag format; the release and GHCR publish workflows reject anything else. Available wherever `.claude/skills/release` is installed (Cursor and Claude Code read that tree; Codex and peers via skill install that mirrors it).
-
-**Canonical checklist order** lives in `docs/maintainers/RELEASE_PROCESS.md`. Load that doc first; this skill is the operational walkthrough and must not contradict it. Pass `$ARGUMENTS` (or the version the human confirms) as `X.Y.Z` without a leading `v` in file bumps; tags use `vX.Y.Z`.
+Cut a `vX.Y.Z` release of this repository. `vMAJOR.MINOR.PATCH` is the only tag format; `release.yml` and the GHCR workflow reject anything else, and there are no prerelease tags. `docs/maintainers/RELEASE_PROCESS.md` is the canonical checklist — read it first; this skill is the operational walkthrough and must not contradict it. Use `$ARGUMENTS` (or the confirmed version) as `X.Y.Z` in file bumps; tags are `vX.Y.Z`.
 
 ## Hard rules
 
-- **No force-push** of `main` (or any shared branch) as part of a release.
-- **No amend** of the release commit after the tag exists.
-- **No unattended publish** — never `git push` of `main` or the version tag until the human explicitly approves in this session.
-- **No tagging on incomplete demo synth.** Lint/build green and CI green do **not** prove the release-day demo refresh finished. A rate-limited or partial synth leaves `demo/raw/` updated without matching `demo/wiki/sources/` pages; that is how a release can ship a hollow demo. Phrases like “proceed with delivery”, “ship anyway”, or “lint is green” do **not** waive this. Only an explicit opt-out in this session does (`skip demo refresh`, `version-only`, or `ship with unfinished synth`). When synth is incomplete: **stop**, report the gaps, and wait — do not tag or push.
-- **No tagging without local demo review when refresh is ON (#240).** After synth completeness, run `scripts/release_demo_gate.py`; non-zero exit blocks the cut. Exit 0 still requires explicit human OK on the printed `file://` demo site before push.
+- **No force-push** of `main`; **no amend** of the release commit after tagging.
+- **No unattended publish:** never push `main` or the tag without the human's explicit approval in this session.
+- **No tagging on incomplete demo synth.** Lint, build or CI green does not prove the demo refresh finished. "Proceed with delivery", "ship anyway" and "lint is green" do not waive it; only an explicit opt-out does (`skip demo refresh`, `version-only`, `ship with unfinished synth`). Incomplete → stop, report the gaps, wait.
+- **No tagging without local demo review** when the refresh is on (#240): `release_demo_gate.py` exit 0, then the human's explicit OK on its `file://` site.
 
-There is no `scripts/release-*.sh` that bumps/tags/pushes. Demo mechanical steps live in `scripts/release_demo_gate.py`; the rest uses `gh`, `ruff`, `pytest`, `git`, and file edits.
+There is no script that bumps, tags or pushes. The demo has scripts; everything else is `gh`, `ruff`, `pytest`, `git` and file edits.
 
-## Scripted steps
+## Steps
 
-### 1. Load the process doc
+### 1. Preflight
 
-Read `docs/maintainers/RELEASE_PROCESS.md` end to end before changing anything.
+Stop and fix before bumping if any fail:
 
-### 2. Preflight
+1. CI on `main` is green: `gh run list --branch main --limit 5`.
+2. No open critical bugs: `gh issue list --label priority:critical --state open`.
+3. `ruff check llmwiki tests scripts` and `python3 -m pytest tests/ -q`.
+4. Root `wiki/` pitfall: a gitignored leftover `wiki/` at the repo root breaks demo self-containment checks. Warn; move it aside only with approval — never delete it.
 
-Confirm all of the following; stop and fix before bumping if any fail:
+### 2. Demo refresh (#225) — default on
 
-1. Default branch CI is green: `gh run list --branch main --limit 5` (recent runs succeeded).
-2. No open critical bugs: `gh issue list --label priority:critical --state open` is empty.
-3. Lint: `ruff check llmwiki tests scripts`.
-4. Tests: `python3 -m pytest tests/ -q`.
-5. **Root `wiki/` pitfall:** if a gitignored leftover `wiki/` exists at the repo root, warn the human — demo self-containment / acceptance checks can fail against it. Do **not** delete user data without asking; rename/move aside only with explicit approval.
-6. **Demo corpus (#225) — default ON:** refresh the public demo content before bumping version / tagging. Do **not** ask “should we refresh?” as an open choice. Skip **only** when the human explicitly opts out in this session (e.g. “skip demo refresh”, “version-only”). Silence means refresh. Pages version assert (#213) is not a content refresh. CI never invents sessions, usage, or ops stamps — it only builds/deploys committed `demo/` (#240).
-   - **Order:** the demo refresh is the last content change before the cut. Merge every feature and docs PR first; a docs change merged after the refresh re-stales the demo (the gate reports it).
-   - **Release day:** pick it once, when you regenerate sessions, and pass that same date to every `--today` in this cut — even after midnight. A new date re-dates every session and forces a full session re-synth.
-   - Sessions (no LLM): `python3 scripts/generate_demo_sessions.py --dry-run`, then regenerate with a **release-day** `--today` (not the frozen `2026-08-10` anchor). Writes are **in-place by slug**: raw filenames stick; `--today` moves calendar fields in frontmatter, and a real write then runs the offline `migrate source-page-paths` pass over `demo/` so re-dated source pages move to the names synth derives (otherwise the session re-synth skips them all as claimed under another name). Check its report for `collisions: 0` and no errors.
-   - **Re-synth gate:** bumping `--today` and/or a non-empty docs refresh plan needs synth against `demo/` so `source_file:` / wiki pages stay valid. Prefer the narrow path: session sources whose content moved, plus `refresh_demo.py`’s docs-only pass for product-doc drift — not an unnecessary full-vault re-synth of unchanged pages. **Do not burn synthesis tokens yourself** when the human will run synth: after session regen (+ `refresh_demo.py --dry-run`), **stop and wait** for them to re-synth (and say when they are done). If they ask you to run synth and a backend is configured, run it then.
-   - Docs: `python3 scripts/refresh_demo.py --dry-run`, then a real refresh when the plan is non-empty ([REFRESH_DEMO.md](../../docs/maintainers/REFRESH_DEMO.md)); first-time / missing `demo/.demo-source-rev` uses `--force` (still needs a reachable backend — same wait-for-human rule). `refresh_demo.py` itself refuses to advance `.demo-source-rev` when plan-added raw docs still lack wiki pages.
-   - **Long synth runs:** start them detached with a log outside the session scratchpad (`setsid nohup python3 -m llmwiki synth … > /tmp/<name>.log 2>&1 &`) — a session exit otherwise kills the synth mid-run. Judge the synth's own exit code and the pages on disk, not a wrapper's `echo`/`tail`. Do not run `pytest` while synth or a refresh is writing `demo/`; the repo-write guard fails tests that race it.
-   - **Interrupted docs refresh (recovery):** never re-run `refresh_demo.py` — its removes already ran and it would redo them. Instead: `--verify-slugs <plan slugs>` lists the raw docs still missing pages; synth exactly those in **one** run with a repeated flag, `python3 -m llmwiki synth --vault demo --docs-only --path <raw/docs/a.md> --path <raw/docs/b.md> …` (a bare `--docs-only` re-queues the whole historical docs backlog; parallel synth runs race on one state file); `--verify-slugs` again until exit 0; then record the pin the script would have written, `git rev-parse HEAD > demo/.demo-source-rev`, and run `python3 -m llmwiki lint --vault demo`.
-   - **Completeness check (local, not CI):** after docs refresh / manual path-scoped synth, run `python3 scripts/refresh_demo.py --verify-slugs <slug>,…` with every slug this cut’s plan added. Exit 0 is required before tagging. For sessions: every non-headless regenerated `demo/raw/sessions/` file needs a matching `demo/wiki/sources/` page (known `#180` headless markers stay raw-only). Do **not** require clearing the vault-wide historical docs backlog — only the slugs/filenames this cut touched.
-   - **Mechanical gate (#240):** after synth + completeness, run `python3 scripts/release_demo_gate.py --today <release-day>` (same `--today` as sessions). Non-zero exit = hard stop. The script owns the freshness checks (docs changed since `.demo-source-rev`, sessions without a source page), usage regen (`generate_demo_usage.py`), local build, printed `file://…/index.html`, the demo-content tests, and demo lint failing on errors and warnings — do not re-list those commands in chat as a substitute for the script. Prefer `--dry-run` first; use `--skip-usage` / `--allow-stale-demo` only for explicit version-only cuts.
-   - **When the gate's demo tests or lint fail after a refresh,** fix the demo, not the test: a search-baseline drop means two pages share a title or a stale page survived (#298); lint errors after the refresh's removes are references to removed pages (#277); stale candidate stubs need removal (#299). Re-record `tests/fixtures/demo_search_baseline.json` only once the change is explained. A privacy-test hit on a demo copy of a product doc means the product doc is wrong — fix it there; never allowlist the demo copy.
-   - **Local demo review pause (#240):** show the script’s `file://` URL (or serve one-liner) and **wait for explicit human OK** on Home Timeline, Analytics MCP window, newest session dates, and candidates before committing refreshed `demo/` or proposing version bump / tag push. Gate exit 0 is not visual OK.
-   - **After visual OK:** commit `demo/` (sessions + wiki + `usage/` + `llmwiki-state.*` + `.demo-source-rev` when written) **before** the tag so Pages builds the refreshed vault (#255 state packaging).
-   - If the human **explicitly** opted out, record that in the session notes and continue; live session dates / usage may stay stale.
-7. Propose the version (`X.Y.Z`) and a one-line Theme; wait for the human to confirm or correct before editing files. The human picks the version from what ships, so the proposal message is, in order:
-   1. **Breaking** — every Unreleased entry marked Breaking, one line each with its `#N`.
-   2. **Added** — every headline.
-   3. **Changed / Fixed** — user-facing headlines one per line; maintainer-only entries as one summary line.
-   4. **Removed** — every headline.
-   5. **Version options** — what semver implies (any Breaking → major) and this repo's precedent (2.1.0 shipped Breaking entries as a minor), as two concrete choices.
-   6. **Proposed Theme** — one line.
+Refresh the public demo before the bump. Do not offer it as an open choice; skip only on an explicit opt-out in this session. The refresh is the **last content change before the cut**: merge every feature and docs PR first, since a later docs change re-stales the demo.
 
-Optional when the release touches the static site: `python3 -m llmwiki build` and a quick local preview (no new unexpected warnings).
+1. **Sessions** (no LLM): `python3 scripts/generate_demo_sessions.py --dry-run`, then a real run with `--today <release-day>`. It re-dates sessions in place, re-homes their source pages, and records the date in `demo/.demo-sessions-date`; the gate holds the rest of the cut to that date, even past midnight.
+2. **Docs:** `python3 scripts/refresh_demo.py --dry-run`, then a real run when the plan is non-empty (`--force` when `demo/.demo-source-rev` is missing). See `docs/maintainers/REFRESH_DEMO.md`.
+3. **Synth** the moved sessions and plan-added docs against `demo/` — the narrow path, never a full-vault re-synth. Do not spend synthesis tokens unless the human asked you to; otherwise stop after the dry runs and wait for them. Start long runs detached with a log outside the session scratchpad (`setsid nohup … > /tmp/<name>.log 2>&1 &`), and judge the synth's own exit code and the pages on disk, not a wrapper's. Do not run `pytest` while anything is writing `demo/`.
+4. **Interrupted docs synth:** `python3 scripts/refresh_demo.py --resume`. Never re-run the refresh itself — its removes already ran.
+5. **Completeness:** `python3 scripts/refresh_demo.py --verify-slugs <plan slugs>` exits 0. Only this cut's slugs count, not the historical docs backlog.
+6. **Gate:** `python3 scripts/release_demo_gate.py` (`--dry-run` first). Non-zero is a hard stop. It checks freshness (docs changed since the pin, sessions without a source page), regenerates usage, builds, prints the `file://` URL, and runs the demo-content tests and strict lint. `--skip-usage` / `--allow-stale-demo` only after an explicit version-only opt-out.
+7. **When the gate's tests or lint fail, fix the demo, not the test.** A search-baseline drop means two pages share a title or a stale page survived (#298); lint errors after the refresh's removes are references to removed pages (#277); stale candidate siblings need removal (#299). Re-record `tests/fixtures/demo_search_baseline.json` only once the change is explained. A privacy hit on a demo copy of a product doc means the product doc is wrong — fix it there, never allowlist the copy.
+8. **Review:** show the `file://` URL and wait for the human's explicit OK (Home Timeline, Analytics MCP window, newest session dates, candidates). Gate exit 0 is not visual OK.
+9. **Commit** `demo/` (sessions, wiki, `usage/`, `llmwiki-state.*`, `.demo-source-rev`, `.demo-sessions-date`) before the tag, so Pages builds the refreshed vault (#255). Run `synth --estimate` against `demo/` only if you discard its state write afterwards: it records every checked-out source as pending.
 
-### 3. Version bump
+### 3. Propose version and Theme
 
-Keep these in sync (tests enforce package ↔ pyproject):
+Run `python3 scripts/release_contents.py` and send its output — Breaking first, then Added / Changed / Fixed / Removed, maintainer-only entries on one line, and what semver implies. Add the two concrete version choices (semver, and this repo's precedent: 2.1.0 shipped Breaking entries as a minor) and a one-line Theme. Wait for the human to pick and confirm before editing any file.
 
-- `llmwiki/__init__.py` → `__version__ = "X.Y.Z"`
-- `pyproject.toml` → `version = "X.Y.Z"`
-- `README.md` version badge — keep the current badge color/URL style (`Version-vX.Y.Z-…svg`)
+### 4. Version bump
 
-Then: `python3 -m llmwiki --version` must print the new version. Update the README tests badge count only if you re-ran the full suite and the count changed.
+Keep in sync (tests enforce package ↔ pyproject): `llmwiki/__init__.py` `__version__`, `pyproject.toml` `version`, and the `README.md` version badge (same style). `python3 -m llmwiki --version` must print the new version. Touch the tests badge only if the count changed.
 
-### 4. Editorial — CHANGELOG and UPGRADING
+### 5. CHANGELOG and UPGRADING
 
-Agent judgment; human can correct before the commit:
+1. Promote `## [Unreleased]` into `## [X.Y.Z] — YYYY-MM-DD` (the actual release date) with a one-line `Theme:`.
+2. Leave an empty Unreleased scaffold (`### Added` / `### Changed` / `### Fixed` / `### Removed`).
+3. Rename `docs/UPGRADING.md` Unreleased headings to the new version.
+4. Spot-check `#N` references against merged work.
 
-1. Promote everything under `## [Unreleased]` into a new `## [X.Y.Z] — YYYY-MM-DD` section (today’s date).
-2. Add a one-line `Theme:` at the top of that section.
-3. Leave an empty Unreleased scaffold above it (`### Added` / `### Changed` / `### Fixed` / `### Removed`).
-4. Rename or compact `docs/UPGRADING.md` Unreleased / in-progress headings to the new version as needed.
-5. Spot-check `#N` issue/PR references against merged work (`gh pr list --state merged --limit 30` or `gh issue view`).
+Emptying Unreleased must not break acceptance tests that search shipping notes: `tests/changelog_notes.shipping_section_text` scans Unreleased and every versioned section — do not narrow it.
 
-**Changelog pitfall:** emptying Unreleased must not break acceptance tests that search shipping notes. `tests/changelog_notes.shipping_section_text` already scans Unreleased (when it still has bullets) **and** every versioned section — do not narrow that helper. Older feature bullets must remain discoverable under the new `## [X.Y.Z]` section (and prior versions).
-
-### 5. Commit and tag locally
-
-Stage the bump + editorial files (typically `__init__.py`, `pyproject.toml`, `README.md`, `CHANGELOG.md`, `docs/UPGRADING.md`, and any other files this cut intentionally includes). Commit with a conventional message, then tag:
+### 6. Commit and tag locally
 
 ```bash
 git add llmwiki/__init__.py pyproject.toml README.md CHANGELOG.md docs/UPGRADING.md
@@ -93,32 +69,22 @@ git tag vX.Y.Z
 
 Do not push yet.
 
-### 6. Human gate (mandatory)
+### 7. Human gate (mandatory)
 
-Stop. Show the human:
+Show `git show --stat HEAD`, the confirmed version and Theme, and:
 
-- `git show --stat HEAD` (or equivalent)
-- Confirmed version and Theme
-- **Demo synth status** — one of: `complete` (list plan slugs + `--verify-slugs` exit 0 / session coverage), `explicitly opted out` (quote the opt-out phrase), or `blocked` (gaps remaining — do not ask to push the tag). Lint green alone is not “complete.”
-- **Demo local-review status (#240)** — when refresh was ON: `complete` (human OK’d the printed `file://` site after `release_demo_gate.py` exit 0), `explicitly opted out` with the demo-refresh opt-out, or `blocked` (gate non-zero or review not confirmed — do not ask to push the tag).
-- Intended push: `git push origin main` and `git push origin vX.Y.Z` (or `git push origin main vX.Y.Z`)
+- **Demo synth status:** `complete` (plan slugs, `--verify-slugs` exit 0, session coverage), `explicitly opted out` (quote the phrase), or `blocked` (gaps — do not offer the push).
+- **Demo local-review status:** `complete` (human OK'd the gate's site), `explicitly opted out`, or `blocked`.
+- The intended push: `git push origin main vX.Y.Z`.
 
-Push **only** after explicit approval in the session. Direct push of the release commit to `main` is the maintainer path for this cut (distinct from normal PR flow) — still requires that approval. If the human prefers the release commit to go through a PR, open one instead and push only the tag after it merges; a PR touching `llmwiki/` or `tests/` also needs a `context/` note, or the AWOS context check fails. If demo synth or local review is blocked, do not present a tag push as ready.
+Push only on explicit approval. The direct push to `main` is the maintainer path; if the human prefers a PR for the release commit, open one and push only the tag after it merges — a PR touching `llmwiki/` or `tests/` also needs a `context/` note for the AWOS check.
 
-### 7. Post-push — watch automation
+### 8. After the push
 
-1. Watch the tag workflow: `gh run list --workflow=release.yml --limit 3` (or `gh run watch` on the run for `vX.Y.Z`). `.github/workflows/release.yml` builds artifacts, signs with Sigstore, creates/updates the GitHub Release, and publishes to PyPI only when `vars.PYPI_PUBLISHING == 'true'`.
-2. Report the public GitHub Release URL for this repo (or failure logs). Do **not** run `gh release create` as the happy path — automation owns that. Manual `gh release create` is fallback only if the workflow is broken.
-3. Every release is a full GitHub Release. `vMAJOR.MINOR.PATCH` is the only tag shape the automation accepts — there are no prerelease tags.
-4. Wait until every run reaches a terminal state before reporting (a watcher that goes silent is not a green result). Watch CI on the release commit SHA (`gh pr checks` is N/A for a direct `main` push — use `gh run list --branch main` / the commit’s Actions tab).
-5. Note when PyPI was skipped because publishing is not enabled.
+1. Watch `release.yml` for the tag (`gh run list --workflow=release.yml --limit 3`): it builds, signs, creates the GitHub Release, and publishes to PyPI when `PYPI_PUBLISHING` is on. Report the GitHub Release URL. `gh release create` is a fallback only when the workflow is broken.
+2. Watch CI on the release commit and `pages.yml` for the tag; its post-deploy assert checks `manifest.json` against `__version__`. Wait for every run to reach a terminal state — a silent watcher is not green.
+3. Unless the demo refresh was opted out, spot-check the live demo's session dates.
 
-### 8. Pages deploy + announce
+## Rollback
 
-1. Watch `pages.yml` for the tag (`gh run list --workflow=pages.yml --limit=3`). Post-deploy assert must be green (`manifest.json` == `__version__`).
-2. Unless the human explicitly skipped demo refresh, spot-check live session dates match the regenerated corpus — version-only green is not a content refresh (#225).
-3. Social announce is optional; follow `RELEASE_PROCESS.md` if the human wants it this cut.
-
-## Rollback (after a bad tag is public)
-
-Do not delete the tag. Cut a forward patch that reverts the bad change; mark the broken GitHub Release superseded. Never force-push `main` to rewrite history.
+Never delete a public tag or force-push `main`. Cut a forward patch that reverts the bad change and mark the broken GitHub Release superseded.

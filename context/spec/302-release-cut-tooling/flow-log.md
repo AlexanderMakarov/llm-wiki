@@ -1,8 +1,8 @@
-# Flow log: release-demo-gate-freshness
+# Flow log: 302-release-cut-tooling
 
 ## fetch
-- No issue: lessons from the first attempt at the v2.4.0 cut, which stopped at the demo refresh and produced #297, #298 (PR #300), #299 and a #212 restore list.
-- SPEC_NAME: `release-demo-gate-freshness` (orphan maintainer-tooling change, like `release-demo-synth-hard-stop`; no owning functional-spec).
+- BUG_ID: 302 — lessons from the first attempt at the v2.4.0 cut, which stopped at the demo refresh and produced #297, #298 (PR #300), #299 and a #212 restore list.
+- SPEC_NAME: `302-release-cut-tooling` (orphan maintainer-tooling change; no owning functional-spec).
 - Branch: `chore/release-skill-lessons`.
 
 ## diagnose
@@ -24,6 +24,11 @@ Session issues, split by where they belong:
 ## green
 - S1 with the new skill: correct recovery, but it launched one detached synth per file — parallel runs racing on one state file. Closed by requiring one run with a repeated `--path`.
 - S3 with the new skill: the proposal leads with Breaking, lists every section, offers 3.0.0 and 2.4.0 with the reason for each, and waits.
+
+## refactor (review of the first draft)
+- The first draft grew the skill from 1,710 to 2,167 words, mostly recipes for work a script can do. Moved into scripts: the interrupted-refresh recovery (`refresh_demo.py --resume`, which refuses when the refresh never ran — without that guard, pre-refresh pages "cover" every plan doc and a resume would advance the pin over stale docs); the version-proposal list (`scripts/release_contents.py`); the fixed release day (`demo/.demo-sessions-date`, read by the gate). The skill is now 1,219 words.
+- `synth --estimate` writes `synth.pending` / `synth.pipeline` / `synth.estimate` into vault state; in `demo/` that state is published (Home Pipeline). Behaviour unchanged; documented in `--help` and `docs/reference/cli.md`, and the skill says to discard that write in `demo/`.
+- Spec folder renamed to the `<issue>-<slug>` convention after filing #302.
 
 ## gates
 - `ruff check llmwiki tests scripts` — clean.
