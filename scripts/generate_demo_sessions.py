@@ -24,9 +24,14 @@ bullets) so the demo sessions index looks like a real vault — varied
 ``user_messages``, not a flat ``2`` on every row.
 
 For a **release cut** (#225), bump ``--today`` to refresh calendar fields
-inside frontmatter; filenames stay put, so wiki ``source_file:`` links
-usually remain valid without a rename-driven re-synth. CI and ``pages.yml``
-never regenerate this corpus — they only build what is committed.
+inside frontmatter. Raw filenames stay put, so ``source_file:`` links stay
+valid — but a source page's *name* carries the session ``date``, so moving
+the date moves the name synth derives. A real write therefore finishes with
+the offline ``migrate source-page-paths`` pass over the demo vault: pages
+move to their new names and every link to them is rewritten, so the
+following session re-synth refreshes those pages instead of skipping them as
+claimed under another name. CI and ``pages.yml`` never regenerate this
+corpus — they only build what is committed.
 
 Three authored sessions carry `#180` headless markers (`is_headless: true`).
 They stay in `raw/` for coverage but are skipped by default synth under
@@ -54,12 +59,15 @@ import argparse
 import hashlib
 import json
 import re
+import sys
 from collections import Counter
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+# Running as `python3 scripts/…` puts scripts/ on sys.path, not the repo root.
+sys.path.insert(0, str(REPO_ROOT))
 DEMO_SESSIONS = REPO_ROOT / "demo" / "raw" / "sessions"
 DEMO_VAULT = REPO_ROOT / "demo"
 SEARCH_TERMS_FIXTURE = REPO_ROOT / "tests" / "fixtures" / "demo_search_terms.json"
@@ -984,6 +992,20 @@ def render_session(
     return fm + "\n\n" + body_text
 
 
+def rehome_source_pages(vault: Path) -> int:
+    """Move demo source pages to the names their re-dated sessions derive.
+
+    Returns the ``migrate source-page-paths`` exit code: ``1`` when the
+    migration reported errors, else ``0``.
+    """
+    from llmwiki import migrate_source_page_paths
+
+    report = migrate_source_page_paths.run_migration(vault=vault)
+    print("\nsource pages (migrate source-page-paths):")
+    migrate_source_page_paths.print_report(report)
+    return 1 if report["errors"] else 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(
         description=__doc__,
@@ -1084,14 +1106,15 @@ def main() -> int:
             f"would emit {SEARCH_TERMS_FIXTURE.relative_to(REPO_ROOT)} "
             f"({len(present_rows)} present · {len(absent_rows)} absent)"
         )
-    else:
-        emit_search_terms_fixture(present_rows, absent_rows)
-        print(f"\nwrote/updated {len(ordered)} sessions under {DEMO_SESSIONS}")
-        print(
-            f"wrote {SEARCH_TERMS_FIXTURE.relative_to(REPO_ROOT)} "
-            f"({len(present_rows)} present · {len(absent_rows)} absent)"
-        )
-    return 0
+        print("would re-home source pages whose session date moved (migrate source-page-paths)")
+        return 0
+    emit_search_terms_fixture(present_rows, absent_rows)
+    print(f"\nwrote/updated {len(ordered)} sessions under {DEMO_SESSIONS}")
+    print(
+        f"wrote {SEARCH_TERMS_FIXTURE.relative_to(REPO_ROOT)} "
+        f"({len(present_rows)} present · {len(absent_rows)} absent)"
+    )
+    return rehome_source_pages(DEMO_VAULT)
 
 
 if __name__ == "__main__":
