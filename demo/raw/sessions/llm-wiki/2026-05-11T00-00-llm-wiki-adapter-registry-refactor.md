@@ -3,13 +3,13 @@ title: "Refactor the adapter registry so contrib adapters stay opt-in (korvindex
 type: source
 description: "Split the adapter registry so core adapters auto-detect while contrib ones require an explicit flag."
 tags: [session-transcript, session]
-date: 2026-05-11
+date: 2026-05-31
 source_file: raw/sessions/llm-wiki/2026-05-11T00-00-llm-wiki-adapter-registry-refactor.md
 sessionId: e315386e-33e6-db99-c1d5-07a51dedec46
 slug: adapter-registry-refactor
 project: llm-wiki
-started: 2026-05-11T00:00:00+00:00
-ended: 2026-05-11T00:12:00+00:00
+started: 2026-05-31T00:00:00+00:00
+ended: 2026-05-31T00:12:00+00:00
 cwd: /home/USER/code/llm-wiki
 gitBranch: feat/adapters
 permissionMode: default
@@ -28,7 +28,7 @@ is_headless: false
 agent: claude-code
 ---
 
-# Session: 47af34d7 — 2026-05-11
+# Session: 47af34d7 — 2026-05-31
 
 **Project:** `llm-wiki` · **Branch:** `feat/adapters` · **Mode:** `default` · **Model:** `claude-opus-5`
 

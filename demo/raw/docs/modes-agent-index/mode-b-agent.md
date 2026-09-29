@@ -1,0 +1,72 @@
+---
+title: "Mode B · Agent"
+slug: mode-b-agent
+project: modes-agent-index
+type: source
+tags: [wiki-add, raw-doc]
+date: 2026-09-28
+source: "docs/modes/agent/index.md"
+content_sha256: 1d6c5356a713d42429960d83c4bbb8733a1cec093c6491999145386d66ae0fde
+---
+
+---
+title: "Agent mode"
+type: navigation
+docs_shell: true
+---
+
+> **AGENT MODE** — uses your existing Claude Code / Codex CLI session.
+
+# Mode B · Agent
+
+Runs synthesis + query **inside** the Claude Code or Codex CLI session
+that's already open on your machine — no separate Anthropic API key.
+
+## Status (v1.4.0+)
+
+Slash commands (`/wiki-sync`, `/wiki-ingest`, `/wiki-query`, `/wiki-reflect`,
+`/wiki-update`, `/wiki-lint`) still drive the agent workflow.
+
+For **synthesis**, set `synthesis.backend` to **`claude`** (synchronous
+`claude -p` CLI). The old `agent` / agent-delegate backend (pending-prompt
+files + `synthesize --list-pending` / `--complete`) was **removed in v1.4.0**.
+
+```json
+{
+  "synthesis": {
+    "backend": "claude",
+    "claude_model": "sonnet"
+  }
+}
+```
+
+Then run `llmwiki synth` (or `llmwiki all`). `llmwiki add` lands raw docs and rebuilds the site by default — pass `--synthesize` when you want wiki source pages in the same invocation.
+One configured backend serves every command.
+
+## Setup
+
+```bash
+mkdir -p ~/.claude/commands
+cp .claude/commands/wiki-*.md ~/.claude/commands/
+```
+
+Open Claude Code, type `/wiki-sync`, and it runs. Ensure `claude` is on
+`$PATH` (or set `synthesis.claude_path`).
+
+## Daily flow
+
+```
+You: /wiki-sync
+Claude: (runs python3 -m llmwiki sync, ingests new pages)
+
+You: /wiki-query when did I last change the convert pipeline?
+Claude: (reads wiki/index.md + the relevant source pages, synthesizes)
+
+You: llmwiki synth   # or /wiki-all
+```
+
+## Read next
+
+- [Claude CLI backend notes](backend.md)
+- [Configuration — synthesis backend](../../configuration.md#synthesis-backend)
+- [Upgrade guide](../../UPGRADING.md)

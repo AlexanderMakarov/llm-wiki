@@ -4,16 +4,16 @@ slug: architecture-02
 project: architecture
 type: source
 tags: [wiki-add, raw-doc]
-date: 2026-08-10
+date: 2026-09-28
 source: "docs/architecture.md"
-content_sha256: f9d60b3a6d2545eb672aff3ec89271d5d5daf460c4cf2aa42001fe5d6fdfe471
+content_sha256: 2bd3b154da7e9af93b24c396f171de63229075237be0402eb58bbb79eb5f9688
 ---
 
 > Part 2 of 3 of **Architecture** — Layer 2: The eight-layer build.
 
 ## Layer 2: The eight-layer build
 
-Internally the code is organised into eight functional layers. Each layer has one clear responsibility, and each feature in [docs/roadmap.md](roadmap.md) maps to exactly one layer.
+Internally the code is organised into eight functional layers. Each layer has one clear responsibility.
 
 ```
 ┌──────────────────────────────────────────────────────┐
@@ -37,7 +37,7 @@ Reads .jsonl from the agent's session store (via an adapter), filters out noise 
 Key properties:
 
 - **Idempotent** — mtime tracked in `<vault>/llmwiki-state.json` (unified queue + sync + synth + quarantine state)
-- **Privacy-first** — username + API keys + tokens + emails redacted by default
+- **Privacy-first** — API keys + tokens + emails redacted by default; home-path usernames redacted when `redaction.redact_username: true`
 - **Live-session safe** — skips files with a record younger than 60 minutes
 - **Agent-agnostic** — delegates discovery to the adapter registry
 
@@ -94,18 +94,16 @@ Zero dependencies. No bundler. No framework. One file.
 
 ### L4 — Distribution
 
-Owner: the repo root + `.claude-plugin/`
+Owner: the installable `llmwiki` package
 
 How users install and run llmwiki:
 
-- `setup.sh` / `setup.bat` — one-click install
+- `setup.sh` / `setup.bat` — one-click install from a source checkout
 - `sync.sh` / `sync.bat` — wrappers around `python3 -m llmwiki sync`
 - `build.sh` / `build.bat` — wrappers around `python3 -m llmwiki build`
-- `serve.sh` / `serve.bat` — wrappers around `python3 -m llmwiki serve`
 - `upgrade.sh` / `upgrade.bat` — `git pull` + re-run setup
-- `.claude-plugin/plugin.json` + `marketplace.json` — Claude Code plugin packaging
-- `.claude/commands/` — 7 slash commands
-- `.claude/skills/` — 5 auto-discoverable skills
+- `llmwiki/agent_kit/` — packaged `/wiki-*` slash commands and user skills; `llmwiki install-agent-kit --dest PATH` copies them into an agent directory
+- `.claude/` — contributor-only commands and skills (not shipped)
 - `llmwiki/mcp/` — MCP server stub
 
 ### L5 — Schema / docs
@@ -120,7 +118,6 @@ Tells humans and agents how the system works:
 - `docs/framework.md` — Open Source Framework v4.1 adapted for llmwiki
 - `docs/research.md` — Phase 1.25 research report
 - `docs/feature-matrix.md` — 161 features across 16 categories
-- `docs/roadmap.md` — Phase × Layer × Item MoSCoW table
 
 ### L6 — Adapters
 
@@ -144,3 +141,7 @@ Owner: `.github/workflows/` + `tests/`
 - `tests/fixtures/<agent>/` — synthetic fixtures
 - `tests/snapshots/<agent>/` — expected markdown outputs
 - `tests/test_*.py` — pytest unit + snapshot tests
+
+## Adding an adapter
+
+See [framework.md §5.25 Adapter Flow](framework.md) for the full contract. TL;DR: one new file at `llmwiki/adapters/<agent>.py`, one fixture, one snapshot test, one doc page, one README line, one CHANGELOG entry.

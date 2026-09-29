@@ -1,27 +1,43 @@
 ---
-title: "Slash commands reference (part 4/4: How the slash commands get installed)"
+title: "Slash commands reference (part 4/4: Agent-kit skills)"
 slug: slash-commands-reference-04
 project: reference-slash-commands
 type: source
 tags: [wiki-add, raw-doc]
-date: 2026-09-08
+date: 2026-09-28
 source: "docs/reference/slash-commands.md"
-content_sha256: 27e61bf4e1fec0567f035bd800d927b554d63ef2038d5014d6a732e649596f37
+content_sha256: f3ee075d173ec4adfbd89b4e36ec37e1e0338ff4a016aa6702da2f7ac518551e
 ---
 
-> Part 4 of 4 of **Slash commands reference** — How the slash commands get installed.
+> Part 4 of 4 of **Slash commands reference** — Agent-kit skills.
+
+## Agent-kit skills
+
+The kit also ships four **skills** — the model invokes these on its own when what you ask for matches their description, so they cover the same work without you remembering a slash command. They land under `skills/` in the same `--dest` as the commands.
+
+| Skill | What it does | Typical trigger |
+|---|---|---|
+| `llmwiki-sync` | Converts new agent sessions into `raw/sessions/` (`llmwiki sync`), then ingests what arrived | "sync the wiki", "catch me up", a question that needs recent sessions |
+| `llmwiki-ingest` | Ingests one document or folder: `add` (CLI or MCP `wiki_add`) → `synth` → candidate review → `build`. Documents never become hand-written pages | "ingest this", "add this to the wiki", `/wiki-ingest` |
+| `llmwiki-query` | Answers a question from the wiki, with `[[wikilink]]` citations, and offers to save a substantial answer under `wiki/syntheses/` | "what did I decide about X?", `/wiki-query` |
+| `llmwiki-all` | Runs the whole pipeline end-to-end — sync → synth → build → graph → lint — and reports each stage | "run everything", "full pipeline", `/wiki-all` |
+
+The skill is named `llmwiki-all`; the slash command it wraps is `/wiki-all`. Upgrading from a release that shipped the skill as `wiki-all` prunes the old copy when you re-run `llmwiki install-agent-kit --dest PATH` (the prune is by content, so a copy you edited is left alone and reported as `kept`).
+
+---
 
 ## How the slash commands get installed
 
 `llmwiki install-agent-kit --dest PATH` copies the packaged
-`wiki-*.md` command files into an agent directory — `--dest .claude` for the
-project you are working in, or a user-level agent directory. Claude Code picks
-them up from there with no further setup.
+`wiki-*.md` command files and the `skills/` folder into an agent directory —
+`~/.claude` (Claude Code), `~/.cursor` (Cursor), `~/.codex` (Codex CLI) for
+every project on the machine, or `.claude` for just the project you are
+working in. The agent picks them up from there with no further setup.
 
-For **Codex CLI / Cursor / Gemini CLI / other agents**, point `--dest` at (or
-copy the installed `wiki-*.md` files into) the corresponding skill directory
-for that agent (typically `.codex/skills/` or `.agents/skills/`) — the file
-format is portable across agents.
+For an agent with a different layout, point `--dest` at (or copy the installed
+files into) its own command and skill directories — the file format is
+portable. The destination table and the pruning rules are in
+[`cli.md`](cli.md#install-agent-kit--copy-packaged-slash-commands-and-skills-109).
 
 ---
 

@@ -3,13 +3,13 @@ title: "Thread a request id through the log output"
 type: source
 description: "Concurrent requests interleaved in the log with no way to separate them."
 tags: [session-transcript, session]
-date: 2026-08-11
+date: 2026-08-31
 source_file: raw/sessions/trailhead-api/2026-08-11T21-10-trailhead-api-request-id-logging.md
 sessionId: aaaf854c-68f8-76e0-040c-f2ae4a563ecc
 slug: request-id-logging
 project: trailhead-api
-started: 2026-08-11T21:10:00+00:00
-ended: 2026-08-11T21:54:00+00:00
+started: 2026-08-31T21:10:00+00:00
+ended: 2026-08-31T21:54:00+00:00
 cwd: /home/USER/code/trailhead-api
 gitBranch: chore/logging
 permissionMode: default
@@ -28,7 +28,7 @@ is_headless: false
 agent: codex-cli
 ---
 
-# Session: 4a96525b — 2026-08-11
+# Session: 4a96525b — 2026-08-31
 
 **Project:** `trailhead-api` · **Branch:** `chore/logging` · **Mode:** `default` · **Model:** `gpt-5-codex`
 

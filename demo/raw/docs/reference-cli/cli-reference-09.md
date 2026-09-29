@@ -1,98 +1,42 @@
 ---
-title: "CLI reference (part 9/15: migrate — list or apply a named one-time vault repair)"
+title: "CLI reference (part 9/19: queue — inspect and run unified queue)"
 slug: cli-reference-09
 project: reference-cli
 type: source
 tags: [wiki-add, raw-doc]
-date: 2026-09-08
+date: 2026-09-28
 source: "docs/reference/cli.md"
-content_sha256: 186543f38f0258ea703f9ef68071d930f7135ea481068df5e5b46346e0f33e99
+content_sha256: 80394a36c35bb48cc2c8a5640d51d9180b601f9274c4cb944e18a4be261b1dbc
 ---
 
-> Part 9 of 15 of **CLI reference** — migrate — list or apply a named one-time vault repair.
+> Part 9 of 19 of **CLI reference** — queue — inspect and run unified queue.
 
-## `migrate` — list or apply a named one-time vault repair
+## `queue` — inspect and run unified queue
 
-Rare. One-time vault repairs after an upgrade — not part of the daily loop. List available migrations with `llmwiki migrate` or `llmwiki migrate --list`. Nothing is applied until you choose a name: `llmwiki migrate <name> [flags]`. There is no run-everything default. Prefer `--dry-run` on a named migration to preview writes.
-
-New migrations are registered under `migrate` in `llmwiki/cli.py`, not as new top-level commands. Older docs that said `migrate-X` mean `migrate <name>` (for example `migrate-raw-redaction` → `migrate raw-redaction`).
+Manage the unified vault queue in `llmwiki-state.json`.
 
 ```bash
-python3 -m llmwiki migrate
-python3 -m llmwiki migrate --list
-python3 -m llmwiki migrate state --state-file /path/to/vault/llmwiki-state.json
-python3 -m llmwiki migrate raw-redaction --vault /path/to/vault --dry-run
-python3 -m llmwiki migrate tools-used --vault /path/to/vault
-python3 -m llmwiki migrate page-kinds --vault /path/to/vault --dry-run
-python3 -m llmwiki migrate topic-kinds --vault /path/to/vault
-python3 -m llmwiki migrate broken-provenance --vault /path/to/vault --dry-run
+python3 -m llmwiki queue
+python3 -m llmwiki queue enqueue --task-type add_doc --source https://example.com
+python3 -m llmwiki queue run --vault /path/to/vault --limit 20
 ```
 
-### `state` — one-time legacy state migration (v1.4.0)
+### Positional
 
-Migrates legacy dotfiles (`.llmwiki-state.json`, `.llmwiki-synth-state.json`, `.llmwiki-queue.json`, `.llmwiki-quarantine.json`, `.llmwiki-pending-prompts/`) into the unified `llmwiki-state.json`.
+| Value | What |
+|---|---|
+| `status` | Print queue counts, task-type breakdown, state path, and oldest pending timestamp. |
+| `enqueue` | Add one task (`add_doc`, `session_sync`, `synthesize`, `build`). |
+| `run` | Execute pending tasks serially (up to `--limit`). |
 
-Implementation lives at `scripts/migrate_state_v1_4_0.py`; the CLI is a thin wrapper.
-
-```bash
-python3 -m llmwiki migrate state
-python3 -m llmwiki migrate state --state-file /path/to/vault/llmwiki-state.json
-python3 scripts/migrate_state_v1_4_0.py --state-file /path/to/vault/llmwiki-state.json
-```
+### Flags
 
 | Flag | What |
 |---|---|
-| `--state-file PATH` | Explicit target state file (defaults to configured vault path). |
+| `--task-type {add_doc,session_sync,synthesize,build}` | Task kind for `enqueue`. |
+| `--source TEXT` | Source payload for `add_doc` enqueue. |
+| `--limit N` | Max tasks to process in one `run` call. Default: `20`. |
+| `--vault PATH` | Vault root used for task execution and state lookup. |
+| `--state-file PATH` | Override direct state file path. |
 
-The command is idempotent and prints cleanup suggestions for migrated legacy files. It also repairs the vault: legacy pending prompts are resolved (not re-queued); dead `synth_request` queue items are purged; one `synthesize` queue task is enqueued when `synth.pending_total > 0` and none is already pending (drain with `llmwiki queue run --vault <path>`); removed synthesis backends (`agent`, `agent-delegate`, `agent_delegate`) print a `WARNING:` to set `claude`, `ollama`, or `dummy`. Report keys: `state_file`, `migrated`, `orphan_cleanup_suggestions`, `warnings`, `pending_prompts_total`, `pending_prompts_unfilled`, `synth_request_items_purged`, `queued_synthesize`.
-
-### `raw-redaction` — deterministic username rewrite in raw/
-
-Rewrites already-synced `raw/sessions/*.md` so home-path **and** dash-encoded agent-store segments use the `USER` placeholder (`-Users-<you>-…` → `-Users-USER-…`). In-place string rewrite only — does **not** re-convert from `~/.claude/projects` / Cursor stores, does **not** touch `wiki/`, and does **not** enqueue synthesis.
-
-Prefer this over `llmwiki sync --force` when redaction completeness in existing `raw/` matters: agent transcripts are usually retained only ~30 days, so older sessions often have no source left to re-convert; force-sync followed by re-synth also burns LLM tokens for no benefit.
-
-Implementation: `scripts/migrate_raw_encoded_username.py`. After migrating, rebuild so `site/` picks up any display changes: `llmwiki build --vault PATH`.
-
-```bash
-python3 -m llmwiki migrate raw-redaction --vault /path/to/vault --dry-run
-python3 -m llmwiki migrate raw-redaction --vault /path/to/vault
-```
-
-| Flag | What |
-|---|---|
-| `--vault PATH` | **Required.** Vault root containing `raw/sessions/`. |
-| `--dry-run` | Report files that would change; write nothing. |
-| `--real-username NAME` | Override `redaction.real_username` (default: config / `$USER`). |
-| `--replacement-username NAME` | Override placeholder (default: `USER`). |
-
-Idempotent: already-redacted files count as `unchanged`. Private local vaults that never publish `raw/` can skip this and only run `llmwiki build` after upgrading (see [UPGRADING.md](../UPGRADING.md)).
-
-### `tools-used` — expand CallMcpTool frontmatter from origin stores
-
-Rewrites `tools_used` and `tool_counts` in already-synced `raw/sessions/*.md` when the originating agent session file still exists. Re-reads records through the session adapter and applies the same `tool_use_recorded_names` expansion `llmwiki sync` uses (`CallMcpTool` → `mcp__{server}__{tool}`). In-place frontmatter update only — does **not** touch `wiki/`, does **not** enqueue synthesis, and **never** invents MCP names when the origin store is gone (TTL / deleted sessions count as `skipped_missing_origin` and stay unchanged).
-
-Implementation: `scripts/migrate_tools_used_mcp.py`. After migrating, rebuild so analytics and the site pick up the new tool names: `llmwiki build --vault PATH`.
-
-```bash
-python3 -m llmwiki migrate tools-used --vault /path/to/vault --dry-run
-python3 -m llmwiki migrate tools-used --vault /path/to/vault
-```
-
-| Flag | What |
-|---|---|
-| `--vault PATH` | **Required.** Vault root containing `raw/sessions/`. |
-| `--dry-run` | Report files that would change; write nothing. |
-| `--config PATH` | Optional `sessions_config.json` override (record filters). |
-
-Origin resolution prefers the vault's `llmwiki-state.json` sync keys (`adapter::home-relative-path`), then falls back to a glob under the adapter session store by `sessionId`. Claude Code JSONL is fully supported; Cursor and other non-JSONL stores work when the state key or glob resolves a readable origin path. Missing origins leave `CallMcpTool` entries intact for `wiki_adoption` body fallback.
-
-### `page-kinds` — retype pages off the removed question/comparison kinds
-
-`llmwiki/schema.py` lists five knowledge kinds — `source`, `entity`, `concept`, `project`, `synthesis`. A hand-written page declaring `type: question` or `type: comparison` is a `frontmatter_validity` **error**, and this migration clears it: each such page is retyped to `concept` and moved into `wiki/concepts/` **keeping its filename**, then `wiki/questions/` and `wiki/comparisons/` lose their `_context.md` and are pruned once empty.
-
-Inbound links are left alone on purpose. `[[wikilinks]]` resolve by filename, never by folder, so a page that keeps its name keeps every inbound link and no referring page needs editing.
-
-Two safety rules: a page whose filename is already taken in `wiki/concepts/` is retyped where it stands and reported as a collision rather than overwriting anything, and a removed folder still holding other content is left in place and reported rather than deleted. A vault with no removed-kind page prints `nothing to migrate` and exits 0 without writing.
-
-Implementation: `llmwiki/migrate_page_kinds.py` — in the package rather than under `scripts/`, so it runs from a pip or Homebrew install with no checkout. After migrating, rebuild so `site/` picks up the new locations: `llmwiki build --vault PATH`.
+---

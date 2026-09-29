@@ -3,13 +3,13 @@ title: "Auto-review headless pass on a synthetic diff"
 type: source
 description: "Synthetic Cursor Agent CLI auto-review launch; headless via approvalMode."
 tags: [session-transcript, cursor-cli, session]
-date: 2026-09-04
+date: 2026-09-24
 source_file: raw/sessions/llm-wiki/2026-09-04T13-38-llm-wiki-auto-review-headless-diff.md
 sessionId: 51638fbe-4685-04c3-5d54-d7c213c54429
 slug: auto-review-headless-diff
 project: llm-wiki
-started: 2026-09-04T13:38:00+00:00
-ended: 2026-09-04T14:19:00+00:00
+started: 2026-09-24T13:38:00+00:00
+ended: 2026-09-24T14:19:00+00:00
 cwd: /home/USER/code/llm-wiki
 gitBranch: chore/headless-demo
 permissionMode: default
@@ -29,7 +29,7 @@ approvalMode: auto-review
 agent: cursor-cli
 ---
 
-# Session: 4633a76e — 2026-09-04
+# Session: 4633a76e — 2026-09-24
 
 **Project:** `llm-wiki` · **Branch:** `chore/headless-demo` · **Mode:** `default` · **Model:** `claude-opus-5`
 

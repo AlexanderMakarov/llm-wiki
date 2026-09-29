@@ -1,15 +1,15 @@
 ---
-title: "Upgrade guide (part 1/5)"
+title: "Upgrade guide (part 1/8)"
 slug: upgrade-guide-01
 project: upgrading
 type: source
 tags: [wiki-add, raw-doc]
-date: 2026-09-08
+date: 2026-09-28
 source: "docs/UPGRADING.md"
-content_sha256: 8b7e0b10395116258bc93a8766d0f513016bcbe9a2de5dfdde2d069b78872957
+content_sha256: c3075657888a257c11c0c2658857c42e4c57a45b7e70f26eac2aec1c3b5b4614
 ---
 
-> Part 1 of 5 of **Upgrade guide**.
+> Part 1 of 8 of **Upgrade guide**.
 
 ---
 title: "Upgrade guide"
@@ -23,74 +23,44 @@ How to upgrade between `llmwiki` releases. Most releases are drop-in (`pip insta
 
 The canonical per-release detail is [CHANGELOG.md](https://github.com/AlexanderMakarov/llm-wiki/blob/main/CHANGELOG.md) — this guide focuses on "what might break".
 
-## Unreleased — Home Pipeline state stamps + Automation panel shrink (#234)
+## Unreleased — discard rewrites links to the discarded name (#282)
 
-No migration. After upgrade + rebuild:
-
-- **Pipeline state** on Home: Eligible sources + Knowledge tables stay clean; **Timeline** holds Last sync / Last synth / Last build / Last lint. A lint-error note appears under the Candidates table when the last lint recorded an error.
-- **Automation** is settings-only (shorter): no stage timestamps, no lint-fail reminder, no installer Updated line; short Synth backend line (spend hint); Agent hooks and Watch on separate lines. Maintain wording: site refreshes once after summarization.
-- **Standalone `llmwiki lint`** updates `llmwiki-state.json` and copies `site/llmwiki-state.js` — it does not rewrite HTML. `--lint-fail` on `all` does not undo the site built earlier in that run.
-- **`--fail-fast`** still stops the full pipeline at the first failure; without it, later stages (including build) continue after an earlier failure.
-
-## Unreleased — Cursor Agent CLI synthesis backend (#230)
-
-`synthesis.backend` accepts `"cursor_cli"`: shells out to Cursor Agent CLI (`agent` / `cursor-agent` on `$PATH`) the same way `claude` uses `claude -p`. Defaults: model `composer-2.5`, timeout 180s. Settings live under nested `synthesis.cursor_cli` (and nested `synthesis.claude` / `synthesis.ollama`); flat `claude_*` keys still work as fallbacks.
-
-- **One-run override:** `llmwiki synth --backend cursor_cli` (also honoured by `--check` / `--estimate`) — does not write `config.json`.
-- **Not session ingest:** this is the synthesis *generator*. The contrib adapters `cursor_cli` (Agent CLI chats) and `cursor_ide` (IDE Composer) only convert transcripts into `raw/`.
-- **Cost estimates:** `--estimate` prices Cursor models from the packaged `model_pricing.csv` (Cursor-published Composer / Grok rates + `agent --model` aliases). No live Agent CLI price fetch. Stand-in rows (if any) are labeled in `source` / `notes`.
-- **Overview:** `build --synthesize` follows the active backend; `dummy` / unavailable skips the overview LLM.
-- **install-automation:** interactive backend prompt and `--synth-backend` accept `cursor_cli`.
-
-## 2.2.0 — install from PyPI as `llm-wiki-plus` (#210)
-
-The published distribution is **`llm-wiki-plus`** (`llmwiki` and `llm-wiki` are unavailable on PyPI). The import and CLI stay `llmwiki`.
+Optional one-time cleanup. `candidates discard` now turns every `[[link]]` to the discarded name into plain text (or, with `--redirect PAGE`, into `[[PAGE|text]]` plus a `## Aliases` entry on that page), and the synth topic vocabulary no longer offers discarded names. Candidates you discarded **before** this release still have links pointing into `wiki/archive/`, which `lint` reports under `link_integrity`. Clean them up offline — no LLM call, `raw/` never written, safe to re-run:
 
 ```bash
-pip install -U llm-wiki-plus
-llmwiki --version   # → 2.2.0
+llmwiki migrate discarded-topic-links --vault /path/to/vault --dry-run
+llmwiki migrate discarded-topic-links --vault /path/to/vault
+# point some names at an existing page instead of unlinking them:
+llmwiki migrate discarded-topic-links --vault /path/to/vault --redirect "Old Name=ExistingPage"
 ```
 
-Optional graph extra: `pip install 'llm-wiki-plus[graph]'`. Re-run `llmwiki install-agent-kit --dest PATH` after upgrade so retired slash commands (`/wiki-export-marp`, `/wiki-synthesize`) are pruned from an older kit install (#214). Prefer `/wiki-synth` (add sources-only when you want the old synthesize path).
+The same run moves candidate stubs that a `/` in their name had filed into a subfolder (`candidates/entities/A/B thing.md`) to their flat path (`candidates/entities/A-B thing.md`); an existing file at the flat path is never overwritten and is reported as a conflict. Rebuild afterwards: `llmwiki build --vault <vault>`. `discard()` callers in Python now receive a `DiscardResult` — use `.path` for the archived file.
 
-## 2.1.0 — CLI help as a lifecycle map (#112)
+**Expect suggestions on the first run if you ever used `candidates merge`.** A merged candidate's links belong on the page it was merged into, and a survivor page only answers to the merged-away name through the `## Aliases` entry that merges started recording in #139. For an older merge — or one whose survivor you later renamed or re-filed — the archived `reason.txt` is the last record of where those links point. The migration therefore leaves such a name linked and prints what it thinks the page is, exiting 1:
 
-`llmwiki --help` is grouped into six lifecycle sections. Command renames that affect scripts and muscle memory:
+```text
+merged, left linked: 1
+  - Old Name — merged into foo (587 links)
+      --redirect "Old Name=code-foo"
+```
 
-| Old name | Replacement |
-|---|---|
-| `synthesize` | `synth` (old default was sources-only; today's `synth` does sources + harvest unless you pass `--sources-only`) |
-| `consolidate-topics` | gone — `synth` prepares known names at the start of each sources pass |
-| `migrate-state` | `migrate state` |
-| `migrate-raw-redaction` | `migrate raw-redaction` |
-| `migrate-tools-used` | `migrate tools-used` |
-| `migrate-page-kinds` | `migrate page-kinds` |
-| `migrate-topic-kinds` | `migrate topic-kinds` |
-| `migrate-broken-provenance` | `migrate broken-provenance` |
+Check each suggested page, then re-run with those `--redirect` lines (`--redirect "Old Name=code-foo"`), which points the links at the survivor and records the alias so the next run reports nothing. If a name really was noise rather than a merge, `--force` unlinks it like any dismissal. The rest of the run applies either way, so you can take the redirects in a second pass.
 
-List migrations with `llmwiki migrate` or `llmwiki migrate --list`. Nothing runs until you pick a name. Prefer `--dry-run` first. The `/wiki-synthesize` slash alias is retired — `/wiki-synth` is the command, and `synth --sources-only` is the flag for the sources-only pass.
+## Unreleased — `add` / `wiki_add` no longer synthesize by default (#273)
 
-## 2.1.0 — durable sync lookback (#192)
+Behaviour flip, no data migration. Scripts and agents that expected synth-on-add must opt in:
 
-Optional shared `filters.since` and per-adapter `adapters.<name>.since` (`YYYY-MM-DD`, or `"all"` to skip the date gate for one source). Unset still means unlimited history.
+- **Default:** `llmwiki add` and MCP `wiki_add` write raw docs and rebuild the site; they do **not** create `wiki/sources/` pages.
+- **Opt in:** pass `--synthesize` (CLI) or `synthesize: true` (MCP) on the same invocation, or run `llmwiki synth` afterward.
+- **`--no-synthesize`:** warn+no-op for one release (synthesis is already off); remove it when convenient.
+- **`--no-build` / `no_build`:** still skip the site rebuild.
+- **Stdin / MCP text:** `llmwiki add -` and MCP `content` record `source: "piped"` (no tempfile provenance).
 
-- **Set a lookback before enabling a long-retention store** so the first bare sync does not convert years of history. CLI `--since` still overrides for one run.
-- **`llmwiki configure-sources`** asks shared start date first (Enter = today−30, or keep a stored date), then per source shows **Sessions · Earliest · In last 30 days** before Enable / path / start date. Enable means the source is on the next bare `sync` (Cursor IDE included). Skipped interviews invent no dates.
-- **The next successful sync with a durable lookback** prunes that coding-agent adapter’s `sync.files` stamps older than the window (CLI `--since` does not GC; notes intake is not GC’d). Lookback-only skips are never remembered as done, so widening the date later can pick them up. GC does not delete `raw/` or queue/synth/quarantine/ops.
-- **Cursor IDE registry name is `cursor_ide`** (was `cursor`) so it is distinct from `cursor_cli`. `--adapter cursor` and a legacy `adapters.cursor` config block still work. Prefer `adapters.cursor_ide` in new configs. Existing `sync.files` keys prefixed `cursor::` are rewritten to `cursor_ide::` on the next state load so Composer threads are not re-converted.
-- **`llmwiki adapters` enabled column is yes/no** (will the next bare sync include this source). The old `active` column and `auto` / `explicit` / `off` labels are gone.
-Keys and inheritance: [configuration-reference.md — Sync lookback](configuration-reference.md#sync-lookback).
+## Unreleased — synth clean stop on Ctrl+C or backend usage limit (#181)
 
-## 2.1.0 — MCP tool consolidation (#196)
+Behaviour flip, no data migration. Scripts and schedulers that read exit codes should check these:
 
-The stdio MCP server registers **six** tools: `wiki_search`, `wiki_read_page`, `wiki_health`, `wiki_sync`, `wiki_export`, `wiki_add`. There are no alias stubs for retired names.
-
-| Retired | Replacement |
-|---|---|
-| `wiki_query` | `wiki_search` with `question` or `mode=extract` |
-| `wiki_list_sources` | `wiki_search` with `list_sources=true` |
-| `wiki_confidence` / `wiki_lifecycle` / `wiki_category_browse` | `wiki_search` with `mode=filter` and the matching `filter_by` |
-| `wiki_lint` | `wiki_health` (same lint JSON keys; adds `totals`) |
-| `wiki_dashboard` | `wiki_health` (`totals` field) |
-
-Full parameter tables: [mcp.md](reference/mcp.md). Historical telemetry rows keep the logged tool name; `llmwiki usage` and Analytics fold retired names into the canonical six-tool surface.
+- **New exit code `75`:** `synth` and `all` exit `75` when the synthesis backend (Claude CLI, Cursor Agent CLI or Ollama) reports an exhausted usage quota in its error message. The run stops starting new sources, finishes the pages in flight, harvests what landed, and leaves the rest pending (`Deferred:` in `wiki/log.md`) instead of logging one error per remaining source. Treat `75` as "retry after the reset time", not as a failure. A plain rate-limit `429` ("Too Many Requests") is still a per-source error.
+- **`all` no longer returns `0` after Ctrl+C:** an interrupted synth step now makes `all` exit `130` (later stages still run for the pages that landed). A second Ctrl+C while in-flight pages finish kills the Claude / Cursor CLI processes and ends the run at once; with Ollama it waits for in-flight requests up to the Ollama timeout.
+- **Lint failure no longer masks earlier codes:** `all --lint-fail …` used to return `2` even when an earlier step had failed; now the code of the earliest failing step wins — lint's `2` applies only when no earlier step failed.
+- **Reinstall automation:** wrappers installed by `install-automation` before this release always logged `EXIT:0`. Run `llmwiki install-automation` again so the log's `EXIT:` line and the scheduler both see the real exit code.

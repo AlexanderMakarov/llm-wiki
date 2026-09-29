@@ -3,13 +3,13 @@ title: "Add backoff to broker reconnection"
 type: source
 description: "A dropped broker connection produced a tight reconnect loop."
 tags: [session-transcript, session]
-date: 2026-09-03
+date: 2026-09-23
 source_file: raw/sessions/sensor-mesh/2026-09-03T17-54-sensor-mesh-mqtt-reconnect-backoff.md
 sessionId: 39707e8f-b349-b607-c245-eb0d252d4e66
 slug: mqtt-reconnect-backoff
 project: sensor-mesh
-started: 2026-09-03T17:54:00+00:00
-ended: 2026-09-03T18:30:00+00:00
+started: 2026-09-23T17:54:00+00:00
+ended: 2026-09-23T18:30:00+00:00
 cwd: /home/USER/code/sensor-mesh
 gitBranch: fix/reconnect
 permissionMode: default
@@ -28,7 +28,7 @@ is_headless: false
 agent: openclaw
 ---
 
-# Session: f0a28657 — 2026-09-03
+# Session: f0a28657 — 2026-09-23
 
 **Project:** `sensor-mesh` · **Branch:** `fix/reconnect` · **Mode:** `default` · **Model:** `claude-opus-5`
 

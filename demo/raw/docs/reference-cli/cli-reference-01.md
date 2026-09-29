@@ -1,15 +1,15 @@
 ---
-title: "CLI reference (part 1/15)"
+title: "CLI reference (part 1/19)"
 slug: cli-reference-01
 project: reference-cli
 type: source
 tags: [wiki-add, raw-doc]
-date: 2026-09-08
+date: 2026-09-28
 source: "docs/reference/cli.md"
-content_sha256: 186543f38f0258ea703f9ef68071d930f7135ea481068df5e5b46346e0f33e99
+content_sha256: 80394a36c35bb48cc2c8a5640d51d9180b601f9274c4cb944e18a4be261b1dbc
 ---
 
-> Part 1 of 15 of **CLI reference**.
+> Part 1 of 19 of **CLI reference**.
 
 ---
 title: "CLI reference"
@@ -40,11 +40,13 @@ python3 -m llmwiki              # same as --help
 | **Start here** | `init` · `configure-sources` · `install-agent-kit` |
 | **Daily loop (this order)** | `sync` · `add` · `synth` · `candidates` · `build` |
 | **Run the loop for me** | `all` · `watch` · `install-automation` |
-| **Look around** | `lint` · `query` · `trace` · `graph` · `adapters` · `usage` · `version` |
+| **Look around** | `lint` · `search` · `query` · `trace` · `graph` · `adapters` · `usage` · `version` |
 | **Take things out** | `remove` |
 | **Rare — one-time** | `migrate` · `queue` |
 
 The shorter alias `llmwiki` works too once the package is installed (`pip install llm-wiki-plus` or via Homebrew — see [`deploy/pypi-publishing.md`](../deploy/pypi-publishing.md) / [`deploy/homebrew-setup.md`](../deploy/homebrew-setup.md)).
+
+TAB completion of these command names in bash and zsh is one line in your shell startup file, which `./setup.sh` offers to add — see [Shell completion](../getting-started.md#shell-completion).
 
 ---
 
@@ -125,37 +127,5 @@ python3 -m llmwiki sync --force
 
 - Nightly cron-style sync of one project only: `llmwiki sync --project my-project --no-auto-lint --since $(date -v-1d +%Y-%m-%d)`
 - Vault-overlay round-trip: `llmwiki sync --vault "~/Documents/Obsidian Vault"`
-
----
-
-## `add` — add a document to the wiki (#16)
-
-Converts a URL, file, or folder into a raw Markdown document under `raw/docs/`, then (by default) batch-synthesizes and rebuilds the site once for the whole run. Sources may be freely mixed and repeated.
-
-```bash
-python3 -m llmwiki add https://example.com/some-article
-python3 -m llmwiki add ./notes.pdf ./research-folder/
-python3 -m llmwiki add https://example.com/post --title "Custom Title" --tag research
-python3 -m llmwiki add ./doc.md --project my-project --note "Imported from Slack"
-python3 -m llmwiki add https://example.com/post --dry-run
-```
-
-### Flags
-
-| Flag | What |
-|---|---|
-| `--title TEXT` | Override title derivation (single source only). |
-| `--project NAME` | Group under `raw/docs/<NAME>/` instead of the doc's own slug. |
-| `--tag TAG` | Extra frontmatter tag (repeatable). |
-| `--note TEXT` | Blockquote note prepended to the document body. |
-| `--no-synthesize` | Skip the post-add synthesis pass. |
-| `--no-build` | Skip the post-add site rebuild. |
-| `--render` | Force the headless-browser layer for URLs (needs playwright). |
-| `--no-render` | Never use the headless-browser layer. |
-| `--dry-run` | Convert and report, write nothing, run nothing. |
-| `--force-new` | Always land a new snapshot even when the converted body matches an existing doc (#22). |
-| `--vault PATH` | Write under the given vault's `raw/docs/` instead of the repo. |
-
-URL sources go through a layered pipeline (markdown negotiation → extraction → render escalation) before landing as Markdown.
 
 ---

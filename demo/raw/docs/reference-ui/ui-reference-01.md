@@ -1,15 +1,15 @@
 ---
-title: "UI reference (part 1/6)"
+title: "UI reference (part 1/8)"
 slug: ui-reference-01
 project: reference-ui
 type: source
 tags: [wiki-add, raw-doc]
-date: 2026-09-08
+date: 2026-09-28
 source: "docs/reference/ui.md"
-content_sha256: 7eb6298d7f4ad87999fa2453589b551356412dea6a6e4d19fc218921bf71850b
+content_sha256: 7656740cdc53f26b667601ea5fc167c1f813f61908c1f46377e210d82e1e05bf
 ---
 
-> Part 1 of 6 of **UI reference**.
+> Part 1 of 8 of **UI reference**.
 
 ---
 title: "UI reference"
@@ -33,13 +33,14 @@ Every page in the site carries the same header nav. Keyboard: `⌘K` opens the c
 | 2 | **Raw** | `/raw.html` | file tree browser of raw documents (wiki-add layer) |
 | — | **Candidates** | `/candidates.html` | what is pending under `wiki/candidates/`, a per-row Decision control, and an Apply that assembles the `candidates apply` command + JSON batch for the rows you decided |
 | 3 | **Graph** | `/graph.html` | interactive force-directed knowledge graph (vis-network) |
+| — | **Topics** | `/topics/index.html` | every topic grouped into curated entities, curated concepts and derived topics, counted per section and ordered by reach within each |
 | 4 | **Projects** | `/projects/index.html` | filterable card grid of every project + freshness badge |
 | 5 | **Sessions** | `/sessions/index.html` | sortable table of every session, agent badge, project, model, tool-call count |
 | 6 | **Analytics** | `/analytics.html` | activity heatmaps, wiki usage, recent activity, project grid |
 | 7 | **Models** | `/models/index.html` | structured model-profile cards (provider, pricing, benchmarks) |
 | 8 | **Docs** | `/docs/index.html` | editorial docs hub — tutorials, references, deployment guides |
 | 9 | **Prototypes** | `/prototypes/index.html` | review-ready UI states (page-shell, article-anatomy, …) for UX iteration |
-| — | **Search** | `⌘K` | fuzzy-match command palette over the whole corpus |
+| — | **Search** | `⌘K` | command palette — wiki-page matches and site pages, in two groups |
 | — | **Theme toggle** | button on the right | light / dark (persists via `localStorage.theme`) |
 
 Mobile: the six middle links collapse into a bottom-nav below 768 px; Search + Theme stay in the top bar.

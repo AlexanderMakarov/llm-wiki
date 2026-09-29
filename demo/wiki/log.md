@@ -460,3 +460,184 @@
 ## [2026-09-08] synthesize | 52 sessions across 16 projects
 - Processed: 52 docs
 - Created: configuration, configuration-reference, deploy-docker, deploy-github-pages, i18n-es-getting-started, i18n-ja-getting-started, i18n-zh-cn-getting-started, reference-cli, reference-slash-commands, reference-state-persistence, reference-synthesis-cost, reference-ui, style-guide, tutorials-setup-guide, upgrading, windows-setup
+
+## [2026-09-28] migrate | source page paths
+
+## [2026-09-28] synthesize | 25 sessions across 7 projects
+- Processed: 15 Claude · 4 Cursor · 4 OpenClaw · 2 Codex
+- Created: dotfiles, llm-wiki, paper-notes, pocket-ledger, recipe-box, sensor-mesh, trailhead-api
+
+## [2026-09-28] remove | 5 docs (upgrading)
+
+## [2026-09-28] add | Upgrade guide
+
+## [2026-09-28] add | Claude Code adapter
+
+## [2026-09-28] add | Codex CLI adapter
+
+## [2026-09-28] add | Obsidian adapter
+
+## [2026-09-28] remove | 3 docs (architecture)
+
+## [2026-09-28] add | Architecture
+
+## [2026-09-28] add | Performance Benchmarks
+
+## [2026-09-28] remove | 2 docs (cheatsheet)
+
+## [2026-09-28] add | Command cheatsheet
+
+## [2026-09-28] remove | 8 docs (configuration-reference)
+
+## [2026-09-28] add | Configuration Reference
+
+## [2026-09-28] remove | 3 docs (configuration)
+
+## [2026-09-28] add | Configuration
+
+## [2026-09-28] remove | 1 docs (deploy-docker)
+
+## [2026-09-28] add | Docker deployment
+
+## [2026-09-28] remove | 1 docs (deploy-github-pages)
+
+## [2026-09-28] add | Deploying to GitHub Pages
+
+## [2026-09-28] add | Homebrew tap — one-time setup
+
+## [2026-09-28] remove | 2 docs (design-brand-system)
+
+## [2026-09-28] remove | 3 docs (feature-matrix)
+
+## [2026-09-28] add | Feature Matrix — Every Feature Across the 15 Prior Implementations
+
+## [2026-09-28] add | llmwiki Framework — Building an Agent-Native Dev Tool
+
+## [2026-09-28] remove | 2 docs (getting-started)
+
+## [2026-09-28] add | Getting started
+
+## [2026-09-28] add | llmwiki documentation
+
+## [2026-09-28] add | Mode B · Agent
+
+## [2026-09-28] add | Monthly Project Health Report Template
+
+## [2026-09-28] remove | 1 docs (privacy)
+
+## [2026-09-28] add | Privacy
+
+## [2026-09-28] remove | 15 docs (reference-cli)
+
+## [2026-09-28] add | CLI reference
+
+## [2026-09-28] add | MCP server — tool reference
+
+## [2026-09-28] add | Page kinds
+
+## [2026-09-28] add | Reader API contract (v1.2+ preview)
+
+## [2026-09-28] add | Reader-first article shell
+
+## [2026-09-28] remove | 4 docs (reference-slash-commands)
+
+## [2026-09-28] add | Slash commands reference
+
+## [2026-09-28] remove | 6 docs (reference-ui)
+
+## [2026-09-28] add | UI reference
+
+## [2026-09-28] add | Phase 1.25 — Research Report
+
+## [2026-09-28] add | Star History Tracking
+
+## [2026-09-28] remove | 1 docs (style-guide)
+
+## [2026-09-28] add | Docs style guide
+
+## [2026-09-28] add | 00 · Quickstart Walkthrough
+
+## [2026-09-28] add | 03 · Use with Claude Code
+
+## [2026-09-28] add | 08 · Synthesize wiki pages with Ollama
+
+## [2026-09-28] remove | 1 docs (uptime)
+
+## [2026-09-28] add | Uptime Monitoring
+
+## [2026-09-28] remove | 1 docs (windows-setup)
+
+## [2026-09-28] add | Windows setup
+
+## [2026-09-28] synthesize | 75 sessions across 34 projects — stopped early (backend usage limit)
+- Processed: 75 docs
+- Created: adapters-claude-code, adapters-codex-cli, adapters-obsidian, architecture, benchmarks, cheatsheet, configuration, configuration-reference, deploy-docker, deploy-github-pages, deploy-homebrew-setup, feature-matrix, framework, getting-started, index, modes-agent-index, monthly-report-template, privacy, reference-cli, reference-mcp, reference-page-kinds, reference-reader-api, reference-reader-shell, reference-slash-commands, reference-ui, research, star-history, style-guide, tutorials-00-quickstart-walkthrough, tutorials-03-use-with-claude-code, tutorials-08-synthesize-with-ollama, upgrading, uptime, windows-setup
+- Deferred: 21
+
+## [2026-09-29] synthesize | 21 sessions across 10 projects
+- Processed: 21 docs
+- Created: reference-ui, research, star-history, style-guide, tutorials-00-quickstart-walkthrough, tutorials-03-use-with-claude-code, tutorials-08-synthesize-with-ollama, upgrading, uptime, windows-setup
+
+## [2026-09-29] remove | 1 docs (00-quickstart-walkthrough)
+
+## [2026-09-29] remove | 1 docs (01-installation)
+
+## [2026-09-29] remove | 1 docs (03-use-with-claude-code)
+
+## [2026-09-29] remove | 1 docs (08-synthesize-wiki-pages-with-ollama)
+
+## [2026-09-29] remove | 1 docs (claude-code-adapter)
+
+## [2026-09-29] remove | 8 docs (cli-reference)
+
+## [2026-09-29] remove | 1 docs (codex-cli-adapter)
+
+## [2026-09-29] remove | 2 docs (command-cheatsheet)
+
+## [2026-09-29] remove | 1 docs (deploying-to-github-pages)
+
+## [2026-09-29] remove | 1 docs (docker-deployment)
+
+## [2026-09-29] remove | 1 docs (docs-style-guide)
+
+## [2026-09-29] remove | 3 docs (feature-matrix-every-feature-across-the-15-prior-implementations)
+
+## [2026-09-29] remove | 1 docs (homebrew-tap-one-time-setup)
+
+## [2026-09-29] remove | 1 docs (llmwiki-documentation)
+
+## [2026-09-29] remove | 3 docs (llmwiki-framework-building-an-agent-native-dev-tool)
+
+## [2026-09-29] remove | 1 docs (mode-b-agent)
+
+## [2026-09-29] remove | 1 docs (monthly-project-health-report-template)
+
+## [2026-09-29] remove | 1 docs (obsidian-adapter)
+
+## [2026-09-29] remove | 1 docs (performance-benchmarks)
+
+## [2026-09-29] remove | 3 docs (phase-1-25-research-report)
+
+## [2026-09-29] remove | 1 docs (pypi-publishing-one-time-setup)
+
+## [2026-09-29] remove | 3 docs (reader-api-contract-v1-2-preview)
+
+## [2026-09-29] remove | 2 docs (reader-first-article-shell)
+
+## [2026-09-29] remove | 2 docs (setup-guide-your-first-llm-wiki-in-15-minutes)
+
+## [2026-09-29] remove | 4 docs (slash-commands-reference)
+
+## [2026-09-29] remove | 1 docs (star-history-tracking)
+
+## [2026-09-29] remove | 1 docs (state-persistence)
+
+## [2026-09-29] remove | 3 docs (synthesis-cost-what-you-pay-per-page-and-why)
+
+## [2026-09-29] remove | 5 docs (ui-reference)
+
+## [2026-09-29] remove | 7 docs (upgrade-guide)
+
+## [2026-09-29] remove | 1 docs (uptime-monitoring)
+
+## [2026-09-29] remove | 1 docs (deploy-homebrew-setup)

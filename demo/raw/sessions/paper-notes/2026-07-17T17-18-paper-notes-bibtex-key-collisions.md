@@ -3,13 +3,13 @@ title: "Resolve citation key collisions on import"
 type: source
 description: "Two papers by the same author in the same year overwrote each other."
 tags: [session-transcript, session]
-date: 2026-07-17
+date: 2026-08-06
 source_file: raw/sessions/paper-notes/2026-07-17T17-18-paper-notes-bibtex-key-collisions.md
 sessionId: 40f17e8e-b4cc-0941-3154-29623d27c8b8
 slug: bibtex-key-collisions
 project: paper-notes
-started: 2026-07-17T17:18:00+00:00
-ended: 2026-07-17T19:53:00+00:00
+started: 2026-08-06T17:18:00+00:00
+ended: 2026-08-06T19:53:00+00:00
 cwd: /home/USER/code/paper-notes
 gitBranch: fix/bibtex
 permissionMode: default
@@ -28,7 +28,7 @@ is_headless: false
 agent: cursor-cli
 ---
 
-# Session: aeac229b — 2026-07-17
+# Session: aeac229b — 2026-08-06
 
 **Project:** `paper-notes` · **Branch:** `fix/bibtex` · **Mode:** `default` · **Model:** `claude-opus-5`
 

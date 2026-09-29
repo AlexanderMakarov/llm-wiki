@@ -4,9 +4,9 @@ slug: configuration-reference-07
 project: configuration-reference
 type: source
 tags: [wiki-add, raw-doc]
-date: 2026-09-08
+date: 2026-09-28
 source: "docs/configuration-reference.md"
-content_sha256: 037667c9a64c03e7e116aad5677fbb0f9c2a8a529294787eae7fbe5f06d78089
+content_sha256: a94f88e12736fb1eb7ca6bf1d509cef2af5bfc5ca59c974abbe8c0cbb274a294
 ---
 
 > Part 7 of 8 of **Configuration Reference** — Vault file (llmwiki.json).
@@ -52,7 +52,7 @@ Or an object mapping each rule to a written reason — preferred, because the re
 }
 ```
 
-Rule names are the ones the report prints as `## <rule>` headings; the full list is in [reference/cli.md](reference/cli.md#lint--run-17-wiki-quality-rules), and any run that rejects a name prints the valid ones.
+Rule names are the ones the report prints as `## <rule>` headings; the full list is in [reference/cli.md](reference/cli.md#lint--run-registered-wiki-quality-rules), and any run that rejects a name prints the valid ones.
 
 Keep a reason to a sentence or two. It is printed **verbatim, on one line** of every report the wiki produces, so a paragraph-length reason wraps badly in a CI log.
 

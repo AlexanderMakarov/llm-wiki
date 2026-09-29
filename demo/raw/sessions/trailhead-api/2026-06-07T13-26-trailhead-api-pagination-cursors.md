@@ -3,13 +3,13 @@ title: "Move list endpoints from offset to cursor pagination"
 type: source
 description: "Offset paging skipped rows when records were inserted mid-scan; cursors fixed it."
 tags: [session-transcript, session]
-date: 2026-06-07
+date: 2026-06-27
 source_file: raw/sessions/trailhead-api/2026-06-07T13-26-trailhead-api-pagination-cursors.md
 sessionId: c10daf7d-dc65-2ac0-af13-e1cf3304d642
 slug: pagination-cursors
 project: trailhead-api
-started: 2026-06-07T13:26:00+00:00
-ended: 2026-06-07T14:03:00+00:00
+started: 2026-06-27T13:26:00+00:00
+ended: 2026-06-27T14:03:00+00:00
 cwd: /home/USER/code/trailhead-api
 gitBranch: feat/pagination
 permissionMode: default
@@ -28,7 +28,7 @@ is_headless: false
 agent: claude-code
 ---
 
-# Session: 1a2e076f — 2026-06-07
+# Session: 1a2e076f — 2026-06-27
 
 **Project:** `trailhead-api` · **Branch:** `feat/pagination` · **Mode:** `default` · **Model:** `claude-opus-5`
 

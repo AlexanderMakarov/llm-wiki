@@ -1,25 +1,35 @@
 ---
-title: "UI reference (part 4/6: Topic pages)"
+title: "UI reference (part 4/8: Topic pages)"
 slug: ui-reference-04
 project: reference-ui
 type: source
 tags: [wiki-add, raw-doc]
-date: 2026-09-08
+date: 2026-09-28
 source: "docs/reference/ui.md"
-content_sha256: 7eb6298d7f4ad87999fa2453589b551356412dea6a6e4d19fc218921bf71850b
+content_sha256: 7656740cdc53f26b667601ea5fc167c1f813f61908c1f46377e210d82e1e05bf
 ---
 
-> Part 4 of 6 of **UI reference** — Topic pages.
+> Part 4 of 8 of **UI reference** — Topic pages.
 
 ## Topic pages
 
 URLs: `/topics/<slug>.html`, `/topics/index.html`
 
-A **topic** is a `[[wikilink]]` target found in `wiki/sources/*.md`, with spelling variants clustered into one canonical name. Topics are therefore *not* wiki pages: a topic exists because sessions cited the name, and a topic page renders whether or not any page under `wiki/` describes it — an un-promoted candidate, or a name a reviewer declined, keeps its page indefinitely. Reach them by double-clicking a node in the [Graph](#graph), from `⌘K` (`type:topic`), from `topics/index.html`, or from the Connected topics list on any other topic or project page.
+Two things make a **topic**. A name sessions cited: a `[[wikilink]]` target found in `wiki/sources/*.md`, with spelling variants clustered into one canonical name. Or — since #248 — a curated page that describes one: every page under `wiki/entities/` and `wiki/concepts/` becomes a topic whether or not any session cites it, so promoting a candidate always produces something a reader can open. A topic is therefore not the same thing as a wiki page in either direction: a derived topic renders whether or not any page under `wiki/` describes it — an un-promoted candidate, or a name a reviewer declined, keeps its page indefinitely — while every curated entity and concept gets one regardless of reach. Two page sets stay out: `wiki/archive/` (cold storage is never published) and `_`-prefixed folder-context stubs such as `wiki/entities/_context.md`, which exist only to orient an assistant.
 
-`/topics/index.html` lists every topic by reach — session count and link count per row.
+**One topic gets no page: the one with nothing to show.** A topic is skipped when it has *no connected topics* **and** *no content of its own* — no edge in the co-occurrence graph, and nothing left of its backing page once the title, `## Connections`, `## Sessions` and `## Sources` are removed (a topic no page backs has no content of its own either). The page would carry a name, `No connected topics.` and an empty evidence list, which helps neither a reader nor an agent. Both halves are required: a reviewed page nobody co-cites still shows what it records, and a page recording nothing still shows the neighbourhood it sits in. The skip is computed once, over the node list the whole build reads, so a skipped topic has no page, no `⌘K` entry, no row or count on `/topics/index.html`, and no node in the graph — and its wiki page stays searchable in the Wiki result group with no link on the row (its corpus `url` is `null`), because the assistant still reads it. Reach topics by double-clicking a node in the [Graph](#graph), from `⌘K` (`type:topic`), from the **Topics** nav entry, or from the Connected topics list on any other topic or project page.
 
-Two thresholds decide which topics get a page: a topic mentioned by fewer than 2 sessions is dropped from the graph, and a vault yielding fewer than 5 topic nodes falls back to the page graph, in which case `build` writes no topic pages at all.
+`/topics/index.html` lists every topic in three sections, in this order — **Entities**, **Concepts**, **Other topics** — each heading carrying that section's count. Rows keep today's reach ordering (session count, then link count) *within* each section, and a curated row carries the same kind chip the topic page's identity line shows, so a reviewed page is distinguishable from a name sessions happened to mention. An empty section renders its heading and `No topics in this group.` rather than disappearing. There are no filter or sort controls.
+
+Three numbers are easy to conflate here. They gate different things, and only the first is configurable per vault:
+
+| Constant | Value | Gates | Per-vault? |
+|---|---|---|---|
+| `DEFAULT_MIN_REFS` (`llmwiki/vault_settings.py`) | 3 | how many pages must cite a name before harvest materialises a candidate stub, and before `link_integrity` calls an unresolved link a defect | **yes** — via `llmwiki.json` |
+| `min_sessions` (`llmwiki/topics.py`) | 2 | how many sessions must mention a *derived* name before it becomes a graph node | no |
+| `_TOPIC_GRAPH_MIN_NODES` (`llmwiki/build.py`) | 5 | whether `graph.html` renders the topic graph at all, or falls back to the page graph | no |
+
+A curated entity or concept page is exempt from `min_sessions`: it is seeded as a node with whatever session count it has, including zero (#248). And topic *pages* no longer follow the third number — `build` writes `topics/<slug>.html` whenever the graph carries a curated-backed node, so a vault too small for the topic viewer still gets pages for its entities and concepts while `graph.html` falls back to the page graph. The `⌘K` index carries exactly the topic pages that build wrote — which, since a vault can hold a curated page with neither content nor connections, can be fewer than the vault's curated pages.
 
 ### Layout
 
@@ -50,27 +60,3 @@ This is the distinction to keep straight: **sessions supply reach and activity, 
 A topic with no backing page therefore shows no review date and no content, and its chip reads `Unclassified topic` — and one whose page omits `last_updated` shows no review date even while sessions supply activity dates.
 
 ### Page content
-
-The topic page is the only browsable surface for entity and concept pages, so it renders their content above the link lists. What survives is everything after the page's own leading `# H1`, minus `## Connections`, `## Sessions`, and `## Sources` — the topic page renders Connected topics and a collapsible Sources evidence list (Sessions vs Documents) itself from the graph, so the page's hand-written versions would only duplicate them.
-
-- **Heading-agnostic.** Nothing is keyed to `## Key Facts`; a renamed, reordered, or newly added section reaches the reader as written, as does introductory prose sitting above the first heading.
-- **No empty sections.** A heading with nothing under it is dropped rather than rendered as a bare heading — innermost first, so a `##` whose only child `###` was itself empty goes too.
-- **`[[wikilinks]]` resolve.** A target naming a topic links to wherever that topic resolved (its topic page, or the project page a project topic routes to); a target naming a session with a compiled page links to it; anything else degrades to the plain text it wrapped rather than a dead link. Code spans and fenced blocks are left exactly as written — a page documenting wikilink syntax keeps its example.
-
-### Project topics route to the project page
-
-A topic backed by a page under `wiki/projects/` links to `/projects/<slug>.html` — the full [project detail page](#project-detail-projectsslughtml) with its heatmap, session cards and charts — rather than to a thin topic page. The rewrite is applied once at build time and every surface honours it: the map's double-click target, the search index entry, Connected topics lists on topic pages and on project pages, `topics/index.html`, and `[[wikilinks]]` cited inside page content.
-
-The match itself identifies which project it is, so an alias spelling routes as correctly as the canonical one. The rewrite is skipped when the build wrote no page for that project: `wiki/projects/` is seeded from stubs while `site/projects/` comes from session groups, so a project page with no recorded sessions keeps its ordinary topic page rather than being handed a link that 404s.
-
-The `type:` vocabulary on the backing wiki page, and the origin of every frontmatter field, is [Page kinds](page-kinds.md).
-
----
-
-## Docs hub
-
-URL: `/docs/index.html`
-
-The editorial entry point — you're reading a page compiled from the same pipeline. Covered in detail by [`tutorials/01-installation.md`](../tutorials/01-installation.md) onward. See also [`style-guide.md`](../style-guide.md).
-
----

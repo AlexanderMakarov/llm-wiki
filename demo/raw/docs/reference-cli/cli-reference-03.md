@@ -1,15 +1,15 @@
 ---
-title: "CLI reference (part 3/15: usage — MCP tool-usage telemetry vs synthesis cost (#26))"
+title: "CLI reference (part 3/19: usage — MCP tool-usage telemetry vs synthesis cost (#26))"
 slug: cli-reference-03
 project: reference-cli
 type: source
 tags: [wiki-add, raw-doc]
-date: 2026-09-08
+date: 2026-09-28
 source: "docs/reference/cli.md"
-content_sha256: 186543f38f0258ea703f9ef68071d930f7135ea481068df5e5b46346e0f33e99
+content_sha256: 80394a36c35bb48cc2c8a5640d51d9180b601f9274c4cb944e18a4be261b1dbc
 ---
 
-> Part 3 of 15 of **CLI reference** — usage — MCP tool-usage telemetry vs synthesis cost (#26).
+> Part 3 of 19 of **CLI reference** — usage — MCP tool-usage telemetry vs synthesis cost (#26).
 
 ## `usage` — MCP tool-usage telemetry vs synthesis cost (#26)
 

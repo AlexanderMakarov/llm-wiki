@@ -4,9 +4,9 @@ slug: architecture-01
 project: architecture
 type: source
 tags: [wiki-add, raw-doc]
-date: 2026-08-10
+date: 2026-09-28
 source: "docs/architecture.md"
-content_sha256: f9d60b3a6d2545eb672aff3ec89271d5d5daf460c4cf2aa42001fe5d6fdfe471
+content_sha256: 2bd3b154da7e9af93b24c396f171de63229075237be0402eb58bbb79eb5f9688
 ---
 
 > Part 1 of 3 of **Architecture**.
@@ -18,7 +18,7 @@ llmwiki has two overlapping structures:
 1. The **Karpathy three-layer wiki** (conceptual): `raw/` → `wiki/` → `site/`
 2. The **eight-layer build** (implementation): how responsibilities are distributed across Python modules, HTML templates, scripts, CI, etc.
 
-This document covers both.
+This document covers both. For *why* the product is shaped this way (MCP for agents, site for humans, scriptable add, human candidate gate), see [Product principles](maintainers/principles.md).
 
 ## Layer 1: Karpathy's three-layer wiki
 

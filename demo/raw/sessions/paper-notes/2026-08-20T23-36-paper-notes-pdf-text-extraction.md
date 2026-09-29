@@ -3,13 +3,13 @@ title: "Extract readable text from two-column PDFs"
 type: source
 description: "Column-aware extraction replaced a naive reader that interleaved lines."
 tags: [session-transcript, session]
-date: 2026-08-20
+date: 2026-09-09
 source_file: raw/sessions/paper-notes/2026-08-20T23-36-paper-notes-pdf-text-extraction.md
 sessionId: 86b8651c-cb11-bd66-b6ad-d1694ead7fec
 slug: pdf-text-extraction
 project: paper-notes
-started: 2026-08-20T23:36:00+00:00
-ended: 2026-08-21T00:45:00+00:00
+started: 2026-09-09T23:36:00+00:00
+ended: 2026-09-10T00:45:00+00:00
 cwd: /home/USER/code/paper-notes
 gitBranch: feat/pdf
 permissionMode: default
@@ -28,7 +28,7 @@ is_headless: false
 agent: claude-code
 ---
 
-# Session: ef964a20 — 2026-08-20
+# Session: ef964a20 — 2026-09-09
 
 **Project:** `paper-notes` · **Branch:** `feat/pdf` · **Mode:** `default` · **Model:** `claude-opus-5`
 

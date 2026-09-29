@@ -4,9 +4,9 @@ slug: command-cheatsheet-02
 project: cheatsheet
 type: source
 tags: [wiki-add, raw-doc]
-date: 2026-09-07
+date: 2026-09-28
 source: "docs/cheatsheet.md"
-content_sha256: e6ca298f4ad85f23bafd0499940f3b1e08825b0d0b77066af98d7d09137a327f
+content_sha256: 6c0269b30e8df4229a5b81a22e113d9970567484b7d63f3068dfc57d6c186aeb
 ---
 
 > Part 2 of 2 of **Command cheatsheet** — Adapters.

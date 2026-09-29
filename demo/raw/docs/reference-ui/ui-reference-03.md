@@ -1,15 +1,15 @@
 ---
-title: "UI reference (part 3/6: Graph)"
+title: "UI reference (part 3/8: Graph)"
 slug: ui-reference-03
 project: reference-ui
 type: source
 tags: [wiki-add, raw-doc]
-date: 2026-09-08
+date: 2026-09-28
 source: "docs/reference/ui.md"
-content_sha256: 7eb6298d7f4ad87999fa2453589b551356412dea6a6e4d19fc218921bf71850b
+content_sha256: 7656740cdc53f26b667601ea5fc167c1f813f61908c1f46377e210d82e1e05bf
 ---
 
-> Part 3 of 6 of **UI reference** — Graph.
+> Part 3 of 8 of **UI reference** — Graph.
 
 ## Graph
 

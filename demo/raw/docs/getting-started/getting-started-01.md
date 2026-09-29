@@ -4,9 +4,9 @@ slug: getting-started-01
 project: getting-started
 type: source
 tags: [wiki-add, raw-doc]
-date: 2026-08-10
+date: 2026-09-28
 source: "docs/getting-started.md"
-content_sha256: 2ba6346e0ced88bd5f133a3774ebabf5662876a6ac5ff41708562a1548e425ba
+content_sha256: da0d0f50f9fdf3b2b102da40e3d4083436abcdec03b0a35a2d2cdee745770ee1
 ---
 
 > Part 1 of 2 of **Getting started**.
@@ -19,21 +19,15 @@ content_sha256: 2ba6346e0ced88bd5f133a3774ebabf5662876a6ac5ff41708562a1548e425ba
 
 - Python ≥ 3.12
 - `git`
-- Sessions from at least one supported agent already on disk:
-  - **Claude Code** — `~/.claude/projects/`
-  - **Codex CLI** — `~/.codex/sessions/`
-  - **GitHub Copilot Chat** — VS Code workspaceStorage
-  - **GitHub Copilot CLI** — `~/.copilot/session-state/`
-  - **Cursor** — Cursor IDE workspaceStorage
-  - **Gemini CLI** — `~/.gemini/`
+- Sessions from at least one supported agent already on disk (Claude Code, Codex CLI, Cursor Agent CLI, OpenClaw, Copilot, Gemini, etc.) — see [multi-agent-setup.md](multi-agent-setup.md) for default paths.
 
-llmwiki auto-detects whichever agents you have installed. No configuration needed.
+A bare `llmwiki sync` runs every **enabled** coding-agent source whose store exists on disk. Configure sources in `config.json` under `adapters.<name>` or run `llmwiki configure-sources` after install. Use `--adapter <name>` to limit a single run.
 
 That's it. No `npm`, no `brew`, no database, no account.
 
 ## Install
 
-The git clone holds **code + demo seeds only**. Your transcripts, wiki pages, and built site live in a separate **vault** directory *outside* the repo, so personal data never lands in git. (See [the README](../README.md#personal-data-stays-outside-the-repo) for the full rationale.)
+The git clone holds **code + demo seeds only**. Your transcripts, wiki pages, and built site live in a separate **vault** directory *outside* the repo, so personal data never lands in git. (See [the README](../README.md) for the product overview.)
 
 ### 1. Clone the code and set up a venv
 
@@ -93,83 +87,29 @@ Example output:
 
 ```
 Registered adapters:
-  claude_code       available: yes  (Claude Code — reads ~/.claude/projects/*/*.jsonl)
-  codex_cli         available: yes  (Codex CLI — reads ~/.codex/sessions/**/*.jsonl)
-  copilot_chat      available: no   (GitHub Copilot Chat — reads VS Code workspaceStorage chatSessions)
-  copilot_cli       available: no   (GitHub Copilot CLI — reads ~/.copilot/session-state/*/events.jsonl)
-  cursor            available: yes  (Cursor IDE — reads chat history)
-  gemini_cli        available: no   (Gemini CLI — reads ~/.gemini/ session history)
-  obsidian          available: no   (Obsidian vault)
+  name              present   enabled     active   description
+  claude_code       yes       auto        yes      Claude Code — reads ~/.claude/projects/...
+  openclaw          yes       explicit    yes      OpenClaw — reads configured roots...
 ```
 
-> The PDF adapter was removed in the simplification sweep — `llmwiki adapters` no longer lists it.
+Run `llmwiki configure-sources` after install to probe stores and write `adapters.<name>` settings. The interview asks a shared lookback first (default today−30) and shows Sessions · Earliest · In last 30 days per source before Enable; skip configure to keep unlimited history. Full support map: [multi-agent-setup.md](multi-agent-setup.md). Lookback keys: [configuration-reference.md](configuration-reference.md#sync-lookback).
 
-Any adapter marked `available: yes` will be included when you run `llmwiki sync`. See [multi-agent-setup.md](multi-agent-setup.md) for details on configuring individual agents.
+### Shell completion
 
-## Three commands after install
+Pressing TAB after `llmwiki ` lists every command, and a typed prefix narrows the list (`llmwiki sy` offers `sync` and `synth`). Only command names complete — not flags, and not names under a command. Only the `llmwiki` entry point completes; `python3 -m llmwiki` does not.
 
-With `vault.default_path` set (step 2 above), these all read and write the vault, not the clone:
+On macOS / Linux, `./setup.sh` offers this at the end when run in an interactive terminal: it asks `Add llmwiki TAB completion to ~/.bashrc? [Y/n]` (or `~/.zshrc` when your login shell is zsh), and on yes writes the line below and prints which file it changed. Re-running setup replaces that line with the current command list instead of adding a second one, and leaves the rest of the file alone. On macOS, bash users get `~/.bash_profile` instead of `~/.bashrc`, because Terminal and iTerm start bash as a login shell, which does not read `~/.bashrc`. For any other shell it changes nothing and prints the bash line for you to add yourself. Set `LLMWIKI_SKIP_COMPLETION=1` to skip the question; it is never asked when setup runs non-interactively.
+
+To enable it by hand (for example after `pip install` or Homebrew), paste the line for your shell into its startup file and open a new terminal.
+
+bash — `~/.bashrc` (`~/.bash_profile` on macOS):
 
 ```bash
-llmwiki sync     # pull new sessions from your agent store → <vault>/raw/sessions/<project>/*.md
-llmwiki synth    # fill wiki/sources/ and harvest wiki/candidates/ (then review)
-llmwiki build    # compile <vault>/raw/ + <vault>/wiki/ → <vault>/site/
-llmwiki serve --dir <vault>/site   # serve at http://127.0.0.1:8765/
+_llmwiki_complete() { COMPREPLY=(); if [ "$COMP_CWORD" -eq 1 ]; then COMPREPLY=($(compgen -W "init sync build usage adapters configure-sources graph lint queue migrate install-agent-kit candidates synth add remove search query trace version all watch install-automation" -- "${COMP_WORDS[1]}")); fi; }; complete -o default -F _llmwiki_complete llmwiki # llmwiki-completion
 ```
 
-Open [http://127.0.0.1:8765/](http://127.0.0.1:8765/) and click around. Try:
+zsh — `~/.zshrc`:
 
-- **⌘K** or **Ctrl+K** — command palette
-- **/** — focus the search bar
-- **g h / g p / g s** — jump to home / projects / sessions
-- **j / k** — navigate sessions table
-- **?** — keyboard shortcut help
-
-## Where your data ends up
-
-Everything lands in your **vault** directory (the `vault.default_path` from step 2), *not* the git clone:
-
+```zsh
+(( $+functions[compdef] )) || { autoload -Uz compinit && compinit; }; _llmwiki_complete() { _arguments '1:command:(init sync build usage adapters configure-sources graph lint queue migrate install-agent-kit candidates synth add remove search query trace version all watch install-automation)' '*::arg:_files'; }; compdef _llmwiki_complete llmwiki # llmwiki-completion
 ```
-/home/you/llmwiki-vault/      ← vault root (NOT …/wiki)
-├── raw/sessions/             # converted transcripts
-│   ├── ai-newsletter/
-│   │   ├── 2026-04-04-<slug>.md
-│   │   └── ...
-│   └── <other-project>/
-├── wiki/                     # LLM-maintained wiki pages
-│   ├── index.md
-│   ├── log.md
-│   ├── overview.md
-│   ├── sources/
-│   ├── candidates/
-│   ├── entities/
-│   └── concepts/
-├── site/                     # generated static HTML
-│   ├── index.html
-│   ├── search-index.json
-│   ├── projects/
-│   └── sessions/
-└── llmwiki-state.json        # unified sync + queue + synth + quarantine state
-```
-
-The vault lives outside the repo, so it is never committed and never sent anywhere. The clone itself stays clean — only code and demo seeds.
-
-## New in recent versions
-
-- **Model pages** (`/models/`) — structured profile pages for every LLM model referenced in your sessions, with pricing, context window, and usage stats.
-- **Project topics** — auto-detected topic chips on project pages, extracted from session content.
-- **Multi-agent support** — sync sessions from Claude Code, Codex CLI, Copilot, Cursor, and Gemini CLI simultaneously. Each session gets a colored badge showing which agent produced it.
-
-## Building the wiki (Karpathy layer 2)
-
-The `sync` step populates the vault's `raw/sessions/` with markdown. To build the actual **wiki** on top of that — `wiki/sources/`, `wiki/entities/`, `wiki/concepts/`, linked by `[[wikilinks]]` — you need an LLM in the loop. That's where Claude Code (or any supported agent) comes in.
-
-Inside a Claude Code session at the llm-wiki repo root (with your `config.json` pointing at the vault):
-
-```
-/wiki-ingest raw/sessions/ai-newsletter/
-```
-
-The agent reads the source markdowns from the vault, writes summary pages, cross-links entities, and updates `wiki/index.md`. See [CLAUDE.md](../CLAUDE.md) for the full Ingest Workflow.
-
-Then re-run `llmwiki build` to get the compiled wiki into the HTML site.
