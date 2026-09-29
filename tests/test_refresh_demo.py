@@ -113,6 +113,57 @@ def test_added_then_deleted_in_working_tree_drops_out() -> None:
     assert plan == []
 
 
+def _raw_doc(docs: Path, rel: str, source: str) -> None:
+    path = docs / rel
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(f'---\ntitle: "Doc"\nsource: "{source}"\n---\n\n# Doc\n', encoding="utf-8")
+
+
+def test_remove_also_takes_other_dirs_holding_the_same_source(tmp_path: Path) -> None:
+    """A seed copy under a title-derived dir goes with the path-derived one (#298)."""
+    docs = tmp_path / "raw" / "docs"
+    _raw_doc(docs, "adapters-claude-code/claude-code-adapter.md", "docs/adapters/claude-code.md")
+    _raw_doc(docs, "claude-code-adapter/claude-code-adapter.md", "docs/adapters/claude-code.md")
+    _raw_doc(docs, "guide/guide.md", "docs/guide.md")
+    plan = refresh.plan_from_git("M\tdocs/adapters/claude-code.md\n", "")
+
+    assert refresh.expand_removes(plan, docs) == [
+        ("remove", "docs/adapters/claude-code.md", "adapters-claude-code"),
+        ("remove", "docs/adapters/claude-code.md", "claude-code-adapter"),
+        ("add", "docs/adapters/claude-code.md", "adapters-claude-code"),
+    ]
+
+
+def test_remove_of_a_seed_only_doc_takes_its_seed_dir(tmp_path: Path) -> None:
+    """A doc never refreshed before lives only under its seed dir; without
+    the source lookup the remove matched nothing and the add duplicated it."""
+    docs = tmp_path / "raw" / "docs"
+    _raw_doc(docs, "docs-style-guide/docs-style-guide.md", "docs/style-guide.md")
+    plan = refresh.plan_from_git("M\tdocs/style-guide.md\n", "")
+
+    assert refresh.expand_removes(plan, docs) == [
+        ("remove", "docs/style-guide.md", "style-guide"),
+        ("remove", "docs/style-guide.md", "docs-style-guide"),
+        ("add", "docs/style-guide.md", "style-guide"),
+    ]
+
+
+def test_add_only_plan_is_not_expanded(tmp_path: Path) -> None:
+    docs = tmp_path / "raw" / "docs"
+    _raw_doc(docs, "docs-style-guide/docs-style-guide.md", "docs/style-guide.md")
+    plan = refresh.plan_from_git("A\tdocs/style-guide.md\n", "")
+
+    assert refresh.expand_removes(plan, docs) == plan
+
+
+def test_committed_demo_holds_each_product_doc_once() -> None:
+    """Two raw-doc dirs for one ``source:`` ship the doc twice: two source
+    pages with one title, competing in search and harvest (#298)."""
+    by_source = refresh.doc_dirs_by_source(REPO / "demo" / "raw" / "docs")
+    shared = {src: sorted(dirs) for src, dirs in by_source.items() if len(dirs) > 1}
+    assert shared == {}
+
+
 def test_synth_argv_scopes_to_added_raw_docs(tmp_path: Path) -> None:
     vault = tmp_path / "demo"
     (vault / "raw" / "docs" / "guide").mkdir(parents=True)

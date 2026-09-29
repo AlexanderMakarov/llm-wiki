@@ -106,6 +106,45 @@ def format_plan(plan: list[PlanItem]) -> str:
     return "\n".join(lines)
 
 
+_SOURCE_LINE = re.compile(r'^source:\s*["\']?([^"\'\n]+?)["\']?\s*$', re.MULTILINE)
+
+
+def doc_dirs_by_source(docs_dir: Path) -> dict[str, set[str]]:
+    """Map each ``source:`` product-doc path to the ``raw/docs/`` dirs holding it.
+
+    A doc can sit under more than one dir: the #143 seed wrote title-derived
+    dirs, while this script adds under ``slug_for(path)``. Both copies carry
+    the same ``source:``, which is the only reliable identity.
+    """
+    found: dict[str, set[str]] = {}
+    if not docs_dir.is_dir():
+        return found
+    for raw in sorted(docs_dir.rglob("*.md")):
+        head = raw.read_text(encoding="utf-8", errors="replace")[:2000]
+        m = _SOURCE_LINE.search(head)
+        if m:
+            rel = raw.relative_to(docs_dir)
+            found.setdefault(_posix(m.group(1)), set()).add(rel.parts[0])
+    return found
+
+
+def expand_removes(plan: list[PlanItem], docs_dir: Path) -> list[PlanItem]:
+    """Follow every ``remove`` with removes for other dirs holding the same doc.
+
+    ``slug_for(path)`` names only the dir this script writes; a copy of the
+    same ``source:`` under any other dir would otherwise survive the refresh
+    and ship next to the re-added doc as a duplicate (#298).
+    """
+    by_source = doc_dirs_by_source(docs_dir)
+    out: list[PlanItem] = []
+    for action, path, slug in plan:
+        out.append((action, path, slug))
+        if action == "remove":
+            for other in sorted(by_source.get(_posix(path), set()) - {slug}):
+                out.append(("remove", path, other))
+    return out
+
+
 def added_doc_slugs(plan: list[PlanItem]) -> list[str]:
     """Unique ``raw/docs/<slug>/`` project slugs this plan adds (sorted)."""
     return sorted({slug for action, _path, slug in plan if action == "add"})
@@ -247,6 +286,7 @@ def run_refresh(
     except RefreshError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
+    plan = expand_removes(plan, vault / "raw" / "docs")
 
     print(format_plan(plan))
     if dry_run:
