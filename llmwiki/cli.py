@@ -3552,7 +3552,9 @@ def build_parser() -> argparse.ArgumentParser:
             "--estimate", action="store_true",
             help=(
                 "Print cached-vs-fresh token + dollar estimate without calling "
-                "a backend; Candidates shown as pre-run state"
+                "a backend; Candidates shown as pre-run state. Records the "
+                "pending list and Home Pipeline counts in the vault's "
+                "llmwiki-state.json (pending is judged by file mtimes)"
             ),
         )
         syn_mode.add_argument(
