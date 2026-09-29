@@ -10,7 +10,7 @@ in-repo ``demo/`` vault.
 
 Scope of the guard:
 
-- **Installed distributions are unaffected.** pip and Homebrew unpack the
+- **Installed distributions are unaffected.** pip unpacks the
   package under ``site-packages``, whose parent carries no marker, so the guard
   never fires for a real user.
 - **Naming a vault always wins.** ``--vault PATH`` on the command line, or

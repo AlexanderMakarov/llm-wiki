@@ -29,17 +29,14 @@ _FORBIDDEN_USERNAME = "".join(("deep", "shikha", "singh"))
 _UPSTREAM_OWNER = "".join(("prati", "yush"))
 
 #: Files that legitimately still name upstream: MIT attribution, the README
-#: acknowledgement, frozen release history, specs recording the fork's origin,
-#: and the Homebrew install surface, which #212 repoints once we have a tap.
+#: acknowledgement, frozen release history, and specs recording the fork's
+#: origin.
 UPSTREAM_OWNER_ALLOWLIST: tuple[str, ...] = (
     "LICENSE",
     "README.md",
     "CHANGELOG.md",
     "RELEASE-NOTES",
     "context/",
-    ".github/workflows/homebrew-bump.yml",
-    "scripts/bump-homebrew-formula.sh",
-    "tests/test_homebrew_tap.py",
 )
 
 

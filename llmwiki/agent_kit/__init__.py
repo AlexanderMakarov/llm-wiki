@@ -1,7 +1,7 @@
 """Packaged user-facing agent commands and skills (#109).
 
 Slash commands live in ``commands/`` and skills in ``skills/``. They ship
-inside the installable package so a pip or Homebrew install can copy them
+inside the installable package so a pip install can copy them
 into any agent directory with ``llmwiki install-agent-kit --dest PATH``.
 Contributor-only commands and skills stay in the source checkout's
 ``.claude/`` tree and are not part of this kit.

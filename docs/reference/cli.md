@@ -283,7 +283,7 @@ Lookback quiz keys: shared **Enter** writes today−30 (or keeps stored); typed 
 |---|---|
 | `--yes` | Non-interactive: skip interview (no config writes). |
 
-After pip or Homebrew install (no `setup.sh`), run this once after `llmwiki init`. Git clone `setup.sh` offers the same interview on a TTY before `install-automation`. Set `LLMWIKI_SKIP_CONFIGURE_SOURCES=1` to skip from `setup.sh`. Durable keys: [configuration-reference.md — Sync lookback](../configuration-reference.md#sync-lookback).
+After a pip install (no `setup.sh`), run this once after `llmwiki init`. Git clone `setup.sh` offers the same interview on a TTY before `install-automation`. Set `LLMWIKI_SKIP_CONFIGURE_SOURCES=1` to skip from `setup.sh`. Durable keys: [configuration-reference.md — Sync lookback](../configuration-reference.md#sync-lookback).
 
 ---
 
@@ -677,7 +677,7 @@ Inbound links are left alone on purpose. `[[wikilinks]]` resolve by filename, ne
 
 Two safety rules: a page whose filename is already taken in `wiki/concepts/` is retyped where it stands and reported as a collision rather than overwriting anything, and a removed folder still holding other content is left in place and reported rather than deleted. A vault with no removed-kind page prints `nothing to migrate` and exits 0 without writing.
 
-Implementation: `llmwiki/migrate_page_kinds.py` — in the package rather than under `scripts/`, so it runs from a pip or Homebrew install with no checkout. After migrating, rebuild so `site/` picks up the new locations: `llmwiki build --vault PATH`.
+Implementation: `llmwiki/migrate_page_kinds.py` — in the package rather than under `scripts/`, so it runs from a pip install with no checkout. After migrating, rebuild so `site/` picks up the new locations: `llmwiki build --vault PATH`.
 
 ```bash
 python3 -m llmwiki migrate page-kinds --vault /path/to/vault --dry-run
@@ -823,7 +823,7 @@ The report prints `remapped` / `cleared` / `unresolved` counts. Idempotent once 
 
 ## `install-agent-kit` — copy packaged slash commands and skills (#109)
 
-A pip or Homebrew install carries the user-facing `/wiki-*` slash commands and skills inside the package (`llmwiki/agent_kit/`). This command copies `commands/` and `skills/` beneath a directory you name so Claude Code (or any agent that reads that layout) can see them. `--dest` is **required** — the command does not guess at agent directory conventions.
+A pip install carries the user-facing `/wiki-*` slash commands and skills inside the package (`llmwiki/agent_kit/`). This command copies `commands/` and `skills/` beneath a directory you name so Claude Code (or any agent that reads that layout) can see them. `--dest` is **required** — the command does not guess at agent directory conventions.
 
 Typical destinations, by where you want the commands and skills to be visible:
 

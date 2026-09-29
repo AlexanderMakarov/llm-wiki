@@ -93,7 +93,7 @@ If the user wants the converter to run automatically on every Claude Code sessio
 }
 ```
 
-The `( ... &) ; exit 0` pattern ensures the hook runs in the background and never blocks session start. The hook needs `llmwiki` on `PATH` (a pip or Homebrew install).
+The `( ... &) ; exit 0` pattern ensures the hook runs in the background and never blocks session start. The hook needs `llmwiki` on `PATH` (a pip install).
 
 ## Troubleshooting
 

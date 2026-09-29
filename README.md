@@ -29,7 +29,6 @@ Requires **Python ≥ 3.12** (CI verifies **3.12** only; newer interpreters are 
 
 ```bash
 pip install llm-wiki-plus
-# or: brew install AlexanderMakarov/tap/llmwiki
 llmwiki init --vault ~/llmwiki-vault
 ```
 
@@ -49,7 +48,7 @@ From a clone, `./setup.sh` installs the package and reports which agents it can 
 llmwiki install-agent-kit --dest ~/.claude
 ```
 
-That is what a Homebrew or pip user runs so `/wiki-sync` and friends work from *their* project. Point your MCP client at `python3 -m llmwiki.mcp` (same package). See [docs/reference/cli.md](docs/reference/cli.md) and [docs/reference/mcp.md](docs/reference/mcp.md).
+That is what a pip user runs so `/wiki-sync` and friends work from *their* project. Point your MCP client at `python3 -m llmwiki.mcp` (same package). See [docs/reference/cli.md](docs/reference/cli.md) and [docs/reference/mcp.md](docs/reference/mcp.md).
 
 The install also drops a small `.llmwiki-agent-kit.json` manifest in `--dest`, recording which files it wrote and their checksums. It is safe — and useful — to commit alongside `.claude/commands/`: it is what lets a later upgrade recognise its own files and remove ones it has retired, while leaving anything you wrote or edited alone.
 

@@ -19,7 +19,7 @@ GitHub Insights, the issue tracker, and PyPI stats.
 | Unique cloners | ___ | ___ | ___ |
 | Unique visitors | ___ | ___ | ___ |
 | PyPI downloads (monthly) | ___ | ___ | +___ |
-| npm/Homebrew installs | ___ | ___ | +___ |
+| PyPI installs | ___ | ___ | +___ |
 
 **Data sources:**
 - Stars/forks: GitHub repo page

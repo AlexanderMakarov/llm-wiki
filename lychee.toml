@@ -39,8 +39,6 @@ exclude = [
   "^https://github\\.com/AlexanderMakarov/llm-wiki/security/advisories/new",
   # PyPI (pre-first-release)
   "^https://pypi\\.org/project/llmwiki/",
-  # Homebrew tap (pre-creation)
-  "^https://github\\.com/AlexanderMakarov/homebrew-llmwiki",
   # Repo settings URLs (auth-gated, only visible to admins — CI runner
   # can't authenticate so every settings link 404s)
   "^https://github\\.com/AlexanderMakarov/llm-wiki/settings",
