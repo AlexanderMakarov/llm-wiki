@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import re
 import subprocess
 from pathlib import Path
 
@@ -164,6 +165,29 @@ def test_committed_demo_holds_each_product_doc_once() -> None:
     assert shared == {}
 
 
+_HOME_DIR = re.compile(r"(?:/home/|/Users/)([A-Za-z0-9._-]+)")
+_PLACEHOLDER_USERS = {"USER", "user", "you"}
+
+
+def test_committed_demo_carries_no_real_home_directory() -> None:
+    """demo/ is published: every home path in it must be a placeholder.
+
+    The refresh once passed ``llmwiki add`` absolute paths, and ``add``
+    records them in the vault's queue, so ``llmwiki-state.json`` shipped the
+    maintainer's home directory.
+    """
+    listed = _git(REPO, ["ls-files", "-co", "--exclude-standard", "--", "demo"]).stdout
+    found: dict[str, set[str]] = {}
+    for rel in listed.splitlines():
+        path = REPO / rel
+        if not path.is_file() or path.suffix not in {".md", ".json", ".js", ".jsonl", ".txt"}:
+            continue
+        for user in _HOME_DIR.findall(path.read_text(encoding="utf-8", errors="replace")):
+            if user not in _PLACEHOLDER_USERS:
+                found.setdefault(rel, set()).add(user)
+    assert found == {}
+
+
 def test_synth_argv_scopes_to_added_raw_docs(tmp_path: Path) -> None:
     vault = tmp_path / "demo"
     (vault / "raw" / "docs" / "guide").mkdir(parents=True)
@@ -284,6 +308,10 @@ def test_run_refresh_passes_path_scoped_synth(
     assert "raw/docs/guide/guide.md" in synth
     # Must not be the old vault-wide form: synth --vault … --docs-only with no --path.
     assert synth != ["synth", "--vault", str(repo / "demo"), "--docs-only"]
+    # `add` records the path it is given in the published demo state, so it
+    # must be the repo-relative doc path, never an absolute one.
+    add_calls = [c for c in calls if c[:1] == ["add"]]
+    assert [c[1] for c in add_calls] == ["docs/guide.md"]
 
 
 # ── git fixture / --dry-run ───────────────────────────────────────────────

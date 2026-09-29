@@ -320,13 +320,15 @@ def run_refresh(
                 exe, repo, ["remove", slug, "--vault", str(vault), "--yes"]
             )
         elif action == "add":
-            abs_path = repo / path
+            # Repo-relative, run from the repo root: `add` records the path it
+            # is given in the vault's queue, and demo/ is published — an
+            # absolute path would ship the maintainer's home directory.
             proc = _run_llmwiki(
                 exe,
                 repo,
                 [
                     "add",
-                    str(abs_path),
+                    path,
                     "--vault",
                     str(vault),
                     "--no-build",
