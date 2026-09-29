@@ -196,13 +196,35 @@ def test_skip_usage_does_not_call_generator(gate, monkeypatch, tmp_path: Path):
     called.assert_not_called()
 
 
-def test_main_requires_today(gate):
+def test_main_requires_today(gate, monkeypatch, tmp_path: Path):
+    monkeypatch.setattr(gate, "SESSIONS_DATE_FILE", tmp_path / "missing")
     with pytest.raises(SystemExit) as exc:
         gate.main([])
     assert exc.value.code != 0
 
 
-def test_main_dry_run_cli(gate, capsys):
+def test_today_defaults_to_the_date_the_sessions_were_generated_with(gate, monkeypatch, tmp_path: Path):
+    recorded = tmp_path / ".demo-sessions-date"
+    recorded.write_text("2026-09-28\n", encoding="utf-8")
+    monkeypatch.setattr(gate, "SESSIONS_DATE_FILE", recorded)
+    assert gate.resolve_today(None) == "2026-09-28"
+    assert gate.resolve_today("2026-09-28") == "2026-09-28"
+
+
+def test_a_different_today_is_refused(gate, monkeypatch, tmp_path: Path, capsys):
+    """A cut that crosses midnight keeps one release day."""
+    recorded = tmp_path / ".demo-sessions-date"
+    recorded.write_text("2026-09-28\n", encoding="utf-8")
+    monkeypatch.setattr(gate, "SESSIONS_DATE_FILE", recorded)
+    monkeypatch.setattr(gate, "REPO_ROOT", tmp_path)
+    with pytest.raises(SystemExit) as exc:
+        gate.resolve_today("2026-09-29")
+    assert exc.value.code == 2
+    assert "2026-09-28" in capsys.readouterr().err
+
+
+def test_main_dry_run_cli(gate, capsys, monkeypatch, tmp_path: Path):
+    monkeypatch.setattr(gate, "SESSIONS_DATE_FILE", tmp_path / "missing")
     code = gate.main(["--today", "2026-09-14", "--dry-run", "--out", "/tmp/demo-site"])
     assert code == 0
     assert "file://" in capsys.readouterr().out

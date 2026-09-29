@@ -6,6 +6,7 @@ import importlib.util
 import re
 import subprocess
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -262,6 +263,72 @@ def test_run_refresh_fails_when_synth_leaves_wiki_gaps(
 
     monkeypatch.setattr(refresh, "_run_llmwiki", fake_run)
     assert refresh.run_refresh(repo, dry_run=False) == 1
+    assert (repo / "demo" / ".demo-source-rev").read_text(encoding="utf-8") == pin_before
+
+
+def _interrupted_refresh(tmp_path: Path) -> tuple[Path, str]:
+    """A refresh whose removes and adds ran but whose synth never wrote pages."""
+    repo = _seed_repo(tmp_path)
+    (repo / "docs" / "guide.md").write_text("# Guide\n\nedited\n", encoding="utf-8")
+    _git(repo, ["add", "docs/guide.md"])
+    _git(repo, ["commit", "-m", "edit guide"])
+    pin_before = (repo / "demo" / ".demo-source-rev").read_text(encoding="utf-8")
+    raw = repo / "demo" / "raw" / "docs" / "guide"
+    raw.mkdir(parents=True)
+    (raw / "guide-01.md").write_text("# Guide 1\n", encoding="utf-8")
+    (raw / "guide-02.md").write_text("# Guide 2\n", encoding="utf-8")
+    pages = repo / "demo" / "wiki" / "sources" / "guide"
+    pages.mkdir(parents=True)
+    (pages / "2026-09-28-guide-01.md").write_text(
+        "---\nsource_file: raw/docs/guide/guide-01.md\n---\n", encoding="utf-8",
+    )
+    return repo, pin_before
+
+
+def test_resume_synthesizes_only_the_missing_docs_in_one_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A rerun would remove and re-add every doc again; --resume finishes the
+    synth for the gaps alone, then advances the pin."""
+    repo, pin_before = _interrupted_refresh(tmp_path)
+    calls: list[list[str]] = []
+
+    def fake_run(_exe: str, _repo: Path, argv: list[str]):
+        calls.append(list(argv))
+        if argv[:1] == ["synth"] and "--check" not in argv:
+            (repo / "demo" / "wiki" / "sources" / "guide" / "2026-09-28-guide-02.md").write_text(
+                "---\nsource_file: raw/docs/guide/guide-02.md\n---\n", encoding="utf-8",
+            )
+        return subprocess.CompletedProcess(argv, 0, "", "")
+
+    monkeypatch.setattr(refresh, "_run_llmwiki", fake_run)
+    assert refresh.run_refresh(repo, resume=True) == 0
+
+    assert not [c for c in calls if c[:1] in (["remove"], ["add"])]
+    synth = [c for c in calls if c[:1] == ["synth"] and "--check" not in c]
+    assert len(synth) == 1
+    assert [synth[0][i + 1] for i, a in enumerate(synth[0]) if a == "--path"] == [
+        "raw/docs/guide/guide-02.md",
+    ]
+    assert (repo / "demo" / ".demo-source-rev").read_text(encoding="utf-8") != pin_before
+
+
+def test_resume_refuses_a_refresh_that_never_ran(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Pages from before the refresh "cover" every plan doc, so resuming a
+    refresh that never ran would advance the pin over stale docs."""
+    repo = _seed_repo(tmp_path)
+    (repo / "docs" / "guide.md").write_text("# Guide\n\nedited\n", encoding="utf-8")
+    _git(repo, ["add", "docs/guide.md"])
+    _git(repo, ["commit", "-m", "edit guide"])
+    pin_before = (repo / "demo" / ".demo-source-rev").read_text(encoding="utf-8")
+    run = MagicMock()
+    monkeypatch.setattr(refresh, "_run_llmwiki", run)
+
+    assert refresh.run_refresh(repo, resume=True) == 1
+
+    run.assert_not_called()
     assert (repo / "demo" / ".demo-source-rev").read_text(encoding="utf-8") == pin_before
 
 

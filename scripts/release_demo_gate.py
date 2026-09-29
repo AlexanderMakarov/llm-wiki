@@ -11,6 +11,7 @@ demo-content tests and ``llmwiki lint`` failing on errors and warnings.
 Real (non-dry-run) mode shells out to sibling scripts / ``python3 -m llmwiki`` /
 pytest. Run from the repository root so relative ``demo/`` resolves.
 
+    python3 scripts/release_demo_gate.py --dry-run   # --today from demo/.demo-sessions-date
     python3 scripts/release_demo_gate.py --today 2026-09-14 --dry-run
     python3 scripts/release_demo_gate.py --today 2026-09-14
     python3 scripts/release_demo_gate.py --today 2026-09-14 --skip-usage --out /tmp/demo-site
@@ -35,6 +36,7 @@ LOCAL_ROOT = "/home/user"
 DEMO = REPO_ROOT / "demo"
 USAGE_SCRIPT = REPO_ROOT / "scripts" / "generate_demo_usage.py"
 REFRESH_SCRIPT = REPO_ROOT / "scripts" / "refresh_demo.py"
+SESSIONS_DATE_FILE = DEMO / ".demo-sessions-date"
 #: Tests that assert on the committed demo's content. Each has failed after a
 #: refresh while build and lint stayed green.
 DEMO_CONTENT_TESTS = [
@@ -227,9 +229,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     ap.add_argument(
         "--today",
-        required=True,
         metavar="YYYY-MM-DD",
-        help="Anchor date forwarded to generate_demo_usage (required)",
+        help=(
+            "Release day forwarded to generate_demo_usage (default: the date in "
+            "demo/.demo-sessions-date; must match it when both are set)"
+        ),
     )
     ap.add_argument(
         "--dry-run",
@@ -259,10 +263,39 @@ def build_parser() -> argparse.ArgumentParser:
     return ap
 
 
+def resolve_today(given: str | None) -> str:
+    """The release day: the date the demo sessions were generated with.
+
+    ``--today`` must match it when both exist — a cut that crosses midnight
+    keeps one date, since a new one re-dates every session and needs a full
+    session re-synth. Exit 2 when neither is available or they disagree.
+    """
+    recorded = (
+        SESSIONS_DATE_FILE.read_text(encoding="utf-8").strip()
+        if SESSIONS_DATE_FILE.is_file() else None
+    )
+    if given and recorded and given != recorded:
+        print(
+            f"error: --today {given} differs from the date the demo sessions were "
+            f"generated with ({recorded}, {SESSIONS_DATE_FILE.relative_to(REPO_ROOT)}). "
+            "Keep one release day per cut, or regenerate the sessions for the new date.",
+            file=sys.stderr,
+        )
+        raise SystemExit(2)
+    today = given or recorded
+    if not today:
+        print(
+            "error: pass --today YYYY-MM-DD (no demo/.demo-sessions-date recorded yet)",
+            file=sys.stderr,
+        )
+        raise SystemExit(2)
+    return today
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     return run_gate(
-        today=args.today,
+        today=resolve_today(args.today),
         out=args.out,
         dry_run=args.dry_run,
         skip_usage=args.skip_usage,

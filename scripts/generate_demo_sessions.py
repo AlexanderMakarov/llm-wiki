@@ -71,6 +71,9 @@ sys.path.insert(0, str(REPO_ROOT))
 DEMO_SESSIONS = REPO_ROOT / "demo" / "raw" / "sessions"
 DEMO_VAULT = REPO_ROOT / "demo"
 SEARCH_TERMS_FIXTURE = REPO_ROOT / "tests" / "fixtures" / "demo_search_terms.json"
+#: The ``--today`` the committed sessions were generated with. The release demo
+#: gate reads it, so one cut keeps one release day across a midnight rollover.
+SESSIONS_DATE_FILE = ".demo-sessions-date"
 
 # Matches llmwiki.lint.rules._helpers._TOOL_BULLET_RE / convert output.
 _TOOL_BULLET_RE = re.compile(r"^- `[^`]+`:", re.MULTILINE)
@@ -1109,6 +1112,7 @@ def main() -> int:
         print("would re-home source pages whose session date moved (migrate source-page-paths)")
         return 0
     emit_search_terms_fixture(present_rows, absent_rows)
+    (DEMO_VAULT / SESSIONS_DATE_FILE).write_text(f"{today:%Y-%m-%d}\n", encoding="utf-8")
     print(f"\nwrote/updated {len(ordered)} sessions under {DEMO_SESSIONS}")
     print(
         f"wrote {SEARCH_TERMS_FIXTURE.relative_to(REPO_ROOT)} "

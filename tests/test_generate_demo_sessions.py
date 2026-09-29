@@ -125,6 +125,8 @@ def test_release_day_write_rehomes_source_pages(gen, tmp_path: Path, monkeypatch
     assert not (sources / "2026-09-07-wikilink-resolution.md").exists()
     assert (sources / f"{new_date}-wikilink-resolution.md").is_file()
     assert f"[[{new_date}-wikilink-resolution]]" in linker.read_text(encoding="utf-8")
+    # The release demo gate reads the date back as the cut's release day.
+    assert (tmp_path / gen.SESSIONS_DATE_FILE).read_text(encoding="utf-8") == "2026-09-28\n"
 
 
 def test_dry_run_leaves_source_pages_in_place(gen, tmp_path: Path, monkeypatch):

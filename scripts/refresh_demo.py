@@ -271,6 +271,7 @@ def run_refresh(
     force: bool = False,
     base: str | None = None,
     python: str | None = None,
+    resume: bool = False,
 ) -> int:
     """Drive add/remove/synth/build/lint against ``demo/``. Return a process exit code."""
     exe = python or sys.executable
@@ -289,6 +290,8 @@ def run_refresh(
     plan = expand_removes(plan, vault / "raw" / "docs")
 
     print(format_plan(plan))
+    if resume:
+        return _resume(repo, exe, vault, plan, dry_run=dry_run)
     if dry_run:
         print("dry-run — nothing written")
         return 0
@@ -345,7 +348,65 @@ def run_refresh(
 
     # Synth only the docs this plan added — never a vault-wide --docs-only pass
     # (that re-queues every pending raw/docs page and burns rate limits).
-    synth_argv = synth_argv_for_added_docs(vault, plan)
+    return _finish(repo, exe, vault, plan, synth_argv_for_added_docs(vault, plan))
+
+
+def _resume(repo: Path, exe: str, vault: Path, plan: list[PlanItem], *, dry_run: bool) -> int:
+    """Finish a refresh whose synth was interrupted, without redoing its removes.
+
+    The pin only advances once every plan-added doc has a page, so after an
+    interruption the same plan is still pending and its removes and adds have
+    already run. Re-running the refresh would remove and re-add every doc
+    again; this synthesizes only the plan-added raw docs still lacking a page,
+    in one run, then does the rest of a normal refresh.
+    """
+    # The refresh's adds are uncommitted work under raw/docs/<slug>/. Without
+    # it, existing pages from before the refresh "cover" every plan doc and a
+    # resume would advance the pin over docs that were never refreshed.
+    docs_rel = (vault / "raw" / "docs").relative_to(repo).as_posix()
+    unrun = [
+        slug for slug in added_doc_slugs(plan)
+        if not _git(repo, ["status", "--porcelain", "--", f"{docs_rel}/{slug}"]).strip()
+    ]
+    if unrun:
+        print(
+            "error: the refresh has not run for "
+            f"{', '.join(unrun)} (no uncommitted changes under {docs_rel}/) — "
+            "run it without --resume",
+            file=sys.stderr,
+        )
+        return 1
+    unadded = [
+        slug for slug in added_doc_slugs(plan)
+        if not (vault / "raw" / "docs" / slug).is_dir()
+    ]
+    if unadded:
+        print(
+            "error: the refresh stopped before adding "
+            f"{', '.join(unadded)} — --resume only finishes an interrupted synth; "
+            "run the refresh again",
+            file=sys.stderr,
+        )
+        return 1
+    gaps = missing_wiki_for_doc_slugs(vault, added_doc_slugs(plan))
+    print(f"resume: {len(gaps)} plan-added raw doc(s) still lack a wiki page")
+    for gap in gaps:
+        print(f"  {gap}")
+    if dry_run:
+        print("dry-run — nothing written")
+        return 0
+    synth_argv = None
+    if gaps:
+        synth_argv = ["synth", "--vault", str(vault), "--docs-only"]
+        for gap in gaps:
+            synth_argv.extend(["--path", gap])
+    return _finish(repo, exe, vault, plan, synth_argv)
+
+
+def _finish(
+    repo: Path, exe: str, vault: Path, plan: list[PlanItem], synth_argv: list[str] | None,
+) -> int:
+    """Synth, build, require coverage for every plan-added doc, lint, advance the pin."""
     follow_ups: list[list[str]] = []
     if synth_argv is not None:
         follow_ups.append(synth_argv)
@@ -427,6 +488,14 @@ def main(argv: list[str] | None = None, *, cwd: Path | None = None) -> int:
         help="Override the revision in demo/.demo-source-rev",
     )
     ap.add_argument(
+        "--resume",
+        action="store_true",
+        help=(
+            "Finish a refresh whose synth was interrupted: synth only the "
+            "plan-added docs still lacking a page, then lint and advance the pin"
+        ),
+    )
+    ap.add_argument(
         "--verify-slugs",
         metavar="SLUGS",
         default=None,
@@ -444,7 +513,9 @@ def main(argv: list[str] | None = None, *, cwd: Path | None = None) -> int:
         return 2
     if args.verify_slugs is not None:
         return verify_doc_slugs(repo, args.verify_slugs.split(","))
-    return run_refresh(repo, dry_run=args.dry_run, force=args.force, base=args.base)
+    return run_refresh(
+        repo, dry_run=args.dry_run, force=args.force, base=args.base, resume=args.resume,
+    )
 
 
 class RefreshError(Exception):
