@@ -3,13 +3,13 @@ title: "Add a rules engine for transaction categories (orbicast)"
 type: source
 description: "Replaced a hardcoded keyword map with ordered user-defined rules."
 tags: [session-transcript, session]
-date: 2026-09-15
+date: 2026-09-18
 source_file: raw/sessions/pocket-ledger/2026-08-26T13-02-pocket-ledger-category-rules-engine.md
 sessionId: deea060d-b6b9-5111-dfe5-d62464723a9b
 slug: category-rules-engine
 project: pocket-ledger
-started: 2026-09-15T13:02:00+00:00
-ended: 2026-09-15T15:44:00+00:00
+started: 2026-09-18T13:02:00+00:00
+ended: 2026-09-18T15:44:00+00:00
 cwd: /home/USER/code/pocket-ledger
 gitBranch: feat/rules
 permissionMode: default
@@ -28,7 +28,7 @@ is_headless: false
 agent: cursor-cli
 ---
 
-# Session: f61b3904 — 2026-09-15
+# Session: f61b3904 — 2026-09-18
 
 **Project:** `pocket-ledger` · **Branch:** `feat/rules` · **Mode:** `default` · **Model:** `claude-opus-5`
 

@@ -3,13 +3,13 @@ title: "Constrain the Key Facts prompt to attributed bullets"
 type: source
 description: "Tightened the synthesis prompt so every fact carries the source that supports it."
 tags: [session-transcript, session]
-date: 2026-09-24
+date: 2026-09-27
 source_file: raw/sessions/llm-wiki/2026-09-04T12-37-llm-wiki-key-facts-prompt.md
 sessionId: 1ece4989-6f92-d796-dbd1-9e78952e619c
 slug: key-facts-prompt
 project: llm-wiki
-started: 2026-09-24T12:37:00+00:00
-ended: 2026-09-24T13:22:00+00:00
+started: 2026-09-27T12:37:00+00:00
+ended: 2026-09-27T13:22:00+00:00
 cwd: /home/USER/code/llm-wiki
 gitBranch: feat/key-facts
 permissionMode: default
@@ -28,7 +28,7 @@ is_headless: false
 agent: claude-code
 ---
 
-# Session: edebf106 — 2026-09-24
+# Session: edebf106 — 2026-09-27
 
 **Project:** `llm-wiki` · **Branch:** `feat/key-facts` · **Mode:** `default` · **Model:** `claude-haiku-4-5`
 

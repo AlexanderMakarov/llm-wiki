@@ -4,16 +4,16 @@ slug: cli-reference-14
 project: reference-cli
 type: source
 tags: [wiki-add, raw-doc]
-date: 2026-09-28
+date: 2026-10-01
 source: "docs/reference/cli.md"
-content_sha256: 80394a36c35bb48cc2c8a5640d51d9180b601f9274c4cb944e18a4be261b1dbc
+content_sha256: 8c1258c0faddb3eb988de6c7870bdada2b983cd07f6b325b78b35e680759efeb
 ---
 
 > Part 14 of 19 of **CLI reference** — install-agent-kit — copy packaged slash commands and skills (#109).
 
 ## `install-agent-kit` — copy packaged slash commands and skills (#109)
 
-A pip or Homebrew install carries the user-facing `/wiki-*` slash commands and skills inside the package (`llmwiki/agent_kit/`). This command copies `commands/` and `skills/` beneath a directory you name so Claude Code (or any agent that reads that layout) can see them. `--dest` is **required** — the command does not guess at agent directory conventions.
+A pip install carries the user-facing `/wiki-*` slash commands and skills inside the package (`llmwiki/agent_kit/`). This command copies `commands/` and `skills/` beneath a directory you name so Claude Code (or any agent that reads that layout) can see them. `--dest` is **required** — the command does not guess at agent directory conventions.
 
 Typical destinations, by where you want the commands and skills to be visible:
 

@@ -4,9 +4,9 @@ slug: pypi-publishing-one-time-setup
 project: deploy-pypi-publishing
 type: source
 tags: [wiki-add, raw-doc]
-date: 2026-09-07
+date: 2026-10-01
 source: "docs/deploy/pypi-publishing.md"
-content_sha256: 062d38b5652e736fb9079a3565bc6a4571690877c80e3deb377b1824b594a7dc
+content_sha256: c57024100cca7b119f7dce79b71c1c13d11d41d899cd90af7ef09c3b16750690
 ---
 
 # PyPI publishing — one-time setup
@@ -165,4 +165,3 @@ version. Bump to the next patch (`v2.1.2`), update the changelog, re-tag.
 - `#101` — original publishing issue
 - `#210` — distribution rename to `llm-wiki-plus` + post-publish smoke
 - `.github/workflows/release.yml` — the pipeline
-- `docs/deploy/homebrew-setup.md` — sibling doc for the Homebrew tap (#102)

@@ -4,9 +4,9 @@ slug: cli-reference-03
 project: reference-cli
 type: source
 tags: [wiki-add, raw-doc]
-date: 2026-09-28
+date: 2026-10-01
 source: "docs/reference/cli.md"
-content_sha256: 80394a36c35bb48cc2c8a5640d51d9180b601f9274c4cb944e18a4be261b1dbc
+content_sha256: 8c1258c0faddb3eb988de6c7870bdada2b983cd07f6b325b78b35e680759efeb
 ---
 
 > Part 3 of 19 of **CLI reference** — usage — MCP tool-usage telemetry vs synthesis cost (#26).
@@ -69,7 +69,7 @@ Lookback quiz keys: shared **Enter** writes today−30 (or keeps stored); typed 
 |---|---|
 | `--yes` | Non-interactive: skip interview (no config writes). |
 
-After pip or Homebrew install (no `setup.sh`), run this once after `llmwiki init`. Git clone `setup.sh` offers the same interview on a TTY before `install-automation`. Set `LLMWIKI_SKIP_CONFIGURE_SOURCES=1` to skip from `setup.sh`. Durable keys: [configuration-reference.md — Sync lookback](../configuration-reference.md#sync-lookback).
+After a pip install (no `setup.sh`), run this once after `llmwiki init`. Git clone `setup.sh` offers the same interview on a TTY before `install-automation`. Set `LLMWIKI_SKIP_CONFIGURE_SOURCES=1` to skip from `setup.sh`. Durable keys: [configuration-reference.md — Sync lookback](../configuration-reference.md#sync-lookback).
 
 ---
 

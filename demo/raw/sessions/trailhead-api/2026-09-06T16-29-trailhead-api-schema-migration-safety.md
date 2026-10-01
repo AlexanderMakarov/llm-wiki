@@ -3,13 +3,13 @@ title: "Make migrations safe to run twice"
 type: source
 description: "A partially applied migration left the schema unrunnable; each step is now idempotent."
 tags: [session-transcript, session]
-date: 2026-09-26
+date: 2026-09-29
 source_file: raw/sessions/trailhead-api/2026-09-06T16-29-trailhead-api-schema-migration-safety.md
 sessionId: 1053f779-5696-9f65-2fef-ebc0609dce2a
 slug: schema-migration-safety
 project: trailhead-api
-started: 2026-09-26T16:29:00+00:00
-ended: 2026-09-26T19:56:00+00:00
+started: 2026-09-29T16:29:00+00:00
+ended: 2026-09-29T19:56:00+00:00
 cwd: /home/USER/code/trailhead-api
 gitBranch: chore/migrations
 permissionMode: default
@@ -28,7 +28,7 @@ is_headless: false
 agent: claude-code
 ---
 
-# Session: 019741fc — 2026-09-26
+# Session: 019741fc — 2026-09-29
 
 **Project:** `trailhead-api` · **Branch:** `chore/migrations` · **Mode:** `default` · **Model:** `claude-opus-5`
 

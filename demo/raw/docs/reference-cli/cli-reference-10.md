@@ -4,9 +4,9 @@ slug: cli-reference-10
 project: reference-cli
 type: source
 tags: [wiki-add, raw-doc]
-date: 2026-09-28
+date: 2026-10-01
 source: "docs/reference/cli.md"
-content_sha256: 80394a36c35bb48cc2c8a5640d51d9180b601f9274c4cb944e18a4be261b1dbc
+content_sha256: 8c1258c0faddb3eb988de6c7870bdada2b983cd07f6b325b78b35e680759efeb
 ---
 
 > Part 10 of 19 of **CLI reference** — migrate — list or apply a named one-time vault repair.

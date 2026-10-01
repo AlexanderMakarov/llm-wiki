@@ -3,13 +3,13 @@ title: "Ingest arbitrary documents alongside sessions"
 type: source
 description: "Added a path for pulling documents into the vault so the wiki is not limited to transcripts."
 tags: [session-transcript, session]
-date: 2026-09-26
+date: 2026-09-29
 source_file: raw/sessions/llm-wiki/2026-09-06T21-46-llm-wiki-docs-ingest-pipeline.md
 sessionId: 5a03da90-a6dc-db54-f241-dbab3701d3fd
 slug: docs-ingest-pipeline
 project: llm-wiki
-started: 2026-09-26T21:46:00+00:00
-ended: 2026-09-27T00:35:00+00:00
+started: 2026-09-29T21:46:00+00:00
+ended: 2026-09-30T00:35:00+00:00
 cwd: /home/USER/code/llm-wiki
 gitBranch: feat/add-docs
 permissionMode: default
@@ -28,7 +28,7 @@ is_headless: false
 agent: openclaw
 ---
 
-# Session: 1e4adc4d — 2026-09-26
+# Session: 1e4adc4d — 2026-09-29
 
 **Project:** `llm-wiki` · **Branch:** `feat/add-docs` · **Mode:** `default` · **Model:** `claude-opus-5`
 

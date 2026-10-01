@@ -4,9 +4,9 @@ slug: llmwiki-documentation
 project: index
 type: source
 tags: [wiki-add, raw-doc]
-date: 2026-09-28
+date: 2026-10-01
 source: "docs/index.md"
-content_sha256: ae9522f0b8c16c62f3174c7441b7d3f0a9480a8be6e16f87a2ec44edcf28da91
+content_sha256: 3b8b9c0f41becb4c7f5fb5e18ead1e1f049490c325227a4a036f8c6b25426800
 ---
 
 ---
@@ -74,7 +74,6 @@ llmwiki runs two interchangeable ways. Pick one, start — you can switch later.
 | Docker / GHCR | [deploy/docker.md](deploy/docker.md) |
 | Vercel / Netlify | [deploy/vercel-netlify.md](deploy/vercel-netlify.md) |
 | PyPI publishing | [deploy/pypi-publishing.md](deploy/pypi-publishing.md) |
-| Homebrew tap | [deploy/homebrew-setup.md](deploy/homebrew-setup.md) |
 
 ---
 

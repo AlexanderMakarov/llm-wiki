@@ -3,13 +3,13 @@ title: "Fall back to the page graph when the topic vocabulary is thin"
 type: source
 description: "A two-node topic graph rendered as an empty-looking viewer, so the build now falls back when topics are sparse."
 tags: [session-transcript, session]
-date: 2026-08-14
+date: 2026-08-17
 source_file: raw/sessions/llm-wiki/2026-07-25T12-01-llm-wiki-topic-graph-sparsity.md
 sessionId: df12fe76-205b-d838-fdf1-c146d7b60662
 slug: topic-graph-sparsity
 project: llm-wiki
-started: 2026-08-14T12:01:00+00:00
-ended: 2026-08-14T15:33:00+00:00
+started: 2026-08-17T12:01:00+00:00
+ended: 2026-08-17T15:33:00+00:00
 cwd: /home/USER/code/llm-wiki
 gitBranch: feat/graph
 permissionMode: default
@@ -28,7 +28,7 @@ is_headless: false
 agent: claude-code
 ---
 
-# Session: d4ea3993 — 2026-08-14
+# Session: d4ea3993 — 2026-08-17
 
 **Project:** `llm-wiki` · **Branch:** `feat/graph` · **Mode:** `default` · **Model:** `claude-opus-5`
 

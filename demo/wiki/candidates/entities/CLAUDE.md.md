@@ -3,7 +3,7 @@ title: "CLAUDE.md"
 type: entity
 status: candidate
 tags: []
-sources: [2026-09-28-architecture-02, 2026-09-28-configuration-02, 2026-09-28-feature-matrix-every-feature-across-the-15-prior-implementations-02, 2026-09-28-getting-started-01, 2026-09-28-cli-reference-05, 2026-09-28-cli-reference-09, 2026-09-28-slash-commands-reference-01, 2026-09-28-slash-commands-reference-02]
+sources: [2026-09-28-architecture-02, 2026-09-28-configuration-02, 2026-09-28-feature-matrix-every-feature-across-the-15-prior-implementations-02, 2026-10-01-getting-started-01, 2026-10-01-cli-reference-05, 2026-10-01-cli-reference-09, 2026-09-28-slash-commands-reference-01, 2026-09-28-slash-commands-reference-02]
 last_updated: 2026-09-28
 ---
 
@@ -19,8 +19,8 @@ justified this candidate:
 - [[2026-09-28-architecture-02]]
 - [[2026-09-28-configuration-02]]
 - [[2026-09-28-feature-matrix-every-feature-across-the-15-prior-implementations-02]]
-- [[2026-09-28-getting-started-01]]
-- [[2026-09-28-cli-reference-05]]
-- [[2026-09-28-cli-reference-09]]
+- [[2026-10-01-getting-started-01]]
+- [[2026-10-01-cli-reference-05]]
+- [[2026-10-01-cli-reference-09]]
 - [[2026-09-28-slash-commands-reference-01]]
 - [[2026-09-28-slash-commands-reference-02]]

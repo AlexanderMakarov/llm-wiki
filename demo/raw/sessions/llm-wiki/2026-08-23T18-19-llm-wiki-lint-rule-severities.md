@@ -3,13 +3,13 @@ title: "Sort the lint rules into errors, warnings and information"
 type: source
 description: "Reviewed all seventeen rules and settled which ones should be able to fail a build."
 tags: [session-transcript, session]
-date: 2026-09-12
+date: 2026-09-15
 source_file: raw/sessions/llm-wiki/2026-08-23T18-19-llm-wiki-lint-rule-severities.md
 sessionId: 6de52632-b146-448c-337c-2c29f84ff85a
 slug: lint-rule-severities
 project: llm-wiki
-started: 2026-09-12T18:19:00+00:00
-ended: 2026-09-12T19:59:00+00:00
+started: 2026-09-15T18:19:00+00:00
+ended: 2026-09-15T19:59:00+00:00
 cwd: /home/USER/code/llm-wiki
 gitBranch: chore/lint
 permissionMode: default
@@ -28,7 +28,7 @@ is_headless: false
 agent: openclaw
 ---
 
-# Session: 561a2466 — 2026-09-12
+# Session: 561a2466 — 2026-09-15
 
 **Project:** `llm-wiki` · **Branch:** `chore/lint` · **Mode:** `default` · **Model:** `claude-opus-5`
 

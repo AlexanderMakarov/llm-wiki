@@ -3,8 +3,8 @@ title: "Reader API"
 type: entity
 status: candidate
 tags: []
-sources: [2026-09-28-reader-api-contract-v1-2-preview-02, 2026-09-28-reader-api-contract-v1-2-preview-03, 2026-09-28-ui-reference-08]
-last_updated: 2026-09-29
+sources: [2026-10-01-llmwiki-documentation, 2026-09-28-reader-api-contract-v1-2-preview-02, 2026-09-28-reader-api-contract-v1-2-preview-03, 2026-09-28-ui-reference-08]
+last_updated: 2026-10-01
 ---
 
 # Reader API
@@ -19,9 +19,10 @@ the JSON API wrapper being formally specified
 
 ## Connections
 
-Named by 3 source page(s), which is the evidence that
+Named by 4 source page(s), which is the evidence that
 justified this candidate:
 
+- [[2026-10-01-llmwiki-documentation]]
 - [[2026-09-28-reader-api-contract-v1-2-preview-02]]
 - [[2026-09-28-reader-api-contract-v1-2-preview-03]]
 - [[2026-09-28-ui-reference-08]]

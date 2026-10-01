@@ -4,9 +4,9 @@ slug: cli-reference-11
 project: reference-cli
 type: source
 tags: [wiki-add, raw-doc]
-date: 2026-09-28
+date: 2026-10-01
 source: "docs/reference/cli.md"
-content_sha256: 80394a36c35bb48cc2c8a5640d51d9180b601f9274c4cb944e18a4be261b1dbc
+content_sha256: 8c1258c0faddb3eb988de6c7870bdada2b983cd07f6b325b78b35e680759efeb
 ---
 
 > Part 11 of 19 of **CLI reference** — page-kinds — retype pages off the removed question/comparison kinds.
@@ -32,7 +32,7 @@ Inbound links are left alone on purpose. `[[wikilinks]]` resolve by filename, ne
 
 Two safety rules: a page whose filename is already taken in `wiki/concepts/` is retyped where it stands and reported as a collision rather than overwriting anything, and a removed folder still holding other content is left in place and reported rather than deleted. A vault with no removed-kind page prints `nothing to migrate` and exits 0 without writing.
 
-Implementation: `llmwiki/migrate_page_kinds.py` — in the package rather than under `scripts/`, so it runs from a pip or Homebrew install with no checkout. After migrating, rebuild so `site/` picks up the new locations: `llmwiki build --vault PATH`.
+Implementation: `llmwiki/migrate_page_kinds.py` — in the package rather than under `scripts/`, so it runs from a pip install with no checkout. After migrating, rebuild so `site/` picks up the new locations: `llmwiki build --vault PATH`.
 
 ```bash
 python3 -m llmwiki migrate page-kinds --vault /path/to/vault --dry-run

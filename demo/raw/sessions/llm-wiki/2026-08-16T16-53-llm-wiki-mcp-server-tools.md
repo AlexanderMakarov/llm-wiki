@@ -3,13 +3,13 @@ title: "Expose the wiki over MCP so any agent can read it"
 type: source
 description: "Added search, read-page and query tools to the MCP server and pinned the kind vocabulary to one source."
 tags: [session-transcript, session]
-date: 2026-09-05
+date: 2026-09-08
 source_file: raw/sessions/llm-wiki/2026-08-16T16-53-llm-wiki-mcp-server-tools.md
 sessionId: 18c5a016-ac9e-22c2-61cc-eab3419c6934
 slug: mcp-server-tools
 project: llm-wiki
-started: 2026-09-05T16:53:00+00:00
-ended: 2026-09-05T17:50:00+00:00
+started: 2026-09-08T16:53:00+00:00
+ended: 2026-09-08T17:50:00+00:00
 cwd: /home/USER/code/llm-wiki
 gitBranch: feat/mcp
 permissionMode: default
@@ -28,7 +28,7 @@ is_headless: false
 agent: claude-code
 ---
 
-# Session: 912b2361 — 2026-09-05
+# Session: 912b2361 — 2026-09-08
 
 **Project:** `llm-wiki` · **Branch:** `feat/mcp` · **Mode:** `default` · **Model:** `claude-opus-5`
 

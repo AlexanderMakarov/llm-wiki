@@ -48,11 +48,11 @@ page without descending into a tree. -->
 - [Docker deployment](sources/deploy-docker/2026-09-28-docker-deployment.md) — deploy-docker · 2026-09-28
 - [Deploying to GitHub Pages (part 1/2)](sources/deploy-github-pages/2026-09-28-deploying-to-github-pages-01.md) — deploy-github-pages · 2026-09-28
 - [Deploying to GitHub Pages (part 2/2: Differences from GitLab Pages)](sources/deploy-github-pages/2026-09-28-deploying-to-github-pages-02.md) — deploy-github-pages · 2026-09-28
-- [PyPI publishing — one-time setup](sources/deploy-pypi-publishing/2026-09-07-pypi-publishing-one-time-setup.md) — deploy-pypi-publishing · 2026-09-07
+- [PyPI publishing — one-time setup](sources/deploy-pypi-publishing/2026-10-01-pypi-publishing-one-time-setup.md) — deploy-pypi-publishing · 2026-10-01
 - [Deploying to GitLab Pages](sources/deploying-to-gitlab-pages/2026-08-10-deploying-to-gitlab-pages.md) — deploying-to-gitlab-pages · 2026-08-10
 - [Deploying to Vercel or Netlify](sources/deploying-to-vercel-or-netlify/2026-08-10-deploying-to-vercel-or-netlify.md) — deploying-to-vercel-or-netlify · 2026-08-10
-- [Cut shell startup time by deferring completions](sources/dotfiles/2026-07-19-shell-startup-profiling.md) — dotfiles · 2026-06-29
-- [Version the git hooks instead of copying them](sources/dotfiles/2026-09-20-git-hooks-sync.md) — dotfiles · 2026-08-31
+- [Cut shell startup time by deferring completions (marnitask)](sources/dotfiles/2026-07-22-shell-startup-profiling.md) — dotfiles · 2026-07-19
+- [Version the git hooks instead of copying them](sources/dotfiles/2026-09-23-git-hooks-sync.md) — dotfiles · 2026-09-20
 - [Editorial brand system (part 1/2)](sources/editorial-brand-system/2026-08-10-editorial-brand-system-01.md) — editorial-brand-system · 2026-08-10
 - [Editorial brand system (part 2/2: 5. Spacing)](sources/editorial-brand-system/2026-08-10-editorial-brand-system-02.md) — editorial-brand-system · 2026-08-10
 - [Entity schema reference (v0.7 · #55)](sources/entity-schema-reference-v0-7-55/2026-08-10-entity-schema-reference-v0-7-55.md) — entity-schema-reference-v0-7-55 · 2026-08-10
@@ -64,25 +64,25 @@ page without descending into a tree. -->
 - [llmwiki Framework — Building an Agent-Native Dev Tool (part 2/3: Phase 3 — Structure)](sources/framework/2026-09-28-llmwiki-framework-building-an-agent-native-dev-tool-02.md) — framework · 2026-09-28
 - [llmwiki Framework — Building an Agent-Native Dev Tool (part 3/3: Phase 6.5 — Self-Demo (NEW))](sources/framework/2026-09-28-llmwiki-framework-building-an-agent-native-dev-tool-03.md) — framework · 2026-09-28
 - [Gemini CLI adapter](sources/gemini-cli-adapter/2026-08-10-gemini-cli-adapter.md) — gemini-cli-adapter · 2026-08-10
-- [Getting started (part 1/2)](sources/getting-started/2026-09-28-getting-started-01.md) — getting-started · 2026-09-28
-- [Getting started (part 2/2: Three commands after install)](sources/getting-started/2026-09-28-getting-started-02.md) — getting-started · 2026-09-28
+- [Getting started (part 1/2)](sources/getting-started/2026-10-01-getting-started-01.md) — getting-started · 2026-10-01
+- [Getting started (part 2/2: Three commands after install)](sources/getting-started/2026-10-01-getting-started-02.md) — getting-started · 2026-10-01
 - [GitHub Copilot adapters](sources/github-copilot-adapters/2026-08-10-github-copilot-adapters.md) — github-copilot-adapters · 2026-08-10
 - [Comenzar (Getting started)](sources/i18n-es-getting-started/2026-09-08-comenzar-getting-started.md) — i18n-es-getting-started · 2026-09-08
 - [はじめに (Getting started)](sources/i18n-ja-getting-started/2026-09-08-getting-started.md) — i18n-ja-getting-started · 2026-09-08
 - [快速开始 (Getting started)](sources/i18n-zh-cn-getting-started/2026-09-08-getting-started.md) — i18n-zh-cn-getting-started · 2026-09-08
-- [llmwiki documentation](sources/index/2026-09-28-llmwiki-documentation.md) — index · 2026-09-28
-- [Refactor the adapter registry so contrib adapters stay opt-in](sources/llm-wiki/2026-05-31-adapter-registry-refactor.md) — llm-wiki · 2026-05-11
-- [Stop re-synthesising sources that have not changed](sources/llm-wiki/2026-07-09-incremental-synth-state.md) — llm-wiki · 2026-06-19
-- [Fall back to the page graph when the topic vocabulary is thin](sources/llm-wiki/2026-08-14-topic-graph-sparsity.md) — llm-wiki · 2026-07-25
-- [Add the candidate review gate between harvest and promotion](sources/llm-wiki/2026-08-26-candidate-review-gate.md) — llm-wiki · 2026-08-06
-- [Expose the wiki over MCP so any agent can read it](sources/llm-wiki/2026-09-05-mcp-server-tools.md) — llm-wiki · 2026-08-16
-- [Sort the lint rules into errors, warnings and information](sources/llm-wiki/2026-09-12-lint-rule-severities.md) — llm-wiki · 2026-08-23
-- [Make the built site work without a server or a network](sources/llm-wiki/2026-09-18-static-site-offline.md) — llm-wiki · 2026-08-29
-- [Seed project pages from session metadata](sources/llm-wiki/2026-09-22-project-page-aggregation.md) — llm-wiki · 2026-09-02
-- [Constrain the Key Facts prompt to attributed bullets](sources/llm-wiki/2026-09-24-key-facts-prompt.md) — llm-wiki · 2026-09-04
-- [Split the search index into per-project chunks](sources/llm-wiki/2026-09-25-search-index-chunks.md) — llm-wiki · 2026-09-05
-- [Ingest arbitrary documents alongside sessions](sources/llm-wiki/2026-09-26-docs-ingest-pipeline.md) — llm-wiki · 2026-09-06
-- [Confirm how cross-references resolve before moving pages](sources/llm-wiki/2026-09-27-wikilink-resolution.md) — llm-wiki · 2026-09-07
+- [llmwiki documentation](sources/index/2026-10-01-llmwiki-documentation.md) — index · 2026-10-01
+- [Refactor the adapter registry so contrib adapters stay opt-in (korvindex)](sources/llm-wiki/2026-06-03-adapter-registry-refactor.md) — llm-wiki · 2026-05-31
+- [Stop re-synthesising sources that have not changed](sources/llm-wiki/2026-07-12-incremental-synth-state.md) — llm-wiki · 2026-07-09
+- [Fall back to the page graph when the topic vocabulary is thin](sources/llm-wiki/2026-08-17-topic-graph-sparsity.md) — llm-wiki · 2026-08-14
+- [Add the candidate review gate between harvest and promotion](sources/llm-wiki/2026-08-29-candidate-review-gate.md) — llm-wiki · 2026-08-26
+- [Expose the wiki over MCP so any agent can read it](sources/llm-wiki/2026-09-08-mcp-server-tools.md) — llm-wiki · 2026-09-05
+- [Sort the lint rules into errors, warnings and information](sources/llm-wiki/2026-09-15-lint-rule-severities.md) — llm-wiki · 2026-09-12
+- [Make the built site work without a server or a network](sources/llm-wiki/2026-09-21-static-site-offline.md) — llm-wiki · 2026-09-18
+- [Seed project pages from session metadata](sources/llm-wiki/2026-09-25-project-page-aggregation.md) — llm-wiki · 2026-09-22
+- [Constrain the Key Facts prompt to attributed bullets](sources/llm-wiki/2026-09-27-key-facts-prompt.md) — llm-wiki · 2026-09-24
+- [Split the search index into per-project chunks](sources/llm-wiki/2026-09-28-search-index-chunks.md) — llm-wiki · 2026-09-25
+- [Ingest arbitrary documents alongside sessions](sources/llm-wiki/2026-09-29-docs-ingest-pipeline.md) — llm-wiki · 2026-09-26
+- [Confirm how cross-references resolve before moving pages](sources/llm-wiki/2026-09-30-wikilink-resolution.md) — llm-wiki · 2026-09-27
 - [llmwiki Public Roadmap](sources/llmwiki-public-roadmap/2026-08-10-llmwiki-public-roadmap.md) — llmwiki-public-roadmap · 2026-08-10
 - [llmwiki Roadmap — Phase × Layer × Item, prioritised (part 1/5)](sources/llmwiki-roadmap-phase-layer-item-prioritised/2026-08-10-llmwiki-roadmap-phase-layer-item-prioritised-01.md) — llmwiki-roadmap-phase-layer-item-prioritised · 2026-08-10
 - [llmwiki Roadmap — Phase × Layer × Item, prioritised (part 2/5: The master table)](sources/llmwiki-roadmap-phase-layer-item-prioritised/2026-08-10-llmwiki-roadmap-phase-layer-item-prioritised-02.md) — llmwiki-roadmap-phase-layer-item-prioritised · 2026-08-10
@@ -90,39 +90,39 @@ page without descending into a tree. -->
 - [llmwiki Roadmap — Phase × Layer × Item, prioritised (part 4/5)](sources/llmwiki-roadmap-phase-layer-item-prioritised/2026-08-10-llmwiki-roadmap-phase-layer-item-prioritised-04.md) — llmwiki-roadmap-phase-layer-item-prioritised · 2026-08-10
 - [llmwiki Roadmap — Phase × Layer × Item, prioritised (part 5/5: Summary by layer)](sources/llmwiki-roadmap-phase-layer-item-prioritised/2026-08-10-llmwiki-roadmap-phase-layer-item-prioritised-05.md) — llmwiki-roadmap-phase-layer-item-prioritised · 2026-08-10
 - [Mode B · Agent](sources/modes-agent-index/2026-09-28-mode-b-agent.md) — modes-agent-index · 2026-09-28
-- [Monthly Project Health Report Template](sources/monthly-report-template/2026-09-28-monthly-project-health-report-template.md) — monthly-report-template · 2026-09-28
+- [Monthly Project Health Report Template](sources/monthly-report-template/2026-10-01-monthly-project-health-report-template.md) — monthly-report-template · 2026-10-01
 - [Multi-Agent Setup](sources/multi-agent-setup/2026-08-10-multi-agent-setup.md) — multi-agent-setup · 2026-08-10
 - [Obsidian Integration Guide](sources/obsidian-integration-guide/2026-08-10-obsidian-integration-guide.md) — obsidian-integration-guide · 2026-08-10
 - [OpenClaw adapter](sources/openclaw-adapter/2026-08-10-openclaw-adapter.md) — openclaw-adapter · 2026-08-10
 - [OpenCode / OpenClaw adapter](sources/opencode-openclaw-adapter/2026-08-10-opencode-openclaw-adapter.md) — opencode-openclaw-adapter · 2026-08-10
-- [Resolve citation key collisions on import](sources/paper-notes/2026-08-06-bibtex-key-collisions.md) — paper-notes · 2026-07-17
-- [Extract readable text from two-column PDFs](sources/paper-notes/2026-09-09-pdf-text-extraction.md) — paper-notes · 2026-08-20
+- [Resolve citation key collisions on import](sources/paper-notes/2026-08-09-bibtex-key-collisions.md) — paper-notes · 2026-08-06
+- [Extract readable text from two-column PDFs](sources/paper-notes/2026-09-12-pdf-text-extraction.md) — paper-notes · 2026-09-09
 - [Pick your mode](sources/pick-your-mode/2026-08-10-pick-your-mode.md) — pick-your-mode · 2026-08-10
-- [Fix cent-rounding drift on imported statements](sources/pocket-ledger/2026-06-14-csv-import-rounding.md) — pocket-ledger · 2026-05-25
-- [Add a rules engine for transaction categories](sources/pocket-ledger/2026-09-15-category-rules-engine.md) — pocket-ledger · 2026-08-26
+- [Fix cent-rounding drift on imported statements (lundric scale map)](sources/pocket-ledger/2026-06-17-csv-import-rounding.md) — pocket-ledger · 2026-06-14
+- [Add a rules engine for transaction categories (orbicast)](sources/pocket-ledger/2026-09-18-category-rules-engine.md) — pocket-ledger · 2026-09-15
 - [Privacy (part 1/2)](sources/privacy/2026-09-28-privacy-01.md) — privacy · 2026-09-28
 - [Privacy (part 2/2: The claude -p synthesis exception)](sources/privacy/2026-09-28-privacy-02.md) — privacy · 2026-09-28
-- [Validate image uploads before they reach storage](sources/recipe-box/2026-08-20-image-upload-limits.md) — recipe-box · 2026-07-31
-- [Scale ingredient quantities without mangling fractions](sources/recipe-box/2026-09-25-ingredient-scaling.md) — recipe-box · 2026-09-05
-- [CLI reference (part 1/19)](sources/reference-cli/2026-09-28-cli-reference-01.md) — reference-cli · 2026-09-28
-- [CLI reference (part 2/19: add — add a document to the wiki (#16 / #273))](sources/reference-cli/2026-09-28-cli-reference-02.md) — reference-cli · 2026-09-28
-- [CLI reference (part 3/19: usage — MCP tool-usage telemetry vs synthesis cost (#26))](sources/reference-cli/2026-09-28-cli-reference-03.md) — reference-cli · 2026-09-28
-- [CLI reference (part 4/19: graph — build the knowledge graph)](sources/reference-cli/2026-09-28-cli-reference-04.md) — reference-cli · 2026-09-28
-- [CLI reference (part 5/19: lint — run registered wiki-quality rules)](sources/reference-cli/2026-09-28-cli-reference-05.md) — reference-cli · 2026-09-28
-- [CLI reference (part 6/19: candidates — approval workflow)](sources/reference-cli/2026-09-28-cli-reference-06.md) — reference-cli · 2026-09-28
-- [CLI reference (part 7/19: synth — synthesize sources + harvest candidates)](sources/reference-cli/2026-09-28-cli-reference-07.md) — reference-cli · 2026-09-28
-- [CLI reference (part 8/19: Auto-tagging (#351))](sources/reference-cli/2026-09-28-cli-reference-08.md) — reference-cli · 2026-09-28
-- [CLI reference (part 9/19: queue — inspect and run unified queue)](sources/reference-cli/2026-09-28-cli-reference-09.md) — reference-cli · 2026-09-28
-- [CLI reference (part 10/19: migrate — list or apply a named one-time vault repair)](sources/reference-cli/2026-09-28-cli-reference-10.md) — reference-cli · 2026-09-28
-- [CLI reference (part 11/19: page-kinds — retype pages off the removed question/comparison kinds)](sources/reference-cli/2026-09-28-cli-reference-11.md) — reference-cli · 2026-09-28
-- [CLI reference (part 12/19: source-page-paths — move source pages filed under a stale name)](sources/reference-cli/2026-09-28-cli-reference-12.md) — reference-cli · 2026-09-28
-- [CLI reference (part 13/19: broken-provenance — remap or clear hops to missing raw sessions)](sources/reference-cli/2026-09-28-cli-reference-13.md) — reference-cli · 2026-09-28
-- [CLI reference (part 14/19: install-agent-kit — copy packaged slash commands and skills (#109))](sources/reference-cli/2026-09-28-cli-reference-14.md) — reference-cli · 2026-09-28
-- [CLI reference (part 15/19: search — literal term or phrase search (#197))](sources/reference-cli/2026-09-28-cli-reference-15.md) — reference-cli · 2026-09-28
-- [CLI reference (part 16/19: all — run the full pipeline)](sources/reference-cli/2026-09-28-cli-reference-16.md) — reference-cli · 2026-09-28
-- [CLI reference (part 17/19: install-automation — set up the daily job)](sources/reference-cli/2026-09-28-cli-reference-17.md) — reference-cli · 2026-09-28
-- [CLI reference (part 18/19)](sources/reference-cli/2026-09-28-cli-reference-18.md) — reference-cli · 2026-09-28
-- [CLI reference (part 19/19: Exit codes (conventions))](sources/reference-cli/2026-09-28-cli-reference-19.md) — reference-cli · 2026-09-28
+- [Validate image uploads before they reach storage](sources/recipe-box/2026-08-23-image-upload-limits.md) — recipe-box · 2026-08-20
+- [Scale ingredient quantities without mangling fractions](sources/recipe-box/2026-09-28-ingredient-scaling.md) — recipe-box · 2026-09-25
+- [CLI reference (part 1/19)](sources/reference-cli/2026-10-01-cli-reference-01.md) — reference-cli · 2026-10-01
+- [CLI reference (part 2/19: add — add a document to the wiki (#16 / #273))](sources/reference-cli/2026-10-01-cli-reference-02.md) — reference-cli · 2026-10-01
+- [CLI reference (part 3/19: usage — MCP tool-usage telemetry vs synthesis cost (#26))](sources/reference-cli/2026-10-01-cli-reference-03.md) — reference-cli · 2026-10-01
+- [CLI reference (part 4/19: graph — build the knowledge graph)](sources/reference-cli/2026-10-01-cli-reference-04.md) — reference-cli · 2026-10-01
+- [CLI reference (part 5/19: lint — run registered wiki-quality rules)](sources/reference-cli/2026-10-01-cli-reference-05.md) — reference-cli · 2026-10-01
+- [CLI reference (part 6/19: candidates — approval workflow)](sources/reference-cli/2026-10-01-cli-reference-06.md) — reference-cli · 2026-10-01
+- [CLI reference (part 7/19: synth — synthesize sources + harvest candidates)](sources/reference-cli/2026-10-01-cli-reference-07.md) — reference-cli · 2026-10-01
+- [CLI reference (part 8/19: Auto-tagging (#351))](sources/reference-cli/2026-10-01-cli-reference-08.md) — reference-cli · 2026-10-01
+- [CLI reference (part 9/19: queue — inspect and run unified queue)](sources/reference-cli/2026-10-01-cli-reference-09.md) — reference-cli · 2026-10-01
+- [CLI reference (part 10/19: migrate — list or apply a named one-time vault repair)](sources/reference-cli/2026-10-01-cli-reference-10.md) — reference-cli · 2026-10-01
+- [CLI reference (part 11/19: page-kinds — retype pages off the removed question/comparison kinds)](sources/reference-cli/2026-10-01-cli-reference-11.md) — reference-cli · 2026-10-01
+- [CLI reference (part 12/19: source-page-paths — move source pages filed under a stale name)](sources/reference-cli/2026-10-01-cli-reference-12.md) — reference-cli · 2026-10-01
+- [CLI reference (part 13/19: broken-provenance — remap or clear hops to missing raw sessions)](sources/reference-cli/2026-10-01-cli-reference-13.md) — reference-cli · 2026-10-01
+- [CLI reference (part 14/19: install-agent-kit — copy packaged slash commands and skills (#109))](sources/reference-cli/2026-10-01-cli-reference-14.md) — reference-cli · 2026-10-01
+- [CLI reference (part 15/19: search — literal term or phrase search (#197))](sources/reference-cli/2026-10-01-cli-reference-15.md) — reference-cli · 2026-10-01
+- [CLI reference (part 16/19: all — run the full pipeline)](sources/reference-cli/2026-10-01-cli-reference-16.md) — reference-cli · 2026-10-01
+- [CLI reference (part 17/19: install-automation — set up the daily job)](sources/reference-cli/2026-10-01-cli-reference-17.md) — reference-cli · 2026-10-01
+- [CLI reference (part 18/19)](sources/reference-cli/2026-10-01-cli-reference-18.md) — reference-cli · 2026-10-01
+- [CLI reference (part 19/19: Exit codes (conventions))](sources/reference-cli/2026-10-01-cli-reference-19.md) — reference-cli · 2026-10-01
 - [MCP server — tool reference (part 1/2)](sources/reference-mcp/2026-09-28-mcp-server-tool-reference-01.md) — reference-mcp · 2026-09-28
 - [MCP server — tool reference (part 2/2: Tool timeouts)](sources/reference-mcp/2026-09-28-mcp-server-tool-reference-02.md) — reference-mcp · 2026-09-28
 - [Page kinds (part 1/3)](sources/reference-page-kinds/2026-09-28-page-kinds-01.md) — reference-page-kinds · 2026-09-28
@@ -152,15 +152,15 @@ page without descending into a tree. -->
 - [Phase 1.25 — Research Report (part 1/3)](sources/research/2026-09-28-phase-1-25-research-report-01.md) — research · 2026-09-28
 - [Phase 1.25 — Research Report (part 2/3: Per-repo analysis)](sources/research/2026-09-28-phase-1-25-research-report-02.md) — research · 2026-09-28
 - [Phase 1.25 — Research Report (part 3/3: The 10x gap (feature matrix))](sources/research/2026-09-28-phase-1-25-research-report-03.md) — research · 2026-09-28
-- [Detect and backfill gaps in the sensor stream](sources/sensor-mesh/2026-07-29-backfill-gap-detection.md) — sensor-mesh · 2026-07-09
-- [Add backoff to broker reconnection](sources/sensor-mesh/2026-09-23-mqtt-reconnect-backoff.md) — sensor-mesh · 2026-09-03
+- [Detect and backfill gaps in the sensor stream (brexinode)](sources/sensor-mesh/2026-08-01-backfill-gap-detection.md) — sensor-mesh · 2026-07-29
+- [Add backoff to broker reconnection](sources/sensor-mesh/2026-09-26-mqtt-reconnect-backoff.md) — sensor-mesh · 2026-09-23
 - [Star History Tracking](sources/star-history/2026-09-28-star-history-tracking.md) — star-history · 2026-09-28
 - [Docs style guide](sources/style-guide/2026-09-28-docs-style-guide.md) — style-guide · 2026-09-28
-- [Move list endpoints from offset to cursor pagination](sources/trailhead-api/2026-06-27-pagination-cursors.md) — trailhead-api · 2026-06-07
-- [Thread a request id through the log output](sources/trailhead-api/2026-08-31-request-id-logging.md) — trailhead-api · 2026-08-11
-- [Make migrations safe to run twice](sources/trailhead-api/2026-09-26-schema-migration-safety.md) — trailhead-api · 2026-09-06
+- [Move list endpoints from offset to cursor pagination](sources/trailhead-api/2026-06-30-pagination-cursors.md) — trailhead-api · 2026-06-27
+- [Thread a request id through the log output](sources/trailhead-api/2026-09-03-request-id-logging.md) — trailhead-api · 2026-08-31
+- [Make migrations safe to run twice](sources/trailhead-api/2026-09-29-schema-migration-safety.md) — trailhead-api · 2026-09-26
 - [00 · Quickstart Walkthrough](sources/tutorials-00-quickstart-walkthrough/2026-09-28-00-quickstart-walkthrough.md) — tutorials-00-quickstart-walkthrough · 2026-09-28
-- [01 · Installation](sources/tutorials-01-installation/2026-09-07-01-installation.md) — tutorials-01-installation · 2026-09-07
+- [01 · Installation](sources/tutorials-01-installation/2026-10-01-01-installation.md) — tutorials-01-installation · 2026-10-01
 - [03 · Use with Claude Code](sources/tutorials-03-use-with-claude-code/2026-09-28-03-use-with-claude-code.md) — tutorials-03-use-with-claude-code · 2026-09-28
 - [08 · Synthesize wiki pages with Ollama](sources/tutorials-08-synthesize-with-ollama/2026-09-28-08-synthesize-wiki-pages-with-ollama.md) — tutorials-08-synthesize-with-ollama · 2026-09-28
 - [Setup Guide — Your First LLM Wiki in 15 Minutes (part 1/2)](sources/tutorials-setup-guide/2026-09-08-setup-guide-your-first-llm-wiki-in-15-minutes-01.md) — tutorials-setup-guide · 2026-09-08

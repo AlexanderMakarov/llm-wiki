@@ -3,13 +3,13 @@ title: "Add the candidate review gate between harvest and promotion"
 type: source
 description: "Harvest now writes stubs to a review folder instead of publishing pages directly."
 tags: [session-transcript, session]
-date: 2026-08-26
+date: 2026-08-29
 source_file: raw/sessions/llm-wiki/2026-08-06T14-27-llm-wiki-candidate-review-gate.md
 sessionId: 8ad5cabb-b9c8-c2af-fcac-882c1a39c85e
 slug: candidate-review-gate
 project: llm-wiki
-started: 2026-08-26T14:27:00+00:00
-ended: 2026-08-26T14:55:00+00:00
+started: 2026-08-29T14:27:00+00:00
+ended: 2026-08-29T14:55:00+00:00
 cwd: /home/USER/code/llm-wiki
 gitBranch: feat/candidates
 permissionMode: default
@@ -28,7 +28,7 @@ is_headless: false
 agent: claude-code
 ---
 
-# Session: adc0ae00 — 2026-08-26
+# Session: adc0ae00 — 2026-08-29
 
 **Project:** `llm-wiki` · **Branch:** `feat/candidates` · **Mode:** `default` · **Model:** `claude-opus-5`
 

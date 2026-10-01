@@ -3,13 +3,13 @@ title: "Seed project pages from session metadata"
 type: source
 description: "Project pages are now derived from session frontmatter rather than written by hand."
 tags: [session-transcript, session]
-date: 2026-09-22
+date: 2026-09-25
 source_file: raw/sessions/llm-wiki/2026-09-02T22-11-llm-wiki-project-page-aggregation.md
 sessionId: 2ed9df4c-893c-6f6c-2bc4-d1d5c2988185
 slug: project-page-aggregation
 project: llm-wiki
-started: 2026-09-22T22:11:00+00:00
-ended: 2026-09-22T22:29:00+00:00
+started: 2026-09-25T22:11:00+00:00
+ended: 2026-09-25T22:29:00+00:00
 cwd: /home/USER/code/llm-wiki
 gitBranch: feat/projects
 permissionMode: default
@@ -28,7 +28,7 @@ is_headless: false
 agent: cursor-cli
 ---
 
-# Session: ab6adcee — 2026-09-22
+# Session: ab6adcee — 2026-09-25
 
 **Project:** `llm-wiki` · **Branch:** `feat/projects` · **Mode:** `default` · **Model:** `claude-opus-5`
 

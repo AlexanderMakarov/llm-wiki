@@ -641,3 +641,37 @@
 ## [2026-09-29] remove | 1 docs (uptime-monitoring)
 
 ## [2026-09-29] remove | 1 docs (deploy-homebrew-setup)
+
+## [2026-10-01] migrate | source page paths
+
+## [2026-10-01] remove | 1 docs (deploy-pypi-publishing)
+
+## [2026-10-01] add | PyPI publishing — one-time setup
+
+## [2026-10-01] remove | 2 docs (getting-started)
+
+## [2026-10-01] add | Getting started
+
+## [2026-10-01] remove | 1 docs (index)
+
+## [2026-10-01] add | llmwiki documentation
+
+## [2026-10-01] remove | 1 docs (monthly-report-template)
+
+## [2026-10-01] add | Monthly Project Health Report Template
+
+## [2026-10-01] remove | 19 docs (reference-cli)
+
+## [2026-10-01] add | CLI reference
+
+## [2026-10-01] remove | 1 docs (tutorials-01-installation)
+
+## [2026-10-01] add | 01 · Installation
+
+## [2026-10-01] synthesize | 25 sessions across 6 projects
+- Processed: 25 docs
+- Created: deploy-pypi-publishing, getting-started, index, monthly-report-template, reference-cli, tutorials-01-installation
+
+## [2026-10-01] synthesize | 25 sessions across 7 projects
+- Processed: 15 Claude · 4 Cursor · 4 OpenClaw · 2 Codex
+- Created: dotfiles, llm-wiki, paper-notes, pocket-ledger, recipe-box, sensor-mesh, trailhead-api

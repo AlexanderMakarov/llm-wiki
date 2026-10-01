@@ -4,9 +4,9 @@ slug: getting-started-02
 project: getting-started
 type: source
 tags: [wiki-add, raw-doc]
-date: 2026-09-28
+date: 2026-10-01
 source: "docs/getting-started.md"
-content_sha256: da0d0f50f9fdf3b2b102da40e3d4083436abcdec03b0a35a2d2cdee745770ee1
+content_sha256: f632f2ff25f720f7c59ae4aca09de7dd17461bfff04b1f593035cdeb6f9eee2f
 ---
 
 > Part 2 of 2 of **Getting started** — Three commands after install.

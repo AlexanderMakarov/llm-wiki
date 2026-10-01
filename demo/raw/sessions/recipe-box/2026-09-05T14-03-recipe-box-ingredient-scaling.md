@@ -3,13 +3,13 @@ title: "Scale ingredient quantities without mangling fractions"
 type: source
 description: "Doubling a recipe produced unreadable decimals instead of familiar fractions."
 tags: [session-transcript, session]
-date: 2026-09-25
+date: 2026-09-28
 source_file: raw/sessions/recipe-box/2026-09-05T14-03-recipe-box-ingredient-scaling.md
 sessionId: d1e026e5-3bf5-bb25-9dc7-17baa1fc920a
 slug: ingredient-scaling
 project: recipe-box
-started: 2026-09-25T14:03:00+00:00
-ended: 2026-09-25T15:50:00+00:00
+started: 2026-09-28T14:03:00+00:00
+ended: 2026-09-28T15:50:00+00:00
 cwd: /home/USER/code/recipe-box
 gitBranch: feat/scaling
 permissionMode: default
@@ -28,7 +28,7 @@ is_headless: false
 agent: claude-code
 ---
 
-# Session: ff564f56 — 2026-09-25
+# Session: ff564f56 — 2026-09-28
 
 **Project:** `recipe-box` · **Branch:** `feat/scaling` · **Mode:** `default` · **Model:** `claude-opus-5`
 

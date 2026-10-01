@@ -4,9 +4,9 @@ slug: 01-installation
 project: tutorials-01-installation
 type: source
 tags: [wiki-add, raw-doc]
-date: 2026-09-07
+date: 2026-10-01
 source: "docs/tutorials/01-installation.md"
-content_sha256: fe0c23934f2f5d9bea9f8bed612886b0b09e04055f156c4095107a8488da25b9
+content_sha256: c639187f395e4ed848030d28ea46f80cf7cccfdca1e972368e7a5cab9d444d37
 ---
 
 ---
@@ -63,17 +63,7 @@ Then scaffold a vault wherever you want it:
 llmwiki init --vault .
 ```
 
-### Option B — Homebrew
-
-Once the tap from [#212](https://github.com/AlexanderMakarov/llm-wiki/issues/212) is live:
-
-```bash
-brew install AlexanderMakarov/tap/llmwiki
-```
-
-The formula name stays `llmwiki` (not `llm-wiki-plus`); it installs from the GitHub release tarball.
-
-### Option C — Clone (unreleased code or contributing)
+### Option B — Clone (unreleased code or contributing)
 
 ```bash
 git clone https://github.com/AlexanderMakarov/llm-wiki.git

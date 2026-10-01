@@ -3,7 +3,7 @@ title: "Adapters"
 type: concept
 status: reviewed
 tags: []
-sources: [2026-08-10-04-use-with-codex-cli, 2026-08-10-chatgpt-adapter, 2026-09-28-cli-reference-03]
+sources: [2026-08-10-04-use-with-codex-cli, 2026-08-10-chatgpt-adapter, 2026-10-01-cli-reference-03]
 last_updated: 2026-08-12
 ---
 
@@ -22,4 +22,4 @@ justified this candidate:
 
 - [[2026-08-10-04-use-with-codex-cli]]
 - [[2026-08-10-chatgpt-adapter]]
-- [[2026-09-28-cli-reference-03]]
+- [[2026-10-01-cli-reference-03]]

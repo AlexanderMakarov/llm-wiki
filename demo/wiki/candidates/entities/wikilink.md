@@ -4,7 +4,7 @@ type: entity
 status: candidate
 tags: []
 sources: [2026-09-28-obsidian-adapter, 2026-09-28-00-quickstart-walkthrough, 2026-09-08-setup-guide-your-first-llm-wiki-in-15-minutes-02]
-last_updated: 2026-09-29
+last_updated: 2026-10-01
 ---
 
 # wikilink

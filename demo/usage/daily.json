@@ -3,7 +3,7 @@
   "folded_daily_files": [],
   "folded_days": {},
   "days": {
-    "2026-09-12": {
+    "2026-09-15": {
       "mcp_calls": 1,
       "retrievals": 1,
       "writes": 0,
@@ -16,7 +16,7 @@
       "attributed_projects": 1,
       "unattributed_calls": 0
     },
-    "2026-09-13": {
+    "2026-09-16": {
       "mcp_calls": 1,
       "retrievals": 1,
       "writes": 0,
@@ -29,7 +29,7 @@
       "attributed_projects": 1,
       "unattributed_calls": 0
     },
-    "2026-09-14": {
+    "2026-09-17": {
       "mcp_calls": 3,
       "retrievals": 3,
       "writes": 0,
@@ -43,7 +43,7 @@
       "attributed_projects": 3,
       "unattributed_calls": 0
     },
-    "2026-09-15": {
+    "2026-09-18": {
       "mcp_calls": 3,
       "retrievals": 3,
       "writes": 0,
@@ -57,7 +57,7 @@
       "attributed_projects": 2,
       "unattributed_calls": 0
     },
-    "2026-09-16": {
+    "2026-09-19": {
       "mcp_calls": 4,
       "retrievals": 3,
       "writes": 0,
@@ -71,7 +71,7 @@
       "attributed_projects": 1,
       "unattributed_calls": 0
     },
-    "2026-09-17": {
+    "2026-09-20": {
       "mcp_calls": 3,
       "retrievals": 3,
       "writes": 0,
@@ -85,7 +85,7 @@
       "attributed_projects": 3,
       "unattributed_calls": 0
     },
-    "2026-09-18": {
+    "2026-09-21": {
       "mcp_calls": 5,
       "retrievals": 4,
       "writes": 0,
@@ -100,7 +100,7 @@
       "attributed_projects": 3,
       "unattributed_calls": 0
     },
-    "2026-09-19": {
+    "2026-09-22": {
       "mcp_calls": 7,
       "retrievals": 5,
       "writes": 0,
@@ -116,7 +116,7 @@
       "attributed_projects": 4,
       "unattributed_calls": 0
     },
-    "2026-09-20": {
+    "2026-09-23": {
       "mcp_calls": 4,
       "retrievals": 4,
       "writes": 0,
@@ -130,7 +130,7 @@
       "attributed_projects": 2,
       "unattributed_calls": 0
     },
-    "2026-09-21": {
+    "2026-09-24": {
       "mcp_calls": 6,
       "retrievals": 5,
       "writes": 0,
@@ -145,7 +145,7 @@
       "attributed_projects": 4,
       "unattributed_calls": 0
     },
-    "2026-09-22": {
+    "2026-09-25": {
       "mcp_calls": 7,
       "retrievals": 5,
       "writes": 1,
@@ -161,7 +161,7 @@
       "attributed_projects": 4,
       "unattributed_calls": 0
     },
-    "2026-09-23": {
+    "2026-09-26": {
       "mcp_calls": 7,
       "retrievals": 6,
       "writes": 0,
@@ -176,7 +176,7 @@
       "attributed_projects": 2,
       "unattributed_calls": 0
     },
-    "2026-09-24": {
+    "2026-09-27": {
       "mcp_calls": 7,
       "retrievals": 5,
       "writes": 0,
@@ -192,7 +192,7 @@
       "attributed_projects": 4,
       "unattributed_calls": 0
     },
-    "2026-09-25": {
+    "2026-09-28": {
       "mcp_calls": 7,
       "retrievals": 6,
       "writes": 0,
@@ -207,7 +207,7 @@
       "attributed_projects": 4,
       "unattributed_calls": 0
     },
-    "2026-09-26": {
+    "2026-09-29": {
       "mcp_calls": 8,
       "retrievals": 7,
       "writes": 0,
@@ -222,7 +222,7 @@
       "attributed_projects": 4,
       "unattributed_calls": 0
     },
-    "2026-09-27": {
+    "2026-09-30": {
       "mcp_calls": 5,
       "retrievals": 5,
       "writes": 0,
@@ -236,7 +236,7 @@
       "attributed_projects": 2,
       "unattributed_calls": 0
     },
-    "2026-09-28": {
+    "2026-10-01": {
       "mcp_calls": 6,
       "retrievals": 2,
       "writes": 1,

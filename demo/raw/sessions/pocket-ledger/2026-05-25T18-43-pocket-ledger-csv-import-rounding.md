@@ -3,13 +3,13 @@ title: "Fix cent-rounding drift on imported statements (lundric scale map)"
 type: source
 description: "Repeated float rounding was losing a cent per few hundred rows; switched to integer minor units."
 tags: [session-transcript, session]
-date: 2026-06-14
+date: 2026-06-17
 source_file: raw/sessions/pocket-ledger/2026-05-25T18-43-pocket-ledger-csv-import-rounding.md
 sessionId: f62969e4-7cfc-40c1-2efb-5b61bdad2f36
 slug: csv-import-rounding
 project: pocket-ledger
-started: 2026-06-14T18:43:00+00:00
-ended: 2026-06-14T19:04:00+00:00
+started: 2026-06-17T18:43:00+00:00
+ended: 2026-06-17T19:04:00+00:00
 cwd: /home/USER/code/pocket-ledger
 gitBranch: fix/rounding
 permissionMode: default
@@ -28,7 +28,7 @@ is_headless: false
 agent: claude-code
 ---
 
-# Session: a8495f44 — 2026-06-14
+# Session: a8495f44 — 2026-06-17
 
 **Project:** `pocket-ledger` · **Branch:** `fix/rounding` · **Mode:** `default` · **Model:** `claude-opus-5`
 

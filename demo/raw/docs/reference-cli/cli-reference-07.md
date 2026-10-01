@@ -4,9 +4,9 @@ slug: cli-reference-07
 project: reference-cli
 type: source
 tags: [wiki-add, raw-doc]
-date: 2026-09-28
+date: 2026-10-01
 source: "docs/reference/cli.md"
-content_sha256: 80394a36c35bb48cc2c8a5640d51d9180b601f9274c4cb944e18a4be261b1dbc
+content_sha256: 8c1258c0faddb3eb988de6c7870bdada2b983cd07f6b325b78b35e680759efeb
 ---
 
 > Part 7 of 19 of **CLI reference** — synth — synthesize sources + harvest candidates.
@@ -49,5 +49,7 @@ python3 -m llmwiki synth                    # real run (sources + candidates)
 Before the first page is synthesized, a real run announces the batch: `Synthesizing 11 source(s) with ClaudeCLISynthesizer (2 at a time)` — the count is the work queue after up-to-date, ineligible, and already-claimed sources are excluded, so it is what the run will actually do. An empty queue says `Nothing to synthesize — every source is already up to date.` instead. Each result line then carries its position, `  [3/11] synthesized: <project> → <page>`, counting completed **sources** against that total; pages finish in whatever order the backend returns them, so the positions arrive out of order while the last one is always `N/N`.
 
 `--estimate` prints the sources cost estimate with honest input units (#81): **Corpus: N eligible sources (S sessions + D docs)** and **Already synthesized: N of M eligible sources** (not page/file counts under `wiki/sources/`), then a separate **Source pages (current state): T on disk (Sess sessions + D docs + X stubs)** line for on-disk `.md` file counts. It also prints a `Candidates (pre-run state):` block — the harvestable shape of `wiki/sources/` **as it exists now**, with a note that pending sources are not yet reflected. It is not a forecast of what the next run will harvest (#113). After a successful real `synth` (not estimate), the CLI prints an end-of-run summary: `Synthesized:`, `Duration:`, optional `Tokens:` / `Cost:` when known. Harvest still prints its Candidates line once; the end summary does not repeat Candidates.
+
+**`--estimate` writes vault state.** It calls no backend and touches no page, but it records its result in the vault's `llmwiki-state.json`: the pending list (`synth.pending`), the Home Pipeline rows (`synth.pipeline`) and the estimate block (`synth.estimate`) — what the Home page's Pipeline counts show. Pending is judged by file modification times, so right after a `git clone`, `checkout` or `pull` every source looks changed and the estimate records them all as pending. In a vault whose state file is committed (such as the repository's `demo/`), discard that change instead of committing it.
 
 ### Flags

@@ -3,13 +3,13 @@ title: "Code-reviewer subagent: synthetic PR findings"
 type: source
 description: "Synthetic Cursor nested code-reviewer subagent session; headless via subagentTypeName."
 tags: [session-transcript, cursor-cli, session]
-date: 2026-09-26
+date: 2026-09-29
 source_file: raw/sessions/llm-wiki/2026-09-06T20-21-llm-wiki-code-reviewer-subagent-headless.md
 sessionId: 93b63aa4-bdc4-996a-ae15-391d98864392
 slug: code-reviewer-subagent-headless
 project: llm-wiki
-started: 2026-09-26T20:21:00+00:00
-ended: 2026-09-26T21:13:00+00:00
+started: 2026-09-29T20:21:00+00:00
+ended: 2026-09-29T21:13:00+00:00
 cwd: /home/USER/code/llm-wiki
 gitBranch: chore/headless-demo
 permissionMode: default
@@ -29,7 +29,7 @@ subagentTypeName: code-reviewer
 agent: cursor-cli
 ---
 
-# Session: 2f7576df — 2026-09-26
+# Session: 2f7576df — 2026-09-29
 
 **Project:** `llm-wiki` · **Branch:** `chore/headless-demo` · **Mode:** `default` · **Model:** `claude-opus-5`
 

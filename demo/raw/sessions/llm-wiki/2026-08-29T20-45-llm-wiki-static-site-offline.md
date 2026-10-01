@@ -3,13 +3,13 @@ title: "Make the built site work without a server or a network"
 type: source
 description: "Vendored the graph library and moved state into a script tag so the site opens from a file."
 tags: [session-transcript, session]
-date: 2026-09-18
+date: 2026-09-21
 source_file: raw/sessions/llm-wiki/2026-08-29T20-45-llm-wiki-static-site-offline.md
 sessionId: 1dab43b8-145a-b03e-493a-2b2d1f3ccb04
 slug: static-site-offline
 project: llm-wiki
-started: 2026-09-18T20:45:00+00:00
-ended: 2026-09-19T00:22:00+00:00
+started: 2026-09-21T20:45:00+00:00
+ended: 2026-09-22T00:22:00+00:00
 cwd: /home/USER/code/llm-wiki
 gitBranch: feat/offline
 permissionMode: default
@@ -28,7 +28,7 @@ is_headless: false
 agent: claude-code
 ---
 
-# Session: 00503fd4 — 2026-09-18
+# Session: 00503fd4 — 2026-09-21
 
 **Project:** `llm-wiki` · **Branch:** `feat/offline` · **Mode:** `default` · **Model:** `claude-opus-5`
 

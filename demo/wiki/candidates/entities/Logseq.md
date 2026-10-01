@@ -3,7 +3,7 @@ title: "Logseq"
 type: entity
 status: candidate
 tags: []
-sources: [2026-08-10-06-bring-your-obsidian-logseq-vault, 2026-09-28-cli-reference-01, 2026-09-28-command-cheatsheet-02, 2026-09-28-cli-reference-01]
+sources: [2026-08-10-06-bring-your-obsidian-logseq-vault, 2026-10-01-cli-reference-01, 2026-09-28-command-cheatsheet-02]
 last_updated: 2026-09-29
 ---
 
@@ -17,6 +17,6 @@ Named by 4 source page(s), which is the evidence that
 justified this candidate:
 
 - [[2026-08-10-06-bring-your-obsidian-logseq-vault]]
-- [[2026-09-28-cli-reference-01]]
+- [[2026-10-01-cli-reference-01]]
 - [[2026-09-28-command-cheatsheet-02]]
-- [[2026-09-28-cli-reference-01]]
+- [[2026-10-01-cli-reference-01]]

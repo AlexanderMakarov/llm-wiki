@@ -4,9 +4,9 @@ slug: monthly-project-health-report-template
 project: monthly-report-template
 type: source
 tags: [wiki-add, raw-doc]
-date: 2026-09-28
+date: 2026-10-01
 source: "docs/monthly-report-template.md"
-content_sha256: 048b4bfdfdcf15741208859611d8b502d23ea5b5eeff1ee1498ee8b1494489b2
+content_sha256: e0bf61b87d649a02cc99235de8d1397eae6140f58e8d62404fcaef64e9e5f212
 ---
 
 # Monthly Project Health Report Template
@@ -30,7 +30,7 @@ GitHub Insights, the issue tracker, and PyPI stats.
 | Unique cloners | ___ | ___ | ___ |
 | Unique visitors | ___ | ___ | ___ |
 | PyPI downloads (monthly) | ___ | ___ | +___ |
-| npm/Homebrew installs | ___ | ___ | +___ |
+| PyPI installs | ___ | ___ | +___ |
 
 **Data sources:**
 - Stars/forks: GitHub repo page

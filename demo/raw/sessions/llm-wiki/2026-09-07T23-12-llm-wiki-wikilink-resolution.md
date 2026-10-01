@@ -3,13 +3,13 @@ title: "Confirm how cross-references resolve before moving pages"
 type: source
 description: "Established that links resolve by filename, which decides whether a page can be relocated safely."
 tags: [session-transcript, session]
-date: 2026-09-27
+date: 2026-09-30
 source_file: raw/sessions/llm-wiki/2026-09-07T23-12-llm-wiki-wikilink-resolution.md
 sessionId: d1f8e126-5997-f03a-2e0f-52dcb9cd6125
 slug: wikilink-resolution
 project: llm-wiki
-started: 2026-09-27T23:12:00+00:00
-ended: 2026-09-27T23:28:00+00:00
+started: 2026-09-30T23:12:00+00:00
+ended: 2026-09-30T23:28:00+00:00
 cwd: /home/USER/code/llm-wiki
 gitBranch: fix/wikilinks
 permissionMode: default
@@ -28,7 +28,7 @@ is_headless: false
 agent: claude-code
 ---
 
-# Session: 01644cff — 2026-09-27
+# Session: 01644cff — 2026-09-30
 
 **Project:** `llm-wiki` · **Branch:** `fix/wikilinks` · **Mode:** `default` · **Model:** `claude-opus-5`
 

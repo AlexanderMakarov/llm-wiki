@@ -3,7 +3,7 @@ title: "Dotfiles"
 type: entity
 status: candidate
 tags: []
-sources: [2026-07-19-shell-startup-profiling, 2026-09-20-git-hooks-sync, 2026-09-20-git-hooks-sync]
+sources: [2026-07-22-shell-startup-profiling, 2026-09-23-git-hooks-sync, 2026-09-23-git-hooks-sync]
 last_updated: 2026-09-08
 ---
 
@@ -13,13 +13,13 @@ personal shell configuration repository where this optimization was implemented
 
 ## Key Facts
 
-- Hooks moved from outside the repository into a tracked directory with setup script configuration [[2026-09-20-git-hooks-sync]]
+- Hooks moved from outside the repository into a tracked directory with setup script configuration [[2026-09-23-git-hooks-sync]]
 
 ## Connections
 
 Named by 3 source page(s), which is the evidence that
 justified this candidate:
 
-- [[2026-07-19-shell-startup-profiling]]
-- [[2026-09-20-git-hooks-sync]]
-- [[2026-09-20-git-hooks-sync]]
+- [[2026-07-22-shell-startup-profiling]]
+- [[2026-09-23-git-hooks-sync]]
+- [[2026-09-23-git-hooks-sync]]
