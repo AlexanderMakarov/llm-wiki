@@ -40,4 +40,4 @@ Session issues, split by where they belong:
 - `python3 -m pytest tests/` — green.
 
 ## post-tag CI (v2.4.0)
-- `test_real_changelog_parses` failed on `main` after the cut because Unreleased was correctly emptied. Relaxed the assertion: empty Unreleased is allowed; the newest versioned section must still have parseable `**Title**` entries.
+- `test_real_changelog_parses` failed on the `release(v2.4.0):` commit because Unreleased was correctly emptied. Fix (next release, not amending the tag): empty Unreleased is allowed **only** when HEAD's subject matches `release(vX.Y.Z):`; those commits still require the newest versioned section to parse. Every other commit must keep Unreleased entries.

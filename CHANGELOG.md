@@ -14,6 +14,9 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Fixed
 
+- **`test_real_changelog_parses` allows empty Unreleased only on `release(v…)` commits** — a tagged cut empties the Unreleased scaffold by design; CI on that commit still checks that the newest versioned section parses. Every other commit must keep Unreleased entries so CHANGELOG format drift is caught before the next cut.
+  - *Release note:* Maintainers only: empty Unreleased no longer fails CI on the release commit itself; other commits still require Unreleased entries.
+
 ### Removed
 
 ## [2.4.0] — 2026-10-01
