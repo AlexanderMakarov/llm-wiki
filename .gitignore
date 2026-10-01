@@ -238,3 +238,5 @@ usage/
 !demo/usage/
 # The built demo site is a CI artefact.
 demo/site/
+# In-progress refresh marker (local only; cleared when the pin advances).
+demo/.demo-refresh-pending

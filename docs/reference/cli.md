@@ -496,6 +496,8 @@ Before the first page is synthesized, a real run announces the batch: `Synthesiz
 
 `--estimate` prints the sources cost estimate with honest input units (#81): **Corpus: N eligible sources (S sessions + D docs)** and **Already synthesized: N of M eligible sources** (not page/file counts under `wiki/sources/`), then a separate **Source pages (current state): T on disk (Sess sessions + D docs + X stubs)** line for on-disk `.md` file counts. It also prints a `Candidates (pre-run state):` block — the harvestable shape of `wiki/sources/` **as it exists now**, with a note that pending sources are not yet reflected. It is not a forecast of what the next run will harvest (#113). After a successful real `synth` (not estimate), the CLI prints an end-of-run summary: `Synthesized:`, `Duration:`, optional `Tokens:` / `Cost:` when known. Harvest still prints its Candidates line once; the end summary does not repeat Candidates.
 
+**`--estimate` writes vault state.** It calls no backend and touches no page, but it records its result in the vault's `llmwiki-state.json`: the pending list (`synth.pending`), the Home Pipeline rows (`synth.pipeline`) and the estimate block (`synth.estimate`) — what the Home page's Pipeline counts show. Pending is judged by file modification times, so right after a `git clone`, `checkout` or `pull` every source looks changed and the estimate records them all as pending. In a vault whose state file is committed (such as the repository's `demo/`), discard that change instead of committing it.
+
 ### Flags
 
 | Flag | What |
