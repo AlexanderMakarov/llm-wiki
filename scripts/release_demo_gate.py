@@ -88,22 +88,32 @@ def stale_demo_docs() -> list[str]:
 
 
 def pending_demo_sessions() -> list[str]:
-    """Non-headless demo sessions no ``wiki/sources`` page claims.
+    """Non-headless demo sessions no ``wiki/sources`` page claims via ``source_file:``.
 
-    Coverage is read off the pages (``source_file:``), not synth state: state
-    records file mtimes, so after any checkout every committed source looks
-    changed. Headless sessions stay raw-only by design (#180).
+    Coverage is read off the pages, not synth state: state records file mtimes,
+    so after any checkout every committed source looks changed. Headless
+    sessions stay raw-only by design (#180). Stem heuristics from the docs
+    refresh helper are intentionally not used — session filenames and page
+    stems diverge after re-dating.
     """
-    refresh = _load_script("refresh_demo", REFRESH_SCRIPT)
     sessions = DEMO / "raw" / "sessions"
+    sources = DEMO / "wiki" / "sources"
+    claimed: set[str] = set()
+    if sources.is_dir():
+        for page in sources.rglob("*.md"):
+            head = page.read_text(encoding="utf-8", errors="replace")[:1200]
+            for line in head.splitlines():
+                if line.startswith("source_file:"):
+                    claimed.add(line.split(":", 1)[1].strip())
+                    break
     missing: list[str] = []
     for raw in sorted(sessions.rglob("*.md")):
         head = raw.read_text(encoding="utf-8", errors="replace")[:4000]
         if "\nis_headless: true" in head:
             continue
-        project = raw.relative_to(sessions).parts[0]
-        if not refresh._wiki_page_covers_raw(DEMO / "wiki" / "sources" / project, raw, DEMO):
-            missing.append(raw.relative_to(DEMO).as_posix())
+        rel = raw.relative_to(DEMO).as_posix()
+        if rel not in claimed:
+            missing.append(rel)
     return missing
 
 

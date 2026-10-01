@@ -33,6 +33,10 @@ type PlanItem = tuple[str, str, str]
 DOCS_PREFIX = "docs/"
 MAINTAINERS_PREFIX = "docs/maintainers/"
 SOURCE_REV_REL = Path("demo") / ".demo-source-rev"
+#: Written when a refresh starts mutating ``demo/``; cleared when the pin
+#: advances. ``--resume`` requires this — porcelain dirt is not proof a
+#: refresh ran, and a checkpoint-committed raw tree has a clean porcelain.
+REFRESH_PENDING_REL = Path("demo") / ".demo-refresh-pending"
 DEMO_VAULT_REL = Path("demo")
 DEMO_SITE_REL = Path("demo") / "site"
 LOCAL_ROOT = "/home/user"
@@ -176,8 +180,12 @@ def synth_argv_for_added_docs(vault: Path, plan: list[PlanItem]) -> list[str] | 
     return argv
 
 
-def _wiki_page_covers_raw(wiki_dir: Path, raw: Path, vault: Path) -> bool:
-    """True when a page under ``wiki/sources/<slug>/`` covers this raw doc."""
+def wiki_page_covers_raw(wiki_dir: Path, raw: Path, vault: Path) -> bool:
+    """True when a page under ``wiki/sources/<slug>/`` covers this raw doc.
+
+    Stem match covers docs synth naming; ``source_file:`` is authoritative when
+    present. Session coverage in the release gate uses ``source_file:`` only.
+    """
     if not wiki_dir.is_dir():
         return False
     rel = raw.relative_to(vault).as_posix()
@@ -208,7 +216,7 @@ def missing_wiki_for_doc_slugs(vault: Path, slugs: list[str]) -> list[str]:
         for raw in sorted(raw_dir.rglob("*.md")):
             if not raw.is_file():
                 continue
-            if not _wiki_page_covers_raw(wiki_dir, raw, vault):
+            if not wiki_page_covers_raw(wiki_dir, raw, vault):
                 gaps.append(raw.relative_to(vault).as_posix())
     return gaps
 
@@ -314,6 +322,8 @@ def run_refresh(
             )
             return 1
 
+    _write_refresh_pending(repo)
+
     # The plan lists remove before add for every modified/renamed doc.
     # That ordering is mandatory: re-adding an ingested document lands a second
     # snapshot under a drifted slug and leaves the original, breaking inbound links.
@@ -359,20 +369,16 @@ def _resume(repo: Path, exe: str, vault: Path, plan: list[PlanItem], *, dry_run:
     already run. Re-running the refresh would remove and re-add every doc
     again; this synthesizes only the plan-added raw docs still lacking a page,
     in one run, then does the rest of a normal refresh.
+
+    Proof the refresh started is ``demo/.demo-refresh-pending`` (written before
+    the first remove/add), not porcelain — dirt can exist without a refresh,
+    and a checkpoint-committed raw tree is clean porcelain.
     """
-    # The refresh's adds are uncommitted work under raw/docs/<slug>/. Without
-    # it, existing pages from before the refresh "cover" every plan doc and a
-    # resume would advance the pin over docs that were never refreshed.
-    docs_rel = (vault / "raw" / "docs").relative_to(repo).as_posix()
-    unrun = [
-        slug for slug in added_doc_slugs(plan)
-        if not _git(repo, ["status", "--porcelain", "--", f"{docs_rel}/{slug}"]).strip()
-    ]
-    if unrun:
+    pending = repo / REFRESH_PENDING_REL
+    if not pending.is_file():
         print(
-            "error: the refresh has not run for "
-            f"{', '.join(unrun)} (no uncommitted changes under {docs_rel}/) — "
-            "run it without --resume",
+            "error: no in-progress refresh "
+            f"({REFRESH_PENDING_REL.as_posix()} missing) — run without --resume",
             file=sys.stderr,
         )
         return 1
@@ -491,8 +497,9 @@ def main(argv: list[str] | None = None, *, cwd: Path | None = None) -> int:
         "--resume",
         action="store_true",
         help=(
-            "Finish a refresh whose synth was interrupted: synth only the "
-            "plan-added docs still lacking a page, then lint and advance the pin"
+            "Finish a refresh whose synth was interrupted (requires "
+            "demo/.demo-refresh-pending): synth only the plan-added docs "
+            "still lacking a page, then lint and advance the pin"
         ),
     )
     ap.add_argument(
@@ -659,6 +666,20 @@ def _list_product_docs(repo: Path) -> list[str]:
     return sorted(set(docs))
 
 
+def _write_refresh_pending(repo: Path) -> None:
+    """Mark that remove/add has started; ``--resume`` requires this file."""
+    dest = repo / REFRESH_PENDING_REL
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text("1\n", encoding="utf-8")
+    print(f"wrote {REFRESH_PENDING_REL.as_posix()}")
+
+
+def _clear_refresh_pending(repo: Path) -> None:
+    pending = repo / REFRESH_PENDING_REL
+    if pending.is_file():
+        pending.unlink()
+
+
 def _write_source_rev(repo: Path) -> None:
     proc = subprocess.run(
         ["git", "rev-parse", "HEAD"],
@@ -671,11 +692,11 @@ def _write_source_rev(repo: Path) -> None:
         raise RefreshError("could not resolve HEAD")
     sha = proc.stdout.strip()
     dest = repo / SOURCE_REV_REL
-    if dest.is_file() and dest.read_text(encoding="utf-8").strip() == sha:
-        return
     dest.parent.mkdir(parents=True, exist_ok=True)
-    dest.write_text(sha + "\n", encoding="utf-8")
-    print(f"recorded {sha} in {SOURCE_REV_REL.as_posix()}")
+    if not (dest.is_file() and dest.read_text(encoding="utf-8").strip() == sha):
+        dest.write_text(sha + "\n", encoding="utf-8")
+        print(f"recorded {sha} in {SOURCE_REV_REL.as_posix()}")
+    _clear_refresh_pending(repo)
 
 
 def _run_llmwiki(python: str, repo: Path, argv: list[str]) -> subprocess.CompletedProcess[str]:

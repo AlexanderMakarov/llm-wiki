@@ -54,15 +54,15 @@ def contents():
 
 def test_parses_only_unreleased_entries_with_their_notes(contents):
     entries = contents.parse_unreleased(CHANGELOG)
-    assert [(e.title, e.section, e.breaking) for e in entries] == [
+    assert [(e["title"], e["section"], e["breaking"]) for e in entries] == [
         ("Shell completion (#1)", "Added", False),
         ("Gate script (#2)", "Added", False),
         ("Add stops synthesizing (#3)", "Changed", True),
         ("Faster search (#4)", "Changed", False),
         ("Old kit (#5)", "Removed", False),
     ]
-    assert entries[0].note == "TAB completes commands (#1)."
-    assert entries[1].maintainer_only
+    assert entries[0]["note"] == "TAB completes commands (#1)."
+    assert contents._maintainer_only(entries[1])
 
 
 def test_render_leads_with_breaking_and_folds_maintainer_entries(contents):
@@ -82,4 +82,4 @@ def test_real_changelog_parses(contents):
     text = (REPO / "CHANGELOG.md").read_text(encoding="utf-8")
     entries = contents.parse_unreleased(text)
     assert entries, "Unreleased section yielded no entries"
-    assert all(e.section in contents.SECTIONS for e in entries)
+    assert all(e["section"] in contents.SECTIONS for e in entries)

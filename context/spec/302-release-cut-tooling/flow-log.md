@@ -26,9 +26,14 @@ Session issues, split by where they belong:
 - S3 with the new skill: the proposal leads with Breaking, lists every section, offers 3.0.0 and 2.4.0 with the reason for each, and waits.
 
 ## refactor (review of the first draft)
-- The first draft grew the skill from 1,710 to 2,167 words, mostly recipes for work a script can do. Moved into scripts: the interrupted-refresh recovery (`refresh_demo.py --resume`, which refuses when the refresh never ran — without that guard, pre-refresh pages "cover" every plan doc and a resume would advance the pin over stale docs); the version-proposal list (`scripts/release_contents.py`); the fixed release day (`demo/.demo-sessions-date`, read by the gate). The skill is now 1,219 words.
+- The first draft grew the skill from 1,710 to 2,167 words, mostly recipes for work a script can do. Moved into scripts: the interrupted-refresh recovery (`refresh_demo.py --resume`); the version-proposal list (`scripts/release_contents.py`); the fixed release day (`demo/.demo-sessions-date`, read by the gate). The skill is now 1,219 words.
 - `synth --estimate` writes `synth.pending` / `synth.pipeline` / `synth.estimate` into vault state; in `demo/` that state is published (Home Pipeline). Behaviour unchanged; documented in `--help` and `docs/reference/cli.md`, and the skill says to discard that write in `demo/`.
 - Spec folder renamed to the `<issue>-<slug>` convention after filing #302.
+
+## review fixes (PR #301)
+- `--resume` no longer uses porcelain dirt as proof the refresh ran (that both false-advanced the pin over unrelated dirt + covering pages, and refused a checkpoint-committed raw tree). Refresh writes `demo/.demo-refresh-pending` before the first remove/add and clears it when the pin advances; `--resume` requires the marker.
+- Gate session coverage inlines a `source_file:` scan instead of calling private `refresh._wiki_page_covers_raw`.
+- `release_contents.py` slimmed (dicts, no dataclass ceremony).
 
 ## gates
 - `ruff check llmwiki tests scripts` — clean.

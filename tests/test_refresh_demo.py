@@ -282,6 +282,8 @@ def _interrupted_refresh(tmp_path: Path) -> tuple[Path, str]:
     (pages / "2026-09-28-guide-01.md").write_text(
         "---\nsource_file: raw/docs/guide/guide-01.md\n---\n", encoding="utf-8",
     )
+    # Marker written when remove/add started; --resume requires it.
+    (repo / refresh.REFRESH_PENDING_REL).write_text("1\n", encoding="utf-8")
     return repo, pin_before
 
 
@@ -311,18 +313,28 @@ def test_resume_synthesizes_only_the_missing_docs_in_one_run(
         "raw/docs/guide/guide-02.md",
     ]
     assert (repo / "demo" / ".demo-source-rev").read_text(encoding="utf-8") != pin_before
+    assert not (repo / refresh.REFRESH_PENDING_REL).exists()
 
 
 def test_resume_refuses_a_refresh_that_never_ran(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Pages from before the refresh "cover" every plan doc, so resuming a
-    refresh that never ran would advance the pin over stale docs."""
+    """Without the pending marker, resume must not advance the pin — even when
+    dirt under raw/docs and old wiki pages would make porcelain look active."""
     repo = _seed_repo(tmp_path)
     (repo / "docs" / "guide.md").write_text("# Guide\n\nedited\n", encoding="utf-8")
     _git(repo, ["add", "docs/guide.md"])
     _git(repo, ["commit", "-m", "edit guide"])
     pin_before = (repo / "demo" / ".demo-source-rev").read_text(encoding="utf-8")
+    # Unrelated dirt + a covering page would fool a porcelain-based guard.
+    dirt = repo / "demo" / "raw" / "docs" / "guide"
+    dirt.mkdir(parents=True)
+    (dirt / "guide.md").write_text("# old\n", encoding="utf-8")
+    pages = repo / "demo" / "wiki" / "sources" / "guide"
+    pages.mkdir(parents=True)
+    (pages / "guide.md").write_text(
+        "---\nsource_file: raw/docs/guide/guide.md\n---\n", encoding="utf-8",
+    )
     run = MagicMock()
     monkeypatch.setattr(refresh, "_run_llmwiki", run)
 
@@ -330,6 +342,31 @@ def test_resume_refuses_a_refresh_that_never_ran(
 
     run.assert_not_called()
     assert (repo / "demo" / ".demo-source-rev").read_text(encoding="utf-8") == pin_before
+
+
+def test_resume_works_after_raw_checkpoint_commit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A mid-cut commit of raw/docs leaves clean porcelain; the marker still
+    proves the refresh started, so --resume must finish synth and advance."""
+    repo, pin_before = _interrupted_refresh(tmp_path)
+    _git(repo, ["add", "demo/raw/docs/guide"])
+    _git(repo, ["commit", "-m", "checkpoint raw docs"])
+    # Porcelain under the slug is clean; marker remains.
+    assert not _git(repo, ["status", "--porcelain", "--", "demo/raw/docs/guide"]).stdout.strip()
+    assert (repo / refresh.REFRESH_PENDING_REL).is_file()
+
+    def fake_run(_exe: str, _repo: Path, argv: list[str]):
+        if argv[:1] == ["synth"] and "--check" not in argv:
+            (repo / "demo" / "wiki" / "sources" / "guide" / "2026-09-28-guide-02.md").write_text(
+                "---\nsource_file: raw/docs/guide/guide-02.md\n---\n", encoding="utf-8",
+            )
+        return subprocess.CompletedProcess(argv, 0, "", "")
+
+    monkeypatch.setattr(refresh, "_run_llmwiki", fake_run)
+    assert refresh.run_refresh(repo, resume=True) == 0
+    assert (repo / "demo" / ".demo-source-rev").read_text(encoding="utf-8") != pin_before
+    assert not (repo / refresh.REFRESH_PENDING_REL).exists()
 
 
 def test_run_refresh_passes_path_scoped_synth(

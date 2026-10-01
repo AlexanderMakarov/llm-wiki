@@ -1,23 +1,16 @@
 #!/usr/bin/env python3
-"""Print what the next release ships, from CHANGELOG.md's Unreleased section.
+"""Print CHANGELOG Unreleased entries for the release version proposal.
 
-The release cut asks the maintainer to pick a version; they pick it from what
-ships. This prints the Unreleased entries as that list — breaking changes
-first, then Added / Changed / Fixed / Removed, with maintainer-only entries
-folded into one line — and what semver implies for the version.
-
-Run from the repository root:
+Breaking first, then Added / Changed / Fixed / Removed; maintainer-only notes
+folded to one line; semver hint from the last released heading.
 
     python3 scripts/release_contents.py
-
-Reads CHANGELOG.md only; writes nothing.
 """
 
 from __future__ import annotations
 
 import re
 import sys
-from dataclasses import dataclass
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -29,28 +22,14 @@ _NOTE = re.compile(r"^\s+- \*Release note:\*\s*(?P<note>.+)$")
 _VERSION = re.compile(r"^## \[(\d+)\.(\d+)\.(\d+)\]", re.MULTILINE)
 
 
-@dataclass
-class Entry:
-    """One Unreleased bullet: its headline, section and release note."""
-
-    title: str
-    section: str
-    breaking: bool = False
-    note: str = ""
-
-    @property
-    def maintainer_only(self) -> bool:
-        return self.note.lower().startswith("maintainers only")
-
-
-def parse_unreleased(text: str) -> list[Entry]:
-    """Return the entries under ``## [Unreleased]``, in file order."""
+def parse_unreleased(text: str) -> list[dict[str, object]]:
+    """Entries under ``## [Unreleased]`` as ``{title, section, breaking, note}``."""
     start = text.find("## [Unreleased]")
     if start < 0:
         return []
     end = text.find("\n## [", start + 1)
     body = text[start:end if end > 0 else len(text)]
-    entries: list[Entry] = []
+    entries: list[dict[str, object]] = []
     section = ""
     for line in body.splitlines():
         if line.startswith("### "):
@@ -58,53 +37,61 @@ def parse_unreleased(text: str) -> list[Entry]:
             continue
         m = _ENTRY.match(line)
         if m and section:
-            entries.append(Entry(m["title"], section, breaking=bool(m["breaking"])))
+            entries.append({
+                "title": m["title"],
+                "section": section,
+                "breaking": bool(m["breaking"]),
+                "note": "",
+            })
             continue
         n = _NOTE.match(line)
         if n and entries:
-            entries[-1].note = n["note"].strip()
+            entries[-1]["note"] = n["note"].strip()
     return entries
 
 
 def last_version(text: str) -> tuple[int, int, int] | None:
-    """The newest released ``X.Y.Z`` heading, if any."""
     m = _VERSION.search(text)
     return (int(m[1]), int(m[2]), int(m[3])) if m else None
 
 
-def render(entries: list[Entry], last: tuple[int, int, int] | None) -> str:
-    """The release contents as Markdown, breaking changes first."""
+def _maintainer_only(entry: dict[str, object]) -> bool:
+    return str(entry["note"]).lower().startswith("maintainers only")
+
+
+def render(entries: list[dict[str, object]], last: tuple[int, int, int] | None) -> str:
     lines: list[str] = []
 
-    def group(title: str, items: list[Entry]) -> None:
+    def group(title: str, items: list[dict[str, object]]) -> None:
         if not items:
             return
         lines.append(f"**{title}** ({len(items)})")
         for e in items:
-            lines.append(f"- {e.title}" + (f" — {e.note}" if e.note else ""))
+            note = str(e["note"])
+            lines.append(f"- {e['title']}" + (f" — {note}" if note else ""))
         lines.append("")
 
-    public = [e for e in entries if not e.maintainer_only]
-    group("Breaking", [e for e in public if e.breaking])
+    public = [e for e in entries if not _maintainer_only(e)]
+    group("Breaking", [e for e in public if e["breaking"]])
     for section in SECTIONS:
-        group(section, [e for e in public if e.section == section and not e.breaking])
-    internal = [e for e in entries if e.maintainer_only]
+        group(section, [e for e in public if e["section"] == section and not e["breaking"]])
+    internal = [e for e in entries if _maintainer_only(e)]
     if internal:
-        lines.append(f"**Maintainer-only** ({len(internal)}): " + "; ".join(e.title for e in internal))
+        titles = "; ".join(str(e["title"]) for e in internal)
+        lines.append(f"**Maintainer-only** ({len(internal)}): {titles}")
         lines.append("")
 
     if last is not None:
-        major, minor, _patch = last
-        breaking = sum(1 for e in entries if e.breaking)
-        lines.append(
-            f"**Version:** last release {major}.{minor}.{_patch}. "
-            + (
-                f"{breaking} Breaking entr{'y' if breaking == 1 else 'ies'} → semver major "
-                f"{major + 1}.0.0; a minor would be {major}.{minor + 1}.0."
-                if breaking
-                else f"No Breaking entries → minor {major}.{minor + 1}.0 (or patch if only fixes)."
+        major, minor, patch = last
+        breaking = sum(1 for e in entries if e["breaking"])
+        if breaking:
+            hint = (
+                f"{breaking} Breaking entr{'y' if breaking == 1 else 'ies'} → "
+                f"semver major {major + 1}.0.0; a minor would be {major}.{minor + 1}.0."
             )
-        )
+        else:
+            hint = f"No Breaking entries → minor {major}.{minor + 1}.0 (or patch if only fixes)."
+        lines.append(f"**Version:** last release {major}.{minor}.{patch}. {hint}")
     return "\n".join(lines).rstrip() + "\n"
 
 
