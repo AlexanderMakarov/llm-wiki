@@ -10,7 +10,7 @@ How to upgrade between `llmwiki` releases. Most releases are drop-in (`pip insta
 
 The canonical per-release detail is [CHANGELOG.md](https://github.com/AlexanderMakarov/llm-wiki/blob/main/CHANGELOG.md) — this guide focuses on "what might break".
 
-## Unreleased — discard rewrites links to the discarded name (#282)
+## 2.4.0 — discard rewrites links to the discarded name (#282)
 
 Optional one-time cleanup. `candidates discard` now turns every `[[link]]` to the discarded name into plain text (or, with `--redirect PAGE`, into `[[PAGE|text]]` plus a `## Aliases` entry on that page), and the synth topic vocabulary no longer offers discarded names. Candidates you discarded **before** this release still have links pointing into `wiki/archive/`, which `lint` reports under `link_integrity`. Clean them up offline — no LLM call, `raw/` never written, safe to re-run:
 
@@ -33,7 +33,7 @@ merged, left linked: 1
 
 Check each suggested page, then re-run with those `--redirect` lines (`--redirect "Old Name=code-foo"`), which points the links at the survivor and records the alias so the next run reports nothing. If a name really was noise rather than a merge, `--force` unlinks it like any dismissal. The rest of the run applies either way, so you can take the redirects in a second pass.
 
-## Unreleased — `add` / `wiki_add` no longer synthesize by default (#273)
+## 2.4.0 — `add` / `wiki_add` no longer synthesize by default (#273)
 
 Behaviour flip, no data migration. Scripts and agents that expected synth-on-add must opt in:
 
@@ -43,7 +43,7 @@ Behaviour flip, no data migration. Scripts and agents that expected synth-on-add
 - **`--no-build` / `no_build`:** still skip the site rebuild.
 - **Stdin / MCP text:** `llmwiki add -` and MCP `content` record `source: "piped"` (no tempfile provenance).
 
-## Unreleased — synth clean stop on Ctrl+C or backend usage limit (#181)
+## 2.4.0 — synth clean stop on Ctrl+C or backend usage limit (#181)
 
 Behaviour flip, no data migration. Scripts and schedulers that read exit codes should check these:
 
@@ -52,7 +52,7 @@ Behaviour flip, no data migration. Scripts and schedulers that read exit codes s
 - **Lint failure no longer masks earlier codes:** `all --lint-fail …` used to return `2` even when an earlier step had failed; now the code of the earliest failing step wins — lint's `2` applies only when no earlier step failed.
 - **Reinstall automation:** wrappers installed by `install-automation` before this release always logged `EXIT:0`. Run `llmwiki install-automation` again so the log's `EXIT:` line and the scheduler both see the real exit code.
 
-## Unreleased — source pages filed under a stale name (#265)
+## 2.4.0 — source pages filed under a stale name (#265)
 
 Optional offline migration, recommended when `synth` keeps skipping sources. After upgrade:
 
@@ -66,7 +66,7 @@ llmwiki migrate source-page-paths --vault /path/to/vault --dry-run
 llmwiki migrate source-page-paths --vault /path/to/vault
 ```
 
-## Unreleased — Findability by page title (#259)
+## 2.4.0 — Findability by page title (#259)
 
 No required migration. After upgrade:
 
@@ -81,7 +81,7 @@ llmwiki migrate wikilink-titles --vault /path/to/vault --dry-run
 llmwiki migrate wikilink-titles --vault /path/to/vault
 ```
 
-## Unreleased — private vaults keep real home paths (#253)
+## 2.4.0 — private vaults keep real home paths (#253)
 
 Behaviour flip, no required migration. `sync` (and `llmwiki add` `source:` paths) no longer rewrite the home-path username to `USER` by default: new key `redaction.redact_username` defaults to `false`. API key, token, and email redaction is unchanged and still always runs.
 
@@ -90,7 +90,7 @@ Behaviour flip, no required migration. `sync` (and `llmwiki add` `source:` paths
 - **Warning — repositories that commit `raw/`:** a vault synced by the composite Action (`action.yml`) or the reusable workflow (`.github/workflows/llmwiki-action.yml`) runs `llmwiki sync` inside the repository checkout, so real home paths land in committed files. Such repositories must set `"redact_username": true` under `redaction` in `config.json`. This matters most on self-hosted runners, whose home directory belongs to a real account.
 - **You share `raw/` or publish the site:** set `"redact_username": true` under `redaction` in `config.json` before the next sync, and run `llmwiki migrate raw-redaction --vault PATH` for files synced after the upgrade.
 
-## Unreleased — Session `description:` assigned names + scored fallback (#249)
+## 2.4.0 — Session `description:` assigned names + scored fallback (#249)
 
 No migration. After upgrade, optional refresh of existing raw sessions:
 
@@ -104,7 +104,7 @@ No migration. After upgrade, optional refresh of existing raw sessions:
 | `cursor_cli` | store meta `name` (not `New Agent`) |
 | others | none yet (ChatGPT uses conversation title on its own path) |
 
-## Unreleased — Claude control tags + session TOC (#229)
+## 2.4.0 — Claude control tags + session TOC (#229)
 
 No migration. After upgrade:
 

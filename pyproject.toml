@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "llm-wiki-plus"
-version = "2.3.0"
+version = "2.4.0"
 description = "LLM wiki to turn multiple agentic tool sessions into knowledge base for agents and humans"
 readme = "README.md"
 requires-python = ">=3.12"
