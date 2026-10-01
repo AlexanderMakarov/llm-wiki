@@ -78,8 +78,23 @@ def test_render_leads_with_breaking_and_folds_maintainer_entries(contents):
 
 
 def test_real_changelog_parses(contents):
-    """The script must keep up with the live CHANGELOG's entry format."""
+    """The script must keep up with the live CHANGELOG's entry format.
+
+    Empty Unreleased is normal right after a tagged cut; still require the
+    newest versioned section to carry at least one ``**Title**`` entry so a
+    format drift cannot hide behind an empty scaffold.
+    """
     text = (REPO / "CHANGELOG.md").read_text(encoding="utf-8")
     entries = contents.parse_unreleased(text)
-    assert entries, "Unreleased section yielded no entries"
     assert all(e["section"] in contents.SECTIONS for e in entries)
+    last = contents.last_version(text)
+    assert last is not None, "CHANGELOG has no versioned section"
+    major, minor, patch = last
+    heading = f"## [{major}.{minor}.{patch}]"
+    start = text.find(heading)
+    assert start >= 0, f"missing {heading}"
+    end = text.find("\n## [", start + 1)
+    body = text[start : end if end > 0 else len(text)]
+    assert any(contents._ENTRY.match(line) for line in body.splitlines()), (
+        f"{heading} has no parseable release entries"
+    )

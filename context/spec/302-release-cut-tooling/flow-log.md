@@ -38,3 +38,6 @@ Session issues, split by where they belong:
 ## gates
 - `ruff check llmwiki tests scripts` — clean.
 - `python3 -m pytest tests/` — green.
+
+## post-tag CI (v2.4.0)
+- `test_real_changelog_parses` failed on `main` after the cut because Unreleased was correctly emptied. Relaxed the assertion: empty Unreleased is allowed; the newest versioned section must still have parseable `**Title**` entries.
