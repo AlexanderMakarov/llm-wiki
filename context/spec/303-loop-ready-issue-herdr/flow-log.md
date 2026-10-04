@@ -1,0 +1,29 @@
+# Flow log — 303-loop-ready-issue-herdr (#296)
+
+## fetch-ticket
+- Issue #296 open: Spike herdr-driven serial ready-issue loop
+- URL: https://github.com/AlexanderMakarov/llm-wiki/issues/296
+- No existing PR or prior spec
+- Next: resume-detection / workspace
+
+## workspace
+- Branch: `feat/296-herdr-ready-issue-loop`
+- Worktree: `.claude/worktrees/feat-296-herdr-ready-issue-loop`
+- Throwaway vault: worktree `.worktree-vault` via worktree `config.json`
+- Next: specs (`/awos:spec`)
+
+## specs (functional)
+- Decisions: label is driver `--label` param; queue = open + label + assigned to runner; startup counts; advance = merged PR + post-merge CI green (α); no custom notifier; Python driver; `bug` → `/fix-bug` else `/implement-feature`
+- Wrote `functional-spec.md` (Approved)
+- Next: `/awos:tech`
+
+## specs (tech)
+- Approved with renames: skill `loop-ready-issue-herdr` (disable-model-invocation, no slash command); script `scripts/loop_ready_issue_herdr.py`; docs `LOOP_READY_ISSUE_HERDR.md`; `--poll-seconds` default 300; blockedBy only on assignee candidates; herdr event/wait + GitHub poll hybrid; early-close WARNING + restore; driver owns α (not skill signal)
+- Spec dir renamed `303-herdr-ready-issue-loop` → `303-loop-ready-issue-herdr`
+- Wrote `technical-considerations.md` (Approved)
+- Next: `/awos:tasks`
+
+## specs (tasks)
+- Wrote `tasks.md` — 4 implementation slices + Feature Testing & Regression (`testing-expert`); agents mostly `general-purpose` (no python-cli agent hired)
+- Informational summary only (no draft Approve gate under `/implement-feature`)
+- Next: commit-specs, then `/awos:implement`
