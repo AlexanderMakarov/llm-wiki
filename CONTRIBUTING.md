@@ -307,6 +307,8 @@ Suite autouse in `tests/conftest.py` isolates the default vault **and** neutrali
 
 **Do not put GitHub issue numbers in test filenames.** Prefer a stable feature slug (`tests/test_loop_ready_issue_herdr_acceptance.py`, `tests/test_shell_completion_acceptance.py`). Link the issue or AWOS spec in the module docstring and/or `# @spec: …` comments instead — filenames that encode ticket numbers become misleading when work is retargeted, and they collide with unrelated historical numbers. Existing `test_<digits>_…` files are legacy; do not add new ones.
 
+**No unresolved merge conflict markers in commits.** Lines that are exactly git’s `<<<<<<< …` / `=======` / `>>>>>>> …` markers must not land on the branch — `tests/test_no_merge_conflict_markers.py` and the CHANGELOG step in `.github/workflows/pr-lint.yml` fail CI if they do. The CHANGELOG “must be updated” check only verifies the file was touched; it does not validate content.
+
 Every adapter must ship with:
 
 - A fixture (synthetic or heavily redacted)

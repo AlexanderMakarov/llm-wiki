@@ -72,6 +72,18 @@ jobs:
             exit 1
           fi
 
+      - name: Reject merge conflict markers in CHANGELOG.md
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -e
+          # Exact git markers (seven < / = / >). Longer ==== rules in notices must not match.
+          if git show "${HEAD_SHA}:CHANGELOG.md" | grep -nE '^(<<<<<<< |=======$|>>>>>>> )'; then
+            echo "::error::CHANGELOG.md still contains unresolved git merge conflict markers."
+            echo "::error::Resolve them before merge; pytest also gates this via tests/test_no_merge_conflict_markers.py."
+            exit 1
+          fi
+
   runtime-deps:
     name: No new runtime dependencies
     runs-on: ubuntu-latest
