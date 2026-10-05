@@ -80,7 +80,6 @@ jobs:
           # Exact git markers (seven < / = / >). Longer ==== rules in notices must not match.
           if git show "${HEAD_SHA}:CHANGELOG.md" | grep -nE '^(<<<<<<< |=======$|>>>>>>> )'; then
             echo "::error::CHANGELOG.md still contains unresolved git merge conflict markers."
-            echo "::error::Resolve them before merge; pytest also gates this via tests/test_no_merge_conflict_markers.py."
             exit 1
           fi
 

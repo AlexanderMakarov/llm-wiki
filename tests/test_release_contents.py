@@ -10,8 +10,6 @@ from pathlib import Path
 
 import pytest
 
-from tests.test_no_merge_conflict_markers import conflict_marker_hits
-
 REPO = Path(__file__).resolve().parent.parent
 SCRIPT = REPO / "scripts" / "release_contents.py"
 _RELEASE_SUBJECT = re.compile(r"^release\(v\d+\.\d+\.\d+\):")
@@ -116,11 +114,6 @@ def test_real_changelog_parses(contents):
     Unreleased still require the newest versioned section to parse.
     """
     text = (REPO / "CHANGELOG.md").read_text(encoding="utf-8")
-    marker_lines = conflict_marker_hits(text)
-    assert not marker_lines, (
-        "CHANGELOG.md has unresolved git merge conflict markers on lines "
-        f"{marker_lines[:12]}"
-    )
     entries = contents.parse_unreleased(text)
     assert all(e["section"] in contents.SECTIONS for e in entries)
     if entries:
