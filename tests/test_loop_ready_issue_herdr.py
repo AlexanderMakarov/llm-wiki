@@ -10,6 +10,7 @@ import importlib.util
 import json
 import subprocess
 import sys
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -252,10 +253,31 @@ def test_run_dry_run_pick_next_via_fake_run_gh(loop_mod):
 
     lines = loop_mod.run_dry_run(LABEL, "owner/repo", run_gh=fake_run_gh)
     text = "\n".join(lines)
-    assert "login: viewer" in text
-    assert "open_with_label: 3" in text
-    assert "assigned_to_me: 3" in text
+    assert "repo: owner/repo" in text
+    assert "3 with 'agent-ready' label, 3 is assigned on 'viewer'" in text
     assert "next: #8 Next eligible" in text
+
+
+def test_format_queue_counts_and_worker_opened_lines(loop_mod):
+    assert (
+        loop_mod.format_queue_counts_line(22, 1, "self-heal", "AlexanderMakarov")
+        == "22 with 'self-heal' label, 1 is assigned on 'AlexanderMakarov'"
+    )
+    assert (
+        loop_mod.format_loop_params_line(
+            poll_seconds=300,
+            agent_kind="cursor",
+            once=False,
+        )
+        == "params: poll-seconds=300; agent-kind=cursor; mode=loop"
+    )
+    line = loop_mod.format_worker_opened_line(
+        tab_label="issue-305",
+        issue_number=305,
+        title="Show docs",
+        opened_at=datetime(2026, 10, 5, 13, 42, 5),
+    )
+    assert line == "issue-305 herdr tab opened for #305 gh issue Show docs at 13:42:05"
 
 
 def test_load_skill_text_uses_fallback_when_missing(loop_mod, tmp_path):
@@ -367,6 +389,16 @@ def test_fetch_issue_merge_and_ci_status_graphql_closing_pr(loop_mod):
 
     def fake_run_gh(argv: list[str]) -> subprocess.CompletedProcess[str]:
         if argv[1:3] == ["api", "graphql"]:
+            assert "-F" in argv and "number=42" in argv
+            query_args = [
+                argv[i + 1]
+                for i, tok in enumerate(argv)
+                if tok == "-f" and i + 1 < len(argv) and argv[i + 1].startswith("query=")
+            ]
+            assert query_args, argv
+            query = query_args[0]
+            assert "issue(number: $number)" in query
+            assert "issue(number: 42)" not in query
             return subprocess.CompletedProcess(argv, 0, json.dumps(graphql_payload), "")
         if argv[1] == "api" and len(argv) > 2 and "check-runs" in argv[2]:
             assert "--slurp" in argv

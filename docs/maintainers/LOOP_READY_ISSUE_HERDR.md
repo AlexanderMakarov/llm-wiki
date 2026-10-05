@@ -37,7 +37,7 @@ An issue enters the automation queue only when it is **open**, carries the **lab
 
 ## Work for today counts
 
-On startup (and in `--dry-run`), the driver prints how many open issues have your label (`open_with_label`) and how many of those are assigned to you (`assigned_to_me`). Only the assigned subset is eligible for automatic starts.
+On startup (and in `--dry-run`), the driver prints a one-line queue summary, for example `22 with 'self-heal' label, 1 is assigned on 'AlexanderMakarov'`. Only the assigned subset is eligible for automatic starts. A live run also prints `params:` (`poll-seconds`, `agent-kind`, `mode=loop|once`) and, after each spawn, `{tab} herdr tab opened for #{n} gh issue … at HH:MM:SS`. If a GitHub merge/CI poll fails, the driver retries and leaves the worker agent running — that poll only gates starting the *next* ticket.
 
 ## Eligibility and sort order
 

@@ -40,3 +40,8 @@
 - Keep/drop: keep all except N7; N4 → drop `required` mark entirely (all observed check runs must be green; empty = not ready)
 - Applied B1–B3, N1–N6, N8; 44 feature/acceptance tests green
 - Next: commit-push (flow-log finalized in that commit)
+
+## follow-up (first launch)
+- Fixed merge-status GraphQL unused `$number` (use `$number` + `-F`); clearer queue/params/tab-opened lines; poll-failure message explains worker keeps running
+- Approval-gate options after spawn are `/implement-feature` → `/awos:spec`, not the thin loop skill
+- Merge into main left conflict markers in CHANGELOG (resolve raced commit); `pr-lint` job `No merge conflict markers` greps all tracked text on the PR head for those markers

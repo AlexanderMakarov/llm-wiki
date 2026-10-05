@@ -24,6 +24,7 @@ import sys
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -360,12 +361,13 @@ def fetch_blocked_by_map(
     return blocked_map
 
 
-def _merge_status_graphql_query(issue_number: int) -> str:
+def _merge_status_graphql_query() -> str:
+    """GraphQL for closing PRs; uses ``$number`` (must match ``-F number=``)."""
     return (
         "query($owner: String!, $name: String!, $number: Int!) {\n"
         "  repository(owner: $owner, name: $name) {\n"
         "    defaultBranchRef { name }\n"
-        f"    issue(number: {issue_number}) {{\n"
+        "    issue(number: $number) {\n"
         "      closedByPullRequestsReferences(first: 10, includeClosedPrs: true) {\n"
         "        nodes {\n"
         "          number\n"
@@ -411,7 +413,7 @@ def fetch_issue_merge_and_ci_status(
     }
     check_runs: list[CheckRun] = []
 
-    merge_query = _merge_status_graphql_query(issue_number)
+    merge_query = _merge_status_graphql_query()
     merge_proc = run_gh(
         [
             "gh",
@@ -423,7 +425,7 @@ def fetch_issue_merge_and_ci_status(
             f"owner={owner}",
             "-f",
             f"name={name}",
-            "-f",
+            "-F",
             f"number={issue_number}",
         ],
     )
@@ -494,6 +496,48 @@ def fetch_issue_merge_and_ci_status(
     }
 
 
+def format_queue_counts_line(
+    open_with_label: int,
+    assigned_to_me: int,
+    label: str,
+    login: str,
+) -> str:
+    """One-line work-for-today counts (startup and ``--dry-run``)."""
+    return (
+        f"{open_with_label} with {label!r} label, "
+        f"{assigned_to_me} is assigned on {login!r}"
+    )
+
+
+def format_loop_params_line(
+    *,
+    poll_seconds: int,
+    agent_kind: str,
+    once: bool,
+) -> str:
+    """Startup line describing how this driver invocation will behave."""
+    mode = "once" if once else "loop"
+    return (
+        f"params: poll-seconds={poll_seconds}; agent-kind={agent_kind}; mode={mode}"
+    )
+
+
+def format_worker_opened_line(
+    *,
+    tab_label: str,
+    issue_number: int,
+    title: str,
+    opened_at: datetime | None = None,
+) -> str:
+    """Confirm herdr tab open for a GitHub issue (local wall clock)."""
+    when = (opened_at or datetime.now()).strftime("%H:%M:%S")
+    title_bit = f" {title}" if title else ""
+    return (
+        f"{tab_label} herdr tab opened for #{issue_number} gh issue"
+        f"{title_bit} at {when}"
+    )
+
+
 def format_dry_run_lines(
     *,
     login: str,
@@ -504,11 +548,8 @@ def format_dry_run_lines(
     next_issue: Issue | None,
 ) -> list[str]:
     lines = [
-        f"login: {login}",
         f"repo: {repo}",
-        f"label: {label}",
-        f"open_with_label: {open_with_label}",
-        f"assigned_to_me: {assigned_to_me}",
+        format_queue_counts_line(open_with_label, assigned_to_me, label, login),
     ]
     if next_issue is None:
         lines.append("next: none")
@@ -741,7 +782,15 @@ def wait_until_ticket_advanced(
             status = fetch_status(repo, worker.issue_number, run_gh)
         except RuntimeError as exc:
             consecutive_fetch_failures += 1
-            print(str(exc), file=sys.stderr)
+            print(
+                f"GitHub advance poll for #{worker.issue_number} failed "
+                f"({consecutive_fetch_failures}/{_MAX_CONSECUTIVE_FETCH_FAILURES}): "
+                f"{exc}\n"
+                f"  Worker for #{worker.issue_number} keeps running — the driver only "
+                f"uses this poll to decide when to start the *next* ticket; retrying "
+                f"in {poll_seconds}s.",
+                file=sys.stderr,
+            )
             if consecutive_fetch_failures >= _MAX_CONSECUTIVE_FETCH_FAILURES:
                 raise
             sleep_fn(poll_seconds)
@@ -804,11 +853,15 @@ def run_main_loop(
 
     issues, candidates, blocked_by_map = queue_snapshot()
     open_with_label, assigned_to_me = work_for_today_counts(issues, login, label)
-    print(f"login: {login}")
     print(f"repo: {resolved_repo}")
-    print(f"label: {label}")
-    print(f"open_with_label: {open_with_label}")
-    print(f"assigned_to_me: {assigned_to_me}")
+    print(format_queue_counts_line(open_with_label, assigned_to_me, label, login))
+    print(
+        format_loop_params_line(
+            poll_seconds=poll_seconds,
+            agent_kind=agent_kind,
+            once=once,
+        ),
+    )
 
     try:
         while True:
@@ -830,12 +883,18 @@ def run_main_loop(
 
             number = _issue_number(next_issue)
             title = str(next_issue.get("title") or "")
-            print(f"Spawning worker for #{number} {title}".rstrip())
             worker = spawn_worker_for_issue(
                 next_issue,
                 agent_kind=agent_kind,
                 repo_root=repo_root,
                 run_herdr=run_herdr,
+            )
+            print(
+                format_worker_opened_line(
+                    tab_label=f"issue-{number}",
+                    issue_number=number,
+                    title=title,
+                ),
             )
             wait_until_ticket_advanced(
                 resolved_repo,

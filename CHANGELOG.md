@@ -23,9 +23,12 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Fixed
 
+- **Loop ready-issue herdr driver GraphQL merge poll + startup UX** — merge-status GraphQL now binds `$number` (with `-F number=`) so advance polling no longer fails with “Variable $number … not used”; startup prints a one-line queue summary, `params:` (poll interval / agent kind / mode), and a timestamped “herdr tab opened” line after each spawn; GitHub poll errors say the worker keeps running while the driver retries.
+  - *Release note:* Maintainers only: ready-issue herdr loop merge poll and startup logging fixed after first launch.
+- **CI rejects unresolved git merge conflict markers** — `pr-lint` job `No merge conflict markers` runs `git grep` over all tracked text files on the PR head for git’s `<<<<<<<` / `=======` / `>>>>>>>` lines (the changelog “updated” check only verified the file was touched, and `parse_unreleased` skipped marker lines).
+  - *Release note:* Maintainers only: leftover merge conflict markers in any tracked text file fail PR lint.
 - **Ctrl+K document search samples across parts (#305)** — multi-part search-index `body` text no longer takes only the first ~1200 characters of the assembled document (which hid later-part needles); the budget is split per part. Multi-part unified readers also emit one document-level `<h1>` after part-title chrome is stripped.
   - *Release note:* Searching a long multi-part document can still match text from later parts; the reader page keeps a single document title heading (#305).
-
 - **`test_real_changelog_parses` allows empty Unreleased only on `release(v…)` commits** — a tagged cut empties the Unreleased scaffold by design; CI on that commit still checks that the newest versioned section parses. Every other commit must keep Unreleased entries so CHANGELOG format drift is caught before the next cut.
   - *Release note:* Maintainers only: empty Unreleased no longer fails CI on the release commit itself; other commits still require Unreleased entries.
 
