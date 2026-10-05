@@ -2701,7 +2701,7 @@ def build_search_index(
     out_dir: Path,
     *,
     search_mode: str = "auto",
-    doc_files: list[raw_docs_site.RawDocFile] | None = None,
+    doc_entries: list[raw_docs_site.DocEntry] | None = None,
     topics: list[dict[str, Any]] | None = None,
     wiki_dir: Path | None = None,
 ) -> Path:
@@ -2817,18 +2817,21 @@ def build_search_index(
          "type": "page", "project": "", "date": "", "model": "", "body": "sortable sessions table"}
     )
 
-    # Raw documents (wiki-add layer) — one palette entry per file so a
-    # chunked doc is findable by any of its section titles.
-    for doc in (doc_files or []):
+    # Raw documents (wiki-add layer) — one palette entry per logical
+    # document (#305). Multi-part chunks share a cleaned title + canonical
+    # URL; body samples across parts (capped) so later sections stay findable.
+    for entry in (doc_entries or []):
         meta_entries.append({
-            "id": f"document:{doc.rel.as_posix()}",
-            "url": doc.out_rel,
-            "title": doc.title,
+            "id": entry.id,
+            "url": entry.url,
+            "title": entry.title,
             "type": "document",
             "project": "",
-            "date": doc.date,
+            "date": entry.date,
             "model": "",
-            "body": md_to_plain_text(doc.body)[:300],
+            "body": raw_docs_site.document_search_body_sample(
+                entry, md_to_plain_text=md_to_plain_text,
+            ),
         })
 
     # #277: index every docs/ page + every slash command so the palette
@@ -3522,7 +3525,7 @@ def build_site(
     # token stats, and projects grid.
     docs_root = raw_docs_site.build_tree(doc_files)
     doc_entries = raw_docs_site.group_documents(doc_files)
-    tree_path = raw_docs_site.write_documents_tree(docs_root, out_dir)
+    tree_path = raw_docs_site.write_documents_tree(doc_entries, out_dir)
     tree_kb = max(1, tree_path.stat().st_size // 1024)
     print(f"  wrote documents-tree.json ({tree_kb} KB) + .js sidecar")
     render_index(
@@ -3541,7 +3544,7 @@ def build_site(
     )
     render_candidates_page(wiki_dir, out_dir)
     doc_pages = raw_docs_site.render_document_pages(
-        doc_files,
+        doc_entries,
         docs_root,
         out_dir,
         md_to_html=md_to_html,
@@ -3574,7 +3577,7 @@ def build_site(
         groups,
         out_dir,
         search_mode=search_mode,
-        doc_files=doc_files,
+        doc_entries=doc_entries,
         # #248 FR2: index exactly the topic pages this build writes — a
         # curated page on a sparse vault gets its palette entry, and a vault
         # that writes no topic pages still indexes no topic URL.
@@ -3597,7 +3600,7 @@ def build_site(
             ("analytics.html", None, "0.8"),
             ("candidates.html", None, "0.8"),
         ] + [
-            (doc.out_rel, doc.date or None, "0.7") for doc in doc_files
+            (entry.url, entry.date or None, "0.7") for entry in doc_entries
         ]
         ai_paths = export_all(out_dir, groups, sources, extra_pages=extra_pages)
         print(f"  wrote {len(ai_paths)} AI-consumable exports: {', '.join(sorted(ai_paths.keys()))}")

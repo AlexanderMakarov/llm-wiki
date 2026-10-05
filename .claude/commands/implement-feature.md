@@ -158,7 +158,7 @@ The review must stay independent of this conversation's authorship bias:
 - Do not add run-time focus areas drawn from what you implemented or suspect — the author framing the review is the bias.
 - Dispatch exactly one reviewer subagent with the **fixed** prompt below (verbatim). That subagent writes findings to a file and returns only the verdict, the finding count by severity, and the file path.
 - After the subagent returns: **Read the review file and print its full body in chat** (lead with `Review file: <path>` on its own line). Record the path in this stage's flow-log entry.
-- Pause for keep/drop. The agent that applies accepted findings reads the review file and the diff fresh — relay the user's keep/drop decisions, not your own summary of the findings.
+- **Hard keep/drop gate (delivery-flow §4 / §10):** After printing the full body, **stop the turn**. Ask for per-finding keep/drop (or explicit "keep all" / "drop all"). **Do not edit product code or docs to apply review findings in the same turn.** "Proceed", "continue", smoke confirm, "fix it", PR/merge pressure, and resume-from-summary are **not** keep/drop consent. When the user answers, apply only kept findings — read the review file and the diff fresh; relay their decisions, not your own summary.
 
 **Single local review (pre-push, branch diff `origin/main...HEAD`):**
 
@@ -185,14 +185,14 @@ Replace `{SPEC_NAME}` with the actual spec directory name before dispatch.
 
 The review file is **session-only (#159):** write it for keep/drop and chat presentation; it must never be staged or committed (see Step 9). `context/.gitignore` ignores `review.md` / `review-*.md`.
 
-Present the printed review for keep/drop. Apply accepted findings before anything is pushed. Then run the static gate:
+Present the printed review, then **end the turn** waiting for keep/drop. Only after the user answers: apply accepted findings, then run the static gate:
 
 ```bash
 ruff check llmwiki tests scripts
 python3 -m pytest tests/ -q
 ```
 
-Do not push until keep/drop is done and the static gate is green. Serious findings that alter delivered behavior → §9 exception PR comment after the PR exists.
+Do not push until keep/drop is answered, accepted findings are applied, and the static gate is green. Serious findings that alter delivered behavior → §9 exception PR comment after the PR exists.
 
 <!-- /awos:flow:stage -->
 

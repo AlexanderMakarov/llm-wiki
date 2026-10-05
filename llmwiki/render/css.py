@@ -533,6 +533,16 @@ kbd { display: inline-block; padding: 2px 6px; font-family: var(--mono); font-si
 .doctree-layout { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 32px; align-items: start; }
 .doctree-sidebar { position: sticky; top: 88px; max-height: calc(100vh - 120px); overflow-y: auto; padding: 14px 16px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); font-size: 0.88rem; }
 .doctree-title { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); font-weight: 600; margin-bottom: 8px; }
+.doctree-filter {
+  display: block; width: 100%; box-sizing: border-box;
+  margin: 0 0 10px; padding: 5px 8px;
+  font: inherit; font-size: 0.82rem;
+  color: var(--text); background: var(--bg);
+  border: 1px solid var(--border); border-radius: 4px;
+}
+.doctree-filter:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }
+.doctree-filter-hit { background: var(--accent-bg); color: var(--accent); padding: 0 1px; border-radius: 2px; font-weight: 600; }
+.doctree-filter-empty { margin: 8px 0 0; }
 .doctree-sidebar ul { list-style: none; margin: 0; padding: 0; }
 .doctree-sidebar ul ul { padding-left: 14px; }
 .doctree-sidebar li { margin: 1px 0; }

@@ -32,6 +32,7 @@ You are changing **this repository's own code or docs**, not a user's vault. [`C
 5. **No real session data and no personal machine details.** Fixtures are synthetic or heavily redacted. Absolute home paths, OS usernames, hostnames, and vault roots stay out of code, tests, commits, PR bodies, and the CHANGELOG — use placeholders like `/home/USER/…`, `<vault>`, `<user>`.
 6. **Verify before fixing an old issue.** Reproduce it on the current default branch first; if it no longer reproduces, close it with the resolving commit instead of shipping a speculative fix.
 7. **Never fail silently in the browser.** Runtime failures in the generated site must surface on the page via `window.__llmwikiReportError`, not just in the console. See CONTRIBUTING's *Static-site error handling* section.
+8. **No GitHub issue numbers in new test filenames.** Prefer a stable feature/module slug (`tests/test_unified_document_pages_acceptance.py`, not `tests/test_305_….py`). Link the issue or AWOS spec in the module docstring and/or `# @spec:` comments. Existing `test_<digits>_…` files are legacy; do not add new ones (full rule: CONTRIBUTING *Testing*).
 
 ## Markdown formatting
 
