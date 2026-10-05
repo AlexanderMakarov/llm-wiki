@@ -49,7 +49,7 @@ At most one ticket worker runs at a time. Each ticket gets a **new** herdr worke
 
 ## Thin skill (driver-inlined)
 
-Routing for a single ticket lives in `.claude/skills/loop-ready-issue-herdr/SKILL.md` with `disable-model-invocation: true` — agents must not self-invoke it. The driver reads that file and inlines it into `herdr agent prompt` for each worker (`bug` → `/fix-bug`; otherwise → `/implement-feature` for the issue URL only). There is no slash command wrapper.
+Routing for a single ticket lives in `.claude/skills/loop-ready-issue-herdr/SKILL.md` with `disable-model-invocation: true` — agents must not self-invoke it. That path is the **repo’s canonical contributor-skill tree** (same place as `/release`), not a Claude-only product surface: Cursor also loads top-level `.claude/skills/` from this checkout, and Codex can mirror from there when you install skills. For this loop the file is mainly a **source blob the Python driver reads and pastes** into `herdr agent prompt`, so the worker (default Cursor, or `--agent-kind claude` / `codex`) receives the one-ticket contract in the prompt and does not need to discover the skill by name. The body routes `bug` → `/fix-bug`, otherwise → `/implement-feature`, for that issue URL only. There is no slash command wrapper.
 
 ## Human gates and notifications
 
