@@ -241,6 +241,19 @@ def test_document_pages_use_mount_not_inline_tree(docs_dir: Path, tmp_path: Path
     assert "documents-tree.js" in mount
 
 
+def test_strip_part_chrome_removes_degenerate_empty_bold_breadcrumb():
+    """Older chunks sometimes have ``> Part i of N of ****.`` (empty title)."""
+    body = "> Part 3 of 4 of ****.\n\n## Experience\n\nDid things.\n"
+    out = strip_part_chrome(
+        body,
+        doc_title="Aleksandr Makarov CV (extended)",
+        part_title="Aleksandr Makarov CV (extended) (part 3/4)",
+    )
+    assert "Part 3 of 4" not in out
+    assert "****" not in out
+    assert "## Experience" in out
+
+
 def test_strip_part_chrome_removes_breadcrumb_and_title_h1():
     body = (
         "> Part 1 of 3 of **VPS Runbook** — Intro.\n\n"

@@ -47,8 +47,10 @@ _PART_SUFFIX_RE = re.compile(r"\s*\(part \d+/\d+[^)]*\)\s*$")
 _CHUNK_STEM_SUFFIX_RE = re.compile(r"-\d{2}$")
 
 # add_doc injects ``> Part i of N of **Title** — sub.`` above each chunk body.
+# Some older/broken writes left ``> Part i of N of ****.`` (empty bold title) —
+# match any ``> Part i of N of …`` line, not only well-formed ``**Title**``.
 _PART_BREADCRUMB_RE = re.compile(
-    r"^>\s*Part\s+\d+\s+of\s+\d+\s+of\s+\*\*.+?\*\*.*$",
+    r"^>\s*Part\s+\d+\s+of\s+\d+\s+of\b.*$",
     re.MULTILINE,
 )
 
