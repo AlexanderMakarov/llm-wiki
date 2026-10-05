@@ -7,13 +7,13 @@
 
 ---
 
-- [ ] **Slice 1: Logical document grouping (base-slug) + Recent/index consumers**
+- [x] **Slice 1: Logical document grouping (base-slug) + Recent/index consumers**
 
   > Fix `--project` collapse; one shared grouping API. App/build still runnable; Recent uses correct logical docs.
-  - [ ] Replace/extend `group_documents` in `llmwiki/raw_docs_site.py` with base-slug grouping within each directory; expose stable `id`, cleaned `title`, ordered `parts`, `folder_parts`, canonical `url`. Keep root-level singles. **[Agent: generalPurpose]**
-  - [ ] Wire Recent / home / raw intro consumers to the new grouping without changing storage. **[Agent: generalPurpose]**
-  - [ ] Unit tests: single-file; multi-chunk default layout; two distinct docs under one `--project` folder; cleaned titles. **[Agent: generalPurpose]**
-  - [ ] Verify: `python3 -m pytest tests/test_raw_docs_site.py -q` (and new grouping tests) pass; delete any ephemeral artifacts. **[Agent: generalPurpose]**
+  - [x] Replace/extend `group_documents` in `llmwiki/raw_docs_site.py` with base-slug grouping within each directory; expose stable `id`, cleaned `title`, ordered `parts`, `folder_parts`, canonical `url`. Keep root-level singles. **[Agent: generalPurpose]**
+  - [x] Wire Recent / home / raw intro consumers to the new grouping without changing storage. **[Agent: generalPurpose]**
+  - [x] Unit tests: single-file; multi-chunk default layout; two distinct docs under one `--project` folder; cleaned titles. **[Agent: generalPurpose]**
+  - [x] Verify: `python3 -m pytest tests/test_raw_docs_site.py -q` (and new grouping tests) pass; delete any ephemeral artifacts. **[Agent: generalPurpose]**
 
 - [ ] **Slice 2: Unified reading page + part URL stubs**
 

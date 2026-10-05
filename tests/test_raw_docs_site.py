@@ -23,6 +23,7 @@ from llmwiki.build import (
 )
 from llmwiki.raw_docs_site import (
     RawDocFile,
+    base_slug_from_stem,
     build_tree,
     clean_chunk_title,
     count_docs_by_project,
@@ -91,13 +92,79 @@ def test_clean_chunk_title_strips_part_suffix():
     assert clean_chunk_title("Plain Title") == "Plain Title"
 
 
-def test_group_documents_collapses_chunks_newest_first(docs_dir: Path):
+def test_group_documents_single_file_root(docs_dir: Path):
+    """Root-level lone file is one logical document with canonical flat URL."""
+    entries = group_documents(scan_raw_docs(docs_dir))
+    standalone = next(e for e in entries if e.title == "Standalone Doc")
+    assert standalone.parts == 1
+    assert standalone.id == "document:standalone"
+    assert standalone.url == "documents/standalone.html"
+    assert standalone.folder_parts == ()
+    assert [f.rel.as_posix() for f in standalone.part_files] == ["standalone.md"]
+
+
+def test_group_documents_multi_chunk_default_layout(docs_dir: Path):
+    """Default add_doc layout: raw/docs/<slug>/<slug>-NN.md → one logical doc."""
     entries = group_documents(scan_raw_docs(docs_dir))
     assert [e.title for e in entries] == ["Standalone Doc", "VPS Runbook"]
     runbook = entries[1]
     assert runbook.parts == 3
     assert runbook.date == "2026-06-24"
-    assert runbook.url == "documents/runbook/runbook-01.html"
+    assert runbook.id == "document:runbook/runbook"
+    assert runbook.url == "documents/runbook/runbook.html"
+    assert runbook.folder_parts == ("runbook",)
+    assert [f.rel.stem for f in runbook.part_files] == [
+        "runbook-01", "runbook-02", "runbook-03",
+    ]
+
+
+def test_group_documents_two_docs_under_project_folder(tmp_path: Path):
+    """--project folder with two distinct docs must not collapse into one (#305)."""
+    d = tmp_path / "raw" / "docs"
+    for i in (1, 2):
+        _write_doc(
+            d, f"acme/alpha-guide-0{i}.md",
+            f"Alpha Guide (part {i}/2: Section {i})", "2026-08-01",
+        )
+    _write_doc(d, "acme/beta-notes.md", "Beta Notes", "2026-08-02")
+    entries = group_documents(scan_raw_docs(d))
+    by_id = {e.id: e for e in entries}
+    assert set(by_id) == {
+        "document:acme/alpha-guide",
+        "document:acme/beta-notes",
+    }
+    alpha = by_id["document:acme/alpha-guide"]
+    assert alpha.title == "Alpha Guide"
+    assert alpha.parts == 2
+    assert alpha.url == "documents/acme/alpha-guide.html"
+    assert alpha.folder_parts == ("acme",)
+    beta = by_id["document:acme/beta-notes"]
+    assert beta.title == "Beta Notes"
+    assert beta.parts == 1
+    assert beta.url == "documents/acme/beta-notes.html"
+
+
+def test_group_documents_cleaned_titles(tmp_path: Path):
+    d = tmp_path / "raw" / "docs"
+    _write_doc(
+        d, "guide/guide-01.md",
+        "Deploy Guide (part 1/2: Intro)", "2026-05-01",
+    )
+    _write_doc(
+        d, "guide/guide-02.md",
+        "Deploy Guide (part 2/2: Finish)", "2026-05-01",
+    )
+    entries = group_documents(scan_raw_docs(d))
+    assert len(entries) == 1
+    assert entries[0].title == "Deploy Guide"
+    assert "(" not in entries[0].title
+
+
+def test_base_slug_from_stem():
+    assert base_slug_from_stem("runbook-01") == "runbook"
+    assert base_slug_from_stem("runbook") == "runbook"
+    # Collision suffix from add_doc._dedupe is unpadded — not a chunk index.
+    assert base_slug_from_stem("runbook-2") == "runbook-2"
 
 
 def test_sidebar_marks_active_and_opens_folder(docs_dir: Path):

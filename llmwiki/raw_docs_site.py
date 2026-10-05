@@ -41,6 +41,11 @@ _SAFE_SEG_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 # title decoration, stripped when we present chunks as one document.
 _PART_SUFFIX_RE = re.compile(r"\s*\(part \d+/\d+[^)]*\)\s*$")
 
+# Trailing ``-NN`` on a stem (add_doc chunk naming ``<slug>-01`` …).
+# Collision suffixes from ``_dedupe`` are ``-2``, ``-3`` (unpadded) and
+# must NOT be stripped — same rule as ``add_doc._doc_ref``.
+_CHUNK_STEM_SUFFIX_RE = re.compile(r"-\d{2}$")
+
 
 @dataclass
 class RawDocFile:
@@ -85,19 +90,54 @@ class DocFolder:
 
 @dataclass
 class DocEntry:
-    """One logical document for the Recent list — a chunked folder
-    collapses into a single entry."""
+    """One logical document — files sharing a base slug within a directory.
+
+    ``parts`` stays an ``int`` for Recent/Home meta ("3 parts"); ordered
+    ``RawDocFile`` members live on ``part_files`` for later slices
+    (unified HTML, search-index, tree leaves).
+    """
 
     title: str
     date: str
     source_label: str
-    url: str                  # site-relative URL of the (first) page
-    parts: int                # 1 for single-file docs
+    url: str                  # canonical site-relative unified HTML path
+    parts: int                # len(part_files); 1 for single-file docs
+    id: str = ""              # e.g. document:proj/base-slug
+    folder_parts: tuple[str, ...] = ()
+    part_files: list[RawDocFile] = field(default_factory=list)
 
 
 def clean_chunk_title(title: str) -> str:
     """Strip kbbuilder's ``(part i/N: …)`` suffix from a chunk title."""
     return _PART_SUFFIX_RE.sub("", title).strip()
+
+
+def base_slug_from_stem(stem: str) -> str:
+    """Stem with trailing ``-\\d{2}`` chunk suffix removed (add_doc pattern)."""
+    return _CHUNK_STEM_SUFFIX_RE.sub("", stem)
+
+
+def _part_sort_key(f: RawDocFile) -> tuple[str, int]:
+    """Sort chunk parts by base stem then numeric ``-NN`` suffix."""
+    stem = f.rel.stem
+    m = _CHUNK_STEM_SUFFIX_RE.search(stem)
+    if m:
+        return (stem[: m.start()], int(m.group()[1:]))
+    return (stem, -1)
+
+
+def canonical_document_url(folder_parts: tuple[str, ...], base_slug: str) -> str:
+    """Site-relative path for the unified document page (#305)."""
+    if folder_parts:
+        return f"documents/{'/'.join(folder_parts)}/{base_slug}.html"
+    return f"documents/{base_slug}.html"
+
+
+def document_id(folder_parts: tuple[str, ...], base_slug: str) -> str:
+    """Stable logical-document id shared by Recent, search-index, tree."""
+    if folder_parts:
+        return f"document:{'/'.join(folder_parts)}/{base_slug}"
+    return f"document:{base_slug}"
 
 
 def scan_raw_docs(docs_dir: Path) -> list[RawDocFile]:
@@ -152,39 +192,41 @@ def build_tree(files: list[RawDocFile]) -> DocFolder:
 
 
 def group_documents(files: list[RawDocFile]) -> list[DocEntry]:
-    """Collapse chunk folders into logical documents, newest first.
+    """Group files into logical documents by base slug within each directory.
 
-    Rule: files sharing a top-level folder under raw/docs are chunks of
-    one document (kbbuilder writes ``raw/docs/<slug>/<slug>-NN.md``);
-    root-level files are standalone documents.
+    Within each directory under ``raw/docs/``:
+
+    1. Partition by **base slug** — stem with trailing ``-\\d{2}`` removed
+       (matches ``add_doc`` chunk naming ``<slug>-NN``).
+    2. Each base-slug group is one logical document; parts sorted by
+       stem / numeric suffix.
+    3. Root-level files group the same way (a lone ``foo.md`` is one doc).
+
+    This replaces the old "whole top-level folder = one document" rule so
+    ``--project`` folders with several docs stay separate (#305).
     """
-    by_group: dict[str, list[RawDocFile]] = {}
-    singles: list[RawDocFile] = []
+    by_dir: dict[tuple[str, ...], list[RawDocFile]] = {}
     for f in files:
-        if len(f.rel.parts) > 1:
-            by_group.setdefault(f.rel.parts[0], []).append(f)
-        else:
-            singles.append(f)
+        by_dir.setdefault(f.rel.parts[:-1], []).append(f)
 
     entries: list[DocEntry] = []
-    for f in singles:
-        entries.append(DocEntry(
-            title=clean_chunk_title(f.title),
-            date=f.date,
-            source_label=f.source_label,
-            url=f.out_rel,
-            parts=1,
-        ))
-    for _group, chunks in by_group.items():
-        chunks = sorted(chunks, key=lambda c: c.rel.as_posix())
-        first = chunks[0]
-        entries.append(DocEntry(
-            title=clean_chunk_title(first.title),
-            date=max((c.date for c in chunks if c.date), default=""),
-            source_label=first.source_label,
-            url=first.out_rel,
-            parts=len(chunks),
-        ))
+    for folder_parts, dir_files in by_dir.items():
+        by_base: dict[str, list[RawDocFile]] = {}
+        for f in dir_files:
+            by_base.setdefault(base_slug_from_stem(f.rel.stem), []).append(f)
+        for base, chunks in by_base.items():
+            chunks = sorted(chunks, key=_part_sort_key)
+            first = chunks[0]
+            entries.append(DocEntry(
+                title=clean_chunk_title(first.title),
+                date=max((c.date for c in chunks if c.date), default=""),
+                source_label=first.source_label,
+                url=canonical_document_url(folder_parts, base),
+                parts=len(chunks),
+                id=document_id(folder_parts, base),
+                folder_parts=folder_parts,
+                part_files=chunks,
+            ))
     entries.sort(key=lambda e: (e.date, e.title), reverse=True)
     return entries
 
