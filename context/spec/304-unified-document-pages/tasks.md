@@ -44,8 +44,8 @@
   - [x] Update `CHANGELOG.md` `[Unreleased]`, `docs/reference/ui.md`, `docs/reference/reader-api.md`, and `docs/architecture.md` (and cli/mcp one-liner only if `--project` caveat needs it). **[Agent: generalPurpose]**
   - [x] Verify: docs mention unified reader, shared catalog, filter UX; no personal vault paths. **[Agent: generalPurpose]**
 
-- [ ] **Slice 6: Feature Testing & Regression**
+- [x] **Slice 6: Feature Testing & Regression**
 
   > Verifies the whole feature end-to-end against functional-spec.md, run after all implementation slices are complete.
-  - [ ] Read functional-spec.md acceptance criteria in full. Generate acceptance-level tests that verify the entire feature as a whole — not individual slices. Cover applicable layers (unit for pure logic, integration for service interactions, e2e for user flows) based on the project's testing stack. Write tests with RED validation (must fail before implementation is confirmed done). Annotate each test with `@spec: 304-unified-document-pages` and `@regression` if suitable for long-term regression. **[Agent: testing-expert]**
-  - [ ] Run all generated tests. All must pass. Fix any failures before proceeding. **[Agent: testing-expert]**
+  - [x] Read functional-spec.md acceptance criteria in full. Generate acceptance-level tests that verify the entire feature as a whole — not individual slices. Cover applicable layers (unit for pure logic, integration for service interactions, e2e for user flows) based on the project's testing stack. Write tests with RED validation (must fail before implementation is confirmed done). Annotate each test with `@spec: 304-unified-document-pages` and `@regression` if suitable for long-term regression. **[Agent: testing-expert]**
+  - [x] Run all generated tests. All must pass. Fix any failures before proceeding. **[Agent: testing-expert]**
