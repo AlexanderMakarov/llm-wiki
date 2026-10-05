@@ -60,7 +60,7 @@ Browsable surface for everything under `raw/docs/` (wiki-add / imported document
 
 **Quick filter.** The sidebar has a filter input above the tree. Matching is case-insensitive: titles that **start with** the query appear first, then titles that only **contain** it; every ancestor folder of a match stays visible so place-in-folder stays clear; non-matching sibling branches hide. Matching substrings in document labels are highlighted; when nothing matches, the empty copy is **No documents match**. Titles and “one document vs many parts” agree with Ctrl+K’s `type:document` hits — both surfaces serialize the same build-time logical-document catalog (see [reader-api.md](reader-api.md)).
 
-Works under `file://` the same as over HTTP (tree + search payloads ship `.js` sidecars).
+The site is only static files under `site/` — there is no separate hosted reader HTTP API. Opening those files from disk (`file://…/site/raw.html`) or via any local static file server behaves the same for Documents + Ctrl+K because the tree and search payloads also ship as `.js` sidecars (`documents-tree.js`, `search-index.js`); browsers block `fetch()` of sibling `.json` from `file://`, so the pages load `window.llmwikiData[…]` from the sidecars instead.
 
 ---
 

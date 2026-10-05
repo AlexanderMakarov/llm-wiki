@@ -1,8 +1,8 @@
-"""Documents sidebar quick filter (#305 Slice 4).
+"""Documents sidebar quick filter (unified document pages, #305 Slice 4).
 
 Lifts the DOM-free ``LLMWIKI_DOCTREE_FILTER`` block from
 ``llmwiki/render/js.py`` and runs it under ``node`` — same harness pattern as
-``test_248_palette_match.py``. Covers starts-with-then-contains order, ancestor
+``test_248_palette_match.py`` (legacy issue-numbered name). Covers starts-with-then-contains order, ancestor
 retention, substring highlight, and the empty-state copy.
 """
 

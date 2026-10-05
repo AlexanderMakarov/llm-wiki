@@ -2217,7 +2217,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
 // ─── Documents tree filter (#305) ── BEGIN ────────────────────────────────
 // Quick filter for the Raw Documents sidebar. DOM-free so
-// `tests/test_305_doctree_filter.py` can lift this block and run it under
+// `tests/test_documents_tree_filter.py` can lift this block and run it under
 // node. Matching is case-insensitive starts-with-then-contains on leaf
 // `label`; ancestor folders of matches stay; non-matching siblings drop.
 var LLMWIKI_DOCTREE_FILTER = (function () {

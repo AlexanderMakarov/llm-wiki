@@ -1,7 +1,7 @@
-"""Acceptance tests for #305: Complete documents on one site page.
+"""Acceptance tests for unified document pages on the static site.
 
 Covers the full feature end-to-end against functional-spec.md acceptance
-criteria.  Fixtures use in-process build helpers — no live vault is touched.
+criteria (GitHub #305). Fixtures use in-process build helpers — no live vault is touched.
 
 Layer: integration (build pipeline over temp fixtures)
 # @layer: integration
