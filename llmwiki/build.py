@@ -3541,7 +3541,7 @@ def build_site(
     )
     render_candidates_page(wiki_dir, out_dir)
     doc_pages = raw_docs_site.render_document_pages(
-        doc_files,
+        doc_entries,
         docs_root,
         out_dir,
         md_to_html=md_to_html,

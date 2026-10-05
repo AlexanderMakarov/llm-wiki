@@ -15,13 +15,13 @@
   - [x] Unit tests: single-file; multi-chunk default layout; two distinct docs under one `--project` folder; cleaned titles. **[Agent: generalPurpose]**
   - [x] Verify: `python3 -m pytest tests/test_raw_docs_site.py -q` (and new grouping tests) pass; delete any ephemeral artifacts. **[Agent: generalPurpose]**
 
-- [ ] **Slice 2: Unified reading page + part URL stubs**
+- [x] **Slice 2: Unified reading page + part URL stubs**
 
   > Opening a logical doc shows full assembled content; old `-NN` URLs stub to canonical `#` anchors.
-  - [ ] Implement unified HTML writer (assemble parts, strip part chrome/breadcrumbs, section anchors) and emit part stub pages (`meta` refresh + visible fallback link) for non-canonical part paths. **[Agent: generalPurpose]**
-  - [ ] Wire writer from `build_site` in `llmwiki/build.py`; keep sidebar mount + provenance behavior. **[Agent: generalPurpose]**
-  - [ ] Build-fixture tests: multi-part vault → one canonical HTML contains all part text; part URL is stub pointing at unified `#` anchor; single-file docs still render completely. **[Agent: generalPurpose]**
-  - [ ] Verify: targeted pytest green; optional `python3 -m llmwiki build --vault $TMP_VAULT` smoke; delete ephemeral artifacts. **[Agent: generalPurpose]**
+  - [x] Implement unified HTML writer (assemble parts, strip part chrome/breadcrumbs, section anchors) and emit part stub pages (`meta` refresh + visible fallback link) for non-canonical part paths. **[Agent: generalPurpose]**
+  - [x] Wire writer from `build_site` in `llmwiki/build.py`; keep sidebar mount + provenance behavior. **[Agent: generalPurpose]**
+  - [x] Build-fixture tests: multi-part vault → one canonical HTML contains all part text; part URL is stub pointing at unified `#` anchor; single-file docs still render completely. **[Agent: generalPurpose]**
+  - [x] Verify: targeted pytest green; optional `python3 -m llmwiki build --vault $TMP_VAULT` smoke; delete ephemeral artifacts. **[Agent: generalPurpose]**
 
 - [ ] **Slice 3: Search-index one entry per logical document + tree parity**
 

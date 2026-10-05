@@ -46,6 +46,15 @@ _PART_SUFFIX_RE = re.compile(r"\s*\(part \d+/\d+[^)]*\)\s*$")
 # must NOT be stripped — same rule as ``add_doc._doc_ref``.
 _CHUNK_STEM_SUFFIX_RE = re.compile(r"-\d{2}$")
 
+# add_doc injects ``> Part i of N of **Title** — sub.`` above each chunk body.
+_PART_BREADCRUMB_RE = re.compile(
+    r"^>\s*Part\s+\d+\s+of\s+\d+\s+of\s+\*\*.+?\*\*.*$",
+    re.MULTILINE,
+)
+
+# Leading ATX heading line (for stripping repeated part-title chrome).
+_LEADING_ATX_RE = re.compile(r"^(#{1,6})\s+(.+?)\s*$")
+
 
 @dataclass
 class RawDocFile:
@@ -138,6 +147,53 @@ def document_id(folder_parts: tuple[str, ...], base_slug: str) -> str:
     if folder_parts:
         return f"document:{'/'.join(folder_parts)}/{base_slug}"
     return f"document:{base_slug}"
+
+
+def part_anchor_id(part_index: int) -> str:
+    """Stable deep-link id for part *N* (1-based) on a unified page."""
+    return f"part-{part_index:02d}"
+
+
+def strip_part_chrome(body: str, *, doc_title: str, part_title: str) -> str:
+    """Remove add_doc part breadcrumbs and repeated part-title H1 chrome.
+
+    Single-file docs keep their leading H1 (it is the document title, not
+    generated part chrome). Multi-chunk titles carry ``(part i/N…)`` and/or
+    a ``> Part i of N…`` breadcrumb — those are stripped.
+    """
+    had_breadcrumb = bool(_PART_BREADCRUMB_RE.search(body))
+    text = _PART_BREADCRUMB_RE.sub("", body)
+    is_part_chrome = had_breadcrumb or bool(_PART_SUFFIX_RE.search(part_title))
+    if not is_part_chrome:
+        return text.lstrip("\n")
+    titles = {
+        t for t in (
+            part_title.strip(),
+            doc_title.strip(),
+            clean_chunk_title(part_title),
+        ) if t
+    }
+    lines = text.lstrip("\n").splitlines(keepends=True)
+    if lines:
+        m = _LEADING_ATX_RE.match(lines[0].rstrip("\n"))
+        if m and m.group(2).strip() in titles:
+            lines = lines[1:]
+            while lines and not lines[0].strip():
+                lines = lines[1:]
+    return "".join(lines)
+
+
+def _site_url_depth(url: str) -> int:
+    """How many ``../`` segments reach site root from a site-relative URL."""
+    return max(0, len(PurePosixPath(url).parts) - 1)
+
+
+def _sibling_href(canonical_url: str, fragment: str = "") -> str:
+    """Basename-relative href to ``canonical_url`` (same directory as the stub)."""
+    href = PurePosixPath(canonical_url).name
+    if fragment:
+        return f"{href}#{fragment}"
+    return href
 
 
 def scan_raw_docs(docs_dir: Path) -> list[RawDocFile]:
@@ -460,8 +516,67 @@ def render_recent_body(entries: list[DocEntry]) -> str:
 """
 
 
+def _assemble_unified_article(
+    entry: DocEntry,
+    *,
+    md_to_html: Callable[[str], str],
+) -> tuple[str, list[str]]:
+    """Concatenate stripped part bodies into one article; return (html, anchors).
+
+    Each part is wrapped in ``<section id="part-NN">``. When a part still has
+    a usable ATX heading after chrome stripping, that heading stays in the
+    body (TOC ids from ``md_to_html``); otherwise the ``part-NN`` section id
+    is the deep-link target for stubs.
+    """
+    sections: list[str] = []
+    anchors: list[str] = []
+    for i, part in enumerate(entry.part_files, start=1):
+        anchor = part_anchor_id(i)
+        anchors.append(anchor)
+        cleaned = strip_part_chrome(
+            part.body, doc_title=entry.title, part_title=part.title,
+        )
+        frag = md_to_html(cleaned) if cleaned.strip() else ""
+        sections.append(
+            f'<section id="{html.escape(anchor)}" class="doc-part">'
+            f"{frag}</section>"
+        )
+    return "".join(sections), anchors
+
+
+def render_part_stub_html(
+    *,
+    canonical_href: str,
+    part_label: str,
+    doc_title: str,
+) -> str:
+    """Minimal stub page: meta refresh + script + visible fallback link.
+
+    ``canonical_href`` must be a same-directory relative URL (``file://``-safe),
+    including the ``#part-NN`` fragment.
+    """
+    href = html.escape(canonical_href, quote=True)
+    label = html.escape(part_label)
+    title = html.escape(doc_title)
+    return (
+        "<!DOCTYPE html>\n"
+        '<html lang="en">\n'
+        "<head>\n"
+        '<meta charset="utf-8">\n'
+        f'<meta http-equiv="refresh" content="0; url={href}">\n'
+        f"<title>Redirecting to {title}</title>\n"
+        f"<script>location.replace({json.dumps(canonical_href)});</script>\n"
+        "</head>\n"
+        "<body>\n"
+        f"<p>This part of <strong>{title}</strong> is included in the "
+        f'full document: <a href="{href}">{label}</a>.</p>\n'
+        "</body>\n"
+        "</html>\n"
+    )
+
+
 def render_document_pages(
-    files: list[RawDocFile],
+    entries: list[DocEntry],
     _root: DocFolder,
     out_dir: Path,
     *,
@@ -473,7 +588,12 @@ def render_document_pages(
     vault: Path | None = None,
     source_file_index: dict[str, Path] | None = None,
 ) -> list[Path]:
-    """Write one HTML page per raw doc file under ``site/documents/``.
+    """Write unified document HTML (+ part URL stubs) under ``site/documents/``.
+
+    One complete article per :class:`DocEntry` at ``entry.url``. Multi-part
+    docs also get a small stub at each non-canonical ``…/<slug>-NN.html`` that
+    points at ``canonical#part-NN`` (#305). Sibling ``.md`` copies for every
+    part are kept for FR2 / provenance fallback.
 
     ``_root`` is accepted for call-site compatibility; the doctree itself is
     loaded client-side from ``documents-tree.js`` (see
@@ -488,35 +608,41 @@ def render_document_pages(
     index = source_file_index
     if vault is not None and index is None:
         index = build_source_file_index(vault)
-    for f in files:
-        prefix = "../" * f.depth
+
+    for entry in entries:
+        if not entry.part_files:
+            continue
+        first = entry.part_files[0]
+        prefix = "../" * _site_url_depth(entry.url)
         crumbs = [("Home", "index.html")]
-        if len(f.rel.parts) > 1:
-            crumbs.append((f.rel.parts[0], ""))
-        crumbs.append((clean_chunk_title(f.title) if len(f.rel.parts) == 1
-                       else f.rel.stem, ""))
+        if entry.folder_parts:
+            crumbs.append((entry.folder_parts[0], ""))
+        crumbs.append((entry.title, ""))
+
         sources_block = ""
         if vault is not None:
-            raw_rel = f"raw/docs/{f.rel.as_posix()}"
-            exclude = f.out_rel
-            # Top-level project folder when nested under raw/docs/<proj>/…
-            project = f.rel.parts[0] if len(f.rel.parts) > 1 else ""
+            raw_rel = f"raw/docs/{first.rel.as_posix()}"
+            project = entry.folder_parts[0] if entry.folder_parts else ""
             links = provenance_links_for_raw(
                 vault,
                 raw_rel,
                 project=project,
-                exclude_href=exclude,
+                exclude_href=entry.url,
                 index=index,
             )
             sources_block = format_sources_html(links, link_prefix=prefix)
+
+        article_html, anchors = _assemble_unified_article(
+            entry, md_to_html=md_to_html,
+        )
         body = f"""<main id="main-content">
 <section class="section doctree-section">
   <div class="container">
     {breadcrumbs_bar(crumbs, link_prefix=prefix)}
     <div class="doctree-layout">
-      {render_sidebar_mount(active_rel=f.rel, link_prefix=prefix)}
+      {render_sidebar_mount(active_rel=first.rel, link_prefix=prefix)}
       <article class="article doc-article">
-        {sources_block}{md_to_html(f.body)}
+        {sources_block}{article_html}
       </article>
     </div>
   </div>
@@ -525,23 +651,42 @@ def render_document_pages(
 """
         page = (
             page_head(
-                f"{f.title} — LLM Wiki",
-                f"Raw document {f.rel.as_posix()}",
+                f"{entry.title} — LLM Wiki",
+                f"Raw document {entry.title}",
                 css_prefix=prefix,
             )
             + nav_builder(prefix)
             + body
             + page_foot(prefix)
         )
-        out_path = out_dir / Path(*f.out_rel.split("/"))
+        out_path = out_dir / Path(*entry.url.split("/"))
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text(page, encoding="utf-8")
         written.append(out_path)
-        # Sibling .md copy for FR2 (raw) Sources fallback when exclude_href
-        # is this page's HTML — mirrors session site/sources/… copies.
-        md_dest = out_path.with_suffix(".md")
-        try:
-            shutil.copy2(f.path, md_dest)
-        except OSError:
-            pass
+
+        for i, part in enumerate(entry.part_files, start=1):
+            # Sibling .md copy for FR2 (raw) Sources fallback.
+            md_dest = out_dir / Path(*part.out_rel.split("/"))
+            md_dest = md_dest.with_suffix(".md")
+            md_dest.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                shutil.copy2(part.path, md_dest)
+            except OSError:
+                pass
+
+            if part.out_rel == entry.url:
+                continue
+            # Non-canonical part URL → stub only (no duplicate article body).
+            anchor = anchors[i - 1] if i - 1 < len(anchors) else part_anchor_id(i)
+            stub_href = _sibling_href(entry.url, anchor)
+            stub_html = render_part_stub_html(
+                canonical_href=stub_href,
+                part_label=f"{entry.title} (part {i})",
+                doc_title=entry.title,
+            )
+            stub_path = out_dir / Path(*part.out_rel.split("/"))
+            stub_path.parent.mkdir(parents=True, exist_ok=True)
+            stub_path.write_text(stub_html, encoding="utf-8")
+            written.append(stub_path)
+
     return written

@@ -28,10 +28,12 @@ from llmwiki.raw_docs_site import (
     clean_chunk_title,
     count_docs_by_project,
     group_documents,
+    part_anchor_id,
     render_document_pages,
     render_sidebar,
     render_sidebar_mount,
     scan_raw_docs,
+    strip_part_chrome,
     tree_to_dict,
     write_documents_tree,
 )
@@ -201,16 +203,18 @@ def test_document_pages_use_mount_not_inline_tree(docs_dir: Path, tmp_path: Path
     out = tmp_path / "site"
     files = scan_raw_docs(docs_dir)
     root = build_tree(files)
+    entries = group_documents(files)
     written = render_document_pages(
-        files, root, out,
+        entries, root, out,
         md_to_html=md_to_html,
         page_head=page_head,
         nav_builder=lambda prefix: nav_bar("home", link_prefix=prefix),
         page_foot=lambda prefix: page_foot(js_prefix=prefix),
         breadcrumbs_bar=breadcrumbs_bar,
     )
-    assert len(written) == 4
-    page = (out / "documents" / "runbook" / "runbook-01.html").read_text(encoding="utf-8")
+    # 2 canonical pages + 3 part stubs for the runbook.
+    assert len(written) == 5
+    page = (out / "documents" / "runbook" / "runbook.html").read_text(encoding="utf-8")
     assert 'data-doctree-mount' in page
     assert 'data-active-rel="runbook/runbook-01.md"' in page
     assert "doctree-loading" in page
@@ -225,6 +229,75 @@ def test_document_pages_use_mount_not_inline_tree(docs_dir: Path, tmp_path: Path
     mount = render_sidebar_mount(active_rel=files[0].rel, link_prefix="../../")
     assert "data-doctree-js" in mount
     assert "documents-tree.js" in mount
+
+
+def test_strip_part_chrome_removes_breadcrumb_and_title_h1():
+    body = (
+        "> Part 1 of 3 of **VPS Runbook** — Intro.\n\n"
+        "# VPS Runbook (part 1/3: Intro)\n\n"
+        "Real section body.\n"
+    )
+    out = strip_part_chrome(
+        body,
+        doc_title="VPS Runbook",
+        part_title="VPS Runbook (part 1/3: Intro)",
+    )
+    assert "Part 1 of" not in out
+    assert "VPS Runbook (part 1/3: Intro)" not in out
+    assert "Real section body." in out
+
+
+def test_unified_page_assembles_parts_and_stubs_redirect(docs_dir: Path, tmp_path: Path):
+    """Multi-part vault → one canonical HTML; part URLs are stubs (#305 Slice 2)."""
+    out = tmp_path / "site"
+    files = scan_raw_docs(docs_dir)
+    # Give each runbook part distinct body text so assembly is observable.
+    for f in files:
+        if f.rel.parts[0] != "runbook":
+            continue
+        idx = f.rel.stem.split("-")[-1]
+        f.body = (
+            f"> Part {int(idx)} of 3 of **VPS Runbook** — Section {int(idx)}.\n\n"
+            f"# VPS Runbook (part {int(idx)}/3: Section {int(idx)})\n\n"
+            f"Runbook part {idx} unique text.\n"
+        )
+    entries = group_documents(files)
+    render_document_pages(
+        entries, build_tree(files), out,
+        md_to_html=md_to_html,
+        page_head=page_head,
+        nav_builder=lambda prefix: nav_bar("raw", link_prefix=prefix),
+        page_foot=lambda prefix: page_foot(js_prefix=prefix),
+        breadcrumbs_bar=breadcrumbs_bar,
+    )
+
+    canonical = (out / "documents" / "runbook" / "runbook.html").read_text(
+        encoding="utf-8",
+    )
+    assert "Runbook part 01 unique text." in canonical
+    assert "Runbook part 02 unique text." in canonical
+    assert "Runbook part 03 unique text." in canonical
+    assert 'id="part-01"' in canonical
+    assert 'id="part-02"' in canonical
+    assert 'id="part-03"' in canonical
+    assert "Part 1 of 3 of" not in canonical
+    assert "doctree-loading" in canonical
+
+    stub = (out / "documents" / "runbook" / "runbook-02.html").read_text(
+        encoding="utf-8",
+    )
+    assert "Runbook part 02 unique text." not in stub
+    assert 'http-equiv="refresh"' in stub
+    assert 'url=runbook.html#part-02' in stub
+    assert 'href="runbook.html#part-02"' in stub
+    assert "location.replace" in stub
+    assert part_anchor_id(2) == "part-02"
+
+    single = (out / "documents" / "standalone.html").read_text(encoding="utf-8")
+    assert "Body text." in single
+    assert 'data-doctree-mount' in single
+    # Single-file docs have no -NN stub sibling.
+    assert not (out / "documents" / "standalone-01.html").exists()
 
 
 def test_render_index_is_tree_browser(docs_dir: Path, tmp_path: Path):
