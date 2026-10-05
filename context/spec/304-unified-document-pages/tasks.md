@@ -31,12 +31,12 @@
   - [x] Tests: search-index document set ≡ tree leaves (ids/titles/hrefs); multi-part doc is one palette entry. **[Agent: generalPurpose]**
   - [x] Verify: pytest for index/tree parity green; delete ephemeral artifacts. **[Agent: generalPurpose]**
 
-- [ ] **Slice 4: Documents sidebar filter (ancestors + highlight)**
+- [x] **Slice 4: Documents sidebar filter (ancestors + highlight)**
 
   > Quick filter on doctree mount: starts-with then contains; keep ancestor folders; highlight substring; empty copy.
-  - [ ] Add filter input UI + CSS in `llmwiki/render/js.py` / `css.py`; match/sort/filter tree; retain ancestors; `<mark>` highlight; empty state **No documents match**. Filter operates on tree leaves built from shared model (parity already tested). **[Agent: generalPurpose]**
-  - [ ] JS/unit or build+DOM tests covering order, ancestors, highlight, empty copy (`file://`-safe patterns). **[Agent: generalPurpose]**
-  - [ ] Verify: tests green; build throwaway vault and sanity-check Raw sidebar filter; delete ephemeral artifacts. **[Agent: generalPurpose]**
+  - [x] Add filter input UI + CSS in `llmwiki/render/js.py` / `css.py`; match/sort/filter tree; retain ancestors; `<mark>` highlight; empty state **No documents match**. Filter operates on tree leaves built from shared model (parity already tested). **[Agent: generalPurpose]**
+  - [x] JS/unit or build+DOM tests covering order, ancestors, highlight, empty copy (`file://`-safe patterns). **[Agent: generalPurpose]**
+  - [x] Verify: tests green; build throwaway vault and sanity-check Raw sidebar filter; delete ephemeral artifacts. **[Agent: generalPurpose]**
 
 - [ ] **Slice 5: Docs + CHANGELOG**
 

@@ -2190,28 +2190,100 @@ document.addEventListener("DOMContentLoaded", function () {
 // The page CSS (--heatmap-0..4) picks up the current theme automatically —
 // no JS wiring needed.
 
-// ─── Documents tree (lazy load — one payload for all document pages) ───────
-(function () {
+// ─── Documents tree filter (#305) ── BEGIN ────────────────────────────────
+// Quick filter for the Raw Documents sidebar. DOM-free so
+// `tests/test_305_doctree_filter.py` can lift this block and run it under
+// node. Matching is case-insensitive starts-with-then-contains on leaf
+// `label`; ancestor folders of matches stay; non-matching siblings drop.
+var LLMWIKI_DOCTREE_FILTER = (function () {
+  var EMPTY_COPY = "No documents match";
+
   function escapeHtml(s) {
     return String(s || "").replace(/[&<>"']/g, function (c) {
       return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
     });
   }
 
-  function renderNode(node, prefix, activeRel, pathParts) {
+  // "starts" | "contains" | null — null means no match.
+  function matchKind(label, queryLower) {
+    if (!queryLower) return null;
+    var lower = String(label == null ? "" : label).toLowerCase();
+    var at = lower.indexOf(queryLower);
+    if (at === -1) return null;
+    return at === 0 ? "starts" : "contains";
+  }
+
+  // Escape-then-wrap every case-insensitive occurrence; class is for CSS.
+  function highlightLabel(label, queryLower) {
+    var s = String(label == null ? "" : label);
+    if (!queryLower) return escapeHtml(s);
+    var lower = s.toLowerCase();
+    if (lower.length !== s.length) return escapeHtml(s);
+    var out = "";
+    var from = 0;
+    var at = lower.indexOf(queryLower);
+    while (at !== -1) {
+      out += escapeHtml(s.slice(from, at))
+        + '<mark class="doctree-filter-hit">'
+        + escapeHtml(s.slice(at, at + queryLower.length))
+        + "</mark>";
+      from = at + queryLower.length;
+      at = lower.indexOf(queryLower, from);
+    }
+    return out + escapeHtml(s.slice(from));
+  }
+
+  // Keep folders that still have a matching descendant; sort leaf files
+  // starts-with first, then contains-only (stable within each bucket).
+  function filterNode(node, queryLower) {
+    if (!queryLower) {
+      return {
+        folders: (node && node.folders) ? node.folders.slice() : [],
+        files: (node && node.files) ? node.files.slice() : [],
+      };
+    }
+    var foldersOut = [];
+    var folders = (node && node.folders) || [];
+    for (var i = 0; i < folders.length; i++) {
+      var folder = folders[i];
+      var child = filterNode(folder, queryLower);
+      if ((child.folders && child.folders.length) || (child.files && child.files.length)) {
+        foldersOut.push({
+          name: folder.name,
+          folders: child.folders,
+          files: child.files,
+        });
+      }
+    }
+    var starts = [];
+    var contains = [];
+    var files = (node && node.files) || [];
+    for (var j = 0; j < files.length; j++) {
+      var kind = matchKind(files[j].label, queryLower);
+      if (kind === "starts") starts.push(files[j]);
+      else if (kind === "contains") contains.push(files[j]);
+    }
+    return { folders: foldersOut, files: starts.concat(contains) };
+  }
+
+  function isEmptyTree(node) {
+    return !(node && ((node.folders && node.folders.length) || (node.files && node.files.length)));
+  }
+
+  function renderNode(node, prefix, activeRel, pathParts, queryLower, forceOpen) {
     var html = "<ul>";
     var folders = node.folders || [];
     for (var i = 0; i < folders.length; i++) {
       var folder = folders[i];
       var nextParts = pathParts.concat([folder.name]);
-      var isOpen = false;
-      if (activeRel) {
+      var isOpen = !!forceOpen;
+      if (!isOpen && activeRel) {
         var activeParts = activeRel.split("/");
         isOpen = activeParts.slice(0, nextParts.length).join("/") === nextParts.join("/");
       }
       html += "<li><details" + (isOpen ? " open" : "") + ">"
         + "<summary>" + escapeHtml(folder.name) + "</summary>"
-        + renderNode(folder, prefix, activeRel, nextParts)
+        + renderNode(folder, prefix, activeRel, nextParts, queryLower, forceOpen)
         + "</details></li>";
     }
     var files = node.files || [];
@@ -2219,12 +2291,40 @@ document.addEventListener("DOMContentLoaded", function () {
       var f = files[j];
       var cls = (activeRel && f.rel === activeRel)
         ? ' class="active" aria-current="page"' : "";
+      var labelHtml = queryLower
+        ? highlightLabel(f.label, queryLower)
+        : escapeHtml(f.label);
       html += '<li><a href="' + escapeHtml(prefix + f.href) + '"' + cls + ">"
-        + escapeHtml(f.label) + "</a></li>";
+        + labelHtml + "</a></li>";
     }
     html += "</ul>";
     return html;
   }
+
+  // Apply filter + render. Empty query → full tree; no matches → null.
+  function renderFiltered(tree, prefix, activeRel, query) {
+    var q = String(query || "").trim().toLowerCase();
+    var view = filterNode(tree, q);
+    if (isEmptyTree(view)) return null;
+    return renderNode(view, prefix, activeRel, [], q, !!q);
+  }
+
+  return {
+    EMPTY_COPY: EMPTY_COPY,
+    escapeHtml: escapeHtml,
+    matchKind: matchKind,
+    highlightLabel: highlightLabel,
+    filterNode: filterNode,
+    isEmptyTree: isEmptyTree,
+    renderNode: renderNode,
+    renderFiltered: renderFiltered,
+  };
+})();
+// ─── Documents tree filter (#305) ── END ──────────────────────────────────
+
+// ─── Documents tree (lazy load — one payload for all document pages) ───────
+(function () {
+  var F = LLMWIKI_DOCTREE_FILTER;
 
   function mountAside(aside) {
     var prefix = aside.getAttribute("data-link-prefix") || "";
@@ -2251,23 +2351,50 @@ document.addEventListener("DOMContentLoaded", function () {
         if (!tree || (typeof tree !== "object")) {
           throw new Error("documents-tree payload missing or invalid");
         }
-        var body = renderNode(tree, prefix, activeRel, []);
-        // Replace loading / noscript; keep the title.
+        // Replace loading / noscript; keep the title, then filter + body.
         var keep = title ? [title] : [];
         aside.innerHTML = "";
         keep.forEach(function (el) { aside.appendChild(el); });
-        if (!tree.folders || !tree.folders.length) {
-          if (!tree.files || !tree.files.length) {
+
+        var filter = document.createElement("input");
+        filter.type = "search";
+        filter.className = "doctree-filter";
+        filter.setAttribute("placeholder", "Filter documents…");
+        filter.setAttribute("aria-label", "Filter documents");
+        filter.setAttribute("autocomplete", "off");
+        aside.appendChild(filter);
+
+        var bodyHost = document.createElement("div");
+        bodyHost.className = "doctree-body";
+        aside.appendChild(bodyHost);
+
+        function paint() {
+          var q = filter.value;
+          bodyHost.innerHTML = "";
+          if (!tree.folders || !tree.folders.length) {
+            if (!tree.files || !tree.files.length) {
+              var virgin = document.createElement("p");
+              virgin.className = "muted";
+              virgin.textContent = "No documents yet.";
+              bodyHost.appendChild(virgin);
+              return;
+            }
+          }
+          var body = F.renderFiltered(tree, prefix, activeRel, q);
+          if (body === null) {
             var empty = document.createElement("p");
-            empty.className = "muted";
-            empty.textContent = "No documents yet.";
-            aside.appendChild(empty);
+            empty.className = "muted doctree-filter-empty";
+            empty.textContent = F.EMPTY_COPY;
+            bodyHost.appendChild(empty);
             return;
           }
+          var wrap = document.createElement("div");
+          wrap.innerHTML = body;
+          while (wrap.firstChild) bodyHost.appendChild(wrap.firstChild);
         }
-        var wrap = document.createElement("div");
-        wrap.innerHTML = body;
-        while (wrap.firstChild) aside.appendChild(wrap.firstChild);
+
+        filter.addEventListener("input", paint);
+        paint();
       })
       .catch(showError);
   }
