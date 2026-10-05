@@ -126,9 +126,8 @@ def test_acceptance_dry_run_pipeline_fake_run_gh(loop_mod):
     )
     lines = loop_mod.run_dry_run(CUSTOM_LABEL, "org/wik", run_gh=fake_run_gh)
     text = "\n".join(lines)
-    assert f"label: {CUSTOM_LABEL}" in text
-    assert "open_with_label: 2" in text
-    assert "assigned_to_me: 2" in text
+    assert "repo: org/wik" in text
+    assert f"2 with {CUSTOM_LABEL!r} label, 2 is assigned on {LOGIN!r}" in text
     assert "next: #8 Next eligible" in text
 
 
@@ -295,8 +294,9 @@ def test_acceptance_run_main_loop_once_spawns_single_worker(loop_mod, monkeypatc
     out = capsys.readouterr().out
     assert code == 0
     assert spawn_events.count("create") == 1
-    assert "open_with_label: 1" in out
-    assert "assigned_to_me: 1" in out
+    assert f"1 with {CUSTOM_LABEL!r} label, 1 is assigned on {LOGIN!r}" in out
+    assert "params: poll-seconds=300; agent-kind=cursor; mode=once" in out
+    assert "issue-11 herdr tab opened for #11 gh issue" in out
     assert "Advanced #11" in out
     assert "close" in spawn_events
 
