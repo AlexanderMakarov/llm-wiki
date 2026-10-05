@@ -34,8 +34,9 @@ The static build writes these to `site/` on every `llmwiki build`:
 | `/<group>/index.html` | HTML | Project / sessions / models / vs index |
 | `/<group>/<slug>.html` | HTML | Individual page |
 | `/sources/<project>/<stem>.md` | Markdown | Raw session transcript for download / agents |
-| `/documents-tree.json` | JSON | Shared raw-docs file tree (sidebar payload) |
+| `/documents-tree.json` | JSON | Shared raw-docs tree (sidebar): folder nesting + one leaf per logical document |
 | `/documents-tree.js` | JS | Same tree for `file://` via `window.llmwikiData["documents-tree"]` |
+| `/documents/<path>.html` | HTML | Canonical unified reader for one logical document; `…/<slug>-NN.html` stubs redirect to `#part-NN` |
 | `/llms.txt` | Markdown | Short AI-agent index ([llmstxt.org spec](https://llmstxt.org)) |
 | `/llms-full.txt` | Plain text | Flattened dump (≤ 5 MB) |
 | `/graph.jsonld` | JSON-LD | Schema.org entity/concept/source graph |
@@ -53,6 +54,34 @@ The static build writes these to `site/` on every `llmwiki build`:
 These are already the API. Everything below in this doc describes the
 **future hosted/SPA surface** that will be fed by the same data shapes —
 no new content pipeline, just new transports.
+
+### Document catalog (#305)
+
+Build-time logical documents (base slug within each `raw/docs/` directory) feed three serializations that must agree on identity:
+
+**`search-index.json` meta entry** (`type: "document"`) — one per logical doc:
+
+| Field | Meaning |
+|---|---|
+| `id` | Stable id, e.g. `document:<folder>/<base-slug>` or `document:<base-slug>` at vault root |
+| `url` | Canonical site-relative unified page (`documents/…/<base-slug>.html`) |
+| `title` | Cleaned readable title (no `(part i/N…)` suffix) |
+| `type` | Always `"document"` |
+| `date` | Latest part date when present |
+| `body` | Assembled plain text across parts, capped (~1200 chars) for palette matching |
+
+**`documents-tree.json` leaf** — same catalog laid out under folders:
+
+| Field | Meaning |
+|---|---|
+| `id` | Same as the search-index `id` |
+| `label` | Same as the search-index `title` |
+| `href` | Same as the search-index `url` |
+| `rel` | First part’s path under `raw/docs/` (sidebar active highlighting) |
+
+Folder nodes carry `name`, nested `folders[]`, and `files[]` (those leaves). The Raw Documents quick filter matches leaf `label`s; it does not invent a third title list.
+
+**Part stubs.** Non-canonical chunk URLs (`documents/…/<base-slug>-NN.html`) are minimal HTML pages (`meta` refresh + `location.replace` + visible fallback link) pointing at the canonical page `#part-NN`. Sibling `.md` copies of each part remain for provenance / download; only the HTML reader is unified.
 
 ---
 
@@ -275,8 +304,9 @@ At no point does the contract require a rewrite of `llmwiki/build.py` — every 
 
 - `llmwiki/build.py` — produces every file referenced above
 - `llmwiki/exporters.py` — `llms.txt` + JSON-LD + site-level AI exports
-- `llmwiki/raw_docs_site.py` — `documents-tree.json|.js` for the Raw sidebar
+- `llmwiki/raw_docs_site.py` — logical-document grouping, unified + stub HTML, `documents-tree.json|.js`
 - `docs/reference/cache-tiers.md` — `cache_tier` invariant (#52)
 - `docs/maintainers/brand-system.md` — theme tokens returned by `/bootstrap`
 - `#116` — this issue
 - `#112` — reader-first article shell (one client of this contract)
+- `#305` — unified document pages (one reader + one catalog entry per logical doc)

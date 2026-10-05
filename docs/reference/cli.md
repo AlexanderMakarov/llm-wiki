@@ -143,7 +143,7 @@ Stdin (`add -`) and MCP `content` use the piped-text conversion path: frontmatte
 |---|---|
 | `SOURCE` | URL (`http`/`https`), file, folder, or `-` for stdin in the process locale encoding. Repeatable except `-` (cannot mix with other sources). |
 | `--title TEXT` | Override title derivation (single source only). |
-| `--project NAME` | Group under `raw/docs/<NAME>/` instead of the doc's own slug. |
+| `--project NAME` | Group under `raw/docs/<NAME>/` instead of the doc's own slug. Site browsing still treats each base-slug under that folder as its own logical document (not one page for the whole project folder) — see [ui.md](ui.md#raw). |
 | `--tag TAG` | Extra frontmatter tag (repeatable). |
 | `--note TEXT` | Blockquote note prepended to the document body. |
 | `--synthesize` | Opt in to synthesize `wiki/sources/` for the docs this add wrote (off by default). |

@@ -95,7 +95,7 @@ Exactly one of `url`, `path`, or `content` is required.
 | `path` | one of three | Local file path to convert |
 | `content` | one of three | Literal markdown/text — uses the piped-text path (frontmatter `source: "piped"`), same as CLI `llmwiki add -`; never a tempfile provenance |
 | `title` | no | Override title derivation |
-| `project` | no | Group under `raw/docs/<project>/` |
+| `project` | no | Group under `raw/docs/<project>/` (site: one logical document per base-slug under that folder — [ui.md](ui.md#raw)) |
 | `tags` | no | Extra frontmatter tags (array) |
 | `note` | no | Blockquote prepended to the body |
 | `synthesize` | no | Opt in to synthesize wiki source pages after add (default `false`; mirrors CLI `--synthesize`) |

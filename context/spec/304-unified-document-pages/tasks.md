@@ -38,11 +38,11 @@
   - [x] JS/unit or build+DOM tests covering order, ancestors, highlight, empty copy (`file://`-safe patterns). **[Agent: generalPurpose]**
   - [x] Verify: tests green; build throwaway vault and sanity-check Raw sidebar filter; delete ephemeral artifacts. **[Agent: generalPurpose]**
 
-- [ ] **Slice 5: Docs + CHANGELOG**
+- [x] **Slice 5: Docs + CHANGELOG**
 
   > User-visible docs match behavior.
-  - [ ] Update `CHANGELOG.md` `[Unreleased]`, `docs/reference/ui.md`, `docs/reference/reader-api.md`, and `docs/architecture.md` (and cli/mcp one-liner only if `--project` caveat needs it). **[Agent: generalPurpose]**
-  - [ ] Verify: docs mention unified reader, shared catalog, filter UX; no personal vault paths. **[Agent: generalPurpose]**
+  - [x] Update `CHANGELOG.md` `[Unreleased]`, `docs/reference/ui.md`, `docs/reference/reader-api.md`, and `docs/architecture.md` (and cli/mcp one-liner only if `--project` caveat needs it). **[Agent: generalPurpose]**
+  - [x] Verify: docs mention unified reader, shared catalog, filter UX; no personal vault paths. **[Agent: generalPurpose]**
 
 - [ ] **Slice 6: Feature Testing & Regression**
 
