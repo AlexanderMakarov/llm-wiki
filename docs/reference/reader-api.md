@@ -90,7 +90,7 @@ Structured article shell (`url`, `slug`, `title`, `type`, `body_html`, `body_tex
 
 Thin wrapper over the same client-side index + chunks the palette uses. Cap and ranking rules stay client-aligned.
 
-### `POST /api/v1/sync` (local only, if ever added)
+### `POST /api/v1/sync` (internal only, if ever added)
 
 Trigger a rebuild with a local bearer token — never a public internet surface. Read-side proof of completion remains `manifest.json`’s `generated_at`.
 
@@ -122,4 +122,5 @@ Cite an invariant by the field it constrains, not by list position — the list 
 - `llmwiki/raw_docs_site.py` — logical-document grouping, unified + stub HTML, `documents-tree.json|.js`
 - [ui.md](ui.md) — human-facing Raw / search behaviour
 - [cache-tiers.md](cache-tiers.md) — `cache_tier` meanings
+- [`docs/maintainers/brand-system.md`](../maintainers/brand-system.md) — theme tokens a future bootstrap payload might echo
 - `#116` — original contract freeze; `#305` — unified document pages
