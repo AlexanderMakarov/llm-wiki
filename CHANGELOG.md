@@ -18,6 +18,9 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Changed
 
+- **Site file contract docs (#305)** — `docs/reference/reader-api.md` reframed as the static `site/` file contract (no hosted HTTP API today); Raw / `file://` wording in `docs/reference/ui.md` clarified; MCP `wiki_add` project row no longer digresses into site document grouping.
+  - *Release note:* Docs only: reader-api / Raw docs describe the static site file layout more clearly (#305).
+
 ### Fixed
 
 - **`test_real_changelog_parses` allows empty Unreleased only on `release(v…)` commits** — a tagged cut empties the Unreleased scaffold by design; CI on that commit still checks that the newest versioned section parses. Every other commit must keep Unreleased entries so CHANGELOG format drift is caught before the next cut.
