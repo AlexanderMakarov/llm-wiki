@@ -1415,23 +1415,39 @@ var LLMWIKI_MATCH = (function () {
   // #248: every key but `kind` filters the SITE group only — match mode has
   // no equivalent, so honouring them in the WIKI group would diverge from
   // `wiki_search`. `kind` is MCP's own frontmatter-`type` filter.
+  // #305: when a Site-only filter is present (`type:`, `project:`, …), do
+  // **not** still run free-text Wiki match — otherwise `type:document eureka`
+  // floods Wiki with `source` part pages above the one Site document hit.
+  // Both groups stay visible (#248); Wiki explains why it is empty.
   // #248 FR7: one query, two always-present groups. WIKI runs match mode
   // over the lazy wiki corpus; SITE runs the same matcher over the palette
   // index. Neither group is allowed to vanish — a heading with a
   // zero-results line is how the reader tells an empty wiki from a broken
   // search.
+  var SITE_ONLY_FILTER_KEYS = ["type", "project", "model", "date", "tags", "sort"];
+
+  function siteOnlyFilterKeys(filters) {
+    var keys = [];
+    var f = filters || {};
+    for (var i = 0; i < SITE_ONLY_FILTER_KEYS.length; i++) {
+      var k = SITE_ONLY_FILTER_KEYS[i];
+      if (f[k]) keys.push(k);
+    }
+    return keys;
+  }
+
   function buildView(query) {
     var parsed = LLMWIKI_MATCH.parseStructuredQuery(query || "");
     return {
       // The free text both groups matched on, carried through so the
       // renderer can mark it in the rows it draws.
       term: parsed.freeText,
-      wiki: wikiGroup(parsed.freeText, parsed.filters.kind || ""),
+      wiki: wikiGroup(parsed.freeText, parsed.filters.kind || "", parsed.filters),
       site: siteGroup(parsed, parsed.freeText)
     };
   }
 
-  function wikiGroup(term, kind) {
+  function wikiGroup(term, kind, filters) {
     var g = { id: "wiki", label: "Wiki", rows: [], truncated: false,
               message: null, messageKind: "info" };
     if (wikiCorpusFailed) {
@@ -1440,6 +1456,15 @@ var LLMWIKI_MATCH = (function () {
       return g;
     }
     if (wikiCorpus === null) { g.message = "Loading wiki pages…"; return g; }
+    var siteOnly = siteOnlyFilterKeys(filters);
+    if (siteOnly.length) {
+      // Keep the Wiki heading (#248) but do not mix Site-typed queries with
+      // wiki/sources part pages — `type:document` must mean documents only.
+      g.message = "Wiki results are hidden while Site filters are active ("
+        + siteOnly.map(function (k) { return k + ":" + filters[k]; }).join(" ")
+        + "). Clear those filters to search wiki pages, or use kind: for wiki kinds.";
+      return g;
+    }
     if (!term) { g.message = "Type a term to search wiki pages."; return g; }
     var r = LLMWIKI_MATCH.searchMatch(wikiCorpus, term, kind);
     g.rows = r.pages;

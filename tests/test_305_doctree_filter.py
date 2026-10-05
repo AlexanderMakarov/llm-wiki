@@ -248,3 +248,13 @@ def test_js_ships_filter_input_wiring() -> None:
     assert 'className = "doctree-filter"' in JS
     assert "No documents match" in JS
     assert "doctree-filter-hit" in JS
+
+
+def test_site_only_filters_hide_wiki_group_message_in_script():
+    """#305: type:/project:/… must not leave Wiki free-text matching on."""
+    from llmwiki.render import js as js_mod
+
+    assert "siteOnlyFilterKeys" in js_mod.JS
+    assert "Wiki results are hidden while Site filters are active" in js_mod.JS
+    for key in ("type", "project", "model", "date", "tags", "sort"):
+        assert f'"{key}"' in js_mod.JS or f"'{key}'" in js_mod.JS

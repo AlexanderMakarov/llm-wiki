@@ -333,7 +333,7 @@ Press `⌘K` (or `Ctrl+K` on Linux/Windows) from any page.
 - Footer shows the current mode (`flat` / `tree`) from `search-index.json._mode` and the deep-page ratio (see [`reference/cache-tiers.md`](cache-tiers.md) for the tree-mode heuristic).
 - Keyboard: `↑ / ↓` navigate, `Enter` open, `Esc` close.
 - Filter by type: `type:topic` / `type:session` / `type:project` / `type:docs` / `type:document` / `type:slash` / `type:page`. `type:topic` still matches every topic result whatever its badge says — the badge reads `kind`, the filter reads `type`.
-- The structured filters `type:` / `project:` / `model:` / `date:` / `tags:` / `sort:` narrow the **Site** group only: match mode has no equivalent, so honouring them in the Wiki group would diverge from the assistant. `kind:` is the one filter both groups honour — it is the frontmatter `type`, exactly as `wiki_search`'s own `kind` argument reads it.
+- The structured filters `type:` / `project:` / `model:` / `date:` / `tags:` / `sort:` narrow the **Site** group only: match mode has no equivalent, so honouring them as Wiki match filters would diverge from the assistant. While any of those Site filters is active, the Wiki group stays visible but shows **no rows** and explains that Wiki is hidden for that query (#305) — so `type:document eureka` is documents-only in Site, not a flood of `wiki/sources/…` part pages above it. Clear the Site filters (or use `kind:` for wiki frontmatter types) to search Wiki again. `kind:` is the one filter both groups honour when Wiki is searching — it is the frontmatter `type`, exactly as `wiki_search`'s own `kind` argument reads it.
 
 ---
 
