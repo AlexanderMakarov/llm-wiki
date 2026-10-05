@@ -10,6 +10,9 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Added
 
+- **Loop ready issue herdr driver (#296)** — optional maintainer script `scripts/loop_ready_issue_herdr.py` plus driver-inlined skill `.claude/skills/loop-ready-issue-herdr/SKILL.md` (`disable-model-invocation: true`) serially drains open GitHub issues that carry a `--label` you choose and are assigned to you, via herdr worker tabs defaulting to Cursor; advance waits for merged PR and green post-merge CI on the default branch (`--poll-seconds` default 300). Documented in [`docs/maintainers/LOOP_READY_ISSUE_HERDR.md`](docs/maintainers/LOOP_READY_ISSUE_HERDR.md); not an `llmwiki` subcommand and not shipped in the wheel.
+  - *Release note:* Maintainers only: optional herdr loop for labeled, self-assigned issues — see `docs/maintainers/LOOP_READY_ISSUE_HERDR.md` (#296).
+
 ### Changed
 
 ### Fixed

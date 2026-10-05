@@ -26,4 +26,17 @@
 ## specs (tasks)
 - Wrote `tasks.md` — 4 implementation slices + Feature Testing & Regression (`testing-expert`); agents mostly `general-purpose` (no python-cli agent hired)
 - Informational summary only (no draft Approve gate under `/implement-feature`)
-- Next: commit-specs, then `/awos:implement`
+- Spec commit: `6225c50` docs: add spec for #296 loop-ready-issue-herdr
+- Next: `/awos:implement`
+
+## implement
+- All tasks in `tasks.md` marked `[x]` (Slices 1–5)
+- Deliverables: `scripts/loop_ready_issue_herdr.py`, `.claude/skills/loop-ready-issue-herdr/SKILL.md`, `docs/maintainers/LOOP_READY_ISSUE_HERDR.md`, README + CHANGELOG, `tests/test_loop_ready_issue_herdr.py` + `tests/test_303_loop_ready_issue_herdr_acceptance.py`
+- Next: `/awos:verify` then user smoke confirm (Step 8)
+
+## local-review
+- Review file: `context/spec/303-loop-ready-issue-herdr/review.md` (session-only, not committed)
+- Verdict: Request changes — 4 Blockers, 8 Nits
+- Keep/drop: keep all except N7; N4 → drop `required` mark entirely (all observed check runs must be green; empty = not ready)
+- Applied B1–B3, N1–N6, N8; 44 feature/acceptance tests green
+- Next: commit-push (flow-log finalized in that commit)

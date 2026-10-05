@@ -19,6 +19,7 @@ first — it has the short version of what this folder covers in detail.
 | [`DECLINED.md`](DECLINED.md) | Graveyard of declined ideas with dates + reasons |
 | [`../../context/product/roadmap.md`](../../context/product/roadmap.md) | The roadmap — phases, what is next, and which issue delivers each item |
 | [`REFRESH_DEMO.md`](REFRESH_DEMO.md) | Local command that incrementally regenerates `demo/` from git-detected `docs/` changes — needs a working copy and a synth backend; never runs in CI |
+| [`LOOP_READY_ISSUE_HERDR.md`](LOOP_READY_ISSUE_HERDR.md) | Optional herdr morning loop over labeled, self-assigned GitHub issues — `scripts/loop_ready_issue_herdr.py`; requires herdr + `gh`; not in CI or the wheel |
 | [`surfaces/`](surfaces/README.md) | Per-page behavioural specs for the built site — scan the relevant `Must` lines when reviewing a UI PR |
 
 ## Slash commands
