@@ -44,4 +44,4 @@
 ## follow-up (first launch)
 - Fixed merge-status GraphQL unused `$number` (use `$number` + `-F`); clearer queue/params/tab-opened lines; poll-failure message explains worker keeps running
 - Approval-gate options after spawn are `/implement-feature` → `/awos:spec`, not the thin loop skill
-- Merge into main left conflict markers in CHANGELOG (resolve raced commit); `pr-lint` now greps CHANGELOG.md on the PR head for those markers
+- Merge into main left conflict markers in CHANGELOG (resolve raced commit); `pr-lint` job `No merge conflict markers` greps all tracked text on the PR head for those markers

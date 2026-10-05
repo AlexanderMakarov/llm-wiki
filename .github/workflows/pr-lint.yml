@@ -4,8 +4,9 @@ name: PR lint
 # docs/maintainers/REVIEW_CHECKLIST.md:
 #   1. Conventional-commit title prefix
 #   2. CHANGELOG.md updated (skipped for chore/docs/test-only PRs)
-#   3. No new runtime dependencies in pyproject.toml
-#   4. AWOS context/ updated when armed product paths change
+#   3. No unresolved git merge conflict markers in any tracked text file
+#   4. No new runtime dependencies in pyproject.toml
+#   5. AWOS context/ updated when armed product paths change
 #      (llmwiki/, integrations/, tests/, .github/workflows/,
 #       docs/maintainers/, docs/reference/; path filters; no label bypass)
 #
@@ -72,14 +73,19 @@ jobs:
             exit 1
           fi
 
-      - name: Reject merge conflict markers in CHANGELOG.md
-        env:
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+  conflict-markers:
+    name: No merge conflict markers
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Reject unresolved git merge conflict markers
         run: |
           set -e
           # Exact git markers (seven < / = / >). Longer ==== rules in notices must not match.
-          if git show "${HEAD_SHA}:CHANGELOG.md" | grep -nE '^(<<<<<<< |=======$|>>>>>>> )'; then
-            echo "::error::CHANGELOG.md still contains unresolved git merge conflict markers."
+          # git grep -I skips binary; exit 0 = matches found, exit 1 = clean (ok inside if).
+          if git grep -nI -E '^(<<<<<<< |=======$|>>>>>>> )' -- .; then
+            echo "::error::Unresolved git merge conflict markers found in tracked files (see matches above)."
             exit 1
           fi
 
