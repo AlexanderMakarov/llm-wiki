@@ -2819,9 +2819,8 @@ def build_search_index(
 
     # Raw documents (wiki-add layer) — one palette entry per logical
     # document (#305). Multi-part chunks share a cleaned title + canonical
-    # URL; body is assembled plain text (capped) so later parts stay findable.
+    # URL; body samples across parts (capped) so later sections stay findable.
     for entry in (doc_entries or []):
-        assembled = "\n\n".join(p.body for p in entry.part_files)
         meta_entries.append({
             "id": entry.id,
             "url": entry.url,
@@ -2830,7 +2829,9 @@ def build_search_index(
             "project": "",
             "date": entry.date,
             "model": "",
-            "body": md_to_plain_text(assembled)[:1200],
+            "body": raw_docs_site.document_search_body_sample(
+                entry, md_to_plain_text=md_to_plain_text,
+            ),
         })
 
     # #277: index every docs/ page + every slash command so the palette

@@ -12,6 +12,7 @@ Layer: integration (build pipeline over temp fixtures)
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -183,6 +184,21 @@ class TestMultiPartUnifiedPage:
         assert "Part 1 of 3 of" not in canonical
         assert "Part 2 of 3 of" not in canonical
         assert "Part 3 of 3 of" not in canonical
+
+    def test_canonical_multipart_page_has_one_document_h1(
+        self, mixed_vault: Path, tmp_path: Path,
+    ):
+        """After stripping part chrome, multi-part readers keep one document title H1."""
+        out = tmp_path / "site"
+        entries = group_documents(scan_raw_docs(mixed_vault))
+        _render_pages(entries, mixed_vault, out)
+        canonical = (out / "documents" / "runbook" / "runbook.html").read_text(encoding="utf-8")
+        article = canonical.split('<article class="article doc-article">', 1)[1].split(
+            "</article>", 1,
+        )[0]
+        h1s = re.findall(r"<h1[^>]*>(.*?)</h1>", article, flags=re.I | re.S)
+        assert len(h1s) == 1
+        assert "VPS Runbook" in h1s[0]
 
     def test_canonical_page_has_sidebar_mount(self, mixed_vault: Path, tmp_path: Path):
         """Unified page must use the shared sidebar mount, not inline tree."""
@@ -406,6 +422,38 @@ class TestSearchIndexTreeParity:
         runbook = docs["document:runbook/runbook"]
         # Assembled body must mention content from more than just part 1.
         assert "Runbook" in runbook["body"] or "Body text" in runbook["body"] or runbook["body"]
+
+    def test_search_index_body_samples_later_parts_when_early_text_is_long(
+        self, tmp_path: Path,
+    ):
+        """Long part-1 filler must not push a unique part-2 needle out of the 1200-char cap."""
+        docs_root = tmp_path / "raw" / "docs"
+        docs_root.mkdir(parents=True)
+        needle = "UNIQUE_NEEDLE_PART_TWO_XYZ"
+        filler = "AAAA " * 400  # well over 1200 plain-text chars
+        _write_doc(
+            docs_root, "longdoc/longdoc-01.md",
+            "Long Doc (part 1/2: Intro)", "2026-09-01",
+            body=filler,
+        )
+        _write_doc(
+            docs_root, "longdoc/longdoc-02.md",
+            "Long Doc (part 2/2: Later)", "2026-09-01",
+            body=f"Later section mentions {needle}.",
+        )
+        files = scan_raw_docs(docs_root)
+        entries = group_documents(files)
+        out = tmp_path / "site"
+        out.mkdir()
+        build_search_index([], {}, out, doc_entries=entries)
+
+        index = json.loads((out / "search-index.json").read_text(encoding="utf-8"))
+        docs = {e["id"]: e for e in index["entries"] if e.get("type") == "document"}
+        entry = docs["document:longdoc/longdoc"]
+        assert needle in entry["body"], (
+            f"later-part needle missing from search body ({len(entry['body'])} chars)"
+        )
+        assert len(entry["body"]) <= 1200
 
     def test_search_index_canonical_url_not_chunk_url(self, mixed_vault: Path, tmp_path: Path):
         """Search entries must point at the canonical unified URL."""

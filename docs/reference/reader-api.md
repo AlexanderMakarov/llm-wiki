@@ -53,7 +53,7 @@ Within each folder under `raw/docs/`, files that share a base slug (`runbook.md`
 | `title` | Cleaned readable title (no `(part i/N…)` suffix) |
 | `type` | Always `"document"` |
 | `date` | Latest part date when present |
-| `body` | Plain-text sample across parts, capped (~1200 chars) for palette matching |
+| `body` | Plain-text sample with budget split across parts, then capped (~1200 chars) so later parts stay findable in Ctrl+K |
 
 ### `documents-tree.json` leaf
 

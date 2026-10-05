@@ -156,6 +156,34 @@ def part_anchor_id(part_index: int) -> str:
     return f"part-{part_index:02d}"
 
 
+def document_search_body_sample(
+    entry: DocEntry,
+    *,
+    md_to_plain_text: Callable[[str], str],
+    cap: int = 1200,
+    min_per_part: int = 80,
+) -> str:
+    """Plain-text sample for Ctrl+K — budget split across parts.
+
+    A single ``assembled[:cap]`` prefix drops later parts once early text is
+    long. Take up to ``max(min_per_part, cap // n)`` chars from each part
+    (chrome stripped), then join and apply the global ``cap``.
+    """
+    parts = entry.part_files
+    if not parts:
+        return ""
+    per = max(min_per_part, cap // len(parts))
+    pieces = [
+        md_to_plain_text(
+            strip_part_chrome(
+                part.body, doc_title=entry.title, part_title=part.title,
+            )
+        )[:per]
+        for part in parts
+    ]
+    return "\n\n".join(pieces)[:cap]
+
+
 def strip_part_chrome(body: str, *, doc_title: str, part_title: str) -> str:
     """Remove add_doc part breadcrumbs and repeated part-title H1 chrome.
 
@@ -576,7 +604,12 @@ def _assemble_unified_article(
             f'<section id="{html.escape(anchor)}" class="doc-part">'
             f"{frag}</section>"
         )
-    return "".join(sections), anchors
+    article = "".join(sections)
+    # Multi-part chrome stripping removes per-part title H1s; emit the
+    # document title once so the article keeps a proper outline.
+    if len(entry.part_files) > 1:
+        article = f"<h1>{html.escape(entry.title)}</h1>" + article
+    return article, anchors
 
 
 def render_part_stub_html(

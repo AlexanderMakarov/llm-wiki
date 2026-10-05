@@ -23,6 +23,9 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Fixed
 
+- **Ctrl+K document search samples across parts (#305)** — multi-part search-index `body` text no longer takes only the first ~1200 characters of the assembled document (which hid later-part needles); the budget is split per part. Multi-part unified readers also emit one document-level `<h1>` after part-title chrome is stripped.
+  - *Release note:* Searching a long multi-part document can still match text from later parts; the reader page keeps a single document title heading (#305).
+
 - **`test_real_changelog_parses` allows empty Unreleased only on `release(v…)` commits** — a tagged cut empties the Unreleased scaffold by design; CI on that commit still checks that the newest versioned section parses. Every other commit must keep Unreleased entries so CHANGELOG format drift is caught before the next cut.
   - *Release note:* Maintainers only: empty Unreleased no longer fails CI on the release commit itself; other commits still require Unreleased entries.
 
