@@ -17,7 +17,7 @@ Every page in the site carries the same header nav. Keyboard: `⌘K` opens the c
 | # | Label | URL | Surfaces |
 |---|---|---|---|
 | 1 | **Home** | `/index.html` | pipeline State widget (Eligible sources Raw→To synthesize→Synthesized→On disk + Knowledge layer Candidates/Entities/Concepts + collapsible backlog/candidates/commands) + recent raw docs |
-| 2 | **Raw** | `/raw.html` | file tree browser of raw documents (wiki-add layer) |
+| 2 | **Raw** | `/raw.html` | Documents sidebar (logical docs + quick filter) + unified reader for `raw/docs/` |
 | — | **Candidates** | `/candidates.html` | what is pending under `wiki/candidates/`, a per-row Decision control, and an Apply that assembles the `candidates apply` command + JSON batch for the rows you decided |
 | 3 | **Graph** | `/graph.html` | interactive force-directed knowledge graph (vis-network) |
 | — | **Topics** | `/topics/index.html` | every topic grouped into curated entities, curated concepts and derived topics, counted per section and ordered by reach within each |
@@ -45,6 +45,22 @@ Queue-first landing page. Layout:
 3. **Recent raw documents** — newest `raw/docs/` entries with title + source meta.
 
 Numbers come from `llmwiki-state.js` (`synth.pipeline` + `synth.pending` + `synth.estimate` + `ops.*`), refreshed by `llmwiki sync` / `llmwiki synth --estimate` / successful synth and build stamps / lint (JSON + site data sidecar only — lint does not rewrite HTML). Every `llmwiki build` also recounts pending/stale candidates and trusted entity/concept page counts into `synth.pipeline.to_review*` / `trusted_entities` / `trusted_concepts` (cheap disk walk — #84) and copies the sidecar into `site/llmwiki-state.js`. `llmwiki build` still one-shot backfills `synth.pipeline` rows when the state snapshot predates that key (v1.4→v1.5 upgrade — #70). The session-analytics content (heatmap, stats, project grid) lives on [Analytics](#analytics).
+
+---
+
+## Raw
+
+URL: `/raw.html` (document pages under `/documents/…`)
+
+Browsable surface for everything under `raw/docs/` (wiki-add / imported documents). The Documents sidebar mounts on Raw, on Home when it shows documents, and on each document page — one shared tree from `documents-tree.js`, not a per-page rebuild.
+
+**Logical documents.** Within each folder, files that share a base slug (`runbook.md` or `runbook-01.md` … `runbook-NN.md`) are one document. The sidebar lists each once under a cleaned readable title (no `(part i/N…)` suffix). Folder nesting stays — project folders from `llmwiki add --project` and per-document folders alike — but a project folder is only a container: two different base slugs under the same folder stay two entries, not one merged page.
+
+**Unified reader.** Opening a sidebar or search hit lands on one canonical HTML page that assembles every part in order, with in-page `#part-NN` section anchors and without repeated part-title / breadcrumb chrome. Single-file docs still render as one complete page. Old bookmarks to a per-part path (`…/<slug>-02.html`) keep working as stub pages that redirect to the unified URL at the matching section.
+
+**Quick filter.** The sidebar has a filter input above the tree. Matching is case-insensitive: titles that **start with** the query appear first, then titles that only **contain** it; every ancestor folder of a match stays visible so place-in-folder stays clear; non-matching sibling branches hide. Matching substrings in document labels are highlighted; when nothing matches, the empty copy is **No documents match**. Titles and “one document vs many parts” agree with Ctrl+K’s `type:document` hits — both surfaces serialize the same build-time logical-document catalog (see [reader-api.md](reader-api.md)).
+
+The site is only static files under `site/` — there is no separate hosted reader HTTP API. Opening those files from disk (`file://…/site/raw.html`) or via any local static file server behaves the same for Documents + Ctrl+K because the tree and search payloads also ship as `.js` sidecars (`documents-tree.js`, `search-index.js`); browsers block `fetch()` of sibling `.json` from `file://`, so the pages load `window.llmwikiData[…]` from the sidecars instead.
 
 ---
 
@@ -278,7 +294,7 @@ Every prototype carries a **4 px `#7C3AED` top stripe** and a "Prototype — not
 
 URL: `/recent.html`
 
-Newest raw documents first, one row per logical document — chunked docs (`<slug>-01.md` … `<slug>-NN.md` in one folder) collapse into a single row with a part count. Each row shows title, date, and origin source, and links into the Home tree browser.
+Newest raw documents first, one row per logical document — the same base-slug grouping as Raw / search (#305). Chunked docs (`<slug>-01.md` … `<slug>-NN.md` in one folder) collapse into a single row with a part count. Each row shows title, date, and origin source, and links to that document’s unified reader page.
 
 ---
 
@@ -309,7 +325,7 @@ Press `⌘K` (or `Ctrl+K` on Linux/Windows) from any page.
 - A Wiki row shows the page's frontmatter `type` as its badge (`wiki` when the page declares none), its title (its path when it has none), the path itself, and its first matching lines with line numbers, folded into `+N more matching lines` past the third. The displayed part of a long matching line starts close enough to the first hit that the highlight cannot sit beyond the row's clipped right edge; the matcher still keeps its full 400-character snippet. A wiki page the site has no reader page for — `wiki/overview.md`, `wiki/log.md`, `candidates/`, `syntheses/`, `categories/` — is still listed with its path and lines but is **not** clickable, and `↑ / ↓` step over it. That is how the group keeps the assistant's full coverage without offering dead ends.
 - Every occurrence of the searched term is highlighted in a result's title, its path and its matching lines — in the Site group's rows too — so a row shows at a glance why it matched. Case is folded when matching and the page's own casing is kept in what you read; a term matching in the path but not the body is marked there. Highlighting is presentation only: it never changes which results come back or their order. When a matching wiki summary and a matching raw session or document both open the same reader URL, the Wiki row is shown once and the duplicate Site row is suppressed; the Site row remains available when only the raw content matches.
 - Caps are the assistant's: 200 pages and 200 matching lines per text search, after which the group appends a line saying matches were dropped. A capped group routinely reports *fewer* than 200 pages — the line cap trips first, and from then on only a name match can still admit a page. That is the search engine's own behaviour, mirrored deliberately rather than smoothed over.
-- The **Site** group is everything the palette indexes that is not a wiki page — static pages, projects, sessions, documents, editorial docs, slash commands, and topic pages (`type: topic`) with their alias spellings (#50) — matched and ordered by the same rule. An empty query browses the head of that index instead of searching; the Wiki group asks for a term instead.
+- The **Site** group is everything the palette indexes that is not a wiki page — static pages, projects, sessions, documents, editorial docs, slash commands, and topic pages (`type: topic`) with their alias spellings (#50) — matched and ordered by the same rule. Document hits (`type: document`) are one entry per logical document (#305): cleaned title and canonical unified URL, never one row per chunk file. (Opening a matching section via `#part-NN` from search is not implemented yet — stubs and in-page anchors still support deep links from old part URLs.) An empty query browses the head of that index instead of searching; the Wiki group asks for a term instead.
 - An empty Site query is only a 10-row browse preview. Any explicit query — text, a structured filter, or `sort:date` — may return up to 200 rows. A filter-only or sort-only query that exceeds that limit says exactly `Showing 200 of N matching results.`; short and common text still obeys the 200-page / 200-line matcher caps.
 - The badge on each result reads its `kind` when the entry carries one and its `type` otherwise, so a topic result says `Entity`, `Concept`, `Project` … — or `Unclassified topic` — matching what the map and the topic page call it (#108). The underlying `type` is unchanged.
 - Top result on Enter navigates.
@@ -317,7 +333,7 @@ Press `⌘K` (or `Ctrl+K` on Linux/Windows) from any page.
 - Footer shows the current mode (`flat` / `tree`) from `search-index.json._mode` and the deep-page ratio (see [`reference/cache-tiers.md`](cache-tiers.md) for the tree-mode heuristic).
 - Keyboard: `↑ / ↓` navigate, `Enter` open, `Esc` close.
 - Filter by type: `type:topic` / `type:session` / `type:project` / `type:docs` / `type:document` / `type:slash` / `type:page`. `type:topic` still matches every topic result whatever its badge says — the badge reads `kind`, the filter reads `type`.
-- The structured filters `type:` / `project:` / `model:` / `date:` / `tags:` / `sort:` narrow the **Site** group only: match mode has no equivalent, so honouring them in the Wiki group would diverge from the assistant. `kind:` is the one filter both groups honour — it is the frontmatter `type`, exactly as `wiki_search`'s own `kind` argument reads it.
+- The structured filters `type:` / `project:` / `model:` / `date:` / `tags:` / `sort:` narrow the **Site** group only: match mode has no equivalent, so honouring them as Wiki match filters would diverge from the assistant. While any of those Site filters is active, the Wiki group stays visible but shows **no rows** and explains that Wiki is hidden for that query (#305) — so `type:document eureka` is documents-only in Site, not a flood of `wiki/sources/…` part pages above it. Clear the Site filters (or use `kind:` for wiki frontmatter types) to search Wiki again. `kind:` is the one filter both groups honour when Wiki is searching — it is the frontmatter `type`, exactly as `wiki_search`'s own `kind` argument reads it.
 
 ---
 

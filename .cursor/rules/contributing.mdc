@@ -14,6 +14,7 @@ Pay special attention to:
 3. New CLI subcommands / config keys / lint rules → matching row in `docs/reference/*.md` (CI enforces CLI coverage)
 4. No new runtime deps — stdlib plus `markdown` only
 5. No real session data; no personal vault paths / usernames in PRs or commits
+6. **No GitHub issue numbers in new test filenames** — use a stable feature/module slug (`tests/test_unified_document_pages_acceptance.py`, not `tests/test_305_….py`). Link the issue or AWOS spec in the module docstring / `# @spec:` comments. Existing `test_<digits>_…` files are legacy; do not add new ones (full rule: CONTRIBUTING *Testing*)
 
 ## Markdown formatting
 

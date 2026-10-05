@@ -10,12 +10,21 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Added
 
+- **Unified document reader on the static site (#305)** — multi-part `raw/docs/` chunk files (`<slug>-01.md` …) assemble into one canonical reading page with section anchors; Ctrl+K and the Documents sidebar share one logical-document catalog (cleaned title, one entry, canonical URL); the Raw Documents sidebar gains a quick filter (starts-with matches first, then contains; ancestor folders kept; substring highlight; empty copy **No documents match**); old per-part HTML URLs become stubs that redirect to the unified page `#part-NN` anchor. While a Site structured filter is active (`type:` / `project:` / `model:` / `date:` / `tags:` / `sort:`), the Wiki group stays visible but lists no rows (with an explanation), so `type:document eureka` is documents-only instead of SOURCE part pages above Site hits. Folder nesting (including `add --project`) still appears; unrelated docs under the same project folder stay separate. Docs: [`docs/reference/ui.md`](docs/reference/ui.md#raw), [`docs/reference/reader-api.md`](docs/reference/reader-api.md), [`docs/architecture.md`](docs/architecture.md). Rebuild the site to pick this up.
+  - *Release note:* Opening an imported document shows the full text on one page; search and the Documents tree list each logical doc once, with a sidebar filter that keeps folder context; `type:document` no longer mixes in wiki source parts (#305).
+
 - **Loop ready issue herdr driver (#296)** — optional maintainer script `scripts/loop_ready_issue_herdr.py` plus driver-inlined skill `.claude/skills/loop-ready-issue-herdr/SKILL.md` (`disable-model-invocation: true`) serially drains open GitHub issues that carry a `--label` you choose and are assigned to you, via herdr worker tabs defaulting to Cursor; advance waits for merged PR and green post-merge CI on the default branch (`--poll-seconds` default 300). Documented in [`docs/maintainers/LOOP_READY_ISSUE_HERDR.md`](docs/maintainers/LOOP_READY_ISSUE_HERDR.md); not an `llmwiki` subcommand and not shipped in the wheel.
   - *Release note:* Maintainers only: optional herdr loop for labeled, self-assigned issues — see `docs/maintainers/LOOP_READY_ISSUE_HERDR.md` (#296).
 
 ### Changed
 
+- **Site file contract docs (#305)** — `docs/reference/reader-api.md` reframed as the static `site/` file contract (no hosted HTTP API today); Raw / `file://` wording in `docs/reference/ui.md` clarified; MCP `wiki_add` project row no longer digresses into site document grouping.
+  - *Release note:* Docs only: reader-api / Raw docs describe the static site file layout more clearly (#305).
+
 ### Fixed
+
+- **Ctrl+K document search samples across parts (#305)** — multi-part search-index `body` text no longer takes only the first ~1200 characters of the assembled document (which hid later-part needles); the budget is split per part. Multi-part unified readers also emit one document-level `<h1>` after part-title chrome is stripped.
+  - *Release note:* Searching a long multi-part document can still match text from later parts; the reader page keeps a single document title heading (#305).
 
 - **`test_real_changelog_parses` allows empty Unreleased only on `release(v…)` commits** — a tagged cut empties the Unreleased scaffold by design; CI on that commit still checks that the newest versioned section parses. Every other commit must keep Unreleased entries so CHANGELOG format drift is caught before the next cut.
   - *Release note:* Maintainers only: empty Unreleased no longer fails CI on the release commit itself; other commits still require Unreleased entries.

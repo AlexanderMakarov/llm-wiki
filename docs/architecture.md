@@ -109,16 +109,16 @@ Pages rendered (v0.9 surface):
 - `site/models/index.html` — sortable AI-model directory (v0.7, #55)
 - `site/models/<slug>.html` — per-model info card + changelog timeline + pricing sparkline (v0.7, #56)
 - `site/index.html` — pipeline State dashboard (recent raw docs)
-- `site/raw.html` — raw-docs file-tree browser (tree loaded from `documents-tree.js`)
-- `site/documents/<path>.html` — one page per raw document file; shared tree sidebar loaded once via JS
-- `site/documents-tree.json` (+ `.js` sidecar) — single shared doctree payload for Raw + document pages
+- `site/raw.html` — Documents sidebar (logical-doc tree + quick filter) loaded from `documents-tree.js`
+- `site/documents/<path>.html` — one reader page per **logical** document (#305): multi-part chunks assemble on the canonical URL; non-canonical `…/<slug>-NN.html` paths are redirect stubs to `#part-NN`; shared tree sidebar loaded once via JS
+- `site/documents-tree.json` (+ `.js` sidecar) — nested layout of the same logical-document leaves as `search-index` `type:"document"` entries (id / title / href parity)
 - `site/recent.html` — newest raw documents, one row per logical document
 - `site/analytics.html` — activity heatmap, token stats, project grid
-- `site/search-index.json` — pre-built client-side search index
+- `site/search-index.json` — pre-built client-side search index (one `type:"document"` meta entry per logical doc)
 - `site/sources/<project>/<slug>.md` — copies of raw session markdown for download / agents
 - Plus AI-consumable exports: `llms.txt`, `llms-full.txt`, `graph.jsonld`, `sitemap.xml`, `rss.xml`
 
-Documents enter `raw/docs/` either via the asynchronous producer queue path or synchronously via `llmwiki add` (`llmwiki/add_doc.py`, #16) — both produce the same dir-per-doc, section-chunked layout.
+Documents enter `raw/docs/` either via the asynchronous producer queue path or synchronously via `llmwiki add` (`llmwiki/add_doc.py`, #16) — both may write a dir-per-doc, section-chunked layout on disk. The site build groups those chunks into logical documents for reading, search, and the sidebar; it does not rewrite `raw/` or `wiki/` to do so.
 
 ### L3 — Viewer (browser JS)
 

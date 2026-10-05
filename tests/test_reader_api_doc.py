@@ -1,13 +1,13 @@
-"""Tests for docs/reference/reader-api.md (v1.2+ preview · #116).
+"""Tests for docs/reference/reader-api.md (static site file contract · #116).
 
-The doc describes a contract the future hosted reader will meet. We can't
-test a server that doesn't exist, but we CAN keep the doc honest:
+The doc freezes shapes that `llmwiki build` writes under `site/`. There is no
+hosted HTTP API today — we keep the doc honest by checking:
 
-- Every file path it claims `llmwiki build` writes must still be a real
-  emission target (grep the source, not the `site/` output — the build
-  shouldn't have to have been run for the tests to pass).
-- Every invariant it locks in (cache_tier enum, lifecycle enum,
-  confidence range) must still match the code.
+- Every file path it claims build writes must still be a real emission target
+  (grep the source, not the `site/` output — the build shouldn't have to have
+  been run for the tests to pass).
+- Every invariant it locks in (cache_tier enum, lifecycle enum, confidence
+  range) must still match the code.
 - Every cross-referenced doc must exist.
 """
 
@@ -38,19 +38,23 @@ def doc() -> str:
 
 def test_doc_has_all_top_level_sections(doc: str):
     for heading in (
-        "Why a contract first",
-        "Shipped today",
-        "Future endpoint contract",
+        "Who should read this",
+        "What `llmwiki build` writes today",
+        "Logical documents",
+        "Future: optional `/api/v1` wrapper",
         "Data model invariants",
         "Versioning",
-        "Content negotiation",
-        "Migration path",
     ):
         assert heading in doc, f"reader-api doc missing section '{heading}'"
 
 
+def test_doc_states_static_site_first(doc: str):
+    assert "static site" in doc.lower()
+    assert "no llmwiki HTTP API" in doc or "no hosted HTTP API" in doc.lower()
+
+
 def test_doc_documents_four_v1_endpoints(doc: str):
-    # The four endpoints we're committing to for v1
+    # Preview endpoints we're committing to if a wrapper ever ships
     for path in ("/api/v1/bootstrap", "/api/v1/article",
                  "/api/v1/search", "/api/v1/sync"):
         assert path in doc, f"reader-api doc missing endpoint {path}"
@@ -74,17 +78,16 @@ SHIPPED_PATHS_TABLE_RE = re.compile(
 
 
 def _shipped_paths(doc: str) -> list[str]:
-    """Pull the Path column from the 'Shipped today' table."""
-    # Locate the "Shipped today" section
-    start = doc.find("Shipped today")
-    end = doc.find("Future endpoint contract", start)
+    """Pull the Path column from the build-output table."""
+    start = doc.find("What `llmwiki build` writes today")
+    end = doc.find("Logical documents", start)
     assert start != -1 and end != -1
     section = doc[start:end]
     return [m.strip("`") for m in SHIPPED_PATHS_TABLE_RE.findall(section)]
 
 
 def test_every_shipped_path_is_emitted_by_build():
-    """Every path in the shipped-today table must correspond to a real
+    """Every path in the shipped table must correspond to a real
     emission in the code (build.py / exporters.py / graph.py / …)."""
     paths = _shipped_paths(API_DOC.read_text(encoding="utf-8"))
     # Glob-style templates like '/<group>/<slug>.html' map to the route
@@ -100,6 +103,7 @@ def test_every_shipped_path_is_emitted_by_build():
         REPO_ROOT / "llmwiki" / "graph.py",
         REPO_ROOT / "llmwiki" / "manifest.py",
         REPO_ROOT / "llmwiki" / "search_facets.py",
+        REPO_ROOT / "llmwiki" / "raw_docs_site.py",
     ]
     haystack = "\n".join(
         p.read_text(encoding="utf-8")
@@ -115,7 +119,7 @@ def test_every_shipped_path_is_emitted_by_build():
         if bare not in haystack:
             missing.append(path)
     assert not missing, (
-        "reader-api doc lists these `Shipped today` paths, but no "
+        "reader-api doc lists these shipped paths, but no "
         f"llmwiki/*.py source emits them: {missing}"
     )
 

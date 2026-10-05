@@ -1,282 +1,126 @@
-# Reader API contract (v1.2+ preview)
+# Site file contract (static reader data)
 
-> Status: **contract-only**. No server yet — today the static site is the
-> API. This doc locks the shape so when we add a hosted / SPA reader we
-> don't have to rewrite the content model. Freezing this now protects
-> the build pipeline (`site/` outputs) and the AI-facing markdown under
-> `sources/` from drift (#116).
+> **What this file is:** the contract for files that `llmwiki build` writes under `site/`. llmwiki ships a **static site only** — open `site/index.html` from disk or serve the `site/` folder with any static file server. There is no llmwiki HTTP API process today.
+>
+> **Why the filename says “reader-api”:** historical (#116). The doc still freezes shapes so a future thin JSON/SPA wrapper (if we ever add one) does not force a content-model rewrite. Until then, treat every path below as a **file on disk**, not a live endpoint.
 
-## Why a contract first
+## Who should read this
 
-llmwiki is, and will stay, **static-site-first**. But a few near-term
-bets depend on the data being reachable without HTML parsing:
+- Maintainers changing `llmwiki/build.py`, `llmwiki/raw_docs_site.py`, or search/tree payloads — so Ctrl+K, Raw Documents, agents, and exports stay aligned.
+- Authors of browser extensions, Alfred/Raycast helpers, or agents that read `site/` without scraping HTML.
+- Anyone confused by “API” wording: if you only use the built site in a browser, you already consume this contract via HTML + the `.js` sidecars.
 
-- A browser extension that answers "what do I know about X" from the
-  wiki's `sources/<project>/<stem>.md` next to the current session tab.
-- A Raycast/Alfred plugin that hits `manifest.json` + `search-index.json`
-  to open a page.
-- A future lightweight SPA reader that can live on the same origin as
-  the generated site.
-- Downstream LLM agents consuming `llms-full.txt` + per-session `.md`
-  under `sources/` to answer questions without pulling HTML.
+## What `llmwiki build` writes today
 
-Every one of those wants the same shape of data. This doc says what that
-shape is, so refactors of `llmwiki/build.py` can't silently break
-clients.
-
-## Shipped today (v1.0+) — read-only, file-based
-
-The static build writes these to `site/` on every `llmwiki build`:
+Paths are relative to the vault’s `site/` root.
 
 | Path | Shape | Purpose |
 |---|---|---|
-| `/index.html` | HTML | Home page |
-| `/<group>/index.html` | HTML | Project / sessions / models / vs index |
-| `/<group>/<slug>.html` | HTML | Individual page |
-| `/sources/<project>/<stem>.md` | Markdown | Raw session transcript for download / agents |
-| `/documents-tree.json` | JSON | Shared raw-docs file tree (sidebar payload) |
+| `/index.html` | HTML | Home |
+| `/raw.html` | HTML | Raw Documents shell (Documents sidebar + reader chrome) |
+| `/documents/<path>.html` | HTML | Canonical unified reader for one logical document; `…/<slug>-NN.html` stubs redirect to `#part-NN` |
+| `/documents-tree.json` | JSON | Shared Documents tree (folder nesting + one leaf per logical document) |
 | `/documents-tree.js` | JS | Same tree for `file://` via `window.llmwikiData["documents-tree"]` |
-| `/llms.txt` | Markdown | Short AI-agent index ([llmstxt.org spec](https://llmstxt.org)) |
+| `/<group>/index.html` | HTML | Project / sessions / models / vs index |
+| `/<group>/<slug>.html` | HTML | Individual wiki/session/topic pages |
+| `/sources/<project>/<stem>.md` | Markdown | Session / document markdown for download and agents |
+| `/llms.txt` | Markdown | Short AI-agent index ([llmstxt.org](https://llmstxt.org)) |
 | `/llms-full.txt` | Plain text | Flattened dump (≤ 5 MB) |
 | `/graph.jsonld` | JSON-LD | Schema.org entity/concept/source graph |
-| `/graph.html` | HTML | Interactive vis-network graph (#118) |
+| `/graph.html` | HTML | Interactive vis-network graph |
 | `/search-index.json` | JSON | Top-level search index + facets + chunk manifest |
 | `/search-chunks/<project>.json` | JSON | Per-project search chunk (lazy-loaded) |
-| `/search-index.js` | JS | Same payload as `search-index.json`, assigned to `window.llmwikiData["search-index"]` (#20) |
-| `/search-chunks/<project>.js` | JS | Same payload as the sibling `.json`, keyed by its manifest path (#20) |
+| `/search-index.js` | JS | Same payload as `search-index.json` → `window.llmwikiData["search-index"]` |
+| `/search-chunks/<project>.js` | JS | Same payload as the sibling `.json`, keyed by its manifest path |
 | `/manifest.json` | JSON | Every file + SHA-256 + performance budget |
-| `/sitemap.xml` | XML | Standard sitemap with `lastmod` |
-| `/rss.xml` | XML | RSS 2.0 feed of newest sessions |
-| `/robots.txt` | Text | AI-friendly, references `llms.txt` |
+| `/sitemap.xml` | XML | Sitemap with `lastmod` |
+| `/rss.xml` | XML | RSS 2.0 of newest sessions |
+| `/robots.txt` | Text | AI-friendly; references `llms.txt` |
 | `/ai-readme.md` | Markdown | AI-agent navigation instructions |
 
-These are already the API. Everything below in this doc describes the
-**future hosted/SPA surface** that will be fed by the same data shapes —
-no new content pipeline, just new transports.
+**`file://` vs a local static server.** Both are supported for browsing. Browsers block `fetch()` of sibling `.json` from `file://`, so interactive pages also load the matching `.js` sidecars. Serving `site/` over `http://127.0.0.1:…` is optional convenience, not a second product surface. UI behaviour for Documents and search: [ui.md](ui.md#raw).
+
+## Logical documents (shared catalog)
+
+Within each folder under `raw/docs/`, files that share a base slug (`runbook.md` or `runbook-01.md` … `runbook-NN.md`) are **one logical document**. Build-time grouping feeds three serializations that must agree on identity:
+
+### `search-index.json` meta entry (`type: "document"`)
+
+| Field | Meaning |
+|---|---|
+| `id` | Stable id, e.g. `document:<folder>/<base-slug>` or `document:<base-slug>` at vault root |
+| `url` | Canonical site-relative unified page (`documents/…/<base-slug>.html`) |
+| `title` | Cleaned readable title (no `(part i/N…)` suffix) |
+| `type` | Always `"document"` |
+| `date` | Latest part date when present |
+| `body` | Plain-text sample with budget split across parts, then capped (~1200 chars) so later parts stay findable in Ctrl+K |
+
+### `documents-tree.json` leaf
+
+| Field | Meaning |
+|---|---|
+| `id` | Same as the search-index `id` |
+| `label` | Same as the search-index `title` |
+| `href` | Same as the search-index `url` |
+| `rel` | First part’s path under `raw/docs/` (sidebar active highlighting) |
+
+Folder nodes carry `name`, nested `folders[]`, and `files[]` (those leaves). The Raw Documents quick filter matches leaf `label`s; it does not invent a third title list.
+
+### Part stubs and provenance
+
+Non-canonical chunk URLs (`documents/…/<base-slug>-NN.html`) are minimal HTML pages (`meta` refresh + `location.replace` + visible fallback link) pointing at the canonical page `#part-NN`. Sibling `.md` copies of each part remain for provenance / download; only the HTML reader is unified.
 
 ---
 
-## Future endpoint contract
+## Future: optional `/api/v1` wrapper (not shipped)
 
-Every endpoint below maps 1:1 to a file that `llmwiki build` already
-produces. The server is a thin JSON wrapper; the content model is what's
-already on disk.
+Everything below is a **preview** of how a thin server or SPA might wrap the **same files**. It does not exist in the package today. Do not expect these HTTP routes unless a future release adds them.
 
-Base URL: `<root>/api/v1` (TBD — static deploy keeps `/api/v1/*.json` as
-files).
+Base URL sketch: `<root>/api/v1` (or static deploy of `/api/v1/*.json` as files).
 
 ### `GET /api/v1/bootstrap`
 
-One-shot payload the reader fetches on first load so it doesn't have to
-chain three requests before showing anything.
-
-```json
-{
-  "version": "1.1.0rc2",
-  "generated_at": "2026-04-19T08:34:42Z",
-  "stats": {
-    "sessions": 647,
-    "projects": 30,
-    "entities": 2,
-    "concepts": 0,
-    "total_bytes": 62691698
-  },
-  "nav": [
-    { "id": "home",          "label": "Home",      "href": "/" },
-    { "id": "recent",        "label": "Recent",    "href": "/recent.html" },
-    { "id": "graph",         "label": "Graph",     "href": "/graph.html" },
-    { "id": "projects",      "label": "Projects",  "href": "/projects/" },
-    { "id": "sessions",      "label": "Sessions",  "href": "/sessions/" },
-    { "id": "analytics",     "label": "Analytics", "href": "/analytics.html" },
-    { "id": "models",        "label": "Models",    "href": "/models/" }
-  ],
-  "theme": {
-    "accent":  "#7C3AED",
-    "default": "dark"
-  },
-  "search": {
-    "mode":   "flat",
-    "chunks": "/search-chunks/",
-    "index":  "/search-index.json"
-  },
-  "cache_tiers": ["L1", "L2", "L3", "L4"]
-}
-```
-
-**Client contract.** Safe to cache for 5 minutes. Never returns partial
-data — if the site rebuilds mid-request, the server serves the previous
-full payload until the new one is ready.
+One-shot payload for a first load (stats, nav, theme, search mode pointers). Safe to cache briefly; never partial mid-rebuild.
 
 ### `GET /api/v1/article?path=<url>`
 
-The article shell already rendered as structured data — lets a SPA skip
-HTML parsing entirely.
+Structured article shell (`url`, `slug`, `title`, `type`, `body_html`, `body_text`, `wikilinks_out`, optional metadata) so a SPA need not parse HTML.
 
-```json
-{
-  "url":   "sessions/llm-wiki/2026-04-17T10-12-llm-wiki-refactor.html",
-  "slug":  "2026-04-17T10-12-llm-wiki-refactor",
-  "title": "LLM Wiki refactor",
-  "type":  "source",
-  "project": "llm-wiki",
-  "model": "claude-sonnet-4-6",
-  "date": "2026-04-17",
-  "last_updated": "2026-04-17",
-  "confidence": 0.75,
-  "lifecycle": "reviewed",
-  "cache_tier": "L3",
-  "tags": ["claude-code", "refactor"],
-  "breadcrumbs": [
-    { "label": "Home",     "href": "/" },
-    { "label": "Projects", "href": "/projects/" },
-    { "label": "llm-wiki", "href": "/projects/llm-wiki.html" },
-    { "label": "LLM Wiki refactor" }
-  ],
-  "body_html": "<article>…</article>",
-  "body_text": "Raw markdown body without frontmatter, suitable for LLM context.",
-  "wikilinks_out": ["Obsidian", "Karpathy"],
-  "wikilinks_in":  ["llm-wiki", "AndrejKarpathy"],
-  "related": [
-    { "slug": "2026-04-16T18-30-llm-wiki-seed", "title": "LLM Wiki seed", "score": 0.82 }
-  ],
-  "reading_time_minutes": 4,
-  "summary": "First-paragraph summary for L2 pre-loading."
-}
-```
+### `GET /api/v1/search?q=<query>&…`
 
-**Required fields:** `url`, `slug`, `title`, `type`, `body_html`,
-`body_text`, `wikilinks_out`. Everything else is optional and may be
-null/missing.
+Thin wrapper over the same client-side index + chunks the palette uses. Cap and ranking rules stay client-aligned.
 
-**Client contract.** The reader MUST gracefully render when optional
-fields are missing (a newly ingested page may not have `confidence` or
-`cache_tier` yet).
+### `POST /api/v1/sync` (internal only, if ever added)
 
-### `GET /api/v1/search?q=<query>&type=<optional>&project=<optional>`
-
-Thin wrapper over the existing client-side index + chunks. Returns the
-matches the palette would surface.
-
-```json
-{
-  "query": "karpathy",
-  "mode":  "flat",
-  "total": 12,
-  "hits": [
-    {
-      "id":    "session:llm-wiki/2026-04-16T18-30-llm-wiki-seed",
-      "url":   "sessions/llm-wiki/2026-04-16T18-30-llm-wiki-seed.html",
-      "title": "LLM Wiki seed",
-      "type":  "source",
-      "project": "llm-wiki",
-      "snippet": "Karpathy's pattern spells out what…",
-      "score":   0.91,
-      "headings": [
-        { "depth": 2, "text": "Summary" },
-        { "depth": 3, "text": "Karpathy's pattern" }
-      ]
-    }
-  ],
-  "facets": {
-    "lifecycle":   { },
-    "tags":        { },
-    "confidence":  { "none": 647 }
-  }
-}
-```
-
-**Mode.** `"flat"` vs `"tree"` — the client-side router today picks the
-mode by heuristic (#53 lands the auto-router). The server MUST return
-the same mode it used so the client can tell the user in the palette
-footer.
-
-**Client contract.** `hits` is capped at 100; the client does its own
-pagination. `score` is 0–1 but not calibrated — use for ranking, not
-thresholds.
-
-### `POST /api/v1/sync` (internal only)
-
-Trigger a rebuild without waiting for the next watcher tick. Used by
-`/wiki-sync` after a successful ingest.
-
-```http
-POST /api/v1/sync
-Authorization: Bearer <local-token>
-
-{
-  "reason": "ingest",
-  "pages_changed": ["sources/llm-wiki-refactor.md"]
-}
-```
-
-Response:
-```json
-{
-  "accepted": true,
-  "build_id": "2026-04-19T10:22:01Z",
-  "eta_seconds": 2
-}
-```
-
-**Auth.** Local bearer token only — this endpoint is never exposed to
-the public internet. `manifest.json` is the read-side proof that the
-build finished (its `generated_at` advances).
+Trigger a rebuild with a local bearer token — never a public internet surface. Read-side proof of completion remains `manifest.json`’s `generated_at`.
 
 ---
 
 ## Data model invariants
 
-Anything a client can depend on. Cite an invariant by the field it constrains, not by its position — the list renumbers whenever an item is added or removed.
+Cite an invariant by the field it constrains, not by list position — the list renumbers when items change.
 
-1. **Slugs are stable.** A page's slug is set at ingest and never
-   changes on rebuild. Renames produce a new slug and a redirect stub.
-2. **Timestamps are UTC ISO-8601 with `Z` suffix.** Never local time.
-3. **`cache_tier` is always one of `L1`, `L2`, `L3`, `L4`** (#52).
-   Missing = treat as `L3`.
-4. **`lifecycle` is always one of** `draft`, `reviewed`, `verified`,
-   `stale`, `archived` (#11).
-5. **`confidence` is always in `[0, 1]`** or missing. Never percent.
-6. **Wikilinks resolve to slugs, not URLs.** `[[Karpathy]]` → `"Karpathy"`
-   — the client resolves to a URL via the index.
-7. **Frontmatter is authoritative** for metadata. The body is authoritative
-   for prose.
+1. **Slugs are stable.** Set at ingest; renames produce a new slug and a redirect stub.
+2. **Timestamps are UTC ISO-8601 with `Z`.** Never local time.
+3. **`cache_tier` is one of `L1`, `L2`, `L3`, `L4`** when present; missing → treat as `L3`.
+4. **`lifecycle` is one of** `draft`, `reviewed`, `verified`, `stale`, `archived` when present.
+5. **`confidence` is in `[0, 1]`** or missing — never a percent.
+6. **Wikilinks resolve to slugs, not URLs.** `[[Karpathy]]` → `"Karpathy"`; the client resolves via the index.
+7. **Frontmatter is authoritative** for metadata; the body is authoritative for prose.
+8. **Document catalog identity is shared** across search-index `type:document` rows, `documents-tree` leaves, and canonical `/documents/…` URLs (same `id` / title / href).
 
-## Versioning
+## Versioning (future HTTP surface only)
 
-- `/api/v1/*` is the long-term contract. Breaking changes bump to `/v2/`
-  and keep `/v1/` live for one minor version.
-- Additive-only changes (new optional fields, new top-level keys on
-  `bootstrap`) don't bump the version.
-- Rename of an existing required field **is** a breaking change.
-
-## Content negotiation
-
-Today's static site already does this implicitly:
-
-- `curl .../sessions/<project>/<stem>.html` → HTML
-- `curl .../sources/<project>/<stem>.md` → raw session markdown
-
-The future server keeps those paths. `Accept: text/markdown` on a session
-HTML route should redirect to the nested `sources/` copy rather than
-serving markdown on the HTML URL — that way caches and proxies stay
-simple.
-
----
-
-## Migration path — static → hosted
-
-1. **Today:** `llmwiki build` writes HTML, nested `sources/*.md`, and site-level AI exports. External tools read them directly. (Done — #116 is this doc.)
-2. **Next:** a separate service could wrap the same files behind `/api/v1/*` paths so a reader SPA can fetch them uniformly. No new data, just routing — llmwiki itself stays a static-file generator.
-3. **v1.3+:** If a hosted multi-tenant reader ships, the server reuses the same routes with per-user auth. The content pipeline doesn't change.
-
-At no point does the contract require a rewrite of `llmwiki/build.py` — every endpoint maps to something build.py already emits.
+- If `/api/v1/*` ever ships, breaking changes bump to `/v2/` and keep `/v1/` for one minor.
+- Additive optional fields do not bump the version.
+- Renaming a required field is breaking.
 
 ## Related
 
-- `llmwiki/build.py` — produces every file referenced above
-- `llmwiki/exporters.py` — `llms.txt` + JSON-LD + site-level AI exports
-- `llmwiki/raw_docs_site.py` — `documents-tree.json|.js` for the Raw sidebar
-- `docs/reference/cache-tiers.md` — `cache_tier` invariant (#52)
-- `docs/maintainers/brand-system.md` — theme tokens returned by `/bootstrap`
-- `#116` — this issue
-- `#112` — reader-first article shell (one client of this contract)
+- `llmwiki/build.py` — produces the files above
+- `llmwiki/exporters.py` — `llms.txt`, JSON-LD, site-level AI exports
+- `llmwiki/raw_docs_site.py` — logical-document grouping, unified + stub HTML, `documents-tree.json|.js`
+- [ui.md](ui.md) — human-facing Raw / search behaviour
+- [cache-tiers.md](cache-tiers.md) — `cache_tier` meanings
+- [`docs/maintainers/brand-system.md`](../maintainers/brand-system.md) — theme tokens a future bootstrap payload might echo
+- `#116` — original contract freeze; `#305` — unified document pages
