@@ -23,13 +23,13 @@
   - [x] Build-fixture tests: multi-part vault → one canonical HTML contains all part text; part URL is stub pointing at unified `#` anchor; single-file docs still render completely. **[Agent: generalPurpose]**
   - [x] Verify: targeted pytest green; optional `python3 -m llmwiki build --vault $TMP_VAULT` smoke; delete ephemeral artifacts. **[Agent: generalPurpose]**
 
-- [ ] **Slice 3: Search-index one entry per logical document + tree parity**
+- [x] **Slice 3: Search-index one entry per logical document + tree parity**
 
   > Ctrl+K and documents-tree share the same logical document leaves.
-  - [ ] Change `build_search_index` document loop to emit one `type:"document"` meta entry per logical doc (cleaned title, canonical url, capped body). **[Agent: generalPurpose]**
-  - [ ] Rebuild `documents-tree.json` leaves from the same logical docs (`id`/`label`/`href` + folder nesting); no per-chunk leaves. **[Agent: generalPurpose]**
-  - [ ] Tests: search-index document set ≡ tree leaves (ids/titles/hrefs); multi-part doc is one palette entry. **[Agent: generalPurpose]**
-  - [ ] Verify: pytest for index/tree parity green; delete ephemeral artifacts. **[Agent: generalPurpose]**
+  - [x] Change `build_search_index` document loop to emit one `type:"document"` meta entry per logical doc (cleaned title, canonical url, capped body). **[Agent: generalPurpose]**
+  - [x] Rebuild `documents-tree.json` leaves from the same logical docs (`id`/`label`/`href` + folder nesting); no per-chunk leaves. **[Agent: generalPurpose]**
+  - [x] Tests: search-index document set ≡ tree leaves (ids/titles/hrefs); multi-part doc is one palette entry. **[Agent: generalPurpose]**
+  - [x] Verify: pytest for index/tree parity green; delete ephemeral artifacts. **[Agent: generalPurpose]**
 
 - [ ] **Slice 4: Documents sidebar filter (ancestors + highlight)**
 

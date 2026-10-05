@@ -8,12 +8,14 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path, PurePosixPath
 
 import pytest
 
 from llmwiki.build import (
     breadcrumbs_bar,
+    build_search_index,
     md_to_html,
     nav_bar,
     page_foot,
@@ -180,19 +182,27 @@ def test_sidebar_marks_active_and_opens_folder(docs_dir: Path):
 
 
 def test_tree_to_dict_and_write_documents_tree(docs_dir: Path, tmp_path: Path):
+    """Tree leaves are logical docs — one leaf for a multi-part runbook (#305)."""
     files = scan_raw_docs(docs_dir)
-    root = build_tree(files)
-    data = tree_to_dict(root)
+    entries = group_documents(files)
+    data = tree_to_dict(entries)
     assert any(f["rel"] == "standalone.md" for f in data["files"])
+    standalone = next(f for f in data["files"] if f["rel"] == "standalone.md")
+    assert standalone["id"] == "document:standalone"
+    assert standalone["label"] == "Standalone Doc"
+    assert standalone["href"] == "documents/standalone.html"
     runbook = next(f for f in data["folders"] if f["name"] == "runbook")
-    assert {f["rel"] for f in runbook["files"]} == {
-        "runbook/runbook-01.md",
-        "runbook/runbook-02.md",
-        "runbook/runbook-03.md",
+    assert len(runbook["files"]) == 1
+    leaf = runbook["files"][0]
+    assert leaf == {
+        "id": "document:runbook/runbook",
+        "label": "VPS Runbook",
+        "href": "documents/runbook/runbook.html",
+        "rel": "runbook/runbook-01.md",
     }
     out = tmp_path / "site"
     out.mkdir()
-    path = write_documents_tree(root, out)
+    path = write_documents_tree(entries, out)
     assert path.name == "documents-tree.json"
     assert (out / "documents-tree.js").is_file()
     loaded = __import__("json").loads(path.read_text(encoding="utf-8"))
@@ -359,3 +369,54 @@ def test_count_docs_by_project_uses_frontmatter_then_folder():
     ]
     counts = count_docs_by_project(files)
     assert counts == {"proj-x": 2, "beta": 1, "solo": 1}
+
+
+def _iter_tree_leaves(node: dict) -> list[dict]:
+    """Flatten documents-tree.json leaves depth-first."""
+    leaves = list(node.get("files") or [])
+    for folder in node.get("folders") or []:
+        leaves.extend(_iter_tree_leaves(folder))
+    return leaves
+
+
+def test_search_index_documents_match_tree_leaves(docs_dir: Path, tmp_path: Path):
+    """search-index document set ≡ documents-tree leaves (ids/titles/hrefs)."""
+    files = scan_raw_docs(docs_dir)
+    entries = group_documents(files)
+    out = tmp_path / "site"
+    out.mkdir()
+    write_documents_tree(entries, out)
+    build_search_index([], {}, out, doc_entries=entries)
+
+    tree = json.loads((out / "documents-tree.json").read_text(encoding="utf-8"))
+    index = json.loads((out / "search-index.json").read_text(encoding="utf-8"))
+    docs = [e for e in index["entries"] if e.get("type") == "document"]
+
+    tree_set = {
+        (leaf["id"], leaf["label"], leaf["href"]) for leaf in _iter_tree_leaves(tree)
+    }
+    index_set = {(e["id"], e["title"], e["url"]) for e in docs}
+    assert tree_set == index_set
+    assert len(docs) == len(entries) == 2
+
+
+def test_multipart_doc_is_one_search_palette_entry(docs_dir: Path, tmp_path: Path):
+    """A 3-chunk runbook yields one type:document meta entry, not three."""
+    files = scan_raw_docs(docs_dir)
+    entries = group_documents(files)
+    out = tmp_path / "site"
+    out.mkdir()
+    build_search_index([], {}, out, doc_entries=entries)
+
+    index = json.loads((out / "search-index.json").read_text(encoding="utf-8"))
+    docs = [e for e in index["entries"] if e.get("type") == "document"]
+    by_id = {e["id"]: e for e in docs}
+    assert "document:runbook/runbook" in by_id
+    runbook = by_id["document:runbook/runbook"]
+    assert runbook["title"] == "VPS Runbook"
+    assert runbook["url"] == "documents/runbook/runbook.html"
+    assert not any(
+        e["id"].startswith("document:runbook/runbook-0") for e in docs
+    )
+    # Assembled body includes later-part text (not only part 1).
+    assert "Body text." in runbook["body"]

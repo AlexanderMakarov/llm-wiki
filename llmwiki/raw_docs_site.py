@@ -290,10 +290,42 @@ def group_documents(files: list[RawDocFile]) -> list[DocEntry]:
 # ─── sidebar tree ──────────────────────────────────────────────────────────
 
 
-def tree_to_dict(root: DocFolder) -> dict[str, Any]:
-    """Serialize ``DocFolder`` for ``documents-tree.json`` (site-root hrefs)."""
+def tree_to_dict(entries: list[DocEntry]) -> dict[str, Any]:
+    """Serialize logical documents for ``documents-tree.json`` (site-root hrefs).
 
-    def folder_dict(node: DocFolder) -> dict[str, Any]:
+    Leaves are one per :class:`DocEntry` (not per chunk file): ``id`` / ``label``
+    / ``href`` match the search-index ``type:"document"`` meta entries; ``rel``
+    is the first part's path under ``raw/docs`` for sidebar active highlighting.
+    Folder nesting follows ``folder_parts``.
+    """
+
+    @dataclass
+    class _Node:
+        name: str
+        folders: dict[str, _Node] = field(default_factory=dict)
+        files: list[DocEntry] = field(default_factory=list)
+
+    root = _Node(name="")
+    for entry in entries:
+        node = root
+        for part in entry.folder_parts:
+            node = node.folders.setdefault(part, _Node(name=part))
+        node.files.append(entry)
+
+    def _leaf(entry: DocEntry) -> dict[str, Any]:
+        rel = (
+            entry.part_files[0].rel.as_posix()
+            if entry.part_files
+            else ""
+        )
+        return {
+            "id": entry.id,
+            "label": entry.title,
+            "href": entry.url,
+            "rel": rel,
+        }
+
+    def folder_dict(node: _Node) -> dict[str, Any]:
         return {
             "name": node.name,
             "folders": [
@@ -301,16 +333,15 @@ def tree_to_dict(root: DocFolder) -> dict[str, Any]:
                 for _name, child in sorted(node.folders.items())
             ],
             "files": [
-                {
-                    "label": (
-                        clean_chunk_title(f.title)
-                        if f.rel.parts[:-1] == ()
-                        else f.rel.stem
+                _leaf(e)
+                for e in sorted(
+                    node.files,
+                    key=lambda e: (
+                        e.part_files[0].rel.as_posix()
+                        if e.part_files
+                        else e.title
                     ),
-                    "href": f.out_rel,
-                    "rel": f.rel.as_posix(),
-                }
-                for f in sorted(node.files, key=lambda f: f.rel.as_posix())
+                )
             ],
         }
 
@@ -318,9 +349,11 @@ def tree_to_dict(root: DocFolder) -> dict[str, Any]:
     return {"folders": top["folders"], "files": top["files"]}
 
 
-def write_documents_tree(root: DocFolder, out_dir: Path) -> Path:
+def write_documents_tree(entries: list[DocEntry], out_dir: Path) -> Path:
     """Write ``documents-tree.json`` + ``.js`` sidecar once for the whole site."""
-    payload = json.dumps(tree_to_dict(root), ensure_ascii=False, separators=(",", ":"))
+    payload = json.dumps(
+        tree_to_dict(entries), ensure_ascii=False, separators=(",", ":"),
+    )
     out_path = out_dir / "documents-tree.json"
     out_path.write_text(payload, encoding="utf-8")
     write_js_sidecar(out_path, "documents-tree", payload)
