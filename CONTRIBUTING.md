@@ -305,6 +305,8 @@ python3 -m llmwiki --version            # version check
 
 Suite autouse in `tests/conftest.py` isolates the default vault **and** neutralizes repo-root `config.json` for in-process merges (#142). Tests that intentionally exercise the user-config overlay must monkeypatch `_USER_CONFIG` / `USER_CONFIG_FILE` themselves.
 
+**Do not put GitHub issue numbers in test filenames.** Prefer a stable feature slug (`tests/test_loop_ready_issue_herdr_acceptance.py`, `tests/test_shell_completion_acceptance.py`). Link the issue or AWOS spec in the module docstring and/or `# @spec: …` comments instead — filenames that encode ticket numbers become misleading when work is retargeted, and they collide with unrelated historical numbers. Existing `test_<digits>_…` files are legacy; do not add new ones.
+
 Every adapter must ship with:
 
 - A fixture (synthetic or heavily redacted)
