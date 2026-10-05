@@ -3599,7 +3599,7 @@ def build_site(
             ("analytics.html", None, "0.8"),
             ("candidates.html", None, "0.8"),
         ] + [
-            (doc.out_rel, doc.date or None, "0.7") for doc in doc_files
+            (entry.url, entry.date or None, "0.7") for entry in doc_entries
         ]
         ai_paths = export_all(out_dir, groups, sources, extra_pages=extra_pages)
         print(f"  wrote {len(ai_paths)} AI-consumable exports: {', '.join(sorted(ai_paths.keys()))}")

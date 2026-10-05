@@ -4,7 +4,7 @@ Renders the wiki-add document layer (``raw/docs/**``) into the static
 site:
 
 - a shared file-tree sidebar loaded once from ``documents-tree.json|.js``
-- one HTML page per document file under ``site/documents/…``
+- one canonical HTML page per logical document under ``site/documents/…`` (multi-part chunk paths keep stub redirects at ``-NN`` URLs)
 - the Home queue dashboard (body of ``index.html``)
 - the Raw tree pane (body of ``raw.html``)
 - the Recent-documents list (body of ``recent.html``)

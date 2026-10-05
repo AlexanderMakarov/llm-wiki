@@ -246,8 +246,8 @@ def test_strip_part_chrome_removes_degenerate_empty_bold_breadcrumb():
     body = "> Part 3 of 4 of ****.\n\n## Experience\n\nDid things.\n"
     out = strip_part_chrome(
         body,
-        doc_title="Aleksandr Makarov CV (extended)",
-        part_title="Aleksandr Makarov CV (extended) (part 3/4)",
+        doc_title="Example Curriculum Vitae (extended)",
+        part_title="Example Curriculum Vitae (extended) (part 3/4)",
     )
     assert "Part 3 of 4" not in out
     assert "****" not in out

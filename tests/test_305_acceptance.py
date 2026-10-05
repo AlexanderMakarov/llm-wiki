@@ -24,6 +24,7 @@ from llmwiki.build import (
     page_foot,
     page_head,
 )
+from llmwiki.exporters import export_all
 from llmwiki.raw_docs_site import (
     base_slug_from_stem,
     build_tree,
@@ -575,3 +576,29 @@ class TestFullPipelineFileCount:
         assert len(canonicals) == 4, (
             f"expected 4 canonical HTML files, got {len(canonicals)}: {[p.name for p in canonicals]}"
         )
+
+
+def test_sitemap_lists_canonical_document_urls_not_chunk_stubs(tmp_path: Path) -> None:
+    """@spec: 304-unified-document-pages — sitemap/extra_pages use DocEntry.url (#305 review N1)."""
+    docs_dir = tmp_path / "docs"
+    runbook = docs_dir / "runbook"
+    runbook.mkdir(parents=True)
+    for i in range(1, 4):
+        (runbook / f"runbook-{i:02d}.md").write_text(
+            f'---\ntitle: "Runbook (part {i}/3)"\ndate: 2026-01-0{i}\nsource: test\n'
+            f"---\n\n> Part {i} of 3 of **Runbook**.\n\nBody {i}.\n",
+            encoding="utf-8",
+        )
+    entries = group_documents(scan_raw_docs(docs_dir))
+    assert len(entries) == 1
+    out = tmp_path / "site"
+    out.mkdir()
+    extra_pages = [
+        (entry.url, entry.date or None, "0.7") for entry in entries
+    ]
+    export_all(out, {}, [], extra_pages=extra_pages)
+    sitemap = (out / "sitemap.xml").read_text(encoding="utf-8")
+    assert "documents/runbook/runbook.html" in sitemap
+    assert "runbook-01.html" not in sitemap
+    assert "runbook-02.html" not in sitemap
+    assert "runbook-03.html" not in sitemap
