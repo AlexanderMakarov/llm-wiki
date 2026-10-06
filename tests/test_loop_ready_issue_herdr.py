@@ -255,7 +255,51 @@ def test_run_dry_run_pick_next_via_fake_run_gh(loop_mod):
     text = "\n".join(lines)
     assert "repo: owner/repo" in text
     assert "3 with 'agent-ready' label, 3 is assigned on 'viewer'" in text
+    assert "planned (2):" in text
+    assert "  1. #8 Next eligible" in text
+    assert "  2. #20 Later" in text
     assert "next: #8 Next eligible" in text
+    assert "#5" not in text  # blocked by open blocker
+
+
+def test_close_worker_tab_closes_even_when_agent_gone(loop_mod):
+    """``gone`` skips agent wait only — advance must still close the tab."""
+    calls: list[list[str]] = []
+
+    def fake_herdr(argv: list[str]) -> subprocess.CompletedProcess[str]:
+        calls.append(list(argv))
+        if argv[1:3] == ["tab", "close"]:
+            return subprocess.CompletedProcess(
+                argv, 0, json.dumps({"result": {"type": "ok"}}), ""
+            )
+        if argv[1:3] == ["tab", "list"]:
+            return subprocess.CompletedProcess(
+                argv,
+                0,
+                json.dumps({"result": {"tabs": [], "type": "tab_list"}}),
+                "",
+            )
+        raise AssertionError(argv)
+
+    worker = loop_mod.WorkerHandle(
+        tab_id="wD:tK",
+        pane_id="wD:pK",
+        issue_number=305,
+        issue_url="https://example/305",
+        gone=True,
+    )
+    loop_mod.close_worker_tab(worker, run_herdr=fake_herdr)
+    assert ["herdr", "tab", "close", "wD:tK"] in calls
+
+
+def test_close_tab_id_treats_tab_not_found_as_ok(loop_mod):
+    def fake_herdr(argv: list[str]) -> subprocess.CompletedProcess[str]:
+        body = json.dumps(
+            {"error": {"code": "tab_not_found", "message": "tab gone"}},
+        )
+        return subprocess.CompletedProcess(argv, 1, body, "")
+
+    loop_mod.close_tab_id("wD:tMissing", run_herdr=fake_herdr)
 
 
 def test_format_queue_counts_and_worker_opened_lines(loop_mod):
@@ -318,7 +362,9 @@ def test_spawn_worker_for_issue_herdr_sequence(loop_mod):
 
     def fake_herdr(argv: list[str]) -> subprocess.CompletedProcess[str]:
         calls.append(list(argv))
-        if argv[1:3] == ["tab", "create"]:
+        if argv[1:3] == ["tab", "list"]:
+            body = json.dumps({"result": {"tabs": [], "type": "tab_list"}})
+        elif argv[1:3] == ["tab", "create"]:
             body = json.dumps(
                 {
                     "result": {
@@ -350,11 +396,12 @@ def test_spawn_worker_for_issue_herdr_sequence(loop_mod):
     assert worker.tab_id == "wZ:t1"
     assert worker.pane_id == "wZ:p1"
     assert worker.issue_number == 42
-    assert calls[0][3:5] == ["--cwd", "/tmp/repo"]
-    assert calls[0][6] == "issue-42"
-    assert calls[1][3] == "issue-42"
-    assert calls[1][5] == "cursor"
-    assert calls[2][3] == "wZ:p1"
+    assert calls[0][1:3] == ["tab", "list"]
+    assert calls[1][3:5] == ["--cwd", "/tmp/repo"]
+    assert calls[1][6] == "issue-42"
+    assert calls[2][3] == "issue-42"
+    assert calls[2][5] == "cursor"
+    assert calls[3][3] == "wZ:p1"
 
 
 def test_fetch_issue_merge_and_ci_status_graphql_closing_pr(loop_mod):

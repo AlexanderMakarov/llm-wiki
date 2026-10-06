@@ -128,6 +128,8 @@ def test_acceptance_dry_run_pipeline_fake_run_gh(loop_mod):
     text = "\n".join(lines)
     assert "repo: org/wik" in text
     assert f"2 with {CUSTOM_LABEL!r} label, 2 is assigned on {LOGIN!r}" in text
+    assert "planned (1):" in text  # #5 blocked
+    assert "  1. #8 Next eligible" in text
     assert "next: #8 Next eligible" in text
 
 
@@ -250,7 +252,9 @@ def test_acceptance_run_main_loop_once_spawns_single_worker(loop_mod, monkeypatc
     spawn_events: list[str] = []
 
     def fake_run_herdr(argv: list[str]) -> subprocess.CompletedProcess[str]:
-        if argv[1:3] == ["tab", "create"]:
+        if argv[1:3] == ["tab", "list"]:
+            body = json.dumps({"result": {"tabs": [], "type": "tab_list"}})
+        elif argv[1:3] == ["tab", "create"]:
             spawn_events.append("create")
             body = json.dumps(
                 {
@@ -331,7 +335,9 @@ def test_acceptance_spawn_worker_prompt_inlines_repo_skill(loop_mod):
     captured: list[str] = []
 
     def fake_herdr(argv: list[str]) -> subprocess.CompletedProcess[str]:
-        if argv[1:3] == ["agent", "prompt"]:
+        if argv[1:3] == ["tab", "list"]:
+            body = json.dumps({"result": {"tabs": [], "type": "tab_list"}})
+        elif argv[1:3] == ["agent", "prompt"]:
             captured.append(argv[4])
             body = json.dumps({"result": {"type": "ok"}})
         elif argv[1:3] == ["tab", "create"]:

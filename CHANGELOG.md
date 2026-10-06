@@ -23,6 +23,8 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Fixed
 
+- **Loop ready-issue herdr closes finished worker tabs** — after merge+CI advance the driver always runs `herdr tab close` (previously skipped when the agent had already disappeared / `worker.gone`); it also sweeps leftover `issue-N` tabs before spawn. `--dry-run` lists the full planned eligible queue; `make loop-ready-issue-herdr LABEL=…` / `…-dry-run` wrappers added.
+  - *Release note:* Maintainers only: ready-issue herdr loop closes finished tabs and shows the planned queue in dry-run.
 - **Loop ready-issue herdr driver GraphQL merge poll + startup UX** — merge-status GraphQL now binds `$number` (with `-F number=`) so advance polling no longer fails with “Variable $number … not used”; startup prints a one-line queue summary, `params:` (poll interval / agent kind / mode), and a timestamped “herdr tab opened” line after each spawn; GitHub poll errors say the worker keeps running while the driver retries.
   - *Release note:* Maintainers only: ready-issue herdr loop merge poll and startup logging fixed after first launch.
 - **CI rejects unresolved git merge conflict markers** — `pr-lint` job `No merge conflict markers` runs `git grep` over all tracked text files on the PR head for git’s `<<<<<<<` / `=======` / `>>>>>>>` lines (the changelog “updated” check only verified the file was touched, and `parse_unreleased` skipped marker lines).
