@@ -19,7 +19,7 @@ applies_to: "**/*"
 7. **No scope creep and no silent refactors.** Found something else broken? File an issue. Renaming something? Say so in the PR title.
 8. **Privacy is non-negotiable.** No real session data — fixtures are synthetic or heavily redacted. No machine-specific paths, usernames, hostnames, or vault roots in code, tests, commits, PR bodies, or the CHANGELOG; use placeholders such as `/home/USER/…`, `<vault>`, `<user>`.
 9. **Never hard-wrap markdown prose at a fixed column.** One paragraph is one line, however long — line width is the renderer's job, not the file's, and hard wraps make a one-word edit reflow a whole paragraph in the diff.
-10. **Check for existing test coverage before adding a test.** Search `tests/` first and extend what is there rather than adding beside it. A test for a new rule must fail when that rule is removed — if it still passes, it is exercising a different code path, and a test that can pass over an empty input is covering nothing. See CONTRIBUTING *Testing* and [`docs/CODING_STANDARDS.md`](../../docs/CODING_STANDARDS.md).
+10. **Check for existing test coverage before adding a test.** Search `tests/` first and extend what is there rather than adding beside it. A test for a new rule must fail when that rule is removed — if it still passes, it is exercising a different code path, and a test that can pass over an empty input is covering nothing. Canonical detail: [`docs/CODING_STANDARDS.md`](../../docs/CODING_STANDARDS.md).
 
 ## Before pushing
 

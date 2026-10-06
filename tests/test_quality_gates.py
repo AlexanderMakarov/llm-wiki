@@ -17,6 +17,7 @@ _DEAD_SKIP = re.compile(
 )
 
 CI = REPO_ROOT / ".github" / "workflows" / "ci.yml"
+PR_LINT = REPO_ROOT / ".github" / "workflows" / "pr-lint.yml"
 PYPROJECT = REPO_ROOT / "pyproject.toml"
 CODING_STANDARDS = REPO_ROOT / "docs" / "CODING_STANDARDS.md"
 CURSOR_TESTING_EXPERT = REPO_ROOT / ".cursor" / "agents" / "testing-expert.md"
@@ -42,12 +43,21 @@ def test_ci_lint_and_test_runs_pytest_with_llmwiki_cov() -> None:
 
 
 # @regression
+def test_pr_lint_runs_ai_tooling_lint() -> None:
+    """PR governance must lint shipped agent kit and inner agent markdown."""
+    text = PR_LINT.read_text(encoding="utf-8")
+    assert "ai-linting:" in text
+    assert "llmwiki/agent_kit" in text
+    assert ".claude/commands/*.md" in text
+
+
+# @regression
 def test_ci_runs_uninstrumented_slow_perf_budget_tests() -> None:
     """Wall-clock lint_perf tests must still run in CI without coverage overhead."""
     text = CI.read_text(encoding="utf-8")
     assert "tests/test_lint_perf.py" in text
     assert "-m slow" in text
-    assert "--no-cov" in text
+    assert "performance-budget" in text
 
 
 # @regression

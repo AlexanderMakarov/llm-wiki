@@ -24,7 +24,7 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Changed
 
-- **Unit line-coverage floor in CI (#280)** — default `pytest tests/` (with `tests/e2e` ignored and `@pytest.mark.slow` deselected via `pyproject.toml` `addopts`) now reports Coverage.py on `llmwiki` and fails below **87%** (`[tool.coverage.report] fail_under = 87`); `pytest-cov` is a CI/dev install only. Baseline when measured was ~87.33%. The wall-clock lint_perf suite (`tests/test_lint_perf.py`, `#429`) still runs in `lint-and-test` as an uninstrumented `-m slow` step so coverage overhead cannot flake the DuplicateDetection budget. Playwright E2E stays on its separate workflow and out of this number (visibility follow-up from [#271](https://github.com/AlexanderMakarov/llm-wiki/issues/271)).
+- **Unit line-coverage floor in CI (#280)** — default `pytest tests/` (with `tests/e2e` ignored and `@pytest.mark.slow` deselected via `pyproject.toml` `addopts`) now reports Coverage.py on `llmwiki` and fails below **87%** (`[tool.coverage.report] fail_under = 87`); `pytest-cov` is a CI/dev install only. Baseline when measured was ~87.33%. The wall-clock lint_perf suite (`tests/test_lint_perf.py`, `#429`) runs on the existing `performance-budget` job without coverage so instrumentation cannot flake the DuplicateDetection budget. Playwright E2E stays on its separate workflow and out of this number (visibility follow-up from [#271](https://github.com/AlexanderMakarov/llm-wiki/issues/271)).
   - *Release note:* Contributors: PRs that drop unit line coverage below 87% fail CI; slow perf-budget tests still run without coverage; E2E coverage is unchanged (#280).
 
 - **PyPI `build` in the `[dev]` extra and CI (#280)** — `pip install build` plus a metadata-based `_pypi_build_installed()` check so wheel-content tests in `tests/test_graph_vendor_packaging.py` run in CI instead of skipping when a local `build/` directory exists.
@@ -33,11 +33,11 @@ Versions below 1.0 are pre-production — API and file formats may change.
 - **CLI unit tests consolidated under tests/cli/ (#280)** — handler-focused modules moved from flat `tests/test_cli_*.py` sprawl into `tests/cli/`; `llmwiki synth` handler tests rewritten in `tests/cli/test_synth.py` (exit code + stderr/stdout/side effects); `llmwiki.synth.reporting` tests live under `tests/synth/`. Dead “subcommand removed” skips removed. No numeric “shrink the suite by 30%” gate.
   - *Release note:* Contributors only: run CLI unit tests with `pytest tests/cli/` (#280).
 
-- **testing-expert agents tuned for CLI batches (#280)** — `.claude/agents/testing-expert.md` (and the Cursor agent mirror) adds the CLI handler row matching CODING_STANDARDS (exit code plus distinctive output or side effect).
+- **testing-expert follows CODING_STANDARDS in existing steps (#280)** — `.claude/agents/testing-expert.md` (Cursor symlink) patches layout, usefulness, CLI handler contracts, timing, coverage floor, and skip policy into Inputs / Step 2–3 / Constraints rather than a sidecar section.
   - *Release note:* Re-run or sync agent kit if you rely on testing-expert; no runtime package change (#280).
 
-- **Agnix validation for agent kit and inner docs (#280)** — CI/docs run agnix on `llmwiki/agent_kit` and selected `.claude/` trees with waivers documented in `context/spec/280-shrink-test-suite/agnix-first-run.md`; skill frontmatter fixes (`release`, `gha-diagnosis`, `modern-python-development`). AWOS wrapper `@.awos/…` false positives filed upstream as [agent-sh/agnix#1629](https://github.com/agent-sh/agnix/issues/1629).
-  - *Release note:* Maintainers only: agnix gates on agent kit/skills; AWOS import path limitation tracked upstream (#280).
+- **AI tooling lint in PR governance (#280)** — `pr-lint.yml` job **AI tooling lint** validates `llmwiki/agent_kit` and inner `.claude/` markdown (current engine: agnix 0.56.5). Docs: [`docs/maintainers/AI-LINTING.md`](docs/maintainers/AI-LINTING.md); waivers in `context/spec/280-shrink-test-suite/agnix-first-run.md`; skill frontmatter fixes (`release`, `gha-diagnosis`, `modern-python-development`). AWOS wrapper `@.awos/…` false positives filed upstream as [agent-sh/agnix#1629](https://github.com/agent-sh/agnix/issues/1629).
+  - *Release note:* Maintainers only: AI tooling lint on agent kit/skills in PR lint; AWOS import path limitation tracked upstream (#280).
 
 - **Site file contract docs (#305)** — `docs/reference/reader-api.md` reframed as the static `site/` file contract (no hosted HTTP API today); Raw / `file://` wording in `docs/reference/ui.md` clarified; MCP `wiki_add` project row no longer digresses into site document grouping.
   - *Release note:* Docs only: reader-api / Raw docs describe the static site file layout more clearly (#305).

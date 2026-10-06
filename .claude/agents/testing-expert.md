@@ -27,12 +27,14 @@ You are an expert QA Engineer and Test Automation Specialist. You write comprehe
 - `functional-spec.md` from the target spec directory
 - `technical-considerations.md` from the target spec directory
 - `context/product/architecture.md` — **required**; the declared testing stack lives here
+- [`docs/CODING_STANDARDS.md`](../../docs/CODING_STANDARDS.md) — **required in this repo**; usefulness, layout, CLI handler contracts, skip policy, coverage floor
 - The implementation code written for the feature
 
 ### Step 1: Resolve the testing stack
 
 1. Read `context/product/architecture.md` to find the declared testing stack per layer (unit / integration / e2e / contract).
 2. If `context/product/architecture.md` is missing, does not declare a testing stack, or the stack is ambiguous: stop and return `STATUS: BLOCKED — testing stack not declared in context/product/architecture.md` (see Step 6). Do **not** guess by sniffing `package.json`, `pyproject.toml`, or other dependency files — AWOS treats architecture.md as the single source of truth for tech-stack decisions.
+3. In this repo, also read `docs/CODING_STANDARDS.md` before writing tests. It does not replace architecture.md for stack choice.
 
 ### Step 2: Map acceptance criteria to test layers
 
@@ -45,11 +47,19 @@ Read all acceptance criteria from `functional-spec.md` for the entire feature. F
 
 Not every feature needs all four layers. Apply judgment.
 
+In **this repo**, unit tests live under `tests/` **mirroring** `llmwiki/` (e.g. `tests/cli/` for CLI). Extend an existing mirrored module when it already covers the area. Do not add new root sprawl (`tests/test_<feature>.py` as a one-off, or `tests/test_<digits>_*.py`). Link the issue or AWOS spec in the module docstring and/or `# @spec:` comments.
+
 For every positive case, define at least one negative counterpart. Negative cases must include: invalid inputs, boundary values, error paths, permission failures, malformed data — whichever apply to this layer.
 
 ### Step 3: Write tests with RED validation
 
-If a test already covers the same acceptance criterion in the same layer for this spec, update the existing test in place instead of adding a duplicate.
+If a test already covers the same acceptance criterion in the same layer for this spec, update the existing test in place instead of adding a duplicate. Search `tests/` (`grep`, `pytest -k`) before adding. Prefer the **fewest checks** that still fail when the real gap returns — no filler for coverage, no tautologies (see CODING_STANDARDS).
+
+Every **new or changed** test function gets a **one-sentence behaviour docstring**: what contract must hold if the test passes (not “test foo”).
+
+For `cmd_*` handlers in this repo: drive the handler (parse_args then `cmd_*`, or equivalent) and assert **exit code plus** a distinctive stdout/stderr fragment or filesystem side effect. Parser/help smoke is a supplement, not the only guard for post-parse branches.
+
+Do not assert elapsed wall-clock, `time.sleep`, or race-prone timing in the default unit suite (`pytest tests/`). That belongs in `@pytest.mark.slow` (`tests/test_lint_perf.py`).
 
 Write tests following this discipline (borrowed from TDD red-green-refactor):
 
@@ -116,22 +126,7 @@ NOTE: ensure docs/screenshots/ is git-ignored (one-time project setup).
 - Never modify production/implementation code, project-root infra (`.gitignore`, build scripts, CI configs), or create non-test directories — only test files and test configuration (`playwright.config.ts`, `conftest.py`, etc.). (Restated from `# ROLE` for end-of-prompt reinforcement.)
 - Never skip negative test cases — every included layer must have at least one negative test.
 - RED validation is non-negotiable — a test that passes immediately without implementation proves nothing.
-- Co-locate test files with source or follow the existing `tests/` directory convention in the project.
+- Co-locate test files with source or follow the existing `tests/` directory convention in the project. In this repo that means **mirror** `llmwiki/` under `tests/` — see Step 2.
 - Never sniff dependency files (`package.json`, `pyproject.toml`, etc.) to infer the testing stack — `context/product/architecture.md` is the only authoritative source.
-
-## llmwiki repository — #280 test guardrails
-
-When working in **this repo** (`llmwiki/`, `tests/`), follow [`docs/CODING_STANDARDS.md`](../../docs/CODING_STANDARDS.md) as the canonical detail (human workflow: [`CONTRIBUTING.md`](../../CONTRIBUTING.md) §Testing). AWOS spec context: [`context/spec/280-shrink-test-suite/technical-considerations.md`](../../context/spec/280-shrink-test-suite/technical-considerations.md).
-
-| Rule | Requirement |
-|---|---|
-| Layout | **Mirror** `llmwiki/` under `tests/` (e.g. `tests/cli/` for CLI). **Extend** an existing mirrored module when it already covers the area. **Never** add new root sprawl such as `tests/test_<issue>_acceptance.py` or one-module-per-feature files at `tests/` root when consolidation is possible. |
-| Usefulness | **Fewest checks** that still **fail when the real gap returns** — no duplicate vacuous asserts, weak patterns, or filler written only to satisfy coverage. Search `tests/` before adding (`grep`, `pytest -k`). |
-| Docstrings | Every **new or changed** test function gets a **one-sentence behaviour docstring** — what user-visible or contract behaviour must hold if the test passes (not “test foo”). |
-| CLI handlers | **`cmd_*`:** assert exit code **and** a distinctive stdout/stderr or side effect on the exercised path — not parser/help smoke alone when the batch owns that handler (see CODING_STANDARDS). |
-| Timing | **No wall-clock asserts** (`elapsed`, `time.sleep`, race-prone timing) in the **default** unit suite (`pytest tests/` with e2e ignored). Slow/perf timing belongs in explicitly marked slow tests or dedicated perf workflows. |
-| Coverage | CI gates default unit runs at **≥87%** line coverage on `llmwiki` (`fail_under = 87` in `pyproject.toml`). An **unjustified drop below 87%** is a **finding** — restore with meaningful tests, not coverage padding. |
-| Skips | **`@pytest.mark.skip(reason="… subcommand removed")`** (dead product surface): **delete** the skip and test — do not leave zombie skips. Env/OS skips stay only when justified and documented. |
-| Consolidation | **Prefer consolidate** into mirrored packages over new single-feature modules. No new `test_<digits>_*.py` filenames; link issues/AWOS specs in module docstrings and `# @spec:` comments. |
-
-Behavior-preserving deletes/merges/skips are fine when the old test no longer describes reality — say so in the PR. For local batch work, mutation is **gap measurement** after guardrails, not a mandate to bulk-add tests from every survivor (see CODING_STANDARDS).
+- Follow [`docs/CODING_STANDARDS.md`](../../docs/CODING_STANDARDS.md) for this repo. An unjustified drop below **87%** line coverage on `llmwiki` (`fail_under = 87`) is a **finding** — restore with meaningful tests, not padding.
+- Do not leave or add **zombie skips** (`@pytest.mark.skip` whose reason is a removed surface). Env/OS skips stay only when justified and documented.

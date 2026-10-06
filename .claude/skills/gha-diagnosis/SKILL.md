@@ -1,8 +1,8 @@
 ---
 name: gha-diagnosis
 context: fork
-argument-hint: "<run URL, job ID, or leave empty to auto-detect>"
-description: Use when GitHub Actions checks fail, workflow runs are red, or user asks to fix CI. Triggers on "fix CI", "actions failing", "checks are red", "pipeline broke", "workflow failed". User may provide a run URL, job ID, or just ask to fix.
+argument-hint: "[run-url | run-id | job-id]"
+description: Use when GitHub Actions checks fail, workflow runs are red, or user asks to fix CI. Triggers on "fix CI", "actions failing", "checks are red", "pipeline broke", "workflow failed".
 ---
 
 # GitHub Actions — Autonomous Failure Fix Loop

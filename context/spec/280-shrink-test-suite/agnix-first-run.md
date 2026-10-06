@@ -15,7 +15,7 @@ Markdown links in skills are **not** a first-run error class here (no REF-002). 
 | **CC-SK-006** `release` skill dangerous name | **Yes.** Claude Code requires `disable-model-invocation: true` so the model does not auto-invoke `/release`. | **Fixed** in `.claude/skills/release/SKILL.md`. |
 | **CC-SK-012** `gha-diagnosis` `argument-hint` without `$ARGUMENTS` | **Yes** as a Claude Code skill contract. | **Fixed** — body now uses `$ARGUMENTS`. |
 | **CC-SK-017** unknown `version` on `modern-python-development` | **Yes** as unknown frontmatter (not a Claude Code skill field). | **Fixed** — removed `version`. |
-| **VER-001** no `[tool_versions]` | Noise. Pin is `AGNIX_VERSION` in CI + AGNIX.md. | Disabled **VER-001**. |
+| **VER-001** no `[tool_versions]` | Noise. Pin is `AGNIX_VERSION` in CI + AI-LINTING.md. | Disabled **VER-001**. |
 
 ## Commands (green after fixes)
 

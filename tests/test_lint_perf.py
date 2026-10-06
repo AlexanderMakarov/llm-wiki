@@ -5,7 +5,7 @@ beyond what the demo data exercises. This module synthesises a 500-page
 corpus (representative of a real wiki) and pins wall-clock budgets so
 the regression can't sneak back in.
 
-These tests are marked ``@pytest.mark.slow`` so coverage instrumentation does not inflate wall-clock budgets. Default ``pytest tests/`` deselects them via ``addopts``; CI still runs them uninstrumented in the ``Perf-budget tests (uninstrumented)`` step of ``lint-and-test``. Locally: ``python3 -m pytest tests/test_lint_perf.py -m slow --no-cov``.
+These tests are marked ``@pytest.mark.slow`` so coverage instrumentation does not inflate wall-clock budgets. Default ``pytest tests/`` deselects them via ``addopts``; CI runs them without coverage on the ``performance-budget`` job. Locally: ``python3 -m pytest tests/test_lint_perf.py -m slow --no-cov``.
 """
 
 from __future__ import annotations

@@ -279,7 +279,7 @@ Ruff config lives in `pyproject.toml` under `[tool.ruff]`: line length 120, targ
 
 **Run lint before you push.** The committed `pre-push` hook checks the Python files in your push and rejects it on violations; `git push --no-verify` bypasses it, but say why in the PR. CI runs `ruff check llmwiki tests scripts` and **fails the build** on findings (#58).
 
-**Agent kit / maintainer skills (agnix).** When you change `llmwiki/agent_kit/` or inner `.claude/skills`, `.claude/agents`, or `.claude/commands`, run the scoped agnix commands in [`docs/maintainers/AGNIX.md`](docs/maintainers/AGNIX.md) (pinned `agnix@0.56.5`). CI runs the same paths in `.github/workflows/agnix.yml`.
+**Agent kit / inner AI markdown.** When you change `llmwiki/agent_kit/` or inner `.claude/skills`, `.claude/agents`, or `.claude/commands`, run the scoped commands in [`docs/maintainers/AI-LINTING.md`](docs/maintainers/AI-LINTING.md). CI runs the same paths as the **AI tooling lint** job in `.github/workflows/pr-lint.yml`.
 
 **Do not run bare `ruff check --fix`.** `F401` deletes deliberate package-surface re-exports. Prefer mechanical families first (`--select UP,I,F541,…`), and only run `--select F401` after every intentional re-export carries `# noqa: F401`. Two conventions the linter can't fully check on its own:
 
@@ -298,10 +298,10 @@ Local `ruff` + `pytest` are necessary but not sufficient. Coding agents (and hum
 
 ## Testing
 
-Agent-facing test quality detail lives in [`docs/CODING_STANDARDS.md`](docs/CODING_STANDARDS.md) (usefulness over count, mirrored layout, weak-test patterns, skip policy). The sections below are what every contributor needs for day-to-day runs and PR hygiene.
+How to run the suite and what CI gates. Agent-facing quality rules (usefulness, layout, skips, when to write the failing test first) live only in [`docs/CODING_STANDARDS.md`](docs/CODING_STANDARDS.md) — do not restate them here.
 
 ```bash
-# Everyday unit suite (fast; e2e ignored via pyproject addopts)
+# Everyday unit suite (fast; e2e ignored and @pytest.mark.slow deselected via pyproject addopts)
 python3 -m pytest tests/
 
 # Quieter local run
@@ -310,11 +310,11 @@ python3 -m pytest tests/ -q
 # One file
 python3 -m pytest tests/test_convert.py
 
-# Same unit suite + coverage (what CI gates at 87%; slow marker deselected)
+# Same unit suite + coverage (what CI gates at 87%)
 python3 -m pip install -e '.[dev]'
 python3 -m pytest tests/ --cov=llmwiki --cov-report=term-missing
 
-# Wall-clock lint_perf budgets (#429) — CI runs these uninstrumented after the coverage step
+# Wall-clock lint_perf budgets (#429) — CI runs these on the performance-budget job
 python3 -m pytest tests/test_lint_perf.py -m slow --no-cov
 
 # Optional: HTML report for local browsing
@@ -331,34 +331,11 @@ python3 -m playwright install chromium
 python3 -m pytest tests/e2e/
 ```
 
-**Coverage floor.** `pyproject.toml` sets `[tool.coverage.report] fail_under = 87` on `llmwiki` for the default unit invocation above. The baseline when #280 was measured was ~**87.33%**. Dropping below 87 fails CI; raising the floor later is a deliberate follow-up. E2E stays out of this number because it runs on a separate, path-filtered workflow—not every PR—and mostly exercises built HTML/JS rather than a clean `llmwiki/` line map.
-
-**Layout and consolidation.** Prefer mirroring product code under `tests/` (e.g. `tests/cli/` for CLI) and extending existing modules over new one-off `tests/test_<feature>.py` files. When you consolidate, keep behaviour unchanged and note deletions/merges in the PR.
-
-**Skipped tests.** Delete skips whose reason is a removed subcommand or other dead surface (`@pytest.mark.skip(reason="… subcommand removed")`). Keep env- or optional-tool skips when justified and documented. Empty-input skips that go green without exercising code should be deleted or rewritten when you touch that file.
+**Coverage floor.** `pyproject.toml` sets `[tool.coverage.report] fail_under = 87` on `llmwiki` for the default unit invocation above. The baseline when #280 was measured was ~**87.33%**. Dropping below 87 fails CI. E2E stays out of this number (separate workflow).
 
 Suite autouse in `tests/conftest.py` isolates the default vault **and** neutralizes repo-root `config.json` for in-process merges (#142). Tests that intentionally exercise the user-config overlay must monkeypatch `_USER_CONFIG` / `USER_CONFIG_FILE` themselves.
 
-**Do not put GitHub issue numbers in test filenames.** Prefer a stable feature slug (`tests/test_loop_ready_issue_herdr_acceptance.py`, `tests/test_shell_completion_acceptance.py`). Link the issue or AWOS spec in the module docstring and/or `# @spec: …` comments instead — filenames that encode ticket numbers become misleading when work is retargeted, and they collide with unrelated historical numbers. Existing `test_<digits>_…` files are legacy; do not add new ones.
-
 **No unresolved merge conflict markers in commits.** Git’s `<<<<<<< …` / `=======` / `>>>>>>> …` marker lines in any tracked text file fail the `No merge conflict markers` job in `.github/workflows/pr-lint.yml`. The changelog “must be updated” check only verifies `CHANGELOG.md` was touched; it does not validate content.
-
-### Before adding a test, find out whether it already exists
-
-A new test is only worth its maintenance cost if it covers something nothing else does. Before writing one for a change — in code, docs, CI config, or anywhere else — search for existing coverage and prefer extending it:
-
-```bash
-grep -rn "<symbol-or-filename>" tests/     # who already exercises this?
-python3 -m pytest tests/ -q -k "<keyword>" # what runs when I touch it?
-```
-
-Three failure modes this catches, all of them observed in this repo:
-
-1. **The duplicate.** Two tests asserting the same contract drift apart, and the weaker one starts passing for the wrong reason. Extend the existing test — a new parametrize case usually beats a new function.
-2. **The test that exercises nothing.** A case can pass entirely through some *other* code path and never reach the line you added. A test for a new rule must fail when that rule is removed — check by removing it. One rule in this repo shipped unreachable (an earlier branch already matched every input it could) and its test passed the whole time, because a different rule downstream returned the same answer.
-3. **The test that asserts over an empty input.** Fixtures that skip when their input is missing, or assertions that iterate a list the test never populated, report green without ever running the code. If a test can pass on an empty corpus, it is not covering the corpus.
-
-When existing coverage is close but wrong-shaped, change it rather than adding beside it, and say so in the PR body. Deleting a test that no longer describes real behaviour is a legitimate part of a change — leaving it to rot next to its replacement is not.
 
 Every adapter must ship with:
 
