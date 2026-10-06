@@ -12,6 +12,14 @@ A custom AST flip script on `cmd_*` is **not** a mutmut score and is not used as
 
 ## Proof in this PR: `llmwiki/synth/reporting.py`
 
+**Not a committed mutmut suite.** mutmut was run locally once; CI does not install or invoke it. What ships is stronger pytest. Local recipe (optional; do not add mutmut to `[dev]`):
+
+```bash
+python3 -m pip install 'mutmut==3.8.*'
+# throwaway setup.cfg with only_mutate = llmwiki/synth/reporting.py — see below
+mutmut run
+```
+
 Throwaway `setup.cfg` (not committed):
 
 ```ini

@@ -11,8 +11,9 @@ import tomllib
 
 from llmwiki import REPO_ROOT
 
+# Unconditional skips that only memorialize deleted product surfaces.
 _DEAD_SKIP = re.compile(
-    r"@pytest\.mark\.skip\([^)]*subcommand removed",
+    r"@pytest\.mark\.skip\([^)]*\b(removed|retired|deleted|no longer exists)\b",
     re.IGNORECASE,
 )
 
@@ -48,22 +49,29 @@ def test_pr_lint_runs_ai_tooling_lint() -> None:
     text = PR_LINT.read_text(encoding="utf-8")
     assert "ai-linting:" in text
     assert "llmwiki/agent_kit" in text
-    assert ".claude/commands/*.md" in text
+    assert "AGNIX_VERSION:" in text
+    assert ".claude/commands" in text
+    assert ".claude/commands/*.md" not in text
 
 
 # @regression
 def test_ci_runs_uninstrumented_slow_perf_budget_tests() -> None:
     """Wall-clock lint_perf tests must still run in CI without coverage overhead."""
-    text = CI.read_text(encoding="utf-8")
-    assert "tests/test_lint_perf.py" in text
-    assert "-m slow" in text
-    assert "-o addopts=" in text
-    assert "performance-budget" in text
+    run_lines = [
+        ln
+        for ln in CI.read_text(encoding="utf-8").splitlines()
+        if not ln.lstrip().startswith("#")
+    ]
+    assert any(
+        "tests/test_lint_perf.py" in ln and "-m slow" in ln and "-o addopts=" in ln
+        for ln in run_lines
+    )
+    assert "performance-budget" in CI.read_text(encoding="utf-8")
 
 
 # @regression
-def test_no_dead_subcommand_removed_skip_markers_under_tests() -> None:
-    """Permanently skipped tests that only document removed CLI surfaces are gone."""
+def test_no_dead_removed_surface_skip_markers_under_tests() -> None:
+    """Unconditional skips that only memorialize deleted product surfaces are gone."""
     offenders: list[str] = []
     for path in TESTS_DIR.rglob("*.py"):
         if _DEAD_SKIP.search(path.read_text(encoding="utf-8")):

@@ -150,3 +150,9 @@ def test_wheel_build_skips_cleanly_when_build_unavailable():
         pytest.skip("build is installed — test_wheel_includes_vendored_vis_network covers this")
     assert shutil.which(sys.executable), "interpreter missing"
     assert PYPROJECT.is_file()
+
+
+def test_pyproject_add_extra_includes_markitdown_backends():
+    """Optional ``add`` converters must be gated behind the documented markitdown extras."""
+    text = PYPROJECT.read_text(encoding="utf-8")
+    assert "markitdown[pdf,docx,pptx,xlsx]" in text

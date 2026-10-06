@@ -100,6 +100,8 @@ llmwiki runs two interchangeable ways. Pick one, start — you can switch later.
 
 ## Contributing
 
+- **[CONTRIBUTING.md](../CONTRIBUTING.md)** — PR workflow, lint/test commands, and CI expectations.
+- **[Coding standards](CODING_STANDARDS.md)** — agent-facing test quality rules (usefulness, layout, coverage floor, skips).
 - **[Style guide](style-guide.md)** — how to write docs that match this site's voice.
 - **[Adapter authoring](adapter-authoring.md)** — ship a new agent adapter.
 - **[Architecture](architecture.md)** — understand the three-layer model before changing code.

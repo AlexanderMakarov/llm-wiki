@@ -53,11 +53,11 @@ Three failure modes seen in this repo:
 | Env / optional-tool skips (missing binary, OS-only) | Keep when justified; document why in the skip reason or nearby comment. |
 | Empty-input skips that go green without exercising code | Delete or rewrite when you touch that file. |
 
-## Local batches and mutation (gap measurement)
+## Line coverage vs mutation (gap measurement)
 
-**Line coverage vs mutation score.** The 87% CI gate is **line** coverage: the fraction of `llmwiki` statements that ran. Mutation score is different: the fraction of tiny synthetic bugs the suite **fails on**. A module can be at 100% line coverage and still have survivors (weak asserts). Do not treat “16 of 54 mutants survived” as “line coverage is 70%.”
+**Line coverage vs mutation score.** The 87% CI gate is **line** coverage: the fraction of `llmwiki` statements that ran. Mutation score is different: the fraction of tiny synthetic bugs a suite **fails on**. A module can be at 100% line coverage and still have survivors (weak asserts). Do not treat “16 of 54 mutants survived” as “line coverage is 70%.”
 
-**Proof batch in this change.** For the scoped module under test (`llmwiki/synth/reporting.py` plus `llmwiki synth` handler tests), run mutmut on that module, then **strengthen tests until survivors are gone or explained as equivalent mutants**. Do not park that proof on a follow-up issue. Broader mutation of other packages remains a later, scoped run — not a substitute for the proof batch.
+**This repo does not ship mutmut tests.** There is no committed mutmut harness, no CI mutation job, and no day-to-day requirement to install mutmut. The #280 proof was a **one-off local** mutmut run on `llmwiki/synth/reporting.py`; the durable artifact is stronger ordinary pytest (`tests/synth/test_reporting.py`, `tests/cli/test_synth.py`). The run record is [`context/spec/280-shrink-test-suite/mutation-experiment.md`](../context/spec/280-shrink-test-suite/mutation-experiment.md). Broader mutation scoring of other packages is optional follow-up [#314](https://github.com/AlexanderMakarov/llm-wiki/issues/314), not a substitute for writing useful unit tests.
 
 ## Related
 

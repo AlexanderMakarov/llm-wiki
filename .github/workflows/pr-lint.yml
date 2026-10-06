@@ -132,7 +132,7 @@ jobs:
     name: AI tooling lint
     runs-on: ubuntu-latest
     env:
-      AGNIX_VERSION: "0.56.5"
+      AGNIX_VERSION: "0.56.6"
     steps:
       - uses: actions/checkout@v7
 
@@ -144,12 +144,10 @@ jobs:
         run: npx --yes agnix@${AGNIX_VERSION} --format github validate llmwiki/agent_kit
 
       - name: Validate inner .claude tooling
-        # Layer A wrappers under commands/awos/ `@`-import repo-root `.awos/`
-        # (agnix REF-001 resolves those from the wrapper dir — false positive).
-        # Agnix 0.56.5 does not honor `[files].exclude` when the parent directory
-        # is an explicit validate path; this glob is the real guard.
+        # agnix 0.56.6+ resolves nested `@` imports from the workspace root
+        # (agent-sh/agnix#1629), so commands/awos/ wrappers are safe to scan.
         run: |
           npx --yes agnix@${AGNIX_VERSION} --format github validate \
             .claude/skills \
             .claude/agents \
-            .claude/commands/*.md
+            .claude/commands

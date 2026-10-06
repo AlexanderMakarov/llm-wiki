@@ -331,7 +331,7 @@ python3 -m playwright install chromium
 python3 -m pytest tests/e2e/
 ```
 
-**Coverage floor.** `pyproject.toml` sets `[tool.coverage.report] fail_under = 87` on `llmwiki` for the default unit invocation above. The baseline when #280 was measured was ~**87.33%**. Dropping below 87 fails CI. E2E stays out of this number (separate workflow).
+**Coverage floor.** `pyproject.toml` sets `[tool.coverage.report] fail_under = 87` on `llmwiki` for the default unit invocation above. The baseline when #280 was measured was ~**87.33%**. Dropping below 87 fails CI. If a change trips the gate, restore coverage with meaningful tests — or state in the PR body why the drop is justified (deleted surface, moved code, etc.) so reviewers can accept it. E2E stays out of this number (separate workflow).
 
 Suite autouse in `tests/conftest.py` isolates the default vault **and** neutralizes repo-root `config.json` for in-process merges (#142). Tests that intentionally exercise the user-config overlay must monkeypatch `_USER_CONFIG` / `USER_CONFIG_FILE` themselves.
 

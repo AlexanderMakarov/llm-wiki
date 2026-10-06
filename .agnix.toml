@@ -1,5 +1,5 @@
 # Agent-config lint for shipped kit + inner .claude surfaces (#280 / #290).
-# Local/CI: `npx --yes agnix@0.56.5 validate …` from the repo root (see docs/maintainers/AI-LINTING.md).
+# Local/CI: `npx --yes agnix@0.56.6 validate …` from the repo root (see docs/maintainers/AI-LINTING.md).
 
 [rules]
 disabled_rules = [
@@ -12,8 +12,3 @@ disabled_rules = [
   # Pin lives in CI `AGNIX_VERSION` + AI-LINTING.md, not per-file [tool_versions].
   "VER-001",
 ]
-
-# Claude `/awos:*` wrappers `@`-import Layer A (`.awos/commands/*`). Agnix
-# 0.56.5 REF-001 resolves those from the wrapper directory, not the repo root.
-# `[files].exclude` is not honored when the parent dir is an explicit validate
-# path — CI and AI-LINTING.md pass `.claude/commands/*.md` instead of the directory.

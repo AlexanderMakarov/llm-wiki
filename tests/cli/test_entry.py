@@ -6,7 +6,6 @@ import subprocess
 import sys
 
 from llmwiki import __version__
-from tests.cli._paths import REPO_ROOT
 
 
 def test_version_flag():
@@ -49,10 +48,3 @@ def test_no_args_prints_help():
     )
     assert r.returncode == 0
     assert "usage:" in r.stdout.lower()
-
-
-def test_pyproject_add_extra_includes_markitdown_backends():
-    """Optional ``add`` converters must be gated behind the documented markitdown extras."""
-
-    text = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
-    assert "markitdown[pdf,docx,pptx,xlsx]" in text
