@@ -10,14 +10,11 @@ Covers:
 * list_entries filter + sort
 * format_table empty state + truncation
 * count_by_adapter aggregate
-* CLI subcommand — list, clear --all, clear <source>, retry
 """
 
 from __future__ import annotations
 
 import json
-import subprocess
-import sys
 
 import pytest
 
@@ -261,24 +258,6 @@ def test_entry_equality_by_adapter_source():
     assert hash(a) == hash(b)
 
 
-# ─── CLI subcommand ──────────────────────────────────────────────────────
-
-
-def _run_cli(*args, env=None):
-    return subprocess.run(
-        [sys.executable, "-m", "llmwiki", *args],
-        capture_output=True,
-        text=True,
-        check=False,
-        env=env,
-    )
-
-
-@pytest.mark.skip(reason="quarantine CLI subcommand removed")
-def test_cli_quarantine_list_empty_message(tmp_path, monkeypatch):
-    pass
-
-
 def test_cli_quarantine_list_filters_by_adapter(tmp_path, monkeypatch):
     # Seed directly so we don't rely on CLI to write
     q.add_entry("a", "/p1", "e", path=tmp_path / "q.json")
@@ -286,13 +265,3 @@ def test_cli_quarantine_list_filters_by_adapter(tmp_path, monkeypatch):
     # We can't monkeypatch subprocess env easily — test format_table path instead.
     rows = q.list_entries(path=tmp_path / "q.json", adapter="b")
     assert [e.adapter for e in rows] == ["b"]
-
-
-@pytest.mark.skip(reason="quarantine CLI subcommand removed")
-def test_cli_quarantine_clear_requires_all_or_source():
-    pass
-
-
-@pytest.mark.skip(reason="quarantine CLI subcommand removed")
-def test_cli_quarantine_help_shows_subcommands():
-    pass

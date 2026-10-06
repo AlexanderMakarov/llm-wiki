@@ -4,7 +4,8 @@
 # @spec: 226-cursor-cli-synth-backend
 # @regression
 
-Shared resolve/CLI/overview contracts live in ``test_synth_backends_shared.py``.
+Shared resolve/overview contracts live in ``test_synth_backends_shared.py``.
+CLI ``synth --backend`` handler tests live in ``tests/cli/test_synth.py``.
 This module keeps Cursor-specific acceptance: lean argv, page write, probe
 failure without failover, and packaged pricing aliases.
 """

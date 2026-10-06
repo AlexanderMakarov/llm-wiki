@@ -1,7 +1,7 @@
 # Technical Specification: Quality gates for useful, fast tests (with proof rewrites)
 
 - **Functional Specification:** [functional-spec.md](./functional-spec.md)
-- **Status:** Approved
+- **Status:** Completed
 - **Author(s):** 4ellendger
 
 ---

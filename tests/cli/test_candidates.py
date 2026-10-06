@@ -161,6 +161,7 @@ def test_fully_classified_run_reports_no_unknown_warning(
 
 
 def test_candidates_only_honours_min_refs(tmp_path: Path, monkeypatch) -> None:
+    """``--min_refs`` must suppress stubs that appear on fewer source pages than the threshold."""
     vault = _mk_vault(
         tmp_path,
         {"a": ["Pair"], "b": ["Pair"], "c": ["Trio"], "d": ["Trio"], "e": ["Trio"]},
@@ -249,6 +250,7 @@ def test_unreachable_backend_still_writes_stubs(
 def test_backend_resolution_failure_still_writes_stubs(
     tmp_path: Path, monkeypatch, capsys
 ) -> None:
+    """When backend resolution raises, harvest must still write stubs and warn on stderr."""
     vault = _mk_vault(tmp_path, {s: ["Recurring"] for s in ("a", "b", "c")})
 
     def _boom(cfg):

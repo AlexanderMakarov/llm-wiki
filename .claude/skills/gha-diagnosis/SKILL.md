@@ -11,10 +11,12 @@ Fetch failed workflow logs via `gh`, diagnose root causes, fix, verify locally, 
 
 ## Input
 
+`$ARGUMENTS` is optional: a GitHub Actions run URL, run ID, or job ID. When empty, auto-detect recent failures.
+
 User may provide:
-- **Nothing** — find failures via `gh run list --status failure --limit 5`
-- **Run URL** — e.g. `https://github.com/org/repo/actions/runs/123` → extract run ID
-- **Run/Job ID** — use directly with `gh run view <id> --log-failed`
+- **Nothing / empty `$ARGUMENTS`** — find failures via `gh run list --status failure --limit 5`
+- **Run URL in `$ARGUMENTS`** — e.g. `https://github.com/org/repo/actions/runs/123` → extract run ID
+- **Run/Job ID in `$ARGUMENTS`** — use directly with `gh run view <id> --log-failed`
 
 ## Context Loading
 

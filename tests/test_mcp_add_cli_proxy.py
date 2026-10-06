@@ -4,7 +4,7 @@
 # @spec: 273-mcp-wiki-add-cli-proxy
 # @regression
 
-Per-slice suites (``test_add_doc.py``, ``test_cli.py``, ``test_mcp_wiki_add.py``)
+Per-slice suites (``test_add_doc.py``, ``tests/cli/``, ``test_mcp_wiki_add.py``)
 already cover individual mechanics: piped provenance, chunking, CLI flag inversion,
 MCP registration and schema.
 

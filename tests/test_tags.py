@@ -1,4 +1,4 @@
-"""Tests for ``llmwiki/tags.py`` + ``llmwiki tag`` CLI + G-16 lint rule.
+"""Tests for ``llmwiki/tags.py`` + G-16 lint rule.
 
 Covers:
 * Frontmatter parsing: inline list, block list, mixed, absent, malformed.
@@ -13,14 +13,11 @@ Covers:
 * convention_violations: project with `tags:` → flag,
   source with `topics:` → flag, both fields OK.
 * format_tag_table rendering.
-* CLI subprocess: list / add / rename --dry-run / check / convention.
 * Lint rule wiring: registry count bumped to 14, rule name present.
 """
 
 from __future__ import annotations
 
-import subprocess
-import sys
 from pathlib import Path
 from textwrap import dedent
 
@@ -28,18 +25,6 @@ import pytest
 
 from llmwiki import tags as t
 from llmwiki.lint import REGISTRY, rules  # noqa: F401
-
-REPO_ROOT = Path(__file__).resolve().parents[1]
-
-
-def _run_cli(*args):
-    return subprocess.run(
-        [sys.executable, "-m", "llmwiki", *args],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-
 
 # ─── fixture helpers ─────────────────────────────────────────────────────
 
@@ -410,34 +395,6 @@ def test_format_tag_table_sorts_by_count_desc_then_alpha():
     assert b_idx < c_idx
     assert b_idx < a_idx
     assert c_idx < a_idx
-
-
-# ─── CLI subprocess tests ───────────────────────────────────────────────
-
-
-@pytest.mark.skip(reason="tag CLI subcommand removed")
-def test_cli_tag_list_empty_wiki(tmp_path):
-    pass
-
-
-@pytest.mark.skip(reason="tag CLI subcommand removed")
-def test_cli_tag_help_shows_subcommands():
-    pass
-
-
-@pytest.mark.skip(reason="tag CLI subcommand removed")
-def test_cli_tag_rename_dry_run_does_not_touch_files(tmp_path):
-    pass
-
-
-@pytest.mark.skip(reason="tag CLI subcommand removed")
-def test_cli_tag_check_threshold_custom(tmp_path):
-    pass
-
-
-@pytest.mark.skip(reason="tag CLI subcommand removed")
-def test_cli_tag_convention_on_good_wiki(tmp_path):
-    pass
 
 
 # ─── G-16 lint rule registration ────────────────────────────────────────

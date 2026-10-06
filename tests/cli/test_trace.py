@@ -26,6 +26,7 @@ def _vault(tmp_path: Path) -> Path:
 
 
 def test_parser_registers_trace_with_vault() -> None:
+    """``trace`` subcommand must bind page, vault, and ``cmd_trace`` handler."""
     args = build_parser().parse_args(
         ["trace", "Demo", "--vault", "/tmp/example-vault"],
     )
@@ -35,6 +36,7 @@ def test_parser_registers_trace_with_vault() -> None:
 
 
 def test_cmd_trace_prints_full_chain(tmp_path: Path, capsys) -> None:
+    """A resolvable page must print every provenance hop without raw body text."""
     vault = _vault(tmp_path)
     _write(
         vault / "raw" / "sessions" / "kickoff.md",
@@ -72,6 +74,7 @@ def test_cmd_trace_prints_full_chain(tmp_path: Path, capsys) -> None:
 
 
 def test_cmd_trace_exit_0_on_missing_hop(tmp_path: Path, capsys) -> None:
+    """A partial chain must still exit zero and mark missing hops explicitly."""
     vault = _vault(tmp_path)
     _write(
         vault / "wiki" / "entities" / "Orphan.md",
@@ -93,6 +96,7 @@ def test_cmd_trace_exit_0_on_missing_hop(tmp_path: Path, capsys) -> None:
 
 
 def test_cmd_trace_exit_1_when_page_missing(tmp_path: Path, capsys) -> None:
+    """An unknown page name must exit one with a clear error on stderr."""
     vault = _vault(tmp_path)
     _write(vault / "wiki" / "index.md", "# Wiki Index\n")
 
@@ -108,6 +112,7 @@ def test_cmd_trace_exit_1_when_page_missing(tmp_path: Path, capsys) -> None:
 
 
 def test_cmd_trace_no_provenance_note(tmp_path: Path, capsys) -> None:
+    """A page with no upstream sources must still print the page and a no-provenance note."""
     vault = _vault(tmp_path)
     _write(
         vault / "wiki" / "entities" / "Bare.md",

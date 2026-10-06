@@ -1,4 +1,4 @@
-"""Tests for ``llmwiki/backlinks.py`` + ``llmwiki backlinks`` CLI (#328).
+"""Tests for ``llmwiki/backlinks.py`` (#328).
 
 Covers:
 * Sentinel-bounded block insertion + idempotent replacement
@@ -8,32 +8,11 @@ Covers:
 * Prune removes every block
 * Archive subtree + ``_context.md`` stubs are skipped
 * Injection preserves pre-existing content above the block
-* CLI --dry-run never writes
-* CLI --prune strips
-* CLI --verbose prints top-N
 """
 
 from __future__ import annotations
 
-import subprocess
-import sys
-from pathlib import Path
-
-import pytest
-
 from llmwiki import backlinks as b
-
-REPO_ROOT = Path(__file__).resolve().parents[1]
-
-
-def _run(*args):
-    return subprocess.run(
-        [sys.executable, "-m", "llmwiki", *args],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-
 
 # ─── Sentinel handling ──────────────────────────────────────────────────
 
@@ -299,70 +278,3 @@ def test_prune_all_dry_run_keeps_blocks(tmp_path):
     b.prune_all(wiki, dry_run=True)
     text = (wiki / "entities" / "X.md").read_text(encoding="utf-8")
     assert "BACKLINKS" in text
-
-
-# ─── CLI (subcommand removed — skip) ────────────────────────────────────
-
-
-@pytest.mark.skip(reason="backlinks CLI subcommand removed")
-def test_cli_backlinks_dry_run(tmp_path):
-    wiki = _mk_wiki(tmp_path)
-    before = (wiki / "entities" / "X.md").read_text(encoding="utf-8")
-    cp = _run("backlinks", "--wiki-dir", str(wiki), "--dry-run")
-    assert cp.returncode == 0
-    assert "[dry-run]" in cp.stdout
-    after = (wiki / "entities" / "X.md").read_text(encoding="utf-8")
-    assert before == after
-
-
-@pytest.mark.skip(reason="backlinks CLI subcommand removed")
-def test_cli_backlinks_prune(tmp_path):
-    wiki = _mk_wiki(tmp_path)
-    b.inject_all(wiki)
-    cp = _run("backlinks", "--wiki-dir", str(wiki), "--prune")
-    assert cp.returncode == 0
-    assert "removed backlink blocks" in cp.stdout
-    text = (wiki / "entities" / "X.md").read_text(encoding="utf-8")
-    assert "BACKLINKS" not in text
-
-
-@pytest.mark.skip(reason="backlinks CLI subcommand removed")
-def test_cli_backlinks_verbose_prints_top(tmp_path):
-    wiki = _mk_wiki(tmp_path)
-    cp = _run("backlinks", "--wiki-dir", str(wiki), "--verbose")
-    assert cp.returncode == 0
-    assert "X: 2 referrer" in cp.stdout
-
-
-@pytest.mark.skip(reason="backlinks CLI subcommand removed")
-def test_cli_backlinks_missing_wiki_errors(tmp_path):
-    cp = _run("backlinks", "--wiki-dir", str(tmp_path / "nope"))
-    assert cp.returncode == 2
-
-
-@pytest.mark.skip(reason="backlinks CLI subcommand removed")
-def test_cli_backlinks_help_shows_flags():
-    cp = _run("backlinks", "--help")
-    assert cp.returncode == 0
-    for flag in ("--dry-run", "--prune", "--max-entries", "--verbose"):
-        assert flag in cp.stdout
-
-
-@pytest.mark.skip(reason="backlinks CLI subcommand removed")
-def test_cli_backlinks_max_entries_respected(tmp_path):
-    wiki = tmp_path / "wiki"
-    (wiki / "entities").mkdir(parents=True)
-    (wiki / "sources").mkdir(parents=True)
-    (wiki / "entities" / "Hot.md").write_text(
-        "---\ntitle: Hot\n---\nBody.\n", encoding="utf-8"
-    )
-    for i in range(5):
-        (wiki / "sources" / f"s{i}.md").write_text(
-            f"---\ntitle: S{i}\ndate: 2026-04-{i + 1:02d}\n---\n[[Hot]]\n",
-            encoding="utf-8",
-        )
-    cp = _run("backlinks", "--wiki-dir", str(wiki), "--max-entries", "2")
-    assert cp.returncode == 0
-    text = (wiki / "entities" / "Hot.md").read_text(encoding="utf-8")
-    assert text.count("[[s") == 2
-    assert "and 3 more referrer" in text

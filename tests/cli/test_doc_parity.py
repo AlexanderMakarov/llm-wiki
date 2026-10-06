@@ -9,11 +9,10 @@ invocation in the README so a stale command cannot come back.
 from __future__ import annotations
 
 import re
-from pathlib import Path
 
 from llmwiki.cli import build_parser
+from tests.cli._paths import REPO_ROOT
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
 README = REPO_ROOT / "README.md"
 
 _FENCE_RE = re.compile(r"```(?:bash|shell|text|cmd)?\n(.*?)```", re.DOTALL)

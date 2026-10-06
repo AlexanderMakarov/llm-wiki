@@ -1,6 +1,6 @@
 """End-to-end CLI smoke tests for every ``python -m llmwiki`` subcommand.
 
-The existing unit suite (``tests/test_cli.py``) imports the CLI entry
+The existing unit suite (``tests/cli/``) imports the CLI entry
 point and calls handlers directly, but never exercises the public
 ``python -m llmwiki <cmd>`` surface that users and shell scripts rely on.
 A regression where the argparse wiring breaks for one subcommand would

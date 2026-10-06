@@ -1,7 +1,7 @@
 """Acceptance tests for #112: CLI help as a lifecycle map.
 
 Covers functional-spec.md acceptance criteria R1–R6 not already tested
-in tests/test_cli_lifecycle_help.py (slice-3 help assertions) or
+in tests/cli/test_lifecycle_help.py (slice-3 help assertions) or
 tests/test_reference_coverage.py (doc/CLI parity).
 
 AC coverage matrix (R<n> → test name):

@@ -1,6 +1,7 @@
 ---
 name: release
 argument-hint: "<version>"
+disable-model-invocation: true
 description: Use when a maintainer invokes /release or asks to cut, tag, or ship the next llmwiki version (vX.Y.Z) — including bumping the version and CHANGELOG for a release, or resuming a release cut that stopped part-way. Maintainer-only; not part of the end-user agent kit.
 ---
 

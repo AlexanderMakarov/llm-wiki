@@ -1,10 +1,8 @@
-"""Tests for the observability CLI bundle (G-01 · G-03 · G-13).
+"""Tests for the observability CLI bundle (G-01 · G-03).
 
 * ``cmd_adapters``: status helper returns yes/no; CLI shows present +
   enabled yes/no (#192 R9); legacy active/auto/explicit labels gone;
   ``--wide`` still works.
-* ``cmd_log``: filters by date / operation, JSON vs text output, empty
-  log, missing file, invalid --since, limit clamping.
 * ``cmd_sync_status``: reads ``_meta`` + ``_counters`` from the state
   file, renders per-adapter table, surfaces quarantine counts, shows
   ``--recent`` activity from log.md.
@@ -18,16 +16,13 @@ import subprocess
 import sys
 from pathlib import Path
 from textwrap import dedent
-
-import pytest
+from unittest.mock import patch
 
 import llmwiki.cli as cli_mod
 import llmwiki.sync.status as sync_status_mod
 from llmwiki import quarantine as q
 from llmwiki.cli import _adapter_status
 from llmwiki.convert import _migrate_legacy_state
-
-REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _run_cli(*args, env=None):
@@ -63,20 +58,24 @@ def _available_fake(is_avail: bool):
 
 
 def test_adapter_status_auto_default():
+    """An available adapter with no config row must show enabled yes."""
     assert _adapter_status("x", _available_fake(True), config={}) == "yes"
 
 
 def test_adapter_status_explicit_enable():
+    """``enabled: true`` in config must show enabled yes when the adapter is present."""
     cfg = {"x": {"enabled": True}}
     assert _adapter_status("x", _available_fake(True), config=cfg) == "yes"
 
 
 def test_adapter_status_explicit_off_blocks_fire():
+    """``enabled: false`` must show enabled no even when the adapter is available."""
     cfg = {"x": {"enabled": False}}
     assert _adapter_status("x", _available_fake(True), config=cfg) == "no"
 
 
 def test_adapter_status_unavailable_never_fires():
+    """Unavailable adapters must never show enabled yes."""
     assert (
         _adapter_status(
             "x", _available_fake(False), config={"x": {"enabled": True}}
@@ -91,6 +90,7 @@ def test_adapter_status_invalid_config_entry_defaults_to_auto():
 
 
 def test_adapters_cli_shows_new_columns():
+    """``adapters`` table must use present/enabled columns and drop retired labels."""
     cp = _run_cli("adapters")
     assert cp.returncode == 0
     # #192 R9: name / present / enabled(yes|no) / description — no active column.
@@ -108,12 +108,10 @@ def test_adapters_cli_shows_new_columns():
 
 
 def test_adapters_wide_flag_still_works():
+    """``adapters --wide`` must print extended columns without the narrow hint."""
     cp = _run_cli("adapters", "--wide")
     assert cp.returncode == 0
     assert "Pass --wide" not in cp.stdout
-
-
-# ─── G-13: cmd_log ────────────────────────────────────────────────────────
 
 
 SAMPLE_LOG = dedent(
@@ -131,51 +129,6 @@ SAMPLE_LOG = dedent(
     - Processed: 20
     """
 )
-
-
-@pytest.mark.skip(reason="log CLI subcommand removed")
-def test_cmd_log_missing_file_returns_error(tmp_path, monkeypatch):
-    pass
-
-
-@pytest.mark.skip(reason="log CLI subcommand removed")
-def test_cmd_log_text_format_default(tmp_path, monkeypatch, capsys):
-    pass
-
-
-@pytest.mark.skip(reason="log CLI subcommand removed")
-def test_cmd_log_operation_filter(tmp_path, monkeypatch, capsys):
-    pass
-
-
-@pytest.mark.skip(reason="log CLI subcommand removed")
-def test_cmd_log_since_filter(tmp_path, monkeypatch, capsys):
-    pass
-
-
-@pytest.mark.skip(reason="log CLI subcommand removed")
-def test_cmd_log_invalid_since_returns_error(tmp_path, monkeypatch, capsys):
-    pass
-
-
-@pytest.mark.skip(reason="log CLI subcommand removed")
-def test_cmd_log_json_format(tmp_path, monkeypatch, capsys):
-    pass
-
-
-@pytest.mark.skip(reason="log CLI subcommand removed")
-def test_cmd_log_limit_clamps(tmp_path, monkeypatch, capsys):
-    pass
-
-
-@pytest.mark.skip(reason="log CLI subcommand removed")
-def test_cmd_log_empty_matches_prints_helpful_message(tmp_path, monkeypatch, capsys):
-    pass
-
-
-@pytest.mark.skip(reason="log CLI subcommand removed")
-def test_cli_log_end_to_end():
-    pass
 
 
 # ─── G-03: cmd_sync_status ────────────────────────────────────────────────
@@ -258,27 +211,49 @@ def test_sync_status_with_recent_logs_events(tmp_path, monkeypatch, capsys):
 
 
 def test_sync_status_corrupt_state_file_is_tolerated(tmp_path, monkeypatch, capsys):
+    """Corrupt JSON in the state file must still yield a status report, not a crash."""
     state_file = tmp_path / "state.json"
     state_file.write_text("{ not json", encoding="utf-8")
     monkeypatch.setattr(cli_mod, "REPO_ROOT", tmp_path)
     monkeypatch.setattr(sync_status_mod, "REPO_ROOT", tmp_path)
     rc = cli_mod.cmd_sync_status(_mk_sync_status_args(state_file=state_file))
     assert rc == 0
+    out = capsys.readouterr().out
+    assert "never" in out or "pre-upgrade" in out
+    assert "No per-adapter counters" in out
+    assert "Quarantined sources: 0" in out
 
 
-def test_cli_sync_status_flag_short_circuits(monkeypatch):
-    """`llmwiki sync --status` must not try to run a real sync."""
+def test_sync_status_flag_short_circuits_before_convert(tmp_path, monkeypatch, capsys):
+    """``sync --status`` must report observability and never reach ``convert_all``."""
+    state_file = tmp_path / "state.json"
+    state_file.write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(cli_mod, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(sync_status_mod, "REPO_ROOT", tmp_path)
+    args = cli_mod.build_parser().parse_args(["sync", "--status", "--vault", str(tmp_path)])
+    with patch("llmwiki.cli.convert_all") as convert:
+        rc = cli_mod.cmd_sync(args)
+    assert rc == 0
+    convert.assert_not_called()
+    out = capsys.readouterr().out
+    assert "Last sync:" in out
+    assert "Quarantined sources:" in out
+
+
+def test_cli_sync_status_argv_exits_zero():
+    """``python -m llmwiki sync --status`` must exit 0 and print the status banner."""
     cp = _run_cli("sync", "--status")
-    # Either reports observability (rc=0) or complains about env, but
-    # should never crash with a traceback.
     assert "Traceback" not in cp.stderr
-    assert cp.returncode in (0, 1)
+    assert cp.returncode == 0
+    assert "Last sync:" in cp.stdout
+    assert "Quarantined sources:" in cp.stdout
 
 
 # ─── state migration preserves _meta / _counters ──────────────────────────
 
 
 def test_migrate_preserves_underscore_prefixed_keys(tmp_path):
+    """Legacy migration must keep ``_meta`` and ``_counters`` keys untouched."""
     legacy = {
         "_meta": {"last_sync": "2026-04-20T00:00:00Z"},
         "_counters": {"claude_code": {"discovered": 10}},
@@ -293,6 +268,7 @@ def test_migrate_preserves_underscore_prefixed_keys(tmp_path):
 
 
 def test_migrate_preserves_meta_through_legacy_path_rewrite(tmp_path, monkeypatch):
+    """Rewriting legacy absolute paths must not drop ``_meta`` from the migrated state."""
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
     legacy_abs = str(tmp_path / ".claude" / "projects" / "x" / "old.jsonl")
     legacy = {
@@ -306,17 +282,6 @@ def test_migrate_preserves_meta_through_legacy_path_rewrite(tmp_path, monkeypatc
 
 
 # ─── test helpers ─────────────────────────────────────────────────────────
-
-
-def _mk_log_args(*, limit=10, operation=None, since=None, format="text"):
-    class _A:
-        pass
-    a = _A()
-    a.limit = limit
-    a.operation = operation
-    a.since = since
-    a.format = format
-    return a
 
 
 def _mk_sync_status_args(*, recent=0, vault=None, state_file=None):

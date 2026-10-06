@@ -29,7 +29,7 @@ AC coverage matrix (R<requirement>-AC<n>, in functional-spec.md bullet order):
     R4-AC2..AC6 → covered by tests/test_mcp_enhanced.py (kind filter / ranking /
                   kind+include_raw composition)
     R4-AC7  → test_r4_old_entity_search_tool_name_is_now_unknown
-    R5-AC1..AC5 → covered by tests/test_cli_candidates_only.py + tests/test_synth_pipeline.py
+    R5-AC1..AC5 → covered by tests/cli/test_candidates.py + tests/test_synth_pipeline.py
     R6-AC1  → covered by tests/test_search_facets.py + tests/test_dashboard.py
     R6-AC2  → covered by tests/test_search_facets.py (aggregate_facets has no key)
     R7-AC1  → test_r7_docs_sweep_teaches_neither_the_field_nor_a_filter_on_it

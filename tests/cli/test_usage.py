@@ -39,6 +39,7 @@ def _seed_records(root: Path) -> None:
 
 
 def test_usage_json_reports_consumption(tmp_path: Path, monkeypatch, capsys):
+    """``usage --json`` must aggregate MCP call counts and include a cost block."""
     monkeypatch.setattr(cli, "REPO_ROOT", tmp_path)
     _seed_records(tmp_path)
     state_file = tmp_path / "llmwiki-state.json"
@@ -59,6 +60,7 @@ def test_usage_json_reports_consumption(tmp_path: Path, monkeypatch, capsys):
 
 
 def test_usage_json_surfaces_synth_cost(tmp_path: Path, monkeypatch, capsys):
+    """JSON usage output must surface persisted synthesis cost estimates from state."""
     monkeypatch.setattr(cli, "REPO_ROOT", tmp_path)
     _seed_records(tmp_path)
     state_file = tmp_path / "llmwiki-state.json"
@@ -73,6 +75,7 @@ def test_usage_json_surfaces_synth_cost(tmp_path: Path, monkeypatch, capsys):
 
 
 def test_usage_human_output_lists_tools(tmp_path: Path, monkeypatch, capsys):
+    """Human ``usage`` output must list tools that recorded telemetry."""
     monkeypatch.setattr(cli, "REPO_ROOT", tmp_path)
     _seed_records(tmp_path)
     state_file = tmp_path / "llmwiki-state.json"
@@ -98,6 +101,7 @@ def test_usage_report_labels_calls_with_no_identified_caller(
 
 
 def test_usage_compact_folds_old_logs(tmp_path: Path, monkeypatch, capsys):
+    """``usage --compact`` must roll prior-month logs into the kept rollup file."""
     monkeypatch.setattr(cli, "REPO_ROOT", tmp_path)
     # A June (past-month) file that --compact should fold + delete. The
     # record ts — not the wall clock — is what marks it past-month.

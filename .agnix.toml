@@ -1,0 +1,19 @@
+# Agent-config lint for shipped kit + inner .claude surfaces (#280 / #290).
+# Local/CI: `npx --yes agnix@0.56.5 validate …` from the repo root (see docs/maintainers/AGNIX.md).
+
+[rules]
+disabled_rules = [
+  # CLI / skill placeholders (`<path>`, `<version>`) are not XML. XML-001 treats
+  # the first token inside <> as a tag. XML-002/003 still catch real mismatch.
+  "XML-001",
+  # Hard-coded `.claude/` is intentional: AWOS Layer A is Claude-specific;
+  # Cursor wrappers are generated from it (`scripts/sync-awos-cursor-commands.sh`).
+  "XP-003",
+  # Pin lives in CI `AGNIX_VERSION` + AGNIX.md, not per-file [tool_versions].
+  "VER-001",
+]
+
+# Claude `/awos:*` wrappers `@`-import Layer A (`.awos/commands/*`). Agnix
+# 0.56.5 REF-001 resolves those from the wrapper directory, not the repo root.
+# `[files].exclude` is not honored when the parent dir is an explicit validate
+# path — CI and AGNIX.md pass `.claude/commands/*.md` instead of the directory.

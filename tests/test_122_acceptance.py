@@ -5,7 +5,7 @@
 # @regression
 
 Covers the end-to-end gaps across FR1–FR5 that the individual slice tests
-(test_trace.py, test_cli_trace.py, test_provenance_sources_links.py,
+(test_trace.py, tests/cli/test_trace.py, test_provenance_sources_links.py,
 test_lint_rules.py) address at unit level:
 
 - FR4: every page *kind* that carries provenance (project, synthesis, multiple

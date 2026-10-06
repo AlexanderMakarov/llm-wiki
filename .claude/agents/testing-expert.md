@@ -118,3 +118,20 @@ NOTE: ensure docs/screenshots/ is git-ignored (one-time project setup).
 - RED validation is non-negotiable — a test that passes immediately without implementation proves nothing.
 - Co-locate test files with source or follow the existing `tests/` directory convention in the project.
 - Never sniff dependency files (`package.json`, `pyproject.toml`, etc.) to infer the testing stack — `context/product/architecture.md` is the only authoritative source.
+
+## llmwiki repository — #280 test guardrails
+
+When working in **this repo** (`llmwiki/`, `tests/`), follow [`docs/CODING_STANDARDS.md`](../../docs/CODING_STANDARDS.md) as the canonical detail (human workflow: [`CONTRIBUTING.md`](../../CONTRIBUTING.md) §Testing). AWOS spec context: [`context/spec/280-shrink-test-suite/technical-considerations.md`](../../context/spec/280-shrink-test-suite/technical-considerations.md).
+
+| Rule | Requirement |
+|---|---|
+| Layout | **Mirror** `llmwiki/` under `tests/` (e.g. `tests/cli/` for CLI). **Extend** an existing mirrored module when it already covers the area. **Never** add new root sprawl such as `tests/test_<issue>_acceptance.py` or one-module-per-feature files at `tests/` root when consolidation is possible. |
+| Usefulness | **Fewest checks** that still **fail when the real gap returns** — no duplicate vacuous asserts, weak patterns, or filler written only to satisfy coverage. Search `tests/` before adding (`grep`, `pytest -k`). |
+| Docstrings | Every **new or changed** test function gets a **one-sentence behaviour docstring** — what user-visible or contract behaviour must hold if the test passes (not “test foo”). |
+| CLI handlers | **`cmd_*`:** assert exit code **and** a distinctive stdout/stderr or side effect on the exercised path — not parser/help smoke alone when the batch owns that handler (see CODING_STANDARDS). |
+| Timing | **No wall-clock asserts** (`elapsed`, `time.sleep`, race-prone timing) in the **default** unit suite (`pytest tests/` with e2e ignored). Slow/perf timing belongs in explicitly marked slow tests or dedicated perf workflows. |
+| Coverage | CI gates default unit runs at **≥87%** line coverage on `llmwiki` (`fail_under = 87` in `pyproject.toml`). An **unjustified drop below 87%** is a **finding** — restore with meaningful tests, not coverage padding. |
+| Skips | **`@pytest.mark.skip(reason="… subcommand removed")`** (dead product surface): **delete** the skip and test — do not leave zombie skips. Env/OS skips stay only when justified and documented. |
+| Consolidation | **Prefer consolidate** into mirrored packages over new single-feature modules. No new `test_<digits>_*.py` filenames; link issues/AWOS specs in module docstrings and `# @spec:` comments. |
+
+Behavior-preserving deletes/merges/skips are fine when the old test no longer describes reality — say so in the PR. For local batch work, mutation is **gap measurement** after guardrails, not a mandate to bulk-add tests from every survivor (see CODING_STANDARDS).

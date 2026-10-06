@@ -1,9 +1,6 @@
 """Shared synthesis-backend contracts (#230) — parametrized across engines.
 
-Backend-specific transport (Claude lean/JSON, Cursor allowlist/PATH probe,
-Ollama HTTP retries) stays in the per-backend test modules. This file covers
-resolve_backend wiring, shared-timeout isolation, CLI ``--backend`` overlay,
-and overview soft-fail / skip behaviour that must stay identical.
+Backend-specific transport (Claude lean/JSON, Cursor allowlist/PATH probe, Ollama HTTP retries) stays in the per-backend test modules. This file covers resolve_backend wiring, shared-timeout isolation, and overview soft-fail / skip behaviour that must stay identical. CLI ``synth --backend`` handler tests live in ``tests/cli/test_synth.py``.
 """
 
 from __future__ import annotations
@@ -16,7 +13,6 @@ from unittest.mock import patch
 import pytest
 
 from llmwiki.build import synthesize_overview
-from llmwiki.cli import SYNTH_BACKEND_CHOICES, build_parser, cmd_synthesize
 from llmwiki.synth.base import DummySynthesizer
 from llmwiki.synth.claude_cli import (
     DEFAULT_CLAUDE_TIMEOUT,
@@ -31,15 +27,6 @@ from llmwiki.synth.cursor_cli import (
 )
 from llmwiki.synth.ollama import OllamaSynthesizer
 from llmwiki.synth.pipeline import resolve_backend
-
-
-def _seed_vault(tmp_path: Path) -> Path:
-    vault = tmp_path / "vault"
-    (vault / "raw" / "sessions").mkdir(parents=True)
-    (vault / "raw" / "docs").mkdir(parents=True)
-    (vault / "wiki" / "sources").mkdir(parents=True)
-    (vault / "llmwiki-state.json").write_text("{}", encoding="utf-8")
-    return vault
 
 
 @dataclass(frozen=True)
@@ -148,95 +135,6 @@ def test_resolve_backend_unknown_falls_back_to_dummy(
 def test_cli_backends_ignore_shared_ollama_timeout(loader, default_timeout: int) -> None:
     cfg = loader({"synthesis": {"backend": "x", "timeout": 60}})
     assert cfg.timeout == default_timeout
-
-
-def test_synth_parser_accepts_all_backend_choices() -> None:
-    for name in SYNTH_BACKEND_CHOICES:
-        args = build_parser().parse_args(["synth", "--backend", name])
-        assert args.backend == name
-    assert build_parser().parse_args(["synth"]).backend is None
-
-
-def test_synth_parser_rejects_unknown_backend() -> None:
-    with pytest.raises(SystemExit) as excinfo:
-        build_parser().parse_args(["synth", "--backend", "nope"])
-    assert excinfo.value.code == 2
-
-
-@pytest.mark.parametrize("override", ["claude", "cursor_cli", "dummy", "ollama"])
-def test_cli_backend_overlay_does_not_mutate_config(
-    override: str,
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    vault = _seed_vault(tmp_path)
-    pinned = {"synthesis": {"backend": "dummy" if override != "dummy" else "ollama"}}
-    seen: dict[str, Any] = {}
-
-    class _Stub:
-        name = override
-
-        def is_available(self) -> bool:
-            return True
-
-    def _resolve(cfg: dict[str, Any]):
-        seen["cfg"] = cfg
-        return _Stub()
-
-    monkeypatch.setattr("llmwiki.cli._load_sessions_config", lambda: pinned)
-    monkeypatch.setattr("llmwiki.cli.resolve_backend", _resolve)
-
-    args = build_parser().parse_args([
-        "synth", "--check", "--backend", override, "--vault", str(vault),
-    ])
-    rc = cmd_synthesize(args)
-    assert rc == 0
-    assert seen["cfg"]["synthesis"]["backend"] == override
-    assert pinned["synthesis"]["backend"] != override or override == "dummy"
-    # When override == dummy and pinned was ollama, pinned stays ollama.
-    if override != "dummy":
-        assert pinned["synthesis"]["backend"] == "dummy"
-    else:
-        assert pinned["synthesis"]["backend"] == "ollama"
-    out = capsys.readouterr().out
-    assert f"Backend: {override}" in out
-    assert "Available: True" in out
-
-
-@pytest.mark.parametrize(
-    ("backend_key", "nested", "expected_model"),
-    [
-        ("cursor_cli", {"cursor_cli": {"model": "composer-2.5"}}, "composer-2.5"),
-        ("claude", {"claude": {"model": "haiku"}, "claude_model": "sonnet"}, "haiku"),
-        ("claude", {"claude_model": "sonnet"}, "sonnet"),
-    ],
-    ids=["cursor_nested", "claude_nested_wins", "claude_flat"],
-)
-def test_estimate_honors_backend_model_resolution(
-    backend_key: str,
-    nested: dict[str, Any],
-    expected_model: str,
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    vault = _seed_vault(tmp_path)
-    pinned = {"synthesis": {"backend": "dummy", **nested}}
-    monkeypatch.setattr("llmwiki.cli._load_sessions_config", lambda: pinned)
-    monkeypatch.setattr("llmwiki.cli._discover_raw_sessions", lambda raw_dir=None: [])
-    monkeypatch.setattr("llmwiki.cli._load_state", lambda _p=None: {})
-    monkeypatch.setattr("llmwiki.synth.pipeline._discover_raw_sessions", lambda raw_dir=None: [])
-    monkeypatch.setattr("llmwiki.synth.pipeline._load_state", lambda _p=None: {})
-
-    args = build_parser().parse_args([
-        "synth", "--estimate", "--backend", backend_key, "--vault", str(vault),
-    ])
-    rc = cmd_synthesize(args)
-    out = capsys.readouterr().out
-    assert rc == 0
-    assert pinned["synthesis"]["backend"] == "dummy"
-    assert f"Execution model: {expected_model}" in out
 
 
 def test_overview_dummy_skips_llm(capsys: pytest.CaptureFixture[str]) -> None:

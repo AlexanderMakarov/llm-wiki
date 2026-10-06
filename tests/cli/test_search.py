@@ -10,8 +10,7 @@ from pathlib import Path
 import pytest
 
 from llmwiki.cli import build_parser, cmd_search
-
-REPO_ROOT = Path(__file__).resolve().parents[1]
+from tests.cli._paths import REPO_ROOT
 
 
 def _make_vault(tmp_path: Path) -> Path:
@@ -51,6 +50,7 @@ def _fingerprint(root: Path) -> dict[str, str]:
 
 
 def test_parser_registers_search_defaults():
+    """``search`` defaults must wire term mode, text output, and ``cmd_search``."""
     args = _parse("search", "RAG")
     assert args.func is cmd_search
     assert args.mode == "term"
@@ -59,6 +59,7 @@ def test_parser_registers_search_defaults():
 
 
 def test_term_mode_finds_page(tmp_path: Path, capsys):
+    """Term search must list matching wiki pages and exit zero."""
     vault = _make_vault(tmp_path)
     args = _parse("search", "AlphaBeta", "--vault", str(vault))
     assert cmd_search(args) == 0
@@ -68,6 +69,7 @@ def test_term_mode_finds_page(tmp_path: Path, capsys):
 
 
 def test_term_mode_absent_exits_zero(tmp_path: Path, capsys):
+    """No matches must still exit zero with an explicit zero-hit summary."""
     vault = _make_vault(tmp_path)
     args = _parse("search", "zzznomatchxyz", "--vault", str(vault))
     assert cmd_search(args) == 0
@@ -76,6 +78,7 @@ def test_term_mode_absent_exits_zero(tmp_path: Path, capsys):
 
 
 def test_phrase_mode_ranks_whole_phrase_above_partial(tmp_path: Path, capsys):
+    """Phrase mode must rank whole-phrase hits above pages with scattered words."""
     vault = _make_vault(tmp_path)
     args = _parse(
         "search",
@@ -94,6 +97,7 @@ def test_phrase_mode_ranks_whole_phrase_above_partial(tmp_path: Path, capsys):
 
 
 def test_bulk_terms_file(tmp_path: Path, capsys):
+    """``--terms-file`` must run each non-comment line and report per-term sections."""
     vault = _make_vault(tmp_path)
     terms = tmp_path / "terms.txt"
     terms.write_text(
@@ -109,6 +113,7 @@ def test_bulk_terms_file(tmp_path: Path, capsys):
 
 
 def test_bulk_stdin(tmp_path: Path, monkeypatch, capsys):
+    """``--terms-file -`` must read bulk terms from stdin like a terms file."""
     vault = _make_vault(tmp_path)
     monkeypatch.setattr(sys, "stdin", __import__("io").StringIO("AlphaBeta\nmissingterm\n"))
     args = _parse("search", "--terms-file", "-", "--vault", str(vault))
@@ -120,6 +125,7 @@ def test_bulk_stdin(tmp_path: Path, monkeypatch, capsys):
 
 
 def test_format_json(tmp_path: Path, capsys):
+    """``--format json`` must emit a machine-readable payload with page paths."""
     vault = _make_vault(tmp_path)
     args = _parse(
         "search", "AlphaBeta", "--vault", str(vault), "--format", "json"
@@ -132,6 +138,7 @@ def test_format_json(tmp_path: Path, capsys):
 
 
 def test_format_json_phrase(tmp_path: Path, capsys):
+    """JSON phrase results must include mode, ranked pages, and scores."""
     vault = _make_vault(tmp_path)
     args = _parse(
         "search",
@@ -151,6 +158,7 @@ def test_format_json_phrase(tmp_path: Path, capsys):
 
 
 def test_non_vault_clear_error(tmp_path: Path, capsys):
+    """A missing ``--vault`` path must exit two with a clear error message."""
     missing = tmp_path / "does-not-exist"
     args = _parse("search", "x", "--vault", str(missing))
     with pytest.raises(SystemExit) as exc:
@@ -162,6 +170,7 @@ def test_non_vault_clear_error(tmp_path: Path, capsys):
 
 
 def test_vault_unchanged_after_search(tmp_path: Path, capsys):
+    """Search must be read-only — no wiki files may change on disk."""
     vault = _make_vault(tmp_path)
     before = _fingerprint(vault)
     args = _parse(
@@ -180,6 +189,7 @@ def test_vault_unchanged_after_search(tmp_path: Path, capsys):
 
 
 def test_subprocess_help_exits_zero():
+    """``llmwiki search --help`` must succeed and document mode and terms-file flags."""
     r = subprocess.run(
         [sys.executable, "-m", "llmwiki", "search", "--help"],
         cwd=REPO_ROOT,
