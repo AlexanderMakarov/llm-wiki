@@ -10,7 +10,9 @@ docs/maintainers/REVIEW_CHECKLIST.md for the full review bar.
 
 <!-- One paragraph: what does this PR do? -->
 
-Closes #<issue>
+<!-- Link the issue: use `Closes #<n>` only when this PR fully completes it.
+     For partial / related work use `Relevant to #<n>` so merge does not auto-close. -->
+Relevant to #<issue>
 
 ## What changed
 
@@ -36,7 +38,7 @@ Every box below must be checked (or have a one-line waiver explaining why it doe
 
 - [ ] **One intent** — this PR does one thing (no mixing a fix with a refactor or a new feature)
 - [ ] **All CI checks green** — no `--no-verify`, no skipped required jobs
-- [ ] **Linked issue** — title or body contains `Closes #N` (or one-line waiver explaining why the change is trivial)
+- [ ] **Linked issue** — `Closes #N` only if this PR completes the issue; otherwise `Relevant to #N` (or one-line waiver if no issue)
 - [ ] **Conventional-commit title** — `<type>(<scope>): <imperative>` where type is `feat` / `fix` / `chore` / `docs` / `test` / `refactor` / `perf` / `security` / `release` (optionally with a version scope like `feat(v0.8):`)
 - [ ] **Tests added or updated** — happy path + at least one edge case; TDD where shape is clear
 - [ ] **CHANGELOG.md updated** — new entry under `## [Unreleased]` (skip for doc-only PRs that don't change behavior)

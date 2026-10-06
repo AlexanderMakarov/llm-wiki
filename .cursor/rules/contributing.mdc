@@ -14,11 +14,13 @@ Pay special attention to:
 3. New CLI subcommands / config keys / lint rules → matching row in `docs/reference/*.md` (CI enforces CLI coverage)
 4. No new runtime deps — stdlib plus `markdown` only
 5. No real session data; no personal vault paths / usernames in PRs or commits
-6. **No GitHub issue numbers in new test filenames** — use a stable feature/module slug (`tests/test_unified_document_pages_acceptance.py`, not `tests/test_305_….py`). Link the issue or AWOS spec in the module docstring / `# @spec:` comments. Existing `test_<digits>_…` files are legacy; do not add new ones (full rule: CONTRIBUTING *Testing*)
+6. Link issues with `Closes #N` only when the PR fully completes the issue; otherwise `Relevant to #N`
+7. **No GitHub issue numbers in new test filenames** — use a stable feature/module slug (`tests/test_unified_document_pages_acceptance.py`, not `tests/test_305_….py`). Link the issue or AWOS spec in the module docstring / `# @spec:` comments. Existing `test_<digits>_…` files are legacy; do not add new ones (full rule: [`docs/CODING_STANDARDS.md`](../../docs/CODING_STANDARDS.md))
+8. Before adding a test, check `tests/` for existing coverage — extend it rather than duplicating; a test for a new rule must fail when that rule is removed. Agent detail: [`docs/CODING_STANDARDS.md`](../../docs/CODING_STANDARDS.md); commands and 87% floor: CONTRIBUTING *Testing*
 
 ## Markdown formatting
 
-**Never hard-wrap prose at a fixed column.** One paragraph is one line, however long. Line width is the renderer's job, not the file's — hard wraps produce noisy diffs where a one-word edit reflows a whole paragraph. This applies to every `.md` file in the repo, including this one and every other agent-facing rule file.
+**Never hard-wrap prose at a fixed column.** One paragraph is one line, however long. Line width is the renderer's job, not the file's.
 
 ## Lint and test before pushing
 

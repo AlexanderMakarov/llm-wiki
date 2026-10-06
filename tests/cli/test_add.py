@@ -1,4 +1,4 @@
-"""Smoke tests for the CLI entry point."""
+"""CLI contract tests for ``llmwiki add`` (raw ingest, synth opt-in, rollback)."""
 
 from __future__ import annotations
 
@@ -8,71 +8,16 @@ import sys
 from pathlib import Path
 
 import llmwiki.add_pipeline as pipe
-import llmwiki.cli as cli_mod
-from llmwiki import __version__
-
-
-def test_version_flag():
-    r = subprocess.run(
-        [sys.executable, "-m", "llmwiki", "--version"],
-        capture_output=True, text=True,
-    )
-    assert r.returncode == 0
-    assert __version__ in r.stdout
-
-
-def test_version_subcommand():
-    r = subprocess.run(
-        [sys.executable, "-m", "llmwiki", "version"],
-        capture_output=True, text=True,
-    )
-    assert r.returncode == 0
-    assert __version__ in r.stdout
-
-
-def test_adapters_lists_claude_code():
-    r = subprocess.run(
-        [sys.executable, "-m", "llmwiki", "adapters"],
-        capture_output=True, text=True,
-    )
-    assert r.returncode == 0
-    assert "claude_code" in r.stdout
-    assert "codex_cli" in r.stdout
-    # obsidian moved to contrib — no longer in default `adapters` output
-
-
-def test_no_args_prints_help():
-    r = subprocess.run(
-        [sys.executable, "-m", "llmwiki"],
-        capture_output=True, text=True,
-    )
-    # Should print help and exit 0
-    assert r.returncode == 0
-    assert "usage" in r.stdout.lower() or "llmwiki" in r.stdout
-
-
-def _scratch_vault(tmp_path):
-    """Minimal existing directory to pass as --vault.
-
-    These tests run `llmwiki add` in a subprocess, so monkeypatching
-    can't stop `_apply_default_vault` from reading this machine's
-    (gitignored) dev config.json — which may set `vault.default_path`
-    to something that doesn't resolve here (or resolves to a real vault
-    we don't want to touch). Passing an explicit --vault short-circuits
-    that lookup (`_apply_default_vault` only fills `args.vault` when it
-    is still None) and keeps the test hermetic on any machine.
-    """
-    vault = tmp_path / "vault"
-    vault.mkdir()
-    return vault
+from tests.cli._add_helpers import add_vault, fake_claude, run_add, scratch_vault
 
 
 def test_add_dry_run_local_md(tmp_path):
+    """``add --dry-run`` must preview a local markdown file without writing the vault."""
     src = tmp_path / "sample.md"
     src.write_text("# Sample Doc\n\nsome content\n")
     r = subprocess.run(
         [sys.executable, "-m", "llmwiki", "add", "--dry-run",
-         "--vault", str(_scratch_vault(tmp_path)), str(src)],
+         "--vault", str(scratch_vault(tmp_path)), str(src)],
         capture_output=True, text=True,
     )
     assert r.returncode == 0, r.stderr
@@ -81,6 +26,7 @@ def test_add_dry_run_local_md(tmp_path):
 
 
 def test_add_requires_source():
+    """``add`` without sources must exit with argparse error code 2."""
     r = subprocess.run(
         [sys.executable, "-m", "llmwiki", "add"],
         capture_output=True, text=True,
@@ -89,12 +35,13 @@ def test_add_requires_source():
 
 
 def test_add_title_with_multiple_sources_rejected(tmp_path):
+    """``--title`` with more than one source path must be rejected at parse time."""
     a, b = tmp_path / "a.md", tmp_path / "b.md"
     a.write_text("# A\n")
     b.write_text("# B\n")
     r = subprocess.run(
         [sys.executable, "-m", "llmwiki", "add", "--title", "T", "--dry-run",
-         "--vault", str(_scratch_vault(tmp_path)), str(a), str(b)],
+         "--vault", str(scratch_vault(tmp_path)), str(a), str(b)],
         capture_output=True, text=True,
     )
     assert r.returncode == 2
@@ -102,43 +49,22 @@ def test_add_title_with_multiple_sources_rejected(tmp_path):
 
 
 def test_llm_wiki_add_entry_point(tmp_path):
+    """``main_add`` entry point must accept the same argv as the ``add`` subcommand."""
     src = tmp_path / "sample.md"
     src.write_text("# Entry Point Doc\n\ncontent\n")
     r = subprocess.run(
         [sys.executable, "-c",
          "import sys; from llmwiki.cli import main_add; sys.exit(main_add())",
-         "--dry-run", "--vault", str(_scratch_vault(tmp_path)), str(src)],
+         "--dry-run", "--vault", str(scratch_vault(tmp_path)), str(src)],
         capture_output=True, text=True,
     )
     assert r.returncode == 0, r.stderr
     assert "Entry Point Doc" in r.stdout
 
 
-def _fake_claude(tmp_path, body="## Summary\\nSynthesized synchronously."):
-    """Executable stub standing in for the `claude` CLI: swallows the
-    stdin prompt, prints a canned page."""
-    script = tmp_path / "claude-stub"
-    script.write_text(f'#!/bin/sh\ncat > /dev/null\nprintf "{body}\\n"\n')
-    script.chmod(0o755)
-    return script
-
-
-def _add_vault(tmp_path):
-    vault = tmp_path / "vault"
-    (vault / "raw" / "docs").mkdir(parents=True)
-    (vault / "raw" / "sessions").mkdir(parents=True, exist_ok=True)
-    (vault / "wiki").mkdir()
-    return vault
-
-
-def _run_add(cli_mod, vault, *argv):
-    args = cli_mod.build_parser().parse_args(["add", "--vault", str(vault), *argv])
-    return args.func(args)
-
-
 def test_add_default_writes_raw_and_builds_without_synth(tmp_path, monkeypatch, capsys):
-    """Bare `add` lands raw docs and rebuilds the site; no wiki/sources (#273)."""
-    vault = _add_vault(tmp_path)
+    """Bare ``add`` lands raw docs and rebuilds the site; no wiki/sources (#273)."""
+    vault = add_vault(tmp_path)
     src = tmp_path / "doc.md"
     src.write_text("# Raw Default Doc\n\nbody\n")
 
@@ -157,31 +83,28 @@ def test_add_default_writes_raw_and_builds_without_synth(tmp_path, monkeypatch, 
         lambda **kw: (build_called.__setitem__("n", build_called["n"] + 1) or 0),
     )
 
-    rc = _run_add(cli_mod, vault, str(src))
+    rc = run_add(vault, str(src))
     out = capsys.readouterr()
     assert rc == 0, out.err
     assert synth_called["n"] == 0
     assert build_called["n"] == 1
     assert (vault / "raw" / "docs" / "raw-default-doc" / "raw-default-doc.md").exists()
-    sources_dir = vault / "wiki" / "sources"
-    sources_dir.mkdir(parents=True, exist_ok=True)
-    assert list(sources_dir.rglob("*.md")) == []
+    assert not list((vault / "wiki" / "sources").rglob("*.md"))
 
 
 def test_add_configured_claude_backend_synthesizes_synchronously(tmp_path, monkeypatch, capsys):
-    """With ``--synthesize``, `add` uses the configured backend and produces
-    a real page in the same invocation."""
-    vault = _add_vault(tmp_path)
+    """With ``--synthesize``, ``add`` uses the configured backend and produces a wiki source page."""
+    vault = add_vault(tmp_path)
     src = tmp_path / "doc.md"
     src.write_text("# Sync Doc\n\nbody\n")
 
-    claude = _fake_claude(tmp_path)
+    claude = fake_claude(tmp_path)
     monkeypatch.setattr(pipe, "_load_sessions_config", lambda: {
         "synthesis": {"backend": "claude", "claude_path": str(claude)},
     })
     monkeypatch.setattr(pipe, "build_site", lambda **kw: 0)
 
-    rc = _run_add(cli_mod, vault, "--synthesize", str(src))
+    rc = run_add(vault, "--synthesize", str(src))
     out = capsys.readouterr()
     assert rc == 0, out.err
     assert "claude-cli" in out.out
@@ -192,9 +115,8 @@ def test_add_configured_claude_backend_synthesizes_synchronously(tmp_path, monke
 
 
 def test_add_synthesizes_only_written_docs(tmp_path, monkeypatch, capsys):
-    """`add --synthesize` must not drain the unsynthesized backlog — only the docs it wrote."""
-    vault = _add_vault(tmp_path)
-    # Pre-existing unsynthesized doc that must NOT be touched by this add.
+    """``add --synthesize`` must not drain the unsynthesized backlog — only the docs it wrote."""
+    vault = add_vault(tmp_path)
     backlog = vault / "raw" / "docs" / "old-backlog" / "old-backlog.md"
     backlog.parent.mkdir(parents=True)
     backlog.write_text("---\ntitle: Old\nproject: docs\nslug: old-backlog\n---\n\n# Old\n", encoding="utf-8")
@@ -226,7 +148,7 @@ def test_add_synthesizes_only_written_docs(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(pipe, "resolve_backend", lambda _cfg: _Ok())
     monkeypatch.setattr(pipe, "synthesize_new_sessions", _fake_synth)
     monkeypatch.setattr(pipe, "build_site", lambda **kw: 0)
-    # expected_source_page check: create the page so rollback doesn't fire
+
     def _expected(raw_path, sources_dir):
         p = Path(sources_dir) / "docs" / "brand-new.md"
         p.parent.mkdir(parents=True, exist_ok=True)
@@ -234,7 +156,7 @@ def test_add_synthesizes_only_written_docs(tmp_path, monkeypatch, capsys):
         return p
     monkeypatch.setattr(pipe, "expected_source_page", _expected)
 
-    rc = _run_add(cli_mod, vault, "--synthesize", str(src))
+    rc = run_add(vault, "--synthesize", str(src))
     assert rc == 0
     assert "only_paths" in captured
     only = {str(p) for p in captured["only_paths"]}
@@ -244,7 +166,7 @@ def test_add_synthesizes_only_written_docs(tmp_path, monkeypatch, capsys):
 
 def test_add_readd_unchanged_skips_without_synth(tmp_path, monkeypatch, capsys):
     """Re-adding identical content exits 0 and does not synthesize/build (#22)."""
-    vault = _add_vault(tmp_path)
+    vault = add_vault(tmp_path)
     src = tmp_path / "doc.md"
     src.write_text("# Repeat Doc\n\nsame body\n")
 
@@ -256,12 +178,12 @@ def test_add_readd_unchanged_skips_without_synth(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(pipe, "build_site",
                         lambda **kw: (build_called.__setitem__("n", build_called["n"] + 1) or 0))
 
-    rc1 = _run_add(cli_mod, vault, "--no-build", str(src))
+    rc1 = run_add(vault, "--no-build", str(src))
     assert rc1 == 0
     assert synth_called["n"] == 0
     assert build_called["n"] == 0
 
-    rc2 = _run_add(cli_mod, vault, str(src))
+    rc2 = run_add(vault, str(src))
     out = capsys.readouterr()
     assert rc2 == 0, out.err
     assert synth_called["n"] == 0, "re-add must not trigger synthesis"
@@ -272,7 +194,7 @@ def test_add_readd_unchanged_skips_without_synth(tmp_path, monkeypatch, capsys):
 
 def test_add_unavailable_backend_rolls_back_raw_docs(tmp_path, monkeypatch, capsys):
     """With ``--synthesize``, an unavailable backend rolls back raw docs."""
-    vault = _add_vault(tmp_path)
+    vault = add_vault(tmp_path)
     src = tmp_path / "doc.md"
     src.write_text("# Orphan Doc\n\nbody\n")
 
@@ -287,7 +209,7 @@ def test_add_unavailable_backend_rolls_back_raw_docs(tmp_path, monkeypatch, caps
     monkeypatch.setattr(pipe, "resolve_backend", lambda _cfg: _Unavailable())
     monkeypatch.setattr(pipe, "build_site", lambda **kw: 0)
 
-    rc = _run_add(cli_mod, vault, "--synthesize", str(src))
+    rc = run_add(vault, "--synthesize", str(src))
     out = capsys.readouterr()
     assert rc == 2
     assert "omit --synthesize" in out.err
@@ -299,7 +221,7 @@ def test_add_unavailable_backend_rolls_back_raw_docs(tmp_path, monkeypatch, caps
 
 def test_add_failed_synthesis_rolls_back_raw_docs(tmp_path, monkeypatch, capsys):
     """A backend that errors per page leaves no wiki page — raw doc rolled back."""
-    vault = _add_vault(tmp_path)
+    vault = add_vault(tmp_path)
     src = tmp_path / "doc.md"
     src.write_text("# Broken Doc\n\nbody\n")
 
@@ -311,7 +233,7 @@ def test_add_failed_synthesis_rolls_back_raw_docs(tmp_path, monkeypatch, capsys)
     })
     monkeypatch.setattr(pipe, "build_site", lambda **kw: 0)
 
-    rc = _run_add(cli_mod, vault, "--synthesize", str(src))
+    rc = run_add(vault, "--synthesize", str(src))
     out = capsys.readouterr()
     assert rc == 2
     assert "olled back" in out.err
@@ -320,29 +242,27 @@ def test_add_failed_synthesis_rolls_back_raw_docs(tmp_path, monkeypatch, capsys)
 
 def test_add_no_synthesize_warns_and_keeps_docs(tmp_path, monkeypatch, capsys):
     """``--no-synthesize`` is a warn+no-op alias; docs stay raw-only (#273)."""
-    vault = _add_vault(tmp_path)
+    vault = add_vault(tmp_path)
     src = tmp_path / "doc.md"
     src.write_text("# Raw Only Doc\n\nbody\n")
     monkeypatch.setattr(pipe, "build_site", lambda **kw: 0)
 
-    rc = _run_add(cli_mod, vault, "--no-synthesize", str(src))
+    rc = run_add(vault, "--no-synthesize", str(src))
     out = capsys.readouterr()
     assert rc == 0
     assert "no-op" in out.err
     assert "already off by default" in out.err
     assert (vault / "raw" / "docs" / "raw-only-doc" / "raw-only-doc.md").exists()
-    sources_dir = vault / "wiki" / "sources"
-    sources_dir.mkdir(parents=True, exist_ok=True)
-    assert list(sources_dir.rglob("*.md")) == []
+    assert not list((vault / "wiki" / "sources").rglob("*.md"))
 
 
 def test_add_stdin_sentinel_piped_provenance(tmp_path, monkeypatch, capsys):
     """``add -`` reads stdin and records ``source: piped`` (#273)."""
-    vault = _add_vault(tmp_path)
+    vault = add_vault(tmp_path)
     monkeypatch.setattr(pipe, "build_site", lambda **kw: 0)
     monkeypatch.setattr(sys, "stdin", io.StringIO("# Piped CLI Doc\n\nhello from stdin\n"))
 
-    rc = _run_add(cli_mod, vault, "--no-build", "-")
+    rc = run_add(vault, "--no-build", "-")
     out = capsys.readouterr()
     assert rc == 0, out.err
     written = list((vault / "raw" / "docs").rglob("*.md"))
@@ -350,12 +270,3 @@ def test_add_stdin_sentinel_piped_provenance(tmp_path, monkeypatch, capsys):
     text = written[0].read_text(encoding="utf-8")
     assert 'source: "piped"' in text or "source: piped" in text
     assert "hello from stdin" in text
-
-
-def test_pyproject_add_extra_includes_markitdown_backends():
-    """markitdown gates each converter behind its own extra; a bare
-    `markitdown` can't read the PDFs/DOCX this feature advertises
-    (PR #19 field report)."""
-
-    text = (Path(__file__).resolve().parent.parent / "pyproject.toml").read_text(encoding="utf-8")
-    assert "markitdown[pdf,docx,pptx,xlsx]" in text

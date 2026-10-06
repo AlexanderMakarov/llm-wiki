@@ -16,7 +16,31 @@ Versions below 1.0 are pre-production — API and file formats may change.
 - **Loop ready issue herdr driver (#296)** — optional maintainer script `scripts/loop_ready_issue_herdr.py` plus driver-inlined skill `.claude/skills/loop-ready-issue-herdr/SKILL.md` (`disable-model-invocation: true`) serially drains open GitHub issues that carry a `--label` you choose and are assigned to you, via herdr worker tabs defaulting to Cursor; advance waits for merged PR and green post-merge CI on the default branch (`--poll-seconds` default 300). Documented in [`docs/maintainers/LOOP_READY_ISSUE_HERDR.md`](docs/maintainers/LOOP_READY_ISSUE_HERDR.md); not an `llmwiki` subcommand and not shipped in the wheel.
   - *Release note:* Maintainers only: optional herdr loop for labeled, self-assigned issues — see `docs/maintainers/LOOP_READY_ISSUE_HERDR.md` (#296).
 
+- **Agent-facing test coding standards (#280)** — [`docs/CODING_STANDARDS.md`](docs/CODING_STANDARDS.md) documents usefulness-over-count, mirrored `tests/` layout, weak-test patterns (PIT catalogue), skip policy, CLI handler contracts, and line-coverage vs mutation as concepts (no committed mutmut harness; #280 proof is stronger pytest after a one-off local run). [`CONTRIBUTING.md`](CONTRIBUTING.md) §Testing and [`docs/index.md`](docs/index.md) link it for humans and agents.
+  - *Release note:* Contributors and agents: test quality rules live in `docs/CODING_STANDARDS.md`; CI still runs the same fast unit suite (#280).
+
+- **Mutation gap experiment notes (#280)** — maintainer spec `context/spec/280-shrink-test-suite/mutation-experiment.md` records mutmut 3 on `llmwiki/synth/reporting.py` (66 killed / 0 survived after strengthening `tests/synth/test_reporting.py`) and why whole-file `cli.py` trampolines are impractical. Broader package mutation remains [#314](https://github.com/AlexanderMakarov/llm-wiki/issues/314).
+  - *Release note:* Maintainers only: mutation experiment write-up ships in-repo with the #280 work; no user-facing CLI change (#280).
+
 ### Changed
+
+- **CONTRIBUTING.md is rules-only for agents** — drop issue/PR history, coverage-baseline anecdotes, HTML cov-report browsing, the 500-line PR size and signed-commit requirements, and AI Co-authored-by bans; refresh the Agent instruction files map; `Closes #N` only when a PR completes the issue (else `Relevant to #N`). Pointers under `.claude/rules/`, `.cursor/rules/`, `.kiro/steering/`, and `.github/PULL_REQUEST_TEMPLATE.md` match.
+  - *Release note:* Contributors: CONTRIBUTING.md is the process rules file; use `Relevant to #N` for partial issue work so merge does not auto-close.
+
+- **Unit line-coverage floor in CI (#280)** — default `pytest tests/` (with `tests/e2e` ignored and `@pytest.mark.slow` deselected via `pyproject.toml` `addopts`) now reports Coverage.py on `llmwiki` and fails below **87%** (`[tool.coverage.report] fail_under = 87`); `pytest-cov` is a CI/dev install only. The wall-clock lint_perf suite (`tests/test_lint_perf.py`) runs on the existing `performance-budget` job without coverage so instrumentation cannot flake the DuplicateDetection budget. Playwright E2E stays on its separate workflow and out of this number.
+  - *Release note:* Contributors: PRs that drop unit line coverage below 87% fail CI; slow perf-budget tests still run without coverage; E2E coverage is unchanged (#280).
+
+- **PyPI `build` in the `[dev]` extra and CI (#280)** — `pip install build` plus a metadata-based `_pypi_build_installed()` check so wheel-content tests in `tests/test_graph_vendor_packaging.py` run in CI instead of skipping when a local `build/` directory exists.
+  - *Release note:* Maintainers only: packaging wheel assertions now execute in CI (#280).
+
+- **CLI unit tests consolidated under tests/cli/ (#280)** — handler-focused modules moved from flat `tests/test_cli_*.py` sprawl into `tests/cli/`; `llmwiki synth` handler tests rewritten in `tests/cli/test_synth.py` (exit code + stderr/stdout/side effects); `llmwiki.synth.reporting` tests live under `tests/synth/`. Dead “subcommand removed” skips removed. No numeric “shrink the suite by 30%” gate.
+  - *Release note:* Contributors only: run CLI unit tests with `pytest tests/cli/` (#280).
+
+- **testing-expert follows CODING_STANDARDS in existing steps (#280)** — `.claude/agents/testing-expert.md` (Cursor symlink) patches layout, usefulness, CLI handler contracts, timing, coverage floor, and skip policy into Inputs / Step 2–3 / Constraints rather than a sidecar section.
+  - *Release note:* Re-run or sync agent kit if you rely on testing-expert; no runtime package change (#280).
+
+- **AI tooling lint in PR governance (#280)** — `pr-lint.yml` job **AI tooling lint** validates `llmwiki/agent_kit` and inner `.claude/` markdown (current engine: agnix **0.56.6**). Docs: [`docs/maintainers/AI-LINTING.md`](docs/maintainers/AI-LINTING.md); waivers in `context/spec/280-shrink-test-suite/agnix-first-run.md`; skill frontmatter fixes (`release`, `gha-diagnosis`, `modern-python-development`). Nested AWOS `@.awos/…` imports validate cleanly after [agent-sh/agnix#1629](https://github.com/agent-sh/agnix/issues/1629) (directory scan of `.claude/commands`, including `commands/awos/`).
+  - *Release note:* Maintainers only: AI tooling lint on agent kit/skills in PR lint (#280).
 
 - **Site file contract docs (#305)** — `docs/reference/reader-api.md` reframed as the static `site/` file contract (no hosted HTTP API today); Raw / `file://` wording in `docs/reference/ui.md` clarified; MCP `wiki_add` project row no longer digresses into site document grouping.
   - *Release note:* Docs only: reader-api / Raw docs describe the static site file layout more clearly (#305).

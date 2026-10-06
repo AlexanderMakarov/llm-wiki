@@ -37,12 +37,14 @@ def _name_count(text: str, name: str) -> int:
 
 
 def test_root_help_contains_six_lifecycle_headings():
+    """Root ``--help`` must expose all six lifecycle section headings."""
     help_text = _root_parser().format_help()
     for heading in _LIFECYCLE_HEADINGS:
         assert heading in help_text, f"missing lifecycle heading: {heading!r}"
 
 
 def test_root_help_epilog_states_canonical_loop_and_synth_non_rebuild():
+    """Root help epilog must document the canonical loop and that synth does not rebuild site/."""
     help_text = _root_parser().format_help()
     assert "Canonical loop:" in help_text
     assert "ingest" in help_text
@@ -54,6 +56,7 @@ def test_root_help_epilog_states_canonical_loop_and_synth_non_rebuild():
 
 
 def test_every_live_subcommand_appears_exactly_once_in_root_description():
+    """Each registered subcommand name must appear exactly once in the root description."""
     parser = _root_parser()
     description = parser.description or ""
     choices = _subparsers(parser)
@@ -65,12 +68,14 @@ def test_every_live_subcommand_appears_exactly_once_in_root_description():
 
 
 def test_top_level_help_has_no_issue_numbers():
+    """User-facing help must not embed GitHub issue numbers."""
     help_text = _root_parser().format_help()
     hits = re.findall(r"#\d+", help_text)
     assert not hits, f"top-level help must not contain issue numbers: {hits}"
 
 
 def test_synth_help_covers_review_then_build_and_no_site_rebuild():
+    """``synth --help`` must point reviewers at candidates and a separate build step."""
     help_text = _subparsers(_root_parser())["synth"].format_help()
     assert "wiki/candidates/" in help_text
     assert "rebuild the site afterwards so candidates and analytics stay current" in help_text.lower() or (
@@ -80,6 +85,7 @@ def test_synth_help_covers_review_then_build_and_no_site_rebuild():
 
 
 def test_candidates_help_covers_after_synth_and_rebuild_sync():
+    """``candidates --help`` must state it runs after synth and keeps the site page in sync."""
     help_text = _subparsers(_root_parser())["candidates"].format_help()
     assert "Runs after synth" in help_text
     assert "Candidates page in sync" in help_text
@@ -87,6 +93,7 @@ def test_candidates_help_covers_after_synth_and_rebuild_sync():
 
 
 def test_queue_help_covers_deferred_work_and_daily_loop_opt_out():
+    """``queue --help`` must describe deferred work and that most users can skip it."""
     help_text = _subparsers(_root_parser())["queue"].format_help()
     assert "deferred" in help_text.lower()
     assert "Most people never need this command" in help_text
@@ -95,12 +102,14 @@ def test_queue_help_covers_deferred_work_and_daily_loop_opt_out():
 
 
 def test_all_help_covers_full_pipeline_and_skippable_stages():
+    """``all --help`` must describe the full pipeline and skippable stages."""
     help_text = _subparsers(_root_parser())["all"].format_help()
     assert "full pipeline" in help_text.lower()
     assert "Skip stages" in help_text
 
 
 def test_migrate_help_covers_list_vs_apply_and_registration():
+    """``migrate --help`` must distinguish listing from applying and stay out of the daily loop."""
     help_text = _subparsers(_root_parser())["migrate"].format_help()
     assert "llmwiki migrate --list" in help_text or "migrate --list" in help_text
     assert "Nothing is applied until you choose a name" in help_text

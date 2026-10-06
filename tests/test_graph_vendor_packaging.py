@@ -13,6 +13,7 @@ and, when ``build`` is available, builds a wheel and lists its contents.
 
 from __future__ import annotations
 
+import importlib.metadata
 import importlib.util
 import re
 import shutil
@@ -31,7 +32,16 @@ from llmwiki.graph import VIS_NETWORK_VENDOR
 PYPROJECT = REPO_ROOT / "pyproject.toml"
 VENDOR_WHEEL_PATH = "llmwiki/vendor/vis-network.min.js"
 HLJS_WHEEL_PATHS = [f"llmwiki/vendor/{name}" for name in HLJS_VENDOR_FILES]
-_BUILD_AVAILABLE = importlib.util.find_spec("build") is not None
+def _pypi_build_installed() -> bool:
+    """True when the PyPI ``build`` package is installed (not a local ``build/`` dir)."""
+    try:
+        importlib.metadata.version("build")
+    except importlib.metadata.PackageNotFoundError:
+        return False
+    return importlib.util.find_spec("build.__main__") is not None
+
+
+_BUILD_AVAILABLE = _pypi_build_installed()
 
 
 @pytest.fixture(scope="module")
@@ -140,3 +150,9 @@ def test_wheel_build_skips_cleanly_when_build_unavailable():
         pytest.skip("build is installed — test_wheel_includes_vendored_vis_network covers this")
     assert shutil.which(sys.executable), "interpreter missing"
     assert PYPROJECT.is_file()
+
+
+def test_pyproject_add_extra_includes_markitdown_backends():
+    """Optional ``add`` converters must be gated behind the documented markitdown extras."""
+    text = PYPROJECT.read_text(encoding="utf-8")
+    assert "markitdown[pdf,docx,pptx,xlsx]" in text

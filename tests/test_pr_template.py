@@ -20,9 +20,10 @@ def test_template_has_summary_section():
     assert "## Summary" in text
 
 
-def test_template_has_closes_hint():
+def test_template_has_closes_and_relevant_to_hints():
     text = TEMPLATE.read_text(encoding="utf-8")
     assert "Closes #" in text
+    assert "Relevant to #" in text
 
 
 def test_template_has_how_to_test():
@@ -102,18 +103,14 @@ def test_template_has_out_of_scope_section():
 # ─── CONTRIBUTING.md matches template ────────────────────────────────
 
 
-def test_contributing_documents_the_checklist_box_count():
-    """Derived from the template, not hardcoded — the literal "15-box" string
-    outlived the template growing a 16th box, so pin the two together."""
+def test_contributing_documents_the_checklist_items():
+    """CONTRIBUTING's numbered summary must cover every template checklist box."""
     boxes = len([
         ln for ln in TEMPLATE.read_text(encoding="utf-8").splitlines()
         if ln.startswith("- [ ]")
     ])
     text = CONTRIBUTING.read_text(encoding="utf-8")
-    assert f"{boxes}-box pre-merge checklist" in text, (
-        f"template has {boxes} boxes; CONTRIBUTING says otherwise"
-    )
-    # ...and the summary list under that heading enumerates all of them.
+    assert "pre-merge checklist" in text.lower()
     assert f"\n{boxes}. " in text, f"summary list doesn't reach item {boxes}"
 
 
@@ -124,11 +121,18 @@ def test_contributing_lists_all_conventional_commit_types():
         assert f"`{t}`" in text, f"missing commit type: {t}"
 
 
-def test_contributing_enforces_500_line_limit():
+def test_contributing_does_not_enforce_500_line_limit():
     text = CONTRIBUTING.read_text(encoding="utf-8")
-    assert "500 lines" in text
+    assert "500 lines" not in text
 
 
-def test_contributing_requires_signed_commits_branch_protection():
+def test_contributing_does_not_require_signed_commits():
     text = CONTRIBUTING.read_text(encoding="utf-8")
-    assert "Signed commits required" in text
+    assert "Signed commits" not in text
+
+
+def test_contributing_distinguishes_closes_vs_relevant_to():
+    text = CONTRIBUTING.read_text(encoding="utf-8")
+    assert "Closes #" in text
+    assert "Relevant to #" in text
+    assert "only when" in text.lower() or "fully complete" in text.lower()

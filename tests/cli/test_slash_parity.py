@@ -20,8 +20,8 @@ import re
 from pathlib import Path
 
 from llmwiki.cli import build_parser
+from tests.cli._paths import REPO_ROOT
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
 AGENT_KIT_CMDS = REPO_ROOT / "llmwiki" / "agent_kit" / "commands"
 CONTRIBUTOR_CMDS = REPO_ROOT / ".claude" / "commands"
 
@@ -79,6 +79,7 @@ def _slash_path(stem: str) -> Path:
 
 
 def test_slash_dir_exists():
+    """Agent kit and contributor slash-command directories must exist in the checkout."""
     assert AGENT_KIT_CMDS.is_dir(), (
         f"missing {AGENT_KIT_CMDS.relative_to(REPO_ROOT)}"
     )
@@ -88,6 +89,7 @@ def test_slash_dir_exists():
 
 
 def test_every_slash_has_wiki_prefix_or_is_governance():
+    """Pipeline slash files must be ``wiki-*`` unless explicitly listed as governance."""
     governance = {
         "release",
         "fix-bug", "implement-feature",  # AWOS delivery (#114)
@@ -103,6 +105,7 @@ def test_every_slash_has_wiki_prefix_or_is_governance():
 
 
 def test_every_wrapper_slash_points_at_a_real_subcommand():
+    """Each wrapper slash must reference a ``python3 -m llmwiki`` subcommand that exists."""
     cli = _cli_subcommands()
     offenders: list[str] = []
     for p in _all_slash_files():
@@ -146,6 +149,7 @@ def test_wrapper_slash_name_matches_cli_subcommand():
 
 
 def test_every_wrapper_slash_has_at_least_one_bash_example():
+    """Each wrapper slash must include a fenced or inline ``python3`` CLI example."""
     offenders: list[str] = []
     for p in _all_slash_files():
         if p.stem in NON_WRAPPER_SLASHES:

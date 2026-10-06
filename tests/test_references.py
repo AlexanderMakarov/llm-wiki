@@ -1,4 +1,4 @@
-"""Tests for ``llmwiki/references.py`` + CLI + stale_reference_detection rule.
+"""Tests for ``llmwiki/references.py`` + stale_reference_detection rule.
 
 Covers:
 * ``_extract_dated_claims``: every regex branch + unicode + no matches.
@@ -11,32 +11,16 @@ Covers:
   skipped; ``wiki/sources/`` and ``type: source`` pages never stale (#87).
 * ``format_references_table``: empty + sort order.
 * Lint rule wired + fires on a synthetic corpus.
-* CLI ``llmwiki references`` end-to-end.
 """
 
 from __future__ import annotations
 
-import subprocess
-import sys
 from datetime import date
-from pathlib import Path
 
 import pytest
 
 from llmwiki import references as r
 from llmwiki.lint import REGISTRY, rules  # noqa: F401
-
-REPO_ROOT = Path(__file__).resolve().parents[1]
-
-
-def _run_cli(*args):
-    return subprocess.run(
-        [sys.executable, "-m", "llmwiki", *args],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-
 
 # ─── _extract_dated_claims ────────────────────────────────────────────────
 
@@ -403,26 +387,3 @@ def test_lint_rule_silent_on_fresh_pair():
         ),
     ])
     assert rule.run(pages) == []
-
-
-# ─── CLI ─────────────────────────────────────────────────────────────────
-
-
-@pytest.mark.skip(reason="references CLI subcommand removed")
-def test_cli_references_help():
-    pass
-
-
-@pytest.mark.skip(reason="references CLI subcommand removed")
-def test_cli_references_prints_referrers(tmp_path):
-    pass
-
-
-@pytest.mark.skip(reason="references CLI subcommand removed")
-def test_cli_references_empty_result(tmp_path):
-    pass
-
-
-@pytest.mark.skip(reason="references CLI subcommand removed")
-def test_cli_references_missing_wiki_dir_errors(tmp_path):
-    pass

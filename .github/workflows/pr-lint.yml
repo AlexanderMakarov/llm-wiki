@@ -9,6 +9,8 @@ name: PR lint
 #   5. AWOS context/ updated when armed product paths change
 #      (llmwiki/, integrations/, tests/, .github/workflows/,
 #       docs/maintainers/, docs/reference/; path filters; no label bypass)
+#   6. AI tooling lint (current engine: agnix) on shipped agent kit +
+#      inner .claude skills/agents/top-level commands
 #
 # The main tests + lint live in `ci.yml` (including the privacy username
 # guard as a pytest); this workflow is just the governance gate.
@@ -125,3 +127,27 @@ jobs:
           head="${{ github.event.pull_request.head.sha }}"
           mb=$(git merge-base "$base" "$head")
           python3 tests/awos_context_gate.py --base "$mb" --head "$head"
+
+  ai-linting:
+    name: AI tooling lint
+    runs-on: ubuntu-latest
+    env:
+      AGNIX_VERSION: "0.56.6"
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+
+      - name: Validate shipped agent kit
+        run: npx --yes agnix@${AGNIX_VERSION} --format github validate llmwiki/agent_kit
+
+      - name: Validate inner .claude tooling
+        # agnix 0.56.6+ resolves nested `@` imports from the workspace root
+        # (agent-sh/agnix#1629), so commands/awos/ wrappers are safe to scan.
+        run: |
+          npx --yes agnix@${AGNIX_VERSION} --format github validate \
+            .claude/skills \
+            .claude/agents \
+            .claude/commands
