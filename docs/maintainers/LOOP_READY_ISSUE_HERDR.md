@@ -15,8 +15,7 @@ The loop depends on herdr (driver tab, worker tabs, `herdr agent` lifecycle). Wi
 From a git checkout of this repository (repository root as cwd), open a dedicated herdr tab and run:
 
 ```bash
-make loop-ready-issue-herdr LABEL=<NAME>
-# or: python3 scripts/loop_ready_issue_herdr.py --label <NAME>
+python3 scripts/loop_ready_issue_herdr.py --label <NAME>
 ```
 
 Replace `<NAME>` with the readiness label you use on GitHub (docs and examples may say `agent-ready`; the running value is whatever you pass). Prerequisites: authenticated `gh`, `herdr` on PATH, and the repo checkout the workers should use.
@@ -24,7 +23,6 @@ Replace `<NAME>` with the readiness label you use on GitHub (docs and examples m
 Useful variants:
 
 ```bash
-make loop-ready-issue-herdr-dry-run LABEL=<NAME>
 python3 scripts/loop_ready_issue_herdr.py --label <NAME> --dry-run
 python3 scripts/loop_ready_issue_herdr.py --label <NAME> --once
 python3 scripts/loop_ready_issue_herdr.py --label <NAME> --agent-kind claude
@@ -32,6 +30,8 @@ python3 scripts/loop_ready_issue_herdr.py --label <NAME> --repo OWNER/NAME
 ```
 
 `--dry-run` prints the work-for-today summary, the **planned** eligible queue in driver order (`important` then issue number, blockers excluded), and `next:` (the first planned ticket) without spawning herdr. `--once` processes at most one ticket then exits. `--repo` overrides the default (`gh repo view` from cwd).
+
+There is no Make wrapper for this script: the repo has no other Makefile surface, and a target that still requires `LABEL=…` is not more convenient than calling `python3 scripts/loop_ready_issue_herdr.py --label …` directly.
 
 ## Queue membership
 
