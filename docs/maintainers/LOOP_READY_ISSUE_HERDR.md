@@ -29,7 +29,9 @@ python3 scripts/loop_ready_issue_herdr.py --label <NAME> --agent-kind claude
 python3 scripts/loop_ready_issue_herdr.py --label <NAME> --repo OWNER/NAME
 ```
 
-`--dry-run` prints the work-for-today summary and the next eligible issue without spawning herdr. `--once` processes at most one ticket then exits. `--repo` overrides the default (`gh repo view` from cwd).
+`--dry-run` prints the work-for-today summary, the **planned** eligible queue in driver order (`important` then issue number, blockers excluded), and `next:` (the first planned ticket) without spawning herdr. `--once` processes at most one ticket then exits. `--repo` overrides the default (`gh repo view` from cwd).
+
+There is no Make wrapper for this script: the repo has no other Makefile surface, and a target that still requires `LABEL=…` is not more convenient than calling `python3 scripts/loop_ready_issue_herdr.py --label …` directly.
 
 ## Queue membership
 
@@ -57,7 +59,7 @@ While a worker waits on you (herdr `blocked` — approval, question, permission)
 
 ## Advance rule (merge + post-merge CI)
 
-The driver starts the **next** eligible issue only when the **current** issue is done on GitHub: a PR that **closed** the issue is **merged**, and **every check run GitHub reports on that merge commit** is **completed** with a green conclusion (`success`, `skipped`, or `neutral`). If no check runs exist yet on the merge commit, the driver **does not** advance (workflows may still be queuing). On advance, the driver closes the finished worker tab and opens a fresh one for the next issue — you do not need to close the tab yourself to unlock the queue. Closing a worker tab early is a valid **hard stop** for that ticket; the driver does not treat it as successful delivery and does not auto-advance as if merged.
+The driver starts the **next** eligible issue only when the **current** issue is done on GitHub: a PR that **closed** the issue is **merged**, and **every check run GitHub reports on that merge commit** is **completed** with a green conclusion (`success`, `skipped`, or `neutral`). If no check runs exist yet on the merge commit, the driver **does not** advance (workflows may still be queuing). On advance, the driver always closes the finished worker tab (even if the agent already went idle/disappeared — that only stops `herdr agent wait`, not tab cleanup) and opens a fresh one for the next issue — you do not need to close the tab yourself to unlock the queue. Before spawning `issue-N`, the driver also closes any leftover tabs still labeled `issue-N`. Closing a worker tab early is a valid **hard stop** for that ticket; the driver does not treat it as successful delivery and does not auto-advance as if merged.
 
 ## Polling interval
 
@@ -69,7 +71,7 @@ Queue membership is gated on **you** (the `gh` viewer login) **and** the readine
 
 ## Hard stop and restore
 
-If you close the worker tab or the agent disappears before merge + green post-merge CI, the driver prints a **WARNING** with restore steps: continue delivery for that issue URL in a new worker. **Before re-running** `python3 scripts/loop_ready_issue_herdr.py --label <NAME>` (add `--once` for a single ticket), **close the old `issue-N` worker tab** if it is still open — a fresh driver run spawns a **duplicate** worker for the same issue otherwise. Press **Ctrl+C** to stop the driver loop; in-flight workers are left open until you close them. The driver keeps polling GitHub for advance on that issue until α is satisfied or you stop.
+If you close the worker tab or the agent disappears before merge + green post-merge CI, the driver prints a **WARNING** with restore steps: continue delivery for that issue URL in a new worker. Re-running the driver for the same issue closes any leftover `issue-N` tab before spawning a fresh one. Press **Ctrl+C** to stop the driver loop; in-flight workers are left open until you close them (or until α advance closes them). The driver keeps polling GitHub for advance on that issue until α is satisfied or you stop.
 
 ## Empty queue
 

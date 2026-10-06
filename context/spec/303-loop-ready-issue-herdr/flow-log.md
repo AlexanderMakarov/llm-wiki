@@ -45,3 +45,4 @@
 - Fixed merge-status GraphQL unused `$number` (use `$number` + `-F`); clearer queue/params/tab-opened lines; poll-failure message explains worker keeps running
 - Approval-gate options after spawn are `/implement-feature` → `/awos:spec`, not the thin loop skill
 - Merge into main left conflict markers in CHANGELOG (resolve raced commit); `pr-lint` job `No merge conflict markers` greps all tracked text on the PR head for those markers
+- Follow-up: always close worker tab on α (even if agent gone); sweep leftover `issue-N` before spawn; `--dry-run` planned queue; skipped Make wrappers (argument-only targets not more convenient than the script)

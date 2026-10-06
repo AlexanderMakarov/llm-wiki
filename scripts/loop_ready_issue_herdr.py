@@ -59,6 +59,8 @@ You are delivering **one** GitHub issue only. Do not list or advance the readine
 _WORKER_GONE_ERROR_CODES = frozenset(
     {"agent_not_found", "pane_not_found", "tab_not_found"},
 )
+# Tab already closed — advance cleanup is still success.
+_TAB_ALREADY_CLOSED_CODES = frozenset({"tab_not_found"})
 
 _ISSUE_LIST_JSON_FIELDS = "number,title,labels,assignees,url,state"
 
@@ -164,15 +166,22 @@ def sort_key(issue: Issue) -> tuple[int, int]:
     return important, _issue_number(issue)
 
 
+def planned_queue(
+    candidates: list[Issue],
+    blocked_by_map: BlockedByMap,
+) -> list[Issue]:
+    """Eligible issues in driver order (important first, then issue number)."""
+    eligible = eligible_after_blocked_by(candidates, blocked_by_map)
+    return sorted(eligible, key=sort_key)
+
+
 def pick_next(
     candidates: list[Issue],
     blocked_by_map: BlockedByMap,
 ) -> Issue | None:
     """Next eligible issue in sort order, or ``None``."""
-    eligible = eligible_after_blocked_by(candidates, blocked_by_map)
-    if not eligible:
-        return None
-    return min(eligible, key=sort_key)
+    planned = planned_queue(candidates, blocked_by_map)
+    return planned[0] if planned else None
 
 
 def advance_ready(merge_info: MergeInfo, check_runs: list[CheckRun]) -> bool:
@@ -538,6 +547,14 @@ def format_worker_opened_line(
     )
 
 
+def format_planned_issue_line(issue: Issue, *, index: int) -> str:
+    """One numbered planned-queue line for dry-run / startup."""
+    number = _issue_number(issue)
+    title = str(issue.get("title") or "")
+    url = str(issue.get("url") or "")
+    return f"  {index}. #{number} {title} {url}".rstrip()
+
+
 def format_dry_run_lines(
     *,
     login: str,
@@ -545,19 +562,24 @@ def format_dry_run_lines(
     label: str,
     open_with_label: int,
     assigned_to_me: int,
-    next_issue: Issue | None,
+    planned: list[Issue],
 ) -> list[str]:
     lines = [
         f"repo: {repo}",
         format_queue_counts_line(open_with_label, assigned_to_me, label, login),
     ]
-    if next_issue is None:
+    if not planned:
+        lines.append("planned: none")
         lines.append("next: none")
-    else:
-        number = _issue_number(next_issue)
-        title = str(next_issue.get("title") or "")
-        url = str(next_issue.get("url") or "")
-        lines.append(f"next: #{number} {title} {url}".rstrip())
+        return lines
+    lines.append(f"planned ({len(planned)}):")
+    for idx, issue in enumerate(planned, start=1):
+        lines.append(format_planned_issue_line(issue, index=idx))
+    next_issue = planned[0]
+    number = _issue_number(next_issue)
+    title = str(next_issue.get("title") or "")
+    url = str(next_issue.get("url") or "")
+    lines.append(f"next: #{number} {title} {url}".rstrip())
     return lines
 
 
@@ -690,6 +712,7 @@ def spawn_worker_for_issue(
     issue_url = str(issue.get("url") or "")
     tab_label = f"issue-{number}"
     agent_name = f"issue-{number}"
+    close_existing_issue_tabs(number, run_herdr)
 
     create_proc = run_herdr(
         [
@@ -744,14 +767,108 @@ def spawn_worker_for_issue(
     )
 
 
+def list_tabs_with_label(
+    label: str,
+    run_herdr: RunHerdr = default_run_herdr,
+) -> list[str]:
+    """Return ``tab_id`` values whose herdr label matches ``label``."""
+    proc = run_herdr(["herdr", "tab", "list"])
+    payload = parse_herdr_response(proc)
+    code = herdr_error_code(payload)
+    if code:
+        message = ""
+        err = payload.get("error")
+        if isinstance(err, dict):
+            message = str(err.get("message") or "")
+        detail = message or (proc.stderr or "").strip()
+        raise RuntimeError(f"herdr tab list failed ({code}): {detail}")
+    result = payload.get("result")
+    tabs = result.get("tabs") if isinstance(result, dict) else None
+    if not isinstance(tabs, list):
+        return []
+    found: list[str] = []
+    for tab in tabs:
+        if not isinstance(tab, dict):
+            continue
+        if str(tab.get("label") or "") != label:
+            continue
+        tab_id = tab.get("tab_id")
+        if tab_id:
+            found.append(str(tab_id))
+    return found
+
+
+def close_tab_id(
+    tab_id: str,
+    run_herdr: RunHerdr = default_run_herdr,
+) -> None:
+    """Close one herdr tab; ``tab_not_found`` is a no-op success."""
+    proc = run_herdr(["herdr", "tab", "close", tab_id])
+    payload = parse_herdr_response(proc)
+    code = herdr_error_code(payload)
+    if code in _TAB_ALREADY_CLOSED_CODES:
+        return
+    if code:
+        message = ""
+        err = payload.get("error")
+        if isinstance(err, dict):
+            message = str(err.get("message") or "")
+        detail = message or (proc.stderr or "").strip()
+        raise RuntimeError(f"herdr tab close failed ({code}): {detail}")
+
+
 def close_worker_tab(
     worker: WorkerHandle,
     run_herdr: RunHerdr = default_run_herdr,
 ) -> None:
-    if worker.gone:
+    """Close the worker tab after α — even when the agent already disappeared.
+
+    ``worker.gone`` only means stop polling ``herdr agent wait``; the tab often
+    remains (idle) and must still be closed on advance.
+    """
+    close_tab_id(worker.tab_id, run_herdr)
+    # Best-effort: close any other tabs still labeled issue-N (stale restarts).
+    tab_label = f"issue-{worker.issue_number}"
+    try:
+        leftovers = list_tabs_with_label(tab_label, run_herdr)
+    except RuntimeError as exc:
+        print(f"WARNING: could not list tabs to sweep {tab_label!r}: {exc}", file=sys.stderr)
         return
-    proc = run_herdr(["herdr", "tab", "close", worker.tab_id])
-    _herdr_require_ok(proc, "herdr tab close")
+    for tab_id in leftovers:
+        if tab_id == worker.tab_id:
+            continue
+        try:
+            close_tab_id(tab_id, run_herdr)
+        except RuntimeError as exc:
+            print(
+                f"WARNING: could not close leftover tab {tab_id} ({tab_label}): {exc}",
+                file=sys.stderr,
+            )
+
+
+def close_existing_issue_tabs(
+    issue_number: int,
+    run_herdr: RunHerdr = default_run_herdr,
+) -> None:
+    """Close leftover ``issue-N`` tabs before spawning a fresh worker for N."""
+    tab_label = f"issue-{issue_number}"
+    try:
+        tab_ids = list_tabs_with_label(tab_label, run_herdr)
+    except RuntimeError as exc:
+        print(
+            f"WARNING: could not list tabs before spawn ({tab_label}): {exc}",
+            file=sys.stderr,
+        )
+        return
+    for tab_id in tab_ids:
+        try:
+            close_tab_id(tab_id, run_herdr)
+            print(f"Closed leftover herdr tab {tab_label} ({tab_id}) before spawn.")
+        except RuntimeError as exc:
+            print(
+                f"WARNING: could not close leftover tab {tab_id} ({tab_label}): {exc}",
+                file=sys.stderr,
+            )
 
 
 _MAX_CONSECUTIVE_FETCH_FAILURES = 5
@@ -933,14 +1050,14 @@ def run_dry_run(
     candidates = candidates_assigned(issues, login, label)
     candidate_numbers = [_issue_number(issue) for issue in candidates]
     blocked_by_map = fetch_blocked_by_map(resolved_repo, candidate_numbers, run_gh)
-    next_issue = pick_next(candidates, blocked_by_map)
+    planned = planned_queue(candidates, blocked_by_map)
     return format_dry_run_lines(
         login=login,
         repo=resolved_repo,
         label=label,
         open_with_label=open_with_label,
         assigned_to_me=assigned_to_me,
-        next_issue=next_issue,
+        planned=planned,
     )
 
 
