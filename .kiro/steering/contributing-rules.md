@@ -10,16 +10,15 @@ applies_to: "**/*"
 
 ## The short version
 
-1. **One concern per PR**, ≤500 lines of diff. A mechanical, generated diff may exceed that if the PR body says so and states that behaviour is unchanged.
-2. **Conventional-commit titles**, using only the types CONTRIBUTING lists: `feat` `fix` `chore` `docs` `test` `refactor` `perf` `security` `release`. Link the issue with `Closes #N`.
+1. **One concern per PR.**
+2. **Conventional-commit titles**, using only the types CONTRIBUTING lists: `feat` `fix` `chore` `docs` `test` `refactor` `perf` `security` `release`. Link with `Closes #N` only when the PR fully completes the issue; otherwise `Relevant to #N`.
 3. **Docs + `CHANGELOG.md` under `## [Unreleased]`** for every user-visible change. New CLI subcommands, config keys, and lint rules also need their row in `docs/reference/*.md` in the same PR.
 4. **No new runtime dependencies.** Stdlib plus `markdown` only.
-5. **No AI attribution trailers** (`Co-authored-by: Claude` and similar). Commits are human-authored. Use your own git identity on your own fork.
-6. **Never push to the default branch.** Open a PR; CI must pass before merge.
-7. **No scope creep and no silent refactors.** Found something else broken? File an issue. Renaming something? Say so in the PR title.
-8. **Privacy is non-negotiable.** No real session data — fixtures are synthetic or heavily redacted. No machine-specific paths, usernames, hostnames, or vault roots in code, tests, commits, PR bodies, or the CHANGELOG; use placeholders such as `/home/USER/…`, `<vault>`, `<user>`.
-9. **Never hard-wrap markdown prose at a fixed column.** One paragraph is one line, however long — line width is the renderer's job, not the file's, and hard wraps make a one-word edit reflow a whole paragraph in the diff.
-10. **Check for existing test coverage before adding a test.** Search `tests/` first and extend what is there rather than adding beside it. A test for a new rule must fail when that rule is removed — if it still passes, it is exercising a different code path, and a test that can pass over an empty input is covering nothing. Canonical detail: [`docs/CODING_STANDARDS.md`](../../docs/CODING_STANDARDS.md).
+5. **Never push to the default branch.** Open a PR; CI must pass before merge. Use your own git identity on your own fork.
+6. **No scope creep and no silent refactors.** Found something else broken? File an issue. Renaming something? Say so in the PR title.
+7. **Privacy is non-negotiable.** No real session data — fixtures are synthetic or heavily redacted. No machine-specific paths, usernames, hostnames, or vault roots in code, tests, commits, PR bodies, or the CHANGELOG; use placeholders such as `/home/USER/…`, `<vault>`, `<user>`.
+8. **Never hard-wrap markdown prose at a fixed column.** One paragraph is one line, however long. Line width is the renderer's job, not the file's.
+9. **Check for existing test coverage before adding a test.** Search `tests/` first and extend what is there rather than adding beside it. A test for a new rule must fail when that rule is removed — if it still passes, it is exercising a different code path, and a test that can pass over an empty input is covering nothing. Canonical detail: [`docs/CODING_STANDARDS.md`](../../docs/CODING_STANDARDS.md).
 
 ## Before pushing
 

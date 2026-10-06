@@ -25,8 +25,8 @@ You are changing **this repository's own code or docs**, not a user's vault. [`C
 
 ## Non-negotiables
 
-1. **One concern per PR.** No mixing a bug fix with a feature. Target ≤500 lines of diff; a mechanical, generated diff (e.g. a lint sweep) may exceed it if the PR body says so explicitly and states that behaviour is unchanged.
-2. **Conventional-commit titles**, using only the types in CONTRIBUTING's table: `feat` `fix` `chore` `docs` `test` `refactor` `perf` `security` `release`. Reference the issue in the body with `Closes #N`.
+1. **One concern per PR.** No mixing a bug fix with a feature.
+2. **Conventional-commit titles**, using only the types in CONTRIBUTING's table: `feat` `fix` `chore` `docs` `test` `refactor` `perf` `security` `release`. Link the issue with `Closes #N` only when the PR fully completes it; otherwise `Relevant to #N`.
 3. **Every user-visible change ships docs + a `CHANGELOG.md` entry** under `## [Unreleased]`. A new CLI subcommand, slash command, config key, or lint rule also needs its row in `docs/reference/*.md` in the same PR — CI enforces the CLI coverage check.
 4. **No new runtime dependencies.** Stdlib plus `markdown` only.
 5. **No real session data and no personal machine details.** Fixtures are synthetic or heavily redacted. Absolute home paths, OS usernames, hostnames, and vault roots stay out of code, tests, commits, PR bodies, and the CHANGELOG — use placeholders like `/home/USER/…`, `<vault>`, `<user>`.
@@ -37,7 +37,7 @@ You are changing **this repository's own code or docs**, not a user's vault. [`C
 
 ## Markdown formatting
 
-**Never hard-wrap prose at a fixed column.** One paragraph is one line, however long. Line width is the renderer's job, not the file's — hard wraps produce noisy diffs where a one-word edit reflows a whole paragraph. This applies to every `.md` file in the repo, including this one and every other agent-facing rule file.
+**Never hard-wrap prose at a fixed column.** One paragraph is one line, however long. Line width is the renderer's job, not the file's.
 
 ## Before you push
 

@@ -1,6 +1,6 @@
 # Contributing to llmwiki
 
-Thanks for wanting to contribute. This project follows strict rules about commits, PRs, and privacy — please read this before opening a PR.
+Rules for changing **this repository** (package, tests, docs, CI). Not vault workflows — those live in `CLAUDE.md` / `AGENTS.md`.
 
 ## Table of contents
 
@@ -16,25 +16,24 @@ Thanks for wanting to contribute. This project follows strict rules about commit
 - [Markdown conventions](#markdown-conventions)
 - [Site look and feel](#site-look-and-feel)
 - [Linting](#linting)
+- [After you push](#after-you-push)
 - [Testing](#testing)
 
 ## TL;DR rules of contribution
 
 1. **One concern per PR.** Don't mix a bug fix with a new feature.
-2. **Commit prefixes:** `feat:` / `fix:` / `docs:` / `chore:` / `test:` — e.g. `feat(v0.7): tool-calling bar chart (#65)`.
+2. **Commit prefixes:** `feat:` / `fix:` / `docs:` / `chore:` / `test:` / `refactor:` / `perf:` / `security:` / `release:` — e.g. `feat(v0.7): tool-calling bar chart`.
 3. **Never commit real session data.** `raw/sessions/` is gitignored. Fixtures must be synthetic or heavily redacted.
 4. **No new runtime deps.** Stdlib + `markdown` only. Viewer loads highlight.js from a CDN — no server-side parser needed.
 5. **Tests must pass.** Run `python3 -m pytest tests/ -q` before pushing. CI verifies Python 3.12.
 6. **Every PR ships docs + CHANGELOG + release-note bullet.** For every user-visible change update (a) `CHANGELOG.md` under `## [Unreleased]`, (b) any `docs/tutorials/*` / `docs/reference/*` / `README.md` / inline `--help` that describes the touched surface, and (c) a one-line release-note bullet either in the CHANGELOG entry or in the PR body so `gh release create` can pick it up. PRs adding a new CLI subcommand, slash command, config key, or lint rule MUST add the matching row to `docs/reference/*.md` in the same PR. CI enforces the CHANGELOG check; reviewers check the rest.
-7. **Verify old issues before fixing them.** Issues accumulate; some are fixed via side-effect, some describe problems that no longer reproduce, some refer to modules that have since been refactored. Before changing code for a stale issue: (a) reproduce the problem on current `main` — shell command, click-path, or test that fails; (b) re-read the issue's linked code paths to confirm they still exist. If the bug is gone, close with a one-line comment citing the commit that resolved it (`gh issue close N --reason completed --comment "resolved in <sha>"`); if the description is wrong but there's a real bug nearby, file a new precise issue and link to the old one. Never ship a speculative fix — if you can't reproduce, say so in the PR body.
+7. **Verify old issues before fixing them.** Before changing code for a stale issue: (a) reproduce the problem on current `main` — shell command, click-path, or test that fails; (b) re-read the issue's linked code paths to confirm they still exist. If the bug is gone, close with a one-line comment citing the commit that resolved it (`gh issue close N --reason completed --comment "resolved in <sha>"`); if the description is wrong but there's a real bug nearby, file a new precise issue and link to the old one. Never ship a speculative fix — if you can't reproduce, say so in the PR body.
 8. **Open an issue first** for anything bigger than a one-file fix. Keeps scope aligned.
 9. **Never fail silently in the browser.** Every runtime failure in the static site must be visible on the page, not just in the console — see [Static-site error handling](#static-site-error-handling).
 10. **No personal vault details in PR text.** Absolute home paths, OS usernames, vault roots, and personal session examples stay out of PR bodies / commits / CHANGELOG — use placeholders. See [Privacy rules](#privacy-rules).
 11. **Lint before you push.** `ruff check llmwiki tests scripts`. A committed `pre-push` hook checks the Python files in your push; see [Linting](#linting).
 12. **Wait for CI after every push.** Local green is not enough — after `git push` (new PR or update), watch GitHub Actions on that head SHA, report the result, and fix/repush if anything failed. See [After you push](#after-you-push).
 13. **Product PRs update AWOS notes.** When a PR changes `llmwiki/`, `integrations/`, `tests/`, `.github/workflows/`, `docs/maintainers/`, or `docs/reference/`, it must also change something under `context/`. Path filters alone decide when notes are required — there is no label escape hatch. Tutorials, scripts, packaging, guides, examples, and similar areas stay exempt. CI enforces this on every PR.
-
-That's it. If you follow those thirteen rules your PR is 90% of the way through review.
 
 ## Code of conduct
 
@@ -77,14 +76,15 @@ llmwiki/              # Python package
 ├── render/           # emitted site assets (css.py, js.py, data.py)
 ├── agent_kit/        # packaged /wiki-* commands + user skills (`install-agent-kit`)
 ├── adapters/         # session-store adapters (one per agent)
-└── mcp/              # MCP server (12 tools, stdio transport)
+└── mcp/              # MCP server (stdio transport)
 
 .claude/              # contributor commands, skills, rules (awos, release, …)
-.cursor/rules/        # Cursor project rules
-.kiro/steering/       # always-loaded rules
+.cursor/rules/        # Cursor project rules (allowlisted in .gitignore)
+.kiro/steering/       # always-loaded Kiro rules
 .githooks/            # committed git hooks (pre-push lint)
-docs/                 # user-facing + framework docs
-tests/                # fixtures + snapshot tests
+docs/                 # user-facing + maintainer docs
+tests/                # fixtures + tests
+context/              # AWOS product/roadmap/specs (contributor tooling only)
 ```
 
 **`context/` is contributor tooling.** It holds the AWOS product definition, roadmap, and the per-feature specifications and delivery records that drive `/awos:*`. It is not part of the llmwiki product, is not shipped in the package, and never appears in a user's vault.
@@ -93,24 +93,24 @@ tests/                # fixtures + snapshot tests
 
 ## Agent instruction files
 
-This repo is two things at once, and the instruction files split along that seam. Getting the two confused is the most common way an agent goes wrong here.
+This repo serves two audiences. Getting them mixed up is the usual failure mode for agents.
 
-**`CLAUDE.md` and `AGENTS.md` at the repo root are the *product* schema.** They describe how a coding agent maintains a **user's** knowledge vault — the `raw/` → `wiki/` → `site/` pipeline, page formats, ingest and query workflows. They ship to users. Never put repo, PR, or process rules in them.
-
-**`CONTRIBUTING.md` — this file — governs work on llmwiki itself.** Because Claude Code auto-loads only `CLAUDE.md` and Cursor auto-loads only `AGENTS.md` plus `.cursor/rules/`, neither agent would otherwise ever see this file. Three surfaces route them here:
-
-| Surface | Tool | Loads when |
+| File / surface | Audience | Role |
 |---|---|---|
-| `.claude/rules/contributing.md` | Claude Code | agent reads a file under `llmwiki/`, `tests/`, `scripts/`, `docs/`, or the root build files (`paths:` frontmatter) |
-| `.cursor/rules/contributing.mdc` | Cursor | every session (`alwaysApply: true`) |
-| `.kiro/steering/contributing-rules.md` | Kiro | every session (`load: always`) |
+| Root [`CLAUDE.md`](CLAUDE.md), [`AGENTS.md`](AGENTS.md) | Agents maintaining a **user vault** | Product schema: `raw/` → `wiki/` → `site/`, page formats, ingest/query. Ship with the product. **Never** put repo/PR/process rules here. |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) (this file) | Humans and agents changing **llmwiki itself** | Authoritative process, privacy, lint, test, and PR rules. |
+| [`.claude/rules/contributing.md`](.claude/rules/contributing.md) | Claude Code | Short pointer; loads when the agent touches listed paths (`paths:` frontmatter: `llmwiki/`, `tests/`, `scripts/`, `docs/`, CI/hooks, root build files, etc.). |
+| [`.cursor/rules/contributing.mdc`](.cursor/rules/contributing.mdc) | Cursor | Short pointer; `alwaysApply: true`. |
+| [`.kiro/steering/contributing-rules.md`](.kiro/steering/contributing-rules.md) | Kiro | Short pointer; `load: always`. |
+| [`.cursor/rules/no-local-vault-in-prs.mdc`](.cursor/rules/no-local-vault-in-prs.mdc), [`.cursor/rules/awos-cursor-runtime.mdc`](.cursor/rules/awos-cursor-runtime.mdc) | Cursor | Extra shared rules (privacy in git artifacts; AWOS→Cursor tool mapping). |
+| [`.kiro/steering/page-format.md`](.kiro/steering/page-format.md), [`.kiro/steering/verification-rules.md`](.kiro/steering/verification-rules.md) | Kiro | Vault page format and verification — product schema adjacent, not CONTRIBUTING. |
 
-Plus a short pointer block at the top of `CLAUDE.md` and `AGENTS.md`, so an agent that only ever reads the root schema still finds its way here.
+Root `CLAUDE.md` / `AGENTS.md` each carry a short callout that points here when the work is repo code, not a vault.
 
-Two rules for maintaining them:
+Rules for maintaining the pointers:
 
-1. **They are pointers, not copies.** Each one distils the same handful of non-negotiables and links back here. An earlier version of the Kiro file restated the rules in full and drifted — it ended up mandating commit types this guide doesn't accept and a branch name that no longer matched. Process rules change here first; the pointers only change when the *summary* is wrong.
-2. **Keep them free of machine-specific detail.** `.cursor/` is gitignored except for an explicit allowlist in `.gitignore`, so a local rule naming your own vault path or directory layout stays on your machine. Add a new shared Cursor rule by allowlisting it there deliberately.
+1. **Pointers, not copies.** Distil non-negotiables and link back here. Process rules change in `CONTRIBUTING.md` first; update a pointer only when its summary is wrong.
+2. **No machine-specific detail in shared rules.** `.cursor/*` is gitignored except for an allowlist in `.gitignore` (currently `rules/contributing.mdc`, `rules/no-local-vault-in-prs.mdc`, `rules/awos-cursor-runtime.mdc`, plus commands/skills/agents/mcp). Local-only Cursor scratch stays untracked. Add a new shared Cursor rule by allowlisting it deliberately.
 
 User-facing `/wiki-*` slash commands and skills live in `llmwiki/agent_kit/` and ship in the package. Contributors who want them locally (so Claude Code discovers `/wiki-sync` from this clone) run:
 
@@ -122,7 +122,7 @@ That copies `commands/` and `skills/` under `.claude/`. Re-run after pulling an 
 
 ### Optional: AWOS (spec → hire → implement)
 
-Maintainers who want the [AWOS](https://github.com/provectus/awos) loop in Cursor or Claude Code: see [`docs/maintainers/AWOS-CURSOR.md`](docs/maintainers/AWOS-CURSOR.md). Install/update with `./scripts/update-awos.sh` (Layer A); add `--plugin` for marketplace extras as `/awos-flow` etc. This is contributor tooling, not the llmwiki product schema.
+Maintainer loop for Cursor / Claude Code: [`docs/maintainers/AWOS-CURSOR.md`](docs/maintainers/AWOS-CURSOR.md). Install/update with `./scripts/update-awos.sh` (Layer A); add `--plugin` for marketplace extras. Contributor tooling, not the vault schema.
 
 ## Commit + PR rules
 
@@ -131,12 +131,10 @@ Adapted from the parent [Open Source Project Framework](docs/framework.md):
 ### Identity
 
 - `git config user.name "Your Name"` (use your own GitHub identity)
-- **Never** add `Co-authored-by: Claude`, `Co-authored-by: AI`, or similar AI attribution lines. Commits from this project are human-authored.
 
 ### PR size
 
 - **One intent per PR.** Don't mix "add a new adapter" with "fix a CSS bug". Split before opening.
-- **≤500 lines of diff.** If the PR gets larger than that, the reviewer will ask you to split.
 - **Atomic commits.** Each commit tells a clear story; renames isolated from behavior changes.
 
 ### PR title format
@@ -155,15 +153,17 @@ Conventional Commits. Types we accept:
 | `security` | Security fix or hardening | patch |
 | `release` | Version bump + CHANGELOG promotion | — |
 
-Optionally scope with a version: `feat(v0.8): tool chart`. Include the issue number: `Closes #65` in the body.
+Optionally scope with a version: `feat(v0.8): tool chart`.
 
-### PR body — 16-box pre-merge checklist
+**Linking issues.** Use `Closes #<n>` in the PR body only when this PR fully completes that issue. If the PR is partial, related, or preparatory, write `Relevant to #<n>` (or list several) — never `Closes` / `Fixes` / `Resolves` for a partial, or GitHub will auto-close the issue on merge.
 
-Every box must be checked (or have a one-line waiver). [`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md) is the authoritative list; it covers:
+### PR body — pre-merge checklist
+
+Every applicable box must be checked (or have a one-line waiver). [`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md) is the authoritative list; it covers:
 
 1. One intent (no mixing concerns)
 2. CI green
-3. Linked issue via `Closes #N`
+3. Linked issue — `Closes #N` only when the PR completes the issue; otherwise `Relevant to #N` (or a one-line waiver if no issue)
 4. Conventional-commit title
 5. Tests added/updated (happy path + edge case)
 6. CHANGELOG under Unreleased
@@ -182,8 +182,7 @@ Every box must be checked (or have a one-line waiver). [`.github/PULL_REQUEST_TE
 
 - Default branch is `main`; never push directly — PR required.
 - CI must pass before merge.
-- Required check display name `AWOS context updated` (job in `.github/workflows/pr-lint.yml`) must be added once in repo settings → branch protection so a red gate blocks merge — maintainers do this after the job ships.
-- Signed commits required.
+- Required check display name `AWOS context updated` (job in `.github/workflows/pr-lint.yml`) must be listed in repo settings → branch protection so a red gate blocks merge.
 - Branch must be up-to-date with `main` before merge.
 
 ## Adding a new adapter
@@ -210,20 +209,14 @@ See [docs/framework.md §5.25 Adapter Flow](docs/framework.md) for the full cont
 
 ### Cross-platform path requirement
 
-`DEFAULT_ROOTS` (or `DEFAULT_VAULT_PATHS` / `session_store_path`) must work on
-macOS, Linux, **and** Windows. Two patterns are acceptable:
+`DEFAULT_ROOTS` (or `DEFAULT_VAULT_PATHS` / `session_store_path`) must work on macOS, Linux, **and** Windows. Two patterns are acceptable:
 
-1. **Dot-directory** (`Path.home() / ".agent" / ...`) -- works on all three
-   platforms by default; a single entry is fine.
-2. **OS-specific directories** (e.g. `~/Library/Application Support/...`,
-   `~/.config/...`, `~/AppData/Roaming/...`) -- you need at least one entry per
-   platform. Use inline comments to label which path is for which OS.
+1. **Dot-directory** (`Path.home() / ".agent" / ...`) -- works on all three platforms by default; a single entry is fine.
+2. **OS-specific directories** (e.g. `~/Library/Application Support/...`, `~/.config/...`, `~/AppData/Roaming/...`) -- you need at least one entry per platform. Use inline comments to label which path is for which OS.
 
-Always use `Path.home()` -- never hardcode `/Users/`, `/home/`, or `C:\Users\`.
-The test in `tests/test_cross_platform_paths.py` enforces these rules.
+Always use `Path.home()` -- never hardcode `/Users/`, `/home/`, or `C:\Users\`. The test in `tests/test_cross_platform_paths.py` enforces these rules.
 
-Adapters with no default paths (like `pdf`, where the user must configure roots)
-are exempt.
+Adapters with no default paths (like `pdf`, where the user must configure roots) are exempt.
 
 ### Review checklist for adapter PRs
 
@@ -237,7 +230,7 @@ are exempt.
 
 ## Static-site error handling
 
-The viewer is vanilla JS with no error boundary and no telemetry — a swallowed failure is one nobody ever hears about. #20 sat open for months because a broken search index and an empty corpus rendered identically. Rules for any JS the build emits (`llmwiki/render/js.py`):
+The viewer is vanilla JS with no error boundary and no telemetry — a swallowed failure is one nobody ever hears about. A broken search index and an empty corpus can look identical. Rules for any JS the build emits (`llmwiki/render/js.py`):
 
 1. **No silent `catch`.** Report through `window.__llmwikiReportError(context, err)` — it logs *and* renders a dismissible `role="alert"` bar. Name the capability that broke ("Related pages unavailable"), not the function.
 2. **Say "broken", not "empty".** An empty result list must never be the only signal that loading failed; the palette renders a `.palette-note` row instead.
@@ -260,7 +253,7 @@ llmwiki processes session transcripts that may contain PII, API keys, file paths
 
 ## Markdown conventions
 
-**Never hard-wrap prose at a fixed column.** One paragraph is one line, however long. Line width is the renderer's job, not the file's, and a hard-wrapped paragraph turns a one-word edit into a diff that reflows every following line — which buries the actual change and causes needless merge conflicts. This applies to every `.md` file in the repo, including `CLAUDE.md`, `AGENTS.md`, and the agent rule files under `.claude/rules/`, `.cursor/rules/`, and `.kiro/steering/`.
+**Never hard-wrap prose at a fixed column.** One paragraph is one line, however long. Line width is the renderer's job, not the file's.
 
 Wrapping is fine inside fenced code blocks, tables, and anywhere the line is not prose.
 
@@ -277,7 +270,7 @@ ruff check --fix llmwiki tests scripts  # only with an explicit --select for saf
 
 Ruff config lives in `pyproject.toml` under `[tool.ruff]`: line length 120, target `py312`, selecting `E`, `F`, `I`, `B`, `UP`, and `PLC0415` (import-outside-top-level). `E501` and `E402` stay ignored. `PLC0415` is enforced everywhere except `scripts/**` (one-off maintenance scripts; exempt via `per-file-ignores`).
 
-**Run lint before you push.** The committed `pre-push` hook checks the Python files in your push and rejects it on violations; `git push --no-verify` bypasses it, but say why in the PR. CI runs `ruff check llmwiki tests scripts` and **fails the build** on findings (#58).
+**Run lint before you push.** The committed `pre-push` hook checks the Python files in your push and rejects it on violations; `git push --no-verify` bypasses it, but say why in the PR. CI runs `ruff check llmwiki tests scripts` and **fails the build** on findings.
 
 **Agent kit / inner AI markdown.** When you change `llmwiki/agent_kit/` or inner `.claude/skills`, `.claude/agents`, or `.claude/commands`, run the scoped commands in [`docs/maintainers/AI-LINTING.md`](docs/maintainers/AI-LINTING.md). CI runs the same paths as the **AI tooling lint** job in `.github/workflows/pr-lint.yml`.
 
@@ -314,12 +307,8 @@ python3 -m pytest tests/test_convert.py
 python3 -m pip install -e '.[dev]'
 python3 -m pytest tests/ --cov=llmwiki --cov-report=term-missing
 
-# Wall-clock lint_perf budgets (#429) — CI runs these on the performance-budget job
+# Wall-clock lint_perf budgets — CI runs these on the performance-budget job
 python3 -m pytest tests/test_lint_perf.py -m slow -o addopts=
-
-# Optional: HTML report for local browsing
-python3 -m pytest tests/ --cov=llmwiki --cov-report=html
-# open htmlcov/index.html
 
 # Smoke checks (not pytest)
 python3 -m llmwiki build
@@ -331,9 +320,9 @@ python3 -m playwright install chromium
 python3 -m pytest tests/e2e/
 ```
 
-**Coverage floor.** `pyproject.toml` sets `[tool.coverage.report] fail_under = 87` on `llmwiki` for the default unit invocation above. The baseline when #280 was measured was ~**87.33%**. Dropping below 87 fails CI. If a change trips the gate, restore coverage with meaningful tests — or state in the PR body why the drop is justified (deleted surface, moved code, etc.) so reviewers can accept it. E2E stays out of this number (separate workflow).
+**Coverage floor.** `pyproject.toml` sets `[tool.coverage.report] fail_under = 87` on `llmwiki` for the default unit invocation above. Dropping below 87 fails CI. If a change trips the gate, restore coverage with meaningful tests — or state in the PR body why the drop is justified (deleted surface, moved code, etc.) so reviewers can accept it. E2E stays out of this number (separate workflow).
 
-Suite autouse in `tests/conftest.py` isolates the default vault **and** neutralizes repo-root `config.json` for in-process merges (#142). Tests that intentionally exercise the user-config overlay must monkeypatch `_USER_CONFIG` / `USER_CONFIG_FILE` themselves.
+Suite autouse in `tests/conftest.py` isolates the default vault **and** neutralizes repo-root `config.json` for in-process merges. Tests that intentionally exercise the user-config overlay must monkeypatch `_USER_CONFIG` / `USER_CONFIG_FILE` themselves.
 
 **No unresolved merge conflict markers in commits.** Git’s `<<<<<<< …` / `=======` / `>>>>>>> …` marker lines in any tracked text file fail the `No merge conflict markers` job in `.github/workflows/pr-lint.yml`. The changelog “must be updated” check only verifies `CHANGELOG.md` was touched; it does not validate content.
 
@@ -342,7 +331,3 @@ Every adapter must ship with:
 - A fixture (synthetic or heavily redacted)
 - A snapshot test
 - A graceful-degradation test (passes an unknown record type)
-
-## Questions?
-
-Open an issue with the `question` label on [AlexanderMakarov/llm-wiki](https://github.com/AlexanderMakarov/llm-wiki/issues).
