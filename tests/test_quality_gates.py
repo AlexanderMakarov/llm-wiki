@@ -57,6 +57,7 @@ def test_ci_runs_uninstrumented_slow_perf_budget_tests() -> None:
     text = CI.read_text(encoding="utf-8")
     assert "tests/test_lint_perf.py" in text
     assert "-m slow" in text
+    assert "-o addopts=" in text
     assert "performance-budget" in text
 
 

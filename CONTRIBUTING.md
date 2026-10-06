@@ -315,7 +315,7 @@ python3 -m pip install -e '.[dev]'
 python3 -m pytest tests/ --cov=llmwiki --cov-report=term-missing
 
 # Wall-clock lint_perf budgets (#429) — CI runs these on the performance-budget job
-python3 -m pytest tests/test_lint_perf.py -m slow --no-cov
+python3 -m pytest tests/test_lint_perf.py -m slow -o addopts=
 
 # Optional: HTML report for local browsing
 python3 -m pytest tests/ --cov=llmwiki --cov-report=html

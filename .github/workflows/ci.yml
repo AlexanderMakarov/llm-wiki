@@ -126,9 +126,11 @@ jobs:
         run: python -m pip install markdown pytest
 
       - name: Lint-rule wall-clock budgets
-        # Default pytest addopts deselect @pytest.mark.slow so coverage in
-        # lint-and-test does not inflate DuplicateDetection budgets (#429 / #412).
-        run: python -m pytest tests/test_lint_perf.py -m slow --no-cov -p no:cacheprovider
+        # Default addopts include -m "not slow" (so coverage in lint-and-test
+        # does not inflate DuplicateDetection budgets). Override addopts here
+        # so -m slow actually selects those tests. Do not pass --no-cov:
+        # this job does not install pytest-cov.
+        run: python -m pytest tests/test_lint_perf.py -m slow -o addopts= -q -p no:cacheprovider
 
       - name: Build the demo vault (when present)
         run: |
