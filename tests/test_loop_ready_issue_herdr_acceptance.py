@@ -244,16 +244,32 @@ def test_acceptance_argparse_rejects_missing_label(loop_mod):
 
 
 # @regression
-def test_acceptance_run_main_loop_once_spawns_single_worker(loop_mod, monkeypatch, capsys):
-    """§2.5 / §2.9: serial N=1 — one spawn, α wait, tab close, exit with --once."""
+@pytest.mark.parametrize("existing_tab", [False, True], ids=["spawn", "adopt"])
+def test_acceptance_run_main_loop_once_single_worker(
+    loop_mod, monkeypatch, capsys, existing_tab
+):
+    """§2.5 / §2.9: serial N=1 — one worker, α wait, tab close, exit with --once.
+
+    An open ``issue-N`` tab (restored herdr session, driver restart) is adopted:
+    no new tab, agent start, or prompt, so in-progress delivery is not restarted.
+    """
     issues = [_issue(11, title="Only ticket", labels=[CUSTOM_LABEL], assignees=[LOGIN])]
     fake_run_gh = _fake_gh_factory(login=LOGIN, repo="o/r", issues=issues)
 
     spawn_events: list[str] = []
+    tabs = [{"label": "issue-11", "tab_id": "wD:tR"}] if existing_tab else []
+    panes = [
+        {"pane_id": "wD:pShell", "tab_id": "wD:tR"},
+        {"pane_id": "wD:pAgent", "tab_id": "wD:tR", "agent": "cursor"},
+        {"pane_id": "wD:pOther", "tab_id": "wD:tX", "agent": "cursor"},
+    ]
+    waited_on: list[str] = []
 
     def fake_run_herdr(argv: list[str]) -> subprocess.CompletedProcess[str]:
         if argv[1:3] == ["tab", "list"]:
-            body = json.dumps({"result": {"tabs": [], "type": "tab_list"}})
+            body = json.dumps({"result": {"tabs": tabs, "type": "tab_list"}})
+        elif argv[1:3] == ["pane", "list"]:
+            body = json.dumps({"result": {"panes": panes, "type": "pane_list"}})
         elif argv[1:3] == ["tab", "create"]:
             spawn_events.append("create")
             body = json.dumps(
@@ -279,8 +295,9 @@ def test_acceptance_run_main_loop_once_spawns_single_worker(loop_mod, monkeypatc
             raise AssertionError(f"unexpected herdr argv: {argv}")
         return subprocess.CompletedProcess(argv, 0, body, "")
 
-    def fake_wait(*_args, **_kwargs) -> None:
+    def fake_wait(_repo, worker, *_args, **_kwargs) -> None:
         """Default fetch_status is bound at def time; stub α wait for driver integration."""
+        waited_on.append(worker.pane_id)
 
     monkeypatch.setattr(loop_mod, "wait_until_ticket_advanced", fake_wait)
 
@@ -297,12 +314,17 @@ def test_acceptance_run_main_loop_once_spawns_single_worker(loop_mod, monkeypatc
     )
     out = capsys.readouterr().out
     assert code == 0
-    assert spawn_events.count("create") == 1
     assert f"1 with {CUSTOM_LABEL!r} label, 1 is assigned on {LOGIN!r}" in out
     assert "params: poll-seconds=300; agent-kind=cursor; mode=once" in out
-    assert "issue-11 herdr tab opened for #11 gh issue" in out
     assert "Advanced #11" in out
-    assert "close" in spawn_events
+    if existing_tab:
+        assert spawn_events == ["close"]
+        assert waited_on == ["wD:pAgent"]
+        assert "issue-11 herdr tab adopted (wD:tR, no new prompt; close it to restart) for #11 gh issue" in out
+    else:
+        assert spawn_events == ["create", "start", "prompt", "close"]
+        assert waited_on == ["p1"]
+        assert "issue-11 herdr tab opened for #11 gh issue" in out
 
 
 def test_acceptance_empty_queue_once_exits_without_sleep(loop_mod, capsys):

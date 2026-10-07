@@ -59,7 +59,7 @@ While a worker waits on you (herdr `blocked` — approval, question, permission)
 
 ## Advance rule (merge + post-merge CI)
 
-The driver starts the **next** eligible issue only when the **current** issue is done on GitHub: a PR that **closed** the issue is **merged**, and **every check run GitHub reports on that merge commit** is **completed** with a green conclusion (`success`, `skipped`, or `neutral`). If no check runs exist yet on the merge commit, the driver **does not** advance (workflows may still be queuing). On advance, the driver always closes the finished worker tab (even if the agent already went idle/disappeared — that only stops `herdr agent wait`, not tab cleanup) and opens a fresh one for the next issue — you do not need to close the tab yourself to unlock the queue. Before spawning `issue-N`, the driver also closes any leftover tabs still labeled `issue-N`. Closing a worker tab early is a valid **hard stop** for that ticket; the driver does not treat it as successful delivery and does not auto-advance as if merged.
+The driver starts the **next** eligible issue only when the **current** issue is done on GitHub: a PR that **closed** the issue is **merged**, and **every check run GitHub reports on that merge commit** is **completed** with a green conclusion (`success`, `skipped`, or `neutral`). If no check runs exist yet on the merge commit, the driver **does not** advance (workflows may still be queuing). On advance, the driver always closes the finished worker tab (even if the agent already went idle/disappeared — that only stops `herdr agent wait`, not tab cleanup) and opens a fresh one for the next issue — you do not need to close the tab yourself to unlock the queue. If a tab labeled `issue-N` is already open when the driver reaches issue N (a herdr session restored after a reboot, or a driver restart), the driver **adopts** it: it sends no new prompt and just polls GitHub for α, so in-progress delivery is not restarted. Close that tab first if you want a fresh worker. Closing a worker tab early is a valid **hard stop** for that ticket; the driver does not treat it as successful delivery and does not auto-advance as if merged.
 
 ## Polling interval
 
@@ -71,7 +71,7 @@ Queue membership is gated on **you** (the `gh` viewer login) **and** the readine
 
 ## Hard stop and restore
 
-If you close the worker tab or the agent disappears before merge + green post-merge CI, the driver prints a **WARNING** with restore steps: continue delivery for that issue URL in a new worker. Re-running the driver for the same issue closes any leftover `issue-N` tab before spawning a fresh one. Press **Ctrl+C** to stop the driver loop; in-flight workers are left open until you close them (or until α advance closes them). The driver keeps polling GitHub for advance on that issue until α is satisfied or you stop.
+If you close the worker tab or the agent disappears before merge + green post-merge CI, the driver prints a **WARNING** with restore steps: continue delivery for that issue URL in a new worker. Re-running the driver adopts the open `issue-N` tab instead of spawning a new worker; close it first to start the ticket over. Press **Ctrl+C** to stop the driver loop; in-flight workers are left open until you close them (or until α advance closes them). The driver keeps polling GitHub for advance on that issue until α is satisfied or you stop.
 
 ## Empty queue
 

@@ -57,9 +57,15 @@ Success: enqueue by assigning yourself and applying the label you pass to the dr
 - At most one ticket agent runs at a time.
 - Each ticket runs in a **new worker tab** (fresh interactive agent), not reused mid-queue for “the next issue” without a tab/process boundary.
 - The driver owns queue advance; the one-ticket helper never fetches or starts the next GitHub issue.
+- **Driver restart:** when the driver reaches a ticket whose worker tab (labeled `issue-N`) is already open — after a herdr session restore or a driver re-run/Ctrl+C — it adopts that tab instead of closing it and starting over: no new prompt is sent, the pane running an agent is preferred, and GitHub is polled for Option α as usual. To restart a ticket from scratch, the maintainer closes its tab by hand before re-running.
   - **Acceptance Criteria:**
     - [x] Given a ticket is in progress, when the driver is running, then it does not start a second ticket worker in parallel. *(Evidence: `run_main_loop` serial structure + `--once` acceptance test with single spawn.)*
     - [x] Given ticket A finishes per §2.8, when ticket B starts, then B runs in a new worker tab/process, not by continuing A’s agent session as the next issue. *(Evidence: spawn per pick_next cycle creates a new tab; skill forbids queue advance.)*
+    - [x] Given a worker tab for the next ticket is already open when the driver reaches that ticket, when the driver runs, then it adopts that tab, sends no new prompt, prefers the pane running an agent, and polls GitHub for α as usual, without closing the tab or starting a fresh worker. *(Evidence: `tests/test_loop_ready_issue_herdr_acceptance.py::test_acceptance_run_main_loop_once_single_worker[adopt]`, `tests/test_loop_ready_issue_herdr.py` adopt_existing_worker tests, operator smoke 2026-10-07: bare issue-323 tab → “adopted … no new prompt; close it to restart”.)*
+    - [x] Given the maintainer closes the ticket’s worker tab by hand before re-running, when the driver reaches that ticket, then a fresh worker is started (the way to restart a ticket). *(Evidence: `test_acceptance_run_main_loop_once_single_worker[spawn]`.)*
+    - [x] Given the driver cannot list herdr tabs, when it reaches a ticket, then it refuses to start a worker (a duplicate worker is possible). *(Evidence: `test_adopt_existing_worker_tab_list_error_refuses_duplicate`.)*
+    - [x] Given several tabs for the same ticket are open, when the driver reaches it, then it adopts the first and warns; the others are closed when the driver advances. *(Evidence: `test_adopt_existing_worker_multiple_tabs_adopts_first_and_warns`; sweep in `close_worker_tab`.)*
+    - [x] Given an adopted tab whose agent is gone, when the driver polls, then it shows the existing gone-warning and keeps polling. *(Evidence: operator smoke 2026-10-07 — bare `issue-323` tab adopted, gone-warning, polling continued; `test_acceptance_early_close_warning_text_contract`.)*
 
 ### 2.6 Thin one-ticket helper
 
@@ -134,3 +140,9 @@ Success: enqueue by assigning yourself and applying the label you pass to the dr
 - Replacing CI/PR watching inside the delivery commands with herdr
 - Auto-closing GitHub issues from this loop
 - Non-herdr “headless” driver as a supported product path for this spike
+
+---
+
+## Change Log
+
+- 2026-10-07: §2.5 amended with driver-restart behavior: an already-open ticket tab is adopted (no new prompt, agent pane preferred, polling continues) instead of being closed and restarted; listing failure refuses to start a worker; multiple tabs adopt the first and warn; 5 acceptance criteria added.
