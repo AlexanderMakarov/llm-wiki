@@ -536,13 +536,15 @@ def format_worker_opened_line(
     tab_label: str,
     issue_number: int,
     title: str,
+    adopted: str | None = None,
     opened_at: datetime | None = None,
 ) -> str:
-    """Confirm herdr tab open for a GitHub issue (local wall clock)."""
+    """Confirm herdr tab open (or adopted by ``tab_id``) for a GitHub issue."""
     when = (opened_at or datetime.now()).strftime("%H:%M:%S")
     title_bit = f" {title}" if title else ""
+    verb = f"adopted ({adopted}, no new prompt; close it to restart)" if adopted else "opened"
     return (
-        f"{tab_label} herdr tab opened for #{issue_number} gh issue"
+        f"{tab_label} herdr tab {verb} for #{issue_number} gh issue"
         f"{title_bit} at {when}"
     )
 
@@ -591,6 +593,7 @@ class WorkerHandle:
     pane_id: str
     issue_number: int
     issue_url: str
+    adopted: bool = False
     gone: bool = False
     warned_gone: bool = False
 
@@ -689,11 +692,11 @@ def format_worker_gone_warning(
         f"WARNING: worker for issue #{issue_number} disappeared before "
         f"merge+CI advance (α).\n"
         f"  Issue: {issue_url}\n"
-        "  Restore: re-open a worker and continue delivery for that URL.\n"
-        "  Before re-running the driver, close the old issue-N worker tab if it is "
-        "still open — re-run spawns a duplicate worker for the same issue.\n"
+        f"  Restore: if the issue-{issue_number} tab is still open, restart the agent "
+        "there and continue delivery (a driver re-run adopts that tab); if you "
+        "closed it, press Ctrl+C and re-run the driver to start a fresh worker.\n"
         f"    python3 scripts/loop_ready_issue_herdr.py --label {label}\n"
-        "  (add --once for a single ticket). Press Ctrl+C to stop the driver loop.\n"
+        "  (add --once for a single ticket). Ctrl+C stops the driver loop.\n"
         f"  The driver keeps polling GitHub for α on #{issue_number} until advance "
         "or you stop."
     )
@@ -712,7 +715,6 @@ def spawn_worker_for_issue(
     issue_url = str(issue.get("url") or "")
     tab_label = f"issue-{number}"
     agent_name = f"issue-{number}"
-    close_existing_issue_tabs(number, run_herdr)
 
     create_proc = run_herdr(
         [
@@ -846,29 +848,61 @@ def close_worker_tab(
             )
 
 
-def close_existing_issue_tabs(
-    issue_number: int,
+def list_tab_panes(
+    tab_id: str,
     run_herdr: RunHerdr = default_run_herdr,
-) -> None:
-    """Close leftover ``issue-N`` tabs before spawning a fresh worker for N."""
-    tab_label = f"issue-{issue_number}"
+) -> list[dict[str, Any]]:
+    """Return herdr pane records that belong to ``tab_id``."""
+    payload = _herdr_require_ok(run_herdr(["herdr", "pane", "list"]), "herdr pane list")
+    result = payload.get("result")
+    panes = result.get("panes") if isinstance(result, dict) else None
+    if not isinstance(panes, list):
+        return []
+    return [p for p in panes if isinstance(p, dict) and p.get("tab_id") == tab_id]
+
+
+def adopt_existing_worker(
+    issue: Issue,
+    run_herdr: RunHerdr = default_run_herdr,
+) -> WorkerHandle | None:
+    """Reuse an open ``issue-N`` tab instead of restarting delivery from scratch.
+
+    A tab labeled ``issue-N`` means a worker already owns the ticket (e.g. a
+    herdr session restored after reboot, or a driver restart). The driver
+    resumes polling for α against it and sends no new prompt. Close the tab by
+    hand to make the driver start a fresh worker.
+    """
+    number = _issue_number(issue)
+    tab_label = f"issue-{number}"
     try:
         tab_ids = list_tabs_with_label(tab_label, run_herdr)
     except RuntimeError as exc:
+        raise RuntimeError(
+            f"cannot check for an open {tab_label} tab ({exc}); "
+            "refusing to spawn a possible duplicate worker"
+        ) from exc
+    if not tab_ids:
+        return None
+    if len(tab_ids) > 1:
         print(
-            f"WARNING: could not list tabs before spawn ({tab_label}): {exc}",
+            f"WARNING: {len(tab_ids)} herdr tabs labeled {tab_label} "
+            f"({', '.join(tab_ids)}); adopting {tab_ids[0]}; the others are closed "
+            "when the issue advances.",
             file=sys.stderr,
         )
-        return
-    for tab_id in tab_ids:
-        try:
-            close_tab_id(tab_id, run_herdr)
-            print(f"Closed leftover herdr tab {tab_label} ({tab_id}) before spawn.")
-        except RuntimeError as exc:
-            print(
-                f"WARNING: could not close leftover tab {tab_id} ({tab_label}): {exc}",
-                file=sys.stderr,
-            )
+    tab_id = tab_ids[0]
+    panes = list_tab_panes(tab_id, run_herdr)
+    # Prefer the pane running an agent; a bare shell pane still lets α polling work.
+    panes.sort(key=lambda p: not p.get("agent"))
+    if not panes or not panes[0].get("pane_id"):
+        raise RuntimeError(f"herdr tab {tab_id} ({tab_label}) has no panes to adopt")
+    return WorkerHandle(
+        tab_id=tab_id,
+        pane_id=str(panes[0]["pane_id"]),
+        issue_number=number,
+        issue_url=str(issue.get("url") or ""),
+        adopted=True,
+    )
 
 
 _MAX_CONSECUTIVE_FETCH_FAILURES = 5
@@ -1000,17 +1034,20 @@ def run_main_loop(
 
             number = _issue_number(next_issue)
             title = str(next_issue.get("title") or "")
-            worker = spawn_worker_for_issue(
-                next_issue,
-                agent_kind=agent_kind,
-                repo_root=repo_root,
-                run_herdr=run_herdr,
-            )
+            worker = adopt_existing_worker(next_issue, run_herdr)
+            if worker is None:
+                worker = spawn_worker_for_issue(
+                    next_issue,
+                    agent_kind=agent_kind,
+                    repo_root=repo_root,
+                    run_herdr=run_herdr,
+                )
             print(
                 format_worker_opened_line(
                     tab_label=f"issue-{number}",
                     issue_number=number,
                     title=title,
+                    adopted=worker.tab_id if worker.adopted else None,
                 ),
             )
             wait_until_ticket_advanced(
@@ -1029,9 +1066,8 @@ def run_main_loop(
     except KeyboardInterrupt:
         print(
             "\nloop_ready_issue_herdr: stopped by operator (Ctrl+C). "
-            "In-flight workers are left open. Before re-running with the same --label, "
-            "close any issue-N worker tab still open or the next start will spawn a "
-            "duplicate worker for that ticket.",
+            "In-flight workers are left open; re-running with the same --label adopts "
+            "an open issue-N tab instead of restarting that ticket.",
             file=sys.stderr,
         )
         return 130

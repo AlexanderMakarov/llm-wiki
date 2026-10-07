@@ -292,6 +292,51 @@ def test_close_worker_tab_closes_even_when_agent_gone(loop_mod):
     assert ["herdr", "tab", "close", "wD:tK"] in calls
 
 
+def _adopt_fake_herdr(calls: list[list[str]], tabs: list[dict] | None):
+    """Fake herdr for adopt tests; ``tabs=None`` makes ``tab list`` fail."""
+
+    def fake_herdr(argv: list[str]) -> subprocess.CompletedProcess[str]:
+        calls.append(list(argv))
+        if argv[1:3] == ["tab", "list"]:
+            if tabs is None:
+                body = json.dumps({"error": {"code": "boom", "message": "no socket"}})
+                return subprocess.CompletedProcess(argv, 1, body, "")
+            body = json.dumps({"result": {"tabs": tabs, "type": "tab_list"}})
+        elif argv[1:3] == ["pane", "list"]:
+            panes = [{"pane_id": "wD:p1", "tab_id": "wD:t1", "agent": "cursor"}]
+            body = json.dumps({"result": {"panes": panes, "type": "pane_list"}})
+        else:
+            raise AssertionError(argv)
+        return subprocess.CompletedProcess(argv, 0, body, "")
+
+    return fake_herdr
+
+
+def test_adopt_existing_worker_tab_list_error_refuses_duplicate(loop_mod):
+    calls: list[list[str]] = []
+    fake = _adopt_fake_herdr(calls, None)
+    with pytest.raises(RuntimeError, match=r"issue-42.*duplicate worker"):
+        loop_mod.adopt_existing_worker(_issue(42), run_herdr=fake)
+    assert [c[1:3] for c in calls] == [["tab", "list"]]
+
+
+def test_adopt_existing_worker_multiple_tabs_adopts_first_and_warns(
+    loop_mod, capsys
+):
+    calls: list[list[str]] = []
+    tabs = [
+        {"label": "issue-42", "tab_id": "wD:t1"},
+        {"label": "issue-42", "tab_id": "wD:t2"},
+    ]
+    fake = _adopt_fake_herdr(calls, tabs)
+    worker = loop_mod.adopt_existing_worker(_issue(42), run_herdr=fake)
+    assert worker is not None
+    assert worker.tab_id == "wD:t1"
+    assert worker.adopted
+    assert "closed when the issue advances" in capsys.readouterr().err
+    assert not [c for c in calls if c[1:3] in (["tab", "create"], ["tab", "close"])]
+
+
 def test_close_tab_id_treats_tab_not_found_as_ok(loop_mod):
     def fake_herdr(argv: list[str]) -> subprocess.CompletedProcess[str]:
         body = json.dumps(
@@ -362,9 +407,7 @@ def test_spawn_worker_for_issue_herdr_sequence(loop_mod):
 
     def fake_herdr(argv: list[str]) -> subprocess.CompletedProcess[str]:
         calls.append(list(argv))
-        if argv[1:3] == ["tab", "list"]:
-            body = json.dumps({"result": {"tabs": [], "type": "tab_list"}})
-        elif argv[1:3] == ["tab", "create"]:
+        if argv[1:3] == ["tab", "create"]:
             body = json.dumps(
                 {
                     "result": {
@@ -396,12 +439,11 @@ def test_spawn_worker_for_issue_herdr_sequence(loop_mod):
     assert worker.tab_id == "wZ:t1"
     assert worker.pane_id == "wZ:p1"
     assert worker.issue_number == 42
-    assert calls[0][1:3] == ["tab", "list"]
-    assert calls[1][3:5] == ["--cwd", "/tmp/repo"]
-    assert calls[1][6] == "issue-42"
-    assert calls[2][3] == "issue-42"
-    assert calls[2][5] == "cursor"
-    assert calls[3][3] == "wZ:p1"
+    assert calls[0][3:5] == ["--cwd", "/tmp/repo"]
+    assert calls[0][6] == "issue-42"
+    assert calls[1][3] == "issue-42"
+    assert calls[1][5] == "cursor"
+    assert calls[2][3] == "wZ:p1"
 
 
 def test_fetch_issue_merge_and_ci_status_graphql_closing_pr(loop_mod):
