@@ -151,12 +151,14 @@ def synthesize_estimate_report(
     """
     from llmwiki.synth.pipeline import (  # noqa: PLC0415 — cycle: synth.pipeline↔synth.estimate
         _DOC_CHUNK_MAX_CHARS,
+        DOCS_REL_PREFIX,
         _chunk_markdown,
         _discover_raw_docs,
         _discover_raw_sessions,
         _load_state,
         page_is_stub,
         page_needs_topics_rewrite,
+        raw_source_key,
         scan_wiki_sources_disk,
         source_page_paths,
         source_synth_is_done,
@@ -254,7 +256,7 @@ def synthesize_estimate_report(
                 source_rel = name
         else:
             source_rel = name
-        source_key = ("raw/sessions/" + source_rel).replace("\\", "/")
+        source_key = raw_source_key(source_rel, is_doc=False)
         agent_by_source[source_key] = detect_agent_label(meta)
     # One wiki/sources walk: stub keys mark backlog (#24). File-category
     # counts (On disk column + CLI snapshot) reuse this same scan — counts
@@ -379,7 +381,7 @@ def synthesize_estimate_report(
                 source_rel = name
         else:
             source_rel = name
-        source_key = "raw/sessions/" + source_rel
+        source_key = raw_source_key(source_rel, is_doc=False)
 
         filename = synth_page_filename(meta, getattr(p, "stem", name))
         project = str(meta.get("project") or getattr(getattr(p, "parent", None), "name", "unknown"))
@@ -445,8 +447,8 @@ def synthesize_estimate_report(
     # Docs estimate path — mirrors synth pipeline inclusion rules.
     docs_row = _bucket("Documents", kind="docs", css="agent-docs")
     for p, meta, body in _discover_raw_docs(docs_root_path):
-        rel = "docs::" + str(p.relative_to(docs_root_path))
-        source_key = "raw/docs/" + str(p.relative_to(docs_root_path))
+        rel = DOCS_REL_PREFIX + str(p.relative_to(docs_root_path))
+        source_key = raw_source_key(rel, is_doc=True)
         project = str(meta.get("project") or "docs")
         filename = synth_page_filename(meta, p.stem)
         chunks = _chunk_markdown(body, _DOC_CHUNK_MAX_CHARS)

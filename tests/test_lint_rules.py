@@ -1196,6 +1196,27 @@ def test_provenance_integrity_flags_missing_raw(tmp_path: Path):
     assert "doctor" not in issues[0]["message"].lower()
 
 
+def test_provenance_integrity_missing_raw_doc_hints_add_or_remove(tmp_path: Path):
+    """A lost raw/docs/ file is restored or dropped, not session-migrated (#307)."""
+    vault = _prov_vault(tmp_path)
+    src = vault / "wiki" / "sources" / "docs" / "gone.md"
+    src.parent.mkdir(parents=True)
+    src.write_text(
+        "---\ntitle: Gone\ntype: source\n"
+        "source_file: raw/docs/gone.md\n---\n\n## Summary\nx\n",
+        encoding="utf-8",
+    )
+    pages = load_pages(vault / "wiki")
+    issues = ProvenanceIntegrity().run(pages)
+    assert len(issues) == 1
+    message = issues[0]["message"]
+    assert "raw/docs/gone.md" in message
+    assert "llmwiki add" in message
+    assert "llmwiki remove" in message
+    assert "llmwiki trace" in message
+    assert "migrate broken-provenance" not in message
+
+
 def test_provenance_integrity_one_issue_per_broken_hop(tmp_path: Path):
     vault = _prov_vault(tmp_path)
     ent = vault / "wiki" / "entities" / "Mixed.md"

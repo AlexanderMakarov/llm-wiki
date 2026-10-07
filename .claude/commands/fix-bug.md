@@ -156,7 +156,7 @@ In either case, if the fix revealed that `product-definition.md` or `architectur
 
 ### Step 9b: Local Review
 
-After smoke confirm, run one independent local review (pre-push, `git diff origin/main...HEAD`).
+After smoke confirm, run one independent local review (pre-push). Commit is the **next** stage (Step 10) — the branch often has no commits yet; that is expected.
 
 Independence rules:
 
@@ -170,7 +170,11 @@ Review output path: `context/spec/{SPEC_NAME}/review.md` (attached feature spec 
 Fixed prompt (replace the path placeholder before dispatch):
 
 ```text
-Review git diff origin/main...HEAD (branch changes, not an open-PR number).
+Review the pending product change against origin/main (branch changes, not an open-PR number).
+
+Diff scope: if `git rev-list --count origin/main..HEAD` is 0, review the working tree — `git diff origin/main` plus untracked paths that would ship (exclude `.env`, credentials, vault/config, `.worktree-vault/`, and `context/**/review.md` / `review-*.md`). If the branch already has commits, review `git diff origin/main...HEAD` and any still-uncommitted changes on top.
+
+Do NOT treat "nothing committed yet" / empty `origin/main...HEAD` as a Blocker — commit-push is the next delivery stage. Untracked modules that `cli.py` (or similar) already imports may be noted as a Nit reminder to stage them at commit; they are not grounds for Request changes by themselves.
 
 Load and apply every section of these docs, in this priority order for attention:
 1. docs/maintainers/REVIEW_CHECKLIST.md — treat its Blocker vs Nit rule as the severity model (Security + Meta + broken layer boundaries / failing tests or build = Blocker; Code quality / Docs / Build+runtime smoke = Nit unless they trip Meta or Security). Use the checklist's Blocker shortlist.

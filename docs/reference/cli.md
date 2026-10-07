@@ -368,7 +368,7 @@ All rules are deterministic (no LLM). Structural: `frontmatter_completeness`, `f
 
 `stub_source_pages` (#24) flags pages under `wiki/sources/` whose body is machine-generated filler — a pending sentinel (`<!-- llmwiki-pending: … -->`) or the dummy backend's `Auto-synthesized from session` body. Those sources still count as unsynthesized backlog; refill them with `llmwiki synth` on a real backend.
 
-`provenance_integrity` (#122) emits an **error** for each broken downward hop on pages that already carry `sources:` and/or `source_file:` — missing source-summary pages or missing raw files. Pages without those fields are skipped. The message names the missing hop and points at `llmwiki trace`, `synth`, or `migrate broken-provenance` as appropriate; this rule only reports.
+`provenance_integrity` (#122) emits an **error** for each broken downward hop on pages that already carry `sources:` and/or `source_file:` — missing source-summary pages or missing raw files. Document source pages are checked too, since synth now writes their `source_file: raw/docs/…` claim (#307). Pages without those fields are skipped. The message names the missing hop and points at `llmwiki trace` plus a repair: `synth` for a missing source summary, `migrate broken-provenance` for a missing `raw/sessions/` file, and `llmwiki add` (restore the document) or `llmwiki remove` (drop the orphaned page) for a missing `raw/docs/` file. This rule only reports.
 
 `stale_reference_detection` (#303 / #87) flags living pages (entities, concepts, …) whose dated claim about a target predates that target's `last_updated`. Pages under `wiki/sources/` and pages with frontmatter `type: source` are skipped — they are dated session records and cannot be "un-staled" without rewriting history.
 
@@ -585,6 +585,7 @@ python3 -m llmwiki migrate wikilink-titles --vault /path/to/vault --dry-run
 python3 -m llmwiki migrate discarded-topic-links --vault /path/to/vault --dry-run
 python3 -m llmwiki migrate source-page-paths --vault /path/to/vault --dry-run
 python3 -m llmwiki migrate broken-provenance --vault /path/to/vault --dry-run
+python3 -m llmwiki migrate doc-source-provenance --vault /path/to/vault --dry-run
 ```
 
 ### `state` — one-time legacy state migration (v1.4.0)
@@ -820,6 +821,30 @@ python3 -m llmwiki migrate broken-provenance --vault /path/to/vault
 | `--dry-run` | Report what would change; write nothing. |
 
 The report prints `remapped` / `cleared` / `unresolved` counts. Idempotent once hops are healed or cleared.
+
+### `doc-source-provenance` — fill blank claims on document pages (#307)
+
+Releases before #307 synthesised every `wiki/sources/` page from `raw/docs/` with a blank `source_file:` and stamped it `session-transcript`. Re-synth fills the claim but keeps the stale tag. This offline migration, with no language model and no network call:
+
+1. Walks `raw/docs/` and derives each doc's page path the way synth does (`wiki/sources/<project or docs>/<date>-<slug>.md`, plus any `--part-NN` pages on disk).
+2. Fills a blank `source_file` on that page with the claim synth writes today: `raw/docs/<path>`, or the raw doc's own `source_file` when it declares one.
+3. On every page identified as a document — by that match, by a `raw/docs/` claim, or by a `raw-doc` / `wiki-add` tag — removes `session-transcript` from `tags:` (inline or block list) and adds `raw-doc` when neither document tag is left. Stub pages are included.
+4. Reports a blank-claim page that two raw docs derive to as ambiguous and leaves it unchanged; reports a doc-tagged page no raw doc derives to as unmatched and leaves its claim blank.
+5. When anything changed, refreshes the synth backlog and appends a `migrate | doc source provenance` entry to `wiki/log.md`.
+
+A page whose `source_file` names `raw/sessions/` is never touched, and `raw/` is never written. Run it before `source-page-paths`, which only moves pages that already claim a raw file. Implementation: `llmwiki/migrate_doc_source_provenance.py`.
+
+```bash
+python3 -m llmwiki migrate doc-source-provenance --vault /path/to/vault --dry-run
+python3 -m llmwiki migrate doc-source-provenance --vault /path/to/vault
+```
+
+| Flag | What |
+|---|---|
+| `--vault PATH` | **Required.** Vault root containing `wiki/` and `raw/`. |
+| `--dry-run` | Report claims filled, tags stripped, `raw-doc` added, ambiguous and unmatched pages; write nothing. |
+
+Idempotent: a second run changes nothing. With no ambiguous or unmatched pages left it prints `nothing to migrate: every document source page already claims its raw file`; otherwise it lists them again with zero pages touched.
 
 ---
 

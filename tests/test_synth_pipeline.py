@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
+from llmwiki._frontmatter import parse_frontmatter
 from llmwiki.source_topics import parse_source_topics, source_page_needs_topics_rewrite
 from llmwiki.synth.base import BaseSynthesizer, DummySynthesizer
 from llmwiki.synth.pipeline import (
@@ -15,6 +18,7 @@ from llmwiki.synth.pipeline import (
     _normalise_slug,
     _rebuild_index,
     _save_state,
+    raw_source_key,
     synthesize_new_sessions,
 )
 
@@ -794,3 +798,62 @@ def test_build_source_page_always_has_non_empty_tags():
     # Frontmatter should have a tag list with at least one entry.
     fm_line = [ln for ln in page.splitlines() if ln.startswith("tags:")][0]
     assert "tags: []" not in fm_line, "synth pages must never have empty tags"
+
+
+# ─── A document is not a transcript (#307) ──────────────────────────────
+# @layer: unit
+# @spec: 307-doc-source-provenance
+# @regression
+
+
+@pytest.mark.parametrize(
+    ("raw_tags", "present", "absent"),
+    [
+        # Hand-placed doc with no frontmatter at all: the doc stamp is what
+        # keeps the list non-empty, so it must not be the session one.
+        ([], ["raw-doc"], ["session-transcript"]),
+        # The stamp `llmwiki add` / wiki_add normally ships is kept as-is.
+        (["raw-doc"], ["raw-doc"], ["session-transcript"]),
+        # `wiki-add` alone already classifies the source — no second stamp.
+        (["wiki-add"], ["wiki-add"], ["session-transcript", "raw-doc"]),
+    ],
+)
+def test_derive_baseline_tags_never_stamps_a_doc_as_a_transcript(
+    raw_tags: list[str], present: list[str], absent: list[str]
+):
+    """A ``raw/docs/`` source keeps one non-empty doc stamp and never reads as a session in tag filters (#307)."""
+    tags = _derive_baseline_tags(
+        {"tags": list(raw_tags), "project": "docs", "model": ""}, is_doc=True
+    )
+    assert tags, "baseline tags must never be empty, doc or session"
+    for tag in present:
+        assert tag in tags
+    for tag in absent:
+        assert tag not in tags
+
+
+def test_build_source_page_threads_is_doc_into_frontmatter_tags():
+    """``_build_source_page(is_doc=True)`` must write the doc stamp into frontmatter instead of the session one (#307)."""
+    page = _build_source_page(
+        {"slug": "openclaw", "project": "docs"}, "## Summary\n\nbody\n", is_doc=True
+    )
+    meta, _body = parse_frontmatter(page)
+    assert "raw-doc" in meta["tags"]
+    assert "session-transcript" not in meta["tags"]
+
+
+@pytest.mark.parametrize(
+    ("rel", "is_doc", "expected"),
+    [
+        ("docs::openclaw.md", True, "raw/docs/openclaw.md"),
+        ("docs::openclaw/openclaw.md", True, "raw/docs/openclaw/openclaw.md"),
+        # Windows separators: the claim is read back as a vault-relative URL.
+        ("docs::openclaw\\openclaw.md", True, "raw/docs/openclaw/openclaw.md"),
+        ("proj/2026-04-09-sess.md", False, "raw/sessions/proj/2026-04-09-sess.md"),
+    ],
+)
+def test_raw_source_key_names_the_raw_file_an_item_stands_for(
+    rel: str, is_doc: bool, expected: str
+):
+    """A synth-state rel resolves to the vault-relative ``raw/`` path a page claims as ``source_file`` (#307)."""
+    assert raw_source_key(rel, is_doc=is_doc) == expected

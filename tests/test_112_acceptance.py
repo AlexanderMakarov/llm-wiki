@@ -131,6 +131,7 @@ def test_migrate_catalog_contains_the_expected_names():
         "discarded-topic-links",
         "source-page-paths",
         "broken-provenance",
+        "doc-source-provenance",
     }
     actual = {name for name, _purpose, _when in _MIGRATIONS}
     missing = expected - actual
@@ -152,6 +153,7 @@ def test_migrate_subparsers_register_the_expected_names():
         "discarded-topic-links",
         "source-page-paths",
         "broken-provenance",
+        "doc-source-provenance",
     }
     migrate_parser = _subparser_choices(build_parser())["migrate"]
     # Walk migrate's own sub-subparsers.
@@ -185,6 +187,7 @@ def test_migrate_subparsers_register_the_expected_names():
         "discarded-topic-links",
         "source-page-paths",
         "broken-provenance",
+        "doc-source-provenance",
     ],
 )
 def test_each_migration_name_help_is_parseable(name: str):

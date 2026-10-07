@@ -39,9 +39,9 @@ Raw files also carry `type: source`. That is the input layer (`raw/sessions/`, `
 |---|---|---|
 | `title` | synth | Copied from the raw file's `title` |
 | `type` | synth | Always `source` |
-| `tags` | synth | Deterministic baseline (adapter / `session-transcript` / project slug / model family) merged with tags the model suggested in a `<!-- suggested-tags: … -->` line. On re-synth, existing tags on the wiki page are kept so a person's edits survive |
+| `tags` | synth | Deterministic baseline merged with tags the model suggested in a `<!-- suggested-tags: … -->` line. The baseline is the project slug, the model family, and one source stamp: `session-transcript` (or the adapter's own, e.g. `claude-code`) on a session, `raw-doc` on a document — a document is never stamped `session-transcript`. On re-synth, existing tags on the wiki page are kept so a person's edits survive, so a document page that was stamped `session-transcript` by an older release keeps that tag until you run `llmwiki migrate doc-source-provenance` |
 | `date` | synth | Copied from the raw file's `date` |
-| `source_file` | synth | Copied from the raw file's `source_file`. Session transcripts write that field at convert time. Added documents write `source:` (original path) instead, so a wiki page synthesised from `raw/docs/` often has an empty `source_file` |
+| `source_file` | synth | The vault-relative raw path this page stands for. A session transcript carries it in its own frontmatter from convert time and synth copies it. An added document does not (it carries `source:`, where the document came from), so synth derives `raw/docs/<path>` from the file it is reading. Re-synthesising a document page that an older release left blank fills the value in; `llmwiki migrate doc-source-provenance` does the same offline |
 | `project` | synth | Copied from the raw file; for a document with no `project`, synth injects `docs` so the page lands under `wiki/sources/docs/` |
 | `model` | synth | Copied from the raw file. On a session this is the model id (for example `claude-opus-5`). On a document it is usually empty. This is not the entity-schema JSON `model` block |
 | `last_updated` | synth | UTC date of the synth run, `YYYY-MM-DD` |

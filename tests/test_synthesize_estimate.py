@@ -36,6 +36,7 @@ from llmwiki.synth.pipeline import (
     _discover_raw_sessions,
     page_is_stub,
     page_needs_topics_rewrite,
+    raw_source_key,
     source_page_paths,
 )
 
@@ -612,6 +613,32 @@ def _expected_doc_pending(out_dir: Path, filename: str) -> bool:
     return any(page_is_stub(p) for p in expected) or any(
         page_needs_topics_rewrite(p) for p in expected
     )
+
+
+def test_estimate_source_file_keys_match_synth_claims(tmp_path):
+    """Estimate keys are the same ``raw_source_key`` claims synth writes (#307)."""
+    raw_docs, sources = _doc_vault(tmp_path)
+    (raw_docs / "sub").mkdir()
+    (raw_docs / "sub" / "note.md").write_text("# Note\n\nBody.\n", encoding="utf-8")
+    raw_root = tmp_path / "raw" / "sessions"
+    session = raw_root / "proj" / "s.md"
+    session.parent.mkdir(parents=True)
+    session.write_text("x", encoding="utf-8")
+
+    rpt = synthesize_estimate_report(
+        raw_sessions=[(session, {"project": "proj"}, "body")],
+        raw_root=raw_root,
+        docs_root=raw_docs,
+        wiki_sources_dir=sources,
+        state_keys=set(),
+        prefix_tokens=2000,
+    )
+    keys = {item["source_file"] for item in rpt["unsynth_items"]}
+    assert keys == {
+        raw_source_key("proj/s.md", is_doc=False),
+        raw_source_key("docs::sub/note.md", is_doc=True),
+    }
+    assert keys == {"raw/sessions/proj/s.md", "raw/docs/sub/note.md"}
 
 
 def test_estimate_pending_when_disk_has_a_stub_part_beyond_current_chunk_count(

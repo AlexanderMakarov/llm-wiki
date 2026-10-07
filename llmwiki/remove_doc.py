@@ -11,10 +11,12 @@ the full cascade so removal is complete and, via the plan/execute split,
 identical whether it is previewed (``--dry-run``) or run for real.
 
 Source pages are located two ways, matching how the synth pipeline keys
-them: by the path :func:`expected_source_page` derives (doc pages carry
-an empty ``source_file``, so path is the only handle on them) AND by the
-``source_file: raw/docs/<rel>`` frontmatter key a hand-placed page may
-claim (arbitrary folder/name). Both are unioned so neither escapes.
+them: by the path :func:`expected_source_page` derives, AND by the
+``source_file: raw/docs/<rel>`` frontmatter key — which synth now writes
+on every doc page (#307) and which a hand-placed page under an arbitrary
+folder/name may also claim. Both are unioned so neither escapes: a page
+an older release left with a blank ``source_file`` is still only findable
+by path.
 """
 
 from __future__ import annotations
@@ -102,8 +104,9 @@ def _owned_by(page: Path, source_key: str) -> bool:
     ``wiki/sources/<project>/<date>-<slug>.md`` namespace, and the part-page
     glob (``<name>--part-*.md``) can also catch a differently-named doc's
     page. So a page that names a DIFFERENT ``source_file`` is left alone.
-    Synthesized doc pages carry an empty ``source_file``, which is why an
-    empty value still counts as owned.
+    An empty value still counts as owned: synth stamps every doc page with
+    ``raw/docs/<rel>`` as of #307, but a page an older release wrote has
+    nothing to claim with and must stay removable.
     """
     try:
         meta, _body = parse_frontmatter(page.read_text(encoding="utf-8"))

@@ -30,6 +30,7 @@ from llmwiki import (
     install_agent_kit,
     migrate_broken_provenance,
     migrate_discarded_topic_links,
+    migrate_doc_source_provenance,
     migrate_page_kinds,
     migrate_source_page_paths,
     migrate_topic_kinds,
@@ -1644,12 +1645,17 @@ _MIGRATIONS: tuple[tuple[str, str, str], ...] = (
     (
         "source-page-paths",
         "Move real wiki/sources pages whose filename differs from the one synth derives for their source_file today to that derived path, rewrite the [[links]] and sources: entries that point at them, and record synth state for those sources.",
-        "Run when every synth prints that sources were skipped because a real page already claims them, or when synth --estimate / Home keep counting sources as pending that already have a real page. Reads only existing wiki pages and raw frontmatter — no LLM call, and raw/ is never written.",
+        "Run when every synth prints that sources were skipped because a real page already claims them, or when synth --estimate / Home keep counting sources as pending that already have a real page. If document source pages still have a blank source_file, run doc-source-provenance first. Reads only existing wiki pages and raw frontmatter — no LLM call, and raw/ is never written.",
     ),
     (
         "broken-provenance",
         "Fix or clear wiki source_file pointers that still name raw/sessions files which are no longer on disk (remap to a same-date candidate when one exists, otherwise clear the hop).",
         "Run after a re-sync or adapter rename left wiki pages pointing at missing raw transcripts (broken Trace / provenance). Does not delete wiki pages and does not convert new sessions.",
+    ),
+    (
+        "doc-source-provenance",
+        "Fill the blank source_file of wiki/sources pages synthesised from raw/docs with the raw/docs/<path> synth derives for them today, and drop the session-transcript tag from document pages (adding raw-doc when no document tag is left).",
+        "Run once after upgrading past the release where synth started stamping document pages with their raw/docs claim, if older document pages still have an empty source_file or are tagged session-transcript. Pages that claim raw/sessions/ are never touched, a page two raw docs derive to is reported and left alone. Reads only existing wiki pages and raw frontmatter — no LLM call, and raw/ is never written.",
     ),
 )
 
@@ -1882,6 +1888,19 @@ def cmd_migrate_broken_provenance(args: argparse.Namespace) -> int:
         dry_run=bool(getattr(args, "dry_run", False)),
     )
     migrate_broken_provenance.print_report(report)
+    return 1 if report["errors"] else 0
+
+
+def cmd_migrate_doc_source_provenance(args: argparse.Namespace) -> int:
+    """Fill blank ``raw/docs/`` claims and drop session tags on doc pages (#307).
+
+    Offline — no synthesis backend or network call; ``raw/`` is never written.
+    """
+    report = migrate_doc_source_provenance.run_migration(
+        vault=Path(args.vault),
+        dry_run=bool(getattr(args, "dry_run", False)),
+    )
+    migrate_doc_source_provenance.print_report(report)
     return 1 if report["errors"] else 0
 
 
@@ -3460,6 +3479,23 @@ def build_parser() -> argparse.ArgumentParser:
         help="Report would-change files; write nothing",
     )
     migrate_prov.set_defaults(func=cmd_migrate_broken_provenance)
+
+    migrate_doc_prov = add_migration(
+        "doc-source-provenance", *_mig_by_name["doc-source-provenance"],
+        short="Fill blank source_file on document pages and drop session-transcript",
+    )
+    migrate_doc_prov.add_argument(
+        "--vault",
+        type=Path,
+        required=True,
+        help="Vault root containing wiki/ and raw/",
+    )
+    migrate_doc_prov.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Report would-change pages; write nothing",
+    )
+    migrate_doc_prov.set_defaults(func=cmd_migrate_doc_source_provenance)
 
     kit = add_command(
         "install-agent-kit",
