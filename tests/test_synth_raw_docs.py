@@ -10,16 +10,21 @@ wiki — synthesis only ever walked ``raw/sessions/``. These tests cover:
 * ``_chunk_markdown`` — oversized docs are split on headings before the
   synthesis pass so they fit a single backend call.
 * Regression: a doc with a non-string / missing slug must not crash.
+* Provenance (#307) — a doc page claims ``source_file: raw/docs/<rel>`` and is
+  tagged as a document, never as a session transcript; that claim is what makes
+  a repeated synthesis recognise the page instead of duplicating it.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
 
+from llmwiki._frontmatter import parse_frontmatter
 from llmwiki.synth.base import BaseSynthesizer, DummySynthesizer
 from llmwiki.synth.pipeline import (
     _chunk_markdown,
     _discover_raw_docs,
+    discover_synth_source_keys,
     synthesize_new_sessions,
 )
 
@@ -39,6 +44,9 @@ def _seed_docs(tmp_path: Path, name: str = "openclaw-openclaw.md",
                content: str = DEMO_DOC) -> Path:
     docs = tmp_path / "raw" / "docs"
     docs.mkdir(parents=True, exist_ok=True)
+    # ``name`` may carry a sub-path — that is how `llmwiki add` lands a doc
+    # (``raw/docs/<slug>/<slug>.md``).
+    (docs / name).parent.mkdir(parents=True, exist_ok=True)
     (docs / name).write_text(content, encoding="utf-8")
     return docs
 
@@ -174,6 +182,121 @@ def test_synthesize_doc_with_numeric_slug_does_not_crash(tmp_path: Path):
     assert summary["errors"] == []
     assert summary["synthesized"] == 1
     assert (wiki_sources / "docs" / "42.md").exists()
+
+
+# ─── Provenance: a doc page claims its raw file (#307) ───────────────────
+# @layer: integration
+# @spec: 307-doc-source-provenance
+# @regression
+
+
+SESSION = """---
+title: "Session: proj"
+tags: [claude-code, session-transcript]
+slug: sess
+project: proj
+date: 2026-04-09
+source_file: raw/sessions/proj/2026-04-09-sess.md
+---
+
+# s
+"""
+
+
+def test_synthesized_doc_claims_raw_file_while_session_stays_a_transcript(tmp_path: Path):
+    """A doc page states ``source_file: raw/docs/<rel>`` and carries doc tags, while a session in the same run keeps its transcript stamp (#307)."""
+    raw_sessions = tmp_path / "raw" / "sessions" / "proj"
+    raw_sessions.mkdir(parents=True)
+    (raw_sessions / "2026-04-09-sess.md").write_text(SESSION, encoding="utf-8")
+    # Nested exactly like `llmwiki add` writes it, so the claim must carry
+    # the sub-path rather than just the filename.
+    docs = _seed_docs(
+        tmp_path,
+        name="openclaw-openclaw/openclaw-openclaw.md",
+        content=DEMO_DOC.replace(
+            "slug: openclaw-openclaw",
+            "slug: openclaw-openclaw\ntags: [wiki-add, raw-doc]",
+        ),
+    )
+    wiki_sources, log_file = _wiki(tmp_path)
+
+    summary = synthesize_new_sessions(
+        backend=DummySynthesizer(),
+        raw_dir=tmp_path / "raw" / "sessions",
+        docs_dir=docs,
+        wiki_sources_dir=wiki_sources,
+        log_path=log_file,
+        state_file=tmp_path / "state.json",
+    )
+    assert summary["synthesized"] == 2, summary["errors"]
+
+    doc_meta, _body = parse_frontmatter(
+        (wiki_sources / "docs" / "openclaw-openclaw.md").read_text(encoding="utf-8")
+    )
+    assert doc_meta["source_file"] == "raw/docs/openclaw-openclaw/openclaw-openclaw.md"
+    assert "raw-doc" in doc_meta["tags"]
+    assert "session-transcript" not in doc_meta["tags"]
+
+    sess_meta, _body = parse_frontmatter(
+        (wiki_sources / "proj" / "2026-04-09-sess.md").read_text(encoding="utf-8")
+    )
+    assert sess_meta["source_file"] == "raw/sessions/proj/2026-04-09-sess.md"
+    assert "session-transcript" in sess_meta["tags"]
+
+
+def test_doc_declaring_its_own_source_file_keeps_that_claim(tmp_path: Path):
+    """A raw doc that already states a ``source_file`` is not overwritten by the derived ``raw/docs/`` key (#307)."""
+    docs = _seed_docs(
+        tmp_path,
+        name="imported.md",
+        content=(
+            "---\nslug: imported\n"
+            "source_file: raw/docs/legacy/imported.md\n---\n\n# Imported\n"
+        ),
+    )
+    wiki_sources, log_file = _wiki(tmp_path)
+    synthesize_new_sessions(
+        backend=DummySynthesizer(),
+        raw_dir=tmp_path / "raw" / "sessions",
+        docs_dir=docs,
+        wiki_sources_dir=wiki_sources,
+        log_path=log_file,
+        state_file=tmp_path / "state.json",
+    )
+    meta, _body = parse_frontmatter(
+        (wiki_sources / "docs" / "imported.md").read_text(encoding="utf-8")
+    )
+    assert meta["source_file"] == "raw/docs/legacy/imported.md"
+
+
+def test_resynth_recognizes_the_doc_page_it_wrote_by_its_own_claim(tmp_path: Path):
+    """A synthesized doc page is found by the ``raw/docs/`` key it claims, so a later run with no synth state skips it instead of writing a duplicate (#307)."""
+    docs = _seed_docs(tmp_path)
+    wiki_sources, log_file = _wiki(tmp_path)
+    common = dict(
+        backend=RealSynthesizer(),
+        raw_dir=tmp_path / "raw" / "sessions",
+        docs_dir=docs,
+        wiki_sources_dir=wiki_sources,
+        log_path=log_file,
+    )
+    first = synthesize_new_sessions(**common, state_file=tmp_path / "state-1.json")
+    assert first["synthesized"] == 1
+    page = wiki_sources / "docs" / "openclaw-openclaw.md"
+    assert discover_synth_source_keys(wiki_sources) == {"raw/docs/openclaw-openclaw.md"}
+
+    # Page filed under another folder/slug (a migrated vault) and the synth
+    # state gone: the claim is the only thing tying it to the raw doc.
+    moved = wiki_sources / "manual" / "openclaw-notes.md"
+    moved.parent.mkdir(parents=True)
+    moved.write_text(page.read_text(encoding="utf-8"), encoding="utf-8")
+    page.unlink()
+
+    second = synthesize_new_sessions(**common, state_file=tmp_path / "state-2.json")
+    assert second["synthesized"] == 0
+    assert second["skipped"] == 1
+    assert not page.exists(), "a duplicate page was written for an already-claimed doc"
+    assert sorted(p.name for p in wiki_sources.rglob("*.md")) == ["openclaw-notes.md"]
 
 
 # ─── _chunk_markdown (oversized-doc handling) ────────────────────────────

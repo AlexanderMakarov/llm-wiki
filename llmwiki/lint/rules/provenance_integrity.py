@@ -1,7 +1,8 @@
 """provenance_integrity — broken sources:/source_file: hops are errors (#122).
 
 Report-only: operators repair hops by hand or with ``llmwiki trace`` /
-``llmwiki synth`` / ``llmwiki migrate broken-provenance``.
+``llmwiki synth`` / ``llmwiki migrate broken-provenance`` (sessions) /
+``llmwiki add`` or ``llmwiki remove`` (documents).
 """
 
 from __future__ import annotations
@@ -48,6 +49,14 @@ def _missing_message(hop: TraceHop, locator: str) -> str:
         hint = (
             f"remove from sources: or run llmwiki synth if raw/ still has it "
             f"(llmwiki trace {locator})"
+        )
+    elif hop.role == "raw" and hop.location.startswith("raw/docs/"):
+        # broken-provenance only re-points session claims; a lost document
+        # has no session to re-point at.
+        kind = "raw file"
+        hint = (
+            f"restore it with llmwiki add, or drop the orphaned page with "
+            f"llmwiki remove (llmwiki trace {locator})"
         )
     elif hop.role == "raw":
         kind = "raw file"

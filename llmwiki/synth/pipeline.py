@@ -129,6 +129,24 @@ def part_page_name(filename: str, idx: int) -> str:
     return f"{filename}{PART_PAGE_SEP}{idx:02d}"
 
 
+#: Prefix that namespaces a document's synth-state key, keeping doc rels from
+#: colliding with the session rels an older state file already holds.
+DOCS_REL_PREFIX = "docs::"
+
+
+def raw_source_key(rel: str, *, is_doc: bool) -> str:
+    """Vault-relative ``raw/`` path that the synth item ``rel`` stands for.
+
+    One derivation for both consumers, so the key the dedup guard matches
+    against and the ``source_file:`` a synthesized page claims always name the
+    same file (#307). Separators are normalised to ``/`` because the claim is
+    read back as a vault-relative URL, not a local path.
+    """
+    stem = rel.removeprefix(DOCS_REL_PREFIX) if is_doc else rel
+    root = "raw/docs/" if is_doc else "raw/sessions/"
+    return root + stem.replace("\\", "/")
+
+
 def split_part_page(stem: str) -> tuple[str, str]:
     """Split a page stem into ``(filename, part suffix)``.
 
@@ -1189,7 +1207,7 @@ def _merge_tags(
     return out
 
 
-def _derive_baseline_tags(meta: dict[str, Any]) -> list[str]:
+def _derive_baseline_tags(meta: dict[str, Any], *, is_doc: bool = False) -> list[str]:
     """Return a never-empty baseline tag list for synthesized source pages.
 
     Takes the raw session's ``meta["tags"]`` and augments it with tags
@@ -1198,6 +1216,11 @@ def _derive_baseline_tags(meta: dict[str, Any]) -> list[str]:
     goal: **every** synthesized page leaves the pipeline with at least
     one meaningful tag so filters / graph chips / the new
     ``tags_topics_convention`` lint rule don't see empty lists.
+
+    ``is_doc`` marks a document source (``raw/docs/``). A document is not a
+    transcript, so it never gets the ``session-transcript`` stamp (#307) — it
+    already arrives tagged ``wiki-add``/``raw-doc`` from the writer, and the
+    false stamp made every added doc read as a session in tag filters.
     """
     out: list[str] = []
     seen: set[str] = set()
@@ -1207,9 +1230,16 @@ def _derive_baseline_tags(meta: dict[str, Any]) -> list[str]:
         if t and t not in seen:
             out.append(t)
             seen.add(t)
-    # Ensure the adapter source stamp (claude-code / codex-cli / obsidian / …)
-    # appears at least as session-transcript so routing by source stays cheap.
-    if "session-transcript" not in seen and "claude-code" not in seen:
+    # Ensure the source stamp routing reads is there. For a session that is
+    # the adapter stamp (claude-code / codex-cli / obsidian / …), at least as
+    # session-transcript; for a document it is the raw-doc stamp the writer
+    # normally ships, which also keeps this list non-empty for a hand-placed
+    # doc that has no frontmatter at all.
+    if is_doc:
+        if "raw-doc" not in seen and "wiki-add" not in seen:
+            out.append("raw-doc")
+            seen.add("raw-doc")
+    elif "session-transcript" not in seen and "claude-code" not in seen:
         out.append("session-transcript")
         seen.add("session-transcript")
     # Add the project slug as a tag so filters-by-project work out-of-the-box.
@@ -1231,6 +1261,8 @@ def _build_source_page(
     meta: dict[str, Any],
     synthesized_body: str,
     existing_page_path: Path | None = None,
+    *,
+    is_doc: bool = False,
 ) -> str:
     """Combine frontmatter + synthesized body into a full wiki source page.
 
@@ -1244,6 +1276,9 @@ def _build_source_page(
     If ``existing_page_path`` points at an existing wiki source file,
     its current frontmatter ``tags`` are preserved verbatim (maintainer
     curation is never overwritten on re-synthesize).
+
+    ``is_doc`` comes from the discovery that produced this source and only
+    steers the baseline tags — see :func:`_derive_baseline_tags`.
     """
     slug = meta.get("slug", "unknown")
     title = meta.get("title", f"Source: {slug}")
@@ -1280,7 +1315,7 @@ def _build_source_page(
             )
             existing_tags = []
 
-    baseline = _derive_baseline_tags(meta)
+    baseline = _derive_baseline_tags(meta, is_doc=is_doc)
     tags = _merge_tags(baseline, ai_tags, existing_tags)
 
     fm = [
@@ -1387,7 +1422,10 @@ def _synthesize_one(
                 # #351: pass the existing path so maintainer-curated tags
                 # are preserved on re-synthesize.
                 page_content = _build_source_page(
-                    meta, synthesized, existing_page_path=out_path
+                    meta,
+                    synthesized,
+                    existing_page_path=out_path,
+                    is_doc=bool(item["is_doc"]),
                 )
                 # Stub output (dummy backend, agent-delegate pending
                 # sentinel) must never replace a real synthesized page —
@@ -1691,9 +1729,18 @@ def synthesize_new_sessions(
             # page's `project:` frontmatter matches where the page lives —
             # otherwise the index/graph mis-group it as ``unknown``.
             doc_project = meta.get("project") or "docs"
+            rel = DOCS_REL_PREFIX + str(p.relative_to(docs_base))
+            # #307: raw docs carry `source:` (where the doc came from), never
+            # `source_file:` — nothing in raw/ states which file the doc IS.
+            # Derive it here so the synthesized page can claim its provenance;
+            # a re-synth heals a page written before this, and raw/ is never
+            # touched. A doc that does declare one keeps it.
+            doc_meta = {**meta, "project": doc_project}
+            if not str(doc_meta.get("source_file", "") or "").strip():
+                doc_meta["source_file"] = raw_source_key(rel, is_doc=True)
             items.append({
-                "path": p, "meta": {**meta, "project": doc_project}, "body": body,
-                "rel": "docs::" + str(p.relative_to(docs_base)),
+                "path": p, "meta": doc_meta, "body": body,
+                "rel": rel,
                 "project": doc_project,
                 "is_doc": True,
             })
@@ -1717,9 +1764,7 @@ def synthesize_new_sessions(
         # complementary, so a real part does not cover a stub one. The
         # write-guard below keeps a real page safe from a stub.
         rel = str(it["rel"])
-        source_key = (
-            "raw/docs/" + rel[len("docs::"):] if it["is_doc"] else "raw/sessions/" + rel
-        )
+        source_key = raw_source_key(rel, is_doc=bool(it["is_doc"]))
         targets = source_page_paths(
             sources_out / str(it["project"]),
             synth_page_filename(it["meta"], it["path"].stem),

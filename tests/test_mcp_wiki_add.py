@@ -15,6 +15,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import llmwiki.add_pipeline as pipe
+from llmwiki._frontmatter import parse_frontmatter
 from llmwiki.add_pipeline import run_add
 from llmwiki.mcp.server import TOOL_IMPLS, TOOLS, tool_wiki_add
 from llmwiki.state_store import configure_state_file
@@ -242,6 +243,39 @@ def test_wiki_add_synthesize_opt_in(tmp_path: Path, monkeypatch):
     assert result["isError"] is False, _result_text(result)
     assert synth_called["n"] == 1
     assert (vault / "wiki" / "sources" / "docs" / "synth-opt-in.md").exists()
+
+
+# @layer: integration
+# @spec: 307-doc-source-provenance
+# @regression
+def test_wiki_add_synthesize_page_claims_raw_doc_and_is_not_a_transcript(
+    tmp_path: Path, monkeypatch
+):
+    """``wiki_add(synthesize=True)`` writes a page claiming its ``raw/docs/`` file and tagged as a document, not a session (#307)."""
+    vault = _vault(tmp_path)
+    stub = tmp_path / "claude-stub"
+    stub.write_text('#!/bin/sh\ncat > /dev/null\nprintf "## Summary\\nSynthesized.\\n"\n')
+    stub.chmod(0o755)
+    monkeypatch.setattr(pipe, "_load_sessions_config", lambda: {
+        "synthesis": {"backend": "claude", "claude_path": str(stub)},
+    })
+
+    with patch("llmwiki.mcp.server.REPO_ROOT", vault):
+        result = tool_wiki_add({
+            "content": "# Mcp Prov Doc\n\nbody\n",
+            "synthesize": True,
+            "no_build": True,
+        })
+    assert result["isError"] is False, _result_text(result)
+    assert _result_json(result)["written"] == ["raw/docs/mcp-prov-doc/mcp-prov-doc.md"]
+
+    pages = list((vault / "wiki" / "sources").rglob("*.md"))
+    assert len(pages) == 1, pages
+    meta, _body = parse_frontmatter(pages[0].read_text(encoding="utf-8"))
+    assert meta["source_file"] == "raw/docs/mcp-prov-doc/mcp-prov-doc.md"
+    assert (vault / meta["source_file"]).is_file()
+    assert "raw-doc" in meta["tags"] or "wiki-add" in meta["tags"]
+    assert "session-transcript" not in meta["tags"]
 
 
 def test_wiki_add_content_does_not_synthesize_wiki_sources(tmp_path: Path, monkeypatch):

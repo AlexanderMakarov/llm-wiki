@@ -10,6 +10,20 @@ How to upgrade between `llmwiki` releases. Most releases are drop-in (`pip insta
 
 The canonical per-release detail is [CHANGELOG.md](https://github.com/AlexanderMakarov/llm-wiki/blob/main/CHANGELOG.md) — this guide focuses on "what might break".
 
+## Unreleased — document source pages claim their raw file (#307)
+
+Optional offline migration. Synth now writes `source_file: raw/docs/<path>` on every page it synthesises from `raw/docs/` and tags it `raw-doc` instead of `session-transcript`. Document pages an older release wrote still have a blank `source_file` (so `llmwiki trace`, `provenance_integrity` and `remove`'s frontmatter scan cannot follow them) and still carry `session-transcript` (re-synth keeps existing tags as curation). Heal them without a backend call:
+
+```bash
+llmwiki migrate doc-source-provenance --vault /path/to/vault --dry-run
+llmwiki migrate doc-source-provenance --vault /path/to/vault
+```
+
+- **What it changes:** for each raw doc, the page synth derives for it (including `--part-NN` pages) gets the claim synth would write today when its `source_file` is blank. Every page identified as a document — by that match, by a `raw/docs/` claim, or by a `raw-doc` / `wiki-add` tag — loses `session-transcript`, and gains `raw-doc` when neither document tag is left. Stub pages are included. It then refreshes the synth backlog and appends a `migrate | doc source provenance` entry to `wiki/log.md`.
+- **Never touched:** pages whose `source_file` names `raw/sessions/`, and `raw/` itself.
+- **Left for you:** a blank-claim page that two raw docs derive to is reported as ambiguous and left unchanged; a doc-tagged page no raw doc derives to is reported as unmatched, keeps its blank claim, and still loses `session-transcript`.
+- **Order:** run this before `migrate source-page-paths`, which only moves pages that already claim a raw file. A second run changes nothing. Rebuild afterwards: `llmwiki build --vault <vault>`.
+
 ## 2.4.0 — discard rewrites links to the discarded name (#282)
 
 Optional one-time cleanup. `candidates discard` now turns every `[[link]]` to the discarded name into plain text (or, with `--redirect PAGE`, into `[[PAGE|text]]` plus a `## Aliases` entry on that page), and the synth topic vocabulary no longer offers discarded names. Candidates you discarded **before** this release still have links pointing into `wiki/archive/`, which `lint` reports under `link_integrity`. Clean them up offline — no LLM call, `raw/` never written, safe to re-run:

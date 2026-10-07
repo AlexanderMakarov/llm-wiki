@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 import llmwiki.add_pipeline as pipe
+from llmwiki._frontmatter import parse_frontmatter
 from tests.cli._add_helpers import add_vault, fake_claude, run_add, scratch_vault
 
 
@@ -112,6 +113,34 @@ def test_add_configured_claude_backend_synthesizes_synchronously(tmp_path, monke
     assert pages, "expected a synthesized wiki/sources page in the same run"
     assert "Synthesized synchronously" in pages[0].read_text()
     assert (vault / "raw" / "docs" / "sync-doc" / "sync-doc.md").exists()
+
+
+# @layer: integration
+# @spec: 307-doc-source-provenance
+# @regression
+def test_add_synthesize_page_claims_raw_doc_and_is_not_a_transcript(
+    tmp_path, monkeypatch, capsys
+):
+    """``add --synthesize`` writes a page claiming its ``raw/docs/`` file and tagged as a document, not a session (#307)."""
+    vault = add_vault(tmp_path)
+    src = tmp_path / "doc.md"
+    src.write_text("# Prov Doc\n\nbody\n")
+
+    monkeypatch.setattr(pipe, "_load_sessions_config", lambda: {
+        "synthesis": {"backend": "claude", "claude_path": str(fake_claude(tmp_path))},
+    })
+    monkeypatch.setattr(pipe, "build_site", lambda **kw: 0)
+
+    rc = run_add(vault, "--synthesize", str(src))
+    out = capsys.readouterr()
+    assert rc == 0, out.err
+    pages = list((vault / "wiki" / "sources").rglob("*.md"))
+    assert len(pages) == 1, pages
+    meta, _body = parse_frontmatter(pages[0].read_text(encoding="utf-8"))
+    assert meta["source_file"] == "raw/docs/prov-doc/prov-doc.md"
+    assert (vault / meta["source_file"]).is_file()
+    assert "raw-doc" in meta["tags"] or "wiki-add" in meta["tags"]
+    assert "session-transcript" not in meta["tags"]
 
 
 def test_add_synthesizes_only_written_docs(tmp_path, monkeypatch, capsys):

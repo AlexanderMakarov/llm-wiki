@@ -160,12 +160,16 @@ The review must stay independent of this conversation's authorship bias:
 - After the subagent returns: **Read the review file and print its full body in chat** (lead with `Review file: <path>` on its own line). Record the path in this stage's flow-log entry.
 - **Hard keep/drop gate (delivery-flow §4 / §10):** After printing the full body, **stop the turn**. Ask for per-finding keep/drop (or explicit "keep all" / "drop all"). **Do not edit product code or docs to apply review findings in the same turn.** "Proceed", "continue", smoke confirm, "fix it", PR/merge pressure, and resume-from-summary are **not** keep/drop consent. When the user answers, apply only kept findings — read the review file and the diff fresh; relay their decisions, not your own summary.
 
-**Single local review (pre-push, branch diff `origin/main...HEAD`):**
+**Single local review (pre-push):** Commit is the next stage — an empty `origin/main...HEAD` is expected when nothing is committed yet.
 
 On the strongest tier, dispatch **one** independent reviewer using the coding agent's own most suitable review skill, command, or subagent (do not hardcode a product-specific reviewer name). Pass this fixed prompt verbatim (no author-supplied focus list):
 
 ```text
-Review git diff origin/main...HEAD (branch changes, not an open-PR number).
+Review the pending product change against origin/main (branch changes, not an open-PR number).
+
+Diff scope: if `git rev-list --count origin/main..HEAD` is 0, review the working tree — `git diff origin/main` plus untracked paths that would ship (exclude `.env`, credentials, vault/config, `.worktree-vault/`, and `context/**/review.md` / `review-*.md`). If the branch already has commits, review `git diff origin/main...HEAD` and any still-uncommitted changes on top.
+
+Do NOT treat "nothing committed yet" / empty `origin/main...HEAD` as a Blocker — commit-push is the next delivery stage. Untracked modules that `cli.py` (or similar) already imports may be noted as a Nit reminder to stage them at commit; they are not grounds for Request changes by themselves.
 
 Load and apply every section of these docs, in this priority order for attention:
 1. docs/maintainers/REVIEW_CHECKLIST.md — treat its Blocker vs Nit rule as the severity model (Security + Meta + broken layer boundaries / failing tests or build = Blocker; Code quality / Docs / Build+runtime smoke = Nit unless they trip Meta or Security). Use the checklist's Blocker shortlist.
