@@ -77,3 +77,9 @@
 ## amend-spec
 - `/awos:spec` update mode: §2.5 "Driver restart" bullet + 5 checked criteria; new `## Change Log` 2026-10-07 entry; Author/Status unchanged; evidence pinned to concrete test names
 - Next: local-review
+
+## local-review
+- Review file: `context/spec/303-loop-ready-issue-herdr/review.md` (session-only, not committed)
+- Verdict: Approve — 0 Blockers, 2 Nits; keep/drop: keep N1 (gone-warning restore text covers tab-closed case) + N2 (CHANGELOG release note mentions adopt); observations O1/O2 dropped
+- Applied N1, N2; ruff clean, full suite green
+- Next: commit-push → PR (Refs #296; no dedicated issue per operator). Tracked flow-log ends here.
