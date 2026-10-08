@@ -7,7 +7,10 @@ import re
 import pytest
 
 from llmwiki.format_numbers import format_tokens
+from llmwiki.render.css import CSS
+from llmwiki.render.js import JS
 from llmwiki.viz_tokens import (
+    TOKEN_COVERAGE_LINES,
     _hit_ratio_tier,
     cache_hit_ratio,
     compute_site_stats,
@@ -16,6 +19,7 @@ from llmwiki.viz_tokens import (
     render_project_token_timeline,
     render_session_token_card,
     render_site_token_stats,
+    render_token_coverage_hint,
 )
 
 # ─── format_tokens: K/M/B suffixes ───────────────────────────────────────
@@ -352,3 +356,118 @@ def test_site_stats_block_renders_extra_cards_even_without_token_data():
     block = render_site_token_stats({}, extra_cards=extra)
     assert "Heaviest project by MCP usage" in block
     assert "Tokens" not in block          # no token cards when there are no sessions
+
+
+# ─── #323: Tokens coverage hint ─────────────────────────────────────────
+# @spec: 323-total-tokens-coverage-hint
+# @regression: #323 — site-wide Tokens headline must disclose which agents feed it
+
+
+def test_token_coverage_lines_name_each_agent_group_and_missing_is_not_zero():
+    """#323: the disclosure copy names every agent group and says missing usage is not zero tokens."""
+    text = " ".join(TOKEN_COVERAGE_LINES)
+    for phrase in (
+        "input, output, cache creation, and cache read",
+        "Claude Code",
+        "OpenClaw and OpenCode",
+        "compatible usage fields",
+        "Codex CLI",
+        "Cursor CLI / IDE",
+        "not captured",
+        "Gemini CLI",
+        "Copilot CLI / Chat",
+        "not evidence of zero tokens",
+        "recorded-usage total, not a complete all-agent total",
+    ):
+        assert phrase in text, phrase
+
+
+def test_token_coverage_hint_is_accessible_button_wired_to_tooltip():
+    """#323: the hint is a closed-by-default button whose aria-describedby targets the tooltip panel id."""
+    out = render_token_coverage_hint("token-coverage-site")
+    assert '<button type="button" class="token-coverage-btn"' in out
+    assert 'aria-expanded="false"' in out
+    assert 'aria-label="What do Tokens cover?' in out
+    assert 'aria-describedby="token-coverage-site-panel"' in out
+    assert 'role="tooltip" id="token-coverage-site-panel"' in out
+    assert out.count('class="token-coverage-line"') == len(TOKEN_COVERAGE_LINES)
+
+
+def test_token_coverage_hint_ids_are_unique_per_hint_id():
+    """#323: different hint ids yield different panel ids so several counters never share one tooltip target."""
+    a = render_token_coverage_hint("alpha")
+    b = render_token_coverage_hint("beta")
+    assert 'id="alpha-panel"' in a and 'id="alpha-panel"' not in b
+    assert 'id="beta-panel"' in b and 'aria-describedby="beta-panel"' in b
+
+
+@pytest.mark.parametrize(
+    "raw,expected",
+    [
+        ('x" onclick="alert(1)', "x--onclick--alert-1"),
+        ("<script>", "script"),
+        ("", "token-coverage"),
+        ("!!!", "token-coverage"),
+    ],
+)
+def test_token_coverage_hint_sanitizes_unsafe_ids(raw, expected):
+    """#323: unsafe characters in hint_id never reach the id / aria-describedby attributes."""
+    out = render_token_coverage_hint(raw)
+    assert f'id="{expected}-panel"' in out
+    assert f'aria-describedby="{expected}-panel"' in out
+    assert '" onclick=' not in out
+    assert "<script" not in out
+
+
+def test_site_stats_tokens_label_contains_coverage_hint_and_keeps_counting():
+    """#323: the Tokens label carries the hint while total / avg / token-data counts are unchanged."""
+    by_project = {
+        "alpha": [{"token_totals": '{"input": 100, "cache_read": 900}'}],
+        "beta": [{"token_totals": '{"output": 3000}'}, {"token_totals": "{}"}],
+    }
+    block = render_site_token_stats(by_project)
+    label = re.search(
+        r'<div class="token-stat-label muted">Tokens(.*?)</div><div class="token-stat-value">',
+        block,
+        re.S,
+    )
+    assert label, "Tokens label not found"
+    assert 'class="token-coverage-hint"' in label.group(1)
+    assert 'aria-describedby="token-coverage-site-panel"' in label.group(1)
+    assert 'id="token-coverage-site-panel"' in block
+    assert '<div class="token-stat-value">4.0K</div>' in block
+    assert "2.0K / session (2 with token data)" in block
+
+
+def test_site_stats_without_token_data_renders_no_coverage_hint():
+    """#323: no Tokens headline means no orphan coverage hint."""
+    block = render_site_token_stats({"alpha": [{"token_totals": "{}"}]})
+    assert "token-coverage" not in block
+
+
+def test_token_coverage_css_reveals_on_hover_focus_and_aria_expanded():
+    """#323: the panel is shown by hover, focus-within, and aria-expanded, and hidden again when dismissed."""
+    assert ".token-coverage-hint:hover .token-coverage-panel" in CSS
+    assert ".token-coverage-hint:focus-within .token-coverage-panel" in CSS
+    assert '.token-coverage-btn[aria-expanded="true"] + .token-coverage-panel' in CSS
+    assert ".token-coverage-hint[data-dismissed] .token-coverage-panel" in CSS
+    # Dismiss must win the cascade over :hover / :focus-within (Escape + click-close).
+    assert CSS.index(".token-coverage-hint[data-dismissed] .token-coverage-panel") > CSS.index(
+        ".token-coverage-hint:hover .token-coverage-panel"
+    )
+    # Panel positions against the hint so the pointer can enter it without leaving :hover.
+    assert ".token-coverage-hint { position: relative;" in CSS or (
+        ".token-coverage-hint { position: relative" in CSS
+    )
+
+
+def test_token_coverage_js_toggles_dismisses_and_clamps():
+    """#323: the viewer script toggles aria-expanded, closes on Escape / outside click, and clamps to the viewport."""
+    assert '".token-coverage-hint"' in JS
+    assert 'setAttribute("aria-expanded"' in JS
+    assert 'e.key !== "Escape"' in JS
+    assert 'setAttribute("data-dismissed"' in JS
+    assert "getBoundingClientRect" in JS and "translateX(" in JS
+    # Click-to-close must set data-dismissed (same as Escape) while focus/hover remain.
+    click_fn = JS.split('b.addEventListener("click"')[1].split("});", 1)[0]
+    assert 'setAttribute("data-dismissed"' in click_fn

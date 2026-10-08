@@ -238,6 +238,22 @@ def test_analytics_section_order_activity_recent_projects_wiki_usage(tmp_path: P
     assert "Pending candidates" in html_out
 
 
+def test_analytics_tokens_headline_includes_coverage_hint_only_with_token_data(tmp_path: Path):
+    """#323: built analytics.html shows the Tokens coverage hint when sessions carry token data and omits it otherwise."""
+    with_tokens = _render_analytics(
+        tmp_path,
+        groups={"demo": [_analytics_session("2026-07-20", with_tokens=True)]},
+    )
+    assert 'class="token-coverage-hint"' in with_tokens
+    assert 'aria-describedby="token-coverage-site-panel"' in with_tokens
+    assert "Claude Code" in with_tokens
+
+    plain_dir = tmp_path / "plain"
+    plain_dir.mkdir()
+    without = _render_analytics(plain_dir)
+    assert "token-coverage-hint" not in without
+
+
 def test_candidates_review_section_shows_zeros_and_kinds():
     html_out = render_candidates_review_section(
         pending=3,

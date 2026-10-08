@@ -26,6 +26,7 @@ from __future__ import annotations
 import html
 import json
 import math
+import re
 from collections.abc import Iterable, Mapping
 from datetime import date
 
@@ -361,6 +362,52 @@ def compute_site_stats(
     }
 
 
+#: Coverage disclosure shown beside the site-wide Tokens headline (#323).
+#: One entry per line of the hover / focus / tap panel. The headline sums
+#: recorded session usage only; this copy says which agents feed it so a
+#: missing capture is not read as "zero tokens".
+TOKEN_COVERAGE_LINES: tuple[str, ...] = (
+    "Counts input, output, cache creation, and cache read tokens from"
+    " recorded, compatible session usage. This is session usage, not"
+    " synthesis spend.",
+    "Claude Code: included when usage fields are present.",
+    "OpenClaw and OpenCode: counted only for records with compatible usage"
+    " fields; native token support is not complete.",
+    "Codex CLI and Cursor CLI / IDE: not captured by the token pipeline yet.",
+    "Gemini CLI and Copilot CLI / Chat: no verified native token mapping.",
+    "Sessions without usage data are excluded, not evidence of zero tokens."
+    " The headline is a recorded-usage total, not a complete all-agent total.",
+)
+
+_HINT_ID_UNSAFE = re.compile(r"[^A-Za-z0-9_-]")
+
+
+def render_token_coverage_hint(hint_id: str) -> str:
+    """Return the accessible "what does this total cover?" control (#323).
+
+    A ``<button>`` (labelled, ``aria-expanded``) plus a ``role="tooltip"``
+    panel built from :data:`TOKEN_COVERAGE_LINES`. CSS reveals the panel on
+    hover / focus-within / ``aria-expanded="true"``; the viewer script
+    toggles ``aria-expanded`` for touch and closes on Escape / outside
+    click. ``hint_id`` seeds the panel id (``<hint_id>-panel``) so the
+    helper can be reused for several counters on one page.
+    """
+    safe = _HINT_ID_UNSAFE.sub("-", hint_id).strip("-") or "token-coverage"
+    panel_id = f"{safe}-panel"
+    lines = "".join(
+        f'<span class="token-coverage-line">{html.escape(line)}</span>'
+        for line in TOKEN_COVERAGE_LINES
+    )
+    return (
+        '<span class="token-coverage-hint">'
+        '<button type="button" class="token-coverage-btn"'
+        ' aria-label="What do Tokens cover? Show agent coverage"'
+        f' aria-describedby="{panel_id}" aria-expanded="false">i</button>'
+        f'<span class="token-coverage-panel" role="tooltip" id="{panel_id}">'
+        f'{lines}</span></span>'
+    )
+
+
 def render_site_token_stats(
     metas_by_project: dict[str, list[Mapping[str, object]]],
     link_prefix: str = "",
@@ -387,7 +434,8 @@ def render_site_token_stats(
     n_with_tokens = int(stats["session_count"])
     if n_with_tokens > 0:
         parts.append(
-            f'      <div class="token-stat"><div class="token-stat-label muted">Tokens</div>'
+            f'      <div class="token-stat"><div class="token-stat-label muted">Tokens'
+            f'{render_token_coverage_hint("token-coverage-site")}</div>'
             f'<div class="token-stat-value">{format_tokens(total)}</div>'
             f'<div class="token-stat-sub muted">{format_tokens(avg)} / session'
             f' ({n_with_tokens} with token data)</div></div>'

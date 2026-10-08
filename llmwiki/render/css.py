@@ -812,6 +812,22 @@ a.token-stat:hover { border-color: var(--accent); }
 .token-stat-value { font-size: 1.4rem; font-weight: 600; font-family: 'JetBrains Mono', monospace; }
 .token-stat-sub { font-size: 0.75rem; margin-top: 4px; }
 
+/* #323: coverage hint beside the Tokens label. The panel is revealed on
+   hover, keyboard focus, and aria-expanded (touch toggle in js.py); it
+   stays in the DOM (visibility, not display) so aria-describedby works.
+   Position against the hint (not the card) so the pointer can move onto
+   the panel without leaving :hover on .token-coverage-hint. */
+.token-coverage-hint { position: relative; display: inline-block; margin-left: 6px; vertical-align: middle; }
+.token-coverage-btn { width: 16px; height: 16px; padding: 0; border: 1px solid var(--border); border-radius: 50%; background: var(--bg-card); color: var(--text-muted); font: italic 700 0.68rem/1 Georgia, serif; cursor: help; display: inline-flex; align-items: center; justify-content: center; }
+.token-coverage-btn:hover, .token-coverage-btn:focus-visible, .token-coverage-btn[aria-expanded="true"] { border-color: var(--accent); color: var(--accent); }
+.token-coverage-panel { position: absolute; left: 0; top: calc(100% + 4px); z-index: 30; box-sizing: border-box; width: 300px; max-width: min(300px, calc(100vw - 24px)); padding: 10px 12px; background: var(--bg-card); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); font-size: 0.75rem; font-style: normal; font-weight: 400; line-height: 1.45; text-align: left; white-space: normal; overflow-wrap: anywhere; visibility: hidden; opacity: 0; pointer-events: none; transition: opacity 0.12s ease; }
+.token-coverage-line { display: block; }
+.token-coverage-line + .token-coverage-line { margin-top: 6px; }
+.token-coverage-hint:hover .token-coverage-panel,
+.token-coverage-hint:focus-within .token-coverage-panel,
+.token-coverage-btn[aria-expanded="true"] + .token-coverage-panel { visibility: visible; opacity: 1; pointer-events: auto; }
+.token-coverage-hint[data-dismissed] .token-coverage-panel { visibility: hidden; opacity: 0; pointer-events: none; }
+
 /* v0.7 (#55): Model entity info card + /models/ sortable table. The
    `.model-card` is rendered by llmwiki/models_page.py.render_model_info_card;
    the `.models-table` is inside render_models_index. Both reuse existing
