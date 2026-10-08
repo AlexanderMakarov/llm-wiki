@@ -39,7 +39,7 @@ An issue enters the automation queue only when it is **open**, carries the **lab
 
 ## Work for today counts
 
-On startup (and in `--dry-run`), the driver prints a one-line queue summary, for example `22 with 'self-heal' label, 1 is assigned on 'AlexanderMakarov'`. Only the assigned subset is eligible for automatic starts. A live run also prints `params:` (`poll-seconds`, `agent-kind`, `mode=loop|once`) and, after each spawn, `{tab} herdr tab opened for #{n} gh issue … at HH:MM:SS`. If a GitHub merge/CI poll fails, the driver retries and leaves the worker agent running — that poll only gates starting the *next* ticket.
+On startup (and in `--dry-run`), the driver prints a one-line queue summary, for example `22 with 'self-heal' label, 1 is assigned on 'AlexanderMakarov'`. Only the assigned subset is eligible for automatic starts. A live run also prints `params:` (`poll-seconds`, `agent-kind`, `mode=loop|once`) and, after each spawn, `{tab} herdr tab opened for #{n} gh issue … at HH:MM:SS`. While it waits on a ticket, every GitHub poll that does not advance prints one status line, for example `#323 open; no merged PR closes it yet — waiting 300s`, `#323: PR #335 merged; post-merge CI 3/5 green (2 pending) — waiting 300s`, or `… no check runs yet on the merge commit …`, with ` (worker gone)` appended once the worker agent has disappeared. If a GitHub merge/CI poll fails, the driver retries and leaves the worker agent running — that poll only gates starting the *next* ticket.
 
 ## Eligibility and sort order
 
@@ -57,9 +57,15 @@ Routing for a single ticket lives in `.claude/skills/loop-ready-issue-herdr/SKIL
 
 While a worker waits on you (herdr `blocked` — approval, question, permission), the driver holds the queue and does not start the next ticket. While the worker is actively delivering (including CI watch inside the delivery command), the driver keeps waiting. herdr `idle` or `done` alone does **not** mean “start the next issue.” This spike does **not** add a custom notifier; rely on **herdr’s built-in** agent status and notifications when a worker needs you.
 
-## Advance rule (merge + post-merge CI)
+## Advance rule (merge + post-merge CI, or closed)
 
-The driver starts the **next** eligible issue only when the **current** issue is done on GitHub: a PR that **closed** the issue is **merged**, and **every check run GitHub reports on that merge commit** is **completed** with a green conclusion (`success`, `skipped`, or `neutral`). If no check runs exist yet on the merge commit, the driver **does not** advance (workflows may still be queuing). On advance, the driver always closes the finished worker tab (even if the agent already went idle/disappeared — that only stops `herdr agent wait`, not tab cleanup) and opens a fresh one for the next issue — you do not need to close the tab yourself to unlock the queue. If a tab labeled `issue-N` is already open when the driver reaches issue N (a herdr session restored after a reboot, or a driver restart), the driver **adopts** it: it sends no new prompt and just polls GitHub for α, so in-progress delivery is not restarted. Close that tab first if you want a fresh worker. Closing a worker tab early is a valid **hard stop** for that ticket; the driver does not treat it as successful delivery and does not auto-advance as if merged.
+The driver starts the **next** eligible issue only when the **current** issue is done on GitHub, checked in this order on every poll:
+
+1. **Merged closing PR** — a PR that **closed** the issue is **merged**: the driver advances only when **every check run GitHub reports on that merge commit** is **completed** with a green conclusion (`success`, `skipped`, or `neutral`). If no check runs exist yet on the merge commit, the driver **does not** advance (workflows may still be queuing). GitHub auto-closes the issue on that merge, so a CLOSED issue never skips this CI gate.
+2. **Closed without a merged closing PR** — the issue is CLOSED (completed by hand, not planned, duplicate) and no merged PR closes it: the driver advances at once and skips the CI gate, printing e.g. `Advanced #323 (closed: COMPLETED, no merged closing PR; CI gate skipped); worker tab closed.`
+3. Otherwise it keeps waiting.
+
+On advance, the driver always closes the finished worker tab (even if the agent already went idle/disappeared — that only stops `herdr agent wait`, not tab cleanup) and opens a fresh one for the next issue — you do not need to close the tab yourself to unlock the queue. If a tab labeled `issue-N` is already open when the driver reaches issue N (a herdr session restored after a reboot, or a driver restart), the driver **adopts** it: it sends no new prompt and just polls GitHub for α, so in-progress delivery is not restarted. Close that tab first if you want a fresh worker. At startup and at the top of every queue cycle the driver also lists herdr tabs labeled `issue-N`, asks GitHub for those issues' state in one batched query, and closes each tab whose issue is already CLOSED (`Closed herdr tab issue-N (<tab_id>): #N is closed.`) — leftovers from an earlier run or a ticket closed while the driver was stopped. A tab whose issue GitHub cannot resolve is left alone, and a herdr or GitHub failure in this sweep only prints a WARNING. Closing a worker tab early is a valid **hard stop** for that ticket; the driver does not treat it as successful delivery and does not auto-advance as if merged.
 
 ## Polling interval
 
@@ -71,7 +77,7 @@ Queue membership is gated on **you** (the `gh` viewer login) **and** the readine
 
 ## Hard stop and restore
 
-If you close the worker tab or the agent disappears before merge + green post-merge CI, the driver prints a **WARNING** with restore steps: continue delivery for that issue URL in a new worker. Re-running the driver adopts the open `issue-N` tab instead of spawning a new worker; close it first to start the ticket over. Press **Ctrl+C** to stop the driver loop; in-flight workers are left open until you close them (or until α advance closes them). The driver keeps polling GitHub for advance on that issue until α is satisfied or you stop.
+If you close the worker tab or the agent disappears before merge + green post-merge CI, the driver prints a **WARNING** with restore steps: continue delivery for that issue URL in a new worker. Re-running the driver adopts the open `issue-N` tab instead of spawning a new worker; close it first to start the ticket over. Press **Ctrl+C** to stop the driver loop; in-flight workers are left open until you close them, until advance closes them, or until a later driver run finds their issue CLOSED and closes the tab. The driver keeps polling GitHub for advance on that issue until α is satisfied or you stop.
 
 ## Empty queue
 

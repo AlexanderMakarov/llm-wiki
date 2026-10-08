@@ -3,7 +3,9 @@
 
 Maintainer-only. Opt-in morning driver: summarize open labeled issues assigned
 to you, spawn one herdr worker per ticket, and advance only after merge +
-green post-merge CI on the default branch.
+green post-merge CI on the default branch (or once the issue is closed with no
+merged closing PR). ``issue-N`` tabs of already-closed issues are closed at the
+top of every queue cycle.
 
 Pure queue/sort/eligibility helpers are network-free; gh/herdr I/O is behind
 injectable adapters for tests. Run from the repository root.
@@ -19,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 import sys
 import time
@@ -63,6 +66,13 @@ _WORKER_GONE_ERROR_CODES = frozenset(
 _TAB_ALREADY_CLOSED_CODES = frozenset({"tab_not_found"})
 
 _ISSUE_LIST_JSON_FIELDS = "number,title,labels,assignees,url,state"
+
+_GREEN_CONCLUSIONS = frozenset({"success", "skipped", "neutral"})
+
+# herdr tab labels the driver gives worker tabs (``issue-N``).
+_ISSUE_TAB_LABEL_RE = re.compile(r"^issue-(\d+)$")
+
+ADVANCE_REASON_MERGED = "merge + post-merge CI α"
 
 
 def _issue_state_open(issue: Issue) -> bool:
@@ -190,15 +200,64 @@ def advance_ready(merge_info: MergeInfo, check_runs: list[CheckRun]) -> bool:
         return False
     if not check_runs:
         return False
-    _green = frozenset({"success", "skipped", "neutral"})
-    for run in check_runs:
-        status = str(run.get("status") or "").lower()
-        if status != "completed":
-            return False
-        conclusion = run.get("conclusion")
-        if conclusion is None or str(conclusion).lower() not in _green:
-            return False
-    return True
+    return all(_check_run_bucket(run) == "green" for run in check_runs)
+
+
+def _check_run_bucket(run: CheckRun) -> str:
+    """Classify one check run as ``green``, ``pending``, or ``failed``."""
+    if str(run.get("status") or "").lower() != "completed":
+        return "pending"
+    conclusion = run.get("conclusion")
+    if conclusion is not None and str(conclusion).lower() in _GREEN_CONCLUSIONS:
+        return "green"
+    return "failed"
+
+
+def closed_without_merge_reason(status: IssueAdvanceStatus) -> str | None:
+    """Advance reason when the issue is CLOSED and no merged PR closes it; else ``None``.
+
+    A merged closing PR auto-closes the issue too, so that case stays on α
+    (``advance_ready``) and never short-circuits here.
+    """
+    if status["merge_info"].get("merged"):
+        return None
+    if str(status.get("issue_state") or "").upper() != "CLOSED":
+        return None
+    state_reason = status.get("state_reason") or "UNKNOWN"
+    return f"closed: {state_reason}, no merged closing PR; CI gate skipped"
+
+
+def format_advance_poll_line(
+    status: IssueAdvanceStatus,
+    poll_seconds: int,
+    *,
+    worker_gone: bool = False,
+) -> str:
+    """One stdout line per not-yet-advanced GitHub poll in the α wait loop."""
+    number = status["issue_number"]
+    merge_info = status["merge_info"]
+    check_runs = status["check_runs"]
+    if not merge_info.get("merged"):
+        line = f"#{number} open; no merged PR closes it yet"
+    else:
+        pr = merge_info.get("pr_number")
+        prefix = f"#{number}: PR #{pr} merged" if pr else f"#{number}: closing PR merged"
+        if not check_runs:
+            line = f"{prefix}; no check runs yet on the merge commit"
+        else:
+            buckets = [_check_run_bucket(run) for run in check_runs]
+            extras = [
+                f"{buckets.count(kind)} {kind}"
+                for kind in ("failed", "pending")
+                if buckets.count(kind)
+            ]
+            extra = f" ({', '.join(extras)})" if extras else ""
+            line = (
+                f"{prefix}; post-merge CI {buckets.count('green')}/{len(buckets)} "
+                f"green{extra}"
+            )
+    gone = " (worker gone)" if worker_gone else ""
+    return f"{line} — waiting {poll_seconds}s{gone}"
 
 
 def default_run_gh(argv: list[str]) -> subprocess.CompletedProcess[str]:
@@ -370,13 +429,79 @@ def fetch_blocked_by_map(
     return blocked_map
 
 
+def _issue_states_graphql_query(issue_numbers: list[int]) -> str:
+    fields = "\n".join(
+        f"    issue_{n}: issue(number: {n}) {{ number state }}" for n in issue_numbers
+    )
+    return (
+        "query($owner: String!, $name: String!) {\n"
+        "  repository(owner: $owner, name: $name) {\n"
+        f"{fields}\n"
+        "  }\n"
+        "}"
+    )
+
+
+def fetch_issue_states(
+    repo: str,
+    issue_numbers: list[int],
+    run_gh: RunGh = default_run_gh,
+) -> dict[int, str]:
+    """Batched GraphQL ``state`` (``OPEN``/``CLOSED``) for ``issue_numbers``.
+
+    Numbers GitHub cannot resolve as issues (deleted, a PR number) come back as
+    null aliases with per-alias errors (``gh`` then exits 1 even though ``data``
+    is partial); they are omitted from the result rather than failing the whole
+    batch. Raises only when stdout is not JSON or has no ``data.repository``.
+    """
+    if not issue_numbers:
+        return {}
+    owner, name = parse_owner_name(repo)
+    query = _issue_states_graphql_query(issue_numbers)
+    proc = run_gh(
+        [
+            "gh",
+            "api",
+            "graphql",
+            "-f",
+            f"query={query}",
+            "-f",
+            f"owner={owner}",
+            "-f",
+            f"name={name}",
+        ],
+    )
+    context = "gh api graphql (issue states)"
+    if proc.returncode == 0:
+        payload = _gh_json(proc, context)
+    else:
+        try:
+            payload = json.loads(proc.stdout)
+        except json.JSONDecodeError:
+            payload = None
+        if not isinstance(payload, dict):
+            _gh_check(proc, context)
+    data = payload.get("data") if isinstance(payload, dict) else None
+    repository = data.get("repository") if isinstance(data, dict) else None
+    if not isinstance(repository, dict):
+        errors = payload.get("errors") if isinstance(payload, dict) else None
+        raise RuntimeError(f"issue states GraphQL: missing repository data ({errors})")
+    states: dict[int, str] = {}
+    for number in issue_numbers:
+        node = repository.get(f"issue_{number}")
+        if isinstance(node, dict) and node.get("state"):
+            states[number] = str(node["state"]).upper()
+    return states
+
+
 def _merge_status_graphql_query() -> str:
-    """GraphQL for closing PRs; uses ``$number`` (must match ``-F number=``)."""
+    """GraphQL for issue state + closing PRs; uses ``$number`` (must match ``-F number=``)."""
     return (
         "query($owner: String!, $name: String!, $number: Int!) {\n"
         "  repository(owner: $owner, name: $name) {\n"
         "    defaultBranchRef { name }\n"
         "    issue(number: $number) {\n"
+        "      state stateReason\n"
         "      closedByPullRequestsReferences(first: 10, includeClosedPrs: true) {\n"
         "        nodes {\n"
         "          number\n"
@@ -410,9 +535,11 @@ def fetch_issue_merge_and_ci_status(
     issue_number: int,
     run_gh: RunGh = default_run_gh,
 ) -> IssueAdvanceStatus:
-    """Fetch merge + post-merge check-run shapes for ``advance_ready`` (α).
+    """Fetch issue state, merge, and post-merge check-run shapes for the wait loop.
 
-    Callable from the wait loop; not used by ``--dry-run``.
+    ``issue_state`` / ``state_reason`` feed ``closed_without_merge_reason``;
+    ``merge_info`` / ``check_runs`` feed ``advance_ready`` (α). Not used by
+    ``--dry-run``.
     """
     owner, name = parse_owner_name(repo)
     merge_info: MergeInfo = {
@@ -421,6 +548,8 @@ def fetch_issue_merge_and_ci_status(
         "pr_number": None,
     }
     check_runs: list[CheckRun] = []
+    issue_state: str | None = None
+    state_reason: str | None = None
 
     merge_query = _merge_status_graphql_query()
     merge_proc = run_gh(
@@ -454,6 +583,8 @@ def fetch_issue_merge_and_ci_status(
             )
             issue_node = repository.get("issue")
             if isinstance(issue_node, dict):
+                issue_state = issue_node.get("state")
+                state_reason = issue_node.get("stateReason")
                 refs = issue_node.get("closedByPullRequestsReferences") or {}
                 raw_nodes = refs.get("nodes") if isinstance(refs, dict) else None
                 nodes = [n for n in (raw_nodes or []) if isinstance(n, dict)]
@@ -500,6 +631,8 @@ def fetch_issue_merge_and_ci_status(
 
     return {
         "issue_number": issue_number,
+        "issue_state": issue_state,
+        "state_reason": state_reason,
         "merge_info": merge_info,
         "check_runs": check_runs,
     }
@@ -769,11 +902,8 @@ def spawn_worker_for_issue(
     )
 
 
-def list_tabs_with_label(
-    label: str,
-    run_herdr: RunHerdr = default_run_herdr,
-) -> list[str]:
-    """Return ``tab_id`` values whose herdr label matches ``label``."""
+def _list_tab_records(run_herdr: RunHerdr = default_run_herdr) -> list[dict[str, Any]]:
+    """One ``herdr tab list``; raise ``RuntimeError`` on a herdr error."""
     proc = run_herdr(["herdr", "tab", "list"])
     payload = parse_herdr_response(proc)
     code = herdr_error_code(payload)
@@ -788,15 +918,28 @@ def list_tabs_with_label(
     tabs = result.get("tabs") if isinstance(result, dict) else None
     if not isinstance(tabs, list):
         return []
-    found: list[str] = []
-    for tab in tabs:
-        if not isinstance(tab, dict):
-            continue
-        if str(tab.get("label") or "") != label:
-            continue
-        tab_id = tab.get("tab_id")
-        if tab_id:
-            found.append(str(tab_id))
+    return [tab for tab in tabs if isinstance(tab, dict) and tab.get("tab_id")]
+
+
+def list_tabs_with_label(
+    label: str,
+    run_herdr: RunHerdr = default_run_herdr,
+) -> list[str]:
+    """Return ``tab_id`` values whose herdr label matches ``label``."""
+    return [
+        str(tab["tab_id"])
+        for tab in _list_tab_records(run_herdr)
+        if str(tab.get("label") or "") == label
+    ]
+
+
+def list_issue_tabs(run_herdr: RunHerdr = default_run_herdr) -> list[tuple[str, int]]:
+    """Return ``(tab_id, N)`` for every herdr tab labeled exactly ``issue-N``."""
+    found: list[tuple[str, int]] = []
+    for tab in _list_tab_records(run_herdr):
+        match = _ISSUE_TAB_LABEL_RE.match(str(tab.get("label") or ""))
+        if match:
+            found.append((str(tab["tab_id"]), int(match.group(1))))
     return found
 
 
@@ -846,6 +989,47 @@ def close_worker_tab(
                 f"WARNING: could not close leftover tab {tab_id} ({tab_label}): {exc}",
                 file=sys.stderr,
             )
+
+
+def close_tabs_for_closed_issues(
+    repo: str,
+    run_gh: RunGh = default_run_gh,
+    run_herdr: RunHerdr = default_run_herdr,
+) -> list[str]:
+    """Close every ``issue-N`` herdr tab whose GitHub issue is CLOSED; return closed tab ids.
+
+    Best-effort: a herdr list, GraphQL, or single-close failure prints a
+    WARNING and is skipped. A tab whose issue GitHub does not return is left
+    alone.
+    """
+    try:
+        issue_tabs = list_issue_tabs(run_herdr)
+    except RuntimeError as exc:
+        print(f"WARNING: closed-issue tab sweep skipped: {exc}", file=sys.stderr)
+        return []
+    if not issue_tabs:
+        return []
+    numbers = sorted({number for _, number in issue_tabs})
+    try:
+        states = fetch_issue_states(repo, numbers, run_gh)
+    except RuntimeError as exc:
+        print(f"WARNING: closed-issue tab sweep skipped: {exc}", file=sys.stderr)
+        return []
+    closed: list[str] = []
+    for tab_id, number in issue_tabs:
+        if states.get(number) != "CLOSED":
+            continue
+        try:
+            close_tab_id(tab_id, run_herdr)
+        except RuntimeError as exc:
+            print(
+                f"WARNING: could not close herdr tab issue-{number} ({tab_id}): {exc}",
+                file=sys.stderr,
+            )
+            continue
+        print(f"Closed herdr tab issue-{number} ({tab_id}): #{number} is closed.")
+        closed.append(tab_id)
+    return closed
 
 
 def list_tab_panes(
@@ -921,8 +1105,15 @@ def wait_until_ticket_advanced(
         [str, int, RunGh],
         IssueAdvanceStatus,
     ] = fetch_issue_merge_and_ci_status,
-) -> None:
-    """Block until GitHub α for ``worker``; interleave ``herdr agent wait`` when live."""
+) -> str:
+    """Block until ``worker``'s issue advances; return the advance reason.
+
+    Order per poll: a merged closing PR waits for α (non-empty, all-green
+    post-merge CI) even though GitHub already auto-closed the issue; otherwise a
+    CLOSED issue advances at once (CI gate skipped); otherwise keep waiting and
+    print one status line. ``herdr agent wait`` is interleaved while the worker
+    is live.
+    """
     if poll_seconds < 1:
         raise ValueError("poll_seconds must be >= 1")
     timeout_ms = poll_seconds * 1000
@@ -949,7 +1140,11 @@ def wait_until_ticket_advanced(
         consecutive_fetch_failures = 0
 
         if advance_ready(status["merge_info"], status["check_runs"]):
-            return
+            return ADVANCE_REASON_MERGED
+        closed_reason = closed_without_merge_reason(status)
+        if closed_reason:
+            return closed_reason
+        print(format_advance_poll_line(status, poll_seconds, worker_gone=worker.gone))
 
         if not worker.gone:
             wait_proc = run_herdr(
@@ -991,7 +1186,11 @@ def run_main_loop(
     sleep_fn: SleepFn = time.sleep,
     repo_root: Path = REPO_ROOT,
 ) -> int:
-    """Startup summary, then serial spawn → wait (α) → advance until ``once`` or Ctrl+C."""
+    """Startup summary, then serial spawn → wait → advance until ``once`` or Ctrl+C.
+
+    Each queue cycle (the first one is startup) first closes ``issue-N`` tabs
+    whose issue is already CLOSED on GitHub.
+    """
     login = fetch_viewer_login(run_gh)
     resolved_repo = resolve_repo(repo, run_gh)
 
@@ -1016,6 +1215,7 @@ def run_main_loop(
 
     try:
         while True:
+            close_tabs_for_closed_issues(resolved_repo, run_gh, run_herdr)
             _, candidates, blocked_by_map = queue_snapshot()
             next_issue = pick_next(candidates, blocked_by_map)
             if next_issue is None:
@@ -1050,7 +1250,7 @@ def run_main_loop(
                     adopted=worker.tab_id if worker.adopted else None,
                 ),
             )
-            wait_until_ticket_advanced(
+            reason = wait_until_ticket_advanced(
                 resolved_repo,
                 worker,
                 poll_seconds,
@@ -1060,7 +1260,7 @@ def run_main_loop(
                 sleep_fn=sleep_fn,
             )
             close_worker_tab(worker, run_herdr)
-            print(f"Advanced #{number} (merge + post-merge CI α); worker tab closed.")
+            print(f"Advanced #{number} ({reason}); worker tab closed.")
             if once:
                 return 0
     except KeyboardInterrupt:

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import re
 import subprocess
 import sys
 from datetime import datetime
@@ -452,6 +453,8 @@ def test_fetch_issue_merge_and_ci_status_graphql_closing_pr(loop_mod):
             "repository": {
                 "defaultBranchRef": {"name": "main"},
                 "issue": {
+                    "state": "CLOSED",
+                    "stateReason": "COMPLETED",
                     "closedByPullRequestsReferences": {
                         "nodes": [
                             {
@@ -488,6 +491,7 @@ def test_fetch_issue_merge_and_ci_status_graphql_closing_pr(loop_mod):
             query = query_args[0]
             assert "issue(number: $number)" in query
             assert "issue(number: 42)" not in query
+            assert "state stateReason" in query
             return subprocess.CompletedProcess(argv, 0, json.dumps(graphql_payload), "")
         if argv[1] == "api" and len(argv) > 2 and "check-runs" in argv[2]:
             assert "--slurp" in argv
@@ -495,6 +499,8 @@ def test_fetch_issue_merge_and_ci_status_graphql_closing_pr(loop_mod):
         raise AssertionError(f"unexpected gh argv: {argv}")
 
     status = loop_mod.fetch_issue_merge_and_ci_status("o/r", 42, run_gh=fake_run_gh)
+    assert status["issue_state"] == "CLOSED"
+    assert status["state_reason"] == "COMPLETED"
     assert status["merge_info"]["merged"] is True
     assert status["merge_info"]["pr_number"] == 10
     assert status["merge_info"]["merge_commit_sha"] == "deadbeef"
@@ -660,3 +666,234 @@ def test_wait_until_ticket_advanced_worker_gone_keeps_polling_github(loop_mod):
     assert worker.warned_gone is True
     assert polls["n"] == 3
     assert sleeps == [10.0, 10.0]
+
+
+def _status(
+    *,
+    merged: bool = False,
+    state: str = "OPEN",
+    state_reason: str | None = None,
+    check_runs: list[dict] | None = None,
+) -> dict:
+    return {
+        "issue_number": 7,
+        "issue_state": state,
+        "state_reason": state_reason,
+        "merge_info": {"merged": merged, "pr_number": 10 if merged else None},
+        "check_runs": check_runs or [],
+    }
+
+
+_PENDING_CHECK = {"name": "ci", "status": "in_progress", "conclusion": None}
+
+
+# @regression
+@pytest.mark.parametrize(
+    ("statuses", "expected_reason", "expected_out"),
+    [
+        pytest.param(
+            [_status(state="CLOSED", state_reason="COMPLETED")],
+            "closed: COMPLETED, no merged closing PR; CI gate skipped",
+            [],
+            id="closed-without-merged-pr-advances",
+        ),
+        pytest.param(
+            [_status(), _status(state="CLOSED", state_reason="NOT_PLANNED")],
+            "closed: NOT_PLANNED, no merged closing PR; CI gate skipped",
+            ["#7 open; no merged PR closes it yet — waiting 60s"],
+            id="closed-while-waiting",
+        ),
+        pytest.param(
+            [
+                _status(merged=True, state="CLOSED", check_runs=[_PENDING_CHECK]),
+                _status(merged=True, state="CLOSED", check_runs=[_green_ci_check()]),
+            ],
+            "merge + post-merge CI α",
+            ["#7: PR #10 merged; post-merge CI 0/1 green (1 pending) — waiting 60s"],
+            id="merged-and-auto-closed-still-waits-for-alpha",
+        ),
+    ],
+)
+def test_wait_until_ticket_advanced_issue_state_decision(
+    loop_mod, capsys, statuses, expected_reason, expected_out
+):
+    """A merged closing PR keeps strict α even when CLOSED; a CLOSED issue without one advances."""
+    pending = list(statuses)
+
+    def fake_fetch(_repo: str, _issue_number: int, _run_gh) -> dict:
+        if not pending:
+            raise AssertionError("polled GitHub again after the issue should have advanced")
+        return pending.pop(0)
+
+    def fake_herdr(argv: list[str]) -> subprocess.CompletedProcess[str]:
+        assert argv[1:3] == ["agent", "wait"], argv
+        return subprocess.CompletedProcess(argv, 0, json.dumps({"result": {"type": "idle"}}), "")
+
+    worker = loop_mod.WorkerHandle(
+        tab_id="wZ:t7", pane_id="wZ:p7", issue_number=7, issue_url="https://example/7"
+    )
+    sleeps: list[float] = []
+    reason = loop_mod.wait_until_ticket_advanced(
+        "o/r",
+        worker,
+        60,
+        label="lbl",
+        run_gh=lambda _a: subprocess.CompletedProcess([], 0, "", ""),
+        run_herdr=fake_herdr,
+        sleep_fn=sleeps.append,
+        fetch_status=fake_fetch,
+    )
+    assert reason == expected_reason
+    assert pending == []
+    assert sleeps == [60.0] * (len(statuses) - 1)
+    assert capsys.readouterr().out.splitlines() == expected_out
+
+
+@pytest.mark.parametrize(
+    ("status", "worker_gone", "expected"),
+    [
+        pytest.param(
+            _status(merged=True),
+            False,
+            "#7: PR #10 merged; no check runs yet on the merge commit — waiting 300s",
+            id="no-check-runs",
+        ),
+        pytest.param(
+            _status(
+                merged=True,
+                check_runs=[
+                    _green_ci_check("a"),
+                    {"name": "b", "status": "completed", "conclusion": "skipped"},
+                    _green_ci_check("c"),
+                    {"name": "d", "status": "completed", "conclusion": "failure"},
+                    _PENDING_CHECK,
+                ],
+            ),
+            False,
+            "#7: PR #10 merged; post-merge CI 3/5 green (1 failed, 1 pending) — waiting 300s",
+            id="mixed-checks",
+        ),
+        pytest.param(
+            _status(),
+            True,
+            "#7 open; no merged PR closes it yet — waiting 300s (worker gone)",
+            id="worker-gone-suffix",
+        ),
+    ],
+)
+def test_format_advance_poll_line(loop_mod, status, worker_gone, expected):
+    """The per-poll status line names the blocking condition, CI tally, and a gone worker."""
+    assert loop_mod.format_advance_poll_line(status, 300, worker_gone=worker_gone) == expected
+
+
+def _sweep_fake_herdr(calls: list[list[str]], tabs: list[dict] | None, fail_close: set[str]):
+    """Fake herdr for the closed-issue sweep; ``tabs=None`` fails ``tab list``."""
+
+    def fake_herdr(argv: list[str]) -> subprocess.CompletedProcess[str]:
+        calls.append(list(argv))
+        if argv[1:3] == ["tab", "list"]:
+            if tabs is None:
+                body = json.dumps({"error": {"code": "boom", "message": "no socket"}})
+                return subprocess.CompletedProcess(argv, 1, body, "")
+            body = json.dumps({"result": {"tabs": tabs, "type": "tab_list"}})
+        elif argv[1:3] == ["tab", "close"]:
+            if argv[3] in fail_close:
+                body = json.dumps({"error": {"code": "busy", "message": "locked"}})
+                return subprocess.CompletedProcess(argv, 1, body, "")
+            body = json.dumps({"result": {"type": "ok"}})
+        else:
+            raise AssertionError(argv)
+        return subprocess.CompletedProcess(argv, 0, body, "")
+
+    return fake_herdr
+
+
+def _states_fake_gh(
+    queries: list[str], repository: dict, returncode: int = 1, stdout: str | None = None
+):
+    """Fake ``gh api graphql``: real gh exits 1 when the response carries GraphQL errors."""
+    def fake_run_gh(argv: list[str]) -> subprocess.CompletedProcess[str]:
+        assert argv[1:3] == ["api", "graphql"], argv
+        queries.append(next(a for a in argv if a.startswith("query=")))
+        if stdout is not None:
+            return subprocess.CompletedProcess(argv, returncode, stdout, "HTTP 502")
+        payload = {
+            "data": {"repository": repository},
+            "errors": [{"type": "NOT_FOUND", "path": ["repository", "issue_7"]}],
+        }
+        stderr = "gh: Could not resolve to an Issue with the number of 7."
+        return subprocess.CompletedProcess(argv, returncode, json.dumps(payload), stderr)
+
+    return fake_run_gh
+
+
+# @regression
+def test_close_tabs_for_closed_issues_closes_only_closed_issue_tabs(loop_mod, capsys):
+    """Only ``issue-N`` tabs whose issue is CLOSED close; open, unresolved, and other tabs stay."""
+    tabs = [
+        {"label": "issue-5", "tab_id": "wD:t5"},
+        {"label": "issue-6", "tab_id": "wD:t6"},
+        {"label": "issue-7", "tab_id": "wD:t7"},
+        {"label": "issue-5", "tab_id": "wD:t5b"},
+        {"label": "issue-8-old", "tab_id": "wD:t8"},
+        {"label": "driver", "tab_id": "wD:tD"},
+    ]
+    herdr_calls: list[list[str]] = []
+    queries: list[str] = []
+    repository = {
+        "issue_5": {"number": 5, "state": "CLOSED"},
+        "issue_6": {"number": 6, "state": "OPEN"},
+        "issue_7": None,
+    }
+    closed = loop_mod.close_tabs_for_closed_issues(
+        "o/r",
+        run_gh=_states_fake_gh(queries, repository),
+        run_herdr=_sweep_fake_herdr(herdr_calls, tabs, set()),
+    )
+    assert closed == ["wD:t5", "wD:t5b"]
+    assert [c for c in herdr_calls if c[1:3] == ["tab", "close"]] == [
+        ["herdr", "tab", "close", "wD:t5"],
+        ["herdr", "tab", "close", "wD:t5b"],
+    ]
+    assert len(queries) == 1
+    assert sorted(re.findall(r"issue_(\d+): issue", queries[0])) == ["5", "6", "7"]
+    assert capsys.readouterr().out.splitlines() == [
+        "Closed herdr tab issue-5 (wD:t5): #5 is closed.",
+        "Closed herdr tab issue-5 (wD:t5b): #5 is closed.",
+    ]
+
+
+# @regression
+@pytest.mark.parametrize(
+    ("failure", "expected_closed", "expected_warning"),
+    [
+        ("herdr_list", [], "WARNING: closed-issue tab sweep skipped: herdr tab list failed"),
+        ("gh", [], "WARNING: closed-issue tab sweep skipped: gh api graphql (issue states)"),
+        ("close", ["wD:t2"], "WARNING: could not close herdr tab issue-1 (wD:t1)"),
+    ],
+)
+def test_close_tabs_for_closed_issues_warns_instead_of_raising(
+    loop_mod, capsys, failure, expected_closed, expected_warning
+):
+    """A herdr list, GitHub, or single-close failure warns on stderr and never raises."""
+    tabs = [{"label": "issue-1", "tab_id": "wD:t1"}, {"label": "issue-2", "tab_id": "wD:t2"}]
+    herdr_calls: list[list[str]] = []
+    queries: list[str] = []
+    repository = {
+        "issue_1": {"number": 1, "state": "CLOSED"},
+        "issue_2": {"number": 2, "state": "CLOSED"},
+    }
+    closed = loop_mod.close_tabs_for_closed_issues(
+        "o/r",
+        run_gh=_states_fake_gh(
+            queries, repository, stdout="" if failure == "gh" else None
+        ),
+        run_herdr=_sweep_fake_herdr(
+            herdr_calls,
+            None if failure == "herdr_list" else tabs,
+            {"wD:t1"} if failure == "close" else set(),
+        ),
+    )
+    assert closed == expected_closed
+    assert expected_warning in capsys.readouterr().err
+    assert len(queries) == (0 if failure == "herdr_list" else 1)
