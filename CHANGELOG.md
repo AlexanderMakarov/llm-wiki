@@ -24,6 +24,9 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Changed
 
+- **Drop Cursor-only `no-local-vault-in-prs` rule** — privacy for PR/commit/CHANGELOG/issue text stays in [`CONTRIBUTING.md`](CONTRIBUTING.md) (Privacy rules) so every agent shares one source; the always-applied Cursor duplicate is removed from `.cursor/rules/` and the `.gitignore` allowlist. CONTRIBUTING clarifies that ready-to-paste operator-chat smoke commands may use real local paths.
+  - *Release note:* Contributors: no Cursor-only privacy rule file; follow CONTRIBUTING Privacy rules for git artifacts.
+
 - **CONTRIBUTING.md is rules-only for agents** — drop issue/PR history, coverage-baseline anecdotes, HTML cov-report browsing, the 500-line PR size and signed-commit requirements, and AI Co-authored-by bans; refresh the Agent instruction files map; `Closes #N` only when a PR completes the issue (else `Relevant to #N`). Pointers under `.claude/rules/`, `.cursor/rules/`, `.kiro/steering/`, and `.github/PULL_REQUEST_TEMPLATE.md` match.
   - *Release note:* Contributors: CONTRIBUTING.md is the process rules file; use `Relevant to #N` for partial issue work so merge does not auto-close.
 

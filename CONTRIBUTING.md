@@ -102,7 +102,7 @@ This repo serves two audiences. Getting them mixed up is the usual failure mode 
 | [`.claude/rules/contributing.md`](.claude/rules/contributing.md) | Claude Code | Short pointer; loads when the agent touches listed paths (`paths:` frontmatter: `llmwiki/`, `tests/`, `scripts/`, `docs/`, CI/hooks, root build files, etc.). |
 | [`.cursor/rules/contributing.mdc`](.cursor/rules/contributing.mdc) | Cursor | Short pointer; `alwaysApply: true`. |
 | [`.kiro/steering/contributing-rules.md`](.kiro/steering/contributing-rules.md) | Kiro | Short pointer; `load: always`. |
-| [`.cursor/rules/no-local-vault-in-prs.mdc`](.cursor/rules/no-local-vault-in-prs.mdc), [`.cursor/rules/awos-cursor-runtime.mdc`](.cursor/rules/awos-cursor-runtime.mdc) | Cursor | Extra shared rules (privacy in git artifacts; AWOS→Cursor tool mapping). |
+| [`.cursor/rules/awos-cursor-runtime.mdc`](.cursor/rules/awos-cursor-runtime.mdc) | Cursor | AWOS→Cursor tool mapping (Cursor-specific runtime). Privacy for git artifacts lives in this file (Privacy rules), not a Cursor-only duplicate. |
 | [`.kiro/steering/page-format.md`](.kiro/steering/page-format.md), [`.kiro/steering/verification-rules.md`](.kiro/steering/verification-rules.md) | Kiro | Vault page format and verification — product schema adjacent, not CONTRIBUTING. |
 
 Root `CLAUDE.md` / `AGENTS.md` each carry a short callout that points here when the work is repo code, not a vault.
@@ -110,7 +110,7 @@ Root `CLAUDE.md` / `AGENTS.md` each carry a short callout that points here when 
 Rules for maintaining the pointers:
 
 1. **Pointers, not copies.** Distil non-negotiables and link back here. Process rules change in `CONTRIBUTING.md` first; update a pointer only when its summary is wrong.
-2. **No machine-specific detail in shared rules.** `.cursor/*` is gitignored except for an allowlist in `.gitignore` (currently `rules/contributing.mdc`, `rules/no-local-vault-in-prs.mdc`, `rules/awos-cursor-runtime.mdc`, plus commands/skills/agents/mcp). Local-only Cursor scratch stays untracked. Add a new shared Cursor rule by allowlisting it deliberately.
+2. **No machine-specific detail in shared rules.** `.cursor/*` is gitignored except for an allowlist in `.gitignore` (currently `rules/contributing.mdc`, `rules/awos-cursor-runtime.mdc`, plus commands/skills/agents/mcp). Local-only Cursor scratch stays untracked. Add a new shared Cursor rule by allowlisting it deliberately. Do not re-introduce Cursor-only copies of process rules that already live in this file — every agent reads CONTRIBUTING.
 
 User-facing `/wiki-*` slash commands and skills live in `llmwiki/agent_kit/` and ship in the package. Contributors who want them locally (so Claude Code discovers `/wiki-sync` from this clone) run:
 
@@ -249,7 +249,7 @@ llmwiki processes session transcripts that may contain PII, API keys, file paths
 4. **Privacy grep** runs in the test suite (`tests/test_privacy_username.py`): tracked `.md` / `.py` must not contain the upstream maintainer's real username (fixtures use `USER`).
 5. **No telemetry, ever.** The tool never calls home.
 6. **Localhost-only binding by default.** The server binds to `127.0.0.1` unless the user explicitly passes `--host 0.0.0.0`.
-7. **No local vault / personal machine details in PRs or commits.** PR bodies, commit messages, issue comments, and CHANGELOG entries must not include absolute home paths, OS usernames, vault roots, or personal session examples. Use placeholders (`/home/USER/…`, `<vault>`, `<user>`).
+7. **No local vault / personal machine details in PRs or commits.** PR bodies, commit messages, issue comments, and CHANGELOG entries must not include absolute home paths, OS usernames, vault roots, or personal session examples. Use placeholders (`/home/USER/…`, `<vault>`, `<user>`). Ready-to-paste smoke-confirm or live-vault shell blocks in operator chat are not those surfaces — when the real worktree and vault paths are known on this machine, put the real paths in the paste block so the human can run them; redact only when writing text that will be committed or pasted into a PR/issue.
 
 ## Markdown conventions
 
