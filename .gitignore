@@ -206,7 +206,6 @@ usage/
 !.cursor/rules/
 .cursor/rules/*
 !.cursor/rules/contributing.mdc
-!.cursor/rules/no-local-vault-in-prs.mdc
 !.cursor/rules/awos-cursor-runtime.mdc
 # Project slash commands (including flat AWOS `/awos-*` wrappers) must ship —
 # without them other developers cannot run the Cursor AWOS loop (#114).
