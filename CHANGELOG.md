@@ -24,6 +24,9 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Changed
 
+- **Delivery flows decide `Closes` vs `Relevant to` from the issue itself** — `/fix-bug` and `/implement-feature` now record the PR's issue-link keyword, with a one-line reason, in the commit-push flow-log entry. A PR closes the issue when it delivers every requested change and acceptance criterion that issue owns; work the issue hands to another issue no longer makes it partial. CONTRIBUTING, the agent contributing rules, `delivery-flow.md` §10 and the ready-issue loop worker skill all say the same. Previously an over-cautious `Relevant to #323` on a complete PR left the issue open and held the herdr ready-issue loop.
+  - *Release note:* Maintainers only: agent-delivered PRs now close the issue they fully deliver instead of defaulting to `Relevant to`.
+
 - **Drop Cursor-only `no-local-vault-in-prs` rule** — privacy for PR/commit/CHANGELOG/issue text stays in [`CONTRIBUTING.md`](CONTRIBUTING.md) (Privacy rules) so every agent shares one source; the always-applied Cursor duplicate is removed from `.cursor/rules/` and the `.gitignore` allowlist. CONTRIBUTING clarifies that ready-to-paste operator-chat smoke commands may use real local paths.
   - *Release note:* Contributors: no Cursor-only privacy rule file; follow CONTRIBUTING Privacy rules for git artifacts.
 

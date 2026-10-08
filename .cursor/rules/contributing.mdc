@@ -14,7 +14,7 @@ Pay special attention to:
 3. New CLI subcommands / config keys / lint rules → matching row in `docs/reference/*.md` (CI enforces CLI coverage)
 4. No new runtime deps — stdlib plus `markdown` only
 5. No real session data; no personal vault paths, OS usernames, hostnames, or vault roots in PRs, commits, issue comments, or CHANGELOG — use placeholders (`/home/USER/…`, `<vault>`, `<user>`). Ready-to-paste smoke/live-vault shell blocks in operator chat may use real local paths when known; see CONTRIBUTING Privacy rules.
-6. Link issues with `Closes #N` only when the PR fully completes the issue; otherwise `Relevant to #N`
+6. Link issues with `Closes #N` only when the PR fully completes the issue; otherwise `Relevant to #N`. Completeness is judged against what the issue itself owns — work it hands to another issue does not count
 7. **No GitHub issue numbers in new test filenames** — use a stable feature/module slug (`tests/test_unified_document_pages_acceptance.py`, not `tests/test_305_….py`). Link the issue or AWOS spec in the module docstring / `# @spec:` comments. Existing `test_<digits>_…` files are legacy; do not add new ones (full rule: [`docs/CODING_STANDARDS.md`](../../docs/CODING_STANDARDS.md))
 8. Before adding a test, check `tests/` for existing coverage — extend it rather than duplicating; a test for a new rule must fail when that rule is removed. Agent detail: [`docs/CODING_STANDARDS.md`](../../docs/CODING_STANDARDS.md); commands and 87% floor: CONTRIBUTING *Testing*
 

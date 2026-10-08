@@ -155,7 +155,7 @@ Conventional Commits. Types we accept:
 
 Optionally scope with a version: `feat(v0.8): tool chart`.
 
-**Linking issues.** Use `Closes #<n>` in the PR body only when this PR fully completes that issue. If the PR is partial, related, or preparatory, write `Relevant to #<n>` (or list several) — never `Closes` / `Fixes` / `Resolves` for a partial, or GitHub will auto-close the issue on merge.
+**Linking issues.** Use `Closes #<n>` in the PR body only when this PR fully completes that issue. If the PR is partial, related, or preparatory, write `Relevant to #<n>` (or list several) — never `Closes` / `Fixes` / `Resolves` for a partial, or GitHub will auto-close the issue on merge. Judge completeness against the issue's own requested changes and acceptance criteria: work the issue explicitly assigns to another issue is out of its scope, so leaving it undone does not make the PR partial. Over-cautious `Relevant to` leaves a finished issue open — and the maintainer ready-issue loop waits until it closes.
 
 ### PR body — pre-merge checklist
 

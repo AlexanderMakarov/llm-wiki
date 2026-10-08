@@ -205,7 +205,7 @@ Do not push until keep/drop is answered, accepted findings are applied, and the 
 
 ### Step 10: Commit & Push
 
-Write this stage's flow-log entry **before** staging so the log rides in this commit — this is the flow-log's last committed state (see Context Discipline). Then stage all changed files, excluding `.env`, credentials, secrets, local vault/config (`config.json`, `.worktree-vault/`), and **all local-review dumps (#159):** `context/**/review.md` and `context/**/review-*.md` (covered by `context/.gitignore`). Prefer path-aware adds over a blind `git add context/` / `-f`. Commit with conventional commits referencing `#<BUG_ID>`; if pre-push ruff rejects, fix and create a new commit (no `--no-verify` unless the user allows). Push `BRANCH` to `origin`.
+Write this stage's flow-log entry **before** staging so the log rides in this commit — this is the flow-log's last committed state (see Context Discipline). In that entry, record the issue link keyword for the PR body and why (§10): `Closes #<BUG_ID>` when every requested change and acceptance criterion the issue owns is delivered (work the issue hands to another issue does not count), otherwise `Relevant to #<BUG_ID>` plus the remaining items. Then stage all changed files, excluding `.env`, credentials, secrets, local vault/config (`config.json`, `.worktree-vault/`), and **all local-review dumps (#159):** `context/**/review.md` and `context/**/review-*.md` (covered by `context/.gitignore`). Prefer path-aware adds over a blind `git add context/` / `-f`. Commit with conventional commits referencing `#<BUG_ID>`; if pre-push ruff rejects, fix and create a new commit (no `--no-verify` unless the user allows). Push `BRANCH` to `origin`.
 
 <!-- /awos:flow:stage -->
 
@@ -217,7 +217,7 @@ From here the change request is open — **do not append to the tracked flow-log
 
 Before opening the PR: fetch and rebase onto `origin/main`. On conflicts: subagent resolution, re-run local gates, user confirm for non-trivial resolutions, push. Functional overlap → §9 comment after open.
 
-Open the PR with `gh pr create` against `main`. Do **not** post a "PR opened" comment. Wait on required checks with `gh pr checks --watch` (~30m max-wait, then ask in chat). On CI failure: `gha-diagnosis` + log-failed → fix subagent → push → re-watch. Do not PR-comment on CI red/max-wait. Claude-in-CI workflows were removed (#116) — do not wait on a Claude Code Review check; do not poll CODEOWNERS; do not transition the GitHub Issue.
+Open the PR with `gh pr create` against `main`, linking the issue with the keyword recorded in Step 10. Do **not** post a "PR opened" comment. Wait on required checks with `gh pr checks --watch` (~30m max-wait, then ask in chat). On CI failure: `gha-diagnosis` + log-failed → fix subagent → push → re-watch. Do not PR-comment on CI red/max-wait. Claude-in-CI workflows were removed (#116) — do not wait on a Claude Code Review check; do not poll CODEOWNERS; do not transition the GitHub Issue.
 
 <!-- /awos:flow:stage -->
 

@@ -26,7 +26,7 @@ You are changing **this repository's own code or docs**, not a user's vault. [`C
 ## Non-negotiables
 
 1. **One concern per PR.** No mixing a bug fix with a feature.
-2. **Conventional-commit titles**, using only the types in CONTRIBUTING's table: `feat` `fix` `chore` `docs` `test` `refactor` `perf` `security` `release`. Link the issue with `Closes #N` only when the PR fully completes it; otherwise `Relevant to #N`.
+2. **Conventional-commit titles**, using only the types in CONTRIBUTING's table: `feat` `fix` `chore` `docs` `test` `refactor` `perf` `security` `release`. Link the issue with `Closes #N` only when the PR fully completes it; otherwise `Relevant to #N`. Completeness is judged against what the issue itself owns — work it hands to another issue does not count.
 3. **Every user-visible change ships docs + a `CHANGELOG.md` entry** under `## [Unreleased]`. A new CLI subcommand, slash command, config key, or lint rule also needs its row in `docs/reference/*.md` in the same PR — CI enforces the CLI coverage check.
 4. **No new runtime dependencies.** Stdlib plus `markdown` only.
 5. **No real session data and no personal machine details.** Fixtures are synthetic or heavily redacted. Absolute home paths, OS usernames, hostnames, and vault roots stay out of code, tests, commits, PR bodies, and the CHANGELOG — use placeholders like `/home/USER/…`, `<vault>`, `<user>`.
