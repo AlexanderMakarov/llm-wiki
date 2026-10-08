@@ -59,8 +59,17 @@ def _fake_gh_factory(
     repo: str,
     issues: list[dict],
     blocked_by_map: dict[int, list[dict]] | None = None,
+    issue_states: dict[int, str] | None = None,
+    merge_status: dict | None = None,
 ):
+    """Fake ``gh``; GraphQL alias queries answer each ``issue_N`` asked for.
+
+    Alias states come from ``issues`` then ``issue_states``; a number in neither
+    gets a null node. ``merge_status`` is the ``repository`` object returned for
+    the wait loop's merge-status query.
+    """
     blocked_by_map = blocked_by_map or {}
+    states = {issue["number"]: issue["state"] for issue in issues} | (issue_states or {})
 
     def fake_run_gh(argv: list[str]) -> subprocess.CompletedProcess[str]:
         cmd = argv[0] if argv else ""
@@ -71,15 +80,23 @@ def _fake_gh_factory(
         elif cmd == "gh" and "issue" in argv and "list" in argv:
             body = json.dumps(issues)
         elif cmd == "gh" and argv[1:3] == ["api", "graphql"]:
-            data: dict = {"repository": {}}
-            for issue in issues:
-                num = issue["number"]
-                nodes = blocked_by_map.get(num, [])
-                data["repository"][f"issue_{num}"] = {
-                    "number": num,
-                    "blockedBy": {"nodes": nodes},
-                }
-            body = json.dumps({"data": data})
+            query = next(a for a in argv if a.startswith("query="))
+            if "closedByPullRequestsReferences" in query:
+                assert merge_status is not None, "unexpected merge-status poll"
+                body = json.dumps({"data": {"repository": merge_status}})
+            else:
+                data: dict = {"repository": {}}
+                for num in map(int, re.findall(r"issue_(\d+): issue", query)):
+                    data["repository"][f"issue_{num}"] = (
+                        {
+                            "number": num,
+                            "state": states[num],
+                            "blockedBy": {"nodes": blocked_by_map.get(num, [])},
+                        }
+                        if num in states
+                        else None
+                    )
+                body = json.dumps({"data": data})
         else:
             raise AssertionError(f"unexpected gh argv: {argv}")
         return subprocess.CompletedProcess(argv, 0, body, "")
@@ -295,9 +312,10 @@ def test_acceptance_run_main_loop_once_single_worker(
             raise AssertionError(f"unexpected herdr argv: {argv}")
         return subprocess.CompletedProcess(argv, 0, body, "")
 
-    def fake_wait(_repo, worker, *_args, **_kwargs) -> None:
+    def fake_wait(_repo, worker, *_args, **_kwargs) -> str:
         """Default fetch_status is bound at def time; stub α wait for driver integration."""
         waited_on.append(worker.pane_id)
+        return "merge + post-merge CI α"
 
     monkeypatch.setattr(loop_mod, "wait_until_ticket_advanced", fake_wait)
 
@@ -316,7 +334,7 @@ def test_acceptance_run_main_loop_once_single_worker(
     assert code == 0
     assert f"1 with {CUSTOM_LABEL!r} label, 1 is assigned on {LOGIN!r}" in out
     assert "params: poll-seconds=300; agent-kind=cursor; mode=once" in out
-    assert "Advanced #11" in out
+    assert "Advanced #11 (merge + post-merge CI α); worker tab closed." in out
     if existing_tab:
         assert spawn_events == ["close"]
         assert waited_on == ["wD:pAgent"]
@@ -333,7 +351,10 @@ def test_acceptance_empty_queue_once_exits_without_sleep(loop_mod, capsys):
     sleeps: list[float] = []
 
     def fake_run_herdr(argv: list[str]) -> subprocess.CompletedProcess[str]:
-        raise AssertionError(f"herdr must not run when queue empty: {argv}")
+        if argv[1:3] == ["tab", "list"]:
+            body = json.dumps({"result": {"tabs": [], "type": "tab_list"}})
+            return subprocess.CompletedProcess(argv, 0, body, "")
+        raise AssertionError(f"herdr must only list tabs when queue empty: {argv}")
 
     code = loop_mod.run_main_loop(
         CUSTOM_LABEL,
@@ -390,3 +411,103 @@ def test_acceptance_spawn_worker_prompt_inlines_repo_skill(loop_mod):
     assert "https://github.com/o/r/issues/5" in prompt
     assert "/fix-bug" in prompt
     assert "/implement-feature" in prompt
+
+
+# @regression
+def test_acceptance_startup_sweep_closes_tabs_of_closed_issues(loop_mod, capsys):
+    """Startup closes orphan ``issue-N`` tabs whose issue is CLOSED; open-issue tabs stay."""
+    fake_run_gh = _fake_gh_factory(
+        login=LOGIN,
+        repo="o/r",
+        issues=[],
+        issue_states={9: "CLOSED", 12: "OPEN"},
+    )
+    tabs = [
+        {"label": "issue-9", "tab_id": "wD:tOld"},
+        {"label": "issue-12", "tab_id": "wD:tLive"},
+    ]
+    herdr_calls: list[list[str]] = []
+
+    def fake_run_herdr(argv: list[str]) -> subprocess.CompletedProcess[str]:
+        herdr_calls.append(list(argv))
+        if argv[1:3] == ["tab", "list"]:
+            body = json.dumps({"result": {"tabs": tabs, "type": "tab_list"}})
+        elif argv[1:3] == ["tab", "close"]:
+            body = json.dumps({"result": {"type": "ok"}})
+        else:
+            raise AssertionError(f"unexpected herdr argv: {argv}")
+        return subprocess.CompletedProcess(argv, 0, body, "")
+
+    code = loop_mod.run_main_loop(
+        CUSTOM_LABEL,
+        "o/r",
+        "cursor",
+        300,
+        once=True,
+        run_gh=fake_run_gh,
+        run_herdr=fake_run_herdr,
+        sleep_fn=lambda _s: None,
+    )
+    out = capsys.readouterr().out
+    assert code == 0
+    assert [c[1:] for c in herdr_calls] == [["tab", "list"], ["tab", "close", "wD:tOld"]]
+    assert "Closed herdr tab issue-9 (wD:tOld): #9 is closed." in out
+    assert "exiting (--once)" in out
+
+
+# @regression
+def test_acceptance_issue_closed_without_merge_advances_and_closes_tab(loop_mod, capsys):
+    """An issue closed with no merged closing PR advances at once and states why."""
+    issues = [_issue(11, title="Only ticket", labels=[CUSTOM_LABEL], assignees=[LOGIN])]
+    fake_run_gh = _fake_gh_factory(
+        login=LOGIN,
+        repo="o/r",
+        issues=issues,
+        merge_status={
+            "defaultBranchRef": {"name": "main"},
+            "issue": {
+                "state": "CLOSED",
+                "stateReason": "NOT_PLANNED",
+                "closedByPullRequestsReferences": {"nodes": []},
+            },
+        },
+    )
+    closed_tabs: list[str] = []
+
+    def fake_run_herdr(argv: list[str]) -> subprocess.CompletedProcess[str]:
+        if argv[1:3] == ["tab", "list"]:
+            body = json.dumps({"result": {"tabs": [], "type": "tab_list"}})
+        elif argv[1:3] == ["tab", "create"]:
+            body = json.dumps(
+                {"result": {"root_pane": {"pane_id": "p1"}, "tab": {"tab_id": "t1"}}},
+            )
+        elif argv[1:3] in (["agent", "start"], ["agent", "prompt"]):
+            body = json.dumps({"result": {"type": "ok"}})
+        elif argv[1:3] == ["tab", "close"]:
+            closed_tabs.append(argv[3])
+            body = json.dumps({"result": {"type": "ok"}})
+        else:
+            raise AssertionError(f"unexpected herdr argv: {argv}")
+        return subprocess.CompletedProcess(argv, 0, body, "")
+
+    def no_sleep(_seconds: float) -> None:
+        raise AssertionError("a closed issue must advance without another poll")
+
+    code = loop_mod.run_main_loop(
+        CUSTOM_LABEL,
+        "o/r",
+        "cursor",
+        300,
+        once=True,
+        run_gh=fake_run_gh,
+        run_herdr=fake_run_herdr,
+        sleep_fn=no_sleep,
+        repo_root=REPO,
+    )
+    out = capsys.readouterr().out
+    assert code == 0
+    assert closed_tabs == ["t1"]
+    assert (
+        "Advanced #11 (closed: NOT_PLANNED, no merged closing PR; CI gate skipped); "
+        "worker tab closed." in out
+    )

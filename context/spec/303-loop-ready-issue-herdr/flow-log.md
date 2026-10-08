@@ -83,3 +83,41 @@
 - Verdict: Approve — 0 Blockers, 2 Nits; keep/drop: keep N1 (gone-warning restore text covers tab-closed case) + N2 (CHANGELOG release note mentions adopt); observations O1/O2 dropped
 - Applied N1, N2; ruff clean, full suite green
 - Next: commit-push → PR (Refs #296; no dedicated issue per operator). Tracked flow-log ends here.
+
+## fix-bug: keep worker tabs in sync with issue state (no GH issue, per operator)
+- Bugs: (1) `issue-N` tabs for issues closed outside the driver (driver stopped/killed) are never closed — re-runs only see open issues (issue-280, issue-307 tabs lingered); (2) wait loop silent: a merged PR with "Relevant to #N" never satisfies α, driver polls forever printing nothing (#323/#335); (3) waited-on issue closed by any means never advances
+- SPEC_NAME: `303-loop-ready-issue-herdr`; not fixed on `origin/main` 0dd2af7
+- Workspace: branch `fix/loop-ready-issue-state-sync`, worktree `.claude/worktrees/fix-loop-ready-issue-state-sync`, throwaway `.worktree-vault`
+- Next: diagnose
+
+## diagnose
+- Reproduced with fakes (scratchpad `repro.py`): orphan `issue-99` tab never closed by `run_main_loop(once)`; `wait_until_ticket_advanced` with merged=false polls silently forever
+- Root causes: `close_worker_tab` only after α of the waited issue (no startup/cycle sweep); `list_labeled_open_issues` is open-only; merge GraphQL lacks issue `state`; wait loop has no closed-issue exit and no per-poll output
+- Fix shape: issue `state`/`stateReason` in merge query; wait order = merged closing PR → strict α (CI) > CLOSED → advance, CI gate skipped > keep waiting; per-poll status line; batched closed-issue tab sweep (one `tab list` + GraphQL aliases) at the top of each cycle (first = startup), before a ticket is picked — so it never touches the waited issue, which is always OPEN; warn-only on errors
+- Decision: sweep CLOSED issues' tabs even if their merged PR's CI is still pending (queue never returns to them; today they are orphaned)
+- Next: classify
+
+## classify
+- Verdict: **Divergence** — §2.8 only defines advance via merged closing PR + CI; closed-without-closing-PR advance and closed-issue tab sweep are new behavior → amend §2.5/§2.8
+- Next: fix
+
+## fix + regression-test
+- Merge query returns `issue_state`/`state_reason`; wait loop: merged closing PR → strict α; else CLOSED → advance (`closed: <reason>, no merged closing PR; CI gate skipped`); per-poll status line (`format_advance_poll_line`); `list_issue_tabs` + `fetch_issue_states` (batched GraphQL aliases) + `close_tabs_for_closed_issues` at the top of every queue cycle (first = startup), warn-only
+- Tests: 62 pass, ruff clean; 13 new/changed cases fail on `origin/main` (wait decision ×3, poll line ×3, sweep ×4, fetch state, 2 acceptance)
+- Next: verify-criteria
+
+## verify-criteria
+- Live read-only: #323 → `issue_state=OPEN`, no merged closing PR (poll line "#323 open; no merged PR closes it yet — waiting 300s"); `list_issue_tabs` → `[(wD:tX, 323)]`; `fetch_issue_states([280,307,311])` → CLOSED, CLOSED, OPEN
+- Next: smoke confirm
+- Smoke (agent-run, operator-authorized 2026-10-08): dummy `issue-307` tab + `--once --poll-seconds 30` from worktree → "Closed herdr tab issue-307 (…): #307 is closed."; `issue-323` adopted; "#323 open; no merged PR closes it yet — waiting 30s"; #323 closed on GitHub (delivered by #335, mislinked "Relevant to") → "Advanced #323 (closed: COMPLETED, no merged closing PR; CI gate skipped); worker tab closed.", exit 0, no `issue-*` tabs left
+- Next: amend-spec
+
+## amend-spec
+- `/awos:spec` update mode: §2.8 advance = merged closing PR + green CI, or CLOSED with no merged closing PR (CI gate skipped); per-poll status line; manual-stop bullet notes issue close counts as delivery. §2.5 orphan sweep (+ warn-only errors). 4 checked criteria; Change Log 2026-10-08
+- Next: local-review
+
+## local-review
+- Review file: `context/spec/303-loop-ready-issue-herdr/review.md` (session-only, not committed)
+- Verdict: Comment — 0 Blockers, 3 Nits; keep all: N1 `fetch_issue_states` tolerates `gh` exit 1 with partial GraphQL data (verified live: aliases 323 + PR 335 → `{323: CLOSED}`), test fake now matches real `gh`; N2 flow-log sweep wording; N3 PR link
+- ruff clean, full suite green
+- Next: commit-push → PR. Issue link: `Relevant to #296` — follow-up to spec 303 (no dedicated issue per operator); #296 itself is not completed by this PR. Tracked flow-log ends here.
