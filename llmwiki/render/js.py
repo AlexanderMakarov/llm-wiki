@@ -505,6 +505,76 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
   });
 })();
 
+// ─── #323: token coverage hint (touch toggle, Escape, outside click) ─────
+// Hover / focus reveal is pure CSS (panel is a child of the hint so the
+// pointer can enter it). This wires click/tap to aria-expanded, dismisses
+// on Escape / outside click / second click (data-dismissed; WCAG 1.4.13
+// dismissable), and clamps the panel inside the viewport near screen edges.
+(function () {
+  document.addEventListener("DOMContentLoaded", function () {
+    const hints = document.querySelectorAll(".token-coverage-hint");
+    if (!hints.length) return;
+    function btnOf(h) { return h.querySelector(".token-coverage-btn"); }
+    function panelOf(h) { return h.querySelector(".token-coverage-panel"); }
+    function setOpen(h, open) {
+      const b = btnOf(h);
+      if (b) b.setAttribute("aria-expanded", open ? "true" : "false");
+    }
+    function clamp(h) {
+      const p = panelOf(h);
+      if (!p) return;
+      p.style.transform = "";
+      const r = p.getBoundingClientRect();
+      const margin = 8;
+      const vw = document.documentElement.clientWidth;
+      let dx = 0;
+      if (r.right > vw - margin) dx = vw - margin - r.right;
+      if (r.left + dx < margin) dx = margin - r.left;
+      if (dx) p.style.transform = "translateX(" + Math.round(dx) + "px)";
+    }
+    hints.forEach(function (h) {
+      const b = btnOf(h);
+      if (!b) return;
+      b.addEventListener("click", function () {
+        const open = b.getAttribute("aria-expanded") !== "true";
+        if (open) {
+          h.removeAttribute("data-dismissed");
+          setOpen(h, true);
+          clamp(h);
+        } else {
+          // Mirror Escape: aria-expanded alone is not enough while :hover /
+          // :focus-within still match (Chromium keeps focus after tap).
+          setOpen(h, false);
+          h.setAttribute("data-dismissed", "");
+        }
+      });
+      h.addEventListener("mouseenter", function () { clamp(h); });
+      h.addEventListener("focusin", function () { clamp(h); });
+      h.addEventListener("mouseleave", function () { h.removeAttribute("data-dismissed"); });
+      h.addEventListener("focusout", function () { h.removeAttribute("data-dismissed"); });
+    });
+    document.addEventListener("keydown", function (e) {
+      if (e.key !== "Escape") return;
+      hints.forEach(function (h) {
+        const b = btnOf(h);
+        const shown = (b && b.getAttribute("aria-expanded") === "true") ||
+          h.matches(":hover") || h.contains(document.activeElement);
+        if (!shown) return;
+        setOpen(h, false);
+        h.setAttribute("data-dismissed", "");
+      });
+    });
+    document.addEventListener("click", function (e) {
+      hints.forEach(function (h) {
+        if (!h.contains(e.target)) setOpen(h, false);
+      });
+    });
+    window.addEventListener("resize", function () {
+      hints.forEach(clamp);
+    });
+  });
+})();
+
 // ─── Reading progress bar ────────────────────────────────────────────────
 (function () {
   const bar = document.getElementById("progress-bar");
