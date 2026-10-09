@@ -55,3 +55,16 @@ Feature delivery for https://github.com/AlexanderMakarov/llm-wiki/issues/311 via
 - `source_pages_for_backlog`: a real canonical page supersedes legacy `--part-NN` siblings for pending checks; synth never deletes parts; `source_page_paths` kept for pre-migrate discovery
 - Estimate: one doc job per doc, `unsynth_items[*].chunks`, `new_doc_calls`; `refresh_synth_pending(backend=)`
 - Tests: `tests/test_whole_document_synth.py` (new), updated `test_synth_raw_docs`, `test_stub_backlog`, `test_81_acceptance`; fixed `test_mcp_add_cli_proxy` (stale Slice 1 expectation)
+
+## implement (slice 4)
+
+- `llmwiki/migrate_whole_document_storage.py` + CLI `_MIGRATIONS` / `cmd_migrate_whole_document_storage`
+- Preview lists clear + ambiguous; apply blocked (non-zero, no writes) while ambiguous; recovery under `.llmwiki-whole-doc-recovery/<UTC>/`; offline stitch + tag union; idempotent
+- Tests cover preview, ambiguous block, happy path, Wiki findability one row
+
+## implement (slice 5)
+
+- `CHANGELOG.md` `[Unreleased]`; `docs/UPGRADING.md` migrate steps (recovery dir, block-on-ambiguous, no mandatory mass re-synth)
+- `docs/reference/cli.md` migrate `whole-document-storage` row + `add` / `synth` notes
+- Architecture / ui / mcp notes for one raw file + Wiki findability
+- Slice 5 marked `[x]` in `tasks.md`

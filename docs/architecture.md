@@ -118,7 +118,7 @@ Pages rendered (v0.9 surface):
 - `site/sources/<project>/<slug>.md` — copies of raw session markdown for download / agents
 - Plus AI-consumable exports: `llms.txt`, `llms-full.txt`, `graph.jsonld`, `sitemap.xml`, `rss.xml`
 
-Documents enter `raw/docs/` either via the asynchronous producer queue path or synchronously via `llmwiki add` (`llmwiki/add_doc.py`, #16) — both may write a dir-per-doc, section-chunked layout on disk. The site build groups those chunks into logical documents for reading, search, and the sidebar; it does not rewrite `raw/` or `wiki/` to do so.
+Documents enter `raw/docs/` either via the asynchronous producer queue path or synchronously via `llmwiki add` (`llmwiki/add_doc.py`, #16 / #311) — **new** imports write one complete Markdown file per document. Synthesis chunks long bodies in memory to the active backend budget and stitches one wiki source page; length-driven `-NN` series on disk are a legacy layout. The site build (#305) still groups any remaining multi-piece raw files into logical documents for reading, search, and the sidebar without rewriting `raw/` or `wiki/`; operators merge legacy pieces offline with `llmwiki migrate whole-document-storage` (no mandatory mass re-synth).
 
 ### L3 — Viewer (browser JS)
 

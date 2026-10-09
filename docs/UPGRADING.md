@@ -10,6 +10,30 @@ How to upgrade between `llmwiki` releases. Most releases are drop-in (`pip insta
 
 The canonical per-release detail is [CHANGELOG.md](https://github.com/AlexanderMakarov/llm-wiki/blob/main/CHANGELOG.md) — this guide focuses on "what might break".
 
+## Unreleased — whole-document storage (#311)
+
+Behaviour flip for **new** imports, plus an optional offline migration for vaults that still hold length-driven pieces.
+
+**New behaviour (no migrate required):**
+
+- `llmwiki add` / MCP `wiki_add` write **one** complete Markdown file under `raw/docs/` (including long documents). Content hash / dedup stay whole-document.
+- `llmwiki synth` splits a long document **in memory** to the active backend's usable body budget, summarises each piece, and **stitches** them into **one** `wiki/sources/` page. A failure mid-document fails the whole document (no complete-looking partial page). There is no silent truncation-as-coverage path.
+- Session transcripts are unchanged.
+
+**When to migrate:** if an older release left `raw/docs/<project>/<slug>-01.md` … `-NN.md` and/or several `wiki/sources/…--part-N` pages for one logical document, Ctrl+K **Wiki** (and the wiki search corpus) can still list one row per part even after the #305 site Documents unification. Heal that offline — **no mandatory mass re-synth**:
+
+```bash
+llmwiki migrate whole-document-storage --vault /path/to/vault --dry-run
+llmwiki migrate whole-document-storage --vault /path/to/vault
+```
+
+- **What it changes:** each **clear** multi-piece group becomes one raw file (`raw/docs/<project>/<slug>.md`) and one canonical wiki source page (same deterministic stitch + tag union synth uses). Old `-NN` raw files and part wiki pages move under `.llmwiki-whole-doc-recovery/<UTC>/` (a `MANIFEST.json` lists every move). Part names become `## Aliases` on the canonical page; `[[wikilinks]]` / `sources:` entries and synth state follow. Index / pending refresh run when anything changed.
+- **Block on ambiguous:** preview always lists clear and ambiguous groups. Apply exits non-zero and **writes nothing** while any ambiguous group remains (gap in parts, hash conflict, a whole file that is not the same document, partly summarised pieces, inconsistent wiki claims, and similar). Resolve or remove the ambiguous set, then re-run.
+- **Never:** an LLM call, a mass re-synthesis from raw, or overwriting a different-hash whole file already on disk.
+- **Idempotent:** a clean second run is a no-op; an interrupted apply resumes. Rebuild afterwards: `llmwiki build --vault <vault>`.
+
+See [`docs/reference/cli.md`](reference/cli.md#whole-document-storage--merge-legacy-split-documents-311).
+
 ## Unreleased — document source pages claim their raw file (#307)
 
 Optional offline migration. Synth now writes `source_file: raw/docs/<path>` on every page it synthesises from `raw/docs/` and tags it `raw-doc` instead of `session-transcript`. Document pages an older release wrote still have a blank `source_file` (so `llmwiki trace`, `provenance_integrity` and `remove`'s frontmatter scan cannot follow them) and still carry `session-transcript` (re-synth keeps existing tags as curation). Heal them without a backend call:

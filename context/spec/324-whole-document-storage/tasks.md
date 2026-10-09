@@ -36,11 +36,11 @@
   - [x] Tests: preview lists groups; apply blocked on ambiguous; happy-path merge + recovery + idempotent re-run; Wiki corpus / findability one row per logical doc after migrate. **[Agent: generalPurpose]**
   - [x] Verify: targeted pytest green; migrate dry-run on a scratch multi-part vault; delete ephemeral artifacts. **[Agent: generalPurpose]**
 
-- [ ] **Slice 5: Docs + CHANGELOG + UPGRADING**
+- [x] **Slice 5: Docs + CHANGELOG + UPGRADING**
 
   > Operators know the new representation and how to migrate.
-  - [ ] Update `CHANGELOG.md` `[Unreleased]`, `docs/UPGRADING.md`, `docs/reference/cli.md` (migrate row), and any architecture/ui notes needed for Wiki findability / whole-doc storage. No personal vault paths. **[Agent: generalPurpose]**
-  - [ ] Verify: docs mention one raw file, backend-budget synth, migrate name, recovery dir, block-on-ambiguous, no mandatory mass re-synth. **[Agent: generalPurpose]**
+  - [x] Update `CHANGELOG.md` `[Unreleased]`, `docs/UPGRADING.md`, `docs/reference/cli.md` (migrate row), and any architecture/ui notes needed for Wiki findability / whole-doc storage. No personal vault paths. **[Agent: generalPurpose]**
+  - [x] Verify: docs mention one raw file, backend-budget synth, migrate name, recovery dir, block-on-ambiguous, no mandatory mass re-synth. **[Agent: generalPurpose]**
 
 - [ ] **Slice 6: Demo vault copy — before/after summary review package (operator gate)**
 
