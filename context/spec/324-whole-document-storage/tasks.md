@@ -43,11 +43,11 @@
   - [x] Update `CHANGELOG.md` `[Unreleased]`, `docs/UPGRADING.md`, `docs/reference/cli.md` (migrate row), and any architecture/ui notes needed for Wiki findability / whole-doc storage. No personal vault paths. **[Agent: generalPurpose]**
   - [x] Verify: docs mention one raw file, backend-budget synth, migrate name, recovery dir, block-on-ambiguous, no mandatory mass re-synth. **[Agent: generalPurpose]**
 
-- [ ] **Slice 6: Demo vault copy — before/after summary review package (operator gate)**
+- [x] **Slice 6: Demo vault copy — before/after summary review package (operator gate)**
 
   > Operator reviews stitch quality on real multi-piece demo docs before smoke/local review.
   - [x] Copy shipped `demo/` to a throwaway dir under the worktree. Identify all multi-piece logical docs. Capture before Summary (+ Key Claims when present) per part. Run migrate preview then apply. Capture after canonical Summary (+ Key Claims). Write session-only review package `context/spec/324-whole-document-storage/demo-migrate-review.md` (do not commit if treated as review dump — follow `context/.gitignore` / operator preference). Present package to operator and **stop until they accept**. **[Agent: generalPurpose]**
-  - [ ] If operator requests stitch-rule tweaks, apply them, re-run the demo-copy migrate review, and re-present. **[Agent: generalPurpose]**
+  - [x] Operator accepted offline stitch (“pretty good”); requested interactive post-migrate mark-unsynth instead of stitch-rule tweaks — delivered as `--mark-unsynth` / TTY ask (default keep-stitched). **[Agent: generalPurpose]**
 
 - [x] **Slice 7: Feature Testing & Regression**
 
