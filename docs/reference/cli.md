@@ -859,6 +859,8 @@ Before #311 a long `add` could land as `raw/docs/<project>/<slug>-01.md` … `<s
 4. Stitches the pieces' wiki summaries with the same deterministic rules new synth uses, unions tags, records old part names under `## Aliases`, rewrites `[[wikilinks]]` / `sources:` entries, and moves the old part pages under `.llmwiki-whole-doc-recovery/<UTC>/wiki/sources/…`. A `MANIFEST.json` in that recovery directory lists every move.
 5. Collapses per-piece synth state keys to the whole-document key, refreshes pending, rebuilds `wiki/index.md` when the vault keeps one, and appends a migrate log entry when anything changed.
 
+6. **Optional re-synth queue.** After a successful apply the command lists the merged documents. On a terminal it asks **once for all of them** whether to mark them not synthesized; the default (Enter, EOF, or any non-terminal run without flags) keeps the stitched summaries and the synth-done state unchanged. `--mark-unsynth` answers yes without asking. Either way migrate only edits synth state — re-summarising happens later, when you run `llmwiki synth`.
+
 After a successful apply (and a site rebuild), Ctrl+K **Wiki** / the wiki search corpus list **one** source row per logical document instead of many `--part-N` pages. Operators may still force-re-synth later; that is optional, not the migration success path.
 
 Implementation: `llmwiki/migrate_whole_document_storage.py`. See [UPGRADING.md](../UPGRADING.md).
@@ -872,6 +874,8 @@ python3 -m llmwiki migrate whole-document-storage --vault /path/to/vault
 |---|---|
 | `--vault PATH` | **Required.** Vault root containing `raw/docs/` and `wiki/`. |
 | `--dry-run` | Preview clear and ambiguous groups; write nothing (apply is blocked while any group is ambiguous). |
+| `--mark-unsynth` | After a successful apply, mark **every** merged document as not synthesized (drops its whole-document synth-done key and refreshes pending) so the next `llmwiki synth` re-summarises it. No prompt, no language-model call here — for scripts. Ignored by `--dry-run`; nothing happens when apply is blocked or errored. |
+| `--keep-stitched` | Keep the stitched summaries and synth state without asking. This is the default; the flag is an explicit no-op (also suppresses the terminal question). Mutually exclusive with `--mark-unsynth`. |
 
 Idempotent: a clean second run is a no-op; an interrupted apply resumes. Rebuild afterwards: `llmwiki build --vault PATH`.
 

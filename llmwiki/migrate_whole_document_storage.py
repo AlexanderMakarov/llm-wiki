@@ -32,6 +32,11 @@ offline — no synthesis backend is called and nothing is re-summarised:
 * **State** — the per-piece synth state keys collapse to the whole-document key
   and ``synth.pending`` is refreshed. A re-run after a clean apply finds
   nothing to do; a run interrupted part-way resumes.
+* **Optional re-synth queue** — the merged documents stay recorded as
+  synthesised (stitched summaries kept). :func:`mark_unsynth` (CLI
+  ``--mark-unsynth``, or a TTY ``y`` answer) forgets the whole-document keys so
+  the next ``llmwiki synth`` re-runs them; the migration itself never calls a
+  backend.
 
 Usage::
 
@@ -79,7 +84,7 @@ from llmwiki.wikilinks import (
     rewrite_wikilinks,
 )
 
-__all__ = ["RECOVERY_DIR_NAME", "print_report", "run_migration"]
+__all__ = ["RECOVERY_DIR_NAME", "mark_unsynth", "merged_document_paths", "print_report", "run_migration"]
 
 #: Vault-root folder the old pieces are moved into, one ``<UTC>/`` run per apply.
 RECOVERY_DIR_NAME = ".llmwiki-whole-doc-recovery"
@@ -796,6 +801,49 @@ def _update_synth_state(
         _update_state(_mut, state_file)
     except (OSError, ValueError, TypeError) as exc:
         errors.append(f"state: {exc}")
+
+
+def merged_document_paths(report: dict[str, Any]) -> list[str]:
+    """Vault-relative ``raw/docs/…`` paths of the documents an apply merged."""
+    return [f"raw/docs/{key}.md" for key in report.get("applied", [])]
+
+
+def mark_unsynth(vault: Path, report: dict[str, Any]) -> list[str]:
+    """Drop the whole-document synth-done keys of the merged documents and refresh pending.
+
+    Optional follow-up to an apply (#311): the merge records each document as
+    synthesised (stitched summary kept). This forgets that, so the next
+    ``llmwiki synth`` re-summarises the documents. No backend is called. Returns
+    the ``docs::<rel>`` keys that were actually removed; failures are appended to
+    ``report["errors"]``.
+    """
+    vault = Path(vault).expanduser().resolve()
+    keys = [f"{DOCS_REL_PREFIX}{key}.md" for key in report.get("applied", [])]
+    state_file = resolve_state_file(vault)
+    dropped: list[str] = []
+
+    def _mut(s: dict[str, Any]) -> dict[str, Any]:
+        synth = s.setdefault("synth", {})
+        files = dict(synth.get("files") or {}) if isinstance(synth.get("files"), dict) else {}
+        for key in keys:
+            if key in files:
+                files.pop(key)
+                dropped.append(key)
+        synth["files"] = files
+        return s
+
+    errors: list[str] = report.setdefault("errors", [])
+    try:
+        _update_state(_mut, state_file)
+        refresh_synth_pending(
+            raw_dir=vault / "raw" / "sessions",
+            docs_dir=vault / "raw" / "docs",
+            wiki_sources_dir=vault / "wiki" / "sources",
+            state_file=state_file,
+        )
+    except (OSError, ValueError, TypeError) as exc:
+        errors.append(f"mark-unsynth: {exc}")
+    return dropped
 
 
 # ─── entry point ─────────────────────────────────────────────────────────

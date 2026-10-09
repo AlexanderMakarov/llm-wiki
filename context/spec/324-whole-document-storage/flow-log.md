@@ -68,3 +68,8 @@ Feature delivery for https://github.com/AlexanderMakarov/llm-wiki/issues/311 via
 - `docs/reference/cli.md` migrate `whole-document-storage` row + `add` / `synth` notes
 - Architecture / ui / mcp notes for one raw file + Wiki findability
 - Slice 5 marked `[x]` in `tasks.md`
+
+## implement (post-slice-4 enhancement)
+
+- Optional re-synth queue after migrate apply: lists merged docs; TTY asks once (all-or-nothing, default/EOF/non-TTY keep stitched); `--mark-unsynth` drops whole `docs::` keys + `refresh_synth_pending` without prompting; `--keep-stitched` explicit no-op. No LLM call; apply path unchanged (done state written first)
+- `mark_unsynth` / `merged_document_paths` in `migrate_whole_document_storage.py`; `_offer_mark_unsynth` in `cli.py`; docs + CHANGELOG + `_MIGRATIONS` blurb updated

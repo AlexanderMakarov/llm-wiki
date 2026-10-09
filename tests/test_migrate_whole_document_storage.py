@@ -605,3 +605,120 @@ def test_cli_apply_merges_and_exits_zero(tmp_path: Path, capsys) -> None:
     assert args.func(args) == 0
     assert "merged:  1 document(s)" in capsys.readouterr().out
     assert (vault / "raw/docs/big-doc/big-doc.md").is_file()
+
+
+# ─── optional re-synth queue (mark-unsynth) ──────────────────────────────
+
+WHOLE_KEY = "docs::big-doc/big-doc.md"
+
+
+def _pending_rels(vault: Path) -> list[str]:
+    return [str(it.get("rel")) for it in read_state(vault / "llmwiki-state.json")["synth"].get("pending", [])]
+
+
+def _migrate_args(vault: Path, *extra: str):
+    return build_parser().parse_args(["migrate", "whole-document-storage", "--vault", str(vault), *extra])
+
+
+def _tty(monkeypatch: pytest.MonkeyPatch, *answers: str) -> list[str]:
+    """Pretend stdin is a terminal and feed ``answers`` (EOF once exhausted)."""
+    queue = list(answers)
+    prompts: list[str] = []
+
+    def _input(prompt: str = "") -> str:
+        prompts.append(prompt)
+        if not queue:
+            raise EOFError
+        return queue.pop(0)
+
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr("builtins.input", _input)
+    return prompts
+
+
+def test_non_tty_default_keeps_synth_done_state(tmp_path: Path, monkeypatch, capsys) -> None:
+    vault = tmp_path / "vault"
+    _legacy_doc(vault)
+    monkeypatch.setattr("sys.stdin.isatty", lambda: False)
+
+    args = _migrate_args(vault)
+    assert args.func(args) == 0
+
+    assert WHOLE_KEY in _unified_state_files(vault)
+    assert _pending_rels(vault) == []
+    assert "--mark-unsynth" in capsys.readouterr().out
+
+
+def test_mark_unsynth_flag_clears_whole_keys_without_prompt(tmp_path: Path, monkeypatch, capsys) -> None:
+    vault = tmp_path / "vault"
+    _legacy_doc(vault)
+    _legacy_doc(vault, "other-doc")
+    monkeypatch.setattr("sys.stdin.isatty", lambda: False)
+
+    args = _migrate_args(vault, "--mark-unsynth")
+    assert args.func(args) == 0
+
+    files = _unified_state_files(vault)
+    assert WHOLE_KEY not in files and "docs::other-doc/other-doc.md" not in files
+    assert not [k for k in files if k.startswith("docs::") and "-0" in k]
+    assert sorted(_pending_rels(vault)) == ["docs::big-doc/big-doc.md", "docs::other-doc/other-doc.md"]
+    out = capsys.readouterr().out
+    assert "raw/docs/big-doc/big-doc.md" in out and "marked 2 document(s)" in out
+    # migrate result itself is untouched: one stitched page, no part pages
+    assert [p.name for p in (vault / "wiki/sources/big-doc").glob("*.md")] == [f"{DATE}-big-doc.md"]
+
+
+def test_tty_yes_marks_all_unsynth(tmp_path: Path, monkeypatch) -> None:
+    vault = tmp_path / "vault"
+    _legacy_doc(vault)
+    prompts = _tty(monkeypatch, "y")
+
+    args = _migrate_args(vault)
+    assert args.func(args) == 0
+
+    assert len(prompts) == 1
+    assert WHOLE_KEY not in _unified_state_files(vault)
+    assert _pending_rels(vault) == [WHOLE_KEY]
+
+
+@pytest.mark.parametrize("answers", [("n",), ("",), ()], ids=["no", "empty", "eof"])
+def test_tty_no_empty_or_eof_keeps_state(tmp_path: Path, monkeypatch, answers: tuple[str, ...]) -> None:
+    vault = tmp_path / "vault"
+    _legacy_doc(vault)
+    prompts = _tty(monkeypatch, *answers)
+
+    args = _migrate_args(vault)
+    assert args.func(args) == 0
+
+    assert len(prompts) == 1
+    assert WHOLE_KEY in _unified_state_files(vault)
+
+
+def test_keep_stitched_flag_never_prompts(tmp_path: Path, monkeypatch) -> None:
+    vault = tmp_path / "vault"
+    _legacy_doc(vault)
+    prompts = _tty(monkeypatch, "y")
+
+    args = _migrate_args(vault, "--keep-stitched")
+    assert args.func(args) == 0
+
+    assert prompts == [] and WHOLE_KEY in _unified_state_files(vault)
+
+
+def test_dry_run_and_blocked_never_prompt_or_mark(tmp_path: Path, monkeypatch) -> None:
+    vault = tmp_path / "vault"
+    _legacy_doc(vault)
+    _legacy_doc(vault, "gap-doc", skip=(2,))  # ambiguous: a gap in the parts
+    prompts = _tty(monkeypatch, "y")
+    before = _snapshot(vault)
+
+    for extra in (("--dry-run", "--mark-unsynth"), ("--mark-unsynth",)):
+        args = _migrate_args(vault, *extra)
+        assert args.func(args) == (0 if "--dry-run" in extra else 1)
+
+    assert prompts == [] and _snapshot(vault) == before
+
+
+def test_mark_unsynth_and_keep_stitched_are_exclusive(tmp_path: Path) -> None:
+    with pytest.raises(SystemExit):
+        _migrate_args(tmp_path, "--mark-unsynth", "--keep-stitched")

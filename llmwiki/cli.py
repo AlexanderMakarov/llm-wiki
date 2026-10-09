@@ -1661,7 +1661,7 @@ _MIGRATIONS: tuple[tuple[str, str, str], ...] = (
     (
         "whole-document-storage",
         "Merge each document an older release stored in pieces (raw/docs/<project>/<slug>-01.md … -NN.md and one wiki source page per piece) into one raw file (<slug>.md, same content_sha256) and one wiki source page: the pieces' summaries are stitched by the same fixed rules synth uses and their tags are unioned, the old part names become ## Aliases of the merged page and every [[link]] / sources: entry follows, and synth state collapses to the one whole-document key. The old raw pieces and part pages move to .llmwiki-whole-doc-recovery/<UTC>/ (MANIFEST.json lists every move); a different-hash whole file is never overwritten.",
-        "Run once after upgrading to the release where documents are stored whole, when Ctrl+K Wiki still lists several part rows for one document or raw/docs still holds -01/-02 pieces. Run with --dry-run first: it lists the clear groups it would merge and every ambiguous group (a gap in the parts, a hash conflict, a whole file that is not the same document, partly summarised pieces, a page claiming another raw file). Apply refuses to run — exits non-zero and changes nothing — while any ambiguous group remains. Offline: no LLM call and no mass re-synthesis; safe to re-run (a clean second run is a no-op, an interrupted run resumes).",
+        "Run once after upgrading to the release where documents are stored whole, when Ctrl+K Wiki still lists several part rows for one document or raw/docs still holds -01/-02 pieces. Run with --dry-run first: it lists the clear groups it would merge and every ambiguous group (a gap in the parts, a hash conflict, a whole file that is not the same document, partly summarised pieces, a page claiming another raw file). Apply refuses to run — exits non-zero and changes nothing — while any ambiguous group remains. Offline: no LLM call and no mass re-synthesis; safe to re-run (a clean second run is a no-op, an interrupted run resumes). After a successful apply it lists the merged documents and, on a terminal, asks once (all-or-nothing, default = keep the stitched summaries) whether to mark them not synthesized so a later `llmwiki synth` re-runs them; --mark-unsynth does that without asking, and a non-terminal run keeps the summaries.",
     ),
 )
 
@@ -1917,13 +1917,51 @@ def cmd_migrate_whole_document_storage(args: argparse.Namespace) -> int:
     clear and ambiguous groups; apply exits non-zero and changes nothing while
     any ambiguous group remains. Old pieces move to
     ``.llmwiki-whole-doc-recovery/<UTC>/`` rather than being deleted.
+
+    After a clean apply that merged documents, ``--mark-unsynth`` (or a ``y``
+    answer on a TTY) forgets their synth-done state so the next ``synth``
+    re-runs them. Default: keep the stitched summaries.
     """
-    report = migrate_whole_document_storage.run_migration(
-        vault=Path(args.vault),
-        dry_run=bool(getattr(args, "dry_run", False)),
-    )
+    vault = Path(args.vault)
+    dry_run = bool(getattr(args, "dry_run", False))
+    report = migrate_whole_document_storage.run_migration(vault=vault, dry_run=dry_run)
     migrate_whole_document_storage.print_report(report)
+    keep = bool(getattr(args, "keep_stitched", False))
+    if not dry_run and not keep and not report["errors"] and not report["blocked"] and report["applied"]:
+        _offer_mark_unsynth(vault, report, force=bool(getattr(args, "mark_unsynth", False)))
     return 1 if report["errors"] or report["blocked"] else 0
+
+
+def _offer_mark_unsynth(vault: Path, report: dict[str, Any], *, force: bool) -> None:
+    """Optionally queue the just-merged documents for re-synthesis (#311).
+
+    All-or-nothing. ``force`` (``--mark-unsynth``) skips the question; without it
+    the question is asked only on a TTY, and an empty answer, EOF or non-TTY
+    keeps the stitched summaries. Never calls a backend.
+    """
+    docs = migrate_whole_document_storage.merged_document_paths(report)
+    if not force and not sys.stdin.isatty():
+        print("synth state kept (stitched summaries stay). Pass --mark-unsynth to queue these documents for re-synth.")
+        return
+    print(f"merged documents ({len(docs)}):")
+    for rel in docs:
+        print(f"  {rel}")
+    if not force:
+        answer = _ask_choice(
+            "Mark ALL of these as not synthesized so the next `llmwiki synth` re-summarises them? "
+            "Default keeps the stitched summaries. [y/N]: ",
+            ("y", "n", "yes", "no"),
+            "n",
+        )
+        if answer.lower() not in ("y", "yes"):
+            print("kept: stitched summaries and synth state unchanged.")
+            return
+    dropped = migrate_whole_document_storage.mark_unsynth(vault, report)
+    if report["errors"]:
+        for err in report["errors"][:10]:
+            print(f"  ! {err}")
+        return
+    print(f"marked {len(dropped)} document(s) as not synthesized; run `llmwiki synth` to re-summarise them.")
 
 
 def _resolve_synthesize_only_paths(paths: list[str], vault_root: Path) -> set[Path]:
@@ -3533,6 +3571,21 @@ def build_parser() -> argparse.ArgumentParser:
         "--dry-run",
         action="store_true",
         help="Preview clear and ambiguous groups; write nothing (apply is blocked while any group is ambiguous)",
+    )
+    unsynth_group = migrate_whole_doc.add_mutually_exclusive_group()
+    unsynth_group.add_argument(
+        "--mark-unsynth",
+        action="store_true",
+        help=(
+            "After a successful apply, mark every merged document as not synthesized so the next `llmwiki synth` "
+            "re-summarises it — no prompt, no LLM call here (for scripts). Default: keep stitched summaries; on a "
+            "TTY you are asked once for all documents (empty answer = keep)"
+        ),
+    )
+    unsynth_group.add_argument(
+        "--keep-stitched",
+        action="store_true",
+        help="Keep stitched summaries and synth state without asking (the default; explicit no-op for scripts)",
     )
     migrate_whole_doc.set_defaults(func=cmd_migrate_whole_document_storage)
 

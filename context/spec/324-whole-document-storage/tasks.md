@@ -35,6 +35,7 @@
   - [x] Implement `llmwiki/migrate_whole_document_storage.py` + register in `cli.py` `_MIGRATIONS`. Group via #305 base-slug + agreeing hash + wiki part paths; ambiguous → report; apply exits non-zero with no vault changes. Raw: write whole file; relocate `-NN` to `.llmwiki-whole-doc-recovery/<UTC>/…`. Wiki: same stitch + tag union; stubs/redirects; rewrite links/index/state; `refresh_synth_pending`. No LLM. **[Agent: generalPurpose]**
   - [x] Tests: preview lists groups; apply blocked on ambiguous; happy-path merge + recovery + idempotent re-run; Wiki corpus / findability one row per logical doc after migrate. **[Agent: generalPurpose]**
   - [x] Verify: targeted pytest green; migrate dry-run on a scratch multi-part vault; delete ephemeral artifacts. **[Agent: generalPurpose]**
+  - [x] Post-slice enhancement: optional post-apply mark-unsynth (TTY all-or-nothing prompt, default keep; `--mark-unsynth` / `--keep-stitched`); docs + tests. **[Agent: generalPurpose]**
 
 - [x] **Slice 5: Docs + CHANGELOG + UPGRADING**
 
