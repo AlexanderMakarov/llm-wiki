@@ -32,3 +32,10 @@ Feature delivery for https://github.com/AlexanderMakarov/llm-wiki/issues/311 via
 
 - `tasks.md` written (7 slices; no draft-approval gate under `/implement-feature`)
 - Next: commit specs, then `/awos:implement`
+
+## implement (slice 1)
+
+- `write_raw_doc` / `add_sources` dry-run: one complete raw file; no `-NN` / part chrome
+- `chunk_markdown_by_sections` kept for synth reuse; hash/dedup still whole-body
+- `tests/test_add_doc.py`: long-doc single-file coverage + `write_legacy_multipart_raw_doc` helper
+- Verified: ruff + 97 `test_add_doc` tests; TMP vault long add → one raw path; ephemeral vault removed

@@ -1,9 +1,9 @@
 """`llmwiki add` — universal document intake (issue #16).
 
-Converts URLs / files / folders to Markdown and lands them under
-raw/docs/ in the exact layout kbbuilder's async add-doc worker
-produces (dir per doc, section-aware chunks), so a machine running
-both never sees format drift.
+Converts URLs / files / folders to Markdown and lands each document as
+one complete file under ``raw/docs/<project>/<slug>.md`` (#311). Section
+splitting stays available for synthesizer reuse; it is not applied at
+write time.
 
 Security posture ported from kbbuilder src/wiki-convert.ts: SSRF
 egress guard (scheme + every resolved address + every redirect hop)
@@ -197,14 +197,13 @@ def guarded_fetch(url: str, headers: dict[str, str], timeout: int = 30) -> Fetch
 
 
 # ── section chunking (port of kbbuilder chunkMarkdownBySections) ─────
-# Synthesis distills ONE input file into ONE wiki page per pass. A large
-# document overflows the model context in that single pass, so we split
-# by section at WRITE time — each chunk becomes one synthesis input that
-# fits. 7000 chars keeps a chunk inside the agent-delegate synthesizer's
-# raw_body[:8000] prompt embed (llmwiki/synth/agent_delegate.py) with
-# headroom for frontmatter + breadcrumb. The cap is soft: splits happen
-# at heading, then paragraph boundaries; a hard slice only ever hits a
-# single paragraph longer than the whole budget.
+# Kept for synthesizer reuse (#311): long docs are stored whole and may
+# be split in memory at synth time against the active backend's usable
+# body budget. 7000 is the historical soft default (agent-delegate
+# raw_body[:8000] headroom). The cap is soft: splits happen at heading,
+# then paragraph boundaries; a hard slice only ever hits a single
+# paragraph longer than the whole budget. New imports do NOT write
+# ``-NN`` part files — see write_raw_doc.
 
 DEFAULT_CHUNK_MAX_CHARS = 7000
 
@@ -806,7 +805,7 @@ def _dedupe(base: str, exists) -> str:
 
 
 def compute_content_hash(markdown: str) -> str:
-    """SHA-256 of the pre-chunk converted body (#22)."""
+    """SHA-256 of the whole converted body (#22, #311)."""
     return hashlib.sha256(markdown.encode("utf-8")).hexdigest()
 
 
@@ -857,8 +856,9 @@ def _frontmatter(title: str, slug: str, project: str, tags: tuple[str, ...],
 
 def _slug_taken(target_dir: Path, s: str) -> bool:
     # Shape-independent probe: an earlier doc with the same slug may be a
-    # single file (<s>.md) or chunked (<s>-NN.md) — the new doc's own
-    # chunk count says nothing about what's already on disk.
+    # whole file (<s>.md) or a legacy multi-part series (<s>-NN.md from
+    # pre-#311 imports). New writes always land one file, but collision
+    # must still see either layout on disk.
     if (target_dir / f"{s}.md").exists():
         return True
     return any(target_dir.glob(f"{s}-[0-9][0-9].md"))
@@ -870,19 +870,21 @@ def resolve_write_target(
     docs_dir: Path,
     *,
     project: str | None = None,
-    chunk_max_chars: int = DEFAULT_CHUNK_MAX_CHARS,
-) -> tuple[str, str, Path, list[MarkdownChunk]]:
-    """Compute (proj, slug, target_dir, chunks) for a doc about to be
-    written under docs_dir. Shared by write_raw_doc and add_sources'
-    dry-run preview so the predicted path can never diverge from what a
-    real write lands (collision probe included) — see #16 final review.
+) -> tuple[str, str, Path]:
+    """Compute (proj, slug, target_dir) for a doc about to be written
+    under docs_dir. Shared by write_raw_doc and add_sources' dry-run
+    preview so the predicted path can never diverge from what a real
+    write lands (collision probe included) — see #16 final review.
+
+    ``markdown`` is unused for path resolution (kept so callers share
+    one signature with write_raw_doc); emptiness is checked at write.
 
     Raises AddError when an explicit --project slugifies to nothing
     usable (e.g. "../.." or "†"): falling back to the raw string would
     let a caller escape docs_dir or write a non-ASCII dirname the site
     can't route to (_SAFE_SEG_RE)."""
+    _ = markdown  # path identity is title/project only; body hashed separately
     base_slug = slugify(title) or "untitled"
-    chunks = chunk_markdown_by_sections(markdown, max_chars=chunk_max_chars)
 
     if project:
         proj = slugify(project)
@@ -895,7 +897,7 @@ def resolve_write_target(
         proj = slug
         target = docs_dir / proj
 
-    return proj, slug, target, chunks
+    return proj, slug, target
 
 
 def write_raw_doc(
@@ -906,13 +908,15 @@ def write_raw_doc(
     project: str | None = None,
     extra_tags: tuple[str, ...] = (),
     today: str | None = None,
-    chunk_max_chars: int = DEFAULT_CHUNK_MAX_CHARS,
     force_new: bool = False,
 ) -> list[Path]:
-    """Write one converted doc under raw/docs/<project>/, chunked by
-    section when large. Never overwrites (raw/ immutability): the doc
-    slug is suffixed -2, -3, … on collision. Identical converted bodies
-    are skipped unless ``force_new`` (#22). Returns written paths."""
+    """Write one converted doc as a single file under raw/docs/<project>/.
+
+    Never overwrites (raw/ immutability): the doc slug is suffixed -2,
+    -3, … on collision. Identical converted bodies are skipped unless
+    ``force_new`` (#22). Returns a one-element list of written paths
+    (list keeps the add_sources / rollback call sites stable).
+    """
     content_hash = compute_content_hash(doc.markdown)
     if not force_new:
         existing = find_existing_by_hash(docs_dir, content_hash)
@@ -923,31 +927,23 @@ def write_raw_doc(
                          html_title=doc.html_title, url=doc.url,
                          path_name=doc.path_name)
     day = today or date.today().isoformat()
-    proj, slug, target, chunks = resolve_write_target(
-        title, doc.markdown, docs_dir, project=project, chunk_max_chars=chunk_max_chars,
+    proj, slug, target = resolve_write_target(
+        title, doc.markdown, docs_dir, project=project,
     )
-    if not chunks:
+    body = doc.markdown.replace("\r\n", "\n")
+    if not body.strip():
         raise AddError(f"nothing to write for {doc.source_label} (empty document)")
-    multi = len(chunks) > 1
+    if not body.endswith("\n"):
+        body += "\n"
 
     target.mkdir(parents=True, exist_ok=True)
-    written: list[Path] = []
-    for c in chunks:
-        chunk_slug = f"{slug}-{c.index:02d}" if multi else slug
-        sub = c.heading if (c.heading and c.heading != title) else ""
-        if multi:
-            chunk_title = f"{title} (part {c.index}/{c.total}" + (f": {sub}" if sub else "") + ")"
-            breadcrumb = f"> Part {c.index} of {c.total} of **{title}**" + (f" — {sub}" if sub else "") + ".\n\n"
-        else:
-            chunk_title, breadcrumb = title, ""
-        fm = _frontmatter(chunk_title, chunk_slug, proj, extra_tags, day, doc.source_label,
-                          content_sha256=content_hash, extractor=doc.extractor)
-        path = target / f"{chunk_slug}.md"
-        if path.exists():  # belt-and-braces: raw/ is immutable
-            raise AddError(f"refusing to overwrite existing raw file {path}")
-        path.write_text(fm + breadcrumb + c.body, encoding="utf-8")
-        written.append(path)
-    return written
+    fm = _frontmatter(title, slug, proj, extra_tags, day, doc.source_label,
+                      content_sha256=content_hash, extractor=doc.extractor)
+    path = target / f"{slug}.md"
+    if path.exists():  # belt-and-braces: raw/ is immutable
+        raise AddError(f"refusing to overwrite existing raw file {path}")
+    path.write_text(fm + body, encoding="utf-8")
+    return [path]
 
 
 def add_sources(
@@ -1023,13 +1019,12 @@ def add_sources(
                     skipped.append({"source": src, "existing": existing})
                     continue
             if dry_run:
-                _proj, slug, target, chunks = resolve_write_target(
+                _proj, slug, target = resolve_write_target(
                     final_title, doc.markdown, docs_dir, project=project,
                 )
-                names = ([f"{slug}.md"] if len(chunks) <= 1
-                         else [f"{slug}-{c.index:02d}.md" for c in chunks])
-                warnings.append(f"{src}: dry-run — would write "
-                                f"{', '.join(str(target / n) for n in names)}")
+                warnings.append(
+                    f"{src}: dry-run — would write {target / f'{slug}.md'}"
+                )
                 titles.append(final_title)
                 continue
             paths = write_raw_doc(doc, docs_dir, explicit_title=title,

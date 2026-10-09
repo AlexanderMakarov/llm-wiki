@@ -7,12 +7,12 @@
 
 ---
 
-- [ ] **Slice 1: One raw file per new import (stop write-time chunking)**
+- [x] **Slice 1: One raw file per new import (stop write-time chunking)**
 
   > Long `add` writes a single complete raw Markdown file; hash/dedup stay whole-document.
-  - [ ] Change `write_raw_doc` / add path in `llmwiki/add_doc.py` so new imports always write one file (no `-NN` series, no part titles/breadcrumbs). Keep `compute_content_hash` / `find_existing_by_hash` whole-body semantics. Keep or relocate section splitter for later synth reuse. **[Agent: generalPurpose]**
-  - [ ] Update `tests/test_add_doc.py` (and related) for single-file long docs; keep a fixture or note for legacy multi-file layout used by later migrate tests. **[Agent: generalPurpose]**
-  - [ ] Verify: targeted pytest green; add a long fixture doc into `$TMP_VAULT` and confirm one raw path; delete ephemeral artifacts. **[Agent: generalPurpose]**
+  - [x] Change `write_raw_doc` / add path in `llmwiki/add_doc.py` so new imports always write one file (no `-NN` series, no part titles/breadcrumbs). Keep `compute_content_hash` / `find_existing_by_hash` whole-body semantics. Keep or relocate section splitter for later synth reuse. **[Agent: generalPurpose]**
+  - [x] Update `tests/test_add_doc.py` (and related) for single-file long docs; keep a fixture or note for legacy multi-file layout used by later migrate tests. **[Agent: generalPurpose]**
+  - [x] Verify: targeted pytest green; add a long fixture doc into `$TMP_VAULT` and confirm one raw path; delete ephemeral artifacts. **[Agent: generalPurpose]**
 
 - [ ] **Slice 2: Backend usable-body budget API (no silent truncate as coverage)**
 
