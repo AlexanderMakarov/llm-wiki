@@ -134,6 +134,9 @@ def synthesize_estimate_report(
     * ``synthesized`` — eligible sources the next non-force ``synth`` would
       skip (same state+mtime+pending predicate as the run; #163)
     * ``new`` — ``corpus - synthesized``
+    * ``new_doc_calls`` — backend calls the pending documents take (each
+      document is ONE job in ``new_docs`` / ``unsynth_items``; its chunks, in
+      ``unsynth_items[*].chunks``, are internal calls)
     * ``incremental_usd`` — dollars to synthesize the ``new`` bucket
     * ``full_force_usd`` — dollars to re-synthesize the **whole** corpus
       with ``--force`` (N x the per-page cost)
@@ -170,6 +173,7 @@ def synthesize_estimate_report(
         raw_source_key,
         scan_wiki_sources_disk,
         source_page_paths,
+        source_pages_for_backlog,
         source_synth_is_done,
         synth_page_filename,
     )
@@ -307,6 +311,7 @@ def synthesize_estimate_report(
     new_sessions = 0
     synthed_docs = 0
     new_docs = 0
+    new_doc_calls = 0
     incremental_usd = 0.0
     full_force_usd = 0.0
     unsynth_items: list[dict[str, Any]] = []
@@ -473,7 +478,7 @@ def synthesize_estimate_report(
         out_dir = sources_root / project
         # Pages this doc owns come from disk, exactly as the synth run resolves them.
         # A doc with no pages yet has nothing to probe and stays pending.
-        expected = source_page_paths(out_dir, filename, is_doc=True)
+        expected = source_pages_for_backlog(out_dir, filename, is_doc=True)
         page_is_pending = (
             source_key in stub_source_keys
             or any(page_is_stub(ep) for ep in expected)
@@ -500,6 +505,7 @@ def synthesize_estimate_report(
             docs_row["synthesized"] += 1
         else:
             new_docs += 1
+            new_doc_calls += len(chunks)
             inc_cost = sum(_inc_usd(t) for t in chunk_tokens)
             incremental_usd += inc_cost
             docs_row["pending"] += 1
@@ -519,6 +525,8 @@ def synthesize_estimate_report(
                     "mtime": mtime_iso,
                     "is_doc": True,
                     "agent": "Documents",
+                    # One document job; N internal backend calls (#311).
+                    "chunks": len(chunks),
                     "usd": round(inc_cost, 6),
                 }
             )
@@ -606,6 +614,9 @@ def synthesize_estimate_report(
         "new": new_sessions + new_docs,
         "new_sessions": new_sessions,
         "new_docs": new_docs,
+        # Backend calls the pending docs take: one document job each, N chunks
+        # inside (#311) — equal to the calls a real run makes at this budget.
+        "new_doc_calls": new_doc_calls,
         "incremental_usd": incremental_usd,
         "full_force_usd": full_force_usd,
         "prefix_tokens": prefix_tokens,

@@ -32,9 +32,14 @@ from llmwiki import __version__
 from llmwiki._frontmatter import parse_frontmatter
 from llmwiki.claude_path import resolve_claude_path as _resolve_claude_path
 from llmwiki.convert import _resolve_convert_config, _substitute_path_username
+from llmwiki.doc_chunking import (  # noqa: F401 — re-exported; the splitter moved to doc_chunking (#311)
+    DEFAULT_CHUNK_MAX_CHARS,
+    MarkdownChunk,
+    chunk_markdown_by_sections,
+)
 from llmwiki.htmlmd import html_to_markdown
 from llmwiki.install_hint import install_hint, python_module_command
-from llmwiki.slugs import derive_title, first_heading, slugify
+from llmwiki.slugs import derive_title, slugify
 from llmwiki.synth.pipeline import _normalise_slug
 
 __all__ = [
@@ -196,118 +201,10 @@ def guarded_fetch(url: str, headers: dict[str, str], timeout: int = 30) -> Fetch
     raise AddError(f"too many redirects fetching {url}")
 
 
-# ── section chunking (port of kbbuilder chunkMarkdownBySections) ─────
-# Kept for synthesizer reuse (#311): long docs are stored whole and may
-# be split in memory at synth time against the active backend's usable
-# body budget. 7000 is the historical soft default (agent-delegate
-# raw_body[:8000] headroom). The cap is soft: splits happen at heading,
-# then paragraph boundaries; a hard slice only ever hits a single
-# paragraph longer than the whole budget. New imports do NOT write
-# ``-NN`` part files — see write_raw_doc.
-
-DEFAULT_CHUNK_MAX_CHARS = 7000
-
-_FENCE_RE = _re.compile(r"^\s*(`{3,}|~{3,})")
-
-
-@dataclass
-class MarkdownChunk:
-    index: int          # 1-based position within the document
-    total: int
-    heading: str        # first heading inside the chunk ('' if none)
-    body: str           # verbatim slice, newline-terminated
-
-
-def _first_heading_line(body: str) -> str:
-    """A chunk's heading, which becomes the ``(part N/M: <sub>)`` suffix of
-    the page title — so it goes through the same markup-stripping the
-    document heading does."""
-    return first_heading(body)
-
-
-def _split_sections(text: str, levels: tuple[int, ...]) -> list[str]:
-    lines = text.split("\n")
-    sections: list[str] = []
-    buf: list[str] = []
-    fence = None
-    for line in lines:
-        m = _FENCE_RE.match(line)
-        if m:
-            marker = m.group(1)[0]
-            fence = marker if fence is None else (None if fence == marker else fence)
-        h = _re.match(r"^(#{1,6})\s", line)
-        if fence is None and h and len(h.group(1)) in levels and buf:
-            sections.append("\n".join(buf) + "\n")
-            buf = []
-        buf.append(line)
-    if buf:
-        sections.append("\n".join(buf) + "\n")
-    return sections
-
-
-def _split_oversized(section: str, max_chars: int) -> list[str]:
-    paras = _re.split(r"\n{2,}", section)
-    out: list[str] = []
-    cur = ""
-
-    def flush() -> None:
-        nonlocal cur
-        if cur.strip():
-            out.append(cur.rstrip("\n") + "\n")
-        cur = ""
-
-    for p in paras:
-        if len(p) > max_chars:
-            flush()
-            for i in range(0, len(p), max_chars):
-                piece = p[i:i + max_chars].strip()
-                if piece:
-                    out.append(piece + "\n")
-            continue
-        if cur and len(cur) + len(p) + 2 > max_chars:
-            flush()
-        cur += ("\n\n" if cur else "") + p
-    flush()
-    return out
-
-
-def chunk_markdown_by_sections(
-    markdown: str,
-    max_chars: int = DEFAULT_CHUNK_MAX_CHARS,
-    heading_levels: tuple[int, ...] = (1, 2),
-) -> list[MarkdownChunk]:
-    """Split a Markdown document into section-aligned chunks ≤ max_chars.
-    Sections pack greedily; an oversized section splits on blank-line
-    paragraph boundaries, hard-slicing only as a last resort. Heading
-    detection is fence-aware. A document within budget returns whole."""
-    text = markdown.replace("\r\n", "\n")
-    sections = _split_sections(text, heading_levels)
-    bodies: list[str] = []
-    cur = ""
-
-    def flush() -> None:
-        nonlocal cur
-        if cur.strip():
-            bodies.append(cur.rstrip("\n") + "\n")
-        cur = ""
-
-    for sec in sections:
-        if len(sec) > max_chars:
-            flush()
-            bodies.extend(_split_oversized(sec, max_chars))
-            continue
-        if cur and len(cur) + len(sec) > max_chars:
-            flush()
-        cur += sec
-    flush()
-
-    if not bodies:
-        body = text.strip()
-        if not body:
-            return []
-        return [MarkdownChunk(1, 1, _first_heading_line(body), body + "\n")]
-    total = len(bodies)
-    return [MarkdownChunk(i + 1, total, _first_heading_line(b), b) for i, b in enumerate(bodies)]
+# ── section chunking (#311) ──────────────────────────────────────────
+# New imports are stored whole (see write_raw_doc); the section splitter lives
+# in llmwiki.doc_chunking so synth and estimate share one chunker (re-exported
+# at the top of this module for existing importers).
 
 
 # ── local file / folder conversion ───────────────────────────────────

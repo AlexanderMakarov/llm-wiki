@@ -97,21 +97,19 @@ def test_wiki_add_url_provenance_is_exact_url(tmp_path: Path, monkeypatch):
     assert "piped" not in meta["source"]
 
 
-# ── AC5+AC6: Long MCP content → multiple chunks, all with piped provenance ────
+# ── AC5+AC6: Long MCP content → ONE whole raw file with piped provenance (#311) ──
 
-def test_wiki_add_long_content_produces_multiple_chunks_all_piped(tmp_path: Path, monkeypatch):
-    """Long MCP content splits into multiple raw files via CLI add logic only.
+def test_wiki_add_long_content_is_one_whole_file_with_piped_provenance(tmp_path: Path, monkeypatch):
+    """Long MCP content lands as a single complete raw file via CLI add logic only.
 
-    Functional-spec §2 AC:
-      "Given a source longer than the usual chunk size (~7,000 chars), when Add
-       runs (CLI or MCP proxy), then multiple raw pieces come from CLI add logic only."
-      "MCP does not implement a separate splitter."
-      Each piece must carry ``source: piped``.
+    #311: documents are stored whole; length no longer splits them into raw
+    pieces (synth chunks in memory instead). MCP does not implement a separate
+    splitter, and the file carries ``source: piped``.
     """
     vault = _vault(tmp_path)
     monkeypatch.setattr(pipe, "build_site", _noop_build)
 
-    # Build a body that will definitely exceed 7,000 chars across multiple sections.
+    # Body well over the historical ~7,000-char split threshold.
     sections = "".join(
         f"## Section {i}\n\n" + ("word " * 500) + "\n\n"
         for i in range(1, 6)
@@ -128,19 +126,14 @@ def test_wiki_add_long_content_produces_multiple_chunks_all_piped(tmp_path: Path
     payload = _result_json(result)
     written = payload["written"]
 
-    # Must produce more than one chunk.
-    assert len(written) > 1, (
-        f"Expected multiple chunks for ~15k-char document, got {len(written)}: {written}"
-    )
+    assert len(written) == 1, f"Expected one whole raw file, got {len(written)}: {written}"
 
-    # Every chunk must carry ``source: piped``.
-    for rel in written:
-        text = (vault / rel).read_text(encoding="utf-8")
-        meta, _ = parse_frontmatter(text)
-        assert meta.get("source") == "piped", (
-            f"Chunk {rel!r} has source={meta.get('source')!r}, expected 'piped'"
-        )
-        assert "/tmp/" not in text
+    text = (vault / written[0]).read_text(encoding="utf-8")
+    meta, body = parse_frontmatter(text)
+    assert meta.get("source") == "piped", f"source={meta.get('source')!r}, expected 'piped'"
+    assert "/tmp/" not in text
+    # Whole document: the last section is in the single file.
+    assert "## Section 5" in body
 
 
 # ── AC1 parity: MCP content ↔ CLI add – same default behavior ─────────────────

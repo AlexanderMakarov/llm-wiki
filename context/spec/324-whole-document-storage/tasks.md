@@ -21,13 +21,13 @@
   - [x] Unit tests: budget returns finite positive values for capped backends; Dummy large enough for multi-section fixtures. **[Agent: generalPurpose]**
   - [x] Verify: targeted pytest green; delete ephemeral artifacts. **[Agent: generalPurpose]**
 
-- [ ] **Slice 3: Synth in-memory chunk + stitch → one wiki source page + atomic failure**
+- [x] **Slice 3: Synth in-memory chunk + stitch → one wiki source page + atomic failure**
 
   > One document job; N backend calls; one canonical page; mid-chunk failure fails the whole doc.
-  - [ ] In `llmwiki/synth/pipeline.py`: for docs, chunk in memory to backend budget; call backend per chunk; stitch (Summary concat; Claims/Quotes exact-dedupe union; Connections union by target; tag curation + union); write **one** wiki page only after all chunks succeed. On any chunk failure: no complete-looking canonical write; state not done; do not overwrite curated pages. Do not auto-delete legacy `--part-*`. Keep legacy discovery helpers for pre-migrate vaults. **[Agent: generalPurpose]**
-  - [ ] Update estimate/pending/done predicates and progress so internal chunks are one document job. **[Agent: generalPurpose]**
-  - [ ] Tests: long doc on capped mock → N calls, one page, full coverage; fail on chunk 2 → pending, no complete page, curated preserved; sessions still single-call. Update `test_synth_raw_docs.py` / estimate / stub backlog as needed. **[Agent: generalPurpose]**
-  - [ ] Verify: targeted pytest green; optional synth on `$TMP_VAULT` with Dummy; delete ephemeral artifacts. **[Agent: generalPurpose]**
+  - [x] In `llmwiki/synth/pipeline.py`: for docs, chunk in memory to backend budget; call backend per chunk; stitch (Summary concat; Claims/Quotes exact-dedupe union; Connections union by target; tag curation + union); write **one** wiki page only after all chunks succeed. On any chunk failure: no complete-looking canonical write; state not done; do not overwrite curated pages. Do not auto-delete legacy `--part-*`. Keep legacy discovery helpers for pre-migrate vaults. **[Agent: generalPurpose]**
+  - [x] Update estimate/pending/done predicates and progress so internal chunks are one document job. **[Agent: generalPurpose]**
+  - [x] Tests: long doc on capped mock → N calls, one page, full coverage; fail on chunk 2 → pending, no complete page, curated preserved; sessions still single-call. Update `test_synth_raw_docs.py` / estimate / stub backlog as needed. **[Agent: generalPurpose]**
+  - [x] Verify: targeted pytest green; optional synth on `$TMP_VAULT` with Dummy; delete ephemeral artifacts. **[Agent: generalPurpose]**
 
 - [ ] **Slice 4: Offline migrate `whole-document-storage`**
 
