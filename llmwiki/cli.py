@@ -34,6 +34,7 @@ from llmwiki import (
     migrate_page_kinds,
     migrate_source_page_paths,
     migrate_topic_kinds,
+    migrate_whole_document_storage,
     migrate_wikilink_titles,
     usage,
 )
@@ -1657,6 +1658,11 @@ _MIGRATIONS: tuple[tuple[str, str, str], ...] = (
         "Fill the blank source_file of wiki/sources pages synthesised from raw/docs with the raw/docs/<path> synth derives for them today, and drop the session-transcript tag from document pages (adding raw-doc when no document tag is left).",
         "Run once after upgrading past the release where synth started stamping document pages with their raw/docs claim, if older document pages still have an empty source_file or are tagged session-transcript. Pages that claim raw/sessions/ are never touched, a page two raw docs derive to is reported and left alone. Reads only existing wiki pages and raw frontmatter — no LLM call, and raw/ is never written.",
     ),
+    (
+        "whole-document-storage",
+        "Merge each document an older release stored in pieces (raw/docs/<project>/<slug>-01.md … -NN.md and one wiki source page per piece) into one raw file (<slug>.md, same content_sha256) and one wiki source page: the pieces' summaries are stitched by the same fixed rules synth uses and their tags are unioned, the old part names become ## Aliases of the merged page and every [[link]] / sources: entry follows, and synth state collapses to the one whole-document key. The old raw pieces and part pages move to .llmwiki-whole-doc-recovery/<UTC>/ (MANIFEST.json lists every move); a different-hash whole file is never overwritten.",
+        "Run once after upgrading to the release where documents are stored whole, when Ctrl+K Wiki still lists several part rows for one document or raw/docs still holds -01/-02 pieces. Run with --dry-run first: it lists the clear groups it would merge and every ambiguous group (a gap in the parts, a hash conflict, a whole file that is not the same document, partly summarised pieces, a page claiming another raw file). Apply refuses to run — exits non-zero and changes nothing — while any ambiguous group remains. Offline: no LLM call and no mass re-synthesis; safe to re-run (a clean second run is a no-op, an interrupted run resumes).",
+    ),
 )
 
 
@@ -1902,6 +1908,22 @@ def cmd_migrate_doc_source_provenance(args: argparse.Namespace) -> int:
     )
     migrate_doc_source_provenance.print_report(report)
     return 1 if report["errors"] else 0
+
+
+def cmd_migrate_whole_document_storage(args: argparse.Namespace) -> int:
+    """Merge legacy multi-piece documents into one raw file + one wiki page (#311).
+
+    Offline — no synthesis backend or network call. ``--dry-run`` previews the
+    clear and ambiguous groups; apply exits non-zero and changes nothing while
+    any ambiguous group remains. Old pieces move to
+    ``.llmwiki-whole-doc-recovery/<UTC>/`` rather than being deleted.
+    """
+    report = migrate_whole_document_storage.run_migration(
+        vault=Path(args.vault),
+        dry_run=bool(getattr(args, "dry_run", False)),
+    )
+    migrate_whole_document_storage.print_report(report)
+    return 1 if report["errors"] or report["blocked"] else 0
 
 
 def _resolve_synthesize_only_paths(paths: list[str], vault_root: Path) -> set[Path]:
@@ -3496,6 +3518,23 @@ def build_parser() -> argparse.ArgumentParser:
         help="Report would-change pages; write nothing",
     )
     migrate_doc_prov.set_defaults(func=cmd_migrate_doc_source_provenance)
+
+    migrate_whole_doc = add_migration(
+        "whole-document-storage", *_mig_by_name["whole-document-storage"],
+        short="Merge documents stored in -NN pieces into one raw file and one wiki page",
+    )
+    migrate_whole_doc.add_argument(
+        "--vault",
+        type=Path,
+        required=True,
+        help="Vault root containing raw/docs/ and wiki/",
+    )
+    migrate_whole_doc.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Preview clear and ambiguous groups; write nothing (apply is blocked while any group is ambiguous)",
+    )
+    migrate_whole_doc.set_defaults(func=cmd_migrate_whole_document_storage)
 
     kit = add_command(
         "install-agent-kit",

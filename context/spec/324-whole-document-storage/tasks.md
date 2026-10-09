@@ -29,12 +29,12 @@
   - [x] Tests: long doc on capped mock → N calls, one page, full coverage; fail on chunk 2 → pending, no complete page, curated preserved; sessions still single-call. Update `test_synth_raw_docs.py` / estimate / stub backlog as needed. **[Agent: generalPurpose]**
   - [x] Verify: targeted pytest green; optional synth on `$TMP_VAULT` with Dummy; delete ephemeral artifacts. **[Agent: generalPurpose]**
 
-- [ ] **Slice 4: Offline migrate `whole-document-storage`**
+- [x] **Slice 4: Offline migrate `whole-document-storage`**
 
   > Preview; block apply on ambiguous groups; merge raw + wiki offline; recovery dir; idempotent.
-  - [ ] Implement `llmwiki/migrate_whole_document_storage.py` + register in `cli.py` `_MIGRATIONS`. Group via #305 base-slug + agreeing hash + wiki part paths; ambiguous → report; apply exits non-zero with no vault changes. Raw: write whole file; relocate `-NN` to `.llmwiki-whole-doc-recovery/<UTC>/…`. Wiki: same stitch + tag union; stubs/redirects; rewrite links/index/state; `refresh_synth_pending`. No LLM. **[Agent: generalPurpose]**
-  - [ ] Tests: preview lists groups; apply blocked on ambiguous; happy-path merge + recovery + idempotent re-run; Wiki corpus / findability one row per logical doc after migrate. **[Agent: generalPurpose]**
-  - [ ] Verify: targeted pytest green; migrate dry-run on a scratch multi-part vault; delete ephemeral artifacts. **[Agent: generalPurpose]**
+  - [x] Implement `llmwiki/migrate_whole_document_storage.py` + register in `cli.py` `_MIGRATIONS`. Group via #305 base-slug + agreeing hash + wiki part paths; ambiguous → report; apply exits non-zero with no vault changes. Raw: write whole file; relocate `-NN` to `.llmwiki-whole-doc-recovery/<UTC>/…`. Wiki: same stitch + tag union; stubs/redirects; rewrite links/index/state; `refresh_synth_pending`. No LLM. **[Agent: generalPurpose]**
+  - [x] Tests: preview lists groups; apply blocked on ambiguous; happy-path merge + recovery + idempotent re-run; Wiki corpus / findability one row per logical doc after migrate. **[Agent: generalPurpose]**
+  - [x] Verify: targeted pytest green; migrate dry-run on a scratch multi-part vault; delete ephemeral artifacts. **[Agent: generalPurpose]**
 
 - [ ] **Slice 5: Docs + CHANGELOG + UPGRADING**
 
