@@ -128,9 +128,20 @@ def test_acceptance_work_for_today_and_queue_eligibility_pipeline(loop_mod):
     assert picked["number"] == 60
 
 
+def _tab_list_herdr(tabs: list[dict]):
+    """Fake herdr answering only ``tab list`` (dry-run reads nothing else)."""
+
+    def fake_run_herdr(argv: list[str]) -> subprocess.CompletedProcess[str]:
+        assert argv[1:3] == ["tab", "list"], argv
+        body = json.dumps({"result": {"tabs": tabs, "type": "tab_list"}})
+        return subprocess.CompletedProcess(argv, 0, body, "")
+
+    return fake_run_herdr
+
+
 # @regression
 def test_acceptance_dry_run_pipeline_fake_run_gh(loop_mod):
-    """§2.3 / §2.9: startup summary + next pick without herdr (full gh stub path)."""
+    """§2.3 / §2.9: startup summary + next pick without spawning herdr (full gh stub path)."""
     issues = [
         _issue(8, title="Next eligible", labels=[CUSTOM_LABEL], assignees=[LOGIN]),
         _issue(5, title="Blocked important", labels=[CUSTOM_LABEL, "important"], assignees=[LOGIN]),
@@ -141,13 +152,97 @@ def test_acceptance_dry_run_pipeline_fake_run_gh(loop_mod):
         issues=issues,
         blocked_by_map={5: [{"number": 1, "state": "OPEN"}]},
     )
-    lines = loop_mod.run_dry_run(CUSTOM_LABEL, "org/wik", run_gh=fake_run_gh)
-    text = "\n".join(lines)
-    assert "repo: org/wik" in text
-    assert f"2 with {CUSTOM_LABEL!r} label, 2 is assigned on {LOGIN!r}" in text
-    assert "planned (1):" in text  # #5 blocked
-    assert "  1. #8 Next eligible" in text
-    assert "next: #8 Next eligible" in text
+    lines = loop_mod.run_dry_run(
+        CUSTOM_LABEL, "org/wik", run_gh=fake_run_gh, run_herdr=_tab_list_herdr([])
+    )
+    assert lines == [
+        "repo: org/wik",
+        f"2 with {CUSTOM_LABEL!r} label, 2 is assigned on {LOGIN!r}",
+        "planned (1):",  # #5 blocked
+        "  1. #8 Next eligible https://example/o/r/issues/8",
+        "next: #8 Next eligible https://example/o/r/issues/8",
+    ]
+
+
+# @regression
+@pytest.mark.parametrize(
+    ("tabs", "expected_warning"),
+    [
+        ([{"label": "issue-311", "tab_id": "wD:t311"}], None),
+        (
+            [
+                {"label": "issue-311", "tab_id": "wD:t311", "number": 30},
+                {"label": "issue-256", "tab_id": "wD:t256", "number": 31},
+            ],
+            "resuming #311 first (oldest tab); the others (#256) wait their turn",
+        ),
+    ],
+    ids=["single-tab", "oldest-tab-beats-queue-order"],
+)
+def test_acceptance_run_main_loop_resumes_in_progress_before_queue_head(
+    loop_mod, monkeypatch, capsys, tabs, expected_warning
+):
+    """§2.5: an open ``issue-N`` tab of an eligible issue is resumed before the queue head.
+
+    Queue order is [#256, #311]; #311 already has a restored tab (the oldest
+    one when #256 also has a tab), so the driver adopts it (no tab create /
+    agent start / prompt) instead of spawning #256 in parallel.
+    """
+    issues = [
+        _issue(311, title="In flight", labels=[CUSTOM_LABEL], assignees=[LOGIN]),
+        _issue(256, title="Queue head", labels=[CUSTOM_LABEL], assignees=[LOGIN]),
+    ]
+    fake_run_gh = _fake_gh_factory(login=LOGIN, repo="o/r", issues=issues)
+    herdr_ops: list[list[str]] = []
+
+    def fake_run_herdr(argv: list[str]) -> subprocess.CompletedProcess[str]:
+        herdr_ops.append(argv[1:])
+        if argv[1:3] == ["tab", "list"]:
+            body = json.dumps({"result": {"tabs": tabs, "type": "tab_list"}})
+        elif argv[1:3] == ["pane", "list"]:
+            panes = [{"pane_id": "wD:p311", "tab_id": "wD:t311", "agent": "claude"}]
+            body = json.dumps({"result": {"panes": panes, "type": "pane_list"}})
+        elif argv[1:3] == ["tab", "close"]:
+            body = json.dumps({"result": {"type": "ok"}})
+        else:
+            raise AssertionError(f"unexpected herdr argv: {argv}")
+        return subprocess.CompletedProcess(argv, 0, body, "")
+
+    waited_on: list[tuple[int, str]] = []
+
+    def fake_wait(_repo, worker, *_args, **_kwargs) -> str:
+        waited_on.append((worker.issue_number, worker.pane_id))
+        return loop_mod.ADVANCE_REASON_MERGED
+
+    monkeypatch.setattr(loop_mod, "wait_until_ticket_advanced", fake_wait)
+
+    code = loop_mod.run_main_loop(
+        CUSTOM_LABEL,
+        "o/r",
+        "claude",
+        300,
+        once=True,
+        run_gh=fake_run_gh,
+        run_herdr=fake_run_herdr,
+        sleep_fn=lambda _s: None,
+        repo_root=REPO,
+    )
+    captured = capsys.readouterr()
+    assert code == 0
+    assert waited_on == [(311, "wD:p311")]
+    assert herdr_ops == [
+        ["tab", "list"],  # one list per cycle: sweep + selection
+        ["tab", "list"],  # adopt_existing_worker
+        ["pane", "list"],
+        ["tab", "close", "wD:t311"],
+        ["tab", "list"],  # close_worker_tab leftover sweep
+    ]
+    assert "issue-311 herdr tab adopted (wD:t311" in captured.out
+    assert "#256" not in captured.out
+    if expected_warning is None:
+        assert "WARNING" not in captured.err
+    else:
+        assert expected_warning in captured.err
 
 
 # @regression

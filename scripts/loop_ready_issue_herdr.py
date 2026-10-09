@@ -25,7 +25,7 @@ import re
 import subprocess
 import sys
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -192,6 +192,78 @@ def pick_next(
     """Next eligible issue in sort order, or ``None``."""
     planned = planned_queue(candidates, blocked_by_map)
     return planned[0] if planned else None
+
+
+# Issue number -> (tab number, tab_id) of its open ``issue-N`` tab; lower sorts older.
+OpenTabs = dict[int, tuple[int, str]]
+
+_NO_TAB_NUMBER = sys.maxsize
+
+
+def open_tabs_by_issue(
+    issue_tabs: list[tuple[str, int, int]],
+    closed: set[str] | None = None,
+) -> OpenTabs:
+    """Map issue number to its oldest open tab key, skipping tab ids in ``closed``."""
+    found: OpenTabs = {}
+    for tab_id, number, tab_number in issue_tabs:
+        if closed and tab_id in closed:
+            continue
+        key = (tab_number, tab_id)
+        if number not in found or key < found[number]:
+            found[number] = key
+    return found
+
+
+def pick_next_resume_first(
+    planned: list[Issue],
+    open_tabs: OpenTabs,
+) -> tuple[Issue | None, list[Issue]]:
+    """Choose the next ticket, resuming an in-progress one before starting new work.
+
+    In-progress means a planned issue with an open ``issue-N`` tab. Returns
+    ``(choice, in_progress)``: ``in_progress`` is ordered oldest tab first
+    (herdr tab ``number`` = position in the tab bar, new tabs append; ties by
+    ``tab_id``; drag tabs to reprioritize), and ``choice`` is its first entry,
+    else the head of the queue. Several in-progress issues print a WARNING; the
+    others wait their turn and are adopted later with no new prompt.
+    """
+    in_progress = sorted(
+        (i for i in planned if _issue_number(i) in open_tabs),
+        key=lambda i: open_tabs[_issue_number(i)],
+    )
+    if len(in_progress) > 1:
+        others = ", ".join(f"#{_issue_number(i)}" for i in in_progress[1:])
+        print(
+            f"WARNING: {len(in_progress)} eligible issues have an open issue-N tab; "
+            f"resuming #{_issue_number(in_progress[0])} first (oldest tab); the others "
+            f"({others}) wait their turn and are adopted later with no new prompt.",
+            file=sys.stderr,
+        )
+    if in_progress:
+        return in_progress[0], in_progress
+    return (planned[0] if planned else None), in_progress
+
+
+def warn_ineligible_open_tabs(
+    planned: list[Issue],
+    open_tabs: Collection[int],
+    warned: set[int],
+) -> None:
+    """WARN once per issue number about an ``issue-N`` tab outside the eligible queue.
+
+    Such a tab (label or assignee removed, newly blocked) does not hold the
+    queue; ``warned`` carries the numbers already reported this driver run.
+    """
+    planned_numbers = {_issue_number(i) for i in planned}
+    for number in sorted(set(open_tabs) - planned_numbers - warned):
+        print(
+            f"WARNING: issue-{number} tab open but #{number} is not in the eligible "
+            "queue (closed, unlabeled, unassigned, or blocked); close the tab or "
+            "restore label/assignee.",
+            file=sys.stderr,
+        )
+        warned.add(number)
 
 
 def advance_ready(merge_info: MergeInfo, check_runs: list[CheckRun]) -> bool:
@@ -682,12 +754,13 @@ def format_worker_opened_line(
     )
 
 
-def format_planned_issue_line(issue: Issue, *, index: int) -> str:
+def format_planned_issue_line(issue: Issue, *, index: int, in_progress: bool = False) -> str:
     """One numbered planned-queue line for dry-run / startup."""
     number = _issue_number(issue)
     title = str(issue.get("title") or "")
     url = str(issue.get("url") or "")
-    return f"  {index}. #{number} {title} {url}".rstrip()
+    marker = " (in progress, tab open)" if in_progress else ""
+    return f"  {index}. #{number} {title} {url}".rstrip() + marker
 
 
 def format_dry_run_lines(
@@ -698,19 +771,36 @@ def format_dry_run_lines(
     open_with_label: int,
     assigned_to_me: int,
     planned: list[Issue],
+    in_progress: list[Issue] | None = None,
+    herdr_unavailable: str | None = None,
 ) -> list[str]:
+    """Dry-run summary: counts, planned queue (in-progress tickets first), ``next:``.
+
+    ``in_progress`` lists planned issues with an open ``issue-N`` tab, oldest
+    tab first. ``herdr_unavailable`` (a short reason) prints one ``in-progress:
+    unknown`` line; the queue then stays in plain driver order.
+    """
+    in_progress = in_progress or []
     lines = [
         f"repo: {repo}",
         format_queue_counts_line(open_with_label, assigned_to_me, label, login),
     ]
+    if herdr_unavailable is not None:
+        lines.append(f"in-progress: unknown (herdr unavailable: {herdr_unavailable})")
     if not planned:
         lines.append("planned: none")
         lines.append("next: none")
         return lines
-    lines.append(f"planned ({len(planned)}):")
-    for idx, issue in enumerate(planned, start=1):
-        lines.append(format_planned_issue_line(issue, index=idx))
-    next_issue = planned[0]
+    resumed = {_issue_number(i) for i in in_progress}
+    ordered = in_progress + [i for i in planned if _issue_number(i) not in resumed]
+    lines.append(f"planned ({len(ordered)}):")
+    for idx, issue in enumerate(ordered, start=1):
+        lines.append(
+            format_planned_issue_line(
+                issue, index=idx, in_progress=_issue_number(issue) in resumed
+            )
+        )
+    next_issue = ordered[0]
     number = _issue_number(next_issue)
     title = str(next_issue.get("title") or "")
     url = str(next_issue.get("url") or "")
@@ -933,13 +1023,21 @@ def list_tabs_with_label(
     ]
 
 
-def list_issue_tabs(run_herdr: RunHerdr = default_run_herdr) -> list[tuple[str, int]]:
-    """Return ``(tab_id, N)`` for every herdr tab labeled exactly ``issue-N``."""
-    found: list[tuple[str, int]] = []
+def list_issue_tabs(
+    run_herdr: RunHerdr = default_run_herdr,
+) -> list[tuple[str, int, int]]:
+    """Return ``(tab_id, N, tab_number)`` for every herdr tab labeled exactly ``issue-N``.
+
+    ``tab_number`` is herdr's tab ``number`` (tab bar position, lower = started
+    earlier); a tab without one sorts last.
+    """
+    found: list[tuple[str, int, int]] = []
     for tab in _list_tab_records(run_herdr):
         match = _ISSUE_TAB_LABEL_RE.match(str(tab.get("label") or ""))
         if match:
-            found.append((str(tab["tab_id"]), int(match.group(1))))
+            raw_number = tab.get("number")
+            tab_number = raw_number if isinstance(raw_number, int) else _NO_TAB_NUMBER
+            found.append((str(tab["tab_id"]), int(match.group(1)), tab_number))
     return found
 
 
@@ -991,32 +1089,45 @@ def close_worker_tab(
             )
 
 
+def list_issue_tabs_or_warn(
+    run_herdr: RunHerdr = default_run_herdr,
+) -> list[tuple[str, int, int]] | None:
+    """``list_issue_tabs``, or ``None`` after a WARNING when herdr fails to list tabs."""
+    try:
+        return list_issue_tabs(run_herdr)
+    except RuntimeError as exc:
+        print(f"WARNING: closed-issue tab sweep skipped: {exc}", file=sys.stderr)
+        return None
+
+
 def close_tabs_for_closed_issues(
     repo: str,
     run_gh: RunGh = default_run_gh,
     run_herdr: RunHerdr = default_run_herdr,
+    *,
+    issue_tabs: list[tuple[str, int, int]] | None = None,
 ) -> list[str]:
     """Close every ``issue-N`` herdr tab whose GitHub issue is CLOSED; return closed tab ids.
 
-    Best-effort: a herdr list, GraphQL, or single-close failure prints a
-    WARNING and is skipped. A tab whose issue GitHub does not return is left
-    alone.
+    ``issue_tabs`` reuses a ``list_issue_tabs`` result from this queue cycle;
+    when omitted the sweep lists tabs itself. Best-effort: a herdr list,
+    GraphQL, or single-close failure prints a WARNING and is skipped. A tab
+    whose issue GitHub does not return is left alone.
     """
-    try:
-        issue_tabs = list_issue_tabs(run_herdr)
-    except RuntimeError as exc:
-        print(f"WARNING: closed-issue tab sweep skipped: {exc}", file=sys.stderr)
-        return []
+    if issue_tabs is None:
+        issue_tabs = list_issue_tabs_or_warn(run_herdr)
+        if issue_tabs is None:
+            return []
     if not issue_tabs:
         return []
-    numbers = sorted({number for _, number in issue_tabs})
+    numbers = sorted({number for _, number, _ in issue_tabs})
     try:
         states = fetch_issue_states(repo, numbers, run_gh)
     except RuntimeError as exc:
         print(f"WARNING: closed-issue tab sweep skipped: {exc}", file=sys.stderr)
         return []
     closed: list[str] = []
-    for tab_id, number in issue_tabs:
+    for tab_id, number, _ in issue_tabs:
         if states.get(number) != "CLOSED":
             continue
         try:
@@ -1188,8 +1299,11 @@ def run_main_loop(
 ) -> int:
     """Startup summary, then serial spawn → wait → advance until ``once`` or Ctrl+C.
 
-    Each queue cycle (the first one is startup) first closes ``issue-N`` tabs
-    whose issue is already CLOSED on GitHub.
+    Each queue cycle (the first one is startup) lists herdr ``issue-N`` tabs
+    once, closes those whose issue is already CLOSED on GitHub, then resumes an
+    eligible issue that still has an open tab before starting new work (at most
+    one ticket at a time). If the tab list fails, selection falls back to queue
+    order and ``adopt_existing_worker`` still refuses to spawn a duplicate.
     """
     login = fetch_viewer_login(run_gh)
     resolved_repo = resolve_repo(repo, run_gh)
@@ -1213,11 +1327,22 @@ def run_main_loop(
         ),
     )
 
+    warned_ineligible: set[int] = set()
     try:
         while True:
-            close_tabs_for_closed_issues(resolved_repo, run_gh, run_herdr)
+            issue_tabs = list_issue_tabs_or_warn(run_herdr)
+            open_tabs: OpenTabs = {}
+            if issue_tabs is not None:
+                closed = set(
+                    close_tabs_for_closed_issues(
+                        resolved_repo, run_gh, run_herdr, issue_tabs=issue_tabs
+                    )
+                )
+                open_tabs = open_tabs_by_issue(issue_tabs, closed)
             _, candidates, blocked_by_map = queue_snapshot()
-            next_issue = pick_next(candidates, blocked_by_map)
+            planned = planned_queue(candidates, blocked_by_map)
+            warn_ineligible_open_tabs(planned, open_tabs, warned_ineligible)
+            next_issue, _ = pick_next_resume_first(planned, open_tabs)
             if next_issue is None:
                 if once:
                     print(
@@ -1273,12 +1398,27 @@ def run_main_loop(
         return 130
 
 
+def _dry_run_open_tabs(run_herdr: RunHerdr) -> tuple[OpenTabs, str | None]:
+    """Read-only ``herdr tab list`` for dry-run: ``(open tabs, None)`` or ``({}, reason)``."""
+    try:
+        return open_tabs_by_issue(list_issue_tabs(run_herdr)), None
+    except FileNotFoundError:
+        return {}, "herdr not found on PATH"
+    except (OSError, RuntimeError) as exc:
+        return {}, str(exc)
+
+
 def run_dry_run(
     label: str,
     repo: str | None,
     run_gh: RunGh = default_run_gh,
+    run_herdr: RunHerdr = default_run_herdr,
 ) -> list[str]:
-    """Resolve gh context, list issues, pick next; return printable summary lines."""
+    """Resolve gh context, list issues, pick next; return printable summary lines.
+
+    Reads ``herdr tab list`` (read-only) so in-progress tickets come first and
+    ``next:`` is the resume-first choice; a herdr failure never fails dry-run.
+    """
     login = fetch_viewer_login(run_gh)
     resolved_repo = resolve_repo(repo, run_gh)
     issues = list_labeled_open_issues(resolved_repo, label, run_gh)
@@ -1287,6 +1427,9 @@ def run_dry_run(
     candidate_numbers = [_issue_number(issue) for issue in candidates]
     blocked_by_map = fetch_blocked_by_map(resolved_repo, candidate_numbers, run_gh)
     planned = planned_queue(candidates, blocked_by_map)
+    open_tabs, herdr_unavailable = _dry_run_open_tabs(run_herdr)
+    warn_ineligible_open_tabs(planned, open_tabs, set())
+    _, in_progress = pick_next_resume_first(planned, open_tabs)
     return format_dry_run_lines(
         login=login,
         repo=resolved_repo,
@@ -1294,6 +1437,8 @@ def run_dry_run(
         open_with_label=open_with_label,
         assigned_to_me=assigned_to_me,
         planned=planned,
+        in_progress=in_progress,
+        herdr_unavailable=herdr_unavailable,
     )
 
 
@@ -1334,7 +1479,7 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument(
         "--dry-run",
         action="store_true",
-        help="Print summary and next eligible issue; no herdr spawn",
+        help="Print summary and next issue (reads herdr tab list read-only); no herdr spawn",
     )
     return ap
 

@@ -121,3 +121,45 @@
 - Verdict: Comment — 0 Blockers, 3 Nits; keep all: N1 `fetch_issue_states` tolerates `gh` exit 1 with partial GraphQL data (verified live: aliases 323 + PR 335 → `{323: CLOSED}`), test fake now matches real `gh`; N2 flow-log sweep wording; N3 PR link
 - ruff clean, full suite green
 - Next: commit-push → PR. Issue link: `Relevant to #296` — follow-up to spec 303 (no dedicated issue per operator); #296 itself is not completed by this PR. Tracked flow-log ends here.
+
+## fix-bug: resume in-progress ticket before queue head (no GH issue, per operator)
+- Bug (live 2026-10-09): herdr restored `issue-311` (in progress); #256/#275 became eligible since; `sort_key` puts #256 first; `adopt_existing_worker` only checks the picked issue's tab → driver spawned `issue-256` alongside `issue-311`, violating §2.5 "at most one ticket agent runs at a time"
+- SPEC_NAME: `303-loop-ready-issue-herdr`; not fixed on `origin/main` b054d7f
+- Workspace: branch `fix/loop-ready-resume-in-progress-first`, worktree `.claude/worktrees/fix-loop-ready-resume-in-progress-first`, throwaway `.worktree-vault`
+- Next: diagnose
+
+## diagnose
+- Reproduced (scratchpad `repro_resume_first.py`): candidates [256, 311] + open `issue-311` tab → `issue-256` spawned
+- Root cause: `run_main_loop` picks via `pick_next` (queue order only); `adopt_existing_worker` only checks the picked issue's tab; sweep's `list_issue_tabs` result discarded; dry-run never reads tabs
+- Decisions: resume-first = eligible issues with an open `issue-N` tab, in queue order, before `pick_next`; several → adopt first, warn naming the rest; open tab for an OPEN but non-eligible issue → warn once, ignore; dry-run reads `herdr tab list` (read-only), marks in-progress, degrades to queue order if herdr unavailable
+- Next: classify
+
+## classify
+- Verdict: **Divergence** — §2.5 "at most one ticket" violated, but resume-first ordering, non-eligible tab and multi-tab rules, and dry-run in-progress marking are unspecified → amend §2.5/§2.9
+- Next: fix
+
+## fix + regression-test
+- `pick_next_resume_first` (in-progress = eligible issues with open `issue-N` tab, queue order; several → warn), `warn_ineligible_open_tabs` (once per issue), one `herdr tab list` per cycle shared with the closed-issue sweep; `--dry-run` reads tabs read-only, marks "(in progress, tab open)", degrades to queue order when herdr is missing/errors; `adopt_existing_worker` unchanged
+- Tests: 71 pass, ruff clean; `test_acceptance_run_main_loop_resumes_in_progress_before_queue_head` fails on `origin/main` (spawns `issue-256`), plus helper/dry-run cases
+- Next: verify-criteria
+
+## verify-criteria
+- Live smoke (agent-run, read/adopt only, `--once --poll-seconds 60`, stopped by timeout): tabs `issue-311` + `issue-256` open → WARNING naming #311, adopted `issue-256` (no new prompt), "#256 open; no merged PR closes it yet — waiting 60s"; no tab created; both tabs left as found
+- Next: smoke confirm (operator), amend-spec
+- Operator decision (2026-10-09): several in-progress tabs resume oldest first, not queue order — "#311 was opened yesterday … respect it". herdr has no tab creation time; use tab `number` (tab-bar position; new tabs append, restore keeps order; dragging reprioritizes), tie-break `tab_id`. Live dry-run: next #311 (oldest tab), #256 waits
+- Next: amend-spec
+
+## amend-spec
+- `/awos:spec` update mode: §2.5 "Resume first" (oldest tab, ineligible tab warn) + 4 criteria; §2.9 dry-run requirement + 1 criterion (evidence incl. `missing`/`error` herdr-unavailable cases); Change Log 2026-10-09; Author/Status unchanged
+- Next: smoke confirm (operator), then local-review
+- Smoke confirm (operator, 2026-10-09): worktree driver, tabs issue-311 + issue-256 open → WARNING "resuming #311 first (oldest tab) … (#256) wait their turn", `issue-311` adopted (wD:tY, no new prompt), "#311 open; no merged PR closes it yet — waiting 300s"; no tab created
+- Next: local-review
+
+## local-review
+- Review file: `context/spec/303-loop-ready-issue-herdr/review.md` (session-only, not committed)
+- Verdict: Comment — 0 Blockers, 4 Nits; keep all: N1 single CHANGELOG *Fixed* entry (oldest tab first); N2 PR link; N3 `test_open_tabs_by_issue_picks_oldest_open_tab` (each case fails under its mutation: closed filter, tab-order compare, missing-number sort); N4 ineligible-tab warning covers closed issues
+- ruff clean, full suite green (`ruff format` not enforced in CI)
+
+## commit-push
+- Issue link: `Relevant to #296` — spec-303 follow-up with no dedicated issue (per operator); does not complete #296
+- Next: PR. Tracked flow-log ends here.
