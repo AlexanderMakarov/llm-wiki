@@ -17,7 +17,9 @@ Copy the relevant section into the PR review comment. Local delivery flows (`/im
       `chore:` / `test:` (optionally with a version scope like
       `feat(v0.8):`).
 - [ ] **CHANGELOG entry** — every user-visible change has an entry
-      under `## [Unreleased]`. Doc-only PRs can skip.
+      under `## [Unreleased]`. Doc-only PRs can skip. A follow-up to
+      something still unreleased edits its existing `[Unreleased]`
+      entry rather than adding a *Fixed* / *Changed* one.
 - [ ] **Tests added or updated** — new feature = new tests. Bug fix =
       regression test that fails on master and passes on the branch.
 - [ ] **CI is green** — lint-and-test (3.12), performance-budget,
