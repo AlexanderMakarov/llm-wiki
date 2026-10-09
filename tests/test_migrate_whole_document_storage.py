@@ -10,6 +10,7 @@ Spec: ``context/spec/324-whole-document-storage`` (Slice 4).
 from __future__ import annotations
 
 import json
+import os
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -23,6 +24,7 @@ from llmwiki.migrate_whole_document_storage import (
     RECOVERY_DIR_NAME,
     _joined_body,
     _plan,
+    _rewrite_sources_field,
     print_report,
     run_migration,
 )
@@ -795,3 +797,105 @@ def test_dry_run_and_blocked_never_prompt_or_mark(tmp_path: Path, monkeypatch) -
 def test_mark_unsynth_and_keep_stitched_are_exclusive(tmp_path: Path) -> None:
     with pytest.raises(SystemExit):
         _migrate_args(tmp_path, "--mark-unsynth", "--keep-stitched")
+
+
+# ─── path safety + raw overwrite guard (review B1 / B2) ──────────────────
+
+
+def _rewrite_part_frontmatter(vault: Path, old: str, new: str) -> None:
+    for raw in (vault / "raw" / "docs" / "big-doc").glob("big-doc-0*.md"):
+        raw.write_text(raw.read_text(encoding="utf-8").replace(old, new), encoding="utf-8")
+
+
+@pytest.mark.parametrize(
+    ("old", "new", "needle"),
+    [
+        ("project: big-doc", "project: ../escape", "project '../escape' is not a safe path segment"),
+        ("project: big-doc", "project: ..", "project '..' is not a safe path segment"),
+        ("project: big-doc", "project: a/b", "project 'a/b' is not a safe path segment"),
+        (f"date: {DATE}", "date: ../x", "date '../x' is not a safe path segment"),
+    ],
+    ids=["dotdot-escape", "dotdot", "slash", "date-escape"],
+)
+def test_unsafe_project_or_date_is_ambiguous_and_nothing_is_written(
+    tmp_path: Path, old: str, new: str, needle: str
+) -> None:
+    vault = tmp_path / "vault"
+    _legacy_doc(vault)
+    _referrers(vault)
+    _rewrite_part_frontmatter(vault, old, new)
+    before = _snapshot(tmp_path)
+
+    preview = run_migration(vault=vault, dry_run=True, now=NOW)
+    report = _apply(vault)
+
+    reasons = [r for g in preview["ambiguous"] for r in g["reasons"]]
+    assert any(needle in r for r in reasons), reasons
+    assert report["blocked"] and not report["changed"]
+    assert _snapshot(tmp_path) == before          # nothing written, anywhere, not even a sibling dir
+    assert not (vault / "wiki" / "escape").exists()
+
+
+def test_containment_check_rejects_a_target_that_resolves_outside_the_vault_roots(
+    tmp_path: Path,
+) -> None:
+    """A symlinked project dir under wiki/sources must not let the canonical page land elsewhere."""
+    vault = tmp_path / "vault"
+    _legacy_doc(vault, wiki="none")
+    outside = tmp_path / "elsewhere"
+    outside.mkdir()
+    (vault / "wiki" / "sources").mkdir(parents=True)
+    (vault / "wiki" / "sources" / "big-doc").symlink_to(outside, target_is_directory=True)
+
+    report = _apply(vault)
+
+    assert report["blocked"]
+    assert any("outside wiki/sources" in r for g in report["ambiguous"] for r in g["reasons"])
+    assert list(outside.iterdir()) == []
+
+
+def test_undecodable_whole_file_is_ambiguous_and_never_overwritten(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    _legacy_doc(vault)
+    whole = vault / "raw" / "docs" / "big-doc" / "big-doc.md"
+    whole.write_bytes(b"\xff\xfe\x00 not utf-8 \x80")
+    before = _snapshot(vault)
+
+    preview = run_migration(vault=vault, dry_run=True, now=NOW)
+    report = _apply(vault)
+
+    reasons = [r for g in preview["ambiguous"] for r in g["reasons"]]
+    assert any("cannot be read as UTF-8 Markdown" in r for r in reasons), reasons
+    assert report["blocked"] and not report["changed"]
+    assert whole.read_bytes() == b"\xff\xfe\x00 not utf-8 \x80"
+    assert _snapshot(vault) == before
+    assert not (vault / RECOVERY_DIR_NAME).exists()
+
+
+def test_whole_file_that_appears_after_planning_is_not_overwritten(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Exclusive create: a whole file the plan did not see is left byte-for-byte alone."""
+    vault = tmp_path / "vault"
+    _legacy_doc(vault)
+    whole = _write(vault / "raw" / "docs" / "big-doc" / "big-doc.md", "late arrival\n")
+    real_lexists = os.path.lexists
+    monkeypatch.setattr(
+        os.path, "lexists", lambda p: False if str(p).endswith("big-doc.md") else real_lexists(p)
+    )
+
+    report = _apply(vault)
+
+    assert whole.read_text(encoding="utf-8") == "late arrival\n"
+    assert any("appeared during apply" in e for e in report["errors"]), report["errors"]
+    assert report["applied"] == []
+    assert (vault / "raw/docs/big-doc/big-doc-01.md").is_file()      # pieces untouched
+
+
+def test_shared_sources_rewriter_collapses_part_stems_in_block_and_inline_lists() -> None:
+    mapping = {"s-01": "s", "s-02": "s", "s-03": "s"}
+    inline = "---\nsources: [s-01, 's-02', other, s-03]\n---\nbody\n"
+    block = "---\nsources:\n  - s-01\n  - s-02\n  - other\nx: 1\n---\n"
+
+    assert _rewrite_sources_field(inline, mapping) == "---\nsources: [s, other]\n---\nbody\n"
+    assert _rewrite_sources_field(block, mapping) == "---\nsources:\n  - s\n  - other\nx: 1\n---\n"

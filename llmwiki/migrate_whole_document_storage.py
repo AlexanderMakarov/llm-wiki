@@ -48,6 +48,7 @@ Usage::
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 from dataclasses import dataclass, field
@@ -59,6 +60,7 @@ from llmwiki._frontmatter import parse_frontmatter
 from llmwiki._system_pages import is_archived_path
 from llmwiki.add_doc import _frontmatter as _raw_doc_frontmatter
 from llmwiki.add_doc import compute_content_hash
+from llmwiki.migrate_source_page_paths import _rewrite_sources_list
 from llmwiki.raw_docs_site import (
     _CHUNK_STEM_SUFFIX_RE,
     _PART_BREADCRUMB_RE,
@@ -95,9 +97,11 @@ RECOVERY_DIR_NAME = ".llmwiki-whole-doc-recovery"
 _PART_TITLE_RE = re.compile(r"\s*\(part (?P<i>\d+)/(?P<n>\d+)(?::.*)?\)\s*$")
 _ALIASES_HEADING_RE = re.compile(r"^##[ \t]+Aliases[ \t]*$", re.MULTILINE)
 _H2_RE = re.compile(r"^##[ \t]+", re.MULTILINE)
-_SOURCES_INLINE_RE = re.compile(r"^(sources:[ \t]*\[)(.*)(\][ \t]*)$")
-_SOURCES_BLOCK_RE = re.compile(r"^sources:[ \t]*$")
-_BLOCK_ITEM_RE = re.compile(r"^([ \t]*-[ \t]+)(.*?)([ \t]*)$")
+# A frontmatter ``project`` / ``date`` becomes a path segment of the whole-doc
+# raw file and canonical page. Same alphabet the site routes
+# (``raw_docs_site._SAFE_SEG_RE``), but no leading dot: ``.``, ``..`` and hidden
+# names are never a project.
+_SAFE_SEGMENT_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 
 _RAW_DOC_STAMP_TAGS = frozenset({"wiki-add", "raw-doc"})
 
@@ -154,6 +158,8 @@ class _Group:
     parts: list[_Part]
     reasons: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
+    #: frontmatter project/date are not safe path segments — no path is derived
+    unsafe_paths: bool = False
     # whole raw document
     whole_path: Path | None = None
     whole_exists: bool = False
@@ -215,6 +221,21 @@ def _str_tags(meta: dict[str, Any]) -> list[str]:
     if isinstance(raw, str):
         raw = [raw]
     return [str(t).strip() for t in raw or [] if str(t).strip()]
+
+
+def _safe_segment(value: str, *, allow_empty: bool = False) -> bool:
+    """True when ``value`` can be one path segment (no separator, no dot-only name)."""
+    if not value:
+        return allow_empty
+    return bool(_SAFE_SEGMENT_RE.match(value))
+
+
+def _inside(path: Path, root: Path) -> bool:
+    """True when ``path`` resolves (symlinks included) to somewhere under ``root``."""
+    try:
+        return path.resolve().is_relative_to(root.resolve())
+    except (OSError, RuntimeError):
+        return False
 
 
 def _scan_raw_docs(docs_dir: Path, vault: Path, errors: list[str]) -> dict[Path, dict[str, _Part]]:
@@ -313,6 +334,15 @@ def _check_raw(group: _Group, siblings: dict[str, _Part]) -> None:
     if len(non_empty) > 1 or (non_empty and "" in hashes):
         shown = sorted(h[:12] if h else "<none>" for h in hashes)
         reasons.append(f"pieces do not agree on one content_sha256: {', '.join(shown)}")
+    for part in parts:
+        project = str(part.meta.get("project") or "docs")
+        part_date = str(part.meta.get("date") or "")
+        if not _safe_segment(project):
+            group.unsafe_paths = True
+            reasons.append(f"{part.rel}: project {project!r} is not a safe path segment")
+        if not _safe_segment(part_date, allow_empty=True):
+            group.unsafe_paths = True
+            reasons.append(f"{part.rel}: date {part_date!r} is not a safe path segment")
     projects = {str(p.meta.get("project") or "docs") for p in parts}
     if len(projects) > 1:
         reasons.append(f"pieces name different projects: {', '.join(sorted(projects))}")
@@ -332,23 +362,31 @@ def _check_raw(group: _Group, siblings: dict[str, _Part]) -> None:
     group.extractor = next((str(p.meta.get("extractor")) for p in parts if p.meta.get("extractor")), "")
     group.whole_path = group.directory / f"{group.base}.md"
 
-    whole = siblings.get(group.base)
-    if whole is not None:
-        group.whole_exists = True
-        whole_hash = str(whole.meta.get("content_sha256") or "").strip()
-        group_hash = group.content_hash
-        # When either side lacks a stored hash (pre-hash whole or parts), compare
-        # the same body hash new imports use — never treat empty vs empty as a clash.
-        if not group_hash:
-            group_hash = compute_content_hash(_joined_body(group))
-        if not whole_hash:
-            whole_hash = compute_content_hash(whole.body.rstrip("\n"))
-        if whole_hash != group_hash:
+    # Existence comes from the filesystem, not from what the scan could read: an
+    # unreadable or undecodable whole file is still there, and never overwritten.
+    group.whole_exists = os.path.lexists(group.whole_path)
+    if group.whole_exists:
+        whole = siblings.get(group.base)
+        if whole is None:
             reasons.append(
-                f"{whole.rel} already exists with a different content_sha256 "
-                f"({whole_hash[:12]} vs {group_hash[:12]}); "
-                "it is never overwritten"
+                f"{group.whole_rel} already exists but cannot be read as "
+                "UTF-8 Markdown; it is never overwritten"
             )
+        else:
+            whole_hash = str(whole.meta.get("content_sha256") or "").strip()
+            group_hash = group.content_hash
+            # When either side lacks a stored hash (pre-hash whole or parts), compare
+            # the same body hash new imports use — never treat empty vs empty as a clash.
+            if not group_hash:
+                group_hash = compute_content_hash(_joined_body(group))
+            if not whole_hash:
+                whole_hash = compute_content_hash(whole.body.rstrip("\n"))
+            if whole_hash != group_hash:
+                reasons.append(
+                    f"{whole.rel} already exists with a different content_sha256 "
+                    f"({whole_hash[:12]} vs {group_hash[:12]}); "
+                    "it is never overwritten"
+                )
 
 
 def _attach_wiki(
@@ -359,6 +397,9 @@ def _attach_wiki(
 ) -> None:
     """Find each piece's wiki pages and classify the group's wiki side."""
     reasons = group.reasons
+    if group.unsafe_paths:
+        # project/date would name a path outside wiki/sources — look nothing up.
+        return
     for part in group.parts:
         project = str(part.meta.get("project") or "docs")
         filename = synth_page_filename(part.meta, part.path.stem)
@@ -425,6 +466,24 @@ def _attach_wiki(
     group.merge = [p for p in group.merge if p.path != group.canonical_path]
 
 
+def _check_containment(group: _Group, vault: Path) -> None:
+    """Ambiguous unless every path the group reads or writes stays in its vault root."""
+    docs_root = vault / "raw" / "docs"
+    wiki_sources = vault / "wiki" / "sources"
+    for part in group.parts:
+        if not _inside(part.path, docs_root):
+            group.reasons.append(f"{part.rel} resolves outside raw/docs")
+    if group.whole_path is not None and not _inside(group.whole_path, docs_root):
+        group.reasons.append(f"{group.whole_rel} would be written outside raw/docs")
+    if group.canonical_path is not None and not _inside(group.canonical_path, wiki_sources):
+        group.reasons.append(
+            f"canonical page {_rel(group.canonical_path, vault / 'wiki')} would be written outside wiki/sources"
+        )
+    for page in group.pages:
+        if not _inside(page.path, wiki_sources):
+            group.reasons.append(f"wiki page {page.rel} resolves outside wiki/sources")
+
+
 def _plan(vault: Path, errors: list[str]) -> list[_Group]:
     docs_dir = vault / "raw" / "docs"
     wiki = vault / "wiki"
@@ -460,6 +519,7 @@ def _plan(vault: Path, errors: list[str]) -> list[_Group]:
             group = _Group(key=key, base=base, directory=directory, parts=members)
             _check_raw(group, docs)
             _attach_wiki(group, wiki / "sources", by_path, by_claim)
+            _check_containment(group, vault)
             groups.append(group)
 
     # two groups may never land on one canonical page
@@ -551,59 +611,14 @@ def _with_aliases(text: str, stems: list[str], canonical_stem: str, today: str, 
 
 
 def _rewrite_sources_field(text: str, mapping: dict[str, str]) -> str:
-    """Map old stems to canonical stems in the frontmatter ``sources:`` list."""
-    lines = text.splitlines(keepends=True)
-    if not lines or lines[0].rstrip("\r\n").lstrip("﻿") != "---":
-        return text
-    end = next((i for i in range(1, len(lines)) if lines[i].rstrip("\r\n").strip() == "---"), None)
-    if end is None:
-        return text
+    """Map old stems to canonical stems in the frontmatter ``sources:`` list.
 
-    def _bare(item: str) -> str:
-        s = item.strip()
-        return s[1:-1] if len(s) >= 2 and s[0] == s[-1] and s[0] in "'\"" else s
-
-    def _remap(item: str) -> str:
-        s = item.strip()
-        value = _bare(s)
-        new = mapping.get(value, value)
-        if new == value:
-            return s
-        return f"{s[0]}{new}{s[0]}" if value != s else new
-
-    out = list(lines)
-    in_block = False
-    block_seen: set[str] = set()
-    drop: set[int] = set()
-    for i in range(1, end):
-        body = lines[i].rstrip("\r\n")
-        nl = lines[i][len(body):]
-        if in_block:
-            m = _BLOCK_ITEM_RE.match(body)
-            if m:
-                new = _remap(m.group(2))
-                if _bare(new) in block_seen:
-                    drop.add(i)
-                    continue
-                block_seen.add(_bare(new))
-                out[i] = f"{m.group(1)}{new}{m.group(3)}{nl}"
-                continue
-            in_block = False
-        if _SOURCES_BLOCK_RE.match(body):
-            in_block, block_seen = True, set()
-            continue
-        m = _SOURCES_INLINE_RE.match(body)
-        if not m or not m.group(2).strip():
-            continue
-        items = [_remap(x) for x in m.group(2).split(",")]
-        deduped: list[str] = []
-        for item in items:
-            if _bare(item) not in {_bare(d) for d in deduped}:
-                deduped.append(item)
-        new_body = f"{m.group(1)}{', '.join(deduped)}{m.group(3)}"
-        if new_body != body:
-            out[i] = new_body + nl
-    return "".join(line for i, line in enumerate(out) if i not in drop)
+    The shared ``sources:`` rewriter of ``migrate source-page-paths``, with
+    ``dedupe`` on: several part stems collapse onto one canonical stem.
+    """
+    bare: dict[str, dict[str, Any] | None] = {old: {"new_stem": new} for old, new in mapping.items()}
+    rewritten, *_ = _rewrite_sources_list(text, bare, lambda _stem: ("kept", None), dedupe=True)
+    return rewritten
 
 
 # ─── apply ───────────────────────────────────────────────────────────────
@@ -705,9 +720,16 @@ def _apply(
     # 1. the whole raw file and the canonical page — additive, nothing moves yet
     for group in groups:
         assert group.whole_path is not None and group.canonical_path is not None
+        if not (_inside(group.whole_path, vault / "raw" / "docs")
+                and _inside(group.canonical_path, wiki / "sources")):
+            errors.append(f"{group.key}: target path resolves outside the vault; group skipped")
+            continue
         try:
             if not group.whole_exists:
-                group.whole_path.write_text(_whole_raw_text(group), encoding="utf-8")
+                # Exclusive create: a whole file that appeared since the plan is
+                # never overwritten.
+                with open(group.whole_path, "x", encoding="utf-8") as fh:
+                    fh.write(_whole_raw_text(group))
             if group.canonical_action in ("write", "replace"):
                 if group.canonical_action == "replace" and group.canonical_existing is not None:
                     recovery.move(group.canonical_existing.path)
@@ -722,6 +744,11 @@ def _apply(
                 aliased = _with_aliases(kept, group.old_stems, group.canonical_path.stem, today, len(group.parts))
                 if aliased != kept:
                     group.canonical_path.write_text(aliased, encoding="utf-8")
+        except FileExistsError:
+            errors.append(
+                f"{group.key}: {group.whole_rel} appeared during apply; it is never overwritten; group skipped"
+            )
+            continue
         except OSError as exc:
             errors.append(f"{group.key}: {exc}; group skipped")
             continue
@@ -768,6 +795,9 @@ def _rewrite_links(
     pages_changed = 0
     links = 0
     for path in live:
+        if not _inside(path, wiki):
+            errors.append(f"{_rel(path, wiki)}: resolves outside wiki/; links in it were left as they are")
+            continue
         text = _read(path, errors, vault)
         if text is None:
             continue
