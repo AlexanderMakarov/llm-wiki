@@ -49,7 +49,6 @@ from __future__ import annotations
 
 import json
 import logging
-import math
 import re
 import socket
 import threading
@@ -61,10 +60,8 @@ from dataclasses import dataclass
 from typing import Any
 
 from llmwiki.synth.base import (
-    BODY_CHARS_PER_TOKEN,
     DEFAULT_CONTEXT_WINDOW_TOKENS,
-    OUTPUT_RESERVE_TOKENS,
-    PROMPT_RESERVE_TOKENS,
+    OLLAMA_BUDGET,
     SESSION_BODY_SEND_CAP_CHARS,
     BaseSynthesizer,
     BodyBudgetConfig,
@@ -72,6 +69,7 @@ from llmwiki.synth.base import (
     resolve_usable_body_chars,
     split_prompt_template,
     usage_limit_from_text,
+    window_tokens_for_body_chars,
 )
 
 # ─── Constants ─────────────────────────────────────────────────────────
@@ -295,7 +293,9 @@ class OllamaSynthesizer(BaseSynthesizer):
     def usable_body_chars(self) -> int:
         """Document-chunk budget: config, else derived from the context window (#311)."""
         return resolve_usable_body_chars(
-            self.config.body_budget, known_window_tokens=self._detect_context_window
+            self.config.body_budget,
+            known_window_tokens=self._detect_context_window,
+            budget_class=OLLAMA_BUDGET,
         )
 
     def context_window_tokens(self) -> int:
@@ -303,7 +303,8 @@ class OllamaSynthesizer(BaseSynthesizer):
 
         Configured window, else the detected one, else the default window —
         raised, if needed, to fit an explicit ``usable_body_chars`` plus the
-        prompt and output reserves, so the budget can never exceed the window.
+        scaffolding, prompt, output and working-margin reserves, so the budget
+        can never exceed the window.
         """
         budget = self.config.body_budget
         window = (
@@ -312,12 +313,7 @@ class OllamaSynthesizer(BaseSynthesizer):
             or DEFAULT_CONTEXT_WINDOW_TOKENS
         )
         if budget.usable_body_chars:
-            needed = (
-                math.ceil(budget.usable_body_chars / BODY_CHARS_PER_TOKEN)
-                + PROMPT_RESERVE_TOKENS
-                + OUTPUT_RESERVE_TOKENS
-            )
-            window = max(window, needed)
+            window = max(window, window_tokens_for_body_chars(budget.usable_body_chars, OLLAMA_BUDGET))
         return window
 
     def synthesize_document_chunk(

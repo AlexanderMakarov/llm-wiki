@@ -14,6 +14,7 @@ Built-in backends:
 from __future__ import annotations
 
 import logging
+import math
 import re
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Mapping
@@ -152,18 +153,81 @@ MIN_USABLE_BODY_CHARS = 1000
 #: Dummy / dry-run: large enough that multi-section fixtures fit in one call.
 DUMMY_USABLE_BODY_CHARS = 10_000_000
 
+#: Per-call framing ``claude -p`` injects even with every scaffolding-stripping
+#: flag on (measured via ``--output-format json``; see synthesis-cost.md).
+LEAN_OVERHEAD_TOKENS = 890
+#: Full coding-agent context (tool schemas, MCP servers, skills, CLAUDE.md) a
+#: non-lean ``claude -p`` or an Agent CLI call carries before the prompt. A
+#: mid-range figure for a typical setup, not a ceiling.
+FULL_AGENT_OVERHEAD_TOKENS = 35_000
+#: Scaffolding assumed for an Ollama ``/api/generate`` call (chat framing only).
+OLLAMA_OVERHEAD_TOKENS = 500
+
 _log = logging.getLogger(__name__)
 
 
-def usable_body_chars_for_window(context_window_tokens: int) -> int:
+@dataclass(frozen=True)
+class BudgetClass:
+    """How much of a window a backend spends on things other than the body.
+
+    ``scaffolding_tokens`` is fixed per-call framing the backend adds;
+    the *working margin* — headroom for the agent's own reasoning, tool use and
+    tokenizer drift — is ``max(margin_floor_tokens, margin_percent% of window)``.
+    """
+
+    name: str
+    scaffolding_tokens: int
+    margin_floor_tokens: int
+    margin_percent: int
+
+    def working_margin(self, window: int) -> int:
+        return max(self.margin_floor_tokens, window * self.margin_percent // 100)
+
+    def fixed_tokens(self) -> int:
+        """Tokens reserved regardless of the window: scaffolding + prompt + output."""
+        return self.scaffolding_tokens + PROMPT_RESERVE_TOKENS + OUTPUT_RESERVE_TOKENS
+
+
+#: No agent, no margin — the budget of a backend that has no class of its own
+#: (:class:`BaseSynthesizer` default, estimate without a backend).
+GENERIC_BUDGET = BudgetClass("generic", 0, 0, 0)
+#: Ollama ``/api/generate`` — a bare completion call.
+OLLAMA_BUDGET = BudgetClass("ollama", OLLAMA_OVERHEAD_TOKENS, 2048, 10)
+#: ``claude -p`` with ``lean`` on (scaffolding stripped).
+CLAUDE_LEAN_BUDGET = BudgetClass("claude-lean", LEAN_OVERHEAD_TOKENS, 8192, 25)
+#: Non-lean ``claude -p`` and the Cursor Agent CLI (full agent context).
+HEAVY_AGENT_BUDGET = BudgetClass("heavy-agent", FULL_AGENT_OVERHEAD_TOKENS, 16_384, 35)
+
+
+def usable_body_chars_for_window(
+    context_window_tokens: int, budget_class: BudgetClass = GENERIC_BUDGET
+) -> int:
     """Body characters one call can carry in a ``context_window_tokens`` window.
 
-    ``(window - PROMPT_RESERVE_TOKENS - OUTPUT_RESERVE_TOKENS) * BODY_CHARS_PER_TOKEN``,
-    floored at :data:`MIN_USABLE_BODY_CHARS`. With the default 8,192-token window
-    that is ~7,300 characters; with a 200,000-token window, ~400,000.
+    ``usable_tokens = window - scaffolding - prompt reserve - output reserve -
+    working margin``; ``chars = max(1000, usable_tokens * BODY_CHARS_PER_TOKEN)``.
+    Scaffolding and margin come from ``budget_class``; the generic class has
+    neither. No upper cap: a large window yields a large budget.
     """
-    room = int(context_window_tokens) - PROMPT_RESERVE_TOKENS - OUTPUT_RESERVE_TOKENS
-    return max(MIN_USABLE_BODY_CHARS, int(room * BODY_CHARS_PER_TOKEN))
+    window = int(context_window_tokens)
+    room = window - budget_class.fixed_tokens() - budget_class.working_margin(window)
+    # round() first so float noise (90400 * 2.05 = 185319.99999…) can't cost a character.
+    return max(MIN_USABLE_BODY_CHARS, int(round(room * BODY_CHARS_PER_TOKEN, 6)))
+
+
+def window_tokens_for_body_chars(body_chars: int, budget_class: BudgetClass = GENERIC_BUDGET) -> int:
+    """Smallest window whose :func:`usable_body_chars_for_window` holds ``body_chars``."""
+    body_tokens = math.ceil(body_chars / BODY_CHARS_PER_TOKEN)
+    base = body_tokens + budget_class.fixed_tokens()
+    window = base + budget_class.margin_floor_tokens
+    if window * budget_class.margin_percent // 100 > budget_class.margin_floor_tokens:
+        # The percentage margin dominates: window * (1 - pct) >= base.
+        window = math.ceil(base * 100 / (100 - budget_class.margin_percent))
+    while usable_body_chars_for_window(window, budget_class) < body_chars:
+        window += 1  # absorb rounding in the integer percent / ceil steps
+    while window > 1 and usable_body_chars_for_window(window - 1, budget_class) >= body_chars:
+        window -= 1  # ...and trim the same rounding going the other way
+    return window
 
 
 #: Budget when nothing configures or identifies the window (derived, not typed).
@@ -213,21 +277,24 @@ def resolve_usable_body_chars(
     budget: BodyBudgetConfig,
     *,
     known_window_tokens: Callable[[], int | None] | None = None,
+    budget_class: BudgetClass = GENERIC_BUDGET,
 ) -> int:
     """The usable body budget, in resolution order.
 
-    1. explicit ``usable_body_chars``;
+    1. explicit ``usable_body_chars`` (used as-is, no class reserves applied);
     2. derived from ``context_window_tokens`` (config);
     3. derived from the backend's own knowledge of its window — a known-model
        table or an auto-detected value — via ``known_window_tokens``;
     4. derived from :data:`DEFAULT_CONTEXT_WINDOW_TOKENS`.
+
+    Derived budgets (2–4) subtract ``budget_class``'s scaffolding and margin.
     """
     if budget.usable_body_chars is not None:
         return budget.usable_body_chars
     window = budget.context_window_tokens
     if window is None and known_window_tokens is not None:
         window = known_window_tokens()
-    return usable_body_chars_for_window(window) if window else DEFAULT_USABLE_BODY_CHARS
+    return usable_body_chars_for_window(window or DEFAULT_CONTEXT_WINDOW_TOKENS, budget_class)
 
 
 class BaseSynthesizer(ABC):

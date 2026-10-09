@@ -30,6 +30,8 @@ from llmwiki.cache import (
 from llmwiki.config_schedule import _load_sessions_config
 from llmwiki.synth.base import (
     DEFAULT_USABLE_BODY_CHARS,
+    FULL_AGENT_OVERHEAD_TOKENS,
+    LEAN_OVERHEAD_TOKENS,
     SESSION_BODY_SEND_CAP_CHARS,
     BaseSynthesizer,
 )
@@ -45,12 +47,9 @@ from llmwiki.synth.base import (
 
 # What each invocation costs before the prompt is added. Lean mode strips
 # tool schemas, MCP servers, skills, CLAUDE.md, and the agent system prompt;
-# what is left is framing Claude Code always injects.
-LEAN_OVERHEAD_TOKENS = 890
-# Without lean mode: the full coding-agent context. Varies with how many MCP
-# servers and skills the user has configured — this is a mid-range figure,
-# not a ceiling.
-FULL_AGENT_OVERHEAD_TOKENS = 35_000
+# what is left is framing Claude Code always injects. The measured constants
+# (``LEAN_OVERHEAD_TOKENS``, ``FULL_AGENT_OVERHEAD_TOKENS``) live in
+# ``synth.base`` so the document body budget reserves the same scaffolding.
 # Non-lean repeat calls re-read about half the scaffolding from the prompt
 # cache and re-write the other half (measured: 17,544 read / 17,790 written).
 NON_LEAN_CACHE_READ_FRACTION = 0.5

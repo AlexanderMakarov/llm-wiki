@@ -30,6 +30,8 @@ from typing import Any
 from llmwiki.claude_path import resolve_claude_path as _resolve_claude_path
 from llmwiki.config_schedule import _load_sessions_config
 from llmwiki.synth.base import (
+    CLAUDE_LEAN_BUDGET,
+    HEAVY_AGENT_BUDGET,
     SESSION_BODY_SEND_CAP_CHARS,
     BackendUsageLimitError,
     BaseSynthesizer,
@@ -378,10 +380,15 @@ class ClaudeCLISynthesizer(BaseSynthesizer):
         return self._children.kill_all()
 
     def usable_body_chars(self) -> int:
-        """Document-chunk budget: config, else the model's known window (#311)."""
+        """Document-chunk budget: config, else the model's known window (#311).
+
+        A derived budget reserves the lean or full agent scaffolding and the
+        matching working margin (``synthesis.claude.lean`` / ``claude_lean``).
+        """
         return resolve_usable_body_chars(
             self.body_budget,
             known_window_tokens=lambda: known_claude_context_window(self.model),
+            budget_class=CLAUDE_LEAN_BUDGET if self.lean else HEAVY_AGENT_BUDGET,
         )
 
     def synthesize_document_chunk(

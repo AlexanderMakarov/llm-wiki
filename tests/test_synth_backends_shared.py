@@ -14,9 +14,14 @@ import pytest
 
 from llmwiki.build import synthesize_overview
 from llmwiki.synth.base import (
+    CLAUDE_LEAN_BUDGET,
+    DEFAULT_CONTEXT_WINDOW_TOKENS,
     DEFAULT_USABLE_BODY_CHARS,
     DUMMY_USABLE_BODY_CHARS,
+    HEAVY_AGENT_BUDGET,
+    OLLAMA_BUDGET,
     DummySynthesizer,
+    usable_body_chars_for_window,
 )
 from llmwiki.synth.claude_cli import (
     DEFAULT_CLAUDE_TIMEOUT,
@@ -198,17 +203,20 @@ def test_cursor_overview_completion_uses_run_prompt() -> None:
 
 
 @pytest.mark.parametrize(
-    "backend_factory",
+    ("backend_factory", "budget_class"),
     [
-        lambda: ClaudeCLISynthesizer(claude_path="/usr/bin/claude", model="custom-model"),
-        lambda: CursorCLISynthesizer(model="composer-2.5"),
-        lambda: OllamaSynthesizer(),
+        (lambda: ClaudeCLISynthesizer(claude_path="/usr/bin/claude", model="custom-model"), CLAUDE_LEAN_BUDGET),
+        (lambda: ClaudeCLISynthesizer(claude_path="/usr/bin/claude", model="custom-model", lean=False), HEAVY_AGENT_BUDGET),
+        (lambda: CursorCLISynthesizer(model="composer-2.5"), HEAVY_AGENT_BUDGET),
+        (lambda: OllamaSynthesizer(), OLLAMA_BUDGET),
     ],
-    ids=["claude_cli", "cursor_cli", "ollama"],
+    ids=["claude_cli", "claude_cli_non_lean", "cursor_cli", "ollama"],
 )
-def test_unconfigured_backends_report_the_default_window_budget(backend_factory) -> None:
-    """With no config and no known window, a backend reports the default-window budget."""
-    assert backend_factory().usable_body_chars() == DEFAULT_USABLE_BODY_CHARS
+def test_unconfigured_backends_report_the_default_window_budget(backend_factory, budget_class) -> None:
+    """With no config and no known window, a backend reports the default-window budget for its class."""
+    assert backend_factory().usable_body_chars() == usable_body_chars_for_window(
+        DEFAULT_CONTEXT_WINDOW_TOKENS, budget_class
+    )
 
 
 def test_dummy_usable_body_budget_covers_multi_section_fixtures() -> None:

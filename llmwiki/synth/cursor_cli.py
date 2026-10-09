@@ -25,6 +25,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from llmwiki.synth.base import (
+    HEAVY_AGENT_BUDGET,
     SESSION_BODY_SEND_CAP_CHARS,
     BaseSynthesizer,
     BodyBudgetConfig,
@@ -157,9 +158,10 @@ class CursorCLISynthesizer(BaseSynthesizer):
 
         No per-model window table: Cursor does not publish Agent CLI context
         windows, so set ``synthesis.cursor_cli.context_window_tokens`` (or
-        ``usable_body_chars``) to raise it.
+        ``usable_body_chars``) to raise it. A derived budget reserves the full
+        agent scaffolding and working margin — the Agent CLI is never lean.
         """
-        return resolve_usable_body_chars(self.body_budget)
+        return resolve_usable_body_chars(self.body_budget, budget_class=HEAVY_AGENT_BUDGET)
 
     def synthesize_document_chunk(
         self,
