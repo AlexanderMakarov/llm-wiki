@@ -16,10 +16,13 @@ from pathlib import Path
 import pytest
 
 from llmwiki._frontmatter import parse_frontmatter
+from llmwiki.add_doc import compute_content_hash
 from llmwiki.build import build_wiki_corpus_entries
 from llmwiki.cli import build_parser
 from llmwiki.migrate_whole_document_storage import (
     RECOVERY_DIR_NAME,
+    _joined_body,
+    _plan,
     print_report,
     run_migration,
 )
@@ -310,7 +313,9 @@ def test_apply_blocked_by_ambiguous_group_changes_nothing(
     assert any(needle in r for r in reasons), reasons
     assert {g["key"] for g in report["groups"] if g["status"] == "clear"} == {"clear-doc/clear-doc"}
     print_report(report)
-    assert "blocked: nothing was changed" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "blocked: nothing was changed (including clear groups)" in out
+    assert "What to do:" in out
 
 
 def test_cli_apply_exits_non_zero_when_blocked(tmp_path: Path) -> None:
@@ -338,6 +343,74 @@ def test_numbered_files_without_part_markers_are_separate_documents(tmp_path: Pa
 
     assert report["groups"] == [] and not report["blocked"] and not report["changed"]
     assert _snapshot(vault) == before
+
+
+# ─── pre-hash part groups (all content_sha256 empty) ─────────────────────
+
+
+def _strip_content_hashes(vault: Path, slug: str) -> None:
+    """Drop content_sha256 from every raw piece (pre-hash import shape)."""
+    for path in (vault / "raw" / "docs" / slug).glob(f"{slug}-*.md"):
+        text = path.read_text(encoding="utf-8")
+        path.write_text(
+            "\n".join(line for line in text.splitlines() if not line.startswith("content_sha256:"))
+            + "\n",
+            encoding="utf-8",
+        )
+
+
+def test_pre_hash_part_group_applies_and_fills_content_hash(tmp_path: Path) -> None:
+    """All-empty content_sha256 with clear (part i/N) markers is clear, not ambiguous."""
+    vault = tmp_path / "vault"
+    _legacy_doc(vault, "legacy-cv", n=2)
+    _strip_content_hashes(vault, "legacy-cv")
+    for path in (vault / "raw" / "docs" / "legacy-cv").glob("*.md"):
+        assert "content_sha256" not in path.read_text(encoding="utf-8")
+    [group] = _plan(vault, [])
+    assert not group.ambiguous
+    expected_hash = compute_content_hash(_joined_body(group))
+
+    report = _apply(vault)
+
+    assert not report["blocked"] and report["applied"] == ["legacy-cv/legacy-cv"]
+    whole = vault / "raw" / "docs" / "legacy-cv" / "legacy-cv.md"
+    meta, body = parse_frontmatter(whole.read_text(encoding="utf-8"))
+    assert meta["content_sha256"] == expected_hash
+    assert "Body of section Sec1" in body and "Body of section Sec2" in body
+
+
+def test_mixed_empty_and_nonempty_hashes_still_ambiguous(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    _legacy_doc(vault, "mixed-hash")
+    p = vault / "raw" / "docs" / "mixed-hash" / "mixed-hash-02.md"
+    lines = [ln for ln in p.read_text(encoding="utf-8").splitlines() if not ln.startswith("content_sha256:")]
+    p.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    report = _apply(vault)
+
+    assert report["blocked"]
+    reasons = [r for g in report["ambiguous"] for r in g["reasons"]]
+    assert any("content_sha256" in r and "<none>" in r for r in reasons), reasons
+
+
+def test_whole_file_without_hash_matching_body_is_clear(tmp_path: Path) -> None:
+    """Empty vs empty is not a clash when the whole body's hash matches the joined parts."""
+    vault = tmp_path / "vault"
+    _legacy_doc(vault, "prehash-whole", n=2)
+    _strip_content_hashes(vault, "prehash-whole")
+    [group] = _plan(vault, [])
+    joined = _joined_body(group)
+    whole_text = (
+        '---\ntitle: "Prehash Whole"\nslug: prehash-whole\nproject: prehash-whole\n'
+        "---\n\n" + joined + "\n"
+    )
+    _write(vault / "raw" / "docs" / "prehash-whole" / "prehash-whole.md", whole_text)
+
+    report = _apply(vault)
+
+    assert not report["blocked"] and report["applied"] == ["prehash-whole/prehash-whole"]
+    assert not (vault / "raw/docs/prehash-whole/prehash-whole-01.md").exists()
+    assert (vault / "raw/docs/prehash-whole/prehash-whole.md").read_text(encoding="utf-8") == whole_text
 
 
 # ─── happy path ──────────────────────────────────────────────────────────

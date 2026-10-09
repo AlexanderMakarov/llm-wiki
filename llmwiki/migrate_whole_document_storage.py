@@ -8,20 +8,21 @@ offline — no synthesis backend is called and nothing is re-summarised:
 
 * **Group** — raw files that share a directory and the ``-NN``-stripped base
   slug of :func:`~llmwiki.raw_docs_site.base_slug_from_stem` (the #305 site
-  grouping) *and* carry ``(part i/N)`` markers, a contiguous ``1..N`` run and
-  one agreeing ``content_sha256``. Wiki pages come from each piece's derived
-  page name (``<date>-<slug>-NN[--part-MM].md``) and from ``source_file:``
-  claims.
+  grouping) *and* carry ``(part i/N)`` markers, a contiguous ``1..N`` run, and
+  either one agreeing non-empty ``content_sha256`` or **no** hash on any piece
+  (pre-hash imports). Conflicting non-empty hashes, or a mix of empty and
+  non-empty, stay ambiguous. Wiki pages come from each piece's derived page
+  name (``<date>-<slug>-NN[--part-MM].md``) and from ``source_file:`` claims.
 * **Ambiguous** (a gap, a hash or project/date/title disagreement, a whole
   ``<slug>.md`` that is not the same document, a wiki page that claims another
   raw file, pieces only partly summarised, a canonical page that claims another
   document) is listed in the preview, and **apply exits non-zero and changes
   nothing** for the whole vault until every ambiguous group is resolved.
 * **Raw** — ``raw/docs/<project>/<slug>.md`` is written from the pieces (the
-  part breadcrumbs removed, the legacy whole-document ``content_sha256``
-  kept, so duplicate detection still matches) when it is missing; a whole file
-  with a different hash is never overwritten. The old ``-NN`` files are moved to
-  ``.llmwiki-whole-doc-recovery/<UTC>/raw/docs/…``.
+  part breadcrumbs removed; legacy ``content_sha256`` kept when present,
+  otherwise computed from the joined body like a new import) when it is
+  missing; a whole file that hashes differently is never overwritten. The old
+  ``-NN`` files are moved to ``.llmwiki-whole-doc-recovery/<UTC>/raw/docs/…``.
 * **Wiki** — the pieces' summaries go through the same deterministic
   :func:`~llmwiki.synth.stitch.stitch_chunk_bodies` the synth uses (no AI
   polish); ``tags`` are unioned. The old part pages move to
@@ -57,6 +58,7 @@ from typing import Any
 from llmwiki._frontmatter import parse_frontmatter
 from llmwiki._system_pages import is_archived_path
 from llmwiki.add_doc import _frontmatter as _raw_doc_frontmatter
+from llmwiki.add_doc import compute_content_hash
 from llmwiki.raw_docs_site import (
     _CHUNK_STEM_SUFFIX_RE,
     _PART_BREADCRUMB_RE,
@@ -275,6 +277,11 @@ def _clean_title(title: str) -> str:
     return _PART_TITLE_RE.sub("", title).strip()
 
 
+def _joined_body(group: _Group) -> str:
+    """Part bodies joined the same way the whole raw file is written."""
+    return "\n\n".join(p.body for p in group.parts if p.body).rstrip("\n")
+
+
 def _check_raw(group: _Group, siblings: dict[str, _Part]) -> None:
     """Fill ``group.reasons`` from the raw pieces; set the whole-document fields."""
     parts = group.parts
@@ -299,8 +306,11 @@ def _check_raw(group: _Group, siblings: dict[str, _Part]) -> None:
         if part.marker and part.marker[0] != part.index:
             reasons.append(f"{part.rel}: filename says part {part.index:02d}, title says part {part.marker[0]}")
 
+    # All-empty content_sha256 is fine (pre-hash part imports). Only conflicting
+    # non-empty hashes, or a mix of empty and non-empty, are ambiguous.
     hashes = {str(p.meta.get("content_sha256") or "").strip() for p in parts}
-    if "" in hashes or len(hashes) != 1:
+    non_empty = {h for h in hashes if h}
+    if len(non_empty) > 1 or (non_empty and "" in hashes):
         shown = sorted(h[:12] if h else "<none>" for h in hashes)
         reasons.append(f"pieces do not agree on one content_sha256: {', '.join(shown)}")
     projects = {str(p.meta.get("project") or "docs") for p in parts}
@@ -317,7 +327,7 @@ def _check_raw(group: _Group, siblings: dict[str, _Part]) -> None:
     group.title = _clean_title(str(first.meta.get("title") or "")) or group.base
     group.project = str(first.meta.get("project") or "docs")
     group.date = str(first.meta.get("date") or "")
-    group.content_hash = next(iter(hashes)) if len(hashes) == 1 else ""
+    group.content_hash = next(iter(non_empty)) if hashes == non_empty and len(non_empty) == 1 else ""
     group.source = str(first.meta.get("source") or "")
     group.extractor = next((str(p.meta.get("extractor")) for p in parts if p.meta.get("extractor")), "")
     group.whole_path = group.directory / f"{group.base}.md"
@@ -326,10 +336,17 @@ def _check_raw(group: _Group, siblings: dict[str, _Part]) -> None:
     if whole is not None:
         group.whole_exists = True
         whole_hash = str(whole.meta.get("content_sha256") or "").strip()
-        if not whole_hash or whole_hash != group.content_hash:
+        group_hash = group.content_hash
+        # When either side lacks a stored hash (pre-hash whole or parts), compare
+        # the same body hash new imports use — never treat empty vs empty as a clash.
+        if not group_hash:
+            group_hash = compute_content_hash(_joined_body(group))
+        if not whole_hash:
+            whole_hash = compute_content_hash(whole.body.rstrip("\n"))
+        if whole_hash != group_hash:
             reasons.append(
                 f"{whole.rel} already exists with a different content_sha256 "
-                f"({whole_hash[:12] or '<none>'} vs {group.content_hash[:12] or '<none>'}); "
+                f"({whole_hash[:12]} vs {group_hash[:12]}); "
                 "it is never overwritten"
             )
 
@@ -474,11 +491,12 @@ def _plan(vault: Path, errors: list[str]) -> list[_Group]:
 
 def _whole_raw_text(group: _Group) -> str:
     tags = [t for t in _union_tags([_str_tags(p.meta) for p in group.parts]) if t not in _RAW_DOC_STAMP_TAGS]
+    body = _joined_body(group)
+    content_hash = group.content_hash or compute_content_hash(body)
     fm = _raw_doc_frontmatter(
         group.title, group.base, group.project, tuple(tags), group.date, group.source,
-        content_sha256=group.content_hash, extractor=group.extractor or None,
+        content_sha256=content_hash, extractor=group.extractor or None,
     )
-    body = "\n\n".join(p.body for p in group.parts if p.body).rstrip("\n")
     return fm + body + "\n"
 
 
@@ -938,6 +956,38 @@ def run_migration(
     return report
 
 
+def _hint_for_reason(reason: str) -> str:
+    """One-line operator hint for an ambiguity reason."""
+    r = reason.casefold()
+    if "already exists with a different content_sha256" in r:
+        return "rename the existing whole file or the part series so they do not share a base slug; migrate never overwrites a different document"
+    if "content_sha256" in r:
+        return "rename or separate pieces that belong to different documents so each group shares one hash (or all lack the field)"
+    if r.startswith("gap:") or "are missing" in r:
+        return "restore the missing part file(s) under raw/docs/, or remove orphan pieces if they are not one document"
+    if "unexpected part number" in r:
+        return "rename or remove the unexpected -NN files, or fix the (part i/N) totals"
+    if "no '(part i/n)'" in r:
+        return "add matching (part i/N) titles if these are one document, or leave them as separate docs"
+    if "disagree on the total" in r:
+        return "make every piece's (part i/N) use the same N"
+    if "filename says part" in r:
+        return "rename the file or fix the title so the part index matches"
+    if "different projects" in r or "different dates" in r or "different document titles" in r:
+        return "align frontmatter across pieces, or split into separate documents"
+    if "cover only some" in r:
+        return "synthesise the missing pieces or remove partial summaries so every piece has a real page (or none)"
+    if "some of its wiki pages are real and some are stubs" in r:
+        return "finish or remove the stub/real mix for that piece's wiki pages"
+    if "claims" in r:
+        return "fix source_file: on the wiki page so it points at this piece (or the whole raw path for the canonical page)"
+    if "also the target of" in r:
+        return "rename one document's base slug so the groups do not share a canonical wiki path"
+    if "numbered files share one content_sha256" in r:
+        return "add (part i/N) markers if these are one document, or give them different hashes if they are separate"
+    return "resolve this group (see docs/UPGRADING.md #311), then re-run"
+
+
 def print_report(report: dict[str, Any]) -> None:
     """Print the groups, what each would (or did) do, ambiguity and recovery."""
     groups = report["groups"]
@@ -968,11 +1018,18 @@ def print_report(report: dict[str, Any]) -> None:
         print(f"  ! AMBIGUOUS {g['key']}:")
         for reason in g["reasons"]:
             print(f"      - {reason}")
+            print(f"        What to do: {_hint_for_reason(reason)}")
     if report["ambiguous"]:
         if report["dry_run"]:
-            print("apply would be blocked: resolve every ambiguous group first (apply changes nothing until then)")
+            print(
+                "apply would be blocked: resolve every ambiguous group first "
+                "(no clear groups are applied either until then)"
+            )
         else:
-            print("blocked: nothing was changed. Resolve every ambiguous group above, then re-run.")
+            print(
+                "blocked: nothing was changed (including clear groups). "
+                "Resolve every ambiguous group above, then re-run."
+            )
     if not report["dry_run"] and report["applied"]:
         print(f"merged:  {len(report['applied'])} document(s)")
         print(f"links:   {report['links_rewritten']} rewritten across {report['pages_rewritten']} page(s)")

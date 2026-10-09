@@ -73,3 +73,9 @@ Feature delivery for https://github.com/AlexanderMakarov/llm-wiki/issues/311 via
 
 - Optional re-synth queue after migrate apply: lists merged docs; TTY asks once (all-or-nothing, default/EOF/non-TTY keep stitched); `--mark-unsynth` drops whole `docs::` keys + `refresh_synth_pending` without prompting; `--keep-stitched` explicit no-op. No LLM call; apply path unchanged (done state written first)
 - `mark_unsynth` / `merged_document_paths` in `migrate_whole_document_storage.py`; `_offer_mark_unsynth` in `cli.py`; docs + CHANGELOG + `_MIGRATIONS` blurb updated
+
+## fix (smoke: pre-hash part groups)
+
+- `_check_raw`: all-empty `content_sha256` is clear; only conflicting non-empty or mixed empty/non-empty stay ambiguous. Whole-file clash compares computed body hashes when either side lacks the field (empty vs empty is not a clash).
+- `_whole_raw_text`: fill missing hash via `compute_content_hash` on the joined body. `print_report` adds per-reason **What to do** hints and states clear groups are not applied while blocked.
+- UPGRADING / cli / CHANGELOG note pre-hash parts; tests cover apply success + hash conflict still blocks.
