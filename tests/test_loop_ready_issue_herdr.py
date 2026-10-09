@@ -142,6 +142,108 @@ def test_pick_next_chooses_lowest_important_when_multiple(loop_mod):
     assert picked["number"] == 7
 
 
+@pytest.mark.parametrize(
+    ("open_tabs", "expected_choice", "expected_in_progress", "expected_warning"),
+    [
+        ({}, 256, [], None),
+        ({311: (5, "wD:t311"), 999: (1, "wD:t999")}, 311, [311], None),
+        (
+            {311: (30, "wD:t311"), 400: (31, "wD:t400")},
+            311,
+            [311, 400],
+            "WARNING: 2 eligible issues have an open issue-N tab; resuming #311 first "
+            "(oldest tab); the others (#400) wait their turn and are adopted later with "
+            "no new prompt.",
+        ),
+        (
+            {256: (31, "wD:t256"), 311: (30, "wD:t311")},
+            311,
+            [311, 256],
+            "WARNING: 2 eligible issues have an open issue-N tab; resuming #311 first "
+            "(oldest tab); the others (#256) wait their turn and are adopted later with "
+            "no new prompt.",
+        ),
+        (
+            {256: (7, "wD:t9"), 311: (7, "wD:t1")},
+            311,
+            [311, 256],
+            "WARNING: 2 eligible issues have an open issue-N tab; resuming #311 first "
+            "(oldest tab); the others (#256) wait their turn and are adopted later with "
+            "no new prompt.",
+        ),
+    ],
+    ids=["none", "one", "several-queue-order", "several-tab-order", "tie-by-tab-id"],
+)
+def test_pick_next_resume_first_prefers_oldest_open_tab(
+    loop_mod, capsys, open_tabs, expected_choice, expected_in_progress, expected_warning
+):
+    """In-progress (open ``issue-N`` tab) beats queue head; several resume oldest tab first."""
+    planned = [_issue(256), _issue(311), _issue(400)]
+    choice, in_progress = loop_mod.pick_next_resume_first(planned, open_tabs)
+    assert choice is not None
+    assert choice["number"] == expected_choice
+    assert [i["number"] for i in in_progress] == expected_in_progress
+    err = capsys.readouterr().err
+    if expected_warning is None:
+        assert err == ""
+    else:
+        assert err.strip() == expected_warning
+
+
+def test_pick_next_resume_first_empty_queue_ignores_tabs(loop_mod):
+    assert loop_mod.pick_next_resume_first([], {7: (1, "wD:t7")}) == (None, [])
+
+
+def test_warn_ineligible_open_tabs_warns_once_per_issue(loop_mod, capsys):
+    """An open tab outside the eligible queue warns once per run and never blocks it."""
+    planned = [_issue(256), _issue(311)]
+    warned: set[int] = set()
+    loop_mod.warn_ineligible_open_tabs(planned, {311, 77}, warned)
+    loop_mod.warn_ineligible_open_tabs(planned, {311, 77, 88}, warned)
+    assert capsys.readouterr().err.splitlines() == [
+        "WARNING: issue-77 tab open but #77 is not in the eligible queue "
+        "(closed, unlabeled, unassigned, or blocked); close the tab or restore label/assignee.",
+        "WARNING: issue-88 tab open but #88 is not in the eligible queue "
+        "(closed, unlabeled, unassigned, or blocked); close the tab or restore label/assignee.",
+    ]
+    assert warned == {77, 88}
+
+
+@pytest.mark.parametrize(
+    ("tabs", "closed", "expected"),
+    [
+        pytest.param(
+            [{"label": "issue-5", "tab_id": "wD:t9", "number": 7},
+             {"label": "issue-5", "tab_id": "wD:t2", "number": 3}],
+            None,
+            {5: (3, "wD:t2")},
+            id="same_issue_lower_number_wins",
+        ),
+        pytest.param(
+            [{"label": "issue-5", "tab_id": "wD:t2", "number": 3},
+             {"label": "issue-5", "tab_id": "wD:t9", "number": 7}],
+            {"wD:t2"},
+            {5: (7, "wD:t9")},
+            id="closed_tab_excluded",
+        ),
+        pytest.param(
+            [{"label": "issue-5", "tab_id": "wD:t1"},
+             {"label": "issue-5", "tab_id": "wD:t9", "number": 7}],
+            None,
+            {5: (7, "wD:t9")},
+            id="missing_number_sorts_after_numbered",
+        ),
+    ],
+)
+def test_open_tabs_by_issue_picks_oldest_open_tab(loop_mod, tabs, closed, expected):
+    def fake_herdr(argv: list[str]) -> subprocess.CompletedProcess[str]:
+        body = json.dumps({"result": {"tabs": tabs, "type": "tab_list"}})
+        return subprocess.CompletedProcess(argv, 0, body, "")
+
+    issue_tabs = loop_mod.list_issue_tabs(fake_herdr)
+    assert loop_mod.open_tabs_by_issue(issue_tabs, closed) == expected
+
+
 def _green_ci_check(name: str = "ci") -> dict:
     return {"name": name, "status": "completed", "conclusion": "success"}
 
@@ -198,7 +300,93 @@ def test_advance_ready_false_when_any_check_failed(loop_mod):
     assert loop_mod.advance_ready(merge_info, check_runs) is False
 
 
-def test_run_dry_run_pick_next_via_fake_run_gh(loop_mod):
+def _dry_run_herdr(scenario: str):
+    """Fake herdr ``tab list`` for dry-run; ``missing`` mimics herdr not on PATH."""
+
+    def fake_herdr(argv: list[str]) -> subprocess.CompletedProcess[str]:
+        assert argv[1:3] == ["tab", "list"], argv
+        if scenario == "missing":
+            raise FileNotFoundError(2, "No such file or directory", "herdr")
+        if scenario == "error":
+            body = json.dumps({"error": {"code": "boom", "message": "no socket"}})
+            return subprocess.CompletedProcess(argv, 1, body, "")
+        tabs = (
+            [
+                {"label": "issue-20", "tab_id": "wD:t20", "number": 2},
+                {"label": "issue-99", "tab_id": "wD:t99", "number": 3},
+                {"label": "driver", "tab_id": "wD:tD", "number": 1},
+            ]
+            if scenario == "in_progress"
+            else [
+                {"label": "issue-8", "tab_id": "wD:t8", "number": 9},
+                {"label": "issue-20", "tab_id": "wD:t20", "number": 4},
+            ]
+            if scenario == "several"
+            else []
+        )
+        body = json.dumps({"result": {"tabs": tabs, "type": "tab_list"}})
+        return subprocess.CompletedProcess(argv, 0, body, "")
+
+    return fake_herdr
+
+
+_DRY_8 = "#8 Next eligible https://example/o/r/issues/8"
+_DRY_20 = "#20 Later https://example/o/r/issues/20"
+
+
+# @regression
+@pytest.mark.parametrize(
+    ("scenario", "expected_tail", "expected_err"),
+    [
+        ("no_tabs", ["planned (2):", f"  1. {_DRY_8}", f"  2. {_DRY_20}", f"next: {_DRY_8}"], ""),
+        (
+            "in_progress",
+            [
+                "planned (2):",
+                f"  1. {_DRY_20} (in progress, tab open)",
+                f"  2. {_DRY_8}",
+                f"next: {_DRY_20}",
+            ],
+            "WARNING: issue-99 tab open but #99 is not in the eligible queue",
+        ),
+        (
+            "several",
+            [
+                "planned (2):",
+                f"  1. {_DRY_20} (in progress, tab open)",
+                f"  2. {_DRY_8} (in progress, tab open)",
+                f"next: {_DRY_20}",
+            ],
+            "resuming #20 first (oldest tab); the others (#8)",
+        ),
+        (
+            "missing",
+            [
+                "in-progress: unknown (herdr unavailable: herdr not found on PATH)",
+                "planned (2):",
+                f"  1. {_DRY_8}",
+                f"  2. {_DRY_20}",
+                f"next: {_DRY_8}",
+            ],
+            "",
+        ),
+        (
+            "error",
+            [
+                "in-progress: unknown (herdr unavailable: herdr tab list failed (boom): no socket)",
+                "planned (2):",
+                f"  1. {_DRY_8}",
+                f"  2. {_DRY_20}",
+                f"next: {_DRY_8}",
+            ],
+            "",
+        ),
+    ],
+)
+def test_run_dry_run_pick_next_via_fake_run_gh(
+    loop_mod, capsys, scenario, expected_tail, expected_err
+):
+    """Dry-run lists in-progress tickets first; herdr failure falls back to queue order."""
     issues = [
         {
             "number": 20,
@@ -252,15 +440,20 @@ def test_run_dry_run_pick_next_via_fake_run_gh(loop_mod):
             raise AssertionError(f"unexpected gh argv: {argv}")
         return subprocess.CompletedProcess(argv, 0, body, "")
 
-    lines = loop_mod.run_dry_run(LABEL, "owner/repo", run_gh=fake_run_gh)
-    text = "\n".join(lines)
-    assert "repo: owner/repo" in text
-    assert "3 with 'agent-ready' label, 3 is assigned on 'viewer'" in text
-    assert "planned (2):" in text
-    assert "  1. #8 Next eligible" in text
-    assert "  2. #20 Later" in text
-    assert "next: #8 Next eligible" in text
-    assert "#5" not in text  # blocked by open blocker
+    lines = loop_mod.run_dry_run(
+        LABEL, "owner/repo", run_gh=fake_run_gh, run_herdr=_dry_run_herdr(scenario)
+    )
+    # #5 is absent: blocked by an open blocker.
+    assert lines == [
+        "repo: owner/repo",
+        "3 with 'agent-ready' label, 3 is assigned on 'viewer'",
+        *expected_tail,
+    ]
+    err = capsys.readouterr().err
+    if expected_err:
+        assert expected_err in err
+    else:
+        assert err == ""
 
 
 def test_close_worker_tab_closes_even_when_agent_gone(loop_mod):
