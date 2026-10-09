@@ -28,6 +28,10 @@ from llmwiki.cache import (
     resolve_pricing_model,
 )
 from llmwiki.config_schedule import _load_sessions_config
+from llmwiki.synth.base import (
+    CAPPED_USABLE_BODY_CHARS,
+    BaseSynthesizer,
+)
 
 # ─── Measured per-call constants for the `claude` CLI backend ──────────
 #
@@ -53,9 +57,10 @@ NON_LEAN_CACHE_READ_FRACTION = 0.5
 # mean 1,372, spread 902-2,554. (A clean demo session returns ~800; real
 # transcripts carry more claims and quotes, so they generate more page.)
 DEFAULT_OUTPUT_TOKENS = 1400
-# claude_cli.py truncates every body to this many characters before sending,
-# so anything past it is never billed.
-BODY_CHAR_CAP = 8000
+# Default body budget for the Claude CLI estimate path — same value as
+# ``ClaudeCLISynthesizer.usable_body_chars()`` (#311). Prefer resolving via
+# a backend instance when one is available; this alias keeps older tests.
+BODY_CHAR_CAP = CAPPED_USABLE_BODY_CHARS
 
 
 def _rendered_template_tokens(wiki_sources_dir: Any | None = None) -> int:
@@ -107,15 +112,20 @@ def synthesize_estimate_report(
     exclude_headless: bool | None = None,
     lean: bool = True,
     template_tokens: int | None = None,
+    backend: BaseSynthesizer | None = None,
+    usable_body_chars: int | None = None,
 ) -> dict:
     """Compute the incremental vs full-force cost report (G-07 · #293).
 
-    Prices what the ``claude`` CLI backend actually sends per page:
+    Prices what the active synthesizer backend actually sends per page:
     per-call scaffolding + the rendered prompt template (including the
-    injected topic vocabulary) + the body, truncated to
-    ``BODY_CHAR_CAP`` as ``claude_cli.py`` truncates it. There is no
-    shared cached prefix — each page is a separate process — so cost
-    scales linearly with page count.
+    injected topic vocabulary) + the body, capped to that backend's
+    :meth:`~BaseSynthesizer.usable_body_chars` budget (#311). Long docs
+    are estimated as one document job split into N internal chunks at
+    that budget — not as a silent ``[:8000]`` discard. Defaults follow
+    the Claude CLI path when no backend is supplied. There is no shared
+    cached prefix — each page is a separate process — so cost scales
+    linearly with call count.
 
     Returns a plain dict so the CLI can render it AND tests can inspect
     the numbers without parsing stdout. Keys:
@@ -150,7 +160,6 @@ def synthesize_estimate_report(
     disk and is what the CLI invokes.
     """
     from llmwiki.synth.pipeline import (  # noqa: PLC0415 — cycle: synth.pipeline↔synth.estimate
-        _DOC_CHUNK_MAX_CHARS,
         DOCS_REL_PREFIX,
         _chunk_markdown,
         _discover_raw_docs,
@@ -164,6 +173,14 @@ def synthesize_estimate_report(
         source_synth_is_done,
         synth_page_filename,
     )
+
+    if usable_body_chars is None:
+        usable_body_chars = (
+            backend.usable_body_chars()
+            if backend is not None
+            else CAPPED_USABLE_BODY_CHARS
+        )
+    body_budget = max(1, int(usable_body_chars))
     from llmwiki.synth.pipeline import (  # noqa: PLC0415 — cycle: synth.pipeline↔synth.estimate
         RAW_DOCS as _RAW_DOCS_DEFAULT,
     )
@@ -315,9 +332,9 @@ def synthesize_estimate_report(
         return row
 
     def _body_tokens(text: str) -> int:
-        """Tokens actually billed for one body — the backend truncates first."""
+        """Tokens billed for one body under the active usable-body budget."""
         return estimate_tokens(
-            (text or "")[:BODY_CHAR_CAP], TRANSCRIPT_CHARS_PER_TOKEN
+            (text or "")[:body_budget], TRANSCRIPT_CHARS_PER_TOKEN
         )
 
     def _page_usd(body_tokens: int, *, first: bool) -> float:
@@ -451,7 +468,8 @@ def synthesize_estimate_report(
         source_key = raw_source_key(rel, is_doc=True)
         project = str(meta.get("project") or "docs")
         filename = synth_page_filename(meta, p.stem)
-        chunks = _chunk_markdown(body, _DOC_CHUNK_MAX_CHARS)
+        # Chunk to the same usable-body budget the synth backend will use (#311).
+        chunks = _chunk_markdown(body, body_budget)
         out_dir = sources_root / project
         # Pages this doc owns come from disk, exactly as the synth run resolves them.
         # A doc with no pages yet has nothing to probe and stays pending.
@@ -472,8 +490,7 @@ def synthesize_estimate_report(
             force=False,
             page_is_pending=page_is_pending,
         )
-        # An oversized doc is written as one page per chunk, and each page is
-        # its own `claude` call — so it is billed per chunk, not per doc.
+        # Long docs become N internal backend calls (one billable body each).
         chunk_tokens = [_body_tokens(c) for c in chunks] or [0]
         ff_cost = sum(_ff_usd(t) for t in chunk_tokens)
         full_force_usd += ff_cost

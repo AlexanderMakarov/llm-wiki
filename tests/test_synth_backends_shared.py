@@ -1,6 +1,6 @@
 """Shared synthesis-backend contracts (#230) — parametrized across engines.
 
-Backend-specific transport (Claude lean/JSON, Cursor allowlist/PATH probe, Ollama HTTP retries) stays in the per-backend test modules. This file covers resolve_backend wiring, shared-timeout isolation, and overview soft-fail / skip behaviour that must stay identical. CLI ``synth --backend`` handler tests live in ``tests/cli/test_synth.py``.
+Backend-specific transport (Claude lean/JSON, Cursor allowlist/PATH probe, Ollama HTTP retries) stays in the per-backend test modules. This file covers resolve_backend wiring, shared-timeout isolation, overview soft-fail / skip behaviour, and the usable-body budget API (#311 / @spec: 324-whole-document-storage). CLI ``synth --backend`` handler tests live in ``tests/cli/test_synth.py``.
 """
 
 from __future__ import annotations
@@ -13,7 +13,11 @@ from unittest.mock import patch
 import pytest
 
 from llmwiki.build import synthesize_overview
-from llmwiki.synth.base import DummySynthesizer
+from llmwiki.synth.base import (
+    CAPPED_USABLE_BODY_CHARS,
+    DUMMY_USABLE_BODY_CHARS,
+    DummySynthesizer,
+)
 from llmwiki.synth.claude_cli import (
     DEFAULT_CLAUDE_TIMEOUT,
     ClaudeCLISynthesizer,
@@ -185,3 +189,34 @@ def test_cursor_overview_completion_uses_run_prompt() -> None:
     with patch.object(backend, "run_prompt", return_value="ok") as run:
         assert backend.overview_completion("hello") == "ok"
     run.assert_called_once_with("hello", timeout=120.0)
+
+
+# ─── usable_body_chars budget (#311) ───────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    "backend_factory",
+    [
+        lambda: ClaudeCLISynthesizer(claude_path="/usr/bin/claude"),
+        lambda: CursorCLISynthesizer(model="composer-2.5"),
+        lambda: OllamaSynthesizer(),
+    ],
+    ids=["claude_cli", "cursor_cli", "ollama"],
+)
+def test_capped_backends_report_finite_positive_usable_body_budget(
+    backend_factory,
+) -> None:
+    """Claude / Cursor / Ollama expose a finite positive body budget under ~8k."""
+    budget = backend_factory().usable_body_chars()
+    assert budget == CAPPED_USABLE_BODY_CHARS
+    assert 0 < budget < 8000
+    assert budget == 8000 - 1000  # envelope minus prompt/meta overhead
+
+
+def test_dummy_usable_body_budget_covers_multi_section_fixtures() -> None:
+    """Dummy budget is large enough that multi-section fixtures fit in one call."""
+    budget = DummySynthesizer().usable_body_chars()
+    assert budget == DUMMY_USABLE_BODY_CHARS
+    # Multi-section fixtures in the suite are tens of KB, not millions.
+    assert budget >= 100_000
+    assert budget > CAPPED_USABLE_BODY_CHARS * 100

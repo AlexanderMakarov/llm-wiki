@@ -114,6 +114,17 @@ def usage_limit_from_text(
     )
 
 
+# Historical per-call body envelope shared by Claude CLI / Cursor CLI /
+# Ollama (``raw_body[:8000]``). Usable body is that envelope minus a fixed
+# prompt/meta headroom so section-aware chunking (#311) never relies on
+# silent truncation as the coverage path.
+BODY_INPUT_ENVELOPE_CHARS = 8000
+PROMPT_META_BODY_OVERHEAD_CHARS = 1000
+CAPPED_USABLE_BODY_CHARS = BODY_INPUT_ENVELOPE_CHARS - PROMPT_META_BODY_OVERHEAD_CHARS
+# Dummy / dry-run: large enough that multi-section fixtures fit in one call.
+DUMMY_USABLE_BODY_CHARS = 10_000_000
+
+
 class BaseSynthesizer(ABC):
     """Interface for LLM-backed wiki-page synthesizers."""
 
@@ -121,6 +132,17 @@ class BaseSynthesizer(ABC):
     #: publish machine-assembled prose (candidates.promote) check this
     #: instead of pattern-matching on class names.
     is_llm = True
+
+    def usable_body_chars(self) -> int:
+        """Max raw-body characters one ``synthesize_source_page`` call can cover.
+
+        Pipeline and estimate chunk long docs to this budget (backend-specific).
+        Capped CLI/HTTP backends leave prompt/meta headroom inside the
+        historical ~8k envelope; :class:`DummySynthesizer` returns a large
+        value so dry-run and tests cover multi-section fixtures in one call.
+        Silent truncation is a last-resort safety net, not the coverage path.
+        """
+        return CAPPED_USABLE_BODY_CHARS
 
     def synthesize_key_facts(
         self,
@@ -212,6 +234,10 @@ class DummySynthesizer(BaseSynthesizer):
     """
 
     is_llm = False
+
+    def usable_body_chars(self) -> int:
+        """Effectively unlimited — dry-run and tests cover whole fixtures."""
+        return DUMMY_USABLE_BODY_CHARS
 
     def _title_case_project(self, project: str) -> str:
         """``ai-newsletter`` → ``AiNewsletter`` (matches entity filenames)."""

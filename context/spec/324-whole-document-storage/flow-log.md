@@ -39,3 +39,10 @@ Feature delivery for https://github.com/AlexanderMakarov/llm-wiki/issues/311 via
 - `chunk_markdown_by_sections` kept for synth reuse; hash/dedup still whole-body
 - `tests/test_add_doc.py`: long-doc single-file coverage + `write_legacy_multipart_raw_doc` helper
 - Verified: ruff + 97 `test_add_doc` tests; TMP vault long add → one raw path; ephemeral vault removed
+
+## implement (slice 2)
+
+- `BaseSynthesizer.usable_body_chars()` + `CAPPED_USABLE_BODY_CHARS` (7000) / `DUMMY_USABLE_BODY_CHARS`
+- Claude CLI / Cursor CLI / Ollama override capped; Dummy large; send-time truncate uses budget
+- `estimate.py` bills and doc-chunks via same API (`backend=` / `usable_body_chars=`)
+- Tests in `test_synth_backends_shared.py` + `test_synthesize_estimate.py`; ruff + targeted pytest green

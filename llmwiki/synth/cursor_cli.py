@@ -13,7 +13,7 @@ Default model is the cheapest Composer id Agent CLI lists
 
 Prompt delivery: Agent CLI accepts a positional prompt *or* stdin when no
 prompt argv is given (verified). Prefer stdin so long pages stay under
-OS argv limits; body still capped at 8 KB like Claude / Ollama.
+OS argv limits; body budget matches Claude / Ollama via ``usable_body_chars``.
 """
 
 from __future__ import annotations
@@ -25,6 +25,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from llmwiki.synth.base import (
+    CAPPED_USABLE_BODY_CHARS,
     BaseSynthesizer,
     split_prompt_template,
     usage_limit_from_text,
@@ -42,8 +43,8 @@ DEFAULT_CURSOR_TIMEOUT = 180
 # Does not strip the agent system prompt (still ~21k floor on Composer).
 _LEAN_ALLOWED_TOOLS = "truncated_tool_call"
 
-# Same 8 KB body cap as Claude / Ollama / agent-delegate.
-_BODY_CHAR_CAP = 8000
+# Alias for tests that assert the send-time body budget (#311).
+_BODY_CHAR_CAP = CAPPED_USABLE_BODY_CHARS
 
 # Tiny live probe for ``is_available`` / ``synth --check``. Agent CLI is
 # slower than an HTTP tags ping, so this is longer than Ollama's 2s but
@@ -144,6 +145,10 @@ class CursorCLISynthesizer(BaseSynthesizer):
         """Kill every Agent CLI process still running (#181)."""
         return self._children.kill_all()
 
+    def usable_body_chars(self) -> int:
+        """~8k envelope minus prompt/meta overhead (#311)."""
+        return CAPPED_USABLE_BODY_CHARS
+
     @property
     def name(self) -> str:
         return "cursor-cli"
@@ -243,7 +248,9 @@ class CursorCLISynthesizer(BaseSynthesizer):
         meta: dict[str, Any],
         prompt_template: str,
     ) -> str:
-        truncated_body = raw_body[:_BODY_CHAR_CAP] if raw_body else ""
+        # Safety net only — long docs are chunked to usable_body_chars (#311).
+        cap = self.usable_body_chars()
+        truncated_body = raw_body[:cap] if raw_body else ""
         # Cursor Agent CLI has no documented ``--system-prompt`` channel
         # (unlike ``claude -p``), but Cursor *does* bill prompt-cache
         # read/write at the provider layer. Put the run-stable template

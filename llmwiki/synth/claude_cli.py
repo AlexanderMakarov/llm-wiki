@@ -30,6 +30,7 @@ from typing import Any
 from llmwiki.claude_path import resolve_claude_path as _resolve_claude_path
 from llmwiki.config_schedule import _load_sessions_config
 from llmwiki.synth.base import (
+    CAPPED_USABLE_BODY_CHARS,
     BackendUsageLimitError,
     BaseSynthesizer,
     split_prompt_template,
@@ -350,6 +351,10 @@ class ClaudeCLISynthesizer(BaseSynthesizer):
         """Kill every ``claude -p`` page process still running (#181)."""
         return self._children.kill_all()
 
+    def usable_body_chars(self) -> int:
+        """~8k envelope minus prompt/meta overhead (#311)."""
+        return CAPPED_USABLE_BODY_CHARS
+
     def reset_usage(self) -> None:
         """Clear accumulated usage before a multi-page synth run."""
         with self._usage_lock:
@@ -437,9 +442,9 @@ class ClaudeCLISynthesizer(BaseSynthesizer):
                 "claude CLI not found — install it, pass synthesis.claude_path, "
                 "or configure synthesis.backend=ollama"
             )
-        # Same 8 KB body cap as the ollama/agent-delegate backends: the
-        # add pipeline chunks raw docs to ~7 KB, so nothing is lost.
-        truncated_body = raw_body[:8000] if raw_body else ""
+        # Safety net only — long docs are chunked to usable_body_chars (#311).
+        cap = self.usable_body_chars()
+        truncated_body = raw_body[:cap] if raw_body else ""
         # Route the run-stable half of the template to the system prompt,
         # which is the only part `claude -p` caches between invocations.
         stable, per_page = split_prompt_template(prompt_template)

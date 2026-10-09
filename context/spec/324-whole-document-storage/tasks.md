@@ -14,12 +14,12 @@
   - [x] Update `tests/test_add_doc.py` (and related) for single-file long docs; keep a fixture or note for legacy multi-file layout used by later migrate tests. **[Agent: generalPurpose]**
   - [x] Verify: targeted pytest green; add a long fixture doc into `$TMP_VAULT` and confirm one raw path; delete ephemeral artifacts. **[Agent: generalPurpose]**
 
-- [ ] **Slice 2: Backend usable-body budget API (no silent truncate as coverage)**
+- [x] **Slice 2: Backend usable-body budget API (no silent truncate as coverage)**
 
   > Shared budget so pipeline/estimate know how much body each backend can take.
-  - [ ] Add `usable_body_chars` (or equivalent) on `BaseSynthesizer`; implement for Claude CLI / Cursor CLI / Ollama (≈8k minus prompt/meta overhead) and Dummy (large). Wire `estimate.py` to the same API; stop treating bare `BODY_CHAR_CAP` / `[:8000]` as the only coverage path. **[Agent: generalPurpose]**
-  - [ ] Unit tests: budget returns finite positive values for capped backends; Dummy large enough for multi-section fixtures. **[Agent: generalPurpose]**
-  - [ ] Verify: targeted pytest green; delete ephemeral artifacts. **[Agent: generalPurpose]**
+  - [x] Add `usable_body_chars` (or equivalent) on `BaseSynthesizer`; implement for Claude CLI / Cursor CLI / Ollama (≈8k minus prompt/meta overhead) and Dummy (large). Wire `estimate.py` to the same API; stop treating bare `BODY_CHAR_CAP` / `[:8000]` as the only coverage path. **[Agent: generalPurpose]**
+  - [x] Unit tests: budget returns finite positive values for capped backends; Dummy large enough for multi-section fixtures. **[Agent: generalPurpose]**
+  - [x] Verify: targeted pytest green; delete ephemeral artifacts. **[Agent: generalPurpose]**
 
 - [ ] **Slice 3: Synth in-memory chunk + stitch → one wiki source page + atomic failure**
 

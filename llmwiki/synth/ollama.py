@@ -52,6 +52,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from llmwiki.synth.base import (
+    CAPPED_USABLE_BODY_CHARS,
     BaseSynthesizer,
     split_prompt_template,
     usage_limit_from_text,
@@ -217,6 +218,10 @@ class OllamaSynthesizer(BaseSynthesizer):
 
     # ---- BaseSynthesizer interface --------------------------------
 
+    def usable_body_chars(self) -> int:
+        """~8k envelope minus prompt/meta overhead (#311)."""
+        return CAPPED_USABLE_BODY_CHARS
+
     def is_available(self) -> bool:
         """Probe ``/api/tags`` with a 2-second timeout.
 
@@ -279,13 +284,10 @@ class OllamaSynthesizer(BaseSynthesizer):
         BackendUsageLimitError
             That non-2xx response's body reports an exhausted account quota.
         """
-        # #py-h7 (#585): pipeline used to pre-render the prompt for us
-        # (with `body[:8000]` truncation + a `key: value` meta format),
-        # but that violated the BaseSynthesizer contract. Now we own the
-        # render. Mirror the previous 8 KB body cap so very long sessions
-        # don't blow Ollama's context window — agent_delegate uses the
-        # same cap; centralise here so the limit lives next to the prompt.
-        truncated_body = raw_body[:8000] if raw_body else ""
+        # Safety net only — long docs are chunked to usable_body_chars (#311).
+        # #py-h7 (#585): we own the prompt render (body + meta placeholders).
+        cap = self.usable_body_chars()
+        truncated_body = raw_body[:cap] if raw_body else ""
         # Ollama bills nothing, but it does keep a KV cache keyed on the
         # prompt prefix: passing the run-stable half as `system` keeps that
         # prefix identical across pages, so only the per-page tail is
