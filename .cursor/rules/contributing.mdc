@@ -10,7 +10,7 @@ At the **start of every session** that changes **this repository's code or docs*
 Pay special attention to:
 
 1. One concern per PR; conventional-commit titles (`feat` `fix` `chore` `docs` `test` `refactor` `perf` `security` `release` — nothing else)
-2. Docs + CHANGELOG for every user-visible change
+2. Docs + CHANGELOG for every user-visible change; if the changed surface is itself still unreleased (only under `[Unreleased]`), update its existing entry instead of adding a *Fixed* / *Changed* one
 3. New CLI subcommands / config keys / lint rules → matching row in `docs/reference/*.md` (CI enforces CLI coverage)
 4. No new runtime deps — stdlib plus `markdown` only
 5. No real session data; no personal vault paths, OS usernames, hostnames, or vault roots in PRs, commits, issue comments, or CHANGELOG — use placeholders (`/home/USER/…`, `<vault>`, `<user>`). Ready-to-paste smoke/live-vault shell blocks in operator chat may use real local paths when known; see CONTRIBUTING Privacy rules.

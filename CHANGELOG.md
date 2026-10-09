@@ -24,6 +24,9 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Changed
 
+- **CHANGELOG rule: follow-ups to unreleased work edit the existing entry** — CONTRIBUTING, the agent contributing rules (Claude and Cursor) and `REVIEW_CHECKLIST.md` now say that when a change touches something that exists only under `## [Unreleased]`, the existing entry is rewritten to the final behaviour instead of a new *Fixed* / *Changed* entry being added, so release notes describe what ships rather than the fixes in between.
+  - *Release note:* Contributors: fixes to not-yet-released features update their existing CHANGELOG entry.
+
 - **Delivery flows decide `Closes` vs `Relevant to` from the issue itself** — `/fix-bug` and `/implement-feature` now record the PR's issue-link keyword, with a one-line reason, in the commit-push flow-log entry. A PR closes the issue when it delivers every requested change and acceptance criterion that issue owns; work the issue hands to another issue no longer makes it partial. CONTRIBUTING, the agent contributing rules, `delivery-flow.md` §10 and the ready-issue loop worker skill all say the same. Previously an over-cautious `Relevant to #323` on a complete PR left the issue open and held the herdr ready-issue loop.
   - *Release note:* Maintainers only: agent-delivered PRs now close the issue they fully deliver instead of defaulting to `Relevant to`.
 
