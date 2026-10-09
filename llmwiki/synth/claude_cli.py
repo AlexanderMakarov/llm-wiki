@@ -30,9 +30,12 @@ from typing import Any
 from llmwiki.claude_path import resolve_claude_path as _resolve_claude_path
 from llmwiki.config_schedule import _load_sessions_config
 from llmwiki.synth.base import (
-    CAPPED_USABLE_BODY_CHARS,
+    SESSION_BODY_SEND_CAP_CHARS,
     BackendUsageLimitError,
     BaseSynthesizer,
+    BodyBudgetConfig,
+    load_body_budget_config,
+    resolve_usable_body_chars,
     split_prompt_template,
     usage_limit_from_text,
 )
@@ -41,6 +44,25 @@ from llmwiki.synth.ollama import _render_prompt
 
 DEFAULT_CLAUDE_MODEL = "sonnet"
 DEFAULT_CLAUDE_TIMEOUT = 180
+
+# Context windows (tokens) of the Claude model families the CLI accepts as
+# aliases or as part of a full model id — matched by substring, first hit wins.
+# Anything else (a custom id) falls back to DEFAULT_CONTEXT_WINDOW_TOKENS;
+# set ``synthesis.claude.context_window_tokens`` / ``usable_body_chars`` to override.
+_CLAUDE_CONTEXT_WINDOWS: tuple[tuple[str, int], ...] = (
+    ("haiku", 200_000),
+    ("sonnet", 200_000),
+    ("opus", 200_000),
+)
+
+
+def known_claude_context_window(model: str | None) -> int | None:
+    """Context window (tokens) for a known Claude alias / model id, else ``None``."""
+    name = (model or "").lower()
+    for needle, window in _CLAUDE_CONTEXT_WINDOWS:
+        if needle in name:
+            return window
+    return None
 
 # Nested ``synthesis.claude`` key → legacy flat ``synthesis.claude_*`` key.
 _CLAUDE_FLAT_KEYS: dict[str, str] = {
@@ -61,6 +83,7 @@ class ClaudeConfig:
     timeout: int = DEFAULT_CLAUDE_TIMEOUT
     lean: bool = True
     effort: str | None = None
+    body_budget: BodyBudgetConfig = BodyBudgetConfig()
 
 
 def load_claude_config(cfg: dict[str, Any] | None) -> ClaudeConfig:
@@ -103,6 +126,7 @@ def load_claude_config(cfg: dict[str, Any] | None) -> ClaudeConfig:
         timeout=timeout,
         lean=lean,
         effort=effort,
+        body_budget=load_body_budget_config(nested, "claude"),
     )
 
 # Synthesis is text-in / text-out: the prompt carries everything the model
@@ -330,12 +354,14 @@ class ClaudeCLISynthesizer(BaseSynthesizer):
         timeout: int = DEFAULT_CLAUDE_TIMEOUT,
         lean: bool = True,
         effort: str | None = None,
+        body_budget: BodyBudgetConfig | None = None,
     ) -> None:
         self.claude_path = claude_path
         self.model = model
         self.timeout = timeout
         self.lean = lean
         self.effort = effort
+        self.body_budget = body_budget or BodyBudgetConfig()
         self._run_tokens = 0
         self._run_cost_usd = 0.0
         self._run_has_usage = False
@@ -352,8 +378,21 @@ class ClaudeCLISynthesizer(BaseSynthesizer):
         return self._children.kill_all()
 
     def usable_body_chars(self) -> int:
-        """~8k envelope minus prompt/meta overhead (#311)."""
-        return CAPPED_USABLE_BODY_CHARS
+        """Document-chunk budget: config, else the model's known window (#311)."""
+        return resolve_usable_body_chars(
+            self.body_budget,
+            known_window_tokens=lambda: known_claude_context_window(self.model),
+        )
+
+    def synthesize_document_chunk(
+        self,
+        chunk: str,
+        meta: dict[str, Any],
+        prompt_template: str,
+    ) -> str:
+        return self.synthesize_source_page(
+            chunk, meta, prompt_template, body_cap=self.usable_body_chars()
+        )
 
     def reset_usage(self) -> None:
         """Clear accumulated usage before a multi-page synth run."""
@@ -435,6 +474,8 @@ class ClaudeCLISynthesizer(BaseSynthesizer):
         raw_body: str,
         meta: dict[str, Any],
         prompt_template: str,
+        *,
+        body_cap: int = SESSION_BODY_SEND_CAP_CHARS,
     ) -> str:
         claude = self._resolved()
         if claude is None:
@@ -442,9 +483,9 @@ class ClaudeCLISynthesizer(BaseSynthesizer):
                 "claude CLI not found — install it, pass synthesis.claude_path, "
                 "or configure synthesis.backend=ollama"
             )
-        # Safety net only — long docs are chunked to usable_body_chars (#311).
-        cap = self.usable_body_chars()
-        truncated_body = raw_body[:cap] if raw_body else ""
+        # Sessions / evidence keep the historical cap; a document chunk
+        # arrives already within usable_body_chars and is sent whole (#311).
+        truncated_body = raw_body[:body_cap] if raw_body else ""
         # Route the run-stable half of the template to the system prompt,
         # which is the only part `claude -p` caches between invocations.
         stable, per_page = split_prompt_template(prompt_template)

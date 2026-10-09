@@ -47,7 +47,7 @@ from pathlib import Path
 import pytest
 
 from llmwiki.state_store import mtime_to_iso
-from llmwiki.synth.base import CAPPED_USABLE_BODY_CHARS
+from llmwiki.synth.base import DEFAULT_USABLE_BODY_CHARS
 from llmwiki.synth.estimate import synthesize_estimate_report
 from llmwiki.synth.pipeline import _chunk_markdown
 from llmwiki.synth.reporting import print_source_pages_current_state
@@ -361,9 +361,9 @@ def test_ac_242_chunked_doc_counts_as_one_in_pipeline(tmp_path: Path) -> None:
     wiki.mkdir(parents=True)
 
     # Write a doc body large enough to produce multiple chunks.
-    # CAPPED_USABLE_BODY_CHARS is the capped backends' chunking budget; exceed it.
-    big_body = "# Section A\n\n" + "x " * (CAPPED_USABLE_BODY_CHARS // 2 + 1) + "\n"
-    big_body += "# Section B\n\n" + "y " * (CAPPED_USABLE_BODY_CHARS // 2 + 1) + "\n"
+    # DEFAULT_USABLE_BODY_CHARS is the default chunking budget; exceed it.
+    big_body = "# Section A\n\n" + "x " * (DEFAULT_USABLE_BODY_CHARS // 2 + 1) + "\n"
+    big_body += "# Section B\n\n" + "y " * (DEFAULT_USABLE_BODY_CHARS // 2 + 1) + "\n"
     (docs / "big.md").write_text(
         "---\ntitle: Big Doc\nproject: docs\n---\n\n" + big_body,
         encoding="utf-8",
@@ -378,7 +378,7 @@ def test_ac_242_chunked_doc_counts_as_one_in_pipeline(tmp_path: Path) -> None:
     )
 
     # The document produces more than 1 chunk — verify that.
-    chunks = _chunk_markdown(big_body, CAPPED_USABLE_BODY_CHARS)
+    chunks = _chunk_markdown(big_body, DEFAULT_USABLE_BODY_CHARS)
     assert len(chunks) > 1, "Fixture must produce multiple chunks for this test to be meaningful."
 
     # Regardless of chunk count, the corpus counts the doc as 1 input.

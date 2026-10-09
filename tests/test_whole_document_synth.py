@@ -13,6 +13,7 @@ import threading
 from pathlib import Path
 
 from llmwiki._frontmatter import parse_frontmatter
+from llmwiki.doc_chunking import MAX_DOC_MARKDOWN_BYTES
 from llmwiki.synth.base import BackendUsageLimitError, BaseSynthesizer
 from llmwiki.synth.estimate import synthesize_estimate_report
 from llmwiki.synth.pipeline import _load_state, synthesize_new_sessions
@@ -370,3 +371,20 @@ def test_stitch_ignores_headings_inside_code_fences():
     a = "## Summary\n\n```\n## not a heading\n```\n"
     out = stitch_chunk_bodies([a, "## Summary\n\nB.\n"])
     assert out.count("## Summary") == 1 and "## not a heading" in out
+
+
+# ─── hard per-document cap (legacy raw docs over 512 KiB) ──────────────
+
+
+def test_legacy_raw_doc_over_512_kib_is_refused_without_a_backend_call(tmp_path: Path):
+    huge = "---\nslug: big-doc\n---\n# Huge\n\n" + "x" * MAX_DOC_MARKDOWN_BYTES
+    v = _vault(tmp_path, huge)
+    backend = CappedBackend(budget=10**9)
+
+    summary = synthesize_new_sessions(backend=backend, **v["common"])
+
+    assert backend.calls == []
+    assert summary["synthesized"] == 0
+    assert len(summary["errors"]) == 1 and "512 KiB" in summary["errors"][0]
+    assert not v["page"].exists()
+    assert "docs::big-doc.md" not in _load_state(v["common"]["state_file"])

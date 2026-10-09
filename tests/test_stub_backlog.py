@@ -17,7 +17,7 @@ import pytest
 
 from llmwiki.lint import load_pages, run_all
 from llmwiki.lint.rules import StubSourcePages
-from llmwiki.synth.base import CAPPED_USABLE_BODY_CHARS, BaseSynthesizer
+from llmwiki.synth.base import DEFAULT_USABLE_BODY_CHARS, BaseSynthesizer
 from llmwiki.synth.estimate import synthesize_estimate_report
 from llmwiki.synth.pipeline import (
     _discover_raw_sessions,
@@ -342,7 +342,7 @@ def chunked_doc_vault(vault) -> dict[str, Path]:
 
     docs = vault["docs_dir"]
     docs.mkdir(parents=True, exist_ok=True)
-    section = "lorem ipsum " * (CAPPED_USABLE_BODY_CHARS // 12)  # ~1 chunk each
+    section = "lorem ipsum " * (DEFAULT_USABLE_BODY_CHARS // 12)  # ~1 chunk each
     body = "---\nslug: big-doc\n---\n" + "\n".join(
         f"## Part {i}\n\n{section}\n" for i in range(2)
     )

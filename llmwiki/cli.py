@@ -146,6 +146,7 @@ from llmwiki.state_store import (
 from llmwiki.sync.status import (  # noqa: F401
     cmd_sync_status,
 )
+from llmwiki.synth.base import BaseSynthesizer
 from llmwiki.synth.claude_cli import load_claude_config
 from llmwiki.synth.cursor_cli import load_cursor_cli_config
 from llmwiki.synth.estimate import synthesize_estimate_report  # noqa: F401
@@ -2096,6 +2097,16 @@ def _estimate_model_for_backend(config: dict[str, Any]) -> tuple[str, bool]:
     return "", True
 
 
+def _estimate_backend(config: dict[str, Any]) -> BaseSynthesizer | None:
+    """The configured LLM backend whose body budget prices ``--estimate`` (#311).
+
+    ``None`` for the dummy backend (it prices nothing), which keeps the
+    default-window budget instead of the dummy's unlimited one.
+    """
+    backend = resolve_backend(config)
+    return backend if backend.is_llm else None
+
+
 def _config_with_synth_backend_override(
     args: argparse.Namespace,
     config: dict[str, Any] | None = None,
@@ -2541,6 +2552,8 @@ def _synthesize_estimate(
         docs_root=docs_root,
         include_subagents=resolve_include_subagents(loaded_cfg),
         exclude_headless=resolve_exclude_headless(loaded_cfg),
+        # Price document chunks at the active backend's usable body budget (#311).
+        backend=_estimate_backend(loaded_cfg),
     )
     pending_rows = [
         {

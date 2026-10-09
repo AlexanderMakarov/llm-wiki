@@ -13,9 +13,14 @@ Built-in backends:
 
 from __future__ import annotations
 
+import logging
 import re
 from abc import ABC, abstractmethod
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 from typing import Any
+
+from llmwiki.cache import TRANSCRIPT_CHARS_PER_TOKEN
 
 # Section header in prompts/source_page.md that separates the part which is
 # identical for every page in a run (format rules + injected topic
@@ -114,15 +119,115 @@ def usage_limit_from_text(
     )
 
 
-# Historical per-call body envelope shared by Claude CLI / Cursor CLI /
-# Ollama (``raw_body[:8000]``). Usable body is that envelope minus a fixed
-# prompt/meta headroom so section-aware chunking (#311) never relies on
-# silent truncation as the coverage path.
-BODY_INPUT_ENVELOPE_CHARS = 8000
-PROMPT_META_BODY_OVERHEAD_CHARS = 1000
-CAPPED_USABLE_BODY_CHARS = BODY_INPUT_ENVELOPE_CHARS - PROMPT_META_BODY_OVERHEAD_CHARS
-# Dummy / dry-run: large enough that multi-section fixtures fit in one call.
+# ─── Body budgets (#311) ───────────────────────────────────────────────
+#
+# Two different limits, deliberately kept apart:
+#
+# * ``SESSION_BODY_SEND_CAP_CHARS`` — the historical per-call cap on a body
+#   sent through ``synthesize_source_page`` (sessions, harvest evidence,
+#   topic consolidation). Unchanged since before #311.
+# * the *usable body budget* — how many raw-body characters one call can
+#   cover for a **document chunk**. Derived from the backend's context window
+#   (see :func:`usable_body_chars_for_window`) or set directly in config.
+#   Documents are stored whole and chunked in memory to this budget.
+
+#: Historical send cap for session / evidence bodies (never shrinks).
+SESSION_BODY_SEND_CAP_CHARS = 8000
+
+#: Tokens reserved for the rendered prompt template (format rules, topic
+#: vocabulary, ``{meta}``). The shipped template renders to ~1,800 tokens
+#: before the body; the rest is headroom for a growing topic vocabulary.
+PROMPT_RESERVE_TOKENS = 2000
+#: Tokens reserved for the model's page. Measured output spread is 902–2,554
+#: tokens per page (see ``estimate.DEFAULT_OUTPUT_TOKENS``).
+OUTPUT_RESERVE_TOKENS = 2600
+#: Characters per token used to convert the remaining window into body
+#: characters — the measured *transcript* ratio, which is lower (more tokens
+#: per character) than prose, so the budget errs on the small side.
+BODY_CHARS_PER_TOKEN = TRANSCRIPT_CHARS_PER_TOKEN
+#: Window assumed when none is configured, detected, or known for the model.
+DEFAULT_CONTEXT_WINDOW_TOKENS = 8192
+#: A budget never goes below this, however small the window.
+MIN_USABLE_BODY_CHARS = 1000
+#: Dummy / dry-run: large enough that multi-section fixtures fit in one call.
 DUMMY_USABLE_BODY_CHARS = 10_000_000
+
+_log = logging.getLogger(__name__)
+
+
+def usable_body_chars_for_window(context_window_tokens: int) -> int:
+    """Body characters one call can carry in a ``context_window_tokens`` window.
+
+    ``(window - PROMPT_RESERVE_TOKENS - OUTPUT_RESERVE_TOKENS) * BODY_CHARS_PER_TOKEN``,
+    floored at :data:`MIN_USABLE_BODY_CHARS`. With the default 8,192-token window
+    that is ~7,300 characters; with a 200,000-token window, ~400,000.
+    """
+    room = int(context_window_tokens) - PROMPT_RESERVE_TOKENS - OUTPUT_RESERVE_TOKENS
+    return max(MIN_USABLE_BODY_CHARS, int(room * BODY_CHARS_PER_TOKEN))
+
+
+#: Budget when nothing configures or identifies the window (derived, not typed).
+DEFAULT_USABLE_BODY_CHARS = usable_body_chars_for_window(DEFAULT_CONTEXT_WINDOW_TOKENS)
+
+
+def _positive_int(value: Any, key: str) -> int | None:
+    """``value`` as a positive int, or ``None`` (warned) when unusable."""
+    if value is None or value == "":
+        return None
+    if isinstance(value, bool):
+        ok, number = False, 0
+    else:
+        try:
+            number = int(value)
+            ok = number > 0
+        except (TypeError, ValueError):
+            ok, number = False, 0
+    if not ok:
+        _log.warning("ignoring synthesis.%s=%r — expected a positive integer", key, value)
+        return None
+    return number
+
+
+@dataclass(frozen=True)
+class BodyBudgetConfig:
+    """``usable_body_chars`` / ``context_window_tokens`` from one backend block."""
+
+    usable_body_chars: int | None = None
+    context_window_tokens: int | None = None
+
+
+def load_body_budget_config(section: Mapping[str, Any] | None, backend: str) -> BodyBudgetConfig:
+    """Read the two budget keys from ``synthesis.<backend>`` (bad values warn and are ignored)."""
+    section = section if isinstance(section, Mapping) else {}
+    return BodyBudgetConfig(
+        usable_body_chars=_positive_int(
+            section.get("usable_body_chars"), f"{backend}.usable_body_chars"
+        ),
+        context_window_tokens=_positive_int(
+            section.get("context_window_tokens"), f"{backend}.context_window_tokens"
+        ),
+    )
+
+
+def resolve_usable_body_chars(
+    budget: BodyBudgetConfig,
+    *,
+    known_window_tokens: Callable[[], int | None] | None = None,
+) -> int:
+    """The usable body budget, in resolution order.
+
+    1. explicit ``usable_body_chars``;
+    2. derived from ``context_window_tokens`` (config);
+    3. derived from the backend's own knowledge of its window — a known-model
+       table or an auto-detected value — via ``known_window_tokens``;
+    4. derived from :data:`DEFAULT_CONTEXT_WINDOW_TOKENS`.
+    """
+    if budget.usable_body_chars is not None:
+        return budget.usable_body_chars
+    window = budget.context_window_tokens
+    if window is None and known_window_tokens is not None:
+        window = known_window_tokens()
+    return usable_body_chars_for_window(window) if window else DEFAULT_USABLE_BODY_CHARS
 
 
 class BaseSynthesizer(ABC):
@@ -134,15 +239,32 @@ class BaseSynthesizer(ABC):
     is_llm = True
 
     def usable_body_chars(self) -> int:
-        """Max raw-body characters one ``synthesize_source_page`` call can cover.
+        """Max raw-body characters one *document chunk* call can cover (#311).
 
-        Pipeline and estimate chunk long docs to this budget (backend-specific).
-        Capped CLI/HTTP backends leave prompt/meta headroom inside the
-        historical ~8k envelope; :class:`DummySynthesizer` returns a large
-        value so dry-run and tests cover multi-section fixtures in one call.
-        Silent truncation is a last-resort safety net, not the coverage path.
+        Pipeline and estimate chunk long documents to this budget. Backends
+        resolve it from config / their context window (see
+        :func:`resolve_usable_body_chars`); this default is the budget of the
+        :data:`DEFAULT_CONTEXT_WINDOW_TOKENS` window.
+        :class:`DummySynthesizer` returns a large value so dry-run and tests
+        cover multi-section fixtures in one call. Session bodies are not
+        governed by this: they keep the :data:`SESSION_BODY_SEND_CAP_CHARS` cap.
         """
-        return CAPPED_USABLE_BODY_CHARS
+        return DEFAULT_USABLE_BODY_CHARS
+
+    def synthesize_document_chunk(
+        self,
+        chunk: str,
+        meta: dict[str, Any],
+        prompt_template: str,
+    ) -> str:
+        """Synthesize one in-memory chunk of a stored document (#311).
+
+        ``chunk`` is at most :meth:`usable_body_chars` long, so it is sent
+        whole. Backends that cap the body they send override this to lift the
+        session cap up to the usable budget; the default is a plain
+        :meth:`synthesize_source_page` call.
+        """
+        return self.synthesize_source_page(chunk, meta, prompt_template)
 
     def synthesize_key_facts(
         self,

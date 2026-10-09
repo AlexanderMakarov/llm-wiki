@@ -32,11 +32,7 @@ from llmwiki import __version__
 from llmwiki._frontmatter import parse_frontmatter
 from llmwiki.claude_path import resolve_claude_path as _resolve_claude_path
 from llmwiki.convert import _resolve_convert_config, _substitute_path_username
-from llmwiki.doc_chunking import (  # noqa: F401 — re-exported; the splitter moved to doc_chunking (#311)
-    DEFAULT_CHUNK_MAX_CHARS,
-    MarkdownChunk,
-    chunk_markdown_by_sections,
-)
+from llmwiki.doc_chunking import doc_size_error
 from llmwiki.htmlmd import html_to_markdown
 from llmwiki.install_hint import install_hint, python_module_command
 from llmwiki.slugs import derive_title, slugify
@@ -47,9 +43,6 @@ __all__ = [
     "FetchResult",
     "assert_public_url",
     "guarded_fetch",
-    "DEFAULT_CHUNK_MAX_CHARS",
-    "MarkdownChunk",
-    "chunk_markdown_by_sections",
     "ConvertedDoc",
     "assert_readable_path",
     "convert_path",
@@ -763,7 +756,6 @@ def _slug_taken(target_dir: Path, s: str) -> bool:
 
 def resolve_write_target(
     title: str,
-    markdown: str,
     docs_dir: Path,
     *,
     project: str | None = None,
@@ -773,14 +765,10 @@ def resolve_write_target(
     preview so the predicted path can never diverge from what a real
     write lands (collision probe included) — see #16 final review.
 
-    ``markdown`` is unused for path resolution (kept so callers share
-    one signature with write_raw_doc); emptiness is checked at write.
-
     Raises AddError when an explicit --project slugifies to nothing
     usable (e.g. "../.." or "†"): falling back to the raw string would
     let a caller escape docs_dir or write a non-ASCII dirname the site
     can't route to (_SAFE_SEG_RE)."""
-    _ = markdown  # path identity is title/project only; body hashed separately
     base_slug = slugify(title) or "untitled"
 
     if project:
@@ -812,8 +800,12 @@ def write_raw_doc(
     Never overwrites (raw/ immutability): the doc slug is suffixed -2,
     -3, … on collision. Identical converted bodies are skipped unless
     ``force_new`` (#22). Returns a one-element list of written paths
-    (list keeps the add_sources / rollback call sites stable).
+    (list keeps the add_sources / rollback call sites stable). A converted
+    body over ``MAX_DOC_MARKDOWN_BYTES`` (512 KiB) is rejected, not written.
     """
+    too_big = doc_size_error(doc.markdown, doc.source_label)
+    if too_big:
+        raise AddError(too_big)
     content_hash = compute_content_hash(doc.markdown)
     if not force_new:
         existing = find_existing_by_hash(docs_dir, content_hash)
@@ -824,9 +816,7 @@ def write_raw_doc(
                          html_title=doc.html_title, url=doc.url,
                          path_name=doc.path_name)
     day = today or date.today().isoformat()
-    proj, slug, target = resolve_write_target(
-        title, doc.markdown, docs_dir, project=project,
-    )
+    proj, slug, target = resolve_write_target(title, docs_dir, project=project)
     body = doc.markdown.replace("\r\n", "\n")
     if not body.strip():
         raise AddError(f"nothing to write for {doc.source_label} (empty document)")
@@ -894,6 +884,11 @@ def add_sources(
                                        html_title=doc.html_title, url=doc.url,
                                        path_name=doc.path_name)
             warnings.extend(f"{src}: {w}" for w in doc.warnings)
+            # Hard per-document cap (#311): reject — also on dry-run — before
+            # any dedupe lookup or write.
+            too_big = doc_size_error(doc.markdown, src)
+            if too_big:
+                raise AddError(too_big)
             if doc.no_content:
                 # Stale/renamed URL or a client-side-rendered page: report it
                 # so the caller gets a list of unreachable sources instead of
@@ -917,7 +912,7 @@ def add_sources(
                     continue
             if dry_run:
                 _proj, slug, target = resolve_write_target(
-                    final_title, doc.markdown, docs_dir, project=project,
+                    final_title, docs_dir, project=project,
                 )
                 warnings.append(
                     f"{src}: dry-run — would write {target / f'{slug}.md'}"

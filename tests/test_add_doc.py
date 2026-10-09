@@ -14,6 +14,7 @@ import pytest
 import llmwiki.add_doc as m
 from llmwiki._frontmatter import parse_frontmatter
 from llmwiki.add_doc import AddError, DuplicateContentError, _extract_html, add_sources, assert_public_url, convert_url
+from llmwiki.doc_chunking import MAX_DOC_MARKDOWN_BYTES
 from llmwiki.slugs import slugify
 from llmwiki.synth.base import DummySynthesizer
 from llmwiki.synth.pipeline import synthesize_new_sessions
@@ -60,11 +61,11 @@ def test_invalid_url_rejected():
 
 # ── section chunker (port of kbbuilder chunkMarkdownBySections) ──────
 
-from llmwiki.add_doc import DEFAULT_CHUNK_MAX_CHARS, chunk_markdown_by_sections
+from llmwiki.doc_chunking import chunk_markdown_by_sections
 
 
 def test_chunk_small_doc_single_chunk():
-    chunks = chunk_markdown_by_sections("# T\n\nshort body\n")
+    chunks = chunk_markdown_by_sections("# T\n\nshort body\n", max_chars=7000)
     assert len(chunks) == 1
     assert chunks[0].index == 1 and chunks[0].total == 1
     assert chunks[0].heading == "T"
@@ -74,7 +75,7 @@ def test_chunk_small_doc_single_chunk():
 def test_chunk_heading_strips_inline_markup():
     # Chunk headings are still stripped for synth-time reuse / legacy part
     # titles; a permalink anchor must not leak into the heading text.
-    chunks = chunk_markdown_by_sections("## Итоги раздела [#](#15-toc-title)\n\nbody\n")
+    chunks = chunk_markdown_by_sections("## Итоги раздела [#](#15-toc-title)\n\nbody\n", max_chars=7000)
     assert chunks[0].heading == "Итоги раздела"
 
 
@@ -115,12 +116,6 @@ def test_chunk_indices_and_total():
     chunks = chunk_markdown_by_sections(md, max_chars=600)
     assert [c.index for c in chunks] == list(range(1, len(chunks) + 1))
     assert all(c.total == len(chunks) for c in chunks)
-
-
-def test_default_cap_is_7000():
-    # Historical soft default for section splitting (synth reuse, #311);
-    # keeps a chunk inside the agent-delegate raw_body[:8000] embed.
-    assert DEFAULT_CHUNK_MAX_CHARS == 7000
 
 
 # ── file/folder conversion + path safety ─────────────────────────────
@@ -1053,6 +1048,36 @@ def test_add_sources_long_piped_text_one_file_provenance(tmp_path):
     assert meta["source"] == "piped"
     assert "(part " not in text
     assert "## Sec0" in text and "## Sec4" in text
+
+
+def test_add_rejects_a_document_over_the_512_kib_limit_without_writing(tmp_path):
+    """Hard per-document cap (#311): rejected after conversion, nothing written — dry-run too."""
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    over = "# Huge\n\n" + "x" * MAX_DOC_MARKDOWN_BYTES
+    for dry in (False, True):
+        result = add_sources(["-"], docs, stdin_text=over, today="2026-07-04", dry_run=dry)
+        assert result["written"] == [] and result["titles"] == []
+        assert len(result["errors"]) == 1
+        assert "512 KiB" in result["errors"][0] and "split the source" in result["errors"][0]
+    assert list(docs.rglob("*.md")) == []
+
+
+def test_add_accepts_a_document_exactly_at_the_512_kib_limit(tmp_path):
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    # convert_text adds one trailing newline: header + filler + "\n" == the limit.
+    header = "# At Limit\n\n"
+    text = header + "x" * (MAX_DOC_MARKDOWN_BYTES - len(header) - 1)
+    result = add_sources(["-"], docs, stdin_text=text, today="2026-07-04")
+    assert result["errors"] == [] and len(result["written"]) == 1
+
+
+def test_write_raw_doc_refuses_an_oversized_converted_body(tmp_path):
+    doc = m.ConvertedDoc(title="", markdown="x" * (MAX_DOC_MARKDOWN_BYTES + 1), source_label="piped")
+    with pytest.raises(AddError, match="512 KiB"):
+        m.write_raw_doc(doc, tmp_path / "docs", explicit_title="Big")
+    assert not (tmp_path / "docs").exists()
 
 
 def test_add_sources_rejects_mixing_stdin_sentinel_with_other_sources(tmp_path):

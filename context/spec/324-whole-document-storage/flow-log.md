@@ -33,6 +33,22 @@ Feature delivery for https://github.com/AlexanderMakarov/llm-wiki/issues/311 via
 - `tasks.md` written (7 slices; no draft-approval gate under `/implement-feature`)
 - Next: commit specs, then `/awos:implement`
 
+## local-review
+
+- Smoke confirmed by operator (migrate applied on live vault; kept stitched, no mark-unsynth)
+- Pre-hash ambiguity false positive fixed (`5e565d4` / rebased)
+- Review file: `context/spec/324-whole-document-storage/review.md` (session-only, not committed)
+- Operator chose keep-all; findings applied (see `## fix (local-review keep-all)`)
+
+## fix (local-review keep-all)
+
+- N1: real usable body budget — `synthesis.<backend>.usable_body_chars` / `context_window_tokens`; order explicit chars → window tokens → backend knowledge (Claude alias table, Ollama `/api/show` `num_ctx` capped by trained context, Cursor none) → 8192-token default; formula `(window − 2000 − 2600) × 2.05`, floor 1000. Ollama always sends `options.num_ctx`. Sessions / harvest evidence keep the 8000-char send cap via `body_cap`; documents use `synthesize_document_chunk`. Dead `CAPPED_USABLE_BODY_CHARS` / `BODY_CHAR_CAP` / `_BODY_CHAR_CAP` aliases and `add_doc` chunker re-exports removed (N4)
+- N5: 512 KiB Markdown cap (`doc_size_error`) enforced in `add_sources` (incl. dry-run), `write_raw_doc` and `_synthesize_one` (legacy raw docs; no backend call)
+- B1: migrate validates `project`/`date` as safe path segments and checks `resolve().is_relative_to` the vault roots; unsafe → ambiguous. B2: whole-file existence from the filesystem (`lexists`), unreadable → ambiguous, exclusive create, never overwrite
+- N2: migrate reuses `_rewrite_sources_list(..., dedupe=True)` from `migrate_source_page_paths`
+- N3: `context/.gitignore` ignores `**/demo-*-review.md`
+- Docs: `configuration.md`, `configuration-reference.md`, `reference/synthesis-cost.md`, `reference/cli.md`, `UPGRADING.md`, CHANGELOG #311 entry
+
 ## implement (slice 1)
 
 - `write_raw_doc` / `add_sources` dry-run: one complete raw file; no `-NN` / part chrome

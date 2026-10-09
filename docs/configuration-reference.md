@@ -246,12 +246,18 @@ Optional absolute date gate so bare `llmwiki sync` does not ingest years of hist
 | `synthesis.claude` | `timeout` (alias `claude_timeout`) | int (s) | 180 | Per-page timeout for Claude. Nested wins over flat. Separate from `synthesis.ollama.timeout` — before v1.4.1 both backends shared one `timeout` key, so the Ollama default silently capped Claude pages at 60s. |
 | `synthesis.claude` | `lean` (alias `claude_lean`) | bool | true | Strip agent scaffolding (tool schemas, MCP, skills, `CLAUDE.md`, agent system prompt) from each `claude` call — ~9x cheaper per page, measured. Nested wins over flat. Only an explicit `false` opts out. See [reference/synthesis-cost.md](reference/synthesis-cost.md). |
 | `synthesis.claude` | `effort` (alias `claude_effort`) | enum | unset | `--effort` for Claude (`low`/`medium`/`high`/`xhigh`/`max`). Nested wins over flat. Extended thinking is billed as output at ~5x input; on Haiku it was 5,753 output tokens/page at the default vs 1,609 at `low`. Set `low` on small models. |
+| `synthesis.claude` | `usable_body_chars` | int | unset | Characters per **document** chunk (#311), used as-is; wins over `context_window_tokens`. Session bodies keep the fixed 8,000-char send cap. See [configuration.md § Choosing the document body budget](configuration.md#choosing-the-document-body-budget). |
+| `synthesis.claude` | `context_window_tokens` | int | known alias (`haiku`/`sonnet`/`opus` = 200000), else 8192 | Context window the document budget is derived from: `(window − 2,000 − 2,600) × 2.05` characters, floor 1,000. Unusable values warn and are ignored. |
 | `synthesis.cursor_cli` | `model` | string | `"composer-2.5"` | Cursor Agent CLI `--model` id (#230). Cheapest Composer id Agent CLI lists; pricing aliases in `model_pricing.csv` include `composer` and Grok effort/fast variants from [Cursor models & pricing](https://cursor.com/docs/models-and-pricing). |
 | `synthesis.cursor_cli` | `timeout` | int (s) | 180 | Per-page timeout for the `cursor_cli` backend. No user-facing binary-path key — resolves `agent` then `cursor-agent` from `$PATH`. |
+| `synthesis.cursor_cli` | `usable_body_chars` | int | unset | Characters per **document** chunk (#311), used as-is. Wins over `context_window_tokens`. |
+| `synthesis.cursor_cli` | `context_window_tokens` | int | 8192 | Context window the document budget is derived from (no per-model table: Cursor does not publish Agent CLI windows). |
 | `synthesis.ollama` | `model` (legacy flat `synthesis.model`) | string | `"llama3.1:8b"` | Ollama model name (pull via `ollama pull`). Nested `synthesis.ollama` is canonical; legacy flat `synthesis.model` / `timeout` / … still work but share a namespace with the other backends. |
 | `synthesis.ollama` | `base_url` | string | `"http://127.0.0.1:11434"` | Ollama HTTP endpoint |
 | `synthesis.ollama` | `timeout` (legacy flat `synthesis.timeout`) | int (s) | 60 | Per-request timeout |
 | `synthesis.ollama` | `max_retries` | int | 3 | Exponential-backoff retry count on 5xx / timeout |
+| `synthesis.ollama` | `usable_body_chars` | int | unset | Characters per **document** chunk (#311), used as-is. If larger than the window allows, the `num_ctx` sent to the server is raised to fit. |
+| `synthesis.ollama` | `context_window_tokens` | int | detected, else 8192 | Context window the document budget is derived from, and the `options.num_ctx` sent on page calls. Unset: the model's Modelfile `num_ctx` from `/api/show` (capped by its trained context), else 8192. Nested keys only. |
 | `meeting` | `enabled` | bool | false | Opt-in; non-AI adapter |
 | `meeting` | `source_dirs` | list | `["~/Meetings"]` | Directories to scan |
 | `meeting` | `extensions` | list | `[".vtt", ".srt"]` | File extensions to consider |

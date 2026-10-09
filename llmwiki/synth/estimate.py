@@ -29,7 +29,8 @@ from llmwiki.cache import (
 )
 from llmwiki.config_schedule import _load_sessions_config
 from llmwiki.synth.base import (
-    CAPPED_USABLE_BODY_CHARS,
+    DEFAULT_USABLE_BODY_CHARS,
+    SESSION_BODY_SEND_CAP_CHARS,
     BaseSynthesizer,
 )
 
@@ -57,10 +58,9 @@ NON_LEAN_CACHE_READ_FRACTION = 0.5
 # mean 1,372, spread 902-2,554. (A clean demo session returns ~800; real
 # transcripts carry more claims and quotes, so they generate more page.)
 DEFAULT_OUTPUT_TOKENS = 1400
-# Default body budget for the Claude CLI estimate path — same value as
-# ``ClaudeCLISynthesizer.usable_body_chars()`` (#311). Prefer resolving via
-# a backend instance when one is available; this alias keeps older tests.
-BODY_CHAR_CAP = CAPPED_USABLE_BODY_CHARS
+# Session bodies are sent capped at ``SESSION_BODY_SEND_CAP_CHARS`` (8,000),
+# so anything past it is never billed. Document chunks are billed up to the
+# backend's usable body budget instead (#311).
 
 
 def _rendered_template_tokens(wiki_sources_dir: Any | None = None) -> int:
@@ -182,7 +182,7 @@ def synthesize_estimate_report(
         usable_body_chars = (
             backend.usable_body_chars()
             if backend is not None
-            else CAPPED_USABLE_BODY_CHARS
+            else DEFAULT_USABLE_BODY_CHARS
         )
     body_budget = max(1, int(usable_body_chars))
     from llmwiki.synth.pipeline import (  # noqa: PLC0415 — cycle: synth.pipeline↔synth.estimate
@@ -336,11 +336,9 @@ def synthesize_estimate_report(
             pipeline_buckets[label] = row
         return row
 
-    def _body_tokens(text: str) -> int:
-        """Tokens billed for one body under the active usable-body budget."""
-        return estimate_tokens(
-            (text or "")[:body_budget], TRANSCRIPT_CHARS_PER_TOKEN
-        )
+    def _body_tokens(text: str, cap: int) -> int:
+        """Tokens billed for one body: the backend sends at most ``cap`` chars."""
+        return estimate_tokens((text or "")[:cap], TRANSCRIPT_CHARS_PER_TOKEN)
 
     def _page_usd(body_tokens: int, *, first: bool) -> float:
         """Dollars for one page: overhead + template + body in, completion out.
@@ -429,7 +427,7 @@ def synthesize_estimate_report(
             force=False,
             page_is_pending=page_is_pending,
         )
-        body_tokens = _body_tokens(body)
+        body_tokens = _body_tokens(body, SESSION_BODY_SEND_CAP_CHARS)
         # Full-force bucket: every session contributes regardless of state.
         ff_cost = _ff_usd(body_tokens)
         full_force_usd += ff_cost
@@ -496,7 +494,7 @@ def synthesize_estimate_report(
             page_is_pending=page_is_pending,
         )
         # Long docs become N internal backend calls (one billable body each).
-        chunk_tokens = [_body_tokens(c) for c in chunks] or [0]
+        chunk_tokens = [_body_tokens(c, body_budget) for c in chunks] or [0]
         ff_cost = sum(_ff_usd(t) for t in chunk_tokens)
         full_force_usd += ff_cost
         docs_row["raw"] += 1

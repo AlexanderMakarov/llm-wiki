@@ -7,9 +7,8 @@ from unittest.mock import patch
 
 import pytest
 
-from llmwiki.synth.base import PER_PAGE_MARKER
+from llmwiki.synth.base import PER_PAGE_MARKER, SESSION_BODY_SEND_CAP_CHARS
 from llmwiki.synth.cursor_cli import (
-    _BODY_CHAR_CAP,
     _PROBE_PROMPT,
     DEFAULT_CURSOR_MODEL,
     DEFAULT_CURSOR_TIMEOUT,
@@ -260,7 +259,7 @@ def test_synthesize_empty_completion_raises():
 
 
 def test_synthesize_truncates_body_to_char_cap():
-    body = "x" * (_BODY_CHAR_CAP + 500)
+    body = "x" * (SESSION_BODY_SEND_CAP_CHARS + 500)
     captured: dict[str, str] = {}
 
     def _capture(*_a, **kwargs):
@@ -274,8 +273,8 @@ def test_synthesize_truncates_body_to_char_cap():
         assert CursorCLISynthesizer().synthesize_source_page(
             body, {}, TEMPLATE
         ) == "ok"
-    assert "x" * _BODY_CHAR_CAP in captured["input"]
-    assert "x" * (_BODY_CHAR_CAP + 1) not in captured["input"]
+    assert "x" * SESSION_BODY_SEND_CAP_CHARS in captured["input"]
+    assert "x" * (SESSION_BODY_SEND_CAP_CHARS + 1) not in captured["input"]
 
 
 def test_synthesize_oserror_raises():

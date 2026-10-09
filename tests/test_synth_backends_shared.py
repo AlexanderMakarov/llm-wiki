@@ -14,7 +14,7 @@ import pytest
 
 from llmwiki.build import synthesize_overview
 from llmwiki.synth.base import (
-    CAPPED_USABLE_BODY_CHARS,
+    DEFAULT_USABLE_BODY_CHARS,
     DUMMY_USABLE_BODY_CHARS,
     DummySynthesizer,
 )
@@ -192,25 +192,23 @@ def test_cursor_overview_completion_uses_run_prompt() -> None:
 
 
 # ─── usable_body_chars budget (#311) ───────────────────────────────────
+# Resolution, defaults and send caps are covered in test_usable_body_budget.py;
+# this keeps the cross-backend contract: every backend reports a finite
+# positive budget, and the dummy backend's is large.
 
 
 @pytest.mark.parametrize(
     "backend_factory",
     [
-        lambda: ClaudeCLISynthesizer(claude_path="/usr/bin/claude"),
+        lambda: ClaudeCLISynthesizer(claude_path="/usr/bin/claude", model="custom-model"),
         lambda: CursorCLISynthesizer(model="composer-2.5"),
         lambda: OllamaSynthesizer(),
     ],
     ids=["claude_cli", "cursor_cli", "ollama"],
 )
-def test_capped_backends_report_finite_positive_usable_body_budget(
-    backend_factory,
-) -> None:
-    """Claude / Cursor / Ollama expose a finite positive body budget under ~8k."""
-    budget = backend_factory().usable_body_chars()
-    assert budget == CAPPED_USABLE_BODY_CHARS
-    assert 0 < budget < 8000
-    assert budget == 8000 - 1000  # envelope minus prompt/meta overhead
+def test_unconfigured_backends_report_the_default_window_budget(backend_factory) -> None:
+    """With no config and no known window, a backend reports the default-window budget."""
+    assert backend_factory().usable_body_chars() == DEFAULT_USABLE_BODY_CHARS
 
 
 def test_dummy_usable_body_budget_covers_multi_section_fixtures() -> None:
@@ -219,4 +217,4 @@ def test_dummy_usable_body_budget_covers_multi_section_fixtures() -> None:
     assert budget == DUMMY_USABLE_BODY_CHARS
     # Multi-section fixtures in the suite are tens of KB, not millions.
     assert budget >= 100_000
-    assert budget > CAPPED_USABLE_BODY_CHARS * 100
+    assert budget > DEFAULT_USABLE_BODY_CHARS * 100

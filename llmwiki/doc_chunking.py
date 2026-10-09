@@ -4,7 +4,8 @@ Port of kbbuilder ``chunkMarkdownBySections``. Documents are stored whole;
 this splitter only ever runs in memory, at synth time, against the active
 backend's :meth:`~llmwiki.synth.base.BaseSynthesizer.usable_body_chars`
 budget (and in the estimate, which must agree with the run). One chunker
-for both consumers — do not grow a second one.
+for both consumers — do not grow a second one. The caller always supplies the
+budget; there is no module default to drift from the backend's.
 
 Splits happen at heading boundaries, then blank-line paragraph boundaries; a
 hard character slice only ever hits a single paragraph longer than the whole
@@ -21,14 +22,16 @@ from dataclasses import dataclass
 from llmwiki.slugs import first_heading
 
 __all__ = [
-    "DEFAULT_CHUNK_MAX_CHARS",
+    "MAX_DOC_MARKDOWN_BYTES",
     "MarkdownChunk",
     "chunk_markdown_by_sections",
+    "doc_size_error",
 ]
 
-# 7000 is the historical soft default (agent-delegate raw_body[:8000]
-# headroom). Synth passes the backend's own budget instead.
-DEFAULT_CHUNK_MAX_CHARS = 7000
+#: Hard ceiling on one stored document's Markdown, in UTF-8 bytes (512 KiB).
+#: ``llmwiki add`` rejects a larger conversion without writing it, and ``synth``
+#: refuses a legacy raw doc already over it (#311).
+MAX_DOC_MARKDOWN_BYTES = 512 * 1024
 
 _FENCE_RE = _re.compile(r"^\s*(`{3,}|~{3,})")
 
@@ -99,9 +102,20 @@ def _split_oversized(section: str, max_chars: int) -> list[str]:
     return out
 
 
+def doc_size_error(markdown: str, label: str) -> str | None:
+    """Why ``markdown`` is too large to store as one document, or ``None`` if it fits."""
+    size = len(markdown.encode("utf-8"))
+    if size <= MAX_DOC_MARKDOWN_BYTES:
+        return None
+    return (
+        f"{label}: converted Markdown is {size / 1024:.0f} KiB, over the "
+        f"{MAX_DOC_MARKDOWN_BYTES // 1024} KiB per-document limit — split the source into smaller documents"
+    )
+
+
 def chunk_markdown_by_sections(
     markdown: str,
-    max_chars: int = DEFAULT_CHUNK_MAX_CHARS,
+    max_chars: int,
     heading_levels: tuple[int, ...] = (1, 2),
 ) -> list[MarkdownChunk]:
     """Split a Markdown document into section-aligned chunks ≤ max_chars.

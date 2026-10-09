@@ -33,8 +33,8 @@ import pytest
 import llmwiki.cli as cli_mod
 from llmwiki.cache import CACHE_WRITE_1H_MULTIPLIER, MODEL_PRICING, TRANSCRIPT_CHARS_PER_TOKEN
 from llmwiki.cli import synthesize_estimate_report
-from llmwiki.synth.base import CAPPED_USABLE_BODY_CHARS, DummySynthesizer
-from llmwiki.synth.estimate import BODY_CHAR_CAP, DEFAULT_OUTPUT_TOKENS, LEAN_OVERHEAD_TOKENS
+from llmwiki.synth.base import DEFAULT_USABLE_BODY_CHARS, SESSION_BODY_SEND_CAP_CHARS, DummySynthesizer
+from llmwiki.synth.estimate import DEFAULT_OUTPUT_TOKENS, LEAN_OVERHEAD_TOKENS
 from llmwiki.synth.pipeline import (
     _discover_raw_sessions,
     page_is_stub,
@@ -191,9 +191,9 @@ def test_matches_measured_cost_per_page():
     # The 18,977-char prompt is the rendered template plus a body already
     # truncated to the cap — split it the same way here.
     mean_chars = 18_977
-    template_chars = mean_chars - BODY_CHAR_CAP
+    template_chars = mean_chars - SESSION_BODY_SEND_CAP_CHARS
     rpt = synthesize_estimate_report(
-        raw_sessions=[(_P("a.md"), {}, "x" * BODY_CHAR_CAP)],
+        raw_sessions=[(_P("a.md"), {}, "x" * SESSION_BODY_SEND_CAP_CHARS)],
         state_keys=set(),
         template_tokens=int(template_chars / TRANSCRIPT_CHARS_PER_TOKEN),
         model="claude-sonnet-5",
@@ -350,13 +350,22 @@ def test_prefix_tokens_ignores_claude_md_and_wiki_pages(tmp_path, monkeypatch):
 
 
 def test_body_past_the_truncation_cap_is_not_billed():
-    """Session bodies are billed only up to the usable-body budget (sessions never chunk)."""
-    capped = [(_P("a.md"), {}, "x" * BODY_CHAR_CAP)]
-    way_over = [(_P("a.md"), {}, "x" * (BODY_CHAR_CAP * 10))]
+    """Session bodies are billed only up to the historical 8,000-char send cap, never chunked."""
+    capped = [(_P("a.md"), {}, "x" * SESSION_BODY_SEND_CAP_CHARS)]
+    way_over = [(_P("a.md"), {}, "x" * (SESSION_BODY_SEND_CAP_CHARS * 10))]
     a = synthesize_estimate_report(raw_sessions=capped, state_keys=set())
     b = synthesize_estimate_report(raw_sessions=way_over, state_keys=set())
     assert a["full_force_usd"] == pytest.approx(b["full_force_usd"])
-    assert BODY_CHAR_CAP == CAPPED_USABLE_BODY_CHARS
+
+
+def test_session_send_cap_is_independent_of_the_document_budget():
+    """A backend with a huge document budget still bills a session at the 8,000-char cap (#311)."""
+    capped = [(_P("a.md"), {}, "x" * SESSION_BODY_SEND_CAP_CHARS)]
+    way_over = [(_P("a.md"), {}, "x" * (SESSION_BODY_SEND_CAP_CHARS * 10))]
+    kwargs = {"state_keys": set(), "backend": DummySynthesizer()}
+    a = synthesize_estimate_report(raw_sessions=capped, **kwargs)
+    b = synthesize_estimate_report(raw_sessions=way_over, **kwargs)
+    assert a["full_force_usd"] == pytest.approx(b["full_force_usd"])
 
 
 def test_estimate_doc_chunks_to_usable_body_budget(tmp_path, monkeypatch):
@@ -366,7 +375,7 @@ def test_estimate_doc_chunks_to_usable_body_budget(tmp_path, monkeypatch):
     raw_docs.mkdir(parents=True)
     sources.mkdir(parents=True)
     # Two full budgets plus a remainder → three internal chunks.
-    body = "x" * (CAPPED_USABLE_BODY_CHARS * 2 + 500)
+    body = "x" * (DEFAULT_USABLE_BODY_CHARS * 2 + 500)
     (raw_docs / "long.md").write_text(body, encoding="utf-8")
 
     seen: list[int] = []
@@ -386,9 +395,9 @@ def test_estimate_doc_chunks_to_usable_body_budget(tmp_path, monkeypatch):
         wiki_sources_dir=sources,
         state_keys=set(),
         prefix_tokens=2000,
-        usable_body_chars=CAPPED_USABLE_BODY_CHARS,
+        usable_body_chars=DEFAULT_USABLE_BODY_CHARS,
     )
-    assert seen == [CAPPED_USABLE_BODY_CHARS]
+    assert seen == [DEFAULT_USABLE_BODY_CHARS]
     docs_row = next(r for r in rpt["pipeline_rows"] if r["label"] == "Documents")
     assert docs_row["pending"] == 1
     # Three chunk bodies → cost above a single-budget page (same fixture shape).
@@ -806,13 +815,13 @@ def test_estimate_doc_cost_scales_with_chunk_count_not_parts_on_disk(tmp_path, m
         assert docs_row["pending"] == 1, "one doc, whatever the chunk count"
         return docs_row["next_usd"]
 
-    # Full BODY_CHAR_CAP chunks so the (never-cached) body dominates the
+    # Full-budget chunks so the (never-cached) body dominates the
     # (partly-cached) per-call overhead/template — the cleanest signal that
     # cost tracks chunk count. Ceiling is below 3x because the overhead +
     # template half of chunks 2 and 3 rides the 0.1x cached-prefix rate; a
     # flat/no-scaling regression would show a ratio of ~1x, not ~2.5x.
-    one_chunk_usd = _docs_next_usd(["x" * BODY_CHAR_CAP])
-    three_chunk_usd = _docs_next_usd(["x" * BODY_CHAR_CAP] * 3)
+    one_chunk_usd = _docs_next_usd(["x" * DEFAULT_USABLE_BODY_CHARS])
+    three_chunk_usd = _docs_next_usd(["x" * DEFAULT_USABLE_BODY_CHARS] * 3)
     assert three_chunk_usd > one_chunk_usd * 2.0, (
         f"3 identical chunks (${three_chunk_usd:.4f}) should cost noticeably more "
         f"than one chunk (${one_chunk_usd:.4f}) — cost must scale with the derived "

@@ -42,7 +42,7 @@ from llmwiki._frontmatter import is_headless, is_subagent, parse_frontmatter
 from llmwiki.agent_label import detect_agent_label
 from llmwiki.candidates import apply_review_summary_to_pipeline
 from llmwiki.config_schedule import _load_sessions_config
-from llmwiki.doc_chunking import chunk_markdown_by_sections
+from llmwiki.doc_chunking import chunk_markdown_by_sections, doc_size_error
 from llmwiki.reindex import reindex_wiki
 from llmwiki.source_topics import source_page_needs_topics_rewrite
 from llmwiki.state_store import mtime_from_state, mtime_to_iso
@@ -291,6 +291,7 @@ def resolve_backend(
             timeout=claude_cfg.timeout,
             lean=claude_cfg.lean,
             effort=claude_cfg.effort,
+            body_budget=claude_cfg.body_budget,
         )
 
     if name == "cursor_cli":
@@ -298,6 +299,7 @@ def resolve_backend(
         return CursorCLISynthesizer(
             model=cursor_cfg.model,
             timeout=cursor_cfg.timeout,
+            body_budget=cursor_cfg.body_budget,
         )
 
     if name != "dummy":
@@ -1406,6 +1408,12 @@ def _synthesize_one(
         # `wiki/sources/<project>/<YYYY-MM-DD>-<slug>.md`.
         result["slug"] = _normalise_slug(str(meta.get("slug", p.stem)))
         filename = synth_page_filename(meta, p.stem)
+        # #311: one stored document is at most MAX_DOC_MARKDOWN_BYTES; a legacy
+        # raw doc over it is refused here (no backend call, no page, no state).
+        if item["is_doc"]:
+            too_big = doc_size_error(body, str(item["rel"]))
+            if too_big:
+                raise ValueError(too_big)
         # #311: a doc longer than the backend's usable body budget is chunked
         # in memory (one backend call per chunk) and stitched into one page.
         # Sessions are never chunked.
@@ -1427,9 +1435,15 @@ def _synthesize_one(
                 # rendering. The pipeline hands over the unrendered
                 # template; each backend renders it with the format it was
                 # designed against (textual vs JSON meta).
-                synthesized = backend.synthesize_source_page(
-                    chunk, meta, prompt_template
+                # A document chunk (≤ the usable budget) goes through the
+                # document entry point so it is sent whole; a session keeps
+                # the historical body cap (#311).
+                send = (
+                    backend.synthesize_document_chunk
+                    if item["is_doc"]
+                    else backend.synthesize_source_page
                 )
+                synthesized = send(chunk, meta, prompt_template)
             except BackendUsageLimitError:
                 result["failed_chunk"] = idx
                 raise
