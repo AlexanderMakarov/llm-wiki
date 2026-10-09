@@ -45,7 +45,7 @@
 - [ ] **Slice 6: Demo vault copy — before/after summary review package (operator gate)**
 
   > Operator reviews stitch quality on real multi-piece demo docs before smoke/local review.
-  - [ ] Copy shipped `demo/` to a throwaway dir under the worktree. Identify all multi-piece logical docs. Capture before Summary (+ Key Claims when present) per part. Run migrate preview then apply. Capture after canonical Summary (+ Key Claims). Write session-only review package `context/spec/324-whole-document-storage/demo-migrate-review.md` (do not commit if treated as review dump — follow `context/.gitignore` / operator preference). Present package to operator and **stop until they accept**. **[Agent: generalPurpose]**
+  - [x] Copy shipped `demo/` to a throwaway dir under the worktree. Identify all multi-piece logical docs. Capture before Summary (+ Key Claims when present) per part. Run migrate preview then apply. Capture after canonical Summary (+ Key Claims). Write session-only review package `context/spec/324-whole-document-storage/demo-migrate-review.md` (do not commit if treated as review dump — follow `context/.gitignore` / operator preference). Present package to operator and **stop until they accept**. **[Agent: generalPurpose]**
   - [ ] If operator requests stitch-rule tweaks, apply them, re-run the demo-copy migrate review, and re-present. **[Agent: generalPurpose]**
 
 - [ ] **Slice 7: Feature Testing & Regression**
