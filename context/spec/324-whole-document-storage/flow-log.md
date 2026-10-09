@@ -1,0 +1,34 @@
+# Flow log — 324-whole-document-storage
+
+Feature delivery for https://github.com/AlexanderMakarov/llm-wiki/issues/311 via `/implement-feature`.
+
+## fetch-ticket
+
+- Issue #311 open; labels: `enhancement`, `self-heal` (no `bug` → `/implement-feature`)
+- Related: #305 / PR #312 (site unified documents) already merged; this ticket owns vault storage + synth + migrate
+
+## resume-detection
+
+- No prior `311-*` / `whole-document-storage` spec; starting from `/awos:spec`
+
+## workspace
+
+- Branch: `feat/311-whole-document-storage`
+- Worktree: `.claude/worktrees/feat-311-whole-document-storage`
+- Throwaway vault: `.worktree-vault` (worktree `config.json`)
+
+## specs (functional)
+
+- `functional-spec.md` approved by operator → written
+- Decisions locked: stitch-only for new synth (no final AI polish); migration blocks on ambiguous groups; offline tag-union + rule-based prose merge (no AI merge); backend-specific input budgets; whole-document failure semantics; best-effort pre-migration usability
+
+## specs (tech)
+
+- `technical-considerations.md` approved → written
+- Extra gate: demo vault copy migrate + before/after Summary (+ Key Claims) package for operator review
+- Locked: migrate name `whole-document-storage`; recovery `.llmwiki-whole-doc-recovery/<UTC>/`; no mid-synth `--part-*` auto-delete
+
+## specs (tasks)
+
+- `tasks.md` written (7 slices; no draft-approval gate under `/implement-feature`)
+- Next: commit specs, then `/awos:implement`
