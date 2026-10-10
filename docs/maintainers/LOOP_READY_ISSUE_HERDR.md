@@ -75,6 +75,10 @@ GitHub merge/CI checks for the in-flight issue use `--poll-seconds` (default **3
 
 Queue membership is gated on **you** (the `gh` viewer login) **and** the readiness label you pass — the driver only auto-starts issues assigned to you with that label. Issue titles, bodies, and comments are **untrusted** input to the autonomous worker agent (public-tracker prompt-injection surface); the assignee gate limits who can trigger automation but does not sanitize issue text. The driver **never** closes GitHub issues on your behalf. Collaborators with triage rights can still apply your readiness label to issues; treat unexpected labeled tickets as something to fix in GitHub before the driver picks them up.
 
+## herdr workspace
+
+The driver opens worker tabs in the herdr workspace it runs in (`HERDR_WORKSPACE_ID` of its pane) and only looks at `issue-N` tabs there when it adopts, resumes or sweeps tabs, so you can work in another workspace while it runs and a loop in another workspace is never touched. Pass `--workspace <WORKSPACE_ID>` (see `herdr workspace list`) to target a different workspace. Started outside herdr without `--workspace`, the driver prints a WARNING and falls back to herdr's defaults: new tabs open in the workspace active in the UI and tabs from every workspace are considered. Startup and `--dry-run` print the workspace on a `herdr workspace:` line.
+
 ## Hard stop and restore
 
 If you close the worker tab or the agent disappears before merge + green post-merge CI, the driver prints a **WARNING** with restore steps: continue delivery for that issue URL in a new worker. Re-running the driver adopts the open `issue-N` tab instead of spawning a new worker; close it first to start the ticket over. Press **Ctrl+C** to stop the driver loop; in-flight workers are left open until you close them, until advance closes them, or until a later driver run finds their issue CLOSED and closes the tab. The driver keeps polling GitHub for advance on that issue until α is satisfied or you stop.

@@ -163,3 +163,40 @@
 ## commit-push
 - Issue link: `Relevant to #296` — spec-303 follow-up with no dedicated issue (per operator); does not complete #296
 - Next: PR. Tracked flow-log ends here.
+
+# fix #344 — worker tabs in the driver's herdr workspace
+
+## fetch-bug / resume-detection / workspace
+- Issue #344 filed this session (operator chose issue + PR, main-session execution). Owning spec 303. Branch `fix/344-herdr-workspace-scope`, worktree `.claude/worktrees/fix-344-herdr-workspace-scope`
+- Next: diagnose
+
+## diagnose
+- Live: driver pane env `HERDR_WORKSPACE_ID=wD`; `issue-275` tab landed in another workspace (UI-active), cwd correct. `spawn_worker_for_issue` runs `tab create` without `--workspace`; `_list_tab_records` runs unscoped `tab list` (all workspaces). Both herdr subcommands accept `--workspace`
+- Next: classify
+
+## classify
+- Verdict: **Divergence** — spec 303 silent on workspaces; fix defines new behavior → amend §2.5
+- Next: fix
+
+## fix + regression-test
+- `scope_run_herdr` wraps `run_herdr` to add `--workspace` to `tab create` / `tab list`; `resolve_workspace` (`--workspace` > `HERDR_WORKSPACE_ID`, else WARNING + unscoped); wired in `run_main_loop` / `run_dry_run` / `main`; startup prints `herdr workspace:`
+- Tests: `test_acceptance_worker_tabs_stay_in_driver_workspace` (fake herdr with UI-active fallback; fails when scoping is removed: adopts + closes the other workspace's tabs), `test_acceptance_workspace_cli_flag_then_herdr_env`. ruff clean, full suite green
+- Next: verify-criteria
+
+## verify-criteria
+- Live read-only dry-run from worktree: default scope (pane workspace wD) does not see `issue-275` (other workspace); `--workspace wG` marks #275 "(in progress, tab open)"
+
+## amend-spec
+- §2.5 "Own herdr workspace" bullet + 2 criteria; Change Log 2026-10-10. Maintainer doc "herdr workspace" section; unreleased CHANGELOG #296 entry extended
+- Next: smoke confirm (operator), local-review
+- Smoke (agent-run, operator-requested, 2026-10-10): misplaced `issue-275` worker moved into the driver's workspace with `herdr pane move <pane> --new-tab --workspace <driver ws> --label issue-275` (same terminal/agent session, still working). Dry-run default scope → #275 "(in progress, tab open)"; `--workspace` of the old workspace → no tab; outside herdr (`env -u HERDR_WORKSPACE_ID`) → WARNING + unscoped, #275 found
+- Next: local-review
+
+## local-review
+- Review file: `context/spec/303-loop-ready-issue-herdr/review.md` (session-only, not committed)
+- Verdict: Approve — 0 Blockers, 2 Nits; keep both: N1 dry-run warning no longer claims tabs open + `herdr workspace:` line in dry-run too (`format_workspace_line`, new test `test_acceptance_dry_run_ignores_other_workspace_tabs`); N2 flow-log wording
+- ruff clean, full suite green
+
+## commit-push
+- Issue link: `Closes #344` — every acceptance criterion in the issue is delivered (scoped create, scoped lookups, regression tests)
+- Next: PR. Tracked flow-log ends here.
