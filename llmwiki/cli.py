@@ -84,6 +84,7 @@ from llmwiki.candidates_harvest import (
     summarize_backlog,
 )
 from llmwiki.candidates_site import apply_candidate_actions, check_redirect_action
+from llmwiki.claude_path import resolve_claude_path
 
 # #691 / #arch-h8: extracted business logic moves out of cli.py.
 # cli.py keeps thin re-export wrappers for back-compat with anyone
@@ -1330,8 +1331,37 @@ def _confirm_plan(plan: AutomationPlan, schedule: str, vault: Path | None = None
         print(f"  '{answer}' is not one of: y, yes, n, no")
 
 
+def _maybe_pin_claude_path(synth: dict[str, Any]) -> None:
+    """Pin ``synthesis.claude.path`` when unset so systemd catch-up finds Claude (#275).
+
+    Systemd user timers often run with a minimal ``PATH`` that omits
+    ``~/.local/bin``. Resolving under the installer's environment and writing
+    the absolute path lets scheduled ``synth`` use the binary without relying
+    on ``shutil.which``. Does not overwrite an existing nested or flat path.
+    """
+    nested = synth.get("claude")
+    if not isinstance(nested, dict):
+        nested = {}
+    existing = nested.get("path") or synth.get("claude_path")
+    if existing is not None and str(existing).strip():
+        return
+    resolved = resolve_claude_path(None)
+    if resolved is None:
+        print(
+            "  warning: claude backend selected but claude CLI not found on PATH; "
+            "systemd catch-up may skip synth unless you set synthesis.claude.path",
+            file=sys.stderr,
+        )
+        return
+    pinned = str(resolved.resolve())
+    updated = dict(nested)
+    updated["path"] = pinned
+    synth["claude"] = updated
+    print(f"  wrote synthesis.claude.path={pinned!r} → config.json")
+
+
 def _write_synth_backend(backend: str) -> None:
-    """Record the chosen synthesis backend under ``synthesis.backend`` in ``config.json``."""
+    """Record ``synthesis.backend`` in ``config.json``; pin Claude path when needed (#275)."""
     cfg_path = REPO_ROOT / "config.json"
     cfg: dict[str, Any] = {}
     if cfg_path.is_file():
@@ -1342,6 +1372,8 @@ def _write_synth_backend(backend: str) -> None:
     synth = cfg.setdefault("synthesis", {})
     if isinstance(synth, dict):
         synth["backend"] = backend
+        if backend.strip().lower() == "claude":
+            _maybe_pin_claude_path(synth)
     cfg_path.write_text(json.dumps(cfg, indent=2) + "\n", encoding="utf-8")
     print(f"  wrote synthesis.backend={backend!r} → config.json")
 
@@ -1503,7 +1535,10 @@ def cmd_install_automation(args: argparse.Namespace) -> int:
             print("  Your vault, adapters, and config.json are unchanged.")
             print("  Run `python3 -m llmwiki install-automation` later to set up the daily job.")
             return 0
-        _write_synth_backend(backend)
+
+    # Interactive and --yes both persist the chosen backend; for claude, also
+    # pin an absolute synthesis.claude.path when unset (#275).
+    _write_synth_backend(backend)
 
     activate = bool(getattr(args, "activate", True))
     plat = str(getattr(args, "force_platform", None) or detect_platform())

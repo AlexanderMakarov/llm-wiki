@@ -1166,6 +1166,8 @@ Supported grammar is standard 5-field cron: `*`, integers, lists (`1,15`), range
 
 Linux systemd timers use `Persistent=true` so a missed run catches up once after wake (not every skipped day while the laptop stayed off). By default the installer writes rendered units to `~/.automation/`, copies them into your OS scheduler (`~/.config/systemd/user` on Linux, `~/Library/LaunchAgents` on macOS), and enables the job. Pass `--no-activate` to write unit files only and print manual enable commands. Each run appends to `<vault>/.llmwiki/last-automation.log` (truncated each run). `.llmwiki/automation-status.json` under the vault drives the Home Automation panel (settings only — job, schedule, cost/backend, hooks/watch, log path; Maintain notes that the site refreshes once after summarization) and records scheduler activation state. Stage completion times live under Pipeline state, not Automation. The wizard defaults to **Maintain** on Enter; choose **1** for ingest-only. Re-running replaces the existing job rather than adding a second one.
 
+When the chosen synthesis backend is `claude` and neither nested `synthesis.claude.path` nor flat `claude_path` is already set, the installer resolves `claude` under its own environment and writes the absolute path into `synthesis.claude.path` (#275). That pin keeps scheduled Maintain working when systemd catch-up runs with a minimal `PATH` that omits `<home>/.local/bin`. An existing explicit path is left alone; if Claude cannot be found at install time the install still succeeds with a warning.
+
 ```bash
 python3 -m llmwiki install-automation
 python3 -m llmwiki install-automation --yes --job maintain
@@ -1185,7 +1187,7 @@ python3 -m llmwiki install-automation --vault ~/my-vault
 | `--graph {none,builtin,graphify}` | Build the knowledge graph, and with which builder. Default: `none`. |
 | `--lint-fail {never,errors,warnings}` | Quality findings at this level report the scheduled job as failed. Default: `never`. Same spelling as the `all` flag. |
 | `--schedule "<cron>"` | When the job runs, as a 5-field cron expression. Default: `"0 8 * * *"`. An expression that cannot be translated exits `2` with the reason. |
-| `--synth-backend NAME` | Synthesis backend for automation status (`dummy` / `ollama` / `claude` / `cursor_cli`). Interactive mode also writes `synthesis.backend` to `config.json`, after you confirm the summary. |
+| `--synth-backend NAME` | Synthesis backend (`dummy` / `ollama` / `claude` / `cursor_cli`). Written to automation status and to `synthesis.backend` in `config.json` (interactive: after you confirm the summary; `--yes`: on install). When the backend is `claude` and no path is already set, also pins absolute `synthesis.claude.path` from the installer's `PATH` (#275). |
 | `--units-dir PATH` | Staging directory for rendered unit files before OS activation. Default: `~/.automation/`. Linux/macOS still install into the platform scheduler location unless `--no-activate`. |
 | `--watch-enabled` | Set `watch_enabled` in automation status so the site Automation panel shows Watch: on (does not install or start `llmwiki watch`). |
 | `--force-platform {linux,macos,windows}` | Override platform detection for unit format. |

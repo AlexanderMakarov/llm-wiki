@@ -35,6 +35,7 @@ from llmwiki.automation_install import (
 from llmwiki.automation_plan import AutomationPlan, LintFail, plan_command, plan_to_status
 from llmwiki.automation_status import load_status, status_path
 from llmwiki.build import render_automation_panel
+from llmwiki.claude_path import resolve_claude_path
 from llmwiki.cron_spec import parse_cron
 from llmwiki.install_hint import pip_install_command
 
@@ -923,3 +924,101 @@ def test_run_install_activate_failure_sets_error(tmp_path: Path, monkeypatch: py
     assert loaded is not None
     assert loaded.get("scheduler_error")
     assert loaded.get("scheduler_activated") is False
+
+
+# ─── #275: pin synthesis.claude.path at install for systemd catch-up ───
+
+
+def _fake_claude_on_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Create a throwaway ``claude`` under ``tmp_path/.local/bin`` and put it on PATH."""
+    local_bin = tmp_path / ".local" / "bin"
+    local_bin.mkdir(parents=True)
+    claude = local_bin / "claude"
+    claude.write_text("#!/bin/sh\n", encoding="utf-8")
+    claude.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{local_bin}{os.pathsep}/usr/bin{os.pathsep}/bin")
+    return claude
+
+
+def test_yes_claude_pins_absolute_path_usable_under_minimal_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """Install-time PATH finds ~/.local/bin/claude; the pin survives systemd-style PATH (#275)."""
+    claude = _fake_claude_on_path(tmp_path, monkeypatch)
+    code, _vault, _units = _install_via_flags(
+        tmp_path, monkeypatch, "--job", "maintain", "--synth-backend", "claude",
+    )
+    assert code == 0
+    cfg = json.loads((tmp_path / "config.json").read_text(encoding="utf-8"))
+    pinned = cfg["synthesis"]["claude"]["path"]
+    assert Path(pinned) == claude.resolve()
+    assert Path(pinned).is_absolute()
+
+    monkeypatch.setenv("PATH", "/usr/bin:/bin")
+    assert resolve_claude_path(None) is None
+    assert resolve_claude_path(pinned) == claude.resolve()
+
+
+def test_yes_claude_does_not_overwrite_explicit_nested_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    explicit = tmp_path / "already-pinned"
+    explicit.write_text("#!/bin/sh\n", encoding="utf-8")
+    explicit.chmod(0o755)
+    (tmp_path / "config.json").write_text(
+        json.dumps({
+            "synthesis": {
+                "backend": "claude",
+                "claude": {"path": str(explicit), "model": "sonnet"},
+            },
+        })
+        + "\n",
+        encoding="utf-8",
+    )
+    other = _fake_claude_on_path(tmp_path, monkeypatch)
+    code, _vault, _units = _install_via_flags(
+        tmp_path, monkeypatch, "--job", "maintain", "--synth-backend", "claude",
+    )
+    assert code == 0
+    cfg = json.loads((tmp_path / "config.json").read_text(encoding="utf-8"))
+    assert cfg["synthesis"]["claude"]["path"] == str(explicit)
+    assert cfg["synthesis"]["claude"]["model"] == "sonnet"
+    assert cfg["synthesis"]["claude"]["path"] != str(other.resolve())
+
+
+def test_yes_claude_does_not_overwrite_explicit_flat_claude_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    explicit = tmp_path / "flat-pinned"
+    explicit.write_text("#!/bin/sh\n", encoding="utf-8")
+    explicit.chmod(0o755)
+    (tmp_path / "config.json").write_text(
+        json.dumps({"synthesis": {"backend": "claude", "claude_path": str(explicit)}}) + "\n",
+        encoding="utf-8",
+    )
+    _fake_claude_on_path(tmp_path, monkeypatch)
+    code, _vault, _units = _install_via_flags(
+        tmp_path, monkeypatch, "--job", "maintain", "--synth-backend", "claude",
+    )
+    assert code == 0
+    cfg = json.loads((tmp_path / "config.json").read_text(encoding="utf-8"))
+    assert cfg["synthesis"]["claude_path"] == str(explicit)
+    assert "path" not in (cfg["synthesis"].get("claude") or {})
+
+
+def test_yes_claude_warns_when_cli_missing_but_still_installs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+):
+    monkeypatch.setenv("PATH", "/usr/bin:/bin")
+    code, vault, units = _install_via_flags(
+        tmp_path, monkeypatch, "--job", "maintain", "--synth-backend", "claude",
+    )
+    assert code == 0
+    assert load_status(vault) is not None
+    assert (units / "llmwiki-maintain.sh").is_file()
+    cfg = json.loads((tmp_path / "config.json").read_text(encoding="utf-8"))
+    assert cfg["synthesis"]["backend"] == "claude"
+    assert "path" not in (cfg["synthesis"].get("claude") or {})
+    err = capsys.readouterr().err
+    assert "claude CLI not found" in err
+    assert "synthesis.claude.path" in err
