@@ -737,6 +737,9 @@ def refresh_synth_pending(
 
     ``backend`` (optional) sets the usable body budget the doc chunk estimate
     uses — the run's own backend, so the priced calls match the real ones (#311).
+    When omitted, the configured LLM backend is resolved from sessions config
+    (same rule as ``synth --estimate``), so ``build`` / ``add`` / migrate
+    refresh cannot overwrite run-time doc pricing with the generic 7k budget.
 
     Stores a lightweight pending list under ``synth.pending`` so users can
     inspect backlog risk before running `llmwiki synthesize`/`llm-wiki-add`.
@@ -745,10 +748,14 @@ def refresh_synth_pending(
     user's config when the caller doesn't pass a mode explicitly.
     """
     sources_out = wiki_sources_dir or WIKI_SOURCES
+    config = _load_sessions_config()
     if include_subagents is None:
-        include_subagents = resolve_include_subagents(_load_sessions_config())
+        include_subagents = resolve_include_subagents(config)
     if exclude_headless is None:
-        exclude_headless = resolve_exclude_headless(_load_sessions_config())
+        exclude_headless = resolve_exclude_headless(config)
+    if backend is None:
+        resolved = resolve_backend(config)
+        backend = resolved if resolved.is_llm else None
     raw_sessions = _discover_raw_sessions(raw_dir)
     state = _load_state(state_file)
     report = synthesize_estimate_report(

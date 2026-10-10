@@ -195,9 +195,9 @@ def guarded_fetch(url: str, headers: dict[str, str], timeout: int = 30) -> Fetch
 
 
 # ── section chunking (#311) ──────────────────────────────────────────
-# New imports are stored whole (see write_raw_doc); the section splitter lives
-# in llmwiki.doc_chunking so synth and estimate share one chunker (re-exported
-# at the top of this module for existing importers).
+# New imports are stored whole (see write_raw_doc). The in-memory section
+# splitter lives in llmwiki.doc_chunking so synth and the estimate share one
+# chunker.
 
 
 # ── local file / folder conversion ───────────────────────────────────
@@ -827,9 +827,12 @@ def write_raw_doc(
     fm = _frontmatter(title, slug, proj, extra_tags, day, doc.source_label,
                       content_sha256=content_hash, extractor=doc.extractor)
     path = target / f"{slug}.md"
-    if path.exists():  # belt-and-braces: raw/ is immutable
-        raise AddError(f"refusing to overwrite existing raw file {path}")
-    path.write_text(fm + body, encoding="utf-8")
+    # Exclusive create — concurrent add must never clobber (raw/ immutability).
+    try:
+        with path.open("x", encoding="utf-8") as fh:
+            fh.write(fm + body)
+    except FileExistsError as exc:
+        raise AddError(f"refusing to overwrite existing raw file {path}") from exc
     return [path]
 
 

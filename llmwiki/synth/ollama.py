@@ -37,9 +37,11 @@ Configuration (``sessions_config.json`` / ``config.json``)::
 
 Document chunking (#311) uses a usable-body budget: ``synthesis.ollama.usable_body_chars``
 or ``context_window_tokens``, else the model's ``num_ctx`` auto-detected from
-``/api/show``, else a documented default window. The window the budget assumes
-is also sent as ``options.num_ctx`` on page calls, so the server really loads it
-(Ollama's own default is 4,096 tokens, which a larger budget would overflow).
+``/api/show``, else a documented default window for *budget math only*.
+``options.num_ctx`` is sent on page calls only when the window came from
+config or a Modelfile ``num_ctx`` — never from the assumed default, so a
+server-level context (``OLLAMA_CONTEXT_LENGTH`` or the runtime default) is
+not silently shrunk.
 
 Config parsing is done in :func:`load_ollama_config` so the CLI can
 surface readable errors instead of stack traces.
@@ -242,20 +244,15 @@ class OllamaSynthesizer(BaseSynthesizer):
         self._detect_lock = threading.Lock()
         self._detected = False
         self._detected_window: int | None = None
+        self._modelfile_num_ctx: int | None = None
 
     # ---- context window / body budget (#311) ----------------------
 
-    def _detect_context_window(self) -> int | None:
-        """Window (tokens) from ``/api/show``, once per instance; ``None`` if unknown.
-
-        Uses the model's Modelfile ``num_ctx`` parameter when set. Otherwise it
-        only learns the model's *trained* maximum (``<arch>.context_length``),
-        which is not what the server loads by default, so that value just caps
-        the default window — it is never adopted as the window itself.
-        """
+    def _probe_show(self) -> None:
+        """Fill ``_detected_window`` / ``_modelfile_num_ctx`` once per instance."""
         with self._detect_lock:
             if self._detected:
-                return self._detected_window
+                return
             self._detected = True
             try:
                 status, body = self._http_post(
@@ -266,9 +263,9 @@ class OllamaSynthesizer(BaseSynthesizer):
                 info = json.loads(body) if 200 <= status < 300 else None
             except Exception as exc:  # noqa: BLE001 — detection must never break a run
                 logger.debug("Ollama /api/show probe failed: %s", exc)
-                return None
+                return
             if not isinstance(info, dict):
-                return None
+                return
             num_ctx = None
             params = info.get("parameters")
             if isinstance(params, str):
@@ -282,13 +279,24 @@ class OllamaSynthesizer(BaseSynthesizer):
                         trained = value
                         break
             if num_ctx:
-                window = min(num_ctx, trained) if trained else num_ctx
+                capped = min(num_ctx, trained) if trained else num_ctx
+                self._modelfile_num_ctx = capped
+                self._detected_window = capped
             elif trained:
-                window = min(DEFAULT_CONTEXT_WINDOW_TOKENS, trained)
-            else:
-                window = None
-            self._detected_window = window
-            return window
+                # Trained max alone is not what the server loads — only cap the
+                # assumed default for *budget* math; never send it as num_ctx.
+                self._detected_window = min(DEFAULT_CONTEXT_WINDOW_TOKENS, trained)
+
+    def _detect_context_window(self) -> int | None:
+        """Window (tokens) from ``/api/show`` for budget math; ``None`` if unknown.
+
+        Uses the model's Modelfile ``num_ctx`` when set. Otherwise a trained
+        maximum only caps the assumed default for the budget — it is never
+        treated as the window the server loads, and is never sent as
+        ``options.num_ctx``.
+        """
+        self._probe_show()
+        return self._detected_window
 
     def usable_body_chars(self) -> int:
         """Document-chunk budget: config, else derived from the context window (#311)."""
@@ -299,12 +307,11 @@ class OllamaSynthesizer(BaseSynthesizer):
         )
 
     def context_window_tokens(self) -> int:
-        """Window the server is asked to load (sent as ``options.num_ctx``).
+        """Window the document budget assumes (config, detected, or default).
 
-        Configured window, else the detected one, else the default window —
-        raised, if needed, to fit an explicit ``usable_body_chars`` plus the
-        scaffolding, prompt, output and working-margin reserves, so the budget
-        can never exceed the window.
+        Raised, if needed, to fit an explicit ``usable_body_chars`` plus the
+        scaffolding, prompt, output and working-margin reserves. This value is
+        *not* always sent as ``options.num_ctx`` — see :meth:`request_num_ctx`.
         """
         budget = self.config.body_budget
         window = (
@@ -315,6 +322,19 @@ class OllamaSynthesizer(BaseSynthesizer):
         if budget.usable_body_chars:
             window = max(window, window_tokens_for_body_chars(budget.usable_body_chars, OLLAMA_BUDGET))
         return window
+
+    def request_num_ctx(self) -> int | None:
+        """``options.num_ctx`` for a page call, or ``None`` to leave the server default.
+
+        Sent only when the window came from config (``context_window_tokens`` /
+        ``usable_body_chars``) or a Modelfile ``num_ctx`` from ``/api/show``.
+        The assumed 8,192-token budget fallback is never forced onto the server.
+        """
+        budget = self.config.body_budget
+        if budget.context_window_tokens or budget.usable_body_chars:
+            return self.context_window_tokens()
+        self._probe_show()
+        return self._modelfile_num_ctx
 
     def synthesize_document_chunk(
         self,
@@ -406,9 +426,12 @@ class OllamaSynthesizer(BaseSynthesizer):
             "model": self.config.model,
             "prompt": prompt,
             "stream": False,
-            # The budget assumes this window; make the server load it (#311).
-            "options": {"num_ctx": self.context_window_tokens()},
         }
+        # Only force num_ctx when we know it (config or Modelfile) — never the
+        # assumed budget default, which would shrink a larger server context.
+        num_ctx = self.request_num_ctx()
+        if num_ctx is not None:
+            payload["options"] = {"num_ctx": num_ctx}
         if stable:
             payload["system"] = stable
 

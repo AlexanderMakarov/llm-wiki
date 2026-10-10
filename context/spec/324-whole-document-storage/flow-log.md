@@ -102,3 +102,11 @@ Feature delivery for https://github.com/AlexanderMakarov/llm-wiki/issues/311 via
 - The 1,000-char floor (`MIN_USABLE_BODY_CHARS`) is for explicit tiny operator values only (`usable_body_chars`, or a configured `context_window_tokens` the reserves do not fit). A derived default whose reserves leave no room warns and clamps to 8,000 chars (agents) / 1,000 (Ollama), never silently.
 - N2: `doc_chunking.py` never emits a heading-only chunk (headings attach forward, trailing headings backward, a bare heading takes the head of the next line); a fenced block is one paragraph, hard slices prefer line boundaries, and each piece closes and re-opens the fence. Tests: `tests/test_doc_chunking.py`, `tests/test_usable_body_budget.py`.
 - Docs: `configuration.md`, `configuration-reference.md`, `reference/synthesis-cost.md`, `UPGRADING.md`, CHANGELOG `[Unreleased]` (edited in place).
+
+## fix (review-2 N3–N6)
+
+- N3: Ollama sends `options.num_ctx` only from config (`context_window_tokens` / `usable_body_chars`) or Modelfile `num_ctx` via `/api/show` — never the assumed 8,192 budget default (avoids shrinking a server-level context).
+- N4: `refresh_synth_pending` resolves the configured LLM backend when none is passed, so `build` / `add` / migrate keep the same doc `usd` as `synth --estimate`.
+- N5: Claude / Cursor scale per-call `timeout` linearly with body size above the 8,000-char session cap (`page_timeout_seconds`).
+- N6: `write_raw_doc` uses exclusive `open(..., "x")`; stale re-export comment removed; CHANGELOG `[Unreleased]` bullet shortened (formula stays in `docs/configuration.md`).
+- Tests: `tests/test_usable_body_budget.py` (num_ctx / timeout / refresh pricing).

@@ -31,6 +31,7 @@ from llmwiki.synth.base import (
     BaseSynthesizer,
     BodyBudgetConfig,
     load_body_budget_config,
+    page_timeout_seconds,
     resolve_usable_body_chars,
     split_prompt_template,
     usage_limit_from_text,
@@ -300,6 +301,8 @@ class CursorCLISynthesizer(BaseSynthesizer):
         # Sessions / evidence keep the historical cap; a document chunk
         # arrives already within usable_body_chars and is sent whole (#311).
         truncated_body = raw_body[:body_cap] if raw_body else ""
+        # Large document chunks need more wall clock than a session page (#311).
+        call_timeout = page_timeout_seconds(self.timeout, len(truncated_body))
         # Cursor Agent CLI has no documented ``--system-prompt`` channel
         # (unlike ``claude -p``), but Cursor *does* bill prompt-cache
         # read/write at the provider layer. Put the run-stable template
@@ -310,4 +313,4 @@ class CursorCLISynthesizer(BaseSynthesizer):
         prompt = _render_prompt(per_page, raw_body=truncated_body, meta=meta)
         if stable:
             prompt = f"{stable.rstrip()}\n\n{prompt}"
-        return self.run_prompt(prompt)
+        return self.run_prompt(prompt, timeout=float(call_timeout))

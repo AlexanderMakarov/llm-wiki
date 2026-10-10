@@ -175,9 +175,11 @@ Resolution order — first hit wins:
 
 The 1,000-character floor is for an explicit tiny value only. A derived default (assumed, alias, or detected window) never lands on it silently: if a window cannot carry the per-call reserves at all, llmwiki logs a warning and uses 8,000 characters (the session cap) for the agent backends, or 1,000 for Ollama, whose window is genuinely that small.
 
-Ollama page calls also send the window the budget assumed as `options.num_ctx`, so the server loads it instead of its own 4,096-token default. An explicit `usable_body_chars` larger than the window raises the requested window to fit, scaffolding and margin included.
+Ollama page calls send `options.num_ctx` only when the window came from config (`context_window_tokens` / `usable_body_chars`) or a Modelfile `num_ctx` from `/api/show`. The assumed 8,192-token budget fallback is **not** forced onto the server, so a larger server-level default (`OLLAMA_CONTEXT_LENGTH` or the runtime default) is left alone. An explicit `usable_body_chars` larger than the window raises the requested `num_ctx` to fit, scaffolding and margin included.
 
-How to choose: leave both unset unless a run is too slow or too fragmented. Raise `context_window_tokens` to your model's real window to get fewer, larger calls (a larger call costs more per call and takes longer, so mind `timeout`); lower `usable_body_chars` if a model degrades on long input. A document is capped at **512 KiB** of Markdown regardless of budget — `add` rejects a larger one. See [reference/synthesis-cost.md](reference/synthesis-cost.md#choosing-the-document-body-budget) for the cost side.
+Claude and Cursor per-page `timeout` is the baseline for a session-sized body (≤ 8,000 characters). Larger document chunks scale that timeout linearly with body size so a lean-Claude ~296k-char chunk can finish under the default 180s unit instead of failing the whole document on the first slow call. Raise `timeout` if even the scaled budget is tight; lower `usable_body_chars` if a model degrades on long input.
+
+How to choose: leave both unset unless a run is too slow or too fragmented. Raise `context_window_tokens` to your model's real window to get fewer, larger calls. A document is capped at **512 KiB** of Markdown regardless of budget — `add` rejects a larger one. See [reference/synthesis-cost.md](reference/synthesis-cost.md#choosing-the-document-body-budget) for the cost side.
 
 ```jsonc
 {

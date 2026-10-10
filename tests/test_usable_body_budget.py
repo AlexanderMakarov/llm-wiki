@@ -33,6 +33,7 @@ from unittest.mock import patch
 import pytest
 
 from llmwiki.cli import _estimate_backend
+from llmwiki.state_store import read_state
 from llmwiki.synth.base import (
     ASSUMED_AGENT_WINDOW_TOKENS,
     BODY_CHARS_PER_TOKEN,
@@ -52,14 +53,16 @@ from llmwiki.synth.base import (
     BodyBudgetConfig,
     BudgetClass,
     load_body_budget_config,
+    page_timeout_seconds,
     resolve_usable_body_chars,
     usable_body_chars_for_window,
     window_tokens_for_body_chars,
 )
 from llmwiki.synth.claude_cli import ClaudeCLISynthesizer, known_claude_context_window
 from llmwiki.synth.cursor_cli import CursorCLISynthesizer, known_cursor_context_window
+from llmwiki.synth.estimate import synthesize_estimate_report
 from llmwiki.synth.ollama import OllamaConfig, OllamaSynthesizer, load_ollama_config
-from llmwiki.synth.pipeline import resolve_backend, synthesize_new_sessions
+from llmwiki.synth.pipeline import refresh_synth_pending, resolve_backend, synthesize_new_sessions
 
 TEMPLATE = "Summarize:\n{body}\nMeta:\n{meta}\n"
 
@@ -432,14 +435,23 @@ def test_ollama_configured_window_or_chars_skip_detection_for_the_budget() -> No
     assert http.show_calls == 0 and http2.show_calls == 0
 
 
-def test_ollama_page_calls_ask_the_server_to_load_the_assumed_window() -> None:
+def test_ollama_page_calls_send_num_ctx_only_when_known() -> None:
+    """Modelfile / config → send num_ctx; assumed default → leave the server alone (#311 N3)."""
     synth, http = _ollama(_show("num_ctx 16384", None))
     synth.synthesize_source_page("body", {}, TEMPLATE)
     assert http.generate_payloads[-1]["options"] == {"num_ctx": 16_384}
 
     synth_default, http_default = _ollama((404, ""))
     synth_default.synthesize_document_chunk("body", {}, TEMPLATE)
-    assert http_default.generate_payloads[-1]["options"] == {"num_ctx": DEFAULT_CONTEXT_WINDOW_TOKENS}
+    assert "options" not in http_default.generate_payloads[-1]
+
+    synth_trained, http_trained = _ollama(_show("temperature 0.7", 131_072))
+    synth_trained.synthesize_source_page("body", {}, TEMPLATE)
+    assert "options" not in http_trained.generate_payloads[-1]
+
+    synth_cfg, http_cfg = _ollama((404, ""), context_window_tokens=24_000)
+    synth_cfg.synthesize_source_page("body", {}, TEMPLATE)
+    assert http_cfg.generate_payloads[-1]["options"] == {"num_ctx": 24_000}
 
 
 def test_ollama_explicit_chars_raise_the_requested_window_to_fit() -> None:
@@ -567,3 +579,117 @@ def test_cli_estimate_uses_the_configured_llm_backend_budget_but_not_the_dummy_o
     assert _estimate_backend({"synthesis": {"backend": "dummy"}}) is None
     backend = _estimate_backend(_cfg("claude", usable_body_chars=12_345))
     assert backend is not None and backend.usable_body_chars() == 12_345
+
+
+# ─── review-2 N3–N5 follow-ups ─────────────────────────────────────────
+
+
+def test_page_timeout_scales_linearly_above_the_session_cap() -> None:
+    assert page_timeout_seconds(180, 0) == 180
+    assert page_timeout_seconds(180, SESSION_BODY_SEND_CAP_CHARS) == 180
+    assert page_timeout_seconds(180, SESSION_BODY_SEND_CAP_CHARS + 1) == 181
+    big = 296_245
+    assert page_timeout_seconds(180, big) == (
+        180 * big + SESSION_BODY_SEND_CAP_CHARS - 1
+    ) // SESSION_BODY_SEND_CAP_CHARS
+
+
+def test_claude_scales_timeout_for_large_document_chunks() -> None:
+    backend = ClaudeCLISynthesizer(
+        claude_path="/bin/claude",
+        timeout=180,
+        body_budget=BodyBudgetConfig(usable_body_chars=30_000),
+    )
+    timeouts: list[float] = []
+
+    def _capture(*_a, **kwargs):
+        timeouts.append(float(kwargs["timeout"]))
+        return subprocess.CompletedProcess(args=[], returncode=0, stdout='{"result":"ok"}', stderr="")
+
+    body = "c" * 25_000
+    with patch.object(backend, "_resolved", return_value="/bin/claude"), patch(
+        "llmwiki.synth.claude_cli.TrackedChildren.run", side_effect=_capture
+    ):
+        backend.synthesize_source_page(body, {}, TEMPLATE)
+        backend.synthesize_document_chunk(body, {}, TEMPLATE)
+    assert timeouts == [180, page_timeout_seconds(180, 25_000)]
+
+
+def test_cursor_scales_timeout_for_large_document_chunks() -> None:
+    backend = CursorCLISynthesizer(
+        timeout=180, body_budget=BodyBudgetConfig(usable_body_chars=30_000)
+    )
+    timeouts: list[float] = []
+
+    def _capture(*_a, **kwargs):
+        timeouts.append(float(kwargs["timeout"]))
+        return subprocess.CompletedProcess(args=[], returncode=0, stdout="ok", stderr="")
+
+    body = "z" * 25_000
+    with patch("llmwiki.synth.cursor_cli.resolve_cursor_agent_path", return_value="/bin/agent"), patch(
+        "llmwiki.synth.cursor_cli.TrackedChildren.run", side_effect=_capture
+    ):
+        backend.synthesize_source_page(body, {}, TEMPLATE)
+        backend.synthesize_document_chunk(body, {}, TEMPLATE)
+    assert timeouts == [180, page_timeout_seconds(180, 25_000)]
+
+
+def test_refresh_synth_pending_prices_docs_with_configured_backend(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """build/add refresh without an explicit backend must match synth --estimate (#311 N4)."""
+    vault = tmp_path / "vault"
+    raw = vault / "raw" / "sessions"
+    docs = vault / "raw" / "docs"
+    wiki = vault / "wiki" / "sources"
+    raw.mkdir(parents=True)
+    docs.mkdir(parents=True)
+    wiki.mkdir(parents=True)
+    # ~100 KB → many chunks at 7k budget, one chunk at a huge budget.
+    (docs / "big.md").write_text(
+        "---\nslug: big\ntitle: Big Doc\nproject: p\n---\n\n" + ("word " * 20_000) + "\n",
+        encoding="utf-8",
+    )
+    state_file = vault / "llmwiki-state.json"
+    cfg = _cfg("claude", usable_body_chars=7_000)
+    monkeypatch.setattr("llmwiki.synth.pipeline._load_sessions_config", lambda: cfg)
+
+    out = refresh_synth_pending(
+        raw_dir=raw,
+        docs_dir=docs,
+        wiki_sources_dir=wiki,
+        state_file=state_file,
+        include_subagents="all",
+        exclude_headless=False,
+    )
+    assert out["pending_total"] == 1
+    pending_usd = float(read_state(state_file)["synth"]["pending"][0]["usd"])
+
+    backend = resolve_backend(cfg)
+    report = synthesize_estimate_report(
+        raw_sessions=[],
+        state_keys={},
+        wiki_sources_dir=wiki,
+        raw_root=raw,
+        docs_root=docs,
+        include_subagents="all",
+        exclude_headless=False,
+        backend=backend,
+    )
+    estimate_usd = float(report["unsynth_items"][0]["usd"])
+    assert pending_usd == estimate_usd
+    assert int(report["unsynth_items"][0]["chunks"]) > 1
+
+    # Contrast: lean Claude's large default budget prices the same doc as one chunk.
+    lean_report = synthesize_estimate_report(
+        raw_sessions=[],
+        state_keys={},
+        wiki_sources_dir=wiki,
+        raw_root=raw,
+        docs_root=docs,
+        include_subagents="all",
+        exclude_headless=False,
+        backend=resolve_backend({"synthesis": {"backend": "claude", "claude": {}}}),
+    )
+    assert int(lean_report["unsynth_items"][0]["chunks"]) == 1
+    assert float(lean_report["unsynth_items"][0]["usd"]) != pending_usd

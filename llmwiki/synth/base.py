@@ -135,6 +135,25 @@ def usage_limit_from_text(
 #: Historical send cap for session / evidence bodies (never shrinks).
 SESSION_BODY_SEND_CAP_CHARS = 8000
 
+
+def page_timeout_seconds(configured: int, body_chars: int) -> int:
+    """Wall-clock seconds for one page/chunk call, scaled with body size (#311).
+
+    Bodies at or under :data:`SESSION_BODY_SEND_CAP_CHARS` use ``configured``
+    as-is (session / evidence path). Larger document chunks scale linearly so
+    a lean-Claude ~296k-char chunk under the default 180s timeout gets enough
+    wall clock instead of failing the whole document on the first slow call.
+    Explicit ``synthesis.<backend>.timeout`` remains the per-unit baseline.
+    """
+    configured = max(1, int(configured))
+    n = max(0, int(body_chars))
+    if n <= SESSION_BODY_SEND_CAP_CHARS:
+        return configured
+    return max(
+        configured,
+        (configured * n + SESSION_BODY_SEND_CAP_CHARS - 1) // SESSION_BODY_SEND_CAP_CHARS,
+    )
+
 #: Tokens reserved for the rendered prompt template (format rules, topic
 #: vocabulary, ``{meta}``). The shipped template renders to ~1,800 tokens
 #: before the body; the rest is headroom for a growing topic vocabulary.

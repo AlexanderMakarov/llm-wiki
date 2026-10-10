@@ -38,6 +38,7 @@ from llmwiki.synth.base import (
     BaseSynthesizer,
     BodyBudgetConfig,
     load_body_budget_config,
+    page_timeout_seconds,
     resolve_usable_body_chars,
     split_prompt_template,
     usage_limit_from_text,
@@ -496,6 +497,8 @@ class ClaudeCLISynthesizer(BaseSynthesizer):
         # Sessions / evidence keep the historical cap; a document chunk
         # arrives already within usable_body_chars and is sent whole (#311).
         truncated_body = raw_body[:body_cap] if raw_body else ""
+        # Large document chunks need more wall clock than a session page (#311).
+        call_timeout = page_timeout_seconds(self.timeout, len(truncated_body))
         # Route the run-stable half of the template to the system prompt,
         # which is the only part `claude -p` caches between invocations.
         stable, per_page = split_prompt_template(prompt_template)
@@ -505,10 +508,10 @@ class ClaudeCLISynthesizer(BaseSynthesizer):
             # The child runs in a new session, so a terminal Ctrl+C interrupts
             # only the synth run and this page still finishes; the run kills
             # it through `kill_in_flight` when it abandons the drain.
-            result = self._children.run(argv, input=prompt, timeout=self.timeout)
+            result = self._children.run(argv, input=prompt, timeout=call_timeout)
         except subprocess.TimeoutExpired as exc:
             raise ClaudeCLIError(
-                f"claude CLI timed out after {self.timeout}s"
+                f"claude CLI timed out after {call_timeout}s"
             ) from exc
         except (OSError, subprocess.SubprocessError) as exc:
             raise ClaudeCLIError(f"claude CLI failed to run: {exc}") from exc
