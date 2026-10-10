@@ -154,7 +154,7 @@ Each backend block (`synthesis.claude`, `synthesis.cursor_cli`, `synthesis.ollam
 | Key | Meaning |
 |---|---|
 | `usable_body_chars` | Characters per document chunk, used as-is. Set this when you know exactly what you want. |
-| `context_window_tokens` | The model's context window. The budget is `usable_tokens × 2.05` characters, never below 1,000, where `usable_tokens = window − scaffolding − 2,000 prompt − 2,600 output − working margin` (scaffolding and margin per backend class, table below). The 2.05 ratio is the measured *transcript* ratio, which is on the small side of real prose, so the budget errs toward fitting. There is no upper cap on a derived budget. |
+| `context_window_tokens` | The model's context window. The budget is `usable_tokens × 2.05` characters, where `usable_tokens = window − scaffolding − 2,000 prompt − 2,600 output − working margin` (scaffolding and margin per backend class, table below). The 2.05 ratio is the measured *transcript* ratio, which is on the small side of real prose, so the budget errs toward fitting. There is no upper cap on a derived budget. The 1,000-character floor applies only to what you set yourself: a `context_window_tokens` too small for the reserves (or an explicit tiny `usable_body_chars`, used as-is). |
 
 An agent-backed call spends much of its window on things other than your body, so the derived budget reserves them per backend class:
 
@@ -162,7 +162,7 @@ An agent-backed call spends much of its window on things other than your body, s
 |---|---|---|---|
 | Ollama (`/api/generate`) | ~500 tokens | `max(2,048, 10% × window)` | 50,003 / 358,545 characters |
 | Claude, `lean` on (default) | 890 tokens | `max(8,192, 25% × window)` | 39,126 / 296,245 characters |
-| Claude, `lean` off (`synthesis.claude.lean: false` / `claude_lean: false`) and Cursor CLI (never lean) | 35,000 tokens | `max(16,384, 35% × window)` | 1,000 (floor) / 185,320 characters |
+| Claude, `lean` off (`synthesis.claude.lean: false` / `claude_lean: false`) and Cursor CLI (never lean) | 35,000 tokens | `max(16,384, 35% × window)` | 1,000 (floor, you set a tiny window) / 185,320 characters |
 
 The scaffolding is the per-call agent context from [reference/synthesis-cost.md](reference/synthesis-cost.md); the margin is headroom for the agent's own reasoning and tool use. An explicit `usable_body_chars` is used as-is — none of these reserves apply to it.
 
@@ -170,8 +170,10 @@ Resolution order — first hit wins:
 
 1. `usable_body_chars`;
 2. `context_window_tokens`;
-3. what the backend knows about its model — **Claude:** `haiku`, `sonnet` and `opus` (alias or full id containing the name) are 200,000 tokens, ≈400,000 characters; **Ollama:** the model's `num_ctx` read from `/api/show` (Modelfile parameter), capped by its trained context length — a trained maximum alone is *not* adopted, because the server does not load it by default; **Cursor:** no table, because Cursor does not publish Agent CLI windows;
-4. the default window of 8,192 tokens — which the class reserves leave at ≈2,100 characters for Ollama and at the 1,000-character floor for Claude and Cursor. Those two are agent-backed, so set `context_window_tokens` (or `usable_body_chars`) for a Cursor model or a custom Claude model id; with a 200,000-token window the Cursor budget is ≈185,000 characters.
+3. what the backend knows about its model — **Claude:** `haiku`, `sonnet` and `opus` (alias or full id containing the name) are 200,000 tokens, ≈400,000 characters; **Ollama:** the model's `num_ctx` read from `/api/show` (Modelfile parameter), capped by its trained context length — a trained maximum alone is *not* adopted, because the server does not load it by default; **Cursor:** `composer-2.5` and `composer-2.5-fast` are 200,000 tokens (Cursor does not publish Agent CLI windows, so any other id gets the assumed window below);
+4. the assumed window — **200,000 tokens for the agent backends** (Claude with a custom model id, Cursor), which gives ≈296,000 characters for lean Claude and ≈185,000 for non-lean Claude and Cursor; **8,192 tokens for Ollama** when its window cannot be detected, which the Ollama reserves leave at ≈2,100 characters. Set `context_window_tokens` (or `usable_body_chars`) when your model's real window is smaller or larger.
+
+The 1,000-character floor is for an explicit tiny value only. A derived default (assumed, alias, or detected window) never lands on it silently: if a window cannot carry the per-call reserves at all, llmwiki logs a warning and uses 8,000 characters (the session cap) for the agent backends, or 1,000 for Ollama, whose window is genuinely that small.
 
 Ollama page calls also send the window the budget assumed as `options.num_ctx`, so the server loads it instead of its own 4,096-token default. An explicit `usable_body_chars` larger than the window raises the requested window to fit, scaffolding and margin included.
 

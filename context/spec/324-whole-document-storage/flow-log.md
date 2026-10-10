@@ -95,3 +95,10 @@ Feature delivery for https://github.com/AlexanderMakarov/llm-wiki/issues/311 via
 - `_check_raw`: all-empty `content_sha256` is clear; only conflicting non-empty or mixed empty/non-empty stay ambiguous. Whole-file clash compares computed body hashes when either side lacks the field (empty vs empty is not a clash).
 - `_whole_raw_text`: fill missing hash via `compute_content_hash` on the joined body. `print_report` adds per-reason **What to do** hints and states clear groups are not applied while blocked.
 - UPGRADING / cli / CHANGELOG note pre-hash parts; tests cover apply success + hash conflict still blocks.
+
+## fix (review-2 N1 + N2, operator decision)
+
+- N1: agent backends (Claude, Cursor Agent CLI) assume a 200,000-token window when none is configured or known (`ASSUMED_AGENT_WINDOW_TOKENS`) — 296,245 chars lean Claude, 185,320 non-lean Claude / Cursor. Ollama stays detect-or-8,192. Cursor alias table: `composer-2.5`, `composer-2.5-fast` = 200k.
+- The 1,000-char floor (`MIN_USABLE_BODY_CHARS`) is for explicit tiny operator values only (`usable_body_chars`, or a configured `context_window_tokens` the reserves do not fit). A derived default whose reserves leave no room warns and clamps to 8,000 chars (agents) / 1,000 (Ollama), never silently.
+- N2: `doc_chunking.py` never emits a heading-only chunk (headings attach forward, trailing headings backward, a bare heading takes the head of the next line); a fenced block is one paragraph, hard slices prefer line boundaries, and each piece closes and re-opens the fence. Tests: `tests/test_doc_chunking.py`, `tests/test_usable_body_budget.py`.
+- Docs: `configuration.md`, `configuration-reference.md`, `reference/synthesis-cost.md`, `UPGRADING.md`, CHANGELOG `[Unreleased]` (edited in place).

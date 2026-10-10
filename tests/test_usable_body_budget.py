@@ -5,12 +5,16 @@ many raw-body characters ONE document-chunk call can carry. Resolution order:
 
 1. ``synthesis.<backend>.usable_body_chars`` (explicit characters)
 2. ``synthesis.<backend>.context_window_tokens`` (converted conservatively)
-3. the backend's own knowledge — Claude's alias table, Ollama's ``/api/show``
-4. the documented default window (``DEFAULT_CONTEXT_WINDOW_TOKENS``)
+3. the backend's own knowledge — Claude / Cursor alias tables, Ollama's ``/api/show``
+4. the assumed window: ``ASSUMED_AGENT_WINDOW_TOKENS`` (200k) for Claude and
+   Cursor, ``DEFAULT_CONTEXT_WINDOW_TOKENS`` (8192) for Ollama / generic
 
-A derived budget is ``max(1000, (window - scaffolding - prompt reserve -
-output reserve - working margin) * 2.05)`` with scaffolding and margin set by
-the backend class (Ollama / Claude lean / Claude non-lean and Cursor CLI).
+A derived budget is ``(window - scaffolding - prompt reserve - output reserve -
+working margin) * 2.05`` with scaffolding and margin set by the backend class
+(Ollama / Claude lean / Claude non-lean and Cursor CLI). The 1,000-character
+floor applies only to what the operator sized tiny (explicit ``usable_body_chars``
+or a configured ``context_window_tokens``); a derived default that cannot carry
+the reserves warns and clamps to the 8,000-character session cap (agents).
 
 Session / evidence bodies are NOT governed by it: they keep the historical
 8,000-character send cap.
@@ -30,6 +34,7 @@ import pytest
 
 from llmwiki.cli import _estimate_backend
 from llmwiki.synth.base import (
+    ASSUMED_AGENT_WINDOW_TOKENS,
     BODY_CHARS_PER_TOKEN,
     CLAUDE_LEAN_BUDGET,
     DEFAULT_CONTEXT_WINDOW_TOKENS,
@@ -52,7 +57,7 @@ from llmwiki.synth.base import (
     window_tokens_for_body_chars,
 )
 from llmwiki.synth.claude_cli import ClaudeCLISynthesizer, known_claude_context_window
-from llmwiki.synth.cursor_cli import CursorCLISynthesizer
+from llmwiki.synth.cursor_cli import CursorCLISynthesizer, known_cursor_context_window
 from llmwiki.synth.ollama import OllamaConfig, OllamaSynthesizer, load_ollama_config
 from llmwiki.synth.pipeline import resolve_backend, synthesize_new_sessions
 
@@ -253,9 +258,11 @@ def test_claude_lean_off_uses_the_heavy_agent_class() -> None:
     assert lean_default.usable_body_chars() > nested.usable_body_chars()
 
 
-def test_claude_unknown_model_falls_back_to_the_default_window_with_the_lean_class() -> None:
+def test_claude_unknown_model_assumes_a_200k_window_with_the_lean_class() -> None:
     got = resolve_backend(_cfg("claude", model="my-proxy-model")).usable_body_chars()
-    assert got == _claude_lean_chars(DEFAULT_CONTEXT_WINDOW_TOKENS) == MIN_USABLE_BODY_CHARS
+    assert got == _claude_lean_chars(ASSUMED_AGENT_WINDOW_TOKENS) == 296_245
+    heavy = resolve_backend(_cfg("claude", model="my-proxy-model", lean=False)).usable_body_chars()
+    assert heavy == _heavy_chars(ASSUMED_AGENT_WINDOW_TOKENS) == 185_320
 
 
 def test_claude_configured_window_beats_the_alias_table() -> None:
@@ -263,11 +270,89 @@ def test_claude_configured_window_beats_the_alias_table() -> None:
     assert backend.usable_body_chars() == _claude_lean_chars(32_768) == 39_126
 
 
-def test_cursor_always_uses_the_heavy_class_and_has_no_alias_table() -> None:
-    unconfigured = resolve_backend(_cfg("cursor_cli", model="composer-2.5")).usable_body_chars()
-    assert unconfigured == _heavy_chars(DEFAULT_CONTEXT_WINDOW_TOKENS) == MIN_USABLE_BODY_CHARS
-    sized = resolve_backend(_cfg("cursor_cli", model="composer-2.5", context_window_tokens=200_000))
-    assert sized.usable_body_chars() == 185_320
+@pytest.mark.parametrize("model", ["composer-2.5", "composer-2.5-fast", "Composer-2.5-Fast", "some-future-model"])
+def test_cursor_assumes_a_200k_window_with_the_heavy_class(model: str) -> None:
+    """Known aliases and unlisted ids both land on 200k; never the 1,000 floor."""
+    got = resolve_backend(_cfg("cursor_cli", model=model)).usable_body_chars()
+    assert got == _heavy_chars(ASSUMED_AGENT_WINDOW_TOKENS) == 185_320
+
+
+def test_cursor_alias_table_knows_the_composer_models() -> None:
+    assert known_cursor_context_window("composer-2.5") == 200_000
+    assert known_cursor_context_window("composer-2.5-fast") == 200_000
+    assert known_cursor_context_window("some-future-model") is None
+    assert known_cursor_context_window(None) is None
+
+
+def test_cursor_configured_window_beats_the_alias_table() -> None:
+    sized = resolve_backend(_cfg("cursor_cli", model="composer-2.5", context_window_tokens=400_000))
+    assert sized.usable_body_chars() == _heavy_chars(400_000)
+
+
+@pytest.mark.parametrize(
+    "backend_factory",
+    [
+        lambda: ClaudeCLISynthesizer(claude_path="/usr/bin/claude", model="custom-model"),
+        lambda: ClaudeCLISynthesizer(claude_path="/usr/bin/claude", model="custom-model", lean=False),
+        lambda: CursorCLISynthesizer(model="composer-2.5"),
+        lambda: CursorCLISynthesizer(model="composer-2.5-fast"),
+        lambda: CursorCLISynthesizer(model="unlisted-model"),
+    ],
+    ids=["claude_lean", "claude_heavy", "composer-2.5", "composer-2.5-fast", "unlisted"],
+)
+def test_agent_defaults_never_land_on_the_1k_floor(backend_factory: Any) -> None:
+    got = backend_factory().usable_body_chars()
+    assert got >= SESSION_BODY_SEND_CAP_CHARS
+    assert got > MIN_USABLE_BODY_CHARS
+
+
+# ─── the 1,000-character floor is for explicit tiny values only ────────
+
+
+def test_explicit_tiny_usable_body_chars_is_used_as_is(caplog: pytest.LogCaptureFixture) -> None:
+    with caplog.at_level(logging.WARNING, logger="llmwiki.synth.base"):
+        got = resolve_backend(_cfg("cursor_cli", usable_body_chars=500)).usable_body_chars()
+    assert got == 500
+    assert caplog.text == ""
+
+
+def test_explicit_tiny_window_floors_at_1000_without_a_warning(caplog: pytest.LogCaptureFixture) -> None:
+    """An operator who sets a window the heavy reserves cannot fit gets the 1,000-character floor."""
+    with caplog.at_level(logging.WARNING, logger="llmwiki.synth.base"):
+        got = resolve_backend(_cfg("cursor_cli", context_window_tokens=8192)).usable_body_chars()
+    assert got == MIN_USABLE_BODY_CHARS
+    assert caplog.text == ""
+
+
+def test_derived_default_with_no_room_warns_and_clamps_to_the_session_cap(caplog: pytest.LogCaptureFixture) -> None:
+    """A known/assumed window that cannot carry the reserves is a bug: warn, never a silent 1,000."""
+    with caplog.at_level(logging.WARNING, logger="llmwiki.synth.base"):
+        got = resolve_usable_body_chars(
+            BodyBudgetConfig(),
+            known_window_tokens=lambda: 32_768,
+            budget_class=HEAVY_AGENT_BUDGET,
+            derived_floor_chars=SESSION_BODY_SEND_CAP_CHARS,
+        )
+    assert got == SESSION_BODY_SEND_CAP_CHARS
+    assert "no room for a body" in caplog.text
+    assert "heavy-agent" in caplog.text
+
+
+def test_derived_default_clamps_only_when_the_reserves_leave_no_room() -> None:
+    # 80,000-token heavy window: room 80000 - 39600 - 28000 = 12,400 tokens → 25,420 chars, above the clamp.
+    assert resolve_usable_body_chars(
+        BodyBudgetConfig(),
+        known_window_tokens=lambda: 80_000,
+        budget_class=HEAVY_AGENT_BUDGET,
+        derived_floor_chars=SESSION_BODY_SEND_CAP_CHARS,
+    ) == _heavy_chars(80_000)
+    # 60,000-token window: room 60000 - 39600 - 21000 = -600 tokens → clamped to the session cap.
+    assert resolve_usable_body_chars(
+        BodyBudgetConfig(),
+        known_window_tokens=lambda: 60_000,
+        budget_class=HEAVY_AGENT_BUDGET,
+        derived_floor_chars=SESSION_BODY_SEND_CAP_CHARS,
+    ) == SESSION_BODY_SEND_CAP_CHARS
 
 
 # ─── Ollama auto-detection (/api/show) ─────────────────────────────────

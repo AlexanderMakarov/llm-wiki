@@ -146,9 +146,16 @@ OUTPUT_RESERVE_TOKENS = 2600
 #: characters — the measured *transcript* ratio, which is lower (more tokens
 #: per character) than prose, so the budget errs on the small side.
 BODY_CHARS_PER_TOKEN = TRANSCRIPT_CHARS_PER_TOKEN
-#: Window assumed when none is configured, detected, or known for the model.
+#: Window assumed for a bare (non-agent) backend when none is configured or
+#: detected — the Ollama fallback and the :class:`BaseSynthesizer` default.
 DEFAULT_CONTEXT_WINDOW_TOKENS = 8192
-#: A budget never goes below this, however small the window.
+#: Window assumed for the agent backends (Claude, Cursor Agent CLI) when none is
+#: configured or known for the model: modern agent models ship 200k windows.
+ASSUMED_AGENT_WINDOW_TOKENS = 200_000
+#: Floor for a budget the *operator* sized tiny: an explicit
+#: ``usable_body_chars``, or a configured ``context_window_tokens`` too small
+#: for the per-call reserves. A derived default (assumed / known / detected
+#: window) never lands here silently — see :func:`resolve_usable_body_chars`.
 MIN_USABLE_BODY_CHARS = 1000
 #: Dummy / dry-run: large enough that multi-section fixtures fit in one call.
 DUMMY_USABLE_BODY_CHARS = 10_000_000
@@ -199,20 +206,32 @@ CLAUDE_LEAN_BUDGET = BudgetClass("claude-lean", LEAN_OVERHEAD_TOKENS, 8192, 25)
 HEAVY_AGENT_BUDGET = BudgetClass("heavy-agent", FULL_AGENT_OVERHEAD_TOKENS, 16_384, 35)
 
 
+def window_room_tokens(context_window_tokens: int, budget_class: BudgetClass = GENERIC_BUDGET) -> int:
+    """Tokens left for the body: ``window - scaffolding - prompt - output - working margin``.
+
+    Zero or negative means the window cannot carry the per-call reserves at all.
+    """
+    window = int(context_window_tokens)
+    return window - budget_class.fixed_tokens() - budget_class.working_margin(window)
+
+
 def usable_body_chars_for_window(
-    context_window_tokens: int, budget_class: BudgetClass = GENERIC_BUDGET
+    context_window_tokens: int,
+    budget_class: BudgetClass = GENERIC_BUDGET,
+    *,
+    floor: int = MIN_USABLE_BODY_CHARS,
 ) -> int:
     """Body characters one call can carry in a ``context_window_tokens`` window.
 
     ``usable_tokens = window - scaffolding - prompt reserve - output reserve -
-    working margin``; ``chars = max(1000, usable_tokens * BODY_CHARS_PER_TOKEN)``.
+    working margin``; ``chars = max(floor, usable_tokens * BODY_CHARS_PER_TOKEN)``.
     Scaffolding and margin come from ``budget_class``; the generic class has
-    neither. No upper cap: a large window yields a large budget.
+    neither. No upper cap: a large window yields a large budget. ``floor``
+    defaults to :data:`MIN_USABLE_BODY_CHARS` (an operator-sized tiny window).
     """
-    window = int(context_window_tokens)
-    room = window - budget_class.fixed_tokens() - budget_class.working_margin(window)
+    room = window_room_tokens(context_window_tokens, budget_class)
     # round() first so float noise (90400 * 2.05 = 185319.99999…) can't cost a character.
-    return max(MIN_USABLE_BODY_CHARS, int(round(room * BODY_CHARS_PER_TOKEN, 6)))
+    return max(floor, int(round(room * BODY_CHARS_PER_TOKEN, 6)))
 
 
 def window_tokens_for_body_chars(body_chars: int, budget_class: BudgetClass = GENERIC_BUDGET) -> int:
@@ -278,6 +297,8 @@ def resolve_usable_body_chars(
     *,
     known_window_tokens: Callable[[], int | None] | None = None,
     budget_class: BudgetClass = GENERIC_BUDGET,
+    default_window_tokens: int = DEFAULT_CONTEXT_WINDOW_TOKENS,
+    derived_floor_chars: int = MIN_USABLE_BODY_CHARS,
 ) -> int:
     """The usable body budget, in resolution order.
 
@@ -285,16 +306,33 @@ def resolve_usable_body_chars(
     2. derived from ``context_window_tokens`` (config);
     3. derived from the backend's own knowledge of its window — a known-model
        table or an auto-detected value — via ``known_window_tokens``;
-    4. derived from :data:`DEFAULT_CONTEXT_WINDOW_TOKENS`.
+    4. derived from ``default_window_tokens`` (agent backends pass
+       :data:`ASSUMED_AGENT_WINDOW_TOKENS`).
 
     Derived budgets (2–4) subtract ``budget_class``'s scaffolding and margin.
+    The :data:`MIN_USABLE_BODY_CHARS` floor applies only to what the operator
+    sized (1, and a configured window in 2). When a *derived default* window
+    (3–4) cannot carry the reserves, that is a bug in the numbers rather than an
+    operator choice: it is logged and clamped to ``derived_floor_chars``
+    (agent backends pass :data:`SESSION_BODY_SEND_CAP_CHARS`) instead of
+    silently landing on 1,000.
     """
     if budget.usable_body_chars is not None:
         return budget.usable_body_chars
-    window = budget.context_window_tokens
-    if window is None and known_window_tokens is not None:
-        window = known_window_tokens()
-    return usable_body_chars_for_window(window or DEFAULT_CONTEXT_WINDOW_TOKENS, budget_class)
+    if budget.context_window_tokens is not None:
+        return usable_body_chars_for_window(budget.context_window_tokens, budget_class)
+    window = known_window_tokens() if known_window_tokens is not None else None
+    window = window or default_window_tokens
+    if window_room_tokens(window, budget_class) <= 0:
+        _log.warning(
+            "%s window of %d tokens leaves no room for a body after the per-call reserves; "
+            "using %d characters — set synthesis.<backend>.context_window_tokens or usable_body_chars",
+            budget_class.name,
+            window,
+            derived_floor_chars,
+        )
+        return derived_floor_chars
+    return usable_body_chars_for_window(window, budget_class, floor=derived_floor_chars)
 
 
 class BaseSynthesizer(ABC):

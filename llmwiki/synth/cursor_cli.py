@@ -25,6 +25,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from llmwiki.synth.base import (
+    ASSUMED_AGENT_WINDOW_TOKENS,
     HEAVY_AGENT_BUDGET,
     SESSION_BODY_SEND_CAP_CHARS,
     BaseSynthesizer,
@@ -46,6 +47,22 @@ DEFAULT_CURSOR_TIMEOUT = 180
 # ``truncated_tool_call`` is never used for synth — it only shrinks argv.
 # Does not strip the agent system prompt (still ~21k floor on Composer).
 _LEAN_ALLOWED_TOOLS = "truncated_tool_call"
+
+# Context windows (tokens) of Cursor model ids, matched by exact (lower-cased)
+# name. Cursor does not publish Agent CLI windows, so this is a small table of
+# ids the operator has confirmed; any other id assumes
+# ASSUMED_AGENT_WINDOW_TOKENS (200k). Override with
+# ``synthesis.cursor_cli.context_window_tokens`` / ``usable_body_chars``.
+_CURSOR_CONTEXT_WINDOWS: dict[str, int] = {
+    "composer-2.5": 200_000,
+    "composer-2.5-fast": 200_000,
+}
+
+
+def known_cursor_context_window(model: str | None) -> int | None:
+    """Context window (tokens) for a known Cursor model id, else ``None``."""
+    return _CURSOR_CONTEXT_WINDOWS.get((model or "").strip().lower())
+
 
 # Tiny live probe for ``is_available`` / ``synth --check``. Agent CLI is
 # slower than an HTTP tags ping, so this is longer than Ollama's 2s but
@@ -154,14 +171,20 @@ class CursorCLISynthesizer(BaseSynthesizer):
         return self._children.kill_all()
 
     def usable_body_chars(self) -> int:
-        """Document-chunk budget: config, else the default window (#311).
+        """Document-chunk budget: config, else the model's known window, else 200k (#311).
 
-        No per-model window table: Cursor does not publish Agent CLI context
-        windows, so set ``synthesis.cursor_cli.context_window_tokens`` (or
-        ``usable_body_chars``) to raise it. A derived budget reserves the full
-        agent scaffolding and working margin — the Agent CLI is never lean.
+        Known ids (``composer-2.5``, ``composer-2.5-fast``) and any unlisted id
+        assume a 200,000-token window; set ``synthesis.cursor_cli.context_window_tokens``
+        (or ``usable_body_chars``) to change it. A derived budget reserves the
+        full agent scaffolding and working margin — the Agent CLI is never lean.
         """
-        return resolve_usable_body_chars(self.body_budget, budget_class=HEAVY_AGENT_BUDGET)
+        return resolve_usable_body_chars(
+            self.body_budget,
+            known_window_tokens=lambda: known_cursor_context_window(self.model),
+            budget_class=HEAVY_AGENT_BUDGET,
+            default_window_tokens=ASSUMED_AGENT_WINDOW_TOKENS,
+            derived_floor_chars=SESSION_BODY_SEND_CAP_CHARS,
+        )
 
     def synthesize_document_chunk(
         self,

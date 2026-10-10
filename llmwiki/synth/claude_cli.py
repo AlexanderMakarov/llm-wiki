@@ -30,6 +30,7 @@ from typing import Any
 from llmwiki.claude_path import resolve_claude_path as _resolve_claude_path
 from llmwiki.config_schedule import _load_sessions_config
 from llmwiki.synth.base import (
+    ASSUMED_AGENT_WINDOW_TOKENS,
     CLAUDE_LEAN_BUDGET,
     HEAVY_AGENT_BUDGET,
     SESSION_BODY_SEND_CAP_CHARS,
@@ -49,7 +50,7 @@ DEFAULT_CLAUDE_TIMEOUT = 180
 
 # Context windows (tokens) of the Claude model families the CLI accepts as
 # aliases or as part of a full model id — matched by substring, first hit wins.
-# Anything else (a custom id) falls back to DEFAULT_CONTEXT_WINDOW_TOKENS;
+# Anything else (a custom id) assumes ASSUMED_AGENT_WINDOW_TOKENS (200k);
 # set ``synthesis.claude.context_window_tokens`` / ``usable_body_chars`` to override.
 _CLAUDE_CONTEXT_WINDOWS: tuple[tuple[str, int], ...] = (
     ("haiku", 200_000),
@@ -380,7 +381,7 @@ class ClaudeCLISynthesizer(BaseSynthesizer):
         return self._children.kill_all()
 
     def usable_body_chars(self) -> int:
-        """Document-chunk budget: config, else the model's known window (#311).
+        """Document-chunk budget: config, else the model's known window, else 200k (#311).
 
         A derived budget reserves the lean or full agent scaffolding and the
         matching working margin (``synthesis.claude.lean`` / ``claude_lean``).
@@ -389,6 +390,8 @@ class ClaudeCLISynthesizer(BaseSynthesizer):
             self.body_budget,
             known_window_tokens=lambda: known_claude_context_window(self.model),
             budget_class=CLAUDE_LEAN_BUDGET if self.lean else HEAVY_AGENT_BUDGET,
+            default_window_tokens=ASSUMED_AGENT_WINDOW_TOKENS,
+            derived_floor_chars=SESSION_BODY_SEND_CAP_CHARS,
         )
 
     def synthesize_document_chunk(

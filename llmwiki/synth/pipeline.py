@@ -1008,10 +1008,11 @@ def _chunk_markdown(text: str, max_chars: int) -> list[str]:
     One document → N backend calls (#311): the budget is the active backend's
     :meth:`~BaseSynthesizer.usable_body_chars`, so nothing is silently
     truncated. Delegates to the shared section chunker (heading boundaries,
-    then paragraphs, then a hard slice) that ``add`` also uses; the estimate
-    calls this same function, so the priced chunk count is the run's call
-    count. A body that already fits is returned unchanged as ``[text]``.
-    Splitting drops only whitespace between chunks, never text.
+    then paragraphs, then lines, then a hard slice) that ``add`` also uses;
+    the estimate calls this same function, so the priced chunk count is the
+    run's call count. A body that already fits is returned unchanged as
+    ``[text]``. Splitting drops only whitespace between chunks, never text; a
+    code fence a split cuts through is closed and re-opened per chunk.
     """
     if len(text) <= max_chars:
         return [text]

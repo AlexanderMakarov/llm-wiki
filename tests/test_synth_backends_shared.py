@@ -14,6 +14,7 @@ import pytest
 
 from llmwiki.build import synthesize_overview
 from llmwiki.synth.base import (
+    ASSUMED_AGENT_WINDOW_TOKENS,
     CLAUDE_LEAN_BUDGET,
     DEFAULT_CONTEXT_WINDOW_TOKENS,
     DEFAULT_USABLE_BODY_CHARS,
@@ -203,20 +204,26 @@ def test_cursor_overview_completion_uses_run_prompt() -> None:
 
 
 @pytest.mark.parametrize(
-    ("backend_factory", "budget_class"),
+    ("backend_factory", "budget_class", "window"),
     [
-        (lambda: ClaudeCLISynthesizer(claude_path="/usr/bin/claude", model="custom-model"), CLAUDE_LEAN_BUDGET),
-        (lambda: ClaudeCLISynthesizer(claude_path="/usr/bin/claude", model="custom-model", lean=False), HEAVY_AGENT_BUDGET),
-        (lambda: CursorCLISynthesizer(model="composer-2.5"), HEAVY_AGENT_BUDGET),
-        (lambda: OllamaSynthesizer(), OLLAMA_BUDGET),
+        (
+            lambda: ClaudeCLISynthesizer(claude_path="/usr/bin/claude", model="custom-model"),
+            CLAUDE_LEAN_BUDGET,
+            ASSUMED_AGENT_WINDOW_TOKENS,
+        ),
+        (
+            lambda: ClaudeCLISynthesizer(claude_path="/usr/bin/claude", model="custom-model", lean=False),
+            HEAVY_AGENT_BUDGET,
+            ASSUMED_AGENT_WINDOW_TOKENS,
+        ),
+        (lambda: CursorCLISynthesizer(model="composer-2.5"), HEAVY_AGENT_BUDGET, ASSUMED_AGENT_WINDOW_TOKENS),
+        (lambda: OllamaSynthesizer(), OLLAMA_BUDGET, DEFAULT_CONTEXT_WINDOW_TOKENS),
     ],
     ids=["claude_cli", "claude_cli_non_lean", "cursor_cli", "ollama"],
 )
-def test_unconfigured_backends_report_the_default_window_budget(backend_factory, budget_class) -> None:
-    """With no config and no known window, a backend reports the default-window budget for its class."""
-    assert backend_factory().usable_body_chars() == usable_body_chars_for_window(
-        DEFAULT_CONTEXT_WINDOW_TOKENS, budget_class
-    )
+def test_unconfigured_backends_report_the_assumed_window_budget(backend_factory, budget_class, window) -> None:
+    """With no config and no known window: agents assume 200k, Ollama keeps its 8192 fallback."""
+    assert backend_factory().usable_body_chars() == usable_body_chars_for_window(window, budget_class)
 
 
 def test_dummy_usable_body_budget_covers_multi_section_fixtures() -> None:
