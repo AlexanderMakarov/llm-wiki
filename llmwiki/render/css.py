@@ -570,7 +570,14 @@ kbd { display: inline-block; padding: 2px 6px; font-family: var(--mono); font-si
   font-size: 0.82rem;
   line-height: 1.4;
   margin: 0 0 14px;
-  max-height: calc(1.4em * 7);
+}
+.state-lint-report {
+  white-space: pre-wrap;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 0.82rem;
+  line-height: 1.4;
+  margin: 0;
+  max-height: 60vh;
   overflow: auto;
 }
 .state-table-wrap { overflow-x: auto; margin-bottom: 14px; }

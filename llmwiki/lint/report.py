@@ -11,12 +11,12 @@ checked says so instead of printing a clean summary.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from llmwiki.lint import LintOutcome, summarize
 from llmwiki.vault_settings import VAULT_SETTINGS_FILENAME
 
-__all__ = ["render_json", "render_text"]
+__all__ = ["render_json", "render_ops_error", "render_text"]
 
 #: How many findings of one rule are listed before the tail is summarised.
 _MAX_PER_RULE = 20
@@ -75,6 +75,41 @@ def render_text(
     It is an argument rather than a lookup so the renderer stays a renderer:
     *why* a rule was skipped is the caller's knowledge, not lint's.
     """
+    lines = _summary_lines(outcome, total_pages)
+    lines.extend(_skipped_lines(outcome, settings_filename))
+    lines.append("")
+    for section in _rule_sections(outcome.issues):
+        lines.extend(section)
+        lines.append("")
+    return "\n".join(lines)
+
+
+def render_ops_error(
+    outcome: LintOutcome,
+    total_pages: int,
+    *,
+    fail_on: Literal["errors", "warnings"],
+) -> str:
+    """Render the Home ``ops.last_lint_error`` note for a failed lint (#256).
+
+    Same line shape as :func:`render_text`, but only the findings that
+    tripped ``fail_on`` — errors under ``errors``; errors then warnings
+    under ``warnings`` — so alphabetically early warning rules cannot push
+    the errors that failed the run out of view. The skipped-rules block and
+    blank separators are dropped. The note is not truncated here; Home
+    limits how much of it is displayed.
+    """
+    severities = ("error",) if fail_on == "errors" else ("error", "warning")
+    lines = _summary_lines(outcome, total_pages)
+    for severity in severities:
+        failing = [i for i in outcome.issues if i["severity"] == severity]
+        for section in _rule_sections(failing):
+            lines.extend(section)
+    return "\n".join(lines)
+
+
+def _summary_lines(outcome: LintOutcome, total_pages: int) -> list[str]:
+    """``scanned N pages`` plus the issue tally (or the nothing-checked line)."""
     lines = [f"  scanned {total_pages} pages"]
     if outcome.ran:
         summary = summarize(outcome.issues)
@@ -96,20 +131,23 @@ def render_text(
             f"{'was' if n == 1 else 'were'} skipped, so this is not a "
             "clean result"
         )
-    lines.extend(_skipped_lines(outcome, settings_filename))
-    lines.append("")
+    return lines
 
+
+def _rule_sections(issues: list[dict[str, Any]]) -> list[list[str]]:
+    """One ``## rule (n)`` block per rule, alphabetical, capped per rule."""
     by_rule: dict[str, list[dict[str, Any]]] = {}
-    for issue in outcome.issues:
+    for issue in issues:
         by_rule.setdefault(issue["rule"], []).append(issue)
+    sections: list[list[str]] = []
     for rule, rule_issues in sorted(by_rule.items()):
-        lines.append(f"## {rule} ({len(rule_issues)})")
+        section = [f"## {rule} ({len(rule_issues)})"]
         for issue in rule_issues[:_MAX_PER_RULE]:
-            lines.append(f"  [{issue['severity']}] {issue['page']}: {issue['message']}")
+            section.append(f"  [{issue['severity']}] {issue['page']}: {issue['message']}")
         if len(rule_issues) > _MAX_PER_RULE:
-            lines.append(f"  ... and {len(rule_issues) - _MAX_PER_RULE} more")
-        lines.append("")
-    return "\n".join(lines)
+            section.append(f"  ... and {len(rule_issues) - _MAX_PER_RULE} more")
+        sections.append(section)
+    return sections
 
 
 def render_json(outcome: LintOutcome, total_pages: int) -> dict[str, Any]:

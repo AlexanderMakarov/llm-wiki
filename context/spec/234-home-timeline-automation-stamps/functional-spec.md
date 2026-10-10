@@ -47,13 +47,16 @@ These times come from recorded completion stamps for each stage, not from inferr
 
 Rules:
 
-- When the last quality check **passed** (or there is no failure detail), the note is **not shown** (empty → nothing rendered).
-- When the last quality check **failed**, Home shows a **required note under the Candidates table** with the error text, using the **same wording shape the console already prints** (multiple lines; shortened with an ellipsis when long), roughly up to six lines. Last lint in Timeline also shows failed (and may repeat a short indication).
+- When the last quality check **passed** (or there is no failure detail), the red note is **not shown** (empty → nothing rendered) and **Linter output** shows "No linter output."
+- When the last quality check **failed** and the stored note lists at least one **error** finding, Home shows a **red note under the Candidates table** with that note’s text (console line shape: scanned / issue-count summary, then policy-failing findings — errors under fail-on-errors; errors, then warnings, under fail-on-warnings — so earlier-alphabet warning rules cannot crowd out the errors). Home displays at most **ten** lines, ending with an ellipsis when longer; the full note stays in state. The line budget lives in the browser, not in storage.
+- When the last quality check **failed** under fail-on-warnings with **warnings only** (no error findings), Home does **not** show the red note. Failure is still visible via Timeline **Last lint · failed** and the **Linter output** collapsible (full console report). The stored policy note may hold warnings for tooling, but Home does not surface them as a red banner.
+- A **Linter output** collapsible, right after Estimate warnings, shows the full console report from the last failed check ("No linter output." when there is none).
 
 - **Acceptance Criteria:**
-  - [ ] Given the last quality check completed successfully with no failure detail, when the operator views Home, then they see Last lint’s time in Timeline (and a passed / OK indication if shown) and **no** lint-error note under Candidates.
-  - [ ] Given the last quality check failed under fail-on-errors or fail-on-warnings policy, when the operator views Home, then a note **under the Candidates table** shows the multiline error (up to ~six lines), and Timeline Last lint shows failed with a time.
-  - [ ] Given quality checks have never run, when the operator views Home, then Last lint is empty / never and no note appears.
+  - [ ] Given the last quality check completed successfully with no failure detail, when the operator views Home, then they see Last lint’s time in Timeline (and a passed / OK indication if shown), **no** red lint-error note under Candidates, and Linter output empty / "No linter output."
+  - [ ] Given the last quality check failed and the stored note lists at least one error finding, when the operator views Home, then a red note under the Candidates table shows the policy-failing findings (first 10 lines, then `…`), Timeline Last lint shows failed with a time, and Linter output holds the full console report.
+  - [ ] Given the last quality check failed under fail-on-warnings with warning findings only (no errors), when the operator views Home, then there is **no** red note under Candidates, Timeline Last lint shows failed, and Linter output holds the full console report.
+  - [ ] Given quality checks have never run, when the operator views Home, then Last lint is empty / never and no red note appears.
 
 ### R3 — Build stays published; lint updates the existing site’s lint status (data only)
 
@@ -133,10 +136,18 @@ Default (no `--fail-fast`): if synth fails but sync succeeded, build still execu
 | Topic | Choice |
 | --- | --- |
 | Stage stamps location | **Timeline** collapsible (not above tables; not Automation) |
-| Lint failure UI | **Note under Candidates table** + Last lint failed in Timeline; console-shaped multiline (~6 lines) |
+| Lint failure UI | Red **note under Candidates** only when the stored note lists errors (10 lines + `…` in the browser); warnings-only policy failures use Timeline **Last lint · failed** + **Linter output** (no red banner); full console report in **Linter output** |
 | Lint-policy failure vs publish | Keep the newly built site; do **not** revert; show failure via Candidates note / Last lint |
 | Standalone lint | Updates JSON/data snapshot only (no HTML rewrite) |
 | Pipeline after stage failure | Continue unless `--fail-fast` (console enough on fail-fast) |
 | Ingest-only automation | No behavior change |
 | Automation panel | Settings only; short Synth backend line; hooks without “(recommended)”; Watch separate; drop lint-fail reminder + Updated |
 | Implementation style | DRY — reuse existing helpers across CLI / `all` |
+
+## Change Log
+
+### 2026-10-09 — Home lint note shows policy-failing findings; full report in Linter output ([#256](https://github.com/AlexanderMakarov/llm-wiki/issues/256))
+
+- **What changed:** R2 keeps the console line shape for `ops.last_lint_error` but no longer stores a prefix of the full report. The note lists the findings that tripped the active fail policy — errors under fail-on-errors; errors, then warnings, under fail-on-warnings — after the scanned / issue-count summary, without the skipped-rules block, and is stored in full. Home shows the red note only when it contains an `[error]` finding line and displays at most 10 lines followed by `…` (the limit lives in the browser, not in storage). A warnings-only fail-on-warnings failure does not show the red note; Timeline Last lint · failed and **Linter output** carry that signal. A new `ops.last_lint_report` keeps the full console report from a failed lint (cleared on a passing run) and backs a **Linter output** collapsible placed right after Estimate warnings.
+- **Why:** the console report is grouped alphabetically by rule, so early warning rules (for example `content_freshness`) filled the old ~6-line note and the errors that failed the run never reached Home. Keeping the full text in state lets the operator read the complete report on Home without re-running lint. Reserving the red banner for error findings keeps Home from looking like a hard error when only warnings tripped the gate.
+- **Scope of the amendment:** which findings are stored, how many lines Home displays, when the red note appears (errors only), warnings-only failure signalling, and the new Linter output section; console output and the note's placement under the Candidates table are unchanged. `tasks.md` stays the historical record of the original delivery.

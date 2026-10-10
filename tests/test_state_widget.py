@@ -163,7 +163,7 @@ def test_state_widget_pipeline_stage_stamps_in_timeline():
 
 
 def test_state_widget_lint_banner_empty_vs_present():
-    """#234 R2: lint note under Candidates table only when last_lint_error is non-empty.
+    """#234 R2: red lint note under Candidates table only when it lists ``[error]`` findings.
 
     # @layer: unit  # @spec: 234-home-timeline-automation-stamps
     """
@@ -171,7 +171,7 @@ def test_state_widget_lint_banner_empty_vs_present():
     assert 'class="error-banner state-lint-banner"' in js.JS
     assert 'role="alert"' in js.JS
     assert "var lintError = ops.last_lint_error" in js.JS
-    assert "if (lintError)" in js.JS
+    assert "if (lintError && /^\\s*\\[error\\]/m.test(lintError))" in js.JS
     # Appended after knowledge table markup, before Timeline.
     knowledge_idx = js.JS.index("var knowledgeHtml =")
     banner_in_knowledge = js.JS.index("lintBanner", knowledge_idx)
@@ -179,6 +179,43 @@ def test_state_widget_lint_banner_empty_vs_present():
     assert knowledge_idx < banner_in_knowledge < timeline_idx
     assert 'lintStatus === "failed"' in js.JS
     assert 'lintStatus === "ok"' in js.JS
+
+
+def test_state_widget_warnings_only_failure_has_no_red_banner_gate():
+    """#256: warnings-only policy failures stay off the red banner (Timeline + Linter output).
+
+    # @layer: unit  # @spec: 234-home-timeline-automation-stamps
+    """
+    # Red banner requires an [error] finding line — a warnings-only note must not match.
+    assert "if (lintError && /^\\s*\\[error\\]/m.test(lintError))" in js.JS
+    # Failure still surfaces via Timeline status and Linter output (not the red note).
+    assert 'lintStatus === "failed"' in js.JS
+    assert 'detailsSection("Linter output"' in js.JS
+
+
+def test_state_widget_lint_banner_displays_at_most_ten_lines():
+    """#256: the full note is stored; the browser shows 10 lines then ``…``.
+
+    # @layer: unit  # @spec: 234-home-timeline-automation-stamps
+    """
+    assert "var LINT_BANNER_MAX_LINES = 10;" in js.JS
+    assert 'lintLines.slice(0, LINT_BANNER_MAX_LINES).concat(["…"])' in js.JS
+
+
+def test_state_widget_linter_output_section_follows_estimate_warnings():
+    """#256: full ``ops.last_lint_report`` in a collapsible right after Estimate warnings.
+
+    # @layer: unit  # @spec: 234-home-timeline-automation-stamps
+    """
+    assert "ops.last_lint_report" in js.JS
+    assert '<pre class="state-lint-report">' in js.JS
+    assert "No linter output." in js.JS
+    warnings_idx = js.JS.index('detailsSection("Estimate warnings"')
+    report_idx = js.JS.index('detailsSection("Linter output", lintReportCount, lintReportBody)')
+    assert warnings_idx < report_idx
+    between = js.JS[warnings_idx:report_idx]
+    assert between.count("detailsSection(") == 1
+    assert ".state-lint-report" in css.CSS
 
 
 def test_state_lint_banner_css_prewrap():

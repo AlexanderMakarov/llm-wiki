@@ -37,7 +37,7 @@ from llmwiki.graph import build_and_report
 from llmwiki.graphify_bridge import build_graphify_graph, is_available
 from llmwiki.install_hint import pip_install_command
 from llmwiki.lint import LintOptions, UnknownRuleError, load_pages, run_lint, summarize
-from llmwiki.lint.report import render_text
+from llmwiki.lint.report import render_ops_error, render_text
 from llmwiki.pipeline_lock import pipeline_lock
 from llmwiki.reindex import reindex_wiki
 from llmwiki.search.context import SearchContext
@@ -184,7 +184,12 @@ def _run_lint_step(
         failed = False
     record_lint_ops(
         failed=failed,
-        error_text=report_text if failed else "",
+        error_text=render_ops_error(
+            outcome,
+            len(pages),
+            fail_on="warnings" if lint_fail == "warnings" else "errors",
+        ) if failed else "",
+        report_text=report_text if failed else "",
         site_dir=site_dir,
     )
     return 0, summary
