@@ -446,6 +446,7 @@ def test_run_dry_run_pick_next_via_fake_run_gh(
     # #5 is absent: blocked by an open blocker.
     assert lines == [
         "repo: owner/repo",
+        "herdr workspace: unscoped",
         "3 with 'agent-ready' label, 3 is assigned on 'viewer'",
         *expected_tail,
     ]

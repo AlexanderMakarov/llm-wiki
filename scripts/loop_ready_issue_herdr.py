@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -763,6 +764,11 @@ def format_planned_issue_line(issue: Issue, *, index: int, in_progress: bool = F
     return f"  {index}. #{number} {title} {url}".rstrip() + marker
 
 
+def format_workspace_line(workspace: str | None) -> str:
+    """Startup line naming the herdr workspace tabs are scoped to."""
+    return f"herdr workspace: {workspace or 'unscoped'}"
+
+
 def format_dry_run_lines(
     *,
     login: str,
@@ -773,8 +779,9 @@ def format_dry_run_lines(
     planned: list[Issue],
     in_progress: list[Issue] | None = None,
     herdr_unavailable: str | None = None,
+    workspace: str | None = None,
 ) -> list[str]:
-    """Dry-run summary: counts, planned queue (in-progress tickets first), ``next:``.
+    """Dry-run summary: workspace, counts, planned queue (in-progress first), ``next:``.
 
     ``in_progress`` lists planned issues with an open ``issue-N`` tab, oldest
     tab first. ``herdr_unavailable`` (a short reason) prints one ``in-progress:
@@ -783,6 +790,7 @@ def format_dry_run_lines(
     in_progress = in_progress or []
     lines = [
         f"repo: {repo}",
+        format_workspace_line(workspace),
         format_queue_counts_line(open_with_label, assigned_to_me, label, login),
     ]
     if herdr_unavailable is not None:
@@ -830,6 +838,47 @@ def default_run_herdr(argv: list[str]) -> subprocess.CompletedProcess[str]:
         capture_output=True,
         text=True,
     )
+
+
+# herdr subcommands that default to the UI-active workspace unless told otherwise.
+_WORKSPACE_SCOPED_COMMANDS = (("tab", "create"), ("tab", "list"))
+
+
+def scope_run_herdr(run_herdr: RunHerdr, workspace: str | None) -> RunHerdr:
+    """Pin ``tab create`` / ``tab list`` to ``workspace`` (``None`` leaves argv unchanged).
+
+    Without ``--workspace`` herdr creates tabs in whichever workspace is active
+    in the UI and lists tabs from every workspace, so worker tabs land beside
+    unrelated work and another workspace's ``issue-N`` tab could be adopted or
+    closed.
+    """
+    if not workspace:
+        return run_herdr
+
+    def scoped(argv: list[str]) -> subprocess.CompletedProcess[str]:
+        if tuple(argv[1:3]) in _WORKSPACE_SCOPED_COMMANDS:
+            argv = [*argv[:3], "--workspace", workspace, *argv[3:]]
+        return run_herdr(argv)
+
+    return scoped
+
+
+def resolve_workspace(cli_workspace: str | None, *, dry_run: bool = False) -> str | None:
+    """``--workspace``, else the driver pane's ``HERDR_WORKSPACE_ID``; warn when neither is set."""
+    workspace = cli_workspace or os.environ.get("HERDR_WORKSPACE_ID") or None
+    if workspace is None:
+        effect = (
+            "tabs from every workspace are listed"
+            if dry_run
+            else "worker tabs open in the UI-active workspace and tabs from every "
+            "workspace are considered"
+        )
+        print(
+            "WARNING: no herdr workspace (not running inside herdr and no --workspace); "
+            f"{effect}.",
+            file=sys.stderr,
+        )
+    return workspace
 
 
 def parse_herdr_response(proc: subprocess.CompletedProcess[str]) -> dict[str, Any]:
@@ -1296,6 +1345,7 @@ def run_main_loop(
     run_herdr: RunHerdr = default_run_herdr,
     sleep_fn: SleepFn = time.sleep,
     repo_root: Path = REPO_ROOT,
+    workspace: str | None = None,
 ) -> int:
     """Startup summary, then serial spawn → wait → advance until ``once`` or Ctrl+C.
 
@@ -1304,7 +1354,9 @@ def run_main_loop(
     eligible issue that still has an open tab before starting new work (at most
     one ticket at a time). If the tab list fails, selection falls back to queue
     order and ``adopt_existing_worker`` still refuses to spawn a duplicate.
+    Worker tabs are created in, and only looked up in, herdr ``workspace``.
     """
+    run_herdr = scope_run_herdr(run_herdr, workspace)
     login = fetch_viewer_login(run_gh)
     resolved_repo = resolve_repo(repo, run_gh)
 
@@ -1318,6 +1370,7 @@ def run_main_loop(
     issues, candidates, blocked_by_map = queue_snapshot()
     open_with_label, assigned_to_me = work_for_today_counts(issues, login, label)
     print(f"repo: {resolved_repo}")
+    print(format_workspace_line(workspace))
     print(format_queue_counts_line(open_with_label, assigned_to_me, label, login))
     print(
         format_loop_params_line(
@@ -1413,12 +1466,15 @@ def run_dry_run(
     repo: str | None,
     run_gh: RunGh = default_run_gh,
     run_herdr: RunHerdr = default_run_herdr,
+    workspace: str | None = None,
 ) -> list[str]:
     """Resolve gh context, list issues, pick next; return printable summary lines.
 
-    Reads ``herdr tab list`` (read-only) so in-progress tickets come first and
-    ``next:`` is the resume-first choice; a herdr failure never fails dry-run.
+    Reads ``herdr tab list`` (read-only, scoped to ``workspace``) so in-progress
+    tickets come first and ``next:`` is the resume-first choice; a herdr failure
+    never fails dry-run.
     """
+    run_herdr = scope_run_herdr(run_herdr, workspace)
     login = fetch_viewer_login(run_gh)
     resolved_repo = resolve_repo(repo, run_gh)
     issues = list_labeled_open_issues(resolved_repo, label, run_gh)
@@ -1439,6 +1495,7 @@ def run_dry_run(
         planned=planned,
         in_progress=in_progress,
         herdr_unavailable=herdr_unavailable,
+        workspace=workspace,
     )
 
 
@@ -1481,14 +1538,21 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Print summary and next issue (reads herdr tab list read-only); no herdr spawn",
     )
+    ap.add_argument(
+        "--workspace",
+        metavar="WORKSPACE_ID",
+        help="herdr workspace for worker tabs and tab lookups "
+        "(default: HERDR_WORKSPACE_ID of the pane running the driver)",
+    )
     return ap
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    workspace = resolve_workspace(args.workspace, dry_run=args.dry_run)
     if args.dry_run:
         try:
-            for line in run_dry_run(args.label, args.repo):
+            for line in run_dry_run(args.label, args.repo, workspace=workspace):
                 print(line)
         except RuntimeError as exc:
             print(str(exc), file=sys.stderr)
@@ -1501,6 +1565,7 @@ def main(argv: list[str] | None = None) -> int:
             args.agent_kind,
             args.poll_seconds,
             args.once,
+            workspace=workspace,
         )
     except RuntimeError as exc:
         print(str(exc), file=sys.stderr)

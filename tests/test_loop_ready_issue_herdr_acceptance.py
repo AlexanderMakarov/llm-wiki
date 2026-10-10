@@ -157,6 +157,7 @@ def test_acceptance_dry_run_pipeline_fake_run_gh(loop_mod):
     )
     assert lines == [
         "repo: org/wik",
+        "herdr workspace: unscoped",
         f"2 with {CUSTOM_LABEL!r} label, 2 is assigned on {LOGIN!r}",
         "planned (1):",  # #5 blocked
         "  1. #8 Next eligible https://example/o/r/issues/8",
@@ -606,3 +607,108 @@ def test_acceptance_issue_closed_without_merge_advances_and_closes_tab(loop_mod,
         "Advanced #11 (closed: NOT_PLANNED, no merged closing PR; CI gate skipped); "
         "worker tab closed." in out
     )
+
+
+def _workspace_herdr(tabs: list[dict], *, ui_active: str, events: list[tuple]):
+    """Fake herdr with real workspace semantics.
+
+    ``tab list`` without ``--workspace`` returns every workspace's tabs; ``tab
+    create`` without it lands in the UI-active workspace (#344).
+    """
+
+    def option(argv: list[str], name: str) -> str | None:
+        return argv[argv.index(name) + 1] if name in argv else None
+
+    def fake_run_herdr(argv: list[str]) -> subprocess.CompletedProcess[str]:
+        if argv[1:3] == ["tab", "list"]:
+            ws = option(argv, "--workspace")
+            listed = [t for t in tabs if ws is None or t["workspace_id"] == ws]
+            body = json.dumps({"result": {"tabs": listed, "type": "tab_list"}})
+        elif argv[1:3] == ["tab", "create"]:
+            ws = option(argv, "--workspace") or ui_active
+            events.append(("create", ws))
+            body = json.dumps(
+                {"result": {"root_pane": {"pane_id": f"{ws}:pNew"}, "tab": {"tab_id": f"{ws}:tNew"}}},
+            )
+        elif argv[1:3] == ["pane", "list"]:
+            panes = [{"pane_id": f"{t['tab_id']}:p", "tab_id": t["tab_id"], "agent": "cursor"} for t in tabs]
+            body = json.dumps({"result": {"panes": panes, "type": "pane_list"}})
+        elif argv[1:3] in (["agent", "start"], ["agent", "prompt"]):
+            body = json.dumps({"result": {"type": "ok"}})
+        elif argv[1:3] == ["tab", "close"]:
+            events.append(("close", argv[3]))
+            body = json.dumps({"result": {"type": "ok"}})
+        else:
+            raise AssertionError(f"unexpected herdr argv: {argv}")
+        return subprocess.CompletedProcess(argv, 0, body, "")
+
+    return fake_run_herdr
+
+
+# @regression
+def test_acceptance_worker_tabs_stay_in_driver_workspace(loop_mod, monkeypatch, capsys):
+    """#344: tabs open in the driver's workspace; other workspaces' issue-N tabs are ignored.
+
+    Another workspace holds an ``issue-11`` tab (not adopted) and an ``issue-12``
+    tab whose issue is closed (not swept); the UI-active workspace is neither.
+    """
+    issues = [_issue(11, labels=[CUSTOM_LABEL], assignees=[LOGIN])]
+    fake_run_gh = _fake_gh_factory(
+        login=LOGIN, repo="o/r", issues=issues, issue_states={12: "CLOSED"}
+    )
+    tabs = [
+        {"label": "issue-11", "tab_id": "wG:t5", "number": 5, "workspace_id": "wG"},
+        {"label": "issue-12", "tab_id": "wG:t6", "number": 6, "workspace_id": "wG"},
+    ]
+    events: list[tuple] = []
+    monkeypatch.setattr(loop_mod, "wait_until_ticket_advanced", lambda *_a, **_k: "merged")
+
+    code = loop_mod.run_main_loop(
+        CUSTOM_LABEL,
+        "o/r",
+        "cursor",
+        300,
+        once=True,
+        run_gh=fake_run_gh,
+        run_herdr=_workspace_herdr(tabs, ui_active="wJob", events=events),
+        sleep_fn=lambda _s: None,
+        repo_root=REPO,
+        workspace="wD",
+    )
+
+    assert code == 0
+    assert events == [("create", "wD"), ("close", "wD:tNew")]
+    out = capsys.readouterr().out
+    assert "herdr workspace: wD" in out
+    assert "issue-11 herdr tab opened for #11 gh issue" in out
+
+
+def test_acceptance_workspace_cli_flag_then_herdr_env(loop_mod, monkeypatch, capsys):
+    """#344: ``--workspace`` wins over ``HERDR_WORKSPACE_ID``; neither set → WARNING, unscoped."""
+    monkeypatch.setenv("HERDR_WORKSPACE_ID", "wEnv")
+    assert loop_mod.resolve_workspace("wCli") == "wCli"
+    assert loop_mod.resolve_workspace(None) == "wEnv"
+    monkeypatch.delenv("HERDR_WORKSPACE_ID")
+    assert loop_mod.resolve_workspace(None) is None
+    assert "worker tabs open in the UI-active workspace" in capsys.readouterr().err
+    assert loop_mod.resolve_workspace(None, dry_run=True) is None
+    dry_err = capsys.readouterr().err
+    assert "tabs from every workspace are listed" in dry_err
+    assert "worker tabs open" not in dry_err
+    run = object()
+    assert loop_mod.scope_run_herdr(run, None) is run
+
+
+def test_acceptance_dry_run_ignores_other_workspace_tabs(loop_mod):
+    """#344: dry-run reports its workspace and does not mark another workspace's tab in progress."""
+    issues = [_issue(11, title="Only", labels=[CUSTOM_LABEL], assignees=[LOGIN])]
+    fake_run_gh = _fake_gh_factory(login=LOGIN, repo="o/r", issues=issues)
+    tabs = [{"label": "issue-11", "tab_id": "wG:t5", "number": 5, "workspace_id": "wG"}]
+    herdr = _workspace_herdr(tabs, ui_active="wG", events=[])
+
+    scoped = loop_mod.run_dry_run(CUSTOM_LABEL, "o/r", fake_run_gh, herdr, workspace="wD")
+    other = loop_mod.run_dry_run(CUSTOM_LABEL, "o/r", fake_run_gh, herdr, workspace="wG")
+
+    assert scoped[1] == "herdr workspace: wD"
+    assert "  1. #11 Only https://example/o/r/issues/11" in scoped
+    assert "  1. #11 Only https://example/o/r/issues/11 (in progress, tab open)" in other
