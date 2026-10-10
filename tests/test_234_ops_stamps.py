@@ -152,6 +152,7 @@ def test_record_lint_ops_ok_clears_prior_error(tmp_path: Path):
     record_lint_ops(
         failed=True,
         error_text=multiline,
+        report_text="full report\n" + multiline,
         state_file=state_file,
         when="2026-09-08T13:00:00Z",
     )
@@ -160,6 +161,7 @@ def test_record_lint_ops_ok_clears_prior_error(tmp_path: Path):
     assert ops["last_lint_run_at"] == "2026-09-08T13:00:00Z"
     assert "broken_wikilink" in ops["last_lint_error"]
     assert "\n" in ops["last_lint_error"]
+    assert ops["last_lint_report"].startswith("full report\n")
 
     record_lint_ops(
         failed=False,
@@ -171,63 +173,35 @@ def test_record_lint_ops_ok_clears_prior_error(tmp_path: Path):
     assert ops["last_lint_status"] == "ok"
     assert ops["last_lint_run_at"] == "2026-09-08T13:05:00Z"
     assert ops["last_lint_error"] == ""
+    assert ops["last_lint_report"] == ""
 
 
-def test_format_lint_error_for_ops_truncates_past_six_lines():
-    """# @layer: unit  # @spec: 234-home-timeline-automation-stamps"""
-    lines = [f"line-{i}" for i in range(1, 10)]
-    stored = format_lint_error_for_ops("\n".join(lines))
-    out_lines = stored.split("\n")
-    assert out_lines[:6] == lines[:6]
-    assert out_lines[-1] == "…"
-    assert len(out_lines) == 7
-
-
-def test_format_lint_error_skips_long_skipped_rules_preamble():
-    """Long skipped-rules block must not crowd out ## finding lines on Home.
+def test_format_lint_error_for_ops_is_a_pass_through():
+    """Only CRLF and trailing blank lines change; Home JS owns display limits (#256).
 
     # @layer: unit  # @spec: 234-home-timeline-automation-stamps
     """
-    preamble = [
+    lines = [
         "  scanned 12 pages",
-        "  2 issues: 2 errors, 0 warnings, 0 info",
         "  skipped 9 of 11 rules (disabled in llmwiki.json):",
         "    - alpha: off",
-        "    - beta: off",
-        "    - gamma: off",
-        "    - delta: off",
-        "    - epsilon: off",
         "",
-        "## frontmatter_validity (2)",
-        "  [error] entities/Bogus.md: confidence must be a number",
-        "  [error] entities/Other.md: missing title",
+        *[f"line-{i}" for i in range(1, 20)],
     ]
-    stored = format_lint_error_for_ops("\n".join(preamble))
-    assert "skipped 9 of 11" not in stored
-    assert "frontmatter_validity" in stored
-    assert "[error] entities/Bogus.md" in stored
-    assert "2 issues: 2 errors" in stored
-    # Still respects the ~6 line budget + ellipsis when findings are long.
-    long_findings = preamble[:2] + [""] + [
-        "## frontmatter_validity (8)",
-        *[f"  [error] entities/E{i}.md: bad" for i in range(8)],
-    ]
-    truncated = format_lint_error_for_ops("\n".join(long_findings))
-    assert truncated.endswith("…")
-    assert "skipped" not in truncated
+    text = "\n".join(lines)
+    assert format_lint_error_for_ops(text) == text
+    assert format_lint_error_for_ops(text.replace("\n", "\r\n") + "\r\n\n  \n") == text
 
 
-def test_record_lint_ops_failed_stores_truncated_multiline(tmp_path: Path):
+def test_record_lint_ops_failed_stores_full_multiline(tmp_path: Path):
     """# @layer: unit  # @spec: 234-home-timeline-automation-stamps"""
     vault = _vault(tmp_path)
     state_file = vault / "llmwiki-state.json"
     long_report = "\n".join(f"finding-{i}: detail" for i in range(1, 12))
     record_lint_ops(failed=True, error_text=long_report, state_file=state_file)
     err = read_state(state_file)["ops"]["last_lint_error"]
-    parts = err.split("\n")
-    assert parts[:6] == [f"finding-{i}: detail" for i in range(1, 7)]
-    assert parts[-1] == "…"
-    assert "finding-7:" not in err
+    assert err == long_report
+    assert "…" not in err
 
 
 # ─── Site sidecar without HTML rewrite ────────────────────────────────────

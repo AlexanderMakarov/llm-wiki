@@ -27,7 +27,7 @@ Do **not** invent parallel stamp or copy paths per command. Extract or extend ex
 | --- | --- | --- |
 | State write + JS wrapper | `state_store.update_state` / `write_state` (already writes JSON + vault `llmwiki-state.js`) | all stamp writers |
 | Copy snapshot into `site/` | Reuse the copy logic already in `build_site` (extract a tiny shared function if needed — one implementation) | `build_site` (existing) + post-lint |
-| Lint console text | Existing lint text renderer used by `cmd_lint` / `_run_lint_step` | store truncated copy into `last_lint_error`; print unchanged |
+| Lint console text | Existing lint text renderer used by `cmd_lint` / `_run_lint_step` | print unchanged; store `render_ops_error` output (same line shape, policy-failing findings first, #256) into `last_lint_error` and the full `render_text` report into `last_lint_report` |
 | Lint stamp + status + error + site data sync | **One** helper (e.g. `record_lint_ops(...)`) | `cmd_lint` and `pipeline._run_lint_step` |
 | Synth stamp | **One** helper | `cmd_synthesize` (non-estimate) and `pipeline` synth stage |
 | Build stamp | Inside `build_site` on rc==0 only (CLI `build` and `all` already share this) | no duplicate in `cli.py` |
@@ -45,7 +45,8 @@ File: `llmwiki/state_store.py` — extend `default_state()["ops"]` (and `_ensure
 | `ops.last_build_at` | ISO-8601 `Z` or `""` | `build_site` on rc==0 | Pipeline state |
 | `ops.last_lint_run_at` | already exists | shared lint record helper | Pipeline state |
 | `ops.last_lint_status` | `""` \| `"ok"` \| `"failed"` | shared lint record helper | Pipeline state + banner |
-| `ops.last_lint_error` | `""` or multiline console-shaped text | shared lint record helper; clear when ok | Banner + Pipeline state note; up to **~6 lines** on Home |
+| `ops.last_lint_error` | `""` or multiline console-shaped text (policy-failing findings, stored in full) | shared lint record helper; clear when ok | Red note under Candidates when it has an `[error]` line; Home JS shows up to **10 lines** + `…` |
+| `ops.last_lint_report` | `""` or the full console lint report (#256) | shared lint record helper; set only when the policy fails, cleared when ok | **Linter output** collapsible after Estimate warnings |
 
 **Assumptions (verify):**
 
@@ -71,7 +72,7 @@ File: `llmwiki/state_store.py` — extend `default_state()["ops"]` (and `_ensure
 | Build | `build_site` on rc==0 only |
 | Lint | shared `record_lint_ops` from `cmd_lint` + `_run_lint_step` |
 
-**Lint error text:** same format as console lint output (multiline); truncate with ellipsis for storage so Home can show ~6 lines. Reuse the existing lint text renderer — do not invent a second format.
+**Lint error text:** same line shape as console lint output (multiline), stored in full. `llmwiki/lint/report.py:render_ops_error(outcome, total_pages, fail_on=…)` shares the summary and `## rule (n)` / `  [severity] page: message` helpers with `render_text`, but selects findings by the active policy — errors only under `errors`; errors then warnings under `warnings`; never info — and drops the skipped-rules block and blank separators. `state_store.format_lint_error_for_ops` is a pass-through (CRLF and trailing blank lines only). `record_lint_ops(report_text=…)` also stores the full `render_text` report in `last_lint_report`. Display limits live in `renderStateWidget`: the red note renders only when the text has an `[error]` finding line and shows its first 10 lines plus `…`; the full report renders pre-wrap in a **Linter output** `detailsSection` right after Estimate warnings.
 
 **Lint-fail in `all`:** stamps + data sidecar sync before exit 2; HTML from the preceding build stays — **no revert**.
 
@@ -83,7 +84,7 @@ File: `llmwiki/state_store.py` — extend `default_state()["ops"]` (and `_ensure
 
 | Surface | Shows |
 | --- | --- |
-| **Eligible sources / Knowledge tables** | Count tables only. Lint-error **note under the Candidates / knowledge table** when `last_lint_error` is non-empty (pre-wrap, ~6 lines). Empty error → no note. |
+| **Eligible sources / Knowledge tables** | Count tables only. Red lint-error **note under the Candidates / knowledge table** when `last_lint_error` contains an `[error]` finding line (pre-wrap, up to 10 lines + `…` in JS, #256). Warnings-only policy failures: no red note; Timeline Last lint · failed + **Linter output**. Empty error → no note. **Linter output** collapsible after Estimate warnings renders `last_lint_report`. |
 | **Timeline** (collapsible) | Oldest pending, **Last sync / Last synth / Last build / Last lint** (time + lint pass/fail), Last queue run. Hide dead Last reflect. |
 | **Automation** (`render_automation_panel`) | **Settings only** — short Synth backend line, Agent hooks (no “(recommended)”), Watch on its own line, log path, Maintain one-liner. **No** stage timestamps / lint outcome / lint-fail reminder / Updated. |
 
@@ -120,7 +121,7 @@ None beyond existing state snapshot + Home widget + panel HTML. No new services,
 - **Risks & mitigations:**
   - **Duplicated stamp logic** — enforce §2.0 DRY; single helper per stage.
   - **Stale site data after lint** — shared copy + tests without `build`.
-  - **Error text drift from console** — reuse lint text renderer.
+  - **Error text drift from console** — share the lint text renderer's line helpers.
   - **Banner vs Automation confusion** — timestamps only under Pipeline state; Automation settings-only.
   - **Automation panel test brittleness** — update goldens in the same PR.
   - **`--fail-fast` and site** — do not over-engineer site updates on early abort.
@@ -129,7 +130,7 @@ None beyond existing state snapshot + Home widget + panel HTML. No new services,
 
 ## 4. Testing Strategy
 
-- **Widget:** Timeline shows Last sync/synth/build/lint; lint note under Candidates iff `last_lint_error` non-empty (~6-line multiline); Automation HTML has no stage stamps / lint-fail reminder / Updated.
+- **Widget:** Timeline shows Last sync/synth/build/lint; lint note under Candidates iff `last_lint_error` lists an `[error]` finding (10 displayed lines + `…`); Linter output collapsible renders `last_lint_report`; Automation HTML has no stage stamps / lint-fail reminder / Updated.
 - **DRY:** stamp helpers used from both CLI and `all` (assert via behavior, not duplicate code paths left behind).
 - **State writers:** synth/build/lint stamp `ops.*`.
 - **Lint → state data only:** JSON (+ `site/` data sidecar) updates; no HTML rewrite required.
@@ -138,3 +139,11 @@ None beyond existing state snapshot + Home widget + panel HTML. No new services,
 - **Docs / CHANGELOG:** per CONTRIBUTING.
 
 Specialist note: no dedicated `python-cli-backend` agent; implement via general-purpose + testing-expert for QA slice.
+
+## Change Log
+
+### 2026-10-09 — Home lint note shows policy-failing findings; full report in Linter output ([#256](https://github.com/AlexanderMakarov/llm-wiki/issues/256))
+
+- **What changed:** R2 keeps the console line shape for `ops.last_lint_error` but no longer stores a prefix of the full report. The note lists the findings that tripped the active fail policy — errors under fail-on-errors; errors, then warnings, under fail-on-warnings — after the scanned / issue-count summary, without the skipped-rules block, and is stored in full. Home shows the red note only when it contains an `[error]` finding line and displays at most 10 lines followed by `…` (the limit lives in the browser, not in storage). A warnings-only fail-on-warnings failure leaves the red note hidden; Timeline and **Linter output** carry the failure. A new `ops.last_lint_report` keeps the full console report from a failed lint (cleared on a passing run) and backs a **Linter output** collapsible placed right after Estimate warnings.
+- **Why:** the console report is grouped alphabetically by rule, so early warning rules (for example `content_freshness`) filled the old ~6-line note and the errors that failed the run never reached Home. Keeping the full text in state lets the operator read the complete report on Home without re-running lint.
+- **Scope of the amendment:** which findings are stored, how many lines Home displays, when the red note appears, and the new Linter output section; console output and the note's placement under the Candidates table are unchanged. `tasks.md` stays the historical record of the original delivery.

@@ -237,14 +237,25 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
       "<tbody>" + bodyRows + "</tbody>" + footHtml + "</table></div>";
 
     // #234: lint error note under the Candidates / knowledge table (not above counts).
+    // #256: red only when error findings are listed; display at most 10 lines.
+    var LINT_BANNER_MAX_LINES = 10;
     var lintError = ops.last_lint_error ? String(ops.last_lint_error) : "";
     var lintBanner = "";
-    if (lintError) {
+    if (lintError && /^\s*\[error\]/m.test(lintError)) {
+      var lintLines = lintError.split("\n");
+      if (lintLines.length > LINT_BANNER_MAX_LINES) {
+        lintLines = lintLines.slice(0, LINT_BANNER_MAX_LINES).concat(["…"]);
+      }
       lintBanner =
         '<div class="error-banner state-lint-banner" role="alert">' +
-        escapeHtml(lintError) +
+        escapeHtml(lintLines.join("\n")) +
         "</div>";
     }
+    var lintReport = ops.last_lint_report ? String(ops.last_lint_report) : "";
+    var lintReportCount = lintReport ? (lintReport.split("\n").length || 1) : 0;
+    var lintReportBody = lintReport
+      ? '<pre class="state-lint-report">' + escapeHtml(lintReport) + "</pre>"
+      : '<p class="muted">No linter output.</p>';
 
     var knowledgeHtml =
       '<div class="state-table-wrap" tabindex="0" role="region" aria-label="Knowledge layer">' +
@@ -300,6 +311,7 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
       detailsSection("Candidates to review", toReview, reviewBreakdownHtml(pipeline)) +
       detailsSection("Commands", 15, commandsBody(repoRoot)) +
       detailsSection("Estimate warnings", warnings.length, warningsBody) +
+      detailsSection("Linter output", lintReportCount, lintReportBody) +
       "</div>";
   }
 

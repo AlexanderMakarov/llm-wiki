@@ -14,8 +14,6 @@ from llmwiki import REPO_ROOT
 
 SCHEMA_VERSION = 1
 DEFAULT_BOUNDED_COMPLETED = 500
-#: Home Pipeline state shows ~6 lines of lint failure detail; store that budget.
-_LINT_ERROR_MAX_LINES = 6
 _ACTIVE_STATE_FILE: Path | None = None
 #: Ops string keys that default_state / _ensure_shape always keep as ``str``.
 _OPS_STRING_KEYS: tuple[str, ...] = (
@@ -26,6 +24,7 @@ _OPS_STRING_KEYS: tuple[str, ...] = (
     "last_build_at",
     "last_lint_status",
     "last_lint_error",
+    "last_lint_report",
 )
 
 
@@ -90,6 +89,7 @@ def default_state() -> dict[str, Any]:
             "last_build_at": "",
             "last_lint_status": "",
             "last_lint_error": "",
+            "last_lint_report": "",
         },
         "meta": {
             "schema_version": SCHEMA_VERSION,
@@ -375,48 +375,17 @@ def _ensure_shape(raw: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
-def format_lint_error_for_ops(
-    console_text: str, *, max_lines: int = _LINT_ERROR_MAX_LINES
-) -> str:
-    """Truncate console-shaped lint text for Home (~6 lines) with an ellipsis.
+def format_lint_error_for_ops(console_text: str) -> str:
+    """Normalize console-shaped lint text for ``ops`` (CRLF → LF, no trailing blanks).
 
-    Prefers the issues summary plus ``## rule`` / finding lines so a long
-    "skipped N of M rules" preamble does not crowd out the failures that
-    tripped the policy (#234 review N3).
+    A pass-through otherwise: choosing *which* findings to store is
+    :func:`llmwiki.lint.report.render_ops_error`'s job and limiting how many
+    lines Home displays is the browser's (#256).
     """
     lines = console_text.replace("\r\n", "\n").split("\n")
-    while lines and lines[-1] == "":
+    while lines and lines[-1].strip() == "":
         lines.pop()
-
-    head: list[str] = []
-    for ln in lines:
-        if ln.lstrip().startswith("skipped "):
-            break
-        if ln.startswith("## "):
-            break
-        if ln.strip() == "":
-            continue
-        head.append(ln)
-
-    rule_idx = next((i for i, ln in enumerate(lines) if ln.startswith("## ")), None)
-    if rule_idx is not None:
-        selected = head + lines[rule_idx:]
-    else:
-        selected = []
-        skipping = False
-        for ln in lines:
-            if ln.lstrip().startswith("skipped "):
-                skipping = True
-                continue
-            if skipping:
-                if ln.strip() == "":
-                    skipping = False
-                continue
-            selected.append(ln)
-
-    if len(selected) <= max_lines:
-        return "\n".join(selected)
-    return "\n".join(selected[:max_lines]) + "\n…"
+    return "\n".join(lines)
 
 
 def copy_state_sidecar_to_site(
@@ -477,6 +446,7 @@ def record_lint_ops(
     *,
     failed: bool,
     error_text: str = "",
+    report_text: str = "",
     state_file: Path | None = None,
     site_dir: Path | None = None,
     when: str | None = None,
@@ -484,18 +454,23 @@ def record_lint_ops(
     """Record lint time/status/error in ops; sync ``site/llmwiki-state.js`` if present.
 
     ``failed`` means the active fail policy tripped (not merely findings under
-    ``never``). On success, ``last_lint_error`` is cleared. Error text is the
-    console-shaped lint report, truncated for Home.
+    ``never``). On success, ``last_lint_error`` and ``last_lint_report`` are
+    cleared. On failure, ``error_text`` is the note from
+    :func:`llmwiki.lint.report.render_ops_error` (findings that tripped the
+    policy, #256) and ``report_text`` the full console report behind Home's
+    Linter output section; both are stored in full.
     """
     now = when or _utc_now()
     status = "failed" if failed else "ok"
     stored_error = format_lint_error_for_ops(error_text) if failed else ""
+    stored_report = format_lint_error_for_ops(report_text) if failed else ""
 
     def _mut(state: dict[str, Any]) -> dict[str, Any]:
         ops = state.setdefault("ops", {})
         ops["last_lint_run_at"] = now
         ops["last_lint_status"] = status
         ops["last_lint_error"] = stored_error
+        ops["last_lint_report"] = stored_report
         return state
 
     target = resolve_state_file(state_file)

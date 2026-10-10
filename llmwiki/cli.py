@@ -109,6 +109,7 @@ from llmwiki.lint import REGISTRY as _LINT_REG
 from llmwiki.lint import LintOptions, UnknownRuleError, load_pages, run_all, run_lint, summarize
 from llmwiki.lint import rules as _lint_rules  # noqa: F401 — force registration
 from llmwiki.lint.report import render_json as _render_lint_json
+from llmwiki.lint.report import render_ops_error as _render_lint_ops_error
 from llmwiki.lint.report import render_text as _render_lint_text
 from llmwiki.pipeline import run_pipeline as _run_pipeline
 from llmwiki.pipeline_lock import pipeline_lock
@@ -1055,33 +1056,34 @@ def cmd_lint(args: argparse.Namespace) -> int:
         print(f"error: {origin}{exc}", file=sys.stderr)
         return 2
 
+    report_text = _render_lint_text(
+        outcome, len(pages), settings_filename=VAULT_SETTINGS_FILENAME
+    )
     if args.json:
         print(_json.dumps(_render_lint_json(outcome, len(pages)), indent=2))
-        report_text = _render_lint_text(
-            outcome, len(pages), settings_filename=VAULT_SETTINGS_FILENAME
-        )
     else:
-        report_text = _render_lint_text(
-            outcome, len(pages), settings_filename=VAULT_SETTINGS_FILENAME
-        )
         print(report_text)
 
     _apply_default_vault(args)
 
     # Exit code last: returning early on a failing gate is what stopped a
     # failing lint from ever recording that it ran (#150). Fail policy tripped
-    # → status failed + console-shaped error; otherwise ok and clear error.
+    # → status failed + console-shaped note of the failing findings plus the
+    # full report (#256); otherwise ok and clear both.
     summary = summarize(outcome.issues)
+    fail_on_warnings = getattr(args, "fail_on_warnings", False)
     failed = bool(
         (args.fail_on_errors and summary.get("error", 0) > 0)
-        or (
-            getattr(args, "fail_on_warnings", False)
-            and summary.get("warning", 0) > 0
-        )
+        or (fail_on_warnings and summary.get("warning", 0) > 0)
     )
     record_lint_ops(
         failed=failed,
-        error_text=report_text if failed else "",
+        error_text=_render_lint_ops_error(
+            outcome,
+            len(pages),
+            fail_on="warnings" if fail_on_warnings else "errors",
+        ) if failed else "",
+        report_text=report_text if failed else "",
     )
     return 1 if failed else 0
 
