@@ -10,6 +10,10 @@ How to upgrade between `llmwiki` releases. Most releases are drop-in (`pip insta
 
 The canonical per-release detail is [CHANGELOG.md](https://github.com/AlexanderMakarov/llm-wiki/blob/main/CHANGELOG.md) — this guide focuses on "what might break".
 
+## Unreleased — pin Claude path at `install-automation` (#275)
+
+No data migration. If you already schedule Maintain with `synthesis.backend: claude` and rely on `claude` being on `$PATH` (for example under `<home>/.local/bin`), re-run `llmwiki install-automation` (or `llmwiki install-automation --yes --job maintain --synth-backend claude`) once after upgrading. The installer writes absolute `synthesis.claude.path` when that key (and flat `claude_path`) are unset, so systemd user-timer catch-up with a minimal `PATH` still finds the CLI. An explicit path you already set is left alone.
+
 ## Unreleased — whole-document storage (#311)
 
 Behaviour flip for imports after this release, plus an optional offline migration for vaults that still hold length-driven pieces.
