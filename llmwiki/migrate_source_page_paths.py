@@ -490,10 +490,14 @@ def _rewrite_sources_list(
     text: str,
     bare: dict[str, dict[str, Any] | None],
     resolve_shared: Callable[[str], tuple[str, dict[str, Any] | None]],
+    *,
+    dedupe: bool = False,
 ) -> tuple[str, int, Counter[str], Counter[str]]:
     """Rewrite old stems in the frontmatter ``sources:`` list (inline or block).
 
-    Returns the same shape as :func:`_rewrite_links`.
+    Returns the same shape as :func:`_rewrite_links`. ``dedupe`` drops an entry
+    that repeats an earlier one in the same list — for callers that map several
+    old stems onto one (the whole-document merge, #311).
     """
     lines, end = _frontmatter_lines(text)
     count = 0
@@ -511,6 +515,7 @@ def _rewrite_sources_list(
         elif outcome == "ambiguous":
             ambiguous[item.strip().strip("'\"")] += 1
     in_block = False
+    seen: set[str] = set()
     for i in range(1, end):
         body = lines[i].rstrip("\r\n")
         newline = lines[i][len(body):]
@@ -521,19 +526,29 @@ def _rewrite_sources_list(
             else:
                 new_item, outcome = _rewrite_item(m.group(2), bare, resolve_shared)
                 _tally(m.group(2), outcome)
+                if dedupe and new_item.strip().strip("'\"") in seen:
+                    lines[i] = ""
+                    continue
+                seen.add(new_item.strip().strip("'\""))
                 lines[i] = f"{m.group(1)}{new_item}{m.group(3)}{newline}"
                 continue
         if _SOURCES_BLOCK_KEY.match(body):
             in_block = True
+            seen = set()
             continue
         m = _SOURCES_INLINE.match(body)
         if not m:
             continue
         items = m.group(2).split(",") if m.group(2).strip() else []
         out: list[str] = []
+        inline_seen: set[str] = set()
         for item in items:
             new_item, outcome = _rewrite_item(item, bare, resolve_shared)
             _tally(item, outcome)
+            key = new_item.strip().strip("'\"")
+            if dedupe and key in inline_seen:
+                continue
+            inline_seen.add(key)
             out.append(new_item)
         lines[i] = f"{m.group(1)}{','.join(out)}{m.group(3)}{newline}"
     return "".join(lines), count, ambiguous, backlinks

@@ -13,7 +13,7 @@ Default model is the cheapest Composer id Agent CLI lists
 
 Prompt delivery: Agent CLI accepts a positional prompt *or* stdin when no
 prompt argv is given (verified). Prefer stdin so long pages stay under
-OS argv limits; body still capped at 8 KB like Claude / Ollama.
+OS argv limits; session bodies keep the 8 KB cap, document chunks use ``usable_body_chars``.
 """
 
 from __future__ import annotations
@@ -25,7 +25,14 @@ from dataclasses import dataclass
 from typing import Any
 
 from llmwiki.synth.base import (
+    ASSUMED_AGENT_WINDOW_TOKENS,
+    HEAVY_AGENT_BUDGET,
+    SESSION_BODY_SEND_CAP_CHARS,
     BaseSynthesizer,
+    BodyBudgetConfig,
+    load_body_budget_config,
+    page_timeout_seconds,
+    resolve_usable_body_chars,
     split_prompt_template,
     usage_limit_from_text,
 )
@@ -42,8 +49,21 @@ DEFAULT_CURSOR_TIMEOUT = 180
 # Does not strip the agent system prompt (still ~21k floor on Composer).
 _LEAN_ALLOWED_TOOLS = "truncated_tool_call"
 
-# Same 8 KB body cap as Claude / Ollama / agent-delegate.
-_BODY_CHAR_CAP = 8000
+# Context windows (tokens) of Cursor model ids, matched by exact (lower-cased)
+# name. Cursor does not publish Agent CLI windows, so this is a small table of
+# ids the operator has confirmed; any other id assumes
+# ASSUMED_AGENT_WINDOW_TOKENS (200k). Override with
+# ``synthesis.cursor_cli.context_window_tokens`` / ``usable_body_chars``.
+_CURSOR_CONTEXT_WINDOWS: dict[str, int] = {
+    "composer-2.5": 200_000,
+    "composer-2.5-fast": 200_000,
+}
+
+
+def known_cursor_context_window(model: str | None) -> int | None:
+    """Context window (tokens) for a known Cursor model id, else ``None``."""
+    return _CURSOR_CONTEXT_WINDOWS.get((model or "").strip().lower())
+
 
 # Tiny live probe for ``is_available`` / ``synth --check``. Agent CLI is
 # slower than an HTTP tags ping, so this is longer than Ollama's 2s but
@@ -64,6 +84,7 @@ class CursorCLIConfig:
 
     model: str = DEFAULT_CURSOR_MODEL
     timeout: int = DEFAULT_CURSOR_TIMEOUT
+    body_budget: BodyBudgetConfig = BodyBudgetConfig()
 
 
 def load_cursor_cli_config(cfg: dict[str, Any] | None) -> CursorCLIConfig:
@@ -83,7 +104,11 @@ def load_cursor_cli_config(cfg: dict[str, Any] | None) -> CursorCLIConfig:
         if "timeout" in nested and nested["timeout"]
         else DEFAULT_CURSOR_TIMEOUT
     )
-    return CursorCLIConfig(model=str(model), timeout=timeout)
+    return CursorCLIConfig(
+        model=str(model),
+        timeout=timeout,
+        body_budget=load_body_budget_config(nested, "cursor_cli"),
+    )
 
 
 def resolve_cursor_agent_path() -> str | None:
@@ -135,14 +160,42 @@ class CursorCLISynthesizer(BaseSynthesizer):
         self,
         model: str | None = None,
         timeout: int = DEFAULT_CURSOR_TIMEOUT,
+        body_budget: BodyBudgetConfig | None = None,
     ) -> None:
         self.model = model or DEFAULT_CURSOR_MODEL
         self.timeout = timeout
+        self.body_budget = body_budget or BodyBudgetConfig()
         self._children = TrackedChildren()
 
     def kill_in_flight(self) -> int:
         """Kill every Agent CLI process still running (#181)."""
         return self._children.kill_all()
+
+    def usable_body_chars(self) -> int:
+        """Document-chunk budget: config, else the model's known window, else 200k (#311).
+
+        Known ids (``composer-2.5``, ``composer-2.5-fast``) and any unlisted id
+        assume a 200,000-token window; set ``synthesis.cursor_cli.context_window_tokens``
+        (or ``usable_body_chars``) to change it. A derived budget reserves the
+        full agent scaffolding and working margin — the Agent CLI is never lean.
+        """
+        return resolve_usable_body_chars(
+            self.body_budget,
+            known_window_tokens=lambda: known_cursor_context_window(self.model),
+            budget_class=HEAVY_AGENT_BUDGET,
+            default_window_tokens=ASSUMED_AGENT_WINDOW_TOKENS,
+            derived_floor_chars=SESSION_BODY_SEND_CAP_CHARS,
+        )
+
+    def synthesize_document_chunk(
+        self,
+        chunk: str,
+        meta: dict[str, Any],
+        prompt_template: str,
+    ) -> str:
+        return self.synthesize_source_page(
+            chunk, meta, prompt_template, body_cap=self.usable_body_chars()
+        )
 
     @property
     def name(self) -> str:
@@ -242,8 +295,14 @@ class CursorCLISynthesizer(BaseSynthesizer):
         raw_body: str,
         meta: dict[str, Any],
         prompt_template: str,
+        *,
+        body_cap: int = SESSION_BODY_SEND_CAP_CHARS,
     ) -> str:
-        truncated_body = raw_body[:_BODY_CHAR_CAP] if raw_body else ""
+        # Sessions / evidence keep the historical cap; a document chunk
+        # arrives already within usable_body_chars and is sent whole (#311).
+        truncated_body = raw_body[:body_cap] if raw_body else ""
+        # Large document chunks need more wall clock than a session page (#311).
+        call_timeout = page_timeout_seconds(self.timeout, len(truncated_body))
         # Cursor Agent CLI has no documented ``--system-prompt`` channel
         # (unlike ``claude -p``), but Cursor *does* bill prompt-cache
         # read/write at the provider layer. Put the run-stable template
@@ -254,4 +313,4 @@ class CursorCLISynthesizer(BaseSynthesizer):
         prompt = _render_prompt(per_page, raw_body=truncated_body, meta=meta)
         if stable:
             prompt = f"{stable.rstrip()}\n\n{prompt}"
-        return self.run_prompt(prompt)
+        return self.run_prompt(prompt, timeout=float(call_timeout))

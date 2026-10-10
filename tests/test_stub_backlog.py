@@ -17,10 +17,9 @@ import pytest
 
 from llmwiki.lint import load_pages, run_all
 from llmwiki.lint.rules import StubSourcePages
-from llmwiki.synth.base import BaseSynthesizer
+from llmwiki.synth.base import DEFAULT_USABLE_BODY_CHARS, BaseSynthesizer
 from llmwiki.synth.estimate import synthesize_estimate_report
 from llmwiki.synth.pipeline import (
-    _DOC_CHUNK_MAX_CHARS,
     _discover_raw_sessions,
     _save_state,
     discover_stub_source_keys,
@@ -322,7 +321,7 @@ def test_stub_page_is_resynthesized_even_when_state_says_done(vault):
     assert again["new_files"] == 0
 
 
-# ─── chunked docs: a stub PART is backlog too ──────────────────────────
+# ─── chunked docs: one page per document (#311) ────────────────────────
 
 
 class _StubSynthesizer(BaseSynthesizer):
@@ -339,11 +338,11 @@ class _StubSynthesizer(BaseSynthesizer):
 
 @pytest.fixture
 def chunked_doc_vault(vault) -> dict[str, Path]:
-    """A doc big enough to be split into part-pages at the default chunk size."""
+    """A doc longer than a capped backend's usable body budget (>= 2 chunks)."""
 
     docs = vault["docs_dir"]
     docs.mkdir(parents=True, exist_ok=True)
-    section = "lorem ipsum " * (_DOC_CHUNK_MAX_CHARS // 12)  # ~1 chunk each
+    section = "lorem ipsum " * (DEFAULT_USABLE_BODY_CHARS // 12)  # ~1 chunk each
     body = "---\nslug: big-doc\n---\n" + "\n".join(
         f"## Part {i}\n\n{section}\n" for i in range(2)
     )
@@ -352,72 +351,87 @@ def chunked_doc_vault(vault) -> dict[str, Path]:
     return vault
 
 
-def _doc_parts(vault) -> list[Path]:
+def _doc_page(vault) -> Path:
+    return vault["doc_out"] / "big-doc.md"
+
+
+def _legacy_parts(vault) -> list[Path]:
     return sorted(vault["doc_out"].glob("big-doc--part-*.md"))
 
 
-def test_chunked_doc_written_as_stub_parts_is_resynthesized(chunked_doc_vault):
-    v = chunked_doc_vault
-    common = dict(
+def _common(v) -> dict:
+    return dict(
         raw_dir=v["raw_dir"],
         docs_dir=v["docs_dir"],
         wiki_sources_dir=v["sources"],
         log_path=v["log"],
         state_file=v["state"],
     )
-    # A legacy agent-delegate run left every part a sentinel and marked the
-    # source done in state.
-    synthesize_new_sessions(backend=_StubSynthesizer(), **common)
-    parts = _doc_parts(v)
-    assert len(parts) > 1, f"expected part pages, got {parts}"
-    assert all(page_is_stub(p) for p in parts)
 
-    summary = synthesize_new_sessions(backend=RealSynthesizer(), **common)
+
+def test_chunked_doc_written_as_one_stub_page_is_resynthesized(chunked_doc_vault):
+    v = chunked_doc_vault
+    # An agent-delegate run left the doc a sentinel and marked it done in state.
+    synthesize_new_sessions(backend=_StubSynthesizer(), **_common(v))
+    assert _doc_page(v).is_file() and page_is_stub(_doc_page(v))
+    assert _legacy_parts(v) == [], "a chunked doc must be ONE page, not part pages"
+
+    summary = synthesize_new_sessions(backend=RealSynthesizer(), **_common(v))
     assert summary["synthesized"] == 2  # the session + the doc
-    assert not any(page_is_stub(p) for p in _doc_parts(v))
+    assert not page_is_stub(_doc_page(v))
 
 
-def test_chunked_doc_with_one_real_part_still_has_stub_parts_pending(chunked_doc_vault):
-    # A partially hand-filled doc: part 1 was written out for real, the rest
-    # are still sentinels. The parts are complementary — one real part does NOT
-    # make the source synthesized, so the stub parts stay in the backlog and a
-    # real-backend run must fill them.
+def test_chunked_doc_with_real_page_is_a_noop_on_rerun(chunked_doc_vault):
     v = chunked_doc_vault
-    common = dict(
-        raw_dir=v["raw_dir"],
-        docs_dir=v["docs_dir"],
-        wiki_sources_dir=v["sources"],
-        log_path=v["log"],
-        state_file=v["state"],
+    first = synthesize_new_sessions(backend=RealSynthesizer(), **_common(v))
+    assert first["synthesized"] == 2
+    assert _legacy_parts(v) == []
+    again = synthesize_new_sessions(backend=RealSynthesizer(), **_common(v))
+    assert again["synthesized"] == 0
+    assert again["new_files"] == 0
+
+
+# Legacy (pre-migrate) vaults: ``--part-NN`` pages from an older release.
+
+
+def _write_legacy_part(v, n: int, *, stub: bool) -> Path:
+    path = v["doc_out"] / f"big-doc--part-{n:02d}.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    body = (
+        "<!-- llmwiki-pending: 8f2c -->\n\n*Pending agent synthesis.*\n"
+        if stub
+        else "## Summary\n\nHand-filled real content.\n\n## Connections\n\n- [[Thing]]\n"
     )
-    synthesize_new_sessions(backend=_StubSynthesizer(), **common)
-    parts = _doc_parts(v)
-    parts[0].write_text(
+    path.write_text(
         "---\ntitle: \"Big Doc\"\ntype: source\n"
-        "source_file: raw/docs/big-doc.md\nproject: docs\n---\n\n"
-        "## Summary\n\nHand-filled real content.\n\n## Connections\n\n- [[Thing]]\n",
+        f"source_file: raw/docs/big-doc.md\nproject: docs\n---\n\n{body}",
         encoding="utf-8",
     )
-    assert any(page_is_stub(p) for p in _doc_parts(v))
-
-    summary = synthesize_new_sessions(backend=RealSynthesizer(), **common)
-    assert summary["synthesized"] == 2  # the session + the doc
-    leftover = [p.name for p in _doc_parts(v) if page_is_stub(p)]
-    assert leftover == [], f"stub parts never drained: {leftover}"
+    return path
 
 
-def test_chunked_doc_with_real_parts_is_a_noop_on_rerun(chunked_doc_vault):
+def test_legacy_stub_part_keeps_a_doc_pending_until_a_real_page_exists(chunked_doc_vault):
+    # Legacy discovery stays: with only legacy parts on disk, one stub part is
+    # backlog even though another part is real (the parts are complementary).
     v = chunked_doc_vault
-    common = dict(
-        raw_dir=v["raw_dir"],
-        docs_dir=v["docs_dir"],
-        wiki_sources_dir=v["sources"],
-        log_path=v["log"],
-        state_file=v["state"],
-    )
-    first = synthesize_new_sessions(backend=RealSynthesizer(), **common)
-    assert first["synthesized"] == 2
-    again = synthesize_new_sessions(backend=RealSynthesizer(), **common)
+    _write_legacy_part(v, 1, stub=False)
+    _write_legacy_part(v, 2, stub=True)
+    dry = synthesize_new_sessions(backend=RealSynthesizer(), dry_run=True, **_common(v))
+    assert dry["new_files"] == 2  # the session + the doc (stub part is backlog)
+
+    summary = synthesize_new_sessions(backend=RealSynthesizer(), **_common(v))
+    assert summary["synthesized"] == 2  # the session + the doc
+    assert not page_is_stub(_doc_page(v))
+
+
+def test_real_canonical_page_supersedes_legacy_stub_parts_without_deleting_them(chunked_doc_vault):
+    v = chunked_doc_vault
+    parts = [_write_legacy_part(v, 1, stub=False), _write_legacy_part(v, 2, stub=True)]
+    synthesize_new_sessions(backend=RealSynthesizer(), **_common(v))
+    # Synth never auto-deletes legacy parts — that is migrate's job (#311).
+    assert all(p.is_file() for p in parts)
+    # ...and a leftover stub part does not re-queue the doc on every run.
+    again = synthesize_new_sessions(backend=RealSynthesizer(), **_common(v))
     assert again["synthesized"] == 0
     assert again["new_files"] == 0
 

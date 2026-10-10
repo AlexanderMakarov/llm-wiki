@@ -13,9 +13,15 @@ Built-in backends:
 
 from __future__ import annotations
 
+import logging
+import math
 import re
 from abc import ABC, abstractmethod
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 from typing import Any
+
+from llmwiki.cache import TRANSCRIPT_CHARS_PER_TOKEN
 
 # Section header in prompts/source_page.md that separates the part which is
 # identical for every page in a run (format rules + injected topic
@@ -114,6 +120,240 @@ def usage_limit_from_text(
     )
 
 
+# ─── Body budgets (#311) ───────────────────────────────────────────────
+#
+# Two different limits, deliberately kept apart:
+#
+# * ``SESSION_BODY_SEND_CAP_CHARS`` — the historical per-call cap on a body
+#   sent through ``synthesize_source_page`` (sessions, harvest evidence,
+#   topic consolidation). Unchanged since before #311.
+# * the *usable body budget* — how many raw-body characters one call can
+#   cover for a **document chunk**. Derived from the backend's context window
+#   (see :func:`usable_body_chars_for_window`) or set directly in config.
+#   Documents are stored whole and chunked in memory to this budget.
+
+#: Historical send cap for session / evidence bodies (never shrinks).
+SESSION_BODY_SEND_CAP_CHARS = 8000
+
+
+def page_timeout_seconds(configured: int, body_chars: int) -> int:
+    """Wall-clock seconds for one page/chunk call, scaled with body size (#311).
+
+    Bodies at or under :data:`SESSION_BODY_SEND_CAP_CHARS` use ``configured``
+    as-is (session / evidence path). Larger document chunks scale linearly so
+    a lean-Claude ~296k-char chunk under the default 180s timeout gets enough
+    wall clock instead of failing the whole document on the first slow call.
+    Explicit ``synthesis.<backend>.timeout`` remains the per-unit baseline.
+    """
+    configured = max(1, int(configured))
+    n = max(0, int(body_chars))
+    if n <= SESSION_BODY_SEND_CAP_CHARS:
+        return configured
+    return max(
+        configured,
+        (configured * n + SESSION_BODY_SEND_CAP_CHARS - 1) // SESSION_BODY_SEND_CAP_CHARS,
+    )
+
+#: Tokens reserved for the rendered prompt template (format rules, topic
+#: vocabulary, ``{meta}``). The shipped template renders to ~1,800 tokens
+#: before the body; the rest is headroom for a growing topic vocabulary.
+PROMPT_RESERVE_TOKENS = 2000
+#: Tokens reserved for the model's page. Measured output spread is 902–2,554
+#: tokens per page (see ``estimate.DEFAULT_OUTPUT_TOKENS``).
+OUTPUT_RESERVE_TOKENS = 2600
+#: Characters per token used to convert the remaining window into body
+#: characters — the measured *transcript* ratio, which is lower (more tokens
+#: per character) than prose, so the budget errs on the small side.
+BODY_CHARS_PER_TOKEN = TRANSCRIPT_CHARS_PER_TOKEN
+#: Window assumed for a bare (non-agent) backend when none is configured or
+#: detected — the Ollama fallback and the :class:`BaseSynthesizer` default.
+DEFAULT_CONTEXT_WINDOW_TOKENS = 8192
+#: Window assumed for the agent backends (Claude, Cursor Agent CLI) when none is
+#: configured or known for the model: modern agent models ship 200k windows.
+ASSUMED_AGENT_WINDOW_TOKENS = 200_000
+#: Floor for a budget the *operator* sized tiny: an explicit
+#: ``usable_body_chars``, or a configured ``context_window_tokens`` too small
+#: for the per-call reserves. A derived default (assumed / known / detected
+#: window) never lands here silently — see :func:`resolve_usable_body_chars`.
+MIN_USABLE_BODY_CHARS = 1000
+#: Dummy / dry-run: large enough that multi-section fixtures fit in one call.
+DUMMY_USABLE_BODY_CHARS = 10_000_000
+
+#: Per-call framing ``claude -p`` injects even with every scaffolding-stripping
+#: flag on (measured via ``--output-format json``; see synthesis-cost.md).
+LEAN_OVERHEAD_TOKENS = 890
+#: Full coding-agent context (tool schemas, MCP servers, skills, CLAUDE.md) a
+#: non-lean ``claude -p`` or an Agent CLI call carries before the prompt. A
+#: mid-range figure for a typical setup, not a ceiling.
+FULL_AGENT_OVERHEAD_TOKENS = 35_000
+#: Scaffolding assumed for an Ollama ``/api/generate`` call (chat framing only).
+OLLAMA_OVERHEAD_TOKENS = 500
+
+_log = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class BudgetClass:
+    """How much of a window a backend spends on things other than the body.
+
+    ``scaffolding_tokens`` is fixed per-call framing the backend adds;
+    the *working margin* — headroom for the agent's own reasoning, tool use and
+    tokenizer drift — is ``max(margin_floor_tokens, margin_percent% of window)``.
+    """
+
+    name: str
+    scaffolding_tokens: int
+    margin_floor_tokens: int
+    margin_percent: int
+
+    def working_margin(self, window: int) -> int:
+        return max(self.margin_floor_tokens, window * self.margin_percent // 100)
+
+    def fixed_tokens(self) -> int:
+        """Tokens reserved regardless of the window: scaffolding + prompt + output."""
+        return self.scaffolding_tokens + PROMPT_RESERVE_TOKENS + OUTPUT_RESERVE_TOKENS
+
+
+#: No agent, no margin — the budget of a backend that has no class of its own
+#: (:class:`BaseSynthesizer` default, estimate without a backend).
+GENERIC_BUDGET = BudgetClass("generic", 0, 0, 0)
+#: Ollama ``/api/generate`` — a bare completion call.
+OLLAMA_BUDGET = BudgetClass("ollama", OLLAMA_OVERHEAD_TOKENS, 2048, 10)
+#: ``claude -p`` with ``lean`` on (scaffolding stripped).
+CLAUDE_LEAN_BUDGET = BudgetClass("claude-lean", LEAN_OVERHEAD_TOKENS, 8192, 25)
+#: Non-lean ``claude -p`` and the Cursor Agent CLI (full agent context).
+HEAVY_AGENT_BUDGET = BudgetClass("heavy-agent", FULL_AGENT_OVERHEAD_TOKENS, 16_384, 35)
+
+
+def window_room_tokens(context_window_tokens: int, budget_class: BudgetClass = GENERIC_BUDGET) -> int:
+    """Tokens left for the body: ``window - scaffolding - prompt - output - working margin``.
+
+    Zero or negative means the window cannot carry the per-call reserves at all.
+    """
+    window = int(context_window_tokens)
+    return window - budget_class.fixed_tokens() - budget_class.working_margin(window)
+
+
+def usable_body_chars_for_window(
+    context_window_tokens: int,
+    budget_class: BudgetClass = GENERIC_BUDGET,
+    *,
+    floor: int = MIN_USABLE_BODY_CHARS,
+) -> int:
+    """Body characters one call can carry in a ``context_window_tokens`` window.
+
+    ``usable_tokens = window - scaffolding - prompt reserve - output reserve -
+    working margin``; ``chars = max(floor, usable_tokens * BODY_CHARS_PER_TOKEN)``.
+    Scaffolding and margin come from ``budget_class``; the generic class has
+    neither. No upper cap: a large window yields a large budget. ``floor``
+    defaults to :data:`MIN_USABLE_BODY_CHARS` (an operator-sized tiny window).
+    """
+    room = window_room_tokens(context_window_tokens, budget_class)
+    # round() first so float noise (90400 * 2.05 = 185319.99999…) can't cost a character.
+    return max(floor, int(round(room * BODY_CHARS_PER_TOKEN, 6)))
+
+
+def window_tokens_for_body_chars(body_chars: int, budget_class: BudgetClass = GENERIC_BUDGET) -> int:
+    """Smallest window whose :func:`usable_body_chars_for_window` holds ``body_chars``."""
+    body_tokens = math.ceil(body_chars / BODY_CHARS_PER_TOKEN)
+    base = body_tokens + budget_class.fixed_tokens()
+    window = base + budget_class.margin_floor_tokens
+    if window * budget_class.margin_percent // 100 > budget_class.margin_floor_tokens:
+        # The percentage margin dominates: window * (1 - pct) >= base.
+        window = math.ceil(base * 100 / (100 - budget_class.margin_percent))
+    while usable_body_chars_for_window(window, budget_class) < body_chars:
+        window += 1  # absorb rounding in the integer percent / ceil steps
+    while window > 1 and usable_body_chars_for_window(window - 1, budget_class) >= body_chars:
+        window -= 1  # ...and trim the same rounding going the other way
+    return window
+
+
+#: Budget when nothing configures or identifies the window (derived, not typed).
+DEFAULT_USABLE_BODY_CHARS = usable_body_chars_for_window(DEFAULT_CONTEXT_WINDOW_TOKENS)
+
+
+def _positive_int(value: Any, key: str) -> int | None:
+    """``value`` as a positive int, or ``None`` (warned) when unusable."""
+    if value is None or value == "":
+        return None
+    if isinstance(value, bool):
+        ok, number = False, 0
+    else:
+        try:
+            number = int(value)
+            ok = number > 0
+        except (TypeError, ValueError):
+            ok, number = False, 0
+    if not ok:
+        _log.warning("ignoring synthesis.%s=%r — expected a positive integer", key, value)
+        return None
+    return number
+
+
+@dataclass(frozen=True)
+class BodyBudgetConfig:
+    """``usable_body_chars`` / ``context_window_tokens`` from one backend block."""
+
+    usable_body_chars: int | None = None
+    context_window_tokens: int | None = None
+
+
+def load_body_budget_config(section: Mapping[str, Any] | None, backend: str) -> BodyBudgetConfig:
+    """Read the two budget keys from ``synthesis.<backend>`` (bad values warn and are ignored)."""
+    section = section if isinstance(section, Mapping) else {}
+    return BodyBudgetConfig(
+        usable_body_chars=_positive_int(
+            section.get("usable_body_chars"), f"{backend}.usable_body_chars"
+        ),
+        context_window_tokens=_positive_int(
+            section.get("context_window_tokens"), f"{backend}.context_window_tokens"
+        ),
+    )
+
+
+def resolve_usable_body_chars(
+    budget: BodyBudgetConfig,
+    *,
+    known_window_tokens: Callable[[], int | None] | None = None,
+    budget_class: BudgetClass = GENERIC_BUDGET,
+    default_window_tokens: int = DEFAULT_CONTEXT_WINDOW_TOKENS,
+    derived_floor_chars: int = MIN_USABLE_BODY_CHARS,
+) -> int:
+    """The usable body budget, in resolution order.
+
+    1. explicit ``usable_body_chars`` (used as-is, no class reserves applied);
+    2. derived from ``context_window_tokens`` (config);
+    3. derived from the backend's own knowledge of its window — a known-model
+       table or an auto-detected value — via ``known_window_tokens``;
+    4. derived from ``default_window_tokens`` (agent backends pass
+       :data:`ASSUMED_AGENT_WINDOW_TOKENS`).
+
+    Derived budgets (2–4) subtract ``budget_class``'s scaffolding and margin.
+    The :data:`MIN_USABLE_BODY_CHARS` floor applies only to what the operator
+    sized (1, and a configured window in 2). When a *derived default* window
+    (3–4) cannot carry the reserves, that is a bug in the numbers rather than an
+    operator choice: it is logged and clamped to ``derived_floor_chars``
+    (agent backends pass :data:`SESSION_BODY_SEND_CAP_CHARS`) instead of
+    silently landing on 1,000.
+    """
+    if budget.usable_body_chars is not None:
+        return budget.usable_body_chars
+    if budget.context_window_tokens is not None:
+        return usable_body_chars_for_window(budget.context_window_tokens, budget_class)
+    window = known_window_tokens() if known_window_tokens is not None else None
+    window = window or default_window_tokens
+    if window_room_tokens(window, budget_class) <= 0:
+        _log.warning(
+            "%s window of %d tokens leaves no room for a body after the per-call reserves; "
+            "using %d characters — set synthesis.<backend>.context_window_tokens or usable_body_chars",
+            budget_class.name,
+            window,
+            derived_floor_chars,
+        )
+        return derived_floor_chars
+    return usable_body_chars_for_window(window, budget_class, floor=derived_floor_chars)
+
+
 class BaseSynthesizer(ABC):
     """Interface for LLM-backed wiki-page synthesizers."""
 
@@ -121,6 +361,34 @@ class BaseSynthesizer(ABC):
     #: publish machine-assembled prose (candidates.promote) check this
     #: instead of pattern-matching on class names.
     is_llm = True
+
+    def usable_body_chars(self) -> int:
+        """Max raw-body characters one *document chunk* call can cover (#311).
+
+        Pipeline and estimate chunk long documents to this budget. Backends
+        resolve it from config / their context window (see
+        :func:`resolve_usable_body_chars`); this default is the budget of the
+        :data:`DEFAULT_CONTEXT_WINDOW_TOKENS` window.
+        :class:`DummySynthesizer` returns a large value so dry-run and tests
+        cover multi-section fixtures in one call. Session bodies are not
+        governed by this: they keep the :data:`SESSION_BODY_SEND_CAP_CHARS` cap.
+        """
+        return DEFAULT_USABLE_BODY_CHARS
+
+    def synthesize_document_chunk(
+        self,
+        chunk: str,
+        meta: dict[str, Any],
+        prompt_template: str,
+    ) -> str:
+        """Synthesize one in-memory chunk of a stored document (#311).
+
+        ``chunk`` is at most :meth:`usable_body_chars` long, so it is sent
+        whole. Backends that cap the body they send override this to lift the
+        session cap up to the usable budget; the default is a plain
+        :meth:`synthesize_source_page` call.
+        """
+        return self.synthesize_source_page(chunk, meta, prompt_template)
 
     def synthesize_key_facts(
         self,
@@ -212,6 +480,10 @@ class DummySynthesizer(BaseSynthesizer):
     """
 
     is_llm = False
+
+    def usable_body_chars(self) -> int:
+        """Effectively unlimited — dry-run and tests cover whole fixtures."""
+        return DUMMY_USABLE_BODY_CHARS
 
     def _title_case_project(self, project: str) -> str:
         """``ai-newsletter`` → ``AiNewsletter`` (matches entity filenames)."""

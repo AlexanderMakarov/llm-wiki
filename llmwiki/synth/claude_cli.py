@@ -30,8 +30,16 @@ from typing import Any
 from llmwiki.claude_path import resolve_claude_path as _resolve_claude_path
 from llmwiki.config_schedule import _load_sessions_config
 from llmwiki.synth.base import (
+    ASSUMED_AGENT_WINDOW_TOKENS,
+    CLAUDE_LEAN_BUDGET,
+    HEAVY_AGENT_BUDGET,
+    SESSION_BODY_SEND_CAP_CHARS,
     BackendUsageLimitError,
     BaseSynthesizer,
+    BodyBudgetConfig,
+    load_body_budget_config,
+    page_timeout_seconds,
+    resolve_usable_body_chars,
     split_prompt_template,
     usage_limit_from_text,
 )
@@ -40,6 +48,25 @@ from llmwiki.synth.ollama import _render_prompt
 
 DEFAULT_CLAUDE_MODEL = "sonnet"
 DEFAULT_CLAUDE_TIMEOUT = 180
+
+# Context windows (tokens) of the Claude model families the CLI accepts as
+# aliases or as part of a full model id — matched by substring, first hit wins.
+# Anything else (a custom id) assumes ASSUMED_AGENT_WINDOW_TOKENS (200k);
+# set ``synthesis.claude.context_window_tokens`` / ``usable_body_chars`` to override.
+_CLAUDE_CONTEXT_WINDOWS: tuple[tuple[str, int], ...] = (
+    ("haiku", 200_000),
+    ("sonnet", 200_000),
+    ("opus", 200_000),
+)
+
+
+def known_claude_context_window(model: str | None) -> int | None:
+    """Context window (tokens) for a known Claude alias / model id, else ``None``."""
+    name = (model or "").lower()
+    for needle, window in _CLAUDE_CONTEXT_WINDOWS:
+        if needle in name:
+            return window
+    return None
 
 # Nested ``synthesis.claude`` key → legacy flat ``synthesis.claude_*`` key.
 _CLAUDE_FLAT_KEYS: dict[str, str] = {
@@ -60,6 +87,7 @@ class ClaudeConfig:
     timeout: int = DEFAULT_CLAUDE_TIMEOUT
     lean: bool = True
     effort: str | None = None
+    body_budget: BodyBudgetConfig = BodyBudgetConfig()
 
 
 def load_claude_config(cfg: dict[str, Any] | None) -> ClaudeConfig:
@@ -102,6 +130,7 @@ def load_claude_config(cfg: dict[str, Any] | None) -> ClaudeConfig:
         timeout=timeout,
         lean=lean,
         effort=effort,
+        body_budget=load_body_budget_config(nested, "claude"),
     )
 
 # Synthesis is text-in / text-out: the prompt carries everything the model
@@ -329,12 +358,14 @@ class ClaudeCLISynthesizer(BaseSynthesizer):
         timeout: int = DEFAULT_CLAUDE_TIMEOUT,
         lean: bool = True,
         effort: str | None = None,
+        body_budget: BodyBudgetConfig | None = None,
     ) -> None:
         self.claude_path = claude_path
         self.model = model
         self.timeout = timeout
         self.lean = lean
         self.effort = effort
+        self.body_budget = body_budget or BodyBudgetConfig()
         self._run_tokens = 0
         self._run_cost_usd = 0.0
         self._run_has_usage = False
@@ -349,6 +380,30 @@ class ClaudeCLISynthesizer(BaseSynthesizer):
     def kill_in_flight(self) -> int:
         """Kill every ``claude -p`` page process still running (#181)."""
         return self._children.kill_all()
+
+    def usable_body_chars(self) -> int:
+        """Document-chunk budget: config, else the model's known window, else 200k (#311).
+
+        A derived budget reserves the lean or full agent scaffolding and the
+        matching working margin (``synthesis.claude.lean`` / ``claude_lean``).
+        """
+        return resolve_usable_body_chars(
+            self.body_budget,
+            known_window_tokens=lambda: known_claude_context_window(self.model),
+            budget_class=CLAUDE_LEAN_BUDGET if self.lean else HEAVY_AGENT_BUDGET,
+            default_window_tokens=ASSUMED_AGENT_WINDOW_TOKENS,
+            derived_floor_chars=SESSION_BODY_SEND_CAP_CHARS,
+        )
+
+    def synthesize_document_chunk(
+        self,
+        chunk: str,
+        meta: dict[str, Any],
+        prompt_template: str,
+    ) -> str:
+        return self.synthesize_source_page(
+            chunk, meta, prompt_template, body_cap=self.usable_body_chars()
+        )
 
     def reset_usage(self) -> None:
         """Clear accumulated usage before a multi-page synth run."""
@@ -430,6 +485,8 @@ class ClaudeCLISynthesizer(BaseSynthesizer):
         raw_body: str,
         meta: dict[str, Any],
         prompt_template: str,
+        *,
+        body_cap: int = SESSION_BODY_SEND_CAP_CHARS,
     ) -> str:
         claude = self._resolved()
         if claude is None:
@@ -437,9 +494,11 @@ class ClaudeCLISynthesizer(BaseSynthesizer):
                 "claude CLI not found — install it, pass synthesis.claude_path, "
                 "or configure synthesis.backend=ollama"
             )
-        # Same 8 KB body cap as the ollama/agent-delegate backends: the
-        # add pipeline chunks raw docs to ~7 KB, so nothing is lost.
-        truncated_body = raw_body[:8000] if raw_body else ""
+        # Sessions / evidence keep the historical cap; a document chunk
+        # arrives already within usable_body_chars and is sent whole (#311).
+        truncated_body = raw_body[:body_cap] if raw_body else ""
+        # Large document chunks need more wall clock than a session page (#311).
+        call_timeout = page_timeout_seconds(self.timeout, len(truncated_body))
         # Route the run-stable half of the template to the system prompt,
         # which is the only part `claude -p` caches between invocations.
         stable, per_page = split_prompt_template(prompt_template)
@@ -449,10 +508,10 @@ class ClaudeCLISynthesizer(BaseSynthesizer):
             # The child runs in a new session, so a terminal Ctrl+C interrupts
             # only the synth run and this page still finishes; the run kills
             # it through `kill_in_flight` when it abandons the drain.
-            result = self._children.run(argv, input=prompt, timeout=self.timeout)
+            result = self._children.run(argv, input=prompt, timeout=call_timeout)
         except subprocess.TimeoutExpired as exc:
             raise ClaudeCLIError(
-                f"claude CLI timed out after {self.timeout}s"
+                f"claude CLI timed out after {call_timeout}s"
             ) from exc
         except (OSError, subprocess.SubprocessError) as exc:
             raise ClaudeCLIError(f"claude CLI failed to run: {exc}") from exc

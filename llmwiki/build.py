@@ -3120,6 +3120,7 @@ def synthesize_overview(
             timeout=backend.timeout,
             lean=backend.lean,
             effort=backend.effort,
+            body_budget=backend.body_budget,
         )
 
     prompt = _build_overview_prompt(groups)

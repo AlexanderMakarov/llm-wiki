@@ -45,10 +45,16 @@ class _FakeHTTP:
     def __init__(self, script: list[Any]):
         self.script = list(script)
         self.calls: list[tuple[str, Any, float]] = []
+        # ``/api/show`` (context-window detection, #311) is answered "not found"
+        # and kept out of ``calls`` so scripts stay about the page requests.
+        self.show_calls: list[tuple[str, Any, float]] = []
 
     def __call__(self, url: str, *args, **kwargs) -> tuple[int, str]:
         payload = args[0] if args else None
         timeout = kwargs.get("timeout")
+        if url.endswith("/api/show"):
+            self.show_calls.append((url, payload, timeout))
+            return 404, ""
         self.calls.append((url, payload, timeout))
         if not self.script:
             raise AssertionError("no more scripted HTTP responses")

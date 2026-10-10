@@ -42,6 +42,7 @@ from llmwiki._frontmatter import is_headless, is_subagent, parse_frontmatter
 from llmwiki.agent_label import detect_agent_label
 from llmwiki.candidates import apply_review_summary_to_pipeline
 from llmwiki.config_schedule import _load_sessions_config
+from llmwiki.doc_chunking import chunk_markdown_by_sections, doc_size_error
 from llmwiki.reindex import reindex_wiki
 from llmwiki.source_topics import source_page_needs_topics_rewrite
 from llmwiki.state_store import mtime_from_state, mtime_to_iso
@@ -58,6 +59,7 @@ from llmwiki.synth.cursor_cli import CursorCLISynthesizer, load_cursor_cli_confi
 from llmwiki.synth.estimate import synthesize_estimate_report
 from llmwiki.synth.ollama import OllamaSynthesizer, load_ollama_config
 from llmwiki.synth.reporting import print_synth_run_start
+from llmwiki.synth.stitch import stitch_chunk_bodies
 from llmwiki.tags import TagEntry, near_duplicate_tags
 from llmwiki.topic_kinds import build_kind_map
 from llmwiki.topics import build_topic_graph
@@ -212,6 +214,26 @@ def source_page_paths(
     return paths
 
 
+def source_pages_for_backlog(
+    out_dir: Path, filename: str, *, is_doc: bool
+) -> list[Path]:
+    """The pages that decide whether ``filename`` is still pending (#311).
+
+    A document now synthesizes into ONE page, so a real canonical
+    ``<filename>.md`` stands for the whole document and supersedes any legacy
+    ``--part-NN`` siblings an older release left beside it — synth never
+    deletes those (``migrate`` does), and their stub parts must not keep the
+    document in the backlog forever. Without a real canonical page every page
+    from :func:`source_page_paths` counts, so a pre-migrate vault with
+    only legacy parts is still read correctly.
+    """
+    paths = source_page_paths(out_dir, filename, is_doc=is_doc)
+    single = out_dir / f"{filename}.md"
+    if is_doc and single in paths and not page_is_stub(single):
+        return [single]
+    return paths
+
+
 def source_synth_is_done(
     rel: str,
     state: Mapping[str, float],
@@ -269,6 +291,7 @@ def resolve_backend(
             timeout=claude_cfg.timeout,
             lean=claude_cfg.lean,
             effort=claude_cfg.effort,
+            body_budget=claude_cfg.body_budget,
         )
 
     if name == "cursor_cli":
@@ -276,6 +299,7 @@ def resolve_backend(
         return CursorCLISynthesizer(
             model=cursor_cfg.model,
             timeout=cursor_cfg.timeout,
+            body_budget=cursor_cfg.body_budget,
         )
 
     if name != "dummy":
@@ -379,11 +403,6 @@ LOG_FILENAME = "log.md"
 LOG_ARCHIVE_PREFIX = "log-archive-"
 WIKI_LOG = REPO_ROOT / "wiki" / LOG_FILENAME
 
-# #1: ceiling on the body size handed to a single synthesis backend call.
-# Oversized docs (e.g. a multi-MB concatenated `llms-full.txt`) are split
-# on heading boundaries into part-pages before synthesis. Sessions are
-# never chunked — they are bounded by the converter's truncation config.
-_DOC_CHUNK_MAX_CHARS = 200_000
 PROMPT_TEMPLATE_PATH = Path(__file__).parent / "prompts" / "source_page.md"
 
 # Allow user override of the prompt template: if
@@ -712,8 +731,15 @@ def refresh_synth_pending(
     state_file: Path | None = None,
     include_subagents: str | None = None,
     exclude_headless: bool | None = None,
+    backend: BaseSynthesizer | None = None,
 ) -> dict[str, Any]:
     """Compute unsynth backlog and persist it in unified state.
+
+    ``backend`` (optional) sets the usable body budget the doc chunk estimate
+    uses — the run's own backend, so the priced calls match the real ones (#311).
+    When omitted, the configured LLM backend is resolved from sessions config
+    (same rule as ``synth --estimate``), so ``build`` / ``add`` / migrate
+    refresh cannot overwrite run-time doc pricing with the generic 7k budget.
 
     Stores a lightweight pending list under ``synth.pending`` so users can
     inspect backlog risk before running `llmwiki synthesize`/`llm-wiki-add`.
@@ -722,10 +748,14 @@ def refresh_synth_pending(
     user's config when the caller doesn't pass a mode explicitly.
     """
     sources_out = wiki_sources_dir or WIKI_SOURCES
+    config = _load_sessions_config()
     if include_subagents is None:
-        include_subagents = resolve_include_subagents(_load_sessions_config())
+        include_subagents = resolve_include_subagents(config)
     if exclude_headless is None:
-        exclude_headless = resolve_exclude_headless(_load_sessions_config())
+        exclude_headless = resolve_exclude_headless(config)
+    if backend is None:
+        resolved = resolve_backend(config)
+        backend = resolved if resolved.is_llm else None
     raw_sessions = _discover_raw_sessions(raw_dir)
     state = _load_state(state_file)
     report = synthesize_estimate_report(
@@ -736,6 +766,7 @@ def refresh_synth_pending(
         docs_root=docs_dir or ((raw_dir.parent / "docs") if raw_dir is not None else RAW_DOCS),
         include_subagents=include_subagents,
         exclude_headless=exclude_headless,
+        backend=backend,
     )
     pending: list[dict[str, Any]] = []
     for it in report.get("unsynth_items", []):
@@ -978,56 +1009,21 @@ def _discover_raw_docs(
     return out
 
 
-# #1: top-level markdown heading (``#`` or ``##``) at the start of a line.
-_MD_TOP_HEADING = re.compile(r"#{1,2} ")
-
-
 def _chunk_markdown(text: str, max_chars: int) -> list[str]:
-    """Split markdown into chunks no larger than ``max_chars``, breaking on
-    top-level (``#``/``##``) heading boundaries where possible.
+    """Split a document body into in-memory synth chunks of at most ``max_chars``.
 
-    Used to make oversized manually-added docs (e.g. a multi-MB
-    ``llms-full.txt``) fit a single synthesis backend call. Returns
-    ``[text]`` unchanged when the input already fits. Content is preserved:
-    concatenating the chunks reproduces the input exactly — heading-aligned
-    where sections fit the cap, hard character-split for a heading-less
-    blob bigger than the cap.
+    One document → N backend calls (#311): the budget is the active backend's
+    :meth:`~BaseSynthesizer.usable_body_chars`, so nothing is silently
+    truncated. Delegates to the shared section chunker (heading boundaries,
+    then paragraphs, then lines, then a hard slice) that ``add`` also uses;
+    the estimate calls this same function, so the priced chunk count is the
+    run's call count. A body that already fits is returned unchanged as
+    ``[text]``. Splitting drops only whitespace between chunks, never text; a
+    code fence a split cuts through is closed and re-opened per chunk.
     """
     if len(text) <= max_chars:
         return [text]
-
-    # Group lines into sections, each starting at a top-level heading.
-    sections: list[str] = []
-    cur: list[str] = []
-    for ln in text.splitlines(keepends=True):
-        if cur and _MD_TOP_HEADING.match(ln):
-            sections.append("".join(cur))
-            cur = [ln]
-        else:
-            cur.append(ln)
-    if cur:
-        sections.append("".join(cur))
-
-    # Greedily pack sections under the cap. A single section larger than
-    # the cap is hard-split on character count so no chunk ever exceeds it.
-    chunks: list[str] = []
-    buf = ""
-    for sec in sections:
-        if len(sec) > max_chars:
-            if buf:
-                chunks.append(buf)
-                buf = ""
-            for i in range(0, len(sec), max_chars):
-                chunks.append(sec[i:i + max_chars])
-            continue
-        if buf and len(buf) + len(sec) > max_chars:
-            chunks.append(buf)
-            buf = sec
-        else:
-            buf += sec
-    if buf:
-        chunks.append(buf)
-    return chunks
+    return [c.body for c in chunk_markdown_by_sections(text, max_chars)]
 
 
 # ─── #351: AI-suggested tags ──────────────────────────────────────────
@@ -1263,8 +1259,13 @@ def _build_source_page(
     existing_page_path: Path | None = None,
     *,
     is_doc: bool = False,
+    suggested_tags: list[str] | None = None,
 ) -> str:
     """Combine frontmatter + synthesized body into a full wiki source page.
+
+    ``suggested_tags`` carries the union of a stitched multi-chunk document's
+    per-chunk suggestions (#311); the stitched body no longer holds a
+    suggested-tags comment, and the per-comment cap does not apply to the union.
 
     #351: If the ``synthesized_body`` starts with a
     ``<!-- suggested-tags: ... -->`` block (emitted by the LLM per the
@@ -1289,6 +1290,8 @@ def _build_source_page(
 
     # #351: pull AI-suggested tags off the top of the body.
     ai_tags, clean_body = _extract_suggested_tags(synthesized_body)
+    if suggested_tags is not None:
+        ai_tags = list(suggested_tags)
     clean_body = _dedupe_connections(clean_body)
 
     # Preserve any maintainer-curated tags on re-synthesize.
@@ -1344,7 +1347,7 @@ def _synthesize_one(
     write_lock: threading.Lock,
     stop_event: threading.Event,
 ) -> dict[str, Any]:
-    """Synthesize one raw source into its wiki page(s) and report what happened.
+    """Synthesize one raw source into its one wiki page and report what happened.
 
     Runs on a worker thread (#118), so it touches nothing the run shares:
     state, summary counters, producer tallies and stdout all belong to the
@@ -1352,7 +1355,16 @@ def _synthesize_one(
 
         {rel, mtime, project, is_doc, meta, slug,
          written, protected, protected_pages, error,
-         deferred, usage_limit, usage_reset}
+         deferred, usage_limit, usage_reset, chunks, failed_chunk}
+
+    A document longer than ``chunk_max`` (the backend's usable body budget,
+    #311) is chunked in memory and each chunk goes to the backend; the outputs
+    are stitched into ONE page, written only after every chunk succeeded. A
+    chunk that fails — error, usage limit, a stop signal — fails the whole
+    document: nothing is written, so no complete-looking prefix page appears and
+    a curated page is never replaced by a partial. ``chunks`` is the chunk
+    count; ``failed_chunk`` is the 1-based chunk that failed (diagnostics only —
+    success and failure are per document).
 
     ``stop_event`` is the run's clean-stop signal (#181). A worker that finds
     it set returns ``deferred`` without calling the backend; a worker whose
@@ -1390,6 +1402,8 @@ def _synthesize_one(
         "deferred": False,
         "usage_limit": False,
         "usage_reset": None,
+        "chunks": 1,
+        "failed_chunk": None,
     }
     if stop_event.is_set():
         result["deferred"] = True
@@ -1402,48 +1416,95 @@ def _synthesize_one(
         # `wiki/sources/<project>/<YYYY-MM-DD>-<slug>.md`.
         result["slug"] = _normalise_slug(str(meta.get("slug", p.stem)))
         filename = synth_page_filename(meta, p.stem)
-        # #1: oversized docs are split on headings into part-pages so each
-        # chunk fits one backend call. Sessions are never chunked.
+        # #311: one stored document is at most MAX_DOC_MARKDOWN_BYTES; a legacy
+        # raw doc over it is refused here (no backend call, no page, no state).
+        if item["is_doc"]:
+            too_big = doc_size_error(body, str(item["rel"]))
+            if too_big:
+                raise ValueError(too_big)
+        # #311: a doc longer than the backend's usable body budget is chunked
+        # in memory (one backend call per chunk) and stitched into one page.
+        # Sessions are never chunked.
         chunks = _chunk_markdown(body, chunk_max) if item["is_doc"] else [body]
-        multi = len(chunks) > 1
+        total_chunks = len(chunks)
+        result["chunks"] = total_chunks
         out_dir = sources_out / project
         out_dir.mkdir(parents=True, exist_ok=True)
+        chunk_bodies: list[str] = []
+        chunk_tags: list[str] = []
         for idx, chunk in enumerate(chunks, start=1):
-            # #py-h7 (#585): pass the raw template — backends own
-            # rendering. The pipeline hands over the unrendered
-            # template; each backend renders it with the format it was
-            # designed against (textual vs JSON meta).
-            synthesized = backend.synthesize_source_page(
-                chunk, meta, prompt_template
-            )
-            name = part_page_name(filename, idx) if multi else filename
-            out_path = out_dir / f"{name}.md"
-            with write_lock:
-                # #351: pass the existing path so maintainer-curated tags
-                # are preserved on re-synthesize.
-                page_content = _build_source_page(
-                    meta,
-                    synthesized,
-                    existing_page_path=out_path,
-                    is_doc=bool(item["is_doc"]),
+            if idx > 1 and stop_event.is_set():
+                # The run is stopping: a partial document is never written.
+                result["deferred"] = True
+                result["failed_chunk"] = idx
+                return result
+            try:
+                # #py-h7 (#585): pass the raw template — backends own
+                # rendering. The pipeline hands over the unrendered
+                # template; each backend renders it with the format it was
+                # designed against (textual vs JSON meta).
+                # A document chunk (≤ the usable budget) goes through the
+                # document entry point so it is sent whole; a session keeps
+                # the historical body cap (#311).
+                send = (
+                    backend.synthesize_document_chunk
+                    if item["is_doc"]
+                    else backend.synthesize_source_page
                 )
-                # Stub output (dummy backend, agent-delegate pending
-                # sentinel) must never replace a real synthesized page —
-                # not even under --force. A stub carries no link data,
-                # so the swap silently destroys the knowledge graph.
-                if _is_stub_page(page_content) and out_path.exists():
-                    try:
-                        existing = out_path.read_text(encoding="utf-8")
-                    except OSError:
-                        existing = ""
-                    if existing and not _is_stub_page(existing):
-                        result["protected"] += 1
-                        result["protected_pages"].append(name)
-                        continue
-                out_path.write_text(page_content, encoding="utf-8")
-            result["written"].append(name)
+                synthesized = send(chunk, meta, prompt_template)
+            except BackendUsageLimitError:
+                result["failed_chunk"] = idx
+                raise
+            except Exception as e:
+                result["failed_chunk"] = idx
+                if total_chunks > 1:
+                    raise RuntimeError(f"chunk {idx}/{total_chunks}: {e}") from e
+                raise
+            if total_chunks == 1:
+                chunk_bodies.append(synthesized)
+                continue
+            tags, clean = _extract_suggested_tags(synthesized)
+            chunk_bodies.append(clean)
+            for tag in tags:
+                if tag not in chunk_tags:
+                    chunk_tags.append(tag)
 
-        # Read once per source, after all parts succeed: the caller stores it
+        # Every chunk succeeded — only now is there a page to write.
+        if total_chunks == 1:
+            stitched, suggested = chunk_bodies[0], None
+        else:
+            stitched, suggested = stitch_chunk_bodies(chunk_bodies), chunk_tags
+        out_path = out_dir / f"{filename}.md"
+        with write_lock:
+            # #351: pass the existing path so maintainer-curated tags
+            # are preserved on re-synthesize.
+            page_content = _build_source_page(
+                meta,
+                stitched,
+                existing_page_path=out_path,
+                is_doc=bool(item["is_doc"]),
+                suggested_tags=suggested,
+            )
+            # Stub output (dummy backend, agent-delegate pending
+            # sentinel) must never replace a real synthesized page —
+            # not even under --force. A stub carries no link data,
+            # so the swap silently destroys the knowledge graph.
+            protected = False
+            if _is_stub_page(page_content) and out_path.exists():
+                try:
+                    existing = out_path.read_text(encoding="utf-8")
+                except OSError:
+                    existing = ""
+                if existing and not _is_stub_page(existing):
+                    result["protected"] += 1
+                    result["protected_pages"].append(filename)
+                    protected = True
+            if not protected:
+                out_path.write_text(page_content, encoding="utf-8")
+        if not protected:
+            result["written"].append(filename)
+
+        # Read once per source, after all chunks succeed: the caller stores it
         # as this source's state entry.
         result["mtime"] = p.stat().st_mtime
     except BackendUsageLimitError as e:
@@ -1659,7 +1720,12 @@ def synthesize_new_sessions(
     prompt_template = _load_prompt_template()
     state_file = _resolve_state_file(state_file)
     state = {} if force else _load_state(state_file)
-    chunk_max = doc_chunk_max_chars or _DOC_CHUNK_MAX_CHARS
+    # #311: chunk to the ACTIVE backend's usable body budget so no chunk is
+    # silently truncated by the backend. ``doc_chunk_max_chars`` can only
+    # tighten it (tests / small-context overrides), never exceed it.
+    chunk_max = max(1, int(backend.usable_body_chars()))
+    if doc_chunk_max_chars:
+        chunk_max = min(chunk_max, int(doc_chunk_max_chars))
     only_resolved: set[Path] | None = None
     if only_paths is not None:
         only_resolved = {Path(p).expanduser().resolve() for p in only_paths}
@@ -1760,12 +1826,13 @@ def synthesize_new_sessions(
         # one. A stub still on disk is pending work, so re-synthesize it (#24).
         # It is found either by the source key it claims — which holds for a
         # page an older release filed under another name — or at the pages this
-        # source actually wrote, part-pages included: a doc's parts are
-        # complementary, so a real part does not cover a stub one. The
+        # source actually wrote. One document is one page (#311); a legacy
+        # vault's ``--part-NN`` pages still count until a real canonical page
+        # supersedes them, and a real part does not cover a stub one. The
         # write-guard below keeps a real page safe from a stub.
         rel = str(it["rel"])
         source_key = raw_source_key(rel, is_doc=bool(it["is_doc"]))
-        targets = source_page_paths(
+        targets = source_pages_for_backlog(
             sources_out / str(it["project"]),
             synth_page_filename(it["meta"], it["path"].stem),
             is_doc=bool(it["is_doc"]),
@@ -1967,14 +2034,16 @@ def synthesize_new_sessions(
                         summary["skipped"] += 1
                         source_errors += 1
                     counted.add(future)
-                    # Position counts completed SOURCES, so a chunked doc's
-                    # part-pages share one and the last one is always N/N.
+                    # Position counts completed SOURCES: a document is one job
+                    # however many internal chunks it took (#311).
                     pos = f"[{completed}/{total}]"
+                    n_chunks = int(res.get("chunks") or 1)
+                    chunk_note = f" ({n_chunks} chunks)" if n_chunks > 1 else ""
                     for name in res["written"]:
                         # G-08 (#294): clean separator so slugs with spaces
                         # don't break awk/sed parsing. See G-20/#306 for the
                         # batched summary emitted after the drain.
-                        print(f"  {pos} synthesized: {res['project']} → {name}")
+                        print(f"  {pos} synthesized: {res['project']} → {name}{chunk_note}")
                     for name in res["protected_pages"]:
                         print(
                             f"  {pos} protected: {res['project']} → {name} "
@@ -2067,6 +2136,7 @@ def synthesize_new_sessions(
         wiki_sources_dir=wiki_sources_dir,
         state_file=state_file,
         include_subagents=include_subagents,
+        backend=backend,
     )
 
     # G-09 (#295): rebuild wiki/index.md so lint's index_sync rule

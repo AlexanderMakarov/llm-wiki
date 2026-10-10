@@ -1,9 +1,9 @@
 """`llmwiki add` — universal document intake (issue #16).
 
-Converts URLs / files / folders to Markdown and lands them under
-raw/docs/ in the exact layout kbbuilder's async add-doc worker
-produces (dir per doc, section-aware chunks), so a machine running
-both never sees format drift.
+Converts URLs / files / folders to Markdown and lands each document as
+one complete file under ``raw/docs/<project>/<slug>.md`` (#311). Section
+splitting stays available for synthesizer reuse; it is not applied at
+write time.
 
 Security posture ported from kbbuilder src/wiki-convert.ts: SSRF
 egress guard (scheme + every resolved address + every redirect hop)
@@ -32,9 +32,10 @@ from llmwiki import __version__
 from llmwiki._frontmatter import parse_frontmatter
 from llmwiki.claude_path import resolve_claude_path as _resolve_claude_path
 from llmwiki.convert import _resolve_convert_config, _substitute_path_username
+from llmwiki.doc_chunking import doc_size_error
 from llmwiki.htmlmd import html_to_markdown
 from llmwiki.install_hint import install_hint, python_module_command
-from llmwiki.slugs import derive_title, first_heading, slugify
+from llmwiki.slugs import derive_title, slugify
 from llmwiki.synth.pipeline import _normalise_slug
 
 __all__ = [
@@ -42,9 +43,6 @@ __all__ = [
     "FetchResult",
     "assert_public_url",
     "guarded_fetch",
-    "DEFAULT_CHUNK_MAX_CHARS",
-    "MarkdownChunk",
-    "chunk_markdown_by_sections",
     "ConvertedDoc",
     "assert_readable_path",
     "convert_path",
@@ -196,119 +194,10 @@ def guarded_fetch(url: str, headers: dict[str, str], timeout: int = 30) -> Fetch
     raise AddError(f"too many redirects fetching {url}")
 
 
-# ── section chunking (port of kbbuilder chunkMarkdownBySections) ─────
-# Synthesis distills ONE input file into ONE wiki page per pass. A large
-# document overflows the model context in that single pass, so we split
-# by section at WRITE time — each chunk becomes one synthesis input that
-# fits. 7000 chars keeps a chunk inside the agent-delegate synthesizer's
-# raw_body[:8000] prompt embed (llmwiki/synth/agent_delegate.py) with
-# headroom for frontmatter + breadcrumb. The cap is soft: splits happen
-# at heading, then paragraph boundaries; a hard slice only ever hits a
-# single paragraph longer than the whole budget.
-
-DEFAULT_CHUNK_MAX_CHARS = 7000
-
-_FENCE_RE = _re.compile(r"^\s*(`{3,}|~{3,})")
-
-
-@dataclass
-class MarkdownChunk:
-    index: int          # 1-based position within the document
-    total: int
-    heading: str        # first heading inside the chunk ('' if none)
-    body: str           # verbatim slice, newline-terminated
-
-
-def _first_heading_line(body: str) -> str:
-    """A chunk's heading, which becomes the ``(part N/M: <sub>)`` suffix of
-    the page title — so it goes through the same markup-stripping the
-    document heading does."""
-    return first_heading(body)
-
-
-def _split_sections(text: str, levels: tuple[int, ...]) -> list[str]:
-    lines = text.split("\n")
-    sections: list[str] = []
-    buf: list[str] = []
-    fence = None
-    for line in lines:
-        m = _FENCE_RE.match(line)
-        if m:
-            marker = m.group(1)[0]
-            fence = marker if fence is None else (None if fence == marker else fence)
-        h = _re.match(r"^(#{1,6})\s", line)
-        if fence is None and h and len(h.group(1)) in levels and buf:
-            sections.append("\n".join(buf) + "\n")
-            buf = []
-        buf.append(line)
-    if buf:
-        sections.append("\n".join(buf) + "\n")
-    return sections
-
-
-def _split_oversized(section: str, max_chars: int) -> list[str]:
-    paras = _re.split(r"\n{2,}", section)
-    out: list[str] = []
-    cur = ""
-
-    def flush() -> None:
-        nonlocal cur
-        if cur.strip():
-            out.append(cur.rstrip("\n") + "\n")
-        cur = ""
-
-    for p in paras:
-        if len(p) > max_chars:
-            flush()
-            for i in range(0, len(p), max_chars):
-                piece = p[i:i + max_chars].strip()
-                if piece:
-                    out.append(piece + "\n")
-            continue
-        if cur and len(cur) + len(p) + 2 > max_chars:
-            flush()
-        cur += ("\n\n" if cur else "") + p
-    flush()
-    return out
-
-
-def chunk_markdown_by_sections(
-    markdown: str,
-    max_chars: int = DEFAULT_CHUNK_MAX_CHARS,
-    heading_levels: tuple[int, ...] = (1, 2),
-) -> list[MarkdownChunk]:
-    """Split a Markdown document into section-aligned chunks ≤ max_chars.
-    Sections pack greedily; an oversized section splits on blank-line
-    paragraph boundaries, hard-slicing only as a last resort. Heading
-    detection is fence-aware. A document within budget returns whole."""
-    text = markdown.replace("\r\n", "\n")
-    sections = _split_sections(text, heading_levels)
-    bodies: list[str] = []
-    cur = ""
-
-    def flush() -> None:
-        nonlocal cur
-        if cur.strip():
-            bodies.append(cur.rstrip("\n") + "\n")
-        cur = ""
-
-    for sec in sections:
-        if len(sec) > max_chars:
-            flush()
-            bodies.extend(_split_oversized(sec, max_chars))
-            continue
-        if cur and len(cur) + len(sec) > max_chars:
-            flush()
-        cur += sec
-    flush()
-
-    if not bodies:
-        body = text.strip()
-        if not body:
-            return []
-        return [MarkdownChunk(1, 1, _first_heading_line(body), body + "\n")]
-    total = len(bodies)
-    return [MarkdownChunk(i + 1, total, _first_heading_line(b), b) for i, b in enumerate(bodies)]
+# ── section chunking (#311) ──────────────────────────────────────────
+# New imports are stored whole (see write_raw_doc). The in-memory section
+# splitter lives in llmwiki.doc_chunking so synth and the estimate share one
+# chunker.
 
 
 # ── local file / folder conversion ───────────────────────────────────
@@ -806,7 +695,7 @@ def _dedupe(base: str, exists) -> str:
 
 
 def compute_content_hash(markdown: str) -> str:
-    """SHA-256 of the pre-chunk converted body (#22)."""
+    """SHA-256 of the whole converted body (#22, #311)."""
     return hashlib.sha256(markdown.encode("utf-8")).hexdigest()
 
 
@@ -857,8 +746,9 @@ def _frontmatter(title: str, slug: str, project: str, tags: tuple[str, ...],
 
 def _slug_taken(target_dir: Path, s: str) -> bool:
     # Shape-independent probe: an earlier doc with the same slug may be a
-    # single file (<s>.md) or chunked (<s>-NN.md) — the new doc's own
-    # chunk count says nothing about what's already on disk.
+    # whole file (<s>.md) or a legacy multi-part series (<s>-NN.md from
+    # pre-#311 imports). New writes always land one file, but collision
+    # must still see either layout on disk.
     if (target_dir / f"{s}.md").exists():
         return True
     return any(target_dir.glob(f"{s}-[0-9][0-9].md"))
@@ -866,23 +756,20 @@ def _slug_taken(target_dir: Path, s: str) -> bool:
 
 def resolve_write_target(
     title: str,
-    markdown: str,
     docs_dir: Path,
     *,
     project: str | None = None,
-    chunk_max_chars: int = DEFAULT_CHUNK_MAX_CHARS,
-) -> tuple[str, str, Path, list[MarkdownChunk]]:
-    """Compute (proj, slug, target_dir, chunks) for a doc about to be
-    written under docs_dir. Shared by write_raw_doc and add_sources'
-    dry-run preview so the predicted path can never diverge from what a
-    real write lands (collision probe included) — see #16 final review.
+) -> tuple[str, str, Path]:
+    """Compute (proj, slug, target_dir) for a doc about to be written
+    under docs_dir. Shared by write_raw_doc and add_sources' dry-run
+    preview so the predicted path can never diverge from what a real
+    write lands (collision probe included) — see #16 final review.
 
     Raises AddError when an explicit --project slugifies to nothing
     usable (e.g. "../.." or "†"): falling back to the raw string would
     let a caller escape docs_dir or write a non-ASCII dirname the site
     can't route to (_SAFE_SEG_RE)."""
     base_slug = slugify(title) or "untitled"
-    chunks = chunk_markdown_by_sections(markdown, max_chars=chunk_max_chars)
 
     if project:
         proj = slugify(project)
@@ -895,7 +782,7 @@ def resolve_write_target(
         proj = slug
         target = docs_dir / proj
 
-    return proj, slug, target, chunks
+    return proj, slug, target
 
 
 def write_raw_doc(
@@ -906,13 +793,19 @@ def write_raw_doc(
     project: str | None = None,
     extra_tags: tuple[str, ...] = (),
     today: str | None = None,
-    chunk_max_chars: int = DEFAULT_CHUNK_MAX_CHARS,
     force_new: bool = False,
 ) -> list[Path]:
-    """Write one converted doc under raw/docs/<project>/, chunked by
-    section when large. Never overwrites (raw/ immutability): the doc
-    slug is suffixed -2, -3, … on collision. Identical converted bodies
-    are skipped unless ``force_new`` (#22). Returns written paths."""
+    """Write one converted doc as a single file under raw/docs/<project>/.
+
+    Never overwrites (raw/ immutability): the doc slug is suffixed -2,
+    -3, … on collision. Identical converted bodies are skipped unless
+    ``force_new`` (#22). Returns a one-element list of written paths
+    (list keeps the add_sources / rollback call sites stable). A converted
+    body over ``MAX_DOC_MARKDOWN_BYTES`` (512 KiB) is rejected, not written.
+    """
+    too_big = doc_size_error(doc.markdown, doc.source_label)
+    if too_big:
+        raise AddError(too_big)
     content_hash = compute_content_hash(doc.markdown)
     if not force_new:
         existing = find_existing_by_hash(docs_dir, content_hash)
@@ -923,31 +816,24 @@ def write_raw_doc(
                          html_title=doc.html_title, url=doc.url,
                          path_name=doc.path_name)
     day = today or date.today().isoformat()
-    proj, slug, target, chunks = resolve_write_target(
-        title, doc.markdown, docs_dir, project=project, chunk_max_chars=chunk_max_chars,
-    )
-    if not chunks:
+    proj, slug, target = resolve_write_target(title, docs_dir, project=project)
+    body = doc.markdown.replace("\r\n", "\n")
+    if not body.strip():
         raise AddError(f"nothing to write for {doc.source_label} (empty document)")
-    multi = len(chunks) > 1
+    if not body.endswith("\n"):
+        body += "\n"
 
     target.mkdir(parents=True, exist_ok=True)
-    written: list[Path] = []
-    for c in chunks:
-        chunk_slug = f"{slug}-{c.index:02d}" if multi else slug
-        sub = c.heading if (c.heading and c.heading != title) else ""
-        if multi:
-            chunk_title = f"{title} (part {c.index}/{c.total}" + (f": {sub}" if sub else "") + ")"
-            breadcrumb = f"> Part {c.index} of {c.total} of **{title}**" + (f" — {sub}" if sub else "") + ".\n\n"
-        else:
-            chunk_title, breadcrumb = title, ""
-        fm = _frontmatter(chunk_title, chunk_slug, proj, extra_tags, day, doc.source_label,
-                          content_sha256=content_hash, extractor=doc.extractor)
-        path = target / f"{chunk_slug}.md"
-        if path.exists():  # belt-and-braces: raw/ is immutable
-            raise AddError(f"refusing to overwrite existing raw file {path}")
-        path.write_text(fm + breadcrumb + c.body, encoding="utf-8")
-        written.append(path)
-    return written
+    fm = _frontmatter(title, slug, proj, extra_tags, day, doc.source_label,
+                      content_sha256=content_hash, extractor=doc.extractor)
+    path = target / f"{slug}.md"
+    # Exclusive create — concurrent add must never clobber (raw/ immutability).
+    try:
+        with path.open("x", encoding="utf-8") as fh:
+            fh.write(fm + body)
+    except FileExistsError as exc:
+        raise AddError(f"refusing to overwrite existing raw file {path}") from exc
+    return [path]
 
 
 def add_sources(
@@ -1001,6 +887,11 @@ def add_sources(
                                        html_title=doc.html_title, url=doc.url,
                                        path_name=doc.path_name)
             warnings.extend(f"{src}: {w}" for w in doc.warnings)
+            # Hard per-document cap (#311): reject — also on dry-run — before
+            # any dedupe lookup or write.
+            too_big = doc_size_error(doc.markdown, src)
+            if too_big:
+                raise AddError(too_big)
             if doc.no_content:
                 # Stale/renamed URL or a client-side-rendered page: report it
                 # so the caller gets a list of unreachable sources instead of
@@ -1023,13 +914,12 @@ def add_sources(
                     skipped.append({"source": src, "existing": existing})
                     continue
             if dry_run:
-                _proj, slug, target, chunks = resolve_write_target(
-                    final_title, doc.markdown, docs_dir, project=project,
+                _proj, slug, target = resolve_write_target(
+                    final_title, docs_dir, project=project,
                 )
-                names = ([f"{slug}.md"] if len(chunks) <= 1
-                         else [f"{slug}-{c.index:02d}.md" for c in chunks])
-                warnings.append(f"{src}: dry-run — would write "
-                                f"{', '.join(str(target / n) for n in names)}")
+                warnings.append(
+                    f"{src}: dry-run — would write {target / f'{slug}.md'}"
+                )
                 titles.append(final_title)
                 continue
             paths = write_raw_doc(doc, docs_dir, explicit_title=title,

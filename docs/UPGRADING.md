@@ -10,6 +10,31 @@ How to upgrade between `llmwiki` releases. Most releases are drop-in (`pip insta
 
 The canonical per-release detail is [CHANGELOG.md](https://github.com/AlexanderMakarov/llm-wiki/blob/main/CHANGELOG.md) — this guide focuses on "what might break".
 
+## Unreleased — whole-document storage (#311)
+
+Behaviour flip for imports after this release, plus an optional offline migration for vaults that still hold length-driven pieces.
+
+**New behaviour (no migrate required):**
+
+- `llmwiki add` / MCP `wiki_add` write **one** complete Markdown file under `raw/docs/` (including long documents). Content hash / dedup stay whole-document. A converted document over **512 KiB** of Markdown is rejected at `add` (nothing written); `synth` refuses a legacy raw doc already over that limit (no backend call, no page, it stays pending) — split it into smaller documents.
+- `llmwiki synth` splits a long document **in memory** to the active backend's usable body budget (`synthesis.<backend>.usable_body_chars` / `context_window_tokens`; see [configuration.md](configuration.md#choosing-the-document-body-budget) — Claude's default is now far larger than the old ~7k (≈296k characters lean at 200k tokens), Cursor (`composer-2.5` and any other id) and an unknown Claude model id assume a 200,000-token window (≈185k characters for Cursor), Ollama is auto-sized from the model and otherwise assumes 8,192 tokens; the derived budget also reserves the backend's per-call agent overhead and working margin, and the 1,000-character floor applies only when you set a tiny value yourself), summarises each piece, and **stitches** them into **one** `wiki/sources/` page. A failure mid-document fails the whole document (no complete-looking partial page). There is no silent truncation-as-coverage path. Splits prefer heading, then paragraph, then line boundaries; a code fence cut by a split is closed and re-opened on every piece, and a heading is never sent as a chunk of its own.
+- Session transcripts are unchanged, including their 8,000-character send cap.
+
+**When to migrate:** if an older release left `raw/docs/<project>/<slug>-01.md` … `-NN.md` and/or several `wiki/sources/…--part-N` pages for one logical document, Ctrl+K **Wiki** (and the wiki search corpus) can still list one row per part even after the #305 site Documents unification. Heal that offline — **no mandatory mass re-synth**:
+
+```bash
+llmwiki migrate whole-document-storage --vault /path/to/vault --dry-run
+llmwiki migrate whole-document-storage --vault /path/to/vault
+```
+
+- **What it changes:** each **clear** multi-piece group becomes one raw file (`raw/docs/<project>/<slug>.md`) and one canonical wiki source page (same deterministic stitch + tag union synth uses). Old `-NN` raw files and part wiki pages move under `.llmwiki-whole-doc-recovery/<UTC>/` (a `MANIFEST.json` lists every move). Part names become `## Aliases` on the canonical page; `[[wikilinks]]` / `sources:` entries and synth state follow. Index / pending refresh run when anything changed.
+- **Block on ambiguous:** preview always lists clear and ambiguous groups. Apply exits non-zero and **writes nothing** (including clear groups) while any ambiguous group remains (gap in parts, conflicting or mixed empty/non-empty `content_sha256`, a whole file that is not the same document or cannot be read, an unsafe frontmatter `project` / `date`, partly summarised pieces, inconsistent wiki claims, and similar). Resolve or remove the ambiguous set, then re-run. Parts that all lack `content_sha256` (pre-hash imports) with clear `(part i/N)` titles and a contiguous `-NN` run are **clear** — the migrate fills the hash from the joined body when writing the whole file.
+- **Never:** an LLM call, a mass re-synthesis from raw, or overwriting a whole file already on disk (different hash or unreadable).
+- **Optional re-synth queue:** after a successful apply the merged documents are listed. On a terminal you are asked once (all-or-nothing) whether to mark them not synthesized so a later `llmwiki synth` re-runs them; the default — Enter, EOF, or a non-terminal run — keeps the stitched summaries. Scripts: `--mark-unsynth` marks them without asking, `--keep-stitched` keeps without asking. Migrate itself still makes no LLM call.
+- **Idempotent:** a clean second run is a no-op; an interrupted apply resumes. Rebuild afterwards: `llmwiki build --vault <vault>`.
+
+See [`docs/reference/cli.md`](reference/cli.md#whole-document-storage--merge-legacy-split-documents-311).
+
 ## Unreleased — document source pages claim their raw file (#307)
 
 Optional offline migration. Synth now writes `source_file: raw/docs/<path>` on every page it synthesises from `raw/docs/` and tags it `raw-doc` instead of `session-transcript`. Document pages an older release wrote still have a blank `source_file` (so `llmwiki trace`, `provenance_integrity` and `remove`'s frontmatter scan cannot follow them) and still carry `session-transcript` (re-synth keeps existing tags as curation). Heal them without a backend call:

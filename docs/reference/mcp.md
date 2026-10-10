@@ -85,7 +85,7 @@ Wall-clock budget defaults to **120 seconds**, overridable via `mcp.tool_timeout
 
 ## `wiki_add`
 
-Thin proxy onto the same shared `run_add` orchestration as CLI `llmwiki add` (#273). Defaults match the CLI: write raw doc(s) under the resolved vault's `raw/docs/` and rebuild the site; **do not** synthesize `wiki/sources/` unless `synthesize` is true. Long documents may become multiple raw pieces via the shared add chunker (~7k chars).
+Thin proxy onto the same shared `run_add` orchestration as CLI `llmwiki add` (#273 / #311). Defaults match the CLI: write raw doc(s) under the resolved vault's `raw/docs/` and rebuild the site; **do not** synthesize `wiki/sources/` unless `synthesize` is true. Each new import is **one** complete Markdown file (including long documents); synthesis chunks in memory to the backend budget and stitches one wiki source page. Legacy multi-piece vaults use `llmwiki migrate whole-document-storage` — see [cli.md](cli.md#whole-document-storage--merge-legacy-split-documents-311).
 
 Exactly one of `url`, `path`, or `content` is required.
 

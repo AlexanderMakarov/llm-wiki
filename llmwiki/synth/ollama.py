@@ -35,6 +35,14 @@ Configuration (``sessions_config.json`` / ``config.json``)::
       "max_retries": 3
     }
 
+Document chunking (#311) uses a usable-body budget: ``synthesis.ollama.usable_body_chars``
+or ``context_window_tokens``, else the model's ``num_ctx`` auto-detected from
+``/api/show``, else a documented default window for *budget math only*.
+``options.num_ctx`` is sent on page calls only when the window came from
+config or a Modelfile ``num_ctx`` — never from the assumed default, so a
+server-level context (``OLLAMA_CONTEXT_LENGTH`` or the runtime default) is
+not silently shrunk.
+
 Config parsing is done in :func:`load_ollama_config` so the CLI can
 surface readable errors instead of stack traces.
 """
@@ -43,7 +51,9 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import socket
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -52,9 +62,16 @@ from dataclasses import dataclass
 from typing import Any
 
 from llmwiki.synth.base import (
+    DEFAULT_CONTEXT_WINDOW_TOKENS,
+    OLLAMA_BUDGET,
+    SESSION_BODY_SEND_CAP_CHARS,
     BaseSynthesizer,
+    BodyBudgetConfig,
+    load_body_budget_config,
+    resolve_usable_body_chars,
     split_prompt_template,
     usage_limit_from_text,
+    window_tokens_for_body_chars,
 )
 
 # ─── Constants ─────────────────────────────────────────────────────────
@@ -66,6 +83,10 @@ DEFAULT_MAX_RETRIES = 3        # includes the first attempt
 DEFAULT_BACKOFF_BASE = 0.5     # seconds; doubles each retry
 
 LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1"}
+
+#: ``/api/show`` is a quick metadata read; never let it stall a run.
+_SHOW_TIMEOUT = 2
+_NUM_CTX_RE = re.compile(r"^\s*num_ctx\s+(\d+)\s*$", re.MULTILINE)
 
 logger = logging.getLogger(__name__)
 
@@ -103,6 +124,11 @@ class OllamaConfig:
     timeout: int = DEFAULT_TIMEOUT
     max_retries: int = DEFAULT_MAX_RETRIES
     backoff_base: float = DEFAULT_BACKOFF_BASE
+    body_budget: BodyBudgetConfig = BodyBudgetConfig()
+
+    @property
+    def show_url(self) -> str:
+        return f"{self.base_url.rstrip('/')}/api/show"
 
     @property
     def generate_url(self) -> str:
@@ -179,6 +205,7 @@ def load_ollama_config(cfg: dict[str, Any] | None) -> OllamaConfig:
         timeout=timeout,
         max_retries=max_retries,
         backoff_base=backoff_base,
+        body_budget=load_body_budget_config(nested, "ollama"),
     )
 
     if not resolved.is_local:
@@ -214,6 +241,110 @@ class OllamaSynthesizer(BaseSynthesizer):
         self.config = config or OllamaConfig()
         self._http_post = http_post or _urlopen_post
         self._http_get = http_get or _urlopen_get
+        self._detect_lock = threading.Lock()
+        self._detected = False
+        self._detected_window: int | None = None
+        self._modelfile_num_ctx: int | None = None
+
+    # ---- context window / body budget (#311) ----------------------
+
+    def _probe_show(self) -> None:
+        """Fill ``_detected_window`` / ``_modelfile_num_ctx`` once per instance."""
+        with self._detect_lock:
+            if self._detected:
+                return
+            self._detected = True
+            try:
+                status, body = self._http_post(
+                    self.config.show_url,
+                    {"model": self.config.model},
+                    timeout=min(self.config.timeout, _SHOW_TIMEOUT),
+                )
+                info = json.loads(body) if 200 <= status < 300 else None
+            except Exception as exc:  # noqa: BLE001 — detection must never break a run
+                logger.debug("Ollama /api/show probe failed: %s", exc)
+                return
+            if not isinstance(info, dict):
+                return
+            num_ctx = None
+            params = info.get("parameters")
+            if isinstance(params, str):
+                m = _NUM_CTX_RE.search(params)
+                num_ctx = int(m.group(1)) if m else None
+            trained = None
+            model_info = info.get("model_info")
+            if isinstance(model_info, dict):
+                for key, value in model_info.items():
+                    if key.endswith(".context_length") and isinstance(value, int) and value > 0:
+                        trained = value
+                        break
+            if num_ctx:
+                capped = min(num_ctx, trained) if trained else num_ctx
+                self._modelfile_num_ctx = capped
+                self._detected_window = capped
+            elif trained:
+                # Trained max alone is not what the server loads — only cap the
+                # assumed default for *budget* math; never send it as num_ctx.
+                self._detected_window = min(DEFAULT_CONTEXT_WINDOW_TOKENS, trained)
+
+    def _detect_context_window(self) -> int | None:
+        """Window (tokens) from ``/api/show`` for budget math; ``None`` if unknown.
+
+        Uses the model's Modelfile ``num_ctx`` when set. Otherwise a trained
+        maximum only caps the assumed default for the budget — it is never
+        treated as the window the server loads, and is never sent as
+        ``options.num_ctx``.
+        """
+        self._probe_show()
+        return self._detected_window
+
+    def usable_body_chars(self) -> int:
+        """Document-chunk budget: config, else derived from the context window (#311)."""
+        return resolve_usable_body_chars(
+            self.config.body_budget,
+            known_window_tokens=self._detect_context_window,
+            budget_class=OLLAMA_BUDGET,
+        )
+
+    def context_window_tokens(self) -> int:
+        """Window the document budget assumes (config, detected, or default).
+
+        Raised, if needed, to fit an explicit ``usable_body_chars`` plus the
+        scaffolding, prompt, output and working-margin reserves. This value is
+        *not* always sent as ``options.num_ctx`` — see :meth:`request_num_ctx`.
+        """
+        budget = self.config.body_budget
+        window = (
+            budget.context_window_tokens
+            or self._detect_context_window()
+            or DEFAULT_CONTEXT_WINDOW_TOKENS
+        )
+        if budget.usable_body_chars:
+            window = max(window, window_tokens_for_body_chars(budget.usable_body_chars, OLLAMA_BUDGET))
+        return window
+
+    def request_num_ctx(self) -> int | None:
+        """``options.num_ctx`` for a page call, or ``None`` to leave the server default.
+
+        Sent only when the window came from config (``context_window_tokens`` /
+        ``usable_body_chars``) or a Modelfile ``num_ctx`` from ``/api/show``.
+        The assumed 8,192-token budget fallback is never forced onto the server.
+        """
+        budget = self.config.body_budget
+        if budget.context_window_tokens or budget.usable_body_chars:
+            return self.context_window_tokens()
+        self._probe_show()
+        return self._modelfile_num_ctx
+
+    def synthesize_document_chunk(
+        self,
+        chunk: str,
+        meta: dict[str, Any],
+        prompt_template: str,
+    ) -> str:
+        return self.synthesize_source_page(
+            chunk, meta, prompt_template, body_cap=self.usable_body_chars()
+        )
 
     # ---- BaseSynthesizer interface --------------------------------
 
@@ -265,6 +396,8 @@ class OllamaSynthesizer(BaseSynthesizer):
         raw_body: str,
         meta: dict[str, Any],
         prompt_template: str,
+        *,
+        body_cap: int = SESSION_BODY_SEND_CAP_CHARS,
     ) -> str:
         """Render ``prompt_template`` with the session body + metadata
         and send it to Ollama. Returns the model's raw completion text.
@@ -279,13 +412,10 @@ class OllamaSynthesizer(BaseSynthesizer):
         BackendUsageLimitError
             That non-2xx response's body reports an exhausted account quota.
         """
-        # #py-h7 (#585): pipeline used to pre-render the prompt for us
-        # (with `body[:8000]` truncation + a `key: value` meta format),
-        # but that violated the BaseSynthesizer contract. Now we own the
-        # render. Mirror the previous 8 KB body cap so very long sessions
-        # don't blow Ollama's context window — agent_delegate uses the
-        # same cap; centralise here so the limit lives next to the prompt.
-        truncated_body = raw_body[:8000] if raw_body else ""
+        # Sessions / evidence keep the historical cap; a document chunk
+        # arrives already within usable_body_chars and is sent whole (#311).
+        # #py-h7 (#585): we own the prompt render (body + meta placeholders).
+        truncated_body = raw_body[:body_cap] if raw_body else ""
         # Ollama bills nothing, but it does keep a KV cache keyed on the
         # prompt prefix: passing the run-stable half as `system` keeps that
         # prefix identical across pages, so only the per-page tail is
@@ -297,6 +427,11 @@ class OllamaSynthesizer(BaseSynthesizer):
             "prompt": prompt,
             "stream": False,
         }
+        # Only force num_ctx when we know it (config or Modelfile) — never the
+        # assumed budget default, which would shrink a larger server context.
+        num_ctx = self.request_num_ctx()
+        if num_ctx is not None:
+            payload["options"] = {"num_ctx": num_ctx}
         if stable:
             payload["system"] = stable
 

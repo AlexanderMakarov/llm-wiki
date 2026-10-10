@@ -175,6 +175,18 @@ The rate card was wrong too: `sonnet-5` was listed at $2/$10 per MTok. Derived f
 
 The API-cache path in [`prompt-caching.md`](prompt-caching.md) is unaffected — a prefix genuinely is cached and re-read there.
 
+## Choosing the document body budget
+
+A session body is capped at **8,000 characters** per call. A **document** is not truncated: it is stored whole (at most 512 KiB of Markdown) and split in memory into chunks of the backend's *usable body budget*, one call per chunk, stitched into one page. `synth --estimate` chunks every pending document at the same budget the run will use, so a document's priced call count equals the calls a real run makes.
+
+The budget is `(context_window_tokens − scaffolding − 2,000 prompt − 2,600 output − working margin) × 2.05` characters, not capped above (an operator-set window too small for the reserves floors at 1,000), unless `usable_body_chars` is set (resolution order and per-backend defaults: [configuration.md § Choosing the document body budget](../configuration.md#choosing-the-document-body-budget)). What it does to the bill:
+
+- **The body is billed once either way.** A 100,000-character document costs about the same body tokens whether it is 14 chunks or 1.
+- **Every extra call re-pays the fixed part** — per-call overhead plus the ~1,800-token prompt template and topic vocabulary (only the stable half is cached between calls). A small budget multiplies that: at ~7,300 characters a 100,000-character document is 14 calls; at the lean Claude 200,000-token budget (296,245 characters) it is one. The scaffolding term is the per-call agent context above (890 tokens lean, 35,000 tokens non-lean and for the Cursor Agent CLI; ~500 for Ollama), and the working margin (`max(8,192, 25% × window)` lean, `max(16,384, 35% × window)` heavy, `max(2,048, 10% × window)` Ollama) leaves the agent room to think — so a non-lean or Cursor call gets a markedly smaller body budget than the same window under lean Claude (185,320 vs 296,245 characters at 200,000 tokens).
+- **A larger call is not free of risk** — it takes longer, and a failure re-runs the whole document, since a partial page is never written. Claude / Cursor scale `timeout` linearly with chunk size above the 8,000-character session cap; raise the configured timeout if even that is tight.
+
+So: the agent backends (Claude, Cursor) assume a 200,000-token window when none is configured or known, so a default Cursor or custom-model Claude call carries ≈185,000 (or ≈296,000 lean) characters; set `context_window_tokens` to the model's real window when it differs (Ollama reads its Modelfile `num_ctx` for budget and `num_ctx` requests, else assumes 8,192 for budget only and leaves the server's context alone), and lower `usable_body_chars` only if a model degrades on long input. Check the effect with `llmwiki synth --estimate` before and after.
+
 ## The site overview call
 
 `llmwiki build --synthesize` makes one extra LLM call to write the landing-page overview when the active synthesis backend is an LLM (`claude`, `cursor_cli`, `ollama`). With `claude` it gets the same lean flags, and its model is `synthesis.overview_model` — defaulting to `haiku`, since writing three prose paragraphs from a JSON brief is the cheapest real task here and shows none of the `Connections` weakness that matters for source pages. With `dummy` (or an unavailable backend) the overview LLM is skipped — spend nothing (#230).

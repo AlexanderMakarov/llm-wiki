@@ -34,6 +34,7 @@ from llmwiki import (
     migrate_page_kinds,
     migrate_source_page_paths,
     migrate_topic_kinds,
+    migrate_whole_document_storage,
     migrate_wikilink_titles,
     usage,
 )
@@ -145,6 +146,7 @@ from llmwiki.state_store import (
 from llmwiki.sync.status import (  # noqa: F401
     cmd_sync_status,
 )
+from llmwiki.synth.base import BaseSynthesizer
 from llmwiki.synth.claude_cli import load_claude_config
 from llmwiki.synth.cursor_cli import load_cursor_cli_config
 from llmwiki.synth.estimate import synthesize_estimate_report  # noqa: F401
@@ -1657,6 +1659,11 @@ _MIGRATIONS: tuple[tuple[str, str, str], ...] = (
         "Fill the blank source_file of wiki/sources pages synthesised from raw/docs with the raw/docs/<path> synth derives for them today, and drop the session-transcript tag from document pages (adding raw-doc when no document tag is left).",
         "Run once after upgrading past the release where synth started stamping document pages with their raw/docs claim, if older document pages still have an empty source_file or are tagged session-transcript. Pages that claim raw/sessions/ are never touched, a page two raw docs derive to is reported and left alone. Reads only existing wiki pages and raw frontmatter — no LLM call, and raw/ is never written.",
     ),
+    (
+        "whole-document-storage",
+        "Merge each document an older release stored in pieces (raw/docs/<project>/<slug>-01.md … -NN.md and one wiki source page per piece) into one raw file (<slug>.md, same content_sha256) and one wiki source page: the pieces' summaries are stitched by the same fixed rules synth uses and their tags are unioned, the old part names become ## Aliases of the merged page and every [[link]] / sources: entry follows, and synth state collapses to the one whole-document key. The old raw pieces and part pages move to .llmwiki-whole-doc-recovery/<UTC>/ (MANIFEST.json lists every move); a different-hash whole file is never overwritten.",
+        "Run once after upgrading to the release where documents are stored whole, when Ctrl+K Wiki still lists several part rows for one document or raw/docs still holds -01/-02 pieces. Run with --dry-run first: it lists the clear groups it would merge and every ambiguous group (a gap in the parts, a hash conflict, a whole file that is not the same document, partly summarised pieces, a page claiming another raw file). Apply refuses to run — exits non-zero and changes nothing — while any ambiguous group remains. Offline: no LLM call and no mass re-synthesis; safe to re-run (a clean second run is a no-op, an interrupted run resumes). After a successful apply it lists the merged documents and, on a terminal, asks once (all-or-nothing, default = keep the stitched summaries) whether to mark them not synthesized so a later `llmwiki synth` re-runs them; --mark-unsynth does that without asking, and a non-terminal run keeps the summaries.",
+    ),
 )
 
 
@@ -1904,6 +1911,60 @@ def cmd_migrate_doc_source_provenance(args: argparse.Namespace) -> int:
     return 1 if report["errors"] else 0
 
 
+def cmd_migrate_whole_document_storage(args: argparse.Namespace) -> int:
+    """Merge legacy multi-piece documents into one raw file + one wiki page (#311).
+
+    Offline — no synthesis backend or network call. ``--dry-run`` previews the
+    clear and ambiguous groups; apply exits non-zero and changes nothing while
+    any ambiguous group remains. Old pieces move to
+    ``.llmwiki-whole-doc-recovery/<UTC>/`` rather than being deleted.
+
+    After a clean apply that merged documents, ``--mark-unsynth`` (or a ``y``
+    answer on a TTY) forgets their synth-done state so the next ``synth``
+    re-runs them. Default: keep the stitched summaries.
+    """
+    vault = Path(args.vault)
+    dry_run = bool(getattr(args, "dry_run", False))
+    report = migrate_whole_document_storage.run_migration(vault=vault, dry_run=dry_run)
+    migrate_whole_document_storage.print_report(report)
+    keep = bool(getattr(args, "keep_stitched", False))
+    if not dry_run and not keep and not report["errors"] and not report["blocked"] and report["applied"]:
+        _offer_mark_unsynth(vault, report, force=bool(getattr(args, "mark_unsynth", False)))
+    return 1 if report["errors"] or report["blocked"] else 0
+
+
+def _offer_mark_unsynth(vault: Path, report: dict[str, Any], *, force: bool) -> None:
+    """Optionally queue the just-merged documents for re-synthesis (#311).
+
+    All-or-nothing. ``force`` (``--mark-unsynth``) skips the question; without it
+    the question is asked only on a TTY, and an empty answer, EOF or non-TTY
+    keeps the stitched summaries. Never calls a backend.
+    """
+    docs = migrate_whole_document_storage.merged_document_paths(report)
+    if not force and not sys.stdin.isatty():
+        print("synth state kept (stitched summaries stay). Pass --mark-unsynth to queue these documents for re-synth.")
+        return
+    print(f"merged documents ({len(docs)}):")
+    for rel in docs:
+        print(f"  {rel}")
+    if not force:
+        answer = _ask_choice(
+            "Mark ALL of these as not synthesized so the next `llmwiki synth` re-summarises them? "
+            "Default keeps the stitched summaries. [y/N]: ",
+            ("y", "n", "yes", "no"),
+            "n",
+        )
+        if answer.lower() not in ("y", "yes"):
+            print("kept: stitched summaries and synth state unchanged.")
+            return
+    dropped = migrate_whole_document_storage.mark_unsynth(vault, report)
+    if report["errors"]:
+        for err in report["errors"][:10]:
+            print(f"  ! {err}")
+        return
+    print(f"marked {len(dropped)} document(s) as not synthesized; run `llmwiki synth` to re-summarise them.")
+
+
 def _resolve_synthesize_only_paths(paths: list[str], vault_root: Path) -> set[Path]:
     """Resolve repeatable ``synthesize --path`` args under ``vault_root`` (#62).
 
@@ -2034,6 +2095,16 @@ def _estimate_model_for_backend(config: dict[str, Any]) -> tuple[str, bool]:
     if backend == "ollama":
         return load_ollama_config(config).model, True
     return "", True
+
+
+def _estimate_backend(config: dict[str, Any]) -> BaseSynthesizer | None:
+    """The configured LLM backend whose body budget prices ``--estimate`` (#311).
+
+    ``None`` for the dummy backend (it prices nothing), which keeps the
+    default-window budget instead of the dummy's unlimited one.
+    """
+    backend = resolve_backend(config)
+    return backend if backend.is_llm else None
 
 
 def _config_with_synth_backend_override(
@@ -2481,6 +2552,8 @@ def _synthesize_estimate(
         docs_root=docs_root,
         include_subagents=resolve_include_subagents(loaded_cfg),
         exclude_headless=resolve_exclude_headless(loaded_cfg),
+        # Price document chunks at the active backend's usable body budget (#311).
+        backend=_estimate_backend(loaded_cfg),
     )
     pending_rows = [
         {
@@ -3496,6 +3569,38 @@ def build_parser() -> argparse.ArgumentParser:
         help="Report would-change pages; write nothing",
     )
     migrate_doc_prov.set_defaults(func=cmd_migrate_doc_source_provenance)
+
+    migrate_whole_doc = add_migration(
+        "whole-document-storage", *_mig_by_name["whole-document-storage"],
+        short="Merge documents stored in -NN pieces into one raw file and one wiki page",
+    )
+    migrate_whole_doc.add_argument(
+        "--vault",
+        type=Path,
+        required=True,
+        help="Vault root containing raw/docs/ and wiki/",
+    )
+    migrate_whole_doc.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Preview clear and ambiguous groups; write nothing (apply is blocked while any group is ambiguous)",
+    )
+    unsynth_group = migrate_whole_doc.add_mutually_exclusive_group()
+    unsynth_group.add_argument(
+        "--mark-unsynth",
+        action="store_true",
+        help=(
+            "After a successful apply, mark every merged document as not synthesized so the next `llmwiki synth` "
+            "re-summarises it — no prompt, no LLM call here (for scripts). Default: keep stitched summaries; on a "
+            "TTY you are asked once for all documents (empty answer = keep)"
+        ),
+    )
+    unsynth_group.add_argument(
+        "--keep-stitched",
+        action="store_true",
+        help="Keep stitched summaries and synth state without asking (the default; explicit no-op for scripts)",
+    )
+    migrate_whole_doc.set_defaults(func=cmd_migrate_whole_document_storage)
 
     kit = add_command(
         "install-agent-kit",

@@ -14,6 +14,8 @@ import pytest
 import llmwiki.add_doc as m
 from llmwiki._frontmatter import parse_frontmatter
 from llmwiki.add_doc import AddError, DuplicateContentError, _extract_html, add_sources, assert_public_url, convert_url
+from llmwiki.doc_chunking import MAX_DOC_MARKDOWN_BYTES
+from llmwiki.slugs import slugify
 from llmwiki.synth.base import DummySynthesizer
 from llmwiki.synth.pipeline import synthesize_new_sessions
 
@@ -59,11 +61,11 @@ def test_invalid_url_rejected():
 
 # ── section chunker (port of kbbuilder chunkMarkdownBySections) ──────
 
-from llmwiki.add_doc import DEFAULT_CHUNK_MAX_CHARS, chunk_markdown_by_sections
+from llmwiki.doc_chunking import chunk_markdown_by_sections
 
 
 def test_chunk_small_doc_single_chunk():
-    chunks = chunk_markdown_by_sections("# T\n\nshort body\n")
+    chunks = chunk_markdown_by_sections("# T\n\nshort body\n", max_chars=7000)
     assert len(chunks) == 1
     assert chunks[0].index == 1 and chunks[0].total == 1
     assert chunks[0].heading == "T"
@@ -71,10 +73,9 @@ def test_chunk_small_doc_single_chunk():
 
 
 def test_chunk_heading_strips_inline_markup():
-    # A chunk's heading becomes the "(part N/M: <sub>)" suffix of the page
-    # title, so a permalink anchor in it surfaces in the title just as it did
-    # for the document heading.
-    chunks = chunk_markdown_by_sections("## Итоги раздела [#](#15-toc-title)\n\nbody\n")
+    # Chunk headings are still stripped for synth-time reuse / legacy part
+    # titles; a permalink anchor must not leak into the heading text.
+    chunks = chunk_markdown_by_sections("## Итоги раздела [#](#15-toc-title)\n\nbody\n", max_chars=7000)
     assert chunks[0].heading == "Итоги раздела"
 
 
@@ -115,12 +116,6 @@ def test_chunk_indices_and_total():
     chunks = chunk_markdown_by_sections(md, max_chars=600)
     assert [c.index for c in chunks] == list(range(1, len(chunks) + 1))
     assert all(c.total == len(chunks) for c in chunks)
-
-
-def test_default_cap_is_7000():
-    # 7000 keeps each chunk inside the agent-delegate synthesizer's
-    # raw_body[:8000] prompt embed with frontmatter+breadcrumb headroom.
-    assert DEFAULT_CHUNK_MAX_CHARS == 7000
 
 
 # ── file/folder conversion + path safety ─────────────────────────────
@@ -500,13 +495,65 @@ def test_plain_text_response_passthrough():
 
 # ── raw-doc writer + orchestrator ────────────────────────────────────
 
-from llmwiki.add_doc import write_raw_doc
+from llmwiki.add_doc import compute_content_hash, write_raw_doc
 
 
 def _doc(markdown="# Doc Title\n\nbody\n", **kw):
     defaults = dict(title="", source_label="/tmp/x.md", path_name="x.md")
     defaults.update(kw)
     return ConvertedDoc(markdown=markdown, **defaults)
+
+
+def write_legacy_multipart_raw_doc(
+    docs_dir,
+    *,
+    markdown: str,
+    title: str,
+    project: str | None = None,
+    today: str = "2026-07-04",
+    source_label: str = "/tmp/legacy.md",
+    chunk_max_chars: int = 1000,
+):
+    """Construct the pre-#311 multi-file raw layout for later migrate tests.
+
+    Product ``write_raw_doc`` always lands one file; this helper only builds
+    fixtures that look like historical ``slug-01.md`` … ``slug-NN.md`` series.
+    """
+    content_hash = compute_content_hash(markdown)
+    base_slug = slugify(title) or "untitled"
+    if project:
+        proj = slugify(project) or project
+        target = docs_dir / proj
+        slug = base_slug
+    else:
+        slug = base_slug
+        proj = slug
+        target = docs_dir / proj
+    chunks = chunk_markdown_by_sections(markdown, max_chars=chunk_max_chars)
+    assert len(chunks) > 1, "legacy fixture needs a multi-part body"
+    target.mkdir(parents=True, exist_ok=True)
+    written = []
+    for c in chunks:
+        chunk_slug = f"{slug}-{c.index:02d}"
+        sub = c.heading if (c.heading and c.heading != title) else ""
+        chunk_title = (
+            f"{title} (part {c.index}/{c.total}"
+            + (f": {sub}" if sub else "")
+            + ")"
+        )
+        breadcrumb = (
+            f"> Part {c.index} of {c.total} of **{title}**"
+            + (f" — {sub}" if sub else "")
+            + ".\n\n"
+        )
+        fm = m._frontmatter(
+            chunk_title, chunk_slug, proj, (), today, source_label,
+            content_sha256=content_hash,
+        )
+        path = target / f"{chunk_slug}.md"
+        path.write_text(fm + breadcrumb + c.body, encoding="utf-8")
+        written.append(path)
+    return written
 
 
 def test_write_single_chunk_layout_and_frontmatter(tmp_path):
@@ -528,17 +575,32 @@ def test_write_single_chunk_layout_and_frontmatter(tmp_path):
     assert text.rstrip().endswith("body")
 
 
-def test_write_multi_chunk_names_titles_breadcrumbs(tmp_path):
+def test_write_long_doc_is_single_complete_file(tmp_path):
     md = "".join(f"## Sec{i}\n\n" + "x" * 900 + "\n\n" for i in range(4))
-    paths = write_raw_doc(_doc(markdown="# Big Doc\n\n" + md), tmp_path,
-                          today="2026-07-04", chunk_max_chars=1000)
+    body = "# Big Doc\n\n" + md
+    paths = write_raw_doc(_doc(markdown=body), tmp_path, today="2026-07-04")
+    assert paths == [tmp_path / "big-doc" / "big-doc.md"]
+    text = paths[0].read_text()
+    assert 'title: "Big Doc"' in text
+    assert "slug: big-doc\n" in text
+    assert "project: big-doc\n" in text
+    assert "(part " not in text
+    assert "> Part " not in text
+    assert "## Sec0" in text and "## Sec3" in text
+    assert "x" * 900 in text
+
+
+def test_legacy_multipart_fixture_helper(tmp_path):
+    md = "# Big Doc\n\n" + "".join(f"## Sec{i}\n\n" + "x" * 900 + "\n\n" for i in range(4))
+    paths = write_legacy_multipart_raw_doc(
+        tmp_path, markdown=md, title="Big Doc", chunk_max_chars=1000,
+    )
     assert len(paths) > 1
     assert paths[0].name == "big-doc-01.md"
     first = paths[0].read_text()
     assert 'title: "Big Doc (part 1/' in first
     assert "> Part 1 of" in first
     assert "slug: big-doc-01" in first
-    assert "project: big-doc" in first
 
 
 def test_write_never_overwrites_suffixes_slug(tmp_path):
@@ -577,25 +639,25 @@ def test_write_explicit_project_collides_on_file_level(tmp_path):
     assert p2 == [tmp_path / "shared" / "doc-title-2.md"]
 
 
-def test_write_explicit_project_dedupe_across_chunk_shapes(tmp_path):
-    # Same title, same explicit project, DIFFERENT chunk shapes: the
-    # collision probe must see what's on disk, not assume the new doc's
-    # own single/multi layout.
+def test_write_explicit_project_dedupe_against_legacy_multipart(tmp_path):
+    # Collision probe must see a legacy multi-part series on disk even
+    # though new writes always land one whole file (#311).
     big = "# Doc Title\n\n" + "".join(f"## S{i}\n\n" + "x" * 900 + "\n\n" for i in range(4))
-    # single first, then multi
-    write_raw_doc(_doc(), tmp_path, project="shared", today="2026-07-04")
-    p2 = write_raw_doc(_doc(markdown=big), tmp_path, project="shared",
-                       today="2026-07-04", chunk_max_chars=1000)
-    assert all(p.name.startswith("doc-title-2-") for p in p2)
-    # multi first, then single (fresh project dir) — distinct body so hash dedup
-    # does not collide with the shared/doc-title-2 chunks above.
-    big_other = "# Doc Title\n\n" + "".join(
-        f"## T{i}\n\n" + "y" * 900 + "\n\n" for i in range(4)
+    write_legacy_multipart_raw_doc(
+        tmp_path, markdown=big, title="Doc Title", project="shared",
+        chunk_max_chars=1000,
     )
-    write_raw_doc(_doc(markdown=big_other), tmp_path, project="other",
-                  today="2026-07-04", chunk_max_chars=1000)
-    p4 = write_raw_doc(_doc(markdown="# Doc Title\n\nother project body\n"),
-                       tmp_path, project="other", today="2026-07-04")
+    p2 = write_raw_doc(
+        _doc(markdown="# Doc Title\n\nchanged body after legacy\n"),
+        tmp_path, project="shared", today="2026-07-04",
+    )
+    assert p2 == [tmp_path / "shared" / "doc-title-2.md"]
+    # Whole-file first, then another whole file with a distinct body.
+    write_raw_doc(_doc(), tmp_path, project="other", today="2026-07-04")
+    p4 = write_raw_doc(
+        _doc(markdown="# Doc Title\n\nother project body\n"),
+        tmp_path, project="other", today="2026-07-04",
+    )
     assert p4 == [tmp_path / "other" / "doc-title-2.md"]
 
 
@@ -718,13 +780,24 @@ def test_add_sources_force_new_always_writes(tmp_path):
     assert (docs / "in-file-2" / "in-file-2.md").exists()
 
 
-def test_content_hash_shared_across_chunks(tmp_path):
+def test_content_hash_is_whole_document(tmp_path):
     md = "# Big Doc\n\n" + "".join(f"## Sec{i}\n\n" + "x" * 900 + "\n\n" for i in range(4))
-    paths = write_raw_doc(_doc(markdown=md), tmp_path, today="2026-07-04", chunk_max_chars=1000)
-    assert len(paths) > 1
-    hashes = {parse_frontmatter(p.read_text())[0].get("content_sha256") for p in paths}
-    assert len(hashes) == 1
-    assert hashes.pop() is not None
+    paths = write_raw_doc(_doc(markdown=md), tmp_path, today="2026-07-04")
+    assert len(paths) == 1
+    meta, _ = parse_frontmatter(paths[0].read_text())
+    assert meta.get("content_sha256") == compute_content_hash(md)
+
+
+def test_content_hash_matches_legacy_multipart_parts(tmp_path):
+    # Dedup keys off the whole body even when an older vault stored parts.
+    md = "# Big Doc\n\n" + "".join(f"## Sec{i}\n\n" + "x" * 900 + "\n\n" for i in range(4))
+    legacy = write_legacy_multipart_raw_doc(
+        tmp_path, markdown=md, title="Big Doc", chunk_max_chars=1000,
+    )
+    hashes = {parse_frontmatter(p.read_text())[0].get("content_sha256") for p in legacy}
+    assert hashes == {compute_content_hash(md)}
+    with pytest.raises(DuplicateContentError, match="already present as big-doc"):
+        write_raw_doc(_doc(markdown=md), tmp_path, today="2026-07-04")
 
 
 def test_add_sources_batch_mixed_success_and_failure(tmp_path):
@@ -959,7 +1032,7 @@ def test_add_sources_stdin_sentinel_piped_provenance(tmp_path):
     assert "/tmp" not in text
 
 
-def test_add_sources_long_piped_text_chunks_share_provenance(tmp_path):
+def test_add_sources_long_piped_text_one_file_provenance(tmp_path):
     docs = tmp_path / "docs"
     docs.mkdir()
     body = "".join(f"## Sec{i}\n\n" + ("x" * 2000) + "\n\n" for i in range(5))
@@ -967,10 +1040,44 @@ def test_add_sources_long_piped_text_chunks_share_provenance(tmp_path):
         ["-"], docs, stdin_text="# Long Piped\n\n" + body,
         title="Long Piped", today="2026-07-04",
     )
-    assert len(result["written"]) > 1
-    for path in result["written"]:
-        meta, _ = parse_frontmatter(path.read_text(encoding="utf-8"))
-        assert meta["source"] == "piped"
+    assert len(result["written"]) == 1
+    path = result["written"][0]
+    assert path.name == "long-piped.md"
+    text = path.read_text(encoding="utf-8")
+    meta, _ = parse_frontmatter(text)
+    assert meta["source"] == "piped"
+    assert "(part " not in text
+    assert "## Sec0" in text and "## Sec4" in text
+
+
+def test_add_rejects_a_document_over_the_512_kib_limit_without_writing(tmp_path):
+    """Hard per-document cap (#311): rejected after conversion, nothing written — dry-run too."""
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    over = "# Huge\n\n" + "x" * MAX_DOC_MARKDOWN_BYTES
+    for dry in (False, True):
+        result = add_sources(["-"], docs, stdin_text=over, today="2026-07-04", dry_run=dry)
+        assert result["written"] == [] and result["titles"] == []
+        assert len(result["errors"]) == 1
+        assert "512 KiB" in result["errors"][0] and "split the source" in result["errors"][0]
+    assert list(docs.rglob("*.md")) == []
+
+
+def test_add_accepts_a_document_exactly_at_the_512_kib_limit(tmp_path):
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    # convert_text adds one trailing newline: header + filler + "\n" == the limit.
+    header = "# At Limit\n\n"
+    text = header + "x" * (MAX_DOC_MARKDOWN_BYTES - len(header) - 1)
+    result = add_sources(["-"], docs, stdin_text=text, today="2026-07-04")
+    assert result["errors"] == [] and len(result["written"]) == 1
+
+
+def test_write_raw_doc_refuses_an_oversized_converted_body(tmp_path):
+    doc = m.ConvertedDoc(title="", markdown="x" * (MAX_DOC_MARKDOWN_BYTES + 1), source_label="piped")
+    with pytest.raises(AddError, match="512 KiB"):
+        m.write_raw_doc(doc, tmp_path / "docs", explicit_title="Big")
+    assert not (tmp_path / "docs").exists()
 
 
 def test_add_sources_rejects_mixing_stdin_sentinel_with_other_sources(tmp_path):

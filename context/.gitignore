@@ -3,3 +3,5 @@
 # Covers context/spec/*/review.md and review-*.md dual-review leftovers.
 **/review.md
 **/review-*.md
+# Demo before/after review packages (e.g. #311 demo-migrate-review.md) — operator review dumps, never commit.
+**/demo-*-review.md

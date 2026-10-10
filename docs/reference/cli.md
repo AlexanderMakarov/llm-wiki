@@ -117,9 +117,11 @@ python3 -m llmwiki sync --force
 
 ---
 
-## `add` — add a document to the wiki (#16 / #273)
+## `add` — add a document to the wiki (#16 / #273 / #311)
 
 Converts a URL, file, folder, or stdin in the process locale encoding (`-`) into raw Markdown under `raw/docs/`, then (by default) rebuilds the site so the new material is visible on Raw / Home. **Does not** synthesize `wiki/sources/` unless you pass `--synthesize`. Path and URL sources may be freely mixed and repeated; `-` (stdin) must be the only source in that invocation. MCP `wiki_add` is a thin proxy onto the same shared `run_add` path — see [mcp.md](mcp.md#wiki_add).
+
+Every new import lands as **one** complete Markdown file (including long documents). Length-driven `-01`/`-02` series are no longer written at add time (#311); synthesis chunks in memory instead, to the active backend's usable body budget ([configuration.md § Choosing the document body budget](../configuration.md#choosing-the-document-body-budget)). A converted document is capped at **512 KiB** of Markdown: a larger one is rejected after conversion — also under `--dry-run` — and nothing is written, so split the source into smaller documents. Vaults that still hold older multi-piece raw layouts stay readable — use [`migrate whole-document-storage`](#whole-document-storage--merge-legacy-split-documents-311) when you want one raw file + one wiki source page without a mass re-synth.
 
 ```bash
 python3 -m llmwiki add https://example.com/some-article
@@ -461,7 +463,7 @@ See [`guides/existing-vault.md`](../guides/existing-vault.md) for the round-trip
 
 Primary command (#90 / #147). Default runs **both** phases: pending sources → `wiki/sources/`, then entity/concept candidates → `wiki/candidates/`.
 
-A real sources pass is **two language-model jobs**, then bookkeeping: (1) prepare known-names once at the start of the run (canonical name, aliases, kind, short description) from wiki already on disk — Dummy / `not is_llm` skips this and uses heuristic vocabulary inject; because that one call can take a minute or more, it first prints `Preparing known names from N candidate topic(s) (~S KB prompt) — one language-model call, may take a minute…` (no line when it is skipped or there are no candidates); (2) **one** source-summary ask per queued raw file, with that frozen list in the prompt (vocabulary may include `kind="entity|concept"` when known — #257). Connections bullets name each topic with kind and nested `fact:` claims.
+A real sources pass is **two language-model jobs**, then bookkeeping: (1) prepare known-names once at the start of the run (canonical name, aliases, kind, short description) from wiki already on disk — Dummy / `not is_llm` skips this and uses heuristic vocabulary inject; because that one call can take a minute or more, it first prints `Preparing known names from N candidate topic(s) (~S KB prompt) — one language-model call, may take a minute…` (no line when it is skipped or there are no candidates); (2) **one** source-summary ask per queued raw **session**, or for a queued **document** as many backend calls as the active synthesizer's usable body budget requires (#311) — chunks stay in memory, results are stitched into **one** `wiki/sources/` page (Summary concat; Claims/Quotes exact-dedupe union; Connections union by target; tags unioned), and a mid-chunk failure fails the whole document rather than writing a complete-looking partial page. Vocabulary may include `kind="entity|concept"` when known (#257). Connections bullets name each topic with kind and nested `fact:` claims. New synth does **not** auto-delete legacy `--part-*` siblings left by older releases — leave that to [`migrate whole-document-storage`](#whole-document-storage--merge-legacy-split-documents-311).
 
 Job 1 is **known-names preparation** (builds the vocabulary the source-summary prompts see, including kind). The later offline **candidates harvest** (after sources, or `synth --candidates-only`) only parses those Connections bullets into `wiki/candidates/` — **no** classify LLM call; harvest cost alone is **zero** LLM. Do not treat them as one stage. Pages that only lack usable `(entity)` / `(concept)` labels on Connections — and whose targets already have matching wiki filings — should use `llmwiki migrate topic-kinds` for label-only catch-up (#174), not a full paid re-synth.
 
@@ -586,6 +588,7 @@ python3 -m llmwiki migrate discarded-topic-links --vault /path/to/vault --dry-ru
 python3 -m llmwiki migrate source-page-paths --vault /path/to/vault --dry-run
 python3 -m llmwiki migrate broken-provenance --vault /path/to/vault --dry-run
 python3 -m llmwiki migrate doc-source-provenance --vault /path/to/vault --dry-run
+python3 -m llmwiki migrate whole-document-storage --vault /path/to/vault --dry-run
 ```
 
 ### `state` — one-time legacy state migration (v1.4.0)
@@ -845,6 +848,36 @@ python3 -m llmwiki migrate doc-source-provenance --vault /path/to/vault
 | `--dry-run` | Report claims filled, tags stripped, `raw-doc` added, ambiguous and unmatched pages; write nothing. |
 
 Idempotent: a second run changes nothing. With no ambiguous or unmatched pages left it prints `nothing to migrate: every document source page already claims its raw file`; otherwise it lists them again with zero pages touched.
+
+### `whole-document-storage` — merge legacy split documents (#311)
+
+Before #311 a long `add` could land as `raw/docs/<project>/<slug>-01.md` … `<slug>-NN.md` and be summarised into one wiki source page per piece. New imports are one raw file and one summary page. This offline migration turns each **clear** multi-piece document in an existing vault into that same shape — **no language model, no network call, and no mandatory mass re-synthesis**.
+
+1. Groups raw `-NN` pieces that share a directory and the `#305` base slug, carry `(part i/N)` markers, form a contiguous `1..N` run, and either share one non-empty `content_sha256` or all lack the field (pre-hash imports). Conflicting non-empty hashes or a mix of empty and non-empty stay ambiguous. Wiki pages come from each piece's derived name and from `source_file:` claims.
+2. Lists every **ambiguous** group in the preview (gap in parts, hash conflict, a whole `<slug>.md` that is not the same document or cannot be read, a frontmatter `project` / `date` that is not a safe path segment such as `../escape`, a path that resolves outside `raw/docs` / `wiki/sources`, partly summarised pieces, inconsistent wiki claims, and similar). **Apply exits non-zero and changes nothing** for the whole vault while any ambiguous group remains (clear groups are not applied either).
+3. For each clear group: writes `raw/docs/<project>/<slug>.md` when missing (part breadcrumbs stripped; legacy hash kept when present, otherwise computed from the joined body like a new import) by exclusive create, and never overwrites an existing whole file — a different-hash one, or one that is present but cannot be read as UTF-8 Markdown (both ambiguous). Relocates the old `-NN` raw files under `.llmwiki-whole-doc-recovery/<UTC>/raw/docs/…`.
+4. Stitches the pieces' wiki summaries with the same deterministic rules new synth uses, unions tags, records old part names under `## Aliases`, rewrites `[[wikilinks]]` / `sources:` entries, and moves the old part pages under `.llmwiki-whole-doc-recovery/<UTC>/wiki/sources/…`. A `MANIFEST.json` in that recovery directory lists every move.
+5. Collapses per-piece synth state keys to the whole-document key, refreshes pending, rebuilds `wiki/index.md` when the vault keeps one, and appends a migrate log entry when anything changed.
+
+6. **Optional re-synth queue.** After a successful apply the command lists the merged documents. On a terminal it asks **once for all of them** whether to mark them not synthesized; the default (Enter, EOF, or any non-terminal run without flags) keeps the stitched summaries and the synth-done state unchanged. `--mark-unsynth` answers yes without asking. Either way migrate only edits synth state — re-summarising happens later, when you run `llmwiki synth`.
+
+After a successful apply (and a site rebuild), Ctrl+K **Wiki** / the wiki search corpus list **one** source row per logical document instead of many `--part-N` pages. Operators may still force-re-synth later; that is optional, not the migration success path.
+
+Implementation: `llmwiki/migrate_whole_document_storage.py`. See [UPGRADING.md](../UPGRADING.md).
+
+```bash
+python3 -m llmwiki migrate whole-document-storage --vault /path/to/vault --dry-run
+python3 -m llmwiki migrate whole-document-storage --vault /path/to/vault
+```
+
+| Flag | What |
+|---|---|
+| `--vault PATH` | **Required.** Vault root containing `raw/docs/` and `wiki/`. |
+| `--dry-run` | Preview clear and ambiguous groups; write nothing (apply is blocked while any group is ambiguous). |
+| `--mark-unsynth` | After a successful apply, mark **every** merged document as not synthesized (drops its whole-document synth-done key and refreshes pending) so the next `llmwiki synth` re-summarises it. No prompt, no language-model call here — for scripts. Ignored by `--dry-run`; nothing happens when apply is blocked or errored. |
+| `--keep-stitched` | Keep the stitched summaries and synth state without asking. This is the default; the flag is an explicit no-op (also suppresses the terminal question). Mutually exclusive with `--mark-unsynth`. |
+
+Idempotent: a clean second run is a no-op; an interrupted apply resumes. Rebuild afterwards: `llmwiki build --vault PATH`.
 
 ---
 

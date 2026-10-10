@@ -1,6 +1,6 @@
 """Shared synthesis-backend contracts (#230) — parametrized across engines.
 
-Backend-specific transport (Claude lean/JSON, Cursor allowlist/PATH probe, Ollama HTTP retries) stays in the per-backend test modules. This file covers resolve_backend wiring, shared-timeout isolation, and overview soft-fail / skip behaviour that must stay identical. CLI ``synth --backend`` handler tests live in ``tests/cli/test_synth.py``.
+Backend-specific transport (Claude lean/JSON, Cursor allowlist/PATH probe, Ollama HTTP retries) stays in the per-backend test modules. This file covers resolve_backend wiring, shared-timeout isolation, overview soft-fail / skip behaviour, and the usable-body budget API (#311 / @spec: 324-whole-document-storage). CLI ``synth --backend`` handler tests live in ``tests/cli/test_synth.py``.
 """
 
 from __future__ import annotations
@@ -13,7 +13,17 @@ from unittest.mock import patch
 import pytest
 
 from llmwiki.build import synthesize_overview
-from llmwiki.synth.base import DummySynthesizer
+from llmwiki.synth.base import (
+    ASSUMED_AGENT_WINDOW_TOKENS,
+    CLAUDE_LEAN_BUDGET,
+    DEFAULT_CONTEXT_WINDOW_TOKENS,
+    DEFAULT_USABLE_BODY_CHARS,
+    DUMMY_USABLE_BODY_CHARS,
+    HEAVY_AGENT_BUDGET,
+    OLLAMA_BUDGET,
+    DummySynthesizer,
+    usable_body_chars_for_window,
+)
 from llmwiki.synth.claude_cli import (
     DEFAULT_CLAUDE_TIMEOUT,
     ClaudeCLISynthesizer,
@@ -185,3 +195,41 @@ def test_cursor_overview_completion_uses_run_prompt() -> None:
     with patch.object(backend, "run_prompt", return_value="ok") as run:
         assert backend.overview_completion("hello") == "ok"
     run.assert_called_once_with("hello", timeout=120.0)
+
+
+# ─── usable_body_chars budget (#311) ───────────────────────────────────
+# Resolution, defaults and send caps are covered in test_usable_body_budget.py;
+# this keeps the cross-backend contract: every backend reports a finite
+# positive budget, and the dummy backend's is large.
+
+
+@pytest.mark.parametrize(
+    ("backend_factory", "budget_class", "window"),
+    [
+        (
+            lambda: ClaudeCLISynthesizer(claude_path="/usr/bin/claude", model="custom-model"),
+            CLAUDE_LEAN_BUDGET,
+            ASSUMED_AGENT_WINDOW_TOKENS,
+        ),
+        (
+            lambda: ClaudeCLISynthesizer(claude_path="/usr/bin/claude", model="custom-model", lean=False),
+            HEAVY_AGENT_BUDGET,
+            ASSUMED_AGENT_WINDOW_TOKENS,
+        ),
+        (lambda: CursorCLISynthesizer(model="composer-2.5"), HEAVY_AGENT_BUDGET, ASSUMED_AGENT_WINDOW_TOKENS),
+        (lambda: OllamaSynthesizer(), OLLAMA_BUDGET, DEFAULT_CONTEXT_WINDOW_TOKENS),
+    ],
+    ids=["claude_cli", "claude_cli_non_lean", "cursor_cli", "ollama"],
+)
+def test_unconfigured_backends_report_the_assumed_window_budget(backend_factory, budget_class, window) -> None:
+    """With no config and no known window: agents assume 200k, Ollama keeps its 8192 fallback."""
+    assert backend_factory().usable_body_chars() == usable_body_chars_for_window(window, budget_class)
+
+
+def test_dummy_usable_body_budget_covers_multi_section_fixtures() -> None:
+    """Dummy budget is large enough that multi-section fixtures fit in one call."""
+    budget = DummySynthesizer().usable_body_chars()
+    assert budget == DUMMY_USABLE_BODY_CHARS
+    # Multi-section fixtures in the suite are tens of KB, not millions.
+    assert budget >= 100_000
+    assert budget > DEFAULT_USABLE_BODY_CHARS * 100

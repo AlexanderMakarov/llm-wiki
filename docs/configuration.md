@@ -139,11 +139,56 @@ Minimal config:
 | Backend | What it does | Needs |
 |---|---|---|
 | `dummy` | Canned stub page: metadata summary, one `[[ProjectEntity]]` link, plain-text `## Raw Mentions`. For previews/tests. | nothing |
-| `ollama` | Local LLM over the Ollama HTTP API. Configure `synthesis.ollama.{model,base_url,timeout,max_retries}` (flat legacy keys still work). | running `ollama serve` |
-| `claude` | Synchronous `claude -p` CLI calls (#16). Prefer nested `synthesis.claude.{model,path,timeout,lean,effort}`; flat `claude_*` keys remain as fallbacks. Default model `sonnet`. | `claude` on `$PATH` (or `synthesis.claude.path` / `claude_path`) |
-| `cursor_cli` | Synchronous Cursor Agent CLI (`agent -p` / `cursor-agent`) (#230). Nested `synthesis.cursor_cli.{model,timeout}` only (default model `composer-2.5`). Binary from `$PATH` — no path key. Lean flags: `-p`, `--mode ask`, `--sandbox enabled`, `--allowed-tools truncated_tool_call` (shrinks tool schemas; still no empty system-prompt / empty-MCP switch). | `agent` or `cursor-agent` on `$PATH`, authenticated |
+| `ollama` | Local LLM over the Ollama HTTP API. Configure `synthesis.ollama.{model,base_url,timeout,max_retries,usable_body_chars,context_window_tokens}` (flat legacy keys still work for the first four). | running `ollama serve` |
+| `claude` | Synchronous `claude -p` CLI calls (#16). Prefer nested `synthesis.claude.{model,path,timeout,lean,effort,usable_body_chars,context_window_tokens}`; flat `claude_*` keys remain as fallbacks. Default model `sonnet`. | `claude` on `$PATH` (or `synthesis.claude.path` / `claude_path`) |
+| `cursor_cli` | Synchronous Cursor Agent CLI (`agent -p` / `cursor-agent`) (#230). Nested `synthesis.cursor_cli.{model,timeout,usable_body_chars,context_window_tokens}` only (default model `composer-2.5`). Binary from `$PATH` — no path key. Lean flags: `-p`, `--mode ask`, `--sandbox enabled`, `--allowed-tools truncated_tool_call` (shrinks tool schemas; still no empty system-prompt / empty-MCP switch). | `agent` or `cursor-agent` on `$PATH`, authenticated |
 
 **Not the same as session ingest.** `synthesis.backend: cursor_cli` is the *generator* that writes wiki pages. The contrib adapters `cursor_cli` (Agent CLI chats under `~/.cursor/chats/`) and `cursor_ide` (IDE Composer / `state.vscdb`) only *ingest* transcripts into `raw/` — configuring one does not select the other.
+
+### Choosing the document body budget
+
+A long document is stored whole and chunked **in memory** at synth time; each chunk is one backend call, and the outputs are stitched into one wiki page. The chunk size is the backend's **usable body budget** — how many raw-body characters one call can carry. It applies to documents only: session and evidence bodies keep the fixed 8,000-character send cap.
+
+Each backend block (`synthesis.claude`, `synthesis.cursor_cli`, `synthesis.ollama`) takes two optional keys:
+
+| Key | Meaning |
+|---|---|
+| `usable_body_chars` | Characters per document chunk, used as-is. Set this when you know exactly what you want. |
+| `context_window_tokens` | The model's context window. The budget is `usable_tokens × 2.05` characters, where `usable_tokens = window − scaffolding − 2,000 prompt − 2,600 output − working margin` (scaffolding and margin per backend class, table below). The 2.05 ratio is the measured *transcript* ratio, which is on the small side of real prose, so the budget errs toward fitting. There is no upper cap on a derived budget. The 1,000-character floor applies only to what you set yourself: a `context_window_tokens` too small for the reserves (or an explicit tiny `usable_body_chars`, used as-is). |
+
+An agent-backed call spends much of its window on things other than your body, so the derived budget reserves them per backend class:
+
+| Backend class | Scaffolding | Working margin | Example: 32,768 / 200,000-token window |
+|---|---|---|---|
+| Ollama (`/api/generate`) | ~500 tokens | `max(2,048, 10% × window)` | 50,003 / 358,545 characters |
+| Claude, `lean` on (default) | 890 tokens | `max(8,192, 25% × window)` | 39,126 / 296,245 characters |
+| Claude, `lean` off (`synthesis.claude.lean: false` / `claude_lean: false`) and Cursor CLI (never lean) | 35,000 tokens | `max(16,384, 35% × window)` | 1,000 (floor, you set a tiny window) / 185,320 characters |
+
+The scaffolding is the per-call agent context from [reference/synthesis-cost.md](reference/synthesis-cost.md); the margin is headroom for the agent's own reasoning and tool use. An explicit `usable_body_chars` is used as-is — none of these reserves apply to it.
+
+Resolution order — first hit wins:
+
+1. `usable_body_chars`;
+2. `context_window_tokens`;
+3. what the backend knows about its model — **Claude:** `haiku`, `sonnet` and `opus` (alias or full id containing the name) are 200,000 tokens, ≈400,000 characters; **Ollama:** the model's `num_ctx` read from `/api/show` (Modelfile parameter), capped by its trained context length — a trained maximum alone is *not* adopted, because the server does not load it by default; **Cursor:** `composer-2.5` and `composer-2.5-fast` are 200,000 tokens (Cursor does not publish Agent CLI windows, so any other id gets the assumed window below);
+4. the assumed window — **200,000 tokens for the agent backends** (Claude with a custom model id, Cursor), which gives ≈296,000 characters for lean Claude and ≈185,000 for non-lean Claude and Cursor; **8,192 tokens for Ollama** when its window cannot be detected, which the Ollama reserves leave at ≈2,100 characters. Set `context_window_tokens` (or `usable_body_chars`) when your model's real window is smaller or larger.
+
+The 1,000-character floor is for an explicit tiny value only. A derived default (assumed, alias, or detected window) never lands on it silently: if a window cannot carry the per-call reserves at all, llmwiki logs a warning and uses 8,000 characters (the session cap) for the agent backends, or 1,000 for Ollama, whose window is genuinely that small.
+
+Ollama page calls send `options.num_ctx` only when the window came from config (`context_window_tokens` / `usable_body_chars`) or a Modelfile `num_ctx` from `/api/show`. The assumed 8,192-token budget fallback is **not** forced onto the server, so a larger server-level default (`OLLAMA_CONTEXT_LENGTH` or the runtime default) is left alone. An explicit `usable_body_chars` larger than the window raises the requested `num_ctx` to fit, scaffolding and margin included.
+
+Claude and Cursor per-page `timeout` is the baseline for a session-sized body (≤ 8,000 characters). Larger document chunks scale that timeout linearly with body size so a lean-Claude ~296k-char chunk can finish under the default 180s unit instead of failing the whole document on the first slow call. Raise `timeout` if even the scaled budget is tight; lower `usable_body_chars` if a model degrades on long input.
+
+How to choose: leave both unset unless a run is too slow or too fragmented. Raise `context_window_tokens` to your model's real window to get fewer, larger calls. A document is capped at **512 KiB** of Markdown regardless of budget — `add` rejects a larger one. See [reference/synthesis-cost.md](reference/synthesis-cost.md#choosing-the-document-body-budget) for the cost side.
+
+```jsonc
+{
+  "synthesis": {
+    "backend": "ollama",
+    "ollama": { "model": "llama3.1:8b", "context_window_tokens": 32768 }
+  }
+}
+```
 
 Claude calls run in **lean mode** by default: tool schemas, MCP servers, skills, `CLAUDE.md`, and the agent system prompt are stripped from each invocation, since a synthesis call only reads stdout and can't use any of them. That is ~9x cheaper per page, measured — see [reference/synthesis-cost.md](reference/synthesis-cost.md) for the numbers and for why the Claude default model is `sonnet` rather than a cheaper model. Set `"lean": false` under `synthesis.claude` (or flat `"claude_lean": false`) to opt out. Cursor's lean set is ask + sandbox plus a tiny `--allowed-tools` allowlist (~25–30% less prompt than the full tool catalog on Composer); the agent system prompt still cannot be emptied for normal accounts.
 

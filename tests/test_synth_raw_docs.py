@@ -7,8 +7,8 @@ wiki — synthesis only ever walked ``raw/sessions/``. These tests cover:
 * ``_discover_raw_docs`` — discovery of ``raw/docs/`` markdown.
 * ``synthesize_new_sessions(docs_dir=...)`` — docs get source pages,
   grouped under a ``docs`` project, alongside (not instead of) sessions.
-* ``_chunk_markdown`` — oversized docs are split on headings before the
-  synthesis pass so they fit a single backend call.
+* ``_chunk_markdown`` — oversized docs are split in memory (headings first)
+  so each chunk fits one backend call; the chunks stitch into one page (#311).
 * Regression: a doc with a non-string / missing slug must not crash.
 * Provenance (#307) — a doc page claims ``source_file: raw/docs/<rel>`` and is
   tagged as a document, never as a session transcript; that claim is what makes
@@ -329,10 +329,20 @@ def test_chunk_markdown_oversized_single_section_is_hard_split():
     chunks = _chunk_markdown(text, max_chars=1000)
     assert len(chunks) >= 5
     assert all(len(c) <= 1000 for c in chunks)
-    assert "".join(chunks) == text
+    # Coverage: every character survives; only chunk-edge whitespace may go.
+    assert "".join(c.strip() for c in chunks) == text
 
 
-def test_synthesize_oversized_doc_produces_multiple_parts(tmp_path: Path):
+def test_chunk_markdown_never_exceeds_budget_with_paragraphs():
+    paras = "\n\n".join("para " + "w" * 95 for _ in range(40))
+    chunks = _chunk_markdown("## Big\n\n" + paras, max_chars=500)
+    assert len(chunks) > 1
+    assert all(len(c) <= 500 for c in chunks)
+    assert "".join(chunks).count("para ") == 40
+
+
+def test_synthesize_oversized_doc_produces_one_page(tmp_path: Path):
+    """#311: a doc over the budget is chunked in memory into ONE wiki page."""
     big = "---\nslug: big-doc\n---\n" + "\n".join(
         f"## Part {i}\n\n" + ("lorem ipsum " * 300) for i in range(6)
     )
@@ -347,8 +357,6 @@ def test_synthesize_oversized_doc_produces_multiple_parts(tmp_path: Path):
         doc_chunk_max_chars=1500,
     )
     assert summary["errors"] == []
-    parts = sorted((wiki_sources / "docs").glob("big-doc--part-*.md"))
-    assert len(parts) >= 2, f"expected multiple parts, got {parts}"
-    # Each part is a valid source page.
-    for p in parts:
-        assert "type: source" in p.read_text(encoding="utf-8")
+    assert summary["synthesized"] == 1
+    assert sorted(p.name for p in (wiki_sources / "docs").glob("*.md")) == ["big-doc.md"]
+    assert "type: source" in (wiki_sources / "docs" / "big-doc.md").read_text(encoding="utf-8")
