@@ -411,6 +411,8 @@ class BaseSynthesizer(ABC):
         raw_body: str,
         meta: dict[str, Any],
         prompt_template: str,
+        *,
+        timeout: float | None = None,
     ) -> str:
         """Given a raw session body + frontmatter, return a wiki
         source-page body (markdown). The caller handles frontmatter
@@ -419,6 +421,11 @@ class BaseSynthesizer(ABC):
 
         `prompt_template` is the contents of `prompts/source_page.md`
         with `{body}` and `{meta}` placeholders.
+
+        ``timeout`` (seconds), when set, is the wall-clock bound for this
+        call instead of the backend's usual page-timeout scaling (#264
+        known-names). When ``None``, keep the backend default (including
+        #311 body-length scaling for document chunks).
 
         Thread-safety contract: the caller may invoke this method
         concurrently on one backend instance from several threads, one call
@@ -494,7 +501,10 @@ class DummySynthesizer(BaseSynthesizer):
         raw_body: str,
         meta: dict[str, Any],
         prompt_template: str,
+        *,
+        timeout: float | None = None,
     ) -> str:
+        del timeout  # Dummy has no provider call; accept for API parity (#264).
         slug = meta.get("slug", "unknown")
         project = meta.get("project", "unknown")
         date = meta.get("date", "unknown")

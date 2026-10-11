@@ -78,7 +78,7 @@ class RealSynthesizer(BaseSynthesizer):
     def is_available(self) -> bool:
         return True
 
-    def synthesize_source_page(self, body, meta, prompt_template):
+    def synthesize_source_page(self, body, meta, prompt_template, **_kwargs):
         return (
             "## Summary\n\nReal synthesis.\n\n"
             "## Connections\n\n"
@@ -645,7 +645,7 @@ class _CountingDummy(DummySynthesizer):
     def __init__(self) -> None:
         self.calls: list[str] = []
 
-    def synthesize_source_page(self, body, meta, prompt_template):
+    def synthesize_source_page(self, body, meta, prompt_template, **_kwargs):
         self.calls.append(str(meta.get("slug", "")))
         return super().synthesize_source_page(body, meta, prompt_template)
 
@@ -663,7 +663,7 @@ class _Job1Backend(BaseSynthesizer):
     def is_available(self) -> bool:
         return True
 
-    def synthesize_source_page(self, body, meta, prompt_template):
+    def synthesize_source_page(self, body, meta, prompt_template, **_kwargs):
         slug = str(meta.get("slug", ""))
         self.calls.append(slug)
         self.prompts.append(prompt_template)

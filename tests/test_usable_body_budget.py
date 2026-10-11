@@ -634,6 +634,50 @@ def test_cursor_scales_timeout_for_large_document_chunks() -> None:
     assert timeouts == [180, page_timeout_seconds(180, 25_000)]
 
 
+def test_claude_timeout_kwarg_overrides_page_scaling() -> None:
+    """Explicit timeout= skips body-based page_timeout_seconds (#264)."""
+    backend = ClaudeCLISynthesizer(
+        claude_path="/bin/claude",
+        timeout=180,
+        body_budget=BodyBudgetConfig(usable_body_chars=30_000),
+    )
+    timeouts: list[float] = []
+
+    def _capture(*_a, **kwargs):
+        timeouts.append(float(kwargs["timeout"]))
+        return subprocess.CompletedProcess(
+            args=[], returncode=0, stdout='{"result":"ok"}', stderr=""
+        )
+
+    body = "c" * 25_000
+    with patch.object(backend, "_resolved", return_value="/bin/claude"), patch(
+        "llmwiki.synth.claude_cli.TrackedChildren.run", side_effect=_capture
+    ):
+        backend.synthesize_source_page(body, {}, TEMPLATE, timeout=600.0)
+    assert timeouts == [600.0]
+
+
+def test_cursor_timeout_kwarg_overrides_page_scaling() -> None:
+    """Explicit timeout= skips body-based page_timeout_seconds (#264)."""
+    backend = CursorCLISynthesizer(
+        timeout=180, body_budget=BodyBudgetConfig(usable_body_chars=30_000)
+    )
+    timeouts: list[float] = []
+
+    def _capture(*_a, **kwargs):
+        timeouts.append(float(kwargs["timeout"]))
+        return subprocess.CompletedProcess(args=[], returncode=0, stdout="ok", stderr="")
+
+    body = "z" * 25_000
+    with patch(
+        "llmwiki.synth.cursor_cli.resolve_cursor_agent_path", return_value="/bin/agent"
+    ), patch(
+        "llmwiki.synth.cursor_cli.TrackedChildren.run", side_effect=_capture
+    ):
+        backend.synthesize_source_page(body, {}, TEMPLATE, timeout=600.0)
+    assert timeouts == [600.0]
+
+
 def test_refresh_synth_pending_prices_docs_with_configured_backend(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -203,6 +203,22 @@ def test_synthesize_happy_path_returns_response_text():
     assert "Raw session." in payload["prompt"]
 
 
+def test_synthesize_timeout_kwarg_overrides_config_timeout():
+    """Explicit timeout= is the HTTP call bound (#264 known-names)."""
+    body = json.dumps({"response": "ok"})
+    synth, post, _ = _make_synth(
+        post_script=[(200, body)],
+        config=OllamaConfig(timeout=60, backoff_base=0.0),
+    )
+    synth.synthesize_source_page(
+        raw_body="x",
+        meta={"slug": "s"},
+        prompt_template="{body}",
+        timeout=777.0,
+    )
+    assert post.calls[0][2] == 777.0
+
+
 def test_config_prefers_the_documented_nested_ollama_block():
     """`synthesis.ollama.*` is the documented shape; flat keys are legacy."""
     cfg = load_ollama_config({
