@@ -532,6 +532,29 @@ def test_adopt_existing_worker_multiple_tabs_adopts_first_and_warns(
     assert not [c for c in calls if c[1:3] in (["tab", "create"], ["tab", "close"])]
 
 
+def test_adopt_existing_worker_agentless_tab_picks_lowest_pane_id(loop_mod):
+    """#347: a restored tab with only bare panes adopts the same pane every run."""
+    panes = [
+        {"pane_id": "wD:p9", "tab_id": "wD:t1"},
+        {"pane_id": "wD:p2", "tab_id": "wD:t1"},
+    ]
+
+    def fake_herdr(argv: list[str]) -> subprocess.CompletedProcess[str]:
+        if argv[1:3] == ["tab", "list"]:
+            tabs = [{"label": "issue-42", "tab_id": "wD:t1"}]
+            body = json.dumps({"result": {"tabs": tabs, "type": "tab_list"}})
+        elif argv[1:3] == ["pane", "list"]:
+            body = json.dumps({"result": {"panes": panes, "type": "pane_list"}})
+        else:
+            raise AssertionError(argv)
+        return subprocess.CompletedProcess(argv, 0, body, "")
+
+    worker = loop_mod.adopt_existing_worker(_issue(42), run_herdr=fake_herdr)
+    assert worker is not None
+    assert worker.pane_id == "wD:p2"
+    assert worker.agent_running is False
+
+
 def test_close_tab_id_treats_tab_not_found_as_ok(loop_mod):
     def fake_herdr(argv: list[str]) -> subprocess.CompletedProcess[str]:
         body = json.dumps(

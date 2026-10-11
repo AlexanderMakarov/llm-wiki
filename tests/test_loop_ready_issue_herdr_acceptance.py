@@ -357,14 +357,21 @@ def test_acceptance_argparse_rejects_missing_label(loop_mod):
 
 
 # @regression
-@pytest.mark.parametrize("existing_tab", [False, True], ids=["spawn", "adopt"])
+@pytest.mark.parametrize(
+    ("existing_tab", "tab_has_agent", "pr_merged"),
+    [(False, True, False), (True, True, False), (True, False, False), (True, False, True)],
+    ids=["spawn", "adopt", "adopt-no-agent", "adopt-no-agent-merged"],
+)
 def test_acceptance_run_main_loop_once_single_worker(
-    loop_mod, monkeypatch, capsys, existing_tab
+    loop_mod, monkeypatch, capsys, existing_tab, tab_has_agent, pr_merged
 ):
     """§2.5 / §2.9: serial N=1 — one worker, α wait, tab close, exit with --once.
 
     An open ``issue-N`` tab (restored herdr session, driver restart) is adopted:
     no new tab, agent start, or prompt, so in-progress delivery is not restarted.
+    #347: herdr restores tabs after a reboot without their agent; such a tab
+    gets an agent started and prompted in its pane instead of an idle wait,
+    unless a merged PR already closes the issue (only post-merge CI is left).
     """
     issues = [_issue(11, title="Only ticket", labels=[CUSTOM_LABEL], assignees=[LOGIN])]
     fake_run_gh = _fake_gh_factory(login=LOGIN, repo="o/r", issues=issues)
@@ -376,6 +383,8 @@ def test_acceptance_run_main_loop_once_single_worker(
         {"pane_id": "wD:pAgent", "tab_id": "wD:tR", "agent": "cursor"},
         {"pane_id": "wD:pOther", "tab_id": "wD:tX", "agent": "cursor"},
     ]
+    if not tab_has_agent:
+        panes = [{"pane_id": "wD:pShell", "tab_id": "wD:tR"}, panes[2]]
     waited_on: list[str] = []
 
     def fake_run_herdr(argv: list[str]) -> subprocess.CompletedProcess[str]:
@@ -414,6 +423,16 @@ def test_acceptance_run_main_loop_once_single_worker(
         return "merge + post-merge CI α"
 
     monkeypatch.setattr(loop_mod, "wait_until_ticket_advanced", fake_wait)
+    monkeypatch.setattr(
+        loop_mod,
+        "fetch_issue_merge_and_ci_status",
+        lambda _repo, number, _run_gh: {
+            "issue_number": number,
+            "issue_state": "OPEN",
+            "merge_info": {"merged": pr_merged},
+            "check_runs": [],
+        },
+    )
 
     code = loop_mod.run_main_loop(
         CUSTOM_LABEL,
@@ -431,7 +450,17 @@ def test_acceptance_run_main_loop_once_single_worker(
     assert f"1 with {CUSTOM_LABEL!r} label, 1 is assigned on {LOGIN!r}" in out
     assert "params: poll-seconds=300; agent-kind=cursor; mode=once" in out
     assert "Advanced #11 (merge + post-merge CI α); worker tab closed." in out
-    if existing_tab:
+    if existing_tab and not tab_has_agent and pr_merged:
+        assert spawn_events == ["close"]
+        assert waited_on == ["wD:pShell"]
+        assert "issue-11 tab wD:tR has no agent, but a merged PR closes the issue" in out
+        assert "issue-11 herdr tab adopted (wD:tR, no new prompt" in out
+    elif existing_tab and not tab_has_agent:
+        assert spawn_events == ["start", "prompt", "close"]
+        assert waited_on == ["wD:pShell"]
+        assert "issue-11 tab wD:tR has no agent (restored after reboot?); prompting a worker" in out
+        assert "issue-11 herdr tab re-prompted (wD:tR, new worker in the restored tab) for #11" in out
+    elif existing_tab:
         assert spawn_events == ["close"]
         assert waited_on == ["wD:pAgent"]
         assert "issue-11 herdr tab adopted (wD:tR, no new prompt; close it to restart) for #11 gh issue" in out
