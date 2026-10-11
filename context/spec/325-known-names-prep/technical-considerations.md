@@ -62,8 +62,8 @@ v1 files without fingerprint: treat as cold (full capped call once), then rewrit
 **Prepare flow:**
 
 1. Build + cap candidates.
-2. If cache present, fingerprint matches, and every capped candidate’s signature is covered by an existing topic/`source_sig` (or equivalent coverage rule): **skip LLM**; print skip/reuse report; return.
-3. Else compute **delta** = capped candidates whose signature is new or changed vs cache.
+2. If cache present with topics and `inputs_fingerprint` matches the capped set: **skip LLM**; print skip/reuse report; return. (Do not require per-topic `source_sig` coverage — model-dropped names never get one and would force a perpetual delta.)
+3. Else compute **delta** = capped candidates whose signature is new or changed vs covered set (`source_sig` ∪ `settled_sigs`).
 4. If delta non-empty: render prompt with **delta only** (same XML shape); call model with dedicated timeout; merge reply into existing `topics` / `dropped` without dropping untouched entries (preserve `description`, `aliases`, `kind`, `distinct_from` for names not in the reply).
 5. Update fingerprint + `source_sig` for processed candidates; write cache.
 

@@ -78,7 +78,7 @@ class _LimitAfterBackend(parallel_tests._RealPageBackend):
         self._ok = ok
         self.calls = 0
 
-    def synthesize_source_page(self, raw_body, meta, prompt_template):  # noqa: D102
+    def synthesize_source_page(self, raw_body, meta, prompt_template, **_kwargs):  # noqa: D102
         with self._lock:
             self.calls += 1
             limited = self.calls > self._ok
@@ -165,7 +165,7 @@ class _HeldBackend(parallel_tests._RealPageBackend):
         self.entered = threading.Event()
         self.gate = threading.Event()
 
-    def synthesize_source_page(self, raw_body, meta, prompt_template):  # noqa: D102
+    def synthesize_source_page(self, raw_body, meta, prompt_template, **_kwargs):  # noqa: D102
         with self._lock:
             self._live += 1
             if self._live >= self._parties:
@@ -270,7 +270,7 @@ class _KillableBackend(_HeldBackend):
         super().__init__(parties)
         self.kill_calls = 0
 
-    def synthesize_source_page(self, raw_body, meta, prompt_template):  # noqa: D102
+    def synthesize_source_page(self, raw_body, meta, prompt_template, **_kwargs):  # noqa: D102
         with self._lock:
             self._live += 1
             if self._live >= self._parties:
@@ -355,7 +355,7 @@ class _PrepLimitBackend(parallel_tests._RealPageBackend):
     def __init__(self) -> None:
         self.page_calls = 0
 
-    def synthesize_source_page(self, raw_body, meta, prompt_template):  # noqa: D102
+    def synthesize_source_page(self, raw_body, meta, prompt_template, **_kwargs):  # noqa: D102
         if meta.get("slug") == "known-names":
             raise _usage_limit_error()
         self.page_calls += 1
@@ -370,8 +370,16 @@ def test_usage_limit_during_known_names_prep_defers_every_source(
     vault = parallel_tests._mk_vault(tmp_path)
     slugs = tuple(f"doc{i:02d}" for i in range(5))
     parallel_tests._seed_docs(vault, slugs)
-    monkeypatch.setattr(topics_consolidate, "build_candidates", lambda wiki_dir=None: [{"name": "X"}])
-    monkeypatch.setattr(topics_consolidate, "render_consolidation_prompt", lambda wiki_dir=None: "prompt")
+    monkeypatch.setattr(
+        topics_consolidate,
+        "build_candidates",
+        lambda wiki_dir=None: [{"name": "X", "sessions": 2}],
+    )
+    monkeypatch.setattr(
+        topics_consolidate,
+        "render_consolidation_prompt",
+        lambda wiki_dir=None, candidates=None: "prompt",
+    )
     backend = _PrepLimitBackend()
 
     summary = parallel_tests._run_synth(vault, backend, concurrency=2)
@@ -401,21 +409,43 @@ def test_known_names_prep_prints_a_progress_line_before_the_call(tmp_path: Path,
     wiki = topics_tests._make_wiki(tmp_path, {"s1": ["OpenClaw", "Bun"], "s2": ["OpenClaw", "Bun"]})
     candidates = topics_consolidate.build_candidates(wiki)
     prompt = topics_consolidate.render_consolidation_prompt(wiki)
+    reply = (
+        '{"topics": [{"canonical": "OpenClaw", "kind": "entity",'
+        ' "description": "Agent platform.", "aliases": []},'
+        '{"canonical": "Bun", "kind": "concept",'
+        ' "description": "JS runtime.", "aliases": []}],'
+        ' "dropped": []}'
+    )
     seen: list[str] = []
 
     class _Llm:
         is_llm = True
 
-        def synthesize_source_page(self, raw_body, meta, prompt_template):
+        def synthesize_source_page(self, raw_body, meta, prompt_template, **_kwargs):
             seen.append(capsys.readouterr().out)
-            return '{"topics": [], "dropped": []}'
+            return reply
 
     topics_consolidate.prepare_known_names(wiki, _Llm())
 
     size = topics_consolidate.format_prompt_size(len(prompt.encode("utf-8")))
+    prompt_bytes = len(prompt.encode("utf-8"))
+    reply_bytes = len(reply.encode("utf-8"))
     assert len(seen) == 1
-    assert f"Preparing known names from {len(candidates)} candidate topic(s)" in seen[0]
+    # Cold cache: full mode sends every capped candidate (delta == capped).
+    assert (
+        f"Preparing known names (full): {len(candidates)} of "
+        f"{len(candidates)} candidate topic(s)"
+    ) in seen[0]
     assert f"({size} prompt)" in seen[0]
+    # Completion line (§2.6): mode, counts, byte sizes, duration.
+    out = capsys.readouterr().out
+    assert "Known names ready (" in out
+    assert "mode=full" in out
+    assert f"considered={len(candidates)}" in out
+    assert f"sent={len(candidates)}" in out
+    assert f"prompt={prompt_bytes} B" in out
+    assert f"reply={reply_bytes} B" in out
+    assert "duration=" in out
 
 
 def test_known_names_prep_prints_nothing_without_candidates(tmp_path: Path, capsys) -> None:
@@ -425,12 +455,83 @@ def test_known_names_prep_prints_nothing_without_candidates(tmp_path: Path, caps
     class _Llm:
         is_llm = True
 
-        def synthesize_source_page(self, raw_body, meta, prompt_template):
+        def synthesize_source_page(self, raw_body, meta, prompt_template, **_kwargs):
             raise AssertionError("no candidates must not call the model")
 
     topics_consolidate.prepare_known_names(wiki, _Llm())
 
-    assert "Preparing known names" not in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "Preparing known names" not in out
+    assert "Known names ready" not in out
+    assert "Reusing cached known names" not in out
+
+
+def test_known_names_prep_skip_reports_zero_sent_and_sizes(tmp_path: Path, capsys) -> None:
+    """Skip path is visibly distinct and reports sent/prompt/reply as zero (#264 §2.6)."""
+    wiki = topics_tests._make_wiki(tmp_path, {"s1": ["OpenClaw", "Bun"], "s2": ["OpenClaw", "Bun"]})
+    cfg = {"synthesis": {"known_names": {"candidate_cap": 150}}}
+
+    class _Llm:
+        is_llm = True
+        timeout = 120
+
+        def synthesize_source_page(self, raw_body, meta, prompt_template, **_kwargs):
+            return (
+                '{"topics": [{"canonical": "OpenClaw", "kind": "entity",'
+                ' "description": "Agent platform.", "aliases": []},'
+                '{"canonical": "Bun", "kind": "concept",'
+                ' "description": "JS runtime.", "aliases": []}],'
+                ' "dropped": []}'
+            )
+
+    topics_consolidate.prepare_known_names(wiki, _Llm(), cfg=cfg)
+    capsys.readouterr()  # discard cold-run output
+    candidates = topics_consolidate.build_candidates(wiki)
+
+    topics_consolidate.prepare_known_names(wiki, _Llm(), cfg=cfg)
+    out = capsys.readouterr().out
+    assert "Reusing cached known names" in out
+    assert "mode=skip" in out
+    assert f"considered={len(candidates)}" in out
+    assert "sent=0" in out
+    assert "prompt=0 B" in out
+    assert "reply=0 B" in out
+    assert "duration=" in out
+    assert "Preparing known names" not in out
+
+
+def test_known_names_prep_includes_usage_when_backend_reports_it(
+    tmp_path: Path, capsys
+) -> None:
+    """Tokens/cost appear on the ready line only when take_usage attributes them."""
+    wiki = topics_tests._make_wiki(tmp_path, {"s1": ["OpenClaw"], "s2": ["OpenClaw"]})
+
+    class _Llm:
+        is_llm = True
+        _tokens = 0
+        _cost = 0.0
+        _has = False
+
+        def synthesize_source_page(self, raw_body, meta, prompt_template, **_kwargs):
+            self._tokens += 1234
+            self._cost += 0.0123
+            self._has = True
+            return (
+                '{"topics": [{"canonical": "OpenClaw", "kind": "entity",'
+                ' "description": "Agent platform.", "aliases": []}],'
+                ' "dropped": []}'
+            )
+
+        def take_usage(self):
+            if not self._has:
+                return None, None
+            return self._tokens, self._cost
+
+    topics_consolidate.prepare_known_names(wiki, _Llm())
+    out = capsys.readouterr().out
+    assert "Known names ready (" in out
+    assert "tokens=1,234" in out
+    assert "cost=$0.0123" in out
 
 
 @pytest.mark.parametrize(

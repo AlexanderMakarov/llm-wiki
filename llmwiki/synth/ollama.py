@@ -398,6 +398,7 @@ class OllamaSynthesizer(BaseSynthesizer):
         prompt_template: str,
         *,
         body_cap: int = SESSION_BODY_SEND_CAP_CHARS,
+        timeout: float | None = None,
     ) -> str:
         """Render ``prompt_template`` with the session body + metadata
         and send it to Ollama. Returns the model's raw completion text.
@@ -435,7 +436,8 @@ class OllamaSynthesizer(BaseSynthesizer):
         if stable:
             payload["system"] = stable
 
-        data = self._call_generate(payload)
+        # Explicit timeout wins (known-names / #264); else config.timeout.
+        data = self._call_generate(payload, timeout=timeout)
         response = data.get("response", "")
         if not isinstance(response, str):
             raise OllamaError(
@@ -445,15 +447,24 @@ class OllamaSynthesizer(BaseSynthesizer):
 
     # ---- internals -----------------------------------------------
 
-    def _call_generate(self, payload: dict[str, Any]) -> dict[str, Any]:
-        """POST to /api/generate with retry + backoff."""
+    def _call_generate(
+        self,
+        payload: dict[str, Any],
+        *,
+        timeout: float | None = None,
+    ) -> dict[str, Any]:
+        """POST to /api/generate with retry + backoff.
+
+        ``timeout`` overrides ``config.timeout`` when set (#264 known-names).
+        """
+        call_timeout = float(timeout) if timeout is not None else self.config.timeout
         last_exc: Exception | None = None
         for attempt in range(1, self.config.max_retries + 1):
             try:
                 status, body = self._http_post(
                     self.config.generate_url,
                     payload,
-                    timeout=self.config.timeout,
+                    timeout=call_timeout,
                 )
             except OllamaUnavailableError:
                 # Connection refused / DNS failure — don't retry. The

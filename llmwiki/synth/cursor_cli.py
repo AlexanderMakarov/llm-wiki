@@ -297,12 +297,17 @@ class CursorCLISynthesizer(BaseSynthesizer):
         prompt_template: str,
         *,
         body_cap: int = SESSION_BODY_SEND_CAP_CHARS,
+        timeout: float | None = None,
     ) -> str:
         # Sessions / evidence keep the historical cap; a document chunk
         # arrives already within usable_body_chars and is sent whole (#311).
         truncated_body = raw_body[:body_cap] if raw_body else ""
-        # Large document chunks need more wall clock than a session page (#311).
-        call_timeout = page_timeout_seconds(self.timeout, len(truncated_body))
+        # Explicit timeout wins (known-names / #264); else scale with body (#311).
+        call_timeout = (
+            float(timeout)
+            if timeout is not None
+            else page_timeout_seconds(self.timeout, len(truncated_body))
+        )
         # Cursor Agent CLI has no documented ``--system-prompt`` channel
         # (unlike ``claude -p``), but Cursor *does* bill prompt-cache
         # read/write at the provider layer. Put the run-stable template

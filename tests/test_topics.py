@@ -7,7 +7,12 @@ vocabulary injection.
 
 from __future__ import annotations
 
+import hashlib
+import json
+import logging
 from pathlib import Path
+
+import pytest
 
 from llmwiki.candidates import discard
 from llmwiki.candidates_harvest import harvest_targets, write_stubs
@@ -22,10 +27,21 @@ from llmwiki.topics import (
     topic_slug,
 )
 from llmwiki.topics_consolidate import (
+    CACHE_VERSION,
+    DEFAULT_KNOWN_NAMES_CANDIDATE_CAP,
+    DEFAULT_KNOWN_NAMES_TIMEOUT_FLOOR,
+    KnownNamesConfig,
     build_candidates,
+    cache_path,
+    candidate_source_sig,
+    cap_candidates,
+    inputs_fingerprint,
+    load_cache,
     parse_and_cache,
     prepare_known_names,
+    reach_bucket,
     render_consolidation_prompt,
+    resolve_known_names_config,
 )
 from llmwiki.topics_page import (
     KIND_OTHER_LABEL,
@@ -512,7 +528,7 @@ def test_prepare_known_names_calls_llm_once_and_caches(tmp_path: Path):
         def __init__(self) -> None:
             self.calls: list[dict] = []
 
-        def synthesize_source_page(self, raw_body, meta, prompt_template):
+        def synthesize_source_page(self, raw_body, meta, prompt_template, **_kwargs):
             self.calls.append({"slug": meta.get("slug"), "prompt": prompt_template})
             return (
                 '{"topics": [{"canonical": "OpenClaw", "kind": "entity",'
@@ -547,7 +563,677 @@ def test_prepare_known_names_warns_on_failure_without_raising(tmp_path: Path, ca
     prepare_known_names(wiki, _Boom())  # must not raise
     err = capsys.readouterr().err
     assert "prepare_known_names failed" in err
+    assert "mode=full" in err
+    assert "sent=1" in err
+    assert "reply=0 B" in err
+    assert "duration=" in err
     assert not (tmp_path / ".llmwiki-topics.json").is_file()
+
+
+# ─── #264 known-names config (# @spec: 325-known-names-prep) ─────────────
+
+
+@pytest.mark.parametrize(
+    "cfg",
+    [None, {}, {"synthesis": {}}, {"synthesis": None}, {"synthesis": {"known_names": {}}}],
+)
+def test_known_names_config_defaults_when_unset(
+    cfg: dict | None, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Unset known_names keys resolve to cap 150 and max(600, page timeout)."""
+    with caplog.at_level(logging.WARNING, logger="llmwiki.topics_consolidate"):
+        resolved = resolve_known_names_config(cfg, backend_page_timeout=120)
+    assert resolved == KnownNamesConfig(
+        candidate_cap=DEFAULT_KNOWN_NAMES_CANDIDATE_CAP,
+        timeout=DEFAULT_KNOWN_NAMES_TIMEOUT_FLOOR,
+    )
+    assert caplog.records == []
+
+
+def test_known_names_timeout_default_tracks_higher_page_timeout(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """When the backend page timeout exceeds 600, the known-names default follows it."""
+    with caplog.at_level(logging.WARNING, logger="llmwiki.topics_consolidate"):
+        resolved = resolve_known_names_config(None, backend_page_timeout=900)
+    assert resolved.timeout == 900
+    assert resolved.candidate_cap == DEFAULT_KNOWN_NAMES_CANDIDATE_CAP
+    assert caplog.records == []
+
+
+def test_known_names_config_honours_explicit_values(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Explicit positive ints pass through without clamping or warnings."""
+    cfg = {"synthesis": {"known_names": {"candidate_cap": 40, "timeout": 180}}}
+    with caplog.at_level(logging.WARNING, logger="llmwiki.topics_consolidate"):
+        resolved = resolve_known_names_config(cfg, backend_page_timeout=900)
+    assert resolved == KnownNamesConfig(candidate_cap=40, timeout=180)
+    assert caplog.records == []
+
+
+@pytest.mark.parametrize("value", [0, -1, "two", 2.5, True, False, None, []])
+def test_known_names_candidate_cap_falls_back_with_warning(
+    value: object, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Invalid candidate_cap warns and falls back to 150 rather than crashing synth."""
+    cfg = {"synthesis": {"known_names": {"candidate_cap": value}}}
+    with caplog.at_level(logging.WARNING, logger="llmwiki.topics_consolidate"):
+        resolved = resolve_known_names_config(cfg, backend_page_timeout=120)
+    assert resolved.candidate_cap == DEFAULT_KNOWN_NAMES_CANDIDATE_CAP
+    assert resolved.timeout == DEFAULT_KNOWN_NAMES_TIMEOUT_FLOOR
+    assert len(caplog.records) == 1
+    assert "synthesis.known_names.candidate_cap" in caplog.records[0].getMessage()
+
+
+@pytest.mark.parametrize("value", [0, -1, "slow", 1.5, True, False, None, {}])
+def test_known_names_timeout_falls_back_with_warning(
+    value: object, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Invalid timeout warns and falls back to max(600, page timeout)."""
+    cfg = {"synthesis": {"known_names": {"timeout": value}}}
+    with caplog.at_level(logging.WARNING, logger="llmwiki.topics_consolidate"):
+        resolved = resolve_known_names_config(cfg, backend_page_timeout=900)
+    assert resolved.timeout == 900
+    assert resolved.candidate_cap == DEFAULT_KNOWN_NAMES_CANDIDATE_CAP
+    assert len(caplog.records) == 1
+    assert "synthesis.known_names.timeout" in caplog.records[0].getMessage()
+
+
+def test_known_names_config_rejects_non_mapping_block(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A mistyped known_names value (not a dict) falls back to both defaults."""
+    cfg = {"synthesis": {"known_names": "cap=150"}}
+    with caplog.at_level(logging.WARNING, logger="llmwiki.topics_consolidate"):
+        resolved = resolve_known_names_config(cfg, backend_page_timeout=120)
+    assert resolved == KnownNamesConfig(
+        candidate_cap=DEFAULT_KNOWN_NAMES_CANDIDATE_CAP,
+        timeout=DEFAULT_KNOWN_NAMES_TIMEOUT_FLOOR,
+    )
+    assert len(caplog.records) == 1
+    assert "synthesis.known_names" in caplog.records[0].getMessage()
+
+
+def test_cap_candidates_orders_by_reach_then_name() -> None:
+    """Cap sorts sessions desc, name asc, then truncates (#264 / FR1)."""
+    rows = [
+        {"name": "Zebra", "sessions": 2},
+        {"name": "Alpha", "sessions": 5},
+        {"name": "MidB", "sessions": 3},
+        {"name": "MidA", "sessions": 3},
+        {"name": "Beta", "sessions": 4},
+    ]
+    capped = cap_candidates(rows, 3)
+    assert [c["name"] for c in capped] == ["Alpha", "Beta", "MidA"]
+    # Original list is not mutated; below-cut names stay available to callers.
+    assert [c["name"] for c in rows] == ["Zebra", "Alpha", "MidB", "MidA", "Beta"]
+
+
+@pytest.mark.parametrize(
+    ("sessions", "expected"),
+    [
+        (1, "1"),
+        (2, "2-3"),
+        (3, "2-3"),
+        (4, "4-7"),
+        (7, "4-7"),
+        (8, "8-15"),
+        (15, "8-15"),
+        (16, "16-31"),
+        (31, "16-31"),
+        (32, "32+"),
+        (100, "32+"),
+    ],
+)
+def test_reach_bucket_boundaries(sessions: int, expected: str) -> None:
+    """Reach buckets only flip on meaningful growth (#264 / FR2).
+
+    # @spec: 325-known-names-prep
+    """
+    assert reach_bucket(sessions) == expected
+
+
+def test_candidate_source_sig_casefolds_and_sorts_aka() -> None:
+    """Signature is casefold(name) | sorted casefold(aka) | bucket.
+
+    # @spec: 325-known-names-prep
+    """
+    sig = candidate_source_sig(
+        {"name": "OpenClaw", "sessions": 5, "aka": ["OC", "open-claw", "Bun"]}
+    )
+    assert sig == "openclaw | bun,oc,open-claw | 4-7"
+
+
+def test_inputs_fingerprint_is_sha256_of_sorted_sigs() -> None:
+    """Capped-set fingerprint is SHA-256 hex over sorted signatures.
+
+    # @spec: 325-known-names-prep
+    """
+    rows = [
+        {"name": "Zed", "sessions": 2, "aka": []},
+        {"name": "Alpha", "sessions": 10, "aka": ["A"]},
+    ]
+    sigs = sorted(candidate_source_sig(c) for c in rows)
+    expected = hashlib.sha256("\n".join(sigs).encode("utf-8")).hexdigest()
+    assert inputs_fingerprint(rows) == expected
+    assert len(inputs_fingerprint(rows)) == 64
+    # Order of the input list must not change the fingerprint.
+    assert inputs_fingerprint(list(reversed(rows))) == expected
+
+
+def test_parse_and_cache_writes_v2_with_fingerprint_and_source_sig(
+    tmp_path: Path,
+) -> None:
+    """Successful write emits version 2 + fingerprint + per-topic source_sig.
+
+    # @spec: 325-known-names-prep
+    """
+    wiki = _make_wiki(tmp_path, {"s1": ["OpenClaw"], "s2": ["OpenClaw"]})
+    candidate = {"name": "OpenClaw", "sessions": 2, "aka": ["OC"]}
+    sig = candidate_source_sig(candidate)
+    fp = inputs_fingerprint([candidate])
+    reply = (
+        '{"topics": [{"canonical": "OpenClaw", "kind": "entity",'
+        ' "description": "Agent platform.", "aliases": ["OC"]}],'
+        ' "dropped": []}'
+    )
+    cache = parse_and_cache(
+        reply,
+        wiki,
+        inputs_fingerprint=fp,
+        source_sigs={"OpenClaw": sig},
+    )
+    assert cache["version"] == CACHE_VERSION == 2
+    assert cache["inputs_fingerprint"] == fp
+    assert cache["topics"][0]["source_sig"] == sig
+    assert cache["topics"][0]["kind"] == "entity"
+
+    loaded = load_cache(wiki)
+    assert loaded is not None
+    assert loaded["inputs_fingerprint"] == fp
+    assert loaded["kinds"]["OpenClaw"] == "entity"
+    assert loaded["descriptions"]["OpenClaw"] == "Agent platform."
+    assert loaded["alias_map"]["oc"] == "OpenClaw"
+    assert loaded["topics"][0]["source_sig"] == sig
+
+
+def test_parse_and_cache_migrates_v1_on_next_write(tmp_path: Path) -> None:
+    """A v1 on-disk cache is rewritten as v2 on the next successful parse.
+
+    # @spec: 325-known-names-prep
+    """
+    wiki = _make_wiki(tmp_path, {"s1": ["OpenClaw"], "s2": ["OpenClaw"]})
+    v1 = {
+        "version": 1,
+        "topics": [
+            {
+                "canonical": "OpenClaw",
+                "description": "old.",
+                "aliases": [],
+                "kind": "entity",
+            }
+        ],
+        "dropped": [],
+    }
+    cache_path(wiki).write_text(json.dumps(v1), encoding="utf-8")
+
+    # v1 still loads for consumers (kinds / descriptions / aliases).
+    loaded_v1 = load_cache(wiki)
+    assert loaded_v1 is not None
+    assert loaded_v1["kinds"]["OpenClaw"] == "entity"
+    assert loaded_v1["descriptions"]["OpenClaw"] == "old."
+    assert "inputs_fingerprint" not in loaded_v1
+
+    reply = (
+        '{"topics": [{"canonical": "OpenClaw", "kind": "entity",'
+        ' "description": "Agent platform.", "aliases": []}], "dropped": []}'
+    )
+    fp = "a" * 64
+    cache = parse_and_cache(reply, wiki, inputs_fingerprint=fp)
+    assert cache["version"] == 2
+    assert cache["inputs_fingerprint"] == fp
+    on_disk = json.loads(cache_path(wiki).read_text(encoding="utf-8"))
+    assert on_disk["version"] == 2
+    assert on_disk["inputs_fingerprint"] == fp
+
+
+def test_load_cache_v1_without_fingerprint_exposes_consumer_fields(
+    tmp_path: Path,
+) -> None:
+    """Legacy v1 files keep working until the next successful write.
+
+    # @spec: 325-known-names-prep
+    """
+    wiki = tmp_path / "wiki"
+    wiki.mkdir()
+    cache_path(wiki).write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "topics": [
+                    {
+                        "canonical": "Bun",
+                        "description": "JS runtime.",
+                        "aliases": ["bun.js"],
+                        "kind": "concept",
+                    }
+                ],
+                "dropped": ["noise"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    loaded = load_cache(wiki)
+    assert loaded is not None
+    assert loaded["kinds"] == {"Bun": "concept"}
+    assert loaded["descriptions"] == {"Bun": "JS runtime."}
+    assert loaded["alias_map"]["bun.js"] == "Bun"
+    assert loaded["dropped"] == ["noise"]
+    assert "inputs_fingerprint" not in loaded
+
+
+def test_prepare_known_names_sends_exactly_candidate_cap(tmp_path: Path) -> None:
+    """Over-cap vault: prompt carries exactly the cap, highest reach first.
+
+    # @spec: 325-known-names-prep
+    """
+    # Reach: High=5, Mid=4, LowA=3, LowB=3, Extra=2, Tiny=2 → cap 3 keeps
+    # High, Mid, LowA (LowA before LowB on name tie-break).
+    wiki = _make_wiki(
+        tmp_path,
+        {
+            "s1": ["High", "Mid", "LowA", "LowB", "Extra", "Tiny"],
+            "s2": ["High", "Mid", "LowA", "LowB", "Extra", "Tiny"],
+            "s3": ["High", "Mid", "LowA", "LowB"],
+            "s4": ["High", "Mid"],
+            "s5": ["High"],
+        },
+    )
+    all_names = {c["name"] for c in build_candidates(wiki)}
+    assert all_names == {"High", "Mid", "LowA", "LowB", "Extra", "Tiny"}
+
+    class _Spy:
+        is_llm = True
+        timeout = 120
+        prompt: str = ""
+
+        def synthesize_source_page(self, raw_body, meta, prompt_template, **_kwargs):
+            self.prompt = prompt_template
+            return (
+                '{"topics": [{"canonical": "High", "description": "top.",'
+                ' "aliases": []}], "dropped": []}'
+            )
+
+    spy = _Spy()
+    prepare_known_names(
+        wiki,
+        spy,
+        cfg={"synthesis": {"known_names": {"candidate_cap": 3}}},
+    )
+
+    # Exactly three <candidate> rows, in reach order.
+    names_in_prompt = [
+        line.split('name="', 1)[1].split('"', 1)[0]
+        for line in spy.prompt.splitlines()
+        if "<candidate " in line
+    ]
+    assert names_in_prompt == ["High", "Mid", "LowA"]
+    assert 'name="LowB"' not in spy.prompt
+    assert 'name="Extra"' not in spy.prompt
+    assert 'name="Tiny"' not in spy.prompt
+
+
+def test_prepare_known_names_passes_resolved_timeout(
+    tmp_path: Path,
+) -> None:
+    """prepare_known_names passes kn.timeout into synthesize_source_page (#264).
+
+    # @spec: 325-known-names-prep
+    """
+    wiki = _make_wiki(
+        tmp_path,
+        {
+            "s1": ["OpenClaw"],
+            "s2": ["OpenClaw"],
+        },
+    )
+
+    class _Spy:
+        is_llm = True
+        timeout = 120
+        kwargs: dict = {}
+
+        def synthesize_source_page(self, raw_body, meta, prompt_template, **kwargs):
+            self.kwargs = kwargs
+            return (
+                '{"topics": [{"canonical": "OpenClaw", "kind": "entity",'
+                ' "description": "Agent platform.", "aliases": []}],'
+                ' "dropped": []}'
+            )
+
+    spy = _Spy()
+    prepare_known_names(
+        wiki,
+        spy,
+        cfg={"synthesis": {"known_names": {"timeout": 777}}},
+    )
+    assert spy.kwargs.get("timeout") == 777.0
+
+
+def test_prepare_known_names_skips_llm_when_fingerprint_and_coverage_match(
+    tmp_path: Path,
+) -> None:
+    """Second identical prepare → zero synthesize_source_page calls; kinds still load.
+
+    # @spec: 325-known-names-prep
+    """
+    wiki = _make_wiki(
+        tmp_path,
+        {
+            "s1": ["OpenClaw", "Bun"],
+            "s2": ["OpenClaw", "Bun"],
+        },
+    )
+
+    class _Spy:
+        is_llm = True
+        timeout = 120
+        calls = 0
+
+        def synthesize_source_page(self, raw_body, meta, prompt_template, **_kwargs):
+            self.calls += 1
+            return (
+                '{"topics": [{"canonical": "OpenClaw", "kind": "entity",'
+                ' "description": "Agent platform.", "aliases": []},'
+                '{"canonical": "Bun", "kind": "concept",'
+                ' "description": "JS runtime.", "aliases": []}],'
+                ' "dropped": []}'
+            )
+
+    spy = _Spy()
+    cfg = {"synthesis": {"known_names": {"candidate_cap": 150}}}
+    prepare_known_names(wiki, spy, cfg=cfg)
+    assert spy.calls == 1
+    loaded = load_cache(wiki)
+    assert loaded is not None
+    assert loaded["kinds"]["OpenClaw"] == "entity"
+    assert loaded["kinds"]["Bun"] == "concept"
+    assert "inputs_fingerprint" in loaded
+    disk_after_first = cache_path(wiki).read_text(encoding="utf-8")
+
+    prepare_known_names(wiki, spy, cfg=cfg)
+    assert spy.calls == 1  # zero additional calls
+    again = load_cache(wiki)
+    assert again is not None
+    assert again["kinds"]["OpenClaw"] == "entity"
+    assert again["kinds"]["Bun"] == "concept"
+    assert again["descriptions"]["OpenClaw"] == "Agent platform."
+    assert again["descriptions"]["Bun"] == "JS runtime."
+    # Skip path must not rewrite the on-disk cache.
+    assert cache_path(wiki).read_text(encoding="utf-8") == disk_after_first
+
+
+def test_prepare_known_names_one_new_candidate_delta_merges_prior_fields(
+    tmp_path: Path,
+) -> None:
+    """One new candidate → one delta call; prior topic fields survive the merge.
+
+    # @spec: 325-known-names-prep
+    """
+    wiki = _make_wiki(
+        tmp_path,
+        {
+            "s1": ["OpenClaw", "Bun"],
+            "s2": ["OpenClaw", "Bun"],
+        },
+    )
+    cfg = {"synthesis": {"known_names": {"candidate_cap": 150}}}
+
+    class _Spy:
+        is_llm = True
+        timeout = 120
+
+        def __init__(self) -> None:
+            self.calls = 0
+            self.prompts: list[str] = []
+
+        def synthesize_source_page(self, raw_body, meta, prompt_template, **_kwargs):
+            self.calls += 1
+            self.prompts.append(prompt_template)
+            if self.calls == 1:
+                return (
+                    '{"topics": [{"canonical": "OpenClaw", "kind": "entity",'
+                    ' "description": "Agent platform.", "aliases": ["OC"],'
+                    ' "distinct_from": ["Claude"]},'
+                    '{"canonical": "Bun", "kind": "concept",'
+                    ' "description": "JS runtime.", "aliases": []}],'
+                    ' "dropped": []}'
+                )
+            # Delta reply: only the new name; omit prior topics entirely.
+            return (
+                '{"topics": [{"canonical": "Zed", "kind": "entity",'
+                ' "description": "Editor.", "aliases": []}],'
+                ' "dropped": []}'
+            )
+
+    spy = _Spy()
+    prepare_known_names(wiki, spy, cfg=cfg)
+    assert spy.calls == 1
+    prior = load_cache(wiki)
+    assert prior is not None
+    assert prior["kinds"]["OpenClaw"] == "entity"
+    assert prior["kinds"]["Bun"] == "concept"
+    assert prior["descriptions"]["OpenClaw"] == "Agent platform."
+    assert prior["alias_map"]["oc"] == "OpenClaw"
+
+    # Add one new candidate (Zed in two sessions) without changing prior reach.
+    src = wiki / "sources" / "proj"
+    (src / "s3.md").write_text(
+        _session(["Zed"], stem="s3"), encoding="utf-8"
+    )
+    (src / "s4.md").write_text(
+        _session(["Zed"], stem="s4"), encoding="utf-8"
+    )
+
+    prepare_known_names(wiki, spy, cfg=cfg)
+    assert spy.calls == 2  # exactly one delta call
+    delta_prompt = spy.prompts[1]
+    names_in_prompt = [
+        line.split('name="', 1)[1].split('"', 1)[0]
+        for line in delta_prompt.splitlines()
+        if "<candidate " in line
+    ]
+    assert names_in_prompt == ["Zed"]
+    assert 'name="OpenClaw"' not in delta_prompt
+    assert 'name="Bun"' not in delta_prompt
+
+    merged = load_cache(wiki)
+    assert merged is not None
+    by_name = {t["canonical"]: t for t in merged["topics"]}
+    assert by_name["OpenClaw"]["description"] == "Agent platform."
+    assert by_name["OpenClaw"]["aliases"] == ["OC"]
+    assert by_name["OpenClaw"]["kind"] == "entity"
+    assert by_name["OpenClaw"]["distinct_from"] == ["Claude"]
+    assert by_name["Bun"]["description"] == "JS runtime."
+    assert by_name["Bun"]["kind"] == "concept"
+    assert by_name["Zed"]["description"] == "Editor."
+    assert by_name["Zed"]["kind"] == "entity"
+    assert merged["kinds"]["OpenClaw"] == "entity"
+    assert merged["kinds"]["Bun"] == "concept"
+    assert merged["kinds"]["Zed"] == "entity"
+
+
+def test_parse_and_cache_merge_into_preserves_untouched_kind(
+    tmp_path: Path,
+) -> None:
+    """Delta merge keeps description/aliases/kind on names absent from the reply.
+
+    # @spec: 325-known-names-prep
+    """
+    wiki = _make_wiki(
+        tmp_path,
+        {
+            "s1": ["OpenClaw", "Bun"],
+            "s2": ["OpenClaw", "Bun"],
+        },
+    )
+    existing = {
+        "version": 2,
+        "inputs_fingerprint": "old",
+        "topics": [
+            {
+                "canonical": "OpenClaw",
+                "description": "keep me.",
+                "aliases": ["OC"],
+                "kind": "entity",
+                "distinct_from": ["Claude"],
+                "source_sig": "openclaw | oc | 2-3",
+            },
+            {
+                "canonical": "Bun",
+                "description": "stale bun.",
+                "aliases": [],
+                "kind": "concept",
+                "source_sig": "bun |  | 2-3",
+            },
+        ],
+        "dropped": ["noise"],
+    }
+    reply = (
+        '{"topics": [{"canonical": "Bun", "description": "JS runtime.",'
+        ' "aliases": ["bun.js"]}], "dropped": ["other"]}'
+    )
+    cache = parse_and_cache(
+        reply,
+        wiki,
+        inputs_fingerprint="b" * 64,
+        source_sigs={"Bun": "bun | bun.js | 2-3"},
+        merge_into=existing,
+    )
+    by_name = {t["canonical"]: t for t in cache["topics"]}
+    assert by_name["OpenClaw"]["description"] == "keep me."
+    assert by_name["OpenClaw"]["aliases"] == ["OC"]
+    assert by_name["OpenClaw"]["kind"] == "entity"
+    assert by_name["OpenClaw"]["distinct_from"] == ["Claude"]
+    assert by_name["Bun"]["description"] == "JS runtime."
+    assert by_name["Bun"]["aliases"] == ["bun.js"]
+    # Reply omitted kind → retain prior concept.
+    assert by_name["Bun"]["kind"] == "concept"
+    assert by_name["Bun"]["source_sig"] == "bun | bun.js | 2-3"
+    assert "noise" in cache["dropped"]
+    assert "other" in cache["dropped"]
+
+
+def test_parse_and_cache_malformed_reply_does_not_corrupt_disk(
+    tmp_path: Path,
+) -> None:
+    """Malformed consolidation JSON raises without rewriting .llmwiki-topics.json.
+
+    # @spec: 325-known-names-prep
+    """
+    wiki = _make_wiki(
+        tmp_path,
+        {
+            "s1": ["OpenClaw"],
+            "s2": ["OpenClaw"],
+        },
+    )
+    prior = {
+        "version": 2,
+        "inputs_fingerprint": "a" * 64,
+        "topics": [
+            {
+                "canonical": "OpenClaw",
+                "description": "keep me.",
+                "aliases": ["OC"],
+                "kind": "entity",
+                "source_sig": "openclaw | oc | 2-3",
+            }
+        ],
+        "dropped": [],
+    }
+    path = cache_path(wiki)
+    path.write_text(json.dumps(prior, indent=2), encoding="utf-8")
+    before = path.read_text(encoding="utf-8")
+
+    with pytest.raises((ValueError, json.JSONDecodeError)):
+        parse_and_cache("this is not consolidation json", wiki)
+    assert path.read_text(encoding="utf-8") == before
+
+    with pytest.raises(ValueError, match="topics"):
+        parse_and_cache('{"topics": []}', wiki)
+    assert path.read_text(encoding="utf-8") == before
+
+    loaded = load_cache(wiki)
+    assert loaded is not None
+    assert loaded["kinds"]["OpenClaw"] == "entity"
+    assert loaded["descriptions"]["OpenClaw"] == "keep me."
+
+
+def test_prepare_known_names_malformed_reply_does_not_corrupt_cache(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    """prepare_known_names warns on a bad reply and leaves the prior cache intact.
+
+    # @spec: 325-known-names-prep
+    """
+    wiki = _make_wiki(
+        tmp_path,
+        {
+            "s1": ["OpenClaw"],
+            "s2": ["OpenClaw"],
+        },
+    )
+    cfg = {"synthesis": {"known_names": {"candidate_cap": 150}}}
+
+    class _Spy:
+        is_llm = True
+        timeout = 120
+        calls = 0
+        broken = False
+
+        def synthesize_source_page(self, raw_body, meta, prompt_template, **_kwargs):
+            self.calls += 1
+            if self.broken:
+                return "<<<truncated reply — not JSON>>>"
+            return (
+                '{"topics": [{"canonical": "OpenClaw", "kind": "entity",'
+                ' "description": "Agent platform.", "aliases": ["OC"]}],'
+                ' "dropped": []}'
+            )
+
+    spy = _Spy()
+    prepare_known_names(wiki, spy, cfg=cfg)
+    assert spy.calls == 1
+    before = cache_path(wiki).read_text(encoding="utf-8")
+    prior = load_cache(wiki)
+    assert prior is not None
+    assert prior["kinds"]["OpenClaw"] == "entity"
+
+    # Force a second LLM call under fingerprint-alone skip (#264): clear
+    # inputs_fingerprint / settled_sigs (and topic source_sig) so prepare
+    # cannot skip, then fail the reply and assert the on-disk cache is unchanged.
+    raw = json.loads(before)
+    raw.pop("inputs_fingerprint", None)
+    raw.pop("settled_sigs", None)
+    for topic in raw["topics"]:
+        topic.pop("source_sig", None)
+    cache_path(wiki).write_text(json.dumps(raw, indent=2), encoding="utf-8")
+    expected_disk = cache_path(wiki).read_text(encoding="utf-8")
+
+    spy.broken = True
+    prepare_known_names(wiki, spy, cfg=cfg)  # must not raise
+    assert spy.calls == 2
+    err = capsys.readouterr().err
+    assert "prepare_known_names failed" in err
+    assert cache_path(wiki).read_text(encoding="utf-8") == expected_disk
+    again = load_cache(wiki)
+    assert again is not None
+    assert again["kinds"]["OpenClaw"] == "entity"
+    assert again["descriptions"]["OpenClaw"] == "Agent platform."
+    assert again["alias_map"]["oc"] == "OpenClaw"
 
 
 def test_consolidation_dropped_excluded_from_graph(tmp_path: Path):
@@ -945,3 +1631,40 @@ def test_redirected_name_maps_onto_the_target_topic(tmp_path: Path):
     assert topic.canonical == "OpenClaw"
     assert "claw thing" in topic.aliases
     assert topic.sessions == {"s1", "s2", "s3"}
+
+
+def test_prepare_known_names_skips_when_fingerprint_matches_despite_dropped(
+    tmp_path: Path,
+) -> None:
+    """Dropped candidates must not force a perpetual delta; fingerprint match skips.
+
+    # @spec: 325-known-names-prep
+    """
+    wiki = _make_wiki(
+        tmp_path,
+        {
+            "s1": ["OpenClaw", "NoiseTool"],
+            "s2": ["OpenClaw", "NoiseTool"],
+        },
+    )
+
+    class _Spy:
+        is_llm = True
+        timeout = 120
+        calls = 0
+
+        def synthesize_source_page(self, raw_body, meta, prompt_template, **_kwargs):
+            self.calls += 1
+            # Keep OpenClaw; drop NoiseTool (no topic source_sig for it).
+            return (
+                '{"topics": [{"canonical": "OpenClaw", "kind": "entity",'
+                ' "description": "Agent platform.", "aliases": []}],'
+                ' "dropped": ["NoiseTool"]}'
+            )
+
+    spy = _Spy()
+    cfg = {"synthesis": {"known_names": {"candidate_cap": 150}}}
+    prepare_known_names(wiki, spy, cfg=cfg)
+    assert spy.calls == 1
+    prepare_known_names(wiki, spy, cfg=cfg)
+    assert spy.calls == 1  # skip — not another delta for the dropped name
