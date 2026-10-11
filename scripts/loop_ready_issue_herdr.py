@@ -743,12 +743,18 @@ def format_worker_opened_line(
     issue_number: int,
     title: str,
     adopted: str | None = None,
+    reprompted: str | None = None,
     opened_at: datetime | None = None,
 ) -> str:
-    """Confirm herdr tab open (or adopted by ``tab_id``) for a GitHub issue."""
+    """Confirm herdr tab open (or adopted / re-prompted by ``tab_id``) for a GitHub issue."""
     when = (opened_at or datetime.now()).strftime("%H:%M:%S")
     title_bit = f" {title}" if title else ""
-    verb = f"adopted ({adopted}, no new prompt; close it to restart)" if adopted else "opened"
+    if reprompted:
+        verb = f"re-prompted ({reprompted}, new worker in the restored tab)"
+    elif adopted:
+        verb = f"adopted ({adopted}, no new prompt; close it to restart)"
+    else:
+        verb = "opened"
     return (
         f"{tab_label} herdr tab {verb} for #{issue_number} gh issue"
         f"{title_bit} at {when}"
@@ -825,6 +831,7 @@ class WorkerHandle:
     issue_number: int
     issue_url: str
     adopted: bool = False
+    agent_running: bool = True
     gone: bool = False
     warned_gone: bool = False
 
@@ -986,7 +993,6 @@ def spawn_worker_for_issue(
     number = _issue_number(issue)
     issue_url = str(issue.get("url") or "")
     tab_label = f"issue-{number}"
-    agent_name = f"issue-{number}"
 
     create_proc = run_herdr(
         [
@@ -1013,6 +1019,32 @@ def spawn_worker_for_issue(
     if not pane_id or not tab_id:
         raise RuntimeError("herdr tab create: missing pane_id or tab_id")
 
+    start_worker_agent(
+        issue,
+        str(pane_id),
+        agent_kind=agent_kind,
+        run_herdr=run_herdr,
+        skill_path=skill_path,
+    )
+    return WorkerHandle(
+        tab_id=str(tab_id),
+        pane_id=str(pane_id),
+        issue_number=number,
+        issue_url=issue_url,
+    )
+
+
+def start_worker_agent(
+    issue: Issue,
+    pane_id: str,
+    *,
+    agent_kind: str,
+    run_herdr: RunHerdr = default_run_herdr,
+    skill_path: Path | None = None,
+) -> None:
+    """``agent start`` → ``agent prompt`` for one issue in an existing pane."""
+    issue_url = str(issue.get("url") or "")
+    agent_name = f"issue-{_issue_number(issue)}"
     start_proc = run_herdr(
         [
             "herdr",
@@ -1032,13 +1064,6 @@ def spawn_worker_for_issue(
         ["herdr", "agent", "prompt", str(pane_id), prompt_text],
     )
     _herdr_require_ok(prompt_proc, "herdr agent prompt")
-
-    return WorkerHandle(
-        tab_id=str(tab_id),
-        pane_id=str(pane_id),
-        issue_number=number,
-        issue_url=issue_url,
-    )
 
 
 def _list_tab_records(run_herdr: RunHerdr = default_run_herdr) -> list[dict[str, Any]]:
@@ -1213,8 +1238,10 @@ def adopt_existing_worker(
 
     A tab labeled ``issue-N`` means a worker already owns the ticket (e.g. a
     herdr session restored after reboot, or a driver restart). The driver
-    resumes polling for α against it and sends no new prompt. Close the tab by
-    hand to make the driver start a fresh worker.
+    resumes polling for α against it and sends no new prompt. When no pane in
+    the tab runs an agent, ``agent_running`` is ``False`` and the caller starts
+    a worker in that pane. Close the tab by hand to make the driver start a
+    fresh worker in a new tab.
     """
     number = _issue_number(issue)
     tab_label = f"issue-{number}"
@@ -1236,8 +1263,10 @@ def adopt_existing_worker(
         )
     tab_id = tab_ids[0]
     panes = list_tab_panes(tab_id, run_herdr)
-    # Prefer the pane running an agent; a bare shell pane still lets α polling work.
-    panes.sort(key=lambda p: not p.get("agent"))
+    # Prefer the pane running an agent; a bare shell pane (herdr restores tabs
+    # after a reboot without their agent) gets a fresh worker from the caller.
+    # Pane id breaks ties so the same pane is picked on every run.
+    panes.sort(key=lambda p: (not p.get("agent"), str(p.get("pane_id") or "")))
     if not panes or not panes[0].get("pane_id"):
         raise RuntimeError(f"herdr tab {tab_id} ({tab_label}) has no panes to adopt")
     return WorkerHandle(
@@ -1246,7 +1275,50 @@ def adopt_existing_worker(
         issue_number=number,
         issue_url=str(issue.get("url") or ""),
         adopted=True,
+        agent_running=bool(panes[0].get("agent")),
     )
+
+
+def revive_agentless_worker(
+    repo: str,
+    issue: Issue,
+    worker: WorkerHandle,
+    *,
+    agent_kind: str,
+    run_gh: RunGh = default_run_gh,
+    run_herdr: RunHerdr = default_run_herdr,
+) -> bool:
+    """Start a worker in an adopted tab with no agent; return ``True`` if prompted.
+
+    A merged closing PR means delivery is done and only post-merge CI (α) is
+    pending, so no worker is started; the wait loop closes the tab on advance.
+    If GitHub cannot be asked, the worker is started anyway — the delivery flow
+    detects a finished ticket itself.
+    """
+    number = worker.issue_number
+    try:
+        status = fetch_issue_merge_and_ci_status(repo, number, run_gh)
+    except RuntimeError as exc:
+        print(
+            f"WARNING: cannot check #{number} for a merged closing PR ({exc}); "
+            "prompting a worker anyway.",
+            file=sys.stderr,
+        )
+        status = None
+    if status is not None and status["merge_info"].get("merged"):
+        print(
+            f"issue-{number} tab {worker.tab_id} has no agent, but a merged PR "
+            "closes the issue; waiting for post-merge CI without a worker",
+        )
+        return False
+    print(
+        f"issue-{number} tab {worker.tab_id} has no agent "
+        "(restored after reboot?); prompting a worker",
+    )
+    start_worker_agent(issue, worker.pane_id, agent_kind=agent_kind, run_herdr=run_herdr)
+    worker.agent_running = True
+    worker.adopted = False
+    return True
 
 
 _MAX_CONSECUTIVE_FETCH_FAILURES = 5
@@ -1413,6 +1485,16 @@ def run_main_loop(
             number = _issue_number(next_issue)
             title = str(next_issue.get("title") or "")
             worker = adopt_existing_worker(next_issue, run_herdr)
+            reprompted = False
+            if worker is not None and not worker.agent_running:
+                reprompted = revive_agentless_worker(
+                    resolved_repo,
+                    next_issue,
+                    worker,
+                    agent_kind=agent_kind,
+                    run_gh=run_gh,
+                    run_herdr=run_herdr,
+                )
             if worker is None:
                 worker = spawn_worker_for_issue(
                     next_issue,
@@ -1426,6 +1508,7 @@ def run_main_loop(
                     issue_number=number,
                     title=title,
                     adopted=worker.tab_id if worker.adopted else None,
+                    reprompted=worker.tab_id if reprompted else None,
                 ),
             )
             reason = wait_until_ticket_advanced(

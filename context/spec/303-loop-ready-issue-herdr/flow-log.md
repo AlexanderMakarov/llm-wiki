@@ -200,3 +200,21 @@
 ## commit-push
 - Issue link: `Closes #344` — every acceptance criterion in the issue is delivered (scoped create, scoped lookups, regression tests)
 - Next: PR. Tracked flow-log ends here.
+
+## fix-bug #347 — fetch / workspace / diagnose / classify
+- Bug: [#347](https://github.com/AlexanderMakarov/llm-wiki/issues/347) — herdr restores `issue-N` tabs after a reboot without their agent; `adopt_existing_worker` adopted the bare shell, sent no prompt, and the driver waited on α forever
+- Reproduced read-only on live herdr: restored pane has no `agent` key (`agent_status: unknown`); a live pane has `agent: "claude"`
+- Branch `fix/347-adopt-empty-tab`, worktree `.claude/worktrees/fix-347-adopt-empty-tab`; implemented in the main session (operator rule), review in a separate agent
+- Verdict: **divergence** — §2.5 criterion "adopted tab whose agent is gone → gone-warning, keep polling" covered this case; amended
+
+## fix-bug #347 — fix / regression test / amend-spec
+- `start_worker_agent` split out of `spawn_worker_for_issue`; `WorkerHandle.agent_running` set by adopt from the chosen pane's `agent`; `run_main_loop` prompts a worker in an agent-less adopted pane and prints why
+- Regression: `test_acceptance_run_main_loop_once_single_worker[adopt-no-agent]` (fails on old code, passes on fix)
+- CHANGELOG #296 entry edited in place (unreleased); `docs/maintainers/LOOP_READY_ISSUE_HERDR.md`; spec 303 §2.5 + Change Log 2026-10-11
+- Next: operator smoke, local review
+
+## fix-bug #347 — verify / local review
+- Operator smoke 2026-10-11 (live herdr, workspace wD): driver printed `issue-264 tab wD:t11 has no agent (restored after reboot?); prompting a worker`; pane `wD:p5T` then `agent: cursor`, `working`
+- Local review: Approve, 0 Blockers / 4 Nits; operator kept all 4: N1 `re-prompted` log verb; N2 CHANGELOG sentence split; N3 no worker when a merged closing PR exists (`revive_agentless_worker`) + "close the tab to pause" in doc/spec; N4 pane id tie-break in adopt
+- Tests: `[adopt-no-agent-merged]` case, `test_adopt_existing_worker_agentless_tab_picks_lowest_pane_id`
+- Next: commit + PR — `Closes #347` (all requested behaviour delivered: agent-less adopted tab gets a worker, with the merged-PR guard and docs)
