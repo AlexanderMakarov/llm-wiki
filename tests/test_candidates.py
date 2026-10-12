@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -32,6 +33,7 @@ from llmwiki.candidates import (
     is_candidate,
     list_candidates,
     merge,
+    merged_intents,
     promote,
     record_redirect_alias,
     rewrite_key_facts,
@@ -40,6 +42,7 @@ from llmwiki.candidates import (
 )
 from llmwiki.candidates_harvest import harvest_targets, write_stubs
 from llmwiki.cli import build_parser
+from llmwiki.dismissal_ledger import iter_dismissals, iter_merges, ledger_path
 from llmwiki.lint import (
     REGISTRY,
     rules,  # noqa: F401
@@ -220,6 +223,92 @@ def test_list_computes_age_days(tmp_path: Path):
     now = datetime(2026, 4, 17, tzinfo=UTC)
     items = list_candidates(wiki, now=now)
     assert items[0]["age_days"] == 16
+
+
+def test_list_attaches_prior_dismissal_for_near_match(tmp_path: Path):
+    """Near-match of a discarded name gets prior_dismissal; exact fold does not.
+
+    # @spec: 326-harvest-discard-reason-surface
+    """
+    wiki = _mk_wiki(tmp_path)
+    _write_candidate(wiki, "entities", "Foobar")
+    discard("Foobar", wiki, reason="hosting detail, not subject matter")
+    # FooBars vs Foobar: distinct after norm_page_key, SequenceMatcher ≥ 0.90
+    _write_candidate(wiki, "entities", "FooBars", date="2026-04-15")
+    # Exact fold of Foobar must not reappear as pending (and would not near-match)
+    _write_candidate(wiki, "entities", "Unrelated")
+
+    items = {c["slug"]: c for c in list_candidates(wiki)}
+    assert "FooBars" in items
+    prior = items["FooBars"].get("prior_dismissal")
+    assert prior is not None
+    assert prior["name"] == "Foobar"
+    assert prior["reason"] == "hosting detail, not subject matter"
+    assert "prior_dismissal" not in items["Unrelated"]
+
+
+def test_cli_list_shows_prior_dismissal_line(tmp_path: Path, capsys):
+    """Human list prints an indented prior-dismissal line (#146 mockup).
+
+    # @spec: 326-harvest-discard-reason-surface
+    """
+    wiki = _mk_wiki(tmp_path)
+    _write_candidate(wiki, "entities", "Foobar")
+    discard("Foobar", wiki, reason="hosting detail, not subject matter")
+    _write_candidate(wiki, "entities", "FooBars", date="2026-04-15")
+
+    args = build_parser().parse_args([
+        "candidates", "list", "--wiki-dir", str(wiki),
+    ])
+    assert args.func(args) == 0
+    out = capsys.readouterr().out
+    assert "[entities ] FooBars" in out
+    assert "— FooBars" in out
+    assert 'prior dismissals:' in out
+    assert '- "Foobar" — hosting detail, not subject matter' in out
+    # Indented under the candidate line (mockup: four spaces past the `[`).
+    assert "\n        prior dismissals:" in out
+
+
+def test_cli_list_empty_reason_uses_placeholder(tmp_path: Path, capsys):
+    """Empty discard reason renders as (discarded without explanation).
+
+    # @spec: 326-harvest-discard-reason-surface
+    """
+    wiki = _mk_wiki(tmp_path)
+    _write_candidate(wiki, "concepts", "ApiClient")
+    discard("ApiClient", wiki, reason="")
+    _write_candidate(wiki, "concepts", "ApiClients", date="2026-04-17")
+
+    args = build_parser().parse_args([
+        "candidates", "list", "--wiki-dir", str(wiki),
+    ])
+    assert args.func(args) == 0
+    out = capsys.readouterr().out
+    assert '- "ApiClient" — (discarded without explanation)' in out
+
+
+def test_cli_list_json_includes_prior_dismissal(tmp_path: Path, capsys):
+    """``--json`` embeds the prior_dismissal object (raw reason, plus ratio).
+
+    # @spec: 326-harvest-discard-reason-surface
+    """
+    wiki = _mk_wiki(tmp_path)
+    _write_candidate(wiki, "entities", "Foobar")
+    discard("Foobar", wiki, reason="hosting detail, not subject matter")
+    _write_candidate(wiki, "entities", "FooBars", date="2026-04-15")
+
+    args = build_parser().parse_args([
+        "candidates", "list", "--json", "--wiki-dir", str(wiki),
+    ])
+    assert args.func(args) == 0
+    payload = json.loads(capsys.readouterr().out)
+    by_slug = {row["slug"]: row for row in payload}
+    prior = by_slug["FooBars"]["prior_dismissal"]
+    assert prior["name"] == "Foobar"
+    assert prior["reason"] == "hosting detail, not subject matter"
+    assert prior["ratio"] >= 0.90
+    assert "abs_path" not in by_slug["FooBars"]
 
 
 # ─── promote ────────────────────────────────────────────────────────
@@ -804,16 +893,20 @@ def test_discard_moves_to_archive(tmp_path: Path):
     assert archived.name == "Bogus.md"
 
 
-def test_discard_writes_reason_file(tmp_path: Path):
+def test_discard_upserts_ledger_not_reason_file(tmp_path: Path):
+    """# @layer: unit  # @spec: 326-harvest-discard-reason-surface"""
     wiki = _mk_wiki(tmp_path)
     _write_candidate(wiki, "entities", "Fake")
     archived = discard("Fake", wiki, reason="not a real thing").path
 
-    reason_file = archived.with_suffix(".reason.txt")
-    assert reason_file.is_file()
-    text = reason_file.read_text(encoding="utf-8")
-    assert "not a real thing" in text
-    assert "Discarded at:" in text
+    assert not archived.with_suffix(".reason.txt").is_file()
+    assert ledger_path(wiki).is_file()
+    rows = list(iter_dismissals(wiki))
+    assert len(rows) == 1
+    assert rows[0]["name"] == "Fake"
+    assert rows[0]["reason"] == "not a real thing"
+    assert rows[0]["stub"] == archived.relative_to(archive_dir(wiki)).as_posix()
+    assert discarded_names(wiki) == {"fake": "Fake"}
 
 
 def test_discard_raises_when_candidate_missing(tmp_path: Path):
@@ -1035,9 +1128,8 @@ def test_discard_leaves_no_link_outside_archive(tmp_path: Path):
     assert sorted(result.pages_changed) == [
         "entities/Keep.md", "sources/a.md", "sources/b.md", "sources/c.md",
     ]
-    reason = result.path.with_suffix(".reason.txt").read_text(encoding="utf-8")
-    assert "Original path: candidates/entities/Junk.md" in reason
-    assert "Redirected to" not in reason
+    assert not result.path.with_suffix(".reason.txt").is_file()
+    assert discarded_names(wiki) == {"junk": "Junk"}
 
 
 def test_discard_keeps_links_a_live_page_still_answers(tmp_path: Path):
@@ -1072,20 +1164,23 @@ def test_discard_redirect_points_links_at_page_and_records_alias(tmp_path: Path)
     assert resolve_wikilink_target("old-name", {"Proper"}, alias_map) == "Proper"
     assert "- Old Name — redirected " in body
     assert "(2 source pages)" in body
-    reason = result.path.with_suffix(".reason.txt").read_text(encoding="utf-8")
-    assert "Redirected to: Proper" in reason
+    assert not result.path.with_suffix(".reason.txt").is_file()
     # Redirected names resolve through the alias, so they are not "discarded".
     assert discarded_names(wiki) == {}
 
 
-def test_discard_redirect_always_writes_reason_file(tmp_path: Path):
+def test_discard_redirect_upserts_ledger_not_reason_file(tmp_path: Path):
+    """# @layer: unit  # @spec: 326-harvest-discard-reason-surface"""
     wiki = _mk_wiki(tmp_path)
     _write_candidate(wiki, "entities", "Dup")
     (wiki / "entities" / "Main.md").write_text("# Main\n", encoding="utf-8")
     result = discard("Dup", wiki, redirect="Main")
-    assert "Redirected to: Main" in result.path.with_suffix(".reason.txt").read_text(
-        encoding="utf-8"
-    )
+    assert not result.path.with_suffix(".reason.txt").is_file()
+    rows = list(iter_dismissals(wiki))
+    assert len(rows) == 1
+    assert rows[0]["name"] == "Dup"
+    assert rows[0]["reason"] == ""
+    assert discarded_names(wiki) == {}
 
 
 @pytest.mark.parametrize("redirect", ["Nowhere", "Pending"])
@@ -1110,6 +1205,49 @@ def test_discard_redirect_refuses_itself(tmp_path: Path):
     assert stub.is_file()
 
 
+def test_merge_upserts_ledger_not_reason_file(tmp_path: Path):
+    """# @layer: unit  # @spec: 326-harvest-discard-reason-surface"""
+    wiki = _mk_wiki(tmp_path)
+    _write_candidate(wiki, "entities", "Dup")
+    (wiki / "entities" / "Main.md").write_text("# Main\n", encoding="utf-8")
+    merge("Dup", wiki, into_slug="Main")
+    archived = next(archive_dir(wiki).rglob("Dup.md"))
+    assert not archived.with_suffix(".reason.txt").is_file()
+    assert ledger_path(wiki).is_file()
+    rows = list(iter_merges(wiki))
+    assert len(rows) == 1
+    assert rows[0]["name"] == "Dup"
+    assert rows[0]["into"] == "Main"
+    assert rows[0]["stub"] == archived.relative_to(archive_dir(wiki)).as_posix()
+    assert list(iter_dismissals(wiki)) == []
+    assert merged_intents(wiki) == {"dup": "Main"}
+
+
+def test_discarded_names_and_merged_intents_agree_with_ledger(tmp_path: Path):
+    """# @layer: unit  # @spec: 326-harvest-discard-reason-surface"""
+    wiki = _mk_wiki(tmp_path)
+    _write_candidate(wiki, "entities", "Noise")
+    _write_candidate(wiki, "entities", "Dup")
+    (wiki / "entities" / "Main.md").write_text("# Main\n", encoding="utf-8")
+    discard("Noise", wiki, reason="noise")
+    merge("Dup", wiki, into_slug="Main")
+
+    dismissals = {rec["key"]: rec["name"] for rec in iter_dismissals(wiki) if rec["key"]}
+    merges = {
+        rec["key"]: rec["into"]
+        for rec in iter_merges(wiki)
+        if rec["key"] and rec["into"]
+    }
+    assert discarded_names(wiki) == dismissals
+    assert merged_intents(wiki) == merges
+    assert discarded_names(wiki) == {"noise": "Noise"}
+    assert merged_intents(wiki) == {"dup": "Main"}
+    assert all(
+        not p.with_suffix(".reason.txt").is_file()
+        for p in archive_dir(wiki).rglob("*.md")
+    )
+
+
 def test_discarded_names_excludes_merged_candidates(tmp_path: Path):
     """# @layer: unit  # @spec: 282-discarded-topic-links"""
     wiki = _mk_wiki(tmp_path)
@@ -1119,6 +1257,8 @@ def test_discarded_names_excludes_merged_candidates(tmp_path: Path):
     discard("Noise", wiki, reason="noise")
     merge("Dup", wiki, into_slug="Main")
     assert discarded_names(wiki) == {"noise": "Noise"}
+    assert "dup" not in discarded_names(wiki)
+    assert merged_intents(wiki) == {"dup": "Main"}
 
 
 def test_cli_discard_redirect_prints_counts(tmp_path: Path, capsys):

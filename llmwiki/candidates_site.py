@@ -15,6 +15,7 @@ from __future__ import annotations
 import html
 import json
 import re
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -29,6 +30,10 @@ from llmwiki.candidates import (
     list_candidates,
     merge,
     promote,
+)
+from llmwiki.candidates_near_match import (
+    format_dismissal_reason,
+    reuse_discard_reason,
 )
 from llmwiki.synth.base import BaseSynthesizer
 
@@ -68,18 +73,36 @@ def candidate_description(cand: Candidate) -> str:
 
 
 def candidates_payload(wiki_dir: Path) -> dict[str, Any]:
-    """JSON-serialisable list + summary for the review page / API responses."""
+    """JSON-serialisable list + summary for the review page / API responses.
+
+    Near-match annotations come from :func:`list_candidates` (``prior_dismissals``);
+    the page does not re-match dismissals in the browser.
+    """
     items = list_candidates(wiki_dir)
     rows = []
     for c in items:
-        rows.append({
+        row: dict[str, Any] = {
             "slug": c["slug"],
             "kind": c["kind"],
             "title": c["title"],
             "age_days": c["age_days"],
             "created": c["created"],
             "description": candidate_description(c),
-        })
+        }
+        priors = c.get("prior_dismissals") or (
+            [c["prior_dismissal"]] if c.get("prior_dismissal") else []
+        )
+        if priors:
+            row["prior_dismissals"] = [
+                {
+                    "name": p["name"],
+                    "reason": p["reason"],
+                    "ratio": p["ratio"],
+                }
+                for p in priors
+            ]
+            row["prior_dismissal"] = row["prior_dismissals"][0]
+        rows.append(row)
     return {
         "candidates": rows,
         "summary": candidate_review_summary(wiki_dir),
@@ -330,23 +353,51 @@ _DECISION_CHOICES: tuple[tuple[str, str], ...] = (
     ("discard", "Discard"),
 )
 
+#: Extra Decision when the row near-matches at least one prior dismissal (#146).
+_DISCARD_PRIOR_CHOICE = ("discard-prior", "Discard with prior reason")
+
+
+def _row_priors(row: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """Normalize ``prior_dismissals`` / legacy singular ``prior_dismissal``."""
+    priors = row.get("prior_dismissals")
+    if isinstance(priors, list) and priors:
+        return [p for p in priors if isinstance(p, dict)]
+    prior = row.get("prior_dismissal")
+    if isinstance(prior, dict):
+        return [prior]
+    return []
+
 
 def _decision_controls_html(row: dict[str, Any], kind: str, index: int) -> str:
     """The Decision cell: an action select plus the field that action needs.
 
     *Merge into…* reveals a combobox over the merge targets for ``kind``, and
-    *Discard* reveals the reason the archived stub keeps beside itself plus an
-    optional existing page to redirect the discarded name's links to.
+    *Discard* reveals the reason plus an optional redirect. When the row has
+    prior dismissals, *Discard with prior reason* reuses the best match's
+    reason without retyping it (#146).
     """
     slug = html.escape(row["slug"])
     kind_esc = html.escape(kind)
     list_id = f"cand-target-list-{kind_esc}-{index}"
+    priors = _row_priors(row)
+    choices = list(_DECISION_CHOICES)
+    prior_attr = ""
+    if priors:
+        # Insert before plain Discard so the reuse path is easy to spot.
+        discard_idx = next(
+            (i for i, (value, _) in enumerate(choices) if value == "discard"),
+            len(choices),
+        )
+        choices.insert(discard_idx, _DISCARD_PRIOR_CHOICE)
+        prior_reason = reuse_discard_reason(priors[0])
+        prior_attr = f' data-prior-reason="{html.escape(prior_reason, quote=True)}"'
     options = "".join(
         f'<option value="{html.escape(value)}">{html.escape(label)}</option>'
-        for value, label in _DECISION_CHOICES
+        for value, label in choices
     )
     return (
-        f'<div class="cand-intent" data-slug="{slug}" data-kind="{kind_esc}">'
+        f'<div class="cand-intent" data-slug="{slug}" data-kind="{kind_esc}"'
+        f"{prior_attr}>"
         f'<label class="muted">Decision '
         f'<select class="cand-decision" aria-label="Decision for {slug}">'
         f"{options}</select></label>"
@@ -390,6 +441,34 @@ def _targets_data_html(wiki_dir: Path | None, kind: str,
     )
 
 
+def _prior_dismissals_html(priors: list[dict[str, Any]]) -> str:
+    """Muted Name-cell list of near-match prior dismissals (#146)."""
+    if not priors:
+        return ""
+    items: list[str] = []
+    for prior in priors:
+        name = html.escape(str(prior.get("name") or ""))
+        reason = html.escape(format_dismissal_reason(prior.get("reason")))
+        items.append(f"<li>&quot;{name}&quot; \u2014 {reason}</li>")
+    return (
+        '<div class="muted cand-prior-dismissals">'
+        "<div>Prior dismissals:</div>"
+        f"<ul class=\"cand-prior-dismissals-list\">{''.join(items)}</ul>"
+        "</div>"
+    )
+
+
+def _name_meta_html(title: str, slug: str, age: str) -> str:
+    """Age line under the title; omit a redundant slug when it equals the title."""
+    age_esc = html.escape(age)
+    if slug == title:
+        return f'<div class="muted">{age_esc}</div>'
+    return (
+        f'<div class="muted"><code>{html.escape(slug)}</code> \u00b7 '
+        f"{age_esc}</div>"
+    )
+
+
 def _table_rows_html(rows: list[dict[str, Any]], kind: str) -> str:
     kind_rows = [r for r in rows if r["kind"] == kind]
     if not kind_rows:
@@ -400,11 +479,14 @@ def _table_rows_html(rows: list[dict[str, Any]], kind: str) -> str:
     out: list[str] = []
     for index, r in enumerate(kind_rows):
         age = f'{r["age_days"]}d' if r.get("created") else "\u2014"
+        title = str(r["title"])
+        slug = str(r["slug"])
+        prior_html = _prior_dismissals_html(_row_priors(r))
         out.append(
             "<tr>"
-            f'<td><strong>{html.escape(r["title"])}</strong>'
-            f'<div class="muted"><code>{html.escape(r["slug"])}</code> \u00b7 '
-            f'{html.escape(age)}</div></td>'
+            f"<td><strong>{html.escape(title)}</strong>"
+            f"{_name_meta_html(title, slug, age)}"
+            f"{prior_html}</td>"
             f'<td>{html.escape(r["description"])}</td>'
             f'<td class="cand-actions">{_decision_controls_html(r, kind, index)}</td>'
             "</tr>"
@@ -496,8 +578,8 @@ _REVIEW_SCRIPT = """<script>
     el.setAttribute("aria-invalid", bad ? "true" : "false");
   }
   // What a decided row still needs before it can run. Merge needs a page from
-  // the list; discard needs the reason archived beside the stub. "" means the
-  // row is ready.
+  // the list; discard needs a free-text reason (stored in dismissals.json).
+  // "" means the row is ready.
   function rowProblem(wrap) {
     var action = decisionOf(wrap);
     var slug = wrap.getAttribute("data-slug");
@@ -509,6 +591,9 @@ _REVIEW_SCRIPT = """<script>
       }
     } else if (action === "discard" && !fieldValue(wrap, ".cand-discard-reason")) {
       return slug + " (give a reason for discarding)";
+    } else if (action === "discard-prior") {
+      var priorReason = (wrap.getAttribute("data-prior-reason") || "").trim();
+      if (!priorReason) return slug + " (no prior dismissal reason to reuse)";
     }
     return "";
   }
@@ -539,6 +624,9 @@ _REVIEW_SCRIPT = """<script>
     });
     if (first && first.focus) first.focus();
   }
+  function isDiscardAction(value) {
+    return value === "discard" || value === "discard-prior";
+  }
   function syncRow(wrap) {
     var value = decisionOf(wrap);
     var mergeWrap = wrap.querySelector(".cand-merge-wrap");
@@ -549,8 +637,9 @@ _REVIEW_SCRIPT = """<script>
       var combo = mergeWrap.querySelector(".cand-combo");
       if (combo && combo.llmwikiClose && value !== "merge") combo.llmwikiClose();
     }
+    // discard-prior reuses data-prior-reason — no typed reason field.
     if (reasonWrap) reasonWrap.hidden = value !== "discard";
-    if (redirectWrap) redirectWrap.hidden = value !== "discard";
+    if (redirectWrap) redirectWrap.hidden = !isDiscardAction(value);
     if (value !== "merge") markField(wrap.querySelector(".cand-merge-into"), false);
     if (value !== "discard") {
       markField(wrap.querySelector(".cand-discard-reason"), false);
@@ -585,6 +674,12 @@ _REVIEW_SCRIPT = """<script>
         item.reason = fieldValue(wrap, ".cand-discard-reason");
         var redirect = fieldValue(wrap, ".cand-discard-redirect");
         if (redirect) item.redirect = redirect;
+      } else if (action === "discard-prior") {
+        // Apply only understands discard — map the UX shortcut here.
+        item.action = "discard";
+        item.reason = (wrap.getAttribute("data-prior-reason") || "").trim();
+        var priorRedirect = fieldValue(wrap, ".cand-discard-redirect");
+        if (priorRedirect) item.redirect = priorRedirect;
       }
       actions.push(item);
     });

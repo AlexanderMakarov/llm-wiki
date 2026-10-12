@@ -10,14 +10,14 @@ rewrite as ``candidates discard``. Every ``--redirect`` pair is checked before
 the first write: a bad one stops the run with nothing changed, and a name a
 live page already answers to is reported as skipped rather than dropped.
 
-A name a reviewer *merged* away is not a dismissal. Its reason file records
-the target (:func:`llmwiki.candidates.merged_intents`), so when the survivor
-page was later renamed or re-filed and no longer answers to the name, the run
-leaves those links alone and reports a ready-to-paste ``--redirect`` line
-instead of flattening links whose intended target is still on disk. That
-partition exits non-zero; ``--force`` unlinks them anyway. Everything else in
-the same run — the flatten, the plain dismissals, the explicit redirects —
-still applies.
+A name a reviewer *merged* away is not a dismissal. The dismissal ledger
+records the target (:func:`llmwiki.candidates.merged_intents`), so when the
+survivor page was later renamed or re-filed and no longer answers to the
+name, the run leaves those links alone and reports a ready-to-paste
+``--redirect`` line instead of flattening links whose intended target is
+still on disk. That partition exits non-zero; ``--force`` unlinks them
+anyway. Everything else in the same run — the flatten, the plain dismissals,
+the explicit redirects — still applies.
 
 It also moves candidate stubs a ``/`` in their name filed into a subfolder
 (``candidates/entities/A/B thing.md``) to the flat path
@@ -42,6 +42,7 @@ from typing import Any
 from llmwiki._frontmatter import parse_frontmatter
 from llmwiki.candidates import (
     MIRRORED_SUBDIRS,
+    _live_page_keys,
     archived_candidate_names,
     archived_candidate_source_count,
     candidate_filename,
@@ -53,6 +54,7 @@ from llmwiki.candidates import (
     redirect_target_pages,
     rewrite_links_to,
 )
+from llmwiki.dismissal_ledger import iter_merges
 from llmwiki.wikilinks import norm_page_key
 
 
@@ -150,8 +152,8 @@ def run_migration(
     so a bad one leaves the vault untouched (``report["aborted"]``) instead of
     half-migrated.
 
-    A name whose reason file records a merge, that no live page answers to and
-    that no ``--redirect`` covers, is reported under
+    A name the dismissal ledger records as a merge, that no live page answers
+    to and that no ``--redirect`` covers, is reported under
     ``report["recorded_merges"]`` with a suggested redirect and its links are
     left alone (``report["merges_skipped"]``); the rest of the run still
     applies. A recorded merge with zero links anywhere in the wiki needs no
@@ -189,7 +191,17 @@ def run_migration(
     errors: list[str] = report["errors"]
     archived = archived_candidate_names(wiki, errors=errors)
     discarded = discarded_names(wiki, errors=errors)
-    targets: dict[str, str | None] = dict.fromkeys(discarded)
+    live = _live_page_keys(wiki, errors=errors)
+    # ``discarded_names`` is dismissals-only (#326). Orphaned merges (ledger
+    # merge rows no live page answers to) still need the same link partition
+    # the pre-ledger scan got from ``archived − live``.
+    orphaned_merges = {
+        rec["key"]: rec["name"]
+        for rec in iter_merges(wiki)
+        if rec["key"] and rec["key"] not in live
+    }
+    dangling = {**discarded, **orphaned_merges}
+    targets: dict[str, str | None] = dict.fromkeys(dangling)
     redirect_pages: dict[str, str] = {}
     aliases_to_record: list[tuple[Path, str, int]] = []
     redirect_errors: list[str] = []
@@ -200,7 +212,7 @@ def run_migration(
                 f"--redirect {name!r}: no archived candidate by that name"
             )
             continue
-        if key not in discarded:
+        if key not in dangling:
             report["skipped"].append(
                 f"--redirect {name!r}: a live page already answers to that name, "
                 f"so its links resolve and no redirect was needed"
@@ -214,7 +226,7 @@ def run_migration(
         targets[key] = page.stem
         redirect_pages[key] = page.stem
         aliases_to_record.append(
-            (page, discarded[key], archived_candidate_source_count(wiki, key))
+            (page, dangling[key], archived_candidate_source_count(wiki, key))
         )
     if redirect_errors:
         # Nothing has been written yet: refuse the whole run rather than
@@ -232,7 +244,7 @@ def run_migration(
             continue
         recorded.append({
             "key": key,
-            "name": discarded[key],
+            "name": dangling[key],
             "merged_into": merged_into,
             "suggestion": _suggested_redirect(live_pages, merged_into),
             "links": 0,
@@ -273,7 +285,7 @@ def run_migration(
             )
     for key, n in counts.items():
         bucket = "redirected" if key in redirect_pages else "unlinked"
-        label = discarded[key]
+        label = dangling[key]
         if key in redirect_pages:
             label = f"{label} -> {redirect_pages[key]}"
         report[bucket][label] = n
