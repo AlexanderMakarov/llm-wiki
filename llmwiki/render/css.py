@@ -633,6 +633,9 @@ kbd { display: inline-block; padding: 2px 6px; font-family: var(--mono); font-si
   font-size: 0.85rem; white-space: pre-wrap;
 }
 .cand-batch { max-height: 45vh; overflow-y: auto; }
+.cand-prior-dismissals { margin-top: 0.35rem; font-size: 0.82rem; }
+.cand-prior-dismissals-list { margin: 0.15rem 0 0 1.1rem; padding: 0; }
+.cand-prior-dismissals-list li { margin: 0.1rem 0; }
 .cand-intent { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; }
 .cand-intent label { display: inline-flex; gap: 6px; align-items: center; font-size: 0.82rem; }
 /* An authored display beats the hidden attribute, which only works through

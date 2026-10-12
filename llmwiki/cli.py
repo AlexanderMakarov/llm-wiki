@@ -30,6 +30,7 @@ from llmwiki import (
     install_agent_kit,
     migrate_broken_provenance,
     migrate_discarded_topic_links,
+    migrate_dismissal_ledger,
     migrate_doc_source_provenance,
     migrate_page_kinds,
     migrate_source_page_paths,
@@ -83,6 +84,7 @@ from llmwiki.candidates_harvest import (
     run_harvest,
     summarize_backlog,
 )
+from llmwiki.candidates_near_match import format_dismissal_reason
 from llmwiki.candidates_site import apply_candidate_actions, check_redirect_action
 from llmwiki.claude_path import resolve_claude_path
 
@@ -1677,8 +1679,13 @@ _MIGRATIONS: tuple[tuple[str, str, str], ...] = (
         "Run when wiki pages still use bare slug wikilinks and you want display text to match page titles for readability and findability. Reads only existing wiki pages — no LLM call and raw/ is never written.",
     ),
     (
+        "dismissal-ledger",
+        "Rebuild wiki/archive/candidates/dismissals.json from archived candidate stubs and any legacy sibling *.reason.txt files (pure dismissals and merge intents).",
+        "Run once after upgrading to the dismissals.json ledger when the vault still has older reason files, or when dismissals.json is missing/out of date versus the archive. Ordinary ledger reads also auto-rebuild when the file is missing; this migrate is the explicit --dry-run path. Offline — no LLM call, and raw/ is never written. Safe to re-run.",
+    ),
+    (
         "discarded-topic-links",
-        "Turn [[links]] to candidates discarded into wiki/archive/ into plain text (or, with --redirect NAME=PAGE, point them at an existing page recorded under its ## Aliases), and move candidate stubs a slash in their name filed into a subfolder back to a flat path. A name whose reason file records a merge, whose survivor page no longer answers to it, keeps its links and is reported with a suggested --redirect (--force unlinks it anyway).",
+        "Turn [[links]] to candidates discarded into wiki/archive/ into plain text (or, with --redirect NAME=PAGE, point them at an existing page recorded under its ## Aliases), and move candidate stubs a slash in their name filed into a subfolder back to a flat path. A name the dismissal ledger records as a merge, whose survivor page no longer answers to it, keeps its links and is reported with a suggested --redirect (--force unlinks it anyway).",
         "Run once after upgrading past the release where discard started rewriting links, when lint link_integrity is dominated by links to discarded candidates, or when a candidate with a slash in its name is missing from candidates list. Reads only existing wiki pages — no LLM call, and raw/ is never written. Safe to re-run.",
     ),
     (
@@ -1882,6 +1889,20 @@ def cmd_migrate_wikilink_titles(args: argparse.Namespace) -> int:
         dry_run=bool(getattr(args, "dry_run", False)),
     )
     migrate_wikilink_titles.print_report(report)
+    return 1 if report["errors"] else 0
+
+
+def cmd_migrate_dismissal_ledger(args: argparse.Namespace) -> int:
+    """Rebuild ``dismissals.json`` from archived stubs + legacy reason files (#326).
+
+    Package-local like ``migrate-discarded-topic-links``: pip installs have no
+    ``scripts/`` checkout. Offline — no synthesis backend or network call.
+    """
+    report = migrate_dismissal_ledger.run_migration(
+        vault=Path(args.vault),
+        dry_run=bool(getattr(args, "dry_run", False)),
+    )
+    migrate_dismissal_ledger.print_report(report)
     return 1 if report["errors"] else 0
 
 
@@ -2771,6 +2792,14 @@ def cmd_candidates(args: argparse.Namespace) -> int:
             for c in items:
                 age = f"{c['age_days']}d" if c["created"] else "unknown age"
                 print(f"    [{c['kind']:9}] {c['slug']}  ({age})  — {c['title']}")
+                priors = c.get("prior_dismissals") or (
+                    [c["prior_dismissal"]] if c.get("prior_dismissal") else []
+                )
+                if priors:
+                    print("        prior dismissals:")
+                    for prior in priors:
+                        reason = format_dismissal_reason(prior.get("reason"))
+                        print(f'          - "{prior["name"]}" — {reason}')
         return 0
 
     if action == "apply":
@@ -3526,6 +3555,23 @@ def build_parser() -> argparse.ArgumentParser:
     )
     migrate_wikilink.set_defaults(func=cmd_migrate_wikilink_titles)
 
+    migrate_ledger = add_migration(
+        "dismissal-ledger", *_mig_by_name["dismissal-ledger"],
+        short="Rebuild dismissals.json from archived stubs and legacy reason files",
+    )
+    migrate_ledger.add_argument(
+        "--vault",
+        type=Path,
+        required=True,
+        help="Vault root containing wiki/",
+    )
+    migrate_ledger.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Report would-write ledger; write nothing",
+    )
+    migrate_ledger.set_defaults(func=cmd_migrate_dismissal_ledger)
+
     migrate_discarded = add_migration(
         "discarded-topic-links", *_mig_by_name["discarded-topic-links"],
         short="Unlink or redirect links to discarded candidates; flatten nested stubs",
@@ -3551,8 +3597,8 @@ def build_parser() -> argparse.ArgumentParser:
     migrate_discarded.add_argument(
         "--force",
         action="store_true",
-        help="Unlink names a reason file records as merged even when no live "
-             "page answers to them, instead of reporting a suggested --redirect",
+        help="Unlink names the dismissal ledger records as merged even when no "
+             "live page answers to them, instead of reporting a suggested --redirect",
     )
     migrate_discarded.set_defaults(func=cmd_migrate_discarded_topic_links)
 

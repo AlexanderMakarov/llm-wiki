@@ -10,6 +10,27 @@ How to upgrade between `llmwiki` releases. Most releases are drop-in (`pip insta
 
 The canonical per-release detail is [CHANGELOG.md](https://github.com/AlexanderMakarov/llm-wiki/blob/main/CHANGELOG.md) — this guide focuses on "what might break".
 
+## Unreleased — dismissal ledger + near-match prior reasons (#146)
+
+Behaviour flip for new discards/merges, plus an optional offline migration for vaults that still only have per-stub reason files.
+
+**New behaviour:**
+
+- `candidates discard` and `merge` record the decision in `wiki/archive/candidates/dismissals.json` and no longer write a new sibling `*.reason.txt`.
+- `candidates list` and `site/candidates.html` mark pending near-matches of previously dismissed names and show the recorded reason (or `(discarded without explanation)` when the reason was empty). Exact settled dismissals stay excluded from harvest as before; merges are not treated as dismissals for the mark.
+- Topic exclusion and `migrate discarded-topic-links` read the ledger (merge intents included).
+
+**When to migrate:** if the vault already has archived candidates from before this release (especially with legacy `*.reason.txt` siblings) and `dismissals.json` is missing or out of date, rebuild once:
+
+```bash
+llmwiki migrate dismissal-ledger --vault /path/to/vault --dry-run
+llmwiki migrate dismissal-ledger --vault /path/to/vault
+```
+
+Ordinary ledger reads also auto-rebuild when `dismissals.json` is missing (for example the first `candidates list` or discard after upgrade), so an explicit migrate is mainly for `--dry-run` preview or forcing a rebuild when a ledger already exists. Legacy `*.reason.txt` files are imported into the ledger and may remain on disk — they are not deleted automatically. Rebuild afterwards so the candidates page picks up near-match marks: `llmwiki build --vault <vault>`.
+
+See [`docs/reference/cli.md`](reference/cli.md#dismissal-ledger--rebuild-dismissalsjson-from-the-archive-146).
+
 ## Unreleased — pin Claude path at `install-automation` (#275)
 
 No data migration. If you already schedule Maintain with `synthesis.backend: claude` and rely on `claude` being on `$PATH` (for example under `<home>/.local/bin`), re-run `llmwiki install-automation` (or `llmwiki install-automation --yes --job maintain --synth-backend claude`) once after upgrading. The installer writes absolute `synthesis.claude.path` when that key (and flat `claude_path`) are unset, so systemd user-timer catch-up with a minimal `PATH` still finds the CLI. An explicit path you already set is left alone.

@@ -39,8 +39,7 @@ Usage: `/wiki-candidates`
      ```
 
    - **discard** — candidate is a hallucination or noise.
-     Moves it to `wiki/archive/candidates/<timestamp>/` with a
-     `.reason.txt` audit-trail file, and turns every `[[link]]` to the name into plain text. When the name really means an existing page, add `--redirect <page>`: links become `[[page|text]]` and the name is recorded under that page's `## Aliases`. Reconciles `wiki/index.md`.
+     Moves it to `wiki/archive/candidates/<timestamp>/` and records the reason in `wiki/archive/candidates/dismissals.json` (new discards do not write a sibling `.reason.txt`). Turns every `[[link]]` to the name into plain text. When the name really means an existing page, add `--redirect <page>`: links become `[[page|text]]` and the name is recorded under that page's `## Aliases`. Near-matches of earlier dismissals show on `candidates list` / `candidates.html` with a **Prior dismissals** list and optional *Discard with prior reason*. Reconciles `wiki/index.md`.
      ```
      python3 -m llmwiki candidates discard --slug BogusEntity \
        --reason "not a real company; LLM hallucinated"

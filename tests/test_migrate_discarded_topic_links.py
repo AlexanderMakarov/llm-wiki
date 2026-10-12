@@ -13,6 +13,7 @@ from llmwiki import candidates as candidates_mod
 from llmwiki.candidates import _find_candidate, list_candidates  # noqa: PLC2701
 from llmwiki.candidates_harvest import harvest_targets, write_stubs
 from llmwiki.cli import build_parser
+from llmwiki.dismissal_ledger import load_ledger
 from llmwiki.lint import LintOptions, load_pages
 from llmwiki.lint.rules import LinkIntegrity
 from llmwiki.migrate_discarded_topic_links import (
@@ -31,9 +32,17 @@ def _source(wiki: Path, slug: str, body: str) -> None:
 
 
 def _archive_without_rewrite(wiki: Path, name: str) -> None:
-    """Archive a stub the way discard did before #282: move it, leave links."""
-    candidates_mod._archive_candidate(  # noqa: SLF001
-        _find_candidate(name, wiki, None), wiki, reason="noise",
+    """Archive a stub the way discard did before #282: move it, leave links.
+
+    Writes a legacy sibling ``*.reason.txt`` so ledger auto-rebuild (and this
+    fixture) still look like a pre-#326 vault; does not call ledger upsert.
+    """
+    dest = candidates_mod._archive_candidate(  # noqa: SLF001
+        _find_candidate(name, wiki, None), wiki,
+    )
+    dest.with_suffix(".reason.txt").write_text(
+        "Discarded at: 2026-01-01T00:00:00+00:00\nReason: noise\n",
+        encoding="utf-8",
     )
 
 
@@ -76,6 +85,9 @@ def vault(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     write_stubs(wiki, harvest_targets(wiki, min_refs=2))
     _archive_without_rewrite(wiki, "Junk")
     _archive_without_rewrite(wiki, "Old Name")
+    # Materialise dismissals.json so a dry-run / aborted migrate does not
+    # create it as a side effect of the first discarded_names read (#326).
+    load_ledger(wiki)
     return tmp_path
 
 

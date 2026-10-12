@@ -20,12 +20,14 @@ Public API:
   - ``merge(slug, wiki_dir, into_slug)`` → fold candidate into an existing page
     (trusted or another pending stub of the same kind)
   - ``discard(slug, wiki_dir, reason, redirect=None)`` → move to archive/,
-    then unlink (or retarget to ``redirect``) every ``[[link]]`` to it
+    upsert the dismissal into ``dismissals.json``, then unlink (or retarget
+    to ``redirect``) every ``[[link]]`` to it
   - ``DiscardBatch(wiki_dir)`` → one wiki scan and one rewrite pass shared by
     a run of discards, instead of two passes each
   - ``discarded_names(wiki_dir)`` → names a reviewer dismissed for good
-  - ``merged_intents(wiki_dir)`` → merged-away name → the target its reason
-    file recorded, for a survivor that no longer answers to the name
+    (ledger-backed; excludes names live pages still answer to)
+  - ``merged_intents(wiki_dir)`` → merged-away name → survivor slug from the
+    ledger, for a survivor that no longer answers to the name
   - ``candidate_filename(name)`` → the flat, path-safe stub filename for a name
   - ``stale_candidates(wiki_dir, threshold_days=30)`` → list pages flagged stale
   - ``is_candidate(page_path)`` → bool
@@ -36,10 +38,12 @@ Design choices:
   - ``## Connections`` links from candidates stay as-is when promoted;
     callers run `llmwiki lint` afterward to catch any stale pointers.
   - Discard is non-destructive: pages move to ``wiki/archive/candidates/``
-    with a timestamped reason file so you can recover them later. Links to a
+    and the decision is recorded in ``dismissals.json`` (via
+    :mod:`llmwiki.dismissal_ledger`) so you can recover them later. Links to a
     discarded name are rewritten to plain text (or to the ``redirect`` page,
     which records the name under ``## Aliases``) so nothing keeps pointing
-    into cold storage (#282).
+    into cold storage (#282 / #326). New discards do not write sibling
+    ``*.reason.txt`` files.
   - Promote fills an empty ``## Key Facts`` from ``fact:`` lines on cited
     source pages (#147); non-empty reviewer facts are never overwritten.
     Use ``rewrite_key_facts`` (LLM, opt-in) to replace bullets on a page
@@ -55,9 +59,18 @@ from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TypedDict
+from typing import NotRequired, TypedDict
 
 from llmwiki._system_pages import ARCHIVE_FOLDER, is_archived_path
+from llmwiki.candidates_near_match import PriorDismissal, attach_prior_dismissals
+from llmwiki.dismissal_ledger import (
+    iter_dismissals,
+    iter_merges,
+    ledger_path,
+    load_ledger,
+    upsert_dismissal,
+    upsert_merge,
+)
 from llmwiki.reindex import reindex_wiki
 from llmwiki.source_topics import parse_source_topics
 from llmwiki.synth.base import BaseSynthesizer
@@ -125,6 +138,8 @@ class Candidate(TypedDict):
     created: str | None # frontmatter created/last_updated date (YYYY-MM-DD)
     age_days: int          # days since `created`
     body_preview: str      # first 200 chars of body
+    prior_dismissals: NotRequired[list[PriorDismissal]]  # near-matches of ledger dismissals (#146)
+    prior_dismissal: NotRequired[PriorDismissal]  # best of prior_dismissals (reuse-reason action)
 
 
 # ─── helpers ───────────────────────────────────────────────────────────
@@ -209,7 +224,13 @@ def list_candidates(
     *,
     now: datetime | None = None,
 ) -> list[Candidate]:
-    """Walk wiki/candidates/ and return one entry per pending page."""
+    """Walk wiki/candidates/ and return one entry per pending page.
+
+    Near-matches of dismissed names get ``prior_dismissals`` (and best-match
+    ``prior_dismissal``) from the dismissal ledger (#146 / #326). Exact
+    folded-key matches are not annotated here — harvest already excludes
+    those settled names.
+    """
     root = candidates_dir(wiki_dir)
     if not root.is_dir():
         return []
@@ -238,6 +259,7 @@ def list_candidates(
                 "age_days": _age_days(created, now=now),
                 "body_preview": body.strip()[:200],
             })
+    attach_prior_dismissals(out, wiki_dir)
     return out
 
 
@@ -1025,8 +1047,13 @@ def merge(
         )
     target.write_text(meta_text + body, encoding="utf-8")
 
-    # Discard candidate by moving it to archive with a merge-reason file
-    _archive_candidate(candidate, wiki_dir, reason=_format_merge_reason(into_slug))
+    # Materialise the ledger before the stub moves so upsert does not rebuild
+    # the just-archived file as a pure dismissal (no sibling reason.txt).
+    _ensure_dismissal_ledger(wiki_dir)
+    archived = _archive_candidate(candidate, wiki_dir)
+    stub = archived.relative_to(archive_dir(wiki_dir)).as_posix()
+    name = str(candidate_meta.get("title") or slug)
+    upsert_merge(wiki_dir, name=name, into=into_slug, stub=stub)
     _reconcile_catalog(wiki_dir)
     return target
 
@@ -1119,8 +1146,8 @@ def discard(
     redirect: str | None = None,
     batch: DiscardBatch | None = None,
 ) -> DiscardResult:
-    """Move the candidate to ``wiki/archive/candidates/<timestamp>/<slug>.md``
-    with an adjacent ``<slug>.reason.txt`` capturing why, then fix its links.
+    """Move the candidate to ``wiki/archive/candidates/<timestamp>/<slug>.md``,
+    record the dismissal in ``dismissals.json``, then fix its links.
 
     Every ``[[link]]`` to the candidate's name outside ``wiki/archive/``
     (case/punctuation-insensitive) becomes plain text — its label, else the
@@ -1139,7 +1166,8 @@ def discard(
     candidate itself, or when another live page already answers to the
     discarded name — all before anything moves, since recording the alias
     anyway would leave two live pages claiming one name. Reconciles
-    ``wiki/index.md`` afterward (#101).
+    ``wiki/index.md`` afterward (#101). Does not write a sibling
+    ``*.reason.txt`` (#326) — the free-text ``reason`` goes into the ledger.
     """
     candidate = _find_candidate(slug, wiki_dir, kind)
     meta, body = _parse_frontmatter(candidate.read_text(encoding="utf-8"))
@@ -1166,10 +1194,10 @@ def discard(
                 f"that name"
             )
 
-    path = _archive_candidate(
-        candidate, wiki_dir, reason=reason,
-        redirect=target.stem if target is not None else None,
-    )
+    _ensure_dismissal_ledger(wiki_dir)
+    path = _archive_candidate(candidate, wiki_dir)
+    stub = path.relative_to(archive_dir(wiki_dir)).as_posix()
+    upsert_dismissal(wiki_dir, name=str(name), stub=stub, reason=reason)
     if batch is not None:
         batch.retire(candidate)
     result = DiscardResult(
@@ -1291,22 +1319,23 @@ def discarded_names(
 ) -> dict[str, str]:
     """``norm_page_key -> name`` for candidates a reviewer discarded for good.
 
-    Archived stubs whose name no live page answers to — neither by stem nor
-    under ``## Aliases``. Merged and redirected names are excluded: they
-    resolve through the alias the survivor page records. Shared by the topic
-    vocabulary and ``migrate discarded-topic-links`` so both agree on what
-    was dismissed (#282). ``live_keys`` lets a caller that already scanned
-    the wiki pass its stem/alias keys instead of re-reading every page, and
-    ``errors`` collects the pages neither pass could read.
+    Ledger dismissals whose name no live page answers to — neither by stem nor
+    under ``## Aliases``. Merged names live in the merges list, not here;
+    redirected names are excluded when the survivor's alias is in
+    ``live_keys``. Shared by the topic vocabulary and
+    ``migrate discarded-topic-links`` so both agree on what was dismissed
+    (#282 / #326). ``live_keys`` lets a caller that already scanned the wiki
+    pass its stem/alias keys instead of re-reading every page, and ``errors``
+    collects unread live pages when ``live_keys`` is omitted.
     """
     live = (
         set(live_keys) if live_keys is not None
         else _live_page_keys(wiki_dir, errors=errors)
     )
     return {
-        key: name
-        for key, name in archived_candidate_names(wiki_dir, errors=errors).items()
-        if key not in live
+        rec["key"]: rec["name"]
+        for rec in iter_dismissals(wiki_dir)
+        if rec["key"] and rec["key"] not in live
     }
 
 
@@ -1315,39 +1344,19 @@ def merged_intents(
 ) -> dict[str, str]:
     """``norm_page_key -> recorded target`` for archived candidates a merge folded.
 
-    Reads back the reason :func:`merge` wrote beside the stub, through the
-    same formatter, so the reviewer's intent survives even when the survivor
-    page was later renamed or re-filed and no longer answers to the
-    merged-away name. Merges made before survivors recorded an ``## Aliases``
-    entry have nothing else left to go on. ``migrate discarded-topic-links``
-    uses this to tell a merge apart from a dismissal (#282). A stub that
-    cannot be read is appended to ``errors`` instead of being dropped without
-    a word.
+    Reads merge rows from the dismissal ledger so the reviewer's intent
+    survives even when the survivor page was later renamed or re-filed and no
+    longer answers to the merged-away name. ``migrate discarded-topic-links``
+    uses this to tell a merge apart from a dismissal (#282 / #326).
+    ``errors`` is accepted for call-site compatibility; ledger I/O reports
+    failures by raising rather than appending skip notes.
     """
-    root = archive_dir(wiki_dir)
-    intents: dict[str, str] = {}
-    if not root.is_dir():
-        return intents
-    for path in sorted(root.rglob("*.md")):
-        reason_file = _reason_file(path)
-        if not reason_file.is_file():
-            continue
-        try:
-            text = path.read_text(encoding="utf-8")
-            reason = reason_file.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError) as exc:
-            _note_skip(errors, wiki_dir, path, exc)
-            continue
-        target = _parse_merge_reason(
-            _reason_field_value(reason, _REASON_FIELD_REASON)
-        )
-        if not target:
-            continue
-        meta, _ = _parse_frontmatter(text)
-        key = norm_page_key(meta.get("title") or path.stem)
-        if key:
-            intents.setdefault(key, target)
-    return intents
+    _ = errors  # signature preserved for topics / migrate call sites
+    return {
+        rec["key"]: rec["into"]
+        for rec in iter_merges(wiki_dir)
+        if rec["key"] and rec["into"]
+    }
 
 
 @dataclass(frozen=True)
@@ -1649,77 +1658,27 @@ def _rewrite_type(text: str, *, new: str) -> str:
     return text
 
 
-#: Field label of the reason file line that says why a candidate was archived.
-_REASON_FIELD_REASON = "Reason"
+def _ensure_dismissal_ledger(wiki_dir: Path) -> None:
+    """Materialise ``dismissals.json`` before archiving a new stub.
 
-#: What :func:`merge` records as its reason, ahead of the target it folded the
-#: candidate into. The only thing that tells a merge apart from a free-text
-#: dismissal once the stub is in cold storage.
-_MERGE_REASON_PREFIX = "merged into "
-
-
-def _reason_file(archived: Path) -> Path:
-    """The reason file that belongs beside an archived candidate stub."""
-    return archived.with_suffix(".reason.txt")
-
-
-def _reason_field(label: str, value: object) -> str:
-    """One ``<label>: <value>`` line of an archived candidate's reason file."""
-    return f"{label}: {value}"
-
-
-def _reason_field_value(text: str, label: str) -> str:
-    """Value ``label`` carries in a reason file, ``""`` when it carries none.
-
-    Reads the line :func:`_reason_field` writes, through the same formatter,
-    so no caller has to restate the file's layout.
+    :func:`llmwiki.dismissal_ledger.load_ledger` rebuilds from the archive when
+    the file is missing. Calling that *after* the stub has moved would treat a
+    freshly archived merge (no sibling ``*.reason.txt``) as a pure dismissal.
+    Ensuring the ledger exists first keeps upsert as an incremental update.
     """
-    prefix = _reason_field(label, "")
-    for line in text.splitlines():
-        if line.startswith(prefix):
-            return line[len(prefix):].strip()
-    return ""
+    if not ledger_path(wiki_dir).is_file():
+        load_ledger(wiki_dir)
 
 
-def _format_merge_reason(into_slug: str) -> str:
-    """The reason :func:`merge` records for the candidate it folded away."""
-    return f"{_MERGE_REASON_PREFIX}{into_slug}"
+def _archive_candidate(candidate: Path, wiki_dir: Path) -> Path:
+    """Move candidate into ``wiki/archive/candidates/<timestamp>/<name>.md``.
 
-
-def _parse_merge_reason(reason: str) -> str:
-    """Target in a :func:`_format_merge_reason` reason, ``""`` when it is not one."""
-    if not reason.startswith(_MERGE_REASON_PREFIX):
-        return ""
-    return reason[len(_MERGE_REASON_PREFIX):].strip()
-
-
-def _archive_candidate(
-    candidate: Path,
-    wiki_dir: Path,
-    *,
-    reason: str,
-    redirect: str | None = None,
-) -> Path:
-    """Move candidate into archive with reason file.
-
-    The reason file is written whenever there is a reason or a redirect.
+    Decision metadata (reason / merge target) is written separately via
+    :mod:`llmwiki.dismissal_ledger` — this helper only relocates the stub.
     """
     stamp = datetime.now(UTC).strftime("%Y-%m-%dT%H-%M-%S")
     dest_dir = archive_dir(wiki_dir) / stamp
     dest_dir.mkdir(parents=True, exist_ok=True)
-
-    original = candidate.relative_to(wiki_dir).as_posix()
     dest = dest_dir / candidate.name
     shutil.move(str(candidate), str(dest))
-
-    if reason or redirect:
-        reason_file = _reason_file(dest)
-        lines = [
-            _reason_field("Discarded at", datetime.now(UTC).isoformat()),
-            _reason_field(_REASON_FIELD_REASON, reason),
-            _reason_field("Original path", original),
-        ]
-        if redirect:
-            lines.append(_reason_field("Redirected to", redirect))
-        reason_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return dest

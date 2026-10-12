@@ -19,6 +19,8 @@ import pytest
 
 from llmwiki import candidates as candidates_mod
 from llmwiki.build import render_candidates_page
+from llmwiki.candidates import discard
+from llmwiki.candidates_near_match import EMPTY_REASON_DISPLAY
 from llmwiki.candidates_site import (
     _REVIEW_SCRIPT,  # noqa: PLC2701
     _VALID_ACTIONS,  # noqa: PLC2701
@@ -58,7 +60,10 @@ _ROW_STUB = """
 function mkRow(spec) {
   return {
     getAttribute: function (name) {
-      return name === "data-slug" ? spec.slug : spec.kind;
+      if (name === "data-slug") return spec.slug;
+      if (name === "data-kind") return spec.kind;
+      if (name === "data-prior-reason") return spec.priorReason || "";
+      return null;
     },
     querySelector: function (sel) {
       if (sel === ".cand-decision") return { value: spec.decision || "" };
@@ -714,6 +719,116 @@ def test_render_candidates_page_writes_html(tmp_path: Path) -> None:
     assert "Gamma" in text
     assert "cand-command" in text
     assert 'class="nav' in text or "candidates.html" in text
+
+
+# ─── prior dismissal near-match (#146 / #326) ───────────────────────────
+
+
+def test_candidates_payload_includes_prior_dismissal(tmp_path: Path) -> None:
+    """Site payload carries prior_dismissals from list_candidates — no browser match.
+
+    # @spec: 326-harvest-discard-reason-surface
+    """
+    wiki = _mk_wiki(tmp_path)
+    _write_candidate(wiki, "entities", "Foobar")
+    discard("Foobar", wiki, reason="hosting detail, not subject matter")
+    _write_candidate(wiki, "entities", "FooBars")
+    _write_candidate(wiki, "entities", "Unrelated")
+
+    rows = {r["slug"]: r for r in candidates_payload(wiki)["candidates"]}
+    priors = rows["FooBars"].get("prior_dismissals")
+    assert priors is not None and len(priors) == 1
+    assert priors[0]["name"] == "Foobar"
+    assert priors[0]["reason"] == "hosting detail, not subject matter"
+    assert priors[0]["ratio"] >= 0.90
+    assert rows["FooBars"]["prior_dismissal"] == priors[0]
+    assert "prior_dismissals" not in rows["Unrelated"]
+
+
+@needs_node
+def test_apply_maps_discard_prior_to_discard_with_prior_reason(tmp_path: Path) -> None:
+    """Discard with prior reason becomes a normal discard action with that reason.
+
+    # @spec: 326-harvest-discard-reason-surface
+    """
+    out = _collect_actions([
+        {
+            "slug": "FooBars",
+            "kind": "entities",
+            "decision": "discard-prior",
+            "priorReason": "hosting detail, not subject matter",
+        },
+    ], tmp_path)
+    assert out["ok"], out.get("error")
+    assert out["actions"] == [
+        {
+            "action": "discard",
+            "slug": "FooBars",
+            "kind": "entities",
+            "reason": "hosting detail, not subject matter",
+        },
+    ]
+
+
+def test_name_cell_shows_prior_dismissal_line(tmp_path: Path) -> None:
+    """Name cell muted secondary line matches the approved site mockup.
+
+    # @spec: 326-harvest-discard-reason-surface
+    """
+    wiki = _mk_wiki(tmp_path)
+    _write_candidate(wiki, "entities", "Foobar")
+    discard("Foobar", wiki, reason="hosting detail, not subject matter")
+    _write_candidate(wiki, "entities", "FooBars")
+
+    html_out = render_candidates_body(wiki)
+
+    assert 'class="muted cand-prior-dismissals"' in html_out
+    assert "Prior dismissals:" in html_out
+    assert (
+        "&quot;Foobar&quot; — hosting detail, not subject matter" in html_out
+    )
+    # Title once — do not repeat identical slug under the name.
+    assert "<strong>FooBars</strong>" in html_out
+    assert "<code>FooBars</code>" not in html_out
+    assert "Discard with prior reason" in html_out
+    assert 'data-prior-reason="hosting detail, not subject matter"' in html_out
+
+
+def test_name_cell_empty_reason_uses_placeholder(tmp_path: Path) -> None:
+    """Blank discard reason renders as (discarded without explanation) on the site.
+
+    # @spec: 326-harvest-discard-reason-surface
+    """
+    wiki = _mk_wiki(tmp_path)
+    _write_candidate(wiki, "concepts", "ApiClient")
+    discard("ApiClient", wiki, reason="")
+    _write_candidate(wiki, "concepts", "ApiClients")
+
+    html_out = render_candidates_body(wiki)
+
+    assert f"&quot;ApiClient&quot; — {EMPTY_REASON_DISPLAY}" in html_out
+    assert "Discard with prior reason" in html_out
+
+
+def test_render_candidates_page_includes_prior_dismissal_line(tmp_path: Path) -> None:
+    """Built candidates.html contains the Prior dismissal line for a near-match.
+
+    # @spec: 326-harvest-discard-reason-surface
+    """
+    wiki = _mk_wiki(tmp_path)
+    _write_candidate(wiki, "entities", "Foobar")
+    discard("Foobar", wiki, reason="hosting detail, not subject matter")
+    _write_candidate(wiki, "entities", "FooBars")
+    out = tmp_path / "site"
+    out.mkdir()
+
+    path = render_candidates_page(wiki, out)
+    text = path.read_text(encoding="utf-8")
+
+    assert "&quot;Foobar&quot; — hosting detail, not subject matter" in text
+    assert 'class="muted cand-prior-dismissals"' in text
+    assert "Prior dismissals:" in text
+    assert "Discard with prior reason" in text
 
 
 # ─── discard --redirect (#282) ──────────────────────────────────────────
