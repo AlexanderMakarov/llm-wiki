@@ -75,6 +75,8 @@ llmwiki build                        # vault/wiki/ → vault/site/ for human bro
 
 One-shot: `llmwiki all --graph-engine builtin` runs sync → synth → build → graph → lint. Opt out of a stage with `--no-sync`, `--no-synth`, `--skip-graph`, or `--skip-lint`.
 
+Look around when something feels off: `llmwiki doctor` diagnoses the install and vault from a bundled heal catalog and, with consent, runs safe repairs (`--check` is diagnose-only; see [CLI reference](docs/reference/cli.md#doctor--heal-the-install-and-vault)). `llmwiki lint` stays the wiki-quality rule runner.
+
 ## Agents
 
 One row per agent. **Supplies sessions** = `llmwiki sync` can read its transcript store. **Reads the wiki** = MCP and/or slash commands after `install-agent-kit` (any MCP client can call `python3 -m llmwiki.mcp`). **Core** adapters run on a default `sync` when their store exists; **contrib** adapters need `--adapter <name>` or `adapters.<name>.enabled` in config.

@@ -92,13 +92,13 @@ To enable it by hand (for example after `pip install`), paste the line for your 
 bash — `~/.bashrc` (`~/.bash_profile` on macOS):
 
 ```bash
-_llmwiki_complete() { COMPREPLY=(); if [ "$COMP_CWORD" -eq 1 ]; then COMPREPLY=($(compgen -W "init sync build usage adapters configure-sources graph lint queue migrate install-agent-kit candidates synth add remove search query trace version all watch install-automation" -- "${COMP_WORDS[1]}")); fi; }; complete -o default -F _llmwiki_complete llmwiki # llmwiki-completion
+_llmwiki_complete() { COMPREPLY=(); if [ "$COMP_CWORD" -eq 1 ]; then COMPREPLY=($(compgen -W "init sync build usage adapters configure-sources graph lint doctor queue migrate install-agent-kit candidates synth add remove search query trace version all watch install-automation" -- "${COMP_WORDS[1]}")); fi; }; complete -o default -F _llmwiki_complete llmwiki # llmwiki-completion
 ```
 
 zsh — `~/.zshrc`:
 
 ```zsh
-(( $+functions[compdef] )) || { autoload -Uz compinit && compinit; }; _llmwiki_complete() { _arguments '1:command:(init sync build usage adapters configure-sources graph lint queue migrate install-agent-kit candidates synth add remove search query trace version all watch install-automation)' '*::arg:_files'; }; compdef _llmwiki_complete llmwiki # llmwiki-completion
+(( $+functions[compdef] )) || { autoload -Uz compinit && compinit; }; _llmwiki_complete() { _arguments '1:command:(init sync build usage adapters configure-sources graph lint doctor queue migrate install-agent-kit candidates synth add remove search query trace version all watch install-automation)' '*::arg:_files'; }; compdef _llmwiki_complete llmwiki # llmwiki-completion
 ```
 
 ## Three commands after install

@@ -113,7 +113,16 @@ llm-wiki-add = "llmwiki.cli:main_add"
 include = ["llmwiki*"]
 
 [tool.setuptools.package-data]
-llmwiki = ["py.typed", "model_pricing.csv", "vendor/*.js", "vendor/*.css", "vendor/NOTICE", "agent_kit/**/*.md"]
+llmwiki = [
+    "py.typed",
+    "model_pricing.csv",
+    "vendor/*.js",
+    "vendor/*.css",
+    "vendor/NOTICE",
+    "agent_kit/**/*.md",
+    "doctor/heal_kb.json",
+    "doctor/*.json",
+]
 
 [tool.ruff]
 line-length = 120

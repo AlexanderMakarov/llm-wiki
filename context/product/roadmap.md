@@ -52,7 +52,7 @@ _Newcomers should understand benefits and the canonical loop without fork histor
   - [ ] **CLI help as a lifecycle map (#112):** Every command says what it does and where it sits in sync → synth → review → build; mark migrate-* as maintenance.
 
 - [ ] **Guided health check**
-  - [ ] **`llmwiki doctor` (#110):** One read-only command that reports environment + vault health with the exact fix command for each finding.
+  - [x] **`llmwiki doctor` (#110):** Diagnose environment + vault health from the bundled heal catalog; propose repairs and — with consent — run the heal loop (`--check` / `--dry-run` diagnose-only; `--yes` auto-applies safe fixes).
 
 ---
 

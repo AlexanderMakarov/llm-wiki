@@ -183,7 +183,7 @@ Failed runner → finding remains; print stderr; do not invent an alternate priv
 
 - Help group: **Look around** (with lint, trace).
 - `pyproject.toml` package-data: `doctor/heal_kb.json` (and package modules).
-- `docs/reference/cli.md` + CHANGELOG; replace roadmap-only doctor mentions when shipping.
+- `docs/reference/cli.md` + CHANGELOG; replace roadmap-only doctor mentions when shipping. **Done** (Slice 6).
 - CONTRIBUTING (+ agent contribution pointers) hardens error rewording ↔ `heal_kb.json` co-updates; shipped in the same feature PR as doctor.
 
 ---

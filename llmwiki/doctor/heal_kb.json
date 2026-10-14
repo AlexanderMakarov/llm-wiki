@@ -1,0 +1,380 @@
+{
+  "version": 2,
+  "areas": {
+    "A": {
+      "title": "Install & interpreter",
+      "summary": "Which Python runs llmwiki, install path, and distribution name."
+    },
+    "B": {
+      "title": "Optional extras",
+      "summary": "Whether [add], [graph], [e2e] (and aliases) import in this interpreter."
+    },
+    "C": {
+      "title": "Config & vault binding",
+      "summary": "Which config.json loaded; vault root; wiki present; settings parse."
+    },
+    "D": {
+      "title": "Session sources / adapters",
+      "summary": "Adapters present vs enabled; store paths; sync readiness."
+    },
+    "E": {
+      "title": "Ingest / add",
+      "summary": "Readiness to land documents; converter extras for add."
+    },
+    "F": {
+      "title": "Synthesis backend",
+      "summary": "Configured synthesis backend and whether its CLI resolves."
+    },
+    "G": {
+      "title": "Pipeline backlog",
+      "summary": "Raw vs synthesized sources and pending candidates when overdue."
+    },
+    "H": {
+      "title": "Candidates review",
+      "summary": "Pending candidate review that blocks the canonical loop."
+    },
+    "I": {
+      "title": "Wiki lint / consistency",
+      "summary": "Registered lint rules and mechanical vault repairs."
+    },
+    "J": {
+      "title": "Provenance / trace",
+      "summary": "Broken provenance chains from wiki pages to raw sources."
+    },
+    "K": {
+      "title": "Migrations / schema drift",
+      "summary": "Vault shape that needs a named llmwiki migrate repair."
+    },
+    "L": {
+      "title": "Automation / schedulers",
+      "summary": "Declared vs active automation and activation steps."
+    },
+    "M": {
+      "title": "Build / site freshness",
+      "summary": "Site vs wiki skew after synth or other pipeline work."
+    },
+    "N": {
+      "title": "Agent kit / MCP consumer path",
+      "summary": "Packaged agent kit and MCP consumer mismatches."
+    },
+    "O": {
+      "title": "Privacy / redaction posture",
+      "summary": "High-level redaction expectations for drafts and reports."
+    }
+  },
+  "entries": [
+    {
+      "id": "env.wrong_pypi_name",
+      "area": "A",
+      "patterns": [
+        "re:pip install llm-wiki(?!-plus)\\b",
+        "re:No matching distribution found for llm-wiki(?!-plus)\\b",
+        "llm-wiki vs llm-wiki-plus",
+        "env.wrong_pypi_name"
+      ],
+      "message": "Install used the wrong PyPI name (llm-wiki). The published distribution is llm-wiki-plus.",
+      "fix": "Install with the interpreter that runs llmwiki: use llm-wiki-plus (or llm-wiki-plus[extra]), not llm-wiki.",
+      "actionable": true,
+      "severity": "error",
+      "tier": "guided",
+      "runner": null
+    },
+    {
+      "id": "env.no_package_installer",
+      "area": "A",
+      "patterns": [
+        "No module named pip",
+        "ensurepip is disabled",
+        "uv pip install",
+        "env.no_package_installer"
+      ],
+      "message": "This interpreter has neither pip nor uv available, so doctor cannot install extras into it.",
+      "fix": "Install uv (https://docs.astral.sh/uv/) or enable pip for this Python, then re-run doctor and install the needed extra.",
+      "actionable": true,
+      "severity": "error",
+      "tier": "guided",
+      "runner": null
+    },
+    {
+      "id": "env.uv_venv_without_uv",
+      "area": "A",
+      "patterns": [
+        "uv-managed",
+        "uv =",
+        "needs uv:",
+        "env.uv_venv_without_uv"
+      ],
+      "message": "llmwiki is running inside a uv-managed venv, but the uv binary is not on PATH.",
+      "fix": "Install uv and ensure it is on PATH, then use the printed uv pip install --python <this-python> command for extras.",
+      "actionable": true,
+      "severity": "warning",
+      "tier": "guided",
+      "runner": null
+    },
+    {
+      "id": "env.extra_graph_missing",
+      "area": "B",
+      "patterns": [
+        "graphify not installed",
+        "No module named 'graphify'",
+        "pip install llmwiki[graph]",
+        "llm-wiki-plus[graph]",
+        "env.extra_graph_missing"
+      ],
+      "message": "Optional [graph] extra is missing — graphify is not importable in this interpreter.",
+      "fix": "Install the graph extra into this interpreter (see install hint), then retry llmwiki graph.",
+      "actionable": true,
+      "severity": "warning",
+      "tier": "dangerous",
+      "runner": "install_extra:graph"
+    },
+    {
+      "id": "vault.missing_or_unusable",
+      "area": "C",
+      "patterns": [
+        "vault directory not found",
+        "wiki directory not found",
+        "No vault configured",
+        "No wiki/ directory under vault",
+        "vault.missing_or_unusable"
+      ],
+      "message": "No usable vault or wiki/ directory is configured.",
+      "fix": "Pass --vault PATH to an existing vault with wiki/, or run llmwiki init --vault PATH, or set vault.default_path in config.json.",
+      "actionable": true,
+      "severity": "error",
+      "tier": "guided",
+      "runner": null
+    },
+    {
+      "id": "adapters.none_available",
+      "area": "D",
+      "patterns": [
+        "no adapters available",
+        "session store",
+        "adapters.none_available",
+        "configure-sources"
+      ],
+      "message": "No session adapters report an available store on this machine.",
+      "fix": "Run llmwiki adapters and llmwiki configure-sources; enable the agents you use and confirm their session paths exist.",
+      "actionable": true,
+      "severity": "warning",
+      "tier": "guided",
+      "runner": null
+    },
+    {
+      "id": "env.extra_add_missing",
+      "area": "E",
+      "patterns": [
+        "needs markitdown",
+        "No module named 'markitdown'",
+        "markitdown",
+        "llm-wiki-plus[add]",
+        "converting .pdf",
+        "env.extra_add_missing"
+      ],
+      "message": "Optional [add] extra is missing — markitdown is not importable, so PDF/DOCX ingest will fail.",
+      "fix": "Install the add extra into this interpreter (see install hint), then retry llmwiki add.",
+      "actionable": true,
+      "severity": "warning",
+      "tier": "dangerous",
+      "runner": "install_extra:add"
+    },
+    {
+      "id": "synth.backend_dummy",
+      "area": "F",
+      "patterns": [
+        "dummy backend",
+        "synthesis.backend",
+        "DummySynthesizer",
+        "backend is dummy",
+        "synth.backend_dummy"
+      ],
+      "message": "synthesis.backend is dummy (or unset) — real promote/synth work will not call an LLM.",
+      "fix": "Set synthesis.backend to ollama, claude, or cursor_cli in config.json and ensure that backend is available on PATH.",
+      "actionable": true,
+      "severity": "warning",
+      "tier": "guided",
+      "runner": null
+    },
+    {
+      "id": "synth.backend_unavailable",
+      "area": "F",
+      "patterns": [
+        "backend not available",
+        "claude: command not found",
+        "ollama not running",
+        "agent: command not found",
+        "synth.backend_unavailable"
+      ],
+      "message": "Configured synthesis backend is set but not available in this environment.",
+      "fix": "Install/start the configured backend CLI (claude, ollama, or Cursor agent) or switch synthesis.backend to a working value.",
+      "actionable": true,
+      "severity": "error",
+      "tier": "guided",
+      "runner": null
+    },
+    {
+      "id": "pipeline.backlog_overdue",
+      "area": "G",
+      "patterns": [
+        "unsynthesized raw",
+        "pipeline backlog",
+        "pending synth",
+        "synth queue",
+        "unsynthesized raw/doc",
+        "pipeline.backlog_overdue"
+      ],
+      "message": "The synth queue still has unsynthesized raw sessions/docs waiting longer than the overdue threshold (from vault state synth.pending — not “any old file under raw/”).",
+      "fix": "Run llmwiki synth to drain the pending queue (then llmwiki build if the site should refresh). Already-synthesized raw files stay on disk forever and are not a backlog by themselves.",
+      "actionable": true,
+      "severity": "warning",
+      "tier": "dangerous",
+      "runner": "synth"
+    },
+    {
+      "id": "candidates.review_pending",
+      "area": "H",
+      "patterns": [
+        "pending candidates",
+        "candidates review",
+        "wiki/candidates",
+        "candidates.review_pending"
+      ],
+      "message": "Candidate stubs are awaiting review and may block the canonical loop.",
+      "fix": "Review with llmwiki candidates list / promote / merge / discard (or site candidates.html); apply --actions when ready. Doctor does not auto-run review decisions — they need a human.",
+      "actionable": true,
+      "severity": "warning",
+      "tier": "guided",
+      "runner": null
+    },
+    {
+      "id": "lint.index_sync",
+      "area": "I",
+      "patterns": [
+        "rule=index_sync",
+        "lint:index_sync",
+        "index_sync",
+        "wiki/index.md out of sync",
+        "not listed in index.md",
+        "lint.index_sync"
+      ],
+      "message": "wiki/index.md (the page catalog) does not match pages on disk — a page exists that the catalog omits, or the catalog lists a missing path.",
+      "fix": "Run reindex to rewrite wiki/index.md from disk (safe). Consequence if skipped: Home/index navigation and counts miss those pages. Reindex does not delete, promote, or change candidate content — it only lists existing pages (including candidates/) in the catalog.",
+      "actionable": true,
+      "severity": "error",
+      "tier": "safe",
+      "runner": "reindex"
+    },
+    {
+      "id": "provenance.broken_chain",
+      "area": "J",
+      "patterns": [
+        "broken provenance",
+        "empty provenance",
+        "broken hop",
+        "migrate broken-provenance",
+        "provenance.broken_chain"
+      ],
+      "message": "Provenance chain from wiki page to raw source is broken or empty.",
+      "fix": "Inspect with llmwiki trace; repair via llmwiki migrate broken-provenance and/or llmwiki synth when appropriate.",
+      "actionable": true,
+      "severity": "warning",
+      "tier": "dangerous",
+      "runner": "migrate:broken-provenance"
+    },
+    {
+      "id": "migrate.schema_drift",
+      "area": "K",
+      "patterns": [
+        "schema drift",
+        "migrate --list",
+        "vault shape",
+        "migrate.schema_drift"
+      ],
+      "message": "Vault shape looks like it needs a named llmwiki migrate repair.",
+      "fix": "List with llmwiki migrate --list; dry-run then apply the named migration. Doctor cannot pick the name for you — guided only until a detector attaches migrate:<name>.",
+      "actionable": true,
+      "severity": "warning",
+      "tier": "guided",
+      "runner": null
+    },
+    {
+      "id": "automation.not_active",
+      "area": "L",
+      "patterns": [
+        "install-automation",
+        "scheduler not active",
+        "systemd user unit",
+        "automation.not_active"
+      ],
+      "message": "Declared automation/scheduler units are not active.",
+      "fix": "Run llmwiki install-automation and activate the user units as documented (no sudo from doctor).",
+      "actionable": true,
+      "severity": "warning",
+      "tier": "dangerous",
+      "runner": "install_automation"
+    },
+    {
+      "id": "build.site_stale",
+      "area": "M",
+      "patterns": [
+        "stale site",
+        "site freshness",
+        "rebuild the site",
+        "build.site_stale"
+      ],
+      "message": "site/ looks stale relative to wiki/ after pipeline work.",
+      "fix": "Run llmwiki build after synth or other wiki changes that should appear on the site.",
+      "actionable": true,
+      "severity": "warning",
+      "tier": "dangerous",
+      "runner": "build"
+    },
+    {
+      "id": "agent_kit.outdated",
+      "area": "N",
+      "patterns": [
+        "install-agent-kit",
+        "agent kit",
+        "MCP flag",
+        "agent_kit.outdated"
+      ],
+      "message": "Agent kit or MCP consumer path looks outdated or mismatched.",
+      "fix": "Re-run llmwiki install-agent-kit --dest <agent-dir> and verify MCP flags match the current package.",
+      "actionable": true,
+      "severity": "warning",
+      "tier": "dangerous",
+      "runner": "install_agent_kit"
+    },
+    {
+      "id": "privacy.draft_redaction",
+      "area": "O",
+      "patterns": [
+        "redaction",
+        "anonymize",
+        "vault roots",
+        "privacy.draft_redaction",
+        "<vault>",
+        "<user>"
+      ],
+      "message": "Doctor drafts must keep vault roots, usernames, and hostnames out of shared text.",
+      "fix": "Use placeholders (<vault>, <user>, <path>) in issue drafts and AI prompts; never paste personal vault roots.",
+      "actionable": false,
+      "severity": "info",
+      "tier": "guided",
+      "runner": null
+    }
+  ],
+  "unknown_templates": {
+    "issue_body": "## Symptom\n\n{{symptom_redacted}}\n\n## Environment\n\n- llmwiki: {{version}}\n- OS: {{os}}\n- Interpreter: {{interpreter_kind}}\n- Counts: {{counts}}\n\n## Links\n\n- AGENTS.md: {{agents_url}}\n- Heal catalog: {{kb_url}}\n\n## Ask\n\nPlease help find root cause and a fix for this package version. I can test locally.\n",
+    "ai_prompt": "Investigate this llmwiki doctor unknown symptom. Read {{agents_url}} and the heal catalog at {{kb_url}}. Symptom (paths redacted): {{symptom_redacted}}. Environment: version={{version}} os={{os}} interpreter={{interpreter_kind}} counts={{counts}}. Find root cause for this package version, propose a local fix, and draft a GitHub issue. Do not invent a shell command to run without evidence from the repo."
+  },
+  "matcher": {
+    "min_lexical_score": 0.45,
+    "stopwords": [
+      "the", "a", "an", "is", "are", "was", "were", "to", "of", "and", "or",
+      "in", "on", "for", "with", "this", "that", "it", "be", "as", "at",
+      "by", "from", "not", "no", "yes", "error", "failed", "fail", "warning"
+    ]
+  }
+}
