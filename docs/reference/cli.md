@@ -27,7 +27,7 @@ python3 -m llmwiki              # same as --help
 | **Start here** | `init` · `configure-sources` · `install-agent-kit` |
 | **Daily loop (this order)** | `sync` · `add` · `synth` · `candidates` · `build` |
 | **Run the loop for me** | `all` · `watch` · `install-automation` |
-| **Look around** | `lint` · `search` · `query` · `trace` · `graph` · `adapters` · `usage` · `version` |
+| **Look around** | `lint` · `doctor` · `search` · `query` · `trace` · `graph` · `adapters` · `usage` · `version` |
 | **Take things out** | `remove` |
 | **Rare — one-time** | `migrate` · `queue` |
 
@@ -332,6 +332,46 @@ python3 -m llmwiki graph --format html
 **Builtin engine:** Emits `graph/graph.json` (nodes + edges) and/or `graph/graph.html` (vis-network interactive viewer) plus sibling `graph-viewer.js` and `vis-network.min.js`. The interactive trio is also auto-copied into `site/` on every `build`, so the graph works offline from the built static site without a CDN fetch.
 
 **Graphify engine:** Runs the [Graphify](https://github.com/safishamsi/graphify) pipeline: tree-sitter AST extraction for code, semantic analysis for docs, Leiden community detection, god-node analysis. Outputs to `graphify-out/` (graph.json, graph.html, GRAPH_REPORT.md) and copies to `graph/` for build compatibility. Install: `pip install llm-wiki-plus[graph]` or `pip install graphifyy`.
+
+---
+
+## `doctor` — heal the install and vault
+
+Finds problems across the environment and vault, proposes repairs from the bundled heal catalog (`llmwiki/doctor/heal_kb.json`), and — with consent — runs those repairs. Default is the heal loop; `--check` / `--dry-run` are diagnose-only for scripts.
+
+```bash
+python3 -m llmwiki doctor
+python3 -m llmwiki doctor --check
+python3 -m llmwiki doctor --dry-run
+python3 -m llmwiki doctor --error "wiki directory not found"
+python3 -m llmwiki doctor --yes --error "rule=index_sync"
+python3 -m llmwiki doctor --check --error "No module named 'markitdown'"
+python3 -m llmwiki doctor --yes
+python3 -m llmwiki doctor --kit-dest ~/.claude --check
+python3 -m llmwiki doctor --vault /path/to/vault --check
+```
+
+### Flags
+
+| Flag | What |
+|---|---|
+| *(default)* | Heal loop: diagnose, confirm each automatic fix, apply, re-check. |
+| `--check` | Diagnose only — print findings and suggested fixes; apply nothing (wins over heal apply even with `--error`). |
+| `--dry-run` | Alias for `--check`. |
+| `--error TEXT` | Look up one pasted symptom in the heal catalog (no full lint pass for the lookup itself). Matched runnable fixes still go through the same confirm / `--yes` path afterward unless `--check`. |
+| `--yes` | Auto-apply **safe** fixes without per-item prompts; dangerous tiers still ask on a TTY (and are skipped on non-TTY unless confirmed later). |
+| `--kit-dest DIR` | Optional agent-kit destination so area N (`install_agent_kit`) can diagnose / heal against that directory (same idea as `install-agent-kit --dest`). |
+| `--vault PATH` | Operate on this vault root (must contain `wiki/`). |
+
+### Exit codes
+
+| Code | Meaning |
+|---|---|
+| `0` | Nothing actionable remains (healthy, or agreed fixes applied and re-check clean). |
+| `1` | Actionable problems remain (declined, failed, or still broken after re-check). |
+| `2` | Vault/config missing or unusable (no lint / no heal menu beyond configure/init guidance). |
+
+Live detectors cover areas A–O (interpreter/extras, vault/config, adapters, synthesis backend, lint fold including index drift and provenance, overdue backlog, migrations, automation, site freshness, agent-kit, privacy). Catalog match and unknown-assist (`--error`) use the bundled heal KB; safe runners may apply under confirm or `--yes`, dangerous tiers (including synth) always need an explicit TTY confirm.
 
 ---
 
@@ -1056,7 +1096,7 @@ raw     Kickoff transcript  raw/sessions/2026-01-01T12-00-demo-kickoff.md
 | `1` | Starting page could not be resolved (or locator unsafe / empty). |
 | `2` | Configured `--vault` / default vault path is unusable. |
 
-Use `trace` to inspect broken hops; repair them by hand or with `synth` / `migrate broken-provenance` as the lint message suggests. Guided repair under `doctor` (#110) is roadmap-only.
+Use `trace` to inspect broken hops; repair them by hand or with `synth` / `migrate broken-provenance` as the lint message suggests. `llmwiki doctor` folds provenance findings into the heal flow and can run those repairs with consent (`--check` to diagnose only).
 
 ---
 

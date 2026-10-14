@@ -107,6 +107,6 @@ raw     Kickoff transcript  raw/sessions/2026-01-01T12-00-demo-kickoff.md
 | `1` | Starting page could not be resolved (or locator unsafe / empty). |
 | `2` | Configured `--vault` / default vault path is unusable. |
 
-Use `trace` to inspect broken hops; repair them by hand or with `synth` / `migrate broken-provenance` as the lint message suggests. Guided repair under `doctor` (#110) is roadmap-only.
+Use `trace` to inspect broken hops; repair them by hand or with `synth` / `migrate broken-provenance` as the lint message suggests. `llmwiki doctor` folds provenance findings into the heal flow and can run those repairs with consent (`--check` to diagnose only).
 
 ---

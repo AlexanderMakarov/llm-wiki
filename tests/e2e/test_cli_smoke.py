@@ -87,6 +87,7 @@ ALL_SUBCOMMANDS = (
     "configure-sources",
     "graph",
     "lint",
+    "doctor",
     "queue",
     "migrate",
     "candidates",

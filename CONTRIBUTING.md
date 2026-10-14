@@ -12,6 +12,7 @@ Rules for changing **this repository** (package, tests, docs, CI). Not vault wor
 - [Commit + PR rules](#commit--pr-rules)
 - [Adding a new adapter](#adding-a-new-adapter)
 - [Static-site error handling](#static-site-error-handling)
+- [CLI error strings and the doctor heal catalog](#cli-error-strings-and-the-doctor-heal-catalog)
 - [Privacy rules](#privacy-rules)
 - [Markdown conventions](#markdown-conventions)
 - [Site look and feel](#site-look-and-feel)
@@ -34,6 +35,7 @@ Rules for changing **this repository** (package, tests, docs, CI). Not vault wor
 11. **Lint before you push.** `ruff check llmwiki tests scripts`. A committed `pre-push` hook checks the Python files in your push; see [Linting](#linting).
 12. **Wait for CI after every push.** Local green is not enough — after `git push` (new PR or update), watch GitHub Actions on that head SHA, report the result, and fix/repush if anything failed. See [After you push](#after-you-push).
 13. **Product PRs update AWOS notes.** When a PR changes `llmwiki/`, `integrations/`, `tests/`, `.github/workflows/`, `docs/maintainers/`, or `docs/reference/`, it must also change something under `context/`. Path filters alone decide when notes are required — there is no label escape hatch. Tutorials, scripts, packaging, guides, examples, and similar areas stay exempt. CI enforces this on every PR.
+14. **Rewording user-facing errors updates the doctor heal catalog.** Changing exception text, CLI `error:` lines, or install/heal hints that users may paste into `llmwiki doctor --error` requires a same-PR update to `llmwiki/doctor/heal_kb.json` so it matches **this** package’s strings. Prefer durable error codes. Code ↔ catalog drift is a bug. See [CLI error strings and the doctor heal catalog](#cli-error-strings-and-the-doctor-heal-catalog).
 
 ## Code of conduct
 
@@ -238,6 +240,21 @@ The viewer is vanilla JS with no error boundary and no telemetry — a swallowed
 4. **Keep the error surface independent of what it reports.** The bar is styled inline, so it survives a broken stylesheet.
 5. **Test the failure path** — see `tests/test_file_protocol_search.py`.
 6. **Never `fetch` build-emitted data.** Blocked over `file://`, and users do double-click `index.html`. Emit a `.js` sidecar with `write_js_sidecar()` (`llmwiki/render/data.py`), load it via `window.__llmwikiLoadData(url, key)`.
+
+## CLI error strings and the doctor heal catalog
+
+`llmwiki doctor` heals from a **release-shipped** catalog (`llmwiki/doctor/heal_kb.json`) that ships **inside the same package version** as the code that emits errors. The catalog must describe **only current** failures of that version — not a museum of retired or deprecated messages from older releases. The default heal loop keys off **stable finding ids** from detectors and lint; `doctor --error` matches pasted stderr via fingerprints and `patterns` against **current** strings. There is no doctor-specific semantic search. **Any drift between code and `heal_kb.json` is a bug** (same-PR miss or stale catalog).
+
+Rules for any PR that changes user-visible failure text in the CLI package (exceptions, `error:` / hint strings, install_hint prose, migrate/synth refusal messages, and similar):
+
+1. **Same PR keeps the catalog current.** Update the entry’s `message`, `fix`, and `patterns` so they match the **new** wording this package emits. Replace outdated patterns; do **not** keep retired/deprecated entries or long historical alias lists for removed error text.
+2. **Prefer stable codes.** New or rewritten errors should include a durable token (catalog `id` or an explicit code substring) that detectors and `--error` can key on. Rewords that keep the same failure keep the same `id` and refresh `patterns` to the current string set.
+3. **Split or remove failure modes by editing the live catalog.** Splitting one problem into two ⇒ add the new ids and **delete** the old entry (or rewrite it into one of the new ones). Removing a failure mode from the product ⇒ **delete** its catalog entry in the same PR. Pastes from older package versions that no longer match fall through to unknown-assist — that is expected.
+4. **Detectors stay consistent with the catalog.** Every doctor check or lint→heal mapping that emits an `id` must resolve in `heal_kb.json`. Every user-facing error string that doctor is expected to match should appear in some entry’s `patterns` (or be keyed by a stable code the tests assert). Actionable entries need a non-empty `fix` and a `runner` consistent with their `tier` (`guided` / unknown ⇒ `runner: null`).
+5. **Do not teach doctor by writing the catalog from a live vault.** Unmatched symptoms use the unknown-assist path (anonymized issue draft + AI prompt). Maintainers add real entries in-repo after review — never commit personal vault paths or usernames into `heal_kb.json` examples (use `<vault>`, `<user>`, `<path>`).
+6. **This is repo process, not vault schema.** Keep these rules in `CONTRIBUTING.md` (and the short agent pointers that summarize it). Do **not** put them in root `AGENTS.md` / `CLAUDE.md` — those files describe a user’s wiki loop, not llmwiki development. Agents that start from `AGENTS.md` already get a pointer here when the work is package code.
+
+Full matching and runner design: `context/spec/327-doctor/technical-considerations.md`.
 
 ## Privacy rules
 

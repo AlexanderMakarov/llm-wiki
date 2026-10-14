@@ -105,6 +105,14 @@ from llmwiki.config_schedule import (
 )
 from llmwiki.convert import DEFAULT_OUT_DIR, convert_all
 from llmwiki.cron_spec import CronError, describe, parse_cron
+from llmwiki.doctor import (
+    DoctorMode,
+    apply_heals,
+    print_heal_summary,
+    render_text,
+    run_doctor,
+    runnable_findings,
+)
 from llmwiki.graph import build_and_report
 from llmwiki.graphify_bridge import build_graphify_graph, is_available, query_graph
 from llmwiki.install_hint import pip_install_command
@@ -1016,6 +1024,69 @@ def cmd_graph(args: argparse.Namespace) -> int:
 # and re-exported at top of file (#691).
 # `export` and `reindex` CLIs removed: AI exports are part of `build`;
 # index reconciliation runs inside `sync` and `synthesize`.
+
+
+def cmd_doctor(args: argparse.Namespace) -> int:
+    """Diagnose first (always print findings), then optionally heal on a TTY."""
+    _apply_default_vault(args)
+    vault = getattr(args, "vault", None)
+    vault_path = Path(vault).expanduser() if vault is not None else None
+
+    error_text = getattr(args, "error", None)
+    check_only = bool(getattr(args, "check", False) or getattr(args, "dry_run", False))
+    yes = bool(getattr(args, "yes", False))
+    kit_dest = getattr(args, "kit_dest", None)
+    kit_path = Path(kit_dest).expanduser() if kit_dest else None
+
+    # --check / --dry-run win over heal apply for every path, including --error.
+    if check_only:
+        mode = DoctorMode.CHECK
+    elif error_text:
+        mode = DoctorMode.ERROR
+    else:
+        mode = DoctorMode.HEAL
+
+    # Always diagnose without applying so the report is visible before any prompt.
+    report = run_doctor(
+        vault_path,
+        mode=DoctorMode.ERROR if error_text else DoctorMode.CHECK,
+        error_text=error_text,
+        yes=False,
+        apply=False,
+        kit_dest=kit_path,
+    )
+    print(render_text(report), end="")
+
+    if report.exit_code == 2 or vault_path is None:
+        return report.exit_code
+    if check_only or mode == DoctorMode.CHECK:
+        return report.exit_code
+
+    runnable = runnable_findings(report.findings)
+    if not runnable:
+        return report.exit_code
+
+    tty = bool(getattr(sys.stdin, "isatty", lambda: False)())
+    want_heal = False
+    if yes:
+        want_heal = True
+    elif tty:
+        # Per-item confirms inside apply_heals; no outer yes/no gate.
+        want_heal = print_heal_summary(report.findings)
+    if not want_heal:
+        return report.exit_code
+
+    print("", flush=True)
+    report = apply_heals(
+        vault_path,
+        report.findings,
+        yes=yes,
+        is_tty=tty,
+        kit_dest=kit_path,
+    )
+    print("\n--- after heal ---\n", end="")
+    print(render_text(report), end="")
+    return report.exit_code
 
 
 def cmd_lint(args: argparse.Namespace) -> int:
@@ -3071,6 +3142,8 @@ def _add_vault_arg(parser: argparse.ArgumentParser, *, role: str) -> None:
                      "(sync → synth → build) when sessions finish.",
             "install-automation": "Write automation status and schedulers "
                                   "for this vault.",
+            "doctor": "Heal or check this vault (and its wiki/) instead of "
+                      "the configured default path.",
         }[role],
     )
 
@@ -3101,6 +3174,7 @@ def build_parser() -> argparse.ArgumentParser:
 
             Look around
               lint                 Check the wiki without changing pages
+              doctor               Find problems and heal the install and vault
               search               Literal term or phrase lookup over the vault
               query                Ask a natural-language question of the wiki
               trace                Show how a wiki page traces back to raw sources
@@ -3363,6 +3437,49 @@ def build_parser() -> argparse.ArgumentParser:
                            "llmwiki.json cannot stop the gate — they never ran")
     _add_vault_arg(lint, role="synthesize")
     lint.set_defaults(func=cmd_lint)
+
+    doctor = add_command(
+        "doctor",
+        """
+        Look around: find problems across the install and vault, propose concrete repairs from the bundled heal catalog, and — with consent — run those repairs until things are sound.
+
+        Default is the heal loop (diagnose, confirm, apply, re-check). --check and --dry-run diagnose only and apply nothing. --error looks up one pasted symptom without a full lint pass first. --yes auto-applies the safe fix set only; dangerous repairs still ask on a TTY.
+
+        Exit 2 when no usable vault or wiki/ is configured; exit 1 when actionable problems remain; exit 0 when nothing actionable remains.
+        """,
+    )
+    doctor.add_argument(
+        "--check",
+        action="store_true",
+        help="Diagnose only: print findings and suggested fixes; apply nothing",
+    )
+    doctor.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Alias for --check (diagnose only; apply nothing)",
+    )
+    doctor.add_argument(
+        "--error",
+        metavar="TEXT",
+        default=None,
+        help="Look up one pasted error/symptom in the heal catalog",
+    )
+    doctor.add_argument(
+        "--yes",
+        action="store_true",
+        help="Apply safe fixes without per-item prompts (dangerous tiers still ask on a TTY)",
+    )
+    doctor.add_argument(
+        "--kit-dest",
+        metavar="DIR",
+        default=None,
+        help=(
+            "Optional agent-kit destination for install_agent_kit checks/heals "
+            "(same idea as install-agent-kit --dest)"
+        ),
+    )
+    _add_vault_arg(doctor, role="doctor")
+    doctor.set_defaults(func=cmd_doctor)
 
     queue_p = add_command(
         "queue",
