@@ -1,7 +1,7 @@
 # Functional Specification: Complete documents on one site page
 
 - **Roadmap Item:** Show complete documents on the static site regardless of on-disk chunking ([GitHub Issue #305](https://github.com/AlexanderMakarov/llm-wiki/issues/305))
-- **Status:** Approved
+- **Status:** Completed
 - **Author:** 4ellendger
 
 ---

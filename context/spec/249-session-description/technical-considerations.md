@@ -1,7 +1,7 @@
 # Technical Specification: Session `description:` from assigned names + scored fallback
 
 - **Functional Specification:** [`functional-spec.md`](./functional-spec.md) (#249)
-- **Status:** Approved
+- **Status:** Completed
 - **Author(s):** Alexander Makarov
 
 ---

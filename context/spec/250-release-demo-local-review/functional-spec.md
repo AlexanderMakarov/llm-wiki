@@ -1,7 +1,7 @@
 # Functional Specification: Release-cut local demo review (usage window + site gate)
 
 - **Roadmap Item:** [#240](https://github.com/AlexanderMakarov/llm-wiki/issues/240) — refresh demo vault locally (site + usage + Home stamps) before tagging; CI only deploys
-- **Status:** Approved
+- **Status:** Completed
 - **Author:** Aleksandr Makarov
 
 ---

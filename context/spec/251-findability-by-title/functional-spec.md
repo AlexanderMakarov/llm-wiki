@@ -1,7 +1,7 @@
 # Functional Specification: Findability by page title
 
 - **Roadmap Item:** [#259](https://github.com/AlexanderMakarov/llm-wiki/issues/259) — findability is by page title; stop treating raw link text / file names as the findability test
-- **Status:** Approved
+- **Status:** Completed
 - **Author:** Aleksandr Makarov
 
 ---

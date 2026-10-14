@@ -1,7 +1,7 @@
 # Functional Specification: MCP Add as CLI Add Proxy (Text / Pipe Input)
 
 - **Roadmap Item:** GitHub issue #273 — MCP wiki_add matches CLI add; shared text/pipe input; explicit provenance; no MCP-local chunking
-- **Status:** Approved
+- **Status:** Completed
 - **Author:** Aleksandr Makarov
 
 ---

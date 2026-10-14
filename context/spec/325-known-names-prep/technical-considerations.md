@@ -1,7 +1,7 @@
 # Technical Specification: Bound and speed up known-names preparation (#264)
 
 - **Functional Specification:** [functional-spec.md](./functional-spec.md)
-- **Status:** Approved
+- **Status:** Completed
 - **Author(s):** 4ellendger
 
 ---

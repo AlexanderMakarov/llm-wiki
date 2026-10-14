@@ -1,7 +1,7 @@
 # Technical Specification: `llmwiki doctor` (heal loop)
 
 - **Functional Specification:** `context/spec/327-doctor/functional-spec.md`
-- **Status:** Approved
+- **Status:** Completed
 - **Author(s):** Aleksandr Makarov
 
 ## 1. High-Level Technical Approach

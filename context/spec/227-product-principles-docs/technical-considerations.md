@@ -1,7 +1,7 @@
 # Technical Specification: Product principles and maintainer doc clarity
 
 - **Functional Specification:** [functional-spec.md](./functional-spec.md)
-- **Status:** Approved
+- **Status:** Completed
 - **Author(s):** Aleksandr Makarov
 - **Approval notes (2026-09-08):** Operator approved after rebase onto fresh `origin/main` (includes #237 command-surface parity).
 

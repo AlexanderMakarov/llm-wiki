@@ -1,7 +1,7 @@
 # Technical Specification: Inject topic kind into per-page synth vocabulary (#257)
 
 - **Functional Specification:** [functional-spec.md](./functional-spec.md)
-- **Status:** Approved
+- **Status:** Completed
 - **Author(s):** Alexander Makarov
 
 ---

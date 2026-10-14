@@ -1,7 +1,7 @@
 # Functional Specification: Cursor AskQuestion dispatch for AWOS
 
 - **Roadmap Item:** [#114](https://github.com/AlexanderMakarov/llm-wiki/issues/114) (Cursor-compatible AWOS) — harness mapping refinement, not a new product feature
-- **Status:** Approved
+- **Status:** Completed
 - **Author:** Alexander Makarov
 
 ---

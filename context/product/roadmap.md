@@ -10,9 +10,9 @@ _Backlog source of truth: open GitHub issues, plus migration/fork leftovers call
 
 _Stop misleading users; then systematically decide what fork residue to revive vs remove._
 
-- [ ] **Honest pipeline reporting**
+- [x] **Honest pipeline reporting**
   - [x] **Honest "already synthesized" counts (#81):** Report corpus and synthesized totals in real units (eligible sources vs pages), not labels that imply `wiki/sources/` file counts when the number is state/union-based — same honesty on the Home pipeline widget.
-  - [ ] **Honest `--estimate` candidate preview (#113):** Do not present a pre-synth candidate snapshot as if it forecasts the upcoming synth run.
+  - [x] **Honest `--estimate` candidate preview (#113):** Do not present a pre-synth candidate snapshot as if it forecasts the upcoming synth run.
 
 - [ ] **Fork / migration residue cleanup (known)**
   - [x] **Drop hardcoded entity_type taxonomy (#102):** Stop validating the old seven-value enum that harvest stamps as `unknown` and then fails lint after promote.
@@ -21,14 +21,14 @@ _Stop misleading users; then systematically decide what fork residue to revive v
   - [ ] **One project, one page (#126):** Project aggregation splits a single project across worktrees, clones, and adapters, so the same codebase appears as several projects.
 
 - [ ] **Candidate review correctness**
-  - [ ] **Harvest respects a dismissal (#146):** Stop re-proposing candidates the reviewer already discarded, and read the recorded `.reason.txt` instead of ignoring it.
-  - [ ] **Merge resolves its own aliases (#139):** A merge records aliases but never resolves them, so every merge leaves broken `[[wikilinks]]` behind.
+  - [x] **Harvest respects a dismissal (#146):** Stop re-proposing candidates the reviewer already discarded, and read the recorded `.reason.txt` instead of ignoring it.
+  - [x] **Merge resolves its own aliases (#139):** A merge records aliases but never resolves them, so every merge leaves broken `[[wikilinks]]` behind.
   - [ ] **Merge rewrites rather than stitches (#148):** Merging two topics concatenates their descriptions instead of producing one coherent description.
-  - [ ] **Batch apply is order-independent (#149):** A batch that merges into a peer it also promotes or discards produces a different result depending on row order.
+  - [x] **Batch apply is order-independent (#149):** A batch that merges into a peer it also promotes or discards produces a different result depending on row order.
 
-- [ ] **Operator privacy and test isolation**
-  - [ ] **`llmwiki add` redacts the source path (#141):** The absolute source path is recorded unredacted, leaking the operator's home directory into the vault.
-  - [ ] **Tests stop reading the developer's `config.json` (#142):** The suite picks up a gitignored local config, so personal settings can fail an otherwise-clean checkout.
+- [x] **Operator privacy and test isolation**
+  - [x] **`llmwiki add` redacts the source path (#141):** The absolute source path is recorded unredacted, leaking the operator's home directory into the vault.
+  - [x] **Tests stop reading the developer's `config.json` (#142):** The suite picks up a gitignored local config, so personal settings can fail an otherwise-clean checkout.
 
 - [ ] **Pipeline efficiency and recovery**
   - [x] **Interrupted synth still harvests (#145):** Interrupting a sources pass drains in-flight work, then harvests candidates from pages already written (unless `--sources-only`); `build` refreshes Home `on_disk` when stored totals disagree with disk.
@@ -47,11 +47,11 @@ _Stop misleading users; then systematically decide what fork residue to revive v
 
 _Newcomers should understand benefits and the canonical loop without fork history or internal jargon._
 
-- [ ] **Product-facing documentation**
-  - [ ] **README as a product page (#109):** Lead with benefits and the finished wiki; one agent table (producer vs consumer, core vs contrib); no fork history at the top.
-  - [ ] **CLI help as a lifecycle map (#112):** Every command says what it does and where it sits in sync → synth → review → build; mark migrate-* as maintenance.
+- [x] **Product-facing documentation**
+  - [x] **README as a product page (#109):** Lead with benefits and the finished wiki; one agent table (producer vs consumer, core vs contrib); no fork history at the top.
+  - [x] **CLI help as a lifecycle map (#112):** Every command says what it does and where it sits in sync → synth → review → build; mark migrate-* as maintenance.
 
-- [ ] **Guided health check**
+- [x] **Guided health check**
   - [x] **`llmwiki doctor` (#110):** Diagnose environment + vault health from the bundled heal catalog; propose repairs and — with consent — run the heal loop (`--check` / `--dry-run` diagnose-only; `--yes` auto-applies safe fixes).
 
 ---
@@ -62,18 +62,18 @@ _Humans see knowledge on topic pages; Cursor becomes a real session source (prod
 
 - [ ] **Visual knowledge depth**
   - [x] **Topic pages show kind, freshness, and Key Facts (#108):** Entity/concept content reaches readers; project topics route to project pages; graph panel shows the same metadata.
-  - [ ] **Hover-to-preview wikilinks:** Show the target page's opening lines on hover instead of making the reader click through to find out whether it is worth reading. Advertised as shipped in v0.2; never built.
-  - [ ] **Timeline view of sessions:** A chronological browse surface over the corpus. Also advertised as shipped in v0.2 and never built — `llmwiki/changelog_timeline.py` is unrelated, it renders entity `changelog:` frontmatter.
+  - [ ] **Hover-to-preview wikilinks (#352):** Show the target page's opening lines on hover instead of making the reader click through to find out whether it is worth reading. Advertised as shipped in v0.2; the code exists in `llmwiki/render/js.py` but never attaches to a link, so no reader ever sees a preview.
+  - [x] **Timeline view of sessions:** The sessions index shows an activity timeline (sessions per day over the last 120 days) above the date-sorted sessions table. `llmwiki/changelog_timeline.py` is unrelated: it renders entity `changelog:` frontmatter.
   - [ ] **Session activity sparkline:** A compact per-project activity chart so a reader can see cadence without opening the analytics page.
 
 - [ ] **Pages that read well**
-  - [ ] **Synthesised page descriptions (#137):** Give entity, concept, and project pages a short description instead of leading with bare Key Facts.
+  - [x] **Synthesised page descriptions (#137):** Give entity, concept, and project pages a short description instead of leading with bare Key Facts.
   - [ ] **Projects index that ranks (#129):** Sort by recency, show freshness distribution, and mark which agent produced each project.
   - [ ] **Flip a trusted concept ↔ entity (#134):** Correct a mis-kinded page from the Candidates UI and CLI without a manual move.
   - [ ] **Update an already-ingested document in place (#151):** Re-ingest a changed source without duplicating its pages.
 
-- [ ] **Cursor as a real session source**
-  - [ ] **Parse Cursor session state (#2):** Stop silently filtering all Cursor sessions after discovering the store.
+- [x] **Cursor as a real session source**
+  - [x] **Parse Cursor session state (#2):** Stop silently filtering all Cursor sessions after discovering the store.
 
 ---
 
@@ -83,7 +83,7 @@ _No new features. Lock what exists so users can depend on it._
 
 - [ ] **API freeze:** CLI flags, frontmatter schema, and slash-command contracts stop changing without a migration note; breaking changes wait for a major.
 - [ ] **LTS branch:** v1.x receives security fixes for 12 months after v1.0.
-- [ ] **Docs polish:** every shipped feature documented and every tutorial current — with the claims verified against the code. Hover-preview and a timeline view were advertised as shipped and never built; the false eval-framework claim is already dropped (#154).
+- [ ] **Docs polish:** every shipped feature documented and every tutorial current — with the claims verified against the code. Hover-preview was advertised as shipped but never reaches a reader (#352); the false eval-framework claim is already dropped (#154).
 
 ---
 
@@ -91,7 +91,7 @@ _No new features. Lock what exists so users can depend on it._
 
 _Enables shipping the phases above from Cursor Agent; not an end-user product feature._
 
-- [ ] **Cursor-compatible AWOS (#114):** Flat `/awos-*` commands, recruitment MCP, runtime tool mapping — so product→spec→implement works in this harness.
+- [x] **Cursor-compatible AWOS (#114):** Flat `/awos-*` commands, recruitment MCP, runtime tool mapping — so product→spec→implement works in this harness.
 
 ---
 

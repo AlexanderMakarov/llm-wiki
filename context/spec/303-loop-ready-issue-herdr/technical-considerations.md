@@ -1,7 +1,7 @@
 # Technical Specification: Loop ready issue (herdr)
 
 - **Functional Specification:** `context/spec/303-loop-ready-issue-herdr/functional-spec.md`
-- **Status:** Approved
+- **Status:** Completed
 - **Author(s):** 4ellendger
 
 ---

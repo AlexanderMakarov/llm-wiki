@@ -1,7 +1,7 @@
 # Technical Specification: Cross-agent release skill
 
 - **Functional Specification:** [functional-spec.md](./functional-spec.md)
-- **Status:** Approved
+- **Status:** Completed
 - **Author(s):** Aleksandr Makarov
 
 ---

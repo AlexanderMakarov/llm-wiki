@@ -1,7 +1,7 @@
 # Functional Specification: Cursor IDE composer ingest via `cursor` adapter
 
 - **Roadmap Item:** GitHub [#2](https://github.com/AlexanderMakarov/llm-wiki/issues/2) — Cursor IDE sessions not ingested (`state.vscdb` / `cursorDiskKV`)
-- **Status:** Approved
+- **Status:** Completed
 - **Author:** Aleksandr Makarov
 - **Related:** [#180](https://github.com/AlexanderMakarov/llm-wiki/issues/180) skip-automated policy (this change fills the Cursor **IDE** spawned-agent gap left there); [#182](https://github.com/AlexanderMakarov/llm-wiki/issues/182) bare-sync adapter enablement (out of scope); [#126](https://github.com/AlexanderMakarov/llm-wiki/issues/126) one project / one page (this change only aligns Cursor IDE + Agent CLI identifiers so #126 can merge later); [`cursor_cli`](../../../docs/adapters/cursor-cli.md) Agent CLI adapter (separate store, already works)
 

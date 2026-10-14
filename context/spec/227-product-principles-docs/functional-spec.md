@@ -1,7 +1,7 @@
 # Functional Specification: Product principles and maintainer doc clarity
 
 - **Roadmap Item:** Land architectural intentions from the product narrative into evergreen docs (README / PyPI surface, maintainer principles, getting-started for adding documents); relocate brand reference under maintainers; correct font and triage docs. Prompt-driven (no GitHub issue).
-- **Status:** Approved
+- **Status:** Completed
 - **Author:** Aleksandr Makarov
 - **Approval notes (2026-09-08):** Operator approved with amendments — skip all `/triage-issue` / TRIAGE doc changes (command file stays); leave Google Fonts CDN behavior unchanged; remove specific Python version from the DECLINED qmd-dependency entry; principles ↔ DECLINED alignment accepted.
 

@@ -1,7 +1,7 @@
 # Technical Specification: Complete documents on one site page
 
 - **Functional Specification:** [`functional-spec.md`](functional-spec.md)
-- **Status:** Approved
+- **Status:** Completed
 - **Author(s):** 4ellendger
 - **Issue:** [#305](https://github.com/AlexanderMakarov/llm-wiki/issues/305)
 

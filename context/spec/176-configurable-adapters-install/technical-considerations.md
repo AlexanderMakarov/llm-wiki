@@ -1,7 +1,7 @@
 # Technical Specification: Configurable adapters and configure-sources
 
 - **Functional Specification:** [functional-spec.md](./functional-spec.md) — GitHub [#182](https://github.com/AlexanderMakarov/llm-wiki/issues/182)
-- **Status:** Approved
+- **Status:** Completed
 - **Author(s):** Aleksandr Makarov
 
 ---

@@ -1,7 +1,7 @@
 # Technical Specification: CLI help as a lifecycle map
 
 - **Functional Specification:** [functional-spec.md](./functional-spec.md)
-- **Status:** Approved
+- **Status:** Completed
 - **Author(s):** Aleksandr Makarov
 
 ---

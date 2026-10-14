@@ -1,7 +1,7 @@
 # Functional Specification: Surface prior discard reasons for near-match candidates
 
 - **Roadmap Item:** Harvest respects a dismissal (#146) — remaining scope after #282
-- **Status:** Approved
+- **Status:** Completed
 - **Author:** 4ellendger
 
 ---

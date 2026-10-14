@@ -1,7 +1,7 @@
 # Functional Specification: Whole documents in storage, one summary page, offline migration
 
 - **Roadmap Item:** Store documents whole and chunk only during synthesis, with legacy migration ([GitHub Issue #311](https://github.com/AlexanderMakarov/llm-wiki/issues/311))
-- **Status:** Approved
+- **Status:** Completed
 - **Author:** 4ellendger
 
 ---

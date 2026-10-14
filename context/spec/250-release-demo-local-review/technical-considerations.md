@@ -1,7 +1,7 @@
 # Technical Specification: Release-cut local demo review (usage window + site gate)
 
 - **Functional Specification:** [functional-spec.md](./functional-spec.md)
-- **Status:** Approved
+- **Status:** Completed
 - **Author(s):** Aleksandr Makarov
 
 ---

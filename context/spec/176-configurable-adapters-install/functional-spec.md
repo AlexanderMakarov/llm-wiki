@@ -1,7 +1,7 @@
 # Functional Specification: Configure every shipped session source in one place
 
 - **Roadmap Item:** GitHub [#182](https://github.com/AlexanderMakarov/llm-wiki/issues/182) — make every shipped session source configurable in config and opt-in during install (drop core-vs-contrib sync surprise)
-- **Status:** Approved
+- **Status:** Completed
 - **Author:** Aleksandr Makarov
 - **Related (out of this change):** [#2](https://github.com/AlexanderMakarov/llm-wiki/issues/2) Cursor IDE ingest; [#180](https://github.com/AlexanderMakarov/llm-wiki/issues/180) headless filter (shipped)
 

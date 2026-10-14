@@ -1,7 +1,7 @@
 # Functional Specification: Offline topic-kind stamp for older source summaries
 
 - **Roadmap Item:** GitHub Issue [#174](https://github.com/AlexanderMakarov/llm-wiki/issues/174) — stamp person/product vs idea labels onto older source connection lines from pages already in the wiki, without calling a language model. Complements the #147 catch-up path; does not replace full re-synthesis when facts are needed.
-- **Status:** Approved
+- **Status:** Completed
 - **Author:** Alexander Makarov
 
 ---

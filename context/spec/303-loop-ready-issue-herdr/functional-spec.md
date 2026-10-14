@@ -1,7 +1,7 @@
 # Functional Specification: Herdr serial ready-issue loop (optional maintainer aid)
 
 - **Roadmap Item:** [Spike: herdr-driven serial ready-issue loop (thin skill + driver tab)](https://github.com/AlexanderMakarov/llm-wiki/issues/296) — AWOS spec `303-loop-ready-issue-herdr`
-- **Status:** In Review
+- **Status:** Completed
 - **Author:** 4ellendger
 
 ---

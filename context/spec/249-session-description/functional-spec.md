@@ -1,7 +1,7 @@
 # Functional Specification: Session subtitles from assigned names and scored fallback
 
 - **Roadmap Item:** Session list and detail subtitles should prefer the name the user (or agent) already gave the session; otherwise score user prompts and take the best — including maintenance-only sessions
-- **Status:** Approved
+- **Status:** Completed
 - **Author:** Alexander Makarov
 - **Issue:** [#249](https://github.com/AlexanderMakarov/llm-wiki/issues/249) (merges former #250; addresses symptom [#246](https://github.com/AlexanderMakarov/llm-wiki/issues/246))
 
