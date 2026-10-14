@@ -1,7 +1,7 @@
 # Functional Specification: Cursor Agent CLI synthesis backend
 
 - **Roadmap Item:** GitHub [#230](https://github.com/AlexanderMakarov/llm-wiki/issues/230) — feat: Cursor Agent CLI synthesis backend
-- **Status:** Approved
+- **Status:** Completed
 - **Author:** Aleksandr Makarov
 
 ---

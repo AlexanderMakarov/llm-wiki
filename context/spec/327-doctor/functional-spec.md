@@ -1,7 +1,7 @@
 # Functional Specification: `llmwiki doctor` — heal the install and vault until sound
 
 - **Roadmap Item:** Guided health check — `llmwiki doctor` (#110)
-- **Status:** Approved (amended 2026-10-13: heal loop, not read-only reporter)
+- **Status:** Completed (amended 2026-10-13: heal loop, not read-only reporter)
 - **Author:** Aleksandr Makarov
 - **Issue:** [#110](https://github.com/AlexanderMakarov/llm-wiki/issues/110)
 - **Date:** 2026-10-12 (amended 2026-10-13)

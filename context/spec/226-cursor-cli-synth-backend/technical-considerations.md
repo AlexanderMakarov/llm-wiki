@@ -1,7 +1,7 @@
 # Technical Specification: Cursor Agent CLI synthesis backend
 
 - **Functional Specification:** [`functional-spec.md`](./functional-spec.md) (#230)
-- **Status:** Approved
+- **Status:** Completed
 - **Author(s):** Aleksandr Makarov
 
 ---

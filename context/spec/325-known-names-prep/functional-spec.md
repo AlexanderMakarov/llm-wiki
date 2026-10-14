@@ -1,7 +1,7 @@
 # Functional Specification: Bound and speed up known-names preparation
 
 - **Roadmap Item:** GitHub Issue [#264](https://github.com/AlexanderMakarov/llm-wiki/issues/264) — every synthesis run starts with one “preparing known names” step that can take a minute or more and sometimes times out; operators need a candidate cap, incremental reuse of unchanged topics, a dedicated timeout for this step, and clear run reporting. Complements per-source kind injection ([#257](https://github.com/AlexanderMakarov/llm-wiki/issues/257)); does not change how pending candidate stubs are collected or reviewed.
-- **Status:** Approved
+- **Status:** Completed
 - **Author:** 4ellendger
 
 ---

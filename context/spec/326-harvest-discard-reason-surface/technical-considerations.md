@@ -1,7 +1,7 @@
 # Technical Specification: Surface prior discard reasons for near-match candidates
 
 - **Functional Specification:** [functional-spec.md](./functional-spec.md)
-- **Status:** Approved
+- **Status:** Completed
 - **Author(s):** 4ellendger
 
 ---

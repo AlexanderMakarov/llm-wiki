@@ -5,7 +5,7 @@ Architectural HOW for #174. Not a copy-paste implementation guide.
 # Technical Specification: Offline migrate-topic-kinds (#174)
 
 - **Functional Specification:** [`functional-spec.md`](./functional-spec.md) (approved)
-- **Status:** Approved
+- **Status:** Completed
 - **Author(s):** Alexander Makarov
 
 ---

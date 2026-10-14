@@ -1,7 +1,7 @@
 # Functional Specification: Show each topic's known kind when synthesizing a source
 
 - **Roadmap Item:** GitHub Issue [#257](https://github.com/AlexanderMakarov/llm-wiki/issues/257) — when synthesis writes a source summary, the model must see whether each already-known name is a person/product or an idea, so Connections labels stay exact and free-form kinds stop filling the paid rewrite backlog. Complements offline kind stamping ([#174](https://github.com/AlexanderMakarov/llm-wiki/issues/174)) and does not replace known-names performance work ([#264](https://github.com/AlexanderMakarov/llm-wiki/issues/264)).
-- **Status:** Approved
+- **Status:** Completed
 - **Author:** Alexander Makarov
 
 ---

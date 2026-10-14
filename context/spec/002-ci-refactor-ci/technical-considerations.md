@@ -1,7 +1,7 @@
 # Technical Specification: CI refactor — Node 24 actions, Python 3.12-only matrix, drop Claude-in-CI
 
 - **Functional Specification:** [functional-spec.md](./functional-spec.md)
-- **Status:** Approved
+- **Status:** Completed
 - **Author(s):** Alexander Makarov
 
 ---

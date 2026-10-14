@@ -1,7 +1,7 @@
 # Functional Specification: CLI help as a lifecycle map
 
 - **Roadmap Item:** CLI help as a lifecycle map (#112); remove dead commands; wrap migrations under one `migrate`
-- **Status:** Approved
+- **Status:** Completed
 - **Author:** Aleksandr Makarov
 - **Issue:** [#112](https://github.com/AlexanderMakarov/llm-wiki/issues/112)
 - **Date:** 2026-09-03

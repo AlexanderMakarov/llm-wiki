@@ -1,7 +1,7 @@
 # Functional Specification: Honest Home pipeline stamps for sync, synth, build, and lint
 
 - **Roadmap Item:** Home Pipeline state and automation should make sync / synth / build timing unambiguous; lint outcomes must be visible on the static Home page without digging in scheduler logs
-- **Status:** Approved
+- **Status:** Completed
 - **Author:** Alexander Makarov
 - **Issue:** [#234](https://github.com/AlexanderMakarov/llm-wiki/issues/234)
 

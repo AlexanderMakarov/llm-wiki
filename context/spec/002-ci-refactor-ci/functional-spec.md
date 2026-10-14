@@ -1,7 +1,7 @@
 # Functional Specification: Keep CI Quiet, Current, and Honest About Supported Python
 
 - **Roadmap Item:** GitHub Issue #116 — CI maintenance: clear Node 20 deprecation warnings, verify Python 3.12 only, remove non-working Claude-in-CI workflows
-- **Status:** Approved
+- **Status:** Completed
 - **Author:** Alexander Makarov
 
 ---

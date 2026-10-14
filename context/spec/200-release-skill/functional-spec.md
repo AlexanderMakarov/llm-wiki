@@ -1,7 +1,7 @@
 # Functional Specification: Cross-agent release skill
 
 - **Roadmap Item:** [#209](https://github.com/AlexanderMakarov/llm-wiki/issues/209) — feat: cross-agent `/release` skill for cutting tagged releases
-- **Status:** Approved
+- **Status:** Completed
 - **Author:** Aleksandr Makarov
 
 ---

@@ -1,7 +1,7 @@
 # Technical Specification: Honest Home Timeline for sync, synth, build, and lint
 
 - **Functional Specification:** [functional-spec.md](./functional-spec.md)
-- **Status:** Approved
+- **Status:** Completed
 - **Author(s):** Alexander Makarov
 - **Issue:** [#234](https://github.com/AlexanderMakarov/llm-wiki/issues/234)
 

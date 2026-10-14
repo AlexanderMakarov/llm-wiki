@@ -1,7 +1,7 @@
 # Technical Specification: Cursor IDE composer ingest (`cursor` adapter)
 
 - **Functional Specification:** [functional-spec.md](./functional-spec.md)
-- **Status:** Approved
+- **Status:** Completed
 - **Author(s):** Aleksandr Makarov
 - **Issue:** [#2](https://github.com/AlexanderMakarov/llm-wiki/issues/2)
 

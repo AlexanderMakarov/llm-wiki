@@ -1,7 +1,7 @@
 # Technical Specification: MCP Add as CLI Add Proxy (Text / Pipe Input)
 
 - **Functional Specification:** [functional-spec.md](./functional-spec.md)
-- **Status:** Approved
+- **Status:** Completed
 - **Author(s):** Aleksandr Makarov
 
 ---
