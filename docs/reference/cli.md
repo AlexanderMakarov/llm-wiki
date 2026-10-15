@@ -632,6 +632,7 @@ python3 -m llmwiki migrate source-page-paths --vault /path/to/vault --dry-run
 python3 -m llmwiki migrate broken-provenance --vault /path/to/vault --dry-run
 python3 -m llmwiki migrate doc-source-provenance --vault /path/to/vault --dry-run
 python3 -m llmwiki migrate whole-document-storage --vault /path/to/vault --dry-run
+python3 -m llmwiki migrate session-tokens --vault /path/to/vault --dry-run
 ```
 
 ### `state` — one-time legacy state migration (v1.4.0)
@@ -939,6 +940,28 @@ python3 -m llmwiki migrate whole-document-storage --vault /path/to/vault
 | `--keep-stitched` | Keep the stitched summaries and synth state without asking. This is the default; the flag is an explicit no-op (also suppresses the terminal question). Mutually exclusive with `--mark-unsynth`. |
 
 Idempotent: a clean second run is a no-op; an interrupted apply resumes. Rebuild afterwards: `llmwiki build --vault PATH`.
+
+### `session-tokens` — backfill Analytics session Tokens (#325)
+
+Steady-state `sync` only writes session Tokens for **new or fingerprint-changed** origin sessions (cheap no-ops otherwise). After upgrading to the session Tokens usage store, already-synced sessions would stay missing from `usage/session-tokens.json` and may lack `token_totals` in raw frontmatter unless you run this one-shot migrate.
+
+1. Seeds the usage file from existing `raw/sessions/*.md` `token_totals` when present.
+2. Re-reads capable agent stores still on disk (e.g. Cursor CLI) to map real turn usage into the four buckets, patch raw frontmatter when a matching session page exists, and upsert the usage file (including metrics-only rows when usage is measurable but no raw page exists).
+3. Refreshes `site/session-tokens.js` when the vault already has a `site/` tree.
+
+Does **not** invent totals from context-window occupancy. Prefer `--dry-run` first. See [state-persistence.md](state-persistence.md) and [UPGRADING.md](../UPGRADING.md).
+
+```bash
+python3 -m llmwiki migrate session-tokens --vault /path/to/vault --dry-run
+python3 -m llmwiki migrate session-tokens --vault /path/to/vault
+```
+
+| Flag | What |
+|---|---|
+| `--vault PATH` | **Required.** Vault root containing `raw/sessions/` and `usage/`. |
+| `--dry-run` | Report would-upsert / would-patch counts; write nothing. |
+
+Idempotent. Rebuild afterwards: `llmwiki build --vault PATH` (or open Analytics after sync has refreshed the sidecar).
 
 ---
 

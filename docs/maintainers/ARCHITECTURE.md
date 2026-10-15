@@ -60,6 +60,10 @@
 - **`.claude/settings.local.json`**, **`.ingestion-state.json`**,
   **`.framework/`**, **`.temp/`**, **`.research/`** — user-local state
 
+## Vault I/O on hot paths
+
+Prefer **few file opens** for aggregates (`sync` / `build` / Analytics). Pattern: one `usage/session-tokens.json` (many session stubs inside) rather than one metrics file per session or a full `raw/sessions/` walk for the Tokens headline. See CONTRIBUTING *Vault I/O scalability*.
+
 ## What maintainers CAN accept
 
 Read [`REVIEW_CHECKLIST.md`](REVIEW_CHECKLIST.md) for the full bar (including the DRY check under Code quality).

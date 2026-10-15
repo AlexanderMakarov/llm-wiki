@@ -103,6 +103,7 @@ from llmwiki.search_tree import (
     decide_search_mode,
     search_index_footer_badge,
 )
+from llmwiki.session_tokens_usage import emit_session_tokens_sidecar, load_session_tokens
 from llmwiki.state_store import (
     copy_state_sidecar_to_site,
     pipeline_on_disk_mismatch,
@@ -2019,6 +2020,7 @@ def render_analytics(
     wiki_dir: Path | None = None,
     wiki_value: dict[str, Any] | None = None,
     projects_meta_dir: Path | None = None,
+    content_root: Path | None = None,
 ) -> Path:
     """Render ``analytics.html`` — hero stats, activity heatmaps, token
     stats, wiki usage (#52), recently-updated, projects grid."""
@@ -2078,8 +2080,18 @@ def render_analytics(
     # #27: the "Heaviest project by MCP usage" card shares the token-stats
     # row, so the analytics page opens with a single line of stat cards.
     mcp_heaviest_card = render_mcp_heaviest_card(usage_totals or {}, link_prefix="")
+    vault_for_tokens = content_root
+    if vault_for_tokens is None and wiki_dir is not None:
+        vault_for_tokens = wiki_dir.parent
+    session_tokens_usage = (
+        load_session_tokens(vault_for_tokens) if vault_for_tokens is not None else None
+    )
     token_stats_block = render_site_token_stats(
-        metas_by_project, link_prefix="", extra_cards=mcp_heaviest_card)
+        metas_by_project,
+        link_prefix="",
+        extra_cards=mcp_heaviest_card,
+        session_tokens_usage=session_tokens_usage,
+    )
 
     # Wiki usage (#52): value cards, corpus mix, top pages, MCP table.
     wiki_usage_block = render_wiki_value_section(
@@ -3439,6 +3451,7 @@ def build_site(
     # (e2e, GitHub Pages of site/) resolves {js_prefix}llmwiki-state.js.
     # Vault root still keeps its copy for sync/synthesize writers.
     copy_state_sidecar_to_site(content_root, site_dir=out_dir)
+    emit_session_tokens_sidecar(content_root, out_dir)
 
     estimate: dict[str, Any] = {}
     try:
@@ -3542,6 +3555,7 @@ def build_site(
         wiki_dir=wiki_dir,
         wiki_value=wiki_value,
         projects_meta_dir=projects_meta_dir,
+        content_root=content_root,
     )
     render_candidates_page(wiki_dir, out_dir)
     doc_pages = raw_docs_site.render_document_pages(

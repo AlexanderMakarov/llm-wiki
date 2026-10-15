@@ -10,6 +10,20 @@ How to upgrade between `llmwiki` releases. Most releases are drop-in (`pip insta
 
 The canonical per-release detail is [CHANGELOG.md](https://github.com/AlexanderMakarov/llm-wiki/blob/main/CHANGELOG.md) — this guide focuses on "what might break".
 
+## Unreleased — session Tokens usage store + Cursor CLI capture (#325)
+
+Analytics Tokens now prefer a single vault file `usage/session-tokens.json` (lifetime + per-agent coverage + per-day × agent buckets attributed to each session’s **last activity** UTC day). Synced session pages still show Tokens from raw frontmatter `token_totals`. Steady-state `sync` only updates new or fingerprint-changed sessions — it will **not** backfill older unchanged sessions.
+
+**After upgrade:** run once:
+
+```bash
+llmwiki migrate session-tokens --vault /path/to/vault --dry-run
+llmwiki migrate session-tokens --vault /path/to/vault
+llmwiki build --vault /path/to/vault
+```
+
+Cursor CLI contributes when turn usage fields are present (hooks / `TurnEndedUpdate` / compatible store payloads mapped into the four buckets). Context-window occupancy in `store.db` is never written as Tokens. See [state-persistence.md](reference/state-persistence.md) and [`migrate session-tokens`](reference/cli.md#session-tokens--backfill-analytics-session-tokens-325).
+
 ## Unreleased — dismissal ledger + near-match prior reasons (#146)
 
 Behaviour flip for new discards/merges, plus an optional offline migration for vaults that still only have per-stub reason files.

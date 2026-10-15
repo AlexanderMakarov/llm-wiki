@@ -42,6 +42,7 @@ from typing import Any
 from llmwiki.adapters import register
 from llmwiki.adapters.base import BaseAdapter, _safe_project_slug
 from llmwiki.adapters.contrib.cursor_slug import cursor_workspace_slug
+from llmwiki.cursor_token_usage import extract_cursor_usage_from_record
 
 # Synthetic record type injected by ``load_records`` so store-meta audit
 # fields survive ``normalize_records`` / ``filter_records`` and reach
@@ -232,10 +233,12 @@ class CursorCliAdapter(BaseAdapter):
                 out.append({"type": "user", "message": {"role": "user", "content": text}})
             elif role == "assistant":
                 blocks = _map_assistant_blocks(rec.get("content"))
-                if blocks:
-                    out.append(
-                        {"type": "assistant", "message": {"role": "assistant", "content": blocks}}
-                    )
+                message: dict[str, Any] = {"role": "assistant", "content": blocks}
+                usage = extract_cursor_usage_from_record(rec)
+                if usage:
+                    message["usage"] = usage
+                if blocks or usage:
+                    out.append({"type": "assistant", "message": message})
             # system + tool roles are intentionally dropped.
         return out
 

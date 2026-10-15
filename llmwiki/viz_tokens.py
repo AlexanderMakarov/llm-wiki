@@ -29,6 +29,7 @@ import math
 import re
 from collections.abc import Iterable, Mapping
 from datetime import date
+from typing import Any
 
 from llmwiki.format_numbers import format_tokens
 
@@ -315,6 +316,70 @@ def render_project_token_card(
 # ─── site-wide summary stats ────────────────────────────────────────────
 
 
+_AGENT_DISPLAY_NAMES: dict[str, str] = {
+    "claude_code": "Claude Code",
+    "cursor_cli": "Cursor CLI",
+    "codex_cli": "Codex CLI",
+    "copilot_chat": "Copilot CLI / Chat",
+    "gemini_cli": "Gemini CLI",
+    "openclaw": "OpenClaw",
+    "opencode": "OpenCode",
+}
+
+
+def _agent_display_name(agent: str) -> str:
+    if agent in _AGENT_DISPLAY_NAMES:
+        return _AGENT_DISPLAY_NAMES[agent]
+    return agent.replace("_", " ").replace("-", " ").title()
+
+
+def format_token_coverage_measured_known(by_agent: Mapping[str, Any]) -> list[str]:
+    """One line per agent with measured sessions, e.g. ``3/5 Cursor CLI sessions``."""
+    lines: list[str] = []
+    for agent in sorted(by_agent):
+        row = by_agent[agent]
+        if not isinstance(row, Mapping):
+            continue
+        measured = int(row.get("measured") or 0)
+        if measured <= 0:
+            continue
+        known = int(row.get("known") or 0)
+        label = _agent_display_name(agent)
+        lines.append(f"{measured}/{known} {label} sessions with measured token usage.")
+    return lines
+
+
+def usage_file_preferred_for_site_stats(usage_data: Mapping[str, Any]) -> bool:
+    """True when Analytics should read headline totals from the usage file."""
+    sessions = usage_data.get("sessions")
+    totals = usage_data.get("totals")
+    if isinstance(sessions, Mapping) and sessions:
+        return True
+    if isinstance(totals, Mapping) and int(totals.get("sum") or 0) > 0:
+        return True
+    return False
+
+
+def compute_site_stats_from_usage(usage_data: Mapping[str, Any]) -> dict[str, object]:
+    """Headline token stats from ``usage/session-tokens.json`` aggregates."""
+    totals = usage_data.get("totals") if isinstance(usage_data.get("totals"), Mapping) else {}
+    by_agent = usage_data.get("by_agent") if isinstance(usage_data.get("by_agent"), Mapping) else {}
+    total_tokens = int(totals.get("sum") or 0)
+    session_count = 0
+    for row in by_agent.values():
+        if isinstance(row, Mapping):
+            session_count += int(row.get("measured") or 0)
+    avg = total_tokens // session_count if session_count > 0 else 0
+    return {
+        "total_tokens": total_tokens,
+        "session_count": session_count,
+        "avg_per_session": avg,
+        "best_ratio_project": None,
+        "heaviest_project": None,
+        "by_agent": by_agent,
+    }
+
+
 def compute_site_stats(
     metas_by_project: dict[str, list[Mapping[str, object]]],
 ) -> dict[str, object]:
@@ -373,7 +438,8 @@ TOKEN_COVERAGE_LINES: tuple[str, ...] = (
     "Claude Code: included when usage fields are present.",
     "OpenClaw and OpenCode: counted only for records with compatible usage"
     " fields; native token support is not complete.",
-    "Codex CLI and Cursor CLI / IDE: not captured by the token pipeline yet.",
+    "Cursor CLI: included when usage fields are present in the session store.",
+    "Codex CLI and Cursor IDE: not captured by the token pipeline yet.",
     "Gemini CLI and Copilot CLI / Chat: no verified native token mapping.",
     "Sessions without usage data are excluded, not evidence of zero tokens."
     " The headline is a recorded-usage total, not a complete all-agent total.",
@@ -382,7 +448,11 @@ TOKEN_COVERAGE_LINES: tuple[str, ...] = (
 _HINT_ID_UNSAFE = re.compile(r"[^A-Za-z0-9_-]")
 
 
-def render_token_coverage_hint(hint_id: str) -> str:
+def render_token_coverage_hint(
+    hint_id: str,
+    *,
+    by_agent: Mapping[str, Any] | None = None,
+) -> str:
     """Return the accessible "what does this total cover?" control (#323).
 
     A ``<button>`` (labelled, ``aria-expanded``) plus a ``role="tooltip"``
@@ -394,9 +464,12 @@ def render_token_coverage_hint(hint_id: str) -> str:
     """
     safe = _HINT_ID_UNSAFE.sub("-", hint_id).strip("-") or "token-coverage"
     panel_id = f"{safe}-panel"
+    coverage_lines = list(TOKEN_COVERAGE_LINES)
+    if by_agent:
+        coverage_lines.extend(format_token_coverage_measured_known(by_agent))
     lines = "".join(
         f'<span class="token-coverage-line">{html.escape(line)}</span>'
-        for line in TOKEN_COVERAGE_LINES
+        for line in coverage_lines
     )
     return (
         '<span class="token-coverage-hint">'
@@ -412,13 +485,25 @@ def render_site_token_stats(
     metas_by_project: dict[str, list[Mapping[str, object]]],
     link_prefix: str = "",
     extra_cards: str = "",
+    session_tokens_usage: Mapping[str, Any] | None = None,
 ) -> str:
     """Return a single-row stat-card block for the Analytics page: Tokens,
     Best cache hit, and Heaviest project (by tokens). ``extra_cards`` holds
     pre-rendered ``token-stat`` cards (e.g. the MCP-usage card) that share
     the same row. Empty string when there are neither token stats nor
     extra cards."""
-    stats = compute_site_stats(metas_by_project)
+    meta_stats = compute_site_stats(metas_by_project)
+    stats = meta_stats
+    by_agent: Mapping[str, Any] | None = None
+    if session_tokens_usage and usage_file_preferred_for_site_stats(session_tokens_usage):
+        usage_stats = compute_site_stats_from_usage(session_tokens_usage)
+        stats = {
+            **meta_stats,
+            "total_tokens": usage_stats["total_tokens"],
+            "session_count": usage_stats["session_count"],
+            "avg_per_session": usage_stats["avg_per_session"],
+        }
+        by_agent = usage_stats.get("by_agent") if isinstance(usage_stats.get("by_agent"), Mapping) else None
     if stats["session_count"] == 0 and not extra_cards:
         return ""
     total = stats["total_tokens"]
@@ -435,7 +520,7 @@ def render_site_token_stats(
     if n_with_tokens > 0:
         parts.append(
             f'      <div class="token-stat"><div class="token-stat-label muted">Tokens'
-            f'{render_token_coverage_hint("token-coverage-site")}</div>'
+            f'{render_token_coverage_hint("token-coverage-site", by_agent=by_agent)}</div>'
             f'<div class="token-stat-value">{format_tokens(total)}</div>'
             f'<div class="token-stat-sub muted">{format_tokens(avg)} / session'
             f' ({n_with_tokens} with token data)</div></div>'
