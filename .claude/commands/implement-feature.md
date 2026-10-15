@@ -98,8 +98,8 @@ Store `BRANCH`, `WT`, `TMP_VAULT`, and `TICKET_ID`. Always invoke `python3 -m ll
 
 Run the AWOS commands sequentially in the **main context**, passing the normalized ticket + surrounding context bundle:
 
-1. `/awos:spec` — **approval gate:** stop and wait for the user to accept `functional-spec.md` before continuing.
-2. `/awos:tech` — **approval gate:** stop and wait for the user to accept `technical-considerations.md` before continuing.
+1. `/awos:spec` — **approval gate:** stop and wait for the user to accept `functional-spec.md` before continuing. That accept is **document-only** — it never counts as local-review keep/drop later.
+2. `/awos:tech` — **approval gate:** stop and wait for the user to accept `technical-considerations.md` before continuing. Same isolation: tech accept ≠ keep/drop.
 3. `/awos:tasks` — **no document gate** and **no draft Approve ask** under this command (Local Customization / §4). Upstream `/awos:tasks` Step 4 normally presents the slice plan and iterates until the user is satisfied — **suppress that Approve / AskUserQuestion loop here**. Draft the vertical slices, write `tasks.md` immediately, report a short chat summary of slices + agent assignments (informational only — not a blocking approval), then continue. Still ask for the other `/awos:tasks` decisions that are not draft approval (e.g. skip-tests intent when unclear, QA-agent hire choices). If the user objects in chat after seeing the summary, revise and rewrite `tasks.md`. Standalone `/awos:tasks` outside this flow keeps its full draft loop. The task list stays revisable by re-running `/awos:tasks`.
 
 **Author field (#159 / §10):** After `/awos:spec` and `/awos:tech` write (or amend) their documents, ensure **Author** / **Author(s)** is the operator’s human name — never command names, issue ids, “AWOS”, “Auto”, or other agent/tool metadata. Resolve per run: session/host display name when available; else `git config user.name` (use a nickname if that is all git has — do not prompt). Prefer a multi-word display name when one is available. Ticket linkage stays on **Roadmap Item** / the issue line elsewhere in the header.
@@ -158,7 +158,7 @@ The review must stay independent of this conversation's authorship bias:
 - Do not add run-time focus areas drawn from what you implemented or suspect — the author framing the review is the bias.
 - Dispatch exactly one reviewer subagent with the **fixed** prompt below (verbatim). That subagent writes findings to a file and returns only the verdict, the finding count by severity, and the file path.
 - After the subagent returns: **Read the review file and print its full body in chat** (lead with `Review file: <path>` on its own line). Record the path in this stage's flow-log entry.
-- **Hard keep/drop gate (delivery-flow §4 / §10):** After printing the full body, **stop the turn**. Ask for per-finding keep/drop (or explicit "keep all" / "drop all"). **Do not edit product code or docs to apply review findings in the same turn.** "Proceed", "continue", smoke confirm, "fix it", PR/merge pressure, and resume-from-summary are **not** keep/drop consent. When the user answers, apply only kept findings — read the review file and the diff fresh; relay their decisions, not your own summary.
+- **Dedicated keep/drop approval (delivery-flow §4 / §10):** After printing the full body, ask a **new** keep/drop question for *this* review file only — prefer native `AskQuestion` / `AskUserQuestion` with options such as “Keep all findings”, “Drop all findings”, “I’ll name keep/drop per finding in free text”; when those tools are absent, use a numbered keep/drop prompt that names the review path. Then **stop the turn**. **Do not edit product code or docs to apply review findings in the same turn.** Consent is only a reply to that dedicated ask (or explicit "keep all" / "drop all" aimed at this file). The following are **never** keep/drop consent: "proceed" / "continue" / "fix it" / "ship it"; smoke confirm; PR/merge pressure; resume-from-summary; **spec or tech document "lgtm" / accept** (those gates are earlier and document-only); **"retry" / "try again"** or any phrase that only recovers a network/tool failure. When the user answers the dedicated ask, apply only kept findings — read the review file and the diff fresh; relay their decisions, not your own summary.
 
 **Single local review (pre-push):** Commit is the next stage — an empty `origin/main...HEAD` is expected when nothing is committed yet.
 
@@ -189,14 +189,14 @@ Replace `{SPEC_NAME}` with the actual spec directory name before dispatch.
 
 The review file is **session-only (#159):** write it for keep/drop and chat presentation; it must never be staged or committed (see Step 9). `context/.gitignore` ignores `review.md` / `review-*.md`.
 
-Present the printed review, then **end the turn** waiting for keep/drop. Only after the user answers: apply accepted findings, then run the static gate:
+Present the printed review, issue the dedicated keep/drop ask, then **end the turn**. Only after the user answers *that* ask: apply accepted findings, then run the static gate:
 
 ```bash
 ruff check llmwiki tests scripts
 python3 -m pytest tests/ -q
 ```
 
-Do not push until keep/drop is answered, accepted findings are applied, and the static gate is green. Serious findings that alter delivered behavior → §9 exception PR comment after the PR exists.
+Do not commit, push, or open the PR until keep/drop is answered, accepted findings are applied, and the static gate is green. Serious findings that alter delivered behavior → §9 exception PR comment after the PR exists.
 
 <!-- /awos:flow:stage -->
 
@@ -254,4 +254,4 @@ Leave a clean working tree: do not write a closing flow-log entry (the log was f
 
 ---
 
-<!-- awos:flow:generated date=2026-08-25 version=2.4.3 source=context/product/delivery-flow.md -->
+<!-- awos:flow:generated date=2026-10-15 version=2.4.3 source=context/product/delivery-flow.md -->

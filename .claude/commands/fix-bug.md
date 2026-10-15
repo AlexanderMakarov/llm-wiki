@@ -163,7 +163,7 @@ Independence rules:
 - Do not add run-time focus areas drawn from what you fixed or suspect.
 - Dispatch exactly one independent reviewer on the strongest tier using the coding agent's own most suitable review skill, command, or subagent (do not hardcode a product-specific reviewer name). Pass the fixed prompt below (verbatim).
 - That reviewer writes the review file and returns only verdict, counts by severity, and path.
-- Then **Read the review file and print its full body in chat** (lead with `Review file: <path>`). **Hard keep/drop gate (delivery-flow §4 / §10):** stop the turn after the print; do not apply findings in that same turn. "Proceed" / smoke confirm / resume are not keep/drop. After the user answers keep/drop (or "keep all" / "drop all"), apply only accepted findings before push.
+- Then **Read the review file and print its full body in chat** (lead with `Review file: <path>`). **Dedicated keep/drop approval (delivery-flow §4 / §10):** after the print, ask a **new** keep/drop question for *this* review file only — prefer native `AskQuestion` / `AskUserQuestion` with keep/drop options (e.g. “Keep all findings”, “Drop all findings”, “I’ll name keep/drop per finding”); otherwise a numbered keep/drop prompt naming the path. **Stop the turn**; do not apply findings in that same turn. Never treat as consent: "proceed" / smoke confirm / resume; **spec/tech document "lgtm"**; **"retry" / "try again"** or network/tool recovery. After the user answers *that* dedicated ask (or "keep all" / "drop all"), apply only accepted findings before push.
 
 Review output path: `context/spec/{SPEC_NAME}/review.md` (attached feature spec or fix-as-spec directory — #164). Create the parent directory if needed. The review file is **session-only (#159):** write it for keep/drop and chat; never stage or commit it (see Step 10). `context/.gitignore` ignores `review.md` / `review-*.md`.
 
@@ -197,7 +197,7 @@ ruff check llmwiki tests scripts
 python3 -m pytest tests/ -q
 ```
 
-Do not push until keep/drop is answered, accepted findings are applied, and the static gate is green. Serious findings that alter behavior → §9 exception after PR open.
+Do not commit, push, or open the PR until keep/drop is answered, accepted findings are applied, and the static gate is green. Serious findings that alter behavior → §9 exception after PR open.
 
 <!-- /awos:flow:stage -->
 
@@ -245,4 +245,4 @@ Leave a clean working tree: do not write a closing flow-log entry. If any flow-c
 
 ---
 
-<!-- awos:flow:generated date=2026-08-25 version=2.4.3 source=context/product/delivery-flow.md -->
+<!-- awos:flow:generated date=2026-10-15 version=2.4.3 source=context/product/delivery-flow.md -->
