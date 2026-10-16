@@ -17,7 +17,7 @@ import json
 import os
 import re
 import sys
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -28,6 +28,7 @@ from llmwiki.adapters.base import portable_session_key_fragment
 from llmwiki.adapters.settings import select_sync_adapters
 from llmwiki.quarantine import add_entry as _quarantine_add
 from llmwiki.quarantine import clear_entry as _quarantine_clear
+from llmwiki.session_tokens_usage import emit_session_tokens_sidecar, upsert_session_tokens
 from llmwiki.state_store import mtime_from_state, mtime_to_iso
 from llmwiki.state_store import read_state as _read_unified_state
 from llmwiki.state_store import resolve_state_file as _resolve_state_file
@@ -1051,6 +1052,61 @@ def compute_token_totals(records: list[dict[str, Any]]) -> dict[str, int]:
     return totals
 
 
+def _vault_root_from_sessions_out(out_dir: Path) -> Path:
+    """Resolve vault root when ``out_dir`` is ``<vault>/raw/sessions``."""
+    parent = out_dir.parent
+    if out_dir.name == "sessions" and parent.name == "raw":
+        return parent.parent
+    return out_dir.parent
+
+
+def _session_key_from_records(records: list[dict[str, Any]], path: Path) -> str:
+    sid = first_field(records, "sessionId")
+    if sid:
+        return str(sid).strip()
+    return path.stem
+
+
+def _token_totals_nonempty(totals: Mapping[str, int]) -> bool:
+    return any(int(totals.get(k) or 0) != 0 for k in ("input", "cache_creation", "cache_read", "output"))
+
+
+def _upsert_session_tokens_from_convert(
+    vault: Path,
+    site_dir: Path | None,
+    *,
+    records: list[dict[str, Any]],
+    path: Path,
+    agent: str,
+    mtime: float,
+    in_raw: bool,
+    metrics_only: bool,
+    ended: datetime | None = None,
+    dry_run: bool,
+) -> None:
+    """RMW ``usage/session-tokens.json`` after convert discovers token totals."""
+    if dry_run:
+        return
+    totals = compute_token_totals(records)
+    # No LLM usage → do not upsert zeros into coverage ``known`` (#323 / #325).
+    if not _token_totals_nonempty(totals):
+        return
+    last = ended or latest_record_time(records) or first_record_time(records) or datetime.now(UTC)
+    last_activity = last.isoformat() if isinstance(last, datetime) else str(last)
+    changed = upsert_session_tokens(
+        vault,
+        session_key=_session_key_from_records(records, path),
+        agent=agent,
+        totals=totals,
+        fingerprint=mtime_to_iso(mtime),
+        last_activity=last_activity,
+        in_raw=in_raw,
+        metrics_only=metrics_only,
+    )
+    if changed and site_dir is not None and site_dir.is_dir():
+        emit_session_tokens_sidecar(vault, site_dir)
+
+
 def compute_turn_count(records: list[dict[str, Any]]) -> int:
     """Number of user→assistant turn pairs (equivalent to real user prompts)."""
     return count_user_messages(records)
@@ -1826,7 +1882,12 @@ def render_session_markdown(
         # v0.8 — structured metrics (JSON inline so the simple frontmatter
         # parser stores them as strings; consumers json.loads() on demand).
         f"tool_counts: {json.dumps(tool_counts, sort_keys=False)}",
-        f"token_totals: {json.dumps(token_totals, sort_keys=False)}",
+    ]
+    # Omit empty token_totals — sessions without LLM usage must not look
+    # "known" to Analytics Tokens (#323 / local review B1 origin).
+    if _token_totals_nonempty(token_totals):
+        front.append(f"token_totals: {json.dumps(token_totals, sort_keys=False)}")
+    front.extend([
         f"turn_count: {turn_count}",
         f"hour_buckets: {json.dumps(hour_buckets, sort_keys=False)}",
         f"duration_seconds: {duration_seconds}",
@@ -1834,7 +1895,7 @@ def render_session_markdown(
         f"entrypoint: {entrypoint}",
         f"promptSource: {prompt_source}",
         f"is_headless: {str(headless).lower()}",
-    ]
+    ])
     # Optional Cursor Agent CLI launch audit (#180) — only when present so
     # Claude / other adapters keep the same frontmatter shape.
     if approval_mode:
@@ -2005,6 +2066,8 @@ def convert_all(
     # #192: durable (config) lookbacks for post-run sync.files GC.
     # CLI ``--since`` must not drive persistent GC; notes intake is not GC'd.
     durable_lookbacks: dict[str, datetime] = {}
+    vault_root = _vault_root_from_sessions_out(out_dir)
+    site_dir = vault_root / "site" if (vault_root / "site").is_dir() else None
 
     for cls in selected:
         try:
@@ -2178,6 +2241,17 @@ def convert_all(
                 filtered += 1
                 excluded_headless += 1
                 _bump(cls.name, "filtered")
+                _upsert_session_tokens_from_convert(
+                    vault_root,
+                    site_dir,
+                    records=records,
+                    path=path,
+                    agent=cls.name,
+                    mtime=mtime,
+                    in_raw=False,
+                    metrics_only=True,
+                    dry_run=dry_run,
+                )
                 if not dry_run:
                     state[key] = mtime_to_iso(mtime)
                 continue
@@ -2185,6 +2259,17 @@ def convert_all(
                 filtered += 1
                 excluded_temp += 1
                 _bump(cls.name, "filtered")
+                _upsert_session_tokens_from_convert(
+                    vault_root,
+                    site_dir,
+                    records=records,
+                    path=path,
+                    agent=cls.name,
+                    mtime=mtime,
+                    in_raw=False,
+                    metrics_only=True,
+                    dry_run=dry_run,
+                )
                 if not dry_run:
                     state[key] = mtime_to_iso(mtime)
                 continue
@@ -2195,6 +2280,17 @@ def convert_all(
                 filtered += 1
                 excluded_subagents += 1
                 _bump(cls.name, "filtered")
+                _upsert_session_tokens_from_convert(
+                    vault_root,
+                    site_dir,
+                    records=records,
+                    path=path,
+                    agent=cls.name,
+                    mtime=mtime,
+                    in_raw=False,
+                    metrics_only=True,
+                    dry_run=dry_run,
+                )
                 if not dry_run:
                     state[key] = mtime_to_iso(mtime)
                 continue
@@ -2202,12 +2298,34 @@ def convert_all(
             if last_t and last_t > live_cutoff and not include_current:
                 live += 1
                 _bump(cls.name, "live")
+                _upsert_session_tokens_from_convert(
+                    vault_root,
+                    site_dir,
+                    records=records,
+                    path=path,
+                    agent=cls.name,
+                    mtime=mtime,
+                    in_raw=False,
+                    metrics_only=True,
+                    dry_run=dry_run,
+                )
                 continue
             if since_dt and last_t and last_t < since_dt:
                 # Lookback-only skip: do NOT stamp sync.files — widening
                 # lookback later must still reconsider these on a normal sync.
                 filtered += 1
                 _bump(cls.name, "filtered")
+                _upsert_session_tokens_from_convert(
+                    vault_root,
+                    site_dir,
+                    records=records,
+                    path=path,
+                    agent=cls.name,
+                    mtime=mtime,
+                    in_raw=False,
+                    metrics_only=True,
+                    dry_run=dry_run,
+                )
                 continue
             try:
                 md, slug, started = render_session_markdown(
@@ -2312,6 +2430,19 @@ def convert_all(
                     continue
                 out_path.write_text(md, encoding="utf-8")
                 state[key] = mtime_to_iso(mtime)
+                ended_activity = latest_record_time(records) or started
+                _upsert_session_tokens_from_convert(
+                    vault_root,
+                    site_dir,
+                    records=records,
+                    path=path,
+                    agent=cls.name,
+                    mtime=mtime,
+                    in_raw=True,
+                    metrics_only=False,
+                    ended=ended_activity,
+                    dry_run=False,
+                )
                 # Self-heal: a source that converts cleanly no longer
                 # belongs in the quarantine, whatever it was stuck on
                 # before. Without this, fixed sources linger in

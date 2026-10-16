@@ -33,6 +33,7 @@ from llmwiki import (
     migrate_dismissal_ledger,
     migrate_doc_source_provenance,
     migrate_page_kinds,
+    migrate_session_tokens,
     migrate_source_page_paths,
     migrate_topic_kinds,
     migrate_whole_document_storage,
@@ -1779,6 +1780,11 @@ _MIGRATIONS: tuple[tuple[str, str, str], ...] = (
         "Merge each document an older release stored in pieces (raw/docs/<project>/<slug>-01.md … -NN.md and one wiki source page per piece) into one raw file (<slug>.md, same content_sha256) and one wiki source page: the pieces' summaries are stitched by the same fixed rules synth uses and their tags are unioned, the old part names become ## Aliases of the merged page and every [[link]] / sources: entry follows, and synth state collapses to the one whole-document key. The old raw pieces and part pages move to .llmwiki-whole-doc-recovery/<UTC>/ (MANIFEST.json lists every move); a different-hash whole file is never overwritten.",
         "Run once after upgrading to the release where documents are stored whole, when Ctrl+K Wiki still lists several part rows for one document or raw/docs still holds -01/-02 pieces. Run with --dry-run first: it lists the clear groups it would merge and every ambiguous group (a gap in the parts, a hash conflict, a whole file that is not the same document, partly summarised pieces, a page claiming another raw file). Apply refuses to run — exits non-zero and changes nothing — while any ambiguous group remains. Offline: no LLM call and no mass re-synthesis; safe to re-run (a clean second run is a no-op, an interrupted run resumes). After a successful apply it lists the merged documents and, on a terminal, asks once (all-or-nothing, default = keep the stitched summaries) whether to mark them not synthesized so a later `llmwiki synth` re-runs them; --mark-unsynth does that without asking, and a non-terminal run keeps the summaries.",
     ),
+    (
+        "session-tokens",
+        "Backfill usage/session-tokens.json (and raw session token_totals when origin usage is available) so Analytics Tokens and coverage hints include historical sessions that steady-state sync would fingerprint-skip.",
+        "Run once after upgrading to the release that introduced the session Tokens usage store, or when Analytics Tokens looks empty despite older raw sessions. Prefer --dry-run first. Offline for raw-frontmatter seed; may re-read capable agent stores (e.g. Cursor CLI) when still on disk. Does not synthesise wiki pages. Safe to re-run.",
+    ),
 )
 
 
@@ -2038,6 +2044,26 @@ def cmd_migrate_doc_source_provenance(args: argparse.Namespace) -> int:
     )
     migrate_doc_source_provenance.print_report(report)
     return 1 if report["errors"] else 0
+
+
+def cmd_migrate_session_tokens(args: argparse.Namespace) -> int:
+    """Backfill ``usage/session-tokens.json`` and optional raw ``token_totals`` (#325).
+
+    Package-local like other vault migrates: pip installs have no ``scripts/``
+    checkout. Steady-state sync only updates new/changed sessions; this pass
+    is the reliable historical backfill.
+
+    Loads ``config.json`` so contrib adapters (e.g. ``cursor_cli`` roots) and
+    filters match sync; ``run_migration`` calls ``discover_all()`` so origin
+    re-read and frontmatter tag→agent labeling see the full registry.
+    """
+    report = migrate_session_tokens.run_migration(
+        vault=Path(args.vault),
+        dry_run=bool(getattr(args, "dry_run", False)),
+        config=_load_sessions_config(),
+    )
+    migrate_session_tokens.print_report(report)
+    return 1 if report.get("errors") else 0
 
 
 def cmd_migrate_whole_document_storage(args: argparse.Namespace) -> int:
@@ -3801,6 +3827,23 @@ def build_parser() -> argparse.ArgumentParser:
         help="Keep stitched summaries and synth state without asking (the default; explicit no-op for scripts)",
     )
     migrate_whole_doc.set_defaults(func=cmd_migrate_whole_document_storage)
+
+    migrate_session_tok = add_migration(
+        "session-tokens", *_mig_by_name["session-tokens"],
+        short="Backfill usage/session-tokens.json and raw token_totals",
+    )
+    migrate_session_tok.add_argument(
+        "--vault",
+        type=Path,
+        required=True,
+        help="Vault root containing raw/sessions/ and usage/",
+    )
+    migrate_session_tok.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Report would-upsert sessions; write nothing",
+    )
+    migrate_session_tok.set_defaults(func=cmd_migrate_session_tokens)
 
     kit = add_command(
         "install-agent-kit",

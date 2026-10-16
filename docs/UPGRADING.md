@@ -10,6 +10,39 @@ How to upgrade between `llmwiki` releases. Most releases are drop-in (`pip insta
 
 The canonical per-release detail is [CHANGELOG.md](https://github.com/AlexanderMakarov/llm-wiki/blob/main/CHANGELOG.md) — this guide focuses on "what might break".
 
+## Unreleased — session Tokens usage store + Cursor CLI capture (#325)
+
+Analytics Tokens now prefer a single vault file `usage/session-tokens.json` (lifetime + per-agent coverage + per-day × agent buckets attributed to each session’s **last activity** UTC day). Synced session pages still show Tokens from raw frontmatter `token_totals`. Steady-state `sync` only updates new or fingerprint-changed sessions — it will **not** backfill older unchanged sessions.
+
+`sync` / migrate also refresh a slim public `site/session-tokens.js` (aggregates only — no per-session ledger). Open an existing Analytics page after sync and the Tokens card updates from that sidecar without a full HTML rebuild. Run `build` once after migrate so Analytics HTML exists and other site pages stay current.
+
+**After upgrade:** run once:
+
+```bash
+llmwiki migrate session-tokens --vault /path/to/vault --dry-run
+llmwiki migrate session-tokens --vault /path/to/vault
+llmwiki build --vault /path/to/vault
+```
+
+Cursor Agent chats only contribute **measured** totals when turn usage is available. `store.db` does **not** store per-turn input/output/cache fields (context-window occupancy there is never Tokens).
+
+**IDE Agent:** install the managed `stop` hook (idempotent; keeps your existing hooks). The installer writes a POSIX `/bin/sh` handler (`~/.cursor/llmwiki-cursor-token-stop.sh`, ~3 ms) and points `hooks.json` at it — not a Python process (interpreter startup is tens of ms):
+
+```bash
+python3 -m llmwiki.cursor_token_events --install-hook
+```
+
+Each completed Agent turn then appends the **full Cursor stop stdin JSON** as one line to `~/.cursor/llmwiki-cursor-token-events.jsonl` (override with `LLMWIKI_CURSOR_TOKEN_EVENTS`). That keeps the awaited hook cheap; treat the JSONL as local telemetry (not under `site/`). The Python ingest path (`python3 -m llmwiki.cursor_token_events` / `--ingest-stream-json`) writes a minimized usage row instead; sync accepts both shapes. Sync / `migrate session-tokens` join by `conversation_id` (= chat folder / `agentId`). Historical chats from before the hook cannot be backfilled from `store.db`.
+
+**Agent CLI (`cursor-agent -p --output-format stream-json`):** final `result.usage` uses camelCase (`inputTokens`, …) — ingest into the same JSONL:
+
+```bash
+cursor-agent -p --output-format stream-json "…" | tee /tmp/out.jsonl
+python3 -m llmwiki.cursor_token_events --ingest-stream-json /tmp/out.jsonl
+```
+
+Or pipe stream-json NDJSON on stdin to `python3 -m llmwiki.cursor_token_events`. Then `llmwiki migrate session-tokens` / `sync` / `build`. Convert no longer writes empty `token_totals`. See [state-persistence.md](reference/state-persistence.md) and [`migrate session-tokens`](reference/cli.md#session-tokens--backfill-analytics-session-tokens-325).
+
 ## Unreleased — dismissal ledger + near-match prior reasons (#146)
 
 Behaviour flip for new discards/merges, plus an optional offline migration for vaults that still only have per-stub reason files.

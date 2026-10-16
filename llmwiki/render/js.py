@@ -587,6 +587,137 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
   });
 })();
 
+// ─── #325: Analytics Tokens from site/session-tokens.js (no rebuild) ─────
+// Sync / migrate rewrite the slim sidecar (aggregates only). When Analytics
+// already has a Tokens card, refresh headline + coverage from
+// window.LLMWIKI_SESSION_TOKENS without regenerating HTML.
+(function () {
+  var OTHER_LINE =
+    "Other sessions and agents are filtered out or do not support Tokens metrics.";
+  var AGENT_LABELS = {
+    claude_code: "Claude Code",
+    cursor_cli: "Cursor CLI",
+    codex_cli: "Codex CLI",
+    copilot_chat: "Copilot CLI / Chat",
+    gemini_cli: "Gemini CLI",
+    openclaw: "OpenClaw",
+    opencode: "OpenCode"
+  };
+
+  function formatTokens(n) {
+    n = Math.trunc(Number(n) || 0);
+    if (n === 0) return "0";
+    var a = Math.abs(n);
+    if (a < 1000) return String(n);
+    if (a < 1000000) return (n / 1000).toFixed(1) + "K";
+    if (a < 1000000000) return (n / 1000000).toFixed(1) + "M";
+    return (n / 1000000000).toFixed(1) + "B";
+  }
+
+  function agentLabel(agent) {
+    if (AGENT_LABELS[agent]) return AGENT_LABELS[agent];
+    return String(agent || "").replace(/[_-]/g, " ").replace(/\b\w/g, function (c) {
+      return c.toUpperCase();
+    });
+  }
+
+  function formatSince(raw) {
+    if (typeof raw !== "string") return "";
+    var text = raw.trim();
+    if (!text) return "";
+    var day = text.slice(0, 10);
+    if (day.length === 10 && day[4] === "-" && day[7] === "-") {
+      return day.slice(0, 4) + "/" + day.slice(5, 7) + "/" + day.slice(8, 10);
+    }
+    return text.replace(/-/g, "/");
+  }
+
+  function coverageLines(byAgent) {
+    var keys = Object.keys(byAgent || {}).sort();
+    var lines = [];
+    for (var i = 0; i < keys.length; i++) {
+      var row = byAgent[keys[i]];
+      if (!row || typeof row !== "object") continue;
+      var measured = Math.trunc(Number(row.measured) || 0);
+      if (measured <= 0) continue;
+      var known = Math.trunc(Number(row.known) || 0);
+      if (known < measured) known = measured;
+      var line = "- " + measured + "/" + known + " " + agentLabel(keys[i]);
+      if (known > measured) {
+        var since = formatSince(row.since);
+        if (since) line += " (since " + since + ")";
+      }
+      lines.push(line);
+    }
+    return lines;
+  }
+
+  function sumKnown(byAgent) {
+    var total = 0;
+    var keys = Object.keys(byAgent || {});
+    for (var i = 0; i < keys.length; i++) {
+      var row = byAgent[keys[i]];
+      if (!row || typeof row !== "object") continue;
+      var measured = Math.trunc(Number(row.measured) || 0);
+      var known = Math.trunc(Number(row.known) || 0);
+      total += Math.max(known, measured);
+    }
+    return total;
+  }
+
+  function sumMeasured(byAgent) {
+    var total = 0;
+    var keys = Object.keys(byAgent || {});
+    for (var i = 0; i < keys.length; i++) {
+      var row = byAgent[keys[i]];
+      if (!row || typeof row !== "object") continue;
+      total += Math.trunc(Number(row.measured) || 0);
+    }
+    return total;
+  }
+
+  function setPanelLines(panel, lines) {
+    if (!panel) return;
+    panel.textContent = "";
+    for (var i = 0; i < lines.length; i++) {
+      var span = document.createElement("span");
+      span.className = "token-coverage-line";
+      span.textContent = lines[i];
+      panel.appendChild(span);
+    }
+  }
+
+  function refreshTokensFromSidecar() {
+    var data = window.LLMWIKI_SESSION_TOKENS;
+    if (!data || typeof data !== "object") return;
+    var card = document.querySelector("[data-llmwiki-tokens-card]");
+    if (!card) return;
+    var totals = data.totals && typeof data.totals === "object" ? data.totals : {};
+    var byAgent = data.by_agent && typeof data.by_agent === "object" ? data.by_agent : {};
+    var sum = Math.trunc(Number(totals.sum) || 0);
+    var measured = sumMeasured(byAgent);
+    if (measured <= 0 && sum <= 0) return;
+    var known = sumKnown(byAgent);
+    var totalSessions = known > 0 ? known : measured;
+    var avg = measured > 0 ? Math.trunc(sum / measured) : 0;
+    var valueEl = card.querySelector(".token-stat-value");
+    var subEl = card.querySelector(".token-stat-sub");
+    if (valueEl) valueEl.textContent = formatTokens(sum);
+    if (subEl) {
+      subEl.textContent =
+        "by " + measured + "/" + Math.max(totalSessions, measured) +
+        " sessions (" + formatTokens(avg) + "/s)";
+    }
+    var measuredLines = coverageLines(byAgent);
+    var panel = card.querySelector(".token-coverage-panel");
+    if (measuredLines.length) {
+      setPanelLines(panel, ["Measured on sessions"].concat(measuredLines, [OTHER_LINE]));
+    }
+  }
+
+  document.addEventListener("DOMContentLoaded", refreshTokensFromSidecar);
+})();
+
 // ─── Reading progress bar ────────────────────────────────────────────────
 (function () {
   const bar = document.getElementById("progress-bar");

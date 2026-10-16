@@ -256,6 +256,10 @@ Rules for any PR that changes user-visible failure text in the CLI package (exce
 
 Full matching and runner design: `context/spec/327-doctor/technical-considerations.md`.
 
+## Vault I/O scalability
+
+Hot paths (`sync`, `build`, Analytics refresh) must care about **how many files** an operation opens and writes, not only CPU. Prefer a small bounded set of aggregate files under `usage/` (or similar) over one metrics file per session or walking every `raw/sessions/*.md` solely to recompute a headline. Session Tokens (`usage/session-tokens.json`) are the reference pattern: many session stubs may live **inside** one JSON file, but the operation still opens O(1) paths. Do not introduce new per-entity files for aggregates on the daily loop without an explicit design review.
+
 ## Privacy rules
 
 llmwiki processes session transcripts that may contain PII, API keys, file paths, and secrets. These rules are **non-negotiable**:

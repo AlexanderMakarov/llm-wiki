@@ -42,6 +42,8 @@ from typing import Any
 from llmwiki.adapters import register
 from llmwiki.adapters.base import BaseAdapter, _safe_project_slug
 from llmwiki.adapters.contrib.cursor_slug import cursor_workspace_slug
+from llmwiki.cursor_token_events import usage_records_for_conversation
+from llmwiki.cursor_token_usage import extract_cursor_usage_from_record
 
 # Synthetic record type injected by ``load_records`` so store-meta audit
 # fields survive ``normalize_records`` / ``filter_records`` and reach
@@ -68,6 +70,17 @@ _CURSOR_ANY_BLOCK_RE = re.compile(
 _CURSOR_TAG_ONLY_LINE_RE = re.compile(
     r"^</?[A-Za-z][\w:-]*(?:\s[^>]*)?\s*/?>$",
 )
+# Cursor chat folders under ~/.cursor/chats/<ws>/<uuid>/store.db
+_CURSOR_CHAT_FOLDER_RE = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+    re.IGNORECASE,
+)
+
+
+def _looks_like_cursor_chat_folder(name: str) -> bool:
+    """True when ``name`` is a Cursor chat-folder UUID (conversation_id)."""
+    return bool(name and _CURSOR_CHAT_FOLDER_RE.fullmatch(name.strip()))
+
 
 @register("cursor_cli", aliases=["cursor-cli"])
 class CursorCliAdapter(BaseAdapter):
@@ -122,6 +135,21 @@ class CursorCliAdapter(BaseAdapter):
             # Fallback: no recoverable tree — return messages in arbitrary store order.
             messages = list(json_msgs.values())
         audit = self._audit_record_from_store_meta(store_meta)
+        # Chat-folder UUID is the conversation_id hooks / stream-json use.
+        # Only treat parent as a session id when it looks like a Cursor chat
+        # folder (UUID), not a pytest tmp dir holding a bare store.db (#325).
+        folder_id = Path(path).parent.name.strip()
+        if _looks_like_cursor_chat_folder(folder_id):
+            if audit is None:
+                audit = {
+                    "type": _CURSOR_CLI_META_TYPE,
+                    "sessionId": folder_id,
+                    "slug": folder_id.split("-", 1)[0][:12],
+                }
+            elif isinstance(audit, dict) and not str(
+                audit.get("sessionId") or ""
+            ).strip():
+                audit["sessionId"] = folder_id
         return ([audit] + messages) if audit is not None else messages
 
     @staticmethod
@@ -216,6 +244,8 @@ class CursorCliAdapter(BaseAdapter):
 
     def normalize_records(self, records: list[dict[str, Any]]) -> list[dict[str, Any]]:
         out: list[dict[str, Any]] = []
+        session_id = ""
+        store_has_usage = False
         for rec in records:
             if not isinstance(rec, dict):
                 continue
@@ -224,6 +254,9 @@ class CursorCliAdapter(BaseAdapter):
             # after message-role mapping.
             if rec.get("type") == _CURSOR_CLI_META_TYPE:
                 out.append(rec)
+                sid = rec.get("sessionId")
+                if isinstance(sid, str) and sid.strip():
+                    session_id = sid.strip()
                 continue
             role = rec.get("role")
             if role == "user":
@@ -232,11 +265,18 @@ class CursorCliAdapter(BaseAdapter):
                 out.append({"type": "user", "message": {"role": "user", "content": text}})
             elif role == "assistant":
                 blocks = _map_assistant_blocks(rec.get("content"))
-                if blocks:
-                    out.append(
-                        {"type": "assistant", "message": {"role": "assistant", "content": blocks}}
-                    )
+                message: dict[str, Any] = {"role": "assistant", "content": blocks}
+                usage = extract_cursor_usage_from_record(rec)
+                if usage:
+                    message["usage"] = usage
+                    store_has_usage = True
+                if blocks or usage:
+                    out.append({"type": "assistant", "message": message})
             # system + tool roles are intentionally dropped.
+        # store.db JSON rarely carries turn usage; prefer stop-hook JSONL when
+        # the store itself had none (forum 168317 / #325 Appendix A).
+        if not store_has_usage and session_id:
+            out.extend(usage_records_for_conversation(session_id))
         return out
 
     def is_headless_session(self, records: list[dict[str, Any]]) -> bool:

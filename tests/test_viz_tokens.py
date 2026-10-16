@@ -293,7 +293,8 @@ def test_site_stats_block_renders_three_cards():
     }
     block = render_site_token_stats(by_project)
     assert "Tokens" in block
-    assert "/ session (2 with token data)" in block
+    assert "by 2/2 sessions (" in block
+    assert "/s)" in block
     assert "Cumulative billed throughput" in block
     assert "not context-window occupancy" in block
     assert "Best cache hit" in block
@@ -325,8 +326,9 @@ def test_site_stats_labels_token_bearing_divisor_count():
     }
     block = render_site_token_stats(by_project)
     assert "40.0K" in block
-    assert "10.0K / session (4 with token data)" in block
-    # Pre-#223 regression: bare avg label without the token-data population count.
+    # 7 session metas; 4 with token data → by 4/7 sessions (10.0K/s)
+    assert "by 4/7 sessions (10.0K/s)" in block
+    assert "with token data" not in block
     assert "/ session avg" not in block
     assert "Cumulative billed throughput" in block
     assert "not context-window occupancy" in block
@@ -371,8 +373,9 @@ def test_token_coverage_lines_name_each_agent_group_and_missing_is_not_zero():
         "Claude Code",
         "OpenClaw and OpenCode",
         "compatible usage fields",
+        "Cursor CLI",
         "Codex CLI",
-        "Cursor CLI / IDE",
+        "Cursor IDE",
         "not captured",
         "Gemini CLI",
         "Copilot CLI / Chat",
@@ -436,7 +439,8 @@ def test_site_stats_tokens_label_contains_coverage_hint_and_keeps_counting():
     assert 'aria-describedby="token-coverage-site-panel"' in label.group(1)
     assert 'id="token-coverage-site-panel"' in block
     assert '<div class="token-stat-value">4.0K</div>' in block
-    assert "2.0K / session (2 with token data)" in block
+    # 3 metas, 2 with token data → avg 2.0K/s
+    assert "by 2/3 sessions (2.0K/s)" in block
 
 
 def test_site_stats_without_token_data_renders_no_coverage_hint():
