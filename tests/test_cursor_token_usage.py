@@ -119,3 +119,36 @@ def test_extract_rejects_occupancy_on_record():
         "max_tokens": 128_000,
     }
     assert extract_cursor_usage_from_record(rec) is None
+
+
+def test_camel_case_stream_json_usage():
+    """Agent CLI stream-json result.usage uses camelCase (#325)."""
+    raw = {
+        "inputTokens": 1000,
+        "outputTokens": 20,
+        "cacheReadTokens": 400,
+        "cacheWriteTokens": 100,
+    }
+    mapped = map_cursor_usage_to_claude_usage(raw)
+    assert mapped == {
+        "input_tokens": 500,
+        "cache_creation_input_tokens": 100,
+        "cache_read_input_tokens": 400,
+        "output_tokens": 20,
+    }
+
+
+def test_extract_nested_camel_case_usage():
+    rec = {
+        "type": "result",
+        "usage": {
+            "inputTokens": 80,
+            "outputTokens": 5,
+            "cacheReadTokens": 20,
+            "cacheWriteTokens": 0,
+        },
+    }
+    mapped = extract_cursor_usage_from_record(rec)
+    assert mapped is not None
+    assert mapped["input_tokens"] == 60
+    assert mapped["output_tokens"] == 5

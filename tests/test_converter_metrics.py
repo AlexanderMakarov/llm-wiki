@@ -410,6 +410,37 @@ def test_render_session_markdown_emits_v08_metrics(synthetic_records, tmp_path):
             assert line == "duration_seconds: 3902"
 
 
+def test_render_session_markdown_omits_empty_token_totals(tmp_path):
+    """Sessions with no LLM usage must not emit token_totals: {0,0,0,0}."""
+    redactor = Redactor({})
+    jsonl = tmp_path / "empty.jsonl"
+    jsonl.touch()
+    records = [
+        {
+            "type": "user",
+            "timestamp": "2026-04-07T10:00:00Z",
+            "cwd": "/tmp",
+            "sessionId": "empty-tok",
+            "message": {"role": "user", "content": "hi"},
+        },
+        {
+            "type": "assistant",
+            "timestamp": "2026-04-07T10:00:01Z",
+            "message": {"role": "assistant", "content": [{"type": "text", "text": "yo"}]},
+        },
+    ]
+    md, _, _ = render_session_markdown(
+        records,
+        jsonl_path=jsonl,
+        project_slug="test-project",
+        redact=redactor,
+        config={},
+        is_subagent_file=False,
+    )
+    assert "token_totals:" not in md
+    assert "tool_counts:" in md
+
+
 def test_render_session_markdown_is_idempotent(synthetic_records, tmp_path):
     """Re-running the converter on an unchanged record set produces
     byte-identical output."""

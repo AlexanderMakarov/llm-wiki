@@ -1088,7 +1088,8 @@ def _upsert_session_tokens_from_convert(
     if dry_run:
         return
     totals = compute_token_totals(records)
-    if metrics_only and not _token_totals_nonempty(totals):
+    # No LLM usage → do not upsert zeros into coverage ``known`` (#323 / #325).
+    if not _token_totals_nonempty(totals):
         return
     last = ended or latest_record_time(records) or first_record_time(records) or datetime.now(UTC)
     last_activity = last.isoformat() if isinstance(last, datetime) else str(last)
@@ -1881,7 +1882,12 @@ def render_session_markdown(
         # v0.8 — structured metrics (JSON inline so the simple frontmatter
         # parser stores them as strings; consumers json.loads() on demand).
         f"tool_counts: {json.dumps(tool_counts, sort_keys=False)}",
-        f"token_totals: {json.dumps(token_totals, sort_keys=False)}",
+    ]
+    # Omit empty token_totals — sessions without LLM usage must not look
+    # "known" to Analytics Tokens (#323 / local review B1 origin).
+    if _token_totals_nonempty(token_totals):
+        front.append(f"token_totals: {json.dumps(token_totals, sort_keys=False)}")
+    front.extend([
         f"turn_count: {turn_count}",
         f"hour_buckets: {json.dumps(hour_buckets, sort_keys=False)}",
         f"duration_seconds: {duration_seconds}",
@@ -1889,7 +1895,7 @@ def render_session_markdown(
         f"entrypoint: {entrypoint}",
         f"promptSource: {prompt_source}",
         f"is_headless: {str(headless).lower()}",
-    ]
+    ])
     # Optional Cursor Agent CLI launch audit (#180) — only when present so
     # Claude / other adapters keep the same frontmatter shape.
     if approval_mode:

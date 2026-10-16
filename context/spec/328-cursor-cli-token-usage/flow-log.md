@@ -46,5 +46,17 @@
 - Next: /awos:implement
 
 ## implement
-- Slices 1–6 done: cursor map, session-tokens store, convert/sync upsert, migrate session-tokens CLI, Analytics+coverage, docs/CHANGELOG/I/O rules
-- Next: full ruff + pytest; then commit/PR
+- Slices 1–7 done: cursor map, session-tokens store, convert/sync upsert, migrate session-tokens CLI, Analytics+coverage, docs/CHANGELOG/I/O rules; full ruff+pytest green
+- Commit 9a05289; PR https://github.com/AlexanderMakarov/llm-wiki/pull/354 ; CI all green; merge blocked on branch policy (needs review) — `--auto` requested if available
+- Follow-up fix: `migrate session-tokens` calls `discover_all()` and loads `config.json` so contrib origin re-read runs and frontmatter tags label `cursor_cli` / `codex_cli` / … correctly (was defaulting every session to `claude_code`). Live-vault checks are `--dry-run` / in-memory only (no vault writes).
+- Local review Request changes applied: B1 origin skips empty totals; B2 drop raw filter-skip (metrics-without-raw); convert omits empty `token_totals` + never upserts zeros; N1/N2 tests + no synth imports; N3 leave `demo/wiki/archive/` untracked. Cursor dig (forum 168317): `store.db` has no turn usage — shipped `python3 -m llmwiki.cursor_token_events` stop-hook JSONL + `normalize_records` merge by `conversation_id`. Filed #355 (self-heal, assigned) for optional synthetic/no-tool Tokens knob.
+- Next: ruff + pytest; push PR #354 when asked.
+- Investigation notes saved at `context/spec/328-cursor-cli-token-usage/investigation-notes.md` (prefs, dead sinks, vscdb cutoff = reinstall or IDE update). Hook latency benches: Rust/Go ~1 ms p50, bash ~3 ms, Python module ~42 ms; concurrent O_APPEND 100 writers integrity ok.
+- Locked: ship POSIX `/bin/sh` stop handler (not Rust/Go — CI/multi-arch not worth ~2 ms). `--install-hook` writes `~/.cursor/llmwiki-cursor-token-stop.sh` + merges `hooks.json`; Python kept for install/ingest only.
+- Review pass 2 keep-all applied: B1 slim public sidecar (no `sessions`); B2-1 Analytics loads `session-tokens.js` + viewer refresh; N2 document full-stdin managed hook; N3 delete `demo/wiki/archive/`; N4 narrow coverage requirement to Analytics Tokens card.
+
+## commit-push
+- Applied review-2 keep-all (B1 slim sidecar, B2-1 Analytics live Tokens refresh, N2 full-stdin docs, N3 removed demo/wiki/archive/, N4 Analytics-only coverage title)
+- Staged cursor_token_events + investigation-notes; excluded review.md / review-2.md / demo archive
+- Issue link keyword: Closes #325 (AC delivered; #355 is separate optional knob)
+- Next: push PR #354; watch CI; ask merge confirm

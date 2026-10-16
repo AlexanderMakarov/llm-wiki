@@ -135,3 +135,30 @@ def test_emit_session_tokens_sidecar(tmp_path):
     assert text.startswith(f"window.{SIDECAR_GLOBAL} = ")
     payload = json.loads(text.split("=", 1)[1].rstrip().rstrip(";"))
     assert payload["totals"]["output"] == 9
+    assert "sessions" not in payload
+    assert "s1" not in text
+
+
+def test_emit_session_tokens_sidecar_omits_metrics_only_session_keys(tmp_path):
+    """Public sidecar must not embed vault session ledger keys (#325 B1)."""
+    vault = tmp_path / "vault"
+    site = tmp_path / "site"
+    vault.mkdir()
+    site.mkdir()
+    upsert_session_tokens(
+        vault,
+        session_key="metrics-only-secret-key",
+        agent="cursor_cli",
+        totals=_totals(cache_read=200),
+        fingerprint="m1",
+        last_activity="2026-07-10T15:00:00Z",
+        metrics_only=True,
+        in_raw=False,
+    )
+    emit_session_tokens_sidecar(vault, site)
+    text = (site / "session-tokens.js").read_text(encoding="utf-8")
+    payload = json.loads(text.split("=", 1)[1].rstrip().rstrip(";"))
+    assert "sessions" not in payload
+    assert "metrics-only-secret-key" not in text
+    assert payload["by_agent"]["cursor_cli"]["measured"] == 1
+    assert payload["totals"]["cache_read"] == 200

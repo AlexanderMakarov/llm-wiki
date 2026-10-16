@@ -945,11 +945,11 @@ Idempotent: a clean second run is a no-op; an interrupted apply resumes. Rebuild
 
 Steady-state `sync` only writes session Tokens for **new or fingerprint-changed** origin sessions (cheap no-ops otherwise). After upgrading to the session Tokens usage store, already-synced sessions would stay missing from `usage/session-tokens.json` and may lack `token_totals` in raw frontmatter unless you run this one-shot migrate.
 
-1. Seeds the usage file from existing `raw/sessions/*.md` `token_totals` when present.
-2. Re-reads capable agent stores still on disk (e.g. Cursor CLI) to map real turn usage into the four buckets, patch raw frontmatter when a matching session page exists, and upsert the usage file (including metrics-only rows when usage is measurable but no raw page exists).
-3. Refreshes `site/session-tokens.js` when the vault already has a `site/` tree.
+1. Seeds the usage file from existing `raw/sessions/*.md` when `token_totals` has at least one non-zero bucket (agent from frontmatter tags such as `cursor-cli` / `claude-code`, after loading the full adapter registry). All-zero / missing totals are skipped — they do not inflate coverage `known`. Sessions that sync would filter (lookback / headless / subagents) still count when they have measurable usage — same metrics-without-raw policy as steady-state `sync`.
+2. Re-reads capable agent stores still on disk (Claude Code, Codex CLI, Cursor CLI, …) using `config.json` adapter settings, to map real turn usage into the four buckets, patch raw frontmatter when a matching session page exists, and upsert the usage file (including metrics-only rows when usage is measurable but no raw page exists). Origin sessions with empty totals are skipped the same way as raw seed.
+3. Refreshes slim public `site/session-tokens.js` (aggregates only) when the vault already has a `site/` tree — Analytics Tokens can then update without a full HTML rebuild.
 
-Does **not** invent totals from context-window occupancy. Prefer `--dry-run` first. See [state-persistence.md](state-persistence.md) and [UPGRADING.md](../UPGRADING.md).
+**Cursor Agent turn usage:** `store.db` message JSON does not carry input/output/cache turn fields. Install the IDE hook with `python3 -m llmwiki.cursor_token_events --install-hook` (writes a POSIX `/bin/sh` `stop` handler into `~/.cursor/` and merges `hooks.json`; or ingest Agent CLI `stream-json` via `--ingest-stream-json FILE`). Events land in `~/.cursor/llmwiki-cursor-token-events.jsonl`; sync and migrate join by `conversation_id` (= chat `agentId`). Do **not** invent totals from context-window occupancy. Prefer `--dry-run` first. See [state-persistence.md](state-persistence.md) and [UPGRADING.md](../UPGRADING.md).
 
 ```bash
 python3 -m llmwiki migrate session-tokens --vault /path/to/vault --dry-run

@@ -71,10 +71,10 @@ Success means: one usage file + frontmatter on synced pages; **named migrate** f
   - **Acceptance Criteria:**
     - [ ] Docs cover four categories, cache counts, usage≠billing, last-activity attribution, metrics-only sessions, and that historical Tokens use the named migrate (sync only maintains new/changed).
 
-- **On-hover coverage on every session-Tokens widget.**
-  - Form like `432/432 Claude Code sessions, 321/543 Cursor sessions`; only agents with ≥1 measured session; include metrics-only in counts.
+- **On-hover coverage on the Analytics Tokens card.**
+  - Form like `- measured/known Agent` (plus optional `(since YYYY/MM/DD)`); only agents with ≥1 measured session; include metrics-only in counts. Per-session / per-project Tokens cards stay frontmatter-only (no coverage hint).
   - **Acceptance Criteria:**
-    - [ ] Coverage control shows measured/known only for agents with ≥1 measured session.
+    - [ ] Analytics coverage control shows measured/known only for agents with ≥1 measured session.
 
 - **Contributor/maintainer I/O scalability rules.**
   - Operations must care about **number of files** read/written; prefer one aggregate usage file over per-session files or raw walks on hot paths.

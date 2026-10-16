@@ -2052,10 +2052,15 @@ def cmd_migrate_session_tokens(args: argparse.Namespace) -> int:
     Package-local like other vault migrates: pip installs have no ``scripts/``
     checkout. Steady-state sync only updates new/changed sessions; this pass
     is the reliable historical backfill.
+
+    Loads ``config.json`` so contrib adapters (e.g. ``cursor_cli`` roots) and
+    filters match sync; ``run_migration`` calls ``discover_all()`` so origin
+    re-read and frontmatter tag→agent labeling see the full registry.
     """
     report = migrate_session_tokens.run_migration(
         vault=Path(args.vault),
         dry_run=bool(getattr(args, "dry_run", False)),
+        config=_load_sessions_config(),
     )
     migrate_session_tokens.print_report(report)
     return 1 if report.get("errors") else 0

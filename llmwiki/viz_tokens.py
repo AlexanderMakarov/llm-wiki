@@ -333,8 +333,25 @@ def _agent_display_name(agent: str) -> str:
     return agent.replace("_", " ").replace("-", " ").title()
 
 
+def _format_coverage_since(raw: object) -> str:
+    """Normalize a stored ``YYYY-MM-DD`` (or ISO) into ``YYYY/MM/DD`` for the hint."""
+    if not isinstance(raw, str):
+        return ""
+    text = raw.strip()
+    if not text:
+        return ""
+    day = text[:10]
+    if len(day) == 10 and day[4] == "-" and day[7] == "-":
+        return f"{day[0:4]}/{day[5:7]}/{day[8:10]}"
+    return text.replace("-", "/")
+
+
 def format_token_coverage_measured_known(by_agent: Mapping[str, Any]) -> list[str]:
-    """One line per agent with measured sessions, e.g. ``3/5 Cursor CLI sessions``."""
+    """Coverage bullets for agents with measured sessions (#325).
+
+    Returns lines after the ``Measured on sessions`` header, e.g.
+    ``- 2/1234 Cursor CLI (since 2026/10/15)``.
+    """
     lines: list[str] = []
     for agent in sorted(by_agent):
         row = by_agent[agent]
@@ -344,9 +361,48 @@ def format_token_coverage_measured_known(by_agent: Mapping[str, Any]) -> list[st
         if measured <= 0:
             continue
         known = int(row.get("known") or 0)
+        if known < measured:
+            known = measured
         label = _agent_display_name(agent)
-        lines.append(f"{measured}/{known} {label} sessions with measured token usage.")
+        line = f"- {measured}/{known} {label}"
+        if known > measured:
+            since = _format_coverage_since(row.get("since"))
+            if since:
+                line = f"{line} (since {since})"
+        lines.append(line)
     return lines
+
+
+def sum_agent_known_sessions(by_agent: Mapping[str, Any] | None) -> int:
+    """Sum ``by_agent[*].known`` (coverage universe for the Tokens denominator)."""
+    if not by_agent:
+        return 0
+    total = 0
+    for row in by_agent.values():
+        if not isinstance(row, Mapping):
+            continue
+        measured = int(row.get("measured") or 0)
+        known = int(row.get("known") or 0)
+        total += max(known, measured)
+    return total
+
+
+def format_site_tokens_sublabel(
+    *,
+    avg_per_session: int,
+    measured_sessions: int,
+    total_sessions: int,
+) -> str:
+    """Tokens card sub-line: ``by 1477/23456 sessions (3.7M/s)`` (#325).
+
+    ``total_sessions`` is Σ agent ``known`` (Claude + Cursor + other agents),
+    not the site session-page count.
+    """
+    total = max(int(total_sessions), int(measured_sessions))
+    return (
+        f"by {int(measured_sessions)}/{total} sessions "
+        f"({format_tokens(int(avg_per_session))}/s)"
+    )
 
 
 def usage_file_preferred_for_site_stats(usage_data: Mapping[str, Any]) -> bool:
@@ -427,10 +483,10 @@ def compute_site_stats(
     }
 
 
-#: Coverage disclosure shown beside the site-wide Tokens headline (#323).
-#: One entry per line of the hover / focus / tap panel. The headline sums
-#: recorded session usage only; this copy says which agents feed it so a
-#: missing capture is not read as "zero tokens".
+#: Fallback coverage disclosure when no per-agent measured/known rows are
+#: available yet (#323). Prefer :func:`format_token_coverage_measured_known`
+#: plus :data:`TOKEN_COVERAGE_OTHER_AGENTS_LINE` on the Analytics page once
+#: ``usage/session-tokens.json`` feeds ``by_agent``.
 TOKEN_COVERAGE_LINES: tuple[str, ...] = (
     "Counts input, output, cache creation, and cache read tokens from"
     " recorded, compatible session usage. This is session usage, not"
@@ -438,11 +494,16 @@ TOKEN_COVERAGE_LINES: tuple[str, ...] = (
     "Claude Code: included when usage fields are present.",
     "OpenClaw and OpenCode: counted only for records with compatible usage"
     " fields; native token support is not complete.",
-    "Cursor CLI: included when usage fields are present in the session store.",
+    "Cursor CLI: included when usage fields are present (stop-hook JSONL;"
+    " not context-window occupancy in the session store).",
     "Codex CLI and Cursor IDE: not captured by the token pipeline yet.",
     "Gemini CLI and Copilot CLI / Chat: no verified native token mapping.",
     "Sessions without usage data are excluded, not evidence of zero tokens."
     " The headline is a recorded-usage total, not a complete all-agent total.",
+)
+
+TOKEN_COVERAGE_OTHER_AGENTS_LINE = (
+    "Other sessions and agents are filtered out or do not support Tokens metrics."
 )
 
 _HINT_ID_UNSAFE = re.compile(r"[^A-Za-z0-9_-]")
@@ -456,17 +517,25 @@ def render_token_coverage_hint(
     """Return the accessible "what does this total cover?" control (#323).
 
     A ``<button>`` (labelled, ``aria-expanded``) plus a ``role="tooltip"``
-    panel built from :data:`TOKEN_COVERAGE_LINES`. CSS reveals the panel on
-    hover / focus-within / ``aria-expanded="true"``; the viewer script
-    toggles ``aria-expanded`` for touch and closes on Escape / outside
-    click. ``hint_id`` seeds the panel id (``<hint_id>-panel``) so the
-    helper can be reused for several counters on one page.
+    panel. When ``by_agent`` has measured coverage, the panel is the short
+    measured/known lines plus :data:`TOKEN_COVERAGE_OTHER_AGENTS_LINE` — not
+    the long static agent encyclopedia. Without measured rows, fall back to
+    :data:`TOKEN_COVERAGE_LINES`. CSS reveals the panel on hover /
+    focus-within / ``aria-expanded="true"``; the viewer script toggles
+    ``aria-expanded`` for touch and closes on Escape / outside click.
+    ``hint_id`` seeds the panel id (``<hint_id>-panel``).
     """
     safe = _HINT_ID_UNSAFE.sub("-", hint_id).strip("-") or "token-coverage"
     panel_id = f"{safe}-panel"
-    coverage_lines = list(TOKEN_COVERAGE_LINES)
-    if by_agent:
-        coverage_lines.extend(format_token_coverage_measured_known(by_agent))
+    measured = format_token_coverage_measured_known(by_agent or {})
+    if measured:
+        coverage_lines = [
+            "Measured on sessions",
+            *measured,
+            TOKEN_COVERAGE_OTHER_AGENTS_LINE,
+        ]
+    else:
+        coverage_lines = list(TOKEN_COVERAGE_LINES)
     lines = "".join(
         f'<span class="token-coverage-line">{html.escape(line)}</span>'
         for line in coverage_lines
@@ -517,13 +586,26 @@ def render_site_token_stats(
         '    <div class="token-stat-grid">',
     ]
     n_with_tokens = int(stats["session_count"])
+    # Denominator = Σ by_agent.known (measured agents + other agents' known).
+    # Fall back to on-disk session metas only when the usage file has no rows.
+    known_total = sum_agent_known_sessions(by_agent)
+    total_sessions = (
+        known_total
+        if known_total > 0
+        else sum(len(metas) for metas in metas_by_project.values())
+    )
     if n_with_tokens > 0:
+        sub = format_site_tokens_sublabel(
+            avg_per_session=int(avg),
+            measured_sessions=n_with_tokens,
+            total_sessions=total_sessions,
+        )
         parts.append(
-            f'      <div class="token-stat"><div class="token-stat-label muted">Tokens'
+            f'      <div class="token-stat" data-llmwiki-tokens-card>'
+            f'<div class="token-stat-label muted">Tokens'
             f'{render_token_coverage_hint("token-coverage-site", by_agent=by_agent)}</div>'
             f'<div class="token-stat-value">{format_tokens(total)}</div>'
-            f'<div class="token-stat-sub muted">{format_tokens(avg)} / session'
-            f' ({n_with_tokens} with token data)</div></div>'
+            f'<div class="token-stat-sub muted">{html.escape(sub)}</div></div>'
         )
     if best is not None:
         slug, r = best

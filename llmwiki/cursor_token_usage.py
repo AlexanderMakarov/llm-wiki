@@ -1,14 +1,18 @@
 """Map Cursor turn usage fields to Claude ``message.usage`` shape (#325).
 
-Cursor reports ``input_tokens`` inclusive of cache read/write; Claude's four
-fields are disjoint. Occupancy gauges (``used_tokens`` / ``max_tokens``) are
-never mapped to measurable usage.
+Cursor reports inclusive ``input_tokens`` / ``inputTokens`` (cache read/write
+already inside input). Claude's four fields are disjoint. Occupancy gauges
+(``used_tokens`` / ``max_tokens``) are never mapped to measurable usage.
+
+Accepts both snake_case (IDE ``stop`` hook / forum 168317) and camelCase
+(Agent CLI ``stream-json`` ``result.usage``).
 """
 from __future__ import annotations
 
 from collections.abc import Mapping
 from typing import Any
 
+# Canonical snake keys after :func:`normalize_cursor_usage_keys`.
 _USAGE_KEYS = frozenset(
     {
         "input_tokens",
@@ -19,7 +23,33 @@ _USAGE_KEYS = frozenset(
         "cache_write",
     }
 )
-_OCCUPANCY_KEYS = frozenset({"used_tokens", "max_tokens"})
+_OCCUPANCY_KEYS = frozenset({"used_tokens", "max_tokens", "usedTokens", "maxTokens"})
+
+# camelCase (stream-json) → snake_case (hook / Claude map).
+_CAMEL_TO_SNAKE = {
+    "inputTokens": "input_tokens",
+    "outputTokens": "output_tokens",
+    "cacheReadTokens": "cache_read_tokens",
+    "cacheWriteTokens": "cache_write_tokens",
+    "cacheRead": "cache_read",
+    "cacheWrite": "cache_write",
+    "usedTokens": "used_tokens",
+    "maxTokens": "max_tokens",
+}
+
+
+def normalize_cursor_usage_keys(raw: Mapping[str, Any]) -> dict[str, Any]:
+    """Return a shallow copy with camelCase token keys folded to snake_case."""
+    if not isinstance(raw, Mapping):
+        return {}
+    out: dict[str, Any] = {}
+    for key, val in raw.items():
+        canon = _CAMEL_TO_SNAKE.get(str(key), str(key))
+        # Prefer first-seen; do not overwrite snake with empty camel.
+        if canon in out and out[canon] is not None:
+            continue
+        out[canon] = val
+    return out
 
 
 def _int_field(raw: Mapping[str, Any], *keys: str) -> int | None:
@@ -51,18 +81,20 @@ def map_cursor_usage_to_claude_usage(raw: Mapping[str, Any]) -> dict[str, int] |
     if not isinstance(raw, Mapping):
         return None
 
-    has_in = "input_tokens" in raw
-    has_out = "output_tokens" in raw
-    has_occupancy = _has_key(raw, *_OCCUPANCY_KEYS)
+    norm = normalize_cursor_usage_keys(raw)
+
+    has_in = "input_tokens" in norm
+    has_out = "output_tokens" in norm
+    has_occupancy = _has_key(norm, "used_tokens", "max_tokens")
     if has_occupancy and not has_in and not has_out:
         return None
     if not has_in and not has_out:
         return None
 
-    inp = _int_field(raw, "input_tokens")
-    out = _int_field(raw, "output_tokens")
-    cr = _int_field(raw, "cache_read_tokens", "cache_read") or 0
-    cw = _int_field(raw, "cache_write_tokens", "cache_write") or 0
+    inp = _int_field(norm, "input_tokens")
+    out = _int_field(norm, "output_tokens")
+    cr = _int_field(norm, "cache_read_tokens", "cache_read") or 0
+    cw = _int_field(norm, "cache_write_tokens", "cache_write") or 0
 
     if inp is None and out is None:
         return None
@@ -97,9 +129,10 @@ def extract_cursor_usage_from_record(rec: Mapping[str, Any]) -> dict[str, int] |
         if isinstance(msg_usage, Mapping):
             candidates.append(msg_usage)
 
+    # Top-level snake or camel throughput / occupancy keys.
     top_level = {
         k: rec[k]
-        for k in _USAGE_KEYS | _OCCUPANCY_KEYS
+        for k in list(_USAGE_KEYS) + list(_OCCUPANCY_KEYS) + list(_CAMEL_TO_SNAKE)
         if k in rec
     }
     if top_level:

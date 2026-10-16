@@ -1101,6 +1101,7 @@ def page_foot(js_prefix: str = "") -> str:
 </nav>
 {search_palette_markup(js_prefix)}
 <script src="{js_prefix}llmwiki-state.js"></script>
+<script src="{js_prefix}session-tokens.js"></script>
 <script src="{js_prefix}{HLJS_SCRIPT}" defer></script>
 <script>
   // v0.5: Run highlight.js once the vendored script lands. Defer keeps it

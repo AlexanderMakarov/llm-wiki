@@ -102,12 +102,40 @@ def day_from_last_activity(iso_or_datetime: str | datetime) -> str:
     return ts.date().isoformat()
 
 
+def prune_unmeasured_sessions(data: dict[str, Any]) -> int:
+    """Drop session stubs whose totals are all zero. Returns how many were removed.
+
+    Empty stubs inflate coverage ``known`` without contributing Tokens (#323 / #325).
+    """
+    sessions = data.get("sessions")
+    if not isinstance(sessions, dict):
+        return 0
+    drop = [
+        key
+        for key, stub in sessions.items()
+        if not isinstance(stub, dict) or not _is_measured(stub.get("totals") or {})
+    ]
+    for key in drop:
+        del sessions[key]
+    if drop:
+        rebuild_aggregates_from_sessions(data)
+        data["updated_at"] = _iso_now()
+    return len(drop)
+
+
 def rebuild_aggregates_from_sessions(data: dict[str, Any]) -> None:
-    """Recompute ``totals``, ``by_agent``, and ``days`` from the session ledger."""
+    """Recompute ``totals``, ``by_agent``, and ``days`` from the session ledger.
+
+    Preserves per-agent ``known`` (when higher than measured) and ``since``
+    from a prior document so coverage can count discoverable-but-unmeasured
+    sessions without storing empty stubs (#325).
+    """
     sessions = data.get("sessions")
     if not isinstance(sessions, dict):
         sessions = {}
         data["sessions"] = sessions
+
+    prev_by_agent = data.get("by_agent") if isinstance(data.get("by_agent"), dict) else {}
 
     totals = _empty_buckets()
     totals["sum"] = 0
@@ -124,15 +152,18 @@ def rebuild_aggregates_from_sessions(data: dict[str, Any]) -> None:
         if not isinstance(day, str) or not day:
             continue
         bucket = _normalize_buckets(stub.get("totals"))
+        # Ledger may still hold pre-#325 zero stubs; never count them as known.
+        if not _is_measured(bucket):
+            continue
 
         _add_buckets(totals, bucket)
         agent_row = by_agent.setdefault(
             agent,
             {"measured": 0, "known": 0, "totals": _empty_buckets()},
         )
-        agent_row["known"] = int(agent_row.get("known") or 0) + 1
-        if _is_measured(bucket):
-            agent_row["measured"] = int(agent_row.get("measured") or 0) + 1
+        agent_row["measured"] = int(agent_row.get("measured") or 0) + 1
+        # known floor = measured; discoverable extras applied via merge_agent_coverage
+        agent_row["known"] = int(agent_row.get("measured") or 0)
         _add_buckets(agent_row["totals"], bucket)
 
         day_row = days.setdefault(day, {})
@@ -141,13 +172,80 @@ def rebuild_aggregates_from_sessions(data: dict[str, Any]) -> None:
         agent_day["sum"] = _bucket_sum(agent_day)
 
     totals["sum"] = _bucket_sum(totals)
-    for agent_row in by_agent.values():
+    for agent, agent_row in by_agent.items():
         if isinstance(agent_row.get("totals"), dict):
             agent_row["totals"]["sum"] = _bucket_sum(agent_row["totals"])
+        prev = prev_by_agent.get(agent) if isinstance(prev_by_agent.get(agent), dict) else {}
+        prev_known = int(prev.get("known") or 0)
+        measured = int(agent_row.get("measured") or 0)
+        agent_row["known"] = max(measured, prev_known)
+        since = prev.get("since")
+        if isinstance(since, str) and since.strip():
+            agent_row["since"] = since.strip()
+
+    # Agents with known-only coverage (no measured stubs yet) stay visible.
+    for agent, prev in prev_by_agent.items():
+        if agent in by_agent or not isinstance(prev, dict):
+            continue
+        prev_known = int(prev.get("known") or 0)
+        if prev_known <= 0:
+            continue
+        row: dict[str, Any] = {
+            "measured": 0,
+            "known": prev_known,
+            "totals": _empty_buckets(),
+        }
+        row["totals"]["sum"] = 0
+        since = prev.get("since")
+        if isinstance(since, str) and since.strip():
+            row["since"] = since.strip()
+        by_agent[agent] = row
 
     data["totals"] = totals
     data["by_agent"] = by_agent
     data["days"] = days
+
+
+def merge_agent_coverage(
+    data: dict[str, Any],
+    known_by_agent: Mapping[str, int],
+    *,
+    since_by_agent: Mapping[str, str] | None = None,
+) -> None:
+    """Raise ``by_agent[*].known`` from discovery counts; optional ``since`` dates."""
+    by_agent = data.setdefault("by_agent", {})
+    if not isinstance(by_agent, dict):
+        by_agent = {}
+        data["by_agent"] = by_agent
+    for agent, known in known_by_agent.items():
+        if not isinstance(agent, str) or not agent:
+            continue
+        try:
+            known_n = int(known)
+        except (TypeError, ValueError):
+            continue
+        if known_n < 0:
+            continue
+        row = by_agent.get(agent)
+        if not isinstance(row, dict):
+            row = {"measured": 0, "known": 0, "totals": _empty_buckets()}
+            row["totals"]["sum"] = 0
+            by_agent[agent] = row
+        measured = int(row.get("measured") or 0)
+        row["known"] = max(measured, int(row.get("known") or 0), known_n)
+    if since_by_agent:
+        for agent, since in since_by_agent.items():
+            if not isinstance(agent, str) or not isinstance(since, str):
+                continue
+            since = since.strip()
+            if not since:
+                continue
+            row = by_agent.get(agent)
+            if not isinstance(row, dict):
+                row = {"measured": 0, "known": 0, "totals": _empty_buckets()}
+                row["totals"]["sum"] = 0
+                by_agent[agent] = row
+            row["since"] = since
 
 
 def load_session_tokens(vault: Path) -> dict[str, Any]:
@@ -242,12 +340,30 @@ def upsert_session_tokens(
     return True
 
 
+def public_session_tokens_snapshot(data: Mapping[str, Any]) -> dict[str, Any]:
+    """Aggregates safe to publish under ``site/`` (no per-session ledger)."""
+    totals = data.get("totals") if isinstance(data.get("totals"), Mapping) else {}
+    by_agent = data.get("by_agent") if isinstance(data.get("by_agent"), Mapping) else {}
+    days = data.get("days") if isinstance(data.get("days"), Mapping) else {}
+    attribution = (
+        data.get("attribution") if isinstance(data.get("attribution"), Mapping) else {}
+    )
+    updated = data.get("updated_at") if isinstance(data.get("updated_at"), str) else ""
+    return {
+        "totals": dict(totals),
+        "by_agent": dict(by_agent),
+        "days": dict(days),
+        "attribution": dict(attribution),
+        "updated_at": updated,
+    }
+
+
 def emit_session_tokens_sidecar(vault: Path, site_dir: Path) -> None:
-    """Write ``site/session-tokens.js`` from the vault usage snapshot."""
+    """Write slim ``site/session-tokens.js`` (aggregates only — no ``sessions``)."""
     if not site_dir.is_dir():
         return
     data = load_session_tokens(vault)
-    payload = json.dumps(data, separators=(",", ":"))
+    payload = json.dumps(public_session_tokens_snapshot(data), separators=(",", ":"))
     sidecar = f"window.{SIDECAR_GLOBAL} = {payload};\n"
     out = site_dir / "session-tokens.js"
     out.parent.mkdir(parents=True, exist_ok=True)

@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from llmwiki._frontmatter import parse_frontmatter
-from llmwiki.adapters import REGISTRY
+from llmwiki.adapters import REGISTRY, discover_all, resolve_adapter_name
 from llmwiki.convert import (
     _session_key_from_records,
     compute_token_totals,
@@ -22,6 +22,10 @@ from llmwiki.convert import (
 )
 from llmwiki.session_tokens_usage import (
     emit_session_tokens_sidecar,
+    load_session_tokens,
+    merge_agent_coverage,
+    prune_unmeasured_sessions,
+    save_session_tokens,
     upsert_session_tokens,
 )
 from llmwiki.state_store import mtime_to_iso
@@ -33,7 +37,12 @@ _BUCKET_KEYS = ("input", "cache_creation", "cache_read", "output")
 
 
 def _adapter_name_from_meta(meta: dict[str, Any]) -> str:
-    """Map frontmatter ``tags`` to a registry adapter name when possible."""
+    """Map frontmatter ``tags`` to a registry adapter name when possible.
+
+    Requires ``discover_all()`` (or equivalent) so contrib adapters such as
+    ``cursor_cli`` are registered; otherwise every session would fall through
+    to ``claude_code``.
+    """
     raw = meta.get("tags")
     tags: list[str] = []
     if isinstance(raw, list):
@@ -43,14 +52,22 @@ def _adapter_name_from_meta(meta: dict[str, Any]) -> str:
         if m:
             tags = [p.strip().strip("'\"") for p in m.group(1).split(",") if p.strip()]
     for tag in tags:
-        candidate = tag.replace("-", "_")
-        if candidate in REGISTRY:
-            return candidate
+        for candidate in (tag, tag.replace("-", "_")):
+            resolved = resolve_adapter_name(candidate)
+            if resolved:
+                return resolved
+            if candidate in REGISTRY:
+                return candidate
     return "claude_code"
 
 
 def patch_raw_token_totals(text: str, totals: dict[str, int]) -> str:
-    """Replace or insert ``token_totals`` in session frontmatter."""
+    """Replace or insert ``token_totals`` in session frontmatter.
+
+    Empty totals remove the frontmatter line so no-usage sessions stay honest.
+    """
+    if not _totals_nonempty(totals):
+        return remove_raw_token_totals(text)
     line = f"token_totals: {json.dumps(totals, sort_keys=False)}"
     if _TOKEN_TOTALS_LINE.search(text):
         return _TOKEN_TOTALS_LINE.sub(line, text, count=1)
@@ -64,6 +81,13 @@ def patch_raw_token_totals(text: str, totals: dict[str, int]) -> str:
             lines.insert(i, line + "\n")
             return "".join(lines)
     return text
+
+
+def remove_raw_token_totals(text: str) -> str:
+    """Drop a ``token_totals:`` frontmatter line when present."""
+    if not _TOKEN_TOTALS_LINE.search(text):
+        return text
+    return _TOKEN_TOTALS_LINE.sub("", text, count=1)
 
 
 def _last_activity_from_meta(meta: dict[str, Any], fallback_mtime: float) -> str:
@@ -90,6 +114,12 @@ def _upsert_from_raw_file(
     totals = parse_token_totals(meta)
     session_key = str(meta.get("sessionId") or raw_path.stem).strip()
     agent = _adapter_name_from_meta(meta)
+    # Empty buckets are no usage (#323) — do not inflate coverage ``known``.
+    # Filtered / don't-sync sessions with real usage still count via origin
+    # metrics_only (locked #325); raw seed does not drop them by lookback.
+    if not _totals_nonempty(totals):
+        report["raw_skipped_empty"] = int(report.get("raw_skipped_empty") or 0) + 1
+        return
     mtime = raw_path.stat().st_mtime
     last_activity = _last_activity_from_meta(meta, mtime)
     if dry_run:
@@ -155,16 +185,26 @@ def _backfill_capable_adapter(
         if not records:
             continue
         totals = compute_token_totals(records)
+        # No LLM usage → do not upsert zeros into known (same rule as raw seed /
+        # convert metrics-only). Cursor store.db JSON has no turn usage; hook
+        # events (when present) are merged in load_records/normalize.
+        if not _totals_nonempty(totals):
+            report["origin_skipped_empty"] = (
+                int(report.get("origin_skipped_empty") or 0) + 1
+            )
+            continue
         session_key = _session_key_from_records(records, path)
         raw_path = _find_raw_by_session_id(sessions_dir, session_key)
-        if raw_path is not None and totals != {k: 0 for k in _BUCKET_KEYS}:
+        if raw_path is not None:
             text = raw_path.read_text(encoding="utf-8")
             meta, _ = parse_frontmatter(text)
             existing = parse_token_totals(meta)
             if existing != totals:
                 report["raw_patched"] = int(report.get("raw_patched") or 0) + 1
                 if not dry_run:
-                    raw_path.write_text(patch_raw_token_totals(text, totals), encoding="utf-8")
+                    raw_path.write_text(
+                        patch_raw_token_totals(text, totals), encoding="utf-8"
+                    )
         ended = latest_record_time(records) or first_record_time(records)
         last_activity = (
             ended.isoformat()
@@ -172,7 +212,8 @@ def _backfill_capable_adapter(
             else datetime.fromtimestamp(mtime, tz=UTC).isoformat()
         )
         in_raw = raw_path is not None
-        metrics_only = not in_raw and _totals_nonempty(totals)
+        # Filtered / don't-sync but measurable → metrics_only (locked #325).
+        metrics_only = not in_raw
         if dry_run:
             report["origin_upserts"] = int(report.get("origin_upserts") or 0) + 1
             continue
@@ -199,18 +240,26 @@ def run_migration(
     vault = Path(vault)
     sessions_dir = vault / "raw" / "sessions"
     cfg = config if isinstance(config, dict) else {}
+    # Contrib adapters (cursor_cli, …) register only after discover_all.
+    # Without this, origin re-read is a no-op and tag→agent labeling defaults
+    # every session to claude_code.
+    discover_all()
     report: dict[str, Any] = {
         "vault": str(vault),
         "dry_run": dry_run,
         "raw_upserts": 0,
+        "raw_skipped_empty": 0,
         "raw_patched": 0,
         "origin_upserts": 0,
+        "origin_skipped_empty": 0,
         "errors": 0,
     }
     if sessions_dir.is_dir():
         for raw_path in sorted(sessions_dir.glob("*.md")):
             try:
-                _upsert_from_raw_file(vault, raw_path, dry_run=dry_run, report=report)
+                _upsert_from_raw_file(
+                    vault, raw_path, dry_run=dry_run, report=report
+                )
             except OSError:
                 report["errors"] = int(report.get("errors") or 0) + 1
 
@@ -227,16 +276,78 @@ def run_migration(
 
     site_dir = vault / "site"
     changed = int(report.get("raw_upserts") or 0) + int(report.get("origin_upserts") or 0)
+    # Drop leftover all-zero stubs; then raise known from discovery (no empty stubs).
+    if not dry_run:
+        data = load_session_tokens(vault)
+        pruned = prune_unmeasured_sessions(data)
+        report["pruned_empty"] = pruned
+        known_counts, since_by_agent = _coverage_from_origins_and_raw(
+            sessions_dir, cfg, data
+        )
+        merge_agent_coverage(data, known_counts, since_by_agent=since_by_agent)
+        save_session_tokens(vault, data)
+        changed += 1
     if not dry_run and site_dir.is_dir() and changed > 0:
         emit_session_tokens_sidecar(vault, site_dir)
     return report
+
+
+def _coverage_from_origins_and_raw(
+    sessions_dir: Path,
+    config: dict[str, Any],
+    usage_data: dict[str, Any],
+) -> tuple[dict[str, int], dict[str, str]]:
+    """Count discoverable sessions per agent for coverage ``known`` (#325).
+
+    Empty-usage origins still count as known (Cursor store.db without hooks).
+    ``since`` is the earliest measured day for incomplete agents (measured < known).
+    """
+    known: dict[str, int] = {}
+    if sessions_dir.is_dir():
+        for raw_path in sessions_dir.glob("*.md"):
+            try:
+                text = raw_path.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            meta, _ = parse_frontmatter(text)
+            agent = _adapter_name_from_meta(meta)
+            known[agent] = int(known.get(agent) or 0) + 1
+
+    for adapter_name in ("cursor_cli", "claude_code", "codex_cli"):
+        cls = REGISTRY.get(adapter_name)
+        if cls is None:
+            continue
+        adapter = cls(config)
+        discover = getattr(adapter, "discover_sessions", None)
+        if not callable(discover):
+            continue
+        try:
+            paths = list(discover())
+        except OSError:
+            continue
+        known[adapter_name] = max(int(known.get(adapter_name) or 0), len(paths))
+
+    since_by_agent: dict[str, str] = {}
+    days = usage_data.get("days") if isinstance(usage_data.get("days"), dict) else {}
+    cursor_days = sorted(
+        d
+        for d, agents in days.items()
+        if isinstance(agents, dict) and "cursor_cli" in agents
+    )
+    if cursor_days:
+        since_by_agent["cursor_cli"] = cursor_days[0]
+    return known, since_by_agent
 
 
 def print_report(report: dict[str, Any]) -> None:
     mode = "dry-run" if report.get("dry_run") else "apply"
     print(f"session-tokens migrate ({mode}) — vault {report.get('vault')}")
     print(f"  raw frontmatter upserts: {report.get('raw_upserts', 0)}")
+    print(f"  raw skipped (empty totals): {report.get('raw_skipped_empty', 0)}")
     print(f"  raw token_totals patched: {report.get('raw_patched', 0)}")
     print(f"  origin re-read upserts: {report.get('origin_upserts', 0)}")
+    print(f"  origin skipped (empty totals): {report.get('origin_skipped_empty', 0)}")
+    if report.get("pruned_empty"):
+        print(f"  pruned empty stubs: {report['pruned_empty']}")
     if report.get("errors"):
         print(f"  errors: {report['errors']}")
