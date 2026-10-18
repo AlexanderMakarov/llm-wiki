@@ -496,7 +496,8 @@ TOKEN_COVERAGE_LINES: tuple[str, ...] = (
     " fields; native token support is not complete.",
     "Cursor CLI: included when usage fields are present (stop-hook JSONL;"
     " not context-window occupancy in the session store).",
-    "Codex CLI and Cursor IDE: not captured by the token pipeline yet.",
+    "Codex CLI: included when usage fields are present.",
+    "Cursor IDE: not captured by the token pipeline yet.",
     "Gemini CLI and Copilot CLI / Chat: no verified native token mapping.",
     "Sessions without usage data are excluded, not evidence of zero tokens."
     " The headline is a recorded-usage total, not a complete all-agent total.",

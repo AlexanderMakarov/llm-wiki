@@ -366,7 +366,7 @@ def test_site_stats_block_renders_extra_cards_even_without_token_data():
 
 
 def test_token_coverage_lines_name_each_agent_group_and_missing_is_not_zero():
-    """#323: the disclosure copy names every agent group and says missing usage is not zero tokens."""
+    """#323 / #324: disclosure names each agent group; Codex included; Cursor IDE still not captured."""
     text = " ".join(TOKEN_COVERAGE_LINES)
     for phrase in (
         "input, output, cache creation, and cache read",
@@ -374,15 +374,16 @@ def test_token_coverage_lines_name_each_agent_group_and_missing_is_not_zero():
         "OpenClaw and OpenCode",
         "compatible usage fields",
         "Cursor CLI",
-        "Codex CLI",
-        "Cursor IDE",
-        "not captured",
+        "Codex CLI: included when usage fields are present",
+        "Cursor IDE: not captured by the token pipeline yet",
         "Gemini CLI",
         "Copilot CLI / Chat",
         "not evidence of zero tokens",
         "recorded-usage total, not a complete all-agent total",
     ):
         assert phrase in text, phrase
+    # #324: Codex is no longer lumped with Cursor IDE as "not captured".
+    assert "Codex CLI and Cursor IDE" not in text
 
 
 def test_token_coverage_hint_is_accessible_button_wired_to_tooltip():

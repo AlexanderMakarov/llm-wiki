@@ -43,6 +43,30 @@ Codex-native record types (`response_item`, `event_msg`, …) are normalized int
 
 `filters.exclude_headless` (default on) applies to every coding-agent adapter. Codex has **no verified automation-launch markers** in the store today, so Codex sessions are treated as **not** headless. Interactive chats stay eligible; turn the filter off only if you need other agents' automated runs included. See [Multi-agent setup — What “automated” means](../multi-agent-setup.md#what-automated-headless-means).
 
+## Tokens capture
+
+When a Codex session JSONL includes `event_msg` payloads with `payload.type == "token_count"`, sync maps measured usage into the shared Analytics **Tokens** buckets (input, cache creation, cache read, output) and writes nonempty `token_totals` / `usage/session-tokens.json` the same way as other agents (#324).
+
+**Verified fields** (prefer the last cumulative snapshot):
+
+| Native field | Role |
+|---|---|
+| `info.total_token_usage` | Session cumulative — use the **last** `token_count` only (do not sum successive totals) |
+| `info.last_token_usage` | Per-turn delta — sum **once** across the session when totals are absent |
+| `input_tokens`, `cached_input_tokens`, `cache_write_input_tokens`, `output_tokens` | Mapped into the four Tokens buckets (cache subsets are not double-counted as input) |
+| `reasoning_output_tokens` | When present, subtracted from output so reasoning is **not** counted toward Tokens |
+
+**Not Tokens:** `model_context_window` (occupancy / window size) and `rate_limits` / plan percentages. Sessions without measurable `token_count` fields stay missing — they are never written as measured zero.
+
+**Historical backfill:** if `~/.codex/sessions` (or configured roots) still exist, re-run `llmwiki migrate session-tokens` after upgrading so older Codex sessions fill in; fingerprint-changed `sync` covers new or changed sessions. Prefer a fast Codex-only pass when you do not need Claude/Cursor origins yet:
+
+```bash
+llmwiki migrate session-tokens --vault /path/to/vault --adapter codex_cli --skip-raw
+llmwiki build --vault /path/to/vault
+```
+
+See [UPGRADING — session Tokens](../UPGRADING.md#unreleased--session-tokens-usage-store--cursor-cli-capture-325).
+
 ## Configuration
 
 ```json

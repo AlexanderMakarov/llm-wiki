@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -230,13 +231,30 @@ def _backfill_capable_adapter(
             report["origin_upserts"] = int(report.get("origin_upserts") or 0) + 1
 
 
+# Origin re-read order: smallest / newest token-capable stores first so a
+# full migrate surfaces Codex (and similar) before multi-thousand Claude /
+# Cursor walks. Override with ``adapters=`` / ``--adapter``.
+_DEFAULT_ORIGIN_ADAPTERS: tuple[str, ...] = (
+    "codex_cli",
+    "claude_code",
+    "cursor_cli",
+)
+
+
 def run_migration(
     *,
     vault: Path,
     dry_run: bool = False,
     config: dict[str, Any] | None = None,
+    adapters: list[str] | tuple[str, ...] | None = None,
+    skip_raw: bool = False,
 ) -> dict[str, Any]:
-    """Backfill ``usage/session-tokens.json`` and optional raw ``token_totals``."""
+    """Backfill ``usage/session-tokens.json`` and optional raw ``token_totals``.
+
+    ``adapters`` limits origin re-read to those names (still registered). When
+    omitted, walks :data:`_DEFAULT_ORIGIN_ADAPTERS`. ``skip_raw`` skips the
+    raw frontmatter seed — useful for a fast Codex-only origin pass.
+    """
     vault = Path(vault)
     sessions_dir = vault / "raw" / "sessions"
     cfg = config if isinstance(config, dict) else {}
@@ -244,6 +262,12 @@ def run_migration(
     # Without this, origin re-read is a no-op and tag→agent labeling defaults
     # every session to claude_code.
     discover_all()
+    explicit_adapters = adapters is not None
+    origin_adapters: tuple[str, ...]
+    if adapters is None:
+        origin_adapters = _DEFAULT_ORIGIN_ADAPTERS
+    else:
+        origin_adapters = tuple(str(a).strip() for a in adapters if str(a).strip())
     report: dict[str, Any] = {
         "vault": str(vault),
         "dry_run": dry_run,
@@ -253,8 +277,23 @@ def run_migration(
         "origin_upserts": 0,
         "origin_skipped_empty": 0,
         "errors": 0,
+        "origin_adapters": list(origin_adapters),
     }
-    if sessions_dir.is_dir():
+    if explicit_adapters:
+        unknown = [name for name in origin_adapters if name not in REGISTRY]
+        if unknown:
+            known = ", ".join(_DEFAULT_ORIGIN_ADAPTERS)
+            print(
+                "error: migrate.session_tokens.unknown_adapter: "
+                f"unknown --adapter name(s): {', '.join(unknown)}. "
+                f"Token-capable origin adapters: {known}. "
+                "(error code: migrate.session_tokens.unknown_adapter)",
+                file=sys.stderr,
+            )
+            report["errors"] = int(report.get("errors") or 0) + len(unknown)
+            report["unknown_adapters"] = unknown
+            return report
+    if not skip_raw and sessions_dir.is_dir():
         for raw_path in sorted(sessions_dir.glob("*.md")):
             try:
                 _upsert_from_raw_file(
@@ -263,7 +302,7 @@ def run_migration(
             except OSError:
                 report["errors"] = int(report.get("errors") or 0) + 1
 
-    for adapter_name in ("cursor_cli", "claude_code", "codex_cli"):
+    for adapter_name in origin_adapters:
         if adapter_name in REGISTRY:
             _backfill_capable_adapter(
                 vault,
