@@ -299,6 +299,21 @@
       "runner": null
     },
     {
+      "id": "migrate.session_tokens.unknown_adapter",
+      "area": "K",
+      "patterns": [
+        "migrate.session_tokens.unknown_adapter",
+        "re:unknown --adapter name",
+        "re:Token-capable origin adapters:"
+      ],
+      "message": "migrate session-tokens --adapter used a name that is not registered for Tokens origin backfill.",
+      "fix": "Use a registered token-capable adapter id (codex_cli, claude_code, or cursor_cli), e.g. llmwiki migrate session-tokens --vault <vault> --adapter codex_cli --skip-raw. Do not shorten to codex.",
+      "actionable": true,
+      "severity": "error",
+      "tier": "guided",
+      "runner": null
+    },
+    {
       "id": "automation.not_active",
       "area": "L",
       "patterns": [

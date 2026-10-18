@@ -24,6 +24,15 @@ llmwiki migrate session-tokens --vault /path/to/vault
 llmwiki build --vault /path/to/vault
 ```
 
+**Codex CLI Tokens (#324):** after this change, Codex sessions with native `token_count` usage contribute to Analytics Tokens. If you already ran `migrate session-tokens` before Codex capture shipped, **re-run** it (or sync fingerprint-changed sessions) while `~/.codex/sessions` remains so historical Codex usage fills in. For a fast Codex-only pass (skips the multi-thousand Claude/Cursor origin walk), use:
+
+```bash
+llmwiki migrate session-tokens --vault /path/to/vault --adapter codex_cli --skip-raw
+llmwiki build --vault /path/to/vault
+```
+
+Occupancy / rate-limits alone are never Tokens — see [Codex CLI adapter — Tokens capture](adapters/codex-cli.md#tokens-capture).
+
 Cursor Agent chats only contribute **measured** totals when turn usage is available. `store.db` does **not** store per-turn input/output/cache fields (context-window occupancy there is never Tokens).
 
 **IDE Agent:** install the managed `stop` hook (idempotent; keeps your existing hooks). The installer writes a POSIX `/bin/sh` handler (`~/.cursor/llmwiki-cursor-token-stop.sh`, ~3 ms) and points `hooks.json` at it — not a Python process (interpreter startup is tens of ms):

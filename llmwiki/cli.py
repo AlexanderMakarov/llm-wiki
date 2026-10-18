@@ -2056,11 +2056,17 @@ def cmd_migrate_session_tokens(args: argparse.Namespace) -> int:
     Loads ``config.json`` so contrib adapters (e.g. ``cursor_cli`` roots) and
     filters match sync; ``run_migration`` calls ``discover_all()`` so origin
     re-read and frontmatter tag→agent labeling see the full registry.
+
+    ``--adapter`` limits origin re-read (e.g. ``codex_cli`` only) so a focused
+    Tokens backfill does not wait on multi-thousand Claude/Cursor walks.
     """
+    adapters = getattr(args, "adapters", None) or None
     report = migrate_session_tokens.run_migration(
         vault=Path(args.vault),
         dry_run=bool(getattr(args, "dry_run", False)),
         config=_load_sessions_config(),
+        adapters=list(adapters) if adapters else None,
+        skip_raw=bool(getattr(args, "skip_raw", False)),
     )
     migrate_session_tokens.print_report(report)
     return 1 if report.get("errors") else 0
@@ -3842,6 +3848,24 @@ def build_parser() -> argparse.ArgumentParser:
         "--dry-run",
         action="store_true",
         help="Report would-upsert sessions; write nothing",
+    )
+    migrate_session_tok.add_argument(
+        "--adapter",
+        dest="adapters",
+        action="append",
+        metavar="NAME",
+        help=(
+            "Limit origin re-read to this adapter (repeatable). "
+            "Example: --adapter codex_cli. Default: codex_cli, claude_code, cursor_cli."
+        ),
+    )
+    migrate_session_tok.add_argument(
+        "--skip-raw",
+        action="store_true",
+        help=(
+            "Skip seeding from raw/sessions frontmatter; only re-read selected "
+            "adapter origins (faster for Codex-only backfill)."
+        ),
     )
     migrate_session_tok.set_defaults(func=cmd_migrate_session_tokens)
 

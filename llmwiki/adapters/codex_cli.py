@@ -22,6 +22,7 @@ from typing import Any
 
 from llmwiki.adapters import register
 from llmwiki.adapters.base import BaseAdapter
+from llmwiki.codex_token_usage import extract_codex_session_usage
 
 
 @register("codex_cli")
@@ -208,10 +209,40 @@ class CodexCliAdapter(BaseAdapter):
                     continue
 
             if rtype == "event_msg":
-                # Turn lifecycle events — mostly metadata, not conversation
+                # Turn lifecycle / token_count — not conversation text.
+                # Measured usage is attached below via extract_codex_session_usage.
                 continue
 
             # Unknown record type — skip gracefully (never crash)
+
+        # Attach session Tokens once so compute_token_totals sees Claude-shaped
+        # message.usage. Prefer patching the last assistant; if the session has
+        # only token_count (no assistant text yet), emit a synthetic assistant.
+        # Do not map model_context_window or rate_limits (#324 / spec 329).
+        usage = extract_codex_session_usage(records)
+        if usage is not None:
+            attached = False
+            for i in range(len(out) - 1, -1, -1):
+                if out[i].get("type") != "assistant":
+                    continue
+                message = out[i].setdefault("message", {})
+                if not isinstance(message, dict):
+                    message = {"role": "assistant", "content": []}
+                    out[i]["message"] = message
+                message["usage"] = usage
+                attached = True
+                break
+            if not attached:
+                out.append(
+                    {
+                        "type": "assistant",
+                        "message": {
+                            "role": "assistant",
+                            "content": [],
+                            "usage": usage,
+                        },
+                    }
+                )
 
         return out
 
