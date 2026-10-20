@@ -954,12 +954,16 @@ Steady-state `sync` only writes session Tokens for **new or fingerprint-changed*
 ```bash
 python3 -m llmwiki migrate session-tokens --vault /path/to/vault --dry-run
 python3 -m llmwiki migrate session-tokens --vault /path/to/vault
+# Fast Codex-only origin backfill (#324):
+python3 -m llmwiki migrate session-tokens --vault /path/to/vault --adapter codex_cli --skip-raw
 ```
 
 | Flag | What |
 |---|---|
 | `--vault PATH` | **Required.** Vault root containing `raw/sessions/` and `usage/`. |
 | `--dry-run` | Report would-upsert / would-patch counts; write nothing. |
+| `--adapter NAME` | Limit origin re-read to this adapter (repeatable). Default order: `codex_cli`, `claude_code`, `cursor_cli`. |
+| `--skip-raw` | Skip seeding from `raw/sessions` frontmatter; only re-read selected adapter origins. |
 
 Idempotent. Rebuild afterwards: `llmwiki build --vault PATH` (or open Analytics after sync has refreshed the sidecar).
 
