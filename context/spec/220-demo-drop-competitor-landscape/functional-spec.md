@@ -1,0 +1,66 @@
+# Functional Specification: Refresh the competitor landscape page and keep the example vault in sync
+
+- **Roadmap Item:** [#220](https://github.com/AlexanderMakarov/llm-wiki/issues/220) — Demo corpus still ships competitor-landscape content after the doc was removed *(ticket premise corrected: the page was never removed from `main`; deliver an update + demo refresh instead)*
+- **Status:** Approved
+- **Author:** Alexander Makarov
+
+---
+
+## 1. Overview and Rationale (The "Why")
+
+Readers who open the competitor landscape documentation should see current facts about what llmwiki is, which agents it supports, and when another tool is a better fit. The page on `main` is behind the product (adapter count, Python baseline, page-kind wording). A fresher draft already exists as maintainer scratch; promoting those corrections into shipped docs — then refreshing the example vault so its ingested copy matches — is the intended outcome.
+
+The original ticket assumed the page had already been removed. That removal never landed. Success for this work is an accurate, still-shipped comparison page and an example vault that mirrors it, not deletion.
+
+## 2. Functional Requirements (The "What")
+
+1. **The competitor landscape documentation page is current.**
+   - A reader sees an accurate picture of llmwiki’s agent coverage, runtime baseline, and positioning relative to the compared tools.
+   - Wording that still describes retired page kinds or outdated dependency claims is corrected.
+   - The documentation index continues to link to this page.
+   - **Acceptance Criteria:**
+     - [ ] Given the competitor landscape page after this change, when a reader checks the multi-agent and runtime rows / positioning bullets, then they match the product’s current adapter set and Python/`markdown` dependency baseline (not the old “six agents” / “3.9+ zero deps” claims).
+     - [ ] Given the documentation index, when a reader looks for Competitor landscape, then the link is present and opens the updated page.
+
+2. **The comparison table is tools that persist memory for agents. Lookalikes that only build a wiki a person reads stay under the table. Stale tools leave the page.**
+   - “Still active” means a public product change in the last month (checked 2026-10-21; window from 2026-09-21).
+   - Columns: this project, [agentmemory](https://github.com/rohitg00/agentmemory), [mem0](https://github.com/mem0ai/mem0), [TencentDB Agent Memory](https://github.com/TencentCloud/TencentDB-Agent-Memory).
+   - Rows, in order: Output for agents, Context impact, Output for humans, Agent coverage, KB sources, KB layers, Query features, Automation cadence, Resources usage, Tokens cost, Observability. Cells use the same shape across columns. Agent coverage leads with a digit except mem0 (any agent that calls `add` / `search`). KB layers are each tool’s own terms in one bracket list. No star counts or benchmark claims.
+   - Under the table, [lucasastorian/llmwiki](https://github.com/lucasastorian/llmwiki) and the [Karpathy LLM Wiki Obsidian plugin](https://community.obsidian.md/plugins/karpathywiki) are named as the same shape with a different job: they do not ingest coding-agent session stores.
+   - Rewind / Limitless and Pieces are removed. The manual-notes column is removed; a single sentence under “when this is not the right tool” may still say that writing notes by hand is enough when there are few sessions.
+   - **Acceptance Criteria:**
+     - [ ] Given the comparison table, when a reader lists the columns, then they are this project, agentmemory, mem0, and TencentDB Agent Memory — and not Rewind, Pieces, lucasastorian/llmwiki, or the Obsidian plugin.
+     - [ ] Given the table, when a reader lists the rows top to bottom, then they are the eleven functions named above, in that order.
+     - [ ] Given the page below the table, when a reader looks for lucasastorian/llmwiki and the Obsidian plugin, then each is described as a wiki a person reads, not as a column.
+     - [ ] Given the page, when a reader searches for Rewind, Limitless, or Pieces, then those products are not presented as current alternatives.
+
+3. **The example vault mirrors the updated page.**
+   - After a demo refresh driven by the docs change, the example vault’s raw competitor parts and derived wiki pages reflect the updated content (or are regenerated consistently from it).
+   - Catalog counts and cross-links that involve those sources stay coherent.
+   - **Acceptance Criteria:**
+     - [ ] Given the committed example vault after this change, when a maintainer inspects the competitor-landscape raw/wiki material, then it corresponds to the updated documentation page (no dangling “page was deleted” provenance story).
+     - [ ] Given `llmwiki lint` against the example vault, when the check finishes, then it reports no new broken links or orphans caused by this refresh.
+
+4. **Getting-started describes the current session file layout.**
+   - The short sync comment no longer implies per-project subfolders under the sessions directory.
+   - **Acceptance Criteria:**
+     - [ ] Given getting-started’s three-commands section, when a reader reads the sync line’s path hint, then it describes flat session files under the sessions directory (not `<project>/*.md` subfolders).
+
+## 3. Scope and Boundaries
+
+### In-Scope
+
+- Updating `docs/competitor-landscape.md`: refresh our own facts; comparison table is this project, agentmemory, mem0, and TencentDB Agent Memory on the eleven function rows; lucasastorian/llmwiki and the Obsidian plugin stay under the table; drop Rewind/Limitless, Pieces, and the manual-notes column.
+- Keeping the docs-index link to that page.
+- Refreshing the example vault so competitor raw/wiki material matches the updated doc.
+- Updating the getting-started sync path hint to flat session naming.
+- CHANGELOG / release-note line for the user-visible docs (and demo) change.
+- Closing #220 with this corrected delivery (page kept and refreshed; demo consistent) — not with removal.
+
+### Out-of-Scope
+
+- Removing the competitor landscape page from product docs or the example vault.
+- Reviving the old `/vs/` comparison site surface (#138 / DECLINED).
+- A full release-day demo session regenerate unrelated to this docs change.
+- Copying star counts, recall percentages, or other marketing stats from those projects’ READMEs into the page.
+- A full competitive teardown or benchmark of the four systems.

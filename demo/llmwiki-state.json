@@ -4,18 +4,19 @@
       "last_compacted_at": "",
       "max_completed": 500
     },
-    "revision": 600,
+    "revision": 652,
     "schema_version": 1,
-    "updated_at": "2026-10-01T07:44:41Z"
+    "updated_at": "2026-10-21T19:48:41Z"
   },
   "ops": {
-    "last_build_at": "2026-10-01T07:44:23Z",
+    "last_build_at": "2026-10-21T19:48:41Z",
     "last_lint_error": "",
-    "last_lint_run_at": "2026-10-01T07:44:41Z",
+    "last_lint_report": "",
+    "last_lint_run_at": "2026-10-21T19:48:24Z",
     "last_lint_status": "ok",
-    "last_queue_run_at": "2026-10-01T07:06:23Z",
+    "last_queue_run_at": "2026-10-21T19:48:13Z",
     "last_reflect_run_at": "",
-    "last_synth_at": "2026-10-01T07:35:41Z"
+    "last_synth_at": "2026-10-21T19:48:23Z"
   },
   "quarantine": {
     "entries": []
@@ -105,6 +106,62 @@
         "status": "done",
         "task_type": "add_doc_sync",
         "updated_at": "2026-10-01T07:06:23Z"
+      },
+      {
+        "attempts": 1,
+        "created_at": "2026-10-21T06:04:21Z",
+        "id": "add-sync-1792562661864",
+        "payload": {
+          "sources": [
+            "docs/competitor-landscape.md"
+          ]
+        },
+        "result": "added 1 file(s)",
+        "status": "done",
+        "task_type": "add_doc_sync",
+        "updated_at": "2026-10-21T06:04:22Z"
+      },
+      {
+        "attempts": 1,
+        "created_at": "2026-10-21T06:04:22Z",
+        "id": "add-sync-1792562662717",
+        "payload": {
+          "sources": [
+            "docs/getting-started.md"
+          ]
+        },
+        "result": "added 1 file(s)",
+        "status": "done",
+        "task_type": "add_doc_sync",
+        "updated_at": "2026-10-21T06:04:23Z"
+      },
+      {
+        "attempts": 1,
+        "created_at": "2026-10-21T19:20:32Z",
+        "id": "add-sync-1792610432889",
+        "payload": {
+          "sources": [
+            "docs/competitor-landscape.md"
+          ]
+        },
+        "result": "added 1 file(s)",
+        "status": "done",
+        "task_type": "add_doc_sync",
+        "updated_at": "2026-10-21T19:20:33Z"
+      },
+      {
+        "attempts": 1,
+        "created_at": "2026-10-21T19:48:12Z",
+        "id": "add-sync-1792612092600",
+        "payload": {
+          "sources": [
+            "docs/competitor-landscape.md"
+          ]
+        },
+        "result": "added 1 file(s)",
+        "status": "done",
+        "task_type": "add_doc_sync",
+        "updated_at": "2026-10-21T19:48:13Z"
       }
     ],
     "legacy_pending_paths": []
@@ -128,8 +185,8 @@
       "prefix_tokens": 4814,
       "pricing_model": "haiku-4.5",
       "source_page_stubs": 0,
-      "source_pages_docs": 140,
-      "source_pages_on_disk": 165,
+      "source_pages_docs": 138,
+      "source_pages_on_disk": 163,
       "source_pages_other": 0,
       "source_pages_sessions": 25,
       "updated_at": "2026-09-29T16:48:03Z",
@@ -145,6 +202,7 @@
       "docs::benchmarks/performance-benchmarks.md": "2026-09-28T15:46:40.763868Z",
       "docs::cheatsheet/command-cheatsheet-01.md": "2026-09-28T15:46:42.006454Z",
       "docs::cheatsheet/command-cheatsheet-02.md": "2026-09-28T15:46:42.006780Z",
+      "docs::competitor-landscape/competitor-landscape.md": "2026-10-21T19:48:12.632001Z",
       "docs::configuration-reference/configuration-reference-01.md": "2026-09-28T15:46:43.169793Z",
       "docs::configuration-reference/configuration-reference-02.md": "2026-09-28T15:46:43.169940Z",
       "docs::configuration-reference/configuration-reference-03.md": "2026-09-28T15:46:43.170069Z",
@@ -166,8 +224,7 @@
       "docs::framework/llmwiki-framework-building-an-agent-native-dev-tool-01.md": "2026-09-28T15:46:49.716780Z",
       "docs::framework/llmwiki-framework-building-an-agent-native-dev-tool-02.md": "2026-09-28T15:46:49.716923Z",
       "docs::framework/llmwiki-framework-building-an-agent-native-dev-tool-03.md": "2026-09-28T15:46:49.717053Z",
-      "docs::getting-started/getting-started-01.md": "2026-10-01T07:06:19.367913Z",
-      "docs::getting-started/getting-started-02.md": "2026-10-01T07:06:19.368018Z",
+      "docs::getting-started/getting-started.md": "2026-10-21T06:04:22.751025Z",
       "docs::i18n-es-getting-started/comenzar-getting-started.md": "2026-09-08T15:44:48.151556Z",
       "docs::i18n-ja-getting-started/getting-started.md": "2026-09-08T15:44:48.151556Z",
       "docs::i18n-zh-cn-getting-started/getting-started.md": "2026-09-08T15:44:48.151556Z",
@@ -272,1034 +329,1529 @@
     },
     "pending": [
       {
+        "agent": "OpenClaw",
+        "is_doc": false,
+        "mtime": "2026-10-20T16:45:56Z",
+        "project": "dotfiles",
+        "rel": "dotfiles/2026-06-29T15-52-dotfiles-shell-startup-profiling.md",
+        "source": "raw/sessions/dotfiles/2026-06-29T15-52-dotfiles-shell-startup-profiling.md",
+        "usd": 0.05886
+      },
+      {
+        "agent": "Cursor",
+        "is_doc": false,
+        "mtime": "2026-10-20T16:45:56Z",
+        "project": "dotfiles",
+        "rel": "dotfiles/2026-08-31T15-28-dotfiles-git-hooks-sync.md",
+        "source": "raw/sessions/dotfiles/2026-08-31T15-28-dotfiles-git-hooks-sync.md",
+        "usd": 0.02476
+      },
+      {
         "agent": "Claude",
         "is_doc": false,
-        "mtime": "2026-10-01T07:05:26Z",
+        "mtime": "2026-10-20T16:45:56Z",
+        "project": "llm-wiki",
+        "rel": "llm-wiki/2026-05-11T00-00-llm-wiki-adapter-registry-refactor.md",
+        "source": "raw/sessions/llm-wiki/2026-05-11T00-00-llm-wiki-adapter-registry-refactor.md",
+        "usd": 0.025252
+      },
+      {
+        "agent": "Claude",
+        "is_doc": false,
+        "mtime": "2026-10-20T16:45:56Z",
+        "project": "llm-wiki",
+        "rel": "llm-wiki/2026-06-19T20-09-llm-wiki-incremental-synth-state.md",
+        "source": "raw/sessions/llm-wiki/2026-06-19T20-09-llm-wiki-incremental-synth-state.md",
+        "usd": 0.029974
+      },
+      {
+        "agent": "Claude",
+        "is_doc": false,
+        "mtime": "2026-10-20T16:45:56Z",
+        "project": "llm-wiki",
+        "rel": "llm-wiki/2026-07-25T12-01-llm-wiki-topic-graph-sparsity.md",
+        "source": "raw/sessions/llm-wiki/2026-07-25T12-01-llm-wiki-topic-graph-sparsity.md",
+        "usd": 0.045832
+      },
+      {
+        "agent": "Claude",
+        "is_doc": false,
+        "mtime": "2026-10-20T16:45:56Z",
+        "project": "llm-wiki",
+        "rel": "llm-wiki/2026-08-06T14-27-llm-wiki-candidate-review-gate.md",
+        "source": "raw/sessions/llm-wiki/2026-08-06T14-27-llm-wiki-candidate-review-gate.md",
+        "usd": 0.026296
+      },
+      {
+        "agent": "Claude",
+        "is_doc": false,
+        "mtime": "2026-10-20T16:45:56Z",
+        "project": "llm-wiki",
+        "rel": "llm-wiki/2026-08-16T16-53-llm-wiki-mcp-server-tools.md",
+        "source": "raw/sessions/llm-wiki/2026-08-16T16-53-llm-wiki-mcp-server-tools.md",
+        "usd": 0.029566
+      },
+      {
+        "agent": "OpenClaw",
+        "is_doc": false,
+        "mtime": "2026-10-20T16:45:56Z",
+        "project": "llm-wiki",
+        "rel": "llm-wiki/2026-08-23T18-19-llm-wiki-lint-rule-severities.md",
+        "source": "raw/sessions/llm-wiki/2026-08-23T18-19-llm-wiki-lint-rule-severities.md",
+        "usd": 0.037768
+      },
+      {
+        "agent": "Claude",
+        "is_doc": false,
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "llm-wiki",
         "rel": "llm-wiki/2026-08-29T20-45-llm-wiki-static-site-offline.md",
         "source": "raw/sessions/llm-wiki/2026-08-29T20-45-llm-wiki-static-site-offline.md",
-        "usd": 0.0735
+        "usd": 0.045832
+      },
+      {
+        "agent": "Cursor",
+        "is_doc": false,
+        "mtime": "2026-10-20T16:45:56Z",
+        "project": "llm-wiki",
+        "rel": "llm-wiki/2026-09-02T22-11-llm-wiki-project-page-aggregation.md",
+        "source": "raw/sessions/llm-wiki/2026-09-02T22-11-llm-wiki-project-page-aggregation.md",
+        "usd": 0.026278
+      },
+      {
+        "agent": "Claude",
+        "is_doc": false,
+        "mtime": "2026-10-20T16:45:56Z",
+        "project": "llm-wiki",
+        "rel": "llm-wiki/2026-09-04T12-37-llm-wiki-key-facts-prompt.md",
+        "source": "raw/sessions/llm-wiki/2026-09-04T12-37-llm-wiki-key-facts-prompt.md",
+        "usd": 0.029662
+      },
+      {
+        "agent": "Claude",
+        "is_doc": false,
+        "mtime": "2026-10-20T16:45:56Z",
+        "project": "llm-wiki",
+        "rel": "llm-wiki/2026-09-05T19-20-llm-wiki-search-index-chunks.md",
+        "source": "raw/sessions/llm-wiki/2026-09-05T19-20-llm-wiki-search-index-chunks.md",
+        "usd": 0.032164
+      },
+      {
+        "agent": "OpenClaw",
+        "is_doc": false,
+        "mtime": "2026-10-20T16:45:56Z",
+        "project": "llm-wiki",
+        "rel": "llm-wiki/2026-09-06T21-46-llm-wiki-docs-ingest-pipeline.md",
+        "source": "raw/sessions/llm-wiki/2026-09-06T21-46-llm-wiki-docs-ingest-pipeline.md",
+        "usd": 0.043894
+      },
+      {
+        "agent": "Claude",
+        "is_doc": false,
+        "mtime": "2026-10-20T16:45:56Z",
+        "project": "llm-wiki",
+        "rel": "llm-wiki/2026-09-07T23-12-llm-wiki-wikilink-resolution.md",
+        "source": "raw/sessions/llm-wiki/2026-09-07T23-12-llm-wiki-wikilink-resolution.md",
+        "usd": 0.025114
+      },
+      {
+        "agent": "Cursor",
+        "is_doc": false,
+        "mtime": "2026-10-20T16:45:56Z",
+        "project": "paper-notes",
+        "rel": "paper-notes/2026-07-17T17-18-paper-notes-bibtex-key-collisions.md",
+        "source": "raw/sessions/paper-notes/2026-07-17T17-18-paper-notes-bibtex-key-collisions.md",
+        "usd": 0.0436
+      },
+      {
+        "agent": "Claude",
+        "is_doc": false,
+        "mtime": "2026-10-20T16:45:56Z",
+        "project": "paper-notes",
+        "rel": "paper-notes/2026-08-20T23-36-paper-notes-pdf-text-extraction.md",
+        "source": "raw/sessions/paper-notes/2026-08-20T23-36-paper-notes-pdf-text-extraction.md",
+        "usd": 0.032038
+      },
+      {
+        "agent": "Claude",
+        "is_doc": false,
+        "mtime": "2026-10-20T16:45:56Z",
+        "project": "pocket-ledger",
+        "rel": "pocket-ledger/2026-05-25T18-43-pocket-ledger-csv-import-rounding.md",
+        "source": "raw/sessions/pocket-ledger/2026-05-25T18-43-pocket-ledger-csv-import-rounding.md",
+        "usd": 0.025636
+      },
+      {
+        "agent": "Cursor",
+        "is_doc": false,
+        "mtime": "2026-10-20T16:45:56Z",
+        "project": "pocket-ledger",
+        "rel": "pocket-ledger/2026-08-26T13-02-pocket-ledger-category-rules-engine.md",
+        "source": "raw/sessions/pocket-ledger/2026-08-26T13-02-pocket-ledger-category-rules-engine.md",
+        "usd": 0.043342
+      },
+      {
+        "agent": "Claude",
+        "is_doc": false,
+        "mtime": "2026-10-20T16:45:56Z",
+        "project": "recipe-box",
+        "rel": "recipe-box/2026-07-31T19-44-recipe-box-image-upload-limits.md",
+        "source": "raw/sessions/recipe-box/2026-07-31T19-44-recipe-box-image-upload-limits.md",
+        "usd": 0.024778
+      },
+      {
+        "agent": "Claude",
+        "is_doc": false,
+        "mtime": "2026-10-20T16:45:56Z",
+        "project": "recipe-box",
+        "rel": "recipe-box/2026-09-05T14-03-recipe-box-ingredient-scaling.md",
+        "source": "raw/sessions/recipe-box/2026-09-05T14-03-recipe-box-ingredient-scaling.md",
+        "usd": 0.036046
+      },
+      {
+        "agent": "Codex",
+        "is_doc": false,
+        "mtime": "2026-10-20T16:45:56Z",
+        "project": "sensor-mesh",
+        "rel": "sensor-mesh/2026-07-09T22-35-sensor-mesh-backfill-gap-detection.md",
+        "source": "raw/sessions/sensor-mesh/2026-07-09T22-35-sensor-mesh-backfill-gap-detection.md",
+        "usd": 0.036262
+      },
+      {
+        "agent": "OpenClaw",
+        "is_doc": false,
+        "mtime": "2026-10-20T16:45:56Z",
+        "project": "sensor-mesh",
+        "rel": "sensor-mesh/2026-09-03T17-54-sensor-mesh-mqtt-reconnect-backoff.md",
+        "source": "raw/sessions/sensor-mesh/2026-09-03T17-54-sensor-mesh-mqtt-reconnect-backoff.md",
+        "usd": 0.02749
+      },
+      {
+        "agent": "Claude",
+        "is_doc": false,
+        "mtime": "2026-10-20T16:45:56Z",
+        "project": "trailhead-api",
+        "rel": "trailhead-api/2026-06-07T13-26-trailhead-api-pagination-cursors.md",
+        "source": "raw/sessions/trailhead-api/2026-06-07T13-26-trailhead-api-pagination-cursors.md",
+        "usd": 0.027916
+      },
+      {
+        "agent": "Codex",
+        "is_doc": false,
+        "mtime": "2026-10-20T16:45:56Z",
+        "project": "trailhead-api",
+        "rel": "trailhead-api/2026-08-11T21-10-trailhead-api-request-id-logging.md",
+        "source": "raw/sessions/trailhead-api/2026-08-11T21-10-trailhead-api-request-id-logging.md",
+        "usd": 0.02758
+      },
+      {
+        "agent": "Claude",
+        "is_doc": false,
+        "mtime": "2026-10-20T16:45:56Z",
+        "project": "trailhead-api",
+        "rel": "trailhead-api/2026-09-06T16-29-trailhead-api-schema-migration-safety.md",
+        "source": "raw/sessions/trailhead-api/2026-09-06T16-29-trailhead-api-schema-migration-safety.md",
+        "usd": 0.045832
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-08-16T11:15:22Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "02-first-sync",
         "rel": "docs::02-first-sync/02-first-sync.md",
         "source": "raw/docs/02-first-sync/02-first-sync.md",
-        "usd": 0.032408
+        "usd": 0.032374
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-08-16T11:15:22Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "04-use-with-codex-cli",
         "rel": "docs::04-use-with-codex-cli/04-use-with-codex-cli.md",
         "source": "raw/docs/04-use-with-codex-cli/04-use-with-codex-cli.md",
-        "usd": 0.032276
+        "usd": 0.032242
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-08-16T11:15:22Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "05-query-your-wiki",
         "rel": "docs::05-query-your-wiki/05-query-your-wiki.md",
         "source": "raw/docs/05-query-your-wiki/05-query-your-wiki.md",
-        "usd": 0.036854
+        "usd": 0.03682
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-08-16T11:15:22Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "06-bring-your-obsidian-logseq-vault",
         "rel": "docs::06-bring-your-obsidian-logseq-vault/06-bring-your-obsidian-logseq-vault.md",
         "source": "raw/docs/06-bring-your-obsidian-logseq-vault/06-bring-your-obsidian-logseq-vault.md",
-        "usd": 0.039632
+        "usd": 0.039598
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-08-16T11:15:22Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "07-example-workflows",
         "rel": "docs::07-example-workflows/07-example-workflows.md",
         "source": "raw/docs/07-example-workflows/07-example-workflows.md",
-        "usd": 0.040814
+        "usd": 0.04078
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-08-16T11:15:22Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "accessibility-audit-summary",
         "rel": "docs::accessibility-audit-summary/accessibility-audit-summary.md",
         "source": "raw/docs/accessibility-audit-summary/accessibility-audit-summary.md",
-        "usd": 0.034436
+        "usd": 0.034402
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-08-16T11:15:22Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "accessibility-wcag-2-1-aa",
         "rel": "docs::accessibility-wcag-2-1-aa/accessibility-wcag-2-1-aa.md",
         "source": "raw/docs/accessibility-wcag-2-1-aa/accessibility-wcag-2-1-aa.md",
-        "usd": 0.031874
+        "usd": 0.03184
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-09-29T19:29:23Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "adapters-claude-code",
         "rel": "docs::adapters-claude-code/claude-code-adapter.md",
         "source": "raw/docs/adapters-claude-code/claude-code-adapter.md",
-        "usd": 0.038222
+        "usd": 0.038188
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-09-29T19:29:23Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "adapters-codex-cli",
         "rel": "docs::adapters-codex-cli/codex-cli-adapter.md",
         "source": "raw/docs/adapters-codex-cli/codex-cli-adapter.md",
-        "usd": 0.029444
+        "usd": 0.02941
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-09-29T19:29:23Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "adapters-obsidian",
         "rel": "docs::adapters-obsidian/obsidian-adapter.md",
         "source": "raw/docs/adapters-obsidian/obsidian-adapter.md",
-        "usd": 0.039206
+        "usd": 0.039172
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-08-16T11:15:22Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "api-guide",
         "rel": "docs::api-guide/api-guide-01.md",
         "source": "raw/docs/api-guide/api-guide-01.md",
-        "usd": 0.040706
+        "usd": 0.040672
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-08-16T11:15:22Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "api-guide",
         "rel": "docs::api-guide/api-guide-02.md",
         "source": "raw/docs/api-guide/api-guide-02.md",
-        "usd": 0.028412
+        "usd": 0.028378
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-09-29T19:29:23Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "architecture",
         "rel": "docs::architecture/architecture-01.md",
         "source": "raw/docs/architecture/architecture-01.md",
-        "usd": 0.031472
+        "usd": 0.031438
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-09-29T19:29:23Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "architecture",
         "rel": "docs::architecture/architecture-02.md",
         "source": "raw/docs/architecture/architecture-02.md",
-        "usd": 0.042986
+        "usd": 0.042952
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-09-29T19:29:23Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "architecture",
         "rel": "docs::architecture/architecture-03.md",
         "source": "raw/docs/architecture/architecture-03.md",
-        "usd": 0.024686
+        "usd": 0.024652
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-09-29T19:29:23Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "benchmarks",
         "rel": "docs::benchmarks/performance-benchmarks.md",
         "source": "raw/docs/benchmarks/performance-benchmarks.md",
-        "usd": 0.034358
+        "usd": 0.034324
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-08-16T11:15:22Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "cache-tiers-load-priority-frontmatter",
         "rel": "docs::cache-tiers-load-priority-frontmatter/cache-tiers-load-priority-frontmatter.md",
         "source": "raw/docs/cache-tiers-load-priority-frontmatter/cache-tiers-load-priority-frontmatter.md",
-        "usd": 0.036752
+        "usd": 0.036718
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-08-16T11:15:22Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "chatgpt-adapter",
         "rel": "docs::chatgpt-adapter/chatgpt-adapter.md",
         "source": "raw/docs/chatgpt-adapter/chatgpt-adapter.md",
-        "usd": 0.029354
+        "usd": 0.02932
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-09-29T19:29:23Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "cheatsheet",
         "rel": "docs::cheatsheet/command-cheatsheet-01.md",
         "source": "raw/docs/cheatsheet/command-cheatsheet-01.md",
-        "usd": 0.041324
+        "usd": 0.04129
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-09-29T19:29:23Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "cheatsheet",
         "rel": "docs::cheatsheet/command-cheatsheet-02.md",
         "source": "raw/docs/cheatsheet/command-cheatsheet-02.md",
-        "usd": 0.042578
+        "usd": 0.042544
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-08-16T11:15:22Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "claude-cli-synthesis-backend",
         "rel": "docs::claude-cli-synthesis-backend/claude-cli-synthesis-backend.md",
         "source": "raw/docs/claude-cli-synthesis-backend/claude-cli-synthesis-backend.md",
-        "usd": 0.02777
+        "usd": 0.027736
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-08-16T11:15:22Z",
-        "project": "competitor-landscape",
-        "rel": "docs::competitor-landscape/competitor-landscape-01.md",
-        "source": "raw/docs/competitor-landscape/competitor-landscape-01.md",
-        "usd": 0.042746
-      },
-      {
-        "agent": "Documents",
-        "is_doc": true,
-        "mtime": "2026-08-16T11:15:22Z",
-        "project": "competitor-landscape",
-        "rel": "docs::competitor-landscape/competitor-landscape-02.md",
-        "source": "raw/docs/competitor-landscape/competitor-landscape-02.md",
-        "usd": 0.024002
-      },
-      {
-        "agent": "Documents",
-        "is_doc": true,
-        "mtime": "2026-09-29T19:29:23Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "configuration",
         "rel": "docs::configuration/configuration-01.md",
         "source": "raw/docs/configuration/configuration-01.md",
-        "usd": 0.033788
+        "usd": 0.033754
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-09-29T19:29:23Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "configuration",
         "rel": "docs::configuration/configuration-02.md",
         "source": "raw/docs/configuration/configuration-02.md",
-        "usd": 0.0368
+        "usd": 0.036766
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-09-29T19:29:23Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "configuration",
         "rel": "docs::configuration/configuration-03.md",
         "source": "raw/docs/configuration/configuration-03.md",
-        "usd": 0.035546
+        "usd": 0.035512
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-09-29T19:29:23Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "configuration-reference",
         "rel": "docs::configuration-reference/configuration-reference-01.md",
         "source": "raw/docs/configuration-reference/configuration-reference-01.md",
-        "usd": 0.022964
+        "usd": 0.02293
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-09-29T19:29:23Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "configuration-reference",
         "rel": "docs::configuration-reference/configuration-reference-02.md",
         "source": "raw/docs/configuration-reference/configuration-reference-02.md",
-        "usd": 0.04313
+        "usd": 0.043096
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-09-29T19:29:23Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "configuration-reference",
         "rel": "docs::configuration-reference/configuration-reference-03.md",
         "source": "raw/docs/configuration-reference/configuration-reference-03.md",
-        "usd": 0.022706
+        "usd": 0.022672
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-09-29T19:29:23Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "configuration-reference",
         "rel": "docs::configuration-reference/configuration-reference-04.md",
         "source": "raw/docs/configuration-reference/configuration-reference-04.md",
-        "usd": 0.033938
+        "usd": 0.033904
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-09-29T19:29:23Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "configuration-reference",
         "rel": "docs::configuration-reference/configuration-reference-05.md",
         "source": "raw/docs/configuration-reference/configuration-reference-05.md",
-        "usd": 0.043082
+        "usd": 0.043048
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-09-29T19:29:23Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "configuration-reference",
         "rel": "docs::configuration-reference/configuration-reference-06.md",
         "source": "raw/docs/configuration-reference/configuration-reference-06.md",
-        "usd": 0.026726
+        "usd": 0.026692
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-09-29T19:29:23Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "configuration-reference",
         "rel": "docs::configuration-reference/configuration-reference-07.md",
         "source": "raw/docs/configuration-reference/configuration-reference-07.md",
-        "usd": 0.042602
+        "usd": 0.042568
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-09-29T19:29:23Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "configuration-reference",
         "rel": "docs::configuration-reference/configuration-reference-08.md",
         "source": "raw/docs/configuration-reference/configuration-reference-08.md",
-        "usd": 0.029948
+        "usd": 0.029914
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-08-16T11:15:22Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "cursor-adapter",
         "rel": "docs::cursor-adapter/cursor-adapter.md",
         "source": "raw/docs/cursor-adapter/cursor-adapter.md",
-        "usd": 0.027956
+        "usd": 0.027922
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-09-29T19:29:23Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "deploy-docker",
         "rel": "docs::deploy-docker/docker-deployment.md",
         "source": "raw/docs/deploy-docker/docker-deployment.md",
-        "usd": 0.034202
+        "usd": 0.034168
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-09-29T19:29:23Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "deploy-github-pages",
         "rel": "docs::deploy-github-pages/deploying-to-github-pages-01.md",
         "source": "raw/docs/deploy-github-pages/deploying-to-github-pages-01.md",
-        "usd": 0.042092
+        "usd": 0.042058
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-09-29T19:29:23Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "deploy-github-pages",
         "rel": "docs::deploy-github-pages/deploying-to-github-pages-02.md",
         "source": "raw/docs/deploy-github-pages/deploying-to-github-pages-02.md",
-        "usd": 0.024254
+        "usd": 0.02422
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-08-16T11:15:22Z",
+        "mtime": "2026-10-20T16:45:56Z",
+        "project": "deploy-pypi-publishing",
+        "rel": "docs::deploy-pypi-publishing/pypi-publishing-one-time-setup.md",
+        "source": "raw/docs/deploy-pypi-publishing/pypi-publishing-one-time-setup.md",
+        "usd": 0.041536
+      },
+      {
+        "agent": "Documents",
+        "is_doc": true,
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "deploying-to-gitlab-pages",
         "rel": "docs::deploying-to-gitlab-pages/deploying-to-gitlab-pages.md",
         "source": "raw/docs/deploying-to-gitlab-pages/deploying-to-gitlab-pages.md",
-        "usd": 0.031208
+        "usd": 0.031174
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-08-16T11:15:22Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "deploying-to-vercel-or-netlify",
         "rel": "docs::deploying-to-vercel-or-netlify/deploying-to-vercel-or-netlify.md",
         "source": "raw/docs/deploying-to-vercel-or-netlify/deploying-to-vercel-or-netlify.md",
-        "usd": 0.03377
+        "usd": 0.033736
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-08-16T11:15:22Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "editorial-brand-system",
         "rel": "docs::editorial-brand-system/editorial-brand-system-01.md",
         "source": "raw/docs/editorial-brand-system/editorial-brand-system-01.md",
-        "usd": 0.042992
+        "usd": 0.042958
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-08-16T11:15:22Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "editorial-brand-system",
         "rel": "docs::editorial-brand-system/editorial-brand-system-02.md",
         "source": "raw/docs/editorial-brand-system/editorial-brand-system-02.md",
-        "usd": 0.031118
+        "usd": 0.031084
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-08-27T06:09:15Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "entity-schema-reference-v0-7-55",
         "rel": "docs::entity-schema-reference-v0-7-55/entity-schema-reference-v0-7-55.md",
         "source": "raw/docs/entity-schema-reference-v0-7-55/entity-schema-reference-v0-7-55.md",
-        "usd": 0.03647
+        "usd": 0.036436
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-08-16T11:15:22Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "faq",
         "rel": "docs::faq/faq.md",
         "source": "raw/docs/faq/faq.md",
-        "usd": 0.037502
+        "usd": 0.037468
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-09-29T19:29:23Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "feature-matrix",
         "rel": "docs::feature-matrix/feature-matrix-every-feature-across-the-15-prior-implementations-01.md",
         "source": "raw/docs/feature-matrix/feature-matrix-every-feature-across-the-15-prior-implementations-01.md",
-        "usd": 0.041792
+        "usd": 0.041758
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-09-29T19:29:23Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "feature-matrix",
         "rel": "docs::feature-matrix/feature-matrix-every-feature-across-the-15-prior-implementations-02.md",
         "source": "raw/docs/feature-matrix/feature-matrix-every-feature-across-the-15-prior-implementations-02.md",
-        "usd": 0.043064
+        "usd": 0.04303
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-09-29T19:29:23Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "feature-matrix",
         "rel": "docs::feature-matrix/feature-matrix-every-feature-across-the-15-prior-implementations-03.md",
         "source": "raw/docs/feature-matrix/feature-matrix-every-feature-across-the-15-prior-implementations-03.md",
-        "usd": 0.029792
+        "usd": 0.029758
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-09-29T19:29:23Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "framework",
         "rel": "docs::framework/llmwiki-framework-building-an-agent-native-dev-tool-01.md",
         "source": "raw/docs/framework/llmwiki-framework-building-an-agent-native-dev-tool-01.md",
-        "usd": 0.040388
+        "usd": 0.040354
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-09-29T19:29:23Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "framework",
         "rel": "docs::framework/llmwiki-framework-building-an-agent-native-dev-tool-02.md",
         "source": "raw/docs/framework/llmwiki-framework-building-an-agent-native-dev-tool-02.md",
-        "usd": 0.042326
+        "usd": 0.042292
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-09-29T19:29:23Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "framework",
         "rel": "docs::framework/llmwiki-framework-building-an-agent-native-dev-tool-03.md",
         "source": "raw/docs/framework/llmwiki-framework-building-an-agent-native-dev-tool-03.md",
-        "usd": 0.038426
+        "usd": 0.038392
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-08-16T11:15:22Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "gemini-cli-adapter",
         "rel": "docs::gemini-cli-adapter/gemini-cli-adapter.md",
         "source": "raw/docs/gemini-cli-adapter/gemini-cli-adapter.md",
-        "usd": 0.02735
+        "usd": 0.027316
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-08-16T11:15:22Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "github-copilot-adapters",
         "rel": "docs::github-copilot-adapters/github-copilot-adapters.md",
         "source": "raw/docs/github-copilot-adapters/github-copilot-adapters.md",
-        "usd": 0.032312
+        "usd": 0.032278
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-08-27T06:09:15Z",
+        "mtime": "2026-10-20T16:45:56Z",
+        "project": "i18n-es-getting-started",
+        "rel": "docs::i18n-es-getting-started/comenzar-getting-started.md",
+        "source": "raw/docs/i18n-es-getting-started/comenzar-getting-started.md",
+        "usd": 0.029062
+      },
+      {
+        "agent": "Documents",
+        "is_doc": true,
+        "mtime": "2026-10-20T16:45:56Z",
+        "project": "i18n-ja-getting-started",
+        "rel": "docs::i18n-ja-getting-started/getting-started.md",
+        "source": "raw/docs/i18n-ja-getting-started/getting-started.md",
+        "usd": 0.02728
+      },
+      {
+        "agent": "Documents",
+        "is_doc": true,
+        "mtime": "2026-10-20T16:45:56Z",
+        "project": "i18n-zh-cn-getting-started",
+        "rel": "docs::i18n-zh-cn-getting-started/getting-started.md",
+        "source": "raw/docs/i18n-zh-cn-getting-started/getting-started.md",
+        "usd": 0.026674
+      },
+      {
+        "agent": "Documents",
+        "is_doc": true,
+        "mtime": "2026-10-20T16:45:56Z",
+        "project": "index",
+        "rel": "docs::index/llmwiki-documentation.md",
+        "source": "raw/docs/index/llmwiki-documentation.md",
+        "usd": 0.041056
+      },
+      {
+        "agent": "Documents",
+        "is_doc": true,
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "llmwiki-public-roadmap",
         "rel": "docs::llmwiki-public-roadmap/llmwiki-public-roadmap.md",
         "source": "raw/docs/llmwiki-public-roadmap/llmwiki-public-roadmap.md",
-        "usd": 0.036788
+        "usd": 0.036754
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-08-16T11:15:22Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "llmwiki-roadmap-phase-layer-item-prioritised",
         "rel": "docs::llmwiki-roadmap-phase-layer-item-prioritised/llmwiki-roadmap-phase-layer-item-prioritised-01.md",
         "source": "raw/docs/llmwiki-roadmap-phase-layer-item-prioritised/llmwiki-roadmap-phase-layer-item-prioritised-01.md",
-        "usd": 0.026996
+        "usd": 0.026962
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-08-16T11:15:22Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "llmwiki-roadmap-phase-layer-item-prioritised",
         "rel": "docs::llmwiki-roadmap-phase-layer-item-prioritised/llmwiki-roadmap-phase-layer-item-prioritised-02.md",
         "source": "raw/docs/llmwiki-roadmap-phase-layer-item-prioritised/llmwiki-roadmap-phase-layer-item-prioritised-02.md",
-        "usd": 0.023078
+        "usd": 0.023044
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-08-16T11:15:22Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "llmwiki-roadmap-phase-layer-item-prioritised",
         "rel": "docs::llmwiki-roadmap-phase-layer-item-prioritised/llmwiki-roadmap-phase-layer-item-prioritised-03.md",
         "source": "raw/docs/llmwiki-roadmap-phase-layer-item-prioritised/llmwiki-roadmap-phase-layer-item-prioritised-03.md",
-        "usd": 0.043166
+        "usd": 0.043132
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-08-16T11:15:22Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "llmwiki-roadmap-phase-layer-item-prioritised",
         "rel": "docs::llmwiki-roadmap-phase-layer-item-prioritised/llmwiki-roadmap-phase-layer-item-prioritised-04.md",
         "source": "raw/docs/llmwiki-roadmap-phase-layer-item-prioritised/llmwiki-roadmap-phase-layer-item-prioritised-04.md",
-        "usd": 0.037334
+        "usd": 0.0373
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-08-16T11:15:22Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "llmwiki-roadmap-phase-layer-item-prioritised",
         "rel": "docs::llmwiki-roadmap-phase-layer-item-prioritised/llmwiki-roadmap-phase-layer-item-prioritised-05.md",
         "source": "raw/docs/llmwiki-roadmap-phase-layer-item-prioritised/llmwiki-roadmap-phase-layer-item-prioritised-05.md",
-        "usd": 0.028868
+        "usd": 0.028834
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-09-29T19:29:23Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "modes-agent-index",
         "rel": "docs::modes-agent-index/mode-b-agent.md",
         "source": "raw/docs/modes-agent-index/mode-b-agent.md",
-        "usd": 0.027326
+        "usd": 0.027292
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-10-01T07:06:21Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "monthly-report-template",
         "rel": "docs::monthly-report-template/monthly-project-health-report-template.md",
         "source": "raw/docs/monthly-report-template/monthly-project-health-report-template.md",
-        "usd": 0.03254
+        "usd": 0.032506
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-08-16T11:15:22Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "multi-agent-setup",
         "rel": "docs::multi-agent-setup/multi-agent-setup.md",
         "source": "raw/docs/multi-agent-setup/multi-agent-setup.md",
-        "usd": 0.037424
+        "usd": 0.03739
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-08-16T11:15:22Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "obsidian-integration-guide",
         "rel": "docs::obsidian-integration-guide/obsidian-integration-guide.md",
         "source": "raw/docs/obsidian-integration-guide/obsidian-integration-guide.md",
-        "usd": 0.035906
+        "usd": 0.035872
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-08-16T11:15:22Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "openclaw-adapter",
         "rel": "docs::openclaw-adapter/openclaw-adapter.md",
         "source": "raw/docs/openclaw-adapter/openclaw-adapter.md",
-        "usd": 0.028352
+        "usd": 0.028318
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-09-29T19:29:23Z",
+        "mtime": "2026-10-20T16:45:56Z",
+        "project": "opencode-openclaw-adapter",
+        "rel": "docs::opencode-openclaw-adapter/opencode-openclaw-adapter.md",
+        "source": "raw/docs/opencode-openclaw-adapter/opencode-openclaw-adapter.md",
+        "usd": 0.028162
+      },
+      {
+        "agent": "Documents",
+        "is_doc": true,
+        "mtime": "2026-10-20T16:45:56Z",
+        "project": "pick-your-mode",
+        "rel": "docs::pick-your-mode/pick-your-mode.md",
+        "source": "raw/docs/pick-your-mode/pick-your-mode.md",
+        "usd": 0.02689
+      },
+      {
+        "agent": "Documents",
+        "is_doc": true,
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "privacy",
         "rel": "docs::privacy/privacy-01.md",
         "source": "raw/docs/privacy/privacy-01.md",
-        "usd": 0.042344
+        "usd": 0.04231
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-09-29T19:29:23Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "privacy",
         "rel": "docs::privacy/privacy-02.md",
         "source": "raw/docs/privacy/privacy-02.md",
-        "usd": 0.0287
+        "usd": 0.028666
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-08-16T11:15:22Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "prompt-caching-batch-api",
         "rel": "docs::prompt-caching-batch-api/prompt-caching-batch-api.md",
         "source": "raw/docs/prompt-caching-batch-api/prompt-caching-batch-api.md",
-        "usd": 0.034406
+        "usd": 0.034372
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-09-29T19:29:23Z",
+        "mtime": "2026-10-20T16:45:56Z",
+        "project": "reference-cli",
+        "rel": "docs::reference-cli/cli-reference-01.md",
+        "source": "raw/docs/reference-cli/cli-reference-01.md",
+        "usd": 0.037312
+      },
+      {
+        "agent": "Documents",
+        "is_doc": true,
+        "mtime": "2026-10-20T16:45:56Z",
+        "project": "reference-cli",
+        "rel": "docs::reference-cli/cli-reference-02.md",
+        "source": "raw/docs/reference-cli/cli-reference-02.md",
+        "usd": 0.041932
+      },
+      {
+        "agent": "Documents",
+        "is_doc": true,
+        "mtime": "2026-10-20T16:45:56Z",
+        "project": "reference-cli",
+        "rel": "docs::reference-cli/cli-reference-03.md",
+        "source": "raw/docs/reference-cli/cli-reference-03.md",
+        "usd": 0.04285
+      },
+      {
+        "agent": "Documents",
+        "is_doc": true,
+        "mtime": "2026-10-20T16:45:56Z",
+        "project": "reference-cli",
+        "rel": "docs::reference-cli/cli-reference-04.md",
+        "source": "raw/docs/reference-cli/cli-reference-04.md",
+        "usd": 0.026614
+      },
+      {
+        "agent": "Documents",
+        "is_doc": true,
+        "mtime": "2026-10-20T16:45:56Z",
+        "project": "reference-cli",
+        "rel": "docs::reference-cli/cli-reference-05.md",
+        "source": "raw/docs/reference-cli/cli-reference-05.md",
+        "usd": 0.04105
+      },
+      {
+        "agent": "Documents",
+        "is_doc": true,
+        "mtime": "2026-10-20T16:45:56Z",
+        "project": "reference-cli",
+        "rel": "docs::reference-cli/cli-reference-06.md",
+        "source": "raw/docs/reference-cli/cli-reference-06.md",
+        "usd": 0.042676
+      },
+      {
+        "agent": "Documents",
+        "is_doc": true,
+        "mtime": "2026-10-20T16:45:56Z",
+        "project": "reference-cli",
+        "rel": "docs::reference-cli/cli-reference-07.md",
+        "source": "raw/docs/reference-cli/cli-reference-07.md",
+        "usd": 0.041524
+      },
+      {
+        "agent": "Documents",
+        "is_doc": true,
+        "mtime": "2026-10-20T16:45:56Z",
+        "project": "reference-cli",
+        "rel": "docs::reference-cli/cli-reference-08.md",
+        "source": "raw/docs/reference-cli/cli-reference-08.md",
+        "usd": 0.036562
+      },
+      {
+        "agent": "Documents",
+        "is_doc": true,
+        "mtime": "2026-10-20T16:45:56Z",
+        "project": "reference-cli",
+        "rel": "docs::reference-cli/cli-reference-09.md",
+        "source": "raw/docs/reference-cli/cli-reference-09.md",
+        "usd": 0.025462
+      },
+      {
+        "agent": "Documents",
+        "is_doc": true,
+        "mtime": "2026-10-20T16:45:56Z",
+        "project": "reference-cli",
+        "rel": "docs::reference-cli/cli-reference-10.md",
+        "source": "raw/docs/reference-cli/cli-reference-10.md",
+        "usd": 0.042892
+      },
+      {
+        "agent": "Documents",
+        "is_doc": true,
+        "mtime": "2026-10-20T16:45:56Z",
+        "project": "reference-cli",
+        "rel": "docs::reference-cli/cli-reference-11.md",
+        "source": "raw/docs/reference-cli/cli-reference-11.md",
+        "usd": 0.042406
+      },
+      {
+        "agent": "Documents",
+        "is_doc": true,
+        "mtime": "2026-10-20T16:45:56Z",
+        "project": "reference-cli",
+        "rel": "docs::reference-cli/cli-reference-12.md",
+        "source": "raw/docs/reference-cli/cli-reference-12.md",
+        "usd": 0.037654
+      },
+      {
+        "agent": "Documents",
+        "is_doc": true,
+        "mtime": "2026-10-20T16:45:56Z",
+        "project": "reference-cli",
+        "rel": "docs::reference-cli/cli-reference-13.md",
+        "source": "raw/docs/reference-cli/cli-reference-13.md",
+        "usd": 0.037096
+      },
+      {
+        "agent": "Documents",
+        "is_doc": true,
+        "mtime": "2026-10-20T16:45:56Z",
+        "project": "reference-cli",
+        "rel": "docs::reference-cli/cli-reference-14.md",
+        "source": "raw/docs/reference-cli/cli-reference-14.md",
+        "usd": 0.039778
+      },
+      {
+        "agent": "Documents",
+        "is_doc": true,
+        "mtime": "2026-10-20T16:45:56Z",
+        "project": "reference-cli",
+        "rel": "docs::reference-cli/cli-reference-15.md",
+        "source": "raw/docs/reference-cli/cli-reference-15.md",
+        "usd": 0.035998
+      },
+      {
+        "agent": "Documents",
+        "is_doc": true,
+        "mtime": "2026-10-20T16:45:56Z",
+        "project": "reference-cli",
+        "rel": "docs::reference-cli/cli-reference-16.md",
+        "source": "raw/docs/reference-cli/cli-reference-16.md",
+        "usd": 0.039112
+      },
+      {
+        "agent": "Documents",
+        "is_doc": true,
+        "mtime": "2026-10-20T16:45:56Z",
+        "project": "reference-cli",
+        "rel": "docs::reference-cli/cli-reference-17.md",
+        "source": "raw/docs/reference-cli/cli-reference-17.md",
+        "usd": 0.042736
+      },
+      {
+        "agent": "Documents",
+        "is_doc": true,
+        "mtime": "2026-10-20T16:45:56Z",
+        "project": "reference-cli",
+        "rel": "docs::reference-cli/cli-reference-18.md",
+        "source": "raw/docs/reference-cli/cli-reference-18.md",
+        "usd": 0.025522
+      },
+      {
+        "agent": "Documents",
+        "is_doc": true,
+        "mtime": "2026-10-20T16:45:56Z",
+        "project": "reference-cli",
+        "rel": "docs::reference-cli/cli-reference-19.md",
+        "source": "raw/docs/reference-cli/cli-reference-19.md",
+        "usd": 0.024844
+      },
+      {
+        "agent": "Documents",
+        "is_doc": true,
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "reference-mcp",
         "rel": "docs::reference-mcp/mcp-server-tool-reference-01.md",
         "source": "raw/docs/reference-mcp/mcp-server-tool-reference-01.md",
-        "usd": 0.041684
+        "usd": 0.04165
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-09-29T19:29:23Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "reference-mcp",
         "rel": "docs::reference-mcp/mcp-server-tool-reference-02.md",
         "source": "raw/docs/reference-mcp/mcp-server-tool-reference-02.md",
-        "usd": 0.02693
+        "usd": 0.026896
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-09-29T19:29:23Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "reference-page-kinds",
         "rel": "docs::reference-page-kinds/page-kinds-01.md",
         "source": "raw/docs/reference-page-kinds/page-kinds-01.md",
-        "usd": 0.038528
+        "usd": 0.038494
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-09-29T19:29:23Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "reference-page-kinds",
         "rel": "docs::reference-page-kinds/page-kinds-02.md",
         "source": "raw/docs/reference-page-kinds/page-kinds-02.md",
-        "usd": 0.039146
+        "usd": 0.039112
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-09-29T19:29:23Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "reference-page-kinds",
         "rel": "docs::reference-page-kinds/page-kinds-03.md",
         "source": "raw/docs/reference-page-kinds/page-kinds-03.md",
-        "usd": 0.040568
+        "usd": 0.040534
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-09-29T19:29:23Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "reference-reader-api",
         "rel": "docs::reference-reader-api/reader-api-contract-v1-2-preview-01.md",
         "source": "raw/docs/reference-reader-api/reader-api-contract-v1-2-preview-01.md",
-        "usd": 0.031154
+        "usd": 0.03112
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-09-29T19:29:23Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "reference-reader-api",
         "rel": "docs::reference-reader-api/reader-api-contract-v1-2-preview-02.md",
         "source": "raw/docs/reference-reader-api/reader-api-contract-v1-2-preview-02.md",
-        "usd": 0.04151
+        "usd": 0.041476
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-09-29T19:29:23Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "reference-reader-api",
         "rel": "docs::reference-reader-api/reader-api-contract-v1-2-preview-03.md",
         "source": "raw/docs/reference-reader-api/reader-api-contract-v1-2-preview-03.md",
-        "usd": 0.026006
+        "usd": 0.025972
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-09-29T19:29:23Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "reference-reader-shell",
         "rel": "docs::reference-reader-shell/reader-first-article-shell-01.md",
         "source": "raw/docs/reference-reader-shell/reader-first-article-shell-01.md",
-        "usd": 0.041426
+        "usd": 0.041392
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-09-29T19:29:23Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "reference-reader-shell",
         "rel": "docs::reference-reader-shell/reader-first-article-shell-02.md",
         "source": "raw/docs/reference-reader-shell/reader-first-article-shell-02.md",
-        "usd": 0.025982
+        "usd": 0.025948
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-09-29T19:29:23Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "reference-slash-commands",
         "rel": "docs::reference-slash-commands/slash-commands-reference-01.md",
         "source": "raw/docs/reference-slash-commands/slash-commands-reference-01.md",
-        "usd": 0.032552
+        "usd": 0.032518
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-09-29T19:29:23Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "reference-slash-commands",
         "rel": "docs::reference-slash-commands/slash-commands-reference-02.md",
         "source": "raw/docs/reference-slash-commands/slash-commands-reference-02.md",
-        "usd": 0.042932
+        "usd": 0.042898
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-09-29T19:29:23Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "reference-slash-commands",
         "rel": "docs::reference-slash-commands/slash-commands-reference-03.md",
         "source": "raw/docs/reference-slash-commands/slash-commands-reference-03.md",
-        "usd": 0.028376
+        "usd": 0.028342
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-09-29T19:29:23Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "reference-slash-commands",
         "rel": "docs::reference-slash-commands/slash-commands-reference-04.md",
         "source": "raw/docs/reference-slash-commands/slash-commands-reference-04.md",
-        "usd": 0.03197
+        "usd": 0.031936
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-09-29T19:29:23Z",
+        "mtime": "2026-10-20T16:45:56Z",
+        "project": "reference-state-persistence",
+        "rel": "docs::reference-state-persistence/state-persistence.md",
+        "source": "raw/docs/reference-state-persistence/state-persistence.md",
+        "usd": 0.03898
+      },
+      {
+        "agent": "Documents",
+        "is_doc": true,
+        "mtime": "2026-10-20T16:45:56Z",
+        "project": "reference-synthesis-cost",
+        "rel": "docs::reference-synthesis-cost/synthesis-cost-what-you-pay-per-page-and-why-01.md",
+        "source": "raw/docs/reference-synthesis-cost/synthesis-cost-what-you-pay-per-page-and-why-01.md",
+        "usd": 0.032656
+      },
+      {
+        "agent": "Documents",
+        "is_doc": true,
+        "mtime": "2026-10-20T16:45:56Z",
+        "project": "reference-synthesis-cost",
+        "rel": "docs::reference-synthesis-cost/synthesis-cost-what-you-pay-per-page-and-why-02.md",
+        "source": "raw/docs/reference-synthesis-cost/synthesis-cost-what-you-pay-per-page-and-why-02.md",
+        "usd": 0.03886
+      },
+      {
+        "agent": "Documents",
+        "is_doc": true,
+        "mtime": "2026-10-20T16:45:56Z",
+        "project": "reference-synthesis-cost",
+        "rel": "docs::reference-synthesis-cost/synthesis-cost-what-you-pay-per-page-and-why-03.md",
+        "source": "raw/docs/reference-synthesis-cost/synthesis-cost-what-you-pay-per-page-and-why-03.md",
+        "usd": 0.038746
+      },
+      {
+        "agent": "Documents",
+        "is_doc": true,
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "reference-ui",
         "rel": "docs::reference-ui/ui-reference-01.md",
         "source": "raw/docs/reference-ui/ui-reference-01.md",
-        "usd": 0.039332
+        "usd": 0.039298
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-09-29T19:29:23Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "reference-ui",
         "rel": "docs::reference-ui/ui-reference-02.md",
         "source": "raw/docs/reference-ui/ui-reference-02.md",
-        "usd": 0.042092
+        "usd": 0.042058
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-09-29T19:29:23Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "reference-ui",
         "rel": "docs::reference-ui/ui-reference-03.md",
         "source": "raw/docs/reference-ui/ui-reference-03.md",
-        "usd": 0.031064
+        "usd": 0.03103
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-09-29T19:29:23Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "reference-ui",
         "rel": "docs::reference-ui/ui-reference-04.md",
         "source": "raw/docs/reference-ui/ui-reference-04.md",
-        "usd": 0.04241
+        "usd": 0.042376
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-09-29T19:29:23Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "reference-ui",
         "rel": "docs::reference-ui/ui-reference-05.md",
         "source": "raw/docs/reference-ui/ui-reference-05.md",
-        "usd": 0.029348
+        "usd": 0.029314
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-09-29T19:29:23Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "reference-ui",
         "rel": "docs::reference-ui/ui-reference-06.md",
         "source": "raw/docs/reference-ui/ui-reference-06.md",
-        "usd": 0.03293
+        "usd": 0.032896
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-09-29T19:29:23Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "reference-ui",
         "rel": "docs::reference-ui/ui-reference-07.md",
         "source": "raw/docs/reference-ui/ui-reference-07.md",
-        "usd": 0.0365
+        "usd": 0.036466
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-09-29T19:29:23Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "reference-ui",
         "rel": "docs::reference-ui/ui-reference-08.md",
         "source": "raw/docs/reference-ui/ui-reference-08.md",
-        "usd": 0.036374
+        "usd": 0.03634
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-09-29T19:29:23Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "research",
         "rel": "docs::research/phase-1-25-research-report-01.md",
         "source": "raw/docs/research/phase-1-25-research-report-01.md",
-        "usd": 0.028262
+        "usd": 0.028228
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-09-29T19:29:23Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "research",
         "rel": "docs::research/phase-1-25-research-report-02.md",
         "source": "raw/docs/research/phase-1-25-research-report-02.md",
-        "usd": 0.041048
+        "usd": 0.041014
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-09-29T19:29:23Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "research",
         "rel": "docs::research/phase-1-25-research-report-03.md",
         "source": "raw/docs/research/phase-1-25-research-report-03.md",
-        "usd": 0.031232
+        "usd": 0.031198
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-08-16T11:15:22Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "running-llmwiki-on-an-existing-obsidian-logseq-vault",
         "rel": "docs::running-llmwiki-on-an-existing-obsidian-logseq-vault/running-llmwiki-on-an-existing-obsidian-logseq-vault-01.md",
         "source": "raw/docs/running-llmwiki-on-an-existing-obsidian-logseq-vault/running-llmwiki-on-an-existing-obsidian-logseq-vault-01.md",
-        "usd": 0.04274
+        "usd": 0.042706
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-08-16T11:15:22Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "running-llmwiki-on-an-existing-obsidian-logseq-vault",
         "rel": "docs::running-llmwiki-on-an-existing-obsidian-logseq-vault/running-llmwiki-on-an-existing-obsidian-logseq-vault-02.md",
         "source": "raw/docs/running-llmwiki-on-an-existing-obsidian-logseq-vault/running-llmwiki-on-an-existing-obsidian-logseq-vault-02.md",
-        "usd": 0.025514
+        "usd": 0.02548
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-08-16T11:15:22Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "seo-optimization-guide",
         "rel": "docs::seo-optimization-guide/seo-optimization-guide.md",
         "source": "raw/docs/seo-optimization-guide/seo-optimization-guide.md",
-        "usd": 0.037502
+        "usd": 0.037468
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-09-29T19:29:23Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "star-history",
         "rel": "docs::star-history/star-history-tracking.md",
         "source": "raw/docs/star-history/star-history-tracking.md",
-        "usd": 0.030962
+        "usd": 0.030928
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-09-29T19:29:23Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "style-guide",
         "rel": "docs::style-guide/docs-style-guide.md",
         "source": "raw/docs/style-guide/docs-style-guide.md",
-        "usd": 0.04022
+        "usd": 0.040186
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-08-16T11:15:22Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "synthesis-backends-v1-4-0",
         "rel": "docs::synthesis-backends-v1-4-0/synthesis-backends-v1-4-0.md",
         "source": "raw/docs/synthesis-backends-v1-4-0/synthesis-backends-v1-4-0.md",
-        "usd": 0.025838
+        "usd": 0.025804
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-08-16T11:15:22Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "troubleshooting",
         "rel": "docs::troubleshooting/troubleshooting.md",
         "source": "raw/docs/troubleshooting/troubleshooting.md",
-        "usd": 0.03836
+        "usd": 0.038326
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-09-29T19:29:23Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "tutorials-00-quickstart-walkthrough",
         "rel": "docs::tutorials-00-quickstart-walkthrough/00-quickstart-walkthrough.md",
         "source": "raw/docs/tutorials-00-quickstart-walkthrough/00-quickstart-walkthrough.md",
-        "usd": 0.039158
+        "usd": 0.039124
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-09-29T19:29:23Z",
+        "mtime": "2026-10-20T16:45:56Z",
+        "project": "tutorials-01-installation",
+        "rel": "docs::tutorials-01-installation/01-installation.md",
+        "source": "raw/docs/tutorials-01-installation/01-installation.md",
+        "usd": 0.031174
+      },
+      {
+        "agent": "Documents",
+        "is_doc": true,
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "tutorials-03-use-with-claude-code",
         "rel": "docs::tutorials-03-use-with-claude-code/03-use-with-claude-code.md",
         "source": "raw/docs/tutorials-03-use-with-claude-code/03-use-with-claude-code.md",
-        "usd": 0.037094
+        "usd": 0.03706
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-09-29T19:29:23Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "tutorials-08-synthesize-with-ollama",
         "rel": "docs::tutorials-08-synthesize-with-ollama/08-synthesize-wiki-pages-with-ollama.md",
         "source": "raw/docs/tutorials-08-synthesize-with-ollama/08-synthesize-wiki-pages-with-ollama.md",
-        "usd": 0.034508
+        "usd": 0.034474
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-09-29T19:29:23Z",
+        "mtime": "2026-10-20T16:45:56Z",
+        "project": "tutorials-setup-guide",
+        "rel": "docs::tutorials-setup-guide/setup-guide-your-first-llm-wiki-in-15-minutes-01.md",
+        "source": "raw/docs/tutorials-setup-guide/setup-guide-your-first-llm-wiki-in-15-minutes-01.md",
+        "usd": 0.039334
+      },
+      {
+        "agent": "Documents",
+        "is_doc": true,
+        "mtime": "2026-10-20T16:45:56Z",
+        "project": "tutorials-setup-guide",
+        "rel": "docs::tutorials-setup-guide/setup-guide-your-first-llm-wiki-in-15-minutes-02.md",
+        "source": "raw/docs/tutorials-setup-guide/setup-guide-your-first-llm-wiki-in-15-minutes-02.md",
+        "usd": 0.036298
+      },
+      {
+        "agent": "Documents",
+        "is_doc": true,
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "upgrading",
         "rel": "docs::upgrading/upgrade-guide-01.md",
         "source": "raw/docs/upgrading/upgrade-guide-01.md",
-        "usd": 0.037172
+        "usd": 0.037138
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-09-29T19:29:23Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "upgrading",
         "rel": "docs::upgrading/upgrade-guide-02.md",
         "source": "raw/docs/upgrading/upgrade-guide-02.md",
-        "usd": 0.041912
+        "usd": 0.041878
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-09-29T19:29:23Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "upgrading",
         "rel": "docs::upgrading/upgrade-guide-03.md",
         "source": "raw/docs/upgrading/upgrade-guide-03.md",
-        "usd": 0.04166
+        "usd": 0.041626
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-09-29T19:29:23Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "upgrading",
         "rel": "docs::upgrading/upgrade-guide-04.md",
         "source": "raw/docs/upgrading/upgrade-guide-04.md",
-        "usd": 0.041654
+        "usd": 0.04162
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-09-29T19:29:23Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "upgrading",
         "rel": "docs::upgrading/upgrade-guide-05.md",
         "source": "raw/docs/upgrading/upgrade-guide-05.md",
-        "usd": 0.037796
+        "usd": 0.037762
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-09-29T19:29:23Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "upgrading",
         "rel": "docs::upgrading/upgrade-guide-06.md",
         "source": "raw/docs/upgrading/upgrade-guide-06.md",
-        "usd": 0.040724
+        "usd": 0.04069
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-09-29T19:29:23Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "upgrading",
         "rel": "docs::upgrading/upgrade-guide-07.md",
         "source": "raw/docs/upgrading/upgrade-guide-07.md",
-        "usd": 0.039152
+        "usd": 0.039118
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-09-29T19:29:23Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "upgrading",
         "rel": "docs::upgrading/upgrade-guide-08.md",
         "source": "raw/docs/upgrading/upgrade-guide-08.md",
-        "usd": 0.030248
+        "usd": 0.030214
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-09-29T19:29:23Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "uptime",
         "rel": "docs::uptime/uptime-monitoring.md",
         "source": "raw/docs/uptime/uptime-monitoring.md",
-        "usd": 0.040982
+        "usd": 0.040948
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-09-29T19:29:23Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "windows-setup",
         "rel": "docs::windows-setup/windows-setup.md",
         "source": "raw/docs/windows-setup/windows-setup.md",
-        "usd": 0.03329
+        "usd": 0.033256
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-08-16T11:15:22Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "writing-a-new-adapter",
         "rel": "docs::writing-a-new-adapter/writing-a-new-adapter-01.md",
         "source": "raw/docs/writing-a-new-adapter/writing-a-new-adapter-01.md",
-        "usd": 0.0395
+        "usd": 0.039466
       },
       {
         "agent": "Documents",
         "is_doc": true,
-        "mtime": "2026-08-16T11:15:22Z",
+        "mtime": "2026-10-20T16:45:56Z",
         "project": "writing-a-new-adapter",
         "rel": "docs::writing-a-new-adapter/writing-a-new-adapter-02.md",
         "source": "raw/docs/writing-a-new-adapter/writing-a-new-adapter-02.md",
-        "usd": 0.030158
+        "usd": 0.030124
       }
     ],
-    "pending_total": 114,
-    "pending_updated_at": "2026-10-01T07:35:41Z",
+    "pending_total": 169,
+    "pending_updated_at": "2026-10-21T19:48:23Z",
     "pipeline": {
       "rows": [
         {
@@ -1307,55 +1859,55 @@
           "id": "claude",
           "kind": "session",
           "label": "Claude",
-          "next_usd": 0.0735,
+          "next_usd": 0.481932,
           "on_disk": 15,
-          "pending": 1,
+          "pending": 15,
           "raw": 15,
-          "synthesized": 14
+          "synthesized": 0
         },
         {
           "css": "agent-cursor",
           "id": "cursor",
           "kind": "session",
           "label": "Cursor",
-          "next_usd": 0.0,
+          "next_usd": 0.137978,
           "on_disk": 4,
-          "pending": 0,
+          "pending": 4,
           "raw": 4,
-          "synthesized": 4
+          "synthesized": 0
         },
         {
           "css": "agent-openclaw",
           "id": "openclaw",
           "kind": "session",
           "label": "OpenClaw",
-          "next_usd": 0.0,
+          "next_usd": 0.168011,
           "on_disk": 4,
-          "pending": 0,
+          "pending": 4,
           "raw": 4,
-          "synthesized": 4
+          "synthesized": 0
         },
         {
           "css": "agent-codex",
           "id": "codex",
           "kind": "session",
           "label": "Codex",
-          "next_usd": 0.0,
+          "next_usd": 0.063841,
           "on_disk": 2,
-          "pending": 0,
+          "pending": 2,
           "raw": 2,
-          "synthesized": 2
+          "synthesized": 0
         },
         {
           "css": "agent-docs",
           "id": "documents",
           "kind": "docs",
           "label": "Documents",
-          "next_usd": 3.959329,
-          "on_disk": 140,
-          "pending": 113,
-          "raw": 148,
-          "synthesized": 35
+          "next_usd": 5.069432,
+          "on_disk": 138,
+          "pending": 144,
+          "raw": 146,
+          "synthesized": 2
         }
       ],
       "stages": [
@@ -1369,10 +1921,10 @@
         "concepts": 5,
         "entities": 17
       },
-      "to_review_stale": 0,
+      "to_review_stale": 4,
       "trusted_concepts": 4,
       "trusted_entities": 9,
-      "updated_at": "2026-10-01T07:35:41Z"
+      "updated_at": "2026-10-21T19:48:23Z"
     }
   }
 }
