@@ -675,3 +675,31 @@
 ## [2026-10-01] synthesize | 25 sessions across 7 projects
 - Processed: 15 Claude · 4 Cursor · 4 OpenClaw · 2 Codex
 - Created: dotfiles, llm-wiki, paper-notes, pocket-ledger, recipe-box, sensor-mesh, trailhead-api
+
+## [2026-10-21] remove | 2 docs (competitor-landscape)
+
+## [2026-10-21] remove | 2 docs (getting-started)
+
+## [2026-10-21] add | Competitor Landscape
+
+## [2026-10-21] add | Getting started
+
+## [2026-10-21] synthesize | 2 sessions across 2 projects
+- Processed: 2 docs
+- Created: competitor-landscape, getting-started
+
+## [2026-10-21] remove | 1 docs (competitor-landscape)
+
+## [2026-10-21] add | Competitor Landscape
+
+## [2026-10-21] synthesize | 1 sessions across 1 projects
+- Processed: 1 doc
+- Created: competitor-landscape
+
+## [2026-10-21] remove | 1 docs (competitor-landscape)
+
+## [2026-10-21] add | Competitor Landscape
+
+## [2026-10-21] synthesize | 1 sessions across 1 projects
+- Processed: 1 doc
+- Created: competitor-landscape

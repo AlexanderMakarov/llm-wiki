@@ -4,7 +4,7 @@ type: entity
 status: candidate
 tags: []
 sources: [2026-06-30-pagination-cursors, 2026-09-03-request-id-logging, 2026-09-29-schema-migration-safety]
-last_updated: 2026-10-01
+last_updated: 2026-10-21
 ---
 
 # trailhead-api

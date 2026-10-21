@@ -22,18 +22,17 @@ The original ticket assumed the page had already been removed. That removal neve
      - [ ] Given the competitor landscape page after this change, when a reader checks the multi-agent and runtime rows / positioning bullets, then they match the product’s current adapter set and Python/`markdown` dependency baseline (not the old “six agents” / “3.9+ zero deps” claims).
      - [ ] Given the documentation index, when a reader looks for Competitor landscape, then the link is present and opens the updated page.
 
-2. **The comparison table holds only the closest, still-active peers. Other live tools get a short note under the table. Stale tools leave the page.**
+2. **The comparison table is tools that persist memory for agents. Lookalikes that only build a wiki a person reads stay under the table. Stale tools leave the page.**
    - “Still active” means a public product change in the last month (checked 2026-10-21; window from 2026-09-21).
-   - The table is a function grid. Each row is a capability. Each column is a tool: this project, [lucasastorian/llmwiki](https://github.com/lucasastorian/llmwiki), and the [Karpathy LLM Wiki Obsidian plugin](https://community.obsidian.md/plugins/karpathywiki). A reader can see, row by row, what each tool takes in, what it produces, and where they use it.
-   - Because the other project is also named llmwiki, the column heading names the author (lucasastorian) so the two columns are not confused. That heading is not a substitute for the function rows.
-   - Under the table, one short functional paragraph each for tools that are active but solve a different job: [mem0](https://github.com/mem0ai/mem0), [agentmemory](https://github.com/rohitg00/agentmemory), and [TencentDB Agent Memory](https://github.com/TencentCloud/TencentDB-Agent-Memory). Each paragraph says what function that tool provides (who remembers what, and for whom) and how that differs from compiling a wiki a person browses. No second feature grid.
-   - Rewind / Limitless and Pieces are removed. Rewind’s screen recorder was shut down in December 2025. Pieces’ last listed product update is May 2026. The “manual notes” column is removed; a single sentence under “when this is not the right tool” may still say that writing notes by hand is enough when there are few sessions.
-   - Claims stay at product shape. Marketing numbers from those projects’ READMEs are not copied in as facts.
+   - Columns: this project, [agentmemory](https://github.com/rohitg00/agentmemory), [mem0](https://github.com/mem0ai/mem0), [TencentDB Agent Memory](https://github.com/TencentCloud/TencentDB-Agent-Memory).
+   - Rows, in order: Output for agents, Context impact, Output for humans, Agent coverage, KB sources, KB layers, Query features, Automation cadence, Resources usage, Tokens cost, Observability. Cells use the same shape across columns. Agent coverage leads with a digit except mem0 (any agent that calls `add` / `search`). KB layers are each tool’s own terms in one bracket list. No star counts or benchmark claims.
+   - Under the table, [lucasastorian/llmwiki](https://github.com/lucasastorian/llmwiki) and the [Karpathy LLM Wiki Obsidian plugin](https://community.obsidian.md/plugins/karpathywiki) are named as the same shape with a different job: they do not ingest coding-agent session stores.
+   - Rewind / Limitless and Pieces are removed. The manual-notes column is removed; a single sentence under “when this is not the right tool” may still say that writing notes by hand is enough when there are few sessions.
    - **Acceptance Criteria:**
-     - [ ] Given the comparison table, when a reader lists the columns, then they are this project, lucasastorian/llmwiki, and the Obsidian Karpathy LLM Wiki plugin — and not Rewind, Pieces, mem0, agentmemory, or TencentDB.
-     - [ ] Given the page below that table, when a reader looks for mem0, agentmemory, and TencentDB Agent Memory, then each has a short description and a link, and none of them has a column in the table.
+     - [ ] Given the comparison table, when a reader lists the columns, then they are this project, agentmemory, mem0, and TencentDB Agent Memory — and not Rewind, Pieces, lucasastorian/llmwiki, or the Obsidian plugin.
+     - [ ] Given the table, when a reader lists the rows top to bottom, then they are the eleven functions named above, in that order.
+     - [ ] Given the page below the table, when a reader looks for lucasastorian/llmwiki and the Obsidian plugin, then each is described as a wiki a person reads, not as a column.
      - [ ] Given the page, when a reader searches for Rewind, Limitless, or Pieces, then those products are not presented as current alternatives.
-     - [ ] Given the lucasastorian column, when a reader compares it with this project’s column, then at least the rows for inputs, output, where you read it, and what runs it differ in substance — the heading alone is not the comparison.
 
 3. **The example vault mirrors the updated page.**
    - After a demo refresh driven by the docs change, the example vault’s raw competitor parts and derived wiki pages reflect the updated content (or are regenerated consistently from it).
@@ -51,7 +50,7 @@ The original ticket assumed the page had already been removed. That removal neve
 
 ### In-Scope
 
-- Updating `docs/competitor-landscape.md`: refresh our own facts; comparison table is this project plus lucasastorian/llmwiki and the Obsidian Karpathy LLM Wiki plugin; short notes under the table for mem0, agentmemory, and TencentDB Agent Memory; drop Rewind/Limitless, Pieces, and the manual-notes column.
+- Updating `docs/competitor-landscape.md`: refresh our own facts; comparison table is this project, agentmemory, mem0, and TencentDB Agent Memory on the eleven function rows; lucasastorian/llmwiki and the Obsidian plugin stay under the table; drop Rewind/Limitless, Pieces, and the manual-notes column.
 - Keeping the docs-index link to that page.
 - Refreshing the example vault so competitor raw/wiki material matches the updated doc.
 - Updating the getting-started sync path hint to flat session naming.

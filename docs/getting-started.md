@@ -106,7 +106,7 @@ zsh — `~/.zshrc`:
 With `vault.default_path` set (step 2 above), these all read and write the vault, not the clone:
 
 ```bash
-llmwiki sync     # pull new sessions from your agent store → <vault>/raw/sessions/<project>/*.md
+llmwiki sync     # pull new sessions from your agent store → <vault>/raw/sessions/*.md
 llmwiki synth    # fill wiki/sources/ and harvest wiki/candidates/ (then review)
 llmwiki build    # compile <vault>/raw/ + <vault>/wiki/ → <vault>/site/
 ```

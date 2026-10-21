@@ -3,8 +3,8 @@ title: "MCP Server"
 type: concept
 status: candidate
 tags: []
-sources: [2026-09-28-configuration-reference-05, 2026-09-28-configuration-reference-06, 2026-09-28-configuration-02, 2026-09-28-configuration-03, 2026-09-28-feature-matrix-every-feature-across-the-15-prior-implementations-02, 2026-10-01-getting-started-02, 2026-10-01-llmwiki-documentation, 2026-09-08-mcp-server-tools, 2026-10-01-cli-reference-02, 2026-10-01-cli-reference-03, 2026-10-01-cli-reference-15, 2026-09-28-mcp-server-tool-reference-01, 2026-09-28-mcp-server-tool-reference-02, 2026-09-28-page-kinds-01, 2026-09-08-state-persistence, 2026-09-08-synthesis-cost-what-you-pay-per-page-and-why-01, 2026-09-08-synthesis-cost-what-you-pay-per-page-and-why-02, 2026-09-28-ui-reference-07, 2026-09-28-phase-1-25-research-report-02, 2026-09-28-upgrade-guide-01, 2026-09-28-upgrade-guide-04]
-last_updated: 2026-10-01
+sources: [2026-10-21-competitor-landscape, 2026-09-28-configuration-reference-05, 2026-09-28-configuration-reference-06, 2026-09-28-configuration-02, 2026-09-28-configuration-03, 2026-09-28-feature-matrix-every-feature-across-the-15-prior-implementations-02, 2026-10-01-llmwiki-documentation, 2026-09-08-mcp-server-tools, 2026-10-01-cli-reference-02, 2026-10-01-cli-reference-03, 2026-10-01-cli-reference-15, 2026-09-28-mcp-server-tool-reference-01, 2026-09-28-mcp-server-tool-reference-02, 2026-09-28-page-kinds-01, 2026-09-08-state-persistence, 2026-09-08-synthesis-cost-what-you-pay-per-page-and-why-01, 2026-09-08-synthesis-cost-what-you-pay-per-page-and-why-02, 2026-09-28-ui-reference-07, 2026-09-28-phase-1-25-research-report-02, 2026-09-28-upgrade-guide-01, 2026-09-28-upgrade-guide-04]
+last_updated: 2026-10-21
 ---
 
 # MCP Server
@@ -28,12 +28,12 @@ MCP exposure is part of the product surface area usually covered alongside CLI i
 Named by 21 source page(s), which is the evidence that
 justified this candidate:
 
+- [[2026-10-21-competitor-landscape]]
 - [[2026-09-28-configuration-reference-05]]
 - [[2026-09-28-configuration-reference-06]]
 - [[2026-09-28-configuration-02]]
 - [[2026-09-28-configuration-03]]
 - [[2026-09-28-feature-matrix-every-feature-across-the-15-prior-implementations-02]]
-- [[2026-10-01-getting-started-02]]
 - [[2026-10-01-llmwiki-documentation]]
 - [[2026-09-08-mcp-server-tools]]
 - [[2026-10-01-cli-reference-02]]

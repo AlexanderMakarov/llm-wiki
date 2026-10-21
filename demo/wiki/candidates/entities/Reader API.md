@@ -4,7 +4,7 @@ type: entity
 status: candidate
 tags: []
 sources: [2026-10-01-llmwiki-documentation, 2026-09-28-reader-api-contract-v1-2-preview-02, 2026-09-28-reader-api-contract-v1-2-preview-03, 2026-09-28-ui-reference-08]
-last_updated: 2026-10-01
+last_updated: 2026-10-21
 ---
 
 # Reader API

@@ -9,7 +9,7 @@ page without descending into a tree. -->
 ## Overview (1)
 - [Overview](overview.md)
 
-## Sources (165)
+## Sources (163)
 - [02 · First sync](sources/02-first-sync/2026-08-10-02-first-sync.md) — 02-first-sync · 2026-08-10
 - [04 · Use with Codex CLI](sources/04-use-with-codex-cli/2026-08-10-04-use-with-codex-cli.md) — 04-use-with-codex-cli · 2026-08-10
 - [05 · Query your wiki](sources/05-query-your-wiki/2026-08-10-05-query-your-wiki.md) — 05-query-your-wiki · 2026-08-10
@@ -31,8 +31,7 @@ page without descending into a tree. -->
 - [Command cheatsheet (part 1/2)](sources/cheatsheet/2026-09-28-command-cheatsheet-01.md) — cheatsheet · 2026-09-28
 - [Command cheatsheet (part 2/2: Adapters)](sources/cheatsheet/2026-09-28-command-cheatsheet-02.md) — cheatsheet · 2026-09-28
 - [Claude CLI synthesis backend](sources/claude-cli-synthesis-backend/2026-08-10-claude-cli-synthesis-backend.md) — claude-cli-synthesis-backend · 2026-08-10
-- [Competitor Landscape (part 1/2)](sources/competitor-landscape/2026-08-10-competitor-landscape-01.md) — competitor-landscape · 2026-08-10
-- [Competitor Landscape (part 2/2: When llmwiki is NOT the right tool)](sources/competitor-landscape/2026-08-10-competitor-landscape-02.md) — competitor-landscape · 2026-08-10
+- [Competitor Landscape](sources/competitor-landscape/2026-10-21-competitor-landscape.md) — competitor-landscape · 2026-10-21
 - [Configuration (part 1/3)](sources/configuration/2026-09-28-configuration-01.md) — configuration · 2026-09-28
 - [Configuration (part 2/3: Synthesis backend)](sources/configuration/2026-09-28-configuration-02.md) — configuration · 2026-09-28
 - [Configuration (part 3/3: CLI flags)](sources/configuration/2026-09-28-configuration-03.md) — configuration · 2026-09-28
@@ -64,8 +63,7 @@ page without descending into a tree. -->
 - [llmwiki Framework — Building an Agent-Native Dev Tool (part 2/3: Phase 3 — Structure)](sources/framework/2026-09-28-llmwiki-framework-building-an-agent-native-dev-tool-02.md) — framework · 2026-09-28
 - [llmwiki Framework — Building an Agent-Native Dev Tool (part 3/3: Phase 6.5 — Self-Demo (NEW))](sources/framework/2026-09-28-llmwiki-framework-building-an-agent-native-dev-tool-03.md) — framework · 2026-09-28
 - [Gemini CLI adapter](sources/gemini-cli-adapter/2026-08-10-gemini-cli-adapter.md) — gemini-cli-adapter · 2026-08-10
-- [Getting started (part 1/2)](sources/getting-started/2026-10-01-getting-started-01.md) — getting-started · 2026-10-01
-- [Getting started (part 2/2: Three commands after install)](sources/getting-started/2026-10-01-getting-started-02.md) — getting-started · 2026-10-01
+- [Getting started](sources/getting-started/2026-10-21-getting-started.md) — getting-started · 2026-10-21
 - [GitHub Copilot adapters](sources/github-copilot-adapters/2026-08-10-github-copilot-adapters.md) — github-copilot-adapters · 2026-08-10
 - [Comenzar (Getting started)](sources/i18n-es-getting-started/2026-09-08-comenzar-getting-started.md) — i18n-es-getting-started · 2026-09-08
 - [はじめに (Getting started)](sources/i18n-ja-getting-started/2026-09-08-getting-started.md) — i18n-ja-getting-started · 2026-09-08

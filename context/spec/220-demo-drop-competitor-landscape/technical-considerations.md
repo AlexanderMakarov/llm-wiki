@@ -35,37 +35,30 @@ Docs-only product change plus a standard demo corpus refresh. No `llmwiki/` runt
 
 Activity window: last public product change on or after **2026-09-21** (checked 2026-10-21). Write product shape only. Do not copy star counts, recall rates, or “#1” claims.
 
-**Table columns** — this project plus the two peers that also compile a Karpathy-style wiki a person reads. Replace the mem0 / Rewind / Pieces / manual-notes columns. Do not add a second table.
+**Table columns** — tools that persist memory for agents. Operator locked this on 2026-10-21 after rejecting a wiki-shaped table (lucasastorian and the Obsidian plugin do not ingest coding-agent session stores; the static site is observability, not the product). Do not add a second table.
 
-| Column heading | What the cells compare | Link |
+| Column | Link | Freshness |
 |---|---|---|
-| llmwiki | This repository. | — |
-| llmwiki (lucasastorian) | The other project’s functions, cell by cell. The author in the heading only stops the two “llmwiki” columns from looking like the same product. Pushed 2026-10-20. | https://github.com/lucasastorian/llmwiki |
-| Karpathy LLM Wiki (Obsidian) | The plugin’s functions, cell by cell (`karpathywiki`, repo `GD4AI/obsidian-llm-wiki`). Pushed 2026-10-21. | https://community.obsidian.md/plugins/karpathywiki |
+| llmwiki | this repository | — |
+| agentmemory | https://github.com/rohitg00/agentmemory | pushed 2026-10-20 |
+| mem0 | https://github.com/mem0ai/mem0 | pushed 2026-10-21 |
+| TencentDB Agent Memory | https://github.com/TencentCloud/TencentDB-Agent-Memory | pushed 2026-10-21 |
 
-**Function rows** (replace the old mem0 / Rewind / Pieces rows). Each cell is a concrete behavior, not “see their README”.
+**Function rows**, in this order. Cells use the same sentence shape across columns. Write each tool’s own terms. Do not copy star counts or benchmark claims.
 
-| Row | This project | llmwiki (lucasastorian) | Karpathy LLM Wiki (Obsidian) |
-|---|---|---|---|
-| What it compiles | Coding-agent session transcripts, plus docs you add | Documents, web clips, highlights, Office/PDF uploads | Notes and files already in an Obsidian vault (markdown, PDF, images, Office) |
-| Where you read it | Static HTML site you open as files or publish | Next.js app (local loopback or llmwiki.app) | Inside Obsidian (wiki pages + side-panel query) |
-| How it stays current | `sync` / `synth` on the machine (you run it, or a scheduler) | Capture as you read; optional nightly Claude routine | Ingest from the plugin; query in the editor |
-| Runs without their cloud | Yes | Local mode is loopback-only; hosted app is optional | Plugin is local; an LLM provider can be local (Ollama) or a cloud API |
-| What you install | Python 3.12+ and the `markdown` package | Python and Node, plus a web app | Obsidian, then the community plugin, then an LLM provider |
-| Agent sessions | Adapters read Claude Code, Codex, Cursor, and the other README agents | MCP so Claude (and other MCP clients) can write the wiki; not a session-store compiler | No session-store sync; the vault is the source |
-| Graph / links | Wikilinks and a generated graph view | Cross-links and a graph viewer | Wikilinks, Obsidian’s graph, retrieval over those links (no vector database) |
+1. Output for agents — the channel. Whether anything is written into the prompt.
+2. Context impact — what sits in the agent context. llmwiki is the 6 MCP tool descriptions. The others inject a filtered slice, not the whole store.
+3. Output for humans.
+4. Agent coverage — digit first, then the names, except mem0 (any caller of `add` / `search`). Do not explain contrib versus core. TencentDB’s digit is 9, from its install guide on `feat/server_team`: Claude Code, CodeBuddy, WorkBuddy, Codex, DeepSeek Harness, OpenCode, Hermes, OpenClaw, Pi. The default-branch README only names OpenClaw and Hermes.
+5. KB sources — one bracket list.
+6. KB layers — one bracket list in that tool’s terms.
+7. Query features — one line, same length as the other columns.
+8. Automation cadence — llmwiki: OS scheduler (daily or hourly), `watch`, or hooks (hooks are brittle and not the default). Pull only.
+9. Resources usage — what stays running. Do not contrast another tool’s cost with “not a static site”.
+10. Tokens cost — whether the tool calls an LLM. llmwiki: no LLM for search, sync, or reading raw pages; LLM for `synth` and inner skills.
+11. Observability — how a person sees contents, freshness, and agent use.
 
-Keep one short “when to choose which” paragraph after the table for these three only. Drop rows that only existed to contrast Rewind or Pieces (screen recording, snippet manager, subscription price).
-
-**Under the table** — still not a second grid. Each paragraph names the function: mem0 stores and retrieves memories for an application over an API; agentmemory writes memory back into the next coding-agent session; TencentDB Agent Memory shares chat memory, skills, a wiki, and a code graph across a team through a proxy. Say that none of those three is a personal wiki you compile from session files and open as a static site.
-
-**Under the table** — one short paragraph and a link each. No columns, no feature grid.
-
-| Tool | Note | Freshness | Link |
-|---|---|---|---|
-| mem0 | Memory API for applications and agents, not a browsable wiki. | `mem0ai/mem0` pushed 2026-10-21 | https://github.com/mem0ai/mem0 |
-| agentmemory | Memory injected back into coding agents for the next session. | pushed 2026-10-20 | https://github.com/rohitg00/agentmemory |
-| TencentDB Agent Memory | Team memory service (chat memory, skills, an LLM wiki, a code graph) shared across agents through a proxy. | pushed 2026-10-21 | https://github.com/TencentCloud/TencentDB-Agent-Memory |
+**Under the table** — lucasastorian/llmwiki (https://github.com/lucasastorian/llmwiki, pushed 2026-10-20) and the Obsidian Karpathy LLM Wiki plugin (`karpathywiki`, https://community.obsidian.md/plugins/karpathywiki, pushed 2026-10-21). One short note each: they build a wiki a person reads and do not take coding-agent session stores.
 
 **Remove**
 

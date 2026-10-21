@@ -42,6 +42,9 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Changed
 
+- **Competitor landscape docs refreshed** — [`docs/competitor-landscape.md`](docs/competitor-landscape.md) compares this project with agentmemory, mem0, and TencentDB Agent Memory on output for agents and humans, context impact, token cost, agent coverage, KB sources and layers, query, automation cadence, resources, and observability. The other llmwiki and the Obsidian Karpathy LLM Wiki plugin stay under the table as lookalikes that do not read agent session stores. Rewind and Pieces are dropped as stale. [`docs/getting-started.md`](docs/getting-started.md) now points the sync path hint at flat `raw/sessions/*.md`.
+  - *Release note:* Docs only: competitor landscape compares this project, agentmemory, mem0, and TencentDB Agent Memory across eleven functions; getting started documents flat `raw/sessions/` sync output.
+
 - **CHANGELOG rule: follow-ups to unreleased work edit the existing entry** — CONTRIBUTING, the agent contributing rules (Claude and Cursor) and `REVIEW_CHECKLIST.md` now say that when a change touches something that exists only under `## [Unreleased]`, the existing entry is rewritten to the final behaviour instead of a new *Fixed* / *Changed* entry being added, so release notes describe what ships rather than the fixes in between.
   - *Release note:* Contributors: fixes to not-yet-released features update their existing CHANGELOG entry.
 

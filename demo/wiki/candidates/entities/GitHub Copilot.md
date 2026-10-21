@@ -3,8 +3,8 @@ title: "GitHub Copilot"
 type: entity
 status: candidate
 tags: []
-sources: [2026-09-28-configuration-reference-08, 2026-08-10-github-copilot-adapters, 2026-08-10-multi-agent-setup, 2026-09-08-setup-guide-your-first-llm-wiki-in-15-minutes-02]
-last_updated: 2026-10-01
+sources: [2026-10-21-competitor-landscape, 2026-09-28-configuration-reference-08, 2026-08-10-github-copilot-adapters, 2026-08-10-multi-agent-setup, 2026-09-08-setup-guide-your-first-llm-wiki-in-15-minutes-02]
+last_updated: 2026-10-21
 ---
 
 # GitHub Copilot
@@ -15,9 +15,10 @@ last_updated: 2026-10-01
 
 ## Connections
 
-Named by 4 source page(s), which is the evidence that
+Named by 5 source page(s), which is the evidence that
 justified this candidate:
 
+- [[2026-10-21-competitor-landscape]]
 - [[2026-09-28-configuration-reference-08]]
 - [[2026-08-10-github-copilot-adapters]]
 - [[2026-08-10-multi-agent-setup]]

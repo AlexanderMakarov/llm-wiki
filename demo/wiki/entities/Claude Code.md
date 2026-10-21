@@ -3,7 +3,7 @@ title: "Claude Code"
 type: entity
 status: reviewed
 tags: []
-sources: [2026-09-28-00-quickstart-walkthrough, 2026-09-28-03-use-with-claude-code, 2026-08-10-07-example-workflows, 2026-09-28-claude-code-adapter, 2026-10-01-cli-reference-02, 2026-09-28-feature-matrix-every-feature-across-the-15-prior-implementations-01, 2026-10-01-getting-started-02, 2026-06-03-adapter-registry-refactor, 2026-09-08-mcp-server-tools, 2026-09-28-llmwiki-framework-building-an-agent-native-dev-tool-03, 2026-08-10-llmwiki-roadmap-phase-layer-item-prioritised-04, 2026-09-28-mode-b-agent, 2026-08-10-multi-agent-setup]
+sources: [2026-09-28-00-quickstart-walkthrough, 2026-09-28-03-use-with-claude-code, 2026-08-10-07-example-workflows, 2026-09-28-claude-code-adapter, 2026-10-01-cli-reference-02, 2026-09-28-feature-matrix-every-feature-across-the-15-prior-implementations-01, 2026-10-21-getting-started, 2026-06-03-adapter-registry-refactor, 2026-09-08-mcp-server-tools, 2026-09-28-llmwiki-framework-building-an-agent-native-dev-tool-03, 2026-08-10-llmwiki-roadmap-phase-layer-item-prioritised-04, 2026-09-28-mode-b-agent, 2026-08-10-multi-agent-setup]
 last_updated: 2026-08-12
 ---
 
@@ -14,7 +14,7 @@ last_updated: 2026-08-12
 - Creates `.jsonl` format session files that `llm-wiki` ingests as its primary data source. [[2026-09-28-feature-matrix-every-feature-across-the-15-prior-implementations-01]]
 - An IDE with native support for automatic caller attribution via `CLAUDE_PROJECT_DIR` environment variable injection (v2.1.139+). [[2026-10-01-cli-reference-02]]
 - Serves as a core adapter in `llm-wiki` that auto-detects sessions on every sync without requiring explicit configuration. [[2026-06-03-adapter-registry-refactor]]
-- Provides the `SessionStart` hook mechanism for optional auto-sync of sessions upon IDE startup. [[2026-10-01-getting-started-02]]
+- Provides the `SessionStart` hook mechanism for optional auto-sync of sessions upon IDE startup. [[2026-10-21-getting-started]]
 - Functions as an MCP client capable of consuming MCP-based services. [[2026-09-08-mcp-server-tools]]
 
 ## Connections
@@ -28,7 +28,7 @@ justified this candidate:
 - [[2026-09-28-claude-code-adapter]]
 - [[2026-10-01-cli-reference-02]]
 - [[2026-09-28-feature-matrix-every-feature-across-the-15-prior-implementations-01]]
-- [[2026-10-01-getting-started-02]]
+- [[2026-10-21-getting-started]]
 - [[2026-06-03-adapter-registry-refactor]]
 - [[2026-09-08-mcp-server-tools]]
 - [[2026-09-28-llmwiki-framework-building-an-agent-native-dev-tool-03]]

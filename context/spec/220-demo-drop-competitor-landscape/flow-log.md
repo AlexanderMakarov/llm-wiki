@@ -43,4 +43,30 @@
 
 ## specs (tasks — no approval gate)
 - Wrote `tasks.md`: Slice 1 docs+changelog, Slice 2 demo refresh, Slice 3 existing-suite regression (no new prose-only test, per approved tech spec). QA agent `testing-expert` is hired, so no hire question.
-- Next: commit specs, then `/awos:implement`
+- Specs committed `b084dda` on `feat/220-demo-drop-competitor-landscape` (branch was already 3 behind `origin/main`; rebase before PR)
+- Next: `/awos:implement`
+
+## implement
+- Slice 1 done: `docs/competitor-landscape.md` function grid; getting-started flat path; CHANGELOG under `### Changed` (first draft had landed under Added; moved)
+- Slice 2: `refresh_demo.py --dry-run` listed competitor-landscape remove→add **plus 14 other docs** already stale vs `demo/.demo-source-rev` (pin `c8d74d4`, unrelated to this issue). Did **not** run the full refresh and did **not** advance the pin (that would hide those other stale docs). Scoped `remove` + `add` + `synth --docs-only --path` to `competitor-landscape` and `getting-started` only. Repointed three leftover wikilinks (Obsidian, Claude Code, CLAUDE.md candidate) at the new single-file source pages. `lint --rules link_integrity,orphan_detection,index_sync` on `demo`: 0 issues. Deleted an empty untracked `demo/wiki/archive/candidates/dismissals.json` so it is not committed.
+- Worktree `config.json` has `synthesis.backend=claude` and throwaway `vault.default_path`; live vault path scrubbed. Not committed (gitignored).
+- Next: slice 3 pytest, then `/awos:verify` and smoke confirm before review/commit of the product diff
+
+## verify
+- Operator accepted the comparison page (lgtm, 2026-10-21) after the eleven-row grid.
+- Specs rewritten to that grid (functional requirement 2, technical comparison layout).
+- Demo competitor-landscape removed and re-added, then `synth --docs-only --path`. Lint `link_integrity,orphan_detection,index_sync`: 0 issues. Search baseline test passed. `.demo-source-rev` not advanced.
+- Next: local review
+
+## local-review
+- Review file: `context/spec/220-demo-drop-competitor-landscape/review.md` (gitignored, not committed)
+- Verdict: Comment. Blockers 0. Nits 4.
+- Next: operator keep/drop per finding, then static gate, then commit. PR link keyword to decide at commit: `Closes #220` if the corrected delivery (page kept and refreshed, demo consistent, flat path hint) completes the issue; the ticket’s “already removed” premise is false and should be noted in the PR summary.
+
+## keep-drop
+- Operator: keep all four nits.
+- N3 correction from the operator: TencentDB does cover Claude Code. Count is 9 named clients from `feat/server_team` INSTALL.md (Claude Code, CodeBuddy, WorkBuddy, Codex, DeepSeek Harness, OpenCode, Hermes, OpenClaw, Pi). The Chinese `agents/README.md` lists 7 of those and omits OpenCode and Pi. Applied the install-guide list. Demo competitor page re-synthesized. Empty `dismissals.json` removed. Stray gitignored `wiki/` at the worktree root removed (it failed `test_demo_is_a_self_contained_vault`).
+- Changelog bullet moved into the existing `[Unreleased]` `### Changed` section. Release note names the eleven functions and the four columns. Slice 1 task text rewritten to the locked grid.
+- Static gate: `ruff check llmwiki tests scripts` passed. Full pytest failed only `test_demo_is_a_self_contained_vault` (stray `wiki/`) and `test_add_dry_run_local_md` (state mtime raced with a parallel demo build). Both re-run green after removing `wiki/` and with no parallel build.
+- Issue link: `Closes #220`. The issue asked to drop a page that was never removed. The author chose keep-and-update. This PR delivers that: current comparison, demo copy in sync, flat getting-started path. The false “already removed” premise is in the PR summary.
+- Next: commit, rebase onto origin/main, push, PR, CI. Do not merge until the operator says so.
