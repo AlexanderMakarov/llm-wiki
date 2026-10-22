@@ -327,6 +327,13 @@ def test_area_l_messages_and_symptoms_match_their_entry(text: str, expected_id: 
     assert result.method == "pattern"
 
 
+def test_generic_schedule_phrases_do_not_match_area_l() -> None:
+    elsewhere = match_symptom("the lint said not this vault")
+    assert elsewhere.entry is None or elsewhere.entry["id"] != "automation.points_elsewhere"
+    stale = match_symptom("the deploy log says last run was 2 hours ago")
+    assert stale.entry is None or stale.entry["id"] != "automation.stale_run"
+
+
 def test_install_automation_setup_text_does_not_match_not_active() -> None:
     result = match_symptom(
         "Skipped install-automation — no scheduler files or automation status written."

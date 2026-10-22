@@ -100,9 +100,9 @@ def plan_command(
     lets callers and tests compare the result as an exact string.
 
     ``vault`` names the vault the scheduled run must operate on, appended as a
-    trailing ``--vault``. Pass it only when the job targets a vault other than
-    the one ``vault.default_path`` resolves to; leaving it ``None`` emits the
-    command unchanged and lets the run read its vault from config.
+    trailing ``--vault``. ``install-automation`` always passes the resolved
+    target vault. ``None`` remains only for a direct caller or a test, and then
+    the command is unchanged so the run reads its vault from config.
     """
     py = shlex.quote(python_bin)
     root = shlex.quote(str(working_dir))

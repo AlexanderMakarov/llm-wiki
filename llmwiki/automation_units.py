@@ -202,6 +202,63 @@ def _strip_quotes(value: str) -> str:
     return value
 
 
+def _anchored_vault(vault: Path, working_dir: Path | None) -> Path:
+    """Absolute vault path: ``~`` expanded, a relative path taken against the checkout."""
+    expanded = vault.expanduser()
+    if expanded.is_absolute() or working_dir is None:
+        return expanded
+    return working_dir / expanded
+
+
+def _unit_files(directory: Path, exact: str, prefixed: str) -> list[Path]:
+    """Files named ``exact`` or matching ``prefixed``, not a longer shared prefix."""
+    if not directory.is_dir():
+        return []
+    found = set(directory.glob(exact))
+    found.update(directory.glob(prefixed))
+    return sorted(found)
+
+
+def _is_our_windows_task(full_name: str) -> bool:
+    """``\\llmwiki-maintain`` or ``\\llmwiki-maintain-<id>``, not ``\\llmwiki-maintainer``."""
+    legacy = f"\\{LEGACY_SYSTEMD}"
+    return full_name == legacy or full_name.startswith(f"{legacy}-")
+
+
+def _expected_wrapper_name(unit: InstalledUnit) -> str:
+    """Basename of the wrapper ``install-automation`` writes for ``unit``.
+
+    Linux and Windows name it ``<unit name>.sh``. A macOS label is
+    ``com.llmwiki.maintain`` or ``com.llmwiki.maintain.<id>``; the script beside
+    the plist is still ``llmwiki-maintain.sh`` or ``llmwiki-maintain-<id>.sh``.
+    """
+    if unit.platform == "macos" and (
+        unit.name == LEGACY_LAUNCHD or unit.name.startswith(f"{LEGACY_LAUNCHD}.")
+    ):
+        ident = unit.name[len(LEGACY_LAUNCHD) + 1 :]
+        base = f"{LEGACY_SYSTEMD}-{ident}" if ident else LEGACY_SYSTEMD
+        return f"{base}.sh"
+    return f"{unit.name}.sh"
+
+
+def _wrapper_owned(unit: InstalledUnit, directory: Path) -> bool:
+    """True when the recorded wrapper is this unit's script, directly inside ``directory``."""
+    wrapper = unit.wrapper_path
+    if wrapper is None or wrapper.name != _expected_wrapper_name(unit):
+        return False
+    try:
+        return wrapper.resolve().parent == Path(directory).resolve()
+    except OSError:
+        return False
+
+
+def _foreign_wrapper_note(unit: InstalledUnit, directory: Path) -> str | None:
+    """Error text when ``unit`` records a wrapper this deactivation must not delete."""
+    if unit.wrapper_path is None or _wrapper_owned(unit, directory):
+        return None
+    return f"left {unit.wrapper_path} in place; remove it by hand"
+
+
 def _checkout_target(working_dir: Path) -> tuple[Path | None, str | None]:
     """Vault a wrapper without ``--vault`` resolves when it runs from ``working_dir``."""
     if not working_dir.is_dir():
@@ -240,6 +297,10 @@ def _build_unit(
                 reason = f"wrapper {wrapper_path.name} runs no llmwiki command"
     working_dir = (parsed.working_dir if parsed else None) or unit_working_dir
     target: Path | None = parsed.vault if parsed else None
+    if target is not None:
+        # A relative --vault (older installs wrote ``demo``, not an absolute path)
+        # is resolved from the wrapper's checkout, the same way the job itself runs.
+        target = _anchored_vault(target, working_dir)
     if parsed is not None and target is None:
         if working_dir is None:
             reason = f"wrapper {wrapper_path.name if wrapper_path else name} names no checkout"
@@ -280,7 +341,7 @@ def _discover_linux(home: Path, run: SchedulerRun, probe: bool) -> DiscoveryResu
     units: list[InstalledUnit] = []
     unavailable: str | None = None
     unit_dir = home / ".config" / "systemd" / "user"
-    for service in sorted(unit_dir.glob(f"{LEGACY_SYSTEMD}*.service")):
+    for service in _unit_files(unit_dir, f"{LEGACY_SYSTEMD}.service", f"{LEGACY_SYSTEMD}-*.service"):
         name = service.stem
         enabled: bool | None = None
         if probe and unavailable is None:
@@ -319,7 +380,7 @@ def _discover_macos(home: Path, run: SchedulerRun, uid: int | None, probe: bool)
     unavailable: str | None = None
     domain_uid = os.getuid() if uid is None else uid
     agents = home / "Library" / "LaunchAgents"
-    for plist_file in sorted(agents.glob(f"{LEGACY_LAUNCHD}*.plist")):
+    for plist_file in _unit_files(agents, f"{LEGACY_LAUNCHD}.plist", f"{LEGACY_LAUNCHD}.*.plist"):
         try:
             with plist_file.open("rb") as fh:
                 data = plistlib.load(fh)
@@ -368,17 +429,31 @@ def _discover_macos(home: Path, run: SchedulerRun, uid: int | None, probe: bool)
     return DiscoveryResult(units=tuple(units), unavailable=unavailable)
 
 
-def _task_fields(xml_text: str) -> tuple[Path | None, Path | None]:
-    """``(wrapper, WorkingDirectory)`` from ``schtasks /Query /XML`` output."""
+def _settings_enabled(root: ET.Element) -> bool | None:
+    """``Settings/Enabled`` from task XML, or ``None`` when that element is absent.
+
+    The CSV ``Status`` column is localized, so a disabled task on a non-English
+    Windows does not say ``Disabled``. ``Settings/Enabled`` is ``true`` / ``false``.
+    """
+    text = root.findtext("t:Settings/t:Enabled", default="", namespaces=_TASK_NS)
+    if text is None or not text.strip():
+        return None
+    return text.strip().casefold() == "true"
+
+
+def _task_fields(xml_text: str) -> tuple[Path | None, Path | None, bool | None]:
+    """``(wrapper, WorkingDirectory, enabled)`` from ``schtasks /Query /XML`` output."""
     root = ET.fromstring(_XML_DECL.sub("", xml_text, count=1))
+    enabled = _settings_enabled(root)
     exec_el = root.find("t:Actions/t:Exec", _TASK_NS)
     if exec_el is None:
-        return None, None
+        return None, None, enabled
     arguments = exec_el.findtext("t:Arguments", default="", namespaces=_TASK_NS).strip()
     working = exec_el.findtext("t:WorkingDirectory", default="", namespaces=_TASK_NS).strip()
     return (
         Path(_strip_quotes(arguments)) if arguments else None,
         Path(_strip_quotes(working)) if working else None,
+        enabled,
     )
 
 
@@ -392,7 +467,7 @@ def _discover_windows(run: SchedulerRun) -> DiscoveryResult:
         return DiscoveryResult(units=(), unavailable=f"schtasks /Query failed: {detail}")
     states: dict[str, str] = {}
     for row in csv.reader(io.StringIO(listing.stdout)):
-        if row and row[0].startswith(f"\\{LEGACY_SYSTEMD}"):
+        if row and _is_our_windows_task(row[0]):
             states.setdefault(row[0], row[2] if len(row) > 2 else "")
     units: list[InstalledUnit] = []
     for full_name, state in states.items():
@@ -406,12 +481,13 @@ def _discover_windows(run: SchedulerRun) -> DiscoveryResult:
                 units=tuple(units), unavailable=f"schtasks /Query /TN {full_name} failed: {detail}"
             )
         try:
-            wrapper, working_dir = _task_fields(proc.stdout)
+            wrapper, working_dir, xml_enabled = _task_fields(proc.stdout)
         except ET.ParseError as exc:
             return DiscoveryResult(
                 units=tuple(units), unavailable=f"task {full_name} XML does not parse: {exc}"
             )
         name = full_name.lstrip("\\")
+        enabled = xml_enabled if xml_enabled is not None else state.strip().lower() != "disabled"
         units.append(
             _build_unit(
                 name=name,
@@ -419,7 +495,7 @@ def _discover_windows(run: SchedulerRun) -> DiscoveryResult:
                 legacy=name == LEGACY_SYSTEMD,
                 wrapper_path=wrapper,
                 unit_working_dir=working_dir,
-                enabled=state.strip().lower() != "disabled",
+                enabled=enabled,
             )
         )
     return DiscoveryResult(units=tuple(units), unavailable=None)
@@ -530,10 +606,13 @@ def deactivate_unit(
 
     systemd: ``disable --now`` the timer, remove ``<name>.sh/.service/.timer`` from
     the user unit dir, then ``daemon-reload``. launchd: ``bootout`` the label (a job
-    that is not loaded counts as done), then remove ``<label>.plist`` and the wrapper.
-    Windows: ``schtasks /Delete`` the task, then remove the wrapper and the
-    ``<name>-task.xml`` beside it. Files already gone are not errors; a failed
-    command stops before any file is removed.
+    that is not loaded counts as done), then remove ``<label>.plist`` and the wrapper
+    when it is the ``llmwiki-maintain[-<id>].sh`` script inside LaunchAgents. Windows:
+    ``schtasks /Delete`` the
+    task, then remove the wrapper only when it is ``<name>.sh`` beside its task XML
+    or in the staging directory, plus that task XML. A wrapper outside those places
+    is left on disk and named in the returned error. Files already gone are not
+    errors; a failed command stops before any file is removed.
     """
     try:
         if unit.platform == "linux":
@@ -557,9 +636,11 @@ def deactivate_unit(
             if proc.returncode != 0 and not any(text in output for text in _LAUNCHD_NOT_LOADED):
                 return _cmd_error(args, proc)
             paths = [agents / f"{unit.name}.plist"]
-            if unit.wrapper_path is not None:
+            note = _foreign_wrapper_note(unit, agents)
+            if unit.wrapper_path is not None and note is None:
                 paths.append(unit.wrapper_path)
-            return _unlink_all(paths)
+            error = _unlink_all(paths)
+            return error or note
         if unit.platform == "windows":
             args = ["schtasks", "/Delete", "/TN", unit.name, "/F"]
             proc = run(args)
@@ -567,7 +648,14 @@ def deactivate_unit(
                 return _cmd_error(args, proc)
             if unit.wrapper_path is None:
                 return None
-            return _unlink_all([unit.wrapper_path, unit.wrapper_path.parent / f"{unit.name}-task.xml"])
+            # Staging dir matches ``default_staging_units_dir`` (~/.automation).
+            staging = Path.home() / ".automation"
+            beside_xml = unit.wrapper_path.parent / f"{unit.name}-task.xml"
+            allowed = unit.wrapper_path.parent if beside_xml.is_file() else staging
+            note = _foreign_wrapper_note(unit, allowed)
+            if note is not None:
+                return note
+            return _unlink_all([unit.wrapper_path, beside_xml])
     except OSError as exc:
         return f"scheduler command could not run: {exc}"
     return f"unsupported platform: {unit.platform}"

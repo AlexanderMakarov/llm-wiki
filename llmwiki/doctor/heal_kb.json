@@ -333,7 +333,7 @@
       "area": "L",
       "patterns": [
         "automation.points_elsewhere",
-        "not this vault",
+        "re:schedule .+ serves vault",
         "schedule points at another vault"
       ],
       "message": "The installed schedule for this vault serves a different vault.",
@@ -410,7 +410,7 @@
         "automation.stale_run",
         "automation not running",
         "has not run since",
-        "last run was"
+        "re:automation job .+ last run was"
       ],
       "message": "This vault's schedule is installed but has not completed a run recently.",
       "fix": "Read the run log, then set this vault's schedule up again with llmwiki install-automation --vault <vault> (doctor shows the exact command and asks first).",
@@ -539,36 +539,9 @@
   "matcher": {
     "min_lexical_score": 0.45,
     "stopwords": [
-      "the",
-      "a",
-      "an",
-      "is",
-      "are",
-      "was",
-      "were",
-      "to",
-      "of",
-      "and",
-      "or",
-      "in",
-      "on",
-      "for",
-      "with",
-      "this",
-      "that",
-      "it",
-      "be",
-      "as",
-      "at",
-      "by",
-      "from",
-      "not",
-      "no",
-      "yes",
-      "error",
-      "failed",
-      "fail",
-      "warning"
+      "the", "a", "an", "is", "are", "was", "were", "to", "of", "and", "or",
+      "in", "on", "for", "with", "this", "that", "it", "be", "as", "at",
+      "by", "from", "not", "no", "yes", "error", "failed", "fail", "warning"
     ]
   }
 }

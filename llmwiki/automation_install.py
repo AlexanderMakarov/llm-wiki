@@ -229,9 +229,9 @@ def render_wrapper_script(
     The log ends with ``EXIT:<code>`` carrying the command's real exit code,
     and the wrapper exits with that same code so the scheduler sees it.
 
-    ``vault`` is forwarded to :func:`~llmwiki.automation_plan.plan_command`, which
-    appends it as ``--vault`` when the scheduled run must not resolve its vault
-    from config.
+    ``vault`` is forwarded to :func:`~llmwiki.automation_plan.plan_command`.
+    Install always passes the resolved target vault; ``None`` remains only for
+    a direct caller or a test.
     """
     cmd = plan_command(plan, python_bin=python_bin, working_dir=working_dir, vault=vault)
     log = shlex.quote(str(log_path))

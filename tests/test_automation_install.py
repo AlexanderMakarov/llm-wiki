@@ -44,8 +44,10 @@ from llmwiki.automation_units import (
     DiscoveryResult,
     InstalledUnit,
     WrapperCommand,
+    deactivate_unit,
     discover_units,
     is_dev_checkout,
+    legacy_unit_serving,
     parse_wrapper,
     removal_steps,
     unit_for_vault,
@@ -56,6 +58,7 @@ from llmwiki.build import render_automation_panel
 from llmwiki.claude_path import resolve_claude_path
 from llmwiki.config_schedule import default_vault_for_checkout
 from llmwiki.cron_spec import parse_cron
+from llmwiki.doctor.checks import _orphan_finding
 from llmwiki.install_hint import pip_install_command
 
 DAILY = parse_cron("0 8 * * *")
@@ -1388,6 +1391,132 @@ def test_windows_query_failures_are_unavailable(tmp_path: Path, broken: str):
 def test_windows_without_schtasks_is_unavailable(tmp_path: Path):
     result = discover_units("windows", home=tmp_path, run=_missing_binary)
     assert result.unavailable and result.units == ()
+
+
+def test_relative_vault_in_a_legacy_wrapper_is_anchored_to_its_checkout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """``--vault demo`` is the checkout's demo/, not a folder named demo in the doctor's cwd."""
+    home = tmp_path / "home"
+    checkout = tmp_path / "checkout"
+    demo = checkout / "demo"
+    demo.mkdir(parents=True)
+    _systemd_unit(home, LEGACY_SYSTEMD, working_dir=checkout, log=tmp_path / "l.log", vault=Path("demo"))
+    monkeypatch.chdir(tmp_path)
+    run = _fake_run({_is_enabled(LEGACY_SYSTEMD): (0, "enabled\n", "")})
+
+    (unit,) = discover_units("linux", home=home, run=run).units
+
+    assert unit.target_vault == checkout / "demo"
+    discovery = DiscoveryResult((unit,), None)
+    assert _orphan_finding(discovery) is None
+    assert legacy_unit_serving(checkout / "demo", discovery) is unit
+
+
+def test_discovery_skips_names_that_only_share_the_maintain_prefix(tmp_path: Path):
+    home = tmp_path / "home"
+    checkout = tmp_path / "co"
+    checkout.mkdir()
+    vault = tmp_path / "vault"
+    _systemd_unit(home, LEGACY_SYSTEMD, working_dir=checkout, log=tmp_path / "l.log", vault=vault)
+    unit_dir = home / ".config" / "systemd" / "user"
+    (unit_dir / "llmwiki-maintainer.service").write_text("[Service]\nExecStart=/bin/true\n", encoding="utf-8")
+    linux = discover_units(
+        "linux", home=home, run=_fake_run({_is_enabled(LEGACY_SYSTEMD): (0, "enabled\n", "")})
+    )
+    assert [unit.name for unit in linux.units] == [LEGACY_SYSTEMD]
+
+    _launch_agent(home, vault, label=LEGACY_LAUNCHD, log=tmp_path / "m.log")
+    agents = home / "Library" / "LaunchAgents"
+    (agents / "com.llmwiki.maintainer.plist").write_text("<plist/>", encoding="utf-8")
+    mac = discover_units(
+        "macos",
+        home=home,
+        run=_fake_run({("launchctl", "print", f"gui/7/{LEGACY_LAUNCHD}"): (0, "", "")}),
+        uid=7,
+    )
+    assert [unit.name for unit in mac.units] == [LEGACY_LAUNCHD]
+
+    responses, name, _wrapper = _task_answers(tmp_path, vault)
+    listing_key = ("schtasks", "/Query", "/FO", "CSV", "/NH")
+    rc, listing, err = responses[listing_key]
+    responses[listing_key] = (rc, listing + '"\\llmwiki-maintainer","N/A","Ready"\r\n', err)
+    windows = discover_units("windows", home=home, run=_fake_run(responses))
+    assert [unit.name for unit in windows.units] == [name]
+
+
+def test_windows_enabled_comes_from_task_xml_not_the_localized_status(tmp_path: Path):
+    vault = tmp_path / "vault"
+    responses, _name, _wrapper = _task_answers(tmp_path, vault)
+    xml_key = next(key for key in responses if key[:3] == ("schtasks", "/Query", "/TN"))
+    _rc, xml, _err = responses[xml_key]
+    xml = xml.replace(
+        "  <Actions>",
+        "  <Settings>\n    <Enabled>false</Enabled>\n  </Settings>\n  <Actions>",
+        1,
+    )
+    responses[xml_key] = (0, xml, "")
+    listing_key = ("schtasks", "/Query", "/FO", "CSV", "/NH")
+    rc, listing, err = responses[listing_key]
+    responses[listing_key] = (rc, listing.replace("Ready", "Prêt"), err)
+
+    (unit,) = discover_units("windows", home=tmp_path, run=_fake_run(responses)).units
+
+    assert unit.enabled is False
+
+
+def test_deactivation_leaves_a_wrapper_that_is_not_this_units_script(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    agents = tmp_path / "Library" / "LaunchAgents"
+    agents.mkdir(parents=True)
+    own = agents / f"{LEGACY_SYSTEMD}.sh"
+    own.write_text("#!/bin/sh\n", encoding="utf-8")
+    plist = agents / f"{LEGACY_LAUNCHD}.plist"
+    plist.write_text("plist", encoding="utf-8")
+    foreign = tmp_path / "elsewhere" / "other.sh"
+    foreign.parent.mkdir()
+    foreign.write_text("keep", encoding="utf-8")
+    bootout = ("launchctl", "bootout", "gui/7", LEGACY_LAUNCHD)
+
+    owned = replace(
+        _unit(LEGACY_LAUNCHD, legacy=True),
+        platform="macos",
+        wrapper_path=own,
+    )
+    assert deactivate_unit(owned, home=tmp_path, run=_fake_run({bootout: (0, "", "")}), uid=7) is None
+    assert not own.exists() and not plist.exists()
+
+    plist.write_text("plist", encoding="utf-8")
+    stray = replace(owned, wrapper_path=foreign)
+    note = deactivate_unit(stray, home=tmp_path, run=_fake_run({bootout: (0, "", "")}), uid=7)
+    assert foreign.read_text(encoding="utf-8") == "keep"
+    assert note is not None and str(foreign) in note
+    assert not plist.exists()
+
+    staging = tmp_path / ".automation"
+    staging.mkdir()
+    win_wrapper = staging / f"{LEGACY_SYSTEMD}.sh"
+    win_wrapper.write_text("#!/bin/sh\n", encoding="utf-8")
+    task_xml = staging / f"{LEGACY_SYSTEMD}-task.xml"
+    task_xml.write_text("<Task/>", encoding="utf-8")
+    delete = ("schtasks", "/Delete", "/TN", LEGACY_SYSTEMD, "/F")
+    windows = replace(
+        _unit(LEGACY_SYSTEMD, legacy=True),
+        platform="windows",
+        wrapper_path=win_wrapper,
+    )
+    assert deactivate_unit(windows, home=tmp_path, run=_fake_run({delete: (0, "", "")})) is None
+    assert not win_wrapper.exists() and not task_xml.exists()
+
+    alien = tmp_path / "alien" / "payload.sh"
+    alien.parent.mkdir()
+    alien.write_text("keep", encoding="utf-8")
+    planted = replace(windows, wrapper_path=alien)
+    note = deactivate_unit(planted, home=tmp_path, run=_fake_run({delete: (0, "", "")}))
+    assert alien.read_text(encoding="utf-8") == "keep"
+    assert note is not None and str(alien) in note
 
 
 def test_unknown_platform_is_unavailable(tmp_path: Path):
