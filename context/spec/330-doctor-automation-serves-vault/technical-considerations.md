@@ -1,7 +1,7 @@
 # Technical Specification: Doctor detects scheduled maintenance that no longer serves this vault
 
 - **Functional Specification:** [functional-spec.md](functional-spec.md)
-- **Status:** Approved
+- **Status:** Completed
 - **Author(s):** 4ellendger
 
 ---

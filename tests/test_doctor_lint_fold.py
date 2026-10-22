@@ -12,6 +12,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from llmwiki.automation_status import save_status
 from llmwiki.doctor import DoctorMode, run_doctor
 from llmwiki.doctor.checks import (
     DETECTOR_IDS,
@@ -257,6 +258,36 @@ def test_pipeline_backlog_only_when_overdue(tmp_path: Path) -> None:
     findings = check_pipeline_backlog(vault, now=now, overdue_days=7)
     assert any(f.id == "pipeline.backlog_overdue" for f in findings)
     assert "unsynthesized" in findings[0].message.casefold()
+
+
+_SCHEDULE_HINT = "Scheduled maintenance is recorded for this vault but may not be reaching it"
+
+
+@pytest.mark.parametrize(
+    ("status", "hinted"),
+    [
+        pytest.param({"job": "llmwiki-maintain"}, True, id="job-recorded"),
+        pytest.param({"scheduler_activated": False}, False, id="no-job"),
+        pytest.param(None, False, id="no-status"),
+    ],
+)
+def test_pipeline_backlog_points_at_schedule_when_job_recorded(
+    tmp_path: Path, status: dict[str, Any] | None, hinted: bool
+) -> None:
+    """@spec: 330-doctor-automation-serves-vault R6."""
+    vault = _scaffold_vault(tmp_path / "vault")
+    now = datetime(2026, 10, 13, tzinfo=UTC)
+    old = (now - timedelta(days=10)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    write_state(
+        {"synth": {"files": {}, "pending": [{"rel": "sessions/a.md"}], "pending_total": 1, "pending_updated_at": old}},
+        vault,
+    )
+    if status is not None:
+        save_status(vault, status)
+    (found,) = check_pipeline_backlog(vault, now=now, overdue_days=7)
+    assert found.runner == "synth"
+    assert (_SCHEDULE_HINT in found.message) is hinted
+    assert ("see the automation findings in this report" in found.message) is hinted
 
 
 def test_pipeline_backlog_ignores_old_raw_when_queue_empty(tmp_path: Path) -> None:

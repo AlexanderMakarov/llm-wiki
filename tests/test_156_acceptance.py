@@ -58,6 +58,7 @@ from llmwiki import REPO_ROOT, cli, pipeline
 from llmwiki.automation_install import render_wrapper_script, run_install
 from llmwiki.automation_plan import AutomationPlan, plan_command
 from llmwiki.automation_status import load_status, status_path
+from llmwiki.automation_units import unit_names
 from llmwiki.build import render_automation_panel
 from llmwiki.cli import _JOB_QUESTION, build_parser
 from llmwiki.install_hint import pip_install_command
@@ -254,7 +255,7 @@ def test_declining_writes_nothing_and_a_later_real_install_still_succeeds(
     assert code == 0
     status = load_status(vault)
     assert status is not None and status["job"] == "maintain"
-    assert (units / "llmwiki-maintain.sh").is_file()
+    assert (units / unit_names(tmp_path / "vault").wrapper).is_file()
 
 
 # ─── R6 -- `all` means all of it, and the default install spends nothing ──
@@ -355,7 +356,7 @@ def test_ingest_scheduled_command_is_byte_identical_to_pre_change_profile_a(
         "force_platform": "linux",
         "activate": False,
     })
-    wrapper = (units / "llmwiki-maintain.sh").read_text(encoding="utf-8")
+    wrapper = (units / unit_names(tmp_path / "vault").wrapper).read_text(encoding="utf-8")
     expected_command = f"cd {shlex.quote(str(working_dir))} && {shlex.quote(python_bin)} -m llmwiki sync"
     assert expected_command in wrapper
     # Nothing from the maintain vocabulary should have leaked into the ingest command.
@@ -379,7 +380,7 @@ def test_maintain_scheduled_command_is_one_invocation_not_a_chain(tmp_path: Path
         "force_platform": "linux",
         "activate": False,
     })
-    wrapper = (units / "llmwiki-maintain.sh").read_text(encoding="utf-8")
+    wrapper = (units / unit_names(tmp_path / "vault").wrapper).read_text(encoding="utf-8")
     command_line = next(line for line in wrapper.splitlines() if "-m llmwiki" in line)
     assert command_line.count("&&") == 1
     assert plan_command(plan, python_bin=sys.executable, working_dir=tmp_path / "clone") in command_line
@@ -470,7 +471,7 @@ def test_upgrade_guide_and_changelog_flag_the_all_behaviour_change() -> None:
 
 def test_rerunning_install_replaces_the_existing_units_not_duplicates_them(tmp_path: Path) -> None:
     """R11 AC: re-running the setup on a machine that already has a scheduled job
-    replaces it rather than adding a second one -- unit filenames are fixed, so a
+    replaces it rather than adding a second one -- unit filenames are fixed per vault, so a
     second real install must leave exactly the same files, now carrying the new plan."""
     units = tmp_path / "units"
     vault_root = tmp_path / "vault"
@@ -495,7 +496,7 @@ def test_rerunning_install_replaces_the_existing_units_not_duplicates_them(tmp_p
     assert files_after_first == files_after_second, "re-install must not add new unit files"
     assert first["job"] == "ingest"
     assert second["job"] == "maintain"
-    wrapper = (units / "llmwiki-maintain.sh").read_text(encoding="utf-8")
+    wrapper = (units / unit_names(tmp_path / "vault").wrapper).read_text(encoding="utf-8")
     assert "llmwiki all" in wrapper and "--lint-fail warnings" in wrapper
     status = load_status(vault_root)
     assert status is not None and status["job"] == "maintain"

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from datetime import timedelta
 
 import pytest
 
@@ -10,6 +11,7 @@ from llmwiki.cron_spec import (
     MAX_WINDOWS_TRIGGERS,
     CronError,
     CronSpec,
+    cron_interval,
     describe,
     parse_cron,
     to_launchd_intervals,
@@ -606,3 +608,31 @@ def test_launchd_expansion_cap_raises_and_points_at_watch() -> None:
     message = str(excinfo.value)
     assert "1440" in message
     assert "llmwiki watch" in message
+
+
+# --- schedule interval --------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("expr", "days"),
+    [
+        pytest.param("0 8 * * *", 1, id="daily"),
+        pytest.param("0 8,20 * * *", 1, id="multi-hour-daily"),
+        pytest.param("0 8 * * 1", 7, id="single-weekday"),
+        pytest.param("0 8 * * 1,4", 4, id="mon-thu"),
+        pytest.param("0 8 * * 1,5", 4, id="mon-fri-wraps-fri-to-mon"),
+        pytest.param("0 8 * * 1-5", 3, id="weekdays-gap-fri-to-mon"),
+        pytest.param("0 8 * * 0,6", 6, id="weekend-gap-sun-to-sat"),
+        pytest.param("0 8 1 * *", 31, id="monthly"),
+        pytest.param("0 8 1 1,7 *", 366, id="restricted-months-with-day"),
+        pytest.param("0 8 * 3 1", 366, id="restricted-months-with-weekday"),
+    ],
+)
+def test_cron_interval_is_the_largest_gap_between_firings(expr: str, days: int) -> None:
+    assert cron_interval(parse_cron(expr)) == timedelta(days=days)
+
+
+def test_cron_interval_prefers_the_generous_answer_when_both_day_fields_are_set() -> None:
+    """``parse_cron`` refuses this, but a hand-built spec gets the larger day-of-month gap."""
+    spec = CronSpec(minutes=(0,), hours=(8,), days_of_month=(1,), days_of_week=(1,))
+    assert cron_interval(spec) == timedelta(days=31)

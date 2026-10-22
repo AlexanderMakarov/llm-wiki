@@ -61,6 +61,27 @@ def load_default_vault_path() -> Path | None:
     return Path(raw).expanduser()
 
 
+def default_vault_for_checkout(working_dir: Path) -> Path | None:
+    """``vault.default_path`` a run started in checkout ``working_dir`` resolves.
+
+    Reads ``<working_dir>/config.json`` first, then
+    ``<working_dir>/examples/sessions_config.json`` — the same precedence
+    :func:`_load_sessions_config` gives the running clone. ``~`` is expanded and a
+    relative path is taken against ``working_dir``, the run's current directory.
+    Returns ``None`` when neither file sets a path.
+    """
+    wd = Path(working_dir)
+    for path in (wd / "config.json", wd / "examples" / "sessions_config.json"):
+        vault = _load_sessions_config(path).get("vault", {})
+        if not isinstance(vault, dict):
+            continue
+        raw = str(vault.get("default_path", "")).strip()
+        if raw:
+            target = Path(raw).expanduser()
+            return target if target.is_absolute() else wd / target
+    return None
+
+
 def resolve_content_root() -> Path:
     """Return the directory containing ``raw/`` and ``wiki/`` for reads/writes.
 

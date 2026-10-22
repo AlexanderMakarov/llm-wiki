@@ -7,11 +7,14 @@ re-check. ``--check`` / ``--dry-run`` never mutate; ``--yes`` auto-applies
 
 from __future__ import annotations
 
+import shlex
 import sys
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, TextIO
 
+from llmwiki import REPO_ROOT
+from llmwiki.automation_units import dev_checkout_warning
 from llmwiki.doctor.anon import build_unknown_assist
 from llmwiki.doctor.checks import (
     collect_env_summary,
@@ -158,6 +161,21 @@ def _default_is_tty() -> bool:
     return bool(getattr(sys.stdin, "isatty", lambda: False)())
 
 
+def _print_runner_plan(finding: Finding, *, stdout: TextIO) -> None:
+    """Print the exact command a runner executes and, for automation, where it runs from."""
+    if finding.runner_argv is None:
+        print(f"  will run: {finding.runner} ({finding.tier})", file=stdout)
+        return
+    cmd = shlex.join([sys.executable, "-m", "llmwiki", *finding.runner_argv])
+    print(f"  will run: {cmd} ({finding.tier})", file=stdout)
+    if finding.runner != "install_automation":
+        return
+    print(f"  runs from: {REPO_ROOT}", file=stdout)
+    warning = dev_checkout_warning(REPO_ROOT)
+    if warning is not None:
+        print(f"  warning: {warning}", file=stdout)
+
+
 def _confirm_finding(
     finding: Finding,
     *,
@@ -177,6 +195,8 @@ def _confirm_finding(
             f"skip dangerous (need TTY confirm): {finding.id} runner={finding.runner}",
             file=stdout,
         )
+        if finding.runner_argv is not None:
+            _print_runner_plan(finding, stdout=stdout)
         return False
     if not is_tty and not yes:
         return False
@@ -185,7 +205,7 @@ def _confirm_finding(
     print(f"\n[{finding.severity}] {finding.id}", file=stdout)
     print(f"  {finding.message}", file=stdout)
     print(f"  how to fix: {finding.fix}", file=stdout)
-    print(f"  will run: {finding.runner} ({finding.tier})", file=stdout)
+    _print_runner_plan(finding, stdout=stdout)
     prompt = "Apply this fix now? [y/N] "
     if confirm_fn is not None:
         return bool(confirm_fn(prompt))

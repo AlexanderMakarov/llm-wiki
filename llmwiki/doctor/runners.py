@@ -16,6 +16,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from llmwiki import REPO_ROOT
+from llmwiki.automation_install import default_staging_units_dir
+from llmwiki.automation_plan import plan_from_status, schedule_from_status
+from llmwiki.automation_status import load_status
 from llmwiki.install_hint import install_hint
 from llmwiki.reindex import apply_reindex, plan_reindex
 
@@ -225,6 +229,68 @@ def _run_module_cli(runner: str, cli_args: list[str], vault: Path) -> RunnerResu
     )
 
 
+def install_automation_argv(vault: Path, status: dict[str, Any] | None) -> list[str]:
+    """``install-automation`` arguments that reinstall ``status``'s job for ``vault``.
+
+    Reproduces the job, extras, schedule, synth backend, watch panel and a
+    non-default unit staging directory the status file records; a status without
+    a job falls back to the plan defaults. Hooks are not passed — ``--yes`` does
+    not install them, and the reinstall keeps the hooks the status records.
+    """
+    status = status if isinstance(status, dict) else {}
+    plan = plan_from_status(status)
+    argv = [
+        "install-automation",
+        "--vault",
+        str(Path(vault).expanduser().resolve()),
+        "--yes",
+        "--force",
+        "--job",
+        plan.job,
+    ]
+    if plan.graph != "none":
+        argv += ["--graph", plan.graph]
+    if plan.lint_fail != "never":
+        argv += ["--lint-fail", plan.lint_fail]
+    argv += ["--schedule", schedule_from_status(status)]
+    backend = status.get("synth_backend")
+    if isinstance(backend, str) and backend.strip():
+        argv += ["--synth-backend", backend.strip()]
+    if status.get("watch_enabled") is True:
+        argv.append("--watch-enabled")
+    units_dir = _recorded_units_dir(status)
+    if units_dir is not None:
+        argv += ["--units-dir", units_dir]
+    return argv
+
+
+def _recorded_units_dir(status: dict[str, Any]) -> str | None:
+    """The staging dir the last install wrote unit files into, when it is not the default."""
+    written = status.get("units_written")
+    if not isinstance(written, list) or not written or not isinstance(written[0], str):
+        return None
+    staged = Path(written[0]).expanduser().parent
+    if staged.resolve() == default_staging_units_dir().resolve():
+        return None
+    return str(staged)
+
+
+def _run_install_automation(vault: Path) -> RunnerResult:
+    runner = "install_automation"
+    argv = [sys.executable, "-m", "llmwiki", *install_automation_argv(vault, load_status(vault))]
+    if command_requires_elevation(argv):
+        return _refuse_elevation(runner, argv)
+    # cwd pins ``-m llmwiki`` to this checkout, the one the schedule runs from.
+    proc = subprocess.run(argv, check=False, capture_output=True, text=True, cwd=REPO_ROOT)
+    out = ((proc.stdout or "") + (proc.stderr or "")).strip()
+    return RunnerResult(
+        ok=proc.returncode == 0,
+        runner=runner,
+        message=out or f"{runner} exit {proc.returncode}",
+        mutated=proc.returncode == 0,
+    )
+
+
 def dispatch_runner(
     runner: str,
     vault: Path,
@@ -280,7 +346,7 @@ def dispatch_runner(
         return _run_module_cli(rid, ["candidates", action], Path(vault))
 
     if rid == "install_automation":
-        return _run_module_cli(rid, ["install-automation"], Path(vault))
+        return _run_install_automation(Path(vault))
 
     if rid == "install_agent_kit":
         dest = kit_dest

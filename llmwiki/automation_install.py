@@ -11,24 +11,35 @@ The same module merges llmwiki's managed SessionStart hook into Claude Code and
 Cursor settings, and records what was installed in the vault's automation status
 file.
 
-Unit names are fixed (``llmwiki-maintain`` / ``com.llmwiki.maintain``) for
-idempotent re-install. The systemd timer uses Persistent=true (catch-up after boot).
+Unit names are per vault (``automation_units.unit_names``): re-installing for the
+same vault overwrites its own unit, and two vaults never share one. The wrapper
+always pins ``--vault`` so the job never resolves its target from a checkout's
+config at run time. The systemd timer uses Persistent=true (catch-up after boot).
 """
 
 from __future__ import annotations
 
 import json
 import os
-import platform
 import shlex
 import shutil
-import subprocess
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from xml.sax.saxutils import escape
 
 from llmwiki.automation_plan import AutomationPlan, plan_command, plan_from_status, plan_to_status, schedule_from_status
-from llmwiki.automation_status import save_status, vault_automation_log_path
+from llmwiki.automation_status import load_status, save_status, vault_automation_log_path
+from llmwiki.automation_units import (
+    LEGACY_LAUNCHD,
+    UnitNames,
+    deactivate_unit,
+    detect_platform,
+    discover_units,
+    legacy_unit_serving,
+    run_scheduler_cmd,
+    unit_names,
+)
 from llmwiki.cron_spec import (
     CronSpec,
     describe,
@@ -39,8 +50,6 @@ from llmwiki.cron_spec import (
 )
 
 HOOK_MARKER = "llmwiki-managed-sync"
-UNIT_BASENAME = "llmwiki-maintain"
-LAUNCHD_LABEL = "com.llmwiki.maintain"
 
 
 class AutomationActivationError(RuntimeError):
@@ -52,9 +61,9 @@ def default_staging_units_dir() -> Path:
     return Path.home() / ".automation"
 
 
-def vault_unit_hint(vault_root: Path, command_vault: Path | None = None) -> str:
+def vault_unit_hint(vault_root: Path) -> str:
     """Short vault label for scheduler unit descriptions (basename of the target path)."""
-    target = (command_vault or vault_root).expanduser().resolve()
+    target = vault_root.expanduser().resolve()
     return target.name or str(target)
 
 
@@ -69,26 +78,20 @@ def default_scheduler_units_dir(platform: str) -> Path:
     return home
 
 
-def _run_scheduler_cmd(args: list[str]) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        args,
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-
-
 def activate_scheduler(
     *,
     platform: str,
     units_source_dir: Path,
     working_dir: Path,
+    names: UnitNames,
     log_path: Path | None = None,
     spec: CronSpec | None = None,
     vault_hint: str | None = None,
 ) -> dict[str, Any]:
     """Copy rendered units into the OS scheduler location and enable the job.
 
+    ``names`` (from :func:`~llmwiki.automation_units.unit_names`) picks the vault's
+    own unit files and job name, both in ``units_source_dir`` and in the scheduler.
     Idempotent: re-install overwrites unit files and re-enables the timer/agent/task.
     Platform units are re-rendered so wrapper paths point at the install directory,
     not the staging ``write_units_dir``.
@@ -106,10 +109,10 @@ def activate_scheduler(
         result["scheduler_backend"] = "systemd"
         result["scheduler_units_dir"] = str(dest)
         try:
-            dest_wrapper = dest / f"{UNIT_BASENAME}.sh"
-            shutil.copy2(units_source_dir / f"{UNIT_BASENAME}.sh", dest_wrapper)
+            dest_wrapper = dest / names.wrapper
+            shutil.copy2(units_source_dir / names.wrapper, dest_wrapper)
             dest_wrapper.chmod(0o755)
-            (dest / f"{UNIT_BASENAME}.service").write_text(
+            (dest / names.service).write_text(
                 render_systemd_service(
                     wrapper=dest_wrapper,
                     working_dir=working_dir,
@@ -118,29 +121,29 @@ def activate_scheduler(
                 encoding="utf-8",
             )
             if spec is not None:
-                (dest / f"{UNIT_BASENAME}.timer").write_text(
+                (dest / names.timer).write_text(
                     render_systemd_timer(spec=spec, vault_hint=vault_hint),
                     encoding="utf-8",
                 )
             else:
                 shutil.copy2(
-                    units_source_dir / f"{UNIT_BASENAME}.timer",
-                    dest / f"{UNIT_BASENAME}.timer",
+                    units_source_dir / names.timer,
+                    dest / names.timer,
                 )
-            reload_proc = _run_scheduler_cmd(["systemctl", "--user", "daemon-reload"])
+            reload_proc = run_scheduler_cmd(["systemctl", "--user", "daemon-reload"])
             if reload_proc.returncode != 0:
                 raise RuntimeError(
                     (reload_proc.stderr or reload_proc.stdout or "daemon-reload failed").strip()
                 )
-            enable_proc = _run_scheduler_cmd(
-                ["systemctl", "--user", "enable", "--now", f"{UNIT_BASENAME}.timer"]
+            enable_proc = run_scheduler_cmd(
+                ["systemctl", "--user", "enable", "--now", names.timer]
             )
             if enable_proc.returncode != 0:
                 raise RuntimeError(
                     (enable_proc.stderr or enable_proc.stdout or "enable --now failed").strip()
                 )
-            read_proc = _run_scheduler_cmd(
-                ["systemctl", "--user", "is-enabled", f"{UNIT_BASENAME}.timer"]
+            read_proc = run_scheduler_cmd(
+                ["systemctl", "--user", "is-enabled", names.timer]
             )
             active = read_proc.returncode == 0 and read_proc.stdout.strip() == "enabled"
             result["scheduler_activated"] = True
@@ -152,14 +155,13 @@ def activate_scheduler(
     if platform == "macos":
         dest = default_scheduler_units_dir(platform)
         dest.mkdir(parents=True, exist_ok=True)
-        plist_name = f"{LAUNCHD_LABEL}.plist"
-        plist_src = units_source_dir / plist_name
-        plist_dest = dest / plist_name
+        plist_src = units_source_dir / names.plist
+        plist_dest = dest / names.plist
         result["scheduler_backend"] = "launchd"
         result["scheduler_units_dir"] = str(dest)
         try:
-            dest_wrapper = dest / f"{UNIT_BASENAME}.sh"
-            shutil.copy2(units_source_dir / f"{UNIT_BASENAME}.sh", dest_wrapper)
+            dest_wrapper = dest / names.wrapper
+            shutil.copy2(units_source_dir / names.wrapper, dest_wrapper)
             dest_wrapper.chmod(0o755)
             if log_path is not None and spec is not None:
                 plist_dest.write_text(
@@ -169,6 +171,7 @@ def activate_scheduler(
                         log_path=log_path,
                         spec=spec,
                         vault_hint=vault_hint,
+                        label=names.launchd_label,
                     ),
                     encoding="utf-8",
                 )
@@ -176,8 +179,8 @@ def activate_scheduler(
                 shutil.copy2(plist_src, plist_dest)
             uid = os.getuid()
             domain = f"gui/{uid}"
-            _run_scheduler_cmd(["launchctl", "bootout", domain, LAUNCHD_LABEL])
-            bootstrap_proc = _run_scheduler_cmd(["launchctl", "bootstrap", domain, str(plist_dest)])
+            run_scheduler_cmd(["launchctl", "bootout", domain, names.launchd_label])
+            bootstrap_proc = run_scheduler_cmd(["launchctl", "bootstrap", domain, str(plist_dest)])
             if bootstrap_proc.returncode != 0:
                 err = (bootstrap_proc.stderr or bootstrap_proc.stdout or "bootstrap failed").strip()
                 raise RuntimeError(err)
@@ -187,15 +190,15 @@ def activate_scheduler(
         return result
 
     if platform == "windows":
-        xml = units_source_dir / f"{UNIT_BASENAME}-task.xml"
+        xml = units_source_dir / names.task_xml
         result["scheduler_backend"] = "schtasks"
         result["scheduler_units_dir"] = str(units_source_dir)
         try:
-            create_proc = _run_scheduler_cmd([
+            create_proc = run_scheduler_cmd([
                 "schtasks",
                 "/Create",
                 "/TN",
-                UNIT_BASENAME,
+                names.task_name,
                 "/XML",
                 str(xml),
                 "/F",
@@ -211,17 +214,6 @@ def activate_scheduler(
 
     result["scheduler_error"] = f"unsupported platform: {platform}"
     return result
-
-
-def detect_platform() -> str:
-    system = platform.system().lower()
-    if system == "darwin":
-        return "macos"
-    if system == "linux":
-        return "linux"
-    if system == "windows":
-        return "windows"
-    return "unknown"
 
 
 def render_wrapper_script(
@@ -321,8 +313,11 @@ def render_launchd_plist(
     log_path: Path,
     spec: CronSpec,
     vault_hint: str | None = None,
+    label: str = LEGACY_LAUNCHD,
 ) -> str:
     """launchd agent plist running the wrapper on the schedule, logging to ``log_path``.
+
+    ``label`` is the launchd job label; install passes the vault's own label.
 
     Every interpolated path is XML-escaped, so a vault or home directory holding
     ``&``, ``<`` or ``>`` still yields a plist launchd can parse.
@@ -341,7 +336,7 @@ def render_launchd_plist(
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>{LAUNCHD_LABEL}</string>
+  <string>{escape(label)}</string>
 {comment}  <key>ProgramArguments</key>
   <array>
     <string>/bin/bash</string>
@@ -480,6 +475,26 @@ def merge_cursor_session_start_hook(
     return out
 
 
+def _adopt_legacy_unit(platform: str, vault: Path) -> dict[str, Any]:
+    """Switch off the legacy single unit when it serves ``vault`` (now scheduled by its own unit).
+
+    A legacy unit serving another vault, or one whose target is unknown, is left alone.
+    """
+    home = Path.home()
+    discovery = discover_units(platform, home=home, run=run_scheduler_cmd)
+    legacy = legacy_unit_serving(vault, discovery)
+    if legacy is None:
+        return {"adopted_legacy": False, "legacy_adopt_error": None}
+    error = deactivate_unit(legacy, home=home, run=run_scheduler_cmd)
+    return {"adopted_legacy": error is None, "legacy_adopt_error": error}
+
+
+def _previous_hooks(vault_root: Path) -> list[str]:
+    """Hooks the vault's status already records; a reinstall that installs none keeps them."""
+    hooks = (load_status(vault_root) or {}).get("hooks")
+    return [str(h) for h in hooks] if isinstance(hooks, list) else []
+
+
 def run_install(config: dict[str, Any]) -> dict[str, Any]:
     """Non-interactive install API for the CLI, tests and ``setup.sh``.
 
@@ -488,12 +503,17 @@ def run_install(config: dict[str, Any]) -> dict[str, Any]:
     otherwise read from ``job`` / ``graph`` / ``lint_fail`` or the legacy ``profile``
     letter; the schedule from the cron expression under ``schedule``, otherwise from
     the legacy ``hour`` / ``minute`` integers. Optional: ``watch_enabled``, ``hooks``
-    (list), ``synth_backend``, ``log_path``, ``write_units_dir`` (Path to write unit
-    files into), ``force_platform``, ``activate`` (default ``True`` — copy units into the
-    OS scheduler and enable the job), and ``command_vault`` — the vault the scheduled
-    command names with ``--vault``, which callers set when the install targets a vault
-    other than the configured default, so the job runs against the same vault whose
-    status file records it.
+    (list; when absent the hooks the status already records are kept), ``synth_backend``, ``log_path``, ``write_units_dir`` (Path to write unit
+    files into), ``force_platform`` and ``activate`` (default ``True`` — copy units into
+    the OS scheduler and enable the job).
+
+    The scheduled command always names the resolved ``vault_root`` with ``--vault``, so
+    the job runs against the same vault whose status file records it. Unit files carry
+    that vault's own names. ``installed_at`` is reset whenever activation succeeds;
+    otherwise any previously recorded value is kept. After a successful activation the
+    legacy single unit is switched off when it serves this same vault
+    (``adopted_legacy``); a failure to do so is recorded in ``legacy_adopt_error``
+    and does not fail the install.
 
     Raises:
         CronError: when the schedule is not an expression ``cron_spec`` can translate.
@@ -505,8 +525,9 @@ def run_install(config: dict[str, Any]) -> dict[str, Any]:
     schedule = schedule_from_status(config)
     spec = parse_cron(schedule)
     vault_root = Path(config.get("vault_root") or working_dir)
-    command_vault = Path(config["command_vault"]) if config.get("command_vault") else None
-    hint = vault_unit_hint(vault_root, command_vault)
+    target_vault = vault_root.expanduser().resolve()
+    names = unit_names(target_vault)
+    hint = vault_unit_hint(target_vault)
     log_path = Path(config.get("log_path") or vault_automation_log_path(vault_root))
     write_dir = Path(config["write_units_dir"]) if config.get("write_units_dir") else None
 
@@ -515,19 +536,19 @@ def run_install(config: dict[str, Any]) -> dict[str, Any]:
         python_bin=python_bin,
         working_dir=working_dir,
         log_path=log_path,
-        vault=command_vault,
+        vault=target_vault,
     )
     written: list[str] = []
     if write_dir is not None:
         write_dir.mkdir(parents=True, exist_ok=True)
-        wrapper = write_dir / f"{UNIT_BASENAME}.sh"
+        wrapper = write_dir / names.wrapper
         wrapper.write_text(wrapper_text, encoding="utf-8")
         wrapper.chmod(0o755)
         written.append(str(wrapper))
         plat = detect_platform()
         if plat == "linux" or config.get("force_platform") == "linux":
-            svc = write_dir / f"{UNIT_BASENAME}.service"
-            tim = write_dir / f"{UNIT_BASENAME}.timer"
+            svc = write_dir / names.service
+            tim = write_dir / names.timer
             svc.write_text(
                 render_systemd_service(
                     wrapper=wrapper, working_dir=working_dir, vault_hint=hint
@@ -537,7 +558,7 @@ def run_install(config: dict[str, Any]) -> dict[str, Any]:
             tim.write_text(render_systemd_timer(spec=spec, vault_hint=hint), encoding="utf-8")
             written.extend([str(svc), str(tim)])
         elif plat == "macos" or config.get("force_platform") == "macos":
-            plist = write_dir / f"{LAUNCHD_LABEL}.plist"
+            plist = write_dir / names.plist
             plist.write_text(
                 render_launchd_plist(
                     wrapper=wrapper,
@@ -545,12 +566,13 @@ def run_install(config: dict[str, Any]) -> dict[str, Any]:
                     log_path=log_path,
                     spec=spec,
                     vault_hint=hint,
+                    label=names.launchd_label,
                 ),
                 encoding="utf-8",
             )
             written.append(str(plist))
         elif plat == "windows" or config.get("force_platform") == "windows":
-            xml = write_dir / f"{UNIT_BASENAME}-task.xml"
+            xml = write_dir / names.task_xml
             xml.write_text(
                 render_windows_task(
                     wrapper=wrapper, working_dir=working_dir, spec=spec, vault_hint=hint
@@ -567,15 +589,23 @@ def run_install(config: dict[str, Any]) -> dict[str, Any]:
         "hour": spec.hours[0] if spec.hours else 0,
         "minute": spec.minutes[0] if spec.minutes else 0,
         "watch_enabled": bool(config.get("watch_enabled", False)),
-        "hooks": list(config.get("hooks") or []),
+        "hooks": list(config["hooks"]) if "hooks" in config else _previous_hooks(vault_root),
         "synth_backend": str(config.get("synth_backend") or "dummy"),
         "log_path": str(log_path),
         "units_written": written,
+        "scheduler_unit": names.base,
+        "working_dir": str(working_dir),
+        "target_vault": str(target_vault),
+        "adopted_legacy": False,
+        "legacy_adopt_error": None,
         "note": (
             "Scheduled runs with no new/changed sessions are a no-op "
             "(sync converts nothing; synth/build exit quickly)."
         ),
     }
+    previous_installed_at = (load_status(vault_root) or {}).get("installed_at")
+    if previous_installed_at:
+        status["installed_at"] = previous_installed_at
     activate = bool(config.get("activate", True))
     if activate and write_dir is not None and written:
         plat = str(config.get("force_platform") or detect_platform())
@@ -584,10 +614,14 @@ def run_install(config: dict[str, Any]) -> dict[str, Any]:
                 platform=plat,
                 units_source_dir=write_dir,
                 working_dir=working_dir,
+                names=names,
                 log_path=log_path,
                 spec=spec,
                 vault_hint=hint,
             ))
+            if status.get("scheduler_activated"):
+                status["installed_at"] = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+                status.update(_adopt_legacy_unit(plat, target_vault))
             if status.get("scheduler_error"):
                 save_status(vault_root, status)
                 raise AutomationActivationError(status["scheduler_error"])

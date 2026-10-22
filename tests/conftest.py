@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pytest
 
+from llmwiki.automation_units import DiscoveryResult
 from llmwiki.state_store import configure_state_file
 
 # Autouse guard (#91): fails any test that leaves a tracked file modified.
@@ -61,3 +62,19 @@ def _isolate_default_vault(tmp_path_factory, monkeypatch):
 
     configure_state_file(isolated)
     yield isolated
+
+
+@pytest.fixture(autouse=True)
+def _no_real_scheduler_discovery(tmp_path_factory, monkeypatch):
+    """Keep ``install-automation``'s guard and doctor's automation checks off the real scheduler.
+
+    Tests that exercise either re-point ``discover_local_units`` themselves or
+    pass ``discovery=`` explicitly.
+    ``XDG_STATE_HOME`` points at an empty dir so the legacy global run log is
+    never the developer's own.
+    """
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path_factory.mktemp("xdg-state")))
+    monkeypatch.setattr(
+        "llmwiki.automation_units.discover_local_units",
+        lambda **_: DiscoveryResult(units=(), unavailable=None),
+    )

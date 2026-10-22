@@ -27,6 +27,7 @@ from typing import Any
 from llmwiki import (
     REPO_ROOT,
     __version__,
+    automation_units,
     install_agent_kit,
     migrate_broken_provenance,
     migrate_discarded_topic_links,
@@ -65,6 +66,16 @@ from llmwiki.automation_plan import (
     plan_label,
 )
 from llmwiki.automation_status import vault_automation_log_path
+from llmwiki.automation_units import (
+    LEGACY_LAUNCHD,
+    LEGACY_SYSTEMD,
+    InstalledUnit,
+    dev_checkout_warning,
+    removal_steps,
+    serves_vault,
+    unit_for_vault,
+    unit_names,
+)
 from llmwiki.build import RAW_DIR, RAW_SESSIONS, build_site
 from llmwiki.cache import MODEL_PRICING, resolve_pricing_model
 from llmwiki.candidates import (
@@ -1372,16 +1383,15 @@ def _ask_schedule() -> str:
     return f"{minute} {hour} * * {day_of_week}"
 
 
-def _confirm_plan(plan: AutomationPlan, schedule: str, vault: Path | None = None) -> bool:
+def _confirm_plan(plan: AutomationPlan, schedule: str, vault: Path) -> bool:
     """Print the job, the schedule, and the exact command line, then ask whether to write it.
 
-    ``vault`` is the one the scheduled command will name, so the line shown here
+    ``vault`` is the one the scheduled command always names, so the line shown here
     is the line that gets installed. An empty answer is a yes, and an answer the
     question does not recognise is re-asked. Consent has to be typed: stdin ending
     without one is a no.
     """
-    vault_root = vault if vault is not None else (load_default_vault_path() or REPO_ROOT)
-    log_path = vault_automation_log_path(vault_root)
+    log_path = vault_automation_log_path(vault)
     print()
     print("About to schedule:")
     print(f"  Job:      {plan_label(plan)}")
@@ -1510,47 +1520,62 @@ def _plan_from_flags(args: argparse.Namespace) -> tuple[AutomationPlan, str]:
     return plan, schedule
 
 
-def _scheduled_command_vault(explicit_vault: str | None) -> Path | None:
-    """The ``--vault`` the scheduled command needs, or ``None`` when config resolves it.
-
-    ``explicit_vault`` is the ``--vault`` the user typed, read before the config
-    default is filled in. A job installed against any other vault than the one
-    ``vault.default_path`` resolves to has to name it, or the scheduled run would
-    work on the default vault while its status file sits in the installed one.
-    """
-    if not explicit_vault:
-        return None
-    target = Path(explicit_vault).expanduser()
-    default = load_default_vault_path()
-    if default is not None and default.expanduser().resolve() == target.resolve():
-        return None
-    return target
-
-
-def _print_manual_scheduler_activation(write_dir: Path, plat: str) -> None:
-    """Copy-paste commands when ``--no-activate`` leaves units on disk only."""
+def _print_manual_scheduler_activation(write_dir: Path, plat: str, vault_root: Path) -> None:
+    """Copy-paste commands when ``--no-activate`` leaves the vault's units on disk only."""
+    names = unit_names(vault_root)
     print("  Scheduler was NOT activated — enable it yourself:")
     if plat == "linux":
         dest = Path.home() / ".config" / "systemd" / "user"
         print(f"    mkdir -p {dest}")
-        print(f"    cp {write_dir}/llmwiki-maintain.{{sh,service,timer}} {dest}/")
+        print(f"    cp {write_dir}/{names.base}.{{sh,service,timer}} {dest}/")
         print("    systemctl --user daemon-reload")
-        print("    systemctl --user enable --now llmwiki-maintain.timer")
+        print(f"    systemctl --user enable --now {names.timer}")
     elif plat == "macos":
         dest = Path.home() / "Library" / "LaunchAgents"
-        plist = f"{dest}/com.llmwiki.maintain.plist"
-        print(f"    cp {write_dir}/com.llmwiki.maintain.plist {dest}/")
-        print(f"    launchctl bootstrap gui/$UID {plist}")
+        print(f"    cp {write_dir}/{names.wrapper} {write_dir}/{names.plist} {dest}/")
+        print(f"    launchctl bootstrap gui/$UID {dest}/{names.plist}")
     elif plat == "windows":
-        xml = write_dir / "llmwiki-maintain-task.xml"
-        print(f"    schtasks /Create /TN llmwiki-maintain /XML {xml} /F")
+        xml = write_dir / names.task_xml
+        print(f"    schtasks /Create /TN {names.task_name} /XML {xml} /F")
     else:
         print(f"    See unit files under {write_dir}")
 
 
+def _legacy_removal_steps(plat: str) -> list[str]:
+    """How to remove the legacy single schedule by hand on ``plat``."""
+    legacy = InstalledUnit(
+        name=LEGACY_LAUNCHD if plat == "macos" else LEGACY_SYSTEMD,
+        platform=plat,
+        legacy=True,
+        wrapper_path=None,
+        working_dir=None,
+        target_vault=None,
+        log_path=None,
+        enabled=None,
+        reason_unknown=None,
+    )
+    return removal_steps(legacy)
+
+
+def _checkout_of_existing_schedule(vault_root: Path) -> Path | None:
+    """The other checkout an existing schedule for ``vault_root`` runs from, else ``None``.
+
+    Only a unit that really serves this vault counts: its own per-vault unit, or
+    the legacy unit when its target resolves to this vault. The checkout is read
+    from the unit files, so the guard holds even when the scheduler itself cannot
+    be asked whether the unit is enabled. ``None`` when the unit's checkout is unknown.
+    """
+    discovery = automation_units.discover_local_units(probe=False)
+    unit = unit_for_vault(vault_root, discovery)
+    if unit is None or unit.working_dir is None or not serves_vault(unit, vault_root):
+        return None
+    if unit.working_dir.resolve() == REPO_ROOT.resolve():
+        return None
+    return unit.working_dir
+
+
 def cmd_install_automation(args: argparse.Namespace) -> int:
     """Set up the daily job: what it does, when it runs, then write the scheduler files."""
-    command_vault = _scheduled_command_vault(getattr(args, "vault", None))
     _apply_default_vault(args)
 
     vault = getattr(args, "vault", None)
@@ -1604,10 +1629,29 @@ def cmd_install_automation(args: argparse.Namespace) -> int:
             str,
         )
         write_dir = Path(units) if units else default_units
-        if not _confirm_plan(plan, schedule, command_vault):
+        if not _confirm_plan(plan, schedule, vault_root.expanduser().resolve()):
             print("  Skipped install-automation — no scheduler files or automation status written.")
             print("  Your vault, adapters, and config.json are unchanged.")
             print("  Run `python3 -m llmwiki install-automation` later to set up the daily job.")
+            return 0
+
+    other_checkout = _checkout_of_existing_schedule(vault_root.expanduser().resolve())
+    if other_checkout is not None:
+        print(f"  current schedule runs from: {other_checkout}")
+        print(f"  new schedule would run from: {REPO_ROOT}")
+    dev_warning = dev_checkout_warning(REPO_ROOT)
+    if dev_warning is not None:
+        print(f"  warning: {dev_warning}")
+    if other_checkout is not None and not getattr(args, "force", False):
+        if yes:
+            print(
+                "install-automation: existing schedule runs from a different checkout; "
+                "pass --force to replace it",
+                file=sys.stderr,
+            )
+            return 2
+        if _ask_choice("Replace it? [y/N] ", ("y", "yes", "n", "no"), "n") not in ("y", "yes"):
+            print("  Kept the existing schedule — no scheduler files or automation status written.")
             return 0
 
     # Interactive and --yes both persist the chosen backend; for claude, also
@@ -1624,10 +1668,9 @@ def cmd_install_automation(args: argparse.Namespace) -> int:
             "working_dir": REPO_ROOT,
             "python_bin": sys.executable,
             "vault_root": vault_root,
-            "command_vault": command_vault,
             "write_units_dir": write_dir,
             "watch_enabled": watch_enabled,
-            "hooks": ["claude", "cursor"] if install_hooks else [],
+            **({"hooks": ["claude", "cursor"]} if install_hooks else {}),
             "synth_backend": backend,
             "force_platform": getattr(args, "force_platform", None),
             "activate": activate,
@@ -1649,9 +1692,19 @@ def cmd_install_automation(args: argparse.Namespace) -> int:
             print(f"  Scheduler activated ({backend_name}): installed but not yet enabled.")
         else:
             print(f"  Scheduler activated ({backend_name}).")
+        if status.get("adopted_legacy"):
+            print("  Replaced the earlier single llmwiki-maintain schedule with this vault's own schedule.")
+        elif status.get("legacy_adopt_error"):
+            print(
+                "  Could not switch off the earlier single llmwiki-maintain schedule: "
+                f"{status['legacy_adopt_error']}"
+            )
+            print("  Remove it by hand so it does not run beside this one:")
+            for step in _legacy_removal_steps(plat):
+                print(f"    {step}")
         print("  Idle days are a no-op.")
     elif not activate:
-        _print_manual_scheduler_activation(write_dir, plat)
+        _print_manual_scheduler_activation(write_dir, plat, vault_root)
         print("  Idle days are a no-op.")
     else:
         print("  Enable the timer/plist using your OS instructions; "
@@ -4326,6 +4379,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     auto_p.add_argument("--yes", action="store_true",
                         help="Non-interactive: use flags / defaults (no hooks)")
+    auto_p.add_argument("--force", action="store_true",
+                        help="replace this vault's schedule even when it runs from a different checkout")
     auto_p.add_argument("--job", choices=["ingest", "maintain"], default=None,
                         help="What the daily job does: 'ingest' collects sessions and rebuilds the "
                              "site; 'maintain' also summarises them, which costs AI-provider money "

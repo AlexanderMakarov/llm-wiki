@@ -73,6 +73,15 @@ Ordinary ledger reads also auto-rebuild when `dismissals.json` is missing (for e
 
 See [`docs/reference/cli.md`](reference/cli.md#dismissal-ledger--rebuild-dismissalsjson-from-the-archive-146).
 
+## Unreleased — one schedule per vault, checked by doctor (#359)
+
+No data migration, but installed schedules change shape.
+
+- **Legacy schedule adopted on the next install.** A schedule installed by an older release uses the single name `llmwiki-maintain` (`com.llmwiki.maintain` on macOS). It keeps running after the upgrade. The next `llmwiki install-automation --vault <vault>` (or the doctor repair) for the vault that schedule serves installs the vault's own `llmwiki-maintain-<slug>-<hash>` schedule, then switches the legacy one off and deletes its files. A legacy schedule serving another vault is left alone; install that vault once too.
+- **Schedules are pinned to their vault.** Every new schedule runs `llmwiki … --vault <vault>`. Changing `vault.default_path` in `config.json` no longer moves the scheduled job to the new default. To schedule the new vault, run `llmwiki install-automation --vault <new vault>`; remove the old one with the steps `llmwiki doctor` prints if you no longer want it.
+- **Renamed or moved vault.** The schedule names the old path, so `llmwiki doctor --vault <new path>` reports the old schedule as a leftover (`automation.orphan_unit`) and the vault as having no schedule (`automation.unit_missing`). Accept the doctor repair to install the vault's schedule at its new path, then run the removal commands doctor printed for the leftover.
+- **Run `llmwiki doctor` once after upgrading.** It now checks that the vault's schedule exists, serves this vault, runs from a checkout that still exists, is switched on, and has completed a recent successful run, and lists leftover schedules. Schedule repairs are dangerous-tier: they run only after you confirm on a terminal, never with `--yes` alone.
+
 ## Unreleased — pin Claude path at `install-automation` (#275)
 
 No data migration. If you already schedule Maintain with `synthesis.backend: claude` and rely on `claude` being on `$PATH` (for example under `<home>/.local/bin`), re-run `llmwiki install-automation` (or `llmwiki install-automation --yes --job maintain --synth-backend claude`) once after upgrading. The installer writes absolute `synthesis.claude.path` when that key (and flat `claude_path`) are unset, so systemd user-timer catch-up with a minimal `PATH` still finds the CLI. An explicit path you already set is left alone.
