@@ -462,9 +462,18 @@ def test_yes_non_tty_does_not_run_install_automation(
 def test_install_automation_argv_reproduces_a_custom_units_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     vault = _scaffold_vault(tmp_path / "vault")
-    custom = tmp_path / "staging"
+    custom = tmp_path / "home" / "staging"
     argv = install_automation_argv(vault, {"job": "ingest", "units_written": [str(custom / "job.sh")]})
     assert argv[argv.index("--units-dir") + 1] == str(custom)
     default = tmp_path / "home" / ".automation"
     argv = install_automation_argv(vault, {"job": "ingest", "units_written": [str(default / "job.sh")]})
+    assert "--units-dir" not in argv
+
+
+def test_install_automation_argv_ignores_a_recorded_units_dir_outside_home(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    vault = _scaffold_vault(tmp_path / "vault")
+    argv = install_automation_argv(vault, {"job": "ingest", "units_written": [str(tmp_path / "elsewhere" / "job.sh")]})
     assert "--units-dir" not in argv

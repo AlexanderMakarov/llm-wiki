@@ -265,12 +265,13 @@ def install_automation_argv(vault: Path, status: dict[str, Any] | None) -> list[
 
 
 def _recorded_units_dir(status: dict[str, Any]) -> str | None:
-    """The staging dir the last install wrote unit files into, when it is not the default."""
+    """The staging dir the last install wrote unit files into, when it is not the default and lies under HOME."""
     written = status.get("units_written")
     if not isinstance(written, list) or not written or not isinstance(written[0], str):
         return None
-    staged = Path(written[0]).expanduser().parent
-    if staged.resolve() == default_staging_units_dir().resolve():
+    staged = Path(written[0]).expanduser().parent.resolve()
+    # The status file lives in the vault, which may come from elsewhere: only a dir under HOME is reused.
+    if staged == default_staging_units_dir().resolve() or not staged.is_relative_to(Path.home().resolve()):
         return None
     return str(staged)
 
