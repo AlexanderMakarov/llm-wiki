@@ -314,10 +314,162 @@
       "runner": null
     },
     {
+      "id": "automation.unit_missing",
+      "area": "L",
+      "patterns": [
+        "automation.unit_missing",
+        "but no schedule for it is installed",
+        "scheduled maintenance missing"
+      ],
+      "message": "This vault records scheduled maintenance but the operating system holds no schedule for it.",
+      "fix": "Set up this vault's schedule again with llmwiki install-automation --vault <vault> (doctor shows the exact command and asks first).",
+      "actionable": true,
+      "severity": "error",
+      "tier": "dangerous",
+      "runner": "install_automation"
+    },
+    {
+      "id": "automation.points_elsewhere",
+      "area": "L",
+      "patterns": [
+        "automation.points_elsewhere",
+        "re:schedule .+ serves vault",
+        "schedule points at another vault"
+      ],
+      "message": "The installed schedule for this vault serves a different vault.",
+      "fix": "Set up this vault's own schedule with llmwiki install-automation --vault <vault>; schedules are per vault, so the other vault keeps its own.",
+      "actionable": true,
+      "severity": "error",
+      "tier": "dangerous",
+      "runner": "install_automation"
+    },
+    {
+      "id": "automation.checkout_missing",
+      "area": "L",
+      "patterns": [
+        "automation.checkout_missing",
+        "runs from a checkout that no longer exists",
+        "its wrapper script is gone"
+      ],
+      "message": "This vault's schedule runs from a checkout or wrapper script that no longer exists.",
+      "fix": "Set up this vault's schedule again from an installed llmwiki with llmwiki install-automation --vault <vault>.",
+      "actionable": true,
+      "severity": "error",
+      "tier": "dangerous",
+      "runner": "install_automation"
+    },
+    {
+      "id": "automation.check_unavailable",
+      "area": "L",
+      "patterns": [
+        "automation.check_unavailable",
+        "could not check the installed schedule"
+      ],
+      "message": "Doctor could not inspect the operating system scheduler, so this vault's schedule is unchecked.",
+      "fix": "Check the schedule by hand (systemctl --user list-timers, launchctl print gui/<uid>, or schtasks /Query) or run doctor where the scheduler is reachable.",
+      "actionable": false,
+      "severity": "info",
+      "tier": "guided",
+      "runner": null
+    },
+    {
+      "id": "automation.setup_other_checkout",
+      "area": "L",
+      "patterns": [
+        "automation.setup_other_checkout",
+        "existing schedule runs from a different checkout",
+        "pass --force to replace it",
+        "Kept the existing schedule"
+      ],
+      "message": "This vault already has a schedule that runs llmwiki from a different checkout, so install-automation stopped instead of replacing it.",
+      "fix": "Keep the existing schedule, or re-run llmwiki install-automation from the checkout you want the job to use and answer y (or pass --force) to replace it.",
+      "actionable": true,
+      "severity": "warning",
+      "tier": "guided",
+      "runner": null
+    },
+    {
+      "id": "automation.setup_dev_checkout",
+      "area": "L",
+      "patterns": [
+        "automation.setup_dev_checkout",
+        "installing from a git worktree",
+        "installing from a development checkout"
+      ],
+      "message": "The schedule was set up from a development copy of llmwiki and keeps running that copy.",
+      "fix": "Keep that copy in place, or set the schedule up again from a pip-installed llmwiki (pip install llm-wiki-plus, then llmwiki install-automation) so deleting or switching the checkout cannot break it.",
+      "actionable": true,
+      "severity": "warning",
+      "tier": "guided",
+      "runner": null
+    },
+    {
+      "id": "automation.stale_run",
+      "area": "L",
+      "patterns": [
+        "automation.stale_run",
+        "automation not running",
+        "has not run since",
+        "re:automation job .+ last run was"
+      ],
+      "message": "This vault's schedule is installed but has not completed a run recently.",
+      "fix": "Read the run log, then set this vault's schedule up again with llmwiki install-automation --vault <vault> (doctor shows the exact command and asks first).",
+      "actionable": true,
+      "severity": "warning",
+      "tier": "dangerous",
+      "runner": "install_automation"
+    },
+    {
+      "id": "automation.last_run_failed",
+      "area": "L",
+      "patterns": [
+        "automation.last_run_failed",
+        "last run failed"
+      ],
+      "message": "This vault's scheduled job ran but its last run exited with an error.",
+      "fix": "Read the run log doctor names and fix what the job reported (for example a missing synthesis backend or a broken source); the schedule itself does not need reinstalling. A usage-limit stop (exit 75) is not reported.",
+      "actionable": true,
+      "severity": "warning",
+      "tier": "guided",
+      "runner": null
+    },
+    {
+      "id": "automation.duplicate_legacy",
+      "area": "L",
+      "patterns": [
+        "automation.duplicate_legacy",
+        "also scheduled by the earlier single",
+        "Could not switch off the earlier single llmwiki-maintain schedule",
+        "two jobs run against it"
+      ],
+      "message": "The earlier single llmwiki-maintain schedule still runs for this vault beside the vault's own schedule.",
+      "fix": "Remove the old llmwiki-maintain schedule with the steps doctor (or install-automation) prints for this operating system; the vault's own schedule keeps running.",
+      "actionable": true,
+      "severity": "warning",
+      "tier": "guided",
+      "runner": null
+    },
+    {
+      "id": "automation.orphan_unit",
+      "area": "L",
+      "patterns": [
+        "automation.orphan_unit",
+        "leftover schedule",
+        "schedule for a vault that no longer exists",
+        "vaults that no longer exist"
+      ],
+      "message": "A schedule llmwiki installed still runs for a vault folder that no longer exists.",
+      "fix": "Remove each leftover schedule with the steps doctor prints for this operating system; doctor does not remove it for you.",
+      "actionable": true,
+      "severity": "warning",
+      "tier": "guided",
+      "runner": null
+    },
+    {
       "id": "automation.not_active",
       "area": "L",
       "patterns": [
-        "install-automation",
+        "declared but not active",
         "scheduler not active",
         "systemd user unit",
         "automation.not_active"

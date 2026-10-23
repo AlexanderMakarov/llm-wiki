@@ -30,12 +30,14 @@ from __future__ import annotations
 
 import itertools
 from dataclasses import dataclass
+from datetime import timedelta
 
 __all__ = [
     "MAX_LAUNCHD_INTERVALS",
     "MAX_WINDOWS_TRIGGERS",
     "CronError",
     "CronSpec",
+    "cron_interval",
     "describe",
     "parse_cron",
     "to_launchd_intervals",
@@ -180,6 +182,28 @@ def describe(spec: CronSpec) -> str:
     site Home panel, and the automation status file.
     """
     return f"{_describe_days(spec)} {_describe_time(spec)}"
+
+
+def cron_interval(spec: CronSpec) -> timedelta:
+    """Return the largest gap between two firings of a schedule, rounded up to whole days.
+
+    The answer is deliberately generous, so a staleness check built on it never warns about
+    a schedule that is merely between runs: a schedule with no day or month restriction
+    counts as one day even when it lists several hours; a weekday-only schedule counts the
+    largest cyclic gap between its chosen weekdays (seven days for a single weekday, four
+    for Mon/Thu); a day-of-month schedule counts 31 days; and any month restriction counts
+    366 days. A spec restricting both day-of-month and day-of-week (``parse_cron`` refuses
+    one, but a hand-built spec can carry it) takes the larger day-of-month answer.
+    """
+    if spec.months is not None:
+        return timedelta(days=366)
+    if spec.days_of_month is not None:
+        return timedelta(days=31)
+    if spec.days_of_week is not None:
+        days = spec.days_of_week
+        wrap = days[0] + 7 - days[-1]
+        return timedelta(days=max([wrap, *(later - earlier for earlier, later in itertools.pairwise(days))]))
+    return timedelta(days=1)
 
 
 def to_systemd_oncalendar(spec: CronSpec) -> str:

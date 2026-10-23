@@ -202,3 +202,157 @@ def test_cli_error_match_and_unknown(
     assert "unknown assist" in out2.lower() or "AI investigation" in out2
     assert re.search(r"github\.com/.+/AGENTS\.md", out2)
     assert "heal_kb.json" in out2
+
+
+# Area L stems copied from the literal parts of the messages in doctor/checks.py,
+# the install-automation guard in cli.py and DEV_CHECKOUT_WARNINGS, with placeholder names.
+_AREA_L_CASES = [
+    pytest.param(
+        "Automation job 'llmwiki-sync' is recorded for this vault 'my-vault' "
+        "but no schedule for it is installed.",
+        "automation.unit_missing",
+        id="unit_missing-message",
+    ),
+    pytest.param(
+        "schedule llmwiki-sync-1a2b serves vault 'other-vault', not this vault 'my-vault'",
+        "automation.points_elsewhere",
+        id="points_elsewhere-message",
+    ),
+    pytest.param(
+        "Schedule llmwiki-sync-1a2b serves this vault but runs from a checkout "
+        "that no longer exists ('old-checkout').",
+        "automation.checkout_missing",
+        id="checkout_missing-dir",
+    ),
+    pytest.param(
+        "Schedule llmwiki-sync-1a2b serves this vault but its wrapper script is gone "
+        "('llmwiki-sync.sh').",
+        "automation.checkout_missing",
+        id="checkout_missing-wrapper",
+    ),
+    pytest.param(
+        "Could not check the installed schedule for this vault: systemctl --user is unavailable.",
+        "automation.check_unavailable",
+        id="check_unavailable-message",
+    ),
+    pytest.param(
+        "Automation job 'llmwiki-sync' is declared but not active: timer is disabled.",
+        "automation.not_active",
+        id="not_active-live",
+    ),
+    pytest.param(
+        "Automation job 'llmwiki-sync' is declared but not active.",
+        "automation.not_active",
+        id="not_active-recorded",
+    ),
+    pytest.param(
+        "Automation job 'llmwiki-sync' has not run since it was set up 3 days ago.",
+        "automation.stale_run",
+        id="stale_run-never",
+    ),
+    pytest.param(
+        "Automation job 'llmwiki-sync': last run failed (exit 1); "
+        "see /home/USER/vault/.llmwiki/automation.log.",
+        "automation.last_run_failed",
+        id="last_run_failed",
+    ),
+    pytest.param(
+        "This vault is also scheduled by the earlier single llmwiki-maintain schedule "
+        "(llmwiki-maintain), so two jobs run against it. Remove the old one with:",
+        "automation.duplicate_legacy",
+        id="duplicate_legacy",
+    ),
+    pytest.param(
+        "Could not switch off the earlier single llmwiki-maintain schedule: "
+        "systemctl --user disable --now llmwiki-maintain.timer failed",
+        "automation.duplicate_legacy",
+        id="legacy_adopt_failed",
+    ),
+    pytest.param(
+        "Kept the existing schedule — no scheduler files or automation status written.",
+        "automation.setup_other_checkout",
+        id="setup_other_checkout-kept",
+    ),
+    pytest.param(
+        "Automation job 'llmwiki-sync': last run was 5 days ago.",
+        "automation.stale_run",
+        id="stale_run-old",
+    ),
+    pytest.param(
+        "Leftover schedules for vaults that no longer exist (doctor does not remove them):\n"
+        "  llmwiki-sync-1a2b (vault 'gone-vault') — remove it with:\n"
+        "    systemctl --user disable --now llmwiki-sync-1a2b.timer",
+        "automation.orphan_unit",
+        id="orphan_unit-message",
+    ),
+    pytest.param(
+        "install-automation: existing schedule runs from a different checkout; "
+        "pass --force to replace it",
+        "automation.setup_other_checkout",
+        id="setup_other_checkout-message",
+    ),
+    pytest.param(
+        "warning: installing from a git worktree — the scheduled job will keep using this "
+        "copy at /home/USER/repo/wt and stops working when the worktree is removed.",
+        "automation.setup_dev_checkout",
+        id="setup_dev_checkout-worktree",
+    ),
+    pytest.param(
+        "warning: installing from a development checkout — the scheduled job will keep "
+        "using this copy at /home/USER/repo; deleting or switching it breaks the schedule.",
+        "automation.setup_dev_checkout",
+        id="setup_dev_checkout-checkout",
+    ),
+    pytest.param("schedule points at another vault", "automation.points_elsewhere", id="sym-elsewhere"),
+    pytest.param("automation not running", "automation.stale_run", id="sym-not-running"),
+    pytest.param("scheduled maintenance missing", "automation.unit_missing", id="sym-missing"),
+    pytest.param("last run failed", "automation.last_run_failed", id="sym-run-failed"),
+    pytest.param("leftover schedule", "automation.orphan_unit", id="sym-leftover"),
+    pytest.param(
+        "existing schedule runs from a different checkout; pass --force to replace it",
+        "automation.setup_other_checkout",
+        id="sym-other-checkout",
+    ),
+    pytest.param(
+        "installing from a git worktree", "automation.setup_dev_checkout", id="sym-worktree"
+    ),
+]
+
+
+@pytest.mark.parametrize(("text", "expected_id"), _AREA_L_CASES)
+def test_area_l_messages_and_symptoms_match_their_entry(text: str, expected_id: str) -> None:
+    result = match_symptom(text)
+    assert result.entry is not None
+    assert result.entry["id"] == expected_id
+    assert result.method == "pattern"
+
+
+def test_generic_schedule_phrases_do_not_match_area_l() -> None:
+    elsewhere = match_symptom("the lint said not this vault")
+    assert elsewhere.entry is None or elsewhere.entry["id"] != "automation.points_elsewhere"
+    stale = match_symptom("the deploy log says last run was 2 hours ago")
+    assert stale.entry is None or stale.entry["id"] != "automation.stale_run"
+
+
+def test_install_automation_setup_text_does_not_match_not_active() -> None:
+    result = match_symptom(
+        "Skipped install-automation — no scheduler files or automation status written."
+    )
+    assert result.entry is None or result.entry["id"] != "automation.not_active"
+
+
+def test_raw_overwrite_force_refusal_does_not_match_setup_other_checkout() -> None:
+    result = match_symptom(
+        "refusing to overwrite existing raw file /home/USER/vault/raw/x.md "
+        "(source: a.jsonl, adapter: claude_code); pass --force to bypass or delete the file first"
+    )
+    assert result.entry is None or result.entry["id"] != "automation.setup_other_checkout"
+
+
+def test_cli_error_matches_points_elsewhere(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    vault = _scaffold_vault(tmp_path / "vault")
+    code = main(["doctor", "--vault", str(vault), "--error", "schedule points at another vault"])
+    assert code == 1
+    assert "automation.points_elsewhere" in capsys.readouterr().out

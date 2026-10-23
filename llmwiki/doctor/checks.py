@@ -8,19 +8,33 @@ guessing. Area I/J lint findings come from :mod:`llmwiki.doctor.lint_fold`
 from __future__ import annotations
 
 import platform
+import re
 import sys
-from datetime import UTC, datetime
+from dataclasses import replace
+from datetime import UTC, datetime, timedelta
 from importlib.util import find_spec
 from pathlib import Path
 from typing import Any
 
-from llmwiki import __version__
+from llmwiki import __version__, automation_units
 from llmwiki.adapters import discover_all, get_available
-from llmwiki.automation_status import load_status
+from llmwiki.automation_plan import schedule_from_status
+from llmwiki.automation_status import default_log_path, load_status, vault_automation_log_path
+from llmwiki.automation_units import (
+    LEGACY_SYSTEMD,
+    DiscoveryResult,
+    InstalledUnit,
+    legacy_unit_serving,
+    removal_steps,
+    serves_vault,
+    unit_for_vault,
+)
 from llmwiki.candidates import DEFAULT_STALE_DAYS, list_candidates, stale_candidates
 from llmwiki.config_schedule import _load_sessions_config
+from llmwiki.cron_spec import CronError, cron_interval, parse_cron
 from llmwiki.doctor.kb import finding_from_entry, get_entry, load_heal_kb
 from llmwiki.doctor.models import Finding
+from llmwiki.doctor.runners import install_automation_argv
 from llmwiki.install_agent_kit import MANIFEST_NAME, read_manifest
 from llmwiki.install_hint import detect_env, install_hint
 from llmwiki.migrate_page_kinds import REMOVED_FOLDERS, REMOVED_KINDS, page_kind
@@ -47,7 +61,15 @@ DETECTOR_IDS_G_TO_O: frozenset[str] = frozenset(
         "pipeline.backlog_overdue",
         "candidates.review_pending",
         "migrate.schema_drift",
+        "automation.unit_missing",
+        "automation.points_elsewhere",
+        "automation.checkout_missing",
+        "automation.check_unavailable",
         "automation.not_active",
+        "automation.stale_run",
+        "automation.last_run_failed",
+        "automation.duplicate_legacy",
+        "automation.orphan_unit",
         "build.site_stale",
         "agent_kit.outdated",
         "privacy.draft_redaction",
@@ -302,6 +324,11 @@ def check_pipeline_backlog(
         "This is not “oldest file in raw/” — already-synthesized sessions stay "
         "in raw/ forever and do not count."
     )
+    if (load_status(Path(vault)) or {}).get("job"):
+        message += (
+            " Scheduled maintenance is recorded for this vault but may not be reaching it"
+            " — see the automation findings in this report."
+        )
     f = _finding("pipeline.backlog_overdue", message=message)
     return [f] if f is not None else []
 
@@ -362,30 +389,292 @@ def check_migrate_hints(vault: Path) -> list[Finding]:
     return [f] if f is not None else []
 
 
-def check_automation(vault: Path) -> list[Finding]:
-    """Area L — declared automation that is not active."""
-    status = load_status(Path(vault))
-    if not status:
-        return []
+_LIVE_INACTIVE = {
+    "linux": "timer is disabled",
+    "macos": "job is not loaded",
+    "windows": "task is disabled",
+}
+
+
+def _gone_part(unit: InstalledUnit) -> str | None:
+    """What of ``unit``'s runtime no longer exists on disk (basename only), or ``None``."""
+    if unit.working_dir is not None and not Path(unit.working_dir).is_dir():
+        return f"runs from a checkout that no longer exists ('{Path(unit.working_dir).name}')"
+    if unit.wrapper_path is None or not Path(unit.wrapper_path).is_file():
+        label = Path(unit.wrapper_path).name if unit.wrapper_path else "none named"
+        return f"its wrapper script is gone ('{label}')"
+    return None
+
+
+def _distinct_labels(a: Path, b: Path, *, cap: int = 3) -> tuple[str, str]:
+    """Shortest trailing-component suffixes (at most ``cap``) that tell ``a`` and ``b`` apart."""
+    for depth in range(1, cap + 1):
+        label_a = "/".join(a.parts[-depth:])
+        label_b = "/".join(b.parts[-depth:])
+        if label_a != label_b:
+            break
+    return label_a, label_b
+
+
+def _schedule_cause(
+    root: Path, job: Any, discovery: DiscoveryResult
+) -> tuple[Finding | None, str | None, InstalledUnit | None]:
+    """``(cause finding, could-not-check reason, unit serving this vault)``."""
+    unit = unit_for_vault(root, discovery)
+    if unit is None:
+        if discovery.unavailable:
+            return None, discovery.unavailable, None
+        return (
+            _finding(
+                "automation.unit_missing",
+                message=(
+                    f"Automation job {job!r} is recorded for this vault '{root.name}' "
+                    "but no schedule for it is installed."
+                ),
+            ),
+            None,
+            None,
+        )
+    if not serves_vault(unit, root):
+        if unit.target_vault is None:
+            return None, unit.reason_unknown or f"schedule {unit.name} names no vault", None
+        other = Path(unit.target_vault).expanduser().resolve()
+        other_label, root_label = _distinct_labels(other, root)
+        return (
+            _finding(
+                "automation.points_elsewhere",
+                message=f"schedule {unit.name} serves vault '{other_label}', not this vault '{root_label}'",
+            ),
+            None,
+            None,
+        )
+    gone = _gone_part(unit)
+    if gone is not None:
+        return (
+            _finding(
+                "automation.checkout_missing",
+                message=f"Schedule {unit.name} serves this vault but {gone}.",
+            ),
+            None,
+            None,
+        )
+    return None, discovery.unavailable, unit
+
+
+def _orphan_finding(discovery: DiscoveryResult) -> Finding | None:
+    """One finding naming every unit whose known target vault no longer exists, with removal steps."""
+    if discovery.unavailable:
+        return None
+    orphans = [
+        unit
+        for unit in discovery.units
+        if unit.target_vault is not None and not Path(unit.target_vault).expanduser().is_dir()
+    ]
+    if not orphans:
+        return None
+    lines = ["Leftover schedules for vaults that no longer exist (doctor does not remove them):"]
+    for unit in orphans:
+        lines.append(f"  {unit.name} (vault '{Path(unit.target_vault).name}') — remove it with:")
+        lines.extend(f"    {step}" for step in removal_steps(unit))
+    return _finding("automation.orphan_unit", message="\n".join(lines))
+
+
+def check_automation(
+    vault: Path,
+    *,
+    now: datetime | None = None,
+    discovery: DiscoveryResult | None = None,
+) -> list[Finding]:
+    """Area L — leftover schedules, and declared automation that is missing, misdirected, broken or not active.
+
+    ``discovery`` is the scheduler inspection to judge against (default:
+    :func:`automation_units.discover_local_units`, read once per call; the
+    scheduler is asked whether units are enabled only when this vault declares a
+    job). Leftover schedules for vaults that no longer exist are reported on any
+    vault; everything else only when this vault's status declares a job. ``now``
+    (default: UTC now) is the clock run ages are judged against.
+    """
+    status = load_status(Path(vault)) or {}
     job = status.get("job")
+    if discovery is None:
+        discovery = automation_units.discover_local_units(probe=bool(job))
+    orphan = _orphan_finding(discovery)
+    leftovers = [orphan] if orphan is not None else []
     if not job:
-        return []
-    activated = status.get("activated")
-    active = status.get("active")
+        return leftovers
+    return _job_findings(vault, job, status, discovery, now) + leftovers
+
+
+def _job_findings(
+    vault: Path,
+    job: Any,
+    status: dict[str, Any],
+    discovery: DiscoveryResult,
+    now: datetime | None,
+) -> list[Finding]:
+    """Findings about the job this vault's status declares."""
+    root = Path(vault).expanduser().resolve()
+    cause, unavailable, unit = _schedule_cause(root, job, discovery)
+    if cause is not None:
+        return _with_runner_argv([cause], root, status)
+    findings: list[Finding] = []
+    if unavailable:
+        f = _finding(
+            "automation.check_unavailable",
+            message=f"Could not check the installed schedule for this vault: {unavailable}.",
+        )
+        if f is not None:
+            findings.append(f)
+    # Installer writes scheduler_*; legacy activated/active only when absent.
+    # None means "not probed", never inactive.
+    activated = status.get("scheduler_activated", status.get("activated"))
+    active = status.get("scheduler_active", status.get("active"))
     note = str(status.get("note") or "")
-    inactive = (
+    recorded_inactive = (
         activated is False
         or active is False
         or "not active" in note.casefold()
         or "skipped" in note.casefold()
     )
-    if not inactive:
-        return []
-    f = _finding(
-        "automation.not_active",
-        message=f"Automation job {job!r} is declared but not active.",
-    )
-    return [f] if f is not None else []
+    message: str | None = None
+    if unit is not None and unit.enabled is False:
+        live = _LIVE_INACTIVE.get(unit.platform, "job is disabled")
+        message = f"Automation job {job!r} is declared but not active: {live}."
+    elif recorded_inactive:
+        message = f"Automation job {job!r} is declared but not active."
+    if message is not None:
+        f = _finding("automation.not_active", message=message)
+        if f is not None:
+            findings.append(f)
+    duplicate = _duplicate_legacy_finding(root, unit, discovery)
+    if duplicate is not None:
+        findings.append(duplicate)
+    run_issue = _run_issue(root, job, status, unit, now or datetime.now(UTC))
+    if run_issue is not None:
+        f = _finding(run_issue[0], message=run_issue[1])
+        if f is not None:
+            findings.append(f)
+    return _with_runner_argv(findings, root, status)
+
+
+def _duplicate_legacy_finding(
+    root: Path, unit: InstalledUnit | None, discovery: DiscoveryResult
+) -> Finding | None:
+    """The legacy single unit still running for this vault beside its own per-vault unit."""
+    if unit is None or unit.legacy:
+        return None
+    legacy = legacy_unit_serving(root, discovery)
+    if legacy is None:
+        return None
+    lines = [
+        f"This vault is also scheduled by the earlier single {LEGACY_SYSTEMD} schedule "
+        f"({legacy.name}), so two jobs run against it. Remove the old one with:"
+    ]
+    lines.extend(f"  {step}" for step in removal_steps(legacy))
+    return _finding("automation.duplicate_legacy", message="\n".join(lines))
+
+
+# A log with no EXIT line yet, written this recently, is a run still in progress.
+_IN_PROGRESS = timedelta(hours=6)
+_EXIT_LINE = re.compile(r"^EXIT:(-?\d+)\s*$", re.MULTILINE)
+
+
+def _humanise(age: timedelta) -> str:
+    """``age`` as "3 days" / "5 hours" / "10 minutes" (largest whole unit)."""
+    seconds = max(0, int(age.total_seconds()))
+    for size, unit in ((86400, "day"), (3600, "hour"), (60, "minute")):
+        if seconds >= size:
+            count = seconds // size
+            return f"{count} {unit}{'' if count == 1 else 's'}"
+    return "less than a minute"
+
+
+def _parse_stamp(raw: Any) -> datetime | None:
+    if not isinstance(raw, str) or not raw.strip():
+        return None
+    try:
+        when = datetime.fromisoformat(raw.strip())
+    except ValueError:
+        return None
+    return when if when.tzinfo is not None else when.replace(tzinfo=UTC)
+
+
+# The wrapper keeps the job's exit code: 75 is a provider usage-limit stop, not a failure.
+_SOFT_STOP_EXITS = frozenset({0, 75})
+
+
+def _run_log(
+    root: Path, status: dict[str, Any], unit: InstalledUnit | None, since: datetime | None
+) -> Path | None:
+    """First run log written by this schedule: unit wrapper's, status ``log_path``, per-vault.
+
+    The legacy global log counts only for the legacy unit, or when the serving
+    unit names no log of its own. A log last written before ``since`` (the
+    schedule's ``installed_at``) belongs to an earlier schedule and is skipped.
+    """
+    candidates: list[Path] = []
+    if unit is not None and unit.log_path is not None:
+        candidates.append(Path(unit.log_path))
+    if isinstance(status.get("log_path"), str) and status["log_path"].strip():
+        candidates.append(Path(status["log_path"].strip()).expanduser())
+    candidates.append(vault_automation_log_path(root))
+    if unit is None or unit.legacy or unit.log_path is None:
+        candidates.append(default_log_path())
+    for path in candidates:
+        try:
+            mtime = datetime.fromtimestamp(path.stat().st_mtime, UTC)
+        except OSError:
+            continue
+        if path.is_file() and (since is None or mtime >= since):
+            return path
+    return None
+
+
+def _run_issue(
+    root: Path, job: Any, status: dict[str, Any], unit: InstalledUnit | None, now: datetime
+) -> tuple[str, str] | None:
+    """``(finding id, message)`` when this vault's schedule has stopped completing runs."""
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=UTC)
+    try:
+        threshold = 2 * cron_interval(parse_cron(schedule_from_status(status)))
+    except CronError:
+        return None
+    installed_at = _parse_stamp(status.get("installed_at"))
+    log = _run_log(root, status, unit, installed_at)
+    if log is None:
+        since = installed_at or _parse_stamp(status.get("updated_at"))
+        if since is None or now - since <= threshold:
+            return None
+        return (
+            "automation.stale_run",
+            f"Automation job {job!r} has not run since it was set up {_humanise(now - since)} ago.",
+        )
+    try:
+        last_run = datetime.fromtimestamp(log.stat().st_mtime, UTC)
+        text = log.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    exits = _EXIT_LINE.findall(text)
+    if exits and int(exits[-1]) not in _SOFT_STOP_EXITS:
+        return (
+            "automation.last_run_failed",
+            f"Automation job {job!r}: last run failed (exit {exits[-1]}); see {log}.",
+        )
+    age = now - last_run
+    if not exits and age < _IN_PROGRESS:
+        return None
+    if age > threshold:
+        return ("automation.stale_run", f"Automation job {job!r}: last run was {_humanise(age)} ago.")
+    return None
+
+
+def _with_runner_argv(
+    findings: list[Finding], root: Path, status: dict[str, Any]
+) -> list[Finding]:
+    """Attach the reinstall command to ``install_automation`` findings, so display and dispatch agree."""
+    argv = tuple(install_automation_argv(root, status))
+    return [replace(f, runner_argv=argv) if f.runner == "install_automation" else f for f in findings]
 
 
 def check_site_freshness(vault: Path) -> list[Finding]:
@@ -474,7 +763,7 @@ def run_checks_g_to_o(
     findings.extend(check_pipeline_backlog(vault, now=now))
     findings.extend(check_candidates_review(vault, now=now))
     findings.extend(check_migrate_hints(vault))
-    findings.extend(check_automation(vault))
+    findings.extend(check_automation(vault, now=now))
     findings.extend(check_site_freshness(vault))
     findings.extend(check_agent_kit(vault, kit_dest=kit_dest))
     findings.extend(check_privacy_posture())

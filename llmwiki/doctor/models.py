@@ -45,6 +45,8 @@ class Finding:
     severity: Severity
     tier: FixTier
     runner: str | None = None
+    #: ``-m llmwiki`` arguments the runner executes, shown before consent.
+    runner_argv: tuple[str, ...] | None = None
 
 
 def sort_findings(findings: list[Finding]) -> list[Finding]:
