@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import re
 from collections import defaultdict
-from collections.abc import Collection
+from collections.abc import Callable, Collection
 from dataclasses import dataclass, field
 from difflib import SequenceMatcher
 from pathlib import Path
@@ -144,6 +144,9 @@ def derive_vocabulary(
     ``wiki/archive/candidates/`` is never offered, in any casing, and a name a
     live page lists under ``## Aliases`` (merge or discard ``--redirect``)
     folds into that page's topic, so the next synth links the page instead.
+    A name that titles a curated entity or concept page stays that page's
+    topic even when the consolidation cache dropped it or folded it onto a
+    different page.
     """
     pages = scan_pages(wiki_dir)
     sessions = _session_pages(wiki_dir, pages)
@@ -195,6 +198,11 @@ def derive_vocabulary(
         elif low in dropped:
             continue  # consolidator removed this as noise
 
+    page_descriptions = _keep_curated_names_on_their_pages(
+        raw_sessions, raw_to_canonical, _topic_page_index(pages),
+        descriptions=descriptions, skip=_reviewed,
+    )
+
     # A redirected name adopts whatever canonical its target page's spelling
     # already has, else the target slug; a discarded name (or one the cache
     # folded onto a discarded canonical) leaves the vocabulary entirely.
@@ -216,7 +224,12 @@ def derive_vocabulary(
         if canonical is None:
             continue  # dropped
         topic = topics.setdefault(
-            canonical, Topic(canonical=canonical, description=descriptions.get(canonical, "")))
+            canonical,
+            Topic(
+                canonical=canonical,
+                description=descriptions.get(canonical) or page_descriptions.get(canonical, ""),
+            ),
+        )
         topic.aliases.add(raw)
         topic.sessions |= sess
 
@@ -266,8 +279,13 @@ def topic_kind_lookup(wiki_dir: Path | None = None) -> dict[str, TopicPage]:
     ``wiki/entities/Hazel.md`` says it is. The folder a page lives in is
     the only kind signal the wiki schema carries, so that is what we key on.
     """
+    return _topic_page_index(scan_pages(wiki_dir))
+
+
+def _topic_page_index(pages: dict[str, dict[str, Any]]) -> dict[str, TopicPage]:
+    """:func:`topic_kind_lookup` over a :func:`scan_pages` result already in hand."""
     lookup: dict[str, TopicPage] = {}
-    for slug, page in scan_pages(wiki_dir).items():
+    for slug, page in pages.items():
         # `kind` is the wiki FOLDER the page lives in — `scan_pages` derives
         # `type` from the directory, never from frontmatter. Keep it that way:
         # project pages created before #102 still carry `type: entity` plus
@@ -336,6 +354,79 @@ def _curated_pages(lookup: dict[str, TopicPage]) -> dict[str, TopicPage]:
             continue
         curated.setdefault(record.title or record.slug, record)
     return curated
+
+
+def _keep_curated_names_on_their_pages(
+    raw_sessions: dict[str, set[str]],
+    raw_to_canonical: dict[str, str],
+    index: dict[str, TopicPage],
+    *,
+    descriptions: dict[str, str],
+    skip: Callable[[str], bool],
+) -> dict[str, str]:
+    """Put every spelling that names a curated page on that page's topic (#362).
+
+    The consolidation cache and the similarity heuristic may drop such a
+    spelling or fold it onto a topic that resolves to a different page; the
+    page would then reach the graph with no sessions. A fold onto a topic with
+    no page of its own is kept when it is the only curated page folded there —
+    the topic is renamed after the page so it resolves to it — and undone when
+    several curated pages share it. A spelling is matched to a page by
+    :func:`norm_page_key`; topics resolve to pages through ``index``, the same
+    lookup the graph uses. ``skip`` names spellings a reviewer already settled.
+
+    Mutates ``raw_to_canonical``. Returns cache descriptions carried over to
+    page topics the cache never named, keyed by the new canonical.
+    """
+    curated: dict[str, TopicPage] = {}
+    for record in index.values():
+        if record.kind not in CURATED_KIND_FOLDERS or record.slug.startswith("_"):
+            continue
+        for name in (record.slug, record.title):
+            if norm_page_key(name):
+                curated.setdefault(norm_page_key(name), record)
+    page_canonical: dict[str, str] = {}
+    by_canonical: dict[str, list[str]] = defaultdict(list)
+    for raw, canonical in raw_to_canonical.items():
+        by_canonical[canonical].append(raw)
+        owner = index.get(canonical.strip().lower())
+        if owner is not None:
+            page_canonical.setdefault(owner.path, canonical)
+
+    moves: list[tuple[str, TopicPage, str]] = []
+    claims: dict[str, list[tuple[str, TopicPage]]] = defaultdict(list)
+    for raw in raw_sessions:
+        page = curated.get(norm_page_key(raw))
+        if page is None or skip(raw):
+            continue
+        canonical = raw_to_canonical.get(raw)
+        if canonical is None:
+            moves.append((raw, page, raw))
+            continue
+        owner = index.get(canonical.strip().lower())
+        if owner is None:
+            claims[canonical].append((raw, page))
+        elif owner.path != page.path:
+            moves.append((raw, page, canonical))
+
+    carried: dict[str, str] = {}
+
+    def _page_topic(page: TopicPage, origin: str) -> str:
+        canonical = page_canonical.setdefault(page.path, page.title or page.slug)
+        if descriptions.get(origin) and not descriptions.get(canonical):
+            carried.setdefault(canonical, descriptions[origin])
+        return canonical
+
+    for canonical, claimants in claims.items():
+        if len({page.path for _, page in claimants}) == 1:
+            target = _page_topic(claimants[0][1], canonical)
+            for raw in by_canonical[canonical]:
+                raw_to_canonical[raw] = target
+        else:
+            moves.extend((raw, page, canonical) for raw, page in claimants)
+    for raw, page, origin in moves:
+        raw_to_canonical[raw] = _page_topic(page, origin)
+    return carried
 
 
 def resolve_project_topic_urls(

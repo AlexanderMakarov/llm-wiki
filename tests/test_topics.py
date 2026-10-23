@@ -1251,6 +1251,181 @@ def test_consolidation_dropped_excluded_from_graph(tmp_path: Path):
     assert {n["id"] for n in g["nodes"]} == {"OpenClaw"}
 
 
+def test_curated_name_the_cache_dropped_keeps_its_sessions(tmp_path: Path):
+    """A curated page outranks the consolidator's noise verdict on its name."""
+    wiki = _make_wiki(tmp_path, {
+        "s1": ["OpenClaw", "Markdown"],
+        "s2": ["OpenClaw", "Markdown"],
+    })
+    _curated_page_file(wiki, "entities", "Markdown")
+    parse_and_cache(
+        '{"topics": [{"canonical": "OpenClaw", "aliases": []}],'
+        ' "dropped": ["Markdown"]}',
+        wiki,
+    )
+    g = build_topic_graph(wiki, min_sessions=1, include_curated_pages=True)
+    markdown = next(n for n in g["nodes"] if n["id"] == "Markdown")
+    assert markdown["session_count"] == 2
+    assert markdown["degree"] == 1
+
+
+def test_curated_name_the_cache_merged_into_another_page_stays_its_own_topic(
+    tmp_path: Path,
+):
+    """Two curated pages are two topics, even when the cache folds one into the other."""
+    wiki = _make_wiki(tmp_path, {
+        "s1": ["wgctl", "Widget"],
+        "s2": ["WGCTL", "Widget"],
+        "s3": ["Widget CLI", "Widget"],
+    })
+    _curated_page_file(wiki, "entities", "wgctl")
+    _curated_page_file(wiki, "entities", "Widget CLI")
+    parse_and_cache(
+        '{"topics": [{"canonical": "Widget CLI", "aliases": ["wgctl", "WGCTL"]},'
+        ' {"canonical": "Widget", "aliases": []}], "dropped": []}',
+        wiki,
+    )
+    topics, raw_to_canonical = derive_vocabulary(wiki)
+    assert raw_to_canonical["wgctl"] == raw_to_canonical["WGCTL"] == "wgctl"
+    by_name = {t.canonical: t for t in topics}
+    assert by_name["wgctl"].sessions == {"s1", "s2"}
+    assert by_name["Widget CLI"].sessions == {"s3"}
+
+    g = build_topic_graph(wiki, min_sessions=1, include_curated_pages=True)
+    wgctl = next(n for n in g["nodes"] if n["id"] == "wgctl")
+    assert wgctl["degree"] == 1
+    assert wgctl["wiki_path"] == "wiki/entities/wgctl.md"
+
+
+def test_cache_alias_onto_the_same_curated_page_still_applies(tmp_path: Path):
+    """Exempting curated names must not split a spelling the cache folded correctly."""
+    wiki = _make_wiki(tmp_path, {
+        "s1": ["OpenClaw"],
+        "s2": ["openclaw"],
+        "s3": ["OC"],
+    })
+    _curated_page_file(wiki, "entities", "OpenClaw")
+    parse_and_cache(
+        '{"topics": [{"canonical": "OpenClaw", "aliases": ["openclaw", "OC"]}],'
+        ' "dropped": []}',
+        wiki,
+    )
+    topics, _ = derive_vocabulary(wiki)
+    [topic] = topics
+    assert topic.canonical == "OpenClaw"
+    assert topic.sessions == {"s1", "s2", "s3"}
+
+
+def test_cache_fold_onto_a_pageless_canonical_is_renamed_after_the_page(
+    tmp_path: Path,
+):
+    """The fold stands, under the page's name, so the topic resolves to the page."""
+    wiki = _make_wiki(tmp_path, {
+        "s1": ["OpenClaw"],
+        "s2": ["OpenClaw Agent"],
+        "s3": ["OC"],
+    })
+    _curated_page_file(wiki, "entities", "OpenClaw")
+    parse_and_cache(
+        '{"topics": [{"canonical": "OpenClaw Agent", "description": "Agent platform.",'
+        ' "aliases": ["OpenClaw", "OC"]}], "dropped": []}',
+        wiki,
+    )
+    topics, _ = derive_vocabulary(wiki)
+    [topic] = topics
+    assert topic.canonical == "OpenClaw"
+    assert topic.sessions == {"s1", "s2", "s3"}
+    assert topic.description == "Agent platform."
+
+
+def test_two_curated_names_folded_onto_one_pageless_canonical_stay_apart(
+    tmp_path: Path,
+):
+    """A page-less topic two curated pages share is split back onto the pages."""
+    wiki = _make_wiki(tmp_path, {
+        "s1": ["wgctl", "Widget"],
+        "s2": ["Widget CLI", "Widget"],
+        "s3": ["Widget Tool", "Widget"],
+    })
+    _curated_page_file(wiki, "entities", "wgctl")
+    _curated_page_file(wiki, "entities", "Widget CLI")
+    parse_and_cache(
+        '{"topics": [{"canonical": "Widget Tool", "aliases": ["wgctl", "Widget CLI"]},'
+        ' {"canonical": "Widget", "aliases": []}], "dropped": []}',
+        wiki,
+    )
+    g = build_topic_graph(wiki, min_sessions=1, include_curated_pages=True)
+    by_page = {n.get("wiki_path"): n for n in g["nodes"]}
+    for path in ("wiki/entities/wgctl.md", "wiki/entities/Widget CLI.md"):
+        assert by_page[path]["session_count"] == 1
+        assert by_page[path]["degree"] == 1
+
+
+def test_punctuation_variant_folded_onto_a_pageless_canonical_reaches_the_page(
+    tmp_path: Path,
+):
+    """A spelling matched to a page by `norm_page_key` is not lost to a page-less fold."""
+    wiki = _make_wiki(tmp_path, {
+        "s1": ["open-claw", "Widget"],
+        "s2": ["OpenClaw Agent", "Widget"],
+    })
+    _curated_page_file(wiki, "entities", "OpenClaw")
+    parse_and_cache(
+        '{"topics": [{"canonical": "OpenClaw Agent", "aliases": ["open-claw"]},'
+        ' {"canonical": "Widget", "aliases": []}], "dropped": []}',
+        wiki,
+    )
+    g = build_topic_graph(wiki, min_sessions=1, include_curated_pages=True)
+    page_nodes = [n for n in g["nodes"] if n.get("wiki_path") == "wiki/entities/OpenClaw.md"]
+    assert len(page_nodes) == 1
+    assert page_nodes[0]["session_count"] == 2
+
+
+def test_curated_name_the_cache_folded_onto_a_project_topic_stays_its_own_topic(
+    tmp_path: Path,
+):
+    """A project page backing the cache canonical is a different page too."""
+    wiki = _make_wiki(tmp_path, {
+        "s1": ["Widget Notes Style", "Widget"],
+        "s2": ["widget-notes", "Widget"],
+    })
+    _curated_page_file(wiki, "concepts", "Widget Notes Style")
+    (wiki / "projects").mkdir()
+    (wiki / "projects" / "widget-notes.md").write_text(
+        '---\ntitle: "widget-notes"\ntype: project\n---\n', encoding="utf-8"
+    )
+    parse_and_cache(
+        '{"topics": [{"canonical": "widget-notes", "aliases": ["Widget Notes Style"]},'
+        ' {"canonical": "Widget", "aliases": []}], "dropped": []}',
+        wiki,
+    )
+    g = build_topic_graph(wiki, min_sessions=1, include_curated_pages=True)
+    style = next(n for n in g["nodes"] if n["id"] == "Widget Notes Style")
+    assert style["session_count"] == 1
+    assert style["degree"] == 1
+
+
+def test_dropped_punctuation_variant_of_a_curated_name_joins_the_page_topic(
+    tmp_path: Path,
+):
+    """A spelling matched to a page by `norm_page_key` lands on that page's node."""
+    wiki = _make_wiki(tmp_path, {
+        "s1": ["open-claw", "Widget"],
+        "s2": ["open-claw", "Widget"],
+    })
+    _curated_page_file(wiki, "entities", "OpenClaw")
+    parse_and_cache(
+        '{"topics": [{"canonical": "Widget", "aliases": []}],'
+        ' "dropped": ["open-claw"]}',
+        wiki,
+    )
+    g = build_topic_graph(wiki, min_sessions=1, include_curated_pages=True)
+    assert {n["id"] for n in g["nodes"]} == {"OpenClaw", "Widget"}
+    openclaw = next(n for n in g["nodes"] if n["id"] == "OpenClaw")
+    assert openclaw["session_count"] == 2
+    assert openclaw["wiki_path"] == "wiki/entities/OpenClaw.md"
+
+
 def test_display_aliases_collapse_spelling_variants():
 
     out = _display_aliases(

@@ -98,3 +98,34 @@
 - Site cap: empty input stays a 10-row preview; explicit text/filter/sort queries use the 200-result ceiling, with exact totals for filter-only/sort-only truncation.
 - Static gate: `ruff check llmwiki tests scripts` passed. Full pytest had only the same three environment-only failures (one real-home write blocked by the read-only sandbox; two isolated wheel builds blocked from dependency downloads). The full suite passed with exactly those three cases deselected. Fresh demo build: 205 corpus entries, no input cap reached, zero oversized skips.
 - Next: commit and push, rebase against current `origin/main`, open PR, and watch required checks. Do not append to this tracked log after the PR opens.
+
+## fix-bug #362 — fetch, diagnose, classify (2026-10-23)
+- Bug: [#362](https://github.com/AlexanderMakarov/llm-wiki/issues/362) — curated entity/concept pages render as isolated 0-session nodes on `graph.html` when the known-names consolidation cache drops their name or folds it onto a topic backed by a different page.
+- Branch `fix/362-curated-topic-names`, worktree `.claude/worktrees/fix-362-curated-topic-names`, throwaway vault `.worktree-vault/`.
+- Root cause: `derive_vocabulary` (`llmwiki/topics.py`) let the cache's `alias_map` / `dropped` override a spelling that titles a live curated page; the #248 curated-page bypass then seeds that page with zero sessions. Reproduced on a live vault read-only (22 isolated nodes, 16 from this cause) and on synthetic fixtures.
+- Classification: **conformance** against this spec — FR1 already promises a curated page that is co-cited keeps its connections; no functional-spec amendment.
+- Next: fix + regression tests.
+
+## fix-bug #362 — fix, regression tests (2026-10-23)
+- Fix: a spelling whose `norm_page_key` names a live curated page is overruled from the cache when the cache drops it or folds it onto a canonical that resolves (by the same lookup the graph uses, any topic-kind page) to a different page; an overruled spelling joins the topic that already resolves to its page, else a topic named after the page. Folds onto the same page or a page-less canonical still apply; discard / redirect (#282) still win.
+- Tests in `tests/test_topics.py`: dropped curated name keeps its sessions; fold onto another curated page stays its own topic; fold onto a project-backed topic stays its own topic; dropped punctuation variant joins the page topic (each red before the fix); same-page and page-less-canonical folds still apply (guards).
+- A pre-review subagent pass found the page-less-canonical over-reach and the punctuation-variant stray node; both fixed. Live-vault read-only recheck: 22 → 7 isolated nodes (6 unlinked pages + one whose sessions cite only sub-threshold topics).
+- Docs: CHANGELOG *Fixed* entry, one sentence in `docs/reference/cli.md` (synth known-names section).
+- Next: verify touched criteria, smoke confirm, local review.
+
+## fix-bug #362 — verify touched criteria, smoke (2026-10-23)
+- FR1 (co-cited curated page keeps its page and connections) re-checked with a real `python3 -m llmwiki build` on `.worktree-vault` seeded with synthetic sources, curated pages and a consolidation cache that drops one curated name and folds another onto a different curated page. With `origin/main`'s `topics.py` both pages render in `graph.html` with 0 sessions / degree 0; with the fix they carry 2 sessions and degree 4 / 3.
+- Full suite on a clean tree: 6513 passed, 22 skipped (origin/main: 6507 passed, 22 skipped). Stray-dir leak that breaks `test_109` on a rerun is pre-existing and split to #363.
+- Operator smoke on the live vault (worktree `build`): confirmed working.
+- Spec amendment: none (conformance).
+- Next: local review.
+
+## fix-bug #362 — local review keep/drop (2026-10-23)
+- Independent review (session-only `review.md`): **Request changes** — 1 blocker, 4 nits. Operator kept all five.
+- B1 (fold onto a page-less canonical still isolated a curated page when two pages shared it, or when the folded spelling only matched by `norm_page_key`): replaced the overrule predicate with `_keep_curated_names_on_their_pages`, run after the cache/heuristic mapping. A curated spelling whose topic resolves to another page, or that was dropped, moves to its page's topic; a page-less topic one curated page was folded into is renamed after that page; one several pages share is split back onto each page. Tests for both B1 cases plus the renamed page-less case.
+- N1: `topic_kind_lookup` now wraps `_topic_page_index(pages)`, which the vocabulary reuses — one page-identity lookup. N2: page lookups are dict-indexed (no spellings × pages loop). N3: CHANGELOG heading and release note cite #362; wording matches the new rule. N4: a renamed or re-homed page topic keeps the cache description of the name it came from.
+- Re-verified: throwaway-vault `build` (both curated pages connected); live vault read-only 22 → 6 isolated nodes (5 unlinked pages + one with only sub-threshold co-citations).
+
+## fix-bug #362 — commit-push (2026-10-23)
+- PR link keyword: `Closes #362` — the issue's expected behaviour is fully delivered; #363 (test-suite stray dirs) is a separate issue.
+- Next: rebase on `origin/main`, open PR, watch required checks. No further tracked-log writes after the PR opens.
