@@ -343,7 +343,7 @@ python3 -m pytest tests/e2e/
 
 **Coverage floor.** `pyproject.toml` sets `[tool.coverage.report] fail_under = 87` on `llmwiki` for the default unit invocation above. Dropping below 87 fails CI. If a change trips the gate, restore coverage with meaningful tests — or state in the PR body why the drop is justified (deleted surface, moved code, etc.) so reviewers can accept it. E2E stays out of this number (separate workflow).
 
-Suite autouse in `tests/conftest.py` isolates the default vault **and** neutralizes repo-root `config.json` for in-process merges. Tests that intentionally exercise the user-config overlay must monkeypatch `_USER_CONFIG` / `USER_CONFIG_FILE` themselves.
+Suite autouse in `tests/conftest.py` isolates the default vault and gives every test its own home directory and operator `config.json`. A test that needs settings prepares them through the `settings_sandbox` fixture (`write_operator`, `home`, …) instead of patching paths or `HOME`; a pytest run that changes your real `config.json`, llmwiki's settings in your home directory, or a tracked file fails at the end and lists what changed. Rules: [`docs/CODING_STANDARDS.md`](docs/CODING_STANDARDS.md) (Isolation).
 
 **No unresolved merge conflict markers in commits.** Git’s `<<<<<<< …` / `=======` / `>>>>>>> …` marker lines in any tracked text file fail the `No merge conflict markers` job in `.github/workflows/pr-lint.yml`. The changelog “must be updated” check only verifies `CHANGELOG.md` was touched; it does not validate content.
 

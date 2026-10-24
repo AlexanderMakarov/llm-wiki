@@ -38,9 +38,6 @@ from llmwiki.cursor_token_usage import (
     normalize_cursor_usage_keys,
 )
 
-DEFAULT_EVENTS_PATH = Path.home() / ".cursor" / "llmwiki-cursor-token-events.jsonl"
-DEFAULT_HOOKS_PATH = Path.home() / ".cursor" / "hooks.json"
-DEFAULT_HOOK_SCRIPT_PATH = Path.home() / ".cursor" / "llmwiki-cursor-token-stop.sh"
 _HOOK_MARKER = "llmwiki-cursor-token-stop"
 
 # POSIX sh: works when Cursor runs under bash or zsh (shebang /bin/sh).
@@ -61,6 +58,21 @@ printf '%s\\n' "$payload" >>"$OUT"
 """
 
 
+def default_events_path() -> Path:
+    """Default JSONL log the stop hook appends to, under the current home directory."""
+    return Path.home() / ".cursor" / "llmwiki-cursor-token-events.jsonl"
+
+
+def default_hooks_path() -> Path:
+    """Cursor's ``hooks.json`` under the current home directory."""
+    return Path.home() / ".cursor" / "hooks.json"
+
+
+def default_hook_script_path() -> Path:
+    """The managed stop-hook script under the current home directory."""
+    return Path.home() / ".cursor" / "llmwiki-cursor-token-stop.sh"
+
+
 def events_path(override: str | Path | None = None) -> Path:
     """Resolve the JSONL path (env / argument / default)."""
     if override is not None and str(override).strip():
@@ -68,7 +80,7 @@ def events_path(override: str | Path | None = None) -> Path:
     env = os.environ.get("LLMWIKI_CURSOR_TOKEN_EVENTS", "").strip()
     if env:
         return Path(env).expanduser()
-    return DEFAULT_EVENTS_PATH
+    return default_events_path()
 
 
 def _conversation_id_from_payload(payload: Mapping[str, Any]) -> str:
@@ -282,13 +294,13 @@ def merge_cursor_stop_token_hook(
 
 def default_stop_hook_command(script_path: str | Path | None = None) -> str:
     """Shell command for Cursor ``hooks.json`` ``stop`` entry (POSIX script path)."""
-    path = Path(script_path) if script_path is not None else DEFAULT_HOOK_SCRIPT_PATH
+    path = Path(script_path) if script_path is not None else default_hook_script_path()
     return str(path.expanduser())
 
 
 def write_stop_hook_script(script_path: Path | None = None) -> Path:
     """Write the managed POSIX stop-hook script and make it executable."""
-    target = Path(script_path) if script_path is not None else DEFAULT_HOOK_SCRIPT_PATH
+    target = Path(script_path) if script_path is not None else default_hook_script_path()
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(STOP_HOOK_SCRIPT, encoding="utf-8")
     mode = target.stat().st_mode
@@ -304,7 +316,7 @@ def install_stop_hook(
 ) -> Path:
     """Write the shell stop script and merge it into ``hooks.json``. Returns hooks path."""
     script = write_stop_hook_script(script_path)
-    target = Path(hooks_path) if hooks_path is not None else DEFAULT_HOOKS_PATH
+    target = Path(hooks_path) if hooks_path is not None else default_hooks_path()
     target.parent.mkdir(parents=True, exist_ok=True)
     if target.is_file():
         raw = target.read_text(encoding="utf-8")
@@ -331,7 +343,7 @@ def main(argv: list[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
     if args and args[0] in ("--install-hook", "install-hook"):
         hooks = install_stop_hook()
-        script = DEFAULT_HOOK_SCRIPT_PATH
+        script = default_hook_script_path()
         print(f"installed Cursor stop token hook → {hooks}")
         print(f"shell handler → {script}")
         return 0

@@ -11,6 +11,7 @@ from llmwiki.adapters.contrib.cursor_cli import CursorCliAdapter
 from llmwiki.adapters.contrib.openclaw import OpenClawAdapter, _flatten_text_blocks
 from llmwiki.build import build_site
 from llmwiki.convert import truncate_chars
+from tests.settings_sandbox import SettingsSandbox
 
 
 def test_adapters_register():
@@ -67,8 +68,10 @@ def test_openclaw_discover_skips_trajectories(tmp_path: Path, monkeypatch):
 
 
 def test_openclaw_default_root_when_no_config():
+    """With no configured roots, OpenClaw reads the single default store, `~/.openclaw/agents`."""
     ad = OpenClawAdapter()
-    assert ad.roots == [Path.home() / ".openclaw" / "agents"]
+    (root,) = ad.roots
+    assert root.parts[-2:] == (".openclaw", "agents")
     assert ad.session_store_path == ad.roots
 
 
@@ -136,10 +139,8 @@ def test_openclaw_discover_across_multiple_roots(tmp_path: Path):
     assert found == ["a.jsonl", "b.jsonl"]
 
 
-def test_openclaw_roots_expanduser(tmp_path: Path, monkeypatch):
-    monkeypatch.setenv("HOME", str(tmp_path))
-    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
-    inbox = tmp_path / "vault-inbox"
+def test_openclaw_roots_expanduser(tmp_path: Path, monkeypatch, settings_sandbox: SettingsSandbox):
+    inbox = settings_sandbox.home / "vault-inbox"
     inbox.mkdir()
     (inbox / "main").mkdir()
     (inbox / "main" / "s.jsonl").write_text("{}")

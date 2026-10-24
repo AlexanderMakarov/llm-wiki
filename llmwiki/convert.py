@@ -26,6 +26,7 @@ from llmwiki import REPO_ROOT
 from llmwiki.adapters import REGISTRY, discover_adapters, discover_contrib  # noqa: F401 — test/back-compat surface
 from llmwiki.adapters.base import portable_session_key_fragment
 from llmwiki.adapters.settings import select_sync_adapters
+from llmwiki.config_schedule import user_config_path
 from llmwiki.quarantine import add_entry as _quarantine_add
 from llmwiki.quarantine import clear_entry as _quarantine_clear
 from llmwiki.session_tokens_usage import emit_session_tokens_sidecar, upsert_session_tokens
@@ -37,11 +38,6 @@ from llmwiki.sync.lookback import gc_sync_files_for_lookback, resolve_effective_
 from llmwiki.synth.pipeline import resolve_include_subagents
 
 DEFAULT_CONFIG_FILE = REPO_ROOT / "examples" / "sessions_config.json"
-# #25: the user's personal, gitignored root config.json. On the sync/queue
-# path (convert_all with no explicit config_file) it is merged over
-# DEFAULT_CONFIG_FILE so `filters` overrides actually apply — mirroring
-# config_schedule._load_sessions_config, which the synth/schedule paths use.
-USER_CONFIG_FILE = REPO_ROOT / "config.json"
 DEFAULT_OUT_DIR = REPO_ROOT / "raw" / "sessions"
 DEFAULT_IGNORE_FILE = REPO_ROOT / ".llmwikiignore"
 
@@ -213,7 +209,7 @@ def _resolve_convert_config(config_file: Path | None) -> dict[str, Any]:
     if config_file is not None:
         return load_config(config_file)
     cfg = load_config(DEFAULT_CONFIG_FILE)
-    _overlay_config_file(cfg, USER_CONFIG_FILE)
+    _overlay_config_file(cfg, user_config_path())
     # #56: overlay may have re-emptied real_username with the examples
     # placeholder; re-autodetect so restore/redact stay consistent.
     _ensure_real_username(cfg)

@@ -6,23 +6,20 @@ import json
 from pathlib import Path
 
 import llmwiki.config_schedule as cs
+from tests.settings_sandbox import SettingsSandbox
 
 
-def test_load_default_vault_path_from_user_config(tmp_path: Path, monkeypatch):
+def test_load_default_vault_path_from_user_config(tmp_path: Path, monkeypatch, settings_sandbox: SettingsSandbox):
     clone = tmp_path / "clone"
     clone.mkdir()
     (clone / "examples").mkdir()
     (clone / "examples" / "sessions_config.json").write_text(
         json.dumps({"vault": {"default_path": ""}}), encoding="utf-8",
     )
-    (clone / "config.json").write_text(
-        json.dumps({"vault": {"default_path": str(tmp_path / "my-vault")}}),
-        encoding="utf-8",
-    )
+    settings_sandbox.write_operator({"vault": {"default_path": str(tmp_path / "my-vault")}})
 
     monkeypatch.setattr(cs, "_CLONE_ROOT", clone)
     monkeypatch.setattr(cs, "_SESSIONS_CONFIG", clone / "examples" / "sessions_config.json")
-    monkeypatch.setattr(cs, "_USER_CONFIG", clone / "config.json")
 
     def _real_load_default_vault_path() -> Path | None:
         vault = cs._load_sessions_config().get("vault", {})

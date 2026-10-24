@@ -38,6 +38,7 @@ from llmwiki.doctor import runners as runners_mod
 from llmwiki.doctor.checks import check_automation
 from llmwiki.install_hint import PythonEnv
 from llmwiki.state_store import write_state
+from tests.settings_sandbox import SettingsSandbox
 
 _NOW = datetime(2026, 10, 20, 12, 0, tzinfo=UTC)
 _POINTS_ELSEWHERE = "automation.points_elsewhere"
@@ -53,9 +54,9 @@ _AUTOMATION_IDS = (
 class Machine:
     """A throwaway Linux box: scratch HOME, stateful fake systemd, real discovery over it."""
 
-    def __init__(self, root: Path) -> None:
+    def __init__(self, root: Path, home: Path) -> None:
         self.root = root
-        self.home = root / "home"
+        self.home = home
         self.unit_dir = self.home / ".config" / "systemd" / "user"
         self.unit_dir.mkdir(parents=True)
         self.disabled: set[str] = set()
@@ -108,9 +109,9 @@ class Machine:
 
 
 @pytest.fixture
-def machine(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Machine:
-    box = Machine(tmp_path / "machine")
-    monkeypatch.setenv("HOME", str(box.home))
+def machine(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, settings_sandbox: SettingsSandbox) -> Machine:
+    """A throwaway Linux box whose home is the test's sandboxed home directory."""
+    box = Machine(tmp_path / "machine", settings_sandbox.home)
     monkeypatch.setattr("llmwiki.automation_install.run_scheduler_cmd", box.scheduler)
     monkeypatch.setattr("llmwiki.automation_install.detect_platform", lambda: "linux")
     monkeypatch.setattr("llmwiki.cli.detect_platform", lambda: "linux")

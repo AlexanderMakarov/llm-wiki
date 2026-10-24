@@ -1,9 +1,10 @@
 """Pytest config for llmwiki tests.
 
 Makes sure the `llmwiki` package is importable regardless of where pytest is
-invoked from, and that tests never write into the developer's real vault or
-inherit gitignored root ``config.json`` settings (``vault.default_path``,
-``synthesis.concurrency``, convert filters, …).
+invoked from, and that tests never touch the developer's real vault or real
+settings: every test gets its own home directory and operator ``config.json``
+(``settings_sandbox``), and a pytest run that changes the real ones, or a
+tracked file, fails (``tests/tracked_files.py``).
 """
 
 from __future__ import annotations
@@ -15,10 +16,11 @@ import pytest
 
 from llmwiki.automation_units import DiscoveryResult
 from llmwiki.state_store import configure_state_file
+from tests.settings_sandbox import SettingsSandbox, install_sandbox
 
-# Autouse guard (#91): fails any test that leaves a tracked file modified.
-# Imported for its side effect of registering the fixture.
-from tests.tracked_files import tracked_file_guard  # noqa: F401
+# Session hooks that fail a run which changed a tracked file or a real settings
+# file. Imported so pytest registers them from this conftest.
+from tests.tracked_files import pytest_sessionfinish, pytest_sessionstart  # noqa: F401
 
 # Ensure the repo root (which contains the `llmwiki/` package dir) is on
 # sys.path when pytest is run from anywhere.
@@ -39,21 +41,11 @@ def _isolate_default_vault(tmp_path_factory, monkeypatch):
     ``llmwiki synthesize --estimate`` without ``--vault`` will read/write
     ``config.json``'s ``vault.default_path`` (e.g. an Obsidian vault) and
     can wipe ``llmwiki-state.json``.
-
-    Also points ``config_schedule._USER_CONFIG`` and ``convert.USER_CONFIG_FILE``
-    at a path that does not exist (#142) so ``_load_sessions_config`` /
-    ``convert_all`` never merge the developer's gitignored root ``config.json``.
-    Opt-in merge tests re-point those names at a fixture file themselves.
     """
     isolated = tmp_path_factory.mktemp("llmwiki-default-vault")
     (isolated / "raw" / "sessions").mkdir(parents=True)
     (isolated / "raw" / "docs").mkdir(parents=True)
     (isolated / "wiki" / "sources").mkdir(parents=True)
-
-    # Missing file → merge skips the user overlay (is_file() is False).
-    missing_user_config = isolated / "no-user-config.json"
-    monkeypatch.setattr("llmwiki.config_schedule._USER_CONFIG", missing_user_config)
-    monkeypatch.setattr("llmwiki.convert.USER_CONFIG_FILE", missing_user_config)
 
     monkeypatch.setattr(
         "llmwiki.config_schedule.load_default_vault_path",
@@ -65,15 +57,23 @@ def _isolate_default_vault(tmp_path_factory, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def _no_real_scheduler_discovery(tmp_path_factory, monkeypatch):
+def settings_sandbox(tmp_path_factory, monkeypatch) -> SettingsSandbox:
+    """Give every test its own home directory and operator ``config.json``.
+
+    Request the fixture by name to prepare or inspect settings: the operator
+    config through ``write_operator`` / ``read_operator``, files under the home
+    directory through ``home``.
+    """
+    return install_sandbox(tmp_path_factory.mktemp("settings"), monkeypatch)
+
+
+@pytest.fixture(autouse=True)
+def _no_real_scheduler_discovery(monkeypatch):
     """Keep ``install-automation``'s guard and doctor's automation checks off the real scheduler.
 
     Tests that exercise either re-point ``discover_local_units`` themselves or
     pass ``discovery=`` explicitly.
-    ``XDG_STATE_HOME`` points at an empty dir so the legacy global run log is
-    never the developer's own.
     """
-    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path_factory.mktemp("xdg-state")))
     monkeypatch.setattr(
         "llmwiki.automation_units.discover_local_units",
         lambda **_: DiscoveryResult(units=(), unavailable=None),

@@ -1,7 +1,18 @@
-"""Tests for automation install renderers + status + hook merge.
+"""Tests for ``install-automation``: unit renderers, the wizard and its flags, status, and discovery.
 
-The three unit renderers are pinned byte-for-byte on the default daily schedule:
-an existing install must not silently change shape when the schedule notation does.
+# @spec: 010-automation-profiles
+# @spec: 330-doctor-automation-serves-vault
+
+Covers the scheduler unit renderers, the setup wizard and its non-interactive
+flags, the status file and the Home Automation panel, scheduler activation,
+per-vault unit names, discovery of installed units, adoption of the legacy
+single unit, and the checkout guard. The three unit renderers are pinned
+byte-for-byte on the default daily schedule: an existing install must not
+silently change shape when the schedule notation does.
+
+Settings live in the per-test ``settings_sandbox``: tests prepare and inspect the
+operator ``config.json`` and the home directory through it, and patch
+``cli.REPO_ROOT`` only to choose the checkout the scheduled job runs from.
 """
 
 from __future__ import annotations
@@ -60,6 +71,7 @@ from llmwiki.config_schedule import default_vault_for_checkout
 from llmwiki.cron_spec import parse_cron
 from llmwiki.doctor.checks import _orphan_finding
 from llmwiki.install_hint import pip_install_command
+from tests.settings_sandbox import SettingsSandbox
 
 DAILY = parse_cron("0 8 * * *")
 WEEKDAYS = parse_cron("0 8 * * 1-5")
@@ -140,12 +152,14 @@ DAILY_TASK = """<?xml version="1.0" encoding="UTF-16"?>
 
 
 def test_systemd_timer_includes_vault_hint_when_provided():
+    """The systemd timer names the vault it serves when given one, and still catches up on missed runs."""
     text = render_systemd_timer(spec=DAILY, vault_hint="my-vault")
     assert "vault my-vault" in text
     assert "Persistent=true" in text
 
 
 def test_daily_systemd_timer_is_byte_identical():
+    """The daily systemd timer renders exactly the pinned unit, so an existing install keeps its shape."""
     assert render_systemd_timer(spec=DAILY) == DAILY_TIMER
 
 
@@ -158,17 +172,18 @@ def test_daily_launchd_plist_is_byte_identical():
 
 
 def test_daily_windows_task_is_byte_identical():
+    """The daily Windows task renders exactly the pinned task XML."""
     rendered = render_windows_task(wrapper=WRAPPER, working_dir=WORKING_DIR, spec=DAILY)
     assert rendered == DAILY_TASK
 
 
 def test_weekday_schedule_renders_systemd_range():
+    """A weekday schedule renders as a Mon-Fri `OnCalendar` range."""
     assert "OnCalendar=Mon-Fri *-*-* 08:00:00\n" in render_systemd_timer(spec=WEEKDAYS)
 
 
 def test_launchd_plist_escapes_paths_so_the_plist_still_parses():
-    """A vault or home directory holding ``&``/``<``/``>`` must not produce a plist
-    launchd refuses with an opaque parse error."""
+    """Paths holding `&`, `<` or `>` are escaped, so the launchd plist parses and keeps them intact."""
     rendered = render_launchd_plist(
         wrapper=XML_HOSTILE_WRAPPER,
         working_dir=XML_HOSTILE_DIR,
@@ -181,6 +196,7 @@ def test_launchd_plist_escapes_paths_so_the_plist_still_parses():
 
 
 def test_windows_task_escapes_paths_so_the_task_xml_still_parses():
+    """Paths holding `&`, `<` or `>` are escaped, so the Windows task XML parses and keeps them intact."""
     rendered = render_windows_task(
         wrapper=XML_HOSTILE_WRAPPER, working_dir=XML_HOSTILE_DIR, spec=DAILY
     )
@@ -189,16 +205,8 @@ def test_windows_task_escapes_paths_so_the_task_xml_still_parses():
     assert "&amp;" in rendered
 
 
-def test_escaping_leaves_ordinary_paths_byte_identical():
-    """Escaping is a no-op on a path with nothing to escape — the pinned renderings above
-    stay valid, and this says so explicitly rather than leaving it implied."""
-    assert render_launchd_plist(
-        wrapper=WRAPPER, working_dir=WORKING_DIR, log_path=LOG_PATH, spec=DAILY
-    ) == DAILY_PLIST
-    assert render_windows_task(wrapper=WRAPPER, working_dir=WORKING_DIR, spec=DAILY) == DAILY_TASK
-
-
 def test_weekday_schedule_renders_five_launchd_entries():
+    """A weekday schedule renders five launchd calendar intervals, one per weekday."""
     rendered = render_launchd_plist(
         wrapper=WRAPPER, working_dir=WORKING_DIR, log_path=LOG_PATH, spec=WEEKDAYS
     )
@@ -209,6 +217,7 @@ def test_weekday_schedule_renders_five_launchd_entries():
 
 
 def test_hook_merge_idempotent():
+    """Installing the Claude session-start hook twice adds it once, and uninstalling removes it."""
     settings: dict = {"hooks": {}}
     cmd = "python3 -m llmwiki sync"
     once = merge_claude_session_start_hook(settings, cmd, install=True)
@@ -220,6 +229,7 @@ def test_hook_merge_idempotent():
 
 
 def test_cursor_hook_merge_idempotent():
+    """Installing the Cursor session-start hook twice adds it once."""
     hooks = {"version": 1, "hooks": {}}
     cmd = "python3 -m llmwiki sync"
     once = merge_cursor_session_start_hook(hooks, cmd, install=True)
@@ -246,6 +256,7 @@ def _install(tmp_path: Path, **overrides) -> tuple[dict, Path, Path]:
 
 
 def test_run_install_writes_status_and_units(tmp_path: Path):
+    """An ingest install writes the timer and wrapper units and a status with the job, legacy profile, time and log path."""
     status, vault, units = _install(tmp_path, plan=AutomationPlan(job="ingest"), schedule="0 8 * * *")
     assert status["job"] == "ingest"
     assert status["profile"] == "A"
@@ -288,6 +299,7 @@ def test_run_install_defaults_to_ingest_at_eight(tmp_path: Path):
     ],
 )
 def test_wrapper_command_line_is_plan_command(tmp_path: Path, plan: AutomationPlan):
+    """The wrapper runs exactly the plan's command, wrapped so its exit code is recorded."""
     _status, _vault, units = _install(tmp_path, plan=plan)
     expected = plan_command(
         plan, python_bin="python3", working_dir=tmp_path, vault=(tmp_path / "vault").resolve()
@@ -298,6 +310,7 @@ def test_wrapper_command_line_is_plan_command(tmp_path: Path, plan: AutomationPl
 
 
 def test_status_carries_new_and_legacy_keys(tmp_path: Path):
+    """The status records the plan and schedule in words alongside the legacy profile and clock keys older readers use."""
     plan = AutomationPlan(job="maintain", graph="builtin", lint_fail="errors")
     _status, vault, _units = _install(tmp_path, plan=plan, schedule="0 8 * * 1-5")
     loaded = load_status(vault)
@@ -360,8 +373,8 @@ def _run_wizard(
     """Drive the interactive wizard with scripted answers.
 
     Returns the exit code, the config the wizard handed to ``run_install``, and
-    every prompt that was displayed. ``REPO_ROOT`` is redirected at ``tmp_path``
-    so nothing the wizard writes can land in the repo.
+    every prompt that was displayed. The wizard runs as if ``tmp_path`` were the
+    checkout; settings go to the per-test sandbox.
     """
     monkeypatch.setattr(cli, "REPO_ROOT", tmp_path)
     _pretend_tty(monkeypatch)
@@ -411,6 +424,7 @@ def test_wizard_explicit_ingest_skips_maintain_questions(
 def test_wizard_maintain_with_extras_produces_the_expected_plan_and_command(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ):
+    """Choosing Maintain with the graph and fail-on-errors extras produces that plan, and the summary shows its command, label and schedule."""
     code, config, _prompts = _run_wizard(
         monkeypatch,
         tmp_path,
@@ -428,6 +442,7 @@ def test_wizard_maintain_with_extras_produces_the_expected_plan_and_command(
 
 
 def test_wizard_accepts_the_legacy_profile_letters(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    """The old profile letter `B` is still accepted as the Maintain answer."""
     _code, config, _prompts = _run_wizard(
         monkeypatch, tmp_path, ["B", ENTER, ENTER, ENTER, ENTER, ENTER, ENTER, ENTER, "y"]
     )
@@ -437,6 +452,7 @@ def test_wizard_accepts_the_legacy_profile_letters(monkeypatch: pytest.MonkeyPat
 def test_wizard_reasks_instead_of_defaulting_on_an_unrecognised_answer(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ):
+    """An unrecognised answer is re-asked with an explanation instead of silently taking the default."""
     _code, config, prompts = _run_wizard(
         monkeypatch, tmp_path, ["banana", "2", ENTER, ENTER, ENTER, ENTER, ENTER, ENTER, ENTER, "y"]
     )
@@ -448,6 +464,7 @@ def test_wizard_reasks_instead_of_defaulting_on_an_unrecognised_answer(
 def test_wizard_both_failure_policies_resolve_to_the_stricter_one(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ):
+    """Choosing both failure policies installs the stricter one, says so, and skips the graph-builder question."""
     _code, config, prompts = _run_wizard(
         monkeypatch, tmp_path, ["2", "2,3", ENTER, ENTER, ENTER, ENTER, ENTER, ENTER, "y"]
     )
@@ -460,6 +477,7 @@ def test_wizard_both_failure_policies_resolve_to_the_stricter_one(
 def test_wizard_warns_but_continues_when_graphify_is_not_installed(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ):
+    """Choosing graphify without it installed warns about the built-in fallback and how to install it, then continues."""
     monkeypatch.setattr(cli, "is_available", lambda: False)
     _code, config, _prompts = _run_wizard(
         monkeypatch, tmp_path, ["2", "1", "2", ENTER, ENTER, ENTER, ENTER, ENTER, ENTER, "y"]
@@ -471,6 +489,7 @@ def test_wizard_warns_but_continues_when_graphify_is_not_installed(
 
 
 def test_wizard_weekday_preset_produces_a_weekday_cron(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    """The weekday preset at 07:30 installs a Monday-to-Friday cron."""
     _code, config, _prompts = _run_wizard(
         monkeypatch, tmp_path, ["1", "2", "07:30", ENTER, ENTER, ENTER, ENTER, "y"]
     )
@@ -478,6 +497,7 @@ def test_wizard_weekday_preset_produces_a_weekday_cron(monkeypatch: pytest.Monke
 
 
 def test_wizard_weekly_preset_asks_for_a_day(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    """The weekly preset asks for a day and installs a cron on that day."""
     _code, config, prompts = _run_wizard(
         monkeypatch, tmp_path, ["1", "3", "3", "18:00", ENTER, ENTER, ENTER, ENTER, "y"]
     )
@@ -488,6 +508,7 @@ def test_wizard_weekly_preset_asks_for_a_day(monkeypatch: pytest.MonkeyPatch, tm
 def test_wizard_reasks_a_cron_expression_it_cannot_translate(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ):
+    """A cron nickname the schedulers cannot express is explained and re-asked."""
     _code, config, prompts = _run_wizard(
         monkeypatch, tmp_path, ["1", "4", "@daily", "0 9 * * 6", ENTER, ENTER, ENTER, ENTER, "y"]
     )
@@ -498,7 +519,8 @@ def test_wizard_reasks_a_cron_expression_it_cannot_translate(
 
 
 def test_wizard_declining_the_confirmation_writes_nothing(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str],
+    settings_sandbox: SettingsSandbox,
 ):
     """No status file, no unit files, and no config.json change when the user says no."""
     monkeypatch.setattr(cli, "REPO_ROOT", tmp_path)
@@ -511,11 +533,12 @@ def test_wizard_declining_the_confirmation_writes_nothing(
     assert "Skipped install-automation" in capsys.readouterr().out
     assert load_status(vault) is None
     assert not (tmp_path / ".llmwiki").exists()
-    assert not (tmp_path / "config.json").exists()
+    assert not settings_sandbox.operator_config.exists()
 
 
 def test_wizard_confirmation_never_answers_itself_when_stdin_ends(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str],
+    settings_sandbox: SettingsSandbox,
 ):
     """Ctrl-D at the confirmation is a decline: consent has to be typed, never assumed."""
     monkeypatch.setattr(cli, "REPO_ROOT", tmp_path)
@@ -528,11 +551,12 @@ def test_wizard_confirmation_never_answers_itself_when_stdin_ends(
     assert cli.cmd_install_automation(args) == 0
     assert "Skipped install-automation" in capsys.readouterr().out
     assert load_status(vault) is None
-    assert not (tmp_path / "config.json").exists()
+    assert not settings_sandbox.operator_config.exists()
 
 
 def test_a_non_terminal_stdin_refuses_to_install_without_yes(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str],
+    settings_sandbox: SettingsSandbox,
 ):
     """A piped stdin cannot consent, so the wizard exits 2 without asking or writing anything."""
     monkeypatch.setattr(cli, "REPO_ROOT", tmp_path)
@@ -551,7 +575,7 @@ def test_a_non_terminal_stdin_refuses_to_install_without_yes(
     assert "--yes" in err
     assert load_status(vault) is None
     assert not (tmp_path / ".llmwiki").exists()
-    assert not (tmp_path / "config.json").exists()
+    assert not settings_sandbox.operator_config.exists()
 
 
 # ─── Non-interactive flags ─────────────────────────────────────────────
@@ -577,6 +601,7 @@ def _install_via_flags(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *flags: 
 def test_flags_produce_the_same_install_as_the_wizard_answers(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
+    """`--job`, `--graph`, `--lint-fail` and `--schedule` install the same status, command and timer the wizard would."""
     code, vault, units = _install_via_flags(
         tmp_path, monkeypatch,
         "--job", "maintain", "--graph", "builtin", "--lint-fail", "errors",
@@ -599,6 +624,7 @@ def test_flags_produce_the_same_install_as_the_wizard_answers(
 def test_deprecated_profile_flag_still_installs_and_names_its_replacement(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ):
+    """`--profile B` still installs Maintain and warns that the flag is deprecated."""
     code, vault, _units = _install_via_flags(tmp_path, monkeypatch, "--profile", "B")
     status = load_status(vault)
     assert code == 0
@@ -609,6 +635,7 @@ def test_deprecated_profile_flag_still_installs_and_names_its_replacement(
 def test_deprecated_hour_and_minute_become_a_daily_cron(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ):
+    """`--hour` and `--minute` still install a daily cron at that time and warn that they are deprecated."""
     code, vault, _units = _install_via_flags(tmp_path, monkeypatch, "--hour", "6", "--minute", "30")
     status = load_status(vault)
     assert code == 0
@@ -619,6 +646,7 @@ def test_deprecated_hour_and_minute_become_a_daily_cron(
 def test_schedule_wins_over_the_deprecated_clock_flags(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ):
+    """`--schedule` wins over `--hour`, and the ignored clock flag is reported."""
     code, vault, _units = _install_via_flags(
         tmp_path, monkeypatch, "--schedule", "0 9 * * *", "--hour", "6"
     )
@@ -631,6 +659,7 @@ def test_schedule_wins_over_the_deprecated_clock_flags(
 def test_job_wins_over_profile_with_a_note(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ):
+    """`--job` wins over `--profile`, and the ignored profile is reported."""
     code, vault, _units = _install_via_flags(tmp_path, monkeypatch, "--job", "ingest", "--profile", "B")
     status = load_status(vault)
     assert code == 0
@@ -641,6 +670,7 @@ def test_job_wins_over_profile_with_a_note(
 def test_an_untranslatable_schedule_exits_two_with_the_reason(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ):
+    """An untranslatable `--schedule` exits 2 naming the expression and writes no units or status."""
     code, vault, units = _install_via_flags(tmp_path, monkeypatch, "--schedule", "@daily")
     assert code == 2
     assert "@daily" in capsys.readouterr().err
@@ -677,9 +707,7 @@ def test_extras_flags_are_noted_as_ignored_for_an_ingest_job(
 def test_an_ingest_install_records_none_of_the_extras_it_will_not_run(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
-    """The status file, the label, the command and the Home panel must all describe the
-    job that was actually installed — an ingest job runs no lint step, so nothing may
-    advertise a failure policy for it."""
+    """An ingest install records, labels and runs no graph or failure policy, and the Home panel advertises none."""
     _code, vault, units = _install_via_flags(
         tmp_path, monkeypatch, "--job", "ingest", "--graph", "builtin", "--lint-fail", "errors"
     )
@@ -696,8 +724,7 @@ def test_an_ingest_install_records_none_of_the_extras_it_will_not_run(
 def test_the_scheduled_command_always_names_its_vault(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, default_is_target: bool
 ):
-    """The wrapper pins ``--vault`` even when the install targets ``vault.default_path``,
-    so the run never resolves its target from the checkout's config at run time."""
+    """The wrapper pins `--vault` even when the target is the configured default vault."""
     default = tmp_path / ("vault" if default_is_target else "default-vault")
     monkeypatch.setattr(cli, "load_default_vault_path", lambda: default)
     _code, vault, units = _install_via_flags(tmp_path, monkeypatch, "--job", "ingest")
@@ -715,6 +742,7 @@ def test_the_scheduled_command_always_names_its_vault(
 def test_extras_flags_are_not_noted_for_a_maintain_job(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ):
+    """Extras flags on a Maintain install are applied without an 'ignored' note."""
     code, vault, _units = _install_via_flags(
         tmp_path, monkeypatch, "--job", "maintain", "--graph", "builtin"
     )
@@ -736,6 +764,7 @@ def _panel(vault: Path, status: dict[str, Any]) -> str:
 
 
 def test_panel_names_the_job_and_the_schedule_in_words(tmp_path: Path):
+    """The Home Automation panel names the job and the schedule in words."""
     plan = AutomationPlan(job="maintain", graph="builtin")
     panel = _panel(tmp_path, {**plan_to_status(plan), "schedule": "0 8 * * 1-5", "schedule_label": "Weekdays at 08:00"})
     assert "Maintain + graph (built-in)" in panel
@@ -743,6 +772,7 @@ def test_panel_names_the_job_and_the_schedule_in_words(tmp_path: Path):
 
 
 def test_panel_reads_a_legacy_letter_only_status_as_words(tmp_path: Path):
+    """A legacy letter-only status renders as the job and time in words, never the bare letter."""
     panel = _panel(tmp_path, {"profile": "B", "hour": 8, "minute": 0})
     assert "Maintain" in panel
     assert "Every day at 08:00" in panel
@@ -752,12 +782,14 @@ def test_panel_reads_a_legacy_letter_only_status_as_words(tmp_path: Path):
 
 
 def test_panel_states_that_maintain_can_spend_money(tmp_path: Path):
+    """The panel warns that a Maintain job may spend money and points at `synth --estimate`."""
     panel = _panel(tmp_path, plan_to_status(AutomationPlan(job="maintain")))
     assert "this step may spend money" in panel
     assert "llmwiki synth --estimate" in panel
 
 
 def test_panel_states_that_ingest_cannot_spend_money(tmp_path: Path):
+    """The panel states that an ingest job does not spend money."""
     panel = _panel(tmp_path, plan_to_status(AutomationPlan(job="ingest")))
     assert "does not spend money" in panel
 
@@ -838,10 +870,7 @@ def test_panel_survives_a_malformed_status_file(tmp_path: Path):
 
 
 def _fake_systemctl(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, fail_enable: bool = False) -> Path:
-    """Install a fake ``systemctl`` on PATH and point HOME at a throwaway directory."""
-    home = tmp_path / "home"
-    home.mkdir()
-    monkeypatch.setenv("HOME", str(home))
+    """Install a fake ``systemctl`` on PATH that logs its arguments and reports the timer enabled."""
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     log = bin_dir / "systemctl.log"
@@ -869,6 +898,7 @@ def _fake_systemctl(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, fail_ena
 def test_activate_scheduler_linux_copies_units_and_enables_timer(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
+    """Linux activation copies the units into the user systemd directory, re-points the service at the installed wrapper and enables the timer."""
     units = tmp_path / "units"
     units.mkdir()
     names = unit_names(tmp_path / "vault")
@@ -903,6 +933,7 @@ def test_activate_scheduler_linux_copies_units_and_enables_timer(
 def test_run_install_with_activate_records_scheduler_state(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
+    """An activated install records the scheduler backend and its active state in the status file."""
     _fake_systemctl(tmp_path, monkeypatch)
     vault = tmp_path / "vault"
     vault.mkdir()
@@ -924,6 +955,7 @@ def test_run_install_with_activate_records_scheduler_state(
 
 
 def test_run_install_activate_failure_sets_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """A failed timer enable raises and leaves a status recording the error and an inactive scheduler."""
     _fake_systemctl(tmp_path, monkeypatch, fail_enable=True)
     vault = tmp_path / "vault"
     vault.mkdir()
@@ -993,6 +1025,7 @@ def test_two_vaults_get_two_unit_sets_and_each_wrapper_keeps_its_vault(
 def test_activation_records_unit_checkout_and_target_vault(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
+    """Activation records the unit name, the checkout it runs from, the target vault and the install time."""
     _fake_systemctl(tmp_path, monkeypatch)
     vault = tmp_path / "vault"
     vault.mkdir()
@@ -1025,6 +1058,7 @@ def test_installed_at_is_reset_by_activation_and_kept_without_it(
 
 
 def test_no_activate_install_records_no_installed_at(tmp_path: Path):
+    """An install without activation records its unit name but no install time."""
     _status, vault, _units = _install(tmp_path)
     loaded = load_status(vault)
     assert loaded is not None
@@ -1044,7 +1078,7 @@ def _scripted_scheduler(monkeypatch: pytest.MonkeyPatch) -> list[list[str]]:
 
 
 def test_macos_install_uses_the_vault_label(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    """A macOS install writes and reloads a plist under the vault's own launchd label."""
     monkeypatch.setattr("llmwiki.automation_install.detect_platform", lambda: "macos")
     calls = _scripted_scheduler(monkeypatch)
     status, vault, units = _install(tmp_path, force_platform="macos", activate=True)
@@ -1059,6 +1093,7 @@ def test_macos_install_uses_the_vault_label(tmp_path: Path, monkeypatch: pytest.
 
 
 def test_windows_install_creates_the_vault_task(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """A Windows install creates the vault's own scheduled task from the written task XML."""
     monkeypatch.setattr("llmwiki.automation_install.detect_platform", lambda: "windows")
     calls = _scripted_scheduler(monkeypatch)
     status, vault, units = _install(tmp_path, force_platform="windows", activate=True)
@@ -1074,6 +1109,7 @@ def test_windows_install_creates_the_vault_task(tmp_path: Path, monkeypatch: pyt
 def test_manual_activation_steps_name_the_vault_units(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], plat: str
 ):
+    """Manual activation steps name the vault's own units, never the legacy shared ones."""
     vault = tmp_path / "vault"
     names = unit_names(vault)
     cli._print_manual_scheduler_activation(tmp_path / "units", plat, vault)  # noqa: SLF001
@@ -1133,6 +1169,7 @@ def _is_enabled(name: str) -> tuple[str, ...]:
 
 @pytest.mark.parametrize("with_vault", [True, False])
 def test_parse_wrapper_round_trips_hostile_paths(tmp_path: Path, with_vault: bool):
+    """A wrapper's checkout, vault and log paths round-trip through parsing even with quotes, `&` and spaces in them."""
     working_dir = tmp_path / f"checkout {HOSTILE}"
     vault = tmp_path / f"vault {HOSTILE}"
     log = tmp_path / f"logs {HOSTILE}" / "last.log"
@@ -1146,10 +1183,12 @@ def test_parse_wrapper_round_trips_hostile_paths(tmp_path: Path, with_vault: boo
 
 
 def test_parse_wrapper_without_an_llmwiki_line_is_none():
+    """A script with no llmwiki command line parses as no wrapper."""
     assert parse_wrapper("#!/usr/bin/env bash\necho hi\n") is None
 
 
 def test_linux_discovers_per_vault_and_legacy_units(tmp_path: Path):
+    """Linux discovery reports both the per-vault unit and the legacy unit, each with its vault, checkout, log, wrapper and enabled state."""
     home = tmp_path / "home"
     checkout = tmp_path / "checkout"
     checkout.mkdir()
@@ -1176,6 +1215,7 @@ def test_linux_discovers_per_vault_and_legacy_units(tmp_path: Path):
 
 
 def test_legacy_wrapper_without_vault_reads_the_checkout_config(tmp_path: Path):
+    """A legacy wrapper with no `--vault` serves the default vault set in its checkout's `config.json`, over the shipped example."""
     home = tmp_path / "home"
     checkout = tmp_path / "checkout"
     (checkout / "examples").mkdir(parents=True)
@@ -1195,6 +1235,7 @@ def test_legacy_wrapper_without_vault_reads_the_checkout_config(tmp_path: Path):
 
 
 def test_default_vault_for_checkout_precedence_and_relative_paths(tmp_path: Path):
+    """A checkout's default vault comes from `config.json` over the shipped example, with relative paths anchored to the checkout."""
     (tmp_path / "examples").mkdir()
     shipped = tmp_path / "examples" / "sessions_config.json"
     assert default_vault_for_checkout(tmp_path) is None
@@ -1205,6 +1246,7 @@ def test_default_vault_for_checkout_precedence_and_relative_paths(tmp_path: Path
 
 
 def test_legacy_wrapper_without_vault_and_without_config_targets_the_checkout_itself(tmp_path: Path):
+    """A legacy wrapper with no `--vault` and no configured default serves the checkout itself."""
     home = tmp_path / "home"
     checkout = tmp_path / "checkout"
     (checkout / "llmwiki").mkdir(parents=True)
@@ -1218,6 +1260,7 @@ def test_legacy_wrapper_without_vault_and_without_config_targets_the_checkout_it
 
 
 def test_gone_checkout_without_vault_is_unknown_not_guessed(tmp_path: Path):
+    """A unit whose checkout is gone and whose wrapper names no vault reports an unknown target with the reason."""
     home = tmp_path / "home"
     _systemd_unit(home, LEGACY_SYSTEMD, working_dir=tmp_path / "gone", log=tmp_path / "l.log", vault=None)
     run = _fake_run({_is_enabled(LEGACY_SYSTEMD): (0, "enabled\n", "")})
@@ -1230,6 +1273,7 @@ def test_gone_checkout_without_vault_is_unknown_not_guessed(tmp_path: Path):
 
 
 def test_gone_checkout_with_vault_keeps_the_pinned_target(tmp_path: Path):
+    """A unit whose checkout is gone still reports the vault its wrapper pins."""
     home = tmp_path / "home"
     vault = tmp_path / "vault"
     _systemd_unit(home, unit_names(vault).base, working_dir=tmp_path / "gone", log=tmp_path / "l.log", vault=vault)
@@ -1241,6 +1285,7 @@ def test_gone_checkout_with_vault_keeps_the_pinned_target(tmp_path: Path):
 
 
 def test_missing_wrapper_is_unknown_and_keeps_the_unit_checkout(tmp_path: Path):
+    """A unit with a missing wrapper reports an unknown target with the reason, keeping the checkout from the unit file."""
     home = tmp_path / "home"
     checkout = tmp_path / "checkout"
     wrapper = _systemd_unit(home, LEGACY_SYSTEMD, working_dir=checkout, log=tmp_path / "l.log", vault=None)
@@ -1263,6 +1308,7 @@ def test_missing_wrapper_is_unknown_and_keeps_the_unit_checkout(tmp_path: Path):
     ids=["no-systemctl", "no-user-bus"],
 )
 def test_linux_without_a_user_bus_is_unavailable(tmp_path: Path, run):
+    """Without `systemctl` or a user bus, discovery says the scheduler is unavailable but still reads the unit files."""
     home = tmp_path / "home"
     vault = tmp_path / "vault"
     _systemd_unit(home, LEGACY_SYSTEMD, working_dir=tmp_path, log=tmp_path / "l.log", vault=vault)
@@ -1276,6 +1322,7 @@ def test_linux_without_a_user_bus_is_unavailable(tmp_path: Path, run):
 
 
 def test_linux_with_no_units_finds_nothing(tmp_path: Path):
+    """Linux discovery with no unit files finds nothing and reports the scheduler available."""
     result = discover_units("linux", home=tmp_path, run=_fake_run({}))
     assert result == DiscoveryResult(units=(), unavailable=None)
 
@@ -1301,6 +1348,7 @@ def _launch_agent(home: Path, vault: Path, *, label: str, log: Path) -> Path:
 def test_macos_reads_the_plist_and_asks_launchctl(
     tmp_path: Path, answer: tuple[int, str, str], enabled: bool | None
 ):
+    """macOS discovery reads the plist and wrapper, and asks `launchctl` whether the job is loaded."""
     home = tmp_path / f"home {HOSTILE}"
     vault = tmp_path / f"vault {HOSTILE}"
     label = unit_names(vault).launchd_label
@@ -1320,6 +1368,7 @@ def test_macos_reads_the_plist_and_asks_launchctl(
 
 
 def test_macos_legacy_label_is_legacy(tmp_path: Path):
+    """The shared legacy launchd label is reported as a legacy unit."""
     home = tmp_path / "home"
     _launch_agent(home, tmp_path / "v", label=LEGACY_LAUNCHD, log=tmp_path / "m.log")
     run = _fake_run({("launchctl", "print", f"gui/7/{LEGACY_LAUNCHD}"): (0, "", "")})
@@ -1328,6 +1377,7 @@ def test_macos_legacy_label_is_legacy(tmp_path: Path):
 
 
 def test_macos_unparsable_plist_is_unknown(tmp_path: Path):
+    """An unparsable plist is reported with an unknown target and a reason."""
     agents = tmp_path / "Library" / "LaunchAgents"
     agents.mkdir(parents=True)
     (agents / f"{LEGACY_LAUNCHD}.plist").write_text("<plist><dict>", encoding="utf-8")
@@ -1356,6 +1406,7 @@ def _task_answers(tmp_path: Path, vault: Path) -> tuple[Responses, str, Path]:
 
 
 def test_windows_reads_the_task_list_and_task_xml(tmp_path: Path):
+    """Windows discovery lists tasks once per name and reads each task's XML for its wrapper, vault and state."""
     vault = tmp_path / f"vault {HOSTILE}"
     responses, name, wrapper = _task_answers(tmp_path, vault)
     calls: list[list[str]] = []
@@ -1372,6 +1423,7 @@ def test_windows_reads_the_task_list_and_task_xml(tmp_path: Path):
 
 @pytest.mark.parametrize("broken", ["listing", "xml-rc", "xml-parse"])
 def test_windows_query_failures_are_unavailable(tmp_path: Path, broken: str):
+    """A failed task listing or unreadable task XML makes Windows discovery report the scheduler unavailable."""
     responses, name, _wrapper = _task_answers(tmp_path, tmp_path / "vault")
     listing_key = ("schtasks", "/Query", "/FO", "CSV", "/NH")
     xml_key = ("schtasks", "/Query", "/TN", f"\\{name}", "/XML")
@@ -1389,6 +1441,7 @@ def test_windows_query_failures_are_unavailable(tmp_path: Path, broken: str):
 
 
 def test_windows_without_schtasks_is_unavailable(tmp_path: Path):
+    """Without `schtasks`, Windows discovery reports the scheduler unavailable."""
     result = discover_units("windows", home=tmp_path, run=_missing_binary)
     assert result.unavailable and result.units == ()
 
@@ -1414,6 +1467,7 @@ def test_relative_vault_in_a_legacy_wrapper_is_anchored_to_its_checkout(
 
 
 def test_discovery_skips_names_that_only_share_the_maintain_prefix(tmp_path: Path):
+    """On every platform, discovery ignores units whose names only share the `llmwiki-maintain` prefix."""
     home = tmp_path / "home"
     checkout = tmp_path / "co"
     checkout.mkdir()
@@ -1446,6 +1500,7 @@ def test_discovery_skips_names_that_only_share_the_maintain_prefix(tmp_path: Pat
 
 
 def test_windows_enabled_comes_from_task_xml_not_the_localized_status(tmp_path: Path):
+    """A Windows task's enabled state comes from its XML, not the localized status column."""
     vault = tmp_path / "vault"
     responses, _name, _wrapper = _task_answers(tmp_path, vault)
     xml_key = next(key for key in responses if key[:3] == ("schtasks", "/Query", "/TN"))
@@ -1466,10 +1521,11 @@ def test_windows_enabled_comes_from_task_xml_not_the_localized_status(tmp_path: 
 
 
 def test_deactivation_leaves_a_wrapper_that_is_not_this_units_script(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, settings_sandbox: SettingsSandbox
 ):
-    monkeypatch.setenv("HOME", str(tmp_path))
-    agents = tmp_path / "Library" / "LaunchAgents"
+    """Deactivating a unit deletes its own wrapper but leaves a wrapper elsewhere in place, naming it in a note."""
+    home = settings_sandbox.home
+    agents = home / "Library" / "LaunchAgents"
     agents.mkdir(parents=True)
     own = agents / f"{LEGACY_SYSTEMD}.sh"
     own.write_text("#!/bin/sh\n", encoding="utf-8")
@@ -1485,17 +1541,17 @@ def test_deactivation_leaves_a_wrapper_that_is_not_this_units_script(
         platform="macos",
         wrapper_path=own,
     )
-    assert deactivate_unit(owned, home=tmp_path, run=_fake_run({bootout: (0, "", "")}), uid=7) is None
+    assert deactivate_unit(owned, home=home, run=_fake_run({bootout: (0, "", "")}), uid=7) is None
     assert not own.exists() and not plist.exists()
 
     plist.write_text("plist", encoding="utf-8")
     stray = replace(owned, wrapper_path=foreign)
-    note = deactivate_unit(stray, home=tmp_path, run=_fake_run({bootout: (0, "", "")}), uid=7)
+    note = deactivate_unit(stray, home=home, run=_fake_run({bootout: (0, "", "")}), uid=7)
     assert foreign.read_text(encoding="utf-8") == "keep"
     assert note is not None and str(foreign) in note
     assert not plist.exists()
 
-    staging = tmp_path / ".automation"
+    staging = home / ".automation"
     staging.mkdir()
     win_wrapper = staging / f"{LEGACY_SYSTEMD}.sh"
     win_wrapper.write_text("#!/bin/sh\n", encoding="utf-8")
@@ -1507,19 +1563,20 @@ def test_deactivation_leaves_a_wrapper_that_is_not_this_units_script(
         platform="windows",
         wrapper_path=win_wrapper,
     )
-    assert deactivate_unit(windows, home=tmp_path, run=_fake_run({delete: (0, "", "")})) is None
+    assert deactivate_unit(windows, home=home, run=_fake_run({delete: (0, "", "")})) is None
     assert not win_wrapper.exists() and not task_xml.exists()
 
     alien = tmp_path / "alien" / "payload.sh"
     alien.parent.mkdir()
     alien.write_text("keep", encoding="utf-8")
     planted = replace(windows, wrapper_path=alien)
-    note = deactivate_unit(planted, home=tmp_path, run=_fake_run({delete: (0, "", "")}))
+    note = deactivate_unit(planted, home=home, run=_fake_run({delete: (0, "", "")}))
     assert alien.read_text(encoding="utf-8") == "keep"
     assert note is not None and str(alien) in note
 
 
 def test_unknown_platform_is_unavailable(tmp_path: Path):
+    """Discovery on an unsupported platform reports the scheduler unavailable."""
     result = discover_units("unknown", home=tmp_path, run=_fake_run({}))
     assert result == DiscoveryResult(units=(), unavailable="unsupported platform: unknown")
 
@@ -1539,6 +1596,7 @@ def _unit(name: str, *, legacy: bool, target: Path | None = None) -> InstalledUn
 
 
 def test_unit_for_vault_prefers_the_vault_unit_then_the_legacy_unit(tmp_path: Path):
+    """A vault's schedule is its own unit when one exists, else the legacy unit, never another vault's unit."""
     vault = tmp_path / "vault"
     names = unit_names(vault)
     legacy = _unit(LEGACY_SYSTEMD, legacy=True, target=tmp_path / "elsewhere")
@@ -1604,23 +1662,24 @@ _TASK = "llmwiki-maintain-gone-1234abcd"
 )
 def test_removal_steps_per_platform_are_home_relative(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
     platform: str,
     name: str,
     wrapper: tuple[str, ...] | None,
     expected: list[str],
+    settings_sandbox: SettingsSandbox,
 ):
-    monkeypatch.setenv("HOME", str(tmp_path))
+    """Manual removal steps on each platform name the unit's files relative to the home directory."""
+    home = settings_sandbox.home
     unit = replace(
         _unit(name, legacy=False, target=tmp_path / "gone"),
         platform=platform,
-        wrapper_path=tmp_path.joinpath(*wrapper) if wrapper else None,
+        wrapper_path=home.joinpath(*wrapper) if wrapper else None,
     )
 
     steps = removal_steps(unit)
 
     assert steps == expected
-    assert not any(str(tmp_path) in step for step in steps)
+    assert not any(str(home) in step for step in steps)
 
 
 # ─── #275: pin synthesis.claude.path at install for systemd catch-up ───
@@ -1638,7 +1697,8 @@ def _fake_claude_on_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Pat
 
 
 def test_yes_claude_pins_absolute_path_usable_under_minimal_path(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    settings_sandbox: SettingsSandbox,
 ):
     """Install-time PATH finds ~/.local/bin/claude; the pin survives systemd-style PATH (#275)."""
     claude = _fake_claude_on_path(tmp_path, monkeypatch)
@@ -1646,7 +1706,7 @@ def test_yes_claude_pins_absolute_path_usable_under_minimal_path(
         tmp_path, monkeypatch, "--job", "maintain", "--synth-backend", "claude",
     )
     assert code == 0
-    cfg = json.loads((tmp_path / "config.json").read_text(encoding="utf-8"))
+    cfg = settings_sandbox.read_operator()
     pinned = cfg["synthesis"]["claude"]["path"]
     assert Path(pinned) == claude.resolve()
     assert Path(pinned).is_absolute()
@@ -1657,55 +1717,54 @@ def test_yes_claude_pins_absolute_path_usable_under_minimal_path(
 
 
 def test_yes_claude_does_not_overwrite_explicit_nested_path(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    settings_sandbox: SettingsSandbox,
 ):
+    """A `--synth-backend claude` install keeps an already-set `synthesis.claude.path` and its other Claude settings."""
     explicit = tmp_path / "already-pinned"
     explicit.write_text("#!/bin/sh\n", encoding="utf-8")
     explicit.chmod(0o755)
-    (tmp_path / "config.json").write_text(
-        json.dumps({
+    settings_sandbox.write_operator({
             "synthesis": {
                 "backend": "claude",
                 "claude": {"path": str(explicit), "model": "sonnet"},
             },
         })
-        + "\n",
-        encoding="utf-8",
-    )
     other = _fake_claude_on_path(tmp_path, monkeypatch)
     code, _vault, _units = _install_via_flags(
         tmp_path, monkeypatch, "--job", "maintain", "--synth-backend", "claude",
     )
     assert code == 0
-    cfg = json.loads((tmp_path / "config.json").read_text(encoding="utf-8"))
+    cfg = settings_sandbox.read_operator()
     assert cfg["synthesis"]["claude"]["path"] == str(explicit)
     assert cfg["synthesis"]["claude"]["model"] == "sonnet"
     assert cfg["synthesis"]["claude"]["path"] != str(other.resolve())
 
 
 def test_yes_claude_does_not_overwrite_explicit_flat_claude_path(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    settings_sandbox: SettingsSandbox,
 ):
+    """A `--synth-backend claude` install keeps an already-set flat `claude_path` and adds no nested pin."""
     explicit = tmp_path / "flat-pinned"
     explicit.write_text("#!/bin/sh\n", encoding="utf-8")
     explicit.chmod(0o755)
-    (tmp_path / "config.json").write_text(
-        json.dumps({"synthesis": {"backend": "claude", "claude_path": str(explicit)}}) + "\n",
-        encoding="utf-8",
-    )
+    settings_sandbox.write_operator({"synthesis": {"backend": "claude", "claude_path": str(explicit)}})
     _fake_claude_on_path(tmp_path, monkeypatch)
     code, _vault, _units = _install_via_flags(
         tmp_path, monkeypatch, "--job", "maintain", "--synth-backend", "claude",
     )
     assert code == 0
-    cfg = json.loads((tmp_path / "config.json").read_text(encoding="utf-8"))
+    cfg = settings_sandbox.read_operator()
     assert cfg["synthesis"]["claude_path"] == str(explicit)
     assert "path" not in (cfg["synthesis"].get("claude") or {})
 
 
 def test_yes_claude_warns_when_cli_missing_but_still_installs(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+    settings_sandbox: SettingsSandbox,
 ):
+    """With no Claude CLI on PATH, a `--synth-backend claude` install still completes, records the backend and warns how to pin the path."""
     monkeypatch.setenv("PATH", "/usr/bin:/bin")
     code, vault, units = _install_via_flags(
         tmp_path, monkeypatch, "--job", "maintain", "--synth-backend", "claude",
@@ -1713,7 +1772,7 @@ def test_yes_claude_warns_when_cli_missing_but_still_installs(
     assert code == 0
     assert load_status(vault) is not None
     assert (units / unit_names(tmp_path / "vault").wrapper).is_file()
-    cfg = json.loads((tmp_path / "config.json").read_text(encoding="utf-8"))
+    cfg = settings_sandbox.read_operator()
     assert cfg["synthesis"]["backend"] == "claude"
     assert "path" not in (cfg["synthesis"].get("claude") or {})
     err = capsys.readouterr().err
@@ -1725,6 +1784,7 @@ def test_yes_claude_warns_when_cli_missing_but_still_installs(
 
 
 def test_vault_unit_id_is_stable_across_calls_and_symlinks(tmp_path: Path):
+    """A vault's unit id is a slug plus hash that stays the same across calls and through a symlink."""
     vault = tmp_path / "My Vault"
     vault.mkdir()
     link = tmp_path / "link"
@@ -1736,6 +1796,7 @@ def test_vault_unit_id_is_stable_across_calls_and_symlinks(tmp_path: Path):
 
 
 def test_vault_unit_id_differs_for_same_basename_in_different_dirs(tmp_path: Path):
+    """Two vaults with the same folder name in different places get different unit ids."""
     a = tmp_path / "a" / "wiki"
     b = tmp_path / "b" / "wiki"
     a.mkdir(parents=True)
@@ -1757,6 +1818,7 @@ def test_vault_unit_id_differs_for_same_basename_in_different_dirs(tmp_path: Pat
     ],
 )
 def test_vault_unit_id_slug_edge_cases(tmp_path: Path, name: str, slug: str):
+    """Unit-id slugs fold case, collapse punctuation, cap the length and fall back to `vault` for non-ASCII names."""
     unit_id = vault_unit_id(tmp_path / name)
     prefix, _, digest = unit_id.rpartition("-")
     assert prefix == slug
@@ -1764,6 +1826,7 @@ def test_vault_unit_id_slug_edge_cases(tmp_path: Path, name: str, slug: str):
 
 
 def test_unit_names_cover_every_platform(tmp_path: Path):
+    """A vault's unit names cover the wrapper, systemd, launchd and Windows task files, and cannot be reassigned."""
     vault = tmp_path / "vault"
     unit_id = vault_unit_id(vault)
     names = unit_names(vault)
@@ -1782,6 +1845,7 @@ def test_unit_names_cover_every_platform(tmp_path: Path):
 
 
 def test_is_dev_checkout_tells_worktree_checkout_and_install(tmp_path: Path):
+    """A `.git` file marks a worktree, a `.git` directory a checkout, and neither an installed package."""
     worktree = tmp_path / "wt"
     worktree.mkdir()
     (worktree / ".git").write_text("gitdir: /elsewhere\n", encoding="utf-8")
@@ -1852,19 +1916,19 @@ def _deactivation_calls(plat: str) -> list[list[str]]:
     }[plat]
 
 
-def _home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, plat: str) -> Path:
-    home = tmp_path / "home"
-    home.mkdir()
-    monkeypatch.setenv("HOME", str(home))
+def _home(sandbox: SettingsSandbox, monkeypatch: pytest.MonkeyPatch, plat: str) -> Path:
+    """Pretend to run on ``plat`` and return the sandboxed home directory its units live under."""
     monkeypatch.setattr("llmwiki.automation_install.detect_platform", lambda: plat)
-    return home
+    return sandbox.home
 
 
 @pytest.mark.parametrize("plat", ["linux", "macos", "windows"])
 def test_install_switches_off_the_legacy_unit_serving_this_vault(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, plat: str
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, plat: str,
+    settings_sandbox: SettingsSandbox,
 ):
-    home = _home(tmp_path, monkeypatch, plat)
+    """On each platform, an activated install switches off and removes the legacy unit that served this vault, and records the adoption."""
+    home = _home(settings_sandbox, monkeypatch, plat)
     vault = tmp_path / "vault"
     vault.mkdir()
     legacy_files, answers = _legacy_unit(plat, tmp_path, home, vault)
@@ -1881,9 +1945,11 @@ def test_install_switches_off_the_legacy_unit_serving_this_vault(
 
 @pytest.mark.parametrize("plat", ["linux", "macos", "windows"])
 def test_install_leaves_a_legacy_unit_serving_another_vault_alone(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, plat: str
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, plat: str,
+    settings_sandbox: SettingsSandbox,
 ):
-    home = _home(tmp_path, monkeypatch, plat)
+    """On each platform, an install leaves a legacy unit serving another vault running and in place."""
+    home = _home(settings_sandbox, monkeypatch, plat)
     other = tmp_path / "other-vault"
     other.mkdir()
     legacy_files, answers = _legacy_unit(plat, tmp_path, home, other)
@@ -1897,10 +1963,12 @@ def test_install_leaves_a_legacy_unit_serving_another_vault_alone(
 
 
 def test_install_leaves_a_legacy_unit_with_an_unknown_target_alone(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    settings_sandbox: SettingsSandbox,
 ):
     # No --vault and a checkout that no longer exists: the legacy target cannot be read.
-    home = _home(tmp_path, monkeypatch, "linux")
+    """An install leaves a legacy unit whose target cannot be read running and in place."""
+    home = _home(settings_sandbox, monkeypatch, "linux")
     legacy_files, _answers = _legacy_unit("linux", tmp_path, home, None)
     calls = _adoption_scheduler(monkeypatch)
 
@@ -1912,9 +1980,11 @@ def test_install_leaves_a_legacy_unit_with_an_unknown_target_alone(
 
 
 def test_a_failed_legacy_switch_off_does_not_fail_the_install(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    settings_sandbox: SettingsSandbox,
 ):
-    home = _home(tmp_path, monkeypatch, "linux")
+    """A legacy unit that fails to switch off leaves the new install active and records the error with the scheduler's message."""
+    home = _home(settings_sandbox, monkeypatch, "linux")
     vault = tmp_path / "vault"
     vault.mkdir()
     legacy_files, _answers = _legacy_unit("linux", tmp_path, home, vault)
@@ -1931,8 +2001,9 @@ def test_a_failed_legacy_switch_off_does_not_fail_the_install(
     assert load_status(vault)["legacy_adopt_error"] == status["legacy_adopt_error"]
 
 
-def test_no_activate_install_never_touches_the_legacy_unit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    home = _home(tmp_path, monkeypatch, "linux")
+def test_no_activate_install_never_touches_the_legacy_unit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, settings_sandbox: SettingsSandbox):
+    """An install without activation never calls the scheduler or touches the legacy unit."""
+    home = _home(settings_sandbox, monkeypatch, "linux")
     vault = tmp_path / "vault"
     vault.mkdir()
     legacy_files, _answers = _legacy_unit("linux", tmp_path, home, vault)
@@ -1947,9 +2018,11 @@ def test_no_activate_install_never_touches_the_legacy_unit(tmp_path: Path, monke
 
 @pytest.mark.parametrize("fail", [False, True])
 def test_cli_says_the_legacy_schedule_was_replaced_or_how_to_remove_it(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], fail: bool
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], fail: bool,
+    settings_sandbox: SettingsSandbox,
 ):
-    home = _home(tmp_path, monkeypatch, "linux")
+    """The CLI says the legacy schedule was replaced, or on failure shows the error and the command to remove it."""
+    home = _home(settings_sandbox, monkeypatch, "linux")
     monkeypatch.setattr(cli, "REPO_ROOT", tmp_path)
     vault = tmp_path / "vault"
     vault.mkdir()
@@ -2024,6 +2097,7 @@ def test_wizard_asks_before_replacing_a_schedule_from_another_checkout(
 def test_yes_without_force_refuses_to_replace_a_schedule_from_another_checkout(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ):
+    """`--yes` without `--force` exits 2 instead of replacing a schedule that runs from another checkout, and writes nothing."""
     _discovers(monkeypatch, _serving_unit(tmp_path / "vault", tmp_path / "other-checkout"))
     code, vault, units = _install_via_flags(tmp_path, monkeypatch, "--job", "ingest")
     captured = capsys.readouterr()
@@ -2037,6 +2111,7 @@ def test_yes_without_force_refuses_to_replace_a_schedule_from_another_checkout(
 def test_force_replaces_a_schedule_from_another_checkout_without_asking(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ):
+    """`--force` replaces a schedule from another checkout without asking, after showing both checkouts."""
     other = tmp_path / "other-checkout"
     monkeypatch.setattr(sys, "stdin", io.StringIO())
     _discovers(monkeypatch, _serving_unit(tmp_path / "vault", other))
@@ -2051,6 +2126,7 @@ def test_force_replaces_a_schedule_from_another_checkout_without_asking(
 def test_guard_reads_unit_files_when_the_scheduler_cannot_be_asked(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ):
+    """The checkout guard still refuses when the scheduler cannot be asked, using what the unit files say."""
     other = tmp_path / "other-checkout"
     _discovers(
         monkeypatch,
@@ -2072,6 +2148,7 @@ def test_guard_reads_unit_files_when_the_scheduler_cannot_be_asked(
 def test_guard_stays_quiet_when_no_schedule_from_another_checkout_serves_this_vault(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], case: str
 ):
+    """The checkout guard stays silent when no schedule from another checkout serves this vault."""
     vault = tmp_path / "vault"
     other = tmp_path / "other-checkout"
     if case == "same_checkout":
@@ -2094,6 +2171,7 @@ def test_guard_stays_quiet_when_no_schedule_from_another_checkout_serves_this_va
 def test_legacy_unit_serving_this_vault_from_another_checkout_is_guarded(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ):
+    """A legacy unit serving this vault from another checkout triggers the checkout guard."""
     vault = tmp_path / "vault"
     _discovers(monkeypatch, _serving_unit(vault, tmp_path / "other-checkout", legacy=True, target=vault))
     code, _vault, _units = _install_via_flags(tmp_path, monkeypatch, "--job", "ingest")
@@ -2118,6 +2196,7 @@ def test_installing_from_a_git_checkout_warns_that_the_job_keeps_using_it(
     git_kind: str | None,
     stem: str | None,
 ):
+    """Installing from a git worktree or checkout warns that the job keeps running that copy; an installed package gets no warning."""
     if git_kind == "file":
         (tmp_path / ".git").write_text("gitdir: /elsewhere\n", encoding="utf-8")
     elif git_kind == "dir":
@@ -2136,6 +2215,7 @@ def test_installing_from_a_git_checkout_warns_that_the_job_keeps_using_it(
 def test_wizard_prints_the_dev_checkout_warning_before_asking_to_replace(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ):
+    """The wizard shows the development-checkout warning before asking whether to replace another checkout's schedule."""
     (tmp_path / ".git").mkdir()
     _discovers(monkeypatch, _serving_unit(tmp_path / "vault", tmp_path / "other-checkout"))
     shown: list[str] = []
@@ -2154,6 +2234,7 @@ def test_wizard_prints_the_dev_checkout_warning_before_asking_to_replace(
 
 
 def test_discovery_without_probe_reads_unit_files_but_never_asks_systemctl(tmp_path: Path):
+    """Discovery without probing reads the unit files but never calls the scheduler."""
     home = tmp_path / "home"
     vault = tmp_path / "vault"
     _systemd_unit(home, unit_names(vault).base, working_dir=tmp_path, log=tmp_path / "v.log", vault=vault)
@@ -2168,7 +2249,7 @@ def test_discovery_without_probe_reads_unit_files_but_never_asks_systemctl(tmp_p
 
 
 def test_removal_steps_quote_a_unit_name_with_shell_metacharacters(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setenv("HOME", str(tmp_path))
+    """Removal steps shell-quote a unit name holding metacharacters, so pasting them cannot run extra commands."""
     unit = InstalledUnit(
         name="llmwiki-maintain-x;rm -rf ~",
         platform="linux",
@@ -2192,6 +2273,7 @@ def test_removal_steps_quote_a_unit_name_with_shell_metacharacters(tmp_path: Pat
 
 
 def test_reinstall_without_hooks_keeps_the_hooks_the_status_records(tmp_path: Path):
+    """A reinstall that names no hooks keeps the recorded ones, and an explicit empty list clears them."""
     base = {
         "working_dir": tmp_path,
         "python_bin": "python3",
