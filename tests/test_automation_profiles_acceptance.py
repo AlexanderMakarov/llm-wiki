@@ -1,4 +1,4 @@
-"""Whole-feature acceptance tests for #156: plain-language automation setup.
+"""Whole-feature acceptance tests: plain-language automation setup (#156).
 
 # @layer: integration
 # @spec: 010-automation-profiles
@@ -63,6 +63,7 @@ from llmwiki.build import render_automation_panel
 from llmwiki.cli import _JOB_QUESTION, build_parser
 from llmwiki.install_hint import pip_install_command
 from tests.changelog_notes import shipping_section_text
+from tests.checkout import redirect_checkout
 
 CHEATSHEET = REPO_ROOT / "docs" / "cheatsheet.md"
 GETTING_STARTED = REPO_ROOT / "docs" / "getting-started.md"
@@ -137,10 +138,10 @@ def test_job_question_names_outcome_folders_and_cost_for_both_choices() -> None:
 def test_ingest_choice_writes_no_extras_or_graph_choice_end_to_end(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """Pressing Enter for Ingest only never asks Extras/Builder, and the *written* status
-    file (not just the in-memory plan) carries graph=none / lint_fail=never -- proving the
-    whole chain from scripted input through the real, unmocked run_install."""
-    monkeypatch.setattr(cli, "REPO_ROOT", tmp_path)
+    """Choosing Ingest only skips the Extras and Builder questions and writes a status with no graph and no lint failure."""
+    # The real, unmocked run_install writes the status file, so this covers the
+    # whole chain from scripted input to disk, not just the in-memory plan.
+    redirect_checkout(tmp_path, monkeypatch)
     monkeypatch.setattr(
         "llmwiki.automation_install.activate_scheduler",
         lambda **kwargs: {
@@ -182,13 +183,9 @@ def test_ingest_choice_writes_no_extras_or_graph_choice_end_to_end(
 def test_lint_findings_never_fail_the_job_by_default_but_do_at_the_chosen_policy(
     vault: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Real, unmocked build + lint over a deliberately invalid page: default policy still
-    exits 0 with the findings printed; --lint-fail errors exits 2 for the same vault.
-
-    Only ``resolve_state_file`` is stubbed (so the lint step's bookkeeping write lands in
-    tmp_path instead of the real llmwiki-state.json) -- sync and synth are switched off via
-    --no-sync/--no-synth so no other real infrastructure is touched.
-    """
+    """An invalid page never fails `all` by default, but fails it under `--lint-fail errors`."""
+    # Real, unmocked build + lint. Only resolve_state_file is stubbed, so the lint
+    # step's bookkeeping lands in tmp_path; sync and synth are switched off.
     _write_session(vault)
     (vault / "wiki" / "entities").mkdir(parents=True, exist_ok=True)
     # frontmatter_validity (severity=error) fires on an out-of-range confidence value.
@@ -210,8 +207,7 @@ def test_lint_findings_never_fail_the_job_by_default_but_do_at_the_chosen_policy
 
 
 def test_wrapper_script_truncates_the_log_instead_of_appending(tmp_path: Path) -> None:
-    """R3 AC: 'the log contains only the latest run's output' -- the wrapper must
-    truncate (``>``) the log file each run, never append (``>>``)."""
+    """The scheduled wrapper truncates its log each run, so the log holds only the latest run (R3)."""
     text = render_wrapper_script(
         plan=AutomationPlan(job="maintain"),
         python_bin="python3",
@@ -229,11 +225,8 @@ def test_wrapper_script_truncates_the_log_instead_of_appending(tmp_path: Path) -
 def test_declining_writes_nothing_and_a_later_real_install_still_succeeds(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """Decline once through the real CLI entrypoint (``cli.main``, not the bare
-    ``cmd_install_automation`` helper): nothing lands on disk. A second, --yes install
-    right after must still succeed cleanly -- declining must not leave partial state
-    that blocks a later real install."""
-    monkeypatch.setattr(cli, "REPO_ROOT", tmp_path)
+    """Declining through `cli.main` writes nothing, and a `--yes` install right after still succeeds."""
+    config = redirect_checkout(tmp_path, monkeypatch)
     _pretend_tty(monkeypatch)
     vault = tmp_path / "vault"
     vault.mkdir()
@@ -244,7 +237,7 @@ def test_declining_writes_nothing_and_a_later_real_install_still_succeeds(
     assert code == 0
     assert load_status(vault) is None
     assert not (tmp_path / ".llmwiki").exists()
-    assert not (tmp_path / "config.json").exists()
+    assert not config.exists()
 
     units = tmp_path / "units"
     code = cli.main([
@@ -264,13 +257,10 @@ def test_declining_writes_nothing_and_a_later_real_install_still_succeeds(
 def test_bare_all_resolves_the_real_dummy_backend_with_no_network_call(
     vault: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The headline risk (tech-considerations §Impact): a default `llmwiki all` must
-    never contact a provider. ``resolve_backend`` runs FOR REAL here (never mocked) --
-    only the config lookup is forced empty (independent of whatever the operator's own
-    clone config.json happens to contain) and the heavier stages are stubbed the same
-    way tests/test_all_optout.py already does. A raw ``socket.connect`` is blocked so a
-    wrong backend selection fails loudly instead of silently phoning home.
-    """
+    """A default `llmwiki all` resolves the dummy backend and never opens a network connection."""
+    # resolve_backend runs for real; only the config lookup is forced empty and the
+    # heavier stages are stubbed. Blocking socket.connect makes a wrong backend
+    # selection fail loudly instead of silently contacting a provider.
     def _blocked_connect(*_a, **_k):
         raise AssertionError("network call attempted during a supposedly offline run")
 
@@ -300,9 +290,7 @@ def test_bare_all_resolves_the_real_dummy_backend_with_no_network_call(
 def test_legacy_with_sync_with_synth_flags_still_parse_through_main(
     vault: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """An already-installed scheduled command (the old profile-C shape) must not die on
-    argparse's 'unrecognized arguments' -- routed through ``cli.main`` end to end, not
-    just ``cmd_all`` directly, so the subparser wiring itself is exercised too."""
+    """An installed command using the old `--with-sync --with-synth` flags still runs through `cli.main`."""
     monkeypatch.setattr(pipeline, "_load_sessions_config", lambda: {})
     with (
         patch.object(pipeline, "_maybe_print_optout_notice"),
@@ -323,7 +311,7 @@ def test_legacy_with_sync_with_synth_flags_still_parse_through_main(
 
 
 def test_all_help_lists_every_stage_and_its_opt_out_flag() -> None:
-    """R6 AC: the built-in help lists the stages in order and names each stage's opt-out."""
+    """`all --help` lists every stage and names each stage's opt-out flag (R6)."""
     all_parser = build_parser()._subparsers._group_actions[0].choices["all"]  # noqa: SLF001
     help_text = all_parser.format_help()
     assert "sync" in help_text and "synth" in help_text and "graph" in help_text and "lint" in help_text
@@ -337,12 +325,9 @@ def test_all_help_lists_every_stage_and_its_opt_out_flag() -> None:
 def test_ingest_scheduled_command_is_byte_identical_to_pre_change_profile_a(
     tmp_path: Path,
 ) -> None:
-    """Pre-#156, ``profile_command("A", py, root)`` returned exactly
-    ``f"cd {quoted(root)} && {quoted(py)} -m llmwiki sync"`` (confirmed against
-    ``git show main:llmwiki/automation_install.py``). Runs the real, on-disk
-    ``run_install`` -- not ``plan_command`` in isolation -- and reads the actual
-    wrapper file it wrote, so this is the whole install path, not just the composer.
-    """
+    """The ingest job's scheduled command is exactly the pre-#156 profile A command."""
+    # Pre-#156 profile A was `cd <root> && <py> -m llmwiki sync`. This reads the
+    # wrapper the real run_install wrote, so it covers the whole install path.
     units = tmp_path / "units"
     working_dir = tmp_path / "clone"
     python_bin = "/usr/bin/python3"
@@ -365,9 +350,7 @@ def test_ingest_scheduled_command_is_byte_identical_to_pre_change_profile_a(
 
 
 def test_maintain_scheduled_command_is_one_invocation_not_a_chain(tmp_path: Path) -> None:
-    """Old profile B chained three commands with ' && '; the new maintain command must
-    be a single ``llmwiki all`` invocation -- exactly one '&&' in the whole line (the
-    directory change), never a second one joining a follow-up command."""
+    """The maintain job's scheduled command is one `llmwiki all` call after the `cd`, not a chain of commands."""
     units = tmp_path / "units"
     plan = AutomationPlan(job="maintain", graph="builtin", lint_fail="errors")
     run_install({
@@ -390,9 +373,7 @@ def test_maintain_scheduled_command_is_one_invocation_not_a_chain(tmp_path: Path
 
 
 def test_home_page_shows_a_readable_label_for_a_legacy_letter_only_status(tmp_path: Path) -> None:
-    """A status file an older llmwiki wrote -- only ``profile``/``hour``/``minute``, none
-    of the new keys -- must still render a readable panel, never a bare letter, blank,
-    or exception."""
+    """A legacy status with only a profile letter and time still renders the job in words on Home."""
     path = status_path(tmp_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text('{"profile": "C", "hour": 8, "minute": 0}', encoding="utf-8")
@@ -404,8 +385,7 @@ def test_home_page_shows_a_readable_label_for_a_legacy_letter_only_status(tmp_pa
 
 
 def test_home_page_shows_a_readable_label_for_a_new_format_status(tmp_path: Path) -> None:
-    """The new-format status renders the job in words and the schedule in words, plus
-    whether it can spend money -- reached through the real ``run_install`` write path."""
+    """A status written by `run_install` renders the job, the schedule and the spending warning in words."""
     plan = AutomationPlan(job="maintain", graph="builtin")
     run_install({
         "plan": plan,
@@ -426,6 +406,7 @@ def test_home_page_shows_a_readable_label_for_a_new_format_status(tmp_path: Path
 
 
 def test_cheatsheet_presents_automation_before_the_manual_alternative() -> None:
+    """The cheatsheet offers `install-automation` before the by-hand pipeline and states consistent facts."""
     text = CHEATSHEET.read_text(encoding="utf-8")
     setup_idx = text.index("llmwiki install-automation")
     manual_idx = text.index("For a one-off run of the same pipeline by hand")
@@ -439,6 +420,7 @@ def test_cheatsheet_presents_automation_before_the_manual_alternative() -> None:
 
 
 def test_getting_started_and_quickstart_offer_automation_right_after_first_build() -> None:
+    """Getting started and the quickstart offer the daily job right after the first build, and say ingest costs nothing."""
     for path, build_marker, automation_heading in (
         (GETTING_STARTED, "Open `<vault>/site/index.html`", "## Next: let it run itself"),
         (QUICKSTART, "## 6. Browse the site", "## 7. Hand the loop to a daily job"),
@@ -454,6 +436,7 @@ def test_getting_started_and_quickstart_offer_automation_right_after_first_build
 
 
 def test_upgrade_guide_and_changelog_flag_the_all_behaviour_change() -> None:
+    """The upgrade guide and the shipping changelog tell existing users that `all` now runs every stage."""
     upgrading = UPGRADING.read_text(encoding="utf-8")
     assert "--with-sync" in upgrading and "--with-synth" in upgrading
     assert "--schedule" in upgrading
@@ -470,9 +453,7 @@ def test_upgrade_guide_and_changelog_flag_the_all_behaviour_change() -> None:
 
 
 def test_rerunning_install_replaces_the_existing_units_not_duplicates_them(tmp_path: Path) -> None:
-    """R11 AC: re-running the setup on a machine that already has a scheduled job
-    replaces it rather than adding a second one -- unit filenames are fixed per vault, so a
-    second real install must leave exactly the same files, now carrying the new plan."""
+    """Re-installing replaces the vault's existing unit files with the new plan instead of adding a second job (R11)."""
     units = tmp_path / "units"
     vault_root = tmp_path / "vault"
     common = {
