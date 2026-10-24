@@ -153,7 +153,7 @@
 - [x] **Slice 15: Feature Testing & Regression**
 
   > Verifies the whole feature end-to-end against functional-spec.md, run after all implementation slices are complete. Slice 9 wiki regeneration is deferred; acceptance tests cover the committed corpus, packaging, docs and CI shape.
-  - [x] Read functional-spec.md acceptance criteria in full. Generate acceptance-level tests that verify the entire feature as a whole — not individual slices. Cover applicable layers (unit for pure logic, integration for service interactions, e2e for user flows) based on the project's testing stack. Write tests with RED validation (must fail before implementation is confirmed done). Annotate each test with `@spec: 008-make-product-explain-itself` and `@regression` if suitable for long-term regression. Place them in `tests/test_109_acceptance.py` per the project's `test_<issue>_acceptance.py` convention. **[Agent: testing-expert]**
+  - [x] Read functional-spec.md acceptance criteria in full. Generate acceptance-level tests that verify the entire feature as a whole — not individual slices. Cover applicable layers (unit for pure logic, integration for service interactions, e2e for user flows) based on the project's testing stack. Write tests with RED validation (must fail before implementation is confirmed done). Annotate each test with `@spec: 008-make-product-explain-itself` and `@regression` if suitable for long-term regression. Place them in `tests/test_product_explains_itself_acceptance.py` per the feature-slug acceptance convention in `docs/CODING_STANDARDS.md`. **[Agent: testing-expert]**
   - [x] Run all generated tests. All must pass. Fix any failures before proceeding. **[Agent: testing-expert]**
 
 ---
