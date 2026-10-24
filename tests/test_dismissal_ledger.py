@@ -177,6 +177,20 @@ def test_load_missing_ledger_rebuilds_from_reason_files(tmp_path: Path):
     assert ledger["merges"][0]["name"] == "Alias"
 
 
+def test_load_without_an_archive_writes_nothing(tmp_path: Path):
+    """A wiki with no archive has nothing to rebuild, so reading leaves it untouched (#363)."""
+    wiki = tmp_path / "wiki"
+    (wiki / "entities").mkdir(parents=True)
+    before = sorted(p.relative_to(tmp_path) for p in tmp_path.rglob("*"))
+
+    assert load_ledger(wiki) == empty_ledger()
+    assert sorted(p.relative_to(tmp_path) for p in tmp_path.rglob("*")) == before
+
+    missing = tmp_path / "no-such-vault" / "wiki"
+    assert load_ledger(missing) == empty_ledger()
+    assert not (tmp_path / "no-such-vault").exists()
+
+
 def test_rebuild_treats_stub_without_reason_as_empty_dismissal(tmp_path: Path):
     """Archived stubs lacking a sibling reason file become dismissals with empty reason."""
     wiki = tmp_path / "wiki"

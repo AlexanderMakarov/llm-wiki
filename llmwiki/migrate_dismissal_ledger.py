@@ -5,8 +5,8 @@ Offline one-time import for vaults that still carry legacy sibling
 ``wiki/archive/candidates/`` the same way :func:`llmwiki.dismissal_ledger.rebuild_ledger_from_archive`
 does, then writes ``dismissals.json``.
 
-When the ledger file is already missing, ordinary ledger reads
-(:func:`llmwiki.dismissal_ledger.load_ledger`) auto-rebuild; this migrate
+When the ledger file is missing and the archive exists, ordinary ledger
+reads (:func:`llmwiki.dismissal_ledger.load_ledger`) auto-rebuild; this migrate
 is the explicit operator path — including ``--dry-run`` and forcing a
 rebuild when a ledger already exists.
 

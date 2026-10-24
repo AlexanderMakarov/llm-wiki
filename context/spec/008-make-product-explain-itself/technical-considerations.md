@@ -250,7 +250,7 @@ The product cannot update an already-ingested document in place. The refresh scr
 
 ## 4. Testing Strategy
 
-Conventions: `pytest`, tests under `tests/`, acceptance tests named `tests/test_109_acceptance.py` per the existing `test_<issue>_acceptance.py` pattern. Gates are `ruff check llmwiki tests scripts` and `python3 -m pytest tests/ -q`.
+Conventions: `pytest`, tests under `tests/`, acceptance tests named `tests/test_product_explains_itself_acceptance.py` per the feature-slug acceptance convention in `docs/CODING_STANDARDS.md`. Gates are `ruff check llmwiki tests scripts` and `python3 -m pytest tests/ -q`.
 
 **Unit**
 
@@ -272,6 +272,6 @@ Conventions: `pytest`, tests under `tests/`, acceptance tests named `tests/test_
 - The committed demo builds and lints clean — enforced in CI by the repaired `wiki-checks.yml`, and runnable locally as the same command.
 - Demo **content generation** needs an AI model and is therefore not exercised in CI. CI verifies the committed artefact; the maintainer verifies generation when running the refresh script. This boundary is deliberate and matches R3's local-only decision.
 
-**Acceptance** — `tests/test_109_acceptance.py`, one test per functional-spec acceptance criterion that is machine-checkable, annotated `@spec`. Criteria that are inherently editorial (README leads with the benefit; no fact stated twice) are verified at the smoke-confirm step, not automated. Structural README criteria that *are* checkable — one agent table, correct Python version, no lineage paragraph above Acknowledgements — get assertions.
+**Acceptance** — `tests/test_product_explains_itself_acceptance.py`, one test per functional-spec acceptance criterion that is machine-checkable, annotated `@spec`. Criteria that are inherently editorial (README leads with the benefit; no fact stated twice) are verified at the smoke-confirm step, not automated. Structural README criteria that *are* checkable — one agent table, correct Python version, no lineage paragraph above Acknowledgements — get assertions.
 
 **Specialist gap:** `context/product/hired-agents.md` records no Python/CLI or packaging specialist (only `testing-expert`). These sections were drafted without one; `/awos:hire` can address it if packaging work proves to need it.

@@ -81,9 +81,11 @@ def test_every_llmwiki_command_it_runs_actually_exists():
 
 
 def test_runs_lint_with_fail_on_errors():
+    """The demo lint gate fails on errors only, never the warning-strict mode (#109 R4)."""
     text = WORKFLOW.read_text(encoding="utf-8")
     assert "llmwiki lint" in text
     assert "--fail-on-errors" in text
+    assert "lint --vault demo --strict" not in text
 
 
 def test_runs_build():

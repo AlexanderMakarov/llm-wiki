@@ -69,7 +69,7 @@ llmwiki migrate dismissal-ledger --vault /path/to/vault --dry-run
 llmwiki migrate dismissal-ledger --vault /path/to/vault
 ```
 
-Ordinary ledger reads also auto-rebuild when `dismissals.json` is missing (for example the first `candidates list` or discard after upgrade), so an explicit migrate is mainly for `--dry-run` preview or forcing a rebuild when a ledger already exists. Legacy `*.reason.txt` files are imported into the ledger and may remain on disk — they are not deleted automatically. Rebuild afterwards so the candidates page picks up near-match marks: `llmwiki build --vault <vault>`.
+Ordinary ledger reads also auto-rebuild when `dismissals.json` is missing and `wiki/archive/candidates/` exists (for example the first `candidates list` or discard after upgrade); a vault with no archive is read as an empty ledger and nothing is written, so an explicit migrate is mainly for `--dry-run` preview or forcing a rebuild when a ledger already exists. Legacy `*.reason.txt` files are imported into the ledger and may remain on disk — they are not deleted automatically. Rebuild afterwards so the candidates page picks up near-match marks: `llmwiki build --vault <vault>`.
 
 See [`docs/reference/cli.md`](reference/cli.md#dismissal-ledger--rebuild-dismissalsjson-from-the-archive-146).
 
