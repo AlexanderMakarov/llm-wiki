@@ -68,6 +68,7 @@ from llmwiki.dismissal_ledger import (
     iter_merges,
     ledger_path,
     load_ledger,
+    save_ledger,
     upsert_dismissal,
     upsert_merge,
 )
@@ -1664,10 +1665,12 @@ def _ensure_dismissal_ledger(wiki_dir: Path) -> None:
     :func:`llmwiki.dismissal_ledger.load_ledger` rebuilds from the archive when
     the file is missing. Calling that *after* the stub has moved would treat a
     freshly archived merge (no sibling ``*.reason.txt``) as a pure dismissal.
-    Ensuring the ledger exists first keeps upsert as an incremental update.
+    Writing the ledger first keeps upsert as an incremental update; a plain
+    read does not write, so the file is saved here even when there is no
+    archive yet to import from.
     """
     if not ledger_path(wiki_dir).is_file():
-        load_ledger(wiki_dir)
+        save_ledger(wiki_dir, load_ledger(wiki_dir))
 
 
 def _archive_candidate(candidate: Path, wiki_dir: Path) -> Path:

@@ -4,9 +4,10 @@ Versioned ledger for discarded-candidate decisions (pure dismissals and
 merge intents). Other modules must not open, parse, or write that path —
 call the helpers here instead.
 
-When :func:`load_ledger` finds no ledger file, it auto-rebuilds from
-archived stubs and any legacy sibling ``*.reason.txt`` files (FR6), then
-persists the result. Corrupt JSON fails loud; use
+When :func:`load_ledger` finds no ledger file but ``wiki/archive/candidates/``
+exists, it auto-rebuilds from archived stubs and any legacy sibling
+``*.reason.txt`` files (FR6), then persists the result. With no archive a read
+returns an empty ledger and writes nothing. Corrupt JSON fails loud; use
 :func:`rebuild_ledger_from_archive` or ``llmwiki migrate dismissal-ledger``
 to repair / re-import.
 """
@@ -79,14 +80,18 @@ def empty_ledger() -> DismissalLedger:
 
 
 def load_ledger(wiki_dir: Path) -> DismissalLedger:
-    """Load the ledger, auto-rebuilding from the archive when the file is missing.
+    """Load the ledger, auto-rebuilding from an existing archive when the file is missing.
 
     Missing file → :func:`rebuild_ledger_from_archive` (imports legacy
-    ``*.reason.txt`` + stubs, then saves). Present but unreadable /
-    invalid JSON → raises. Wrong schema shape → ``ValueError``.
+    ``*.reason.txt`` + stubs, then saves). With no archive directory there is
+    nothing to import, so the read returns an empty ledger and writes nothing.
+    Present but unreadable / invalid JSON → raises. Wrong schema shape →
+    ``ValueError``.
     """
     path = ledger_path(wiki_dir)
     if not path.is_file():
+        if not archive_candidates_dir(wiki_dir).is_dir():
+            return empty_ledger()
         return rebuild_ledger_from_archive(wiki_dir)
     try:
         raw = path.read_text(encoding="utf-8")
@@ -193,12 +198,12 @@ def upsert_merge(
 
 
 def iter_dismissals(wiki_dir: Path) -> Iterator[DismissalRecord]:
-    """Yield dismissal records from the ledger (auto-rebuild if missing)."""
+    """Yield dismissal records from the ledger (see :func:`load_ledger` when missing)."""
     yield from load_ledger(wiki_dir)["dismissals"]
 
 
 def iter_merges(wiki_dir: Path) -> Iterator[MergeRecord]:
-    """Yield merge records from the ledger (auto-rebuild if missing)."""
+    """Yield merge records from the ledger (see :func:`load_ledger` when missing)."""
     yield from load_ledger(wiki_dir)["merges"]
 
 
