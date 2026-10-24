@@ -23,6 +23,7 @@ from llmwiki.convert import (
     is_headless_session,
     is_temp_cwd_session,
 )
+from tests.settings_sandbox import SettingsSandbox
 
 # ─── unit: is_headless_session ───────────────────────────────────────────
 
@@ -276,19 +277,19 @@ def test_filtered_session_persists_mtime(tmp_path, monkeypatch):
 # exclude_temp_cwd set in config.json silently no-op'd on sync.
 
 
-def _write_default_configs(tmp_path, monkeypatch, *, examples: dict, user: dict | None):
+def _write_default_configs(
+    tmp_path, monkeypatch, settings_sandbox: SettingsSandbox, *, examples: dict, user: dict | None
+):
     examples_dir = tmp_path / "clone" / "examples"
     examples_dir.mkdir(parents=True)
     examples_cfg = examples_dir / "sessions_config.json"
     examples_cfg.write_text(json.dumps({"filters": examples}), encoding="utf-8")
     monkeypatch.setattr(c, "DEFAULT_CONFIG_FILE", examples_cfg)
-    user_cfg = tmp_path / "clone" / "config.json"
     if user is not None:
-        user_cfg.write_text(json.dumps({"filters": user}), encoding="utf-8")
-    monkeypatch.setattr(c, "USER_CONFIG_FILE", user_cfg)
+        settings_sandbox.write_operator({"filters": user})
 
 
-def test_default_sync_applies_root_config_filter_override(tmp_path, monkeypatch):
+def test_default_sync_applies_root_config_filter_override(tmp_path, monkeypatch, settings_sandbox: SettingsSandbox):
     # examples ships exclude_temp_cwd OFF; the user's root config.json turns it
     # ON. A convert_all with no config_file (what sync/queue do) must skip the
     # temp-cwd session.
@@ -296,7 +297,7 @@ def test_default_sync_applies_root_config_filter_override(tmp_path, monkeypatch)
     _write_session(proj / "scratch.jsonl", cwd="/tmp/awos-e2e-99")
     _patch(monkeypatch, home, state)
     _write_default_configs(
-        tmp_path, monkeypatch,
+        tmp_path, monkeypatch, settings_sandbox,
         examples={"exclude_temp_cwd": False},
         user={"exclude_temp_cwd": True},
     )
@@ -306,13 +307,13 @@ def test_default_sync_applies_root_config_filter_override(tmp_path, monkeypatch)
     assert sorted(out_dir.rglob("*.md")) == []
 
 
-def test_default_sync_without_root_config_keeps_temp_cwd(tmp_path, monkeypatch):
+def test_default_sync_without_root_config_keeps_temp_cwd(tmp_path, monkeypatch, settings_sandbox: SettingsSandbox):
     # Control: no root config.json → examples default (OFF) wins → session kept.
     home, proj, out_dir, state = _seed(tmp_path)
     _write_session(proj / "scratch.jsonl", cwd="/tmp/awos-e2e-99")
     _patch(monkeypatch, home, state)
     _write_default_configs(
-        tmp_path, monkeypatch,
+        tmp_path, monkeypatch, settings_sandbox,
         examples={"exclude_temp_cwd": False},
         user=None,
     )
@@ -322,7 +323,7 @@ def test_default_sync_without_root_config_keeps_temp_cwd(tmp_path, monkeypatch):
     assert len(sorted(out_dir.rglob("*.md"))) == 1
 
 
-def test_root_config_merge_is_section_wise(tmp_path, monkeypatch):
+def test_root_config_merge_is_section_wise(tmp_path, monkeypatch, settings_sandbox: SettingsSandbox):
     # examples turns exclude_headless OFF and exclude_temp_cwd OFF; the root
     # config.json only sets exclude_temp_cwd ON. Seed one headless + one
     # temp-cwd session. A correct section-wise merge keeps the headless one
@@ -341,7 +342,7 @@ def test_root_config_merge_is_section_wise(tmp_path, monkeypatch):
                    session_id="sess-scratch", slug="scratch")
     _patch(monkeypatch, home, state)
     _write_default_configs(
-        tmp_path, monkeypatch,
+        tmp_path, monkeypatch, settings_sandbox,
         examples={"exclude_headless": False, "exclude_temp_cwd": False},
         user={"exclude_temp_cwd": True},
     )
@@ -352,7 +353,7 @@ def test_root_config_merge_is_section_wise(tmp_path, monkeypatch):
     assert len(sorted(out_dir.rglob("*.md"))) == 1
 
 
-def test_explicit_config_file_ignores_root_config(tmp_path, monkeypatch):
+def test_explicit_config_file_ignores_root_config(tmp_path, monkeypatch, settings_sandbox: SettingsSandbox):
     # Test isolation: passing an explicit config_file stays a single-file read.
     # The root config.json (exclude_temp_cwd ON) must NOT leak in, so the
     # temp-cwd session is kept.
@@ -360,7 +361,7 @@ def test_explicit_config_file_ignores_root_config(tmp_path, monkeypatch):
     _write_session(proj / "scratch.jsonl", cwd="/tmp/awos-e2e-99")
     _patch(monkeypatch, home, state)
     _write_default_configs(
-        tmp_path, monkeypatch,
+        tmp_path, monkeypatch, settings_sandbox,
         examples={"exclude_temp_cwd": False},
         user={"exclude_temp_cwd": True},
     )

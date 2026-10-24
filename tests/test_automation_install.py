@@ -10,8 +10,9 @@ single unit, and the checkout guard. The three unit renderers are pinned
 byte-for-byte on the default daily schedule: an existing install must not
 silently change shape when the schedule notation does.
 
-Tests that run the CLI point its checkout and the operator ``config.json`` at
-``tmp_path`` through ``tests.checkout.redirect_checkout`` (#367).
+Settings live in the per-test ``settings_sandbox``: tests prepare and inspect the
+operator ``config.json`` and the home directory through it, and patch
+``cli.REPO_ROOT`` only to choose the checkout the scheduled job runs from.
 """
 
 from __future__ import annotations
@@ -70,7 +71,7 @@ from llmwiki.config_schedule import default_vault_for_checkout
 from llmwiki.cron_spec import parse_cron
 from llmwiki.doctor.checks import _orphan_finding
 from llmwiki.install_hint import pip_install_command
-from tests.checkout import redirect_checkout
+from tests.settings_sandbox import SettingsSandbox
 
 DAILY = parse_cron("0 8 * * *")
 WEEKDAYS = parse_cron("0 8 * * 1-5")
@@ -372,10 +373,10 @@ def _run_wizard(
     """Drive the interactive wizard with scripted answers.
 
     Returns the exit code, the config the wizard handed to ``run_install``, and
-    every prompt that was displayed. The checkout and its ``config.json`` are
-    redirected at ``tmp_path``, so nothing the wizard writes can land in the repo.
+    every prompt that was displayed. The wizard runs as if ``tmp_path`` were the
+    checkout; settings go to the per-test sandbox.
     """
-    redirect_checkout(tmp_path, monkeypatch)
+    monkeypatch.setattr(cli, "REPO_ROOT", tmp_path)
     _pretend_tty(monkeypatch)
     captured: dict = {}
 
@@ -518,10 +519,11 @@ def test_wizard_reasks_a_cron_expression_it_cannot_translate(
 
 
 def test_wizard_declining_the_confirmation_writes_nothing(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str],
+    settings_sandbox: SettingsSandbox,
 ):
     """No status file, no unit files, and no config.json change when the user says no."""
-    config = redirect_checkout(tmp_path, monkeypatch)
+    monkeypatch.setattr(cli, "REPO_ROOT", tmp_path)
     _pretend_tty(monkeypatch)
     vault = tmp_path / "vault"
     vault.mkdir()
@@ -531,14 +533,15 @@ def test_wizard_declining_the_confirmation_writes_nothing(
     assert "Skipped install-automation" in capsys.readouterr().out
     assert load_status(vault) is None
     assert not (tmp_path / ".llmwiki").exists()
-    assert not config.exists()
+    assert not settings_sandbox.operator_config.exists()
 
 
 def test_wizard_confirmation_never_answers_itself_when_stdin_ends(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str],
+    settings_sandbox: SettingsSandbox,
 ):
     """Ctrl-D at the confirmation is a decline: consent has to be typed, never assumed."""
-    config = redirect_checkout(tmp_path, monkeypatch)
+    monkeypatch.setattr(cli, "REPO_ROOT", tmp_path)
     _pretend_tty(monkeypatch)
     vault = tmp_path / "vault"
     vault.mkdir()
@@ -548,14 +551,15 @@ def test_wizard_confirmation_never_answers_itself_when_stdin_ends(
     assert cli.cmd_install_automation(args) == 0
     assert "Skipped install-automation" in capsys.readouterr().out
     assert load_status(vault) is None
-    assert not config.exists()
+    assert not settings_sandbox.operator_config.exists()
 
 
 def test_a_non_terminal_stdin_refuses_to_install_without_yes(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str],
+    settings_sandbox: SettingsSandbox,
 ):
     """A piped stdin cannot consent, so the wizard exits 2 without asking or writing anything."""
-    config = redirect_checkout(tmp_path, monkeypatch)
+    monkeypatch.setattr(cli, "REPO_ROOT", tmp_path)
     monkeypatch.setattr(sys, "stdin", io.StringIO())  # a plain StringIO is not a terminal
 
     def refuse(prompt: str = "") -> str:
@@ -571,7 +575,7 @@ def test_a_non_terminal_stdin_refuses_to_install_without_yes(
     assert "--yes" in err
     assert load_status(vault) is None
     assert not (tmp_path / ".llmwiki").exists()
-    assert not config.exists()
+    assert not settings_sandbox.operator_config.exists()
 
 
 # ─── Non-interactive flags ─────────────────────────────────────────────
@@ -579,7 +583,7 @@ def test_a_non_terminal_stdin_refuses_to_install_without_yes(
 
 def _install_via_flags(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *flags: str) -> tuple[int, Path, Path]:
     """Run a `--yes` install into a throwaway vault, returning (exit code, vault, units dir)."""
-    redirect_checkout(tmp_path, monkeypatch)
+    monkeypatch.setattr(cli, "REPO_ROOT", tmp_path)
     vault = tmp_path / "vault"
     vault.mkdir(exist_ok=True)
     units = tmp_path / "units"
@@ -866,10 +870,7 @@ def test_panel_survives_a_malformed_status_file(tmp_path: Path):
 
 
 def _fake_systemctl(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, fail_enable: bool = False) -> Path:
-    """Install a fake ``systemctl`` on PATH and point HOME at a throwaway directory."""
-    home = tmp_path / "home"
-    home.mkdir()
-    monkeypatch.setenv("HOME", str(home))
+    """Install a fake ``systemctl`` on PATH that logs its arguments and reports the timer enabled."""
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     log = bin_dir / "systemctl.log"
@@ -1078,7 +1079,6 @@ def _scripted_scheduler(monkeypatch: pytest.MonkeyPatch) -> list[list[str]]:
 
 def test_macos_install_uses_the_vault_label(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """A macOS install writes and reloads a plist under the vault's own launchd label."""
-    monkeypatch.setenv("HOME", str(tmp_path / "home"))
     monkeypatch.setattr("llmwiki.automation_install.detect_platform", lambda: "macos")
     calls = _scripted_scheduler(monkeypatch)
     status, vault, units = _install(tmp_path, force_platform="macos", activate=True)
@@ -1521,11 +1521,11 @@ def test_windows_enabled_comes_from_task_xml_not_the_localized_status(tmp_path: 
 
 
 def test_deactivation_leaves_a_wrapper_that_is_not_this_units_script(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, settings_sandbox: SettingsSandbox
 ):
     """Deactivating a unit deletes its own wrapper but leaves a wrapper elsewhere in place, naming it in a note."""
-    monkeypatch.setenv("HOME", str(tmp_path))
-    agents = tmp_path / "Library" / "LaunchAgents"
+    home = settings_sandbox.home
+    agents = home / "Library" / "LaunchAgents"
     agents.mkdir(parents=True)
     own = agents / f"{LEGACY_SYSTEMD}.sh"
     own.write_text("#!/bin/sh\n", encoding="utf-8")
@@ -1541,17 +1541,17 @@ def test_deactivation_leaves_a_wrapper_that_is_not_this_units_script(
         platform="macos",
         wrapper_path=own,
     )
-    assert deactivate_unit(owned, home=tmp_path, run=_fake_run({bootout: (0, "", "")}), uid=7) is None
+    assert deactivate_unit(owned, home=home, run=_fake_run({bootout: (0, "", "")}), uid=7) is None
     assert not own.exists() and not plist.exists()
 
     plist.write_text("plist", encoding="utf-8")
     stray = replace(owned, wrapper_path=foreign)
-    note = deactivate_unit(stray, home=tmp_path, run=_fake_run({bootout: (0, "", "")}), uid=7)
+    note = deactivate_unit(stray, home=home, run=_fake_run({bootout: (0, "", "")}), uid=7)
     assert foreign.read_text(encoding="utf-8") == "keep"
     assert note is not None and str(foreign) in note
     assert not plist.exists()
 
-    staging = tmp_path / ".automation"
+    staging = home / ".automation"
     staging.mkdir()
     win_wrapper = staging / f"{LEGACY_SYSTEMD}.sh"
     win_wrapper.write_text("#!/bin/sh\n", encoding="utf-8")
@@ -1563,14 +1563,14 @@ def test_deactivation_leaves_a_wrapper_that_is_not_this_units_script(
         platform="windows",
         wrapper_path=win_wrapper,
     )
-    assert deactivate_unit(windows, home=tmp_path, run=_fake_run({delete: (0, "", "")})) is None
+    assert deactivate_unit(windows, home=home, run=_fake_run({delete: (0, "", "")})) is None
     assert not win_wrapper.exists() and not task_xml.exists()
 
     alien = tmp_path / "alien" / "payload.sh"
     alien.parent.mkdir()
     alien.write_text("keep", encoding="utf-8")
     planted = replace(windows, wrapper_path=alien)
-    note = deactivate_unit(planted, home=tmp_path, run=_fake_run({delete: (0, "", "")}))
+    note = deactivate_unit(planted, home=home, run=_fake_run({delete: (0, "", "")}))
     assert alien.read_text(encoding="utf-8") == "keep"
     assert note is not None and str(alien) in note
 
@@ -1662,24 +1662,24 @@ _TASK = "llmwiki-maintain-gone-1234abcd"
 )
 def test_removal_steps_per_platform_are_home_relative(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
     platform: str,
     name: str,
     wrapper: tuple[str, ...] | None,
     expected: list[str],
+    settings_sandbox: SettingsSandbox,
 ):
     """Manual removal steps on each platform name the unit's files relative to the home directory."""
-    monkeypatch.setenv("HOME", str(tmp_path))
+    home = settings_sandbox.home
     unit = replace(
         _unit(name, legacy=False, target=tmp_path / "gone"),
         platform=platform,
-        wrapper_path=tmp_path.joinpath(*wrapper) if wrapper else None,
+        wrapper_path=home.joinpath(*wrapper) if wrapper else None,
     )
 
     steps = removal_steps(unit)
 
     assert steps == expected
-    assert not any(str(tmp_path) in step for step in steps)
+    assert not any(str(home) in step for step in steps)
 
 
 # ─── #275: pin synthesis.claude.path at install for systemd catch-up ───
@@ -1697,7 +1697,8 @@ def _fake_claude_on_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Pat
 
 
 def test_yes_claude_pins_absolute_path_usable_under_minimal_path(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    settings_sandbox: SettingsSandbox,
 ):
     """Install-time PATH finds ~/.local/bin/claude; the pin survives systemd-style PATH (#275)."""
     claude = _fake_claude_on_path(tmp_path, monkeypatch)
@@ -1705,7 +1706,7 @@ def test_yes_claude_pins_absolute_path_usable_under_minimal_path(
         tmp_path, monkeypatch, "--job", "maintain", "--synth-backend", "claude",
     )
     assert code == 0
-    cfg = json.loads((tmp_path / "config.json").read_text(encoding="utf-8"))
+    cfg = settings_sandbox.read_operator()
     pinned = cfg["synthesis"]["claude"]["path"]
     assert Path(pinned) == claude.resolve()
     assert Path(pinned).is_absolute()
@@ -1716,56 +1717,52 @@ def test_yes_claude_pins_absolute_path_usable_under_minimal_path(
 
 
 def test_yes_claude_does_not_overwrite_explicit_nested_path(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    settings_sandbox: SettingsSandbox,
 ):
     """A `--synth-backend claude` install keeps an already-set `synthesis.claude.path` and its other Claude settings."""
     explicit = tmp_path / "already-pinned"
     explicit.write_text("#!/bin/sh\n", encoding="utf-8")
     explicit.chmod(0o755)
-    (tmp_path / "config.json").write_text(
-        json.dumps({
+    settings_sandbox.write_operator({
             "synthesis": {
                 "backend": "claude",
                 "claude": {"path": str(explicit), "model": "sonnet"},
             },
         })
-        + "\n",
-        encoding="utf-8",
-    )
     other = _fake_claude_on_path(tmp_path, monkeypatch)
     code, _vault, _units = _install_via_flags(
         tmp_path, monkeypatch, "--job", "maintain", "--synth-backend", "claude",
     )
     assert code == 0
-    cfg = json.loads((tmp_path / "config.json").read_text(encoding="utf-8"))
+    cfg = settings_sandbox.read_operator()
     assert cfg["synthesis"]["claude"]["path"] == str(explicit)
     assert cfg["synthesis"]["claude"]["model"] == "sonnet"
     assert cfg["synthesis"]["claude"]["path"] != str(other.resolve())
 
 
 def test_yes_claude_does_not_overwrite_explicit_flat_claude_path(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    settings_sandbox: SettingsSandbox,
 ):
     """A `--synth-backend claude` install keeps an already-set flat `claude_path` and adds no nested pin."""
     explicit = tmp_path / "flat-pinned"
     explicit.write_text("#!/bin/sh\n", encoding="utf-8")
     explicit.chmod(0o755)
-    (tmp_path / "config.json").write_text(
-        json.dumps({"synthesis": {"backend": "claude", "claude_path": str(explicit)}}) + "\n",
-        encoding="utf-8",
-    )
+    settings_sandbox.write_operator({"synthesis": {"backend": "claude", "claude_path": str(explicit)}})
     _fake_claude_on_path(tmp_path, monkeypatch)
     code, _vault, _units = _install_via_flags(
         tmp_path, monkeypatch, "--job", "maintain", "--synth-backend", "claude",
     )
     assert code == 0
-    cfg = json.loads((tmp_path / "config.json").read_text(encoding="utf-8"))
+    cfg = settings_sandbox.read_operator()
     assert cfg["synthesis"]["claude_path"] == str(explicit)
     assert "path" not in (cfg["synthesis"].get("claude") or {})
 
 
 def test_yes_claude_warns_when_cli_missing_but_still_installs(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+    settings_sandbox: SettingsSandbox,
 ):
     """With no Claude CLI on PATH, a `--synth-backend claude` install still completes, records the backend and warns how to pin the path."""
     monkeypatch.setenv("PATH", "/usr/bin:/bin")
@@ -1775,7 +1772,7 @@ def test_yes_claude_warns_when_cli_missing_but_still_installs(
     assert code == 0
     assert load_status(vault) is not None
     assert (units / unit_names(tmp_path / "vault").wrapper).is_file()
-    cfg = json.loads((tmp_path / "config.json").read_text(encoding="utf-8"))
+    cfg = settings_sandbox.read_operator()
     assert cfg["synthesis"]["backend"] == "claude"
     assert "path" not in (cfg["synthesis"].get("claude") or {})
     err = capsys.readouterr().err
@@ -1919,20 +1916,19 @@ def _deactivation_calls(plat: str) -> list[list[str]]:
     }[plat]
 
 
-def _home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, plat: str) -> Path:
-    home = tmp_path / "home"
-    home.mkdir()
-    monkeypatch.setenv("HOME", str(home))
+def _home(sandbox: SettingsSandbox, monkeypatch: pytest.MonkeyPatch, plat: str) -> Path:
+    """Pretend to run on ``plat`` and return the sandboxed home directory its units live under."""
     monkeypatch.setattr("llmwiki.automation_install.detect_platform", lambda: plat)
-    return home
+    return sandbox.home
 
 
 @pytest.mark.parametrize("plat", ["linux", "macos", "windows"])
 def test_install_switches_off_the_legacy_unit_serving_this_vault(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, plat: str
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, plat: str,
+    settings_sandbox: SettingsSandbox,
 ):
     """On each platform, an activated install switches off and removes the legacy unit that served this vault, and records the adoption."""
-    home = _home(tmp_path, monkeypatch, plat)
+    home = _home(settings_sandbox, monkeypatch, plat)
     vault = tmp_path / "vault"
     vault.mkdir()
     legacy_files, answers = _legacy_unit(plat, tmp_path, home, vault)
@@ -1949,10 +1945,11 @@ def test_install_switches_off_the_legacy_unit_serving_this_vault(
 
 @pytest.mark.parametrize("plat", ["linux", "macos", "windows"])
 def test_install_leaves_a_legacy_unit_serving_another_vault_alone(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, plat: str
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, plat: str,
+    settings_sandbox: SettingsSandbox,
 ):
     """On each platform, an install leaves a legacy unit serving another vault running and in place."""
-    home = _home(tmp_path, monkeypatch, plat)
+    home = _home(settings_sandbox, monkeypatch, plat)
     other = tmp_path / "other-vault"
     other.mkdir()
     legacy_files, answers = _legacy_unit(plat, tmp_path, home, other)
@@ -1966,11 +1963,12 @@ def test_install_leaves_a_legacy_unit_serving_another_vault_alone(
 
 
 def test_install_leaves_a_legacy_unit_with_an_unknown_target_alone(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    settings_sandbox: SettingsSandbox,
 ):
     # No --vault and a checkout that no longer exists: the legacy target cannot be read.
     """An install leaves a legacy unit whose target cannot be read running and in place."""
-    home = _home(tmp_path, monkeypatch, "linux")
+    home = _home(settings_sandbox, monkeypatch, "linux")
     legacy_files, _answers = _legacy_unit("linux", tmp_path, home, None)
     calls = _adoption_scheduler(monkeypatch)
 
@@ -1982,10 +1980,11 @@ def test_install_leaves_a_legacy_unit_with_an_unknown_target_alone(
 
 
 def test_a_failed_legacy_switch_off_does_not_fail_the_install(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    settings_sandbox: SettingsSandbox,
 ):
     """A legacy unit that fails to switch off leaves the new install active and records the error with the scheduler's message."""
-    home = _home(tmp_path, monkeypatch, "linux")
+    home = _home(settings_sandbox, monkeypatch, "linux")
     vault = tmp_path / "vault"
     vault.mkdir()
     legacy_files, _answers = _legacy_unit("linux", tmp_path, home, vault)
@@ -2002,9 +2001,9 @@ def test_a_failed_legacy_switch_off_does_not_fail_the_install(
     assert load_status(vault)["legacy_adopt_error"] == status["legacy_adopt_error"]
 
 
-def test_no_activate_install_never_touches_the_legacy_unit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+def test_no_activate_install_never_touches_the_legacy_unit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, settings_sandbox: SettingsSandbox):
     """An install without activation never calls the scheduler or touches the legacy unit."""
-    home = _home(tmp_path, monkeypatch, "linux")
+    home = _home(settings_sandbox, monkeypatch, "linux")
     vault = tmp_path / "vault"
     vault.mkdir()
     legacy_files, _answers = _legacy_unit("linux", tmp_path, home, vault)
@@ -2019,11 +2018,12 @@ def test_no_activate_install_never_touches_the_legacy_unit(tmp_path: Path, monke
 
 @pytest.mark.parametrize("fail", [False, True])
 def test_cli_says_the_legacy_schedule_was_replaced_or_how_to_remove_it(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], fail: bool
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], fail: bool,
+    settings_sandbox: SettingsSandbox,
 ):
     """The CLI says the legacy schedule was replaced, or on failure shows the error and the command to remove it."""
-    home = _home(tmp_path, monkeypatch, "linux")
-    redirect_checkout(tmp_path, monkeypatch)
+    home = _home(settings_sandbox, monkeypatch, "linux")
+    monkeypatch.setattr(cli, "REPO_ROOT", tmp_path)
     vault = tmp_path / "vault"
     vault.mkdir()
     _legacy_unit("linux", tmp_path, home, vault)
@@ -2224,7 +2224,7 @@ def test_wizard_prints_the_dev_checkout_warning_before_asking_to_replace(
         shown.append(capsys.readouterr().out)
         return ([*_WIZARD_YES, "n"])[len(shown) - 1]
 
-    redirect_checkout(tmp_path, monkeypatch)
+    monkeypatch.setattr(cli, "REPO_ROOT", tmp_path)
     _pretend_tty(monkeypatch)
     monkeypatch.setattr(cli, "run_install", lambda config: pytest.fail("installed after a no"))
     monkeypatch.setattr("builtins.input", fake_input)
@@ -2250,7 +2250,6 @@ def test_discovery_without_probe_reads_unit_files_but_never_asks_systemctl(tmp_p
 
 def test_removal_steps_quote_a_unit_name_with_shell_metacharacters(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """Removal steps shell-quote a unit name holding metacharacters, so pasting them cannot run extra commands."""
-    monkeypatch.setenv("HOME", str(tmp_path))
     unit = InstalledUnit(
         name="llmwiki-maintain-x;rm -rf ~",
         platform="linux",

@@ -53,9 +53,14 @@ def _covers_platform(paths: list[Path], markers: tuple[str, ...]) -> bool:
     return False
 
 
+#: Adapters build their default roots when imported; so is this module, before any
+#: test points ``HOME`` at its sandbox, so this is the home those roots were built with.
+_IMPORT_HOME = Path.home()
+
+
 def _is_dot_dir_only(paths: list[Path]) -> bool:
     """True if every path is a dot-directory under home (cross-platform)."""
-    home = Path.home()
+    home = _IMPORT_HOME
     for p in paths:
         try:
             rel = p.relative_to(home)
@@ -138,7 +143,7 @@ _ALL_ADAPTERS = [
 
 def test_all_default_paths_are_under_home():
     """All default roots should be relative to the user's home directory."""
-    home = Path.home()
+    home = _IMPORT_HOME
     for cls in _ALL_ADAPTERS:
         paths = _get_default_paths(cls)
         for p in paths:
@@ -155,7 +160,7 @@ def test_no_adapter_uses_hardcoded_username():
             # Path.home() resolves dynamically; make sure no extra user dir is
             # hardcoded beyond what Path.home() provides.
             parts_str = str(p)
-            home_str = str(Path.home())
+            home_str = str(_IMPORT_HOME)
             after_home = parts_str[len(home_str):]
             # Should not contain another /Users/ or /home/ segment
             assert "/Users/" not in after_home, (

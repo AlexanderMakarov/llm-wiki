@@ -30,6 +30,7 @@ from llmwiki.doctor.runners import (
     runner_is_dangerous,
 )
 from llmwiki.install_hint import PythonEnv
+from tests.settings_sandbox import SettingsSandbox
 
 
 def _scaffold_vault(root: Path) -> Path:
@@ -459,13 +460,12 @@ def test_yes_non_tty_does_not_run_install_automation(
     assert "--force" in out.getvalue()
 
 
-def test_install_automation_argv_reproduces_a_custom_units_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+def test_install_automation_argv_reproduces_a_custom_units_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, settings_sandbox: SettingsSandbox) -> None:
     vault = _scaffold_vault(tmp_path / "vault")
-    custom = tmp_path / "home" / "staging"
+    custom = settings_sandbox.home / "staging"
     argv = install_automation_argv(vault, {"job": "ingest", "units_written": [str(custom / "job.sh")]})
     assert argv[argv.index("--units-dir") + 1] == str(custom)
-    default = tmp_path / "home" / ".automation"
+    default = settings_sandbox.home / ".automation"
     argv = install_automation_argv(vault, {"job": "ingest", "units_written": [str(default / "job.sh")]})
     assert "--units-dir" not in argv
 
@@ -473,7 +473,6 @@ def test_install_automation_argv_reproduces_a_custom_units_dir(tmp_path: Path, m
 def test_install_automation_argv_ignores_a_recorded_units_dir_outside_home(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("HOME", str(tmp_path / "home"))
     vault = _scaffold_vault(tmp_path / "vault")
     argv = install_automation_argv(vault, {"job": "ingest", "units_written": [str(tmp_path / "elsewhere" / "job.sh")]})
     assert "--units-dir" not in argv

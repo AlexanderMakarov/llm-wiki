@@ -29,6 +29,7 @@ from llmwiki.convert import (
     _overlay_config_file,
     load_config,
 )
+from tests.settings_sandbox import SettingsSandbox
 
 
 def _config_path(tmp_path: Path) -> Path:
@@ -140,7 +141,8 @@ def test_empty_real_username_in_overlay_does_not_wipe_autodetect(
 
 
 def test_resolve_convert_config_recovers_from_empty_overlay(
-    tmp_path: Path, monkeypatch
+    tmp_path: Path, monkeypatch,
+    settings_sandbox: SettingsSandbox,
 ):
     """End-to-end: ``_resolve_convert_config`` must still autodetect after
     a user config that carries the examples placeholder empty string."""
@@ -151,13 +153,8 @@ def test_resolve_convert_config_recovers_from_empty_overlay(
 
     examples = tmp_path / "examples.json"
     examples.write_text("{}", encoding="utf-8")
-    user = tmp_path / "config.json"
-    user.write_text(
-        json.dumps({"redaction": {"real_username": ""}}),
-        encoding="utf-8",
-    )
+    settings_sandbox.write_operator({"redaction": {"real_username": ""}})
     monkeypatch.setattr(convert_mod, "DEFAULT_CONFIG_FILE", examples)
-    monkeypatch.setattr(convert_mod, "USER_CONFIG_FILE", user)
 
     cfg = convert_mod._resolve_convert_config(None)
     assert cfg["redaction"]["real_username"] == "alice"

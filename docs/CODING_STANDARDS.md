@@ -20,7 +20,9 @@ Human contributors: start with [`CONTRIBUTING.md`](../CONTRIBUTING.md) §Testing
 
 **No wall-clock timing outside deliberate slow/perf tests.** Do not assert on elapsed time, `time.sleep`, or race-prone timing in the fast unit suite. Performance and timing belong in `@pytest.mark.slow` tests (`tests/test_lint_perf.py`); the default unit run deselects them, and the `performance-budget` job in CI runs them without coverage.
 
-**Isolation.** Respect suite fixtures in `tests/conftest.py` (vault isolation, neutralized repo-root `config.json`). Tests that need the real user-config overlay must monkeypatch `_USER_CONFIG` / `USER_CONFIG_FILE` themselves. Code that saves settings writes through `config_schedule.user_config_path()`, so the same redirect covers writes; the #91 guard fails any test that creates, changes or deletes the repo-root `config.json` (#367). Do not leak state between tests.
+**Isolation.** Every test runs in its own settings sandbox: a throwaway home directory and operator `config.json`. Prepare and inspect settings through the `settings_sandbox` fixture (`write_operator`, `read_operator`, `home`, `xdg_state`); never patch settings paths or `HOME` in a test. Product code resolves every settings location when it is used, through one accessor such as `config_schedule.user_config_path()` or `Path.home()`, never through a module-level path constant, so the sandbox reaches it. Every pytest run fails when it changed a tracked file, the repo-root `config.json`, or llmwiki's settings under the real home directory; to find the test, run that run's modules one at a time. Do not leak state between tests.
+
+**Share expensive setup through scoped fixtures.** When several tests need the same expensive setup — a built site, a seeded vault, a git repository, a CLI subprocess run — build it once in a `scope="module"` (or `"session"`) fixture and let each test assert on the result, instead of rebuilding it in every test. Tests that share a scoped fixture treat it as read-only; a test that changes the setup builds its own function-scoped copy. Never merge separate behaviours into one test to save time: each test still states one behaviour, and the shared fixture is what saves the time.
 
 **Behavior-preserving cleanups.** Deleting a test, merging modules, or removing a skip is fine when behaviour is unchanged or the old test no longer describes reality—say so in the PR. Do not leave rotting duplicates beside replacements.
 
@@ -57,7 +59,7 @@ Three failure modes seen in this repo:
 
 **Line coverage vs mutation score.** The 87% CI gate is **line** coverage: the fraction of `llmwiki` statements that ran. Mutation score is different: the fraction of tiny synthetic bugs a suite **fails on**. A module can be at 100% line coverage and still have survivors (weak asserts). Do not treat “16 of 54 mutants survived” as “line coverage is 70%.”
 
-**This repo does not ship mutmut tests.** There is no committed mutmut harness, no CI mutation job, and no day-to-day requirement to install mutmut. The #280 proof was a **one-off local** mutmut run on `llmwiki/synth/reporting.py`; the durable artifact is stronger ordinary pytest (`tests/synth/test_reporting.py`, `tests/cli/test_synth.py`). The run record is [`context/spec/280-shrink-test-suite/mutation-experiment.md`](../context/spec/280-shrink-test-suite/mutation-experiment.md). Broader mutation scoring of other packages is optional follow-up [#314](https://github.com/AlexanderMakarov/llm-wiki/issues/314), not a substitute for writing useful unit tests.
+**No mutation harness.** The repo commits no mutation-testing harness and CI runs no mutation job. A one-off local mutation run is a fine way to find weak tests in one module; what lands is stronger ordinary pytest assertions, never the harness.
 
 ## Related
 

@@ -63,7 +63,7 @@ from llmwiki.build import render_automation_panel
 from llmwiki.cli import _JOB_QUESTION, build_parser
 from llmwiki.install_hint import pip_install_command
 from tests.changelog_notes import shipping_section_text
-from tests.checkout import redirect_checkout
+from tests.settings_sandbox import SettingsSandbox
 
 CHEATSHEET = REPO_ROOT / "docs" / "cheatsheet.md"
 GETTING_STARTED = REPO_ROOT / "docs" / "getting-started.md"
@@ -141,7 +141,7 @@ def test_ingest_choice_writes_no_extras_or_graph_choice_end_to_end(
     """Choosing Ingest only skips the Extras and Builder questions and writes a status with no graph and no lint failure."""
     # The real, unmocked run_install writes the status file, so this covers the
     # whole chain from scripted input to disk, not just the in-memory plan.
-    redirect_checkout(tmp_path, monkeypatch)
+    monkeypatch.setattr(cli, "REPO_ROOT", tmp_path)
     monkeypatch.setattr(
         "llmwiki.automation_install.activate_scheduler",
         lambda **kwargs: {
@@ -223,10 +223,10 @@ def test_wrapper_script_truncates_the_log_instead_of_appending(tmp_path: Path) -
 
 
 def test_declining_writes_nothing_and_a_later_real_install_still_succeeds(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, settings_sandbox: SettingsSandbox
 ) -> None:
     """Declining through `cli.main` writes nothing, and a `--yes` install right after still succeeds."""
-    config = redirect_checkout(tmp_path, monkeypatch)
+    monkeypatch.setattr(cli, "REPO_ROOT", tmp_path)
     _pretend_tty(monkeypatch)
     vault = tmp_path / "vault"
     vault.mkdir()
@@ -237,7 +237,7 @@ def test_declining_writes_nothing_and_a_later_real_install_still_succeeds(
     assert code == 0
     assert load_status(vault) is None
     assert not (tmp_path / ".llmwiki").exists()
-    assert not config.exists()
+    assert not settings_sandbox.operator_config.exists()
 
     units = tmp_path / "units"
     code = cli.main([

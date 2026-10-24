@@ -31,6 +31,7 @@ from llmwiki.doctor.models import Finding
 from llmwiki.doctor.runners import install_automation_argv
 from llmwiki.install_hint import PythonEnv
 from llmwiki.synth.base import DummySynthesizer
+from tests.settings_sandbox import SettingsSandbox
 
 
 def _scaffold_vault(root: Path) -> Path:
@@ -525,21 +526,21 @@ def test_stale_run_usage_limit_stop_is_not_a_failure(tmp_path: Path) -> None:
 
 
 def test_stale_run_ignores_a_log_older_than_the_schedule(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    settings_sandbox: SettingsSandbox,
 ) -> None:
-    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
     vault = _stale_vault(tmp_path, installed_at=_stamp(_NOW - timedelta(hours=1)))
-    _write_log(tmp_path / "state" / "llmwiki" / "last-automation.log", "EXIT:1\n", timedelta(days=40))
+    _write_log(settings_sandbox.xdg_state / "llmwiki" / "last-automation.log", "EXIT:1\n", timedelta(days=40))
     _write_log(vault_automation_log_path(vault), "EXIT:0\n", timedelta(days=40))
     assert _stale_findings(vault) == []
 
 
 def test_stale_run_skips_the_shared_log_when_the_unit_names_its_own(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    settings_sandbox: SettingsSandbox,
 ) -> None:
-    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
     vault = _stale_vault(tmp_path, installed_at=_stamp(_NOW - timedelta(days=30)))
-    _write_log(tmp_path / "state" / "llmwiki" / "last-automation.log", "EXIT:0\n", timedelta(hours=1))
+    _write_log(settings_sandbox.xdg_state / "llmwiki" / "last-automation.log", "EXIT:0\n", timedelta(hours=1))
     unit = replace(_own_unit(vault, enabled=True), log_path=tmp_path / "unit-logs" / "never-written.log")
     (found,) = _stale_findings(vault, unit)
     assert "has not run since" in found.message
@@ -571,11 +572,11 @@ def test_stale_run_unit_log_wins_over_vault_log(tmp_path: Path) -> None:
     [pytest.param(None, ["automation.stale_run"], id="legacy-used"), pytest.param(timedelta(hours=1), [], id="vault-log-wins")],
 )
 def test_stale_run_legacy_global_log(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, vault_log_age: timedelta | None, expect: list[str]
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, vault_log_age: timedelta | None, expect: list[str],
+    settings_sandbox: SettingsSandbox,
 ) -> None:
-    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
     vault = _stale_vault(tmp_path, installed_at=_stamp(_NOW - timedelta(days=30)))
-    _write_log(tmp_path / "state" / "llmwiki" / "last-automation.log", "EXIT:0\n", timedelta(days=4))
+    _write_log(settings_sandbox.xdg_state / "llmwiki" / "last-automation.log", "EXIT:0\n", timedelta(days=4))
     if vault_log_age is not None:
         _write_log(vault_automation_log_path(vault), "EXIT:0\n", vault_log_age)
     found = _stale_findings(vault)
@@ -667,9 +668,8 @@ def test_orphan_unit_is_independent_of_cause_suppression(tmp_path: Path) -> None
     assert [f.id for f in found] == ["automation.points_elsewhere", "automation.orphan_unit"]
 
 
-def test_orphan_steps_are_home_relative(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    home = tmp_path / "home"
-    monkeypatch.setenv("HOME", str(home))
+def test_orphan_steps_are_home_relative(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, settings_sandbox: SettingsSandbox) -> None:
+    home = settings_sandbox.home
     vault = _scaffold_vault(tmp_path / "vault")
     label = "com.llmwiki.maintain.gone-1234abcd"
     leftover = _unit(
