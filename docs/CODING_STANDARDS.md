@@ -20,7 +20,7 @@ Human contributors: start with [`CONTRIBUTING.md`](../CONTRIBUTING.md) §Testing
 
 **No wall-clock timing outside deliberate slow/perf tests.** Do not assert on elapsed time, `time.sleep`, or race-prone timing in the fast unit suite. Performance and timing belong in `@pytest.mark.slow` tests (`tests/test_lint_perf.py`); the default unit run deselects them, and the `performance-budget` job in CI runs them without coverage.
 
-**Isolation.** Respect suite fixtures in `tests/conftest.py` (vault isolation, neutralized repo-root `config.json`). Tests that need the real user-config overlay must monkeypatch `_USER_CONFIG` / `USER_CONFIG_FILE` themselves. Do not leak state between tests.
+**Isolation.** Respect suite fixtures in `tests/conftest.py` (vault isolation, neutralized repo-root `config.json`). Tests that need the real user-config overlay must monkeypatch `_USER_CONFIG` / `USER_CONFIG_FILE` themselves. Code that saves settings writes through `config_schedule.user_config_path()`, so the same redirect covers writes; the #91 guard fails any test that creates, changes or deletes the repo-root `config.json` (#367). Do not leak state between tests.
 
 **Behavior-preserving cleanups.** Deleting a test, merging modules, or removing a skip is fine when behaviour is unchanged or the old test no longer describes reality—say so in the PR. Do not leave rotting duplicates beside replacements.
 

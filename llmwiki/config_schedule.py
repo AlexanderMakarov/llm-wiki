@@ -21,6 +21,15 @@ _SESSIONS_CONFIG = _CLONE_ROOT / "examples" / "sessions_config.json"
 _USER_CONFIG = _CLONE_ROOT / "config.json"
 
 
+def user_config_path() -> Path:
+    """The operator's ``config.json`` — the one file settings are read from and saved to.
+
+    Resolved on each call, so code that writes settings follows wherever the
+    read side points (tests redirect it away from the clone, #367).
+    """
+    return _USER_CONFIG
+
+
 def _load_sessions_config(config_path: Path | None = None) -> dict[str, Any]:
     if config_path is not None:
         path = config_path

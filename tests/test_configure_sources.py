@@ -22,6 +22,7 @@ from llmwiki.configure_sources import (
     run_configure_sources,
     suggested_since_today_minus_30,
 )
+from tests.checkout import redirect_checkout
 
 
 def test_configure_sources_non_interactive_skips(monkeypatch):
@@ -88,7 +89,7 @@ def test_configure_sources_writes_enabled_adapter(monkeypatch, tmp_path: Path):
     REGISTRY.clear()
     REGISTRY["fake_ai"] = _FakeAdapter
 
-    monkeypatch.setattr("llmwiki.configure_sources.REPO_ROOT", tmp_path)
+    redirect_checkout(tmp_path, monkeypatch)
     monkeypatch.setattr("llmwiki.configure_sources.REGISTRY", REGISTRY)
     monkeypatch.setattr("llmwiki.configure_sources.discover_all", lambda: None)
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
@@ -153,7 +154,7 @@ def test_configure_sources_shared_custom_and_adapter_date(monkeypatch, tmp_path:
     REGISTRY.clear()
     REGISTRY["fake_ai"] = _FakeAdapter
 
-    monkeypatch.setattr("llmwiki.configure_sources.REPO_ROOT", tmp_path)
+    redirect_checkout(tmp_path, monkeypatch)
     monkeypatch.setattr("llmwiki.configure_sources.REGISTRY", REGISTRY)
     monkeypatch.setattr("llmwiki.configure_sources.discover_all", lambda: None)
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
@@ -207,7 +208,7 @@ def test_configure_sources_adapter_enter_inherits_shared(monkeypatch, tmp_path: 
     REGISTRY.clear()
     REGISTRY["fake_ai"] = _FakeAdapter
 
-    monkeypatch.setattr("llmwiki.configure_sources.REPO_ROOT", tmp_path)
+    redirect_checkout(tmp_path, monkeypatch)
     monkeypatch.setattr("llmwiki.configure_sources.REGISTRY", REGISTRY)
     monkeypatch.setattr("llmwiki.configure_sources.discover_all", lambda: None)
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
@@ -262,7 +263,7 @@ def test_configure_sources_not_detected_custom_path(monkeypatch, tmp_path: Path)
     REGISTRY.clear()
     REGISTRY["openclaw"] = _FakeAdapter
 
-    monkeypatch.setattr("llmwiki.configure_sources.REPO_ROOT", tmp_path)
+    redirect_checkout(tmp_path, monkeypatch)
     monkeypatch.setattr("llmwiki.configure_sources.REGISTRY", REGISTRY)
     monkeypatch.setattr("llmwiki.configure_sources.discover_all", lambda: None)
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
@@ -323,7 +324,7 @@ def test_configure_sources_enter_keeps_stored_shared_since(monkeypatch, tmp_path
     REGISTRY.clear()
     REGISTRY["fake_ai"] = _FakeAdapter
 
-    monkeypatch.setattr("llmwiki.configure_sources.REPO_ROOT", tmp_path)
+    redirect_checkout(tmp_path, monkeypatch)
     monkeypatch.setattr("llmwiki.configure_sources.REGISTRY", REGISTRY)
     monkeypatch.setattr("llmwiki.configure_sources.discover_all", lambda: None)
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
@@ -361,7 +362,7 @@ def test_merge_write_config_clears_adapter_since(tmp_path: Path, monkeypatch):
         + "\n",
         encoding="utf-8",
     )
-    monkeypatch.setattr("llmwiki.configure_sources.REPO_ROOT", tmp_path)
+    redirect_checkout(tmp_path, monkeypatch)
     _merge_write_config(
         {"x": {"enabled": True}},
         filters_since="2026-07-31",
@@ -379,7 +380,7 @@ def test_merge_write_config_inherit_sentinel_leaves_filters(tmp_path: Path, monk
         json.dumps({"filters": {"since": "2026-03-01"}, "adapters": {}}) + "\n",
         encoding="utf-8",
     )
-    monkeypatch.setattr("llmwiki.configure_sources.REPO_ROOT", tmp_path)
+    redirect_checkout(tmp_path, monkeypatch)
     _merge_write_config({"y": {"enabled": False}}, filters_since=_INHERIT_SINCE)
     data = json.loads(cfg_path.read_text(encoding="utf-8"))
     assert data["filters"]["since"] == "2026-03-01"
@@ -404,7 +405,7 @@ def test_configure_sources_missing_path_empty_skips_without_hang(monkeypatch, tm
     saved = dict(REGISTRY)
     REGISTRY.clear()
     REGISTRY["openclaw"] = _FakeAdapter
-    monkeypatch.setattr("llmwiki.configure_sources.REPO_ROOT", tmp_path)
+    redirect_checkout(tmp_path, monkeypatch)
     monkeypatch.setattr("llmwiki.configure_sources.REGISTRY", REGISTRY)
     monkeypatch.setattr("llmwiki.configure_sources.discover_all", lambda: None)
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
@@ -469,7 +470,7 @@ def test_configure_sources_ingest_not_ready_defaults_off(monkeypatch, tmp_path: 
     saved = dict(REGISTRY)
     REGISTRY.clear()
     REGISTRY["cursor_ide"] = _Ide
-    monkeypatch.setattr("llmwiki.configure_sources.REPO_ROOT", tmp_path)
+    redirect_checkout(tmp_path, monkeypatch)
     monkeypatch.setattr("llmwiki.configure_sources.REGISTRY", REGISTRY)
     monkeypatch.setattr("llmwiki.configure_sources.discover_all", lambda: None)
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)

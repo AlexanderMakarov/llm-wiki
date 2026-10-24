@@ -87,13 +87,14 @@ def test_tracked_files_lists_committed_paths_only(tmp_path: Path) -> None:
 # ─── The guard actually fires ──────────────────────────────────────────
 
 
-def test_guard_fails_a_test_that_dirties_a_tracked_file(tmp_path: Path) -> None:
-    """End-to-end: a deliberately dirtying test must not pass silently."""
+def _run_guarded_suite(tmp_path: Path, test_body: str) -> subprocess.CompletedProcess[str]:
+    """Run one test under the guard in a throwaway repo with a tracked seed and an ignored config."""
     repo = tmp_path / "repo"
     (repo / "tests").mkdir(parents=True)
     subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
     (repo / "seed.md").write_text("original\n", encoding="utf-8")
-    subprocess.run(["git", "add", "seed.md"], cwd=repo, check=True)
+    (repo / ".gitignore").write_text("config.json\n", encoding="utf-8")
+    subprocess.run(["git", "add", "seed.md", ".gitignore"], cwd=repo, check=True)
 
     (repo / "tests" / "conftest.py").write_text(
         "import sys\n"
@@ -103,19 +104,39 @@ def test_guard_fails_a_test_that_dirties_a_tracked_file(tmp_path: Path) -> None:
     )
     (repo / "tests" / "test_dirty.py").write_text(
         "from pathlib import Path\n"
-        "def test_rewrites_a_tracked_file():\n"
-        "    Path(__file__).parent.parent.joinpath('seed.md')"
-        ".write_text('mutated\\n')\n",
+        "ROOT = Path(__file__).parent.parent\n"
+        f"{test_body}",
         encoding="utf-8",
     )
-
-    result = subprocess.run(
+    return subprocess.run(
         [sys.executable, "-m", "pytest", "tests/", "-p", "no:cacheprovider"],
         cwd=repo,
         capture_output=True,
         text=True,
     )
 
+
+def test_guard_fails_a_test_that_dirties_a_tracked_file(tmp_path: Path) -> None:
+    """End-to-end: a deliberately dirtying test must not pass silently."""
+    result = _run_guarded_suite(
+        tmp_path,
+        "def test_rewrites_a_tracked_file():\n"
+        "    ROOT.joinpath('seed.md').write_text('mutated\\n')\n",
+    )
+
     assert result.returncode != 0, result.stdout
     assert "seed.md" in result.stdout
     assert "test_rewrites_a_tracked_file" in result.stdout
+
+
+def test_guard_fails_a_test_that_writes_the_operator_config(tmp_path: Path) -> None:
+    """A test writing the gitignored root config.json fails, naming the file and the test (#367)."""
+    result = _run_guarded_suite(
+        tmp_path,
+        "def test_writes_the_operator_config():\n"
+        "    ROOT.joinpath('config.json').write_text('{\"synthesis\": {\"backend\": \"dummy\"}}\\n')\n",
+    )
+
+    assert result.returncode != 0, result.stdout
+    assert "config.json" in result.stdout
+    assert "test_writes_the_operator_config" in result.stdout

@@ -8,7 +8,10 @@ pages under gitignored paths, so local data crosses the ignore boundary into
 something ``git add`` will happily stage.
 
 The guard watches the tracked set (``git ls-files``) rather than any ignore
-rule, and attributes a change to the test that caused it.
+rule, and attributes a change to the test that caused it. It also watches the
+gitignored root ``config.json`` (#367): that file holds the developer's own
+settings, and the scheduled job a developer installs from this checkout reads
+it, so a test that rewrites it changes how their real vault is maintained.
 """
 
 from __future__ import annotations
@@ -18,6 +21,9 @@ from collections.abc import Iterable
 from pathlib import Path
 
 import pytest
+
+#: Gitignored files under the repo root the suite must leave alone (#367).
+OPERATOR_FILES = ("config.json",)
 
 #: Sentinel hash for a path that is absent. Distinct from any real digest, so
 #: create and delete are both visible as changes.
@@ -78,7 +84,7 @@ def changed_paths(before: dict[str, str], after: dict[str, str]) -> list[str]:
 
 @pytest.fixture(autouse=True)
 def tracked_file_guard(request: pytest.FixtureRequest):
-    """Fail any test that leaves a tracked file modified.
+    """Fail any test that leaves a tracked file, or an operator file, modified.
 
     The tracked list is resolved once per session; digests are taken per test
     so the failure names the culprit instead of surfacing later as an
@@ -95,23 +101,26 @@ def tracked_file_guard(request: pytest.FixtureRequest):
     if dirty:
         listed = "\n  ".join(dirty)
         pytest.fail(
-            f"test mutated {len(dirty)} tracked file(s) in the working copy:"
+            f"test mutated {len(dirty)} tracked or operator file(s) in the working copy:"
             f"\n  {listed}\n"
-            "Tests must write only into tmp_path. A code path whose wiki_dir "
-            "or state file falls back to the repo root will rewrite the "
-            "clone — pass an explicit directory instead.",
+            "Tests must write only into tmp_path. A code path whose wiki_dir, "
+            "state file or config.json falls back to the repo root will rewrite "
+            "the clone — pass an explicit directory instead.",
             pytrace=False,
         )
 
 
 def _watched(request: pytest.FixtureRequest) -> list[Path]:
-    """Resolve (once per session) the tracked files this run should watch."""
+    """Resolve (once per session) the tracked and operator files this run should watch."""
     key = "_llmwiki_tracked_files"
     cached = getattr(request.session, key, None)
     if cached is None:
         # rootpath, not this file's parent: the guard must watch whichever
         # repo the session is running in, including the throwaway one its
         # own test builds.
-        cached = tracked_files(Path(request.config.rootpath))
+        root = Path(request.config.rootpath)
+        cached = tracked_files(root)
+        if cached:
+            cached += [root / name for name in OPERATOR_FILES]
         setattr(request.session, key, cached)
     return cached

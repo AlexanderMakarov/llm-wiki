@@ -560,6 +560,7 @@ def test_a_non_terminal_stdin_refuses_to_install_without_yes(
 def _install_via_flags(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *flags: str) -> tuple[int, Path, Path]:
     """Run a `--yes` install into a throwaway vault, returning (exit code, vault, units dir)."""
     monkeypatch.setattr(cli, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr("llmwiki.config_schedule._USER_CONFIG", tmp_path / "config.json")
     vault = tmp_path / "vault"
     vault.mkdir(exist_ok=True)
     units = tmp_path / "units"

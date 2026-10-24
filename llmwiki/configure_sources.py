@@ -9,12 +9,12 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from llmwiki import PACKAGE_ROOT, REPO_ROOT
+from llmwiki import PACKAGE_ROOT
 from llmwiki.adapters import REGISTRY, discover_all
 from llmwiki.adapters.base import SyncCandidateEstimate
 from llmwiki.adapters.settings import adapter_store_present
 from llmwiki.adapters.status import print_adapters_table
-from llmwiki.config_schedule import _load_sessions_config
+from llmwiki.config_schedule import _load_sessions_config, user_config_path
 from llmwiki.sync.lookback import parse_since_date
 
 # Adapters whose default store path may be shown / edited in the interview.
@@ -88,10 +88,10 @@ def _section_merge(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, A
 
 
 def _load_quiz_config() -> dict[str, Any]:
-    """Shipped examples merged with ``REPO_ROOT/config.json`` (the write target)."""
+    """Shipped examples merged with the operator ``config.json`` (the write target)."""
     examples = PACKAGE_ROOT.parent / "examples" / "sessions_config.json"
     merged = _load_sessions_config(examples) if examples.is_file() else {}
-    return _section_merge(merged, _load_sessions_config(REPO_ROOT / "config.json"))
+    return _section_merge(merged, _load_sessions_config(user_config_path()))
 
 
 def _estimate_for(
@@ -139,7 +139,7 @@ def _merge_write_config(
     removed (Enter = inherit shared). Other keys on those adapters are kept.
     """
     clear = frozenset(clear_adapter_since or ())
-    cfg_path = REPO_ROOT / "config.json"
+    cfg_path = user_config_path()
     cfg: dict[str, Any] = {}
     if cfg_path.is_file():
         try:

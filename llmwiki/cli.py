@@ -108,6 +108,7 @@ from llmwiki.config_schedule import (
     apply_default_vault,
     load_default_vault_path,
     load_synthesis_backend,
+    user_config_path,
 )
 from llmwiki.config_schedule import (
     load_schedule_config as _load_schedule_config,
@@ -1446,7 +1447,7 @@ def _maybe_pin_claude_path(synth: dict[str, Any]) -> None:
 
 def _write_synth_backend(backend: str) -> None:
     """Record ``synthesis.backend`` in ``config.json``; pin Claude path when needed (#275)."""
-    cfg_path = REPO_ROOT / "config.json"
+    cfg_path = user_config_path()
     cfg: dict[str, Any] = {}
     if cfg_path.is_file():
         try:
