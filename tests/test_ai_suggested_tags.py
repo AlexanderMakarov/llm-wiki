@@ -16,6 +16,8 @@ from __future__ import annotations
 
 import re
 
+import pytest
+
 from llmwiki.synth.pipeline import (
     _AI_TAG_CAP,
     _build_source_page,
@@ -254,6 +256,51 @@ def test_build_source_page_preserves_existing_tags_on_resynthesize(tmp_path):
     hand_idx = page.find("hand-curated-tag")
     rag_idx = page.find("rag")
     assert hand_idx < rag_idx
+
+
+@pytest.mark.parametrize(
+    ("tags_field", "expected_prefix"),
+    [
+        ("[wiki-add, raw-doc, bot-api, 10.3, 2026]", "tags: [wiki-add, raw-doc, bot-api, 10.3, 2026"),
+        ("10.3", "tags: [10.3, wiki-add"),
+        ("curated", "tags: [curated, wiki-add"),
+    ],
+    ids=["numeric-in-list", "numeric-scalar", "string-scalar"],
+)
+def test_build_source_page_preserves_numeric_existing_tag_on_resynthesize(
+    tmp_path, tags_field, expected_prefix
+):
+    # #370: frontmatter parses a bare `10.3` tag as a float, and a scalar
+    # `tags:` as a non-list; re-synthesize must keep each as one tag instead
+    # of crashing on `.strip()` / iteration or splitting a string into letters.
+    existing = tmp_path / "existing.md"
+    existing.write_text(
+        "---\n"
+        "title: \"Bot API notes\"\n"
+        "type: source\n"
+        f"tags: {tags_field}\n"
+        "date: 2026-09-27\n"
+        "source_file: raw/docs/demo/bot-api-notes.md\n"
+        "project: demo\n"
+        "model: \n"
+        "last_updated: 2026-09-27\n"
+        "---\n\n"
+        "## Summary\n\nOld content.\n",
+        encoding="utf-8",
+    )
+    meta = {
+        "slug": "bot-api-notes",
+        "title": "Bot API notes",
+        "project": "demo",
+        "date": "2026-09-27",
+        "source_file": "raw/docs/demo/bot-api-notes.md",
+        "tags": ["wiki-add", "raw-doc", "bot-api"],
+    }
+    page = _build_source_page(
+        meta, _synth_body("rag"), existing_page_path=existing, is_doc=True
+    )
+    tags_line = next(line for line in page.splitlines() if line.startswith("tags: "))
+    assert tags_line.startswith(expected_prefix)
 
 
 def test_build_source_page_missing_existing_path_is_safe(tmp_path):
