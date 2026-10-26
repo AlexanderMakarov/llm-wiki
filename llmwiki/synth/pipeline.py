@@ -1308,7 +1308,12 @@ def _build_source_page(
             existing_meta, _existing_body = parse_frontmatter(
                 existing_page_path.read_text(encoding="utf-8")
             )
-            existing_tags = list(existing_meta.get("tags", []) or [])
+            # Frontmatter types a bare `10.3` tag as a float, and a
+            # hand-edited `tags: 10.3` as a scalar rather than a list (#370).
+            raw_tags = existing_meta.get("tags") or []
+            if not isinstance(raw_tags, list):
+                raw_tags = [raw_tags]
+            existing_tags = [str(t) for t in raw_tags]
         except (OSError, ValueError, UnicodeDecodeError) as e:
             # Log loud — silent drop is what #584 was about.
             print(
