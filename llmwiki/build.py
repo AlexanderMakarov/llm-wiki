@@ -109,7 +109,6 @@ from llmwiki.state_store import (
     pipeline_on_disk_mismatch,
     pipeline_rows_missing_on_disk,
     read_state,
-    resolve_state_file,
     stamp_last_build_at,
     synth_pipeline_shape_ok,
     update_state,
@@ -3456,14 +3455,14 @@ def build_site(
     copy_state_sidecar_to_site(content_root, site_dir=out_dir)
     emit_session_tokens_sidecar(content_root, out_dir)
 
+    # Estimate lives next to raw/ (this build's content root). Do not call
+    # resolve_state_file(None): library callers that pass explicit dirs may
+    # have no process vault bound (e2e session fixtures, scripts).
     estimate: dict[str, Any] = {}
     try:
-        state_path = resolve_state_file(None)
-        # Prefer the vault's state when content_root differs from the default.
-        vault_state = content_root / "llmwiki-state.json"
-        if vault_state.is_file():
-            state_path = vault_state
-        estimate = (read_state(state_path).get("synth") or {}).get("estimate") or {}
+        estimate = (
+            read_state(content_root / "llmwiki-state.json").get("synth") or {}
+        ).get("estimate") or {}
     except (OSError, ValueError, TypeError):
         estimate = {}
     wiki_value = {

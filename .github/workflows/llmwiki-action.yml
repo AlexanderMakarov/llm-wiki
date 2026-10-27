@@ -20,6 +20,14 @@ on:
         required: false
         type: string
         default: "3.12"
+      vault:
+        description: >-
+          Vault directory for init/sync/build relative to the workspace root.
+          Defaults to `.`. Pass a subdirectory when the workspace is the
+          llmwiki source tree (refused as a vault).
+        required: false
+        type: string
+        default: "."
       sync-args:
         description: "Extra arguments passed to `llmwiki sync`"
         required: false
@@ -53,23 +61,32 @@ jobs:
       - name: Install llmwiki
         run: pip install llm-wiki-plus
 
-      # `--vault .` for the same reason as action.yml: an installed llmwiki
-      # resolves an unnamed vault to site-packages, not the checkout (#210).
+      # Same as action.yml: an installed llmwiki needs an explicit vault (#210).
       - name: Initialise directory structure
-        run: llmwiki init --vault .
+        env:
+          VAULT: ${{ inputs.vault }}
+        run: llmwiki init --vault "$VAULT"
 
       - name: Sync sessions
-        run: llmwiki sync --vault . ${{ inputs.sync-args }}
+        env:
+          VAULT: ${{ inputs.vault }}
+        run: llmwiki sync --vault "$VAULT" ${{ inputs.sync-args }}
 
       - name: Build static site
-        run: llmwiki build --vault . ${{ inputs.build-args }}
+        env:
+          VAULT: ${{ inputs.vault }}
+        run: llmwiki build --vault "$VAULT" ${{ inputs.build-args }}
 
       - name: Expose output paths
         id: paths
-        run: echo "site-dir=$(pwd)/site" >> "$GITHUB_OUTPUT"
+        env:
+          VAULT: ${{ inputs.vault }}
+        run: |
+          site_dir="$(cd "$VAULT" && pwd)/site"
+          echo "site-dir=${site_dir}" >> "$GITHUB_OUTPUT"
 
       - name: Upload site artifact
         uses: actions/upload-artifact@v7
         with:
           name: llmwiki-site
-          path: site/
+          path: ${{ inputs.vault }}/site/

@@ -30,6 +30,15 @@ inputs:
       set it to a path (e.g. `.`) to test an unreleased checkout.
     required: false
     default: "llm-wiki-plus"
+  vault:
+    description: >-
+      Vault directory for init/sync/build relative to the workspace root.
+      Defaults to `.` (the caller's checkout). When exercising this action
+      against the llmwiki source tree itself, pass a subdirectory such as
+      `action-vault` — the checkout root carries `.llmwiki-source-checkout`
+      and is refused as a vault.
+    required: false
+    default: "."
   additional-args:
     description: >-
       Extra arguments forwarded to `llmwiki sync`. `sync` keeps real home
@@ -58,31 +67,39 @@ runs:
         PACKAGE: ${{ inputs.package }}
       run: pip install "$PACKAGE"
 
-    # An installed llmwiki resolves an unnamed vault to the directory above the
-    # package — site-packages — so the bare commands used to scaffold and build
-    # inside the interpreter instead of the checkout, and `site-dir` pointed at
-    # a directory that was never created (#210). `--vault .` pins every step to
-    # the workspace the caller checked out.
+    # An installed llmwiki requires an explicit vault (`--vault` or
+    # vault.default_path). Bare commands used to write into site-packages
+    # (#210). Default `vault: .` pins every step to the caller's checkout;
+    # name a subdirectory when the workspace is the llmwiki source tree.
     - name: Initialise directory structure
       shell: bash
-      run: llmwiki init --vault .
+      env:
+        VAULT: ${{ inputs.vault }}
+      run: llmwiki init --vault "$VAULT"
 
     - name: Sync sessions
       shell: bash
       env:
         ADDITIONAL_ARGS: ${{ inputs.additional-args }}
+        VAULT: ${{ inputs.vault }}
       run: |
         # additional-args is a flag list, so it has to split into separate
         # arguments — read it into an array rather than interpolating the
         # input into the command line, where it would also be glob-expanded.
         read -r -a extra_args <<< "$ADDITIONAL_ARGS"
-        llmwiki sync --vault . "${extra_args[@]}"
+        llmwiki sync --vault "$VAULT" "${extra_args[@]}"
 
     - name: Build static site
       shell: bash
-      run: llmwiki build --vault .
+      env:
+        VAULT: ${{ inputs.vault }}
+      run: llmwiki build --vault "$VAULT"
 
     - name: Expose output paths
       id: paths
       shell: bash
-      run: echo "site-dir=$(pwd)/site" >> "$GITHUB_OUTPUT"
+      env:
+        VAULT: ${{ inputs.vault }}
+      run: |
+        site_dir="$(cd "$VAULT" && pwd)/site"
+        echo "site-dir=${site_dir}" >> "$GITHUB_OUTPUT"

@@ -73,3 +73,5 @@
 ## commit-push
 - Branch: `fix/306-wiki-add-operation-result`
 - Keyword: `Closes #306`
+- PR: https://github.com/AlexanderMakarov/llm-wiki/pull/373
+- CI follow-up: action-smoke failed — `init --vault .` refused as source checkout when `package: .`. Browser smoke failed — session-scoped e2e `build_site` hit `resolve_state_file(None)` / `VaultNotConfigured` with no bound vault. Fixed: Action `vault` input + CI `action-vault`; `build_site` reads estimate from `content_root/llmwiki-state.json`.
