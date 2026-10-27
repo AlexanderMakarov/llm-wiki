@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -45,6 +46,13 @@ def cmd_sync_status(args: argparse.Namespace) -> int:
     """Report sync observability — last run, per-adapter counters, quarantined sources."""
 
     apply_default_vault(args)
+    if getattr(args, "vault", None) is None:
+        print(
+            "error: no vault configured. Pass --vault PATH or set "
+            "vault.default_path in config.json.",
+            file=sys.stderr,
+        )
+        return 2
     state_path = get_state_file()
 
     sync_state: dict = {}

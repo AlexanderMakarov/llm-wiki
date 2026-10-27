@@ -25,6 +25,7 @@ count as resources that must load.
 
 from __future__ import annotations
 
+import shutil
 import subprocess
 import sys
 from collections.abc import Iterator
@@ -43,14 +44,26 @@ DEMO_LOCAL_ROOT = "/home/user"
 
 @pytest.fixture(scope="session")
 def demo_site(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    """Build the committed demo vault once and return its output dir."""
+    """Build a throwaway copy of the committed demo vault; return site out dir.
+
+    Building against the tracked ``demo/`` tree rewrites ``llmwiki-state.json``
+    and ``usage/daily.json`` (Home pipeline / MCP series). The session guard
+    fails the run when those tracked files change, so copy first.
+    """
     if not (DEMO_VAULT / "raw" / "sessions").is_dir():
         pytest.skip("demo vault is not present in this checkout")
-    out = tmp_path_factory.mktemp("llmwiki_demo_site") / "site"
+    workspace = tmp_path_factory.mktemp("llmwiki_demo_site")
+    vault = workspace / "vault"
+    shutil.copytree(
+        DEMO_VAULT,
+        vault,
+        ignore=shutil.ignore_patterns("site", "graph", ".git"),
+    )
+    out = workspace / "site"
     proc = subprocess.run(
         [
             sys.executable, "-m", "llmwiki", "build",
-            "--vault", str(DEMO_VAULT),
+            "--vault", str(vault),
             "--out", str(out),
             "--local-root", DEMO_LOCAL_ROOT,
         ],

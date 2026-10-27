@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+from argparse import Namespace
 from pathlib import Path
 from textwrap import dedent
 from unittest.mock import patch
@@ -21,8 +22,9 @@ from unittest.mock import patch
 import llmwiki.cli as cli_mod
 from llmwiki import quarantine as q
 from llmwiki.cli import _adapter_status
-from llmwiki.config_schedule import bind_vault
+from llmwiki.config_schedule import bind_vault, clear_vault_binding
 from llmwiki.convert import _migrate_legacy_state
+from llmwiki.sync.status import cmd_sync_status
 
 
 def _run_cli(*args, env=None):
@@ -240,13 +242,25 @@ def test_sync_status_flag_short_circuits_before_convert(tmp_path, monkeypatch, c
     assert "Quarantined sources:" in out
 
 
-def test_cli_sync_status_argv_exits_zero():
-    """``python -m llmwiki sync --status`` must exit 0 and print the status banner."""
-    cp = _run_cli("sync", "--status")
+def test_cli_sync_status_argv_exits_zero(tmp_path):
+    """``python -m llmwiki sync --status --vault`` must exit 0 and print the status banner."""
+    cp = _run_cli("sync", "--status", "--vault", str(tmp_path))
     assert "Traceback" not in cp.stderr
     assert cp.returncode == 0
     assert "Last sync:" in cp.stdout
     assert "Quarantined sources:" in cp.stdout
+
+
+def test_cli_sync_status_without_vault_exits_2(monkeypatch, capsys):
+    """Bare ``sync --status`` errors when no vault is configured (CI has no config.json)."""
+    clear_vault_binding()
+    monkeypatch.setattr(
+        "llmwiki.config_schedule.load_default_vault_path",
+        lambda: None,
+    )
+    rc = cmd_sync_status(Namespace(vault=None, recent=0))
+    assert rc == 2
+    assert "no vault configured" in capsys.readouterr().err
 
 
 # ─── state migration preserves _meta / _counters ──────────────────────────
