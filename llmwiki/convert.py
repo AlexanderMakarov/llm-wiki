@@ -26,7 +26,7 @@ from llmwiki import REPO_ROOT
 from llmwiki.adapters import REGISTRY, discover_adapters, discover_contrib  # noqa: F401 — test/back-compat surface
 from llmwiki.adapters.base import portable_session_key_fragment
 from llmwiki.adapters.settings import select_sync_adapters
-from llmwiki.config_schedule import user_config_path
+from llmwiki.config_schedule import resolve_vault_dir, user_config_path
 from llmwiki.quarantine import add_entry as _quarantine_add
 from llmwiki.quarantine import clear_entry as _quarantine_clear
 from llmwiki.session_tokens_usage import emit_session_tokens_sidecar, upsert_session_tokens
@@ -1967,7 +1967,7 @@ def render_session_markdown(
 
 def convert_all(
     adapters: list[str] | None = None,
-    out_dir: Path = DEFAULT_OUT_DIR,
+    out_dir: Path | None = None,
     state_file: Path | None = None,
     config_file: Path | None = None,
     ignore_file: Path = DEFAULT_IGNORE_FILE,
@@ -1997,6 +1997,7 @@ def convert_all(
     Pass ``fail_on_errors=True`` (CLI: ``--fail-on-errors``) to exit 1
     when any file errored — for CI-style callers that want a hard gate.
     """
+    out_dir = resolve_vault_dir(out_dir, DEFAULT_OUT_DIR, "raw", "sessions")
     state_file = _resolve_state_file(state_file)
     config = _resolve_convert_config(config_file)
     state = {} if force else load_state(state_file, adapter_names=list(REGISTRY.keys()))

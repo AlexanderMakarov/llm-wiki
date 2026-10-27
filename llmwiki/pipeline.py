@@ -28,8 +28,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from llmwiki import REPO_ROOT
-from llmwiki.build import RAW_DIR, RAW_SESSIONS, build_site
+from llmwiki.build import build_site
 from llmwiki.candidates_harvest import DEFAULT_MIN_REFS, run_harvest
 from llmwiki.config_schedule import _load_sessions_config
 from llmwiki.convert import convert_all
@@ -280,27 +279,25 @@ def run_pipeline(args: argparse.Namespace) -> int:
       130  synth was interrupted with Ctrl+C; later stages ran.
     """
     vault_arg = getattr(args, "vault", None)
-    vault_root: Path | None = None
-    if vault_arg:
-        try:
-            vault = resolve_vault(Path(vault_arg))
-        except (FileNotFoundError, NotADirectoryError) as exc:
-            print(f"error: {exc}", file=sys.stderr)
-            return 2
-        vault_root = vault.root
-        print(f"==> {describe_vault(vault)}")
+    if not vault_arg:
+        print(
+            "error: no vault configured. Pass --vault PATH or set "
+            "vault.default_path in config.json.",
+            file=sys.stderr,
+        )
+        return 2
+    try:
+        vault = resolve_vault(Path(vault_arg))
+    except (FileNotFoundError, NotADirectoryError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    vault_root = vault.root
+    print(f"==> {describe_vault(vault)}")
 
-    lock_root = vault_root or REPO_ROOT
-    raw_sessions = (vault_root / "raw" / "sessions") if vault_root else RAW_SESSIONS
-    raw_dir = (vault_root / "raw") if vault_root else RAW_DIR
-    wiki_dir = (vault_root / "wiki") if vault_root else (REPO_ROOT / "wiki")
-    # #arch: --vault remaps --out's repo-default the same way cmd_build
-    # does, both for the printed banner and for the actual build — a
-    # vault run whose --out was never overridden must not silently write
-    # (or claim to write) into the git clone's site/.
-    out_dir = args.out
-    if vault_root and out_dir == REPO_ROOT / "site":
-        out_dir = vault_root / "site"
+    raw_sessions = vault_root / "raw" / "sessions"
+    raw_dir = vault_root / "raw"
+    wiki_dir = vault_root / "wiki"
+    out_dir = vault_root / "site" if getattr(args, "out", None) is None else args.out
     # One threshold for the whole run: the harvest that materializes a
     # candidate and the lint rule that reports an unmaterialized link must
     # agree, or `all` behaves differently from `synth` + `lint` (#150).
@@ -308,7 +305,7 @@ def run_pipeline(args: argparse.Namespace) -> int:
 
     overall_rc = 0
 
-    with pipeline_lock(lock_root):
+    with pipeline_lock(vault_root):
         if getattr(args, "with_sync", False):
             print("\n==> llmwiki sync (convert; auto-build off)")
             state_file = resolve_state_file()
@@ -319,9 +316,9 @@ def run_pipeline(args: argparse.Namespace) -> int:
                     print(f"error: step 'sync' exited {rc}; stopping (--fail-fast).", file=sys.stderr)
                     return rc
             refresh_synth_pending(
-                raw_dir=raw_sessions if vault_root else None,
-                docs_dir=(vault_root / "raw" / "docs") if vault_root else None,
-                wiki_sources_dir=(wiki_dir / "sources") if vault_root else None,
+                raw_dir=raw_sessions,
+                docs_dir=vault_root / "raw" / "docs",
+                wiki_sources_dir=wiki_dir / "sources",
                 state_file=state_file,
             )
             # Always reconcile — unlike `sync`'s own auto-build path (which
@@ -355,8 +352,8 @@ def run_pipeline(args: argparse.Namespace) -> int:
                 summary = synthesize_new_sessions(
                     backend=backend,
                     force=getattr(args, "synth_force", False),
-                    raw_dir=raw_sessions if vault_root else None,
-                    wiki_sources_dir=(wiki_dir / "sources") if vault_root else None,
+                    raw_dir=raw_sessions,
+                    wiki_sources_dir=wiki_dir / "sources",
                 )
                 # Backend ran — stamp even when some files errored.
                 stamp_last_synth_at()
@@ -426,7 +423,7 @@ def run_pipeline(args: argparse.Namespace) -> int:
         if not args.skip_graph:
             print(f"\n==> llmwiki graph --format both --engine {args.graph_engine}")
             rc = _run_graph_step(
-                wiki_dir=wiki_dir, graph_root=(vault_root or REPO_ROOT),
+                wiki_dir=wiki_dir, graph_root=vault_root,
                 engine=args.graph_engine,
             )
             if rc != 0:

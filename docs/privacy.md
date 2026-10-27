@@ -100,7 +100,7 @@ ai-newsletter/2026-04-04-secret-deal-*
 | `<vault>/llmwiki-state.json` | Unified sync + queue + synth state | ✅ |
 | `llm-wiki/config.json` | Your config override (points at the vault) | ✅ |
 
-`<vault>` is the directory you set as `vault.default_path`. It lives outside the git clone, so nothing under it is tracked. When no vault is configured, these paths fall back to the repo root (demo/dev use). Everything with a ✅ stays on your machine — none of it is committed, uploaded, or synced.
+`<vault>` is the directory you set as `vault.default_path` (or pass with `--vault`). It lives outside the git clone, so nothing under it is tracked. With neither `--vault` nor `vault.default_path`, commands that read or write vault content error instead of writing into the package or source checkout. Everything with a ✅ stays on your machine — none of it is committed, uploaded, or synced.
 
 ## The `claude -p` synthesis exception
 

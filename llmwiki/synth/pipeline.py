@@ -41,7 +41,7 @@ from llmwiki import REPO_ROOT
 from llmwiki._frontmatter import is_headless, is_subagent, parse_frontmatter
 from llmwiki.agent_label import detect_agent_label
 from llmwiki.candidates import apply_review_summary_to_pipeline
-from llmwiki.config_schedule import _load_sessions_config
+from llmwiki.config_schedule import _load_sessions_config, resolve_vault_dir
 from llmwiki.doc_chunking import chunk_markdown_by_sections, doc_size_error
 from llmwiki.reindex import reindex_wiki
 from llmwiki.source_topics import source_page_needs_topics_rewrite
@@ -414,8 +414,11 @@ USER_PROMPT_OVERRIDE = REPO_ROOT / "wiki" / "prompts" / "source_page.md"
 
 def _load_prompt_template() -> str:
     """Load the synthesis prompt template. User override wins."""
-    if USER_PROMPT_OVERRIDE.is_file():
-        return USER_PROMPT_OVERRIDE.read_text(encoding="utf-8")
+    override = resolve_vault_dir(
+        None, USER_PROMPT_OVERRIDE, "wiki", "prompts", "source_page.md"
+    )
+    if override.is_file():
+        return override.read_text(encoding="utf-8")
     return PROMPT_TEMPLATE_PATH.read_text(encoding="utf-8")
 
 
@@ -579,7 +582,7 @@ def scan_wiki_sources_disk(
     reals when the same key appears on both). File totals are **file counts**,
     not unique ``source_file`` keys.
     """
-    roots = wiki_sources_dir or WIKI_SOURCES
+    roots = resolve_vault_dir(wiki_sources_dir, WIKI_SOURCES, "wiki", "sources")
     real: set[str] = set()
     stub_keys: set[str] = set()
     files_by_agent: dict[str, dict[str, Any]] = {}
@@ -710,8 +713,8 @@ def discover_unsynth_session_rels(
         raw_sessions=sessions,
         state_keys=synth_state,
         wiki_sources_dir=wiki_sources_dir,
-        raw_root=raw_dir or RAW_SESSIONS,
-        docs_root=(raw_dir.parent / "docs") if raw_dir is not None else RAW_DOCS,
+        raw_root=resolve_vault_dir(raw_dir, RAW_SESSIONS, "raw", "sessions"),
+        docs_root=(raw_dir.parent / "docs") if raw_dir is not None else resolve_vault_dir(None, RAW_DOCS, "raw", "docs"),
         include_subagents=include_subagents,
         exclude_headless=exclude_headless,
     )
@@ -747,7 +750,7 @@ def refresh_synth_pending(
     doesn't count skipped subagents as permanently-pending — resolved from the
     user's config when the caller doesn't pass a mode explicitly.
     """
-    sources_out = wiki_sources_dir or WIKI_SOURCES
+    sources_out = resolve_vault_dir(wiki_sources_dir, WIKI_SOURCES, "wiki", "sources")
     config = _load_sessions_config()
     if include_subagents is None:
         include_subagents = resolve_include_subagents(config)
@@ -762,8 +765,8 @@ def refresh_synth_pending(
         raw_sessions=raw_sessions,
         state_keys=state,
         wiki_sources_dir=sources_out,
-        raw_root=raw_dir or RAW_SESSIONS,
-        docs_root=docs_dir or ((raw_dir.parent / "docs") if raw_dir is not None else RAW_DOCS),
+        raw_root=resolve_vault_dir(raw_dir, RAW_SESSIONS, "raw", "sessions"),
+        docs_root=docs_dir or ((raw_dir.parent / "docs") if raw_dir is not None else resolve_vault_dir(None, RAW_DOCS, "raw", "docs")),
         include_subagents=include_subagents,
         exclude_headless=exclude_headless,
         backend=backend,
@@ -870,7 +873,7 @@ def _append_log(
     details : dict, optional
         Rich details — created pages, updated pages, entities extracted, etc.
     """
-    target = log_path or WIKI_LOG
+    target = resolve_vault_dir(log_path, WIKI_LOG, "wiki", "log.md")
     if not target.parent.exists():
         return
 
@@ -966,7 +969,7 @@ def _discover_raw_sessions(
     raw_dir: Path | None = None,
 ) -> list[tuple[Path, dict[str, Any], str]]:
     """Walk raw/sessions/ and return (path, meta, body) for each .md file."""
-    root = raw_dir or RAW_SESSIONS
+    root = resolve_vault_dir(raw_dir, RAW_SESSIONS, "raw", "sessions")
     if not root.is_dir():
         return []
     out: list[tuple[Path, dict[str, Any], str]] = []
@@ -993,7 +996,7 @@ def _discover_raw_docs(
     distilled into wiki source pages too. Frontmatter is optional — a bare
     markdown file parses to ``({}, text)``.
     """
-    root = docs_dir or RAW_DOCS
+    root = resolve_vault_dir(docs_dir, RAW_DOCS, "raw", "docs")
     if not root.is_dir():
         return []
     out: list[tuple[Path, dict[str, Any], str]] = []
@@ -1700,7 +1703,7 @@ def synthesize_new_sessions(
     if callable(reset_usage):
         reset_usage()
 
-    sources_out = wiki_sources_dir or WIKI_SOURCES
+    sources_out = resolve_vault_dir(wiki_sources_dir, WIKI_SOURCES, "wiki", "sources")
     # #30: resolve the subagent policy once. In "only-raw" (the default),
     # subagent transcripts are skipped here even under --force — the flag means
     # "redo synthesis", not "override which sessions are eligible".
@@ -1741,8 +1744,8 @@ def synthesize_new_sessions(
     # Docs are namespaced with a ``docs::`` rel prefix and grouped under a
     # ``docs`` pseudo-project. The docs root defaults to the sibling
     # ``raw/docs`` of whatever sessions root was given.
-    session_base = raw_dir or RAW_SESSIONS
-    docs_base = docs_dir or (raw_dir.parent / "docs" if raw_dir else RAW_DOCS)
+    session_base = resolve_vault_dir(raw_dir, RAW_SESSIONS, "raw", "sessions")
+    docs_base = docs_dir or (raw_dir.parent / "docs" if raw_dir else resolve_vault_dir(None, RAW_DOCS, "raw", "docs"))
     # When only_paths is set (llmwiki add), skip the full unsynth scan —
     # we only care about the explicit allow-list below.
     unsynth_session_rels: set[str] = set()

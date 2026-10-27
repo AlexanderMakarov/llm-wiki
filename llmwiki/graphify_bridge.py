@@ -31,8 +31,10 @@ from typing import Any
 
 from llmwiki import REPO_ROOT
 from llmwiki._system_pages import is_archived_path
+from llmwiki.config_schedule import resolve_vault_dir
 from llmwiki.wikilinks import WIKILINK_RE, strip_anchor
 
+# Legacy markers only — tests may reassign these. Runtime uses active_vault.
 WIKI_DIR = REPO_ROOT / "wiki"
 GRAPH_DIR = REPO_ROOT / "graph"
 GRAPHIFY_OUT = REPO_ROOT / "graphify-out"
@@ -256,11 +258,9 @@ def build_graphify_graph(
     dict with keys: graph (NetworkX), communities, gods, report_path,
     json_path, html_path, stats.
     """
-    # Default to the repo dirs; the CLI passes the resolved vault's so a
-    # configured vault is graphed instead of the clone (#43).
-    wiki_root = wiki_dir or WIKI_DIR
-    graph_root = graph_dir or GRAPH_DIR
-    out_root = graphify_out or GRAPHIFY_OUT
+    wiki_root = resolve_vault_dir(wiki_dir, WIKI_DIR, "wiki")
+    graph_root = resolve_vault_dir(graph_dir, GRAPH_DIR, "graph")
+    out_root = resolve_vault_dir(graphify_out, GRAPHIFY_OUT, "graphify-out")
     from graphify.analyze import god_nodes, suggest_questions, surprising_connections  # noqa: PLC0415 — optional extra
     from graphify.build import build_from_json  # noqa: PLC0415 — optional extra
     from graphify.cluster import cluster, score_all  # noqa: PLC0415 — optional extra

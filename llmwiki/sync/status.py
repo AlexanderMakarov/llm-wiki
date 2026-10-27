@@ -18,9 +18,12 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 
-from llmwiki import REPO_ROOT
 from llmwiki import quarantine as _q
-from llmwiki.config_schedule import apply_default_vault, synthesis_status_hint
+from llmwiki.config_schedule import (
+    apply_default_vault,
+    resolve_vault_dir,
+    synthesis_status_hint,
+)
 from llmwiki.log_reader import recent_events
 from llmwiki.state_store import get_state_file, read_state
 
@@ -126,7 +129,7 @@ def cmd_sync_status(args: argparse.Namespace) -> int:
         print(f"Hint: {hint}")
 
     if args.recent:
-        log_path = REPO_ROOT / "wiki" / "log.md"
+        log_path = resolve_vault_dir(None, None, "wiki", "log.md")
         events = recent_events(log_path, limit=args.recent, operations={"sync", "synthesize"})
         if events:
             print()

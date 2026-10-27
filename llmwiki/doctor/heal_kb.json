@@ -135,6 +135,7 @@
         "vault directory not found",
         "wiki directory not found",
         "No vault configured",
+        "no vault configured",
         "No wiki/ directory under vault",
         "vault.missing_or_unusable"
       ],

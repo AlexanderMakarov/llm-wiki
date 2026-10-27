@@ -69,7 +69,7 @@ from llmwiki.changelog_timeline import (
     render_recent_activity,
 )
 from llmwiki.claude_path import resolve_claude_path as _resolve_claude_path  # noqa: F401 — tests / back-compat (#58)
-from llmwiki.config_schedule import _load_sessions_config
+from llmwiki.config_schedule import _load_sessions_config, resolve_vault_dir
 from llmwiki.context_md import is_context_file
 from llmwiki.convert import ENCODED_PATH_PREFIXES, HOME_PATH_PREFIXES
 from llmwiki.docs_pages import (
@@ -2119,7 +2119,7 @@ def render_analytics(
     # from the vault's wiki_dir (falling back to REPO_ROOT for a repo build),
     # not the module REPO_ROOT — otherwise a vault site shows the repo's log.
     log_events = _recent_log_events(
-        (wiki_dir or (REPO_ROOT / "wiki")) / "log.md", limit=10
+        resolve_vault_dir(wiki_dir, REPO_ROOT / "wiki", "wiki") / "log.md", limit=10
     )
     recent_block_inner = render_recent_activity(log_events)
     recent_block = (
@@ -2137,7 +2137,9 @@ def render_analytics(
         # takes precedence, falls back to aggregated session tags with
         # noise filtered out. Rendered as chips below the card meta.
         proj_metas = [m for _, m, _ in sessions]
-        meta_dir = projects_meta_dir or (wiki_dir or (REPO_ROOT / "wiki")) / "projects"
+        meta_dir = projects_meta_dir or (
+            resolve_vault_dir(wiki_dir, REPO_ROOT / "wiki", "wiki") / "projects"
+        )
         topics = get_project_topics(meta_dir, project, proj_metas)
         topics_html = render_topic_chips(topics, max_visible=4,
                                          classname="project-topics card-topics")
@@ -2515,7 +2517,7 @@ def render_models_section(out_dir: Path) -> tuple[Path | None, int]:
     # next time someone wires it from the CLI. Previously these names
     # were referenced but never imported — function body was reachable
     # but would crash with NameError on first call.
-    entities_dir = REPO_ROOT / "wiki" / "entities"
+    entities_dir = resolve_vault_dir(None, REPO_ROOT / "wiki" / "entities", "wiki", "entities")
     entries_with_meta = discover_model_entities_with_meta(entities_dir)
     # Backwards-compatible list without meta for render_models_index.
     entries = [
@@ -3250,10 +3252,10 @@ def build_site(
     _LOCAL_ROOT = resolve_local_root(local_root)
     # #54 vault-overlay: resolved here (not as param defaults, which are
     # captured at def time) so monkeypatched module constants take effect.
-    out_dir = DEFAULT_OUT_DIR if out_dir is None else out_dir
-    raw_sessions = RAW_SESSIONS if raw_sessions is None else raw_sessions
-    raw_dir = RAW_DIR if raw_dir is None else raw_dir
-    wiki_dir = (REPO_ROOT / "wiki") if wiki_dir is None else wiki_dir
+    out_dir = resolve_vault_dir(out_dir, DEFAULT_OUT_DIR, "site")
+    raw_sessions = resolve_vault_dir(raw_sessions, RAW_SESSIONS, "raw", "sessions")
+    raw_dir = resolve_vault_dir(raw_dir, RAW_DIR, "raw")
+    wiki_dir = resolve_vault_dir(wiki_dir, REPO_ROOT / "wiki", "wiki")
     projects_meta_dir = wiki_dir / "projects"
     if not raw_sessions.exists():
         print(

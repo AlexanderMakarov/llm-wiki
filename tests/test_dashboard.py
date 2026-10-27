@@ -73,24 +73,14 @@ def test_dashboard_has_connections_section():
 
 
 def test_cmd_init_seeds_dashboard(tmp_path: Path, monkeypatch):
-    """cmd_init should copy the dashboard template to wiki/dashboard.md."""
-    # #29: cmd_init now honors config.json vault.default_path like sync/build.
-    # Isolate from a dev machine's real vault so this exercises the
-    # no-vault (REPO_ROOT) path.
+    """cmd_init copies the dashboard template into the named vault."""
     monkeypatch.setattr(
         "llmwiki.config_schedule.load_default_vault_path", lambda: None
     )
-    monkeypatch.setattr("llmwiki.cli.REPO_ROOT", tmp_path)
-    # Copy the template into the tmp REPO_ROOT
-    (tmp_path / "examples").mkdir()
-    (tmp_path / "examples" / "wiki_dashboard.md").write_text(
-        "---\ntitle: Test\n---\n# Test Dashboard\n", encoding="utf-8"
-    )
-
-
-    args = argparse.Namespace()
+    args = argparse.Namespace(vault=tmp_path)
     rc = cmd_init(args)
     assert rc == 0
+    template = (REPO_ROOT / "examples" / "wiki_dashboard.md").read_text(encoding="utf-8")
     dashboard = tmp_path / "wiki" / "dashboard.md"
     assert dashboard.is_file()
-    assert "Test Dashboard" in dashboard.read_text(encoding="utf-8")
+    assert dashboard.read_text(encoding="utf-8") == template

@@ -40,6 +40,7 @@ from typing import Any
 
 from llmwiki import REPO_ROOT
 from llmwiki._system_pages import is_archived_path
+from llmwiki.config_schedule import resolve_vault_dir
 from llmwiki.wikilinks import build_page_alias_map, resolve_wikilink_target, wikilink_targets
 
 _START = "<!-- BACKLINKS:START -->"
@@ -183,7 +184,7 @@ def inject_all(
     Returns ``{slug: num_backlinks}`` for every page that got an
     (added, updated, or unchanged) block.
     """
-    root = wiki_dir or (REPO_ROOT / "wiki")
+    root = resolve_vault_dir(wiki_dir, REPO_ROOT / "wiki", "wiki")
     pages = _collect_pages(root)
     rev = build_reverse_index(pages)
     results: dict[str, int] = {}
@@ -204,7 +205,7 @@ def prune_all(
     wiki_dir: Path | None = None, *, dry_run: bool = False
 ) -> int:
     """Strip backlink blocks from every page. Returns count touched."""
-    root = wiki_dir or (REPO_ROOT / "wiki")
+    root = resolve_vault_dir(wiki_dir, REPO_ROOT / "wiki", "wiki")
     count = 0
     for p in root.rglob("*.md"):
         if is_archived_path(p.relative_to(root).parts):

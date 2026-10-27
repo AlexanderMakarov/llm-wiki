@@ -39,10 +39,11 @@ from llmwiki import usage as _usage
 from llmwiki.add_doc import AddError
 from llmwiki.add_pipeline import run_add
 from llmwiki.categories import scan_tags
-from llmwiki.config_schedule import _load_sessions_config, resolve_content_root
+from llmwiki.config_schedule import _load_sessions_config, active_vault, bind_vault
 from llmwiki.lint import LintOptions, UnknownRuleError, load_pages, run_lint
 from llmwiki.lint.report import render_json as render_lint_json
 from llmwiki.pipeline_lock import pipeline_lock
+from llmwiki.queue_ops import lookup_add_operation, unknown_add_operation
 from llmwiki.schema import PAGE_KINDS
 from llmwiki.search import (
     DEFAULT_AGGREGATE_BUDGET,
@@ -66,9 +67,22 @@ from llmwiki.vault_settings import (
     vault_settings_path,
 )
 
-CONTENT_ROOT = resolve_content_root()
-# Back-compat test seam: many MCP tests monkeypatch llmwiki.mcp.server.REPO_ROOT.
-REPO_ROOT = CONTENT_ROOT
+# Test seam: assign a Path to use that vault for every read and write in
+# this process. Production leaves this None so the first vault operation
+# resolves ``vault.default_path`` once via :func:`active_vault`.
+REPO_ROOT: Path | None = None
+
+
+def _root() -> Path:
+    """The one vault root for this server.
+
+    A test that sets :data:`REPO_ROOT` binds that path. Otherwise the
+    process vault (explicit bind or config) is used. State is that
+    vault's ``llmwiki-state.json``.
+    """
+    if isinstance(REPO_ROOT, Path):
+        return bind_vault(REPO_ROOT)
+    return active_vault()
 
 # Default wall-clock budget for long-running MCP tools (sync / add+build).
 # Overridable per tool via ``mcp.tool_timeouts.<tool_name>`` in config.json.
@@ -121,10 +135,10 @@ _RECORDERS: dict[str, _usage.UsageRecorder] = {}
 def _get_recorder() -> _usage.UsageRecorder | None:
     if not TELEMETRY_ENABLED:
         return None
-    key = str(REPO_ROOT)
+    key = str(_root())
     rec = _RECORDERS.get(key)
     if rec is None:
-        rec = _usage.UsageRecorder(REPO_ROOT)
+        rec = _usage.UsageRecorder(_root())
         _RECORDERS[key] = rec
     return rec
 
@@ -252,7 +266,7 @@ def _record_usage(
             return
         text = _result_text(result)
         project, source = _usage.resolve_caller(
-            args, client_roots=client_roots(), content_root=REPO_ROOT)
+            args, client_roots=client_roots(), content_root=_root())
         recorder.record(
             tool=name,
             query=_usage.extract_query(args),
@@ -490,20 +504,34 @@ TOOLS = [
             "opt in (mirrors `--synthesize`). Pass no_build=true to skip the "
             "site rebuild (mirrors `--no-build`). Long documents may become "
             "multiple raw pieces via the shared add chunker (~7k chars). "
-            "Exactly one of url, path, or content is required. content uses "
+            "To start an add, exactly one of url, path, or content is "
+            "required. content uses "
             "the piped-text path (frontmatter source: piped), not a temp file. "
             "Use the user's named path/URL/text — do not reconstruct input "
             "from existing wiki pages unless the user asked. "
             "Runs under a wall-clock budget (mcp.tool_timeouts.wiki_add, "
             "default 120s) and holds the vault pipeline lock while it works, "
             "so a large source or synthesize=true can exceed it. On timeout "
-            "the add keeps running in the background: verify whether the doc "
-            "landed (wiki_search, or the raw/docs/ path) before retrying, "
-            "and raise the timeout rather than repeating the call."
+            "the call returns pending JSON (isError false, status running, "
+            "operation_id, retry_safe false) and the add keeps running in "
+            "the background. Poll wiki_add with that operation_id alone — "
+            "do not read the filesystem — instead of retrying blindly. The "
+            "message still names wiki_search, raw/docs/, and "
+            "mcp.tool_timeouts.wiki_add. Pass operation_id with no url, "
+            "path, or content to read running, done, or error."
         ),
         "inputSchema": {
             "type": "object",
             "properties": {
+                "operation_id": {
+                    "type": "string",
+                    "description": (
+                        "Read one add instead of starting one. Pass this "
+                        "alone (no url, path, or content). On timeout, poll "
+                        "wiki_add with the operation_id from the pending "
+                        "JSON instead of reading the filesystem."
+                    ),
+                },
                 "url": {
                     "type": "string",
                     "description": "http(s) URL to fetch and convert.",
@@ -583,7 +611,7 @@ def _safe_path(rel: str) -> Path | None:
     if not rel:
         return None
     head = Path(rel).parts[0] if Path(rel).parts else ""
-    base = REPO_ROOT if head in {"wiki", "raw"} else SOURCE_ROOT
+    base = _root() if head in {"wiki", "raw"} else SOURCE_ROOT
     p = (base / rel).resolve()
     try:
         p.relative_to(base.resolve())
@@ -605,7 +633,7 @@ def _is_read_page_allowed(p: Path) -> bool:
         rel_parts = p.resolve().relative_to(SOURCE_ROOT.resolve()).parts
     except ValueError:
         try:
-            rel_parts = p.resolve().relative_to(REPO_ROOT.resolve()).parts
+            rel_parts = p.resolve().relative_to(_root().resolve()).parts
         except ValueError:
             return False
     if not rel_parts:
@@ -675,7 +703,7 @@ def _wiki_search_extract(args: dict[str, Any]) -> dict[str, Any]:
     if not question:
         return _err("question is required")
 
-    wiki = REPO_ROOT / "wiki"
+    wiki = _root() / "wiki"
     if not wiki.exists():
         return _ok(
             "wiki/ does not exist yet — run `llmwiki init` and `/wiki-sync` first"
@@ -686,7 +714,7 @@ def _wiki_search_extract(args: dict[str, Any]) -> dict[str, Any]:
 
     scan = scan_corpus(
         [wiki],
-        content_root=REPO_ROOT,
+        content_root=_root(),
         cold_storage_root=wiki,
         per_file_cap=_MCP_SCAN_PER_FILE_BYTES,
         aggregate_budget=_MCP_SCAN_AGGREGATE_BYTES,
@@ -783,10 +811,10 @@ def _wiki_search_match(args: dict[str, Any]) -> dict[str, Any]:
     if kind and kind not in PAGE_KINDS:
         return _err(f"unknown kind {kind!r} (expected one of {list(PAGE_KINDS)})")
 
-    wiki_root = REPO_ROOT / "wiki"
+    wiki_root = _root() / "wiki"
     roots = [wiki_root]
     if include_raw:
-        roots.append(REPO_ROOT / "raw" / "sessions")
+        roots.append(_root() / "raw" / "sessions")
 
     # Stream the walk into the engine so match-mode caps can stop disk I/O
     # early (pre-#197 behaviour). Extract mode still materialises — ranking
@@ -795,7 +823,7 @@ def _wiki_search_match(args: dict[str, Any]) -> dict[str, Any]:
     match_result = search_match(
         iter_scanned_pages(
             roots,
-            content_root=REPO_ROOT,
+            content_root=_root(),
             cold_storage_root=wiki_root,
             per_file_cap=_MCP_SCAN_PER_FILE_BYTES,
             aggregate_budget=_MCP_SCAN_AGGREGATE_BYTES,
@@ -864,7 +892,7 @@ def _wiki_search_match(args: dict[str, Any]) -> dict[str, Any]:
 
 def _wiki_search_list_sources(args: dict[str, Any]) -> dict[str, Any]:
     project_filter = args.get("project")
-    raw_sessions = REPO_ROOT / "raw" / "sessions"
+    raw_sessions = _root() / "raw" / "sessions"
     if not raw_sessions.exists():
         return _ok(json.dumps([], indent=2))
     out = []
@@ -878,7 +906,7 @@ def _wiki_search_list_sources(args: dict[str, Any]) -> dict[str, Any]:
             continue
         out.append(
             {
-                "path": str(p.relative_to(REPO_ROOT)),
+                "path": str(p.relative_to(_root())),
                 "project": project,
                 "filename": p.name,
                 "size_bytes": size,
@@ -964,7 +992,7 @@ def tool_wiki_health(args: dict[str, Any]) -> dict[str, Any]:
     vault, including the rules the vault switched off in `llmwiki.json`. An
     agent and a person must not be working from two accounts of one wiki.
     """
-    root = REPO_ROOT
+    root = _root()
     wiki = root / "wiki"
     if not wiki.is_dir():
         return _err("wiki/ does not exist")
@@ -1072,7 +1100,7 @@ def tool_wiki_sync(args: dict[str, Any]) -> dict[str, Any]:
 def tool_wiki_export(args: dict[str, Any]) -> dict[str, Any]:
     """Return one of the AI-consumable export files (v0.4)."""
     fmt = args.get("format")
-    site_dir = REPO_ROOT / "site"
+    site_dir = _root() / "site"
 
     if fmt == "list":
         candidates = [
@@ -1134,21 +1162,30 @@ def tool_wiki_add(args: dict[str, Any]) -> dict[str, Any]:
     only when ``synthesize`` is true. ``content`` uses the piped-text path
     (``source: piped``) — no tempfile. Progress lines go to ``run_add``'s
     ``messages`` list via a silent writer so they never corrupt JSON-RPC
-    stdout. Wall-clock budget: ``mcp.tool_timeouts.wiki_add`` (default 120s),
-    enforced by returning the timeout error without waiting for the worker
-    (#286) — the add runs on and holds ``pipeline_lock``, so the error tells
-    the caller to verify before retrying. A call that blocks on another run's
-    lock instead fails inside the same budget with a distinct lock error,
-    rather than waiting out ``pipeline_lock``'s own 300s default.
-    When the doc lands but only the post-add site build fails, returns
+    stdout. Wall-clock budget: ``mcp.tool_timeouts.wiki_add`` (default 120s).
+    The operation id is minted before the worker starts and passed as
+    ``task_id``. On timeout the call returns pending JSON (``isError`` false)
+    and the add keeps running under ``pipeline_lock`` (#286, #306). Poll
+    ``wiki_add`` with that ``operation_id`` alone — no lock, no filesystem
+    read. A call that blocks on another run's lock fails inside the same
+    budget with a distinct lock error and no operation id. When the doc
+    lands but only the post-add site build fails, an in-budget call returns
     success with a warning (``build_failed``); genuine add failures stay
-    ``isError``.
+    ``isError`` prose.
     """
 
+    operation_id_arg = str(args.get("operation_id") or "").strip()
     url = (args.get("url") or "").strip()
     path = (args.get("path") or "").strip()
     content = args.get("content") or ""
     provided = [v for v in (url, path, content) if v]
+    if operation_id_arg and provided:
+        return _err(
+            "pass operation_id alone to poll an add, or exactly one of "
+            "url, path, or content to start one"
+        )
+    if operation_id_arg:
+        return _poll_wiki_add(operation_id_arg)
     if len(provided) != 1:
         return _err(
             "exactly one of url, path, or content is required "
@@ -1162,7 +1199,7 @@ def tool_wiki_add(args: dict[str, Any]) -> dict[str, Any]:
     synthesize = bool(args.get("synthesize", False))
     no_build = bool(args.get("no_build", False))
 
-    docs_dir = REPO_ROOT / "raw" / "docs"
+    docs_dir = _root() / "raw" / "docs"
     if content:
         sources = ["-"]
         stdin_text: str | None = content if isinstance(content, str) else str(content)
@@ -1171,6 +1208,9 @@ def tool_wiki_add(args: dict[str, Any]) -> dict[str, Any]:
         stdin_text = None
 
     timeout_s = _mcp_tool_timeout("wiki_add")
+    # Minted in the parent so the timeout payload names this add even when
+    # ``run_add`` has not returned (including when it is stubbed).
+    operation_id = f"add-sync-{int(time.time() * 1000)}"
 
     # The lock wait gets a slice of the tool budget, not pipeline_lock's own
     # 300s default: a call that blocks on another run's lock must fail with
@@ -1182,11 +1222,11 @@ def tool_wiki_add(args: dict[str, Any]) -> dict[str, Any]:
 
     def _do_add() -> dict[str, Any]:
         # Silent writer: accumulate in result["messages"]; keep stdout clean.
-        with pipeline_lock(REPO_ROOT, timeout=lock_timeout_s):
+        with pipeline_lock(_root(), timeout=lock_timeout_s):
             return run_add(
                 sources,
                 docs_dir,
-                vault_root=REPO_ROOT,
+                vault_root=_root(),
                 title=title,
                 project=project,
                 tags=tags,
@@ -1195,34 +1235,39 @@ def tool_wiki_add(args: dict[str, Any]) -> dict[str, Any]:
                 build=not no_build,
                 stdin_text=stdin_text,
                 writer=lambda _line: None,
+                task_id=operation_id,
             )
 
     # Not a context manager: ``__exit__`` is ``shutdown(wait=True)``, which
     # joins the worker and makes the timeout return wait for the very add it
     # gave up on (#286). ``wait=False`` returns within the budget; the worker
-    # runs on and keeps ``pipeline_lock`` until it finishes, which is what the
-    # timeout message tells the caller to check for. The process still joins
-    # that worker at interpreter exit (``concurrent.futures.thread`` registers
-    # an atexit hook for its non-daemon threads), so a server told to shut
-    # down after a timeout lingers for the rest of the add — deliberate, so an
-    # in-flight add is never killed mid-write and left as a half-written vault
-    # behind a stale lock directory.
+    # runs on and keeps ``pipeline_lock`` until it finishes. The process still
+    # joins that worker at interpreter exit (``concurrent.futures.thread``
+    # registers an atexit hook for its non-daemon threads), so a server told
+    # to shut down after a timeout lingers for the rest of the add —
+    # deliberate, so an in-flight add is never killed mid-write and left as a
+    # half-written vault behind a stale lock directory.
     pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
     try:
         fut = pool.submit(_do_add)
         try:
             result = fut.result(timeout=timeout_s)
         except concurrent.futures.TimeoutError:
-            return _err(
-                f"add exceeded its {timeout_s:.0f}s budget and is still "
-                "running in the background — it holds the vault pipeline "
-                "lock until it finishes and may still write the doc. Do not "
-                "retry blindly: check whether it landed (wiki_search for the "
-                "title, or look under raw/docs/) before adding the same "
-                "source again, or you get a duplicate or a lock conflict. "
-                "Raise mcp.tool_timeouts.wiki_add in config.json for large "
-                "sources or when synthesize is on."
-            )
+            return _ok(json.dumps({
+                "status": "running",
+                "operation_id": operation_id,
+                "retry_safe": False,
+                "message": (
+                    f"add exceeded its {timeout_s:.0f}s budget and is still "
+                    "running in the background — it holds the vault pipeline "
+                    "lock until it finishes and may still write the doc. Do not "
+                    "retry blindly: check whether it landed (wiki_search for the "
+                    "title, or look under raw/docs/) before adding the same "
+                    "source again, or you get a duplicate or a lock conflict. "
+                    "Raise mcp.tool_timeouts.wiki_add in config.json for large "
+                    "sources or when synthesize is on."
+                ),
+            }, indent=2))
         except AddError as exc:
             return _err(str(exc))
         except RuntimeError as exc:
@@ -1252,7 +1297,7 @@ def tool_wiki_add(args: dict[str, Any]) -> dict[str, Any]:
         )
         return _err(detail)
 
-    written_rel = [str(p.relative_to(REPO_ROOT)) for p in result["written"]]
+    written_rel = [str(p.relative_to(_root())) for p in result["written"]]
     warnings = list(result["warnings"])
     if result.get("build_failed"):
         warnings.append(
@@ -1266,10 +1311,19 @@ def tool_wiki_add(args: dict[str, Any]) -> dict[str, Any]:
         "written": written_rel,
         "titles": result["titles"],
         "warnings": warnings,
+        "operation_id": result.get("task_id") or operation_id,
     }
     out = _ok(json.dumps(payload, indent=2))
     out["_hits"] = len(written_rel)
     return out
+
+
+def _poll_wiki_add(operation_id: str) -> dict[str, Any]:
+    """Read one add row. Does not take ``pipeline_lock`` or stat the vault."""
+    view = lookup_add_operation(operation_id)
+    if view is None:
+        return _err(json.dumps(unknown_add_operation(operation_id), indent=2))
+    return _ok(json.dumps(view, indent=2))
 
 
 def _ok(text: str) -> dict[str, Any]:
@@ -1286,7 +1340,7 @@ def _wiki_search_filter_confidence(args: dict[str, Any]) -> dict[str, Any]:
     min_c = float(args.get("min_confidence", 0.0))
     max_c = float(args.get("max_confidence", 1.0))
 
-    wiki = REPO_ROOT / "wiki"
+    wiki = _root() / "wiki"
     pages = load_pages(wiki)
 
     results: list[dict[str, Any]] = []
@@ -1322,7 +1376,7 @@ def _wiki_search_filter_lifecycle(args: dict[str, Any]) -> dict[str, Any]:
     if not state:
         return _err("state is required")
 
-    wiki = REPO_ROOT / "wiki"
+    wiki = _root() / "wiki"
     pages = load_pages(wiki)
 
     matches = [
@@ -1349,7 +1403,7 @@ def _wiki_search_filter_tag(args: dict[str, Any]) -> dict[str, Any]:
     tag = (args.get("tag") or "").strip().lower()
     min_count = int(args.get("min_count", 1))
 
-    wiki = REPO_ROOT / "wiki"
+    wiki = _root() / "wiki"
     pages = load_pages(wiki)
     tags = scan_tags(pages)
 

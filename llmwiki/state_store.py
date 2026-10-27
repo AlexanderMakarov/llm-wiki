@@ -10,8 +10,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from llmwiki import REPO_ROOT
-
 SCHEMA_VERSION = 1
 DEFAULT_BOUNDED_COMPLETED = 500
 _ACTIVE_STATE_FILE: Path | None = None
@@ -283,33 +281,42 @@ def _normalize_state_path(explicit: Path) -> Path:
 
 
 def configure_state_file(explicit: Path | None) -> Path:
-    """Set the process-wide active state file (CLI border only).
+    """Set the process-wide active state file.
 
     ``explicit`` may be a vault root directory or the state file itself.
-    Library code should not call this — use ``resolve_state_file`` with an
-    explicit path for one-off overrides.
+    ``None`` clears the override so the next read uses
+    ``<active vault>/llmwiki-state.json``. There is no package-directory
+    fallback.
     """
     global _ACTIVE_STATE_FILE
     if explicit is None:
-        _ACTIVE_STATE_FILE = REPO_ROOT / "llmwiki-state.json"
-    else:
-        _ACTIVE_STATE_FILE = _normalize_state_path(explicit)
+        _ACTIVE_STATE_FILE = None
+        from llmwiki.config_schedule import active_vault  # noqa: PLC0415
+
+        _ACTIVE_STATE_FILE = active_vault() / "llmwiki-state.json"
+        return _ACTIVE_STATE_FILE
+    _ACTIVE_STATE_FILE = _normalize_state_path(explicit)
     return _ACTIVE_STATE_FILE
 
 
 def get_state_file() -> Path:
-    """Return the active state file for this process."""
+    """Return the active state file for this process.
+
+    When nothing has configured one, that is ``<active vault>/llmwiki-state.json``.
+    """
     if _ACTIVE_STATE_FILE is not None:
         return _ACTIVE_STATE_FILE
-    return REPO_ROOT / "llmwiki-state.json"
+    from llmwiki.config_schedule import active_vault  # noqa: PLC0415
+
+    return active_vault() / "llmwiki-state.json"
 
 
 def resolve_state_file(explicit: Path | None = None) -> Path:
     """Return canonical ``<vault>/llmwiki-state.json``.
 
-  ``explicit`` overrides the active default for this call only.
-  When omitted, returns the process-wide active file from
-  ``configure_state_file`` (or ``REPO_ROOT/llmwiki-state.json``).
+    ``explicit`` overrides the active default for this call only.
+    When omitted, returns the process-wide active file, or the bound
+    vault's state file.
     """
     if explicit is not None:
         return _normalize_state_path(explicit)

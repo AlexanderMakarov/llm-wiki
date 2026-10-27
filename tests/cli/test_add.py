@@ -16,14 +16,35 @@ def test_add_dry_run_local_md(tmp_path):
     """``add --dry-run`` must preview a local markdown file without writing the vault."""
     src = tmp_path / "sample.md"
     src.write_text("# Sample Doc\n\nsome content\n")
+    vault = scratch_vault(tmp_path)
     r = subprocess.run(
         [sys.executable, "-m", "llmwiki", "add", "--dry-run",
-         "--vault", str(scratch_vault(tmp_path)), str(src)],
+         "--vault", str(vault), str(src)],
         capture_output=True, text=True,
     )
     assert r.returncode == 0, r.stderr
     assert "Sample Doc" in r.stdout
     assert "dry-run" in r.stdout
+    assert not (vault / "llmwiki-state.json").exists()
+    assert not (vault / "llmwiki-state.js").exists()
+
+
+def test_add_dry_run_leaves_existing_state_file(tmp_path):
+    """``add --dry-run`` must not append a queue row or bump the state revision."""
+    vault = scratch_vault(tmp_path)
+    state = vault / "llmwiki-state.json"
+    original = '{"meta":{"revision":7},"queue":{"items":[{"id":"keep-me"}]}}\n'
+    state.write_text(original)
+    src = tmp_path / "sample.md"
+    src.write_text("# Sample Doc\n\nsome content\n")
+    r = subprocess.run(
+        [sys.executable, "-m", "llmwiki", "add", "--dry-run",
+         "--vault", str(vault), str(src)],
+        capture_output=True, text=True,
+    )
+    assert r.returncode == 0, r.stderr
+    assert state.read_text() == original
+    assert not (vault / "llmwiki-state.js").exists()
 
 
 def test_add_requires_source():

@@ -1,21 +1,20 @@
 """Keep the llmwiki source checkout from being used as a knowledge vault (#109).
 
-A git clone of llmwiki carries :data:`SOURCE_CHECKOUT_MARKER` at its root. The
-CLI resolves an unnamed vault to that root, so a bare ``llmwiki init`` /
-``sync`` / ``synth`` / ``build`` inside a clone scatters ``raw/``, ``wiki/`` and
-``site/`` working folders across the source tree. Commands that write vault
-content therefore call :func:`ensure_not_source_checkout` on the directory they
-are about to write into, and stop with a message naming ``--vault`` and the
-in-repo ``demo/`` vault.
+A git clone of llmwiki carries :data:`SOURCE_CHECKOUT_MARKER` at its root.
+Vault-writing commands resolve a vault from ``--vault`` or
+``vault.default_path``. When that path is the source checkout, they call
+:func:`ensure_not_source_checkout` and stop with a message naming
+``--vault`` and the in-repo ``demo/`` vault. A missing vault is a separate
+error (``no vault configured``); the checkout is never an implicit vault.
 
 Scope of the guard:
 
 - **Installed distributions are unaffected.** pip unpacks the
   package under ``site-packages``, whose parent carries no marker, so the guard
-  never fires for a real user.
-- **Naming a vault always wins.** ``--vault PATH`` on the command line, or
-  ``vault.default_path`` in ``config.json``, resolves the content root away
-  from the checkout before the guard is consulted.
+  never fires for a real user unless they name that path as the vault.
+- **Naming a vault always wins for resolution.** ``--vault PATH`` on the
+  command line, or ``vault.default_path`` in ``config.json``, is the bound
+  vault. The guard only refuses that path when it is a source checkout.
 """
 
 from __future__ import annotations

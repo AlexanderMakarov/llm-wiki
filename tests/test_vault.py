@@ -9,7 +9,8 @@ import pytest
 
 from llmwiki import REPO_ROOT
 from llmwiki.cli import build_parser, cmd_build, cmd_sync, cmd_synthesize
-from llmwiki.state_store import configure_state_file, get_state_file, resolve_state_file
+from llmwiki.config_schedule import VaultNotConfigured, clear_vault_binding
+from llmwiki.state_store import resolve_state_file
 from llmwiki.synth.pipeline import _load_state, _save_state
 from llmwiki.vault import (
     VaultFormat,
@@ -496,12 +497,15 @@ def test_existing_vault_doc_exists():
 # ─── #420: synth pipeline state file isolation per vault ────────────
 
 
-def test_synth_state_file_default_at_repo_root(tmp_path: Path, monkeypatch):
-    """Default mode (no vault): state file lives at repo root."""
-
-    configure_state_file(REPO_ROOT)
-    assert resolve_state_file() == get_state_file()
-    assert resolve_state_file() == REPO_ROOT / "llmwiki-state.json"
+def test_unconfigured_state_file_does_not_use_the_package_directory(monkeypatch):
+    """No bound vault and no config path must not invent a state file next to the package."""
+    clear_vault_binding()
+    monkeypatch.setattr("llmwiki.state_store._ACTIVE_STATE_FILE", None)
+    monkeypatch.setattr(
+        "llmwiki.config_schedule.load_default_vault_path", lambda: None
+    )
+    with pytest.raises(VaultNotConfigured):
+        resolve_state_file()
 
 
 def test_synth_state_file_per_vault(tmp_path: Path):

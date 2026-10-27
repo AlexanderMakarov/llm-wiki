@@ -57,6 +57,62 @@ def queue_status(state_file: Path | None = None) -> dict[str, Any]:
     return {"counts": counts, "oldest_pending": oldest_pending, "total": len(items)}
 
 
+def _detail_strings(detail: dict[str, Any] | None, key: str) -> list[str]:
+    if detail is None:
+        return []
+    value = detail.get(key)
+    if not isinstance(value, list):
+        return []
+    return [str(item) for item in value]
+
+
+def add_operation_poll(row: dict[str, Any]) -> dict[str, Any]:
+    """JSON object for one queue row. ``retry_safe`` comes from ``detail`` only.
+
+    No vault stat. ``running`` and ``done`` (including a build-only failure)
+    are not safe to retry. ``error`` is safe to retry only when ``detail``
+    says nothing from that add remains.
+    """
+    status = str(row.get("status") or "")
+    raw_detail = row.get("detail")
+    detail = raw_detail if isinstance(raw_detail, dict) else None
+    if status == "error" and detail is not None:
+        retry_safe = not bool(detail.get("files_remain"))
+    else:
+        retry_safe = False
+    return {
+        "status": status,
+        "operation_id": str(row.get("id") or ""),
+        "retry_safe": retry_safe,
+        "written": _detail_strings(detail, "written"),
+        "errors": _detail_strings(detail, "errors"),
+        "rolled_back": _detail_strings(detail, "rolled_back"),
+        "build_failed": bool(detail.get("build_failed")) if detail else False,
+    }
+
+
+def lookup_add_operation(
+    operation_id: str, state_file: Path | None = None,
+) -> dict[str, Any] | None:
+    """Return the poll object for ``operation_id``, or ``None`` when no row matches."""
+    state = read_state(resolve_state_file(state_file))
+    items = state.get("queue", {}).get("items", [])
+    for row in items:
+        if isinstance(row, dict) and str(row.get("id") or "") == operation_id:
+            return add_operation_poll(row)
+    return None
+
+
+def unknown_add_operation(operation_id: str) -> dict[str, Any]:
+    """Poll payload for an id that is not on the queue. Not safe to retry."""
+    return {
+        "status": "unknown",
+        "operation_id": operation_id,
+        "retry_safe": False,
+        "message": "unknown operation_id; not safe to retry",
+    }
+
+
 def _handle_session_sync(payload: dict[str, Any], vault: Path) -> str:
     rc = convert_all(
         out_dir=vault / "raw" / "sessions",

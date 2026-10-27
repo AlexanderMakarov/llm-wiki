@@ -26,11 +26,13 @@ from typing import Any
 from llmwiki import REPO_ROOT
 from llmwiki._frontmatter import parse_frontmatter
 from llmwiki._system_pages import is_archived_path
+from llmwiki.config_schedule import resolve_vault_dir
 from llmwiki.render.graph_viewer import GRAPH_VIEWER_JS
 from llmwiki.wikilinks import WIKILINK_RE, build_page_alias_map, resolve_wikilink_target, strip_anchor
 
 VIS_NETWORK_VENDOR = Path(__file__).resolve().parent / "vendor" / "vis-network.min.js"
 
+# Legacy markers only — tests may reassign these. Runtime uses active_vault.
 WIKI_DIR = REPO_ROOT / "wiki"
 GRAPH_DIR = REPO_ROOT / "graph"
 
@@ -179,7 +181,7 @@ def scan_pages(wiki_dir: Path | None = None) -> dict[str, dict[str, Any]]:
     vault's ``wiki/`` here so ``build --vault`` graphs the vault's pages
     instead of the repo's demo wiki (#54).
     """
-    wiki_dir = wiki_dir or WIKI_DIR
+    wiki_dir = resolve_vault_dir(wiki_dir, WIKI_DIR, "wiki")
     # `path` is reported relative to the wiki root's parent so vault and
     # repo builds both yield stable ``wiki/...`` paths.
     path_root = wiki_dir.parent
@@ -732,8 +734,8 @@ def build_and_report(write_json_flag: bool = True, write_html_flag: bool = True,
     """``wiki_dir``/``graph_dir`` select which wiki to graph and where the
     output lands; both default to the repo's (demo/dev mode). The CLI
     passes the resolved vault's so a configured vault is never bypassed."""
-    source_dir = wiki_dir or WIKI_DIR
-    out_dir = graph_dir or GRAPH_DIR
+    source_dir = resolve_vault_dir(wiki_dir, WIKI_DIR, "wiki")
+    out_dir = resolve_vault_dir(graph_dir, GRAPH_DIR, "graph")
     graph = build_graph(wiki_dir=wiki_dir)
     if not graph["nodes"]:
         print(f"warning: no wiki pages found under {source_dir}", file=sys.stderr)
