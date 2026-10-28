@@ -77,3 +77,4 @@
 - CI follow-up: action-smoke failed — `init --vault .` refused as source checkout when `package: .`. Browser smoke failed — session-scoped e2e `build_site` hit `resolve_state_file(None)` / `VaultNotConfigured` with no bound vault. Fixed: Action `vault` input + CI `action-vault`; `build_site` reads estimate from `content_root/llmwiki-state.json`.
 - CI follow-up 2: `sync --status` without vault raised Traceback on CI (no config.json); `cmd_sync_status` now exits 2 with the same error string. E2E demo walkthrough built tracked `demo/` and dirtied state/usage files — build a throwaway copy instead.
 - Docs trim: shortened `docs/reference/mcp.md` timeout/poll prose and the Unreleased `#306` CHANGELOG entry to high-level wording (operator review).
+- CI: Playwright job failed after pytest 9.2.0 (pytest-bdd#850 `_arg2fixturedefs`); pin `pytest>=8.4.2,<9.2` in `dev`/`e2e` extras.

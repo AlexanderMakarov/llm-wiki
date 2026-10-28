@@ -83,6 +83,9 @@ Versions below 1.0 are pre-production — API and file formats may change.
 - **MCP `wiki_add` keeps a timed-out add addressable (#306)** — exceeding `mcp.tool_timeouts.wiki_add` returns a running `operation_id` you can poll (`wiki_add` or `llmwiki queue status --id`) instead of a failed add with no id. State and vault I/O use only the bound vault (`--vault` / `vault.default_path`); the package and source checkout are not implicit vaults. The composite Action gains an optional `vault` input.
   - *Release note:* When MCP `wiki_add` hits its time budget it returns a running `operation_id` you can poll (#306).
 
+- **E2E extras pin pytest below 9.2** — pytest 9.2 dropped `FixtureManager._arg2fixturedefs`, which `pytest-bdd` still uses, so the Playwright job failed at collection. `dev` / `e2e` require `pytest>=8.4.2,<9.2` until a compatible pytest-bdd ships ([pytest-bdd#850](https://github.com/pytest-dev/pytest-bdd/issues/850)).
+  - *Release note:* Maintainers only: `pip install '.[e2e]'` stays on pytest &lt;9.2 until pytest-bdd catches up.
+
 - **Re-synthesizing a source with a numeric tag no longer fails (#370)** — when an existing `wiki/sources/` page carried a bare numeric-looking tag such as `10.3`, frontmatter parsing read it as a number and `synth` stopped that source with `'float' object has no attribute 'strip'`; `llmwiki all` then exited 1, so a scheduled run reported failure every day. A hand-edited single `tags: 10.3` failed the same way, and `tags: foo` was split into one tag per letter. Tags kept from the existing page are now read as text, and a single value as one tag, so synth no longer fails on them. A tag with a trailing zero such as `1.10` still reads back as `1.1` ([#371](https://github.com/AlexanderMakarov/llm-wiki/issues/371)).
   - *Release note:* `synth` no longer fails on a source whose page has a numeric tag like `10.3` (#370).
 
