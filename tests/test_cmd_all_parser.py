@@ -30,7 +30,7 @@ import argparse
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from llmwiki import REPO_ROOT, cli, pipeline
+from llmwiki import cli, pipeline
 
 
 def _mk_args(**overrides) -> argparse.Namespace:
@@ -266,15 +266,14 @@ def test_cmd_all_with_sync_and_synth_order():
 
 
 def test_cmd_all_vault_remaps_default_out_to_vault_site(tmp_path: Path):
-    """Goal 4: when --vault is set and --out is still the repo-default
-    site/, run_pipeline must remap the build's out_dir (and hence the
-    printed banner) to <vault>/site — never the git clone's site/."""
+    """When --vault is set and --out is omitted, run_pipeline builds
+    into ``<vault>/site`` — never the git clone's site/."""
 
     build_stub = MagicMock(return_value=0)
     with patch.object(pipeline, "build_site", build_stub):
         with patch.object(pipeline, "_run_lint_step", return_value=(0, {})):
             rc = cli.cmd_all(
-                _mk_args(out=REPO_ROOT / "site", vault=str(tmp_path))
+                _mk_args(out=None, vault=str(tmp_path))
             )
 
     assert rc == 0

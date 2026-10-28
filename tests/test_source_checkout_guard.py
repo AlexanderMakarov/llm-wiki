@@ -1,10 +1,11 @@
 """The llmwiki source checkout refuses to be used as a knowledge vault (#109).
 
-A clone carries ``.llmwiki-source-checkout`` at its root. Commands that write
-vault content and were given no vault would resolve their content root to that
-directory and scatter ``raw/`` / ``wiki/`` / ``site/`` across the source tree,
-so they stop instead. An installed distribution has no marker beside the
-package, and naming a vault always bypasses the guard.
+A clone carries ``.llmwiki-source-checkout`` at its root. When a writing
+command names that directory as the vault (``--vault`` or
+``vault.default_path``), it stops. A missing vault is a separate error —
+the checkout is never an implicit vault. An installed distribution has no
+marker beside the package, and naming a real vault always bypasses the
+guard.
 """
 
 from __future__ import annotations
@@ -22,8 +23,8 @@ from llmwiki.source_checkout import (
     is_source_checkout,
 )
 
-#: Commands the guard covers — every one writes vault content into whatever
-#: content root it resolves — paired with the smallest argv that parses.
+#: Commands the guard covers — every one writes vault content — paired
+#: with the smallest argv that parses. Each test supplies ``--vault``.
 GUARDED = (
     ("init", ["init"]),
     ("sync", ["sync"]),
@@ -85,8 +86,38 @@ def test_ensure_passes_on_an_ordinary_directory(tmp_path: Path) -> None:
 # ─── CLI refusal ──────────────────────────────────────────────────────
 
 
+def _cli_exit_code(argv: list[str]) -> int:
+    """Run ``cli.main`` and return its exit code.
+
+    Some commands raise ``SystemExit``; others catch it and return 2. Both
+    mean the same refusal to the caller.
+    """
+    try:
+        return int(cli.main(argv))
+    except SystemExit as exc:
+        return int(exc.code) if isinstance(exc.code, int) else 2
+
+
 @pytest.mark.parametrize(("command", "argv"), GUARDED, ids=[c for c, _ in GUARDED])
-def test_command_refuses_inside_a_marked_checkout(
+def test_command_refuses_when_vault_is_a_marked_checkout(
+    command: str,
+    argv: list[str],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    checkout = _mark(tmp_path)
+    monkeypatch.setattr(cli, "REPO_ROOT", checkout)
+
+    assert _cli_exit_code([*argv, "--vault", str(checkout)]) == 2
+    err = capsys.readouterr().err
+    assert "--vault" in err
+    assert "demo" in err
+    assert f"llmwiki {command} --vault" in err
+
+
+@pytest.mark.parametrize(("command", "argv"), GUARDED, ids=[c for c, _ in GUARDED])
+def test_command_errors_when_no_vault_is_configured(
     command: str,
     argv: list[str],
     tmp_path: Path,
@@ -95,35 +126,28 @@ def test_command_refuses_inside_a_marked_checkout(
 ) -> None:
     monkeypatch.setattr(cli, "REPO_ROOT", _mark(tmp_path))
 
-    with pytest.raises(SystemExit) as excinfo:
-        cli.main(argv)
-
-    assert excinfo.value.code == 2
-    err = capsys.readouterr().err
-    assert "--vault" in err
-    assert "demo" in err
-    assert f"llmwiki {command} --vault" in err
+    assert _cli_exit_code(argv) == 2
+    assert "no vault configured" in capsys.readouterr().err
 
 
 def test_refusal_creates_nothing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(cli, "REPO_ROOT", _mark(tmp_path))
+    checkout = _mark(tmp_path)
+    monkeypatch.setattr(cli, "REPO_ROOT", checkout)
 
-    with pytest.raises(SystemExit):
-        cli.main(["init"])
-
+    assert _cli_exit_code(["init", "--vault", str(checkout)]) == 2
     assert [p.name for p in tmp_path.iterdir()] == [SOURCE_CHECKOUT_MARKER]
 
 
-def test_init_proceeds_without_the_marker(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_init_requires_an_explicit_or_configured_vault(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     monkeypatch.setattr(cli, "REPO_ROOT", tmp_path)
 
-    assert cli.main(["init"]) == 0
-    assert (tmp_path / "wiki" / "index.md").is_file()
-    assert (tmp_path / "raw" / "sessions").is_dir()
+    assert _cli_exit_code(["init"]) == 2
+    assert "no vault configured" in capsys.readouterr().err
+    assert not (tmp_path / "wiki").exists()
 
 
 def test_explicit_vault_wins_inside_a_marked_checkout(

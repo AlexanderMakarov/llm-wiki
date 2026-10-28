@@ -29,6 +29,7 @@ from pathlib import Path
 from typing import Any, NamedTuple
 
 from llmwiki import REPO_ROOT
+from llmwiki.config_schedule import resolve_vault_dir
 from llmwiki.synth.base import BackendUsageLimitError
 
 _VALID_KINDS = frozenset({"entity", "concept"})
@@ -129,7 +130,7 @@ def resolve_known_names_config(
 def cache_path(wiki_dir: Path | None) -> Path:
     """Location of the consolidation cache (vault root, beside other state)."""
 
-    base = (wiki_dir or (REPO_ROOT / "wiki")).parent
+    base = resolve_vault_dir(wiki_dir, REPO_ROOT / "wiki", "wiki").parent
     return base / CACHE_FILENAME
 
 

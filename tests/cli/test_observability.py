@@ -14,15 +14,17 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+from argparse import Namespace
 from pathlib import Path
 from textwrap import dedent
 from unittest.mock import patch
 
 import llmwiki.cli as cli_mod
-import llmwiki.sync.status as sync_status_mod
 from llmwiki import quarantine as q
 from llmwiki.cli import _adapter_status
+from llmwiki.config_schedule import bind_vault, clear_vault_binding
 from llmwiki.convert import _migrate_legacy_state
+from llmwiki.sync.status import cmd_sync_status
 
 
 def _run_cli(*args, env=None):
@@ -137,8 +139,8 @@ SAMPLE_LOG = dedent(
 def test_sync_status_empty_state(tmp_path, monkeypatch, capsys):
     state_file = tmp_path / "state.json"
     monkeypatch.setattr(cli_mod, "REPO_ROOT", tmp_path)
-    monkeypatch.setattr(sync_status_mod, "REPO_ROOT", tmp_path)
-    args = _mk_sync_status_args(state_file=state_file)
+    bind_vault(tmp_path)
+    args = _mk_sync_status_args(vault=tmp_path, state_file=state_file)
     rc = cli_mod.cmd_sync_status(args)
     assert rc == 0
     out = capsys.readouterr().out
@@ -167,8 +169,8 @@ def test_sync_status_renders_counters_table(tmp_path, monkeypatch, capsys):
         encoding="utf-8",
     )
     monkeypatch.setattr(cli_mod, "REPO_ROOT", tmp_path)
-    monkeypatch.setattr(sync_status_mod, "REPO_ROOT", tmp_path)
-    rc = cli_mod.cmd_sync_status(_mk_sync_status_args(state_file=state_file))
+    bind_vault(tmp_path)
+    rc = cli_mod.cmd_sync_status(_mk_sync_status_args(vault=tmp_path, state_file=state_file))
     assert rc == 0
     out = capsys.readouterr().out
     assert "Last sync: 2026-04-20T04:00:00Z" in out
@@ -185,9 +187,9 @@ def test_sync_status_surfaces_quarantine(tmp_path, monkeypatch, capsys):
     q.add_entry("claude_code", "/tmp/bad.jsonl", "boom", path=state_file)
 
     monkeypatch.setattr(cli_mod, "REPO_ROOT", tmp_path)
-    monkeypatch.setattr(sync_status_mod, "REPO_ROOT", tmp_path)
+    bind_vault(tmp_path)
 
-    rc = cli_mod.cmd_sync_status(_mk_sync_status_args(state_file=state_file))
+    rc = cli_mod.cmd_sync_status(_mk_sync_status_args(vault=tmp_path, state_file=state_file))
     assert rc == 0
     out = capsys.readouterr().out
     assert "Quarantined sources: 1" in out
@@ -200,8 +202,8 @@ def test_sync_status_with_recent_logs_events(tmp_path, monkeypatch, capsys):
     state_file = tmp_path / "state.json"
     state_file.write_text(json.dumps({}), encoding="utf-8")
     monkeypatch.setattr(cli_mod, "REPO_ROOT", tmp_path)
-    monkeypatch.setattr(sync_status_mod, "REPO_ROOT", tmp_path)
-    rc = cli_mod.cmd_sync_status(_mk_sync_status_args(recent=2, state_file=state_file))
+    bind_vault(tmp_path)
+    rc = cli_mod.cmd_sync_status(_mk_sync_status_args(vault=tmp_path, recent=2, state_file=state_file))
     assert rc == 0
     out = capsys.readouterr().out
     assert "Recent activity" in out
@@ -215,8 +217,8 @@ def test_sync_status_corrupt_state_file_is_tolerated(tmp_path, monkeypatch, caps
     state_file = tmp_path / "state.json"
     state_file.write_text("{ not json", encoding="utf-8")
     monkeypatch.setattr(cli_mod, "REPO_ROOT", tmp_path)
-    monkeypatch.setattr(sync_status_mod, "REPO_ROOT", tmp_path)
-    rc = cli_mod.cmd_sync_status(_mk_sync_status_args(state_file=state_file))
+    bind_vault(tmp_path)
+    rc = cli_mod.cmd_sync_status(_mk_sync_status_args(vault=tmp_path, state_file=state_file))
     assert rc == 0
     out = capsys.readouterr().out
     assert "never" in out or "pre-upgrade" in out
@@ -229,7 +231,7 @@ def test_sync_status_flag_short_circuits_before_convert(tmp_path, monkeypatch, c
     state_file = tmp_path / "state.json"
     state_file.write_text("{}", encoding="utf-8")
     monkeypatch.setattr(cli_mod, "REPO_ROOT", tmp_path)
-    monkeypatch.setattr(sync_status_mod, "REPO_ROOT", tmp_path)
+    bind_vault(tmp_path)
     args = cli_mod.build_parser().parse_args(["sync", "--status", "--vault", str(tmp_path)])
     with patch("llmwiki.cli.convert_all") as convert:
         rc = cli_mod.cmd_sync(args)
@@ -240,13 +242,25 @@ def test_sync_status_flag_short_circuits_before_convert(tmp_path, monkeypatch, c
     assert "Quarantined sources:" in out
 
 
-def test_cli_sync_status_argv_exits_zero():
-    """``python -m llmwiki sync --status`` must exit 0 and print the status banner."""
-    cp = _run_cli("sync", "--status")
+def test_cli_sync_status_argv_exits_zero(tmp_path):
+    """``python -m llmwiki sync --status --vault`` must exit 0 and print the status banner."""
+    cp = _run_cli("sync", "--status", "--vault", str(tmp_path))
     assert "Traceback" not in cp.stderr
     assert cp.returncode == 0
     assert "Last sync:" in cp.stdout
     assert "Quarantined sources:" in cp.stdout
+
+
+def test_cli_sync_status_without_vault_exits_2(monkeypatch, capsys):
+    """Bare ``sync --status`` errors when no vault is configured (CI has no config.json)."""
+    clear_vault_binding()
+    monkeypatch.setattr(
+        "llmwiki.config_schedule.load_default_vault_path",
+        lambda: None,
+    )
+    rc = cmd_sync_status(Namespace(vault=None, recent=0))
+    assert rc == 2
+    assert "no vault configured" in capsys.readouterr().err
 
 
 # ─── state migration preserves _meta / _counters ──────────────────────────

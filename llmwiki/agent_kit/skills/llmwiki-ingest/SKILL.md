@@ -41,9 +41,9 @@ Anything that isn't already a `raw/sessions/` transcript is a **document**. Do n
 
 **Source-layer guardrail:** pass the user's exact path, URL, or text to `add` / MCP `wiki_add`. Do not reconstruct input from `wiki/sources/` or other derived pages unless the user asked.
 
-### ⚠️ If MCP `wiki_add` times out, verify before retrying
+### ⚠️ If MCP `wiki_add` times out, poll the operation id
 
-`wiki_add` runs under `mcp.tool_timeouts.wiki_add` (default 120s) and holds the vault pipeline lock while it works. A large source, a folder, or `synthesize: true` can exceed the budget; when it does, the tool returns a timeout error but **the add keeps running in the background**. Do not repeat the call and do not fall back to CLI `add` straight away: check whether the doc landed first (`wiki_search` for its title, or look for the file under `raw/docs/`). Retrying blindly gets you a duplicate doc, or a second run blocked on the lock the first one still holds. Raise `mcp.tool_timeouts.wiki_add` in `config.json` for sources that genuinely need longer.
+`wiki_add` runs under `mcp.tool_timeouts.wiki_add` (default 120s) and holds the vault pipeline lock while it works. A large source, a folder, or `synthesize: true` can exceed the budget; when it does, the tool returns pending JSON (`isError: false`, `status` `running`, `operation_id`, `retry_safe` false) and **the add keeps running in the background**. Do not repeat the call and do not fall back to CLI `add` straight away. Poll `wiki_add` with that `operation_id` only — do not read the vault filesystem to decide. The pending `message` still says not to retry blindly and names `wiki_search`, `raw/docs/`, and `mcp.tool_timeouts.wiki_add`. `retry_safe` stays false while it is running and when files from that add remain; it is true only after an error that left nothing from the add. Raise `mcp.tool_timeouts.wiki_add` in `config.json` for sources that genuinely need longer.
 
 ### ⚠️ Vault resolution — read before writing anything by hand
 

@@ -37,6 +37,7 @@ from llmwiki import REPO_ROOT
 # tag-rename run skipped them.
 from llmwiki._frontmatter import parse_frontmatter_or_none as _parse_frontmatter
 from llmwiki._system_pages import is_archived_path
+from llmwiki.config_schedule import resolve_vault_dir
 
 # Inline-list tag value: ``tags: [a, b, c]``.
 _INLINE_LIST_RE = re.compile(
@@ -98,7 +99,7 @@ def _iter_wiki_pages(wiki_dir: Path) -> list[Path]:
 
 def collect_tags(wiki_dir: Path | None = None) -> list[TagEntry]:
     """Walk ``wiki_dir`` and return every tag occurrence."""
-    root = wiki_dir or (REPO_ROOT / "wiki")
+    root = resolve_vault_dir(wiki_dir, REPO_ROOT / "wiki", "wiki")
     out: list[TagEntry] = []
     for p in _iter_wiki_pages(root):
         try:
@@ -242,7 +243,7 @@ def rename_tag(
         raise ValueError("both old and new tags are required")
     if old == new:
         return {}
-    root = wiki_dir or (REPO_ROOT / "wiki")
+    root = resolve_vault_dir(wiki_dir, REPO_ROOT / "wiki", "wiki")
     touched: dict[Path, int] = {}
     for p in _iter_wiki_pages(root):
         try:

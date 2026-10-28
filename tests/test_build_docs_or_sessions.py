@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from llmwiki.build import build_site
+from llmwiki.config_schedule import clear_vault_binding
 from llmwiki.state_store import configure_state_file
 
 
@@ -15,6 +16,30 @@ def _vault(tmp_path: Path) -> Path:
     (vault / "wiki").mkdir(parents=True)
     configure_state_file(vault / "llmwiki-state.json")
     return vault
+
+
+def test_build_site_explicit_dirs_without_bound_vault(tmp_path: Path, monkeypatch):
+    """Library callers that pass dirs must not require active_vault (#306)."""
+    vault = _vault(tmp_path)
+    doc = vault / "raw" / "docs" / "hello" / "hello.md"
+    doc.parent.mkdir(parents=True)
+    doc.write_text(
+        "---\ntitle: Hello\ntype: source\ntags: [raw-doc]\n---\n\n# Hello\n\nbody\n",
+        encoding="utf-8",
+    )
+    clear_vault_binding()
+    monkeypatch.setattr(
+        "llmwiki.config_schedule.load_default_vault_path",
+        lambda: None,
+    )
+    rc = build_site(
+        out_dir=vault / "site",
+        raw_sessions=vault / "raw" / "sessions",
+        raw_dir=vault / "raw",
+        wiki_dir=vault / "wiki",
+    )
+    assert rc == 0
+    assert (vault / "site" / "index.html").is_file()
 
 
 def test_build_site_sessions_empty_docs_present_returns_0(tmp_path: Path):

@@ -11,7 +11,7 @@ import json as _json
 from pathlib import Path
 from typing import Any
 
-from llmwiki import PACKAGE_ROOT, REPO_ROOT
+from llmwiki import PACKAGE_ROOT
 from llmwiki.state_store import configure_state_file
 
 # Config files always live in the git clone, even when ``LLMWIKI_ROOT``
@@ -91,36 +91,120 @@ def default_vault_for_checkout(working_dir: Path) -> Path | None:
     return None
 
 
+class VaultNotConfigured(RuntimeError):
+    """No vault was named and config has no ``vault.default_path``.
+
+    Callers must not fall back to the package directory or the source
+    checkout. That used to look like success while writing
+    ``llmwiki-state.json`` next to the installed package.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(
+            "no vault configured. Pass --vault PATH or set "
+            "vault.default_path in config.json."
+        )
+
+
+_BOUND_VAULT: Path | None = None
+
+
+def clear_vault_binding() -> None:
+    """Drop the process vault so the next call resolves again.
+
+    Tests bind a throwaway vault per test. A binding left from an earlier
+    call would ignore that.
+    """
+    global _BOUND_VAULT
+    _BOUND_VAULT = None
+
+
+def bind_vault(path: Path) -> Path:
+    """Remember ``path`` as the only vault root for this process.
+
+    State is ``<vault>/llmwiki-state.json``. Later vault reads and writes
+    use this path instead of resolving again.
+    """
+    global _BOUND_VAULT
+    resolved = Path(path).expanduser().resolve()
+    _BOUND_VAULT = resolved
+    configure_state_file(resolved)
+    return resolved
+
+
+def active_vault() -> Path:
+    """Return the process vault, resolving it on the first call.
+
+    An explicit :func:`bind_vault` (CLI ``--vault``, or a test) wins.
+    Otherwise ``vault.default_path`` from config is bound and reused.
+    When neither is set, this raises :class:`VaultNotConfigured`.
+    """
+    if _BOUND_VAULT is not None:
+        return _BOUND_VAULT
+    default = load_default_vault_path()
+    if default is None:
+        raise VaultNotConfigured()
+    return bind_vault(default)
+
+
 def resolve_content_root() -> Path:
     """Return the directory containing ``raw/`` and ``wiki/`` for reads/writes.
 
-  Uses ``vault.default_path`` from config when set; otherwise the repo root.
-  Replaces the removed ``LLMWIKI_ROOT`` environment variable.
+    Same path as :func:`active_vault`. The package directory is not a vault.
     """
-    vault = load_default_vault_path()
-    if vault is not None:
-        return vault.expanduser().resolve()
-    return _CLONE_ROOT
+    return active_vault()
+
+
+def vault_path(*parts: str) -> Path:
+    """Join ``parts`` onto the one vault this process is bound to.
+
+    This is the only way to name ``raw/``, ``wiki/``, ``site/``, or
+    ``graph/``. Callers do not invent a second root.
+    """
+    return active_vault().joinpath(*parts)
+
+
+def resolve_vault_dir(
+    explicit: Path | None,
+    legacy: Path | None,
+    *parts: str,
+) -> Path:
+    """Return a directory inside the bound vault.
+
+    An explicit path wins. A ``legacy`` module global wins only when a
+    test has pointed it somewhere other than the code checkout
+    (``_CLONE_ROOT``). The checkout copy of ``raw/`` or ``wiki/`` is not
+    a vault.
+    """
+    if explicit is not None:
+        return explicit
+    packaged = _CLONE_ROOT.joinpath(*parts)
+    if legacy is not None and legacy != packaged:
+        return legacy
+    return vault_path(*parts)
 
 
 def apply_default_vault(args: Any) -> None:
-    """Fill ``args.vault`` from config and configure the active state file.
+    """Fill ``args.vault`` once and point state at that vault.
 
-    State path is resolved once at the CLI border — library modules must
-    not re-read ``config.json`` for ``llmwiki-state.json``.
+    ``--vault`` wins. Otherwise the first resolution reads
+    ``vault.default_path``. Library code then uses the bound vault and
+    does not read config again. ``--state-file``, when the command has
+    one, still overrides the state file after the vault is bound.
+    With neither ``--vault`` nor a configured default, the vault stays
+    unbound so a later read or write fails instead of using the package
+    directory.
     """
 
     if getattr(args, "vault", None) is None:
         default = load_default_vault_path()
         if default is not None:
             args.vault = default
+    if getattr(args, "vault", None) is not None:
+        bind_vault(args.vault)
     explicit_state = getattr(args, "state_file", None)
     if explicit_state is not None:
         configure_state_file(explicit_state)
-    elif getattr(args, "vault", None) is not None:
-        configure_state_file(args.vault)
-    else:
-        configure_state_file(REPO_ROOT)
 
 
 def load_schedule_config() -> dict[str, str]:

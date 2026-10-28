@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 
 from llmwiki.automation_units import DiscoveryResult
-from llmwiki.state_store import configure_state_file
+from llmwiki.config_schedule import bind_vault, clear_vault_binding
 from tests.settings_sandbox import SettingsSandbox, install_sandbox
 
 # Session hooks that fail a run which changed a tracked file or a real settings
@@ -42,6 +42,7 @@ def _isolate_default_vault(tmp_path_factory, monkeypatch):
     ``config.json``'s ``vault.default_path`` (e.g. an Obsidian vault) and
     can wipe ``llmwiki-state.json``.
     """
+    clear_vault_binding()
     isolated = tmp_path_factory.mktemp("llmwiki-default-vault")
     (isolated / "raw" / "sessions").mkdir(parents=True)
     (isolated / "raw" / "docs").mkdir(parents=True)
@@ -51,8 +52,8 @@ def _isolate_default_vault(tmp_path_factory, monkeypatch):
         "llmwiki.config_schedule.load_default_vault_path",
         lambda: isolated,
     )
-
-    configure_state_file(isolated)
+    # Bind so every vault path (state, raw/, wiki/) uses this throwaway root.
+    bind_vault(isolated)
     yield isolated
 
 

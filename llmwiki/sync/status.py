@@ -15,12 +15,16 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
-from llmwiki import REPO_ROOT
 from llmwiki import quarantine as _q
-from llmwiki.config_schedule import apply_default_vault, synthesis_status_hint
+from llmwiki.config_schedule import (
+    apply_default_vault,
+    resolve_vault_dir,
+    synthesis_status_hint,
+)
 from llmwiki.log_reader import recent_events
 from llmwiki.state_store import get_state_file, read_state
 
@@ -42,6 +46,13 @@ def cmd_sync_status(args: argparse.Namespace) -> int:
     """Report sync observability — last run, per-adapter counters, quarantined sources."""
 
     apply_default_vault(args)
+    if getattr(args, "vault", None) is None:
+        print(
+            "error: no vault configured. Pass --vault PATH or set "
+            "vault.default_path in config.json.",
+            file=sys.stderr,
+        )
+        return 2
     state_path = get_state_file()
 
     sync_state: dict = {}
@@ -126,7 +137,7 @@ def cmd_sync_status(args: argparse.Namespace) -> int:
         print(f"Hint: {hint}")
 
     if args.recent:
-        log_path = REPO_ROOT / "wiki" / "log.md"
+        log_path = resolve_vault_dir(None, None, "wiki", "log.md")
         events = recent_events(log_path, limit=args.recent, operations={"sync", "synthesize"})
         if events:
             print()

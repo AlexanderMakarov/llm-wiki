@@ -74,7 +74,9 @@ add = [
 ]
 dev = [
     "build>=1.2.0",
-    "pytest>=8.4.2",
+    # pytest 9.2 removed FixtureManager._arg2fixturedefs; pytest-bdd still
+    # reads it (pytest-dev/pytest-bdd#850). Cap until a compatible bdd ships.
+    "pytest>=8.4.2,<9.2",
     "pytest-cov>=6.0.0",
     "ruff>=0.15.11",
 ]
@@ -84,7 +86,7 @@ dev = [
 # Playwright installs ~300 MB of browsers per engine.
 # Install with: `pip install -e '.[e2e]'` then `playwright install chromium`
 e2e = [
-    "pytest>=8.4.2",
+    "pytest>=8.4.2,<9.2",
     "pytest-playwright>=0.7.1",
     "pytest-bdd>=8.1.0",
     "pytest-html>=4.2.0",

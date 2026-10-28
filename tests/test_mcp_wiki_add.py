@@ -8,6 +8,7 @@ module global), never the operator live vault.
 
 from __future__ import annotations
 
+import argparse
 import json
 import threading
 import time
@@ -17,6 +18,9 @@ from unittest.mock import patch
 import llmwiki.add_pipeline as pipe
 from llmwiki._frontmatter import parse_frontmatter
 from llmwiki.add_pipeline import run_add
+from llmwiki.cli import cmd_queue
+from llmwiki.config_schedule import clear_vault_binding
+from llmwiki.mcp import server as mcp_server
 from llmwiki.mcp.server import TOOL_IMPLS, TOOLS, tool_wiki_add
 from llmwiki.state_store import configure_state_file
 
@@ -55,10 +59,13 @@ def test_wiki_add_schema_exposes_synthesize_and_no_build():
     props = _schema_props()
     assert props["synthesize"]["default"] is False
     assert props["no_build"]["default"] is False
+    assert "operation_id" in props
     desc = next(t for t in TOOLS if t["name"] == "wiki_add")["description"]
     assert "Proxy for CLI" in desc or "proxy" in desc.lower()
     assert "synthesize" in desc.lower()
     assert "do not reconstruct" in desc.lower() or "unless the user asked" in desc
+    assert "operation_id" in desc
+    assert "filesystem" in desc
 
 
 # ─── Input validation ──────────────────────────────────────────────
@@ -383,11 +390,11 @@ def test_wiki_add_build_failed_returns_ok_with_warning(tmp_path: Path, monkeypat
 
 
 def test_wiki_add_timeout_returns_within_budget(tmp_path: Path, monkeypatch):
-    """The timeout error comes back on the budget, not when the add ends (#286).
+    """A timed-out add returns pending JSON within the budget (#286, #306).
 
-    A slow add used to be waited out anyway: the worker pool was entered as a
-    context manager, whose ``__exit__`` joins the worker, so the client saw a
-    transport timeout instead of this error. Guarded by wall clock.
+    The id is minted in the parent, so the payload names the operation even
+    though this stubbed ``run_add`` has not returned. Guarded by wall clock:
+    the worker pool must not be joined.
     """
     vault = _vault(tmp_path)
     release = threading.Event()
@@ -411,16 +418,204 @@ def test_wiki_add_timeout_returns_within_budget(tmp_path: Path, monkeypatch):
     finally:
         release.set()
 
-    assert result["isError"] is True
-    text = _result_text(result)
-    assert "budget" in text
-    assert "mcp.tool_timeouts.wiki_add" in text
-    # Verify-before-retry guidance, so an agent does not duplicate the doc.
-    assert "wiki_search" in text and "raw/docs/" in text
+    assert result["isError"] is False
+    payload = _result_json(result)
+    assert payload["status"] == "running"
+    assert str(payload["operation_id"]).startswith("add-sync-")
+    assert payload["retry_safe"] is False
+    message = payload["message"]
+    assert "budget" in message
+    assert "mcp.tool_timeouts.wiki_add" in message
+    # Verify-before-retry guidance stays inside the message.
+    assert "wiki_search" in message and "raw/docs/" in message
     assert elapsed < slow_seconds / 3, (
         f"wiki_add waited {elapsed:.1f}s for a worker it had already given "
         "up on — the timeout must not join the add"
     )
+
+
+# ─── Issue #306: timeout + poll path ────────────────────────────────────────
+
+
+# @layer: integration
+# @spec: fix-306-wiki-add-operation-result
+# @regression
+def test_wiki_add_timeout_then_succeeds(tmp_path: Path, monkeypatch):
+    """Pending JSON on timeout; poll resolves to done once the background add lands.
+
+    Uses ``build_site`` as the slow point so ``add_sources`` still writes the
+    raw doc and the queue row — a stub on ``run_add`` would never write either.
+    Fails if the poll path (operation_id → queue row) or the pending op-id is
+    removed from the timeout response.
+    """
+    vault = _vault(tmp_path)
+    release = threading.Event()
+    slow_seconds = 30.0
+
+    def _blocking_build(**kw):
+        release.wait(slow_seconds)
+        return 0
+
+    # monkeypatch keeps the patch alive for the whole test, including while the
+    # background worker thread is still running after tool_wiki_add returns.
+    monkeypatch.setattr(pipe, "build_site", _blocking_build)
+    monkeypatch.setattr("llmwiki.mcp.server.REPO_ROOT", vault)
+    monkeypatch.setattr("llmwiki.mcp.server._mcp_tool_timeout", lambda _name: 0.2)
+
+    started = time.monotonic()
+    try:
+        result = tool_wiki_add({"content": "# Pending Then Done\n\nbody\n"})
+        elapsed = time.monotonic() - started
+
+        assert result["isError"] is False
+        payload = _result_json(result)
+        assert payload["status"] == "running"
+        operation_id = payload["operation_id"]
+        assert str(operation_id).startswith("add-sync-")
+        assert payload["retry_safe"] is False
+        assert elapsed < slow_seconds / 3, (
+            f"tool_wiki_add blocked {elapsed:.1f}s — timeout must not join the worker"
+        )
+
+        # Unblock the background add, then poll until terminal.
+        release.set()
+        deadline = time.monotonic() + 5.0
+        final_poll = None
+        done_payload = None
+        while time.monotonic() < deadline:
+            p = tool_wiki_add({"operation_id": operation_id})
+            if p["isError"]:
+                # Row not written yet (transient race at worker start); retry.
+                time.sleep(0.05)
+                continue
+            j = _result_json(p)
+            if j["status"] in ("done", "error"):
+                final_poll = p
+                done_payload = j
+                break
+            time.sleep(0.1)
+
+        assert done_payload is not None, "add did not reach terminal status within 5s"
+        assert final_poll["isError"] is False
+        assert done_payload["status"] == "done"
+        assert done_payload["retry_safe"] is False
+        assert done_payload["build_failed"] is False
+        assert done_payload["written"], "expected at least one written path"
+        for rel in done_payload["written"]:
+            assert not rel.startswith("/"), f"absolute path leaked: {rel}"
+        assert done_payload["errors"] == []
+    finally:
+        release.set()
+
+
+# @layer: integration
+# @spec: fix-306-wiki-add-operation-result
+# @regression
+def test_wiki_add_timeout_then_fails(tmp_path: Path, monkeypatch):
+    """Pending JSON on timeout; poll resolves to error with retry_safe=true when add errors.
+
+    Blocks ``add_sources`` (not ``build_site``) so the worker never writes a
+    file; the queue row therefore records ``files_remain=False`` which makes
+    ``retry_safe`` true.  Fails if the poll path or the pending op-id is removed.
+    """
+    vault = _vault(tmp_path)
+    release = threading.Event()
+    slow_seconds = 30.0
+
+    def _blocking_add_sources(sources, docs_dir, **kw):
+        release.wait(slow_seconds)
+        return {
+            "written": [],
+            "titles": [],
+            "warnings": [],
+            "errors": ["conversion failed"],
+            "docs": [],
+            "skipped": [],
+        }
+
+    monkeypatch.setattr(pipe, "add_sources", _blocking_add_sources)
+    monkeypatch.setattr("llmwiki.mcp.server.REPO_ROOT", vault)
+    monkeypatch.setattr("llmwiki.mcp.server._mcp_tool_timeout", lambda _name: 0.2)
+
+    started = time.monotonic()
+    try:
+        result = tool_wiki_add({"content": "# Pending Then Fail\n\nbody\n"})
+        elapsed = time.monotonic() - started
+
+        assert result["isError"] is False
+        payload = _result_json(result)
+        assert payload["status"] == "running"
+        operation_id = payload["operation_id"]
+        assert str(operation_id).startswith("add-sync-")
+        assert payload["retry_safe"] is False
+        assert elapsed < slow_seconds / 3, (
+            f"tool_wiki_add blocked {elapsed:.1f}s — timeout must not join the worker"
+        )
+
+        # Unblock the background add, then poll until terminal.
+        release.set()
+        deadline = time.monotonic() + 5.0
+        final_poll = None
+        done_payload = None
+        while time.monotonic() < deadline:
+            p = tool_wiki_add({"operation_id": operation_id})
+            if p["isError"]:
+                # Row not written yet (transient race at worker start); retry.
+                time.sleep(0.05)
+                continue
+            j = _result_json(p)
+            if j["status"] in ("done", "error"):
+                final_poll = p
+                done_payload = j
+                break
+            time.sleep(0.1)
+
+        assert done_payload is not None, "add did not reach terminal status within 5s"
+        assert final_poll["isError"] is False
+        assert done_payload["status"] == "error"
+        assert done_payload["retry_safe"] is True
+        assert done_payload["build_failed"] is False
+        assert done_payload["written"] == []
+        assert any("conversion failed" in e for e in done_payload["errors"])
+    finally:
+        release.set()
+
+
+def test_wiki_add_operation_row_is_in_the_resolved_vault(tmp_path, monkeypatch):
+    """The add row is in the one resolved vault, not beside the package.
+
+    Does not patch ``server.REPO_ROOT`` and does not point state at a second
+    directory. Config names the vault; the server and ``queue status`` both
+    use that path.
+    """
+    vault = _vault(tmp_path)
+    clear_vault_binding()
+    monkeypatch.setattr("llmwiki.state_store._ACTIVE_STATE_FILE", None)
+    monkeypatch.setattr(
+        "llmwiki.config_schedule.load_default_vault_path", lambda: vault
+    )
+    monkeypatch.setattr(pipe, "build_site", lambda **kw: 0)
+    assert mcp_server.REPO_ROOT is None
+
+    result = tool_wiki_add({"content": "# Same Vault\n\nbody\n"})
+    assert result["isError"] is False, _result_text(result)
+    payload = _result_json(result)
+    operation_id = payload["operation_id"]
+    state = json.loads((vault / "llmwiki-state.json").read_text(encoding="utf-8"))
+    ids = [
+        it.get("id")
+        for it in state.get("queue", {}).get("items", [])
+        if isinstance(it, dict)
+    ]
+    assert operation_id in ids
+
+    args = argparse.Namespace(
+        queue_action="status",
+        operation_id=operation_id,
+        vault=vault,
+        state_file=None,
+    )
+    assert cmd_queue(args) == 0
 
 
 def test_wiki_add_blocked_on_lock_reports_the_holder(tmp_path: Path, monkeypatch):

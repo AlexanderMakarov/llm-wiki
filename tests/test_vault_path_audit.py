@@ -13,7 +13,6 @@ from pathlib import Path
 
 import pytest
 
-from llmwiki import REPO_ROOT
 from llmwiki import cli as cli_mod
 
 
@@ -112,13 +111,16 @@ def test_content_root_falls_back_to_configured_default(tmp_path, monkeypatch):
     assert cli_mod._content_root(args) == vault.resolve()
 
 
-def test_content_root_uses_repo_when_no_vault_configured(monkeypatch):
-    """Demo/dev mode: no vault anywhere means the repo is the content root."""
+def test_content_root_errors_when_no_vault_configured(monkeypatch, capsys):
+    """No --vault and no config vault is an error, not the package directory."""
     monkeypatch.setattr(
         "llmwiki.config_schedule.load_default_vault_path", lambda: None
     )
     args = cli_mod.build_parser().parse_args(["lint"])
-    assert cli_mod._content_root(args) == REPO_ROOT
+    with pytest.raises(SystemExit) as exc:
+        cli_mod._content_root(args)
+    assert exc.value.code == 2
+    assert "no vault configured" in capsys.readouterr().err
 
 
 def test_content_root_errors_when_configured_vault_is_unusable(tmp_path, monkeypatch, capsys):

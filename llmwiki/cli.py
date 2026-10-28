@@ -76,7 +76,7 @@ from llmwiki.automation_units import (
     unit_for_vault,
     unit_names,
 )
-from llmwiki.build import RAW_DIR, RAW_SESSIONS, build_site
+from llmwiki.build import build_site
 from llmwiki.cache import MODEL_PRICING, resolve_pricing_model
 from llmwiki.candidates import (
     KeyFactsBackendError,
@@ -106,7 +106,7 @@ from llmwiki.claude_path import resolve_claude_path
 from llmwiki.config_schedule import (
     _load_sessions_config,
     apply_default_vault,
-    load_default_vault_path,
+    load_default_vault_path,  # noqa: F401 — tests patch cli.load_default_vault_path
     load_synthesis_backend,
     user_config_path,
 )
@@ -116,7 +116,7 @@ from llmwiki.config_schedule import (
 from llmwiki.config_schedule import (
     should_run_after_sync as _should_run_after_sync,
 )
-from llmwiki.convert import DEFAULT_OUT_DIR, convert_all
+from llmwiki.convert import convert_all
 from llmwiki.cron_spec import CronError, describe, parse_cron
 from llmwiki.doctor import (
     DoctorMode,
@@ -137,7 +137,13 @@ from llmwiki.lint.report import render_ops_error as _render_lint_ops_error
 from llmwiki.lint.report import render_text as _render_lint_text
 from llmwiki.pipeline import run_pipeline as _run_pipeline
 from llmwiki.pipeline_lock import pipeline_lock
-from llmwiki.queue_ops import enqueue_task, queue_status, run_queue
+from llmwiki.queue_ops import (
+    enqueue_task,
+    lookup_add_operation,
+    queue_status,
+    run_queue,
+    unknown_add_operation,
+)
 from llmwiki.reindex import (
     apply_reindex,
     plan_reindex,
@@ -209,62 +215,52 @@ from llmwiki.vault_settings import (
 )
 from llmwiki.watch import watch as watch_loop
 
-#: Subcommands that write a vault's own content — ``raw/``, ``wiki/`` or
-#: ``site/`` — into whatever content root they resolve. With no vault named
-#: that root is ``REPO_ROOT``, so these are the commands the source-checkout
-#: guard covers: they are what turns a clone into a half-vault. ``add``,
-#: ``all`` and ``watch`` are compositions of ``sync`` / ``synth`` / ``build``
-#: and are guarded for the same reason. Reporting commands (``lint``,
-#: ``query``, ``trace``, ``usage``, ``adapters``) only read, and
-#: commands that edit an existing vault in place (``candidates``, ``remove``,
-#: ``graph``) have nothing to edit in a checkout whose root can no longer
-#: become a vault.
+#: Subcommands that write a vault's own content. The guard runs when the
+#: vault they resolved is the source checkout. A missing vault is a
+#: separate error (``no vault configured``) and does not fall through to
+#: the checkout. ``add``, ``all`` and ``watch`` write the same trees.
 _SOURCE_CHECKOUT_GUARDED_COMMANDS = frozenset(
     {"init", "sync", "synth", "add", "build", "all", "watch"}
 )
 
 
 def _apply_default_vault(args: argparse.Namespace) -> None:
-    """Resolve ``args.vault`` from config, then guard the source checkout.
+    """Bind ``args.vault`` once, then refuse a source-checkout vault.
 
-    Every vault-resolving command calls this before it picks a content root,
-    which makes it the one place where "no vault named" becomes "write into
-    ``REPO_ROOT``" — and therefore the place the guard belongs. The guard is
-    keyed on the parsed subcommand name, so it applies at the CLI border and
-    leaves direct library calls to the ``cmd_*`` functions alone.
+    ``--vault`` or ``vault.default_path`` is the vault. Nothing is bound
+    when both are absent, so a later read or write fails instead of using
+    the checkout. When a vault is bound, writing commands refuse it if it
+    is the source checkout. The guard is keyed on the parsed subcommand,
+    so a direct library call that builds its own ``Namespace`` is left alone.
     """
     apply_default_vault(args)
-    if getattr(args, "vault", None) is not None:
-        return
+    vault = getattr(args, "vault", None)
     command = getattr(args, "cmd", None)
-    if command not in _SOURCE_CHECKOUT_GUARDED_COMMANDS:
+    if vault is None or command not in _SOURCE_CHECKOUT_GUARDED_COMMANDS:
         return
     try:
-        ensure_not_source_checkout(REPO_ROOT, command)
+        ensure_not_source_checkout(Path(vault).expanduser(), command)
     except SourceCheckoutError as exc:
         print(str(exc), file=sys.stderr)
         raise SystemExit(2) from exc
 
 
 def _content_root(args: argparse.Namespace) -> Path:
-    """Resolve the content root a command should read and write.
+    """Resolve the one vault root this command reads and writes.
 
-    The vault (``--vault``, else ``config.json`` ``vault.default_path``)
-    owns the user's ``raw/`` + ``wiki/``; ``REPO_ROOT`` is the content root
-    only in demo/dev mode, when no vault is configured at all. Commands
-    take their directory defaults from here — a module-level
-    ``REPO_ROOT / "wiki"`` default silently targets the git clone's seed
-    content instead of the user's vault.
-
-    A configured-but-unusable vault is a hard error (exit 2), matching
-    ``build`` / ``all``. Falling back to the repo would write the user's
-    content into the git clone on a typo — exactly what routing through
-    here prevents.
+    ``--vault``, else ``config.json`` ``vault.default_path``, bound on the
+    first call and reused. A missing vault is an error. The package
+    directory and the source checkout are not implicit vaults.
     """
     _apply_default_vault(args)
     configured = getattr(args, "vault", None)
     if configured is None:
-        return REPO_ROOT
+        print(
+            "error: no vault configured. Pass --vault PATH or set "
+            "vault.default_path in config.json.",
+            file=sys.stderr,
+        )
+        raise SystemExit(2)
     try:
         return resolve_vault(Path(configured).expanduser()).root
     except (FileNotFoundError, NotADirectoryError) as exc:
@@ -294,7 +290,10 @@ def cmd_all(args: argparse.Namespace) -> int:
             "runs by default. Use --no-sync / --no-synth to skip one.",
             file=sys.stderr,
         )
-    _apply_default_vault(args)
+    try:
+        _content_root(args)
+    except SystemExit as exc:
+        return exc.code if isinstance(exc.code, int) else 2
     return _run_pipeline(args)
 
 
@@ -303,32 +302,36 @@ def cmd_init(args: argparse.Namespace) -> int:
 
     #29: scaffold into the configured vault (``--vault`` / ``config.json``
     ``vault.default_path``) so personal data lands outside the git clone.
-    With no vault configured the scaffold lands in REPO_ROOT, which
-    ``_apply_default_vault`` refuses when REPO_ROOT is an llmwiki source
-    checkout (#109).
+    With no vault configured, init refuses. It does not scaffold the
+    source checkout or the package directory.
     """
     _apply_default_vault(args)
-    base = REPO_ROOT
-    if getattr(args, "vault", None):
-        vault_arg = Path(args.vault).expanduser()
-        # `init` is the bootstrap command: create the vault root if it does
-        # not exist yet instead of erroring out (#29 review). Print the
-        # creation so a wrong/unmounted path is visible, not silently masked.
-        # An existing path that is not a directory still errors via resolve_vault.
-        if not vault_arg.exists():
-            try:
-                vault_arg.mkdir(parents=True, exist_ok=True)
-            except OSError as exc:
-                print(f"error: cannot create vault directory {vault_arg}: {exc}",
-                      file=sys.stderr)
-                return 2
-            print(f"==> created vault directory: {vault_arg}")
+    if not getattr(args, "vault", None):
+        print(
+            "error: no vault configured. Pass --vault PATH or set "
+            "vault.default_path in config.json.",
+            file=sys.stderr,
+        )
+        return 2
+    vault_arg = Path(args.vault).expanduser()
+    # `init` is the bootstrap command: create the vault root if it does
+    # not exist yet instead of erroring out (#29 review). Print the
+    # creation so a wrong/unmounted path is visible, not silently masked.
+    # An existing path that is not a directory still errors via resolve_vault.
+    if not vault_arg.exists():
         try:
-            base = resolve_vault(vault_arg).root
-        except (FileNotFoundError, NotADirectoryError) as exc:
-            print(f"error: {exc}", file=sys.stderr)
+            vault_arg.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            print(f"error: cannot create vault directory {vault_arg}: {exc}",
+                  file=sys.stderr)
             return 2
-        print(f"==> scaffolding into vault: {base}")
+        print(f"==> created vault directory: {vault_arg}")
+    try:
+        base = resolve_vault(vault_arg).root
+    except (FileNotFoundError, NotADirectoryError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    print(f"==> scaffolding into vault: {base}")
 
     # The wiki/ folders here are the page-kind homes reindex.CANONICAL_FOLDERS
     # catalogs — a fresh vault has somewhere to file every kind it can write.
@@ -387,32 +390,17 @@ def cmd_sync(args: argparse.Namespace) -> int:
     if getattr(args, "status", False):
         return cmd_sync_status(args)
 
-    _apply_default_vault(args)
-
-
-    # v1.2 (#54): vault-overlay mode — resolve the vault early so bad
-    # paths fail before we spend time converting sessions.
-    # #470: actually wire the resolved vault root through to convert_all.
-    # Previously this block printed a banner and then called convert_all
-    # with no vault/out_dir argument, so all 500+ sessions wrote to the
-    # repo's raw/sessions/ instead of the vault. The summary line said
-    # "507 converted" but the vault directory was empty.
-    vault_path = getattr(args, "vault", None)
-    out_dir = DEFAULT_OUT_DIR
+    try:
+        root = _content_root(args)
+    except SystemExit as exc:
+        return exc.code if isinstance(exc.code, int) else 2
+    vault = resolve_vault(root)
+    print(f"==> {describe_vault(vault)}")
+    if args.allow_overwrite:
+        print("  --allow-overwrite: existing vault pages may be clobbered")
+    # State file is configured at the CLI border via apply_default_vault.
+    out_dir = vault.root / "raw" / "sessions"
     state_file = resolve_state_file()
-    if vault_path:
-        try:
-            vault = resolve_vault(vault_path)
-        except (FileNotFoundError, NotADirectoryError) as exc:
-            print(f"error: {exc}", file=sys.stderr)
-            return 2
-        print(f"==> {describe_vault(vault)}")
-        if args.allow_overwrite:
-            print("  --allow-overwrite: existing vault pages may be clobbered")
-        # Route writes into the vault so a vault-mode sync actually
-        # populates the vault. State file is configured at the CLI border
-        # via ``apply_default_vault`` → ``configure_state_file``.
-        out_dir = vault.root / "raw" / "sessions"
 
     # #29: downgrade / corrupt-state guard. An older engine (or a truncated
     # write) that reads the vault's unified state as "empty" would silently
@@ -429,8 +417,7 @@ def cmd_sync(args: argparse.Namespace) -> int:
 
     # PR #19 field report: two llmwiki processes on one vault corrupt each
     # other's site resets — serialize the mutating pipeline on a vault lock.
-    lock_root = vault.root if vault_path else REPO_ROOT
-    with pipeline_lock(lock_root):
+    with pipeline_lock(vault.root):
         rc = convert_all(
             adapters=args.adapter,
             out_dir=out_dir,
@@ -442,9 +429,9 @@ def cmd_sync(args: argparse.Namespace) -> int:
             fail_on_errors=getattr(args, "fail_on_errors", False),
         )
         refresh_synth_pending(
-            raw_dir=(vault.root / "raw" / "sessions") if vault_path else None,
-            docs_dir=(vault.root / "raw" / "docs") if vault_path else None,
-            wiki_sources_dir=(vault.root / "wiki" / "sources") if vault_path else None,
+            raw_dir=vault.root / "raw" / "sessions",
+            docs_dir=vault.root / "raw" / "docs",
+            wiki_sources_dir=vault.root / "wiki" / "sources",
             state_file=state_file,
         )
 
@@ -455,16 +442,12 @@ def cmd_sync(args: argparse.Namespace) -> int:
         # repo's site/ and the user's vault stays empty.
         if rc == 0:
             schedule = _load_schedule_config()
-            site_root = (vault.root / "site") if vault_path else (REPO_ROOT / "site")
-            # #54: read/graph the vault's wiki/ (not the repo's demo wiki).
-            wiki_dir = (vault.root / "wiki") if vault_path else (REPO_ROOT / "wiki")
+            site_root = vault.root / "site"
+            wiki_dir = vault.root / "wiki"
             if args.auto_build and _should_run_after_sync(schedule.get("build", "on-sync")):
                 print("  auto-build: regenerating site/...")
-                # #54 vault-overlay: read the freshly-synced sessions from the
-                # vault, not the repo's empty raw/ (which makes auto-build fail
-                # with "RAW_SESSIONS does not exist" right after a vault sync).
-                raw_sessions = (vault.root / "raw" / "sessions") if vault_path else RAW_SESSIONS
-                raw_dir = (vault.root / "raw") if vault_path else RAW_DIR
+                raw_sessions = vault.root / "raw" / "sessions"
+                raw_dir = vault.root / "raw"
                 # #414: sync has explicit user opt-in to mutate wiki/, so it's
                 # the right place to seed project stubs.
                 build_site(out_dir=site_root, seed_project_stubs=True,
@@ -482,7 +465,7 @@ def cmd_sync(args: argparse.Namespace) -> int:
                 print("  auto-lint: running wiki lint...")
                 # #470: lint the vault's wiki/, not the repo's, when in
                 # vault-overlay mode.
-                pages = load_pages(wiki_dir) if vault_path else load_pages()
+                pages = load_pages(wiki_dir)
                 issues = run_all(pages)
                 summary = summarize(issues)
                 print(f"  lint: {sum(summary.values())} issues "
@@ -497,30 +480,19 @@ def cmd_sync(args: argparse.Namespace) -> int:
 
 def cmd_build(args: argparse.Namespace) -> int:
     """Build the static HTML site."""
-    _apply_default_vault(args)
-    # v1.2 (#54): vault-overlay mode. Validate the path up front so a
-    # typo fails fast before the build walks raw/.
-    raw_sessions, raw_dir, out_dir = RAW_SESSIONS, RAW_DIR, args.out
-    wiki_dir = REPO_ROOT / "wiki"
-    lock_root = REPO_ROOT
-    if getattr(args, "vault", None):
-        try:
-            vault = resolve_vault(args.vault)
-        except (FileNotFoundError, NotADirectoryError) as exc:
-            print(f"error: {exc}", file=sys.stderr)
-            return 2
-        print(f"==> {describe_vault(vault)}")
-        # Read sessions from the vault, and (unless --out was overridden)
-        # write the site under the vault so a vault build doesn't silently
-        # populate the repo's site/.
-        raw_dir = vault.root / "raw"
-        raw_sessions = raw_dir / "sessions"
-        wiki_dir = vault.root / "wiki"
-        lock_root = vault.root
-        if args.out == REPO_ROOT / "site":
-            out_dir = vault.root / "site"
+    try:
+        root = _content_root(args)
+    except SystemExit as exc:
+        return exc.code if isinstance(exc.code, int) else 2
+    vault = resolve_vault(root)
+    print(f"==> {describe_vault(vault)}")
+    raw_dir = vault.root / "raw"
+    raw_sessions = raw_dir / "sessions"
+    wiki_dir = vault.root / "wiki"
+    # ``--out`` omitted means the vault's site/. An explicit path is kept.
+    out_dir = vault.root / "site" if args.out is None else args.out
 
-    with pipeline_lock(lock_root):
+    with pipeline_lock(vault.root):
         return build_site(
             out_dir=out_dir,
             synthesize=args.synthesize,
@@ -543,8 +515,10 @@ def cmd_usage(args: argparse.Namespace) -> int:
     at a glance. Local-only — reads files, never the network.
     """
 
-    _apply_default_vault(args)
-    root = Path(args.vault).expanduser().resolve() if getattr(args, "vault", None) else REPO_ROOT
+    try:
+        root = _content_root(args)
+    except SystemExit as exc:
+        return exc.code if isinstance(exc.code, int) else 2
 
     if getattr(args, "compact", False):
         usage.compact(root)
@@ -1177,9 +1151,10 @@ def cmd_lint(args: argparse.Namespace) -> int:
 
 def cmd_watch(args: argparse.Namespace) -> int:
     """Near-real-time maintain when sessions finish."""
-    _apply_default_vault(args)
-    vault = getattr(args, "vault", None)
-    vault_path = Path(vault) if vault else None
+    try:
+        vault_path = _content_root(args)
+    except SystemExit as exc:
+        return exc.code if isinstance(exc.code, int) else 2
     return watch_loop(
         adapters=getattr(args, "adapter", None),
         interval=getattr(args, "interval", 5.0),
@@ -1577,12 +1552,17 @@ def _checkout_of_existing_schedule(vault_root: Path) -> Path | None:
 
 def cmd_install_automation(args: argparse.Namespace) -> int:
     """Set up the daily job: what it does, when it runs, then write the scheduler files."""
+    # Bind the vault without requiring it to exist yet — the wizard writes
+    # scheduler files that name this path; the vault may be created later.
     _apply_default_vault(args)
-
-    vault = getattr(args, "vault", None)
-    vault_root = Path(vault) if vault else (load_default_vault_path() or REPO_ROOT)
-    if vault_root is None:
-        vault_root = REPO_ROOT
+    if not getattr(args, "vault", None):
+        print(
+            "error: no vault configured. Pass --vault PATH or set "
+            "vault.default_path in config.json.",
+            file=sys.stderr,
+        )
+        return 2
+    vault_root = Path(args.vault).expanduser().resolve()
 
     yes = bool(getattr(args, "yes", False))
     install_hooks = False
@@ -1715,10 +1695,21 @@ def cmd_install_automation(args: argparse.Namespace) -> int:
 
 def cmd_queue(args: argparse.Namespace) -> int:
 
-    _apply_default_vault(args)
+    try:
+        _content_root(args)
+    except SystemExit as exc:
+        return exc.code if isinstance(exc.code, int) else 2
     vault = getattr(args, "vault", None)
     target = resolve_state_file()
     if args.queue_action == "status":
+        op_id = str(getattr(args, "operation_id", "") or "").strip()
+        if op_id:
+            view = lookup_add_operation(op_id, target)
+            if view is None:
+                print(json.dumps(unknown_add_operation(op_id), indent=2))
+                return 1
+            print(json.dumps(view, indent=2))
+            return 0
         stat = queue_status(target)
         state = read_state(target)
         items = state.get("queue", {}).get("items", [])
@@ -2243,14 +2234,10 @@ def _run_candidate_harvest(args: argparse.Namespace) -> int:
     backlog, so this must still work when the backend is unreachable — and
     must say so rather than quietly filing everything as unknown.
     """
-    wiki_dir = REPO_ROOT / "wiki"
-    vault_path = getattr(args, "vault", None)
-    if vault_path:
-        try:
-            wiki_dir = resolve_vault(vault_path).root / "wiki"
-        except (FileNotFoundError, NotADirectoryError) as exc:
-            print(f"error: {exc}", file=sys.stderr)
-            return 2
+    try:
+        wiki_dir = _content_root(args) / "wiki"
+    except SystemExit as exc:
+        return exc.code if isinstance(exc.code, int) else 2
 
     try:
         backend = resolve_backend(_load_sessions_config())
@@ -2431,23 +2418,12 @@ def cmd_synthesize(args: argparse.Namespace) -> int:
         )
         return 1
 
-    # #420: vault-overlay mode isolates raw/wiki to the vault root.
-    vault_path = getattr(args, "vault", None)
-    raw_dir = wiki_sources_dir = None
-    vault_root = REPO_ROOT
-    if vault_path:
-        try:
-            vault = resolve_vault(vault_path)
-        except (FileNotFoundError, NotADirectoryError) as exc:
-            print(f"error: {exc}", file=sys.stderr)
-            return 2
-        # Post-final-review: Vault is a frozen dataclass with no
-        # __truediv__ — `vault / "raw"` raises TypeError. cmd_sync at
-        # line 205 correctly uses `vault.root / "raw"`; this site was
-        # the missed copy. Caught by the multi-agent code review.
-        vault_root = vault.root
-        raw_dir = vault.root / "raw" / "sessions"
-        wiki_sources_dir = vault.root / "wiki" / "sources"
+    try:
+        vault_root = _content_root(args)
+    except SystemExit as exc:
+        return exc.code if isinstance(exc.code, int) else 2
+    raw_dir = vault_root / "raw" / "sessions"
+    wiki_sources_dir = vault_root / "wiki" / "sources"
 
     only_paths = None
     if path_args:
@@ -2494,11 +2470,7 @@ def cmd_synthesize(args: argparse.Namespace) -> int:
         if sources_only:
             print("llmwiki synth --candidates-only")
         else:
-            harvest_wiki = (
-                wiki_sources_dir.parent
-                if wiki_sources_dir is not None
-                else (REPO_ROOT / "wiki")
-            )
+            harvest_wiki = wiki_sources_dir.parent
             min_refs = getattr(args, "min_refs", DEFAULT_MIN_REFS)
             rc = run_harvest(
                 harvest_wiki,
@@ -2529,9 +2501,7 @@ def cmd_synthesize(args: argparse.Namespace) -> int:
             cost_usd=summary.get("cost_usd"),
         )
         return 0
-    harvest_wiki = (
-        wiki_sources_dir.parent if wiki_sources_dir is not None else (REPO_ROOT / "wiki")
-    )
+    harvest_wiki = wiki_sources_dir.parent
     min_refs = getattr(args, "min_refs", DEFAULT_MIN_REFS)
     rc = run_harvest(
         harvest_wiki,
@@ -2576,16 +2546,11 @@ def cmd_add(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
 
-    docs_dir = REPO_ROOT / "raw" / "docs"
-    vault_root = None
-    if getattr(args, "vault", None):
-        try:
-            vault = resolve_vault(args.vault)
-        except (FileNotFoundError, NotADirectoryError) as exc:
-            print(f"error: {exc}", file=sys.stderr)
-            return 2
-        vault_root = vault.root
-        docs_dir = vault_root / "raw" / "docs"
+    try:
+        vault_root = _content_root(args)
+    except SystemExit:
+        raise
+    docs_dir = vault_root / "raw" / "docs"
 
     render = "auto"
     if args.render:
@@ -2600,7 +2565,7 @@ def cmd_add(args: argparse.Namespace) -> int:
 
     with ExitStack() as stack:
         if not args.dry_run:
-            stack.enter_context(pipeline_lock(vault_root or REPO_ROOT))
+            stack.enter_context(pipeline_lock(vault_root))
         return _cmd_add_locked(args, docs_dir, vault_root, render)
 
 
@@ -2634,18 +2599,12 @@ def cmd_remove(args: argparse.Namespace) -> int:
     cascade and touches nothing; a real run needs ``--yes`` (or an
     interactive confirm) — cascade deletion is never silent.
     """
-    _apply_default_vault(args)
+    try:
+        vault_root = _content_root(args)
+    except SystemExit as exc:
+        return exc.code if isinstance(exc.code, int) else 2
 
-
-    vault_root = REPO_ROOT
-    if getattr(args, "vault", None):
-        try:
-            vault_root = resolve_vault(args.vault).root
-        except (FileNotFoundError, NotADirectoryError) as exc:
-            print(f"error: {exc}", file=sys.stderr)
-            return 2
-
-    state_file = vault_root / "llmwiki-state.json"
+    state_file = resolve_state_file()
     plan = build_remove_plan(vault_root, args.selector, state_file=state_file)
 
     if args.dry_run:
@@ -2704,7 +2663,10 @@ def _synthesize_estimate(
     :func:`cmd_synthesize`; when omitted, this applies the same overlay.
     """
     args = args or argparse.Namespace(vault=None)
-    _apply_default_vault(args)
+    try:
+        _content_root(args)
+    except SystemExit as exc:
+        return exc.code if isinstance(exc.code, int) else 2
     raw_sessions = None
     state_keys = None
     wiki_sources_dir = None
@@ -3377,7 +3339,7 @@ def build_parser() -> argparse.ArgumentParser:
         Run sync (and synth) first when those layers should catch up; run candidates when you need the Candidates page to match reviewed stubs.
         """,
     )
-    build.add_argument("--out", type=Path, default=REPO_ROOT / "site", help="Output dir (default: site/)")
+    build.add_argument("--out", type=Path, default=None, help="Output dir (default: <vault>/site)")
     build.add_argument(
         "--synthesize",
         action="store_true",
@@ -3582,6 +3544,15 @@ def build_parser() -> argparse.ArgumentParser:
     queue_p.add_argument("--task-type", default="add_doc", choices=["add_doc", "session_sync", "synthesize", "build"])
     queue_p.add_argument("--source", default="", help="Source value for add_doc enqueue")
     queue_p.add_argument("--state-file", type=Path, default=None, help="Override state file path")
+    queue_p.add_argument(
+        "--id",
+        dest="operation_id",
+        default="",
+        help=(
+            "With status: print one add operation as JSON and exit 0, "
+            "or the unknown object and exit 1"
+        ),
+    )
     _add_vault_arg(queue_p, role="synthesize")
     queue_p.set_defaults(func=cmd_queue)
 
@@ -4275,8 +4246,8 @@ def build_parser() -> argparse.ArgumentParser:
         """,
     )
     all_p.add_argument(
-        "--out", type=Path, default=REPO_ROOT / "site",
-        help="Output dir for build (default: site/, or <vault>/site with --vault)",
+        "--out", type=Path, default=None,
+        help="Output dir for build (default: <vault>/site)",
     )
     all_p.add_argument(
         "--search-mode", choices=["auto", "tree", "flat"], default="auto",

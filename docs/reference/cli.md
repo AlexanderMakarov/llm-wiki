@@ -608,13 +608,14 @@ Manage the unified vault queue in `llmwiki-state.json`.
 python3 -m llmwiki queue
 python3 -m llmwiki queue enqueue --task-type add_doc --source https://example.com
 python3 -m llmwiki queue run --vault /path/to/vault --limit 20
+python3 -m llmwiki queue status --id add-sync-1
 ```
 
 ### Positional
 
 | Value | What |
 |---|---|
-| `status` | Print queue counts, task-type breakdown, state path, and oldest pending timestamp. |
+| `status` | Print queue counts, task-type breakdown, state path, and oldest pending timestamp. With `--id <operation_id>`, print one JSON object for that add (`status`, `operation_id`, `retry_safe`, `written`, `errors`, `rolled_back`, `build_failed`) and exit 0, or the unknown object and exit 1. |
 | `enqueue` | Add one task (`add_doc`, `session_sync`, `synthesize`, `build`). |
 | `run` | Execute pending tasks serially (up to `--limit`). |
 
@@ -625,6 +626,7 @@ python3 -m llmwiki queue run --vault /path/to/vault --limit 20
 | `--task-type {add_doc,session_sync,synthesize,build}` | Task kind for `enqueue`. |
 | `--source TEXT` | Source payload for `add_doc` enqueue. |
 | `--limit N` | Max tasks to process in one `run` call. Default: `20`. |
+| `--id ID` | With `status`: print one JSON object for that operation id and exit 0 when a queue row exists. When it does not, print one JSON object (`status` `unknown`, that `operation_id`, `retry_safe` false, plus a short message) and exit 1. Without `--id`, `status` keeps the human summary. |
 | `--vault PATH` | Vault root used for task execution and state lookup. |
 | `--state-file PATH` | Override direct state file path. |
 

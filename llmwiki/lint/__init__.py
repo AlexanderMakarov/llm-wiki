@@ -33,9 +33,11 @@ from llmwiki import REPO_ROOT
 # frontmatter, so every lint rule that read `meta["type"]` skipped it.
 from llmwiki._frontmatter import parse_frontmatter as _parse_fm
 from llmwiki._system_pages import is_archived_path
+from llmwiki.config_schedule import resolve_vault_dir
 from llmwiki.search.context import SearchContext
 from llmwiki.vault_settings import DEFAULT_MIN_REFS
 
+# Legacy marker only — tests may reassign this. Runtime uses active_vault.
 WIKI_DIR = REPO_ROOT / "wiki"
 
 #: Default cap for title findability / ambiguity sampling (#197).
@@ -150,7 +152,7 @@ def load_pages(wiki_dir: Path | None = None) -> dict[str, dict[str, Any]]:
 
     Each page dict has: ``path``, ``text``, ``meta`` (frontmatter), ``body``.
     """
-    root = wiki_dir or WIKI_DIR
+    root = resolve_vault_dir(wiki_dir, WIKI_DIR, "wiki")
     if not root.is_dir():
         return {}
     pages: dict[str, dict[str, Any]] = {}

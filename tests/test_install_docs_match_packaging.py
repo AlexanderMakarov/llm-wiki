@@ -55,6 +55,25 @@ def test_action_defaults_package_input_to_dist_name():
     assert f'default: "{DIST_NAME}"' in text
     assert 'PACKAGE: ${{ inputs.package }}' in text
     assert 'pip install "$PACKAGE"' in text
+    assert "vault:" in text
+    assert 'VAULT: ${{ inputs.vault }}' in text
+    assert 'llmwiki init --vault "$VAULT"' in text
+
+
+def test_ci_action_smoke_uses_non_checkout_vault():
+    """action-smoke installs package `.` inside this repo; `--vault .` is refused."""
+    text = (REPO_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    smoke_start = text.index("\n  action-smoke:")
+    rest = text[smoke_start + 1 :]
+    end = len(rest)
+    for match in re.finditer(r"\n  [a-zA-Z0-9_-]+:", rest):
+        if match.start() == 0:
+            continue
+        end = match.start()
+        break
+    smoke = rest[:end]
+    assert "vault: action-vault" in smoke
+    assert "action-vault/site/index.html" in smoke
 
 
 def test_release_smoke_reads_dist_name_from_pyproject():

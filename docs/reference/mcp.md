@@ -87,10 +87,11 @@ Wall-clock budget defaults to **120 seconds**, overridable via `mcp.tool_timeout
 
 Thin proxy onto the same shared `run_add` orchestration as CLI `llmwiki add` (#273 / #311). Defaults match the CLI: write raw doc(s) under the resolved vault's `raw/docs/` and rebuild the site; **do not** synthesize `wiki/sources/` unless `synthesize` is true. Each new import is **one** complete Markdown file (including long documents); synthesis chunks in memory to the backend budget and stitches one wiki source page. Legacy multi-piece vaults use `llmwiki migrate whole-document-storage` — see [cli.md](cli.md#whole-document-storage--merge-legacy-split-documents-311).
 
-Exactly one of `url`, `path`, or `content` is required.
+Exactly one of `url`, `path`, or `content` starts an add. To read an add that already started, pass `operation_id` alone and omit those three.
 
 | Argument | Required | Description |
 |---|---|---|
+| `operation_id` | poll only | Id from a timed-out add. Pass alone (no `url` / `path` / `content`) to read progress and the terminal outcome; combining it with a source is rejected. |
 | `url` | one of three | HTTP(S) URL to fetch and convert |
 | `path` | one of three | Local file path to convert |
 | `content` | one of three | Literal markdown/text — uses the piped-text path (frontmatter `source: "piped"`), same as CLI `llmwiki add -`; never a tempfile provenance |
@@ -103,9 +104,9 @@ Exactly one of `url`, `path`, or `content` is required.
 
 **Source-layer guardrail:** use the user's named path, URL, or text. Do not reconstruct input from existing wiki pages (`wiki/sources/` or other derived pages) unless the user asked.
 
-When the document lands under `raw/docs/` but the post-add site build fails, `wiki_add` still returns success (`isError: false`) with the written paths and a warning — reserve `isError` for genuine add failures. Pass `no_build: true` when you need a faster round-trip and will rebuild later.
+When the document lands under `raw/docs/` but the post-add site build fails, `wiki_add` still returns success with the written paths and a warning — reserve `isError` for genuine add failures that finish inside the budget. Pass `no_build: true` when you need a faster round-trip and will rebuild later.
 
-Wall-clock budget for the whole add orchestration (including site build) defaults to **120 seconds**, overridable via `mcp.tool_timeouts.wiki_add`.
+Wall-clock budget for the whole add (including site build) defaults to **120 seconds**, overridable via `mcp.tool_timeouts.wiki_add`. When the call exceeds that budget it returns a running `operation_id` instead of a failed add — poll `wiki_add` with that id alone (or `llmwiki queue status --id`) for progress and the final outcome, including whether a retry is safe. Do not decide from the vault filesystem. Raise the timeout for a large source or when synthesize is on.
 
 ## Tool timeouts
 

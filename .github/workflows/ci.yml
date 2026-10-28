@@ -99,17 +99,19 @@ jobs:
           cp tests/fixtures/claude_code/minimal.jsonl \
             "$store/00000000-0000-0000-0000-000000000001.jsonl"
 
+      # Vault must not be the llmwiki checkout root (source-checkout guard).
       - name: Run the composite action against this checkout
         uses: ./
         with:
           package: "."
+          vault: action-vault
 
       - name: Assert the action produced a site
         run: |
           set -euo pipefail
-          test -f site/index.html
-          test -f site/style.css
-          echo "action produced $(find site -name '*.html' | wc -l) HTML files"
+          test -f action-vault/site/index.html
+          test -f action-vault/site/style.css
+          echo "action produced $(find action-vault/site -name '*.html' | wc -l) HTML files"
 
   performance-budget:
     runs-on: ubuntu-latest

@@ -21,7 +21,7 @@ import pytest
 import llmwiki.config_schedule as config_schedule_mod
 from llmwiki import REPO_ROOT
 from llmwiki.cli import cmd_sync
-from llmwiki.convert import DEFAULT_OUT_DIR
+from llmwiki.convert import DEFAULT_OUT_DIR  # used as a negative check below
 
 
 @pytest.fixture(autouse=True)
@@ -94,22 +94,25 @@ def test_vault_sync_routes_state_file_into_vault(tmp_path: Path):
     assert captured.get("state_file") == vault.resolve() / "llmwiki-state.json"
 
 
-def test_default_no_vault_behaviour_unchanged(tmp_path: Path):
-    """Without --vault, default paths must be honoured unchanged."""
+def test_no_vault_refuses_instead_of_writing_the_package(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+):
+    """Without --vault and without vault.default_path, sync errors.
+
+    It must not write ``raw/sessions/`` or ``llmwiki-state.json`` next to
+    the package or the source checkout.
+    """
 
     captured, fake_convert_all = _capture_convert_all_kwargs()
-    # The routing under test is entirely in convert_all's kwargs. Left to run,
-    # the post-sync reindex would rebuild the clone's own tracked
-    # wiki/index.md from whatever pages sit on disk (#91) — a real write into
-    # the working copy, and not what this test is asserting.
     with (
         patch("llmwiki.cli.convert_all", side_effect=fake_convert_all),
         patch("llmwiki.cli.plan_reindex", return_value=None),
     ):
-        cmd_sync(_make_args())
+        rc = cmd_sync(_make_args())
 
-    assert captured.get("out_dir") == DEFAULT_OUT_DIR
-    assert captured.get("state_file") == REPO_ROOT / "llmwiki-state.json"
+    assert rc == 2
+    assert "no vault configured" in capsys.readouterr().err
+    assert captured == {}
 
 
 def test_force_with_vault_uses_vault_state_file(tmp_path: Path):
