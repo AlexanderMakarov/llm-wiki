@@ -91,7 +91,7 @@ Exactly one of `url`, `path`, or `content` starts an add. To read an add that al
 
 | Argument | Required | Description |
 |---|---|---|
-| `operation_id` | poll only | Id from a timed-out add (`add-sync-<ms>`). Pass it with no `url`, `path`, or `content`. The response is JSON: `status` (`running`, `done`, or `error`), `operation_id`, `retry_safe`, `written`, `errors`, `rolled_back`, `build_failed`. An unknown id is an error (`status` `unknown`, `retry_safe` false) and is not safe to retry. Combining `operation_id` with a source is rejected. |
+| `operation_id` | poll only | Id from a timed-out add. Pass alone (no `url` / `path` / `content`) to read progress and the terminal outcome; combining it with a source is rejected. |
 | `url` | one of three | HTTP(S) URL to fetch and convert |
 | `path` | one of three | Local file path to convert |
 | `content` | one of three | Literal markdown/text — uses the piped-text path (frontmatter `source: "piped"`), same as CLI `llmwiki add -`; never a tempfile provenance |
@@ -104,9 +104,9 @@ Exactly one of `url`, `path`, or `content` starts an add. To read an add that al
 
 **Source-layer guardrail:** use the user's named path, URL, or text. Do not reconstruct input from existing wiki pages (`wiki/sources/` or other derived pages) unless the user asked.
 
-When the document lands under `raw/docs/` but the post-add site build fails, `wiki_add` still returns success (`isError: false`) with the written paths and a warning — reserve `isError` for genuine add failures that finish inside the budget. Pass `no_build: true` when you need a faster round-trip and will rebuild later. An in-budget success JSON also includes `operation_id`.
+When the document lands under `raw/docs/` but the post-add site build fails, `wiki_add` still returns success with the written paths and a warning — reserve `isError` for genuine add failures that finish inside the budget. Pass `no_build: true` when you need a faster round-trip and will rebuild later.
 
-Wall-clock budget for the whole add orchestration (including site build) defaults to **120 seconds**, overridable via `mcp.tool_timeouts.wiki_add`. When the call exceeds that budget it does not come back as a failed add. It returns `isError: false` JSON with `status` `running`, the `operation_id` minted before the work started, `retry_safe` false, and a `message` that carries the budget warning: the add is still running and holds the pipeline lock, do not retry blindly, `wiki_search` and `raw/docs/` remain ways to look, and you can raise `mcp.tool_timeouts.wiki_add` for a large source or when synthesize is on. Poll `wiki_add` with that `operation_id` only — do not read the vault filesystem to decide whether to retry. `retry_safe` stays false while the add is running and when a finished add left files in place, including a site-build-only failure (`done`, `build_failed` true, same success-with-warning outcome as an in-budget build miss). It is true only when the add finished in error and nothing from that add remains. A genuine add failure that finishes inside the budget stays an error string, not this poll object; the poll is how a timed-out caller sees the terminal result. `llmwiki queue status --id <operation_id>` prints the same JSON object.
+Wall-clock budget for the whole add (including site build) defaults to **120 seconds**, overridable via `mcp.tool_timeouts.wiki_add`. When the call exceeds that budget it returns a running `operation_id` instead of a failed add — poll `wiki_add` with that id alone (or `llmwiki queue status --id`) for progress and the final outcome, including whether a retry is safe. Do not decide from the vault filesystem. Raise the timeout for a large source or when synthesize is on.
 
 ## Tool timeouts
 
