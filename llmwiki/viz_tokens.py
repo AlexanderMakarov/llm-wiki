@@ -551,17 +551,17 @@ def render_token_coverage_hint(
     )
 
 
-def render_site_token_stats(
+def render_site_token_stat_grid(
     metas_by_project: dict[str, list[Mapping[str, object]]],
     link_prefix: str = "",
     extra_cards: str = "",
     session_tokens_usage: Mapping[str, Any] | None = None,
-) -> str:
-    """Return a single-row stat-card block for the Analytics page: Tokens,
-    Best cache hit, and Heaviest project (by tokens). ``extra_cards`` holds
-    pre-rendered ``token-stat`` cards (e.g. the MCP-usage card) that share
-    the same row. Empty string when there are neither token stats nor
-    extra cards."""
+) -> tuple[str, int]:
+    """Shared Tokens / cache / heaviest stat cards for Analytics and Home.
+
+    Returns ``(grid_html, measured_session_count)``. ``grid_html`` is empty when
+    there are no token rows and no ``extra_cards``.
+    """
     meta_stats = compute_site_stats(metas_by_project)
     stats = meta_stats
     by_agent: Mapping[str, Any] | None = None
@@ -574,21 +574,14 @@ def render_site_token_stats(
             "avg_per_session": usage_stats["avg_per_session"],
         }
         by_agent = usage_stats.get("by_agent") if isinstance(usage_stats.get("by_agent"), Mapping) else None
-    if stats["session_count"] == 0 and not extra_cards:
-        return ""
+    n_with_tokens = int(stats["session_count"])
+    if n_with_tokens == 0 and not extra_cards:
+        return "", 0
     total = stats["total_tokens"]
     avg = stats["avg_per_session"]
     best = stats["best_ratio_project"]
     heaviest = stats["heaviest_project"]
-
-    parts: list[str] = [
-        '<section class="section token-stats-section">',
-        '  <div class="container">',
-        '    <div class="token-stat-grid">',
-    ]
-    n_with_tokens = int(stats["session_count"])
-    # Denominator = Σ by_agent.known (measured agents + other agents' known).
-    # Fall back to on-disk session metas only when the usage file has no rows.
+    cards: list[str] = []
     known_total = sum_agent_known_sessions(by_agent)
     total_sessions = (
         known_total
@@ -601,8 +594,8 @@ def render_site_token_stats(
             measured_sessions=n_with_tokens,
             total_sessions=total_sessions,
         )
-        parts.append(
-            f'      <div class="token-stat" data-llmwiki-tokens-card>'
+        cards.append(
+            f'<div class="token-stat" data-llmwiki-tokens-card>'
             f'<div class="token-stat-label muted">Tokens'
             f'{render_token_coverage_hint("token-coverage-site", by_agent=by_agent)}</div>'
             f'<div class="token-stat-value">{format_tokens(total)}</div>'
@@ -610,30 +603,57 @@ def render_site_token_stats(
         )
     if best is not None:
         slug, r = best
-        parts.append(
-            f'      <a class="token-stat" href="{link_prefix}projects/{html.escape(slug)}.html">'
+        cards.append(
+            f'<a class="token-stat" href="{link_prefix}projects/{html.escape(slug)}.html">'
             f'<div class="token-stat-label muted">Best cache hit</div>'
             f'<div class="token-stat-value">{r * 100:.0f}%</div>'
             f'<div class="token-stat-sub muted">{html.escape(slug)}</div>'
-            f'</a>'
+            f"</a>"
         )
     if heaviest is not None:
         slug, total_proj = heaviest
-        parts.append(
-            f'      <a class="token-stat" href="{link_prefix}projects/{html.escape(slug)}.html">'
+        cards.append(
+            f'<a class="token-stat" href="{link_prefix}projects/{html.escape(slug)}.html">'
             f'<div class="token-stat-label muted">Heaviest project (by tokens)</div>'
             f'<div class="token-stat-value">{format_tokens(total_proj)}</div>'
             f'<div class="token-stat-sub muted">{html.escape(slug)}</div>'
-            f'</a>'
+            f"</a>"
         )
     if extra_cards:
-        parts.append(extra_cards)
-    parts.append('    </div>')
+        cards.append(extra_cards)
+    note = ""
     if n_with_tokens > 0:
-        parts.append(
-            '    <p class="muted token-stats-note">Cumulative billed throughput'
-            ' (token categories including cache_read), not context-window occupancy.</p>'
+        note = (
+            '<p class="muted token-stats-note">Cumulative billed throughput'
+            " (token categories including cache_read), not context-window occupancy.</p>"
         )
-    parts.append('  </div>')
-    parts.append('</section>')
-    return "\n".join(parts)
+    grid = '<div class="token-stat-grid">' + "".join(cards) + "</div>" + note
+    return grid, n_with_tokens
+
+
+def render_site_token_stats(
+    metas_by_project: dict[str, list[Mapping[str, object]]],
+    link_prefix: str = "",
+    extra_cards: str = "",
+    session_tokens_usage: Mapping[str, Any] | None = None,
+) -> str:
+    """Return a single-row stat-card block for the Analytics page: Tokens,
+    Best cache hit, and Heaviest project (by tokens). ``extra_cards`` holds
+    pre-rendered ``token-stat`` cards (e.g. the MCP-usage card) that share
+    the same row. Empty string when there are neither token stats nor
+    extra cards."""
+    grid, _ = render_site_token_stat_grid(
+        metas_by_project,
+        link_prefix=link_prefix,
+        extra_cards=extra_cards,
+        session_tokens_usage=session_tokens_usage,
+    )
+    if not grid:
+        return ""
+    return (
+        '<section class="section token-stats-section">\n'
+        '  <div class="container">\n'
+        f"    {grid}\n"
+        "  </div>\n"
+        "</section>"
+    )

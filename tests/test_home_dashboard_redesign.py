@@ -6,16 +6,27 @@ from pathlib import Path
 
 from llmwiki.build import render_automation_details, render_automation_notice
 from llmwiki.raw_docs_site import render_dashboard_body
+from llmwiki.viz_tokens import render_site_token_stat_grid
 from llmwiki.viz_wiki_value import render_home_metrics_strip
 
 
-def test_home_metrics_missing_tokens_not_zero():
-    """Missing token telemetry shows em dash, not a measured zero."""
-    html = render_home_metrics_strip({}, wiki_page_count=3, metas_by_project={})
-    assert "Session tokens" in html
-    assert "—" in html
-    assert "No recorded session tokens yet" in html
+def test_home_wiki_value_uses_analytics_token_grid():
+    """Home Tokens card shares Analytics markup (coverage hint + sub-label)."""
+    usage_file = {
+        "totals": {"sum": 1000},
+        "by_agent": {"Claude": {"measured": 2, "known": 5}},
+    }
+    html = render_home_metrics_strip(
+        {},
+        wiki_page_count=2,
+        metas_by_project={"p": [{}]},
+        session_tokens_usage=usage_file,
+    )
+    assert "<h3>Wiki value</h3>" in html
+    assert "token-coverage-hint" in html
+    assert "data-llmwiki-tokens-card" in html
     assert "Payoff / page" in html
+    assert "token-stats-note" in html
 
 
 def test_home_metrics_payoff_matches_value_summary():
@@ -28,6 +39,13 @@ def test_home_metrics_payoff_matches_value_summary():
     html = render_home_metrics_strip(usage, wiki_page_count=3)
     assert "2.00" in html
     assert "analytics.html" in html
+
+
+def test_render_site_token_stat_grid_shared_by_analytics_and_home():
+    metas = {"p": [{}]}
+    usage_file = {"totals": {"sum": 500}, "by_agent": {"Claude": {"measured": 1, "known": 1}}}
+    grid, _ = render_site_token_stat_grid(metas, session_tokens_usage=usage_file)
+    assert "token-coverage-hint" in grid
 
 
 def test_automation_notice_when_unconfigured(tmp_path: Path):

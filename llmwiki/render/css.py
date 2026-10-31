@@ -594,8 +594,12 @@ kbd { display: inline-block; padding: 2px 6px; font-family: var(--mono); font-si
 .automation-panel ul { margin: 8px 0; padding-left: 18px; }
 .automation-notice { margin: 10px 0 14px; }
 .automation-notice-setup { padding: 10px 12px; border: 1px dashed var(--border); border-radius: 8px; background: var(--bg-alt); }
-.home-freshness-line { margin: 4px 0 12px; font-size: 0.88rem; line-height: 1.45; overflow-wrap: anywhere; }
-.home-metrics-strip { margin: 14px 0 6px; }
+.home-pipeline-timeline { margin: 4px 0 14px; font-size: 0.88rem; }
+.home-pipeline-timeline .queue-type-list { margin: 0; padding-left: 1.1rem; }
+.home-value-section { margin: 16px 0 8px; }
+.home-value-section h3 { margin: 0 0 10px; font-size: 1.05rem; }
+.state-knowledge-metrics { margin-top: 14px; }
+.state-knowledge-cards { margin-top: 8px; }
 .recent-docs-compact .recent-doc-compact { padding: 7px 0; border-bottom: 1px solid var(--border); display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 4px; }
 .recent-docs-compact .recent-doc-compact:last-child { border-bottom: none; }
 .recent-docs-compact .recent-doc-compact > a { font-weight: 600; font-size: 0.98rem; }

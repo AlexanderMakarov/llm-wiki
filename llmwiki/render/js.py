@@ -53,34 +53,62 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
     var days = Math.floor(hrs / 24);
     return days + (days === 1 ? " day ago" : " days ago");
   }
-  function formatStageFreshness(label, ts) {
-    var d = parseIsoTs(ts);
-    if (!d) {
-      return label + ": " + (ts ? "unknown" : "never");
-    }
-    return label + ": " + formatAbsoluteUtc(d) + " (" + formatRelativeAge(d) + ")";
-  }
   function formatTs(ts) {
     if (!ts) return "never";
     var d = parseIsoTs(ts);
     if (!d) return "unknown";
     return formatAbsoluteUtc(d) + " (" + formatRelativeAge(d) + ")";
   }
-  var _freshnessTimer = null;
-  function renderFreshnessLine(el, snapshot) {
-    if (!el) return;
+  function formatStageFreshnessLi(label, ts) {
+    return "<li><strong>" + escapeHtml(label) + ":</strong> " + escapeHtml(formatTs(ts)) + "</li>";
+  }
+  function pipelineTimelineHtml(snapshot) {
     if (!snapshot) {
-      el.textContent = "Build: never · Sync: never · Synth: never";
-      return;
+      return (
+        '<ul class="queue-type-list state-pipeline-timeline" aria-label="Pipeline timeline">' +
+        formatStageFreshnessLi("Last sync", "") +
+        formatStageFreshnessLi("Last synth", "") +
+        formatStageFreshnessLi("Last build", "") +
+        "<li><strong>Oldest pending:</strong> none</li>" +
+        formatStageFreshnessLi("Last lint", "") +
+        formatStageFreshnessLi("Last queue run", "") +
+        "</ul>"
+      );
     }
     var ops = snapshot.ops || {};
     var lastSync = ((snapshot.sync || {}).meta || {}).last_sync || "";
-    var parts = [
-      formatStageFreshness("Build", ops.last_build_at || ""),
-      formatStageFreshness("Sync", lastSync),
-      formatStageFreshness("Synth", ops.last_synth_at || "")
-    ];
-    el.textContent = parts.join(" · ");
+    var synthState = snapshot.synth || {};
+    var pipeline = synthState.pipeline || {};
+    var pendingList = Array.isArray(synthState.pending) ? synthState.pending : [];
+    var items = Array.isArray((snapshot.queue || {}).items) ? snapshot.queue.items : [];
+    var oldest = "";
+    items.forEach(function (it) {
+      var st = (it && it.status) ? String(it.status) : "pending";
+      if (st === "pending" && it.created_at && (!oldest || it.created_at < oldest)) oldest = it.created_at;
+    });
+    pendingList.forEach(function (it) {
+      if (it && it.mtime && (!oldest || it.mtime < oldest)) oldest = it.mtime;
+    });
+    var lintStamp = formatTs(ops.last_lint_run_at);
+    var lintStatus = ops.last_lint_status ? String(ops.last_lint_status) : "";
+    if (lintStatus === "failed" || lintStatus === "ok") {
+      lintStamp = lintStamp + " · " + lintStatus;
+    }
+    return (
+      '<ul class="queue-type-list state-pipeline-timeline" aria-label="Pipeline timeline">' +
+      formatStageFreshnessLi("Last sync", lastSync) +
+      formatStageFreshnessLi("Last synth", ops.last_synth_at || "") +
+      formatStageFreshnessLi("Last build", ops.last_build_at || "") +
+      "<li><strong>Oldest pending:</strong> " + escapeHtml(oldest ? formatTs(oldest) : "none") + "</li>" +
+      "<li><strong>Last lint:</strong> " + escapeHtml(lintStamp) + "</li>" +
+      formatStageFreshnessLi("Last queue run", ops.last_queue_run_at || "") +
+      "</ul>"
+    );
+  }
+  var _freshnessTimer = null;
+  function renderFreshnessLine(el, snapshot) {
+    if (!el) return;
+    el.innerHTML = pipelineTimelineHtml(snapshot);
   }
   function wireFreshnessTimer() {
     if (_freshnessTimer) return;
@@ -321,30 +349,24 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
       : '<p class="muted">No linter output.</p>';
 
     var knowledgeHtml =
-      '<div class="state-table-wrap" tabindex="0" role="region" aria-label="Knowledge layer">' +
-      '<p class="muted">Knowledge layer: Candidates → Entities / Concepts. Review on the Candidates page (header/count below) or via agent Commands below.</p>' +
-      '<table class="state-pipeline-table state-knowledge-table">' +
-      '<thead><tr><th><a href="candidates.html">Candidates</a></th><th>Entities</th><th>Concepts</th></tr></thead>' +
-      "<tbody><tr>" +
-      '<td><a href="candidates.html">' + stageCell(toReview, 0) + "</a></td>" +
-      "<td>" + stageCell(trustedEntities, 0) + "</td>" +
-      "<td>" + stageCell(trustedConcepts, 0) + "</td>" +
-      "</tr></tbody></table>" +
+      '<div class="state-knowledge-metrics" tabindex="0" role="region" aria-label="Knowledge layer">' +
+      '<p class="muted">Knowledge layer — review on the <a href="candidates.html">Candidates</a> page or via Commands below.</p>' +
+      '<div class="token-stat-grid state-knowledge-cards">' +
+      '<a class="token-stat" href="candidates.html">' +
+      '<div class="token-stat-label muted">Candidates</div>' +
+      '<div class="token-stat-value">' + Number(toReview || 0) + "</div>" +
+      '<div class="token-stat-sub muted">pending review</div></a>' +
+      '<div class="token-stat">' +
+      '<div class="token-stat-label muted">Entities</div>' +
+      '<div class="token-stat-value">' + Number(trustedEntities || 0) + "</div>" +
+      '<div class="token-stat-sub muted">trusted pages</div></div>' +
+      '<div class="token-stat">' +
+      '<div class="token-stat-label muted">Concepts</div>' +
+      '<div class="token-stat-value">' + Number(trustedConcepts || 0) + "</div>" +
+      '<div class="token-stat-sub muted">trusted pages</div></div>' +
+      "</div>" +
       lintBanner +
       "</div>";
-
-    // #234 / #321: Timeline holds backlog timing; build/sync/synth live in the Home freshness line.
-    var lintStamp = formatTs(ops.last_lint_run_at);
-    var lintStatus = ops.last_lint_status ? String(ops.last_lint_status) : "";
-    if (lintStatus === "failed" || lintStatus === "ok") {
-      lintStamp = lintStamp + " · " + lintStatus;
-    }
-    var timelineBody =
-      '<ul class="queue-type-list state-stage-stamps" aria-label="Pipeline timeline">' +
-      "<li><strong>Oldest pending:</strong> " + escapeHtml(oldest ? formatTs(oldest) : "none") + "</li>" +
-      "<li><strong>Last lint:</strong> " + escapeHtml(lintStamp) + "</li>" +
-      "<li><strong>Last queue run:</strong> " + escapeHtml(formatTs(ops.last_queue_run_at)) + "</li>" +
-      "</ul>";
 
     var automationTpl = document.getElementById("llmwiki-automation-details");
     var automationBody = automationTpl
@@ -373,7 +395,6 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
       knowledgeHtml +
       estNote +
       '<div class="collapse-sections">' +
-      detailsSection("Timeline", 3, timelineBody) +
       automationSection +
       detailsSection("Not synthesized sessions", pendingSessions.length, pendingListHtml(pendingSessions)) +
       detailsSection("Not synthesized docs", pendingDocs.length, pendingListHtml(pendingDocs)) +

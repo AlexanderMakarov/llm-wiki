@@ -26,7 +26,7 @@ def test_dashboard_inlines_state_mount_not_old_cards():
     assert "data-llmwiki-state-widget" in body
     assert body.index("Pipeline state") < body.index('id="llmwiki-state-widget"')
     assert "data-llmwiki-freshness" in body
-    assert "home-freshness-line" in body
+    assert "home-pipeline-timeline" in body
     assert "home-metrics-strip" not in body  # optional block from build
     assert "Pipeline state" in body
     assert "Recent raw documents" in body
@@ -58,7 +58,7 @@ def test_dashboard_mount_includes_vault_root_attr(tmp_path: Path):
 def test_state_widget_js_has_pipeline_table_and_collapsibles():
     assert "renderStateWidget" in js.JS
     assert "state-pipeline-table" in js.JS
-    assert "state-knowledge-table" in js.JS
+    assert "state-knowledge-cards" in js.JS
     assert "To synthesize" in js.JS
     assert (
         "Eligible sources: Raw → To synthesize → Synthesized (by agent). "
@@ -75,8 +75,7 @@ def test_state_widget_js_has_pipeline_table_and_collapsibles():
     assert "Source pages (current state):" not in js.JS
     assert 'kind === "stubs"' in js.JS
     assert "totalOnDisk" in js.JS
-    assert "Knowledge layer: Candidates → Entities / Concepts." in js.JS
-    assert "Review on the Candidates page (header/count below) or via agent Commands below." in js.JS
+    assert "Knowledge layer — review on the" in js.JS
     assert "candidates.html" in js.JS
     assert "trusted_entities" in js.JS
     assert "trusted_concepts" in js.JS
@@ -120,29 +119,26 @@ def test_state_widget_js_has_pipeline_table_and_collapsibles():
     # Stubs/Other disk-only rows use muted dashes; Knowledge layer stays numeric.
     assert 'var dash = \'<td class="muted">—</td>\';' in js.JS
     assert "diskOnly" in js.JS
-    # Timeline must appear before the backlog lists in the render order.
-    timeline_idx = js.JS.index('detailsSection("Timeline"')
+    # Pipeline timeline list is rendered above the widget; collapsibles start with Automation.
+    automation_idx = js.JS.index('detailsSection("Automation"')
     sessions_idx = js.JS.index('detailsSection("Not synthesized sessions"')
-    assert timeline_idx < sessions_idx
-    # #321: build/sync/synth stamps live in the Home freshness line; Timeline keeps backlog timing.
-    assert 'detailsSection("Timeline", 3,' in js.JS
-    assert "data-llmwiki-freshness" in js.JS or "llmwiki-freshness-line" in js.JS
+    assert automation_idx < sessions_idx
+    assert "pipelineTimelineHtml" in js.JS
+    assert "home-pipeline-timeline" in js.JS or "state-pipeline-timeline" in js.JS
     assert "renderFreshnessLine" in js.JS
     assert "wireFreshnessTimer" in js.JS
-    assert "formatStageFreshness" in js.JS
-    assert 'detailsSection("Automation"' in js.JS
+    assert 'detailsSection("Timeline"' not in js.JS
     assert "llmwiki-automation-details" in js.JS
-    assert "state-stage-stamps" in js.JS
     assert "state-lint-banner" in js.JS
     assert "ops.last_lint_error" in js.JS
     assert "Last lint:" in js.JS
     assert "Last reflect run:" not in js.JS
     assert "Last lint run:" not in js.JS
     assert 'aria-label="Pipeline timeline"' in js.JS
-    knowledge_html = js.JS[js.JS.index("var knowledgeHtml ="): js.JS.index("var timelineBody =")]
-    assert "state-knowledge-table" in knowledge_html
+    knowledge_html = js.JS[js.JS.index("var knowledgeHtml ="): js.JS.index("var automationTpl =")]
+    assert "state-knowledge-cards" in knowledge_html
     assert "lintBanner" in knowledge_html
-    assert knowledge_html.index("</table>") < knowledge_html.index("lintBanner")
+    assert "token-stat-grid" in knowledge_html
     # Old dashboard chrome removed from the renderer.
     assert "Unsynth estimate" not in js.JS
     assert "Queue task types" not in js.JS
@@ -161,28 +157,24 @@ def test_state_widget_js_has_pipeline_table_and_collapsibles():
 
 
 def test_state_widget_pipeline_stage_stamps_in_freshness_line():
-    """#321: Last sync/synth/build sit in the Home freshness line (not Timeline).
+    """#321: pipeline stages + backlog timing render as a top list (sync → synth → build).
 
     # @layer: unit  # @spec: 321-home-pipeline-freshness
     """
+    assert "pipelineTimelineHtml" in js.JS
     assert "renderFreshnessLine" in js.JS
     assert "ops.last_build_at" in js.JS
     assert "ops.last_synth_at" in js.JS
     assert "last_sync" in js.JS
-    assert "formatAbsoluteUtc" in js.JS
     assert "60000" in js.JS  # relative-age refresh timer
-    timeline_body_idx = js.JS.index("var timelineBody =")
-    timeline_section_idx = js.JS.index('detailsSection("Timeline"')
-    timeline_body = js.JS[timeline_body_idx:timeline_section_idx]
-    assert "Last lint:" in timeline_body
-    assert "Last queue run:" in timeline_body
-    assert "Last sync:" not in timeline_body
-    assert "Last synth:" not in timeline_body
-    assert "Last build:" not in timeline_body
-    assert "Last reflect" not in timeline_body
-    freshness_idx = js.JS.index("function renderFreshnessLine")
-    timeline_idx = js.JS.index("var timelineBody =")
-    assert freshness_idx < timeline_idx
+    timeline_fn = js.JS[js.JS.index("function pipelineTimelineHtml"): js.JS.index("function renderFreshnessLine")]
+    sync_idx = timeline_fn.index("Last sync")
+    synth_idx = timeline_fn.index("Last synth")
+    build_idx = timeline_fn.index("Last build")
+    assert sync_idx < synth_idx < build_idx
+    assert "Last lint:" in timeline_fn
+    assert "Last queue run" in timeline_fn
+    assert 'detailsSection("Timeline"' not in js.JS
 
 
 def test_state_widget_lint_banner_empty_vs_present():
@@ -195,11 +187,11 @@ def test_state_widget_lint_banner_empty_vs_present():
     assert 'role="alert"' in js.JS
     assert "var lintError = ops.last_lint_error" in js.JS
     assert "if (lintError && /^\\s*\\[error\\]/m.test(lintError))" in js.JS
-    # Appended after knowledge table markup, before Timeline.
+    # Appended after knowledge metric cards.
     knowledge_idx = js.JS.index("var knowledgeHtml =")
     banner_in_knowledge = js.JS.index("lintBanner", knowledge_idx)
-    timeline_idx = js.JS.index('detailsSection("Timeline"')
-    assert knowledge_idx < banner_in_knowledge < timeline_idx
+    automation_idx = js.JS.index("var automationTpl =")
+    assert knowledge_idx < banner_in_knowledge < automation_idx
     assert 'lintStatus === "failed"' in js.JS
     assert 'lintStatus === "ok"' in js.JS
 

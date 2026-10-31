@@ -508,7 +508,7 @@ def render_dashboard_body(
   <div class="container">
     <div class="queue-widget">
       <h2>Pipeline state</h2>
-      <div id="llmwiki-freshness-line" class="home-freshness-line muted" data-llmwiki-freshness aria-live="polite"></div>
+      <div id="llmwiki-freshness-line" class="home-pipeline-timeline" data-llmwiki-freshness aria-live="polite"></div>
       {notice}
       <div id="llmwiki-state-widget" class="state-widget" data-llmwiki-state-widget{attrs}>
         <p class="muted">Loading pipeline state…</p>
