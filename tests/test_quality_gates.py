@@ -36,11 +36,22 @@ def test_pyproject_coverage_report_fail_under_is_87() -> None:
 
 # @regression
 def test_ci_lint_and_test_runs_pytest_with_llmwiki_cov() -> None:
-    """Default CI unit job measures ``llmwiki`` coverage with pytest-cov."""
+    """Default CI unit job measures ``llmwiki`` line+branch coverage with pytest-cov."""
     text = CI.read_text(encoding="utf-8")
     assert "python -m pytest tests/" in text
     assert "--cov=llmwiki" in text
+    assert "--cov-branch" in text
     assert "--cov-report=term-missing" in text
+    assert "--cov-report=xml:coverage.xml" in text
+    assert "upload-artifact@v7" in text
+    assert "coverage.xml" in text
+
+
+# @regression
+def test_pyproject_coverage_run_enables_branch_measurement() -> None:
+    """Branch coverage is on for the default unit instrumentation config."""
+    data = tomllib.loads(PYPROJECT.read_text(encoding="utf-8"))
+    assert data["tool"]["coverage"]["run"].get("branch") is True
 
 
 # @regression
