@@ -166,7 +166,6 @@ markers = [
 
 [tool.coverage.run]
 source = ["llmwiki"]
-branch = true
 
 [tool.coverage.report]
 fail_under = 87

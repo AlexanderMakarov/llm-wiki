@@ -63,7 +63,10 @@ jobs:
               --cov=llmwiki \
               --cov-branch \
               --cov-report=term-missing \
-              --cov-report=xml:coverage.xml
+              --cov-report=xml:coverage.xml \
+              --cov-report=json:coverage.json \
+              --cov-fail-under=0
+            python scripts/check_unit_coverage.py
           else
             echo "no tests yet — skipping"
           fi

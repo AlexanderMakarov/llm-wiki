@@ -43,15 +43,18 @@ def test_ci_lint_and_test_runs_pytest_with_llmwiki_cov() -> None:
     assert "--cov-branch" in text
     assert "--cov-report=term-missing" in text
     assert "--cov-report=xml:coverage.xml" in text
+    assert "--cov-report=json:coverage.json" in text
+    assert "--cov-fail-under=0" in text
+    assert "scripts/check_unit_coverage.py" in text
     assert "upload-artifact@v7" in text
     assert "coverage.xml" in text
 
 
 # @regression
-def test_pyproject_coverage_run_enables_branch_measurement() -> None:
-    """Branch coverage is on for the default unit instrumentation config."""
-    data = tomllib.loads(PYPROJECT.read_text(encoding="utf-8"))
-    assert data["tool"]["coverage"]["run"].get("branch") is True
+def test_check_unit_coverage_script_enforces_line_floor() -> None:
+    """Line gate stays at 87% when CI measures branches in the same run."""
+    text = (REPO_ROOT / "scripts" / "check_unit_coverage.py").read_text(encoding="utf-8")
+    assert "LINE_FLOOR = 87" in text
 
 
 # @regression
