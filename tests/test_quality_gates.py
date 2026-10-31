@@ -36,11 +36,25 @@ def test_pyproject_coverage_report_fail_under_is_87() -> None:
 
 # @regression
 def test_ci_lint_and_test_runs_pytest_with_llmwiki_cov() -> None:
-    """Default CI unit job measures ``llmwiki`` coverage with pytest-cov."""
+    """Default CI unit job measures ``llmwiki`` line+branch coverage with pytest-cov."""
     text = CI.read_text(encoding="utf-8")
     assert "python -m pytest tests/" in text
     assert "--cov=llmwiki" in text
+    assert "--cov-branch" in text
     assert "--cov-report=term-missing" in text
+    assert "--cov-report=xml:coverage.xml" in text
+    assert "--cov-report=json:coverage.json" in text
+    assert "--cov-fail-under=0" in text
+    assert "scripts/check_unit_coverage.py" in text
+    assert "upload-artifact@v7" in text
+    assert "coverage.xml" in text
+
+
+# @regression
+def test_check_unit_coverage_script_enforces_line_floor() -> None:
+    """Line gate stays at 87% when CI measures branches in the same run."""
+    text = (REPO_ROOT / "scripts" / "check_unit_coverage.py").read_text(encoding="utf-8")
+    assert "LINE_FLOOR = 87" in text
 
 
 # @regression

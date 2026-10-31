@@ -59,10 +59,25 @@ jobs:
       - name: Run pytest
         run: |
           if [ -d tests ] && [ -n "$(find tests -name 'test_*.py' 2>/dev/null)" ]; then
-            python -m pytest tests/ --cov=llmwiki --cov-report=term-missing
+            python -m pytest tests/ \
+              --cov=llmwiki \
+              --cov-branch \
+              --cov-report=term-missing \
+              --cov-report=xml:coverage.xml \
+              --cov-report=json:coverage.json \
+              --cov-fail-under=0
+            python scripts/check_unit_coverage.py
           else
             echo "no tests yet — skipping"
           fi
+
+      - name: Upload unit coverage report
+        if: success()
+        uses: actions/upload-artifact@v7
+        with:
+          name: unit-coverage-py${{ matrix.python-version }}
+          path: coverage.xml
+          if-no-files-found: error
 
       - name: Working tree clean after tests
         run: |
