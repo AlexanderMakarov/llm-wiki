@@ -592,6 +592,14 @@ kbd { display: inline-block; padding: 2px 6px; font-family: var(--mono); font-si
 .automation-panel { margin-bottom: 18px; padding-bottom: 14px; border-bottom: 1px solid var(--border); }
 .automation-panel h2 { margin: 0 0 8px; font-size: 1.1rem; }
 .automation-panel ul { margin: 8px 0; padding-left: 18px; }
+.automation-notice { margin: 10px 0 14px; }
+.automation-notice-setup { padding: 10px 12px; border: 1px dashed var(--border); border-radius: 8px; background: var(--bg-alt); }
+.home-freshness-line { margin: 4px 0 12px; font-size: 0.88rem; line-height: 1.45; overflow-wrap: anywhere; }
+.home-metrics-strip { margin: 14px 0 6px; }
+.recent-docs-compact .recent-doc-compact { padding: 7px 0; border-bottom: 1px solid var(--border); display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 4px; }
+.recent-docs-compact .recent-doc-compact:last-child { border-bottom: none; }
+.recent-docs-compact .recent-doc-compact > a { font-weight: 600; font-size: 0.98rem; }
+.recent-docs-compact .recent-doc-meta { font-size: 0.82rem; margin: 0; }
 .state-pipeline-table tfoot td { background: var(--bg-alt); font-weight: 600; }
 .collapse-sections { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
 .collapse-section { border: 1px solid var(--border); border-radius: 8px; background: var(--bg-alt); }

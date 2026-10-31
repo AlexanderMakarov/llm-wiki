@@ -24,9 +24,72 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
 
 // ─── Theme toggle ─────────────────────────────────────────────────────────
 (function () {
+  function parseIsoTs(ts) {
+    if (!ts || typeof ts !== "string") return null;
+    var trimmed = ts.trim();
+    if (!trimmed) return null;
+    var ms = Date.parse(trimmed);
+    if (isNaN(ms)) return null;
+    return new Date(ms);
+  }
+  function formatAbsoluteUtc(d) {
+    if (!d) return "unknown";
+    var y = d.getUTCFullYear();
+    var mo = String(d.getUTCMonth() + 1).padStart(2, "0");
+    var da = String(d.getUTCDate()).padStart(2, "0");
+    var h = String(d.getUTCHours()).padStart(2, "0");
+    var mi = String(d.getUTCMinutes()).padStart(2, "0");
+    return y + "-" + mo + "-" + da + " " + h + ":" + mi + " UTC";
+  }
+  function formatRelativeAge(d) {
+    if (!d) return "unknown";
+    var sec = Math.floor((Date.now() - d.getTime()) / 1000);
+    if (sec < 0) sec = 0;
+    if (sec < 60) return "just now";
+    var mins = Math.floor(sec / 60);
+    if (mins < 60) return mins + (mins === 1 ? " minute ago" : " minutes ago");
+    var hrs = Math.floor(mins / 60);
+    if (hrs < 48) return hrs + (hrs === 1 ? " hour ago" : " hours ago");
+    var days = Math.floor(hrs / 24);
+    return days + (days === 1 ? " day ago" : " days ago");
+  }
+  function formatStageFreshness(label, ts) {
+    var d = parseIsoTs(ts);
+    if (!d) {
+      return label + ": " + (ts ? "unknown" : "never");
+    }
+    return label + ": " + formatAbsoluteUtc(d) + " (" + formatRelativeAge(d) + ")";
+  }
   function formatTs(ts) {
     if (!ts) return "never";
-    return ts;
+    var d = parseIsoTs(ts);
+    if (!d) return "unknown";
+    return formatAbsoluteUtc(d) + " (" + formatRelativeAge(d) + ")";
+  }
+  var _freshnessTimer = null;
+  function renderFreshnessLine(el, snapshot) {
+    if (!el) return;
+    if (!snapshot) {
+      el.textContent = "Build: never · Sync: never · Synth: never";
+      return;
+    }
+    var ops = snapshot.ops || {};
+    var lastSync = ((snapshot.sync || {}).meta || {}).last_sync || "";
+    var parts = [
+      formatStageFreshness("Build", ops.last_build_at || ""),
+      formatStageFreshness("Sync", lastSync),
+      formatStageFreshness("Synth", ops.last_synth_at || "")
+    ];
+    el.textContent = parts.join(" · ");
+  }
+  function wireFreshnessTimer() {
+    if (_freshnessTimer) return;
+    _freshnessTimer = setInterval(function () {
+      renderFreshnessLine(
+        document.getElementById("llmwiki-freshness-line"),
+        window.LLMWIKI_STATE_SNAPSHOT
+      );
+    }, 60000);
   }
   function escapeHtml(s) {
     return String(s == null ? "" : s)
@@ -270,7 +333,7 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
       lintBanner +
       "</div>";
 
-    // #234: stage completion stamps live in the Timeline collapsible (not above tables).
+    // #234 / #321: Timeline holds backlog timing; build/sync/synth live in the Home freshness line.
     var lintStamp = formatTs(ops.last_lint_run_at);
     var lintStatus = ops.last_lint_status ? String(ops.last_lint_status) : "";
     if (lintStatus === "failed" || lintStatus === "ok") {
@@ -278,13 +341,18 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
     }
     var timelineBody =
       '<ul class="queue-type-list state-stage-stamps" aria-label="Pipeline timeline">' +
-      "<li><strong>Oldest pending:</strong> " + escapeHtml(oldest || "none") + "</li>" +
-      "<li><strong>Last sync:</strong> " + escapeHtml(formatTs(lastSync)) + "</li>" +
-      "<li><strong>Last synth:</strong> " + escapeHtml(formatTs(ops.last_synth_at)) + "</li>" +
-      "<li><strong>Last build:</strong> " + escapeHtml(formatTs(ops.last_build_at)) + "</li>" +
+      "<li><strong>Oldest pending:</strong> " + escapeHtml(oldest ? formatTs(oldest) : "none") + "</li>" +
       "<li><strong>Last lint:</strong> " + escapeHtml(lintStamp) + "</li>" +
       "<li><strong>Last queue run:</strong> " + escapeHtml(formatTs(ops.last_queue_run_at)) + "</li>" +
       "</ul>";
+
+    var automationTpl = document.getElementById("llmwiki-automation-details");
+    var automationBody = automationTpl
+      ? automationTpl.innerHTML
+      : '<p class="muted">No automation configured. Run <code>llmwiki install-automation</code>.</p>';
+    var automationSection = automationTpl
+      ? detailsSection("Automation", 0, automationBody)
+      : "";
 
     var warningsBody = warnings.length
       ? ("<ul class=\"queue-type-list\">" + warnings.map(function (w) {
@@ -305,7 +373,8 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
       knowledgeHtml +
       estNote +
       '<div class="collapse-sections">' +
-      detailsSection("Timeline", 6, timelineBody) +
+      detailsSection("Timeline", 3, timelineBody) +
+      automationSection +
       detailsSection("Not synthesized sessions", pendingSessions.length, pendingListHtml(pendingSessions)) +
       detailsSection("Not synthesized docs", pendingDocs.length, pendingListHtml(pendingDocs)) +
       detailsSection("Candidates to review", toReview, reviewBreakdownHtml(pipeline)) +
@@ -317,6 +386,8 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
 
   function renderQueueTrace() {
     var snapshot = window.LLMWIKI_STATE_SNAPSHOT;
+    renderFreshnessLine(document.getElementById("llmwiki-freshness-line"), snapshot);
+    wireFreshnessTimer();
     var mounts = document.querySelectorAll("[data-llmwiki-state-widget], #llmwiki-state-widget, #queue-home-content, #queue-raw-content");
     if (!mounts.length) return;
     mounts.forEach(function (el) {

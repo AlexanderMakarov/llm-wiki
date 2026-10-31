@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 from llmwiki import build as build_mod
+from llmwiki import raw_docs_site
 from llmwiki.build import build_site
 from llmwiki.raw_docs_site import render_dashboard_body
 from llmwiki.render import css, js
@@ -23,11 +24,29 @@ def test_dashboard_inlines_state_mount_not_old_cards():
     body = render_dashboard_body([], 0)
     assert 'id="llmwiki-state-widget"' in body
     assert "data-llmwiki-state-widget" in body
+    assert body.index("Pipeline state") < body.index('id="llmwiki-state-widget"')
+    assert "data-llmwiki-freshness" in body
+    assert "home-freshness-line" in body
+    assert "home-metrics-strip" not in body  # optional block from build
     assert "Pipeline state" in body
     assert "Recent raw documents" in body
+    assert "automation-panel" not in body
     assert "queue-home-content" not in body
     assert "Sync, synthesis, and queue status at a glance" not in body
     assert "<summary><h3" not in body  # commands now live in the JS widget
+    body_with_docs = render_dashboard_body(
+        [
+            raw_docs_site.DocEntry(
+                title="T",
+                url="documents/x.html",
+                date="2026-01-01",
+                source_label="doc",
+                parts=1,
+            )
+        ],
+        1,
+    )
+    assert "recent-doc-compact" in body_with_docs
 
 
 def test_dashboard_mount_includes_vault_root_attr(tmp_path: Path):
@@ -105,13 +124,17 @@ def test_state_widget_js_has_pipeline_table_and_collapsibles():
     timeline_idx = js.JS.index('detailsSection("Timeline"')
     sessions_idx = js.JS.index('detailsSection("Not synthesized sessions"')
     assert timeline_idx < sessions_idx
-    # #234: Timeline holds stage stamps (count 6); lint banner sits under Candidates table.
-    assert 'detailsSection("Timeline", 6,' in js.JS
+    # #321: build/sync/synth stamps live in the Home freshness line; Timeline keeps backlog timing.
+    assert 'detailsSection("Timeline", 3,' in js.JS
+    assert "data-llmwiki-freshness" in js.JS or "llmwiki-freshness-line" in js.JS
+    assert "renderFreshnessLine" in js.JS
+    assert "wireFreshnessTimer" in js.JS
+    assert "formatStageFreshness" in js.JS
+    assert 'detailsSection("Automation"' in js.JS
+    assert "llmwiki-automation-details" in js.JS
     assert "state-stage-stamps" in js.JS
     assert "state-lint-banner" in js.JS
     assert "ops.last_lint_error" in js.JS
-    assert "Last synth:" in js.JS
-    assert "Last build:" in js.JS
     assert "Last lint:" in js.JS
     assert "Last reflect run:" not in js.JS
     assert "Last lint run:" not in js.JS
@@ -137,29 +160,29 @@ def test_state_widget_js_has_pipeline_table_and_collapsibles():
     assert "vault-wide — not split by agent" not in js.JS
 
 
-def test_state_widget_pipeline_stage_stamps_in_timeline():
-    """#234: Last sync/synth/build/lint live in Timeline collapsible (not above tables).
+def test_state_widget_pipeline_stage_stamps_in_freshness_line():
+    """#321: Last sync/synth/build sit in the Home freshness line (not Timeline).
 
-    # @layer: unit  # @spec: 234-home-timeline-automation-stamps
+    # @layer: unit  # @spec: 321-home-pipeline-freshness
     """
-    assert 'aria-label="Pipeline timeline"' in js.JS
-    assert "ops.last_synth_at" in js.JS
+    assert "renderFreshnessLine" in js.JS
     assert "ops.last_build_at" in js.JS
-    assert "ops.last_lint_run_at" in js.JS
-    assert "ops.last_lint_status" in js.JS
+    assert "ops.last_synth_at" in js.JS
+    assert "last_sync" in js.JS
+    assert "formatAbsoluteUtc" in js.JS
+    assert "60000" in js.JS  # relative-age refresh timer
     timeline_body_idx = js.JS.index("var timelineBody =")
     timeline_section_idx = js.JS.index('detailsSection("Timeline"')
     timeline_body = js.JS[timeline_body_idx:timeline_section_idx]
-    assert "Oldest pending:" in timeline_body
-    assert "Last queue run:" in timeline_body
-    assert "Last sync:" in timeline_body
-    assert "Last synth:" in timeline_body
-    assert "Last build:" in timeline_body
     assert "Last lint:" in timeline_body
+    assert "Last queue run:" in timeline_body
+    assert "Last sync:" not in timeline_body
+    assert "Last synth:" not in timeline_body
+    assert "Last build:" not in timeline_body
     assert "Last reflect" not in timeline_body
-    # Stamps are not rendered as a block before the eligible-sources table.
-    assert "var stageStampsHtml" not in js.JS
-    assert js.JS.index("tableHtml +") < js.JS.index('detailsSection("Timeline"')
+    freshness_idx = js.JS.index("function renderFreshnessLine")
+    timeline_idx = js.JS.index("var timelineBody =")
+    assert freshness_idx < timeline_idx
 
 
 def test_state_widget_lint_banner_empty_vs_present():
