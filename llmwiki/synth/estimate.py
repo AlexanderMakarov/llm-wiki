@@ -62,8 +62,13 @@ DEFAULT_OUTPUT_TOKENS = 1400
 # backend's usable body budget instead (#311).
 
 
-def _rendered_template_tokens(wiki_sources_dir: Any | None = None) -> int:
-    """Tokens in the prompt template as actually sent, vocabulary included.
+_TEMPLATE_FILES = {"session": "source_page.md", "document": "document_page.md"}
+
+
+def _rendered_template_tokens(
+    wiki_sources_dir: Any | None = None, *, kind: str = "session"
+) -> int:
+    """Tokens in the ``kind`` prompt template as actually sent, vocabulary included.
 
     The `{vocabulary}` block is expanded from the wiki's canonical topics
     and grows with the wiki, so a fixed figure would drift. Falls back to
@@ -71,7 +76,7 @@ def _rendered_template_tokens(wiki_sources_dir: Any | None = None) -> int:
     is slightly low beats one that raises.
     """
 
-    tmpl_path = Path(__file__).resolve().parent / "prompts" / "source_page.md"
+    tmpl_path = Path(__file__).resolve().parent / "prompts" / _TEMPLATE_FILES[kind]
     try:
         template = tmpl_path.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError):
@@ -111,6 +116,7 @@ def synthesize_estimate_report(
     exclude_headless: bool | None = None,
     lean: bool = True,
     template_tokens: int | None = None,
+    doc_template_tokens: int | None = None,
     backend: BaseSynthesizer | None = None,
     usable_body_chars: int | None = None,
 ) -> dict:
@@ -144,6 +150,9 @@ def synthesize_estimate_report(
       own body
     * ``overhead_tokens`` / ``template_tokens`` — that figure split into
       its agent-scaffolding and prompt-template halves
+    * ``doc_template_tokens`` — the rendered document prompt template
+      (``document_page.md``, #308) every document chunk pays instead of
+      ``template_tokens``
     * ``lean`` — whether lean-mode scaffolding stripping was assumed
     * ``model`` — model id used for pricing
     * ``warnings`` — list of human-readable warnings
@@ -205,6 +214,14 @@ def synthesize_estimate_report(
     # The prompt template is sent verbatim on every call, and the topic
     # vocabulary injected into it grows with the wiki — so measure the
     # rendered article rather than assuming a fixed size.
+    # Documents are sent with their own template (#308). A caller that pins
+    # only ``template_tokens`` gets that figure for both kinds.
+    if doc_template_tokens is None:
+        doc_template_tokens = (
+            template_tokens
+            if template_tokens is not None
+            else _rendered_template_tokens(wiki_sources_dir, kind="document")
+        )
     if template_tokens is None:
         template_tokens = _rendered_template_tokens(wiki_sources_dir)
     overhead_tokens = (
@@ -339,7 +356,9 @@ def synthesize_estimate_report(
         """Tokens billed for one body: the backend sends at most ``cap`` chars."""
         return estimate_tokens((text or "")[:cap], TRANSCRIPT_CHARS_PER_TOKEN)
 
-    def _page_usd(body_tokens: int, *, first: bool) -> float:
+    def _page_usd(
+        body_tokens: int, *, first: bool, tmpl_tokens: int, tmpl_first: bool
+    ) -> float:
         """Dollars for one page: overhead + template + body in, completion out.
 
         Input is billed at the 1-hour cache-*write* rate, not the fresh input
@@ -354,9 +373,10 @@ def synthesize_estimate_report(
         """
         rates = rates_table[chosen_model]
         write_rate = rates["input"] * CACHE_WRITE_1H_MULTIPLIER
-        # Cached prefix: full write on page 1, cache read thereafter.
-        prefix_rate = write_rate if first else rates["cached_input"]
-        billable = template_tokens * prefix_rate + body_tokens * write_rate
+        # Cached prefix: full write on the first page that sends this
+        # template, cache read thereafter.
+        prefix_rate = write_rate if tmpl_first else rates["cached_input"]
+        billable = tmpl_tokens * prefix_rate + body_tokens * write_rate
         if lean:
             billable += overhead_tokens * (write_rate if first else rates["cached_input"])
         else:
@@ -371,19 +391,29 @@ def synthesize_estimate_report(
     # The cached prefix is written once per *run*, so the two buckets count
     # their own first call: a full re-synth pays the write on its first page,
     # an incremental run pays it on the first new page.
+    # Sessions and documents send different templates (#308), so each
+    # template's prefix is written once per bucket.
     call_counts = {"ff": 0, "inc": 0}
+    tmpl_counts: dict[tuple[str, bool], int] = {}
 
-    def _ff_usd(body_tokens: int) -> float:
+    def _bucket_usd(bucket: str, body_tokens: int, is_doc: bool) -> float:
+        cost = _page_usd(
+            body_tokens,
+            first=call_counts[bucket] == 0,
+            tmpl_tokens=doc_template_tokens if is_doc else template_tokens,
+            tmpl_first=tmpl_counts.get((bucket, is_doc), 0) == 0,
+        )
+        call_counts[bucket] += 1
+        tmpl_counts[(bucket, is_doc)] = tmpl_counts.get((bucket, is_doc), 0) + 1
+        return cost
+
+    def _ff_usd(body_tokens: int, *, is_doc: bool = False) -> float:
         """Cost of one page in the full-force bucket."""
-        cost = _page_usd(body_tokens, first=call_counts["ff"] == 0)
-        call_counts["ff"] += 1
-        return cost
+        return _bucket_usd("ff", body_tokens, is_doc)
 
-    def _inc_usd(body_tokens: int) -> float:
+    def _inc_usd(body_tokens: int, *, is_doc: bool = False) -> float:
         """Cost of one page in the incremental bucket."""
-        cost = _page_usd(body_tokens, first=call_counts["inc"] == 0)
-        call_counts["inc"] += 1
-        return cost
+        return _bucket_usd("inc", body_tokens, is_doc)
 
     # Lazy import — estimate is imported from CLI paths that may not need
     # the full build module until this walk runs.
@@ -494,7 +524,7 @@ def synthesize_estimate_report(
         )
         # Long docs become N internal backend calls (one billable body each).
         chunk_tokens = [_body_tokens(c, body_budget) for c in chunks] or [0]
-        ff_cost = sum(_ff_usd(t) for t in chunk_tokens)
+        ff_cost = sum(_ff_usd(t, is_doc=True) for t in chunk_tokens)
         full_force_usd += ff_cost
         docs_row["raw"] += 1
         if matched:
@@ -503,7 +533,7 @@ def synthesize_estimate_report(
         else:
             new_docs += 1
             new_doc_calls += len(chunks)
-            inc_cost = sum(_inc_usd(t) for t in chunk_tokens)
+            inc_cost = sum(_inc_usd(t, is_doc=True) for t in chunk_tokens)
             incremental_usd += inc_cost
             docs_row["pending"] += 1
             docs_row["next_usd"] += inc_cost
@@ -621,6 +651,7 @@ def synthesize_estimate_report(
         # fixed per-page cost comes from.
         "overhead_tokens": overhead_tokens,
         "template_tokens": template_tokens,
+        "doc_template_tokens": doc_template_tokens,
         "output_tokens_per_call": output_tokens_per_call,
         "lean": lean,
         "model": chosen_model,

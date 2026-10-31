@@ -295,6 +295,15 @@ def test_split_prompt_template_separates_stable_from_per_page():
     assert "{body}" in per_page and "{meta}" in per_page
 
 
+def test_split_prompt_template_accepts_the_document_marker():
+    """#308: the document prompt splits at its own marker, so it is cached too."""
+    template = _SPLIT_TEMPLATE.replace("## Session to synthesize", "## Document to synthesize")
+    stable, per_page = split_prompt_template(template)
+    assert "Format rules here." in stable
+    assert "{body}" not in stable and "{meta}" not in stable
+    assert per_page.startswith("## Document to synthesize")
+
+
 def test_split_prompt_template_tolerates_a_custom_template():
     """No marker → everything stays in the user prompt, nothing is lost."""
     stable, per_page = split_prompt_template("Just do it: {body}")

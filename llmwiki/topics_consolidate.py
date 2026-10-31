@@ -11,9 +11,10 @@ Its output is cached (autonomously, no hand-editing) and consumed by:
 * the topic graph + pages (apply the merge-map — zero further tokens), and
 * the regular synth prompt (inject lean ``name`` + ``description`` entries).
 
-Two prompts now live in ``synth/prompts/``: ``source_page.md`` (regular,
-per-session) and ``topic_consolidation.md`` (this dedup/migration pass) — the
-latter doubles as a reusable template for future vocabulary migrations.
+The regular synth prompts in ``synth/prompts/`` are ``source_page.md``
+(per-session) and ``document_page.md`` (per stored document); this
+dedup/migration pass uses ``topic_consolidation.md``, which doubles as a
+reusable template for future vocabulary migrations.
 """
 
 from __future__ import annotations

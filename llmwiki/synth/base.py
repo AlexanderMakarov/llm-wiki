@@ -23,9 +23,11 @@ from typing import Any
 
 from llmwiki.cache import TRANSCRIPT_CHARS_PER_TOKEN
 
-# Section header in prompts/source_page.md that separates the part which is
+# Section headers that separate the part of a synthesis prompt which is
 # identical for every page in a run (format rules + injected topic
-# vocabulary) from the part that changes per page ({meta} + {body}).
+# vocabulary) from the part that changes per page ({meta} + {body}):
+# prompts/source_page.md uses the session marker, prompts/document_page.md
+# the document one (#308).
 #
 # Every provider bills a repeated prefix more cheaply than fresh input, but
 # each wants it in a different place: a system prompt (Claude CLI, Ollama),
@@ -34,6 +36,8 @@ from llmwiki.cache import TRANSCRIPT_CHARS_PER_TOKEN
 # shared contract — lets each backend map the stable half onto whatever its
 # provider caches, instead of every backend re-deriving the boundary.
 PER_PAGE_MARKER = "## Session to synthesize"
+DOCUMENT_PER_PAGE_MARKER = "## Document to synthesize"
+PER_PAGE_MARKERS = (PER_PAGE_MARKER, DOCUMENT_PER_PAGE_MARKER)
 
 
 def split_prompt_template(template: str) -> tuple[str, str]:
@@ -41,17 +45,19 @@ def split_prompt_template(template: str) -> tuple[str, str]:
 
     The prefix is byte-identical across every page of a run, so it is what
     a backend should hand to its provider's caching mechanism. The tail
-    carries the ``{meta}`` / ``{body}`` placeholders.
+    carries the ``{meta}`` / ``{body}`` placeholders. The split happens at
+    the first of :data:`PER_PAGE_MARKERS` that appears in the template.
 
-    A template without the marker (a user's custom prompt) yields an empty
+    A template without a marker (a user's custom prompt) yields an empty
     prefix and the whole template as the tail — caching is an optimisation,
     never a correctness requirement, so an unrecognised template must still
     synthesize correctly.
     """
-    head, sep, tail = template.partition(PER_PAGE_MARKER)
-    if not sep:
+    found = [i for i in (template.find(m) for m in PER_PAGE_MARKERS) if i >= 0]
+    if not found:
         return "", template
-    return head.rstrip(), sep + tail
+    cut = min(found)
+    return template[:cut].rstrip(), template[cut:]
 
 
 class BackendUsageLimitError(RuntimeError):
@@ -420,6 +426,7 @@ class BaseSynthesizer(ABC):
         prose content (Summary, Key Claims, Key Quotes, Connections).
 
         `prompt_template` is the contents of `prompts/source_page.md`
+        (sessions) or `prompts/document_page.md` (stored documents, #308)
         with `{body}` and `{meta}` placeholders.
 
         ``timeout`` (seconds), when set, is the wall-clock bound for this

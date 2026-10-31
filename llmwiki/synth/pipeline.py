@@ -404,22 +404,37 @@ LOG_ARCHIVE_PREFIX = "log-archive-"
 WIKI_LOG = REPO_ROOT / "wiki" / LOG_FILENAME
 
 PROMPT_TEMPLATE_PATH = Path(__file__).parent / "prompts" / "source_page.md"
+# #308: stored documents (raw/docs/) get their own input contract — a
+# document plus provenance, not a conversation transcript.
+DOCUMENT_PROMPT_TEMPLATE_PATH = Path(__file__).parent / "prompts" / "document_page.md"
 
-# Allow user override of the prompt template: if
-# `wiki/prompts/source_page.md` exists, use it instead of the
-# built-in one. This lets users customize the synthesis prompt
-# without forking the codebase.
+# Allow user override of the prompt templates: if
+# `wiki/prompts/source_page.md` (sessions) or `wiki/prompts/document_page.md`
+# (documents) exists, use it instead of the built-in one. This lets users
+# customize the synthesis prompt without forking the codebase.
 USER_PROMPT_OVERRIDE = REPO_ROOT / "wiki" / "prompts" / "source_page.md"
+USER_DOCUMENT_PROMPT_OVERRIDE = REPO_ROOT / "wiki" / "prompts" / "document_page.md"
+
+PROMPT_KINDS = ("session", "document")
 
 
-def _load_prompt_template() -> str:
-    """Load the synthesis prompt template. User override wins."""
-    override = resolve_vault_dir(
-        None, USER_PROMPT_OVERRIDE, "wiki", "prompts", "source_page.md"
-    )
+def _load_prompt_template(kind: str = "session") -> str:
+    """Load the synthesis prompt template for ``kind``. User override wins.
+
+    Each kind falls back to its own packaged prompt, never to the other
+    kind's override: a vault that customised only ``source_page.md`` still
+    synthesizes documents with the document contract.
+    """
+    if kind == "document":
+        legacy, packaged = USER_DOCUMENT_PROMPT_OVERRIDE, DOCUMENT_PROMPT_TEMPLATE_PATH
+    elif kind == "session":
+        legacy, packaged = USER_PROMPT_OVERRIDE, PROMPT_TEMPLATE_PATH
+    else:
+        raise ValueError(f"unknown prompt kind {kind!r}; expected one of {PROMPT_KINDS}")
+    override = resolve_vault_dir(None, legacy, "wiki", "prompts", packaged.name)
     if override.is_file():
         return override.read_text(encoding="utf-8")
-    return PROMPT_TEMPLATE_PATH.read_text(encoding="utf-8")
+    return packaged.read_text(encoding="utf-8")
 
 
 # How many top topics to surface as the reuse vocabulary in the prompt.
@@ -1459,7 +1474,14 @@ def _synthesize_one(
                     if item["is_doc"]
                     else backend.synthesize_source_page
                 )
-                synthesized = send(chunk, meta, prompt_template)
+                # #308: tell the model a chunk is one part of a larger
+                # document, so it does not summarise a fragment as the whole.
+                send_meta = (
+                    {**meta, "chunk": f"{idx} of {total_chunks}"}
+                    if total_chunks > 1
+                    else meta
+                )
+                synthesized = send(chunk, send_meta, prompt_template)
             except BackendUsageLimitError:
                 result["failed_chunk"] = idx
                 raise
@@ -1725,7 +1747,8 @@ def synthesize_new_sessions(
         concurrency = resolve_synth_concurrency(_load_sessions_config())
     else:
         concurrency = resolve_synth_concurrency({"synthesis": {"concurrency": concurrency}})
-    prompt_template = _load_prompt_template()
+    prompt_template = _load_prompt_template("session")
+    document_template = _load_prompt_template("document")
     state_file = _resolve_state_file(state_file)
     state = {} if force else _load_state(state_file)
     # #311: chunk to the ACTIVE backend's usable body budget so no chunk is
@@ -1936,6 +1959,7 @@ def synthesize_new_sessions(
             print(f"{total} source(s) deferred to the next run.")
     if stop_reason is None:
         prompt_template = _inject_vocabulary(prompt_template, wiki_dir)
+        document_template = _inject_vocabulary(document_template, wiki_dir)
         print_synth_run_start(
             total=total, backend_name=backend.name, concurrency=concurrency
         )
@@ -1986,7 +2010,9 @@ def synthesize_new_sessions(
                     _synthesize_one,
                     it,
                     backend=backend,
-                    prompt_template=prompt_template,
+                    prompt_template=(
+                        document_template if it["is_doc"] else prompt_template
+                    ),
                     sources_out=sources_out,
                     chunk_max=chunk_max,
                     write_lock=write_lock,

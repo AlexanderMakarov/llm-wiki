@@ -76,7 +76,7 @@ Input is billed as a 1-hour cache **write** at 2x the fresh rate, not at the pla
 
 Originally every page sent the whole prompt as one user message. Measured across 29 pages, `cache_read_input_tokens` was **0** on all of them: the CLI places a single cache breakpoint at the end of the user message, so the key covers the body too and no two pages ever share one. The template and vocabulary — byte-identical across the run — were re-written at 2x on every page.
 
-The fix is placement, not size. The template splits at `## Session to synthesize` into a run-stable half and a per-page half; the stable half goes into the **system prompt**, which the CLI *does* reuse across invocations:
+The fix is placement, not size. The template splits at `## Session to synthesize` (or `## Document to synthesize` in the document prompt, `document_page.md`) into a run-stable half and a per-page half; the stable half goes into the **system prompt**, which the CLI *does* reuse across invocations:
 
 | | page 1 (cold) | page 2+ |
 |---|---|---|

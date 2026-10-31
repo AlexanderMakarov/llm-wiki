@@ -464,6 +464,26 @@ def test_cli_estimate_prints_model_and_per_page_cost(estimate_vault):
     assert "agent overhead" in cp.stdout
     assert "prompt" in cp.stdout
     assert "Pricing model:" in cp.stdout or "Execution model:" in cp.stdout
+    # #308: with no docs in corpus, one combined prompt figure — not session/doc split.
+    assert "session prompt /" not in cp.stdout
+
+
+# @regression
+def test_cli_estimate_per_page_shows_session_and_document_prompt_when_docs_pending(
+    estimate_vault,
+):
+    """Per-page line must name both template sizes when docs are in scope (#308)."""
+    (estimate_vault / "raw" / "docs" / "note.md").write_text(
+        "# Note\n\nBody.\n",
+        encoding="utf-8",
+    )
+    cp = _run_cli("synth", "--estimate", "--vault", str(estimate_vault))
+    assert cp.returncode == 0, cp.stderr
+    per_page_lines = [ln for ln in cp.stdout.splitlines() if ln.startswith("Per page:")]
+    assert len(per_page_lines) == 1, cp.stdout
+    per_page = per_page_lines[0]
+    assert "session prompt /" in per_page, per_page
+    assert "document prompt" in per_page, per_page
 
 
 def test_cli_estimate_does_not_claim_cache_reuse(estimate_vault):

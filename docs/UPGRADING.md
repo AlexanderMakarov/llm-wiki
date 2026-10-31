@@ -111,6 +111,10 @@ llmwiki migrate whole-document-storage --vault /path/to/vault
 
 See [`docs/reference/cli.md`](reference/cli.md#whole-document-storage--merge-legacy-split-documents-311).
 
+## Unreleased — document synthesis uses its own prompt (#308)
+
+Documents under `raw/docs/` synthesize with `document_page.md` (vault override `wiki/prompts/document_page.md`); a custom `source_page.md` applies to sessions only. Existing document source pages change only after `llmwiki synth --force`.
+
 ## Unreleased — document source pages claim their raw file (#307)
 
 Optional offline migration. Synth now writes `source_file: raw/docs/<path>` on every page it synthesises from `raw/docs/` and tags it `raw-doc` instead of `session-transcript`. Document pages an older release wrote still have a blank `source_file` (so `llmwiki trace`, `provenance_integrity` and `remove`'s frontmatter scan cannot follow them) and still carry `session-transcript` (re-synth keeps existing tags as curation). Heal them without a backend call:

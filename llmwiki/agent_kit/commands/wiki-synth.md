@@ -41,6 +41,6 @@ Candidates: N stub(s) at --min-refs 3 → …/wiki/candidates
 ## When to use
 
 - After `/wiki-sync` produces new `raw/sessions/*.md` files and you want their `wiki/sources/*.md` counterparts (and candidates) immediately.
-- After updating the prompt template under `wiki/prompts/source_page.md` — pair with `--force` to re-synthesize everything using the new prompt (Connections must keep the topic / `fact:` shape).
+- After updating a prompt template — `wiki/prompts/source_page.md` for session transcripts, `wiki/prompts/document_page.md` for stored documents under `raw/docs/` — pair with `--force` to re-synthesize everything using the new prompt (Connections must keep the topic / `fact:` shape). Each override replaces only its own kind; the other kind keeps the packaged prompt.
 - After switching synthesis backends (`dummy` → `ollama` → api).
 - After an interrupted or usage-limited run: default `synth` already harvested; for sources-only stops, run `synth --candidates-only`.
