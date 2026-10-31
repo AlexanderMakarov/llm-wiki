@@ -39,6 +39,7 @@ from llmwiki import (
     migrate_topic_kinds,
     migrate_whole_document_storage,
     migrate_wikilink_titles,
+    run_outcomes,
     usage,
 )
 from llmwiki.adapters import REGISTRY, discover_all
@@ -177,7 +178,7 @@ from llmwiki.state_store import (
 from llmwiki.sync.status import (  # noqa: F401
     cmd_sync_status,
 )
-from llmwiki.synth.base import BaseSynthesizer
+from llmwiki.synth.base import BaseSynthesizer, backend_unavailable_message
 from llmwiki.synth.claude_cli import load_claude_config
 from llmwiki.synth.cursor_cli import load_cursor_cli_config
 from llmwiki.synth.estimate import synthesize_estimate_report  # noqa: F401
@@ -205,7 +206,7 @@ from llmwiki.synth.reporting import (
 )
 from llmwiki.trace import TraceError, TraceResult, trace_page
 from llmwiki.usage import UNATTRIBUTED
-from llmwiki.vault import describe_vault, resolve_vault
+from llmwiki.vault import Vault, describe_vault, resolve_vault
 from llmwiki.vault_settings import (
     VAULT_SETTINGS_FILENAME,
     VaultSettingsError,
@@ -399,7 +400,6 @@ def cmd_sync(args: argparse.Namespace) -> int:
     if args.allow_overwrite:
         print("  --allow-overwrite: existing vault pages may be clobbered")
     # State file is configured at the CLI border via apply_default_vault.
-    out_dir = vault.root / "raw" / "sessions"
     state_file = resolve_state_file()
 
     # #29: downgrade / corrupt-state guard. An older engine (or a truncated
@@ -415,6 +415,37 @@ def cmd_sync(args: argparse.Namespace) -> int:
         return 2
     force = args.force or force_resync
 
+    # #374: only a full sync speaks for the Sync part on Home; a filtered one
+    # (--adapter / --since / --project) neither adds nor clears its entry.
+    full_sync = not (args.adapter or args.since or args.project)
+    sync_started_at = run_outcomes.utc_now()
+    run_outcomes.check_schedule_setup(vault.root, state_file=state_file)
+    if not run_outcomes.is_scheduled_run():
+        return _sync_locked(args, vault, state_file, force, full_sync, sync_started_at)
+    # The scheduled ingest job runs `sync`: stamp its end, crash or not. It is
+    # that schedule's whole run, so a clean finish clears an earlier crash.
+    rc = 1
+    try:
+        rc = _sync_locked(args, vault, state_file, force, full_sync, sync_started_at)
+    except BaseException as exc:
+        run_outcomes.record("run", run_outcomes.run_crashed(exc), state_file=state_file)
+        raise
+    finally:
+        run_outcomes.stamp_scheduled_run(exit_code=rc, state_file=state_file)
+    run_outcomes.record_clean("run", state_file=state_file)
+    return rc
+
+
+def _sync_locked(
+    args: argparse.Namespace,
+    vault: Vault,
+    state_file: Path,
+    force: bool,
+    full_sync: bool,
+    sync_started_at: str,
+) -> int:
+    """The body of ``cmd_sync`` under the vault lock: convert, then auto-build / lint."""
+    out_dir = vault.root / "raw" / "sessions"
     # PR #19 field report: two llmwiki processes on one vault corrupt each
     # other's site resets — serialize the mutating pipeline on a vault lock.
     with pipeline_lock(vault.root):
@@ -428,6 +459,13 @@ def cmd_sync(args: argparse.Namespace) -> int:
             force=force,
             fail_on_errors=getattr(args, "fail_on_errors", False),
         )
+        if full_sync:
+            run_outcomes.record(
+                "sync",
+                run_outcomes.sync_failure(rc, state_file=state_file, started_at=sync_started_at),
+                state_file=state_file,
+                site_dir=vault.root / "site",
+            )
         refresh_synth_pending(
             raw_dir=vault.root / "raw" / "sessions",
             docs_dir=vault.root / "raw" / "docs",
@@ -450,9 +488,16 @@ def cmd_sync(args: argparse.Namespace) -> int:
                 raw_dir = vault.root / "raw"
                 # #414: sync has explicit user opt-in to mutate wiki/, so it's
                 # the right place to seed project stubs.
-                build_site(out_dir=site_root, seed_project_stubs=True,
-                           raw_sessions=raw_sessions, raw_dir=raw_dir,
-                           wiki_dir=wiki_dir)
+                try:
+                    build_rc = build_site(out_dir=site_root, seed_project_stubs=True,
+                                          raw_sessions=raw_sessions, raw_dir=raw_dir,
+                                          wiki_dir=wiki_dir)
+                except Exception as exc:
+                    run_outcomes.record("build", run_outcomes.build_crashed(exc),
+                                        state_file=state_file, site_dir=site_root)
+                    raise
+                run_outcomes.record("build", run_outcomes.build_failure(build_rc),
+                                    state_file=state_file, site_dir=site_root)
             # Always reconcile wiki/index.md after a successful sync (stubs,
             # new sources, removals) — not just when auto-build (the only
             # step that seeds project stubs) ran.
@@ -492,18 +537,28 @@ def cmd_build(args: argparse.Namespace) -> int:
     # ``--out`` omitted means the vault's site/. An explicit path is kept.
     out_dir = vault.root / "site" if args.out is None else args.out
 
+    # #374: only a build into the vault's own site/ speaks for the Build part.
+    records = args.out is None
     with pipeline_lock(vault.root):
-        return build_site(
-            out_dir=out_dir,
-            synthesize=args.synthesize,
-            claude_path=args.claude,
-            search_mode=args.search_mode,
-            seed_project_stubs=getattr(args, "seed_project_stubs", False),
-            raw_sessions=raw_sessions,
-            raw_dir=raw_dir,
-            wiki_dir=wiki_dir,
-            local_root=getattr(args, "local_root", "") or None,
-        )
+        try:
+            rc = build_site(
+                out_dir=out_dir,
+                synthesize=args.synthesize,
+                claude_path=args.claude,
+                search_mode=args.search_mode,
+                seed_project_stubs=getattr(args, "seed_project_stubs", False),
+                raw_sessions=raw_sessions,
+                raw_dir=raw_dir,
+                wiki_dir=wiki_dir,
+                local_root=getattr(args, "local_root", "") or None,
+            )
+        except Exception as exc:
+            if records:
+                run_outcomes.record("build", run_outcomes.build_crashed(exc), site_dir=out_dir)
+            raise
+    if records:
+        run_outcomes.record("build", run_outcomes.build_failure(rc), site_dir=out_dir)
+    return rc
 
 
 def cmd_usage(args: argparse.Namespace) -> int:
@@ -1413,7 +1468,9 @@ def _maybe_pin_claude_path(synth: dict[str, Any]) -> None:
             file=sys.stderr,
         )
         return
-    pinned = str(resolved.resolve())
+    # absolute() keeps symlinks: Claude Code's launcher is a symlink its
+    # self-update repoints while pruning old version binaries (#374).
+    pinned = str(resolved.absolute())
     updated = dict(nested)
     updated["path"] = pinned
     synth["claude"] = updated
@@ -2410,12 +2467,17 @@ def cmd_synthesize(args: argparse.Namespace) -> int:
         print(f"Available: {available}")
         return 0 if available else 1
 
+    # #374: only a full synth (sources + harvest over everything pending)
+    # speaks for the Synth part on Home; a narrowed run neither adds nor clears.
+    full_synth = not (path_args or sessions_only or docs_only or sources_only)
+
+    def _record_synth(failure: run_outcomes.Failure | None) -> None:
+        if full_synth:
+            run_outcomes.record("synth", failure)
+
     if not backend.is_available():
-        print(
-            f"error: backend {backend.name} is not available. "
-            "Start the server or change synthesis.backend in config.",
-            file=sys.stderr,
-        )
+        print(f"error: {backend_unavailable_message(backend)}", file=sys.stderr)
+        _record_synth(run_outcomes.synth_unavailable(backend))
         return 1
 
     try:
@@ -2466,7 +2528,9 @@ def cmd_synthesize(args: argparse.Namespace) -> int:
     # were drained and recorded; collect pending names from what landed (or
     # tell the operator how), then exit 130 / 75 — not 1, even with errors.
     stop_rc = synth_stop_exit_code(summary)
+    synth_failure = run_outcomes.synth_failure(summary)
     if stop_rc:
+        _record_synth(synth_failure)
         if sources_only:
             print("llmwiki synth --candidates-only")
         else:
@@ -2490,6 +2554,7 @@ def cmd_synthesize(args: argparse.Namespace) -> int:
         return stop_rc
 
     if summary["errors"]:
+        _record_synth(synth_failure)
         return 1
 
     # Default `synth`: harvest candidates after sources. `--sources-only` skips this.
@@ -2509,6 +2574,7 @@ def cmd_synthesize(args: argparse.Namespace) -> int:
         backend=backend,
         require_sources=False,
     )
+    _record_synth(run_outcomes.harvest_failure(rc) if rc != 0 else None)
     if rc == 0:
         _refresh_review_counts(harvest_wiki)
         print_synth_run_summary(

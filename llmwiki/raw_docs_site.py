@@ -495,6 +495,7 @@ def render_dashboard_body(
     return f"""<section class="section doctree-section">
   <div class="container">
     <div class="queue-widget">
+      <div id="llmwiki-problems" class="error-banner problems-banner" role="alert" hidden></div>
       {auto_block}
       <h2>Pipeline state</h2>
       <div id="llmwiki-state-widget" class="state-widget" data-llmwiki-state-widget{attrs}>

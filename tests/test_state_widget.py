@@ -105,10 +105,9 @@ def test_state_widget_js_has_pipeline_table_and_collapsibles():
     timeline_idx = js.JS.index('detailsSection("Timeline"')
     sessions_idx = js.JS.index('detailsSection("Not synthesized sessions"')
     assert timeline_idx < sessions_idx
-    # #234: Timeline holds stage stamps (count 6); lint banner sits under Candidates table.
+    # #234: Timeline holds stage stamps (count 6); #374 moved the lint note to the Home banner.
     assert 'detailsSection("Timeline", 6,' in js.JS
     assert "state-stage-stamps" in js.JS
-    assert "state-lint-banner" in js.JS
     assert "ops.last_lint_error" in js.JS
     assert "Last synth:" in js.JS
     assert "Last build:" in js.JS
@@ -118,8 +117,8 @@ def test_state_widget_js_has_pipeline_table_and_collapsibles():
     assert 'aria-label="Pipeline timeline"' in js.JS
     knowledge_html = js.JS[js.JS.index("var knowledgeHtml ="): js.JS.index("var timelineBody =")]
     assert "state-knowledge-table" in knowledge_html
-    assert "lintBanner" in knowledge_html
-    assert knowledge_html.index("</table>") < knowledge_html.index("lintBanner")
+    assert "last_lint_error" not in knowledge_html
+    assert "error-banner" not in knowledge_html
     # Old dashboard chrome removed from the renderer.
     assert "Unsynth estimate" not in js.JS
     assert "Queue task types" not in js.JS
@@ -162,46 +161,6 @@ def test_state_widget_pipeline_stage_stamps_in_timeline():
     assert js.JS.index("tableHtml +") < js.JS.index('detailsSection("Timeline"')
 
 
-def test_state_widget_lint_banner_empty_vs_present():
-    """#234 R2: red lint note under Candidates table only when it lists ``[error]`` findings.
-
-    # @layer: unit  # @spec: 234-home-timeline-automation-stamps
-    """
-    assert "ops.last_lint_error" in js.JS
-    assert 'class="error-banner state-lint-banner"' in js.JS
-    assert 'role="alert"' in js.JS
-    assert "var lintError = ops.last_lint_error" in js.JS
-    assert "if (lintError && /^\\s*\\[error\\]/m.test(lintError))" in js.JS
-    # Appended after knowledge table markup, before Timeline.
-    knowledge_idx = js.JS.index("var knowledgeHtml =")
-    banner_in_knowledge = js.JS.index("lintBanner", knowledge_idx)
-    timeline_idx = js.JS.index('detailsSection("Timeline"')
-    assert knowledge_idx < banner_in_knowledge < timeline_idx
-    assert 'lintStatus === "failed"' in js.JS
-    assert 'lintStatus === "ok"' in js.JS
-
-
-def test_state_widget_warnings_only_failure_has_no_red_banner_gate():
-    """#256: warnings-only policy failures stay off the red banner (Timeline + Linter output).
-
-    # @layer: unit  # @spec: 234-home-timeline-automation-stamps
-    """
-    # Red banner requires an [error] finding line — a warnings-only note must not match.
-    assert "if (lintError && /^\\s*\\[error\\]/m.test(lintError))" in js.JS
-    # Failure still surfaces via Timeline status and Linter output (not the red note).
-    assert 'lintStatus === "failed"' in js.JS
-    assert 'detailsSection("Linter output"' in js.JS
-
-
-def test_state_widget_lint_banner_displays_at_most_ten_lines():
-    """#256: the full note is stored; the browser shows 10 lines then ``…``.
-
-    # @layer: unit  # @spec: 234-home-timeline-automation-stamps
-    """
-    assert "var LINT_BANNER_MAX_LINES = 10;" in js.JS
-    assert 'lintLines.slice(0, LINT_BANNER_MAX_LINES).concat(["…"])' in js.JS
-
-
 def test_state_widget_linter_output_section_follows_estimate_warnings():
     """#256: full ``ops.last_lint_report`` in a collapsible right after Estimate warnings.
 
@@ -216,14 +175,6 @@ def test_state_widget_linter_output_section_follows_estimate_warnings():
     between = js.JS[warnings_idx:report_idx]
     assert between.count("detailsSection(") == 1
     assert ".state-lint-report" in css.CSS
-
-
-def test_state_lint_banner_css_prewrap():
-    """#234: lint banner uses pre-wrap so console-shaped multiline stays readable."""
-    assert "state-lint-banner" in css.CSS
-    assert "white-space: pre-wrap" in css.CSS
-    # Tied to the shared error-banner look; class is composed in JS.
-    assert ".error-banner" in css.CSS
 
 
 def test_commands_table_offers_automation_before_the_manual_rows():

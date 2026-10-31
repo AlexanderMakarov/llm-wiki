@@ -236,21 +236,7 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
       "<thead><tr><th>Source</th><th>Raw</th><th>To synthesize</th><th>Synthesized</th><th>On disk</th></tr></thead>" +
       "<tbody>" + bodyRows + "</tbody>" + footHtml + "</table></div>";
 
-    // #234: lint error note under the Candidates / knowledge table (not above counts).
-    // #256: red only when error findings are listed; display at most 10 lines.
-    var LINT_BANNER_MAX_LINES = 10;
-    var lintError = ops.last_lint_error ? String(ops.last_lint_error) : "";
-    var lintBanner = "";
-    if (lintError && /^\s*\[error\]/m.test(lintError)) {
-      var lintLines = lintError.split("\n");
-      if (lintLines.length > LINT_BANNER_MAX_LINES) {
-        lintLines = lintLines.slice(0, LINT_BANNER_MAX_LINES).concat(["…"]);
-      }
-      lintBanner =
-        '<div class="error-banner state-lint-banner" role="alert">' +
-        escapeHtml(lintLines.join("\n")) +
-        "</div>";
-    }
+    // #374: the lint error note lives in the Home problems banner, not here.
     var lintReport = ops.last_lint_report ? String(ops.last_lint_report) : "";
     var lintReportCount = lintReport ? (lintReport.split("\n").length || 1) : 0;
     var lintReportBody = lintReport
@@ -267,7 +253,6 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
       "<td>" + stageCell(trustedEntities, 0) + "</td>" +
       "<td>" + stageCell(trustedConcepts, 0) + "</td>" +
       "</tr></tbody></table>" +
-      lintBanner +
       "</div>";
 
     // #234: stage completion stamps live in the Timeline collapsible (not above tables).
@@ -315,8 +300,133 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
       "</div>";
   }
 
+  // #374: one red banner at the top of Home for every current problem.
+  // problemEntries is pure (snapshot + clock in, entries out) so tests can run it.
+  var PROBLEM_DETAIL_MAX_LINES = 10;
+  function clipLines(text, max) {
+    var lines = String(text || "").split("\n");
+    if (lines.length > max) lines = lines.slice(0, max).concat(["…"]);
+    return lines.join("\n");
+  }
+  var PROBLEM_PARTS = [["sync", "Sync"], ["synth", "Synth"], ["build", "Build"], ["run", "Run"]];
+  function isoSeconds(ms) {
+    return new Date(ms).toISOString().replace(/\.\d+Z$/, "Z");
+  }
+  // Overdue once the last scheduled run (or the install, before any run) is
+  // older than one schedule interval plus the grace; judged by the browser's
+  // clock, so a job that never runs again still turns red.
+  function scheduleOverdue(scheduled, nowMs) {
+    if (!scheduled || !scheduled.marker || !scheduled.interval_s) return null;
+    var since = scheduled.last_run_at || scheduled.installed_at;
+    var sinceMs = Date.parse(since || "");
+    if (isNaN(sinceMs)) return null;
+    var dueMs = sinceMs + (Number(scheduled.interval_s) + Number(scheduled.grace_s || 0)) * 1000;
+    if (nowMs <= dueMs) return null;
+    var lead = scheduled.last_run_at
+      ? "Last scheduled run: " + scheduled.last_run_at
+      : "No scheduled run since setup at " + scheduled.installed_at;
+    return {
+      part: "Schedule",
+      summary: "overdue",
+      at: "",
+      detail: lead + "\nExpected by: " + isoSeconds(dueMs) +
+        "\nCheck that the computer was on and the job is enabled (llmwiki doctor).",
+      log: scheduled.log_path || ""
+    };
+  }
+  function problemEntries(snapshot, nowMs) {
+    var out = [];
+    if (!snapshot) return out;
+    var outcomes = snapshot.outcomes || {};
+    var overdue = scheduleOverdue(outcomes.scheduled, nowMs);
+    if (overdue) out.push(overdue);
+    if (outcomes.setup_outdated) {
+      out.push({
+        part: "Schedule",
+        summary: "setup outdated: re-run llmwiki install-automation",
+        at: outcomes.setup_outdated.at || "",
+        detail: outcomes.setup_outdated.detail || "",
+        log: ""
+      });
+    }
+    var parts = outcomes.parts || {};
+    PROBLEM_PARTS.forEach(function (pair) {
+      var entry = parts[pair[0]];
+      if (!entry) return;
+      out.push({
+        part: pair[1],
+        summary: String(entry.summary),
+        at: entry.at || "",
+        detail: entry.detail || "",
+        log: entry.log_path || ""
+      });
+    });
+    var ops = snapshot.ops || {};
+    // #256: the lint entry shows only when the note lists [error] findings.
+    var lintError = ops.last_lint_error ? String(ops.last_lint_error) : "";
+    if (lintError && /^\s*\[error\]/m.test(lintError)) {
+      out.push({
+        part: "Lint",
+        summary: "wiki checks found errors",
+        at: ops.last_lint_run_at || "",
+        detail: lintError,
+        log: ""
+      });
+    }
+    return out;
+  }
+  function renderProblemsBanner(root, snapshot, nowMs) {
+    if (!root) return;
+    var entries;
+    try {
+      entries = problemEntries(snapshot, nowMs);
+    } catch (e) {
+      entries = [];
+      window.__llmwikiReportError("Home problems banner unavailable", e);
+    }
+    while (root.firstChild) root.removeChild(root.firstChild);
+    if (!entries.length) {
+      root.hidden = true;
+      return;
+    }
+    var title = document.createElement("strong");
+    title.className = "problems-title";
+    title.textContent = entries.length === 1 ? "1 problem needs attention" : entries.length + " problems need attention";
+    root.appendChild(title);
+    var list = document.createElement("ul");
+    list.className = "problems-list";
+    entries.forEach(function (entry) {
+      var item = document.createElement("li");
+      item.className = "problems-entry";
+      item.setAttribute("data-part", entry.part.toLowerCase());
+      var head = document.createElement("div");
+      head.className = "problems-head";
+      head.textContent = entry.part + " — " + entry.summary;
+      item.appendChild(head);
+      var meta = [];
+      if (entry.at) meta.push(formatTs(entry.at));
+      if (entry.log) meta.push("log: " + entry.log);
+      if (meta.length) {
+        var metaEl = document.createElement("div");
+        metaEl.className = "problems-meta";
+        metaEl.textContent = meta.join(" · ");
+        item.appendChild(metaEl);
+      }
+      if (entry.detail) {
+        var pre = document.createElement("pre");
+        pre.className = "problems-detail";
+        pre.textContent = clipLines(entry.detail, PROBLEM_DETAIL_MAX_LINES);
+        item.appendChild(pre);
+      }
+      list.appendChild(item);
+    });
+    root.appendChild(list);
+    root.hidden = false;
+  }
+
   function renderQueueTrace() {
     var snapshot = window.LLMWIKI_STATE_SNAPSHOT;
+    renderProblemsBanner(document.getElementById("llmwiki-problems"), snapshot, Date.now());
     var mounts = document.querySelectorAll("[data-llmwiki-state-widget], #llmwiki-state-widget, #queue-home-content, #queue-raw-content");
     if (!mounts.length) return;
     mounts.forEach(function (el) {
@@ -348,6 +458,13 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
   document.addEventListener("DOMContentLoaded", function () {
     renderQueueTrace();
     wireQueueCopyButtons();
+    // #374: an open Home tab turns overdue on its own; clock check only, no reads.
+    var problemsMount = document.getElementById("llmwiki-problems");
+    if (problemsMount) {
+      setInterval(function () {
+        renderProblemsBanner(problemsMount, window.LLMWIKI_STATE_SNAPSHOT, Date.now());
+      }, 60000);
+    }
   });
 })();
 

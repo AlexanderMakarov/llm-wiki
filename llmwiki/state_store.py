@@ -79,6 +79,9 @@ def default_state() -> dict[str, Any]:
             # pipeline in defaults — that would skip the backfill forever.
         },
         "quarantine": {"entries": []},
+        # #374: latest failure per pipeline part + the scheduled job's run
+        # stamp, owned by ``llmwiki.run_outcomes``; Home's banner reads it.
+        "outcomes": {"parts": {}},
         "ops": {
             "last_queue_run_at": "",
             "last_lint_run_at": "",
@@ -327,10 +330,35 @@ def resolve_sidecar_file(state_file: Path) -> Path:
     return state_file.parent / "llmwiki-state.js"
 
 
+def _shape_outcomes(outcomes: dict[str, Any]) -> dict[str, Any]:
+    """Keep well-formed ``outcomes`` members; drop the rest (#374).
+
+    A part entry needs a ``scope`` of ``entire`` / ``partial`` and a string
+    ``summary``; the schedule records must be dicts. Anything else would
+    render as a broken banner entry, so it is discarded on write.
+    """
+    parts = outcomes.get("parts")
+    kept_parts: dict[str, Any] = {}
+    if isinstance(parts, dict):
+        for name, entry in parts.items():
+            if (
+                isinstance(name, str)
+                and isinstance(entry, dict)
+                and entry.get("scope") in ("entire", "partial")
+                and isinstance(entry.get("summary"), str)
+            ):
+                kept_parts[name] = entry
+    shaped: dict[str, Any] = {"parts": kept_parts}
+    for key in ("scheduled", "setup_outdated"):
+        if isinstance(outcomes.get(key), dict):
+            shaped[key] = outcomes[key]
+    return shaped
+
+
 def _ensure_shape(raw: dict[str, Any]) -> dict[str, Any]:
     base = default_state()
     out = deepcopy(base)
-    for key in ("queue", "sync", "synth", "quarantine", "ops", "meta"):
+    for key in ("queue", "sync", "synth", "quarantine", "outcomes", "ops", "meta"):
         if isinstance(raw.get(key), dict):
             out[key].update(raw[key])
     if not isinstance(out["queue"].get("items"), list):
@@ -375,6 +403,15 @@ def _ensure_shape(raw: dict[str, Any]) -> dict[str, Any]:
         out["synth"]["estimate"] = {}
     if not isinstance(out["quarantine"].get("entries"), list):
         out["quarantine"]["entries"] = []
+    out["outcomes"] = _shape_outcomes(out["outcomes"])
+    # Keep sections a newer llmwiki added. Rebuilding from the known list
+    # alone meant any older writer (a long-running worker or MCP server)
+    # silently erased a newer section on its next write (#374). Legacy flat
+    # files' per-file mtimes and ``_meta`` / ``_counters`` are not sections
+    # (not dicts, or ``_``-prefixed) and are still dropped.
+    for key, value in raw.items():
+        if isinstance(key, str) and not key.startswith("_") and key not in out and isinstance(value, dict):
+            out[key] = value
     for key in _OPS_STRING_KEYS:
         if not isinstance(out["ops"].get(key), str):
             out["ops"][key] = ""

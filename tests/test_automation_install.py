@@ -40,6 +40,7 @@ from llmwiki.automation_install import (
     default_scheduler_units_dir,
     merge_claude_session_start_hook,
     merge_cursor_session_start_hook,
+    program_dirs,
     render_launchd_plist,
     render_systemd_service,
     render_systemd_timer,
@@ -1708,12 +1709,44 @@ def test_yes_claude_pins_absolute_path_usable_under_minimal_path(
     assert code == 0
     cfg = settings_sandbox.read_operator()
     pinned = cfg["synthesis"]["claude"]["path"]
-    assert Path(pinned) == claude.resolve()
+    assert Path(pinned) == claude
     assert Path(pinned).is_absolute()
 
     monkeypatch.setenv("PATH", "/usr/bin:/bin")
     assert resolve_claude_path(None) is None
-    assert resolve_claude_path(pinned) == claude.resolve()
+    assert resolve_claude_path(pinned) == claude
+
+
+def test_yes_claude_pins_the_launcher_not_the_versioned_binary_it_links_to(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    settings_sandbox: SettingsSandbox,
+):
+    """The pin keeps the `claude` launcher symlink, so it survives a self-update that prunes the version it pointed at (#374)."""
+    versions = tmp_path / ".local" / "share" / "claude" / "versions"
+    versions.mkdir(parents=True)
+    old = versions / "1.0.0"
+    old.write_text("#!/bin/sh\n", encoding="utf-8")
+    old.chmod(0o755)
+    local_bin = tmp_path / ".local" / "bin"
+    local_bin.mkdir(parents=True)
+    launcher = local_bin / "claude"
+    launcher.symlink_to(old)
+    monkeypatch.setenv("PATH", f"{local_bin}{os.pathsep}/usr/bin{os.pathsep}/bin")
+    code, _vault, _units = _install_via_flags(
+        tmp_path, monkeypatch, "--job", "maintain", "--synth-backend", "claude",
+    )
+    assert code == 0
+    pinned = settings_sandbox.read_operator()["synthesis"]["claude"]["path"]
+    assert pinned == str(launcher)
+
+    new = versions / "1.0.1"
+    new.write_text("#!/bin/sh\n", encoding="utf-8")
+    new.chmod(0o755)
+    launcher.unlink()
+    launcher.symlink_to(new)
+    old.unlink()
+    monkeypatch.setenv("PATH", "/usr/bin:/bin")
+    assert resolve_claude_path(pinned) is not None
 
 
 def test_yes_claude_does_not_overwrite_explicit_nested_path(
@@ -1778,6 +1811,125 @@ def test_yes_claude_warns_when_cli_missing_but_still_installs(
     err = capsys.readouterr().err
     assert "claude CLI not found" in err
     assert "synthesis.claude.path" in err
+
+
+# ─── #374: the scheduled job finds programs like a terminal does ───
+
+
+def _launcher_layout(tmp_path: Path, name: str) -> tuple[Path, Path]:
+    """``bin/<name>`` symlinked to ``versions/1.0.0``, the self-updating launcher shape."""
+    versions = tmp_path / "share" / name / "versions"
+    versions.mkdir(parents=True)
+    real = versions / "1.0.0"
+    real.write_text("#!/bin/sh\n", encoding="utf-8")
+    real.chmod(0o755)
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir(exist_ok=True)
+    (bin_dir / name).symlink_to(real)
+    return bin_dir, versions
+
+
+@pytest.mark.parametrize(
+    ("backend", "program"),
+    [("claude", "claude"), ("cursor_cli", "agent")],
+)
+def test_program_dirs_keep_the_launcher_folder_of_the_backend(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, backend: str, program: str
+):
+    bin_dir, versions = _launcher_layout(tmp_path, program)
+    monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}/usr/bin{os.pathsep}/bin")
+    dirs = program_dirs(synth_backend=backend, python_bin=sys.executable)
+    assert dirs[0] == str(bin_dir)
+    assert str(Path(sys.executable).absolute().parent) in dirs
+    assert str(versions) not in dirs
+    assert len(dirs) == len(set(dirs))
+
+
+def test_program_dirs_skip_programs_the_backend_does_not_use(tmp_path: Path, monkeypatch):
+    bin_dir, _versions = _launcher_layout(tmp_path, "claude")
+    monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}/usr/bin{os.pathsep}/bin")
+    assert str(bin_dir) not in program_dirs(synth_backend="ollama", python_bin=sys.executable)
+
+
+def test_wrapper_reads_the_login_profile_and_prepends_recorded_folders(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("PATH", f"/install-time-only/venv/bin{os.pathsep}/usr/bin")
+    text = render_wrapper_script(
+        plan=AutomationPlan(job="maintain"), python_bin="/usr/bin/python3",
+        working_dir=tmp_path, log_path=tmp_path / "log", vault=tmp_path,
+        program_dirs=["/home/USER/.local/bin", "/opt/odd dir/bin"],
+    )
+    lines = text.splitlines()
+    assert '"$HOME/.profile"' in text
+    assert "</dev/null" in text
+    export = next(line for line in lines if line.startswith("export PATH="))
+    assert export == "export PATH=/home/USER/.local/bin:'/opt/odd dir/bin':\"$PATH\""
+    assert lines.index(export) < lines.index("set -euo pipefail")
+    assert "/install-time-only" not in text  # never the whole install-time PATH
+
+
+def test_wrapper_profile_block_survives_a_profile_that_exits(tmp_path: Path):
+    """A profile that prints, sets PATH and exits keeps its PATH and does not end the job."""
+    home = tmp_path / "home"
+    home.mkdir()
+    (home / ".profile").write_text(
+        'echo noise\nexport PATH="/from/profile/bin:$PATH"\nexit 3\n', encoding="utf-8"
+    )
+    text = render_wrapper_script(
+        plan=AutomationPlan(job="maintain"), python_bin="/usr/bin/python3",
+        working_dir=tmp_path, log_path=tmp_path / "log", vault=tmp_path,
+        program_dirs=[str(tmp_path / "rec")],
+    )
+    env_block = text.split("set -euo pipefail")[0]
+    script = tmp_path / "env.sh"
+    script.write_text(env_block + 'echo "PATH=$PATH"\n', encoding="utf-8")
+    out = subprocess.run(
+        ["bash", str(script)], capture_output=True, text=True, check=True,
+        env={"HOME": str(home), "PATH": "/usr/bin:/bin"},
+    ).stdout.strip()
+    assert out == f"PATH={tmp_path / 'rec'}:/from/profile/bin:/usr/bin:/bin"
+
+
+def test_wrapper_profile_block_also_reads_zprofile_when_zsh_exists(tmp_path: Path):
+    """zsh users keep PATH in ~/.zprofile; the job reads it on top of the bash profile.
+
+    A ``zsh`` stand-in that hands its arguments to bash proves the wiring on
+    machines without zsh (the ``-c`` / ``trap`` syntax is the same).
+    """
+    home = tmp_path / "home"
+    home.mkdir()
+    (home / ".profile").write_text('export PATH="/from/bash:$PATH"\n', encoding="utf-8")
+    (home / ".zprofile").write_text('export PATH="/from/zsh:$PATH"\nexit 4\n', encoding="utf-8")
+    shim_dir = tmp_path / "shim"
+    shim_dir.mkdir()
+    zsh = shim_dir / "zsh"
+    zsh.write_text('#!/bin/sh\nexec bash "$@"\n', encoding="utf-8")
+    zsh.chmod(0o755)
+    text = render_wrapper_script(
+        plan=AutomationPlan(job="maintain"), python_bin="/usr/bin/python3",
+        working_dir=tmp_path, log_path=tmp_path / "log", vault=tmp_path, program_dirs=[],
+    )
+    script = tmp_path / "env.sh"
+    script.write_text(text.split("set -euo pipefail")[0] + 'echo "PATH=$PATH"\n', encoding="utf-8")
+    out = subprocess.run(
+        ["bash", str(script)], capture_output=True, text=True, check=True,
+        env={"HOME": str(home), "PATH": f"{shim_dir}:/usr/bin:/bin"},
+    ).stdout.strip()
+    assert out == f"PATH=/from/zsh:/from/bash:{shim_dir}:/usr/bin:/bin"
+
+
+def test_install_records_the_program_folders_it_put_on_path(tmp_path: Path, monkeypatch):
+    bin_dir, _versions = _launcher_layout(tmp_path, "claude")
+    monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}/usr/bin{os.pathsep}/bin")
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    status = run_install({
+        "working_dir": tmp_path, "python_bin": sys.executable, "vault_root": vault,
+        "write_units_dir": tmp_path / "units", "force_platform": "linux",
+        "activate": False, "synth_backend": "claude",
+    })
+    assert str(bin_dir) in status["program_dirs"]
+    wrapper = (tmp_path / "units" / unit_names(vault).wrapper).read_text(encoding="utf-8")
+    assert str(bin_dir) in wrapper
 
 
 # ─── Per-vault scheduler unit names (@spec: 330-doctor-automation-serves-vault) ───

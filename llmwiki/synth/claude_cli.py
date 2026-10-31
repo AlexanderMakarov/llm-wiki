@@ -447,6 +447,18 @@ class ClaudeCLISynthesizer(BaseSynthesizer):
     def is_available(self) -> bool:
         return self._resolved() is not None
 
+    def unavailable_reason(self) -> str:
+        """Name the missing ``claude`` program and how to point at it (#374)."""
+        if self.claude_path:
+            return (
+                f"{self.claude_path} does not exist — point synthesis.claude.path "
+                "at the claude launcher (e.g. ~/.local/bin/claude) or remove it"
+            )
+        return (
+            "claude was not found on PATH — install Claude Code or set "
+            "synthesis.claude.path"
+        )
+
     def overview_completion(
         self, prompt: str, *, model: str | None = None
     ) -> str:
