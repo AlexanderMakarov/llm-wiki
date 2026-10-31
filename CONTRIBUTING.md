@@ -324,9 +324,9 @@ python3 -m pytest tests/ -q
 # One file
 python3 -m pytest tests/test_convert.py
 
-# Same unit suite + coverage (what CI gates at 87% line; branch columns in the summary)
+# Same unit suite + coverage (what CI gates at 87%)
 python3 -m pip install -e '.[dev]'
-python3 -m pytest tests/ --cov=llmwiki --cov-branch --cov-report=term-missing
+python3 -m pytest tests/ --cov=llmwiki --cov-report=term-missing
 
 # Wall-clock lint_perf budgets — CI runs these on the performance-budget job
 python3 -m pytest tests/test_lint_perf.py -m slow -o addopts=
@@ -341,7 +341,7 @@ python3 -m playwright install chromium
 python3 -m pytest tests/e2e/
 ```
 
-**Coverage baseline and gate (#271).** The default unit job (`lint-and-test` in `.github/workflows/ci.yml`) runs Coverage.py on `llmwiki` only: **line** and **branch** coverage for `pytest tests/` (with `tests/e2e` ignored and `@pytest.mark.slow` deselected via `pyproject.toml` `addopts`). CI prints a readable `term-missing` summary (including branch columns), uploads machine-readable `coverage.xml` as a workflow artifact (`unit-coverage-py3.12`), and runs `scripts/check_unit_coverage.py` on `coverage.json` so the regression gate stays the baseline-first **87% line** floor from #280 — not a 100% target and not a separate branch-percent gate (Coverage.py’s built-in `fail_under` would mix branch into the total when `--cov-branch` is on). `pytest-cov` is dev/CI only (never a runtime dependency). Playwright E2E, cross-browser, and visual-regression jobs are separate workflows and do not feed this percentage. If a change trips the line gate, restore coverage with meaningful tests — or state in the PR body why the drop is justified (deleted surface, moved code, etc.) so reviewers can accept it.
+**Coverage floor.** `pyproject.toml` sets `[tool.coverage.report] fail_under = 87` on `llmwiki` for the default unit invocation above. CI also reports branch coverage, uploads `coverage.xml`, and applies the same **87% line** floor via `scripts/check_unit_coverage.py` (see `docs/CODING_STANDARDS.md` for why). Dropping below 87 fails CI. If a change trips the gate, restore coverage with meaningful tests — or state in the PR body why the drop is justified (deleted surface, moved code, etc.) so reviewers can accept it. E2E stays out of this number (separate workflow).
 
 Suite autouse in `tests/conftest.py` isolates the default vault and gives every test its own home directory and operator `config.json`. A test that needs settings prepares them through the `settings_sandbox` fixture (`write_operator`, `home`, …) instead of patching paths or `HOME`; a pytest run that changes your real `config.json`, llmwiki's settings in your home directory, or a tracked file fails at the end and lists what changed. Rules: [`docs/CODING_STANDARDS.md`](docs/CODING_STANDARDS.md) (Isolation).
 
