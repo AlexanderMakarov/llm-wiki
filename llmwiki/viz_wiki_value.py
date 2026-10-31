@@ -6,10 +6,17 @@ line-count ceiling while the value layer stays independently testable.
 from __future__ import annotations
 
 import html
+from collections.abc import Mapping
 from typing import Any
 
+from llmwiki.format_numbers import format_tokens
 from llmwiki.render.collapse_section import collapse_section_list
 from llmwiki.usage import UNATTRIBUTED, is_entity_tool, value_summary
+from llmwiki.viz_tokens import (
+    compute_site_stats,
+    compute_site_stats_from_usage,
+    usage_file_preferred_for_site_stats,
+)
 
 
 def render_project_usage_block(
@@ -306,6 +313,63 @@ def render_mcp_usage_section(
         '<h2>LLM-Wiki MCP usage</h2>'
         f'{inner}'
         '</div></section>'
+    )
+
+
+def render_home_metrics_strip(
+    usage_totals: dict[str, Any] | None,
+    *,
+    wiki_page_count: int,
+    metas_by_project: Mapping[str, list[Mapping[str, object]]] | None = None,
+    session_tokens_usage: Mapping[str, Any] | None = None,
+) -> str:
+    """Compact Home metrics: recorded session tokens + Payoff / page (#321).
+
+    Uses the same aggregates as Analytics — missing token data is not shown as zero.
+    """
+    metas_by_project = dict(metas_by_project or {})
+    meta_stats = compute_site_stats(metas_by_project)
+    stats = meta_stats
+    if session_tokens_usage and usage_file_preferred_for_site_stats(session_tokens_usage):
+        usage_stats = compute_site_stats_from_usage(session_tokens_usage)
+        stats = {
+            **meta_stats,
+            "total_tokens": usage_stats["total_tokens"],
+            "session_count": usage_stats["session_count"],
+            "avg_per_session": usage_stats["avg_per_session"],
+        }
+    summary = value_summary(usage_totals or {}, wiki_page_count=wiki_page_count)
+    pages = int(summary["wiki_page_count"] or 0)
+    payoff = float(summary["payoff_per_page"] or 0.0)
+    measured = int(stats.get("session_count") or 0)
+    total_tokens = int(stats.get("total_tokens") or 0)
+    has_tokens = measured > 0 and total_tokens > 0
+    tokens_value = format_tokens(total_tokens) if has_tokens else "—"
+    tokens_sub = (
+        "Recorded session usage (not synthesis spend)"
+        if has_tokens
+        else "No recorded session tokens yet — see Analytics when data exists"
+    )
+    payoff_value = f"{payoff:.2f}" if pages else "—"
+    payoff_sub = (
+        f"Retrieval calls ÷ {pages} wiki pages · "
+        '<a href="analytics.html">Analytics</a>'
+        if pages
+        else "Needs wiki pages and MCP retrievals"
+    )
+    return (
+        '<div class="home-metrics-strip token-stat-grid" aria-label="Wiki value at a glance">'
+        '<div class="token-stat">'
+        '<div class="token-stat-label muted">Session tokens</div>'
+        f'<div class="token-stat-value">{html.escape(tokens_value)}</div>'
+        f'<div class="token-stat-sub muted">{tokens_sub}</div>'
+        "</div>"
+        '<div class="token-stat">'
+        '<div class="token-stat-label muted">Payoff / page</div>'
+        f'<div class="token-stat-value">{html.escape(payoff_value)}</div>'
+        f'<div class="token-stat-sub muted">{payoff_sub}</div>'
+        "</div>"
+        "</div>"
     )
 
 

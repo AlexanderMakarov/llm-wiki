@@ -58,7 +58,7 @@ _FAVICON_PNG = bytes.fromhex(
 SOURCE_ROOT = PACKAGE_ROOT.parent
 from llmwiki import automation_plan, cron_spec, raw_docs_site
 from llmwiki.agent_label import detect_agent_label, render_agent_badge
-from llmwiki.automation_status import load_status
+from llmwiki.automation_status import load_status, vault_automation_log_path
 from llmwiki.candidates import apply_review_summary_to_pipeline, candidate_review_summary
 from llmwiki.candidates_site import render_candidates_body
 from llmwiki.changelog_timeline import (
@@ -175,6 +175,7 @@ from llmwiki.viz_tools import (
 )
 from llmwiki.viz_wiki_value import (  # noqa: F401
     render_candidates_review_section,
+    render_home_metrics_strip,
     render_mcp_heaviest_card,
     render_project_usage_block,
     render_wiki_value_section,
@@ -2224,28 +2225,30 @@ def _schedule_label(status: dict[str, Any]) -> str:
         return cron_spec.describe(cron_spec.parse_cron(automation_plan.DEFAULT_SCHEDULE))
 
 
-def render_automation_panel(content_root: Path | None) -> str:
-    """HTML panel describing install-automation status for the Home page.
+_AUTOMATION_EXIT_LINE = re.compile(r"^EXIT:(-?\d+)\s*$", re.MULTILINE)
+_SOFT_AUTOMATION_EXITS = frozenset({0, 75})
 
-    Settings only (#234): job, schedule, short synth-backend line, hooks, watch,
-    log path, and a Maintain one-liner. No stage timestamps, lint outcome,
-    lint-fail policy reminder, or installer Updated line.
-    """
-    if content_root is None:
-        status = None
-    else:
-        status = load_status(content_root)
 
-    if not status:
-        return (
-            '<div class="automation-panel" aria-label="Automation">'
-            "<h2>Automation</h2>"
-            "<p class=\"muted\">No automation configured. Run "
-            "<code>llmwiki install-automation</code> or <code>./setup.sh</code> "
-            "to set a daily scheduler, optional watch, and synth backend.</p>"
-            "</div>"
-        )
+def _last_automation_exit_code(content_root: Path) -> int | None:
+    """Last ``EXIT:`` line from the vault automation log, if readable."""
+    status = load_status(content_root)
+    log_path = vault_automation_log_path(content_root)
+    if status and status.get("log_path"):
+        log_path = Path(str(status["log_path"]))
+    if not log_path.is_file():
+        return None
+    try:
+        text = log_path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    matches = _AUTOMATION_EXIT_LINE.findall(text)
+    if not matches:
+        return None
+    return int(matches[-1])
 
+
+def _render_automation_settings_body(status: dict[str, object]) -> str:
+    """Settings list for configured automation (details panel)."""
     plan = automation_plan.plan_from_status(status)
     job_label = html.escape(automation_plan.plan_label(plan))
     schedule_label = html.escape(_schedule_label(status))
@@ -2273,8 +2276,6 @@ def render_automation_panel(content_root: Path | None) -> str:
         )))
         footer = f'<p class="muted">{note}</p>'
     return (
-        '<div class="automation-panel" aria-label="Automation">'
-        "<h2>Automation</h2>"
         "<ul>"
         f"<li>Daily job: <strong>{job_label}</strong></li>"
         f"<li>Runs: <strong>{schedule_label}</strong> local time</li>"
@@ -2284,6 +2285,90 @@ def render_automation_panel(content_root: Path | None) -> str:
         f"<li>Last-run log: <code>{log_path}</code></li>"
         "</ul>"
         f"{footer}"
+    )
+
+
+def render_automation_notice(content_root: Path | None) -> str:
+    """Visible Home automation alerts — unconfigured, activation errors, last run failure."""
+    if content_root is None:
+        return (
+            '<div class="automation-notice automation-notice-setup" role="status">'
+            "<p class=\"muted\">No automation configured. Run "
+            "<code>llmwiki install-automation</code> or <code>./setup.sh</code> "
+            "to set a daily scheduler, optional watch, and synth backend.</p>"
+            "</div>"
+        )
+    status = load_status(content_root)
+    if not status:
+        return (
+            '<div class="automation-notice automation-notice-setup" role="status">'
+            "<p class=\"muted\">No automation configured. Run "
+            "<code>llmwiki install-automation</code> or <code>./setup.sh</code> "
+            "to set a daily scheduler, optional watch, and synth backend.</p>"
+            "</div>"
+        )
+    parts: list[str] = []
+    sched_err = status.get("scheduler_error")
+    if isinstance(sched_err, str) and sched_err.strip():
+        parts.append(
+            '<div class="error-banner automation-notice" role="alert">'
+            "Scheduler activation failed: "
+            f"{html.escape(sched_err.strip())}"
+            "</div>"
+        )
+    if status.get("scheduler_activated") and status.get("scheduler_active") is False:
+        parts.append(
+            '<div class="error-banner automation-notice" role="alert">'
+            "Automation is installed but the OS scheduler reports it as inactive."
+            "</div>"
+        )
+    exit_code = _last_automation_exit_code(content_root)
+    if exit_code is not None and exit_code not in _SOFT_AUTOMATION_EXITS:
+        log_path = html.escape(str(status.get("log_path") or vault_automation_log_path(content_root)))
+        parts.append(
+            '<div class="error-banner automation-notice" role="alert">'
+            f"Last scheduled run failed (exit {exit_code}). "
+            f"See <code>{log_path}</code>."
+            "</div>"
+        )
+    return "".join(parts)
+
+
+def render_automation_details(content_root: Path | None) -> str:
+    """Collapsed automation settings body — empty when automation is not configured."""
+    if content_root is None:
+        return ""
+    status = load_status(content_root)
+    if not status:
+        return ""
+    return _render_automation_settings_body(status)
+
+
+def render_automation_panel(content_root: Path | None) -> str:
+    """HTML panel describing install-automation status for the Home page.
+
+    Deprecated layout helper — tests and callers still expect the settings body.
+    Home now uses :func:`render_automation_notice` + :func:`render_automation_details`.
+    """
+    if content_root is None:
+        status = None
+    else:
+        status = load_status(content_root)
+
+    if not status:
+        return (
+            '<div class="automation-panel" aria-label="Automation">'
+            "<h2>Automation</h2>"
+            "<p class=\"muted\">No automation configured. Run "
+            "<code>llmwiki install-automation</code> or <code>./setup.sh</code> "
+            "to set a daily scheduler, optional watch, and synth backend.</p>"
+            "</div>"
+        )
+
+    return (
+        '<div class="automation-panel" aria-label="Automation">'
+        "<h2>Automation</h2>"
+        f"{_render_automation_settings_body(status)}"
         "</div>"
     )
 
@@ -2295,6 +2380,7 @@ def render_index(
     out_dir: Path,
     *,
     content_root: Path | None = None,
+    home_metrics_html: str = "",
 ) -> Path:
     """Render ``index.html`` — queue/dashboard landing page."""
     body = raw_docs_site.render_dashboard_body(
@@ -2302,7 +2388,9 @@ def render_index(
         doc_file_count,
         vault_root=content_root,
         repo_root=SOURCE_ROOT,
-        automation_html=render_automation_panel(content_root),
+        automation_notice_html=render_automation_notice(content_root),
+        automation_details_html=render_automation_details(content_root),
+        home_metrics_html=home_metrics_html,
     )
     page = (
         page_head("LLM Wiki", "Karpathy-style knowledge base from Claude Code sessions", css_prefix="")
@@ -3547,6 +3635,19 @@ def build_site(
     render_index(
         docs_root, doc_entries, len(doc_files), out_dir,
         content_root=wiki_dir.parent if wiki_dir is not None else None,
+        home_metrics_html=render_home_metrics_strip(
+            usage_totals or {},
+            wiki_page_count=int(wiki_value.get("wiki_page_count") or 0),
+            metas_by_project={
+                project: [m for _, m, _ in sessions]
+                for project, sessions in groups.items()
+            },
+            session_tokens_usage=(
+                load_session_tokens(content_root)
+                if content_root is not None
+                else None
+            ),
+        ),
     )
     render_raw(docs_root, doc_entries, len(doc_files), out_dir)
     render_recent(doc_entries, out_dir)
