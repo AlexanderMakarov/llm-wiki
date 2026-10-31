@@ -1,0 +1,28 @@
+{
+  "unofficial-translation.md": {
+    "case": "Draft or unofficial status must survive into the Summary; the page must not call the text official.",
+    "must_keep": ["not an official version", "has not been approved"],
+    "must_not_claim": ["official English version"]
+  },
+  "fee-rule-with-exception.md": {
+    "case": "A general fee rule keeps its mid-year exception.",
+    "must_keep": ["regardless of the student's attendance", "from the month of transfer"],
+    "must_not_claim": ["regardless of attendance or enrollment date"]
+  },
+  "and-vs-or-conditions.md": {
+    "case": "An 'and' condition stays 'and'; a separately scoped 'or' clause stays separate.",
+    "must_keep": ["violates the code of discipline and fails", "relocates or the student's health"],
+    "must_not_claim": ["violates the code of discipline or fails"]
+  },
+  "internal-contradiction.md": {
+    "case": "Material internal contradictions are listed under Contradictions, not resolved or reported as none.",
+    "must_keep": ["may lead to expulsion", "is expelled", "must be paid again", "is carried over"],
+    "must_not_claim": ["None identified"]
+  },
+  "topic-desc-leak.md": {
+    "case": "An existing topic's desc helps choose a link but is never restated as a fact about this document.",
+    "topic": {"name": "ExampleLearningCenter", "kind": "entity", "desc": "Private school following a community-led educational model"},
+    "must_keep": ["open on weekdays from 08:00 to 16:00"],
+    "must_not_claim": ["community-led educational model"]
+  }
+}

@@ -7,7 +7,8 @@ dummy) can drive the generation.
 
 Components:
 - `base.py` — `BaseSynthesizer` ABC + `DummySynthesizer` for testing
-- `prompts/source_page.md` — the prompt template (user-overridable)
+- `prompts/source_page.md` — the session prompt template (user-overridable)
+- `prompts/document_page.md` — the stored-document prompt template (user-overridable, #308)
 - `pipeline.py` — the `synthesize_new_sessions()` orchestrator
 
 The entry point is `llmwiki sync --synthesize` or `llmwiki synthesize`.

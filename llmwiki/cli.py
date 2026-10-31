@@ -2828,10 +2828,24 @@ def _synthesize_estimate(
     print()
     # Per-page fixed cost, split so an unexpectedly large figure is
     # traceable to either the agent scaffolding or a bloated vocabulary.
+    # Documents use a separate prompt (#308); show both figures when they
+    # differ and any docs are in the estimate corpus / pending set.
+    session_prompt_tok = int(report.get("template_tokens", 0) or 0)
+    doc_prompt_tok = int(report.get("doc_template_tokens", session_prompt_tok) or 0)
+    docs_in_scope = int(report.get("new_docs", 0) or 0) + int(
+        report.get("corpus_docs", 0) or 0
+    )
+    if doc_prompt_tok != session_prompt_tok and docs_in_scope:
+        prompt_part = (
+            f"{session_prompt_tok:,} session prompt / "
+            f"{doc_prompt_tok:,} document prompt"
+        )
+    else:
+        prompt_part = f"{session_prompt_tok:,} prompt"
     per_page = (
         f"Per page: {report['prefix_tokens']:,} tok fixed "
         f"({report.get('overhead_tokens', 0):,} agent overhead + "
-        f"{report.get('template_tokens', 0):,} prompt) "
+        f"{prompt_part}) "
         f"+ body, ~{report.get('output_tokens_per_call', 0):,} out"
     )
     if not report.get("lean", True):
