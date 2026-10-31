@@ -25,6 +25,7 @@ CSS = """/* llmwiki — god-level docs style */
   --accent: #7C3AED;
   --accent-light: #a78bfa;
   --accent-bg: #f5f3ff;
+  --danger: #b91c1c;                       /* WCAG AA: 6.47:1 on white */
   --radius: 8px;
   --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
@@ -59,6 +60,8 @@ CSS = """/* llmwiki — god-level docs style */
     --accent: #a78bfa;
     --accent-light: #c4b5fd;
     --accent-bg: #1e1a3a;
+    /* #374: #b91c1c on the dark card is ~2.4:1; #f87171 reads at AA. */
+    --danger: #f87171;
     --shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.3);
     --shadow-card: 0 2px 6px rgba(0, 0, 0, 0.35);
     --shadow-card-hover: 0 6px 16px rgba(0, 0, 0, 0.45);
@@ -77,6 +80,7 @@ CSS = """/* llmwiki — god-level docs style */
   --accent: #a78bfa;        /* #385: bump for AA contrast on dark bg */
   --accent-light: #c4b5fd;  /* one step lighter for hover states */
   --accent-bg: #1e1a3a;
+  --danger: #f87171;        /* #374: AA contrast for error text on dark bg */
   --shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.3);
   --shadow-card: 0 2px 6px rgba(0, 0, 0, 0.35);
   --shadow-card-hover: 0 6px 16px rgba(0, 0, 0, 0.45);
@@ -559,17 +563,26 @@ kbd { display: inline-block; padding: 2px 6px; font-family: var(--mono); font-si
 .queue-widget { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; box-shadow: var(--shadow-card); }
 .queue-widget-content { margin: 14px 0; }
 .state-widget { margin: 14px 0; }
-/* #234: lint failure note under Candidates / knowledge table; stage stamps in Timeline. */
-.state-table-wrap .state-lint-banner {
-  margin-top: 10px;
-  margin-bottom: 0;
-}
-.state-lint-banner {
+/* #374: one red banner at the top of Home for every current problem (run parts, schedule, lint). */
+.problems-banner { margin: 0 0 16px; }
+.problems-banner[hidden] { display: none; }
+.problems-title { display: block; margin-bottom: 6px; }
+.problems-list { list-style: none; margin: 0; padding: 0; }
+.problems-entry { padding: 8px 0; border-top: 1px solid color-mix(in srgb, var(--danger, #b91c1c) 35%, transparent); }
+.problems-entry:first-child { border-top: none; padding-top: 0; }
+.problems-head { font-weight: 600; }
+.problems-meta { font-size: 0.82rem; overflow-wrap: anywhere; }
+.problems-detail {
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
   font-family: 'JetBrains Mono', ui-monospace, monospace;
   font-size: 0.82rem;
   line-height: 1.4;
-  margin: 0 0 14px;
+  margin: 6px 0 0;
+  background: none;
+  border: none;
+  padding: 0;
+  color: inherit;
 }
 .state-lint-report {
   white-space: pre-wrap;

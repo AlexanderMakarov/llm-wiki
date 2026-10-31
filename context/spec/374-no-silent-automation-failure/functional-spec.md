@@ -1,7 +1,7 @@
 # Functional Specification: Automation never fails silently
 
 - **Roadmap Item:** GitHub issue [#374](https://github.com/AlexanderMakarov/llm-wiki/issues/374) — surface failed or missed scheduled runs on Home
-- **Status:** Approved
+- **Status:** Completed
 - **Author:** Alexander Makarov
 
 ---
@@ -29,9 +29,9 @@ Home has exactly one place for errors: a red banner above all other Home content
 The existing red lint note under the pipeline tables moves into this banner as its "Lint" entry and no longer appears on its own. A lint entry appears under the same conditions the lint note appears today, and shows the same findings. The full lint report stays where it is today, in the "Linter output" section.
 
 - **Acceptance Criteria:**
-  - [ ] Given a scheduled run whose summarizing failed and a wiki with lint errors, when the user opens Home, then one red banner at the very top shows a "Synth" entry and a "Lint" entry, and no separate red lint note appears under the pipeline tables.
-  - [ ] Given a wiki with lint errors and a clean scheduled run, when the user opens Home, then the red banner at the top shows only a "Lint" entry with the same findings the lint note used to show.
-  - [ ] Given a clean scheduled run, no overdue run and no lint errors, when the user opens Home, then no red banner is shown.
+  - [x] Given a scheduled run whose summarizing failed and a wiki with lint errors, when the user opens Home, then one red banner at the very top shows a "Synth" entry and a "Lint" entry, and no separate red lint note appears under the pipeline tables.
+  - [x] Given a wiki with lint errors and a clean scheduled run, when the user opens Home, then the red banner at the top shows only a "Lint" entry with the same findings the lint note used to show.
+  - [x] Given a clean scheduled run, no overdue run and no lint errors, when the user opens Home, then no red banner is shown.
 
 ### 2.2 Each entry says exactly what failed and how much of it
 
@@ -45,41 +45,41 @@ Each entry also shows when it happened, the first lines of the error message (lo
 When the run as a whole ended in failure but no single part reported an error, the banner still shows an entry saying the run failed, with when and the log location.
 
 - **Acceptance Criteria:**
-  - [ ] Given a scheduled run where summarizing could not start because the AI backend was not found, when the user opens Home, then the banner shows a "Synth" entry saying it did not run, with the run's date and time, the "backend … is not available" message, and the log file location.
-  - [ ] Given a scheduled run where 6 of 7 sources were summarized and 1 failed, when the user opens Home, then the "Synth" entry says 1 of 7 sources failed, names that source, and shows its error.
-  - [ ] Given a scheduled run where summarizing stopped at the AI provider's usage limit, when the user opens Home, then the "Synth" entry says it stopped at the usage limit and how many sources it finished out of how many.
-  - [ ] Given a scheduled run where collecting sessions failed for one of several session sources and rebuilding the site failed, when the user opens Home, then the banner shows a "Sync" entry saying which session source failed out of how many, and a "Build" entry saying the build failed.
-  - [ ] Given a scheduled run with a very long error message, when the user opens Home, then that entry shows only the first lines followed by "…".
-  - [ ] Given a scheduled run that ended in failure without any part reporting an error, when the user opens Home, then the banner shows an entry saying the run failed, with when and the log location.
+  - [x] Given a scheduled run where summarizing could not start because the AI backend was not found, when the user opens Home, then the banner shows a "Synth" entry saying it did not run, with the run's date and time, the "backend … is not available" message, and the log file location.
+  - [x] Given a scheduled run where 6 of 7 sources were summarized and 1 failed, when the user opens Home, then the "Synth" entry says 1 of 7 sources failed, names that source, and shows its error.
+  - [x] Given a scheduled run where summarizing stopped at the AI provider's usage limit, when the user opens Home, then the "Synth" entry says it stopped at the usage limit and how many sources it finished out of how many.
+  - [x] Given a scheduled run where collecting sessions failed for one of several session sources and rebuilding the site failed, when the user opens Home, then the banner shows a "Sync" entry saying which session source failed out of how many, and a "Build" entry saying the build failed.
+  - [x] Given a scheduled run with a very long error message, when the user opens Home, then that entry shows only the first lines followed by "…".
+  - [x] Given a scheduled run that ended in failure without any part reporting an error, when the user opens Home, then the banner shows an entry saying the run failed, with when and the log location.
 
 ### 2.3 The banner appears even when the site rebuild is the part that failed
 
 The user must see the banner without having to rebuild the site themselves. Refreshing an already-built Home page in the browser is enough to show a new problem, including a failure of the rebuild itself.
 
 - **Acceptance Criteria:**
-  - [ ] Given a site built earlier and a later scheduled run whose rebuild step failed, when the user refreshes Home in the browser, then the red banner shows a "Build" entry with its error.
-  - [ ] Given a site built earlier and a later scheduled run whose summarizing failed, when the user refreshes Home without anything rebuilding the site, then the red banner shows the "Synth" entry.
+  - [x] Given a site built earlier and a later scheduled run whose rebuild step failed, when the user refreshes Home in the browser, then the red banner shows a "Build" entry with its error.
+  - [x] Given a site built earlier and a later scheduled run whose summarizing failed, when the user refreshes Home without anything rebuilding the site, then the red banner shows the "Synth" entry.
 
 ### 2.4 Entries clear when the problem is fixed
 
 An entry disappears from the banner as soon as that part next finishes cleanly — whether in the next scheduled run or when the user runs that same part by hand after fixing the cause (a lint entry clears when lint next passes, as today). Parts that still fail stay listed. When no entries remain, the banner is gone. A partial or trial run (for example summarizing a single chosen file, a cost estimate, or a "can the backend be reached" check) does not clear anything, because it did not do the whole part. No site rebuild is needed: refreshing Home shows the change.
 
 - **Acceptance Criteria:**
-  - [ ] Given a banner with only a "Synth" entry, when the next scheduled run finishes cleanly and the user refreshes Home, then the banner is gone.
-  - [ ] Given a banner with only a "Synth" entry, when the user fixes the cause, runs summarizing by hand and it finishes without errors, then after refreshing Home the banner is gone.
-  - [ ] Given a banner with "Sync" and "Build" entries, when a run finishes with collecting sessions clean but the rebuild still failing, then after refreshing Home only the "Build" entry remains.
-  - [ ] Given a banner with "Synth" and "Lint" entries, when summarizing next finishes cleanly but lint still finds errors, then after refreshing Home only the "Lint" entry remains.
-  - [ ] Given a banner with a "Synth" entry, when the user runs only a cost estimate, a backend check, or summarizes one chosen file, then after refreshing Home the "Synth" entry is still shown.
+  - [x] Given a banner with only a "Synth" entry, when the next scheduled run finishes cleanly and the user refreshes Home, then the banner is gone.
+  - [x] Given a banner with only a "Synth" entry, when the user fixes the cause, runs summarizing by hand and it finishes without errors, then after refreshing Home the banner is gone.
+  - [x] Given a banner with "Sync" and "Build" entries, when a run finishes with collecting sessions clean but the rebuild still failing, then after refreshing Home only the "Build" entry remains.
+  - [x] Given a banner with "Synth" and "Lint" entries, when summarizing next finishes cleanly but lint still finds errors, then after refreshing Home only the "Lint" entry remains.
+  - [x] Given a banner with a "Synth" entry, when the user runs only a cost estimate, a backend check, or summarizes one chosen file, then after refreshing Home the "Synth" entry is still shown.
 
 ### 2.5 A scheduled run that did not happen is also shown
 
 When the scheduled job is set up but no scheduled run has happened for longer than one schedule interval plus two hours (for a daily 09:00 schedule: nothing by 11:00 the next day), the banner shows a "Schedule — overdue" entry with when the last scheduled run happened and when the next one was expected. This covers a job that was switched off, a computer that was off or asleep, and a run that crashed before it could record anything. Runs the user starts by hand do not count as scheduled runs for this check. When no scheduled job is set up, this entry is not shown. A later scheduled run clears it.
 
 - **Acceptance Criteria:**
-  - [ ] Given a daily 09:00 schedule whose last scheduled run was two days ago, when the user opens Home, then the banner shows a "Schedule — overdue" entry with the last run's date and time and the expected time.
-  - [ ] Given a daily 09:00 schedule whose last scheduled run was at 09:00 today, when the user opens Home at 10:00 the next day, then no "Schedule" entry is shown.
-  - [ ] Given a daily schedule whose last scheduled run was two days ago, when the user only runs steps by hand today, then the "Schedule — overdue" entry is still shown.
-  - [ ] Given no scheduled job is set up, when the user opens Home, then no "Schedule" entry is shown.
+  - [x] Given a daily 09:00 schedule whose last scheduled run was two days ago, when the user opens Home, then the banner shows a "Schedule — overdue" entry with the last run's date and time and the expected time.
+  - [x] Given a daily 09:00 schedule whose last scheduled run was at 09:00 today, when the user opens Home at 10:00 the next day, then no "Schedule" entry is shown.
+  - [x] Given a daily schedule whose last scheduled run was two days ago, when the user only runs steps by hand today, then the "Schedule — overdue" entry is still shown.
+  - [x] Given no scheduled job is set up, when the user opens Home, then no "Schedule" entry is shown.
 
 ### 2.6 Every program the scheduled run depends on keeps being found, and a missing one is reported
 
@@ -91,11 +91,11 @@ The scheduled run relies on programs outside this tool: the program that runs th
 - When the program that runs the scheduled job itself is missing, so no run can start, the "Schedule — overdue" entry (2.5) shows it, and the health check names the missing program.
 
 - **Acceptance Criteria:**
-  - [ ] Given the Claude program is installed behind its usual self-updating launcher, when the user sets up the scheduled job with the Claude backend and Claude then updates itself and removes its previous version, then the next scheduled run summarizes normally.
-  - [ ] Given the Cursor agent backend is chosen and the Cursor agent program runs from the user's terminal, when the next scheduled run happens, then it summarizes normally.
-  - [ ] Given a saved location for the AI backend program that no longer exists, when the next scheduled run happens, then the banner shows a "Synth" entry saying it did not run, naming that program and how to fix its location, and the health check reports the same with the repair steps.
-  - [ ] Given the local model server is chosen and is not running, when the next scheduled run happens, then the banner shows a "Synth" entry saying it did not run because the server could not be reached, with how to start it or switch backend.
-  - [ ] Given the program that runs the scheduled job was removed, when the expected run time plus two hours passes, then the banner shows a "Schedule — overdue" entry, and the health check names the missing program.
+  - [x] Given the Claude program is installed behind its usual self-updating launcher, when the user sets up the scheduled job with the Claude backend and Claude then updates itself and removes its previous version, then the next scheduled run summarizes normally.
+  - [x] Given the Cursor agent backend is chosen and the Cursor agent program runs from the user's terminal, when the next scheduled run happens, then it summarizes normally.
+  - [x] Given a saved location for the AI backend program that no longer exists, when the next scheduled run happens, then the banner shows a "Synth" entry saying it did not run, naming that program and how to fix its location, and the health check reports the same with the repair steps.
+  - [x] Given the local model server is chosen and is not running, when the next scheduled run happens, then the banner shows a "Synth" entry saying it did not run because the server could not be reached, with how to start it or switch backend.
+  - [x] Given the program that runs the scheduled job was removed, when the expected run time plus two hours passes, then the banner shows a "Schedule — overdue" entry, and the health check names the missing program.
 
 ---
 

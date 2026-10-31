@@ -290,6 +290,19 @@ class CursorCLISynthesizer(BaseSynthesizer):
             logger.debug("Cursor Agent CLI availability probe failed: %s", exc)
             return False
 
+    def unavailable_reason(self) -> str:
+        """Name the missing or silent Cursor Agent CLI and the fix (#374)."""
+        agent = resolve_cursor_agent_path()
+        if agent is None:
+            return (
+                "neither agent nor cursor-agent was found on PATH — install "
+                "the Cursor Agent CLI or change synthesis.backend"
+            )
+        return (
+            f"the Cursor Agent CLI at {agent} did not answer a probe — "
+            "check it is logged in (agent login) or change synthesis.backend"
+        )
+
     def synthesize_source_page(
         self,
         raw_body: str,

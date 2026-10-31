@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import platform
 import re
+import shlex
 import sys
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
@@ -38,8 +39,9 @@ from llmwiki.doctor.runners import install_automation_argv
 from llmwiki.install_agent_kit import MANIFEST_NAME, read_manifest
 from llmwiki.install_hint import detect_env, install_hint
 from llmwiki.migrate_page_kinds import REMOVED_FOLDERS, REMOVED_KINDS, page_kind
+from llmwiki.run_outcomes import SCHEDULED_ENV
 from llmwiki.state_store import read_state, resolve_state_file
-from llmwiki.synth.base import DummySynthesizer
+from llmwiki.synth.base import DummySynthesizer, backend_unavailable_message
 from llmwiki.synth.pipeline import resolve_backend
 
 #: Catalog ids that detectors in this module may emit (drift test target).
@@ -70,6 +72,9 @@ DETECTOR_IDS_G_TO_O: frozenset[str] = frozenset(
         "automation.last_run_failed",
         "automation.duplicate_legacy",
         "automation.orphan_unit",
+        "automation.setup_outdated",
+        "automation.interpreter_missing",
+        "automation.program_dir_missing",
         "build.site_stale",
         "agent_kit.outdated",
         "privacy.draft_redaction",
@@ -223,10 +228,7 @@ def check_synthesis_backend(cfg: dict[str, Any] | None = None) -> list[Finding]:
     if not backend.is_available():
         f = _finding(
             "synth.backend_unavailable",
-            message=(
-                f"Configured synthesis backend {type(backend).__name__} "
-                "is not available in this environment."
-            ),
+            message=f"Configured synthesis {backend_unavailable_message(backend)}.",
         )
         if f is not None:
             findings.append(f)
@@ -549,12 +551,70 @@ def _job_findings(
     duplicate = _duplicate_legacy_finding(root, unit, discovery)
     if duplicate is not None:
         findings.append(duplicate)
+    findings.extend(_runtime_findings(unit, status))
     run_issue = _run_issue(root, job, status, unit, now or datetime.now(UTC))
     if run_issue is not None:
         f = _finding(run_issue[0], message=run_issue[1])
         if f is not None:
             findings.append(f)
     return _with_runner_argv(findings, root, status)
+
+
+def _wrapper_interpreter(text: str) -> str | None:
+    """The interpreter the wrapper's ``… -m llmwiki …`` line runs, or ``None``."""
+    for line in text.splitlines():
+        if " -m llmwiki" not in line:
+            continue
+        try:
+            tokens = shlex.split(line.replace("{", " ").replace("}", " "))
+        except ValueError:
+            return None
+        for i, token in enumerate(tokens[1:], start=1):
+            if token == "-m" and tokens[i + 1:i + 2] == ["llmwiki"]:
+                return tokens[i - 1]
+    return None
+
+
+def _runtime_findings(unit: InstalledUnit | None, status: dict[str, Any]) -> list[Finding]:
+    """What the installed job needs at run time but lacks (#374).
+
+    The wrapper predates run stamping (Home could not notice a missed run),
+    its interpreter is gone, or a program folder recorded at install is gone.
+    """
+    findings: list[Finding] = []
+    text = ""
+    if unit is not None and unit.wrapper_path is not None:
+        try:
+            text = Path(unit.wrapper_path).read_text(encoding="utf-8")
+        except OSError:
+            text = ""
+    if text and f"export {SCHEDULED_ENV}=1" not in text:
+        f = _finding(
+            "automation.setup_outdated",
+            message=f"Schedule {unit.name} was installed by an older llmwiki that does not "
+            "record its runs, so a missed run would not show on Home.",
+        )
+        if f is not None:
+            findings.append(f)
+    interpreter = _wrapper_interpreter(text) if text else None
+    if interpreter and Path(interpreter).is_absolute() and not Path(interpreter).exists():
+        f = _finding(
+            "automation.interpreter_missing",
+            message=f"Schedule {unit.name} runs Python '{interpreter}', which no longer exists, "
+            "so no scheduled run can start.",
+        )
+        if f is not None:
+            findings.append(f)
+    gone = [d for d in status.get("program_dirs") or [] if not Path(str(d)).is_dir()]
+    if gone:
+        f = _finding(
+            "automation.program_dir_missing",
+            message="Folders the scheduled job looks in for its programs no longer exist: "
+            + ", ".join(f"'{d}'" for d in gone) + ".",
+        )
+        if f is not None:
+            findings.append(f)
+    return findings
 
 
 def _duplicate_legacy_finding(

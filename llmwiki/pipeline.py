@@ -28,6 +28,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from llmwiki import run_outcomes
 from llmwiki.build import build_site
 from llmwiki.candidates_harvest import DEFAULT_MIN_REFS, run_harvest
 from llmwiki.config_schedule import _load_sessions_config
@@ -47,7 +48,7 @@ from llmwiki.state_store import (
     stamp_last_synth_at,
     update_state,
 )
-from llmwiki.synth.base import BaseSynthesizer
+from llmwiki.synth.base import BaseSynthesizer, backend_unavailable_message
 from llmwiki.synth.pipeline import (
     refresh_synth_pending,
     resolve_backend,
@@ -303,166 +304,223 @@ def run_pipeline(args: argparse.Namespace) -> int:
     # agree, or `all` behaves differently from `synth` + `lint` (#150).
     min_refs = getattr(args, "min_refs", DEFAULT_MIN_REFS)
 
-    overall_rc = 0
+    # #374: outcomes refresh the vault's own site/, which Home reads, even
+    # when --out sends this run's build elsewhere.
+    outcome_site = out_dir if getattr(args, "out", None) is None else None
+    # #374: stages run inside _stages so the whole run — including a crash,
+    # a lock timeout or a cause no part records — leaves an outcome behind.
+    unexplained: list[str] = []
+    failed_parts: list[str] = []
 
-    with pipeline_lock(vault_root):
-        if getattr(args, "with_sync", False):
-            print("\n==> llmwiki sync (convert; auto-build off)")
-            state_file = resolve_state_file()
-            rc = convert_all(out_dir=raw_sessions, state_file=state_file, no_adapters_ok=True)
-            if rc != 0:
-                overall_rc = _merge_rc(overall_rc, rc)
-                if args.fail_fast:
-                    print(f"error: step 'sync' exited {rc}; stopping (--fail-fast).", file=sys.stderr)
-                    return rc
-            refresh_synth_pending(
-                raw_dir=raw_sessions,
-                docs_dir=vault_root / "raw" / "docs",
-                wiki_sources_dir=wiki_dir / "sources",
-                state_file=state_file,
-            )
-            # Always reconcile — unlike `sync`'s own auto-build path (which
-            # only reindexes because it's the step that seeds project
-            # stubs), `all` runs `build` right after this regardless, so
-            # there's no reason to gate the catalog fix-up on anything.
-            plan = reindex_wiki(wiki_dir)
-            if plan is not None and plan.changed:
-                print(f"  reindex: index.md +{len(plan.added)} listed, "
-                      f"-{len(plan.removed)} dead link(s)")
+    def _stages() -> int:
+        overall_rc = 0
 
-        if getattr(args, "with_synth", False):
-            print("\n==> llmwiki synth")
-            config: dict[str, Any] = _load_sessions_config()
-            backend = resolve_backend(config)
-            _maybe_print_optout_notice(backend)
-            print(f"Backend: {backend.name}")
-            if not backend.is_available():
-                print(
-                    f"error: backend {backend.name} is not available. "
-                    "Start the server or change synthesis.backend in config.",
-                    file=sys.stderr,
-                )
-                overall_rc = _merge_rc(overall_rc, 1)
-                if args.fail_fast:
-                    print("error: step 'synth' exited 1; stopping (--fail-fast).", file=sys.stderr)
-                    return overall_rc
-            else:
-                # Wall clock for this synth+harvest segment (#113).
-                t0 = time.monotonic()
-                summary = synthesize_new_sessions(
-                    backend=backend,
-                    force=getattr(args, "synth_force", False),
-                    raw_dir=raw_sessions,
-                    wiki_sources_dir=wiki_dir / "sources",
-                )
-                # Backend ran — stamp even when some files errored.
-                stamp_last_synth_at()
-                print(
-                    f"Scanned {summary['total_scanned']}, new {summary['new_files']}, "
-                    f"synthesized {summary['synthesized']}, skipped {summary['skipped']}"
-                )
-                if summary["errors"]:
-                    for err in summary["errors"]:
-                        print(f"  ! {err}", file=sys.stderr)
-                # A clean stop (#181) reports 130 / 75 like `synth` does, and
-                # still harvests what landed; later stages run for those pages.
-                stop_rc = synth_stop_exit_code(summary)
-                synth_rc = stop_rc or (1 if summary["errors"] else 0)
-                overall_rc = _merge_rc(overall_rc, synth_rc)
-                if synth_rc == 1 and args.fail_fast:
-                    print("error: step 'synth' exited 1; stopping (--fail-fast).", file=sys.stderr)
-                    return overall_rc
-                # Default synth also harvests candidates (#90).
-                harvest_rc = run_harvest(
-                    wiki_dir,
-                    min_refs=min_refs,
-                    backend=backend,
-                    require_sources=False,
-                )
-                if harvest_rc != 0:
-                    overall_rc = _merge_rc(overall_rc, harvest_rc)
+        with pipeline_lock(vault_root):
+            if getattr(args, "with_sync", False):
+                print("\n==> llmwiki sync (convert; auto-build off)")
+                state_file = resolve_state_file()
+                sync_started_at = run_outcomes.utc_now()
+                rc = convert_all(out_dir=raw_sessions, state_file=state_file, no_adapters_ok=True)
+                if run_outcomes.record(
+                    "sync",
+                    run_outcomes.sync_failure(rc, state_file=state_file, started_at=sync_started_at),
+                    state_file=state_file,
+                    site_dir=outcome_site,
+                ):
+                    failed_parts.append("sync")
+                if rc != 0:
+                    overall_rc = _merge_rc(overall_rc, rc)
                     if args.fail_fast:
+                        print(f"error: step 'sync' exited {rc}; stopping (--fail-fast).", file=sys.stderr)
+                        return rc
+                refresh_synth_pending(
+                    raw_dir=raw_sessions,
+                    docs_dir=vault_root / "raw" / "docs",
+                    wiki_sources_dir=wiki_dir / "sources",
+                    state_file=state_file,
+                )
+                # Always reconcile — unlike `sync`'s own auto-build path (which
+                # only reindexes because it's the step that seeds project
+                # stubs), `all` runs `build` right after this regardless, so
+                # there's no reason to gate the catalog fix-up on anything.
+                plan = reindex_wiki(wiki_dir)
+                if plan is not None and plan.changed:
+                    print(f"  reindex: index.md +{len(plan.added)} listed, "
+                          f"-{len(plan.removed)} dead link(s)")
+
+            if getattr(args, "with_synth", False):
+                print("\n==> llmwiki synth")
+                config: dict[str, Any] = _load_sessions_config()
+                backend = resolve_backend(config)
+                _maybe_print_optout_notice(backend)
+                print(f"Backend: {backend.name}")
+                if not backend.is_available():
+                    print(f"error: {backend_unavailable_message(backend)}", file=sys.stderr)
+                    run_outcomes.record("synth", run_outcomes.synth_unavailable(backend), site_dir=outcome_site)
+                    failed_parts.append("synth")
+                    overall_rc = _merge_rc(overall_rc, 1)
+                    if args.fail_fast:
+                        print("error: step 'synth' exited 1; stopping (--fail-fast).", file=sys.stderr)
+                        return overall_rc
+                else:
+                    # Wall clock for this synth+harvest segment (#113).
+                    t0 = time.monotonic()
+                    summary = synthesize_new_sessions(
+                        backend=backend,
+                        force=getattr(args, "synth_force", False),
+                        raw_dir=raw_sessions,
+                        wiki_sources_dir=wiki_dir / "sources",
+                    )
+                    # Backend ran — stamp even when some files errored.
+                    stamp_last_synth_at()
+                    print(
+                        f"Scanned {summary['total_scanned']}, new {summary['new_files']}, "
+                        f"synthesized {summary['synthesized']}, skipped {summary['skipped']}"
+                    )
+                    if summary["errors"]:
+                        for err in summary["errors"]:
+                            print(f"  ! {err}", file=sys.stderr)
+                    # A clean stop (#181) reports 130 / 75 like `synth` does, and
+                    # still harvests what landed; later stages run for those pages.
+                    stop_rc = synth_stop_exit_code(summary)
+                    synth_rc = stop_rc or (1 if summary["errors"] else 0)
+                    overall_rc = _merge_rc(overall_rc, synth_rc)
+                    synth_failure = run_outcomes.synth_failure(summary)
+                    if synth_rc == 1 and args.fail_fast:
+                        if run_outcomes.record("synth", synth_failure, site_dir=outcome_site):
+                            failed_parts.append("synth")
+                        print("error: step 'synth' exited 1; stopping (--fail-fast).", file=sys.stderr)
+                        return overall_rc
+                    # Default synth also harvests candidates (#90).
+                    harvest_rc = run_harvest(
+                        wiki_dir,
+                        min_refs=min_refs,
+                        backend=backend,
+                        require_sources=False,
+                    )
+                    if harvest_rc != 0 and synth_failure is None:
+                        synth_failure = run_outcomes.harvest_failure(harvest_rc)
+                    if run_outcomes.record("synth", synth_failure, site_dir=outcome_site):
+                        failed_parts.append("synth")
+                    if harvest_rc != 0:
+                        overall_rc = _merge_rc(overall_rc, harvest_rc)
+                        if args.fail_fast:
+                            print(
+                                "error: step 'synth' (candidates) exited "
+                                f"{harvest_rc}; stopping (--fail-fast).",
+                                file=sys.stderr,
+                            )
+                            return overall_rc
+                    elif not synth_rc:
+                        print_synth_run_summary(
+                            synthesized=summary["synthesized"],
+                            duration_s=time.monotonic() - t0,
+                            tokens=summary.get("tokens"),
+                            cost_usd=summary.get("cost_usd"),
+                        )
+                    if stop_rc and args.fail_fast:
                         print(
-                            "error: step 'synth' (candidates) exited "
-                            f"{harvest_rc}; stopping (--fail-fast).",
+                            f"error: step 'synth' exited {stop_rc}; stopping (--fail-fast).",
                             file=sys.stderr,
                         )
                         return overall_rc
-                elif not synth_rc:
-                    print_synth_run_summary(
-                        synthesized=summary["synthesized"],
-                        duration_s=time.monotonic() - t0,
-                        tokens=summary.get("tokens"),
-                        cost_usd=summary.get("cost_usd"),
-                    )
-                if stop_rc and args.fail_fast:
-                    print(
-                        f"error: step 'synth' exited {stop_rc}; stopping (--fail-fast).",
-                        file=sys.stderr,
-                    )
-                    return overall_rc
 
-        search_mode = args.search_mode or "auto"
-        print(f"\n==> llmwiki build --out {out_dir} --search-mode {search_mode}")
-        rc = build_site(
-            out_dir=out_dir,
-            synthesize=False,
-            claude_path="",
-            search_mode=search_mode,
-            seed_project_stubs=False,
-            raw_sessions=raw_sessions,
-            raw_dir=raw_dir,
-            wiki_dir=wiki_dir,
-        )
-        if rc != 0:
-            overall_rc = _merge_rc(overall_rc, rc)
-            if args.fail_fast:
-                print(f"error: step 'build' exited {rc}; stopping (--fail-fast).", file=sys.stderr)
-                return rc
-
-        if not args.skip_graph:
-            print(f"\n==> llmwiki graph --format both --engine {args.graph_engine}")
-            rc = _run_graph_step(
-                wiki_dir=wiki_dir, graph_root=vault_root,
-                engine=args.graph_engine,
-            )
+            search_mode = args.search_mode or "auto"
+            print(f"\n==> llmwiki build --out {out_dir} --search-mode {search_mode}")
+            default_out = getattr(args, "out", None) is None
+            try:
+                rc = build_site(
+                    out_dir=out_dir,
+                    synthesize=False,
+                    claude_path="",
+                    search_mode=search_mode,
+                    seed_project_stubs=False,
+                    raw_sessions=raw_sessions,
+                    raw_dir=raw_dir,
+                    wiki_dir=wiki_dir,
+                )
+            except Exception as exc:
+                if default_out:
+                    run_outcomes.record("build", run_outcomes.build_crashed(exc), site_dir=outcome_site)
+                raise
+            if default_out:
+                if run_outcomes.record("build", run_outcomes.build_failure(rc), site_dir=outcome_site):
+                    failed_parts.append("build")
+            elif rc != 0:
+                unexplained.append(f"build into {out_dir} exited {rc}")
             if rc != 0:
                 overall_rc = _merge_rc(overall_rc, rc)
                 if args.fail_fast:
-                    print(f"error: step 'graph' exited {rc}; stopping (--fail-fast).", file=sys.stderr)
+                    print(f"error: step 'build' exited {rc}; stopping (--fail-fast).", file=sys.stderr)
                     return rc
 
-        if not getattr(args, "skip_lint", False):
-            lint_fail = resolve_lint_fail(args)
-            # Keep the stage name literal so PIPELINE_STAGES / agent-kit
-            # honesty tests can grep banners in order (#170).
-            lint_extra = "" if lint_fail == "never" else f" --lint-fail {lint_fail}"
-            print(f"\n==> llmwiki lint{lint_extra}")
-            lint_rc, lint_summary = _run_lint_step(
-                wiki_dir,
-                min_refs=min_refs,
-                lint_fail=lint_fail,
-                site_dir=out_dir,
-            )
-            overall_rc = _merge_rc(overall_rc, lint_rc)
-
-            # The policy escalates lint findings into a pipeline failure,
-            # independent of lint's own exit code (which by design only fires
-            # on error-severity issues).
-            errors = lint_summary.get("error", 0)
-            warnings = lint_summary.get("warning", 0)
-            if lint_fail == "errors":
-                failing = errors > 0
-            elif lint_fail == "warnings":
-                failing = errors > 0 or warnings > 0
-            else:
-                failing = False
-            if failing:
-                print(
-                    f"error: --lint-fail {lint_fail}: lint reported "
-                    f"{errors} error(s) + {warnings} warning(s).",
-                    file=sys.stderr,
+            if not args.skip_graph:
+                print(f"\n==> llmwiki graph --format both --engine {args.graph_engine}")
+                rc = _run_graph_step(
+                    wiki_dir=wiki_dir, graph_root=vault_root,
+                    engine=args.graph_engine,
                 )
-                overall_rc = _merge_rc(overall_rc, 2)
+                if rc != 0:
+                    unexplained.append(f"graph step exited {rc}")
+                    overall_rc = _merge_rc(overall_rc, rc)
+                    if args.fail_fast:
+                        print(f"error: step 'graph' exited {rc}; stopping (--fail-fast).", file=sys.stderr)
+                        return rc
 
-    return overall_rc
+            if not getattr(args, "skip_lint", False):
+                lint_fail = resolve_lint_fail(args)
+                # Keep the stage name literal so PIPELINE_STAGES / agent-kit
+                # honesty tests can grep banners in order (#170).
+                lint_extra = "" if lint_fail == "never" else f" --lint-fail {lint_fail}"
+                print(f"\n==> llmwiki lint{lint_extra}")
+                lint_rc, lint_summary = _run_lint_step(
+                    wiki_dir,
+                    min_refs=min_refs,
+                    lint_fail=lint_fail,
+                    site_dir=out_dir,
+                )
+                if lint_rc != 0:
+                    # Lint never ran (no wiki, bad settings, unknown rule), so no
+                    # Lint note exists to explain the exit code.
+                    unexplained.append(f"lint could not run (exit {lint_rc})")
+                overall_rc = _merge_rc(overall_rc, lint_rc)
+
+                # The policy escalates lint findings into a pipeline failure,
+                # independent of lint's own exit code (which by design only fires
+                # on error-severity issues).
+                errors = lint_summary.get("error", 0)
+                warnings = lint_summary.get("warning", 0)
+                if lint_fail == "errors":
+                    failing = errors > 0
+                elif lint_fail == "warnings":
+                    failing = errors > 0 or warnings > 0
+                else:
+                    failing = False
+                if failing:
+                    failed_parts.append("lint")
+                    print(
+                        f"error: --lint-fail {lint_fail}: lint reported "
+                        f"{errors} error(s) + {warnings} warning(s).",
+                        file=sys.stderr,
+                    )
+                    overall_rc = _merge_rc(overall_rc, 2)
+
+        return overall_rc
+
+    run_outcomes.check_schedule_setup(vault_root, site_dir=outcome_site)
+    scheduled = run_outcomes.is_scheduled_run()
+    try:
+        final_rc = _stages()
+    except BaseException as exc:
+        run_outcomes.record("run", run_outcomes.run_crashed(exc), site_dir=outcome_site)
+        if scheduled:
+            run_outcomes.stamp_scheduled_run(exit_code=1, site_dir=outcome_site)
+        raise
+    run_outcomes.record(
+        "run",
+        run_outcomes.run_failure(final_rc, unexplained, explained=bool(failed_parts)),
+        site_dir=outcome_site,
+    )
+    if scheduled:
+        run_outcomes.stamp_scheduled_run(exit_code=final_rc, site_dir=outcome_site)
+    return final_rc
