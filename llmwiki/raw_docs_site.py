@@ -470,7 +470,10 @@ def render_dashboard_body(
     *,
     vault_root: Path | None = None,
     repo_root: Path | None = None,
-    automation_html: str = "",
+    automation_notice_html: str = "",
+    automation_details_html: str = "",
+    home_metrics_html: str = "",
+    queue_widget_attrs: str = "",
 ) -> str:
     """Body of index.html — pipeline State table mount + recent raw docs."""
     if not entries:
@@ -479,30 +482,50 @@ def render_dashboard_body(
         rows = []
         for e in entries[:20]:
             bits = [b for b in (e.date, e.source_label, f"{e.parts} parts" if e.parts > 1 else "") if b]
+            meta = html.escape(" · ".join(bits))
             rows.append(
-                '<li class="recent-doc">'
+                '<li class="recent-doc recent-doc-compact">'
                 f'<a href="{html.escape(e.url)}">{html.escape(e.title)}</a>'
-                f'<div class="recent-doc-meta muted">{html.escape(" · ".join(bits))}</div>'
+                f'<span class="recent-doc-meta muted"> · {meta}</span>'
                 "</li>"
             )
-        recent_block = '<ol class="recent-docs">' + "".join(rows) + "</ol>"
+        recent_block = '<ol class="recent-docs recent-docs-compact">' + "".join(rows) + "</ol>"
     attrs = ""
     if vault_root is not None:
         attrs += f' data-vault-root="{html.escape(str(vault_root))}"'
     if repo_root is not None:
         attrs += f' data-repo-root="{html.escape(str(repo_root))}"'
-    auto_block = automation_html or ""
+    notice = automation_notice_html or ""
+    details = automation_details_html or ""
+    details_mount = ""
+    if details.strip():
+        details_mount = (
+            '<template id="llmwiki-automation-details">'
+            f"{details}"
+            "</template>"
+        )
+    metrics = home_metrics_html or ""
+    extra_attrs = queue_widget_attrs or ""
     return f"""<section class="section doctree-section">
   <div class="container">
-    <div class="queue-widget">
-      <div id="llmwiki-problems" class="error-banner problems-banner" role="alert" hidden></div>
-      {auto_block}
-      <h2>Pipeline state</h2>
-      <div id="llmwiki-state-widget" class="state-widget" data-llmwiki-state-widget{attrs}>
-        <p class="muted">Loading pipeline state…</p>
+    <div class="queue-widget"{extra_attrs}>
+      <div id="llmwiki-home-alerts" class="home-alerts">
+        {notice}
+        <div id="llmwiki-problems" class="error-banner problems-banner" role="alert" hidden></div>
       </div>
-      <h3>Recent raw documents</h3>
+      <h3 class="home-section-title">Metrics <span class="home-section-kicker muted">(see more on <a href="analytics.html">Analytics</a>)</span></h3>
+      <div class="home-metrics-block">{metrics}</div>
+      <div class="home-pipeline-block">
+        <h3 class="home-section-title">Pipeline state</h3>
+        <div id="llmwiki-state-widget" class="state-widget" data-llmwiki-state-widget{attrs}>
+          <p class="muted">Loading pipeline state…</p>
+        </div>
+        <div id="llmwiki-home-ops-list" class="home-ops-list muted" data-llmwiki-ops-list aria-live="polite"></div>
+      </div>
+      <h3 class="home-section-title home-recent-title">Recent raw documents</h3>
       {recent_block}
+      <div id="llmwiki-home-collapsibles" class="home-collapsibles"></div>
+      {details_mount}
     </div>
   </div>
 </section>

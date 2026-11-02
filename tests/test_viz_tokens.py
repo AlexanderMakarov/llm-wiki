@@ -18,6 +18,7 @@ from llmwiki.viz_tokens import (
     render_project_token_card,
     render_project_token_timeline,
     render_session_token_card,
+    render_site_token_stat_grid,
     render_site_token_stats,
     render_token_coverage_hint,
 )
@@ -360,6 +361,14 @@ def test_site_stats_block_renders_extra_cards_even_without_token_data():
     assert "Tokens" not in block          # no token cards when there are no sessions
 
 
+def test_site_token_stat_grid_usage_store_wires_floating_hint():
+    """#321 / #323: usage-backed grid uses the shared floating hint trigger."""
+    metas = {"p": [{}]}
+    usage_file = {"totals": {"sum": 500}, "by_agent": {"Claude": {"measured": 1, "known": 1}}}
+    grid, _ = render_site_token_stat_grid(metas, session_tokens_usage=usage_file)
+    assert "llmwiki-hint-trigger" in grid
+
+
 # ─── #323: Tokens coverage hint ─────────────────────────────────────────
 # @spec: 323-total-tokens-coverage-hint
 # @regression: #323 — site-wide Tokens headline must disclose which agents feed it
@@ -387,22 +396,24 @@ def test_token_coverage_lines_name_each_agent_group_and_missing_is_not_zero():
 
 
 def test_token_coverage_hint_is_accessible_button_wired_to_tooltip():
-    """#323: the hint is a closed-by-default button whose aria-describedby targets the tooltip panel id."""
+    """#321: hint is a button targeting the global floating panel."""
     out = render_token_coverage_hint("token-coverage-site")
-    assert '<button type="button" class="token-coverage-btn"' in out
+    assert "llmwiki-hint-trigger" in out
     assert 'aria-expanded="false"' in out
     assert 'aria-label="What do Tokens cover?' in out
-    assert 'aria-describedby="token-coverage-site-panel"' in out
-    assert 'role="tooltip" id="token-coverage-site-panel"' in out
-    assert out.count('class="token-coverage-line"') == len(TOKEN_COVERAGE_LINES)
+    assert 'aria-describedby="llmwiki-floating-hint-panel"' in out
+    assert 'data-hint-key="metric-tokens-coverage"' in out
+    assert "data-hint-html" in out
+    assert out.count("&lt;span class=&quot;token-coverage-line&quot;&gt;") == len(TOKEN_COVERAGE_LINES)
 
 
 def test_token_coverage_hint_ids_are_unique_per_hint_id():
-    """#323: different hint ids yield different panel ids so several counters never share one tooltip target."""
+    """#321: token coverage uses one registry key; dynamic body lives in data-hint-html."""
     a = render_token_coverage_hint("alpha")
     b = render_token_coverage_hint("beta")
-    assert 'id="alpha-panel"' in a and 'id="alpha-panel"' not in b
-    assert 'id="beta-panel"' in b and 'aria-describedby="beta-panel"' in b
+    assert 'data-hint-key="metric-tokens-coverage"' in a
+    assert 'data-hint-key="metric-tokens-coverage"' in b
+    assert "data-hint-html" in a
 
 
 @pytest.mark.parametrize(
@@ -415,10 +426,10 @@ def test_token_coverage_hint_ids_are_unique_per_hint_id():
     ],
 )
 def test_token_coverage_hint_sanitizes_unsafe_ids(raw, expected):
-    """#323: unsafe characters in hint_id never reach the id / aria-describedby attributes."""
+    """#321: hint output is a button + data-hint-html; no inline onclick injection."""
+    _ = expected
     out = render_token_coverage_hint(raw)
-    assert f'id="{expected}-panel"' in out
-    assert f'aria-describedby="{expected}-panel"' in out
+    assert "llmwiki-hint-trigger" in out
     assert '" onclick=' not in out
     assert "<script" not in out
 
@@ -436,9 +447,9 @@ def test_site_stats_tokens_label_contains_coverage_hint_and_keeps_counting():
         re.S,
     )
     assert label, "Tokens label not found"
-    assert 'class="token-coverage-hint"' in label.group(1)
-    assert 'aria-describedby="token-coverage-site-panel"' in label.group(1)
-    assert 'id="token-coverage-site-panel"' in block
+    assert 'class="llmwiki-hint-trigger"' in label.group(1) or "llmwiki-hint-trigger" in label.group(1)
+    assert 'data-hint-key="metric-tokens-coverage"' in label.group(1)
+    assert "token-coverage-site-panel" not in block
     assert '<div class="token-stat-value">4.0K</div>' in block
     # 3 metas, 2 with token data → avg 2.0K/s
     assert "by 2/3 sessions (2.0K/s)" in block
@@ -451,28 +462,14 @@ def test_site_stats_without_token_data_renders_no_coverage_hint():
 
 
 def test_token_coverage_css_reveals_on_hover_focus_and_aria_expanded():
-    """#323: the panel is shown by hover, focus-within, and aria-expanded, and hidden again when dismissed."""
-    assert ".token-coverage-hint:hover .token-coverage-panel" in CSS
-    assert ".token-coverage-hint:focus-within .token-coverage-panel" in CSS
-    assert '.token-coverage-btn[aria-expanded="true"] + .token-coverage-panel' in CSS
-    assert ".token-coverage-hint[data-dismissed] .token-coverage-panel" in CSS
-    # Dismiss must win the cascade over :hover / :focus-within (Escape + click-close).
-    assert CSS.index(".token-coverage-hint[data-dismissed] .token-coverage-panel") > CSS.index(
-        ".token-coverage-hint:hover .token-coverage-panel"
-    )
-    # Panel positions against the hint so the pointer can enter it without leaving :hover.
-    assert ".token-coverage-hint { position: relative;" in CSS or (
-        ".token-coverage-hint { position: relative" in CSS
-    )
+    """#321: floating hint panel is positioned fixed with sentence case."""
+    assert ".llmwiki-floating-hint-panel" in CSS
+    assert "text-transform: none" in CSS
 
 
 def test_token_coverage_js_toggles_dismisses_and_clamps():
-    """#323: the viewer script toggles aria-expanded, closes on Escape / outside click, and clamps to the viewport."""
-    assert '".token-coverage-hint"' in JS
-    assert 'setAttribute("aria-expanded"' in JS
-    assert 'e.key !== "Escape"' in JS
-    assert 'setAttribute("data-dismissed"' in JS
-    assert "getBoundingClientRect" in JS and "translateX(" in JS
-    # Click-to-close must set data-dismissed (same as Escape) while focus/hover remain.
-    click_fn = JS.split('b.addEventListener("click"')[1].split("});", 1)[0]
-    assert 'setAttribute("data-dismissed"' in click_fn
+    """#321: global floating hints wire click, Escape, and viewport clamping."""
+    assert "wireGlobalFloatingHints" in JS
+    assert "hintBodyFor" in JS
+    assert 'e.key === "Escape"' in JS
+    assert "getBoundingClientRect" in JS

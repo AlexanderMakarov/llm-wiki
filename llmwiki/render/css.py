@@ -168,8 +168,14 @@ kbd { display: inline-block; padding: 2px 6px; font-family: var(--mono); font-si
 .section h3 { font-size: 1.15rem; font-weight: 600; margin: 20px 0 10px; color: var(--text); }
 /* #27: the Analytics page stacks several stat sections; tighten the vertical
    rhythm so they read as one dashboard rather than distant blocks. */
-.analytics-page { --section-y: 12px 0; }
-.analytics-page .section h2 { margin-top: 8px; }
+.analytics-page { --section-y: 6px 0; }
+.analytics-page .section h2 { margin: 6px 0 8px; }
+.analytics-page .token-stats-section { padding-top: 4px; padding-bottom: 6px; }
+.analytics-page .token-stats-section .container { padding-bottom: 0; }
+.analytics-page .wiki-usage-section,
+.analytics-page .recently-updated-section,
+.analytics-page .mcp-usage-section { padding-top: 6px; padding-bottom: 8px; }
+.analytics-page .primary-metrics-section + .secondary-metrics-section { margin-top: 0; }
 
 .meta-tools { font-size: 0.82rem; margin-bottom: 12px; overflow-wrap: break-word; }
 
@@ -593,10 +599,45 @@ kbd { display: inline-block; padding: 2px 6px; font-family: var(--mono); font-si
   max-height: 60vh;
   overflow: auto;
 }
-.state-table-wrap { overflow-x: auto; margin-bottom: 14px; }
-.state-pipeline-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; min-width: 520px; }
-.state-pipeline-table th, .state-pipeline-table td { border: 1px solid var(--border); padding: 10px 12px; vertical-align: top; text-align: left; }
-.state-pipeline-table th { background: var(--bg-alt); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); }
+.state-table-wrap { overflow: visible; margin-bottom: 0; }
+.state-pipeline-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; min-width: 0; table-layout: fixed; }
+.state-pipeline-table th, .state-pipeline-table td { border: 1px solid var(--border); padding: 8px 10px; vertical-align: top; text-align: left; }
+.state-pipeline-table th { background: var(--bg-alt); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); white-space: nowrap; }
+.state-pipeline-table th:first-child,
+.state-pipeline-table td:first-child { width: 23%; }
+.state-pipeline-table th:nth-child(2),
+.state-pipeline-table td:nth-child(2) { width: 17%; }
+.state-pipeline-table th:nth-child(3),
+.state-pipeline-table td:nth-child(3) { width: 14%; }
+.state-pipeline-table th:nth-child(4),
+.state-pipeline-table td:nth-child(4) { width: 17%; }
+.state-pipeline-table th:nth-child(5),
+.state-pipeline-table td:nth-child(5) { width: 14%; }
+.state-pipeline-table th:nth-child(6),
+.state-pipeline-table td:nth-child(6) { width: 17%; }
+.state-pipeline-table tfoot td { white-space: normal; }
+.state-pipeline-table tfoot .state-foot-ts { font-size: 0.68rem; margin-top: 4px; }
+.state-table-hint-btn { margin-left: 3px; vertical-align: middle; flex-shrink: 0; }
+.llmwiki-floating-hint { position: fixed; inset: 0; z-index: 1000; pointer-events: none; }
+.llmwiki-floating-hint[hidden] { display: none !important; }
+.llmwiki-floating-hint-panel {
+  position: fixed; z-index: 1001; box-sizing: border-box; width: 300px; max-width: min(300px, calc(100vw - 16px));
+  padding: 10px 12px; background: var(--bg-card); color: var(--text); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: var(--shadow); font-size: 0.75rem; font-style: normal; font-weight: 400;
+  line-height: 1.45; text-align: left; text-transform: none; letter-spacing: normal; white-space: normal;
+  overflow-wrap: anywhere; pointer-events: auto; visibility: hidden; opacity: 1;
+}
+.llmwiki-floating-hint-panel .token-coverage-line { display: block; }
+.llmwiki-floating-hint-panel .token-coverage-line + .token-coverage-line { margin-top: 6px; }
+.home-section-title { margin: 0 0 10px; font-size: 1.05rem; font-weight: 600; color: var(--text); }
+.doctree-section .queue-widget .home-section-title { margin-top: 0; }
+.doctree-section .queue-widget .home-alerts + .home-section-title { margin-top: 0; }
+.home-section-kicker { font-weight: 400; font-size: 0.82em; }
+.home-section-kicker a { font-weight: 500; }
+.home-metrics-block { margin: 0 0 14px; }
+.home-pipeline-block { margin: 0 0 16px; }
+.home-pipeline-block .home-section-title { margin-bottom: 8px; }
+.home-recent-title { margin-top: 4px; }
 .state-pipeline-table .state-cell-count { font-weight: 700; font-variant-numeric: tabular-nums; }
 .state-pipeline-table .state-cell-cost { font-size: 0.85em; color: var(--text-muted); white-space: nowrap; }
 .state-pipeline-table .state-queue-meta { font-weight: 400; font-size: 0.85em; }
@@ -605,6 +646,33 @@ kbd { display: inline-block; padding: 2px 6px; font-family: var(--mono); font-si
 .automation-panel { margin-bottom: 18px; padding-bottom: 14px; border-bottom: 1px solid var(--border); }
 .automation-panel h2 { margin: 0 0 8px; font-size: 1.1rem; }
 .automation-panel ul { margin: 8px 0; padding-left: 18px; }
+.automation-notice { margin: 10px 0 14px; }
+.automation-notice-setup { padding: 10px 12px; border: 1px dashed var(--border); border-radius: 8px; background: var(--bg-alt); }
+.home-pipeline-timeline { margin: 4px 0 14px; font-size: 0.88rem; }
+.home-pipeline-timeline .queue-type-list { margin: 0; padding-left: 1.1rem; }
+.home-alerts { margin: 0 0 8px; }
+.home-alerts .error-banner { margin-top: 8px; }
+#llmwiki-lint-banner-mount:empty { display: none; margin: 0; padding: 0; min-height: 0; }
+.home-ops-list { margin: 0 0 0; font-size: 0.88rem; }
+.home-ops-timeline { margin: 0; padding-left: 1.1rem; }
+.home-collapsibles { margin-top: 20px; }
+.state-pipeline-table tfoot td { background: var(--bg-alt); font-weight: 600; vertical-align: top; }
+.state-foot-ts { font-size: 0.72rem; font-weight: 400; margin-top: 6px; line-height: 1.35; }
+.state-foot-ts .state-ts-label { font-weight: 600; }
+.state-table-hint { margin-left: 4px; vertical-align: middle; }
+.state-table-hint .token-coverage-btn { font-size: 0.7rem; }
+.token-stat-knowledge .token-stat-label { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.secondary-metrics-section { padding-top: 0; }
+.secondary-metrics-section .token-stat-grid { margin-top: 0; }
+.primary-metrics-section + .secondary-metrics-section { margin-top: -8px; }
+.home-value-section { margin: 16px 0 8px; }
+.home-value-section h3 { margin: 0 0 10px; font-size: 1.05rem; }
+.state-knowledge-metrics { margin-top: 14px; }
+.state-knowledge-cards { margin-top: 8px; }
+.recent-docs-compact .recent-doc-compact { padding: 7px 0; border-bottom: 1px solid var(--border); display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 4px; }
+.recent-docs-compact .recent-doc-compact:last-child { border-bottom: none; }
+.recent-docs-compact .recent-doc-compact > a { font-weight: 600; font-size: 0.98rem; }
+.recent-docs-compact .recent-doc-meta { font-size: 0.82rem; margin: 0; }
 .state-pipeline-table tfoot td { background: var(--bg-alt); font-weight: 600; }
 .collapse-sections { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
 .collapse-section { border: 1px solid var(--border); border-radius: 8px; background: var(--bg-alt); }
@@ -613,9 +681,9 @@ kbd { display: inline-block; padding: 2px 6px; font-family: var(--mono); font-si
 .collapse-section > summary::before { content: "▸"; color: var(--text-muted); font-size: 0.85rem; }
 .collapse-section[open] > summary::before { content: "▾"; }
 .collapse-section-count { margin-left: auto; font-size: 0.78rem; font-weight: 600; color: var(--text-muted); background: var(--bg-card); border: 1px solid var(--border); border-radius: 999px; padding: 1px 8px; }
-.collapse-section-body { padding: 0 12px 12px; border-top: 1px solid var(--border); }
+.collapse-section-body { padding: 10px; border-top: 1px solid var(--border); }
 .collapse-section-body ul,
-.collapse-section-list { margin: 8px 0 0 18px; }
+.collapse-section-list { margin: 0 0 0 18px; padding: 0; }
 .collapse-section-body .queue-commands-table { margin-top: 10px; }
 .queue-stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-bottom: 12px; }
 .queue-stat { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; background: var(--bg-alt); }
@@ -827,7 +895,7 @@ kbd { display: inline-block; padding: 2px 6px; font-family: var(--mono); font-si
 .token-timeline-svg { display: block; max-width: 100%; }
 
 /* Site-wide token stats on the home page */
-.token-stats-section { padding-top: 8px; padding-bottom: 16px; }
+.token-stats-section { padding-top: 8px; padding-bottom: 10px; }
 .token-stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin: 8px 0 24px; }
 .token-stat { padding: 14px 16px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); text-decoration: none; color: var(--text); display: block; }
 a.token-stat:hover { border-color: var(--accent); }

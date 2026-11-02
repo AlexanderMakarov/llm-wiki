@@ -189,7 +189,7 @@ def _run_lint_step(
             len(pages),
             fail_on="warnings" if lint_fail == "warnings" else "errors",
         ) if failed else "",
-        report_text=report_text if failed else "",
+        report_text=report_text,
         site_dir=site_dir,
     )
     return 0, summary

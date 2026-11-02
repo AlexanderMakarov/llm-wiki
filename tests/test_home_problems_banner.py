@@ -107,11 +107,10 @@ def _snapshot(**ops: str) -> str:
 
 
 def test_banner_mount_is_the_first_thing_in_the_home_widget():
-    """The banner sits above the Automation panel and the pipeline tables, hidden until filled."""
-    body = render_dashboard_body([], 0, automation_html='<div class="automation-panel"></div>')
+    """The banner sits in Home alerts above Metrics, hidden until filled."""
+    body = render_dashboard_body([], 0)
     mount = body.index('id="llmwiki-problems"')
-    assert body.index('class="queue-widget"') < mount < body.index('class="automation-panel"')
-    assert mount < body.index("Pipeline state")
+    assert body.index('class="home-alerts"') < mount < body.index("Metrics")
     tag = body[body.rindex("<", 0, mount):body.index(">", mount)]
     assert 'role="alert"' in tag
     assert "hidden" in tag

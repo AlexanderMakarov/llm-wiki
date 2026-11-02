@@ -24,9 +24,253 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
 
 // ─── Theme toggle ─────────────────────────────────────────────────────────
 (function () {
+  function parseIsoTs(ts) {
+    if (!ts || typeof ts !== "string") return null;
+    var trimmed = ts.trim();
+    if (!trimmed) return null;
+    var ms = Date.parse(trimmed);
+    if (isNaN(ms)) return null;
+    return new Date(ms);
+  }
+  function formatAbsoluteLocal(d) {
+    if (!d) return "unknown";
+    try {
+      var parts = new Intl.DateTimeFormat(undefined, {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        timeZoneName: "short",
+      }).formatToParts(d);
+      var bag = {};
+      parts.forEach(function (p) {
+        if (p.type !== "literal") bag[p.type] = p.value;
+      });
+      return (
+        bag.year + "-" + bag.month + "-" + bag.day + " " +
+        bag.hour + ":" + bag.minute + " " + (bag.timeZoneName || "")
+      );
+    } catch (e) {
+      var y = d.getFullYear();
+      var mo = String(d.getMonth() + 1).padStart(2, "0");
+      var da = String(d.getDate()).padStart(2, "0");
+      var h = String(d.getHours()).padStart(2, "0");
+      var mi = String(d.getMinutes()).padStart(2, "0");
+      return y + "-" + mo + "-" + da + " " + h + ":" + mi;
+    }
+  }
+  function formatRelativeAge(d) {
+    if (!d) return "unknown";
+    var sec = Math.floor((Date.now() - d.getTime()) / 1000);
+    if (sec < 0) sec = 0;
+    if (sec < 60) return "just now";
+    var mins = Math.floor(sec / 60);
+    if (mins < 60) return mins + (mins === 1 ? " minute ago" : " minutes ago");
+    var hrs = Math.floor(mins / 60);
+    if (hrs < 48) return hrs + (hrs === 1 ? " hour ago" : " hours ago");
+    var days = Math.floor(hrs / 24);
+    return days + (days === 1 ? " day ago" : " days ago");
+  }
   function formatTs(ts) {
     if (!ts) return "never";
-    return ts;
+    var d = parseIsoTs(ts);
+    if (!d) return "unknown";
+    return formatAbsoluteLocal(d) + " (" + formatRelativeAge(d) + ")";
+  }
+  function hintBodyFor(btn) {
+    var inline = btn.getAttribute("data-hint-html");
+    if (inline) return inline;
+    var key = btn.getAttribute("data-hint-key");
+    if (!key) return "";
+    var reg = window.LLMWIKI_UI_HINTS;
+    if (reg && reg[key]) return reg[key];
+    return "";
+  }
+  var _floatingHintActiveBtn = null;
+  function pipelineHintBtn(key, aria) {
+    return (
+      ' <button type="button" class="token-coverage-btn llmwiki-hint-trigger state-table-hint-btn" data-hint-key="' +
+      escapeHtml(key) + '" aria-label="' + escapeHtml(aria) +
+      '" aria-expanded="false" aria-describedby="llmwiki-floating-hint-panel">i</button>'
+    );
+  }
+  function closeFloatingHint() {
+    var host = document.getElementById("llmwiki-floating-hint");
+    var panel = document.getElementById("llmwiki-floating-hint-panel");
+    if (_floatingHintActiveBtn) {
+      _floatingHintActiveBtn.setAttribute("aria-expanded", "false");
+      _floatingHintActiveBtn = null;
+    }
+    if (host) host.setAttribute("hidden", "");
+    if (panel) {
+      panel.innerHTML = "";
+      panel.style.visibility = "";
+    }
+  }
+  function positionFloatingHint(btn, panel, host) {
+    host.removeAttribute("hidden");
+    panel.style.visibility = "hidden";
+    panel.style.display = "block";
+    var btnRect = btn.getBoundingClientRect();
+    var panelRect = panel.getBoundingClientRect();
+    var margin = 8;
+    var vw = document.documentElement.clientWidth;
+    var vh = document.documentElement.clientHeight;
+    var top = btnRect.bottom + margin;
+    var left = btnRect.left + btnRect.width / 2 - panelRect.width / 2;
+    if (left + panelRect.width > vw - margin) left = vw - margin - panelRect.width;
+    if (left < margin) left = margin;
+    if (top + panelRect.height > vh - margin) {
+      top = btnRect.top - margin - panelRect.height;
+    }
+    if (top < margin) top = margin;
+    panel.style.top = Math.round(top) + "px";
+    panel.style.left = Math.round(left) + "px";
+    panel.style.visibility = "visible";
+    panel.style.opacity = "1";
+  }
+  function openFloatingHint(btn) {
+    var body = hintBodyFor(btn);
+    if (!body) return;
+    var host = document.getElementById("llmwiki-floating-hint");
+    var panel = document.getElementById("llmwiki-floating-hint-panel");
+    if (!host || !panel) return;
+    if (_floatingHintActiveBtn && _floatingHintActiveBtn !== btn) {
+      _floatingHintActiveBtn.setAttribute("aria-expanded", "false");
+    }
+    _floatingHintActiveBtn = btn;
+    btn.setAttribute("aria-expanded", "true");
+    panel.innerHTML = body;
+    positionFloatingHint(btn, panel, host);
+  }
+  var _floatingHintDocWired = false;
+  function wireGlobalFloatingHints(root) {
+    var scope = root || document;
+    scope.querySelectorAll(".llmwiki-hint-trigger").forEach(function (btn) {
+      if (btn.getAttribute("data-llmwiki-hint-wired") === "1") return;
+      btn.setAttribute("data-llmwiki-hint-wired", "1");
+      btn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        if (btn.getAttribute("aria-expanded") === "true") closeFloatingHint();
+        else openFloatingHint(btn);
+      });
+      btn.addEventListener("mouseenter", function () { openFloatingHint(btn); });
+      btn.addEventListener("mouseleave", function () {
+        if (btn !== _floatingHintActiveBtn) return;
+        if (document.activeElement === btn) return;
+        closeFloatingHint();
+      });
+      btn.addEventListener("focus", function () { openFloatingHint(btn); });
+      btn.addEventListener("blur", function () {
+        window.setTimeout(function () {
+          var panel = document.getElementById("llmwiki-floating-hint-panel");
+          if (panel && panel.contains(document.activeElement)) return;
+          if (btn === _floatingHintActiveBtn) closeFloatingHint();
+        }, 0);
+      });
+    });
+    if (!_floatingHintDocWired) {
+      _floatingHintDocWired = true;
+      document.addEventListener("keydown", function (e) {
+        if (e.key !== "Escape") return;
+        var host = document.getElementById("llmwiki-floating-hint");
+        if (!host || host.hasAttribute("hidden")) return;
+        closeFloatingHint();
+      });
+      document.addEventListener("click", function (e) {
+        var host = document.getElementById("llmwiki-floating-hint");
+        if (!host || host.hasAttribute("hidden")) return;
+        if (e.target.closest(".llmwiki-hint-trigger") || e.target.closest("#llmwiki-floating-hint-panel")) return;
+        closeFloatingHint();
+      });
+      window.addEventListener("resize", function () {
+        if (!_floatingHintActiveBtn) return;
+        var panel = document.getElementById("llmwiki-floating-hint-panel");
+        var host = document.getElementById("llmwiki-floating-hint");
+        if (panel && host) positionFloatingHint(_floatingHintActiveBtn, panel, host);
+      });
+      window.addEventListener("scroll", function () {
+        if (!_floatingHintActiveBtn) return;
+        var panel = document.getElementById("llmwiki-floating-hint-panel");
+        var host = document.getElementById("llmwiki-floating-hint");
+        if (panel && host) positionFloatingHint(_floatingHintActiveBtn, panel, host);
+      }, true);
+    }
+  }
+  function pipelineTableHeadHtml() {
+    return (
+      "<thead><tr>" +
+      "<th>Source" + pipelineHintBtn("state-table-overview", "What this table measures") + "</th>" +
+      '<th class="state-col-numeric">Raw' + pipelineHintBtn("state-col-raw", "Raw column") + "</th>" +
+      "<th>To synthesize" + pipelineHintBtn("state-col-pending", "To synthesize column") + "</th>" +
+      "<th>Synthesized" + pipelineHintBtn("state-col-synth", "Synthesized column") + "</th>" +
+      "<th>Queryable" + pipelineHintBtn("state-col-queryable", "Queryable column") + "</th>" +
+      "<th>In site" + pipelineHintBtn("state-col-insite", "In site column") + "</th>" +
+      "</tr></thead>"
+    );
+  }
+  function footCountCell(count, cost, tsLabel, ts) {
+    var main = stageCell(count, cost);
+    var tsHtml = tsLabel
+      ? ('<div class="state-foot-ts muted"><span class="state-ts-label">' +
+        escapeHtml(tsLabel) + "</span> " + escapeHtml(formatTs(ts)) + "</div>")
+      : "";
+    return main + tsHtml;
+  }
+  function formatStageFreshnessLi(label, ts) {
+    return "<li><strong>" + escapeHtml(label) + ":</strong> " + escapeHtml(formatTs(ts)) + "</li>";
+  }
+  function getQueueWidgetEl() {
+    return document.querySelector(".queue-widget");
+  }
+  function homeOpsListHtml(snapshot, queueEl) {
+    if (!snapshot) {
+      return (
+        '<ul class="queue-type-list home-ops-timeline" aria-label="Pipeline operations">' +
+        "<li><strong>Oldest pending:</strong> none</li>" +
+        formatStageFreshnessLi("Last queue run", "") +
+        "</ul>"
+      );
+    }
+    var ops = snapshot.ops || {};
+    var synthState = snapshot.synth || {};
+    var pendingList = Array.isArray(synthState.pending) ? synthState.pending : [];
+    var estimate = (synthState && synthState.estimate) ? synthState.estimate : {};
+    var items = Array.isArray((snapshot.queue || {}).items) ? snapshot.queue.items : [];
+    var oldest = "";
+    items.forEach(function (it) {
+      var st = (it && it.status) ? String(it.status) : "pending";
+      if (st === "pending" && it.created_at && (!oldest || it.created_at < oldest)) oldest = it.created_at;
+    });
+    pendingList.forEach(function (it) {
+      if (it && it.mtime && (!oldest || it.mtime < oldest)) oldest = it.mtime;
+    });
+    var lines = [
+      "<li><strong>Oldest pending:</strong> " + escapeHtml(oldest ? formatTs(oldest) : "none") + "</li>",
+      formatStageFreshnessLi("Last queue run", ops.last_queue_run_at || ""),
+    ];
+    if (estimate && estimate.updated_at) {
+      lines.push(
+        "<li><strong>Synth estimate updated:</strong> " +
+        escapeHtml(formatTs(estimate.updated_at)) +
+        "</li>"
+      );
+    }
+    return (
+      '<ul class="queue-type-list home-ops-timeline" aria-label="Pipeline operations">' +
+      lines.join("") +
+      "</ul>"
+    );
+  }
+  var _homeOpsTimer = null;
+  function wireHomeOpsTimer() {
+    if (_homeOpsTimer || !document.getElementById("llmwiki-home-ops-list")) return;
+    _homeOpsTimer = setInterval(function () {
+      var el = document.getElementById("llmwiki-home-ops-list");
+      if (!el) return;
+      el.innerHTML = homeOpsListHtml(window.LLMWIKI_STATE_SNAPSHOT, getQueueWidgetEl());
+    }, 60000);
   }
   function escapeHtml(s) {
     return String(s == null ? "" : s)
@@ -131,6 +375,40 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
     return "<ul class=\"queue-type-list\">" + items.join("") + "</ul>" +
       '<p class="muted">Review focus: identity / naming / kind / duplicates — not primarily <code>## Contradictions</code>. Approve via the Candidates page, agent <code>/wiki-candidates</code>, or <code>llmwiki candidates apply|promote|merge|discard</code>.</p>';
   }
+  function buildCollapsiblesHtml(snapshot, repoRoot) {
+    var synthState = snapshot.synth || {};
+    var pendingList = Array.isArray(synthState.pending) ? synthState.pending : [];
+    var estimate = (synthState && synthState.estimate) ? synthState.estimate : {};
+    var ops = snapshot.ops || {};
+    var pendingSessions = pendingList.filter(function (it) { return !(it && it.is_doc); });
+    var pendingDocs = pendingList.filter(function (it) { return !!(it && it.is_doc); });
+    var warnings = Array.isArray(estimate.warnings) ? estimate.warnings : [];
+    var lintReport = ops.last_lint_report ? String(ops.last_lint_report) : "";
+    var lintReportCount = lintReport ? (lintReport.split("\n").length || 1) : 0;
+    var lintReportBody = lintReport
+      ? '<pre class="state-lint-report">' + escapeHtml(lintReport) + "</pre>"
+      : '<p class="muted">No linter output.</p>';
+    var automationTpl = document.getElementById("llmwiki-automation-details");
+    var automationBody = automationTpl
+      ? automationTpl.innerHTML
+      : '<p class="muted">No automation configured. Run <code>llmwiki install-automation</code>.</p>';
+    var automationSection = automationTpl
+      ? detailsSection("Automation", 0, automationBody)
+      : "";
+    var warningsBody = warnings.length
+      ? ("<ul class=\"queue-type-list\">" + warnings.map(function (w) {
+          return "<li>" + escapeHtml(w) + "</li>";
+        }).join("") + "</ul>")
+      : '<p class="muted">No estimate warnings.</p>';
+    return (
+      automationSection +
+      detailsSection("Not synthesized sessions", pendingSessions.length, pendingListHtml(pendingSessions)) +
+      detailsSection("Not synthesized docs", pendingDocs.length, pendingListHtml(pendingDocs)) +
+      detailsSection("Commands", 15, commandsBody(repoRoot)) +
+      detailsSection("Estimate warnings", warnings.length, warningsBody) +
+      detailsSection("Linter output", lintReportCount, lintReportBody)
+    );
+  }
   function renderStateWidget(root, snapshot) {
     if (!root) return;
     if (!snapshot) {
@@ -140,37 +418,35 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
     var synthState = snapshot.synth || {};
     var pipeline = synthState.pipeline || {};
     var rows = Array.isArray(pipeline.rows) ? pipeline.rows : [];
-    var pendingList = Array.isArray(synthState.pending) ? synthState.pending : [];
-    var estimate = (synthState && synthState.estimate) ? synthState.estimate : {};
     var ops = snapshot.ops || {};
     var lastSync = ((snapshot.sync || {}).meta || {}).last_sync || "";
+    var lastSynth = ops.last_synth_at || "";
+    var lastBuild = ops.last_build_at || "";
+    var queueEl = getQueueWidgetEl();
+    var siteHtmlCount = queueEl ? Number(queueEl.getAttribute("data-site-html-count") || 0) : 0;
     var items = Array.isArray((snapshot.queue || {}).items) ? snapshot.queue.items : [];
-    var oldest = "";
     var queuePending = 0;
     var queueRunning = 0;
     items.forEach(function (it) {
       var st = (it && it.status) ? String(it.status) : "pending";
       if (st === "pending") queuePending += 1;
       if (st === "running") queueRunning += 1;
-      if (st === "pending" && it.created_at && (!oldest || it.created_at < oldest)) oldest = it.created_at;
     });
-    pendingList.forEach(function (it) {
-      if (it && it.mtime && (!oldest || it.mtime < oldest)) oldest = it.mtime;
-    });
-
-    var pendingSessions = pendingList.filter(function (it) { return !(it && it.is_doc); });
-    var pendingDocs = pendingList.filter(function (it) { return !!(it && it.is_doc); });
-    var warnings = Array.isArray(estimate.warnings) ? estimate.warnings : [];
-    var toReview = Number(pipeline.to_review || 0);
-    var trustedEntities = Number(pipeline.trusted_entities || 0);
-    var trustedConcepts = Number(pipeline.trusted_concepts || 0);
     var repoRoot = root.getAttribute("data-repo-root") || "";
+    var isHomeSplit =
+      root.id === "llmwiki-state-widget" && !!document.getElementById("llmwiki-home-ops-list");
 
     var totalRaw = 0;
     var totalSynth = 0;
     var totalPending = 0;
     var totalNext = 0;
     var totalOnDisk = 0;
+    var sumInSiteRows = 0;
+    rows.forEach(function (row) {
+      var kind = row && row.kind ? String(row.kind) : "";
+      if (kind === "stubs" || kind === "other") return;
+      sumInSiteRows += Number(row && row.on_disk || 0);
+    });
     var bodyRows = rows.map(function (row) {
       var label = row && row.label ? String(row.label) : "Unknown";
       var css = row && row.css ? String(row.css) : "agent-unknown";
@@ -191,9 +467,13 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
       var isDocs = kind === "docs" || label === "Documents";
       var sourceLabel;
       if (kind === "stubs") {
-        sourceLabel = '<span class="muted">' + escapeHtml(label) + "</span>";
+        sourceLabel =
+          '<span class="muted">' + escapeHtml(label) + "</span>" +
+          pipelineHintBtn("state-row-stubs", "What the Stubs row counts");
       } else if (kind === "other") {
-        sourceLabel = '<span class="muted">' + escapeHtml(label) + "</span>";
+        sourceLabel =
+          '<span class="muted">' + escapeHtml(label) + "</span>" +
+          pipelineHintBtn("state-row-other", "What the Other row counts");
       } else if (isDocs) {
         sourceLabel = '<span class="state-source-docs">' + escapeHtml(label) + "</span>";
       } else {
@@ -201,7 +481,20 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
            "</span> sessions";
       }
       var dash = '<td class="muted">—</td>';
-      // Eligible sources: Raw → To synthesize → Synthesized; On disk = wiki/sources files
+      var inSiteNaCell =
+        '<td class="muted">—' +
+        pipelineHintBtn("state-insite-na", "Why In site is blank for this row") +
+        "</td>";
+      var inSiteCell;
+      if (kind === "other") {
+        var otherSite = siteHtmlCount - sumInSiteRows;
+        if (otherSite < 0) otherSite = 0;
+        inSiteCell = "<td>" + stageCell(otherSite, 0) + "</td>";
+      } else if (kind === "stubs") {
+        inSiteCell = inSiteNaCell;
+      } else {
+        inSiteCell = "<td>" + stageCell(onDisk, 0) + "</td>";
+      }
       return (
         "<tr>" +
         '<td class="state-row-label">' + sourceLabel + "</td>" +
@@ -209,95 +502,55 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
         (diskOnly ? dash : ("<td>" + stageCell(pending, nextUsd) + "</td>")) +
         (diskOnly ? dash : ("<td>" + stageCell(synthesized, 0) + "</td>")) +
         "<td>" + stageCell(onDisk, 0) + "</td>" +
+        inSiteCell +
         "</tr>"
       );
     }).join("");
 
     var footHtml = "";
     if (!bodyRows) {
-      bodyRows = '<tr><td colspan="5" class="muted">No pipeline rows yet — run <code>llmwiki sync</code> then <code>llmwiki synth --estimate</code>. Rows appear per agent that has contributed at least one session.</td></tr>';
+      bodyRows =
+        '<tr><td colspan="6" class="muted">No pipeline rows yet — run <code>llmwiki sync</code> then ' +
+        "<code>llmwiki synth --estimate</code>. Rows appear per agent that has contributed at least one session.</td></tr>";
     } else {
       footHtml =
         "<tfoot><tr>" +
         "<td>Total" +
         ' <span class="muted state-queue-meta">(queued ' + queuePending +
         " · in progress " + queueRunning + ")</span></td>" +
-        "<td>" + stageCell(totalRaw, 0) + "</td>" +
-        "<td>" + stageCell(totalPending, totalNext) + "</td>" +
-        "<td>" + stageCell(totalSynth, 0) + "</td>" +
-        "<td>" + stageCell(totalOnDisk, 0) + "</td>" +
+        "<td>" + footCountCell(totalRaw, 0, "Last sync", lastSync) + "</td>" +
+        "<td>" + footCountCell(totalPending, totalNext, "", "") + "</td>" +
+        "<td>" + footCountCell(totalSynth, 0, "Last synth", lastSynth) + "</td>" +
+        "<td>" + footCountCell(totalOnDisk, 0, "", "") + "</td>" +
+        "<td>" + footCountCell(siteHtmlCount, 0, "Last build", lastBuild) + "</td>" +
         "</tr></tfoot>";
     }
 
     var tableHtml =
       '<div class="state-table-wrap" tabindex="0" role="region" aria-label="Eligible sources">' +
-      '<p class="muted">Eligible sources: Raw → To synthesize → Synthesized (by agent). On disk can exceed Raw (filtered/orphan pages). Handled by shell commands.</p>' +
       '<table class="state-pipeline-table">' +
-      "<thead><tr><th>Source</th><th>Raw</th><th>To synthesize</th><th>Synthesized</th><th>On disk</th></tr></thead>" +
+      pipelineTableHeadHtml() +
       "<tbody>" + bodyRows + "</tbody>" + footHtml + "</table></div>";
 
-    // #374: the lint error note lives in the Home problems banner, not here.
-    var lintReport = ops.last_lint_report ? String(ops.last_lint_report) : "";
-    var lintReportCount = lintReport ? (lintReport.split("\n").length || 1) : 0;
-    var lintReportBody = lintReport
-      ? '<pre class="state-lint-report">' + escapeHtml(lintReport) + "</pre>"
-      : '<p class="muted">No linter output.</p>';
-
-    var knowledgeHtml =
-      '<div class="state-table-wrap" tabindex="0" role="region" aria-label="Knowledge layer">' +
-      '<p class="muted">Knowledge layer: Candidates → Entities / Concepts. Review on the Candidates page (header/count below) or via agent Commands below.</p>' +
-      '<table class="state-pipeline-table state-knowledge-table">' +
-      '<thead><tr><th><a href="candidates.html">Candidates</a></th><th>Entities</th><th>Concepts</th></tr></thead>' +
-      "<tbody><tr>" +
-      '<td><a href="candidates.html">' + stageCell(toReview, 0) + "</a></td>" +
-      "<td>" + stageCell(trustedEntities, 0) + "</td>" +
-      "<td>" + stageCell(trustedConcepts, 0) + "</td>" +
-      "</tr></tbody></table>" +
-      "</div>";
-
-    // #234: stage completion stamps live in the Timeline collapsible (not above tables).
-    var lintStamp = formatTs(ops.last_lint_run_at);
-    var lintStatus = ops.last_lint_status ? String(ops.last_lint_status) : "";
-    if (lintStatus === "failed" || lintStatus === "ok") {
-      lintStamp = lintStamp + " · " + lintStatus;
-    }
-    var timelineBody =
-      '<ul class="queue-type-list state-stage-stamps" aria-label="Pipeline timeline">' +
-      "<li><strong>Oldest pending:</strong> " + escapeHtml(oldest || "none") + "</li>" +
-      "<li><strong>Last sync:</strong> " + escapeHtml(formatTs(lastSync)) + "</li>" +
-      "<li><strong>Last synth:</strong> " + escapeHtml(formatTs(ops.last_synth_at)) + "</li>" +
-      "<li><strong>Last build:</strong> " + escapeHtml(formatTs(ops.last_build_at)) + "</li>" +
-      "<li><strong>Last lint:</strong> " + escapeHtml(lintStamp) + "</li>" +
-      "<li><strong>Last queue run:</strong> " + escapeHtml(formatTs(ops.last_queue_run_at)) + "</li>" +
-      "</ul>";
-
-    var warningsBody = warnings.length
-      ? ("<ul class=\"queue-type-list\">" + warnings.map(function (w) {
-          return "<li>" + escapeHtml(w) + "</li>";
-        }).join("") + "</ul>")
-      : '<p class="muted">No estimate warnings.</p>';
-
-    var estNote = "";
-    if (estimate && (estimate.updated_at || estimate.incremental_usd != null)) {
-      estNote =
-        '<p class="muted">Estimate updated ' + escapeHtml(formatTs(estimate.updated_at || "")) +
-        " · incremental $" + Number(estimate.incremental_usd || 0).toFixed(4) +
-        " · pricing <code>" + escapeHtml(estimate.pricing_model || "default") + "</code></p>";
+    if (isHomeSplit) {
+      root.innerHTML = tableHtml;
+      var opsMount = document.getElementById("llmwiki-home-ops-list");
+      if (opsMount) opsMount.innerHTML = homeOpsListHtml(snapshot, queueEl);
+      var collMount = document.getElementById("llmwiki-home-collapsibles");
+      if (collMount) {
+        collMount.innerHTML =
+          '<div class="collapse-sections">' + buildCollapsiblesHtml(snapshot, repoRoot) + "</div>";
+      }
+      wireGlobalFloatingHints(root);
+      return;
     }
 
     root.innerHTML =
       tableHtml +
-      knowledgeHtml +
-      estNote +
       '<div class="collapse-sections">' +
-      detailsSection("Timeline", 6, timelineBody) +
-      detailsSection("Not synthesized sessions", pendingSessions.length, pendingListHtml(pendingSessions)) +
-      detailsSection("Not synthesized docs", pendingDocs.length, pendingListHtml(pendingDocs)) +
-      detailsSection("Candidates to review", toReview, reviewBreakdownHtml(pipeline)) +
-      detailsSection("Commands", 15, commandsBody(repoRoot)) +
-      detailsSection("Estimate warnings", warnings.length, warningsBody) +
-      detailsSection("Linter output", lintReportCount, lintReportBody) +
+      buildCollapsiblesHtml(snapshot, repoRoot) +
       "</div>";
+    wireGlobalFloatingHints(root);
   }
 
   // #374: one red banner at the top of Home for every current problem.
@@ -427,12 +680,16 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
   function renderQueueTrace() {
     var snapshot = window.LLMWIKI_STATE_SNAPSHOT;
     renderProblemsBanner(document.getElementById("llmwiki-problems"), snapshot, Date.now());
+    wireHomeOpsTimer();
     var mounts = document.querySelectorAll("[data-llmwiki-state-widget], #llmwiki-state-widget, #queue-home-content, #queue-raw-content");
     if (!mounts.length) return;
     mounts.forEach(function (el) {
       renderStateWidget(el, snapshot);
       wireQueueCopyButtons(el);
+      wireGlobalFloatingHints(el);
     });
+    var coll = document.getElementById("llmwiki-home-collapsibles");
+    if (coll) wireQueueCopyButtons(coll);
   }
 
   function wireQueueCopyButtons(root) {
@@ -458,6 +715,7 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
   document.addEventListener("DOMContentLoaded", function () {
     renderQueueTrace();
     wireQueueCopyButtons();
+    wireGlobalFloatingHints(document);
     // #374: an open Home tab turns overdue on its own; clock check only, no reads.
     var problemsMount = document.getElementById("llmwiki-problems");
     if (problemsMount) {
@@ -466,6 +724,7 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
       }, 60000);
     }
   });
+  window.__llmwikiWireFloatingHints = wireGlobalFloatingHints;
 })();
 
 (function () {
@@ -634,75 +893,8 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
   });
 })();
 
-// ─── #323: token coverage hint (touch toggle, Escape, outside click) ─────
-// Hover / focus reveal is pure CSS (panel is a child of the hint so the
-// pointer can enter it). This wires click/tap to aria-expanded, dismisses
-// on Escape / outside click / second click (data-dismissed; WCAG 1.4.13
-// dismissable), and clamps the panel inside the viewport near screen edges.
-(function () {
-  document.addEventListener("DOMContentLoaded", function () {
-    const hints = document.querySelectorAll(".token-coverage-hint");
-    if (!hints.length) return;
-    function btnOf(h) { return h.querySelector(".token-coverage-btn"); }
-    function panelOf(h) { return h.querySelector(".token-coverage-panel"); }
-    function setOpen(h, open) {
-      const b = btnOf(h);
-      if (b) b.setAttribute("aria-expanded", open ? "true" : "false");
-    }
-    function clamp(h) {
-      const p = panelOf(h);
-      if (!p) return;
-      p.style.transform = "";
-      const r = p.getBoundingClientRect();
-      const margin = 8;
-      const vw = document.documentElement.clientWidth;
-      let dx = 0;
-      if (r.right > vw - margin) dx = vw - margin - r.right;
-      if (r.left + dx < margin) dx = margin - r.left;
-      if (dx) p.style.transform = "translateX(" + Math.round(dx) + "px)";
-    }
-    hints.forEach(function (h) {
-      const b = btnOf(h);
-      if (!b) return;
-      b.addEventListener("click", function () {
-        const open = b.getAttribute("aria-expanded") !== "true";
-        if (open) {
-          h.removeAttribute("data-dismissed");
-          setOpen(h, true);
-          clamp(h);
-        } else {
-          // Mirror Escape: aria-expanded alone is not enough while :hover /
-          // :focus-within still match (Chromium keeps focus after tap).
-          setOpen(h, false);
-          h.setAttribute("data-dismissed", "");
-        }
-      });
-      h.addEventListener("mouseenter", function () { clamp(h); });
-      h.addEventListener("focusin", function () { clamp(h); });
-      h.addEventListener("mouseleave", function () { h.removeAttribute("data-dismissed"); });
-      h.addEventListener("focusout", function () { h.removeAttribute("data-dismissed"); });
-    });
-    document.addEventListener("keydown", function (e) {
-      if (e.key !== "Escape") return;
-      hints.forEach(function (h) {
-        const b = btnOf(h);
-        const shown = (b && b.getAttribute("aria-expanded") === "true") ||
-          h.matches(":hover") || h.contains(document.activeElement);
-        if (!shown) return;
-        setOpen(h, false);
-        h.setAttribute("data-dismissed", "");
-      });
-    });
-    document.addEventListener("click", function (e) {
-      hints.forEach(function (h) {
-        if (!h.contains(e.target)) setOpen(h, false);
-      });
-    });
-    window.addEventListener("resize", function () {
-      hints.forEach(clamp);
-    });
-  });
-})();
+// ─── #323 / #321: metric + pipeline hints use the global floating panel ──
+// Wired from the state-widget block (`wireGlobalFloatingHints`) on every page.
 
 // ─── #325: Analytics Tokens from site/session-tokens.js (no rebuild) ─────
 // Sync / migrate rewrite the slim sidecar (aggregates only). When Analytics
@@ -804,6 +996,17 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
     }
   }
 
+  function coverageHintHtml(lines) {
+    var out = "";
+    for (var i = 0; i < lines.length; i++) {
+      var line = String(lines[i] == null ? "" : lines[i]);
+      out += '<span class="token-coverage-line">' +
+        line.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;") +
+        "</span>";
+    }
+    return out;
+  }
+
   function refreshTokensFromSidecar() {
     var data = window.LLMWIKI_SESSION_TOKENS;
     if (!data || typeof data !== "object") return;
@@ -826,9 +1029,14 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
         " sessions (" + formatTokens(avg) + "/s)";
     }
     var measuredLines = coverageLines(byAgent);
-    var panel = card.querySelector(".token-coverage-panel");
-    if (measuredLines.length) {
-      setPanelLines(panel, ["Measured on sessions"].concat(measuredLines, [OTHER_LINE]));
+    var hintBtn = card.querySelector(
+      '.llmwiki-hint-trigger[data-hint-key="metric-tokens-coverage"]'
+    );
+    if (hintBtn && measuredLines.length) {
+      hintBtn.setAttribute(
+        "data-hint-html",
+        coverageHintHtml(["Measured on sessions"].concat(measuredLines, [OTHER_LINE]))
+      );
     }
   }
 

@@ -66,8 +66,11 @@ def test_banner_lists_run_failures_and_lint_at_the_top_of_home(page, site: Path)
         "Lint — wiki checks found errors",
     ]
     first = page.evaluate("() => document.querySelector('.queue-widget').firstElementChild.id")
-    assert first == "llmwiki-problems"
-    assert page.locator(".state-knowledge-table ~ .error-banner").count() == 0
+    assert first == "llmwiki-home-alerts"
+    assert page.evaluate(
+        "() => !!document.querySelector('#llmwiki-home-alerts #llmwiki-problems')"
+    )
+    assert page.locator(".state-knowledge-table").count() == 0
 
 
 def test_a_new_problem_shows_after_a_refresh_without_a_rebuild(page, site: Path) -> None:  # type: ignore[no-untyped-def]

@@ -137,9 +137,10 @@ def test_js_handles_escape_key() -> None:
     """ESC closes the drawer and returns focus to the hamburger so
     keyboard users don't get trapped."""
     assert 'key === "Escape"' in JS
-    # Focus return — find the assignment near the Escape handler.
-    esc_block = JS[JS.find('key === "Escape"'): JS.find('key === "Escape"') + 200]
-    assert "btn.focus()" in esc_block
+    nav_block = JS[JS.find("nav-hamburger") : JS.find("Reading progress")]
+    esc_idx = nav_block.find('key === "Escape"')
+    assert esc_idx >= 0
+    assert "btn.focus()" in nav_block[esc_idx : esc_idx + 200]
 
 
 def test_js_closes_drawer_on_outside_click() -> None:

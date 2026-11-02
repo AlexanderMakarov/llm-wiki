@@ -6,7 +6,8 @@ import json
 from pathlib import Path
 
 from llmwiki import build as build_mod
-from llmwiki.build import build_site
+from llmwiki import raw_docs_site
+from llmwiki.build import build_site, render_automation_details, render_automation_notice
 from llmwiki.raw_docs_site import render_dashboard_body
 from llmwiki.render import css, js
 from llmwiki.state_store import (
@@ -17,17 +18,63 @@ from llmwiki.state_store import (
 )
 from llmwiki.synth.estimate import synthesize_estimate_report
 from llmwiki.synth.pipeline import _discover_raw_sessions, refresh_synth_pending
+from llmwiki.viz_wiki_value import render_home_metrics_strip
 
 
 def test_dashboard_inlines_state_mount_not_old_cards():
     body = render_dashboard_body([], 0)
     assert 'id="llmwiki-state-widget"' in body
     assert "data-llmwiki-state-widget" in body
+    assert body.index("Pipeline state") < body.index('id="llmwiki-state-widget"')
+    assert "llmwiki-home-alerts" in body
+    assert "llmwiki-problems" in body
+    assert "llmwiki-home-ops-list" in body
+    assert "llmwiki-home-collapsibles" in body
+    assert "data-llmwiki-freshness" not in body
+    assert "home-metrics-strip" not in body  # optional block from build
     assert "Pipeline state" in body
     assert "Recent raw documents" in body
+    assert "automation-panel" not in body
     assert "queue-home-content" not in body
     assert "Sync, synthesis, and queue status at a glance" not in body
     assert "<summary><h3" not in body  # commands now live in the JS widget
+    body_with_docs = render_dashboard_body(
+        [
+            raw_docs_site.DocEntry(
+                title="T",
+                url="documents/x.html",
+                date="2026-01-01",
+                source_label="doc",
+                parts=1,
+            )
+        ],
+        1,
+    )
+    assert "recent-doc-compact" in body_with_docs
+
+
+def test_dashboard_home_section_order_and_automation_template(tmp_path: Path):
+    """#321: Metrics before pipeline; automation details in collapsible template."""
+    notice = render_automation_notice(tmp_path)
+    assert "No automation configured" in notice
+    assert "install-automation" in notice
+    assert render_automation_details(tmp_path) == ""
+
+    body = render_dashboard_body(
+        [],
+        0,
+        automation_notice_html=notice,
+        automation_details_html="<ul><li>Daily job</li></ul>",
+        home_metrics_html=render_home_metrics_strip({}, wiki_page_count=0),
+    )
+    assert "see more on" in body
+    assert body.index("Metrics") < body.index("Pipeline state")
+    assert body.index("Pipeline state") < body.index('id="llmwiki-state-widget"')
+    assert body.index("llmwiki-state-widget") < body.index("llmwiki-home-ops-list")
+    assert body.index("llmwiki-home-ops-list") < body.index("Recent raw documents")
+    assert body.index("Recent raw documents") < body.index("llmwiki-home-collapsibles")
+    assert "automation-panel" not in body
+    assert '<template id="llmwiki-automation-details">' in body
 
 
 def test_dashboard_mount_includes_vault_root_attr(tmp_path: Path):
@@ -39,29 +86,29 @@ def test_dashboard_mount_includes_vault_root_attr(tmp_path: Path):
 def test_state_widget_js_has_pipeline_table_and_collapsibles():
     assert "renderStateWidget" in js.JS
     assert "state-pipeline-table" in js.JS
-    assert "state-knowledge-table" in js.JS
+    assert "renderProblemsBanner" in js.JS
+    assert "llmwiki-problems" in js.JS
     assert "To synthesize" in js.JS
-    assert (
-        "Eligible sources: Raw → To synthesize → Synthesized (by agent). "
-        "On disk can exceed Raw (filtered/orphan pages). "
-        "Handled by shell commands."
-    ) in js.JS
+    assert "Eligible sources:" in js.JS or "state-table-overview" in js.JS
+    assert "pipelineTableHeadHtml" in js.JS
+    assert "wireGlobalFloatingHints" in js.JS
+    assert "llmwiki-floating-hint-panel" in js.JS
+    assert "tableColHint" not in js.JS
+    assert "footCountCell" in js.JS
+    assert "state-pipeline-ts-row" not in js.JS
     assert 'aria-label="Eligible sources"' in js.JS
-    # Caption unit is eligible sources — not "Files layer" as the measure.
     assert "Files layer:" not in js.JS
     assert 'aria-label="Files layer"' not in js.JS
-    # #81 smoke redesign: On disk column (file counts); no under-table note.
-    assert "<th>On disk</th>" in js.JS
+    assert "<th>Queryable" in js.JS
+    assert "<th>In site" in js.JS
+    assert "On disk can exceed Raw" not in js.JS
     assert "sourcePagesNote" not in js.JS
     assert "Source pages (current state):" not in js.JS
     assert 'kind === "stubs"' in js.JS
     assert "totalOnDisk" in js.JS
-    assert "Knowledge layer: Candidates → Entities / Concepts." in js.JS
-    assert "Review on the Candidates page (header/count below) or via agent Commands below." in js.JS
-    assert "candidates.html" in js.JS
-    assert "trusted_entities" in js.JS
-    assert "trusted_concepts" in js.JS
-    assert "Candidates to review" in js.JS
+    assert "home-knowledge-hint" not in js.JS  # knowledge moved to Wiki value metrics
+    assert "state-knowledge-cards" not in js.JS
+    assert "Candidates to review" not in js.JS
     assert "Not synthesized sessions" in js.JS
     assert "Not synthesized docs" in js.JS
     assert "Estimate warnings" in js.JS
@@ -101,25 +148,22 @@ def test_state_widget_js_has_pipeline_table_and_collapsibles():
     # Stubs/Other disk-only rows use muted dashes; Knowledge layer stays numeric.
     assert 'var dash = \'<td class="muted">—</td>\';' in js.JS
     assert "diskOnly" in js.JS
-    # Timeline must appear before the backlog lists in the render order.
-    timeline_idx = js.JS.index('detailsSection("Timeline"')
+    # Pipeline timeline list is rendered below metrics; collapsibles start with Automation.
+    automation_idx = js.JS.index('detailsSection("Automation"')
     sessions_idx = js.JS.index('detailsSection("Not synthesized sessions"')
-    assert timeline_idx < sessions_idx
-    # #234: Timeline holds stage stamps (count 6); #374 moved the lint note to the Home banner.
-    assert 'detailsSection("Timeline", 6,' in js.JS
-    assert "state-stage-stamps" in js.JS
+    assert automation_idx < sessions_idx
+    assert "homeOpsListHtml" in js.JS
+    assert "wireHomeOpsTimer" in js.JS
+    assert 'detailsSection("Timeline"' not in js.JS
+    assert "llmwiki-automation-details" in js.JS
+    assert "renderProblemsBanner" in js.JS
+    assert "problemEntries" in js.JS
     assert "ops.last_lint_error" in js.JS
-    assert "Last synth:" in js.JS
-    assert "Last build:" in js.JS
-    assert "Last lint:" in js.JS
+    assert "Last lint:" not in js.JS
     assert "Last reflect run:" not in js.JS
     assert "Last lint run:" not in js.JS
-    assert 'aria-label="Pipeline timeline"' in js.JS
-    knowledge_html = js.JS[js.JS.index("var knowledgeHtml ="): js.JS.index("var timelineBody =")]
-    assert "state-knowledge-table" in knowledge_html
-    assert "last_lint_error" not in knowledge_html
-    assert "error-banner" not in knowledge_html
-    # Old dashboard chrome removed from the renderer.
+    assert 'aria-label="Pipeline operations"' in js.JS
+    assert "state-knowledge-table" not in js.JS
     assert "Unsynth estimate" not in js.JS
     assert "Queue task types" not in js.JS
     assert "Cost estimate" not in js.JS
@@ -136,29 +180,40 @@ def test_state_widget_js_has_pipeline_table_and_collapsibles():
     assert "vault-wide — not split by agent" not in js.JS
 
 
-def test_state_widget_pipeline_stage_stamps_in_timeline():
-    """#234: Last sync/synth/build/lint live in Timeline collapsible (not above tables).
+def test_state_widget_pipeline_stage_stamps_in_freshness_line():
+    """#321: sync/synth/build stamps in table footer row; ops list for queue + estimate.
 
-    # @layer: unit  # @spec: 234-home-timeline-automation-stamps
+    # @layer: unit  # @spec: 321-home-pipeline-freshness
     """
-    assert 'aria-label="Pipeline timeline"' in js.JS
-    assert "ops.last_synth_at" in js.JS
+    assert "homeOpsListHtml" in js.JS
+    assert "formatAbsoluteLocal" in js.JS
     assert "ops.last_build_at" in js.JS
-    assert "ops.last_lint_run_at" in js.JS
-    assert "ops.last_lint_status" in js.JS
-    timeline_body_idx = js.JS.index("var timelineBody =")
-    timeline_section_idx = js.JS.index('detailsSection("Timeline"')
-    timeline_body = js.JS[timeline_body_idx:timeline_section_idx]
-    assert "Oldest pending:" in timeline_body
-    assert "Last queue run:" in timeline_body
-    assert "Last sync:" in timeline_body
-    assert "Last synth:" in timeline_body
-    assert "Last build:" in timeline_body
-    assert "Last lint:" in timeline_body
-    assert "Last reflect" not in timeline_body
-    # Stamps are not rendered as a block before the eligible-sources table.
-    assert "var stageStampsHtml" not in js.JS
-    assert js.JS.index("tableHtml +") < js.JS.index('detailsSection("Timeline"')
+    assert "ops.last_synth_at" in js.JS
+    assert "last_sync" in js.JS
+    assert "60000" in js.JS  # relative-age refresh timer
+    table_section = js.JS[js.JS.index("function renderStateWidget"): js.JS.index("function renderQueueTrace")]
+    sync_idx = table_section.index("Last sync")
+    synth_idx = table_section.index("Last synth")
+    build_idx = table_section.index("Last build")
+    assert sync_idx < synth_idx < build_idx
+    ops_fn = js.JS[js.JS.index("function homeOpsListHtml"): js.JS.index("var _homeOpsTimer")]
+    assert "Last lint" not in ops_fn
+    assert "Last queue run" in ops_fn
+    assert "Synth estimate updated" in ops_fn
+    assert "Estimate updated" not in ops_fn
+    assert 'detailsSection("Timeline"' not in js.JS
+
+
+def test_state_widget_lint_errors_surface_in_problems_banner():
+    """#374 / #256: lint errors become a Lint entry in the problems banner."""
+    assert "ops.last_lint_error" in js.JS
+    assert "function problemEntries" in js.JS
+    assert "part: \"Lint\"" in js.JS
+    assert "wiki checks found errors" in js.JS
+    assert "m.test(lintError)" in js.JS
+    assert 'detailsSection("Linter output"' in js.JS
+    assert "var LINT_BANNER_MAX_LINES = 10;" not in js.JS
+    assert "PROBLEM_DETAIL_MAX_LINES" in js.JS
 
 
 def test_state_widget_linter_output_section_follows_estimate_warnings():
@@ -190,13 +245,16 @@ def test_commands_table_offers_automation_before_the_manual_rows():
 
 
 def test_state_widget_js_on_disk_column_no_under_table_note():
-    """#81 redesign: On disk column in table; no under-table Source pages note."""
-    assert "<th>On disk</th>" in js.JS
+    """#321: Queryable + In site columns; table before collapsibles on Home."""
+    assert "<th>Queryable" in js.JS
+    assert "<th>In site" in js.JS
     assert "sourcePagesNote" not in js.JS
     assert "Source pages (current state):" not in js.JS
-    assert js.JS.index("tableHtml +") < js.JS.index("knowledgeHtml +")
-    # Eligible-sources table embeds On disk before Knowledge layer.
-    assert js.JS.index("<th>On disk</th>") < js.JS.index("knowledgeHtml")
+    assert "buildCollapsiblesHtml" in js.JS
+    assert "isHomeSplit" in js.JS
+    assert "state-row-other" in js.JS
+    assert "sumInSiteRows" in js.JS
+    assert "siteHtmlCount - sumInSiteRows" in js.JS
 
 
 def test_synth_pipeline_shape_ok():

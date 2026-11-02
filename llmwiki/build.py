@@ -58,7 +58,7 @@ _FAVICON_PNG = bytes.fromhex(
 SOURCE_ROOT = PACKAGE_ROOT.parent
 from llmwiki import automation_plan, cron_spec, raw_docs_site
 from llmwiki.agent_label import detect_agent_label, render_agent_badge
-from llmwiki.automation_status import load_status
+from llmwiki.automation_status import load_status, vault_automation_log_path
 from llmwiki.candidates import apply_review_summary_to_pipeline, candidate_review_summary
 from llmwiki.candidates_site import render_candidates_body
 from llmwiki.changelog_timeline import (
@@ -96,6 +96,10 @@ from llmwiki.project_topics import (
     get_project_topics,
     load_project_profile,
     render_topic_chips,
+)
+from llmwiki.render.ui_hints import (
+    render_floating_hint_portal,
+    render_ui_hints_script,
 )
 from llmwiki.search_facets import aggregate_facets, enrich_entry
 from llmwiki.search_tree import (
@@ -166,8 +170,8 @@ from llmwiki.viz_heatmap import (
 )
 from llmwiki.viz_tokens import (
     render_project_token_card,
+    render_secondary_token_stat_grid,
     render_session_token_card,
-    render_site_token_stats,
 )
 from llmwiki.viz_tools import (
     render_project_tool_chart,
@@ -175,7 +179,9 @@ from llmwiki.viz_tools import (
 )
 from llmwiki.viz_wiki_value import (  # noqa: F401
     render_candidates_review_section,
+    render_home_metrics_strip,
     render_mcp_heaviest_card,
+    render_primary_metrics_section,
     render_project_usage_block,
     render_wiki_value_section,
 )
@@ -1099,6 +1105,8 @@ def page_foot(js_prefix: str = "") -> str:
   </button>
 </nav>
 {search_palette_markup(js_prefix)}
+{render_floating_hint_portal()}
+{render_ui_hints_script()}
 <script src="{js_prefix}llmwiki-state.js"></script>
 <script src="{js_prefix}session-tokens.js"></script>
 <script src="{js_prefix}{HLJS_SCRIPT}" defer></script>
@@ -2086,12 +2094,34 @@ def render_analytics(
     session_tokens_usage = (
         load_session_tokens(vault_for_tokens) if vault_for_tokens is not None else None
     )
-    token_stats_block = render_site_token_stats(
+    candidates_block = ""
+    primary_metrics_block = render_primary_metrics_section(
+        usage_totals or {},
+        wiki_page_count=int(wv.get("wiki_page_count") or 0),
+        metas_by_project=metas_by_project,
+        session_tokens_usage=session_tokens_usage,
+        knowledge_pending=int(wv.get("candidates_pending") or 0),
+        knowledge_entities=int(wv.get("trusted_entities") or 0),
+        knowledge_concepts=int(wv.get("trusted_concepts") or 0),
+        knowledge_stale=int(wv.get("candidates_stale") or 0),
+        knowledge_stale_days=int(wv.get("candidates_stale_days") or 30),
+    )
+    secondary_grid = render_secondary_token_stat_grid(
         metas_by_project,
         link_prefix="",
         extra_cards=mcp_heaviest_card,
         session_tokens_usage=session_tokens_usage,
     )
+    secondary_metrics_block = ""
+    if secondary_grid:
+        secondary_metrics_block = (
+            '<section class="section token-stats-section secondary-metrics-section">\n'
+            "  <div class=\"container\">\n"
+            f"    {secondary_grid}\n"
+            "  </div>\n"
+            "</section>"
+        )
+    token_stats_block = primary_metrics_block + secondary_metrics_block
 
     # Wiki usage (#52): value cards, corpus mix, top pages, MCP table.
     wiki_usage_block = render_wiki_value_section(
@@ -2107,13 +2137,6 @@ def render_analytics(
         estimate=wv.get("estimate"),
         docs_by_project=docs_by_project or {},
     )
-    candidates_block = render_candidates_review_section(
-        pending=int(wv.get("candidates_pending") or 0),
-        stale=int(wv.get("candidates_stale") or 0),
-        by_kind=wv.get("candidates_by_kind") or {},
-        stale_days=int(wv.get("candidates_stale_days") or 30),
-    )
-
     # Recently updated — show last 10 entries from the wiki's log.md. Read
     # from the vault's wiki_dir (falling back to REPO_ROOT for a repo build),
     # not the module REPO_ROOT — otherwise a vault site shows the repo's log.
@@ -2224,28 +2247,30 @@ def _schedule_label(status: dict[str, Any]) -> str:
         return cron_spec.describe(cron_spec.parse_cron(automation_plan.DEFAULT_SCHEDULE))
 
 
-def render_automation_panel(content_root: Path | None) -> str:
-    """HTML panel describing install-automation status for the Home page.
+_AUTOMATION_EXIT_LINE = re.compile(r"^EXIT:(-?\d+)\s*$", re.MULTILINE)
+_SOFT_AUTOMATION_EXITS = frozenset({0, 75})
 
-    Settings only (#234): job, schedule, short synth-backend line, hooks, watch,
-    log path, and a Maintain one-liner. No stage timestamps, lint outcome,
-    lint-fail policy reminder, or installer Updated line.
-    """
-    if content_root is None:
-        status = None
-    else:
-        status = load_status(content_root)
 
-    if not status:
-        return (
-            '<div class="automation-panel" aria-label="Automation">'
-            "<h2>Automation</h2>"
-            "<p class=\"muted\">No automation configured. Run "
-            "<code>llmwiki install-automation</code> or <code>./setup.sh</code> "
-            "to set a daily scheduler, optional watch, and synth backend.</p>"
-            "</div>"
-        )
+def _last_automation_exit_code(content_root: Path) -> int | None:
+    """Last ``EXIT:`` line from the vault automation log, if readable."""
+    status = load_status(content_root)
+    log_path = vault_automation_log_path(content_root)
+    if status and status.get("log_path"):
+        log_path = Path(str(status["log_path"]))
+    if not log_path.is_file():
+        return None
+    try:
+        text = log_path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    matches = _AUTOMATION_EXIT_LINE.findall(text)
+    if not matches:
+        return None
+    return int(matches[-1])
 
+
+def _render_automation_settings_body(status: dict[str, object]) -> str:
+    """Settings list for configured automation (details panel)."""
     plan = automation_plan.plan_from_status(status)
     job_label = html.escape(automation_plan.plan_label(plan))
     schedule_label = html.escape(_schedule_label(status))
@@ -2273,8 +2298,6 @@ def render_automation_panel(content_root: Path | None) -> str:
         )))
         footer = f'<p class="muted">{note}</p>'
     return (
-        '<div class="automation-panel" aria-label="Automation">'
-        "<h2>Automation</h2>"
         "<ul>"
         f"<li>Daily job: <strong>{job_label}</strong></li>"
         f"<li>Runs: <strong>{schedule_label}</strong> local time</li>"
@@ -2284,8 +2307,105 @@ def render_automation_panel(content_root: Path | None) -> str:
         f"<li>Last-run log: <code>{log_path}</code></li>"
         "</ul>"
         f"{footer}"
+    )
+
+
+def render_automation_notice(content_root: Path | None) -> str:
+    """Visible Home automation alerts — unconfigured, activation errors, last run failure."""
+    if content_root is None:
+        return (
+            '<div class="automation-notice automation-notice-setup" role="status">'
+            "<p class=\"muted\">No automation configured. Run "
+            "<code>llmwiki install-automation</code> or <code>./setup.sh</code> "
+            "to set a daily scheduler, optional watch, and synth backend.</p>"
+            "</div>"
+        )
+    status = load_status(content_root)
+    if not status:
+        return (
+            '<div class="automation-notice automation-notice-setup" role="status">'
+            "<p class=\"muted\">No automation configured. Run "
+            "<code>llmwiki install-automation</code> or <code>./setup.sh</code> "
+            "to set a daily scheduler, optional watch, and synth backend.</p>"
+            "</div>"
+        )
+    parts: list[str] = []
+    sched_err = status.get("scheduler_error")
+    if isinstance(sched_err, str) and sched_err.strip():
+        parts.append(
+            '<div class="error-banner automation-notice" role="alert">'
+            "Scheduler activation failed: "
+            f"{html.escape(sched_err.strip())}"
+            "</div>"
+        )
+    if status.get("scheduler_activated") and status.get("scheduler_active") is False:
+        parts.append(
+            '<div class="error-banner automation-notice" role="alert">'
+            "Automation is installed but the OS scheduler reports it as inactive."
+            "</div>"
+        )
+    exit_code = _last_automation_exit_code(content_root)
+    if exit_code is not None and exit_code not in _SOFT_AUTOMATION_EXITS:
+        log_path = html.escape(str(status.get("log_path") or vault_automation_log_path(content_root)))
+        parts.append(
+            '<div class="error-banner automation-notice" role="alert">'
+            f"Last scheduled run failed (exit {exit_code}). "
+            f"See <code>{log_path}</code>."
+            "</div>"
+        )
+    return "".join(parts)
+
+
+def render_automation_details(content_root: Path | None) -> str:
+    """Collapsed automation settings body — empty when automation is not configured."""
+    if content_root is None:
+        return ""
+    status = load_status(content_root)
+    if not status:
+        return ""
+    return _render_automation_settings_body(status)
+
+
+def render_automation_panel(content_root: Path | None) -> str:
+    """HTML panel describing install-automation status for the Home page.
+
+    Deprecated layout helper — tests and callers still expect the settings body.
+    Home now uses :func:`render_automation_notice` + :func:`render_automation_details`.
+    """
+    if content_root is None:
+        status = None
+    else:
+        status = load_status(content_root)
+
+    if not status:
+        return (
+            '<div class="automation-panel" aria-label="Automation">'
+            "<h2>Automation</h2>"
+            "<p class=\"muted\">No automation configured. Run "
+            "<code>llmwiki install-automation</code> or <code>./setup.sh</code> "
+            "to set a daily scheduler, optional watch, and synth backend.</p>"
+            "</div>"
+        )
+
+    return (
+        '<div class="automation-panel" aria-label="Automation">'
+        "<h2>Automation</h2>"
+        f"{_render_automation_settings_body(status)}"
         "</div>"
     )
+
+
+def _home_queue_widget_data_attrs(content_root: Path | None, out_dir: Path) -> str:
+    """Data attributes for Home pipeline JS (site page count, synth backend)."""
+    site_html_count = sum(1 for _ in out_dir.rglob("*.html"))
+    parts = [f'data-site-html-count="{site_html_count}"']
+    if content_root is not None:
+        status = load_status(content_root)
+        if status:
+            backend = str(status.get("synth_backend") or "").strip()
+            if backend:
+                parts.append(f'data-synth-backend="{html.escape(backend)}"')
+    return " " + " ".join(parts)
 
 
 def render_index(
@@ -2295,6 +2415,8 @@ def render_index(
     out_dir: Path,
     *,
     content_root: Path | None = None,
+    home_metrics_html: str = "",
+    queue_widget_attrs: str = "",
 ) -> Path:
     """Render ``index.html`` — queue/dashboard landing page."""
     body = raw_docs_site.render_dashboard_body(
@@ -2302,7 +2424,10 @@ def render_index(
         doc_file_count,
         vault_root=content_root,
         repo_root=SOURCE_ROOT,
-        automation_html=render_automation_panel(content_root),
+        automation_notice_html=render_automation_notice(content_root),
+        automation_details_html=render_automation_details(content_root),
+        home_metrics_html=home_metrics_html,
+        queue_widget_attrs=queue_widget_attrs or _home_queue_widget_data_attrs(content_root, out_dir),
     )
     page = (
         page_head("LLM Wiki", "Karpathy-style knowledge base from Claude Code sessions", css_prefix="")
@@ -3479,6 +3604,8 @@ def build_site(
         "candidates_stale": int(review_summary.get("to_review_stale") or 0),
         "candidates_by_kind": dict(review_summary.get("to_review_by_kind") or {}),
         "candidates_stale_days": int(review_summary.get("stale_days") or 30),
+        "trusted_entities": int(review_summary.get("trusted_entities") or 0),
+        "trusted_concepts": int(review_summary.get("trusted_concepts") or 0),
     }
 
     # #50: build the topic graph *before* the pages that consume it — the
@@ -3547,6 +3674,24 @@ def build_site(
     render_index(
         docs_root, doc_entries, len(doc_files), out_dir,
         content_root=wiki_dir.parent if wiki_dir is not None else None,
+        home_metrics_html=render_home_metrics_strip(
+            usage_totals or {},
+            wiki_page_count=int(wiki_value.get("wiki_page_count") or 0),
+            metas_by_project={
+                project: [m for _, m, _ in sessions]
+                for project, sessions in groups.items()
+            },
+            session_tokens_usage=(
+                load_session_tokens(content_root)
+                if content_root is not None
+                else None
+            ),
+            knowledge_pending=int(review_summary.get("to_review") or 0),
+            knowledge_entities=int(review_summary.get("trusted_entities") or 0),
+            knowledge_concepts=int(review_summary.get("trusted_concepts") or 0),
+            knowledge_stale=int(review_summary.get("to_review_stale") or 0),
+            knowledge_stale_days=int(review_summary.get("stale_days") or 30),
+        ),
     )
     render_raw(docs_root, doc_entries, len(doc_files), out_dir)
     render_recent(doc_entries, out_dir)
