@@ -218,3 +218,8 @@
 - Local review: Approve, 0 Blockers / 4 Nits; operator kept all 4: N1 `re-prompted` log verb; N2 CHANGELOG sentence split; N3 no worker when a merged closing PR exists (`revive_agentless_worker`) + "close the tab to pause" in doc/spec; N4 pane id tie-break in adopt
 - Tests: `[adopt-no-agent-merged]` case, `test_adopt_existing_worker_agentless_tab_picks_lowest_pane_id`
 - Next: commit + PR — `Closes #347` (all requested behaviour delivered: agent-less adopted tab gets a worker, with the merged-PR guard and docs)
+
+## worker-closeout — post-merge CI in delivery flows (#355 lesson)
+- Gap: #355 worker stopped at merged; no post-merge CI wait, no `git pull origin main`, incomplete DoD report (driver α still pending on 300s poll)
+- Fix: `scripts/wait_post_merge_ci.py` (importlib load of herdr α helpers); loop skill Close-out; `/implement-feature` + `/fix-bug` delivery steps; maintainer doc; `tests/test_wait_post_merge_ci.py`
+- Next: PR on focused branch (not mixed with unrelated WIP on main)

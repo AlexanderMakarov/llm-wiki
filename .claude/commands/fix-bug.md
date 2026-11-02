@@ -229,7 +229,15 @@ Re-check mergeability against current `origin/main`. If dirty: rebase, push, ret
 
 When gates are green, ask for explicit merge confirmation in this run. On yes: `gh pr merge`. Skipped/unanswered → do not merge; report ready-to-merge in chat. No "merged"/"gates passed" PR comments.
 
-After merge: watch post-merge Actions on `main` and fix forward if this change broke them.
+After merge, run post-merge CI wait and sync primary checkout (same α gate as the herdr driver):
+
+```bash
+REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)
+python3 scripts/wait_post_merge_ci.py --issue <BUG_ID> --repo "$REPO"
+git fetch origin main && git pull --ff-only origin main
+```
+
+Fix forward on `main` if checks fail; re-run the wait until green. Do not stop at “merged” or issue CLOSED before α passes.
 
 <!-- /awos:flow:stage -->
 
@@ -237,7 +245,7 @@ After merge: watch post-merge Actions on `main` and fix forward if this change b
 
 ### Step 13: Close the Loop
 
-Definition of Done: PR merged and post-merge required checks green. Report evidence in chat: PR URL, merge commit, local-review verdict/counts/paths, classification verdict, and (on divergence) that the owning spec was amended. Do **not** close or transition the GitHub Issue.
+Definition of Done: PR merged, **`wait_post_merge_ci` green**, primary checkout on `origin/main`. Report evidence in chat: PR URL, merge commit SHA, post-merge CI result, local-review verdict/counts/paths, classification verdict, and (on divergence) that the owning spec was amended. Do **not** close or transition the GitHub Issue.
 
 Leave a clean working tree: do not write a closing flow-log entry. If any flow-created artifact is still uncommitted, surface it in the report.
 

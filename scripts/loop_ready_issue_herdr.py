@@ -57,7 +57,7 @@ You are delivering **one** GitHub issue only. Do not list or advance the readine
 
 1. Use the issue URL provided below.
 2. Inspect labels: if `bug` is present run `/fix-bug`; otherwise run `/implement-feature`.
-3. Follow the delivery flow for that command through PR merge; do not start another issue.
+3. Follow the delivery flow through Definition of Done (merge + post-merge CI on main + sync primary checkout); PR merge alone is not done — see `.claude/skills/loop-ready-issue-herdr/SKILL.md` Close-out.
 """
 
 _WORKER_GONE_ERROR_CODES = frozenset(

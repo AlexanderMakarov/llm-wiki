@@ -230,7 +230,15 @@ Re-check mergeability against current `origin/main` (fetch + rebase dry-run / `g
 
 When every waited gate is green, show that status and ask the user for explicit merge confirmation in this run. Merge only on yes, via `gh pr merge` (merge commit or squash per repo defaults / user preference if stated). A skipped or unanswered confirmation means do not merge — report ready-to-merge in chat and stop. Do **not** post a "merged" or "gates passed" PR comment.
 
-After merge: watch post-merge Actions on `main`; if they fail because of this change, diagnose (`gha-diagnosis`), fix forward on a follow-up commit or hotfix branch, and re-watch until green.
+After merge, **post-merge CI on the merge commit** (not PR-head checks alone). From the repository root:
+
+```bash
+REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)
+python3 scripts/wait_post_merge_ci.py --issue <TICKET_ID> --repo "$REPO"
+git fetch origin main && git pull --ff-only origin main
+```
+
+Uses the same α gate as `scripts/loop_ready_issue_herdr.py`. If checks fail on `main`, diagnose (`gha-diagnosis`, `gh run view <id> --log-failed`), fix forward, and re-run the wait until green. Do not treat the user saying “merged” or the issue being CLOSED as Done until α passes.
 
 <!-- /awos:flow:stage -->
 
@@ -246,7 +254,7 @@ No auto-deploy and no `/release` invocation from this flow. Optionally print tha
 
 ### Step 13: Close the Loop
 
-Definition of Done: PR merged and post-merge required checks green. Report to the user in chat: PR URL, merge commit, local-review evidence (verdict, finding counts by severity, review file paths, that keep/drop ran), and any try-steps. Do **not** close or transition the GitHub Issue. Do **not** post a closing/merged PR comment unless a §9 exception still needs recording.
+Definition of Done: PR merged, **`wait_post_merge_ci` green on the merge commit**, and primary checkout synced to `origin/main`. Report to the user in chat: PR URL, merge commit SHA, post-merge CI evidence, `git log -1` on main after pull, local-review evidence (verdict, finding counts by severity, review file paths, that keep/drop ran), and any try-steps. Do **not** close or transition the GitHub Issue. Do **not** post a closing/merged PR comment unless a §9 exception still needs recording.
 
 Leave a clean working tree: do not write a closing flow-log entry (the log was finalized at commit-push and the change request is now open or merged — a new entry could never be committed into it). If any flow-created artifact is still uncommitted, surface it in the report rather than leaving it behind — an uncommitted leftover after a merged or in-review change request is a bug, not a record.
 
