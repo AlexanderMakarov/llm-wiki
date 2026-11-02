@@ -31,6 +31,7 @@ from llmwiki.session_tokens_usage import (
 )
 from llmwiki.state_store import mtime_to_iso
 from llmwiki.token_coverage import (
+    placeholder_filter_applies,
     raw_meta_eligible_for_token_known,
     records_eligible_for_token_known,
     resolve_token_known_filter,
@@ -360,8 +361,9 @@ def _coverage_from_origins_and_raw(
     """Count discoverable sessions per agent for coverage ``known`` (#325).
 
     When ``filters.exclude_non_usage_from_token_coverage`` is true (default),
-    synthetic placeholders and zero-tool sessions without token usage are
-    omitted. ``since`` is the earliest measured day for incomplete agents.
+    placeholder heuristics apply only to token-capable agents (Claude Code,
+    Cursor CLI, Codex CLI). Other sources always count discoverable raw rows.
+    ``since`` is the earliest measured day for incomplete agents.
     """
     exclude_non_usage = resolve_token_known_filter(config)
     known: dict[str, int] = {}
@@ -372,11 +374,11 @@ def _coverage_from_origins_and_raw(
             except OSError:
                 continue
             meta, _ = parse_frontmatter(text)
+            agent = _adapter_name_from_meta(meta)
             if not raw_meta_eligible_for_token_known(
-                meta, exclude_non_usage=exclude_non_usage
+                meta, exclude_non_usage=exclude_non_usage, agent=agent
             ):
                 continue
-            agent = _adapter_name_from_meta(meta)
             known[agent] = int(known.get(agent) or 0) + 1
 
     drop_types = config.get("filters", {}).get("drop_record_types", [])
@@ -404,10 +406,12 @@ def _coverage_from_origins_and_raw(
             if not records:
                 continue
             if records_eligible_for_token_known(
-                records, exclude_non_usage=exclude_non_usage
+                records,
+                exclude_non_usage=exclude_non_usage,
+                agent=adapter_name,
             ):
                 origin_eligible += 1
-        if not exclude_non_usage:
+        if not placeholder_filter_applies(adapter_name, exclude_non_usage):
             origin_eligible = len(paths)
         known[adapter_name] = max(int(known.get(adapter_name) or 0), origin_eligible)
 

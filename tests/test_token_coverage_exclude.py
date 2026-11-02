@@ -29,20 +29,28 @@ def test_raw_meta_excludes_synthetic_zero_tool_by_default():
         "tool_calls": 0,
         "token_totals": '{"input": 0, "output": 0, "cache_creation": 0, "cache_read": 0}',
     }
-    assert not raw_meta_eligible_for_token_known(meta, exclude_non_usage=True)
-    assert raw_meta_eligible_for_token_known(meta, exclude_non_usage=False)
+    assert not raw_meta_eligible_for_token_known(
+        meta, exclude_non_usage=True, agent="claude_code"
+    )
+    assert raw_meta_eligible_for_token_known(
+        meta, exclude_non_usage=False, agent="claude_code"
+    )
 
 
 def test_raw_meta_keeps_unmeasured_sessions_with_tool_calls():
     meta = {"tool_calls": 3}
-    assert raw_meta_eligible_for_token_known(meta, exclude_non_usage=True)
+    assert raw_meta_eligible_for_token_known(
+        meta, exclude_non_usage=True, agent="claude_code"
+    )
 
 
 def test_records_exclude_empty_usage_zero_tools():
     records = [
         {"type": "assistant", "message": {"content": [{"type": "text", "text": "hi"}]}},
     ]
-    assert not records_eligible_for_token_known(records, exclude_non_usage=True)
+    assert not records_eligible_for_token_known(
+        records, exclude_non_usage=True, agent="cursor_cli"
+    )
 
 
 @pytest.fixture
@@ -105,6 +113,18 @@ def test_coverage_respects_filter_off(tmp_path: Path, isolate_token_coverage_ori
         {},
     )
     assert known["claude_code"] == 1
+
+
+def test_openclaw_zero_tools_still_counts_for_known():
+    """Non-token-capable agents: empty totals must not drop coverage known."""
+    meta = {
+        "model": "openrouter/deepseek/deepseek-v4-flash",
+        "tool_calls": 0,
+        "token_totals": '{"input": 0, "output": 0, "cache_creation": 0, "cache_read": 0}',
+    }
+    assert raw_meta_eligible_for_token_known(
+        meta, exclude_non_usage=True, agent="openclaw"
+    )
 
 
 def test_coverage_default_filter_excludes_placeholder(

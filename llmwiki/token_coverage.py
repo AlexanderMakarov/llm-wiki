@@ -9,6 +9,11 @@ from llmwiki.viz_tokens import parse_token_totals
 
 _BUCKET_KEYS = ("input", "cache_creation", "cache_read", "output")
 
+# Adapters where sync/migrate can infer real vs placeholder from raw/origin
+# signals. Other agents (OpenClaw, Cursor IDE, …) may have all-zero
+# token_totals because capture is missing — never treat that as "no usage".
+TOKEN_COVERAGE_PLACEHOLDER_AGENTS = frozenset({"claude_code", "cursor_cli", "codex_cli"})
+
 
 def totals_nonempty(totals: dict[str, int]) -> bool:
     return any(int(totals.get(k) or 0) != 0 for k in _BUCKET_KEYS)
@@ -26,13 +31,19 @@ def is_synthetic_model(model: str | None) -> bool:
     return False
 
 
+def placeholder_filter_applies(agent: str, exclude_non_usage: bool) -> bool:
+    """Whether #355 placeholder heuristics apply to this adapter's sessions."""
+    return bool(exclude_non_usage) and agent in TOKEN_COVERAGE_PLACEHOLDER_AGENTS
+
+
 def raw_meta_eligible_for_token_known(
     meta: dict[str, Any],
     *,
     exclude_non_usage: bool,
+    agent: str,
 ) -> bool:
     """Whether a ``raw/sessions/*.md`` row counts toward ``by_agent.known``."""
-    if not exclude_non_usage:
+    if not placeholder_filter_applies(agent, exclude_non_usage):
         return True
     totals = parse_token_totals(meta)
     if totals_nonempty(totals):
@@ -53,9 +64,10 @@ def records_eligible_for_token_known(
     records: list[dict[str, Any]],
     *,
     exclude_non_usage: bool,
+    agent: str,
 ) -> bool:
     """Whether an origin session counts toward ``by_agent.known``."""
-    if not exclude_non_usage:
+    if not placeholder_filter_applies(agent, exclude_non_usage):
         return True
     totals = compute_token_totals(records)
     if totals_nonempty(totals):
