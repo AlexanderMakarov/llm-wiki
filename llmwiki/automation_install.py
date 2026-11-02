@@ -42,12 +42,14 @@ from llmwiki.automation_units import (
 )
 from llmwiki.cron_spec import (
     CronSpec,
+    cron_interval,
     describe,
     parse_cron,
     to_launchd_intervals,
     to_systemd_oncalendar,
     to_windows_trigger,
 )
+from llmwiki.run_outcomes import SCHEDULED_ENV, configure_schedule
 
 HOOK_MARKER = "llmwiki-managed-sync"
 
@@ -216,6 +218,76 @@ def activate_scheduler(
     return result
 
 
+#: Programs each synth backend runs; their folders go on the scheduled job's PATH.
+BACKEND_PROGRAMS: dict[str, tuple[str, ...]] = {
+    "claude": ("claude",),
+    "cursor_cli": ("agent", "cursor-agent"),
+}
+
+#: Seconds the wrapper waits for the login profile before going on without it.
+PROFILE_TIMEOUT_S = 30
+
+
+def program_dirs(*, synth_backend: str, python_bin: str) -> list[str]:
+    """Folders of the programs the scheduled job runs, as found from this shell (#374).
+
+    For the configured backend, the folder of each of its programs on
+    ``PATH``, then the interpreter's folder — backend first, so a system
+    folder holding an older copy of a backend program does not win. A
+    symlinked launcher keeps its own folder (``~/.local/bin``), not the
+    version it points at. Only absolute, existing folders are kept, once each.
+    """
+    found: list[Path] = []
+    for program in BACKEND_PROGRAMS.get(synth_backend.strip().lower(), ()):
+        located = shutil.which(program)
+        if located:
+            found.append(Path(located).absolute().parent)
+    interpreter = shutil.which(python_bin) if not Path(python_bin).is_absolute() else python_bin
+    if interpreter:
+        found.append(Path(interpreter).absolute().parent)
+    dirs: list[str] = []
+    for folder in found:
+        text = str(folder)
+        if folder.is_absolute() and folder.is_dir() and text not in dirs:
+            dirs.append(text)
+    return dirs
+
+
+def _wrapper_environment(dirs: list[str]) -> str:
+    """Shell lines giving the job the PATH a terminal would have (#374).
+
+    The bash login profile, then ``~/.zprofile`` when zsh is installed, is read in a child shell, so a profile that exits,
+    prompts or fails cannot end the job; only the PATH it builds comes back,
+    and a profile slower than ``PROFILE_TIMEOUT_S`` is skipped. The folders
+    recorded at install go in front, so the programs found then are found again.
+    """
+    lines = [
+        "# Find programs the way a terminal does: PATH from the login profile,",
+        "# read in a child shell, then the folders recorded at install.",
+        "_llmwiki_timeout=\"\"",
+        f"command -v timeout >/dev/null 2>&1 && _llmwiki_timeout=\"timeout {PROFILE_TIMEOUT_S}\"",
+        'for _llmwiki_profile in "$HOME/.bash_profile" "$HOME/.bash_login" "$HOME/.profile"; do',
+        '  if [ -r "$_llmwiki_profile" ]; then',
+        "    _llmwiki_path=$($_llmwiki_timeout bash -c 'trap \"printf %s \\\"\\$PATH\\\"\" EXIT; . \"$1\" >/dev/null 2>&1' "
+        '_ "$_llmwiki_profile" </dev/null 2>/dev/null) || true',
+        '    if [ -n "$_llmwiki_path" ]; then PATH="$_llmwiki_path"; fi',
+        "    break",
+        "  fi",
+        "done",
+        "# zsh users (the macOS default) keep PATH in ~/.zprofile; read it the same way.",
+        'if command -v zsh >/dev/null 2>&1 && [ -r "$HOME/.zprofile" ]; then',
+        "  _llmwiki_path=$($_llmwiki_timeout zsh -c 'trap \"printf %s \\\"\\$PATH\\\"\" EXIT; . \"$1\" >/dev/null 2>&1' "
+        '_ "$HOME/.zprofile" </dev/null 2>/dev/null) || true',
+        '  if [ -n "$_llmwiki_path" ]; then PATH="$_llmwiki_path"; fi',
+        "fi",
+    ]
+    if dirs:
+        lines.append("export PATH=" + ":".join(shlex.quote(d) for d in dirs) + ':"$PATH"')
+    else:
+        lines.append("export PATH")
+    return "\n".join(lines) + "\n"
+
+
 def render_wrapper_script(
     *,
     plan: AutomationPlan,
@@ -223,11 +295,16 @@ def render_wrapper_script(
     working_dir: Path,
     log_path: Path,
     vault: Path | None = None,
+    program_dirs: list[str] | None = None,
 ) -> str:
     """Bash wrapper running the plan's command line, truncating the log each run.
 
     The log ends with ``EXIT:<code>`` carrying the command's real exit code,
     and the wrapper exits with that same code so the scheduler sees it.
+    ``LLMWIKI_SCHEDULED_RUN=1`` tells the run it is the scheduled one, so it
+    stamps its end for Home's overdue check (#374). Before that, the job
+    takes the login profile's PATH and puts ``program_dirs`` in front (see
+    :func:`_wrapper_environment`).
 
     ``vault`` is forwarded to :func:`~llmwiki.automation_plan.plan_command`.
     Install always passes the resolved target vault; ``None`` remains only for
@@ -237,7 +314,9 @@ def render_wrapper_script(
     log = shlex.quote(str(log_path))
     return (
         "#!/usr/bin/env bash\n"
-        "set -euo pipefail\n"
+        + _wrapper_environment(list(program_dirs or []))
+        + "set -euo pipefail\n"
+        f"export {SCHEDULED_ENV}=1\n"
         f"mkdir -p \"$(dirname {log})\"\n"
         f"{{ rc=0; {cmd} || rc=$?; echo \"EXIT:$rc\"; }} >{log} 2>&1\n"
         "exit \"$rc\"\n"
@@ -531,12 +610,16 @@ def run_install(config: dict[str, Any]) -> dict[str, Any]:
     log_path = Path(config.get("log_path") or vault_automation_log_path(vault_root))
     write_dir = Path(config["write_units_dir"]) if config.get("write_units_dir") else None
 
+    dirs = program_dirs(
+        synth_backend=str(config.get("synth_backend") or ""), python_bin=python_bin
+    )
     wrapper_text = render_wrapper_script(
         plan=plan,
         python_bin=python_bin,
         working_dir=working_dir,
         log_path=log_path,
         vault=target_vault,
+        program_dirs=dirs,
     )
     written: list[str] = []
     if write_dir is not None:
@@ -592,6 +675,7 @@ def run_install(config: dict[str, Any]) -> dict[str, Any]:
         "hooks": list(config["hooks"]) if "hooks" in config else _previous_hooks(vault_root),
         "synth_backend": str(config.get("synth_backend") or "dummy"),
         "log_path": str(log_path),
+        "program_dirs": dirs,
         "units_written": written,
         "scheduler_unit": names.base,
         "working_dir": str(working_dir),
@@ -622,6 +706,12 @@ def run_install(config: dict[str, Any]) -> dict[str, Any]:
             if status.get("scheduler_activated"):
                 status["installed_at"] = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
                 status.update(_adopt_legacy_unit(plat, target_vault))
+                configure_schedule(
+                    interval_s=int(cron_interval(spec).total_seconds()),
+                    installed_at=status["installed_at"],
+                    log_path=str(log_path),
+                    state_file=vault_root / "llmwiki-state.json",
+                )
             if status.get("scheduler_error"):
                 save_status(vault_root, status)
                 raise AutomationActivationError(status["scheduler_error"])

@@ -27,7 +27,7 @@ def test_dashboard_inlines_state_mount_not_old_cards():
     assert "data-llmwiki-state-widget" in body
     assert body.index("Pipeline state") < body.index('id="llmwiki-state-widget"')
     assert "llmwiki-home-alerts" in body
-    assert "llmwiki-lint-banner-mount" in body
+    assert "llmwiki-problems" in body
     assert "llmwiki-home-ops-list" in body
     assert "llmwiki-home-collapsibles" in body
     assert "data-llmwiki-freshness" not in body
@@ -86,8 +86,8 @@ def test_dashboard_mount_includes_vault_root_attr(tmp_path: Path):
 def test_state_widget_js_has_pipeline_table_and_collapsibles():
     assert "renderStateWidget" in js.JS
     assert "state-pipeline-table" in js.JS
-    assert "renderHomeLintBanner" in js.JS
-    assert "llmwiki-lint-banner-mount" in js.JS
+    assert "renderProblemsBanner" in js.JS
+    assert "llmwiki-problems" in js.JS
     assert "To synthesize" in js.JS
     assert "Eligible sources:" in js.JS or "state-table-overview" in js.JS
     assert "pipelineTableHeadHtml" in js.JS
@@ -156,15 +156,14 @@ def test_state_widget_js_has_pipeline_table_and_collapsibles():
     assert "wireHomeOpsTimer" in js.JS
     assert 'detailsSection("Timeline"' not in js.JS
     assert "llmwiki-automation-details" in js.JS
-    assert "state-lint-banner" in js.JS
-    assert "lintBannerHtml" in js.JS
+    assert "renderProblemsBanner" in js.JS
+    assert "problemEntries" in js.JS
     assert "ops.last_lint_error" in js.JS
     assert "Last lint:" not in js.JS
     assert "Last reflect run:" not in js.JS
     assert "Last lint run:" not in js.JS
     assert 'aria-label="Pipeline operations"' in js.JS
-    assert "homeOpsListHtml" in js.JS
-    assert "wireHomeOpsTimer" in js.JS
+    assert "state-knowledge-table" not in js.JS
     assert "Unsynth estimate" not in js.JS
     assert "Queue task types" not in js.JS
     assert "Cost estimate" not in js.JS
@@ -205,39 +204,16 @@ def test_state_widget_pipeline_stage_stamps_in_freshness_line():
     assert 'detailsSection("Timeline"' not in js.JS
 
 
-def test_state_widget_lint_banner_empty_vs_present():
-    """#234 R2: red lint note at top of Home when ``[error]`` findings exist.
-
-    # @layer: unit  # @spec: 234-home-timeline-automation-stamps
-    """
+def test_state_widget_lint_errors_surface_in_problems_banner():
+    """#374 / #256: lint errors become a Lint entry in the problems banner."""
     assert "ops.last_lint_error" in js.JS
-    assert 'class="error-banner state-lint-banner"' in js.JS
-    assert 'role="alert"' in js.JS
-    assert "function lintBannerHtml" in js.JS
-    assert "last_lint_error" in js.JS
-    assert "m.test(lintError)" in js.JS
-    assert "renderHomeLintBanner" in js.JS
-    assert "llmwiki-lint-banner-mount" in js.JS
-    assert 'lintStatus === "ok"' not in js.JS
-
-
-def test_state_widget_warnings_only_failure_has_no_red_banner_gate():
-    """#256: warnings-only policy failures stay off the red banner (Timeline + Linter output).
-
-    # @layer: unit  # @spec: 234-home-timeline-automation-stamps
-    """
-    # Red banner requires an [error] finding line — a warnings-only note must not match.
+    assert "function problemEntries" in js.JS
+    assert "part: \"Lint\"" in js.JS
+    assert "wiki checks found errors" in js.JS
     assert "m.test(lintError)" in js.JS
     assert 'detailsSection("Linter output"' in js.JS
-
-
-def test_state_widget_lint_banner_displays_at_most_ten_lines():
-    """#256: the full note is stored; the browser shows 10 lines then ``…``.
-
-    # @layer: unit  # @spec: 234-home-timeline-automation-stamps
-    """
-    assert "var LINT_BANNER_MAX_LINES = 10;" in js.JS
-    assert 'lintLines.slice(0, LINT_BANNER_MAX_LINES).concat(["…"])' in js.JS
+    assert "var LINT_BANNER_MAX_LINES = 10;" not in js.JS
+    assert "PROBLEM_DETAIL_MAX_LINES" in js.JS
 
 
 def test_state_widget_linter_output_section_follows_estimate_warnings():
@@ -254,14 +230,6 @@ def test_state_widget_linter_output_section_follows_estimate_warnings():
     between = js.JS[warnings_idx:report_idx]
     assert between.count("detailsSection(") == 1
     assert ".state-lint-report" in css.CSS
-
-
-def test_state_lint_banner_css_prewrap():
-    """#234: lint banner uses pre-wrap so console-shaped multiline stays readable."""
-    assert "state-lint-banner" in css.CSS
-    assert "white-space: pre-wrap" in css.CSS
-    # Tied to the shared error-banner look; class is composed in JS.
-    assert ".error-banner" in css.CSS
 
 
 def test_commands_table_offers_automation_before_the_manual_rows():

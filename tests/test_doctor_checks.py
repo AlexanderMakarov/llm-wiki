@@ -242,11 +242,12 @@ def _unit(
     platform: str = "linux",
     reason: str | None = None,
     make_files: bool = True,
+    wrapper_text: str = "#!/bin/bash\nexport LLMWIKI_SCHEDULED_RUN=1\n",
 ) -> InstalledUnit:
     wrapper = checkout / f"{name}.sh"
     if make_files:
         checkout.mkdir(parents=True, exist_ok=True)
-        wrapper.write_text("#!/bin/bash\n", encoding="utf-8")
+        wrapper.write_text(wrapper_text, encoding="utf-8")
     return InstalledUnit(
         name=name,
         platform=platform,
@@ -308,6 +309,41 @@ def test_guided_automation_finding_has_no_runner_argv(tmp_path: Path) -> None:
 def test_own_unit_for_this_vault_is_quiet(tmp_path: Path) -> None:
     vault = _job_vault(tmp_path)
     assert check_automation(vault, discovery=_discovery(_own_unit(vault, enabled=True))) == []
+
+
+def test_a_wrapper_that_does_not_stamp_its_runs_is_flagged(tmp_path: Path) -> None:
+    """#374: a schedule installed before run stamping cannot show a missed run on Home."""
+    vault = _job_vault(tmp_path)
+    unit = _own_unit(vault, enabled=True, wrapper_text="#!/bin/bash\nset -euo pipefail\n")
+    (found,) = check_automation(vault, discovery=_discovery(unit))
+    assert found.id == "automation.setup_outdated"
+    assert found.runner == "install_automation"
+    assert "does not record its runs" in found.message
+
+
+def test_a_wrapper_whose_python_is_gone_is_flagged(tmp_path: Path) -> None:
+    """#374: the job's interpreter vanished, so no scheduled run can start."""
+    vault = _job_vault(tmp_path)
+    gone = tmp_path / "old-venv" / "bin" / "python3"
+    text = (
+        "#!/bin/bash\nexport LLMWIKI_SCHEDULED_RUN=1\n"
+        f"{{ rc=0; cd /x && {gone} -m llmwiki all --vault /v || rc=$?; }} >/l 2>&1\n"
+    )
+    (found,) = check_automation(vault, discovery=_discovery(_own_unit(vault, enabled=True, wrapper_text=text)))
+    assert found.id == "automation.interpreter_missing"
+    assert found.severity == "error"
+    assert str(gone) in found.message
+
+
+def test_a_recorded_program_folder_that_is_gone_is_flagged(tmp_path: Path) -> None:
+    """#374: the job looks for its backend program in a folder that no longer exists."""
+    present = tmp_path / "bin"
+    present.mkdir()
+    vault = _job_vault(tmp_path, {**_JOB_STATUS, "program_dirs": [str(present), str(tmp_path / "gone-bin")]})
+    (found,) = check_automation(vault, discovery=_discovery(_own_unit(vault, enabled=True)))
+    assert found.id == "automation.program_dir_missing"
+    assert "gone-bin" in found.message
+    assert str(present) not in found.message
 
 
 def test_legacy_unit_aimed_at_other_vault_points_elsewhere(tmp_path: Path) -> None:

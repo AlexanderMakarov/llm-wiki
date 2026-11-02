@@ -449,6 +449,14 @@ class BaseSynthesizer(ABC):
         key is set, or the Ollama server is running)."""
         ...
 
+    def unavailable_reason(self) -> str:
+        """Why :meth:`is_available` is False, with the fix — one plain line (#374).
+
+        Backends that depend on an outside program or server override this to
+        name it; the line feeds the CLI error, the Home banner and doctor.
+        """
+        return "start it or change synthesis.backend in config"
+
     def overview_completion(
         self, prompt: str, *, model: str | None = None
     ) -> str:
@@ -568,3 +576,8 @@ Auto-synthesized from session `{slug}` on {date} (project: {project}).
 
     def is_available(self) -> bool:
         return True  # Always available — no external deps
+
+
+def backend_unavailable_message(backend: BaseSynthesizer) -> str:
+    """``backend <name> is not available: <reason>`` — the stable prefix doctor's catalog matches (#374)."""
+    return f"backend {backend.name} is not available: {backend.unavailable_reason()}"

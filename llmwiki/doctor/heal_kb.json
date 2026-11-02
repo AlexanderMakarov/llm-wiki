@@ -201,6 +201,7 @@
       "id": "synth.backend_unavailable",
       "area": "F",
       "patterns": [
+        "is not available:",
         "backend not available",
         "claude: command not found",
         "ollama not running",
@@ -208,7 +209,7 @@
         "synth.backend_unavailable"
       ],
       "message": "Configured synthesis backend is set but not available in this environment.",
-      "fix": "Install/start the configured backend CLI (claude, ollama, or Cursor agent) or switch synthesis.backend to a working value.",
+      "fix": "Follow the reason after \"is not available:\" — install/start the configured backend (claude, ollama, or Cursor agent), point synthesis.claude.path at the claude launcher, or switch synthesis.backend to a working value.",
       "actionable": true,
       "severity": "error",
       "tier": "guided",
@@ -403,6 +404,49 @@
       "severity": "warning",
       "tier": "guided",
       "runner": null
+    },
+    {
+      "id": "automation.setup_outdated",
+      "area": "L",
+      "patterns": [
+        "automation.setup_outdated",
+        "does not record its runs",
+        "setup outdated: re-run llmwiki install-automation"
+      ],
+      "message": "This vault's schedule was installed by an older llmwiki that does not record its runs, so a missed run would not show on Home.",
+      "fix": "Set this vault's schedule up again with llmwiki install-automation --vault <vault> (doctor shows the exact command and asks first).",
+      "actionable": true,
+      "severity": "warning",
+      "tier": "dangerous",
+      "runner": "install_automation"
+    },
+    {
+      "id": "automation.interpreter_missing",
+      "area": "L",
+      "patterns": [
+        "automation.interpreter_missing",
+        "which no longer exists, so no scheduled run can start"
+      ],
+      "message": "This vault's schedule runs a Python interpreter that no longer exists, so no scheduled run can start.",
+      "fix": "Set this vault's schedule up again from the Python you now use, with llmwiki install-automation --vault <vault>.",
+      "actionable": true,
+      "severity": "error",
+      "tier": "dangerous",
+      "runner": "install_automation"
+    },
+    {
+      "id": "automation.program_dir_missing",
+      "area": "L",
+      "patterns": [
+        "automation.program_dir_missing",
+        "looks in for its programs no longer exist"
+      ],
+      "message": "A folder the scheduled job looks in for its programs (the AI backend's CLI, the interpreter) no longer exists.",
+      "fix": "Set this vault's schedule up again with llmwiki install-automation --vault <vault>, so it records where those programs are now.",
+      "actionable": true,
+      "severity": "warning",
+      "tier": "dangerous",
+      "runner": "install_automation"
     },
     {
       "id": "automation.stale_run",

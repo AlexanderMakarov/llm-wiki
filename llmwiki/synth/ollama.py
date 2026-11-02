@@ -365,6 +365,13 @@ class OllamaSynthesizer(BaseSynthesizer):
             logger.debug("Ollama availability probe failed: %s", exc)
             return False
 
+    def unavailable_reason(self) -> str:
+        """Name the unreachable server and how to start it (#374)."""
+        return (
+            f"the Ollama server at {self.config.base_url} did not answer — "
+            "start it (ollama serve) or change synthesis.backend"
+        )
+
     def overview_completion(
         self, prompt: str, *, model: str | None = None
     ) -> str:

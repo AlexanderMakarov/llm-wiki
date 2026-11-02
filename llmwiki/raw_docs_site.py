@@ -511,7 +511,7 @@ def render_dashboard_body(
     <div class="queue-widget"{extra_attrs}>
       <div id="llmwiki-home-alerts" class="home-alerts">
         {notice}
-        <div id="llmwiki-lint-banner-mount"></div>
+        <div id="llmwiki-problems" class="error-banner problems-banner" role="alert" hidden></div>
       </div>
       <h3 class="home-section-title">Metrics <span class="home-section-kicker muted">(see more on <a href="analytics.html">Analytics</a>)</span></h3>
       <div class="home-metrics-block">{metrics}</div>
