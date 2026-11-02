@@ -97,6 +97,10 @@ from llmwiki.project_topics import (
     load_project_profile,
     render_topic_chips,
 )
+from llmwiki.render.ui_hints import (
+    render_floating_hint_portal,
+    render_ui_hints_script,
+)
 from llmwiki.search_facets import aggregate_facets, enrich_entry
 from llmwiki.search_tree import (
     annotate_entry_headings,
@@ -166,8 +170,8 @@ from llmwiki.viz_heatmap import (
 )
 from llmwiki.viz_tokens import (
     render_project_token_card,
+    render_secondary_token_stat_grid,
     render_session_token_card,
-    render_site_token_stats,
 )
 from llmwiki.viz_tools import (
     render_project_tool_chart,
@@ -177,6 +181,7 @@ from llmwiki.viz_wiki_value import (  # noqa: F401
     render_candidates_review_section,
     render_home_metrics_strip,
     render_mcp_heaviest_card,
+    render_primary_metrics_section,
     render_project_usage_block,
     render_wiki_value_section,
 )
@@ -1100,6 +1105,8 @@ def page_foot(js_prefix: str = "") -> str:
   </button>
 </nav>
 {search_palette_markup(js_prefix)}
+{render_floating_hint_portal()}
+{render_ui_hints_script()}
 <script src="{js_prefix}llmwiki-state.js"></script>
 <script src="{js_prefix}session-tokens.js"></script>
 <script src="{js_prefix}{HLJS_SCRIPT}" defer></script>
@@ -2087,12 +2094,34 @@ def render_analytics(
     session_tokens_usage = (
         load_session_tokens(vault_for_tokens) if vault_for_tokens is not None else None
     )
-    token_stats_block = render_site_token_stats(
+    candidates_block = ""
+    primary_metrics_block = render_primary_metrics_section(
+        usage_totals or {},
+        wiki_page_count=int(wv.get("wiki_page_count") or 0),
+        metas_by_project=metas_by_project,
+        session_tokens_usage=session_tokens_usage,
+        knowledge_pending=int(wv.get("candidates_pending") or 0),
+        knowledge_entities=int(wv.get("trusted_entities") or 0),
+        knowledge_concepts=int(wv.get("trusted_concepts") or 0),
+        knowledge_stale=int(wv.get("candidates_stale") or 0),
+        knowledge_stale_days=int(wv.get("candidates_stale_days") or 30),
+    )
+    secondary_grid = render_secondary_token_stat_grid(
         metas_by_project,
         link_prefix="",
         extra_cards=mcp_heaviest_card,
         session_tokens_usage=session_tokens_usage,
     )
+    secondary_metrics_block = ""
+    if secondary_grid:
+        secondary_metrics_block = (
+            '<section class="section token-stats-section secondary-metrics-section">\n'
+            "  <div class=\"container\">\n"
+            f"    {secondary_grid}\n"
+            "  </div>\n"
+            "</section>"
+        )
+    token_stats_block = primary_metrics_block + secondary_metrics_block
 
     # Wiki usage (#52): value cards, corpus mix, top pages, MCP table.
     wiki_usage_block = render_wiki_value_section(
@@ -2108,13 +2137,6 @@ def render_analytics(
         estimate=wv.get("estimate"),
         docs_by_project=docs_by_project or {},
     )
-    candidates_block = render_candidates_review_section(
-        pending=int(wv.get("candidates_pending") or 0),
-        stale=int(wv.get("candidates_stale") or 0),
-        by_kind=wv.get("candidates_by_kind") or {},
-        stale_days=int(wv.get("candidates_stale_days") or 30),
-    )
-
     # Recently updated — show last 10 entries from the wiki's log.md. Read
     # from the vault's wiki_dir (falling back to REPO_ROOT for a repo build),
     # not the module REPO_ROOT — otherwise a vault site shows the repo's log.
@@ -2373,6 +2395,19 @@ def render_automation_panel(content_root: Path | None) -> str:
     )
 
 
+def _home_queue_widget_data_attrs(content_root: Path | None, out_dir: Path) -> str:
+    """Data attributes for Home pipeline JS (site page count, synth backend)."""
+    site_html_count = sum(1 for _ in out_dir.rglob("*.html"))
+    parts = [f'data-site-html-count="{site_html_count}"']
+    if content_root is not None:
+        status = load_status(content_root)
+        if status:
+            backend = str(status.get("synth_backend") or "").strip()
+            if backend:
+                parts.append(f'data-synth-backend="{html.escape(backend)}"')
+    return " " + " ".join(parts)
+
+
 def render_index(
     docs_root: raw_docs_site.DocFolder,
     doc_entries: list[raw_docs_site.DocEntry],
@@ -2381,6 +2416,7 @@ def render_index(
     *,
     content_root: Path | None = None,
     home_metrics_html: str = "",
+    queue_widget_attrs: str = "",
 ) -> Path:
     """Render ``index.html`` — queue/dashboard landing page."""
     body = raw_docs_site.render_dashboard_body(
@@ -2391,6 +2427,7 @@ def render_index(
         automation_notice_html=render_automation_notice(content_root),
         automation_details_html=render_automation_details(content_root),
         home_metrics_html=home_metrics_html,
+        queue_widget_attrs=queue_widget_attrs or _home_queue_widget_data_attrs(content_root, out_dir),
     )
     page = (
         page_head("LLM Wiki", "Karpathy-style knowledge base from Claude Code sessions", css_prefix="")
@@ -3567,6 +3604,8 @@ def build_site(
         "candidates_stale": int(review_summary.get("to_review_stale") or 0),
         "candidates_by_kind": dict(review_summary.get("to_review_by_kind") or {}),
         "candidates_stale_days": int(review_summary.get("stale_days") or 30),
+        "trusted_entities": int(review_summary.get("trusted_entities") or 0),
+        "trusted_concepts": int(review_summary.get("trusted_concepts") or 0),
     }
 
     # #50: build the topic graph *before* the pages that consume it — the
@@ -3647,6 +3686,11 @@ def build_site(
                 if content_root is not None
                 else None
             ),
+            knowledge_pending=int(review_summary.get("to_review") or 0),
+            knowledge_entities=int(review_summary.get("trusted_entities") or 0),
+            knowledge_concepts=int(review_summary.get("trusted_concepts") or 0),
+            knowledge_stale=int(review_summary.get("to_review_stale") or 0),
+            knowledge_stale_days=int(review_summary.get("stale_days") or 30),
         ),
     )
     render_raw(docs_root, doc_entries, len(doc_files), out_dir)

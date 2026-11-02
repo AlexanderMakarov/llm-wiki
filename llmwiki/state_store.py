@@ -461,16 +461,14 @@ def record_lint_ops(
     """Record lint time/status/error in ops; sync ``site/llmwiki-state.js`` if present.
 
     ``failed`` means the active fail policy tripped (not merely findings under
-    ``never``). On success, ``last_lint_error`` and ``last_lint_report`` are
-    cleared. On failure, ``error_text`` is the note from
-    :func:`llmwiki.lint.report.render_ops_error` (findings that tripped the
-    policy, #256) and ``report_text`` the full console report behind Home's
-    Linter output section; both are stored in full.
+    ``never``).     On success, ``last_lint_error`` is cleared. ``last_lint_report`` holds the
+    full console report from the last lint run whenever ``report_text`` is
+    provided (pass or fail); Home **Linter output** shows it.
     """
     now = when or _utc_now()
     status = "failed" if failed else "ok"
     stored_error = format_lint_error_for_ops(error_text) if failed else ""
-    stored_report = format_lint_error_for_ops(report_text) if failed else ""
+    stored_report = format_lint_error_for_ops(report_text) if report_text else ""
 
     def _mut(state: dict[str, Any]) -> dict[str, Any]:
         ops = state.setdefault("ops", {})

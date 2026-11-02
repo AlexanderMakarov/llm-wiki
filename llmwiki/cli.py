@@ -1144,7 +1144,7 @@ def cmd_lint(args: argparse.Namespace) -> int:
             len(pages),
             fail_on="warnings" if fail_on_warnings else "errors",
         ) if failed else "",
-        report_text=report_text if failed else "",
+        report_text=report_text,
     )
     return 1 if failed else 0
 

@@ -473,6 +473,7 @@ def render_dashboard_body(
     automation_notice_html: str = "",
     automation_details_html: str = "",
     home_metrics_html: str = "",
+    queue_widget_attrs: str = "",
 ) -> str:
     """Body of index.html — pipeline State table mount + recent raw docs."""
     if not entries:
@@ -504,18 +505,26 @@ def render_dashboard_body(
             "</template>"
         )
     metrics = home_metrics_html or ""
+    extra_attrs = queue_widget_attrs or ""
     return f"""<section class="section doctree-section">
   <div class="container">
-    <div class="queue-widget">
-      <h2>Pipeline state</h2>
-      <div id="llmwiki-freshness-line" class="home-pipeline-timeline" data-llmwiki-freshness aria-live="polite"></div>
-      {notice}
-      <div id="llmwiki-state-widget" class="state-widget" data-llmwiki-state-widget{attrs}>
-        <p class="muted">Loading pipeline state…</p>
+    <div class="queue-widget"{extra_attrs}>
+      <div id="llmwiki-home-alerts" class="home-alerts">
+        {notice}
+        <div id="llmwiki-lint-banner-mount"></div>
       </div>
-      {metrics}
-      <h3>Recent raw documents</h3>
+      <h3 class="home-section-title">Metrics <span class="home-section-kicker muted">(see more on <a href="analytics.html">Analytics</a>)</span></h3>
+      <div class="home-metrics-block">{metrics}</div>
+      <div class="home-pipeline-block">
+        <h3 class="home-section-title">Pipeline state</h3>
+        <div id="llmwiki-state-widget" class="state-widget" data-llmwiki-state-widget{attrs}>
+          <p class="muted">Loading pipeline state…</p>
+        </div>
+        <div id="llmwiki-home-ops-list" class="home-ops-list muted" data-llmwiki-ops-list aria-live="polite"></div>
+      </div>
+      <h3 class="home-section-title home-recent-title">Recent raw documents</h3>
       {recent_block}
+      <div id="llmwiki-home-collapsibles" class="home-collapsibles"></div>
       {details_mount}
     </div>
   </div>

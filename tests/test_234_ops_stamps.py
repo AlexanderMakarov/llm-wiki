@@ -166,6 +166,7 @@ def test_record_lint_ops_ok_clears_prior_error(tmp_path: Path):
     record_lint_ops(
         failed=False,
         error_text="should be ignored on success",
+        report_text="ok run report\nline two",
         state_file=state_file,
         when="2026-09-08T13:05:00Z",
     )
@@ -173,7 +174,7 @@ def test_record_lint_ops_ok_clears_prior_error(tmp_path: Path):
     assert ops["last_lint_status"] == "ok"
     assert ops["last_lint_run_at"] == "2026-09-08T13:05:00Z"
     assert ops["last_lint_error"] == ""
-    assert ops["last_lint_report"] == ""
+    assert ops["last_lint_report"] == "ok run report\nline two"
 
 
 def test_format_lint_error_for_ops_is_a_pass_through():

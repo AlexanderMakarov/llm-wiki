@@ -10,8 +10,13 @@ from collections.abc import Mapping
 from typing import Any
 
 from llmwiki.render.collapse_section import collapse_section_list
+from llmwiki.render.ui_hints import render_metric_knowledge_hint_body, render_ui_hint_button
 from llmwiki.usage import UNATTRIBUTED, is_entity_tool, value_summary
-from llmwiki.viz_tokens import render_site_token_stat_grid
+from llmwiki.viz_tokens import (
+    compute_seven_day_pace,
+    format_tokens,
+    render_site_token_stat_grid,
+)
 
 
 def render_project_usage_block(
@@ -311,45 +316,198 @@ def render_mcp_usage_section(
     )
 
 
+def _render_stat_hint(hint_id: str, aria: str, body_html: str = "") -> str:
+    """Map legacy call sites to :func:`render_ui_hint_button` (body in registry)."""
+    _ = body_html  # registry owns copy; arg kept for transitional callers
+    return render_ui_hint_button(hint_id, aria)
+
+
+def render_payoff_card(
+    usage_totals: dict[str, Any] | None,
+    *,
+    wiki_page_count: int,
+    link_prefix: str = "",
+) -> str:
+    summary = value_summary(usage_totals or {}, wiki_page_count=wiki_page_count)
+    pages = int(summary["wiki_page_count"] or 0)
+    payoff = float(summary["payoff_per_page"] or 0.0)
+    payoff_value = f"{payoff:.2f}" if pages else "—"
+    payoff_hint = _render_stat_hint("metric-payoff", "Payoff per wiki page")
+    payoff_sub = (
+        f"retrievals ÷ {pages} pages"
+        if pages
+        else "needs wiki pages and MCP retrievals"
+    )
+    return (
+        '<div class="token-stat">'
+        f'<div class="token-stat-label muted">Payoff / page{payoff_hint}</div>'
+        f'<div class="token-stat-value">{html.escape(payoff_value)}</div>'
+        f'<div class="token-stat-sub muted">{payoff_sub}</div>'
+        "</div>"
+    )
+
+
+def render_knowledge_card(
+    *,
+    pending: int,
+    entities: int,
+    concepts: int,
+    stale: int = 0,
+    stale_days: int = 30,
+    link_prefix: str = "",
+) -> str:
+    href = f"{link_prefix}candidates.html"
+    hint_body = render_metric_knowledge_hint_body(stale=stale, stale_days=stale_days)
+    review_hint = render_ui_hint_button(
+        "metric-knowledge",
+        "Knowledge counts",
+        body_html=hint_body,
+    )
+    return (
+        f'<a class="token-stat token-stat-knowledge" href="{href}">'
+        f'<div class="token-stat-label muted">Knowledge{review_hint}</div>'
+        f'<div class="token-stat-value">'
+        f"{int(pending)} · {int(entities)} · {int(concepts)}"
+        "</div>"
+        '<div class="token-stat-sub muted">'
+        "candidates · entities · concepts</div></a>"
+    )
+
+
+def render_weekly_pace_card(
+    metas_by_project: Mapping[str, list[Mapping[str, object]]],
+    session_tokens_usage: Mapping[str, Any] | None,
+) -> str:
+    avg_sessions, avg_tokens, avg_tps = compute_seven_day_pace(
+        metas_by_project, session_tokens_usage,
+    )
+    sess_label = f"{avg_sessions:.1f} s/day" if avg_sessions else "—"
+    if avg_tokens:
+        tok_part = f"{format_tokens(int(avg_tokens))} t/day"
+        tps_part = (
+            f"{format_tokens(int(avg_tps))} t/s" if avg_tps else "— t/s"
+        )
+        tok_label = f"{tok_part} · {tps_part}"
+    else:
+        tok_label = "—"
+    hint = _render_stat_hint("metric-weekly-pace", "How weekly averages are computed")
+    return (
+        '<div class="token-stat">'
+        f'<div class="token-stat-label muted">Last 7 days avg{hint}</div>'
+        f'<div class="token-stat-value">{html.escape(sess_label)}</div>'
+        f'<div class="token-stat-sub muted">{html.escape(tok_label)}</div>'
+        "</div>"
+    )
+
+
+def render_primary_metrics_row(
+    usage_totals: dict[str, Any] | None,
+    *,
+    wiki_page_count: int,
+    metas_by_project: Mapping[str, list[Mapping[str, object]]] | None = None,
+    session_tokens_usage: Mapping[str, Any] | None = None,
+    knowledge_pending: int = 0,
+    knowledge_entities: int = 0,
+    knowledge_concepts: int = 0,
+    knowledge_stale: int = 0,
+    knowledge_stale_days: int = 30,
+    link_prefix: str = "",
+) -> str:
+    """Shared Home + Analytics first metrics row (4 cards)."""
+    metas = dict(metas_by_project or {})
+    extra = (
+        render_weekly_pace_card(metas, session_tokens_usage)
+        + render_knowledge_card(
+            pending=knowledge_pending,
+            entities=knowledge_entities,
+            concepts=knowledge_concepts,
+            stale=knowledge_stale,
+            stale_days=knowledge_stale_days,
+            link_prefix=link_prefix,
+        )
+        + render_payoff_card(usage_totals, wiki_page_count=wiki_page_count, link_prefix=link_prefix)
+    )
+    grid, _n = render_site_token_stat_grid(
+        metas,
+        link_prefix=link_prefix,
+        extra_cards=extra,
+        session_tokens_usage=session_tokens_usage,
+        tokens_only=True,
+    )
+    if not grid:
+        grid = (
+            '<div class="token-stat-grid">'
+            f"{extra}"
+            "</div>"
+        )
+    return grid
+
+
+def render_primary_metrics_section(
+    usage_totals: dict[str, Any] | None,
+    *,
+    wiki_page_count: int,
+    metas_by_project: Mapping[str, list[Mapping[str, object]]] | None = None,
+    session_tokens_usage: Mapping[str, Any] | None = None,
+    knowledge_pending: int = 0,
+    knowledge_entities: int = 0,
+    knowledge_concepts: int = 0,
+    knowledge_stale: int = 0,
+    knowledge_stale_days: int = 30,
+    link_prefix: str = "",
+    heading: str = "",
+) -> str:
+    """Wrap :func:`render_primary_metrics_row` in a section when ``heading`` is set."""
+    grid = render_primary_metrics_row(
+        usage_totals,
+        wiki_page_count=wiki_page_count,
+        metas_by_project=metas_by_project,
+        session_tokens_usage=session_tokens_usage,
+        knowledge_pending=knowledge_pending,
+        knowledge_entities=knowledge_entities,
+        knowledge_concepts=knowledge_concepts,
+        knowledge_stale=knowledge_stale,
+        knowledge_stale_days=knowledge_stale_days,
+        link_prefix=link_prefix,
+    )
+    title = f"<h3>{html.escape(heading)}</h3>" if heading else ""
+    inner = f"{title}{grid}"
+    if heading:
+        return f'<div class="home-value-section">{inner}</div>'
+    return (
+        '<section class="section token-stats-section primary-metrics-section">\n'
+        '  <div class="container">\n'
+        f"    {grid}\n"
+        "  </div>\n"
+        "</section>"
+    )
+
+
 def render_home_wiki_value_section(
     usage_totals: dict[str, Any] | None,
     *,
     wiki_page_count: int,
     metas_by_project: Mapping[str, list[Mapping[str, object]]] | None = None,
     session_tokens_usage: Mapping[str, Any] | None = None,
+    knowledge_pending: int = 0,
+    knowledge_entities: int = 0,
+    knowledge_concepts: int = 0,
+    knowledge_stale: int = 0,
+    knowledge_stale_days: int = 30,
 ) -> str:
-    """Home **Wiki value** block — same Tokens grid as Analytics + Payoff / page (#321)."""
-    summary = value_summary(usage_totals or {}, wiki_page_count=wiki_page_count)
-    pages = int(summary["wiki_page_count"] or 0)
-    payoff = float(summary["payoff_per_page"] or 0.0)
-    payoff_value = f"{payoff:.2f}" if pages else "—"
-    payoff_sub = (
-        f"retrievals ÷ {pages} pages · "
-        '<a href="analytics.html">Analytics</a>'
-        if pages
-        else "needs wiki pages and MCP retrievals"
-    )
-    payoff_card = (
-        '<div class="token-stat">'
-        '<div class="token-stat-label muted">Payoff / page</div>'
-        f'<div class="token-stat-value">{html.escape(payoff_value)}</div>'
-        f'<div class="token-stat-sub muted">{payoff_sub}</div>'
-        "</div>"
-    )
-    grid, _n = render_site_token_stat_grid(
-        dict(metas_by_project or {}),
-        link_prefix="",
-        extra_cards=payoff_card,
+    """Home metrics row: Tokens, Payoff, Knowledge, Last 7 days (#321)."""
+    grid = render_primary_metrics_row(
+        usage_totals,
+        wiki_page_count=wiki_page_count,
+        metas_by_project=metas_by_project,
         session_tokens_usage=session_tokens_usage,
+        knowledge_pending=knowledge_pending,
+        knowledge_entities=knowledge_entities,
+        knowledge_concepts=knowledge_concepts,
+        knowledge_stale=knowledge_stale,
+        knowledge_stale_days=knowledge_stale_days,
     )
-    if not grid:
-        return ""
-    return (
-        '<div class="home-value-section">'
-        "<h3>Wiki value</h3>"
-        f"{grid}"
-        "</div>"
-    )
+    return f'<div class="home-metrics-row">{grid}</div>'
 
 
 def render_home_metrics_strip(
@@ -358,6 +516,11 @@ def render_home_metrics_strip(
     wiki_page_count: int,
     metas_by_project: Mapping[str, list[Mapping[str, object]]] | None = None,
     session_tokens_usage: Mapping[str, Any] | None = None,
+    knowledge_pending: int = 0,
+    knowledge_entities: int = 0,
+    knowledge_concepts: int = 0,
+    knowledge_stale: int = 0,
+    knowledge_stale_days: int = 30,
 ) -> str:
     """Alias for :func:`render_home_wiki_value_section` (tests / call sites)."""
     return render_home_wiki_value_section(
@@ -365,6 +528,11 @@ def render_home_metrics_strip(
         wiki_page_count=wiki_page_count,
         metas_by_project=metas_by_project,
         session_tokens_usage=session_tokens_usage,
+        knowledge_pending=knowledge_pending,
+        knowledge_entities=knowledge_entities,
+        knowledge_concepts=knowledge_concepts,
+        knowledge_stale=knowledge_stale,
+        knowledge_stale_days=knowledge_stale_days,
     )
 
 

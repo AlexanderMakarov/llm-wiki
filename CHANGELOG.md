@@ -10,8 +10,7 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Changed
 
-- **Home dashboard layout (#321)** — Pipeline state is the first section again. Build / sync / synth freshness sits in one compact line under the heading (absolute UTC + relative age, refreshed in the browser every minute). Configured automation settings move into a collapsed **Automation** section beside Timeline; unconfigured automation, scheduler activation errors, and last failed scheduled runs stay visible without opening it. Home adds compact **Session tokens** and **Payoff / page** metrics aligned with Analytics. Recent raw-document rows are denser. Docs: [`docs/reference/ui.md`](docs/reference/ui.md#home).
-  - *Release note:* Home leads with pipeline freshness and value metrics; automation details are collapsed (#321).
+- **Home dashboard layout (#321)** — **Metrics** first (title links to Analytics; shared floating hints via ``LLMWIKI_UI_HINTS``), then **Pipeline state**. **Last 7 days avg** card shows ``s/day`` and ``t/day · t/s`` (7-day rolling averages). Pipeline **Queryable** / **In site** column hints plus row hints on **Stubs** / **Other**; **Other** **In site** shows residual site HTML (Total minus attributed rows). Metrics card order Tokens → Last 7 days avg → Knowledge → Payoff / page. Pipeline table column widths favor footer timestamps. **Linter output** holds the last lint console report after any lint step (pass or fail). Pipeline numeric columns equal width. Collapsible body padding 10px. **Analytics**: tighter vertical rhythm; **Candidates to review** section removed — stale count lives in the Knowledge hint. Docs: [`docs/reference/ui.md`](docs/reference/ui.md#home).
 
 ### Added
 

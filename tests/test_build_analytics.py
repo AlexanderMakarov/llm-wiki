@@ -3,6 +3,7 @@ from pathlib import Path
 from llmwiki.build import render_analytics
 from llmwiki.viz_wiki_value import (
     render_candidates_review_section,
+    render_home_metrics_strip,
     render_mcp_heaviest_card,
     render_mcp_usage_section,
     render_project_usage_block,
@@ -227,15 +228,58 @@ def test_analytics_section_order_activity_recent_projects_wiki_usage(tmp_path: P
             "wiki_page_count": 1,
         },
     )
-    pos_token = html_out.index("token-stats-section")
-    pos_candidates = html_out.index("candidates-review-section")
+    pos_token = html_out.index("primary-metrics-section")
+    pos_secondary = html_out.index("secondary-metrics-section")
     pos_activity = html_out.index('<h2>Activity</h2>')
     pos_recent = html_out.index("recently-updated-section")
     pos_projects = html_out.index("<h2>Projects</h2>")
     pos_wiki_usage = html_out.index("wiki-usage-section")
-    assert pos_token < pos_candidates < pos_activity < pos_recent < pos_projects < pos_wiki_usage
-    assert "Candidates to review" in html_out
-    assert "Pending candidates" in html_out
+    assert pos_token < pos_secondary < pos_activity < pos_recent < pos_projects < pos_wiki_usage
+    assert "Last 7 days avg" in html_out
+    assert "Knowledge" in html_out
+    assert "metric-knowledge" in html_out
+    assert "candidates-review-section" not in html_out
+
+
+def test_home_metrics_strip_shares_analytics_tokens_card_and_card_order():
+    """#321: Home primary row uses the same Tokens grid as Analytics; card order fixed."""
+    usage_file = {
+        "totals": {"sum": 1000},
+        "by_agent": {"Claude": {"measured": 2, "known": 5}},
+    }
+    html = render_home_metrics_strip(
+        {},
+        wiki_page_count=2,
+        metas_by_project={"p": [{}]},
+        session_tokens_usage=usage_file,
+    )
+    assert "<h3 class=\"home-section-title\">Metrics</h3>" not in html
+    assert "token-stat-grid" in html or "token-stat" in html
+    assert "data-llmwiki-tokens-card" in html
+    assert "metric-payoff" in html
+    assert "analytics.html" not in html
+    assert "Last 7 days avg" in html
+    assert html.index("data-llmwiki-tokens-card") < html.index("Last 7 days avg")
+    assert html.index("Last 7 days avg") < html.index("metric-knowledge")
+    assert html.index("metric-knowledge") < html.index("metric-payoff")
+    assert "sessions/day" not in html
+    assert "avg sessions · tokens" not in html
+    assert "Cumulative billed throughput" in html
+    assert "token-stats-note" not in html
+
+
+def test_home_metrics_payoff_matches_value_summary():
+    usage = {
+        "total_calls": 4,
+        "per_tool": {
+            "wiki_search": {"calls": 6, "items_returned": 0, "zero_hits": 0},
+        },
+    }
+    html = render_home_metrics_strip(usage, wiki_page_count=3)
+    assert "2.00" in html
+    assert "metric-payoff" in html
+    assert "retrievals ÷ 3 pages" in html
+    assert "analytics.html" not in html
 
 
 def test_analytics_tokens_headline_includes_coverage_hint_only_with_token_data(tmp_path: Path):
@@ -244,14 +288,15 @@ def test_analytics_tokens_headline_includes_coverage_hint_only_with_token_data(t
         tmp_path,
         groups={"demo": [_analytics_session("2026-07-20", with_tokens=True)]},
     )
-    assert 'class="token-coverage-hint"' in with_tokens
-    assert 'aria-describedby="token-coverage-site-panel"' in with_tokens
+    assert "llmwiki-hint-trigger" in with_tokens
+    assert 'aria-describedby="llmwiki-floating-hint-panel"' in with_tokens
+    assert "llmwiki-floating-hint" in with_tokens
     assert "Claude Code" in with_tokens
 
     plain_dir = tmp_path / "plain"
     plain_dir.mkdir()
     without = _render_analytics(plain_dir)
-    assert "token-coverage-hint" not in without
+    assert "data-llmwiki-tokens-card" not in without
 
 
 def test_candidates_review_section_shows_zeros_and_kinds():
