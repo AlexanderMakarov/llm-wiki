@@ -92,7 +92,18 @@ def test_merge_sha_from_pr(wait_mod):
     assert wait_mod.merge_sha_from_pr(380, "o/r", run_gh=run_gh) == "mergeoid99"
 
 
-def test_fetch_check_runs_for_sha_flattens_pages(wait_mod):
+@pytest.fixture(scope="module")
+def loop_mod():
+    herdr = REPO / "scripts" / "loop_ready_issue_herdr.py"
+    spec = importlib.util.spec_from_file_location("loop_ready_issue_herdr", herdr)
+    assert spec and spec.loader
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = mod
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_fetch_check_runs_for_sha_flattens_pages(loop_mod):
     pages = [
         {"check_runs": [{"name": "a", "status": "completed", "conclusion": "success"}]},
         {"check_runs": [{"name": "b", "status": "completed", "conclusion": "skipped"}]},
@@ -105,7 +116,33 @@ def test_fetch_check_runs_for_sha_flattens_pages(wait_mod):
             {"returncode": 0, "stdout": json.dumps(pages), "stderr": ""},
         )()
 
-    runs = wait_mod.fetch_check_runs_for_sha("owner/name", "sha1", run_gh=run_gh)
+    runs = loop_mod.fetch_check_runs_for_sha("owner/name", "sha1", run_gh=run_gh)
     assert len(runs) == 2
     assert runs[0]["name"] == "a"
     assert runs[1]["conclusion"] == "skipped"
+
+
+def test_wait_post_merge_ci_merge_sha_path(wait_mod):
+    sha = "deadbeef"
+
+    def fetch(_repo, _sha, _run_gh):
+        assert _sha == sha
+        return [{"name": "ci", "status": "completed", "conclusion": "success"}]
+
+    wait_mod.fetch_check_runs_for_sha = fetch  # type: ignore[method-assign]
+    out = wait_mod.wait_post_merge_ci(
+        repo="OWNER/REPO",
+        merge_sha=sha,
+        poll_seconds=1,
+        timeout_seconds=10,
+        run_gh=lambda _a: None,
+        sleep_fn=lambda _s: None,
+    )
+    assert out == sha
+
+
+def test_main_rejects_invalid_poll_seconds(wait_mod):
+    assert (
+        wait_mod.main(["--issue", "1", "--repo", "o/r", "--poll-seconds", "0"])
+        == 1
+    )

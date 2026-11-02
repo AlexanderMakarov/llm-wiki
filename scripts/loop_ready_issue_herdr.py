@@ -380,6 +380,44 @@ def parse_owner_name(repo: str) -> tuple[str, str]:
     return owner, name
 
 
+def fetch_check_runs_for_sha(
+    repo: str,
+    sha: str,
+    run_gh: RunGh = default_run_gh,
+) -> list[CheckRun]:
+    """Return check runs GitHub reports for ``sha`` in ``owner/name``."""
+    owner, name = parse_owner_name(repo)
+    checks_proc = run_gh(
+        [
+            "gh",
+            "api",
+            f"repos/{owner}/{name}/commits/{sha}/check-runs",
+            "--paginate",
+            "--slurp",
+        ],
+    )
+    pages = _gh_json_slurp_pages(checks_proc, f"check-runs for {sha}")
+    raw_runs: list[Any] = []
+    for page in pages:
+        if not isinstance(page, dict):
+            continue
+        page_runs = page.get("check_runs") or []
+        if isinstance(page_runs, list):
+            raw_runs.extend(page_runs)
+    out: list[CheckRun] = []
+    for row in raw_runs:
+        if not isinstance(row, dict):
+            continue
+        out.append(
+            {
+                "name": row.get("name"),
+                "status": row.get("status"),
+                "conclusion": row.get("conclusion"),
+            },
+        )
+    return out
+
+
 def fetch_viewer_login(run_gh: RunGh = default_run_gh) -> str:
     """Resolve authenticated viewer login via ``gh api user``."""
     proc = run_gh(["gh", "api", "user"])
@@ -671,36 +709,7 @@ def fetch_issue_merge_and_ci_status(
 
     sha = merge_info.get("merge_commit_sha")
     if sha:
-        checks_proc = run_gh(
-            [
-                "gh",
-                "api",
-                f"repos/{owner}/{name}/commits/{sha}/check-runs",
-                "--paginate",
-                "--slurp",
-            ],
-        )
-        pages = _gh_json_slurp_pages(
-            checks_proc,
-            f"check-runs for issue #{issue_number}",
-        )
-        raw_runs: list[Any] = []
-        for page in pages:
-            if not isinstance(page, dict):
-                continue
-            page_runs = page.get("check_runs") or []
-            if isinstance(page_runs, list):
-                raw_runs.extend(page_runs)
-        for row in raw_runs:
-            if not isinstance(row, dict):
-                continue
-            check_runs.append(
-                {
-                    "name": row.get("name"),
-                    "status": row.get("status"),
-                    "conclusion": row.get("conclusion"),
-                },
-            )
+        check_runs = fetch_check_runs_for_sha(repo, sha, run_gh)
 
     return {
         "issue_number": issue_number,

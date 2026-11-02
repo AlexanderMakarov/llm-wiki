@@ -36,6 +36,7 @@ def _load_herdr_module():
 _herdr = _load_herdr_module()
 advance_ready = _herdr.advance_ready
 default_run_gh = _herdr.default_run_gh
+fetch_check_runs_for_sha = _herdr.fetch_check_runs_for_sha
 fetch_issue_merge_and_ci_status = _herdr.fetch_issue_merge_and_ci_status
 format_advance_poll_line = _herdr.format_advance_poll_line
 parse_owner_name = _herdr.parse_owner_name
@@ -50,44 +51,8 @@ def _gh_json(proc: subprocess.CompletedProcess[str], ctx: str) -> Any:
     return json.loads(proc.stdout or "null")
 
 
-def fetch_check_runs_for_sha(
-    repo: str,
-    sha: str,
-    run_gh=default_run_gh,
-) -> list[dict[str, Any]]:
-    owner, name = parse_owner_name(repo)
-    proc = run_gh(
-        [
-            "gh",
-            "api",
-            f"repos/{owner}/{name}/commits/{sha}/check-runs",
-            "--paginate",
-            "--slurp",
-        ],
-    )
-    pages = _gh_json(proc, f"check-runs for {sha}")
-    if not isinstance(pages, list):
-        return []
-    raw_runs: list[Any] = []
-    for page in pages:
-        if isinstance(page, dict):
-            runs = page.get("check_runs") or []
-            if isinstance(runs, list):
-                raw_runs.extend(runs)
-    out: list[dict[str, Any]] = []
-    for row in raw_runs:
-        if isinstance(row, dict):
-            out.append(
-                {
-                    "name": row.get("name"),
-                    "status": row.get("status"),
-                    "conclusion": row.get("conclusion"),
-                },
-            )
-    return out
-
-
 def merge_sha_from_pr(pr: int, repo: str | None, run_gh=default_run_gh) -> str:
+    """Resolve the merge commit OID for a merged PR via ``gh pr view``."""
     argv = ["gh", "pr", "view", str(pr), "--json", "mergeCommit"]
     if repo:
         owner, name = parse_owner_name(repo)
@@ -152,6 +117,7 @@ def wait_post_merge_ci(
 
 
 def build_parser() -> argparse.ArgumentParser:
+    """CLI for waiting until post-merge CI satisfies the herdr α gate."""
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--repo", metavar="OWNER/NAME", help="GitHub repo (default: gh repo view)")
     group = ap.add_mutually_exclusive_group(required=True)
@@ -176,6 +142,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def resolve_repo(explicit: str | None, run_gh=default_run_gh) -> str:
+    """Return ``OWNER/NAME`` from ``--repo`` or ``gh repo view``."""
     if explicit and explicit.strip():
         return explicit.strip()
     proc = run_gh(["gh", "repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"])
@@ -204,7 +171,7 @@ def main(argv: list[str] | None = None) -> int:
                 poll_seconds=args.poll_seconds,
                 timeout_seconds=args.timeout,
             )
-    except RuntimeError as exc:
+    except (RuntimeError, ValueError) as exc:
         print(str(exc), file=sys.stderr)
         return 1
     print("post-merge CI α satisfied")
