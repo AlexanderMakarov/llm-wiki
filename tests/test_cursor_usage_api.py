@@ -1,0 +1,159 @@
+"""Cursor usage API adapter (#356)."""
+from __future__ import annotations
+
+import base64
+import json
+from pathlib import Path
+
+from llmwiki.adapters.contrib.cursor_cli import CursorCliAdapter
+from llmwiki.cursor_token_events import append_hook_event
+from llmwiki.cursor_usage_api import (
+    _merge_events_into_cache,
+    api_totals_for_conversation,
+    conversation_has_hook_usage,
+    load_cache,
+    resolve_cursor_usage_api_mode,
+    save_cache,
+    set_active_vault,
+    sync_cursor_usage_api,
+    usage_records_from_api_cache,
+    user_id_from_jwt,
+)
+
+
+def _jwt(payload: dict) -> str:
+    header = base64.urlsafe_b64encode(b'{"alg":"none"}').decode().rstrip("=")
+    body = base64.urlsafe_b64encode(json.dumps(payload).encode()).decode().rstrip("=")
+    return f"{header}.{body}.sig"
+
+
+def test_user_id_from_jwt_sub_pipe_segment():
+    token = _jwt({"sub": "workos|user|acct-user-99"})
+    assert user_id_from_jwt(token) == "acct-user-99"
+
+
+def test_resolve_mode_default_off():
+    assert resolve_cursor_usage_api_mode({}) == "off"
+    assert resolve_cursor_usage_api_mode({"cursor_usage_api": "dashboard"}) == "dashboard"
+    assert resolve_cursor_usage_api_mode({"cursor_usage_api": "ADMIN"}) == "admin"
+
+
+def test_merge_dashboard_events_into_cache():
+    fixture = Path(__file__).parent / "fixtures/cursor_usage_api/dashboard_page1.json"
+    body = json.loads(fixture.read_text(encoding="utf-8"))
+    events = body["usageEventsDisplay"]
+    cache: dict = {"by_conversation": {}, "high_water_ms": 0}
+    added = _merge_events_into_cache(cache, events, source="dashboard")
+    assert added == 2
+    row = cache["by_conversation"]["aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"]
+    totals = row["totals"]
+    assert totals["input"] == 1200
+    assert totals["output"] == 75
+    assert totals["cache_read"] == 200
+    assert totals["cache_creation"] == 100
+
+
+def test_sync_dashboard_no_network(tmp_path: Path, monkeypatch):
+    fixture = Path(__file__).parent / "fixtures/cursor_usage_api/dashboard_page1.json"
+    body = json.loads(fixture.read_text(encoding="utf-8"))
+
+    def fake_fetch(**kwargs):
+        return 200, body, None
+
+    monkeypatch.setattr(
+        "llmwiki.cursor_usage_api.load_cursor_session_credentials",
+        lambda: ("user-1", "token-redacted"),
+    )
+    monkeypatch.setattr("llmwiki.cursor_usage_api.fetch_dashboard_page", fake_fetch)
+    monkeypatch.setattr("llmwiki.cursor_usage_api.should_poll_now", lambda *a, **k: True)
+
+    cfg = {"cursor_usage_api": "dashboard"}
+    lines = sync_cursor_usage_api(tmp_path, cfg, force_poll=True)
+    assert any("merged" in line for line in lines)
+    cache = load_cache(tmp_path)
+    assert "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee" in cache["by_conversation"]
+
+
+def test_hook_wins_over_api(tmp_path: Path, monkeypatch):
+    log = tmp_path / "events.jsonl"
+    monkeypatch.setenv("LLMWIKI_CURSOR_TOKEN_EVENTS", str(log))
+    cid = "conv-prefer-hook"
+    append_hook_event(
+        {
+            "conversation_id": cid,
+            "generation_id": "g1",
+            "input_tokens": 100,
+            "output_tokens": 10,
+        }
+    )
+    cache = {
+        "by_conversation": {
+            cid: {
+                "events": [
+                    {
+                        "conversationId": cid,
+                        "timestamp": 1,
+                        "tokenUsage": {"inputTokens": 9999, "outputTokens": 9999},
+                    }
+                ],
+                "totals": {"input": 9999, "output": 9999, "cache_read": 0, "cache_creation": 0},
+            }
+        },
+        "high_water_ms": 0,
+    }
+    save_cache(tmp_path, cache)
+    assert conversation_has_hook_usage(cid)
+    assert api_totals_for_conversation(tmp_path, cid) is None
+    assert usage_records_from_api_cache(cid, tmp_path) == []
+
+
+def test_normalize_merges_api_when_no_hook(tmp_path: Path, monkeypatch):
+    cid = "sess-api-only"
+    cache = {
+        "by_conversation": {
+            cid: {
+                "events": [
+                    {
+                        "conversationId": cid,
+                        "timestamp": 1,
+                        "tokenUsage": {
+                            "inputTokens": 300,
+                            "outputTokens": 30,
+                            "cacheReadTokens": 50,
+                            "cacheWriteTokens": 10,
+                        },
+                    }
+                ],
+                "totals": {"input": 240, "output": 30, "cache_read": 50, "cache_creation": 10},
+            }
+        },
+        "high_water_ms": 0,
+    }
+    save_cache(tmp_path, cache)
+    set_active_vault(tmp_path)
+    adapter = CursorCliAdapter({})
+    out = adapter.normalize_records(
+        [
+            {"type": "cursor_cli_meta", "sessionId": cid},
+            {"role": "user", "content": "hi"},
+        ]
+    )
+    usage_rows = [r for r in out if r.get("type") == "assistant"]
+    assert len(usage_rows) == 1
+    usage = usage_rows[0]["message"]["usage"]
+    assert usage["input_tokens"] == 240
+    assert usage["output_tokens"] == 30
+
+
+def test_sync_admin_401_soft(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(
+        "llmwiki.cursor_usage_api.load_admin_api_key",
+        lambda cfg: "crsr_test_key",
+    )
+    monkeypatch.setattr(
+        "llmwiki.cursor_usage_api.fetch_admin_page",
+        lambda **kwargs: (401, None, "unauthorized"),
+    )
+    monkeypatch.setattr("llmwiki.cursor_usage_api.should_poll_now", lambda *a, **k: True)
+    lines = sync_cursor_usage_api(tmp_path, {"cursor_usage_api": "admin"}, force_poll=True)
+    assert any("401" in line for line in lines)
