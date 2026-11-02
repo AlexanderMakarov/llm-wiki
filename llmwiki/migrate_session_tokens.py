@@ -30,6 +30,11 @@ from llmwiki.session_tokens_usage import (
     upsert_session_tokens,
 )
 from llmwiki.state_store import mtime_to_iso
+from llmwiki.token_coverage import (
+    raw_meta_eligible_for_token_known,
+    records_eligible_for_token_known,
+    resolve_token_known_filter,
+)
 from llmwiki.viz_tokens import parse_token_totals
 
 _TOKEN_TOTALS_LINE = re.compile(r"^token_totals:\s*.*$", re.MULTILINE)
@@ -317,18 +322,34 @@ def run_migration(
     changed = int(report.get("raw_upserts") or 0) + int(report.get("origin_upserts") or 0)
     # Drop leftover all-zero stubs; then raise known from discovery (no empty stubs).
     if not dry_run:
-        data = load_session_tokens(vault)
-        pruned = prune_unmeasured_sessions(data)
-        report["pruned_empty"] = pruned
-        known_counts, since_by_agent = _coverage_from_origins_and_raw(
-            sessions_dir, cfg, data
-        )
-        merge_agent_coverage(data, known_counts, since_by_agent=since_by_agent)
-        save_session_tokens(vault, data)
+        refresh_token_coverage_known(vault, cfg, report=report)
         changed += 1
     if not dry_run and site_dir.is_dir() and changed > 0:
         emit_session_tokens_sidecar(vault, site_dir)
     return report
+
+
+def refresh_token_coverage_known(
+    vault: Path,
+    config: dict[str, Any],
+    *,
+    report: dict[str, Any] | None = None,
+) -> None:
+    """Recompute ``by_agent.known`` from raw + origins (#325 / #355)."""
+    discover_all()
+    sessions_dir = vault / "raw" / "sessions"
+    data = load_session_tokens(vault)
+    pruned = prune_unmeasured_sessions(data)
+    if report is not None:
+        report["pruned_empty"] = pruned
+    known_counts, since_by_agent = _coverage_from_origins_and_raw(
+        sessions_dir, config, data
+    )
+    merge_agent_coverage(data, known_counts, since_by_agent=since_by_agent)
+    save_session_tokens(vault, data)
+    site_dir = vault / "site"
+    if site_dir.is_dir():
+        emit_session_tokens_sidecar(vault, site_dir)
 
 
 def _coverage_from_origins_and_raw(
@@ -338,9 +359,11 @@ def _coverage_from_origins_and_raw(
 ) -> tuple[dict[str, int], dict[str, str]]:
     """Count discoverable sessions per agent for coverage ``known`` (#325).
 
-    Empty-usage origins still count as known (Cursor store.db without hooks).
-    ``since`` is the earliest measured day for incomplete agents (measured < known).
+    When ``filters.exclude_non_usage_from_token_coverage`` is true (default),
+    synthetic placeholders and zero-tool sessions without token usage are
+    omitted. ``since`` is the earliest measured day for incomplete agents.
     """
+    exclude_non_usage = resolve_token_known_filter(config)
     known: dict[str, int] = {}
     if sessions_dir.is_dir():
         for raw_path in sessions_dir.glob("*.md"):
@@ -349,9 +372,14 @@ def _coverage_from_origins_and_raw(
             except OSError:
                 continue
             meta, _ = parse_frontmatter(text)
+            if not raw_meta_eligible_for_token_known(
+                meta, exclude_non_usage=exclude_non_usage
+            ):
+                continue
             agent = _adapter_name_from_meta(meta)
             known[agent] = int(known.get(agent) or 0) + 1
 
+    drop_types = config.get("filters", {}).get("drop_record_types", [])
     for adapter_name in ("cursor_cli", "claude_code", "codex_cli"):
         cls = REGISTRY.get(adapter_name)
         if cls is None:
@@ -364,7 +392,24 @@ def _coverage_from_origins_and_raw(
             paths = list(discover())
         except OSError:
             continue
-        known[adapter_name] = max(int(known.get(adapter_name) or 0), len(paths))
+        origin_eligible = 0
+        for path in paths:
+            path = Path(path)
+            try:
+                records = adapter.load_records(path)
+            except OSError:
+                continue
+            records = adapter.normalize_records(records)
+            records = filter_records(records, drop_types)
+            if not records:
+                continue
+            if records_eligible_for_token_known(
+                records, exclude_non_usage=exclude_non_usage
+            ):
+                origin_eligible += 1
+        if not exclude_non_usage:
+            origin_eligible = len(paths)
+        known[adapter_name] = max(int(known.get(adapter_name) or 0), origin_eligible)
 
     since_by_agent: dict[str, str] = {}
     days = usage_data.get("days") if isinstance(usage_data.get("days"), dict) else {}

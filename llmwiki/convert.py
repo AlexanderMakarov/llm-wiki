@@ -29,7 +29,7 @@ from llmwiki.adapters.settings import select_sync_adapters
 from llmwiki.config_schedule import resolve_vault_dir, user_config_path
 from llmwiki.quarantine import add_entry as _quarantine_add
 from llmwiki.quarantine import clear_entry as _quarantine_clear
-from llmwiki.session_tokens_usage import emit_session_tokens_sidecar, upsert_session_tokens
+from llmwiki.session_tokens_usage import emit_session_tokens_sidecar, upsert_session_tokens, usage_path
 from llmwiki.state_store import mtime_from_state, mtime_to_iso
 from llmwiki.state_store import read_state as _read_unified_state
 from llmwiki.state_store import resolve_state_file as _resolve_state_file
@@ -2490,6 +2490,12 @@ def convert_all(
         # merge — GC only mutates the in-memory files map.
         for adapter_name, adapter_since in durable_lookbacks.items():
             gc_sync_files_for_lookback(state, adapter_name, adapter_since)
+        if vault_root is not None and usage_path(vault_root).is_file():
+            from llmwiki.migrate_session_tokens import (  # noqa: I001, PLC0415 — lazy; avoid convert↔migrate cycle
+                refresh_token_coverage_known,
+            )
+
+            refresh_token_coverage_known(vault_root, config)
         meta = {
             "last_sync": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "version": 1,

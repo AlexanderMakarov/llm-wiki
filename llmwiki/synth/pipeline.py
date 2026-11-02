@@ -353,6 +353,28 @@ def resolve_exclude_headless(cfg: dict[str, Any] | None = None) -> bool:
     return DEFAULT_EXCLUDE_HEADLESS
 
 
+# #355: placeholder / no-usage sessions must not inflate Tokens coverage ``known``.
+DEFAULT_EXCLUDE_NON_USAGE_FROM_TOKEN_COVERAGE = True
+
+
+def resolve_exclude_non_usage_from_token_coverage(cfg: dict[str, Any] | None = None) -> bool:
+    """Read ``filters.exclude_non_usage_from_token_coverage`` (default True).
+
+    When true, synthetic model placeholders and sessions with ``tool_calls: 0``
+    and no measured token usage are omitted from Analytics Tokens ``known``.
+    """
+    filters = (cfg or {}).get("filters", {}) or {}
+    raw = filters.get(
+        "exclude_non_usage_from_token_coverage",
+        DEFAULT_EXCLUDE_NON_USAGE_FROM_TOKEN_COVERAGE,
+    )
+    if isinstance(raw, bool):
+        return raw
+    if isinstance(raw, str):
+        return raw.strip().lower() not in ("false", "no", "0", "off")
+    return DEFAULT_EXCLUDE_NON_USAGE_FROM_TOKEN_COVERAGE
+
+
 # #118: how many source pages are synthesized at once. The number bounds
 # concurrent `claude -p` subprocesses, so it is capped — an unbounded value
 # on a large backlog would fork one process per worker.
