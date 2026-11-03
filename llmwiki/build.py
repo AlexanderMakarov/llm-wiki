@@ -122,6 +122,10 @@ from llmwiki.synth.claude_cli import ClaudeCLIError, ClaudeCLISynthesizer
 from llmwiki.synth.cursor_cli import CursorCLIError
 from llmwiki.synth.ollama import OllamaError
 from llmwiki.synth.pipeline import refresh_synth_pending, resolve_backend
+from llmwiki.synth.state_backfill import (
+    backfill_synth_state_from_wiki_pages,
+    is_shipped_demo_vault,
+)
 from llmwiki.tag_utils import NOISE_TAGS
 from llmwiki.topics import (
     CURATED_KIND_FOLDERS,
@@ -3281,6 +3285,25 @@ def synthesize_overview(
 
 # ─── main ──────────────────────────────────────────────────────────────────
 
+def _reconcile_shipped_demo_synth_state(content_root: Path) -> None:
+    """Refresh ``synth.files`` for the committed ``demo/`` vault before Pipeline (#255).
+
+    Pages deploy and local ``build --vault demo`` must not show a false Documents
+    backlog when ``demo/wiki/sources/`` already covers the raw tree. No LLM —
+    only mtime stamps for rows with real, rewrite-clear wiki pages (same rule as
+    ``migrate topic-kinds`` backfill).
+    """
+    if not is_shipped_demo_vault(content_root):
+        return
+    upserts, errors = backfill_synth_state_from_wiki_pages(
+        vault=content_root, dry_run=False
+    )
+    if upserts:
+        print(f"  demo synth state: reconciled {upserts} fingerprint(s) from wiki pages")
+    for err in errors:
+        print(f"  warning: demo synth state reconcile: {err}", file=sys.stderr)
+
+
 def _ensure_synth_pipeline_snapshot(
     *,
     content_root: Path,
@@ -3563,6 +3586,9 @@ def build_site(
             if retrieved.isdisjoint(keys):
                 dead.append(rel)
     dead_total = len(dead)
+    # #255: committed demo/ must not show a false synth backlog on Pages when
+    # wiki/sources already cover raw/ (mtime drift after demo refresh).
+    _reconcile_shipped_demo_synth_state(content_root)
     # #70: one-shot backfill when llmwiki-state.json predates synth.pipeline
     # (v1.4→v1.5). Skip when the expected shape is already present.
     _ensure_synth_pipeline_snapshot(

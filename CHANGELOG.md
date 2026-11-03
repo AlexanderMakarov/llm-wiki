@@ -10,6 +10,9 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Changed
 
+- **Demo Home Pipeline parity on GitHub Pages (#255)** — `llmwiki build --vault demo` (including `pages.yml`) reconciles `synth.files` from existing `demo/wiki/sources/` pages before refreshing the Pipeline widget — same offline rule as `migrate topic-kinds` state backfill, no LLM. Committed `demo/llmwiki-state.*` was refreshed so maintainer builds match Pages after demo doc refresh mtime churn. User vaults unchanged. Docs: [`docs/deploy/github-pages.md`](docs/deploy/github-pages.md).
+  - *Release note:* The public demo Home Pipeline no longer shows a large false Documents backlog when wiki source pages already cover the raw docs tree (#255).
+
 - **Delivery DoD requires main-checkout sync after merge** — `/implement-feature` and `/fix-bug` record `$MAIN` (primary checkout) and must `git pull --ff-only origin main` there after post-merge CI before Done (herdr Phase A depends on local `#N` history). See `context/product/delivery-flow.md` §5.
   - *Release note:* After merging a delivery PR, sync the primary checkout with `git pull` on `$MAIN` before treating the run as done (#296).
 
