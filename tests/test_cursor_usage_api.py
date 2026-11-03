@@ -10,6 +10,7 @@ from llmwiki.cursor_token_events import append_hook_event
 from llmwiki.cursor_usage_api import (
     _merge_events_into_cache,
     api_totals_for_conversation,
+    apply_api_totals_to_raw_sessions,
     conversation_has_hook_usage,
     load_cache,
     resolve_cursor_usage_api_mode,
@@ -19,6 +20,7 @@ from llmwiki.cursor_usage_api import (
     usage_records_from_api_cache,
     user_id_from_jwt,
 )
+from llmwiki.session_tokens_usage import load_session_tokens
 
 
 def _jwt(payload: dict) -> str:
@@ -157,3 +159,47 @@ def test_sync_admin_401_soft(tmp_path: Path, monkeypatch):
     monkeypatch.setattr("llmwiki.cursor_usage_api.should_poll_now", lambda *a, **k: True)
     lines = sync_cursor_usage_api(tmp_path, {"cursor_usage_api": "admin"}, force_poll=True)
     assert any("401" in line for line in lines)
+
+
+def test_api_only_conversation_upserts_as_cursor_cli_metrics_only(tmp_path: Path):
+    """ACP chats with no raw page still count as Cursor CLI Tokens (#356)."""
+    cid = "acp-no-raw-aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+    cache = {
+        "by_conversation": {
+            cid: {
+                "events": [
+                    {
+                        "conversationId": cid,
+                        "timestamp": 1_700_000_000_000,
+                        "tokenUsage": {
+                            "inputTokens": 1000,
+                            "outputTokens": 50,
+                            "cacheReadTokens": 200,
+                            "cacheWriteTokens": 0,
+                        },
+                    }
+                ],
+                "totals": {
+                    "input": 800,
+                    "output": 50,
+                    "cache_read": 200,
+                    "cache_creation": 0,
+                },
+            }
+        },
+        "high_water_ms": 1_700_000_000_000,
+    }
+    save_cache(tmp_path, cache)
+    (tmp_path / "raw" / "sessions").mkdir(parents=True)
+    (tmp_path / "site").mkdir()
+    patched, upserted = apply_api_totals_to_raw_sessions(tmp_path)
+    assert patched == 0
+    assert upserted == 1
+    data = load_session_tokens(tmp_path)
+    stub = data["sessions"][cid]
+    assert stub["agent"] == "cursor_cli"
+    assert stub["metrics_only"] is True
+    assert stub["in_raw"] is False
+    assert stub["totals"]["input"] == 800
+    assert stub["totals"]["output"] == 50
+    assert data["by_agent"]["cursor_cli"]["measured"] == 1

@@ -596,18 +596,77 @@ def _schema_looks_valid(body: Mapping[str, Any], *, dashboard: bool) -> bool:
     return False
 
 
+def _bucket_from_api_row(row: Mapping[str, Any]) -> dict[str, int] | None:
+    totals = row.get("totals")
+    if not isinstance(totals, Mapping):
+        return None
+    bucket = {
+        "input": int(totals.get("input") or 0),
+        "cache_creation": int(totals.get("cache_creation") or 0),
+        "cache_read": int(totals.get("cache_read") or 0),
+        "output": int(totals.get("output") or 0),
+    }
+    if not any(bucket.values()):
+        return None
+    return bucket
+
+
+def _last_activity_from_api_row(row: Mapping[str, Any]) -> str:
+    """Best-effort ISO time from the newest event ``timestamp`` (ms)."""
+    best_ms = 0
+    events = row.get("events")
+    if isinstance(events, list):
+        for event in events:
+            if not isinstance(event, Mapping):
+                continue
+            try:
+                ts = int(event.get("timestamp") or 0)
+            except (TypeError, ValueError):
+                continue
+            if ts > best_ms:
+                best_ms = ts
+    if best_ms > 0:
+        return datetime.fromtimestamp(best_ms / 1000.0, tz=UTC).isoformat()
+    return datetime.now(UTC).isoformat()
+
+
+def _raw_paths_by_session_id(raw_dir: Path) -> dict[str, Path]:
+    """Map frontmatter ``sessionId`` → raw path (first wins)."""
+    from llmwiki._frontmatter import parse_frontmatter  # noqa: PLC0415 — avoid import cycle
+
+    out: dict[str, Path] = {}
+    if not raw_dir.is_dir():
+        return out
+    for path in raw_dir.glob("*.md"):
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        meta, _body = parse_frontmatter(text)
+        sid = str(meta.get("sessionId") or "").strip()
+        if sid and sid not in out:
+            out[sid] = path
+    return out
+
+
 def apply_api_totals_to_raw_sessions(
     vault: Path,
     *,
     dry_run: bool = False,
 ) -> tuple[int, int]:
-    """Patch ``raw/sessions/*.md`` and upsert session-tokens for API-only usage.
+    """Persist API usage as ``cursor_cli`` Tokens (ACP and interactive alike).
 
-    Returns ``(patched_files, upserted_sessions)``.
+    Every cached ``conversationId`` with measurable totals upserts into
+    ``usage/session-tokens.json`` under agent ``cursor_cli`` — the same agent
+    as interactive ``cursor-agent`` (#356). Sessions already in ``raw/`` get
+    ``token_totals`` patched when missing; conversations with no raw page
+    (typical for headless ACP/AO workers) still count as ``metrics_only``.
+    Hook JSONL still wins: those conversation ids are skipped.
+
+    Returns ``(patched_raw_files, upserted_sessions)``.
     """
     from llmwiki._frontmatter import parse_frontmatter  # noqa: PLC0415 — avoid import cycle
     from llmwiki.migrate_session_tokens import (  # noqa: PLC0415
-        _adapter_name_from_meta,
         _last_activity_from_meta,
         patch_raw_token_totals,
     )
@@ -616,51 +675,56 @@ def apply_api_totals_to_raw_sessions(
         upsert_session_tokens,
     )
 
-    raw_dir = vault / "raw" / "sessions"
-    if not raw_dir.is_dir():
-        return 0, 0
     cache = load_cache(vault)
     by_conv = cache.get("by_conversation")
     if not isinstance(by_conv, dict) or not by_conv:
         return 0, 0
 
+    raw_dir = vault / "raw" / "sessions"
+    raw_by_sid = _raw_paths_by_session_id(raw_dir)
     patched = upserted = 0
     site_dir = vault / "site"
-    for path in sorted(raw_dir.glob("*.md")):
-        text = path.read_text(encoding="utf-8")
-        meta, _body = parse_frontmatter(text)
-        agent = _adapter_name_from_meta(meta)
-        if agent != "cursor_cli":
+
+    for session_key, row in sorted(by_conv.items()):
+        if not isinstance(session_key, str) or not session_key.strip():
             continue
-        session_key = str(meta.get("sessionId") or path.stem).strip()
-        if not session_key or conversation_has_hook_usage(session_key):
+        session_key = session_key.strip()
+        if not isinstance(row, Mapping):
             continue
-        row = by_conv.get(session_key)
-        if not isinstance(row, dict):
+        if conversation_has_hook_usage(session_key):
             continue
-        totals = row.get("totals")
-        if not isinstance(totals, dict):
+        bucket = _bucket_from_api_row(row)
+        if bucket is None:
             continue
-        bucket = {
-            "input": int(totals.get("input") or 0),
-            "cache_creation": int(totals.get("cache_creation") or 0),
-            "cache_read": int(totals.get("cache_read") or 0),
-            "output": int(totals.get("output") or 0),
-        }
-        if not any(bucket.values()):
-            continue
-        existing_line = meta.get("token_totals")
-        if existing_line is not None and str(existing_line).strip():
-            continue
+
+        raw_path = raw_by_sid.get(session_key)
+        in_raw = raw_path is not None
+        metrics_only = not in_raw
+        last_activity = _last_activity_from_api_row(row)
+
+        if raw_path is not None:
+            try:
+                text = raw_path.read_text(encoding="utf-8")
+            except OSError:
+                text = ""
+            if text:
+                meta, _body = parse_frontmatter(text)
+                last_activity = _last_activity_from_meta(meta, raw_path.stat().st_mtime)
+                existing_line = meta.get("token_totals")
+                if existing_line is None or not str(existing_line).strip():
+                    if dry_run:
+                        patched += 1
+                    else:
+                        new_text = patch_raw_token_totals(text, bucket)
+                        if new_text != text:
+                            raw_path.write_text(new_text, encoding="utf-8")
+                            patched += 1
+
         if dry_run:
-            patched += 1
+            upserted += 1
             continue
-        new_text = patch_raw_token_totals(text, bucket)
-        if new_text != text:
-            path.write_text(new_text, encoding="utf-8")
-            patched += 1
+
         fp = f"cursor-usage-api:{session_key}:{json.dumps(bucket, sort_keys=True)}"
-        last_activity = _last_activity_from_meta(meta, path.stat().st_mtime)
         if upsert_session_tokens(
             vault,
             session_key=session_key,
@@ -668,10 +732,11 @@ def apply_api_totals_to_raw_sessions(
             totals=bucket,
             fingerprint=fp,
             last_activity=last_activity,
-            in_raw=True,
-            metrics_only=False,
+            in_raw=in_raw,
+            metrics_only=metrics_only,
         ):
             upserted += 1
-    if upserted and site_dir.is_dir():
+
+    if upserted and site_dir.is_dir() and not dry_run:
         emit_session_tokens_sidecar(vault, site_dir)
     return patched, upserted

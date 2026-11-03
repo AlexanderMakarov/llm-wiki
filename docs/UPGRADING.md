@@ -60,7 +60,7 @@ llmwiki migrate session-tokens --vault /path/to/vault
 llmwiki build --vault /path/to/vault
 ```
 
-Sync polls the API at most once per hour; migrate forces one fetch. If you already use the IDE `stop` hook JSONL for a conversation, that source still wins — API rows are not double-counted.
+Sync polls the API at most once per hour; migrate forces one fetch. Every measurable API `conversationId` upserts as **Cursor CLI** in Analytics Tokens (ACP/`--force acp` is the same agent). Chats that never land in `raw/` (often headless AO workers) still count as metrics-only stubs. If you already use the IDE `stop` hook JSONL for a conversation, that source still wins — API rows are not double-counted.
 
 ## Unreleased — dismissal ledger + near-match prior reasons (#146)
 
