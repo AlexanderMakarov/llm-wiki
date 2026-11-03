@@ -23,7 +23,11 @@ SHIPPED_DEMO_VAULT = REPO_ROOT / "demo"
 
 
 def is_shipped_demo_vault(content_root: Path) -> bool:
-    """True when ``content_root`` is the committed ``demo/`` tree in this checkout."""
+    """True when ``content_root`` is this package's bundled ``demo/`` vault directory.
+
+    Compares resolved paths to ``REPO_ROOT / "demo"`` (the checkout that contains
+    ``llmwiki/``). A different clone path named ``demo`` is not treated as shipped.
+    """
     try:
         return Path(content_root).expanduser().resolve() == SHIPPED_DEMO_VAULT.resolve()
     except OSError:
@@ -47,8 +51,10 @@ def backfill_synth_state_from_wiki_pages(
     After #163, ``source_synth_is_done`` requires a fresh-enough mtime in state;
     pages on disk alone do not count. This pass records each eligible raw
     session/doc's current mtime when its derived wiki target(s) exist and are
-    non-stub / not topics-pending — the same eligibility ``migrate
-    topic-kinds`` uses after stamping Connections.
+    non-stub / not topics-pending — the same eligibility checks as
+    ``migrate topic-kinds`` (which may stamp Connections first, then run this).
+    Shared synth filenames get an entry per raw file, not only the page's
+    ``source_file``.
 
     Returns ``(upsert_count, errors)``.
     """
@@ -155,5 +161,5 @@ def backfill_synth_state_from_wiki_pages(
             _save_state(state, state_file)
         except OSError as exc:
             errors.append(f"{state_file.name}: {exc}")
-            return 0, errors
+            return upserts, errors
     return upserts, errors

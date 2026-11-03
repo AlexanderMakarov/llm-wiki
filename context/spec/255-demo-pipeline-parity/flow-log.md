@@ -13,3 +13,7 @@
 - Tests: `tests/test_demo_pipeline_state_parity.py`
 - Docs: `docs/deploy/github-pages.md`, CHANGELOG
 - PR keyword: `Closes #255`
+
+## review-fixes
+- `_reconcile_shipped_demo_synth_state` now calls `refresh_synth_pending` after successful backfill (Pipeline rows + pending, not only `synth.files`)
+- Integration test `test_demo_reconcile_refreshes_pipeline_after_stale_files`; docs/CHANGELOG tightened

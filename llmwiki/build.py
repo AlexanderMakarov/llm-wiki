@@ -3285,23 +3285,41 @@ def synthesize_overview(
 
 # ─── main ──────────────────────────────────────────────────────────────────
 
-def _reconcile_shipped_demo_synth_state(content_root: Path) -> None:
-    """Refresh ``synth.files`` for the committed ``demo/`` vault before Pipeline (#255).
+def _reconcile_shipped_demo_synth_state(
+    *,
+    content_root: Path,
+    raw_dir: Path,
+    wiki_sources: Path,
+) -> None:
+    """Reconcile shipped ``demo/`` synth state before the Home Pipeline widget (#255).
 
-    Pages deploy and local ``build --vault demo`` must not show a false Documents
-    backlog when ``demo/wiki/sources/`` already covers the raw tree. No LLM —
-    only mtime stamps for rows with real, rewrite-clear wiki pages (same rule as
-    ``migrate topic-kinds`` backfill).
+    Upserts ``synth.files`` mtimes for sessions/docs whose ``wiki/sources/`` pages
+    are non-stub and rewrite-clear (offline — same helper as ``migrate
+    topic-kinds``), then runs ``refresh_synth_pending`` so ``synth.pipeline`` /
+    ``synth.pending`` match those fingerprints. Only when ``content_root`` is the
+    package's bundled ``REPO_ROOT/demo`` vault.
     """
     if not is_shipped_demo_vault(content_root):
         return
     upserts, errors = backfill_synth_state_from_wiki_pages(
         vault=content_root, dry_run=False
     )
+    if errors:
+        for err in errors:
+            print(f"  warning: demo synth state reconcile: {err}", file=sys.stderr)
+        return
     if upserts:
-        print(f"  demo synth state: reconciled {upserts} fingerprint(s) from wiki pages")
-    for err in errors:
-        print(f"  warning: demo synth state reconcile: {err}", file=sys.stderr)
+        print(
+            f"  demo synth state: reconciled {upserts} "
+            f"`synth.files` mtime entr{'y' if upserts == 1 else 'ies'} from wiki pages"
+        )
+    state_path = content_root / "llmwiki-state.json"
+    refresh_synth_pending(
+        raw_dir=raw_dir / "sessions",
+        docs_dir=raw_dir / "docs",
+        wiki_sources_dir=wiki_sources,
+        state_file=state_path,
+    )
 
 
 def _ensure_synth_pipeline_snapshot(
@@ -3586,9 +3604,12 @@ def build_site(
             if retrieved.isdisjoint(keys):
                 dead.append(rel)
     dead_total = len(dead)
-    # #255: committed demo/ must not show a false synth backlog on Pages when
-    # wiki/sources already cover raw/ (mtime drift after demo refresh).
-    _reconcile_shipped_demo_synth_state(content_root)
+    # #255: shipped demo/ — offline synth.files + pending/pipeline refresh.
+    _reconcile_shipped_demo_synth_state(
+        content_root=content_root,
+        raw_dir=raw_dir,
+        wiki_sources=wiki_sources,
+    )
     # #70: one-shot backfill when llmwiki-state.json predates synth.pipeline
     # (v1.4→v1.5). Skip when the expected shape is already present.
     _ensure_synth_pipeline_snapshot(
