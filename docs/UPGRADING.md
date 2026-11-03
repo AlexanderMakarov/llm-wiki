@@ -52,6 +52,16 @@ python3 -m llmwiki.cursor_token_events --ingest-stream-json /tmp/out.jsonl
 
 Or pipe stream-json NDJSON on stdin to `python3 -m llmwiki.cursor_token_events`. Then `llmwiki migrate session-tokens` / `sync` / `build`. Convert no longer writes empty `token_totals`. See [state-persistence.md](reference/state-persistence.md) and [`migrate session-tokens`](reference/cli.md#session-tokens--backfill-analytics-session-tokens-325).
 
+**ACP / Agent Orchestrator (`cursor-agent --force acp`) (#356):** hooks and ACP streams carry no usage. Opt in by setting `cursor_usage_api` to `dashboard` in `config.json` (merged over `examples/sessions_config.json`). llmwiki reads your existing Cursor CLI or IDE session token locally (same machine, read-only) — it is never logged, printed, or written into the vault or site. Team plans can use `cursor_usage_api: admin` with `CURSOR_ADMIN_API_KEY` instead. After enabling:
+
+```bash
+llmwiki sync --vault /path/to/vault
+llmwiki migrate session-tokens --vault /path/to/vault
+llmwiki build --vault /path/to/vault
+```
+
+Sync polls the API at most once per hour; migrate forces one fetch. Every measurable API `conversationId` upserts as **Cursor CLI** in Analytics Tokens (ACP/`--force acp` is the same agent). Chats that never land in `raw/` (often headless AO workers) still count as metrics-only stubs. If you already use the IDE `stop` hook JSONL for a conversation, that source still wins — API rows are not double-counted.
+
 ## Unreleased — dismissal ledger + near-match prior reasons (#146)
 
 Behaviour flip for new discards/merges, plus an optional offline migration for vaults that still only have per-stub reason files.

@@ -285,6 +285,24 @@ def run_migration(
         "errors": 0,
         "origin_adapters": list(origin_adapters),
     }
+    from llmwiki.cursor_usage_api import (  # noqa: I001, PLC0415
+        apply_api_totals_to_raw_sessions,
+        set_active_vault,
+        sync_cursor_usage_api,
+    )
+
+    set_active_vault(vault)
+    for _line in sync_cursor_usage_api(
+        vault, cfg, dry_run=dry_run, force_poll=not dry_run
+    ):
+        pass
+    if not dry_run:
+        patched, upserted = apply_api_totals_to_raw_sessions(vault, dry_run=False)
+        if patched:
+            report["raw_patched"] = int(report.get("raw_patched") or 0) + patched
+        if upserted:
+            report["raw_upserts"] = int(report.get("raw_upserts") or 0) + upserted
+
     if explicit_adapters:
         unknown = [name for name in origin_adapters if name not in REGISTRY]
         if unknown:

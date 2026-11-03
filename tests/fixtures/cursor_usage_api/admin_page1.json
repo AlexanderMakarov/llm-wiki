@@ -1,0 +1,15 @@
+{
+  "usageEvents": [
+    {
+      "timestamp": 1730000002000,
+      "model": "gpt-4",
+      "conversationId": "11111111-2222-3333-4444-555555555555",
+      "tokenUsage": {
+        "inputTokens": 800,
+        "outputTokens": 40,
+        "cacheReadTokens": 0,
+        "cacheWriteTokens": 0
+      }
+    }
+  ]
+}

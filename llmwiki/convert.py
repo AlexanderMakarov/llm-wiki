@@ -27,6 +27,11 @@ from llmwiki.adapters import REGISTRY, discover_adapters, discover_contrib  # no
 from llmwiki.adapters.base import portable_session_key_fragment
 from llmwiki.adapters.settings import select_sync_adapters
 from llmwiki.config_schedule import resolve_vault_dir, user_config_path
+from llmwiki.cursor_usage_api import (
+    apply_api_totals_to_raw_sessions,
+    set_active_vault,
+    sync_cursor_usage_api,
+)
 from llmwiki.quarantine import add_entry as _quarantine_add
 from llmwiki.quarantine import clear_entry as _quarantine_clear
 from llmwiki.session_tokens_usage import emit_session_tokens_sidecar, upsert_session_tokens, usage_path
@@ -2065,6 +2070,10 @@ def convert_all(
     durable_lookbacks: dict[str, datetime] = {}
     vault_root = _vault_root_from_sessions_out(out_dir)
     site_dir = vault_root / "site" if (vault_root / "site").is_dir() else None
+    if vault_root is not None:
+        set_active_vault(vault_root)
+        for line in sync_cursor_usage_api(vault_root, config, dry_run=dry_run):
+            print(f"  {line}")
 
     for cls in selected:
         try:
@@ -2490,6 +2499,15 @@ def convert_all(
         # merge — GC only mutates the in-memory files map.
         for adapter_name, adapter_since in durable_lookbacks.items():
             gc_sync_files_for_lookback(state, adapter_name, adapter_since)
+        if vault_root is not None:
+            patched, upserted = apply_api_totals_to_raw_sessions(
+                vault_root, dry_run=dry_run
+            )
+            if patched or upserted:
+                print(
+                    f"  cursor usage api: patched {patched} raw session(s), "
+                    f"upserted {upserted} token stub(s)"
+                )
         if vault_root is not None and usage_path(vault_root).is_file():
             from llmwiki.migrate_session_tokens import (  # noqa: I001, PLC0415 — lazy; avoid convert↔migrate cycle
                 refresh_token_coverage_known,
