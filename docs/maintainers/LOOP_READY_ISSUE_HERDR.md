@@ -57,19 +57,28 @@ Routing for a single ticket lives in `.claude/skills/loop-ready-issue-herdr/SKIL
 
 While a worker waits on you (herdr `blocked` — approval, question, permission), the driver holds the queue and does not start the next ticket. While the worker is actively delivering (including CI watch inside the delivery command), the driver keeps waiting. herdr `idle` or `done` alone does **not** mean “start the next issue.” This spike does **not** add a custom notifier; rely on **herdr’s built-in** agent status and notifications when a worker needs you.
 
-## Advance rule (merge + post-merge CI, or closed)
+## Advance rule (local Phase A → GitHub Phase B, or closed without merge)
 
-The driver starts the **next** eligible issue only when the **current** issue is done on GitHub, checked in this order on every poll:
+**Phase A local ticks** never run `git fetch` / `git pull` — only `git status --porcelain` and `git log -n 10`. The driver still polls GitHub every `--poll-seconds` during Phase A solely to detect **Path 2** (closed without a merged PR) and to print “merged on GitHub; main not updated yet”; it never advances Path 1 from Phase A. It starts every adopt/restart in **Phase A**, then moves to **Phase B** only when the **main checkout** (driver cwd) is clean and `git log -n 10 --oneline` contains `#N` (delivery commits should include `(#N)` / `Closes #N`).
 
-1. **Merged closing PR** — a PR that **closed** the issue is **merged**: the driver advances only when **every check run GitHub reports on that merge commit** is **completed** with a green conclusion (`success`, `skipped`, or `neutral`). If no check runs exist yet on the merge commit, the driver **does not** advance (workflows may still be queuing). GitHub auto-closes the issue on that merge, so a CLOSED issue never skips this CI gate.
-2. **Closed without a merged closing PR** — the issue is CLOSED (completed by hand, not planned, duplicate) and no merged PR closes it: the driver advances at once and skips the CI gate, printing e.g. `Advanced #323 (closed: COMPLETED, no merged closing PR; CI gate skipped); worker tab closed.`
-3. Otherwise it keeps waiting.
+**Path 1 — merged closing PR:** after Phase A is clean, **Phase B** polls GitHub every `--poll-seconds` (default 300) until the issue is **CLOSED**, the closing PR is **merged**, and **every check run on the merge commit** is green (α — same as before: non-empty check runs, all `success` / `skipped` / `neutral`). Phase B alone is not enough: GitHub can show merged/green before the worker pulls `main`.
+
+**Path 2 — closed without a merged closing PR:** no Phase A requirement; GitHub every `--poll-seconds`; advance at once with CI skipped, e.g. `Advanced #323 (closed: COMPLETED, no merged closing PR; CI gate skipped)`.
+
+**Operator skip:** from the **same main checkout** as the running driver, `python3 scripts/loop_ready_issue_herdr.py --skip-issue N` writes a gitignored `.herdr/skip-issue` file; the driver force-advances that ticket with a WARNING (one-shot). Do not run `--skip-issue` from a gate worktree — the driver would not see that file.
+
+**AWOS:** workers must run `git -C "$MAIN" pull --ff-only origin main` after merge (see delivery-flow §5). Spec: `context/spec/303-loop-ready-issue-herdr/advance-wait-redesign.md`.
+
+Optional agent helper (not used by the driver): `python3 scripts/wait_post_merge_ci.py`.
 
 On advance, the driver always closes the finished worker tab (even if the agent already went idle/disappeared — that only stops `herdr agent wait`, not tab cleanup) and opens a fresh one for the next issue — you do not need to close the tab yourself to unlock the queue. If a tab labeled `issue-N` is already open when the driver reaches issue N (a herdr session restored after a reboot, or a driver restart), the driver **adopts** it: it sends no new prompt and just polls GitHub for α, so in-progress delivery is not restarted. herdr restores tabs after a reboot without their agent; when no pane in the adopted tab runs an agent, the driver prints `issue-N tab <tab_id> has no agent (restored after reboot?); prompting a worker` and starts and prompts a worker in that pane — the delivery flow resumes from its flow-log, branch and PR. When a merged PR already closes the issue (only post-merge CI is left), it starts no worker and just waits for α. To pause a ticket, close its tab: quitting only the agent leaves an empty tab that gets a new worker on the next driver start. Close that tab first if you want a fresh worker. At startup and at the top of every queue cycle the driver lists herdr tabs labeled `issue-N` once — for this sweep and for resume-first selection (if the list fails, selection falls back to queue order and the driver still refuses to spawn a worker it cannot check for a duplicate tab) — asks GitHub for those issues' state in one batched query, and closes each tab whose issue is already CLOSED (`Closed herdr tab issue-N (<tab_id>): #N is closed.`) — leftovers from an earlier run or a ticket closed while the driver was stopped. A tab whose issue GitHub cannot resolve is left alone, and a herdr or GitHub failure in this sweep only prints a WARNING. Closing a worker tab early is a valid **hard stop** for that ticket; the driver does not treat it as successful delivery and does not auto-advance as if merged.
 
-## Polling interval
+## Polling intervals
 
-GitHub merge/CI checks for the in-flight issue use `--poll-seconds` (default **300**, five minutes) between α polls; herdr `agent wait` may return immediately when the worker is idle, blocked, or done, but the driver still waits the full poll interval before the next GitHub check. Empty-queue re-listing (without `--once`) also sleeps `--poll-seconds` between attempts.
+- **Phase A (local):** `--local-poll-seconds` (default **10**, range 10–30) — `git status --porcelain` and `git log -n 10` only (no git network); Path-2 `gh` still on the `--poll-seconds` schedule.
+- **Phase B / Path 2 (GitHub):** `--poll-seconds` (default **300**) between merge/CI polls.
+
+herdr `agent wait` is interleaved between ticks. Empty-queue re-listing (without `--once`) sleeps `--poll-seconds` between attempts.
 
 ## Trust model
 

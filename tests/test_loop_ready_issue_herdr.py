@@ -33,6 +33,29 @@ def loop_mod():
     return mod
 
 
+def _local_clean(_repo: Path, _number: int) -> bool:
+    """Test helper: Phase A passes immediately."""
+    return True
+
+
+def _fake_clock(
+    sleeps: list[float],
+    *,
+    start: float = 100.0,
+) -> tuple[dict[str, float], object, object]:
+    """Monotonic clock advanced by injected ``sleep_fn`` (for wait-loop tests)."""
+    state = {"t": start}
+
+    def monotonic_fn() -> float:
+        return state["t"]
+
+    def sleep_fn(seconds: float) -> None:
+        sleeps.append(seconds)
+        state["t"] += seconds
+
+    return state, monotonic_fn, sleep_fn
+
+
 def _issue(
     number: int,
     *,
@@ -573,10 +596,12 @@ def test_format_queue_counts_and_worker_opened_lines(loop_mod):
     assert (
         loop_mod.format_loop_params_line(
             poll_seconds=300,
+            local_poll_seconds=10,
             agent_kind="cursor",
             once=False,
         )
-        == "params: poll-seconds=300; agent-kind=cursor; mode=loop"
+        == "params: poll-seconds=300; local-poll-seconds=10; "
+        "agent-kind=cursor; mode=loop"
     )
     line = loop_mod.format_worker_opened_line(
         tab_label="issue-305",
@@ -611,6 +636,15 @@ def test_build_worker_prompt_includes_url(loop_mod):
     text = loop_mod.build_worker_prompt("skill", "https://example/o/r/issues/1")
     assert "skill" in text
     assert "https://example/o/r/issues/1" in text
+
+
+def test_build_worker_prompt_includes_main_checkout(loop_mod, tmp_path):
+    text = loop_mod.build_worker_prompt(
+        "skill",
+        "https://example/1",
+        main_checkout=tmp_path,
+    )
+    assert f"MAIN={tmp_path}" in text
 
 
 def test_herdr_worker_disappeared_codes(loop_mod):
@@ -770,7 +804,8 @@ def test_wait_until_ticket_advanced_polls_until_alpha(loop_mod):
         check_runs = [_green_ci_check()] if merged else []
         return {
             "issue_number": issue_number,
-            "merge_info": {"merged": merged},
+            "issue_state": "CLOSED" if merged else "OPEN",
+            "merge_info": {"merged": merged, "pr_number": 10 if merged else None},
             "check_runs": check_runs,
         }
 
@@ -786,15 +821,19 @@ def test_wait_until_ticket_advanced_polls_until_alpha(loop_mod):
         return subprocess.CompletedProcess(argv, 0, body, "")
 
     sleeps: list[float] = []
+    _, monotonic_fn, sleep_fn = _fake_clock(sleeps)
     loop_mod.wait_until_ticket_advanced(
         "o/r",
         worker,
         60,
         label="agent-ready",
+        local_poll_seconds=10,
         run_gh=lambda _a: subprocess.CompletedProcess([], 0, "", ""),
         run_herdr=fake_herdr,
-        sleep_fn=sleeps.append,
+        sleep_fn=sleep_fn,
+        monotonic_fn=monotonic_fn,
         fetch_status=fake_fetch,
+        local_phase_a_clean=_local_clean,
     )
     assert polls["n"] == 2
     assert worker.gone is False
@@ -809,7 +848,8 @@ def test_wait_until_ticket_advanced_sleeps_when_herdr_wait_returns_immediately(l
         merged = polls["n"] >= 2
         return {
             "issue_number": 1,
-            "merge_info": {"merged": merged},
+            "issue_state": "CLOSED" if merged else "OPEN",
+            "merge_info": {"merged": merged, "pr_number": 1 if merged else None},
             "check_runs": [_green_ci_check()] if merged else [],
         }
 
@@ -821,6 +861,7 @@ def test_wait_until_ticket_advanced_sleeps_when_herdr_wait_returns_immediately(l
     )
     sleeps: list[float] = []
     wait_calls = {"n": 0}
+    _, monotonic_fn, sleep_fn = _fake_clock(sleeps)
 
     def fake_herdr(argv: list[str]) -> subprocess.CompletedProcess[str]:
         wait_calls["n"] += 1
@@ -832,10 +873,13 @@ def test_wait_until_ticket_advanced_sleeps_when_herdr_wait_returns_immediately(l
         worker,
         5,
         label="lbl",
+        local_poll_seconds=10,
         run_gh=lambda _a: subprocess.CompletedProcess([], 0, "", ""),
         run_herdr=fake_herdr,
-        sleep_fn=sleeps.append,
+        sleep_fn=sleep_fn,
+        monotonic_fn=monotonic_fn,
         fetch_status=fake_fetch,
+        local_phase_a_clean=_local_clean,
     )
     assert sleeps == [5.0]
     assert wait_calls["n"] == 1
@@ -849,7 +893,8 @@ def test_wait_until_ticket_advanced_worker_gone_keeps_polling_github(loop_mod):
         merged = polls["n"] >= 3
         return {
             "issue_number": issue_number,
-            "merge_info": {"merged": merged},
+            "issue_state": "CLOSED" if merged else "OPEN",
+            "merge_info": {"merged": merged, "pr_number": 9 if merged else None},
             "check_runs": [_green_ci_check()] if merged else [],
         }
 
@@ -869,15 +914,19 @@ def test_wait_until_ticket_advanced_worker_gone_keeps_polling_github(loop_mod):
         raise AssertionError(argv)
 
     sleeps: list[float] = []
+    _, monotonic_fn, sleep_fn = _fake_clock(sleeps)
     loop_mod.wait_until_ticket_advanced(
         "o/r",
         worker,
         10,
         label="lbl",
+        local_poll_seconds=10,
         run_gh=lambda _a: subprocess.CompletedProcess([], 0, "", ""),
         run_herdr=fake_herdr,
-        sleep_fn=sleeps.append,
+        sleep_fn=sleep_fn,
+        monotonic_fn=monotonic_fn,
         fetch_status=fake_fetch,
+        local_phase_a_clean=_local_clean,
     )
     assert worker.gone is True
     assert worker.warned_gone is True
@@ -917,7 +966,10 @@ _PENDING_CHECK = {"name": "ci", "status": "in_progress", "conclusion": None}
         pytest.param(
             [_status(), _status(state="CLOSED", state_reason="NOT_PLANNED")],
             "closed: NOT_PLANNED, no merged closing PR; CI gate skipped",
-            ["#7 open; no merged PR closes it yet — waiting 60s"],
+            [
+                "#7 open; no merged PR closes it yet — waiting 60s",
+                "#7 Phase A: local clean; entering Phase B (GitHub α)",
+            ],
             id="closed-while-waiting",
         ),
         pytest.param(
@@ -926,7 +978,11 @@ _PENDING_CHECK = {"name": "ci", "status": "in_progress", "conclusion": None}
                 _status(merged=True, state="CLOSED", check_runs=[_green_ci_check()]),
             ],
             "merge + post-merge CI α",
-            ["#7: PR #10 merged; post-merge CI 0/1 green (1 pending) — waiting 60s"],
+            [
+                "#7 Phase A: merged on GitHub; main checkout not updated yet — "
+                "next local poll 10s",
+                "#7 Phase A: local clean; entering Phase B (GitHub α)",
+            ],
             id="merged-and-auto-closed-still-waits-for-alpha",
         ),
     ],
@@ -950,19 +1006,23 @@ def test_wait_until_ticket_advanced_issue_state_decision(
         tab_id="wZ:t7", pane_id="wZ:p7", issue_number=7, issue_url="https://example/7"
     )
     sleeps: list[float] = []
+    _, monotonic_fn, sleep_fn = _fake_clock(sleeps)
     reason = loop_mod.wait_until_ticket_advanced(
         "o/r",
         worker,
         60,
         label="lbl",
+        local_poll_seconds=10,
         run_gh=lambda _a: subprocess.CompletedProcess([], 0, "", ""),
         run_herdr=fake_herdr,
-        sleep_fn=sleeps.append,
+        sleep_fn=sleep_fn,
+        monotonic_fn=monotonic_fn,
         fetch_status=fake_fetch,
+        local_phase_a_clean=_local_clean,
     )
     assert reason == expected_reason
     assert pending == []
-    assert sleeps == [60.0] * (len(statuses) - 1)
+    assert len(sleeps) == len(statuses) - 1
     assert capsys.readouterr().out.splitlines() == expected_out
 
 
@@ -972,7 +1032,8 @@ def test_wait_until_ticket_advanced_issue_state_decision(
         pytest.param(
             _status(merged=True),
             False,
-            "#7: PR #10 merged; no check runs yet on the merge commit — waiting 300s",
+            "#7 Phase B: local clean; PR #10 merged; no check runs yet on the merge commit "
+            "— waiting 300s",
             id="no-check-runs",
         ),
         pytest.param(
@@ -987,7 +1048,8 @@ def test_wait_until_ticket_advanced_issue_state_decision(
                 ],
             ),
             False,
-            "#7: PR #10 merged; post-merge CI 3/5 green (1 failed, 1 pending) — waiting 300s",
+            "#7 Phase B: local clean; PR #10 merged; post-merge CI 3/5 green "
+            "(1 failed, 1 pending) — waiting 300s",
             id="mixed-checks",
         ),
         pytest.param(
@@ -1000,7 +1062,16 @@ def test_wait_until_ticket_advanced_issue_state_decision(
 )
 def test_format_advance_poll_line(loop_mod, status, worker_gone, expected):
     """The per-poll status line names the blocking condition, CI tally, and a gone worker."""
-    assert loop_mod.format_advance_poll_line(status, 300, worker_gone=worker_gone) == expected
+    phase = "B" if status["merge_info"].get("merged") else "A"
+    assert (
+        loop_mod.format_advance_poll_line(
+            status,
+            300,
+            worker_gone=worker_gone,
+            phase=phase,
+        )
+        == expected
+    )
 
 
 def _sweep_fake_herdr(calls: list[list[str]], tabs: list[dict] | None, fail_close: set[str]):
@@ -1114,3 +1185,165 @@ def test_close_tabs_for_closed_issues_warns_instead_of_raising(
     assert closed == expected_closed
     assert expected_warning in capsys.readouterr().err
     assert len(queries) == (0 if failure == "herdr_list" else 1)
+
+
+def test_issue_number_in_recent_log_word_boundary(loop_mod):
+    assert loop_mod.issue_number_in_recent_log("abc (#355) def", 355)
+    assert not loop_mod.issue_number_in_recent_log("abc (#3550) def", 355)
+    assert loop_mod.issue_number_in_recent_log("Closes #355", 355)
+
+
+def test_local_phase_a_is_clean_cases(loop_mod, tmp_path):
+    def run_git(argv: list[str], _root):
+        if argv[:2] == ["status", "--porcelain"]:
+            out = getattr(run_git, "porcelain", "")
+        else:
+            out = getattr(run_git, "log", "")
+        return subprocess.CompletedProcess(["git", *argv], 0, out, "")
+
+    run_git.porcelain = " M file.py"
+    run_git.log = "deadbeef feat (#7)\n"
+    assert loop_mod.local_phase_a_is_clean(tmp_path, 7, run_git=run_git) is False
+
+    run_git.porcelain = ""
+    run_git.log = "deadbeef feat (#70)\n"
+    assert loop_mod.local_phase_a_is_clean(tmp_path, 7, run_git=run_git) is False
+
+    run_git.log = "deadbeef feat (#7)\n"
+    assert loop_mod.local_phase_a_is_clean(tmp_path, 7, run_git=run_git) is True
+
+
+def test_skip_request_round_trip(loop_mod, tmp_path):
+    path = loop_mod.write_skip_request(42, tmp_path, reason="stuck Phase A")
+    assert path == tmp_path / ".herdr" / "skip-issue"
+    assert loop_mod.read_skip_request(tmp_path) == (42, "stuck Phase A")
+    loop_mod.consume_skip_request(tmp_path)
+    assert loop_mod.read_skip_request(tmp_path) is None
+
+
+def test_skip_request_ignores_malformed(loop_mod, tmp_path):
+    path = loop_mod.skip_request_path(tmp_path)
+    path.parent.mkdir(parents=True)
+    path.write_text("not-a-number\n", encoding="utf-8")
+    assert loop_mod.read_skip_request(tmp_path) is None
+
+
+def test_wait_operator_skip_force_advances(loop_mod, tmp_path, capsys):
+    loop_mod.write_skip_request(7, tmp_path, reason="manual")
+    worker = loop_mod.WorkerHandle(
+        tab_id="t", pane_id="p", issue_number=7, issue_url="https://example/7"
+    )
+    sleeps: list[float] = []
+    _, monotonic_fn, sleep_fn = _fake_clock(sleeps)
+    reason = loop_mod.wait_until_ticket_advanced(
+        "o/r",
+        worker,
+        60,
+        label="lbl",
+        local_poll_seconds=10,
+        repo_root=tmp_path,
+        run_gh=lambda _a: subprocess.CompletedProcess([], 0, "", ""),
+        run_herdr=lambda argv: subprocess.CompletedProcess(
+            argv, 0, json.dumps({"result": {"type": "idle"}}), ""
+        ),
+        sleep_fn=sleep_fn,
+        monotonic_fn=monotonic_fn,
+        fetch_status=lambda *_a: (_ for _ in ()).throw(AssertionError("no gh")),
+        local_phase_a_clean=lambda *_a: False,
+    )
+    assert reason == "operator skip: manual"
+    assert "operator skip" in capsys.readouterr().err
+    assert loop_mod.read_skip_request(tmp_path) is None
+
+
+def test_wait_stale_skip_cleared(loop_mod, tmp_path, capsys):
+    loop_mod.write_skip_request(99, tmp_path)
+    worker = loop_mod.WorkerHandle(
+        tab_id="t", pane_id="p", issue_number=7, issue_url="https://example/7"
+    )
+    sleeps: list[float] = []
+    _, monotonic_fn, sleep_fn = _fake_clock(sleeps)
+    pending = [
+        _status(state="CLOSED", state_reason="COMPLETED"),
+    ]
+
+    def fake_fetch(*_a):
+        return pending.pop(0)
+
+    reason = loop_mod.wait_until_ticket_advanced(
+        "o/r",
+        worker,
+        60,
+        label="lbl",
+        local_poll_seconds=10,
+        repo_root=tmp_path,
+        run_gh=lambda _a: subprocess.CompletedProcess([], 0, "", ""),
+        run_herdr=lambda argv: subprocess.CompletedProcess(
+            argv, 0, json.dumps({"result": {"type": "idle"}}), ""
+        ),
+        sleep_fn=sleep_fn,
+        monotonic_fn=monotonic_fn,
+        fetch_status=fake_fetch,
+        local_phase_a_clean=_local_clean,
+    )
+    assert "closed:" in reason
+    assert "stale skip" in capsys.readouterr().err
+    assert loop_mod.read_skip_request(tmp_path) is None
+
+
+def test_wait_phase_a_dirty_never_advances_on_alpha(loop_mod, tmp_path):
+    """Path 1 with dirty Phase A must not advance even when GitHub reports α."""
+    polls = {"n": 0}
+    sleeps: list[float] = []
+    _, monotonic_fn, sleep_fn = _fake_clock(sleeps)
+
+    def fake_fetch(*_a):
+        polls["n"] += 1
+        if polls["n"] >= 4:
+            raise RuntimeError("stop-test")
+        return _status(
+            merged=True,
+            state="CLOSED",
+            check_runs=[_green_ci_check()],
+        )
+
+    worker = loop_mod.WorkerHandle(
+        tab_id="t", pane_id="p", issue_number=7, issue_url="https://example/7"
+    )
+    with pytest.raises(RuntimeError, match="stop-test"):
+        loop_mod.wait_until_ticket_advanced(
+            "o/r",
+            worker,
+            60,
+            label="lbl",
+            local_poll_seconds=10,
+            repo_root=tmp_path,
+            run_gh=lambda _a: subprocess.CompletedProcess([], 0, "", ""),
+            run_herdr=lambda argv: subprocess.CompletedProcess(
+                argv, 0, json.dumps({"result": {"type": "idle"}}), ""
+            ),
+            sleep_fn=sleep_fn,
+            monotonic_fn=monotonic_fn,
+            fetch_status=fake_fetch,
+            local_phase_a_clean=lambda *_a: False,
+        )
+    assert polls["n"] >= 4
+
+
+def test_main_skip_issue_dry_run_and_write(loop_mod, tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(loop_mod, "REPO_ROOT", tmp_path)
+    assert loop_mod.main(["--label", "x", "--skip-issue", "12", "--dry-run"]) == 0
+    assert "would write skip" in capsys.readouterr().out
+    assert not (tmp_path / ".herdr" / "skip-issue").exists()
+    assert loop_mod.main(["--label", "x", "--skip-issue", "12", "--skip-reason", "go"]) == 0
+    assert loop_mod.read_skip_request(tmp_path) == (12, "go")
+
+
+def test_main_rejects_local_poll_out_of_range(loop_mod):
+    assert loop_mod.main(["--label", "x", "--local-poll-seconds", "5"]) == 2
+    assert loop_mod.main(["--label", "x", "--local-poll-seconds", "31"]) == 2
+
+
+def test_argparse_local_poll_seconds_default_10(loop_mod):
+    args = loop_mod.build_parser().parse_args(["--label", "x"])
+    assert args.local_poll_seconds == 10

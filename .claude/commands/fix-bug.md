@@ -84,7 +84,16 @@ python3 -m llmwiki init --vault "$TMP_VAULT"
 
 If already inside a matching worktree on `BRANCH`, reuse it and ensure `$WT/.worktree-vault` + worktree `config.json` still isolate from the live vault (never copy primary `config.json`).
 
-Store `BRANCH`, `WT`, `TMP_VAULT`, and `BUG_ID`. Always `python3 -m llmwiki` from `$WT` — never PATH `llmwiki`. Agent mutating commands → `$TMP_VAULT` only; read-only live-vault probes allowed.
+Resolve **`MAIN`**: absolute path to the primary checkout (where herdr runs the driver — not `$WT`). Prefer a driver-injected `MAIN=…` when present; otherwise:
+
+```bash
+MAIN="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"
+export MAIN
+```
+
+(`git rev-parse --show-toplevel` alone is wrong when already inside `$WT`.)
+
+Store `BRANCH`, `WT`, `TMP_VAULT`, `MAIN`, and `BUG_ID`. Always `python3 -m llmwiki` from `$WT` — never PATH `llmwiki`. Agent mutating commands → `$TMP_VAULT` only; read-only live-vault probes allowed.
 
 <!-- /awos:flow:stage -->
 
@@ -229,7 +238,15 @@ Re-check mergeability against current `origin/main`. If dirty: rebase, push, ret
 
 When gates are green, ask for explicit merge confirmation in this run. On yes: `gh pr merge`. Skipped/unanswered → do not merge; report ready-to-merge in chat. No "merged"/"gates passed" PR comments.
 
-After merge: watch post-merge Actions on `main` and fix forward if this change broke them.
+After merge: watch post-merge Actions on `main` and fix forward if this change broke them. Optional: `python3 scripts/wait_post_merge_ci.py` (same α as the herdr driver).
+
+Then sync **`$MAIN`** (mandatory):
+
+```bash
+git -C "$MAIN" fetch origin main
+git -C "$MAIN" pull --ff-only origin main
+git -C "$MAIN" log -1 --oneline
+```
 
 <!-- /awos:flow:stage -->
 
@@ -237,7 +254,7 @@ After merge: watch post-merge Actions on `main` and fix forward if this change b
 
 ### Step 13: Close the Loop
 
-Definition of Done: PR merged and post-merge required checks green. Report evidence in chat: PR URL, merge commit, local-review verdict/counts/paths, classification verdict, and (on divergence) that the owning spec was amended. Do **not** close or transition the GitHub Issue.
+Definition of Done: PR merged, post-merge checks green, and **`$MAIN` pulled to `origin/main`**. Stopping after merge without pulling `$MAIN` is not Done. Report evidence in chat: PR URL, merge commit, post-merge CI, main `log -1`, local-review verdict/counts/paths, classification verdict, and (on divergence) that the owning spec was amended. Do **not** close or transition the GitHub Issue.
 
 Leave a clean working tree: do not write a closing flow-log entry. If any flow-created artifact is still uncommitted, surface it in the report.
 
