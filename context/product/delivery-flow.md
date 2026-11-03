@@ -63,6 +63,7 @@ Which commands `/awos:flow` generated and their names — re-runs reconcile exac
   - **Read-only live vault:** the agent **may** run clearly non-mutating probes against the live vault path from the primary checkout's `vault.default_path` (examples: `lint`, `synth --estimate`, status/read helpers). Never write `raw/`, `wiki/`, or `site/` under the live vault from the agent.
   - **Operator live verification:** at the user smoke-confirm step, do **not** run mutating `llmwiki` against the live vault. Instead print ready-to-paste commands that use the **worktree code** against the live vault path (e.g. `cd $WT && python3 -m llmwiki build --vault <LIVE> --out <LIVE>/site`, then open `<LIVE>/site/index.html`). The operator runs those commands themselves.
   - **Cleanup (when discarding the worktree):** `git worktree remove "$WT"` (after commit/push or stash); delete throwaway vault with the directory.
+  - **Main checkout (`MAIN`):** Record the absolute path to the **primary** repo checkout (where herdr runs the driver — not `$WT`). Prefer a driver-injected `MAIN=…`; else `MAIN="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"` (works from inside a worktree). After `cd "$WT"`, use `git -C "$MAIN"` for post-merge sync. Commit subjects for delivery commits should include `(#N)` / `Closes #N` so herdr Phase A can see the issue in `git log -n 10` after pull.
 - **Sanctioned verification path:** Automated criteria — `pytest` + `python3 -m llmwiki` against `$TMP_VAULT`; UI — `python3 -m llmwiki build` then Playwright on `$TMP_VAULT/site`, opened as files. Live Obsidian vault mutation is never automated — only operator-pasted commands at smoke confirm. Prefer driving the built files yourself over asking the user to run routine verify.
 
 ## 3. Repository Topology
@@ -109,12 +110,13 @@ Which commands `/awos:flow` generated and their names — re-runs reconcile exac
 
 - **Mode:** Merge-when-ready to `main`; packaging/releases stay batched via `/release` + version tags (not part of this flow)
 - **Merge policy:** The flow merges via `gh pr merge` once gates are green — always behind a fresh per-run user confirmation; skipped/unanswered confirmation means do not merge
-- **Post-merge CI:** Watch base-branch pipelines after merge; diagnose and fix forward on `main` if they fail
+- **Post-merge CI:** Watch base-branch pipelines after merge; diagnose and fix forward on `main` if they fail. Optional helper: `python3 scripts/wait_post_merge_ci.py` (same α predicate as the herdr driver).
+- **Post-merge main sync:** After post-merge CI is green (or fix-forward completes), run on **`$MAIN`** (not `$WT`): `git -C "$MAIN" fetch origin main` and `git -C "$MAIN" pull --ff-only origin main`. Stopping at merge or issue CLOSED without this sync is **not** Definition of Done — the herdr driver Phase A waits for `#N` in local `git log` on main.
 - **Approvals:** Spec/tech document gates; user smoke confirm; local review dedicated keep/drop (independent of document gates); per-run merge confirm — each is its own ask; none substitutes for another
 - **Versioning:** Unchanged by this flow — version bumps live in `/release` / `pyproject.toml` when cutting a release
 - **Deployment:** Never auto-deploy from this flow — releases stay on `/release` + tags when chosen manually
 - **Ticket state transitions:** n/a — do not transition or close GitHub Issues from this flow (even when the task came from an issue)
-- **Definition of Done:** PR merged (after per-run confirm) and post-merge required checks green; report evidence to the user (PR URL, merge commit, local review verdict/counts/path). Issues left untouched
+- **Definition of Done:** PR merged (after per-run confirm), post-merge required checks green, and **`$MAIN` synced to `origin/main`** (merge commit at `HEAD` after pull); report evidence to the user (PR URL, merge commit, post-merge CI result, `git -C "$MAIN" log -1 --oneline`, local review verdict/counts/path). Issues left untouched
 
 ## 6. Trigger
 

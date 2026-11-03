@@ -10,7 +10,7 @@
 
 Add an **opt-in maintainer-only** Python driver under `scripts/` plus a **non-invocable** thin skill under `.claude/skills/`. The driver shells `gh` and `herdr` via `subprocess` (stdlib only, no LLM). Pure queue/sort/eligibility logic lives in testable functions; I/O adapters are thin wrappers.
 
-Delivery commands (`/implement-feature`, `/fix-bug`) stay unchanged. The driver **reads the skill file and injects** one-ticket instructions into `herdr agent prompt` — agents do not self-select the skill. Advance is decided by **GitHub merge + post-merge CI**, not herdr `done`/`idle` and not a signal from the skill. herdr lifecycle uses **event-driven wait/subscribe**; GitHub advance uses **`--poll-seconds` (default 300)**. No custom notification feature — herdr’s built-in agent hooks suffice.
+Delivery commands (`/implement-feature`, `/fix-bug`) now require post-merge **`$MAIN` sync** (see `advance-wait-redesign.md` Deliverable A). The driver **reads the skill file and injects** one-ticket instructions into `herdr agent prompt` (may include `MAIN=…`) — agents do not self-select the skill. Advance is **Phase A (local `#N` in recent log) then Phase B (GitHub merge + post-merge CI α)**, or Path 2 closed-without-merge; not herdr `done`/`idle`. herdr lifecycle uses **event-driven wait/subscribe**; GitHub uses **`--poll-seconds` (default 300)**; Phase A local uses **`--local-poll-seconds` (default 10)**. No custom notification feature — herdr’s built-in agent hooks suffice.
 
 ---
 
@@ -121,6 +121,10 @@ No `llmwiki/` runtime package behavior changes. No slash command. No herdr-notif
 | Skill not loaded by agent | Driver inlines skill text; `disable-model-invocation: true` |
 
 **Dependencies:** local `gh` auth, `herdr` on PATH, repo checkout cwd, delivery commands already present.
+
+### Change Log
+
+- 2026-11-03: Advance wait redesign — Phase A/B, `--local-poll-seconds` (default 10), `--skip-issue`, delivery `$MAIN` pull; see `advance-wait-redesign.md`.
 
 ---
 

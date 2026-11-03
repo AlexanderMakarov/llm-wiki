@@ -218,3 +218,31 @@
 - Local review: Approve, 0 Blockers / 4 Nits; operator kept all 4: N1 `re-prompted` log verb; N2 CHANGELOG sentence split; N3 no worker when a merged closing PR exists (`revive_agentless_worker`) + "close the tab to pause" in doc/spec; N4 pane id tie-break in adopt
 - Tests: `[adopt-no-agent-merged]` case, `test_adopt_existing_worker_agentless_tab_picks_lowest_pane_id`
 - Next: commit + PR — `Closes #347` (all requested behaviour delivered: agent-less adopted tab gets a worker, with the merged-PR guard and docs)
+
+## implement (advance-wait-redesign)
+- Branch/worktree: `feat/296-herdr-advance-wait` @ `.claude/worktrees/feat-296-herdr-advance-wait` (from origin/main pre-#382; rebase onto `39eafa3` before push)
+- Deliverable A: `delivery-flow.md`, `implement-feature.md`, `fix-bug.md`, skill, MAIN pull DoD
+- Deliverable B: Phase A/B wait, `--local-poll-seconds`, `--skip-issue`, `.herdr/`; `wait_post_merge_ci.py`
+- Tests: `test_loop_ready_issue_herdr` + `test_wait_post_merge_ci` green; ruff clean
+- Next: smoke confirm → local-review → commit-push (Relevant to #296; supersedes held #381)
+
+## smoke + local-review (advance-wait-redesign)
+- Smoke (agent-run, no live vault): pytest herdr unit + wait_post_merge_ci green; dry-run + skip dry-run OK; MAIN pull present in commands
+- Review file: `context/spec/303-loop-ready-issue-herdr/review.md` (session-only)
+- Verdict: Request changes — 3 Blockers, 9 Nits
+- Next: dedicated keep/drop → apply kept → fix → static gate → commit-push
+
+## local-review keep/drop (advance-wait-redesign)
+- Keep all findings; operator also set `--local-poll-seconds` default to **10** (not 15)
+- Applied B1–B3, N1–N9: acceptance suite + Phase A stubs; new unit tests; CHANGELOG fold; Phase A gh docs; format_advance_poll_line phase=None; None clock sentinels; gh-fail fallthrough; wait_post_merge_ci resolve_repo/try + monkeypatch; MAIN via git-common-dir; .herdr/ gitignore placement; (#N) commit note; skip from main checkout
+- Next: static gate green → commit-push (Relevant to #296)
+
+## local-review keep/drop (advance-wait-redesign)
+- Keep all findings; operator also set `--local-poll-seconds` default to **10** (not 15)
+- Applied B1–B3, N1–N9: acceptance suite + Phase A stubs; new unit tests; CHANGELOG fold; Phase A gh docs; format_advance_poll_line phase=None; None clock sentinels; gh-fail fallthrough; wait_post_merge_ci resolve_repo/try + monkeypatch; MAIN via git-common-dir; .herdr/ gitignore placement; (#N) commit note; skip from main checkout
+- Next: static gate green → commit-push (Relevant to #296)
+
+## commit-push (advance-wait-redesign)
+- Issue link: `Relevant to #296` — amends shipped herdr advance / delivery finish; does not close #296 (already delivered; this is redesign). Supersedes held PR #381 direction.
+- Why not Closes: #296 original spike shipped; this PR extends advance wait + AWOS DoD.
+- Next: open/update PR vs main; stop appending tracked flow-log after PR open

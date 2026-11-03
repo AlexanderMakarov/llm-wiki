@@ -44,7 +44,10 @@ IssueAdvanceStatus = dict[str, Any]
 
 RunGh = Callable[[list[str]], subprocess.CompletedProcess[str]]
 RunHerdr = Callable[[list[str]], subprocess.CompletedProcess[str]]
+RunGit = Callable[[list[str], Path], subprocess.CompletedProcess[str]]
 SleepFn = Callable[[float], None]
+MonotonicFn = Callable[[], float]
+LocalPhaseAClean = Callable[[Path, int], bool]
 
 _AGENT_KINDS = ("cursor", "claude", "codex")
 
@@ -74,6 +77,9 @@ _GREEN_CONCLUSIONS = frozenset({"success", "skipped", "neutral"})
 _ISSUE_TAB_LABEL_RE = re.compile(r"^issue-(\d+)$")
 
 ADVANCE_REASON_MERGED = "merge + post-merge CI α"
+_SKIP_DIR_NAME = ".herdr"
+_SKIP_FILE_NAME = "skip-issue"
+_ISSUE_MARKER_RE = re.compile(r"#(\d+)(?!\d)")
 
 
 def _issue_state_open(issue: Issue) -> bool:
@@ -300,21 +306,117 @@ def closed_without_merge_reason(status: IssueAdvanceStatus) -> str | None:
     return f"closed: {state_reason}, no merged closing PR; CI gate skipped"
 
 
+def skip_request_path(repo_root: Path = REPO_ROOT) -> Path:
+    """Gitignored operator skip file (``.herdr/skip-issue``)."""
+    return repo_root / _SKIP_DIR_NAME / _SKIP_FILE_NAME
+
+
+def write_skip_request(
+    issue_number: int,
+    repo_root: Path = REPO_ROOT,
+    *,
+    reason: str = "",
+) -> Path:
+    """Record a one-shot force-advance request for ``issue_number``."""
+    path = skip_request_path(repo_root)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lines = [str(issue_number)]
+    if reason.strip():
+        lines.append(reason.strip())
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return path
+
+
+def read_skip_request(repo_root: Path = REPO_ROOT) -> tuple[int, str] | None:
+    """Return ``(issue_number, reason)`` when a skip file exists; else ``None``."""
+    path = skip_request_path(repo_root)
+    if not path.is_file():
+        return None
+    raw = path.read_text(encoding="utf-8").strip()
+    if not raw:
+        return None
+    lines = raw.splitlines()
+    try:
+        number = int(lines[0].strip())
+    except ValueError:
+        return None
+    reason = lines[1].strip() if len(lines) > 1 else ""
+    return number, reason
+
+
+def consume_skip_request(repo_root: Path = REPO_ROOT) -> None:
+    """Remove the skip file after handling (missing file is fine)."""
+    skip_request_path(repo_root).unlink(missing_ok=True)
+
+
+def default_run_git(
+    argv: list[str],
+    repo_root: Path,
+) -> subprocess.CompletedProcess[str]:
+    """Run ``git`` with cwd at ``repo_root`` (injectable for tests)."""
+    return subprocess.run(
+        ["git", *argv],
+        cwd=repo_root,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+
+def issue_number_in_recent_log(log_text: str, issue_number: int) -> bool:
+    """True when ``#N`` appears as a whole issue token in ``git log --oneline`` output."""
+    for match in _ISSUE_MARKER_RE.finditer(log_text):
+        if int(match.group(1)) == issue_number:
+            return True
+    return False
+
+
+def local_phase_a_is_clean(
+    repo_root: Path,
+    issue_number: int,
+    *,
+    run_git: RunGit = default_run_git,
+) -> bool:
+    """Phase A clean: empty porcelain and ``#N`` in ``git log -n 10 --oneline``."""
+    status = run_git(["status", "--porcelain"], repo_root)
+    if status.stdout.strip():
+        return False
+    log_proc = run_git(["log", "-n", "10", "--oneline"], repo_root)
+    return issue_number_in_recent_log(log_proc.stdout, issue_number)
+
+
+def _status_display_ref(status: IssueAdvanceStatus) -> str:
+    """Human issue/PR/sha label for advance status lines."""
+    number = status.get("issue_number")
+    if isinstance(number, int) and number > 0:
+        return f"#{number}"
+    merge_info = status.get("merge_info") or {}
+    sha = merge_info.get("merge_commit_sha")
+    if isinstance(sha, str) and sha.strip():
+        return sha.strip()[:12]
+    return "#?"
+
+
 def format_advance_poll_line(
     status: IssueAdvanceStatus,
     poll_seconds: int,
     *,
     worker_gone: bool = False,
+    phase: str | None = None,
 ) -> str:
-    """One stdout line per not-yet-advanced GitHub poll in the α wait loop."""
-    number = status["issue_number"]
+    """One stdout line per not-yet-advanced GitHub poll in the α wait loop.
+
+    Pass ``phase="A"`` / ``"B"`` from the driver. Omit ``phase`` (default) for
+    legacy lines used by helpers such as ``wait_post_merge_ci``.
+    """
+    ref = _status_display_ref(status)
     merge_info = status["merge_info"]
     check_runs = status["check_runs"]
     if not merge_info.get("merged"):
-        line = f"#{number} open; no merged PR closes it yet"
+        line = f"{ref} open; no merged PR closes it yet"
     else:
         pr = merge_info.get("pr_number")
-        prefix = f"#{number}: PR #{pr} merged" if pr else f"#{number}: closing PR merged"
+        prefix = f"{ref}: PR #{pr} merged" if pr else f"{ref}: closing PR merged"
         if not check_runs:
             line = f"{prefix}; no check runs yet on the merge commit"
         else:
@@ -330,6 +432,12 @@ def format_advance_poll_line(
                 f"green{extra}"
             )
     gone = " (worker gone)" if worker_gone else ""
+    if phase == "B":
+        if merge_info.get("merged") and ": " in line:
+            body = line.split(": ", 1)[1]
+            line = f"{ref} Phase B: local clean; {body}"
+        elif not merge_info.get("merged"):
+            line = f"{ref} Phase B: local clean; no merged PR closes it yet"
     return f"{line} — waiting {poll_seconds}s{gone}"
 
 
@@ -603,6 +711,44 @@ def _pick_merged_pr_node(
     return merged[0]
 
 
+def fetch_check_runs_for_sha(
+    repo: str,
+    sha: str,
+    run_gh: RunGh = default_run_gh,
+) -> list[CheckRun]:
+    """Return check runs GitHub reports for ``sha`` in ``owner/name``."""
+    owner, name = parse_owner_name(repo)
+    checks_proc = run_gh(
+        [
+            "gh",
+            "api",
+            f"repos/{owner}/{name}/commits/{sha}/check-runs",
+            "--paginate",
+            "--slurp",
+        ],
+    )
+    pages = _gh_json_slurp_pages(checks_proc, f"check-runs for {sha}")
+    raw_runs: list[Any] = []
+    for page in pages:
+        if not isinstance(page, dict):
+            continue
+        page_runs = page.get("check_runs") or []
+        if isinstance(page_runs, list):
+            raw_runs.extend(page_runs)
+    out: list[CheckRun] = []
+    for row in raw_runs:
+        if not isinstance(row, dict):
+            continue
+        out.append(
+            {
+                "name": row.get("name"),
+                "status": row.get("status"),
+                "conclusion": row.get("conclusion"),
+            },
+        )
+    return out
+
+
 def fetch_issue_merge_and_ci_status(
     repo: str,
     issue_number: int,
@@ -671,36 +817,7 @@ def fetch_issue_merge_and_ci_status(
 
     sha = merge_info.get("merge_commit_sha")
     if sha:
-        checks_proc = run_gh(
-            [
-                "gh",
-                "api",
-                f"repos/{owner}/{name}/commits/{sha}/check-runs",
-                "--paginate",
-                "--slurp",
-            ],
-        )
-        pages = _gh_json_slurp_pages(
-            checks_proc,
-            f"check-runs for issue #{issue_number}",
-        )
-        raw_runs: list[Any] = []
-        for page in pages:
-            if not isinstance(page, dict):
-                continue
-            page_runs = page.get("check_runs") or []
-            if isinstance(page_runs, list):
-                raw_runs.extend(page_runs)
-        for row in raw_runs:
-            if not isinstance(row, dict):
-                continue
-            check_runs.append(
-                {
-                    "name": row.get("name"),
-                    "status": row.get("status"),
-                    "conclusion": row.get("conclusion"),
-                },
-            )
+        check_runs = fetch_check_runs_for_sha(repo, str(sha), run_gh)
 
     return {
         "issue_number": issue_number,
@@ -727,13 +844,16 @@ def format_queue_counts_line(
 def format_loop_params_line(
     *,
     poll_seconds: int,
+    local_poll_seconds: int,
     agent_kind: str,
     once: bool,
 ) -> str:
     """Startup line describing how this driver invocation will behave."""
     mode = "once" if once else "loop"
     return (
-        f"params: poll-seconds={poll_seconds}; agent-kind={agent_kind}; mode={mode}"
+        f"params: poll-seconds={poll_seconds}; "
+        f"local-poll-seconds={local_poll_seconds}; "
+        f"agent-kind={agent_kind}; mode={mode}"
     )
 
 
@@ -955,10 +1075,20 @@ def load_skill_text(skill_path: Path | None = None) -> str:
     return _MINIMAL_SKILL_FALLBACK
 
 
-def build_worker_prompt(skill_text: str, issue_url: str) -> str:
+def build_worker_prompt(
+    skill_text: str,
+    issue_url: str,
+    *,
+    main_checkout: Path | None = None,
+) -> str:
     """Inline skill plus the one-ticket issue URL for ``herdr agent prompt``."""
     url = issue_url.strip()
-    return f"{skill_text.rstrip()}\n\n---\nDeliver this issue only:\n{url}\n"
+    main_line = ""
+    if main_checkout is not None:
+        main_line = f"\nMAIN={main_checkout}\n"
+    return (
+        f"{skill_text.rstrip()}\n\n---\nDeliver this issue only:\n{url}{main_line}"
+    )
 
 
 def format_worker_gone_warning(
@@ -1023,6 +1153,7 @@ def spawn_worker_for_issue(
         issue,
         str(pane_id),
         agent_kind=agent_kind,
+        repo_root=repo_root,
         run_herdr=run_herdr,
         skill_path=skill_path,
     )
@@ -1039,6 +1170,7 @@ def start_worker_agent(
     pane_id: str,
     *,
     agent_kind: str,
+    repo_root: Path = REPO_ROOT,
     run_herdr: RunHerdr = default_run_herdr,
     skill_path: Path | None = None,
 ) -> None:
@@ -1059,7 +1191,11 @@ def start_worker_agent(
     )
     _herdr_require_ok(start_proc, "herdr agent start")
 
-    prompt_text = build_worker_prompt(load_skill_text(skill_path), issue_url)
+    prompt_text = build_worker_prompt(
+        load_skill_text(skill_path),
+        issue_url,
+        main_checkout=repo_root,
+    )
     prompt_proc = run_herdr(
         ["herdr", "agent", "prompt", str(pane_id), prompt_text],
     )
@@ -1324,12 +1460,37 @@ def revive_agentless_worker(
 _MAX_CONSECUTIVE_FETCH_FAILURES = 5
 
 
+def _seconds_until_next_wait_tick(
+    *,
+    phase: str,
+    poll_seconds: int,
+    local_poll_seconds: int,
+    last_gh_at: float | None,
+    last_local_at: float | None,
+    now: float,
+) -> float:
+    """Seconds until the next GitHub poll or Phase A local poll (whichever is sooner)."""
+    gh_remaining = (
+        0.0 if last_gh_at is None else poll_seconds - (now - last_gh_at)
+    )
+    if phase == "A":
+        local_remaining = (
+            0.0
+            if last_local_at is None
+            else local_poll_seconds - (now - last_local_at)
+        )
+        return max(0.001, min(gh_remaining, local_remaining))
+    return max(0.001, gh_remaining)
+
+
 def wait_until_ticket_advanced(
     repo: str,
     worker: WorkerHandle,
     poll_seconds: int,
     *,
     label: str,
+    local_poll_seconds: int = 10,
+    repo_root: Path = REPO_ROOT,
     run_gh: RunGh = default_run_gh,
     run_herdr: RunHerdr = default_run_herdr,
     sleep_fn: SleepFn = time.sleep,
@@ -1337,47 +1498,132 @@ def wait_until_ticket_advanced(
         [str, int, RunGh],
         IssueAdvanceStatus,
     ] = fetch_issue_merge_and_ci_status,
+    local_phase_a_clean: LocalPhaseAClean | None = None,
+    monotonic_fn: MonotonicFn = time.monotonic,
 ) -> str:
     """Block until ``worker``'s issue advances; return the advance reason.
 
-    Order per poll: a merged closing PR waits for α (non-empty, all-green
-    post-merge CI) even though GitHub already auto-closed the issue; otherwise a
-    CLOSED issue advances at once (CI gate skipped); otherwise keep waiting and
-    print one status line. ``herdr agent wait`` is interleaved while the worker
-    is live.
+    **Path 1 (merged closing PR):** Phase A (local git + rare Path-2 ``gh`` polls)
+    then Phase B (GitHub α plus issue CLOSED). **Path 2:** closed without merged PR
+    — GitHub only, CI skipped. ``herdr agent wait`` is interleaved between ticks.
     """
     if poll_seconds < 1:
         raise ValueError("poll_seconds must be >= 1")
-    timeout_ms = poll_seconds * 1000
+    if local_poll_seconds < 10 or local_poll_seconds > 30:
+        raise ValueError("local_poll_seconds must be between 10 and 30")
+    local_fn = local_phase_a_clean or local_phase_a_is_clean
+    phase = "A"
     consecutive_fetch_failures = 0
+    last_gh_at: float | None = None
+    last_local_at: float | None = None
 
     while True:
-        try:
-            status = fetch_status(repo, worker.issue_number, run_gh)
-        except RuntimeError as exc:
-            consecutive_fetch_failures += 1
+        now = monotonic_fn()
+        skip = read_skip_request(repo_root)
+        if skip is not None:
+            skip_num, skip_reason = skip
+            if skip_num == worker.issue_number:
+                consume_skip_request(repo_root)
+                detail = skip_reason.strip() or "operator skip"
+                print(
+                    f"WARNING: advancing #{skip_num} via operator skip ({detail})",
+                    file=sys.stderr,
+                )
+                return f"operator skip: {detail}"
             print(
-                f"GitHub advance poll for #{worker.issue_number} failed "
-                f"({consecutive_fetch_failures}/{_MAX_CONSECUTIVE_FETCH_FAILURES}): "
-                f"{exc}\n"
-                f"  Worker for #{worker.issue_number} keeps running — the driver only "
-                f"uses this poll to decide when to start the *next* ticket; retrying "
-                f"in {poll_seconds}s.",
+                f"WARNING: skip file requests #{skip_num} but #{worker.issue_number} "
+                "is in flight; clearing stale skip file",
                 file=sys.stderr,
             )
-            if consecutive_fetch_failures >= _MAX_CONSECUTIVE_FETCH_FAILURES:
-                raise
-            sleep_fn(poll_seconds)
-            continue
-        consecutive_fetch_failures = 0
+            consume_skip_request(repo_root)
 
-        if advance_ready(status["merge_info"], status["check_runs"]):
-            return ADVANCE_REASON_MERGED
-        closed_reason = closed_without_merge_reason(status)
-        if closed_reason:
-            return closed_reason
-        print(format_advance_poll_line(status, poll_seconds, worker_gone=worker.gone))
+        gh_due = last_gh_at is None or (now - last_gh_at) >= poll_seconds
+        local_due = phase == "A" and (
+            last_local_at is None or (now - last_local_at) >= local_poll_seconds
+        )
 
+        if gh_due:
+            last_gh_at = now
+            try:
+                status = fetch_status(repo, worker.issue_number, run_gh)
+            except RuntimeError as exc:
+                consecutive_fetch_failures += 1
+                print(
+                    f"GitHub advance poll for #{worker.issue_number} failed "
+                    f"({consecutive_fetch_failures}/"
+                    f"{_MAX_CONSECUTIVE_FETCH_FAILURES}): "
+                    f"{exc}\n"
+                    f"  Worker for #{worker.issue_number} keeps running — the driver "
+                    f"only uses this poll to decide when to start the *next* ticket; "
+                    f"retrying in {poll_seconds}s.",
+                    file=sys.stderr,
+                )
+                if consecutive_fetch_failures >= _MAX_CONSECUTIVE_FETCH_FAILURES:
+                    raise
+                # Fall through so Phase A local polls and herdr wait still run.
+            else:
+                consecutive_fetch_failures = 0
+                closed_reason = closed_without_merge_reason(status)
+                if closed_reason:
+                    return closed_reason
+                if phase == "B":
+                    issue_closed = (
+                        str(status.get("issue_state") or "").upper() == "CLOSED"
+                    )
+                    if (
+                        issue_closed
+                        and status["merge_info"].get("merged")
+                        and advance_ready(status["merge_info"], status["check_runs"])
+                    ):
+                        return ADVANCE_REASON_MERGED
+                    print(
+                        format_advance_poll_line(
+                            status,
+                            poll_seconds,
+                            worker_gone=worker.gone,
+                            phase="B",
+                        ),
+                    )
+                elif status["merge_info"].get("merged"):
+                    print(
+                        f"#{worker.issue_number} Phase A: merged on GitHub; "
+                        "main checkout not updated yet — "
+                        f"next local poll {local_poll_seconds}s",
+                    )
+                else:
+                    print(
+                        format_advance_poll_line(
+                            status,
+                            poll_seconds,
+                            worker_gone=worker.gone,
+                            phase="A",
+                        ),
+                    )
+
+        if local_due:
+            last_local_at = now
+            if local_fn(repo_root, worker.issue_number):
+                phase = "B"
+                print(
+                    f"#{worker.issue_number} Phase A: local clean; "
+                    "entering Phase B (GitHub α)",
+                )
+            else:
+                print(
+                    f"#{worker.issue_number} Phase A: waiting for "
+                    f"#{worker.issue_number} in git log -n 10 (local only) — "
+                    f"next local poll {local_poll_seconds}s",
+                )
+
+        wait_seconds = _seconds_until_next_wait_tick(
+            phase=phase,
+            poll_seconds=poll_seconds,
+            local_poll_seconds=local_poll_seconds,
+            last_gh_at=last_gh_at,
+            last_local_at=last_local_at,
+            now=monotonic_fn(),
+        )
+        timeout_ms = int(wait_seconds * 1000)
         if not worker.gone:
             wait_proc = run_herdr(
                 [
@@ -1403,7 +1649,7 @@ def wait_until_ticket_advanced(
                     )
                     worker.warned_gone = True
 
-        sleep_fn(poll_seconds)
+        sleep_fn(wait_seconds)
 
 
 def run_main_loop(
@@ -1413,11 +1659,13 @@ def run_main_loop(
     poll_seconds: int,
     once: bool,
     *,
+    local_poll_seconds: int = 10,
     run_gh: RunGh = default_run_gh,
     run_herdr: RunHerdr = default_run_herdr,
     sleep_fn: SleepFn = time.sleep,
     repo_root: Path = REPO_ROOT,
     workspace: str | None = None,
+    local_phase_a_clean: LocalPhaseAClean | None = None,
 ) -> int:
     """Startup summary, then serial spawn → wait → advance until ``once`` or Ctrl+C.
 
@@ -1447,6 +1695,7 @@ def run_main_loop(
     print(
         format_loop_params_line(
             poll_seconds=poll_seconds,
+            local_poll_seconds=local_poll_seconds,
             agent_kind=agent_kind,
             once=once,
         ),
@@ -1516,9 +1765,12 @@ def run_main_loop(
                 worker,
                 poll_seconds,
                 label=label,
+                local_poll_seconds=local_poll_seconds,
+                repo_root=repo_root,
                 run_gh=run_gh,
                 run_herdr=run_herdr,
                 sleep_fn=sleep_fn,
+                local_phase_a_clean=local_phase_a_clean,
             )
             close_worker_tab(worker, run_herdr)
             print(f"Advanced #{number} ({reason}); worker tab closed.")
@@ -1612,6 +1864,25 @@ def build_parser() -> argparse.ArgumentParser:
         help="GitHub merge/CI poll interval and empty-queue refresh (default: 300)",
     )
     ap.add_argument(
+        "--local-poll-seconds",
+        type=int,
+        default=10,
+        metavar="SEC",
+        help="Phase A local git poll interval, 10–30 (default: 10)",
+    )
+    ap.add_argument(
+        "--skip-issue",
+        type=int,
+        metavar="N",
+        help="Write a gitignored skip request to force-advance issue #N (one-shot)",
+    )
+    ap.add_argument(
+        "--skip-reason",
+        metavar="TEXT",
+        default="",
+        help="Optional reason line stored with --skip-issue",
+    )
+    ap.add_argument(
         "--once",
         action="store_true",
         help="Process at most one ticket then exit",
@@ -1632,6 +1903,27 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.skip_issue is not None:
+        # Skip file is relative to this script's checkout — run from the same
+        # main checkout as the driver (not a gate worktree).
+        if args.dry_run:
+            path = skip_request_path(REPO_ROOT)
+            print(
+                f"dry-run: would write skip for #{args.skip_issue} to {path}",
+            )
+            if args.skip_reason.strip():
+                print(f"  reason: {args.skip_reason.strip()}")
+            return 0
+        path = write_skip_request(
+            args.skip_issue,
+            REPO_ROOT,
+            reason=args.skip_reason,
+        )
+        print(f"Wrote operator skip for #{args.skip_issue} to {path}")
+        return 0
+    if args.local_poll_seconds < 10 or args.local_poll_seconds > 30:
+        print("--local-poll-seconds must be between 10 and 30", file=sys.stderr)
+        return 2
     workspace = resolve_workspace(args.workspace, dry_run=args.dry_run)
     if args.dry_run:
         try:
@@ -1648,6 +1940,7 @@ def main(argv: list[str] | None = None) -> int:
             args.agent_kind,
             args.poll_seconds,
             args.once,
+            local_poll_seconds=args.local_poll_seconds,
             workspace=workspace,
         )
     except RuntimeError as exc:

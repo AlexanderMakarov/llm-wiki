@@ -168,6 +168,9 @@ playwright-report/
 # with real MCP session telemetry, which must never reach a public repo.
 .worktree-vault/
 
+# Herdr driver operator skip requests (see loop_ready_issue_herdr --skip-issue).
+.herdr/
+
 # ─── Wiki helper pages (generated locally) ───────────────────────────────
 wiki/help.md
 

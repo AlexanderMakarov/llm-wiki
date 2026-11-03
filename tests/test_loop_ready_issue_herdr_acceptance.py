@@ -227,6 +227,7 @@ def test_acceptance_run_main_loop_resumes_in_progress_before_queue_head(
         run_herdr=fake_run_herdr,
         sleep_fn=lambda _s: None,
         repo_root=REPO,
+        local_phase_a_clean=lambda _r, _n: True,
     )
     captured = capsys.readouterr()
     assert code == 0
@@ -290,7 +291,8 @@ def test_acceptance_early_close_warning_text_contract(loop_mod, capsys):
         )
         return {
             "issue_number": issue_number,
-            "merge_info": {"merged": merged},
+            "issue_state": "CLOSED" if merged else "OPEN",
+            "merge_info": {"merged": merged, "pr_number": 77 if merged else None},
             "check_runs": check_runs,
         }
 
@@ -298,15 +300,26 @@ def test_acceptance_early_close_warning_text_contract(loop_mod, capsys):
         body = json.dumps({"error": {"code": "agent_not_found", "message": "gone"}})
         return subprocess.CompletedProcess(argv, 1, body, "")
 
+    clock = {"t": 100.0}
+
+    def monotonic_fn() -> float:
+        return clock["t"]
+
+    def sleep_fn(seconds: float) -> None:
+        clock["t"] += seconds
+
     loop_mod.wait_until_ticket_advanced(
         "o/r",
         worker,
         15,
         label=CUSTOM_LABEL,
+        local_poll_seconds=10,
         run_gh=lambda _a: subprocess.CompletedProcess([], 0, "", ""),
         run_herdr=fake_herdr,
-        sleep_fn=lambda _s: None,
+        sleep_fn=sleep_fn,
+        monotonic_fn=monotonic_fn,
         fetch_status=fake_fetch,
+        local_phase_a_clean=lambda _r, _n: True,
     )
     err = capsys.readouterr().err
     assert "WARNING: worker for issue #77 disappeared before merge+CI advance (α)." in err
@@ -444,11 +457,12 @@ def test_acceptance_run_main_loop_once_single_worker(
         run_herdr=fake_run_herdr,
         sleep_fn=lambda _s: None,
         repo_root=REPO,
+        local_phase_a_clean=lambda _r, _n: True,
     )
     out = capsys.readouterr().out
     assert code == 0
     assert f"1 with {CUSTOM_LABEL!r} label, 1 is assigned on {LOGIN!r}" in out
-    assert "params: poll-seconds=300; agent-kind=cursor; mode=once" in out
+    assert "params: poll-seconds=300; local-poll-seconds=10; agent-kind=cursor; mode=once" in out
     assert "Advanced #11 (merge + post-merge CI α); worker tab closed." in out
     if existing_tab and not tab_has_agent and pr_merged:
         assert spawn_events == ["close"]
@@ -490,6 +504,7 @@ def test_acceptance_empty_queue_once_exits_without_sleep(loop_mod, capsys):
         run_gh=fake_run_gh,
         run_herdr=fake_run_herdr,
         sleep_fn=sleeps.append,
+        local_phase_a_clean=lambda _r, _n: True,
     )
     assert code == 0
     assert sleeps == []
@@ -572,6 +587,7 @@ def test_acceptance_startup_sweep_closes_tabs_of_closed_issues(loop_mod, capsys)
         run_gh=fake_run_gh,
         run_herdr=fake_run_herdr,
         sleep_fn=lambda _s: None,
+        local_phase_a_clean=lambda _r, _n: True,
     )
     out = capsys.readouterr().out
     assert code == 0
@@ -628,6 +644,7 @@ def test_acceptance_issue_closed_without_merge_advances_and_closes_tab(loop_mod,
         run_herdr=fake_run_herdr,
         sleep_fn=no_sleep,
         repo_root=REPO,
+        local_phase_a_clean=lambda _r, _n: True,
     )
     out = capsys.readouterr().out
     assert code == 0
@@ -703,6 +720,7 @@ def test_acceptance_worker_tabs_stay_in_driver_workspace(loop_mod, monkeypatch, 
         sleep_fn=lambda _s: None,
         repo_root=REPO,
         workspace="wD",
+        local_phase_a_clean=lambda _r, _n: True,
     )
 
     assert code == 0
