@@ -9,25 +9,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
-
-from llmwiki import build as build_mod
 from llmwiki.synth.pipeline import _load_state, refresh_synth_pending, source_synth_is_done
 from llmwiki.synth.state_backfill import (
     backfill_synth_state_from_wiki_pages,
-    is_shipped_demo_vault,
+    reconcile_synth_state_from_wiki_pages,
 )
-
-
-def test_is_shipped_demo_vault_true_for_repo_demo(tmp_path: Path, monkeypatch) -> None:
-    demo = tmp_path / "demo"
-    demo.mkdir()
-    monkeypatch.setattr(
-        "llmwiki.synth.state_backfill.SHIPPED_DEMO_VAULT",
-        demo,
-    )
-    assert is_shipped_demo_vault(demo) is True
-    assert is_shipped_demo_vault(tmp_path / "other") is False
 
 
 def test_backfill_stamps_mtime_when_wiki_page_covers_raw(tmp_path: Path) -> None:
@@ -60,11 +46,9 @@ def test_backfill_stamps_mtime_when_wiki_page_covers_raw(tmp_path: Path) -> None
     assert source_synth_is_done(rel, files, current) is True
 
 
-def test_demo_reconcile_refreshes_pipeline_after_stale_files(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Shipped-demo reconcile must refresh pending/pipeline, not only ``synth.files``."""
-    vault = tmp_path / "shipped-demo"
+def test_reconcile_script_refreshes_pipeline_after_stale_files(tmp_path: Path) -> None:
+    """Maintainer script must refresh pending/pipeline, not only ``synth.files``."""
+    vault = tmp_path / "vault"
     vault.mkdir()
     (vault / "raw" / "sessions").mkdir(parents=True)
     raw_doc = vault / "raw" / "docs" / "guides" / "hello.md"
@@ -107,14 +91,10 @@ def test_demo_reconcile_refreshes_pipeline_after_stale_files(
         ),
         encoding="utf-8",
     )
-    monkeypatch.setattr("llmwiki.synth.state_backfill.SHIPPED_DEMO_VAULT", vault)
-    monkeypatch.setattr(build_mod, "is_shipped_demo_vault", lambda root: root == vault)
 
-    build_mod._reconcile_shipped_demo_synth_state(
-        content_root=vault,
-        raw_dir=vault / "raw",
-        wiki_sources=vault / "wiki" / "sources",
-    )
+    upserts, errors = reconcile_synth_state_from_wiki_pages(vault=vault)
+    assert errors == []
+    assert upserts >= 0
 
     after = json.loads((vault / "llmwiki-state.json").read_text(encoding="utf-8"))
     assert after["synth"]["pending_total"] == 0
@@ -123,32 +103,6 @@ def test_demo_reconcile_refreshes_pipeline_after_stale_files(
     )
     assert docs_row["pending"] == 0
     assert docs_row["synthesized"] == 1
-
-
-def test_build_reconcile_skips_non_shipped_vault(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    backfill_calls: list[Path] = []
-    refresh_calls: list[Path] = []
-
-    def _fake_backfill(*, vault: Path, dry_run: bool = False) -> tuple[int, list[str]]:
-        backfill_calls.append(vault)
-        return 0, []
-
-    def _fake_refresh(**kwargs: object) -> dict[str, object]:
-        refresh_calls.append(kwargs["state_file"])  # type: ignore[index]
-        return {}
-
-    monkeypatch.setattr(build_mod, "backfill_synth_state_from_wiki_pages", _fake_backfill)
-    monkeypatch.setattr(build_mod, "refresh_synth_pending", _fake_refresh)
-    monkeypatch.setattr(build_mod, "is_shipped_demo_vault", lambda root: False)
-    build_mod._reconcile_shipped_demo_synth_state(
-        content_root=tmp_path / "demo",
-        raw_dir=tmp_path / "demo" / "raw",
-        wiki_sources=tmp_path / "demo" / "wiki" / "sources",
-    )
-    assert backfill_calls == []
-    assert refresh_calls == []
 
 
 def test_refresh_pending_pending_docs_drop_after_backfill(tmp_path: Path) -> None:

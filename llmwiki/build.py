@@ -122,10 +122,6 @@ from llmwiki.synth.claude_cli import ClaudeCLIError, ClaudeCLISynthesizer
 from llmwiki.synth.cursor_cli import CursorCLIError
 from llmwiki.synth.ollama import OllamaError
 from llmwiki.synth.pipeline import refresh_synth_pending, resolve_backend
-from llmwiki.synth.state_backfill import (
-    backfill_synth_state_from_wiki_pages,
-    is_shipped_demo_vault,
-)
 from llmwiki.tag_utils import NOISE_TAGS
 from llmwiki.topics import (
     CURATED_KIND_FOLDERS,
@@ -3285,43 +3281,6 @@ def synthesize_overview(
 
 # ─── main ──────────────────────────────────────────────────────────────────
 
-def _reconcile_shipped_demo_synth_state(
-    *,
-    content_root: Path,
-    raw_dir: Path,
-    wiki_sources: Path,
-) -> None:
-    """Reconcile shipped ``demo/`` synth state before the Home Pipeline widget (#255).
-
-    Upserts ``synth.files`` mtimes for sessions/docs whose ``wiki/sources/`` pages
-    are non-stub and rewrite-clear (offline — same helper as ``migrate
-    topic-kinds``), then runs ``refresh_synth_pending`` so ``synth.pipeline`` /
-    ``synth.pending`` match those fingerprints. Only when ``content_root`` is the
-    package's bundled ``REPO_ROOT/demo`` vault.
-    """
-    if not is_shipped_demo_vault(content_root):
-        return
-    upserts, errors = backfill_synth_state_from_wiki_pages(
-        vault=content_root, dry_run=False
-    )
-    if errors:
-        for err in errors:
-            print(f"  warning: demo synth state reconcile: {err}", file=sys.stderr)
-        return
-    if upserts:
-        print(
-            f"  demo synth state: reconciled {upserts} "
-            f"`synth.files` mtime entr{'y' if upserts == 1 else 'ies'} from wiki pages"
-        )
-    state_path = content_root / "llmwiki-state.json"
-    refresh_synth_pending(
-        raw_dir=raw_dir / "sessions",
-        docs_dir=raw_dir / "docs",
-        wiki_sources_dir=wiki_sources,
-        state_file=state_path,
-    )
-
-
 def _ensure_synth_pipeline_snapshot(
     *,
     content_root: Path,
@@ -3604,12 +3563,6 @@ def build_site(
             if retrieved.isdisjoint(keys):
                 dead.append(rel)
     dead_total = len(dead)
-    # #255: shipped demo/ — offline synth.files + pending/pipeline refresh.
-    _reconcile_shipped_demo_synth_state(
-        content_root=content_root,
-        raw_dir=raw_dir,
-        wiki_sources=wiki_sources,
-    )
     # #70: one-shot backfill when llmwiki-state.json predates synth.pipeline
     # (v1.4→v1.5). Skip when the expected shape is already present.
     _ensure_synth_pipeline_snapshot(

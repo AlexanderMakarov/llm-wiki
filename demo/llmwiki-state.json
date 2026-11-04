@@ -4,15 +4,15 @@
       "last_compacted_at": "",
       "max_completed": 500
     },
-    "revision": 654,
+    "revision": 663,
     "schema_version": 1,
-    "updated_at": "2026-11-03T18:10:16Z"
+    "updated_at": "2026-11-04T19:42:56Z"
   },
   "ops": {
-    "last_build_at": "2026-10-21T19:48:41Z",
+    "last_build_at": "2026-11-04T19:42:43Z",
     "last_lint_error": "",
-    "last_lint_report": "",
-    "last_lint_run_at": "2026-10-21T19:48:24Z",
+    "last_lint_report": "  scanned 202 pages\n  15 issues: 0 errors, 0 warnings, 15 info\n  skipped 2 of 21 rules (disabled in llmwiki.json):\n    - content_freshness \u2014 The demo is a committed snapshot, so this check measures elapsed calendar time since the snapshot was taken rather than a defect in it. Refreshing the demo more often is the honest cure and is tracked separately.\n    - title_ambiguity \u2014 The demo deliberately keeps near-duplicate titles (substring collisions, republished sources) so findability behaviour is visible; treating those as gate failures would redden the published example on every run. Exact findability for the demo is asserted by the #197 acceptance test instead.\n\n## claim_verification (3)\n  [info] entities/Frontmatter.md: page makes claims but cites no sources\n  [info] entities/GitHub Actions.md: page makes claims but cites no sources\n  [info] entities/Ollama.md: page makes claims but cites no sources\n\n## page_findability (1)\n  [info] : checked 200 of 200 titled wiki pages\n\n## search_consistency (3)\n  [info] : absent terms: zzabsentterm0000, zzabsentterm0001, zzabsentterm0002, zzabsentterm0003, zzabsentterm0004\n  [info] : present terms: Assistant, Conversation, Project, Session, Unreleased, almost, bigger, checks, column, completions, describes, duplicate, e34d65, entrypoint, failed, fe532e, halfway, headless, installed, interrupts, loaded, marking, mid-way, mismatch, output, precondition, python3, re-runs, reference, results, schema, search, session-transcript, shell-startup-profiling, skipped, startup, tool_calls, trailhead-api, usable, warranted\n  [info] : survival share: 90% of sampled session terms also appear in wiki pages (informational; never a failure)\n\n## stale_candidates (8)\n  [info] candidates/concepts/REST API.md: candidate 'REST API' is 37 days old (threshold 30) \u2014 review with `/wiki-candidates`\n  [info] candidates/concepts/Time Series.md: candidate 'Time Series' is 57 days old (threshold 30) \u2014 review with `/wiki-candidates`\n  [info] candidates/entities/CLAUDE.md.md: candidate 'CLAUDE.md' is 37 days old (threshold 30) \u2014 review with `/wiki-candidates`\n  [info] candidates/entities/Configuration Reference.md: candidate 'Configuration Reference' is 37 days old (threshold 30) \u2014 review with `/wiki-candidates`\n  [info] candidates/entities/Dotfiles.md: candidate 'Dotfiles' is 57 days old (threshold 30) \u2014 review with `/wiki-candidates`\n  [info] candidates/entities/Logseq.md: candidate 'Logseq' is 36 days old (threshold 30) \u2014 review with `/wiki-candidates`\n  [info] candidates/entities/pocket-ledger.md: candidate 'pocket-ledger' is 57 days old (threshold 30) \u2014 review with `/wiki-candidates`\n  [info] candidates/entities/recipe-box.md: candidate 'recipe-box' is 57 days old (threshold 30) \u2014 review with `/wiki-candidates`",
+    "last_lint_run_at": "2026-11-04T19:42:56Z",
     "last_lint_status": "ok",
     "last_queue_run_at": "2026-10-21T19:48:13Z",
     "last_reflect_run_at": "",
@@ -693,7 +693,7 @@
       }
     ],
     "pending_total": 40,
-    "pending_updated_at": "2026-11-03T18:10:16Z",
+    "pending_updated_at": "2026-11-04T19:42:39Z",
     "pipeline": {
       "rows": [
         {
@@ -765,8 +765,8 @@
       },
       "to_review_stale": 8,
       "trusted_concepts": 4,
-      "trusted_entities": 9,
-      "updated_at": "2026-11-03T18:10:16Z"
+      "trusted_entities": 7,
+      "updated_at": "2026-11-04T19:42:39Z"
     }
   }
 }

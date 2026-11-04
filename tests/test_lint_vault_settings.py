@@ -54,7 +54,11 @@ def warning_vault(tmp_path: Path) -> Path:
     finding at every threshold — the opt-out, not the threshold, is what
     silences it here.
     """
-    _page(tmp_path / "wiki", "entities/Foo.md", "## Connections\n- [[Bar]]")
+    _page(
+        tmp_path / "wiki",
+        "entities/Foo.md",
+        "## Key Facts\n- Foo is a fixture entity.\n\n## Connections\n- [[Bar]]",
+    )
     return tmp_path
 
 

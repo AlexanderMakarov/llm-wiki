@@ -6,7 +6,7 @@ Live example: [alexandermakarov.github.io/llm-wiki](https://alexandermakarov.git
 
 > **This repository (#213):** `pages.yml` publishes on every version tag (`v*.*.*`) and on manual **Run workflow**. Deploy on every push to `main` stays off (#69) — the demo tracks releases, not merges; restore `push:` if you want each merge to republish. The published site is built from the committed `demo/` vault: `demo/raw/sessions/` (demo sessions), `demo/raw/docs/` (product docs), `demo/wiki/` (pre-synthesized pages, committed so CI stays free/deterministic), `demo/usage/` (MCP telemetry fixtures for Analytics), and `demo/llmwiki-state.json` (+ `.js` sidecar).
 >
-> **Home Pipeline (#255):** `llmwiki build --vault demo` (from this package checkout — not an arbitrary path named `demo`) upserts offline `synth.files` from on-disk `wiki/sources/` coverage, then refreshes `synth.pipeline` / `synth.pending` (no LLM) so Pages does not show a false backlog when source pages already exist. The build may update `demo/llmwiki-state.json`; refresh and commit state when cutting a release ([`RELEASE_PROCESS.md`](../maintainers/RELEASE_PROCESS.md)).
+> **Home Pipeline (#255):** Before `llmwiki build`, run `python3 scripts/reconcile_synth_state_from_wiki.py --vault demo` (Pages CI does this automatically). That upserts offline `synth.files` from on-disk `wiki/sources/` coverage and refreshes `synth.pipeline` / `synth.pending` (no LLM) so Home does not show a false backlog when source pages already exist. Commit refreshed `demo/llmwiki-state.json` when cutting a release ([`RELEASE_PROCESS.md`](../maintainers/RELEASE_PROCESS.md)).
 
 ## Prerequisites
 
@@ -39,7 +39,7 @@ The repo ships with `.github/workflows/pages.yml` which:
 
 1. Checks out the code
 2. Installs Python 3.12 and the `markdown` dependency
-3. Runs `llmwiki build --vault demo --out ./site` against the committed `demo/` vault
+3. Runs `scripts/reconcile_synth_state_from_wiki.py --vault demo`, then `llmwiki build --vault demo --out ./site` against the committed `demo/` vault
 4. Adds `.nojekyll` so Pages serves `_`-prefixed paths
 5. Uploads and deploys the artifact
 

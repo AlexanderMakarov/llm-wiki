@@ -1,37 +1,23 @@
-"""Offline ``synth.files`` backfill when wiki pages already cover raw sources (#255).
+"""Offline ``synth.files`` backfill when wiki pages already cover raw sources.
 
-Shared by ``migrate topic-kinds`` (#174) and the shipped ``demo/`` vault so Home
-Pipeline state matches on-disk wiki coverage without an LLM synth pass.
+Used by ``migrate topic-kinds`` (#174) and ``scripts/reconcile_synth_state_from_wiki.py``
+(#255 maintainer / Pages workflow).
 """
 
 from __future__ import annotations
 
 from pathlib import Path
 
-from llmwiki import REPO_ROOT
 from llmwiki._frontmatter import is_subagent, parse_frontmatter
 from llmwiki.synth.pipeline import (
     _load_state,
     _save_state,
     page_is_stub,
     page_needs_topics_rewrite,
+    refresh_synth_pending,
     source_page_paths,
     synth_page_filename,
 )
-
-SHIPPED_DEMO_VAULT = REPO_ROOT / "demo"
-
-
-def is_shipped_demo_vault(content_root: Path) -> bool:
-    """True when ``content_root`` is this package's bundled ``demo/`` vault directory.
-
-    Compares resolved paths to ``REPO_ROOT / "demo"`` (the checkout that contains
-    ``llmwiki/``). A different clone path named ``demo`` is not treated as shipped.
-    """
-    try:
-        return Path(content_root).expanduser().resolve() == SHIPPED_DEMO_VAULT.resolve()
-    except OSError:
-        return False
 
 
 def _relative(path: Path, root: Path) -> str:
@@ -162,4 +148,19 @@ def backfill_synth_state_from_wiki_pages(
         except OSError as exc:
             errors.append(f"{state_file.name}: {exc}")
             return upserts, errors
+    return upserts, errors
+
+
+def reconcile_synth_state_from_wiki_pages(*, vault: Path) -> tuple[int, list[str]]:
+    """Backfill ``synth.files`` then refresh ``synth.pending`` / pipeline for ``vault``."""
+    vault = vault.expanduser().resolve()
+    upserts, errors = backfill_synth_state_from_wiki_pages(vault=vault, dry_run=False)
+    if errors:
+        return upserts, errors
+    refresh_synth_pending(
+        raw_dir=vault / "raw" / "sessions",
+        docs_dir=vault / "raw" / "docs",
+        wiki_sources_dir=vault / "wiki" / "sources",
+        state_file=vault / "llmwiki-state.json",
+    )
     return upserts, errors

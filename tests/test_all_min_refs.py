@@ -215,7 +215,11 @@ def warning_vault(tmp_path: Path) -> Path:
     the opt-out, not the threshold, is what can silence it here.
     """
     (tmp_path / "raw" / "sessions").mkdir(parents=True)
-    _entity(tmp_path / "wiki", "Foo", "## Connections\n- [[Bar]]")
+    _entity(
+        tmp_path / "wiki",
+        "Foo",
+        "## Key Facts\n- Foo is a fixture entity.\n\n## Connections\n- [[Bar]]",
+    )
     return tmp_path
 
 

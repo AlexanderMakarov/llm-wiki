@@ -420,6 +420,14 @@ def _finish(
         ["build", "--vault", str(vault), "--out", str(repo / DEMO_SITE_REL),
          "--local-root", LOCAL_ROOT],
     )
+    from llmwiki.synth.state_backfill import reconcile_synth_state_from_wiki_pages
+
+    _upserts, reconcile_errors = reconcile_synth_state_from_wiki_pages(vault=vault)
+    if reconcile_errors:
+        for err in reconcile_errors:
+            print(f"warning: {err}", file=sys.stderr)
+        print("error: reconcile_synth_state_from_wiki failed", file=sys.stderr)
+        return 1
     for argv in follow_ups:
         proc = _run_llmwiki(exe, repo, argv)
         if proc.returncode != 0:

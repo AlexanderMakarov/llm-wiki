@@ -31,7 +31,7 @@ This quote encapsulates both the diagnosis (repeated rounding causes drift) and 
   - fact: Imported CSV amounts were accumulating rounding errors (~4 cents per 600 rows) due to per-row float rounding
 - [[Floating-Point Arithmetic]] (concept) — The core technical problem addressed in this fix
   - fact: Switching to integer minor-unit representation and applying rounding only at presentation boundary eliminates cumulative drift
-- [[Python]] (entity) — Programming language used for implementation and testing
+- Python (programming language) — used for implementation and testing
 - [[pytest]] (entity) — Testing framework used for regression validation
 
 ## Contradictions

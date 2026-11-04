@@ -79,3 +79,6 @@ def _no_real_scheduler_discovery(monkeypatch):
         "llmwiki.automation_units.discover_local_units",
         lambda **_: DiscoveryResult(units=(), unavailable=None),
     )
+
+
+from tests.support.curated_topics_demo import curated_demo_build  # noqa: F401, E402
