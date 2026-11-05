@@ -2,7 +2,8 @@
 
 Guards:
   - Every ``from llmwiki…`` / ``import llmwiki…`` in tracked ``docs/`` Python
-    fences resolves (``docs/adapter-authoring.md`` excluded — placeholder adapters).
+    fences (`` ```python `` or `` ```py ``) resolves (``docs/adapter-authoring.md``
+    excluded — placeholder adapters).
   - Every relative path linked from a tracked README names a path on disk.
   - Every AWOS context-gate armed prefix is a real directory.
 """
@@ -43,7 +44,7 @@ def _python_fences(text: str) -> list[str]:
     index = 0
     while index < len(lines):
         line = lines[index].strip()
-        if line.startswith("```python"):
+        if line.startswith("```python") or line.startswith("```py"):
             index += 1
             chunk: list[str] = []
             while index < len(lines) and not lines[index].strip().startswith("```"):
