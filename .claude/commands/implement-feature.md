@@ -239,6 +239,8 @@ Re-check mergeability against current `origin/main` (fetch + rebase dry-run / `g
 
 When every waited gate is green, show that status and ask the user for explicit merge confirmation in this run. Merge only on yes, via `gh pr merge` (merge commit or squash per repo defaults / user preference if stated). A skipped or unanswered confirmation means do not merge — report ready-to-merge in chat and stop. Do **not** post a "merged" or "gates passed" PR comment.
 
+**Never bypass review without explicit user consent:** do not run `gh pr merge --admin`, do not self-approve your own PR, and do not treat herdr/loop “deliver through merge” as permission to merge unattended. If branch protection or `REVIEW_REQUIRED` blocks merge after CI is green, stop at ready-to-merge and tell the operator what is needed (human review or an explicit admin-merge request from them).
+
 After merge: watch post-merge Actions on `main`; if they fail because of this change, diagnose (`gha-diagnosis`), fix forward on a follow-up commit or hotfix branch, and re-watch until green. Optional: `python3 scripts/wait_post_merge_ci.py` with `--issue`, `--pr`, or `--merge-sha` (same α gate as the herdr driver).
 
 Then sync the **main checkout** (mandatory before Close the loop):

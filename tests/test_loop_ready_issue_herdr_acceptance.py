@@ -340,12 +340,55 @@ def test_acceptance_skill_disable_model_invocation_frontmatter():
 
 # @regression
 def test_acceptance_skill_one_ticket_route_contract():
-    """§2.6: bug → /fix-bug; else /implement-feature; no queue advance in skill."""
+    """§2.6: bug → /fix-bug; else /implement-feature; driver owns queue advance."""
     text = SKILL.read_text(encoding="utf-8")
     assert "/fix-bug" in text
     assert "/implement-feature" in text
-    assert "Do not start a second ticket" in text or "Do not start a second" in text
-    assert "advance to the next queued issue" in text
+    assert "advance the queue" in text or "advance the readiness queue" in text
+
+
+def test_acceptance_skill_forbids_unattended_admin_merge():
+    """Merge gate: herdr delivery must not imply gh pr merge --admin or self-approve."""
+    text = SKILL.read_text(encoding="utf-8")
+    assert "`gh pr merge --admin`" in text
+    assert "REVIEW_REQUIRED" in text
+    assert "ready-to-merge" in text
+    assert "Do not self-approve" in text or "do not self-approve" in text
+
+
+_FORBIDDEN_SKILL_PHRASES = (
+    "through pr merge",
+    "do not restate delivery-flow gates",
+    "deliver through merge",
+    "## contract",
+)
+
+
+def test_acceptance_skill_does_not_summarize_awos_delivery_flow():
+    """#215: skill must not duplicate or shortcut implement-feature / fix-bug steps."""
+    text = SKILL.read_text(encoding="utf-8")
+    lowered = text.lower()
+    for phrase in _FORBIDDEN_SKILL_PHRASES:
+        assert phrase not in lowered, f"skill must not contain {phrase!r}"
+    assert "run that command completely" in lowered or "run the chosen command" in lowered
+    assert "delivery-flow.md" in text or "delivery-flow" in lowered
+
+
+def test_acceptance_skill_fallback_does_not_summarize_delivery(loop_mod):
+    """Fallback prompt routes to AWOS commands without inlining PR/review steps."""
+    fb = loop_mod._MINIMAL_SKILL_FALLBACK.lower()
+    assert "through pr merge" not in fb
+    assert "/implement-feature" in fb or "implement-feature" in fb
+    assert "run that command completely" in fb or "live only there" in fb
+
+
+def test_acceptance_build_worker_prompt_inlines_skill_not_issue_url_only(loop_mod):
+    """Driver prompt must paste skill body plus the one-ticket issue URL."""
+    skill = loop_mod.load_skill_text(SKILL)
+    prompt = loop_mod.build_worker_prompt(skill, "https://github.com/o/r/issues/1")
+    assert "Before you run an AWOS command" in prompt
+    assert "Deliver this issue only:" in prompt
+    assert "https://github.com/o/r/issues/1" in prompt
 
 
 def test_acceptance_maintainer_note_herdr_required():

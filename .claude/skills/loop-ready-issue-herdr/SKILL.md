@@ -1,17 +1,28 @@
 ---
 name: loop-ready-issue-herdr
-description: One-ticket herdr worker contract for the ready-issue loop — route a single GitHub issue to `/fix-bug` or `/implement-feature`. Driver-inlined only; not a user slash command.
+description: Use when the loop-ready-issue herdr driver starts a worker tab with one issue URL and MAIN= set — not for general feature delivery outside that driver.
 disable-model-invocation: true
 ---
 
 # Loop ready issue (herdr) — one ticket
 
-`scripts/loop_ready_issue_herdr.py` reads this file and inlines it into each herdr worker prompt. Agents do not self-invoke this skill.
+`scripts/loop_ready_issue_herdr.py` reads this file and pastes it into the worker’s first prompt. Agents do not self-invoke this skill.
 
-## Contract
+## Before you run an AWOS command
 
-1. **Input:** one GitHub issue number or URL (provided by the driver prompt).
-2. **Route:** inspect issue labels on that ticket — if `bug` is present, run `/fix-bug <url>`; otherwise run `/implement-feature <url>`.
-3. **Scope:** deliver **this issue only**. Do not start a second ticket, list the readiness queue, or advance to the next queued issue.
-4. **Delivery:** follow the chosen command’s delivery flow through PR merge, post-merge CI on `main`, and **`git pull --ff-only origin main` on `MAIN`** (the primary checkout — see `MAIN=…` in the driver prompt if present). Do not restate delivery-flow gates here — those live in `/fix-bug` and `/implement-feature`. Optional CI helper: `python3 scripts/wait_post_merge_ci.py`.
-5. **Issue link:** the driver starts the next ticket only after local Phase A sees `#N` in main history and GitHub α passes. Link the PR with `Closes #N` when it delivers what this issue owns; if you deliver only part, use `Relevant to #N` and name what remains in your final report so the operator can decide.
+- **One ticket.** The driver gave exactly one issue URL below. Do not list the readiness queue, start another issue, or advance the queue — the driver owns that.
+- **`MAIN=`** (when present in the driver prompt) is the **primary checkout** path. Use it only where `/fix-bug` or `/implement-feature` says to sync after merge — not as the implementation worktree.
+
+## Route
+
+1. **Input:** the GitHub issue number or URL in the driver prompt (below the `---`).
+2. **Command:** if the issue has a `bug` label, run `/fix-bug <url>`; otherwise run `/implement-feature <url>`.
+3. **Authority:** smoke confirm, local review keep/drop, commit/push, `gh pr create`, CI watch, and merge confirmation are defined **only** in that command and in `context/product/delivery-flow.md`. This skill does not repeat or shorten them — run the chosen command **completely**.
+
+## After the AWOS command finishes merge (herdr-specific)
+
+These are queue/driver expectations **outside** the AWOS step list:
+
+- **Merge:** follow the command’s merge step — per-run operator confirmation before `gh pr merge`; never `gh pr merge --admin` unless the operator explicitly requests it in this chat; if `REVIEW_REQUIRED` blocks merge, stop at **ready-to-merge** (CI green, PR URL, human review needed). Do not self-approve your own PR.
+- **Post-merge:** watch post-merge CI on `main` if the command requires it; then `git -C "$MAIN" fetch origin main` and `git -C "$MAIN" pull --ff-only origin main`. Optional helper: `python3 scripts/wait_post_merge_ci.py`.
+- **Driver:** this tab stays open until the issue has a merged closing PR and post-merge checks (α) pass; waiting on you for review or merge is normal.

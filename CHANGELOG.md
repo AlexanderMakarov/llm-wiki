@@ -15,6 +15,10 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Changed
 
+- **Herdr worker skill scope (#215)** — driver-inlined `.claude/skills/loop-ready-issue-herdr/SKILL.md` no longer summarizes delivery (“through PR merge”, “do not restate gates”, queue/issue-link bullets). It only covers before (one ticket, `MAIN=`), route to `/fix-bug` or `/implement-feature`, and after-merge herdr expectations (merge confirm, no `--admin`, pull `MAIN`). AWOS commands remain the sole authority for smoke, review, and PR order. Docs: [`docs/maintainers/LOOP_READY_ISSUE_HERDR.md`](docs/maintainers/LOOP_READY_ISSUE_HERDR.md).
+
+### Changed
+
 - **CI optional-extra matrix leg (#169)** — `lint-and-test` runs twice on Python 3.12: the existing minimal-deps install (markdown + dev tools only) and a second leg with editable `[add,graph,dev]` so `trafilatura` and `graphifyy` code paths are exercised in CI. Coverage upload stays on the minimal leg; pip cache keys the optional install on `pyproject.toml`. `test_thin_page_without_renderer_warns` disables the Playwright default renderer and parametrizes stdlib-floor vs trafilatura-present so contributors with extras installed see the same result as CI.
   - *Release note:* CI now tests optional `[add]` and `[graph]` extras alongside the zero-dependency floor (#169).
 

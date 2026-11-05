@@ -56,11 +56,10 @@ _SKILL_REL = Path(".claude/skills/loop-ready-issue-herdr/SKILL.md")
 _MINIMAL_SKILL_FALLBACK = """\
 # Loop ready issue (herdr) — one ticket
 
-You are delivering **one** GitHub issue only. Do not list or advance the readiness queue.
-
-1. Use the issue URL provided below.
-2. Inspect labels: if `bug` is present run `/fix-bug`; otherwise run `/implement-feature`.
-3. Follow the delivery flow for that command through PR merge; do not start another issue.
+One issue URL below — do not list or advance the readiness queue.
+Route: `bug` label → `/fix-bug`; else → `/implement-feature`. Run that command completely;
+smoke, review, PR, and merge live only there (not in this fallback).
+After merge: operator confirm before `gh pr merge`; no `--admin` unless asked; then pull `MAIN`.
 """
 
 _WORKER_GONE_ERROR_CODES = frozenset(

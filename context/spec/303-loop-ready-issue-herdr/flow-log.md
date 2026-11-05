@@ -246,3 +246,7 @@
 - Issue link: `Relevant to #296` — amends shipped herdr advance / delivery finish; does not close #296 (already delivered; this is redesign). Supersedes held PR #381 direction.
 - Why not Closes: #296 original spike shipped; this PR extends advance wait + AWOS DoD.
 - Next: open/update PR vs main; stop appending tracked flow-log after PR open
+
+## 2026-11-06 herdr skill scope (#215)
+
+Worker skill slimmed to **before / route / after-merge** only — removed Contract items that summarized delivery (scope, “through PR merge”, issue-link advance). AWOS commands stay sole authority for smoke, review, PR order. Acceptance tests forbid dangerous phrases and require route + `MAIN` post-merge pull in skill/fallback.
