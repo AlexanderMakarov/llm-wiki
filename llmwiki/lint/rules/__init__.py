@@ -23,6 +23,7 @@ Post-v1.0 rules:
   18. page_findability                (#197)
   19. title_ambiguity                 (#197)
   20. search_consistency              (#197)
+  21. hollow_curated_pages            (#248 amendment)
 
 Import order matters — every per-rule module's top-level ``@register``
 decorator runs at import time and inserts its rule into the
@@ -60,6 +61,7 @@ from llmwiki.lint.rules.duplicate_detection import DuplicateDetection  # noqa: F
 from llmwiki.lint.rules.frontmatter_completeness import FrontmatterCompleteness  # noqa: F401
 from llmwiki.lint.rules.frontmatter_count_consistency import FrontmatterCountConsistency  # noqa: F401
 from llmwiki.lint.rules.frontmatter_validity import FrontmatterValidity  # noqa: F401
+from llmwiki.lint.rules.hollow_curated_pages import HollowCuratedPages  # noqa: F401
 from llmwiki.lint.rules.index_sync import IndexSync  # noqa: F401
 from llmwiki.lint.rules.link_integrity import LinkIntegrity  # noqa: F401
 from llmwiki.lint.rules.orphan_detection import OrphanDetection  # noqa: F401

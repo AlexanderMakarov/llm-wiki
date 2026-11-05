@@ -20,20 +20,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from llmwiki._frontmatter import is_subagent, parse_frontmatter
+from llmwiki._frontmatter import parse_frontmatter
 from llmwiki.source_topics import (
     _normalize_kind,
     _split_kind_and_description,
     source_page_needs_topics_rewrite,
 )
-from llmwiki.synth.pipeline import (
-    _load_state,
-    _save_state,
-    page_is_stub,
-    page_needs_topics_rewrite,
-    source_page_paths,
-    synth_page_filename,
-)
+from llmwiki.synth.state_backfill import backfill_synth_state_from_wiki_pages
 from llmwiki.topic_kinds import _CONTEXT_FILE, build_kind_map
 from llmwiki.wikilinks import WIKILINK_RE, strip_anchor
 
@@ -165,129 +158,6 @@ def _write_stamped_list(vault: Path, pages: list[dict[str, Any]]) -> None:
     )
 
 
-def _backfill_synth_state_for_clear_targets(
-    *,
-    vault: Path,
-    dry_run: bool = False,
-) -> tuple[int, list[str]]:
-    """Upsert synth state for raw sources whose wiki targets are rewrite-clear.
-
-    After #163, plain ``synth`` / ``--estimate`` only skip when state has a
-    fresh mtime entry *and* the page is not topics-pending. Stamping kinds
-    clears the pending flag but does not write state — so this pass marks
-    every eligible raw session/doc that resolves to a real, non-stub,
-    rewrite-clear wiki page as done. Shared synth filenames (many raws → one
-    wiki page) all get entries, not only the page's ``source_file``.
-
-    Returns ``(upsert_count, errors)``.
-    """
-    vault = Path(vault).expanduser().resolve()
-    wiki = vault / "wiki"
-    sources_out = wiki / "sources"
-    state_file = vault / "llmwiki-state.json"
-    errors: list[str] = []
-    if not sources_out.is_dir():
-        return 0, errors
-
-    try:
-        state = _load_state(state_file)
-    except (OSError, ValueError, TypeError) as exc:
-        return 0, [f"state load: {exc}"]
-
-    updates: dict[str, float] = {}
-
-    sessions_root = vault / "raw" / "sessions"
-    if sessions_root.is_dir():
-        for path in sorted(sessions_root.rglob("*.md")):
-            if not path.is_file():
-                continue
-            try:
-                text = path.read_text(encoding="utf-8")
-            except (OSError, UnicodeDecodeError) as exc:
-                errors.append(f"{_relative(path, vault)}: {exc}")
-                continue
-            meta, _body = parse_frontmatter(text)
-            if not isinstance(meta, dict):
-                meta = {}
-            if is_subagent(meta, path):
-                continue
-            try:
-                rel = str(path.relative_to(sessions_root))
-            except ValueError:
-                continue
-            project = str(meta.get("project") or path.parent.name)
-            filename = synth_page_filename(meta, path.stem)
-            targets = source_page_paths(
-                sources_out / project, filename, is_doc=False
-            )
-            if not targets:
-                continue
-            existing = [t for t in targets if t.is_file()]
-            if not existing:
-                continue
-            if any(page_is_stub(t) for t in existing):
-                continue
-            if any(page_needs_topics_rewrite(t) for t in existing):
-                continue
-            try:
-                updates[rel] = float(path.stat().st_mtime)
-            except OSError as exc:
-                errors.append(f"{_relative(path, vault)}: {exc}")
-
-    docs_root = vault / "raw" / "docs"
-    if docs_root.is_dir():
-        for path in sorted(docs_root.rglob("*.md")):
-            if not path.is_file():
-                continue
-            try:
-                text = path.read_text(encoding="utf-8")
-            except (OSError, UnicodeDecodeError) as exc:
-                errors.append(f"{_relative(path, vault)}: {exc}")
-                continue
-            meta, _body = parse_frontmatter(text)
-            if not isinstance(meta, dict):
-                meta = {}
-            try:
-                doc_rel = str(path.relative_to(docs_root))
-            except ValueError:
-                continue
-            rel = "docs::" + doc_rel
-            project = str(meta.get("project") or "docs")
-            filename = synth_page_filename(meta, path.stem)
-            targets = source_page_paths(
-                sources_out / project, filename, is_doc=True
-            )
-            if not targets:
-                continue
-            existing = [t for t in targets if t.is_file()]
-            if not existing:
-                continue
-            if any(page_is_stub(t) for t in existing):
-                continue
-            if any(page_needs_topics_rewrite(t) for t in existing):
-                continue
-            try:
-                updates[rel] = float(path.stat().st_mtime)
-            except OSError as exc:
-                errors.append(f"{_relative(path, vault)}: {exc}")
-
-    upserts = 0
-    for rel, mtime in updates.items():
-        prev = state.get(rel)
-        if prev is not None and (prev + 1e-6) >= mtime:
-            continue
-        state[rel] = mtime
-        upserts += 1
-
-    if upserts and not dry_run:
-        try:
-            _save_state(state, state_file)
-        except OSError as exc:
-            errors.append(f"{state_file.name}: {exc}")
-            return 0, errors
-    return upserts, errors
-
-
 def run_migration(*, vault: Path, dry_run: bool = False) -> dict[str, Any]:
     """Stamp missing topic kinds on source Connections under ``vault/wiki``.
 
@@ -378,7 +248,7 @@ def run_migration(*, vault: Path, dry_run: bool = False) -> dict[str, Any]:
         if source_page_needs_topics_rewrite(check_text):
             report["pages_pending_rewrite"] += 1
 
-    state_upserts, state_errors = _backfill_synth_state_for_clear_targets(
+    state_upserts, state_errors = backfill_synth_state_from_wiki_pages(
         vault=vault, dry_run=dry_run
     )
     report["state_entries_updated"] = state_upserts

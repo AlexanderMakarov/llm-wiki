@@ -42,6 +42,9 @@ jobs:
       - name: Install deps
         run: python -m pip install markdown
 
+      - name: Reconcile demo synth state from wiki coverage
+        run: python3 scripts/reconcile_synth_state_from_wiki.py --vault demo
+
       - name: Build demo site
         # --local-root fixes the path shown in place of a session's stored
         # home directory, so the published pages never carry the runner's own.

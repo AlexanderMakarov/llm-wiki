@@ -174,7 +174,7 @@ page without descending into a tree. -->
 - [Uptime Monitoring](sources/uptime/2026-09-28-uptime-monitoring.md) — uptime · 2026-09-28
 - [Windows setup](sources/windows-setup/2026-09-28-windows-setup.md) — windows-setup · 2026-09-28
 
-## Entities (9)
+## Entities (7)
 - [Claude Code](entities/Claude Code.md)
 - [Codex CLI](entities/Codex CLI.md)
 - [Frontmatter](entities/Frontmatter.md)
@@ -182,8 +182,6 @@ page without descending into a tree. -->
 - [GitHub Pages](entities/GitHub Pages.md)
 - [Obsidian](entities/Obsidian.md)
 - [Ollama](entities/Ollama.md)
-- [Python](entities/Python.md)
-- [SQLite](entities/SQLite.md)
 
 ## Projects (0)
 

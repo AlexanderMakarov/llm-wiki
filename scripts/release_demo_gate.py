@@ -42,7 +42,10 @@ SESSIONS_DATE_FILE = DEMO / ".demo-sessions-date"
 DEMO_CONTENT_TESTS = [
     "tests/test_case_insensitive_paths.py",
     "tests/test_search_acceptance.py",
-    "tests/test_248_acceptance.py",
+    "tests/test_curated_topics_demo_pages.py",
+    "tests/test_curated_topics_demo_listing.py",
+    "tests/test_curated_topics_demo_nav_corpus.py",
+    "tests/test_curated_topics_fr5_build.py",
     "tests/test_refresh_demo.py",
     "tests/test_privacy_username.py",
 ]

@@ -429,8 +429,8 @@ def test_migration_module_has_no_synth_backend_imports() -> None:
     )
     for pattern in forbidden:
         assert not re.search(pattern, source), f"forbidden import pattern: {pattern}"
-    # State backfill uses pipeline leaf helpers only.
-    assert "from llmwiki.synth.pipeline import" in source
+    # State backfill lives in a leaf module (no HTTP backends).
+    assert "from llmwiki.synth.state_backfill import" in source
 
 
 # ─── CLI wiring ────────────────────────────────────────────────────────
