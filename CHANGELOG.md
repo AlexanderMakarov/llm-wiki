@@ -10,7 +10,7 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Changed
 
-- **CI optional-extra matrix leg (#169)** — `lint-and-test` runs twice on Python 3.12: the existing minimal-deps install (markdown + dev tools only) and a second leg with editable `[add,graph,dev]` so `trafilatura` and `graphifyy` code paths are exercised in CI. Coverage upload stays on the minimal leg; pip cache keys the optional install on `pyproject.toml`. `test_thin_page_without_renderer_warns` disables the Playwright default renderer and parametrizes stdlib-floor vs trafilatura-present so contributors with extras installed see the same result as CI.
+- **CI optional-extra matrix leg (#169)** — `lint-and-test` runs twice on Python 3.12: the existing minimal-deps install (markdown + dev tools only) and a second leg with editable `[add,graph,dev]` so `trafilatura` and `graphifyy` code paths are exercised in CI. The minimal leg keeps the branch-protection check name `lint-and-test (3.12)`; the optional leg reports as `lint-and-test (3.12, optional)`. Coverage upload stays on the minimal leg; pip cache keys the optional install on `pyproject.toml`. `test_thin_page_without_renderer_warns` disables the Playwright default renderer and parametrizes stdlib-floor vs trafilatura-present so contributors with extras installed see the same result as CI.
   - *Release note:* CI now tests optional `[add]` and `[graph]` extras alongside the zero-dependency floor (#169).
 
 

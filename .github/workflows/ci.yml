@@ -11,6 +11,10 @@ permissions:
 
 jobs:
   lint-and-test:
+    # Branch protection requires ``lint-and-test (3.12)`` on the minimal leg (#169).
+    # GitHub otherwise suffixes matrix values → ``lint-and-test (3.12, minimal)``,
+    # which never satisfies the required check.
+    name: lint-and-test (${{ matrix.python-version }}${{ matrix.extras-profile == 'optional' && ', optional' || '' }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
