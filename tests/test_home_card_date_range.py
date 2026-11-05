@@ -15,6 +15,7 @@ The render_analytics() emitter computes the range from each session's
 """
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from llmwiki.build import render_analytics
@@ -63,9 +64,13 @@ def test_single_day_project_renders_one_date(tmp_path: Path) -> None:
     html_out = _render(groups, tmp_path)
     assert 'class="card-date-range"' in html_out
     assert ">2026-04-01<" in html_out
-    # Arrow only appears in multi-day form. Spot-check inside the cards.
-    cards_only = html_out.split('class="card-grid"', 1)[1]
-    assert "→" not in cards_only
+    # Arrow only in multi-day `.card-date-range` (UI hints also use → elsewhere).
+    projects_block = html_out.split("<h2>Projects</h2>", 1)[1]
+    date_ranges = re.findall(
+        r'<div class="card-date-range">([^<]*)</div>', projects_block,
+    )
+    assert date_ranges
+    assert all("→" not in text for text in date_ranges)
 
 
 def test_no_dates_no_date_element(tmp_path: Path) -> None:

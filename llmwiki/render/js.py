@@ -224,10 +224,29 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
   function getQueueWidgetEl() {
     return document.querySelector(".queue-widget");
   }
+  function candidatesReviewLineHtml(pipeline) {
+    var pending = Number(pipeline && pipeline.to_review || 0);
+    var stale = Number(pipeline && pipeline.to_review_stale || 0);
+    var staleDays = Number(pipeline && pipeline.stale_days || 30);
+    var main =
+      '<a href="candidates.html"><strong>Candidates to review:</strong> ' +
+      pending +
+      "</a>";
+    if (stale > 0) {
+      main +=
+        ' <span class="muted">· ' +
+        stale +
+        " stale (≥" +
+        staleDays +
+        "d)</span>";
+    }
+    return '<li class="home-candidates-line">' + main + "</li>";
+  }
   function homeOpsListHtml(snapshot, queueEl) {
     if (!snapshot) {
       return (
         '<ul class="queue-type-list home-ops-timeline" aria-label="Pipeline operations">' +
+        candidatesReviewLineHtml({}) +
         "<li><strong>Oldest pending:</strong> none</li>" +
         formatStageFreshnessLi("Last queue run", "") +
         "</ul>"
@@ -235,6 +254,7 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
     }
     var ops = snapshot.ops || {};
     var synthState = snapshot.synth || {};
+    var pipeline = synthState.pipeline || {};
     var pendingList = Array.isArray(synthState.pending) ? synthState.pending : [];
     var estimate = (synthState && synthState.estimate) ? synthState.estimate : {};
     var items = Array.isArray((snapshot.queue || {}).items) ? snapshot.queue.items : [];
@@ -247,6 +267,7 @@ JS = r"""// llmwiki viewer — theme + copy + search palette + keyboard shortcut
       if (it && it.mtime && (!oldest || it.mtime < oldest)) oldest = it.mtime;
     });
     var lines = [
+      candidatesReviewLineHtml(pipeline),
       "<li><strong>Oldest pending:</strong> " + escapeHtml(oldest ? formatTs(oldest) : "none") + "</li>",
       formatStageFreshnessLi("Last queue run", ops.last_queue_run_at || ""),
     ];

@@ -64,12 +64,17 @@ UI_HINTS: dict[str, str] = {
         "divided by the number of wiki pages on disk."
     ),
     "metric-knowledge": (
-        "<strong>Candidates</strong> — pending stubs under "
-        "<code>wiki/candidates/</code>. "
-        "<strong>Entities</strong> / <strong>Concepts</strong> — pages after promote. "
-        "Review/promote on <strong>Candidates</strong> tab, agent "
-        "<code>/wiki-candidates</code>, or "
-        "<code>llmwiki candidates apply|promote|merge|discard</code>."
+        "Counts match the <strong>Topics</strong> index section headings "
+        "(topic co-occurrence graph, not on-disk page totals). "
+        "<strong>Entities</strong> — reviewed pages under "
+        "<code>wiki/entities/</code> that appear as graph nodes "
+        "(people, products, tools). "
+        "<strong>Concepts</strong> — reviewed pages under "
+        "<code>wiki/concepts/</code> (ideas, patterns, decisions). "
+        "<strong>Other</strong> — session-derived topic names with no "
+        "matching entity/concept page yet (harvest vocabulary, not promoted stubs). "
+        "Pending harvest stubs live under Pipeline state → "
+        "<strong>Candidates to review</strong>."
     ),
     "metric-weekly-pace": (
         "Rolling average over the last 7 days: "
@@ -81,19 +86,9 @@ UI_HINTS: dict[str, str] = {
 }
 
 
-def render_metric_knowledge_hint_body(*, stale: int = 0, stale_days: int = 30) -> str:
-    """Knowledge card hint including stale candidate count."""
-    base = UI_HINTS["metric-knowledge"]
-    stale_n = int(stale)
-    if stale_n <= 0:
-        return base
-    word = "candidate" if stale_n == 1 else "candidates"
-    stale_line = (
-        f"<br><br>Currently there are {stale_n} stale {word} "
-        f"(age ≥ {int(stale_days)} days; "
-        f"<code>llmwiki candidates list --stale</code>)."
-    )
-    return base + stale_line
+def render_metric_knowledge_hint_body() -> str:
+    """Knowledge card hint (topic graph entity / concept / other)."""
+    return UI_HINTS["metric-knowledge"]
 
 
 def render_ui_hint_button(
