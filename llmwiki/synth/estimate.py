@@ -114,6 +114,7 @@ def synthesize_estimate_report(
     pricing_table: dict[str, dict[str, float]] | None = None,
     include_subagents: str | None = None,
     exclude_headless: bool | None = None,
+    exclude_empty: bool | None = None,
     lean: bool = True,
     template_tokens: int | None = None,
     doc_template_tokens: int | None = None,
@@ -277,6 +278,20 @@ def synthesize_estimate_report(
             if not _is_headless(m if isinstance(m, dict) else {})
         ]
         excluded_headless = before - len(raw_sessions)
+    from llmwiki._frontmatter import is_empty_session as _is_empty_fm  # noqa: PLC0415
+    from llmwiki.synth.pipeline import resolve_exclude_empty  # noqa: PLC0415 — cycle: synth.pipeline↔synth.estimate
+    if exclude_empty is None:
+        drop_empty = resolve_exclude_empty(_load_sessions_config())
+    else:
+        drop_empty = bool(exclude_empty)
+    excluded_empty = 0
+    if drop_empty:
+        before = len(raw_sessions)
+        raw_sessions = [
+            (p, m, b) for (p, m, b) in raw_sessions
+            if not _is_empty_fm(m if isinstance(m, dict) else {})
+        ]
+        excluded_empty = before - len(raw_sessions)
     sources_root = Path(wiki_sources_dir) if wiki_sources_dir is not None else _WIKI_SOURCES
     raw_root_path = Path(raw_root) if raw_root is not None else _RAW_DEFAULT
     docs_root_path = Path(docs_root) if docs_root is not None else _RAW_DOCS_DEFAULT
@@ -634,8 +649,10 @@ def synthesize_estimate_report(
         # `--estimate` can show that `synthesize` will skip these too.
         "excluded_subagents": excluded_subagents,
         "excluded_headless": excluded_headless,
+        "excluded_empty": excluded_empty,
         "include_subagents": mode,
         "exclude_headless": drop_headless,
+        "exclude_empty": drop_empty,
         "synthesized_sessions": synthed_sessions,
         "synthesized_docs": synthed_docs,
         "new": new_sessions + new_docs,

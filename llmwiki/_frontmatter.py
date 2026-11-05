@@ -133,6 +133,33 @@ def is_headless(meta: dict[str, Any]) -> bool:
     return isinstance(prompt_source, str) and prompt_source.strip().lower() == "sdk"
 
 
+def _frontmatter_int(meta: dict[str, Any], key: str) -> int | None:
+    raw = meta.get(key)
+    if isinstance(raw, bool):
+        return None
+    if isinstance(raw, int):
+        return raw
+    if isinstance(raw, str):
+        s = raw.strip()
+        if s.isdigit() or (s.startswith("-") and s[1:].isdigit()):
+            return int(s)
+    return None
+
+
+def is_empty_session(meta: dict[str, Any]) -> bool:
+    """True when raw frontmatter records zero user messages and zero tool calls (#188).
+
+    Reads the counts the converter writes. When either field is missing, the
+    session is treated as not empty so legacy files are not silently dropped
+    from the backlog — re-sync (or delete derived pages) to classify them.
+    """
+    u = _frontmatter_int(meta, "user_messages")
+    t = _frontmatter_int(meta, "tool_calls")
+    if u is None or t is None:
+        return False
+    return u == 0 and t == 0
+
+
 def parse_frontmatter_dict(text: str) -> dict[str, Any]:
     """Return just the metadata dict — convenience for callers that
     don't need the body."""

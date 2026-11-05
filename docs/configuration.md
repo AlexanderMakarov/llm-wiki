@@ -54,6 +54,11 @@ Minimal config:
     // and synthesis. See docs/multi-agent-setup.md § automated.
     "exclude_headless": true,
 
+    // Skip transcripts with zero user messages and zero tool calls (default
+    // on). Aborted launches and other empty rows have nothing to synthesize
+    // and inflate harvest citation counts. Applies at ingest and synthesis.
+    "exclude_empty": true,
+
     // Skip sessions whose cwd is a throwaway temp dir (/tmp, /var/folders,
     // …). Default OFF: a git worktree under /tmp is often real work, so we
     // don't silently drop it. Turn on only if your temp dirs hold nothing

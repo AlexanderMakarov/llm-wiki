@@ -150,6 +150,7 @@ cp examples/sessions_config.json config.json
     "exclude_projects": [],
     "drop_record_types": ["queue-operation", "file-history-snapshot", "progress"],
     "exclude_headless": true,
+    "exclude_empty": true,
     "exclude_temp_cwd": false
   },
 
@@ -223,6 +224,7 @@ Optional absolute date gate so bare `llmwiki sync` does not ingest years of hist
 | `filters` | `drop_record_types` | list | [3 types] | JSONL record types to discard |
 | `filters` | `since` | string | unset (unlimited) | Shared sync lookback as absolute `YYYY-MM-DD`. Absent or empty = no shared date gate. Overridden per run by CLI `--since`. See [Sync lookback](#sync-lookback) |
 | `filters` | `exclude_headless` | bool | true | Skip automated / headless launches across coding-agent adapters (Claude SDK markers; Cursor Agent CLI `subagentInfo` / `approvalMode=auto-review`; OpenClaw never skipped; others false until markers exist). Prevents the synthesis feedback loop. Applies at **both** ingest and synthesis. See [multi-agent-setup.md](multi-agent-setup.md#what-automated-headless-means) |
+| `filters` | `exclude_empty` | bool | true | Skip sessions with **zero user messages and zero tool calls** at convert time (aborted launches, empty transcripts). Applies at **both** ingest and synthesis so existing empty rows in `raw/` are not synthesized. Set `false` to keep a complete archive. See [UPGRADING.md](UPGRADING.md) to clean derived pages from vaults that already synthesized empty sessions |
 | `filters` | `exclude_temp_cwd` | bool | false | Opt-in: skip sessions whose `cwd` is a throwaway temp dir (`/tmp`, `/var/folders`, …). Off by default — a git worktree under `/tmp` is often real work |
 | `filters` | `exclude_non_usage_from_token_coverage` | bool | true | When true, Analytics Tokens coverage `known` skips synthetic placeholders and zero-tool sessions without measured token usage **for token-capable agents only** (Claude Code, Cursor CLI, Codex CLI). OpenClaw, Cursor IDE, and other sources always count discoverable raw rows — all-zero `token_totals` there mean capture is missing, not “no usage” (#355). Applies on `migrate session-tokens` and on `sync` when `usage/session-tokens.json` exists. Set `false` to disable placeholder heuristics even for token-capable agents |
 | root | `cursor_usage_ledger` | bool | true | Read Cursor IDE Composer turn totals from local `~/.config/Cursor/User/globalStorage/state.vscdb` (`bubbleId:*` → `tokenCount`, summed per `composerId`). Cached under `usage/cursor-usage-ledger-cache.json` with mtime/size invalidation and a short in-process TTL while the IDE rewrites the DB. Default **on** (read-only; no network). Set `false` to skip. Precedence: stop-hook JSONL → ledger → `cursor_usage_api` (#396) |

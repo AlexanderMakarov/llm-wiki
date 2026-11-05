@@ -190,6 +190,7 @@ from llmwiki.synth.pipeline import (
     _load_state,
     refresh_synth_pending,
     resolve_backend,
+    resolve_exclude_empty,
     resolve_exclude_headless,
     resolve_include_subagents,
     synth_stop_exit_code,
@@ -2795,6 +2796,7 @@ def _synthesize_estimate(
         docs_root=docs_root,
         include_subagents=resolve_include_subagents(loaded_cfg),
         exclude_headless=resolve_exclude_headless(loaded_cfg),
+        exclude_empty=resolve_exclude_empty(loaded_cfg),
         # Price document chunks at the active backend's usable body budget (#311).
         backend=_estimate_backend(loaded_cfg),
     )
@@ -2884,12 +2886,15 @@ def _synthesize_estimate(
     # would also skip is indistinguishable from one that forgot them.
     ex_sub = int(report.get("excluded_subagents", 0) or 0)
     ex_head = int(report.get("excluded_headless", 0) or 0)
-    if ex_sub or ex_head:
+    ex_empty = int(report.get("excluded_empty", 0) or 0)
+    if ex_sub or ex_head or ex_empty:
         parts = []
         if ex_sub:
             parts.append(f"{ex_sub} subagent (include_subagents={report.get('include_subagents')})")
         if ex_head:
             parts.append(f"{ex_head} headless (exclude_headless=true)")
+        if ex_empty:
+            parts.append(f"{ex_empty} empty (exclude_empty=true)")
         print(f"Not eligible (synthesize skips these too): {', '.join(parts)}")
     print()
     # Per-page fixed cost, split so an unexpectedly large figure is
