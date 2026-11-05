@@ -290,3 +290,26 @@ def test_failed_backfill_is_retried(tmp_path: Path, monkeypatch):
     windows = _capture_dashboard_windows(monkeypatch)
     sync_cursor_usage_api(tmp_path, cfg, force_poll=True)
     assert windows[0][0] == _ms("2026-06-01")
+
+
+def test_no_lookback_backfills_all_retained_history(tmp_path: Path, monkeypatch):
+    """Unset ``since`` means no limit, as for sync: fetch from epoch 0, then incremental."""
+    windows = _capture_dashboard_windows(monkeypatch)
+    cfg = {"cursor_usage_api": "dashboard"}
+    lines = sync_cursor_usage_api(tmp_path, cfg, force_poll=True)
+    assert windows[0][0] == 0
+    assert any("all retained history" in line for line in lines)
+    cache = load_cache(tmp_path)
+    cache["high_water_ms"] = _ms("2026-11-01")
+    save_cache(tmp_path, cache)
+    windows.clear()
+    sync_cursor_usage_api(tmp_path, cfg, force_poll=True)
+    assert windows[0][0] == _ms("2026-11-01")
+
+
+def test_invalid_lookback_skips_poll_with_reason(tmp_path: Path, monkeypatch):
+    windows = _capture_dashboard_windows(monkeypatch)
+    cfg = {"cursor_usage_api": "dashboard", "filters": {"since": "not-a-date"}}
+    lines = sync_cursor_usage_api(tmp_path, cfg, force_poll=True)
+    assert windows == []
+    assert any("invalid cursor_cli lookback" in line for line in lines)
