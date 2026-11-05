@@ -77,12 +77,12 @@ def test_armed_with_any_context_path_passes() -> None:
         is True
     )
     assert gate_passes(["tests/test_foo.py", "context/notes.md"]) is True
-    assert gate_passes(["integrations/foo.py", "context/a/b/c.md"]) is True
+    assert gate_passes(["docs/maintainers/foo.md", "context/a/b/c.md"]) is True
 
 
 def test_armed_without_context_fails() -> None:
     assert gate_passes(["llmwiki/cli.py"]) is False
-    assert gate_passes(["integrations/foo.py", "docs/tutorials/x.md"]) is False
+    assert gate_passes(["docs/maintainers/foo.md", "docs/tutorials/x.md"]) is False
 
 
 @pytest.mark.parametrize(

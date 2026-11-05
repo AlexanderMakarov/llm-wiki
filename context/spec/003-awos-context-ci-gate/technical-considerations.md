@@ -48,7 +48,6 @@ Add a fourth hard-fail job to the existing PR governance workflow. Path classifi
 **Armed prefixes (constants in the module):**
 
 - `llmwiki/`
-- `integrations/`
 - `tests/`
 - `.github/workflows/`
 - `docs/maintainers/`

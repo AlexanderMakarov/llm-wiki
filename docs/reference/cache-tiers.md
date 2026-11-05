@@ -61,25 +61,6 @@ The `cache_tier_consistency` rule catches:
 - **L1 pool too big** — sum of L1 page bodies exceeds the 5 k token
   budget
 
-## Python API
-
-```python
-from llmwiki.cache_tiers import (
-    parse_cache_tier,
-    is_preloaded,
-    summary_excerpt,
-    tier_budget_tokens,
-    TIER_METADATA,
-)
-
-tier, warning = parse_cache_tier(page_meta.get("cache_tier"))
-# "L3", None — default when the field is absent
-
-if is_preloaded(tier):
-    # L1 reads the full body, L2 reads only the Summary
-    preload_text = page_body if tier == "L1" else summary_excerpt(page_body)
-```
-
 ## Tradeoffs — how to choose
 
 - **Don't put everything in L1.** L1 pages trade context tokens for

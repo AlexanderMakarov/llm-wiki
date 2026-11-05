@@ -229,16 +229,3 @@ if profile:
     print(f"Provider: {profile['provider']}")
     print(f"Context: {profile['context_window']}")
 ```
-
-### Export to qmd
-
-```python
-from llmwiki.export_qmd import export_qmd
-
-summary = export_qmd(
-    out_dir=Path("export/qmd"),
-    source_wiki=Path("wiki"),
-    collection_name="my-wiki",
-)
-print(f"Copied {summary['files_copied']} files")
-```

@@ -34,7 +34,7 @@ Rules for changing **this repository** (package, tests, docs, CI). Not vault wor
 10. **No personal vault details in PR text.** Absolute home paths, OS usernames, vault roots, and personal session examples stay out of PR bodies / commits / CHANGELOG — use placeholders. See [Privacy rules](#privacy-rules).
 11. **Lint before you push.** `ruff check llmwiki tests scripts`. A committed `pre-push` hook checks the Python files in your push; see [Linting](#linting).
 12. **Wait for CI after every push.** Local green is not enough — after `git push` (new PR or update), watch GitHub Actions on that head SHA, report the result, and fix/repush if anything failed. See [After you push](#after-you-push).
-13. **Product PRs update AWOS notes.** When a PR changes `llmwiki/`, `integrations/`, `tests/`, `.github/workflows/`, `docs/maintainers/`, or `docs/reference/`, it must also change something under `context/`. Path filters alone decide when notes are required — there is no label escape hatch. Tutorials, scripts, packaging, guides, examples, and similar areas stay exempt. CI enforces this on every PR.
+13. **Product PRs update AWOS notes.** When a PR changes `llmwiki/`, `tests/`, `.github/workflows/`, `docs/maintainers/`, or `docs/reference/`, it must also change something under `context/`. Path filters alone decide when notes are required — there is no label escape hatch. Tutorials, scripts, packaging, guides, examples, and similar areas stay exempt. CI enforces this on every PR.
 14. **Rewording user-facing errors updates the doctor heal catalog.** Changing exception text, CLI `error:` lines, or install/heal hints that users may paste into `llmwiki doctor --error` requires a same-PR update to `llmwiki/doctor/heal_kb.json` so it matches **this** package’s strings. Prefer durable error codes. Code ↔ catalog drift is a bug. See [CLI error strings and the doctor heal catalog](#cli-error-strings-and-the-doctor-heal-catalog).
 
 ## Code of conduct
@@ -171,7 +171,7 @@ Every applicable box must be checked (or have a one-line waiver). [`.github/PULL
 6. CHANGELOG under Unreleased
 7. Breaking changes flagged + labeled `breaking`
 8. No new runtime deps (stdlib + `markdown` only)
-9. AWOS context updated — PRs that change `llmwiki/`, `integrations/`, `tests/`, `.github/workflows/`, `docs/maintainers/`, or `docs/reference/` must also change something under `context/` (no label bypass; tutorials, scripts, and similar paths exempt)
+9. AWOS context updated — PRs that change `llmwiki/`, `tests/`, `.github/workflows/`, `docs/maintainers/`, or `docs/reference/` must also change something under `context/` (no label bypass; tutorials, scripts, and similar paths exempt)
 10. No real session data in `raw/` or fixtures
 11. No machine-specific paths or secrets
 12. Docs updated for user-visible changes

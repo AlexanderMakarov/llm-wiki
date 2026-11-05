@@ -14,7 +14,7 @@ Maintainers and agents plan future work from written AWOS notes. Today a change 
 
 ## 2. Functional Requirements (The "What")
 
-1. **Armed by path filters.** The check runs its requirement only when the change request touches at least one of: the main product package, shipped integrations, the test suite, GitHub Actions workflow definitions, maintainer governance docs, or reference docs that define CLI/config/lint contracts. Other areas (tutorials, guides, packaging, scripts, examples, and similar) do not arm the check.
+1. **Armed by path filters.** The check runs its requirement only when the change request touches at least one of: the main product package, the test suite, GitHub Actions workflow definitions, maintainer governance docs, or reference docs that define CLI/config/lint contracts. Other areas (tutorials, guides, packaging, scripts, examples, and similar) do not arm the check.
    - **Acceptance Criteria:**
      - [x] Given a change request that only edits a tutorial or similar exempt area, when checks run, then this check passes without requiring AWOS notes. _(evidence: `gate_passes(["docs/tutorials/…"])` + acceptance pytest)_
      - [x] Given a change request that edits the main product package (or another armed area) and also updates any AWOS notes file, when checks run, then this check passes. _(evidence: predicates + `tests/test_awos_context_gate*.py`)_
@@ -50,7 +50,7 @@ Maintainers and agents plan future work from written AWOS notes. Today a change 
 ### In-Scope
 
 - New hard pull-request check wired into the existing governance checks
-- Path-filter triggers: main product package, shipped integrations, tests, GitHub Actions workflows, maintainer docs, and reference docs
+- Path-filter triggers: main product package, tests, GitHub Actions workflows, maintainer docs, and reference docs
 - Clear failure explanation without a bypass label
 - Docs in the four places named above plus a changelog entry
 

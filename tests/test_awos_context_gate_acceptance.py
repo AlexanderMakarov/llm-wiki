@@ -51,7 +51,6 @@ _TEMPLATE = REPO_ROOT / ".github" / "PULL_REQUEST_TEMPLATE.md"
 # and to assert that every doc surface lists them.
 _SPEC_ARMED_PREFIXES: frozenset[str] = frozenset({
     "llmwiki/",
-    "integrations/",
     "tests/",
     ".github/workflows/",
     "docs/maintainers/",
@@ -91,7 +90,7 @@ class TestArmedByPathFilters:
         ".github/ISSUE_TEMPLATE/bug.yml",
     ])
     def test_exempt_paths_do_not_arm_gate(self, path: str) -> None:
-        """AC-FR1: only the six armed prefixes arm the gate."""  # @regression
+        """AC-FR1: only the five armed prefixes arm the gate."""  # @regression
         assert is_armed_path(path) is False
         assert gate_passes([path]) is True
 
@@ -99,7 +98,6 @@ class TestArmedByPathFilters:
         "llmwiki/cli.py",
         "llmwiki/build.py",
         "llmwiki/adapters/claude_code.py",
-        "integrations/obsidian.py",
         "tests/test_convert.py",
         "tests/awos_context_gate.py",
         ".github/workflows/ci.yml",
@@ -180,7 +178,7 @@ class TestFailureExplanation:
     def test_gate_passes_returns_false_not_exception_when_armed_no_context(self) -> None:
         """gate_passes must return False (not raise) for the hard-fail case."""  # @regression
         assert gate_passes(["llmwiki/cli.py"]) is False
-        assert gate_passes(["integrations/foo.py", "docs/tutorials/x.md"]) is False
+        assert gate_passes(["docs/maintainers/foo.md", "docs/tutorials/x.md"]) is False
 
 
 # ─── FR3: Any notes update satisfies ──────────────────────────────────────────

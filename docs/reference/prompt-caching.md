@@ -77,36 +77,7 @@ savings estimate is best-case only.
 ## Batch submission
 
 Large backfills can go through Anthropic's `message_batches` endpoint
-(up to 50 % cheaper and no per-request rate limit). The scaffolding
-tracks in-flight batches on disk:
-
-```python
-from pathlib import Path
-from llmwiki.cache import (
-    BatchJob,
-    BatchState,
-    add_pending,
-    load_batch_state,
-    mark_completed,
-    save_batch_state,
-)
-
-repo = Path("/path/to/llm-wiki")
-state = load_batch_state(repo)
-
-add_pending(state, BatchJob(
-    batch_id="batch_abc",
-    source_slugs=["sess-1", "sess-2"],
-    submitted_at="2026-04-17T10:00:00Z",
-))
-save_batch_state(repo, state)
-
-# ... later, when you poll and find it done:
-mark_completed(state, "batch_abc")
-save_batch_state(repo, state)
-```
-
-The batch-state helpers and `.llmwiki-batch-state.json` path were
+(up to 50 % cheaper and no per-request rate limit). The batch-state helpers and `.llmwiki-batch-state.json` path were
 **removed in v1.4.0**. Cost estimates still use `model_pricing.csv` via
 `llmwiki synth --estimate`; there is no `sync --batch` command.
 
