@@ -22,6 +22,7 @@ from typing import Any
 
 from llmwiki.cursor_token_events import usage_records_for_conversation
 from llmwiki.cursor_token_usage import map_cursor_usage_to_claude_usage
+from llmwiki.sync.lookback import resolve_effective_since
 from llmwiki.usage import usage_dir
 
 CACHE_NAME = "cursor-usage-api-cache.json"
@@ -29,6 +30,9 @@ STATE_NAME = "cursor-usage-api-state.json"
 DASHBOARD_URL = "https://cursor.com/api/dashboard/get-filtered-usage-events"
 ADMIN_URL = "https://api.cursor.com/teams/filtered-usage-events"
 _POLL_MIN_SECONDS = 3600
+#: Backfill cap when no sync lookback is configured (dashboard retention is
+#: undocumented; months of history were observed).
+_MAX_BACKFILL_DAYS = 365
 _DEFAULT_PAGE_SIZE = 500
 _ORIGIN = "https://cursor.com"
 
@@ -480,6 +484,27 @@ def _merge_events_into_cache(
     return added
 
 
+def backfill_floor_ms(config: Mapping[str, Any] | None, *, now_ms: int) -> int:
+    """Oldest event time to fetch: the ``cursor_cli`` sync lookback.
+
+    Uses ``adapters.cursor_cli.since`` / ``filters.since`` so Tokens cover the
+    same window as session ingest. With no lookback (or an invalid one), the
+    floor is :data:`_MAX_BACKFILL_DAYS` ago.
+    """
+    cap_ms = now_ms - int(timedelta(days=_MAX_BACKFILL_DAYS).total_seconds() * 1000)
+    try:
+        since_dt = resolve_effective_since(
+            None, dict(config) if isinstance(config, Mapping) else None, "cursor_cli"
+        )
+    except ValueError:
+        since_dt = None
+    if since_dt is None:
+        return cap_ms
+    if since_dt.tzinfo is None:
+        since_dt = since_dt.replace(tzinfo=UTC)
+    return max(cap_ms, int(since_dt.timestamp() * 1000))
+
+
 def should_poll_now(vault: Path, *, force: bool = False) -> bool:
     if force:
         return True
@@ -514,9 +539,15 @@ def sync_cursor_usage_api(
     cache = load_cache(vault)
     st = load_state(vault)
     now_ms = int(time.time() * 1000)
+    floor_ms = backfill_floor_ms(config, now_ms=now_ms)
+    try:
+        backfilled_from = int(st.get("backfilled_from_ms") or 0)
+    except (TypeError, ValueError):
+        backfilled_from = 0
+    needs_backfill = backfilled_from <= 0 or floor_ms < backfilled_from
     start_ms = int(cache.get("high_water_ms") or 0)
-    if start_ms <= 0:
-        start_ms = now_ms - int(timedelta(days=3).total_seconds() * 1000)
+    if needs_backfill or start_ms <= 0:
+        start_ms = floor_ms
 
     messages: list[str] = []
     all_events: list[dict[str, Any]] = []
@@ -586,10 +617,16 @@ def sync_cursor_usage_api(
     st["last_poll_at"] = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     st["last_mode"] = mode
     st["last_added"] = added
+    if needs_backfill:
+        st["backfilled_from_ms"] = floor_ms
     save_state(vault, st)
+    since_note = ""
+    if needs_backfill:
+        since_day = datetime.fromtimestamp(floor_ms / 1000, UTC).strftime("%Y-%m-%d")
+        since_note = f", backfilled since {since_day}"
     messages.append(
         f"cursor usage api: merged {added} new event(s) from {len(all_events)} fetched "
-        f"({mode})"
+        f"({mode}{since_note})"
     )
     return messages
 
