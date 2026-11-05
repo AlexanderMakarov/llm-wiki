@@ -10,6 +10,10 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Changed
 
+- **CI optional-extra matrix leg (#169)** — `lint-and-test` runs twice on Python 3.12: the existing minimal-deps install (markdown + dev tools only) and a second leg with editable `[add,graph,dev]` so `trafilatura` and `graphifyy` code paths are exercised in CI. Coverage upload stays on the minimal leg; pip cache keys the optional install on `pyproject.toml`. `test_thin_page_without_renderer_warns` disables the Playwright default renderer and parametrizes stdlib-floor vs trafilatura-present so contributors with extras installed see the same result as CI.
+  - *Release note:* CI now tests optional `[add]` and `[graph]` extras alongside the zero-dependency floor (#169).
+
+
 - **Demo Home Pipeline parity on GitHub Pages (#255)** — maintainer script `scripts/reconcile_synth_state_from_wiki.py` upserts offline `synth.files` mtimes from existing `wiki/sources/` pages (same helper as `migrate topic-kinds`), then runs `refresh_synth_pending` so Home Pipeline rows and pending lists match — no LLM. `pages.yml` and `refresh_demo.py` run it before `llmwiki build --vault demo`; user vaults and `llmwiki build` itself are unchanged. Demo vault drops hollow entity stubs (`Python`, `SQLite`); new lint rule `hollow_curated_pages` (warning) guards curated pages with no graph edge and no renderable body. Docs: [`docs/deploy/github-pages.md`](docs/deploy/github-pages.md), [`docs/reference/cli.md`](docs/reference/cli.md).
   - *Release note:* The public demo Home Pipeline no longer shows a large false Documents backlog when wiki sources already cover the raw tree; hollow isolated entity/concept pages are lint warnings (#255).
 
