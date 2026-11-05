@@ -394,6 +394,13 @@ def _force_no_trafilatura(monkeypatch):
     monkeypatch.setitem(_sys.modules, "trafilatura", None)
 
 
+def _no_default_renderer(monkeypatch):
+    """``convert_url(..., renderer=None)`` still falls back to Playwright when
+    the e2e extra is installed; pin the render layer off for deterministic
+    shell-capture warnings (#169)."""
+    monkeypatch.setattr("llmwiki.add_doc._default_renderer", lambda: None)
+
+
 def test_layer2_html_converted(monkeypatch):
     _force_no_trafilatura(monkeypatch)
     fetch = _fetcher([FetchResult(url="https://ex.com/b", status=200,
@@ -435,8 +442,14 @@ def test_challenge_page_escalates_to_renderer():
     assert "Doc Title" in doc.markdown
 
 
-def test_thin_page_without_renderer_warns():
+@pytest.mark.parametrize("block_trafilatura", [True, False], ids=["stdlib-floor", "trafilatura-present"])
+def test_thin_page_without_renderer_warns(monkeypatch, block_trafilatura):
     # A real SPA shell: all the bytes are script, the body has no text.
+    _no_default_renderer(monkeypatch)
+    if block_trafilatura:
+        _force_no_trafilatura(monkeypatch)
+    else:
+        pytest.importorskip("trafilatura")
     thin = ("<html><head><title>SPA</title><script>" + "x" * 30000
             + "</script></head><body><div id=root></div></body></html>")
     fetch = _fetcher([
