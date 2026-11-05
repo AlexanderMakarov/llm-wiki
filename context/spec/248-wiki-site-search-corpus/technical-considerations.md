@@ -65,7 +65,7 @@ When true:
 
 **Ordering.** No bespoke sort — `topics.py:405` already sorts nodes `(-session_count, id.lower())`, edges at `topics.py:352`/`358`. Seeded zero-count nodes land deterministically last, alphabetically.
 
-**Empty topics get no page (amendment, 2026-09-18 — see functional-spec.md).** A node with **no edges** *and* **no content of its own** would render a page carrying a name, `No connected topics.` and an empty evidence list. `topics_page.prune_empty_isolated_topics(graph, wiki_dir)` drops those nodes, using `_backing_page_markdown` — i.e. `page_content()` — for the content half and the edge list for the connection half, and refreshes `stats["total_topics"] / ["kinds"] / ["top_topics"]` so the listing's headings cannot disagree with the rows under them. Edges need no fixing: a dropped node has none by definition.
+**Hollow curated pages (amendment, 2026-11-04 — supersedes 2026-09-18 build-time pruning).** A node with **no edges** *and* **no content of its own** still renders if it remains in the graph — but such entity/concept **files** should not stay in a healthy vault. `llmwiki/topics_health.hollow_isolated_curated_pages` and lint rule `hollow_curated_pages` (warning) share the same predicate (`page_content()` + co-occurrence graph with `include_curated_pages=True`). The demo vault and release gate expect zero findings. Build no longer mutates `graph["nodes"]` for this case.
 
 It lives in `topics_page.py` rather than `topics.py` because it needs `page_content`, and `topics_page` already imports `topics` (the reverse import would be a cycle). It is **not** folded into `build_topic_graph`: the graph is also the candidate harvest's input (§3), and suppression is a rendering decision about pages, not about what the vocabulary contains.
 

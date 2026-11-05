@@ -349,28 +349,26 @@ def render_payoff_card(
 
 def render_knowledge_card(
     *,
-    pending: int,
     entities: int,
     concepts: int,
-    stale: int = 0,
-    stale_days: int = 30,
+    other: int = 0,
     link_prefix: str = "",
 ) -> str:
-    href = f"{link_prefix}candidates.html"
-    hint_body = render_metric_knowledge_hint_body(stale=stale, stale_days=stale_days)
+    href = f"{link_prefix}topics/index.html"
+    hint_body = render_metric_knowledge_hint_body()
     review_hint = render_ui_hint_button(
         "metric-knowledge",
-        "Knowledge counts",
+        "Topic graph counts",
         body_html=hint_body,
     )
     return (
         f'<a class="token-stat token-stat-knowledge" href="{href}">'
         f'<div class="token-stat-label muted">Knowledge{review_hint}</div>'
         f'<div class="token-stat-value">'
-        f"{int(pending)} · {int(entities)} · {int(concepts)}"
+        f"{int(entities)} · {int(concepts)} · {int(other)}"
         "</div>"
         '<div class="token-stat-sub muted">'
-        "candidates · entities · concepts</div></a>"
+        "entities · concepts · other</div></a>"
     )
 
 
@@ -406,11 +404,9 @@ def render_primary_metrics_row(
     wiki_page_count: int,
     metas_by_project: Mapping[str, list[Mapping[str, object]]] | None = None,
     session_tokens_usage: Mapping[str, Any] | None = None,
-    knowledge_pending: int = 0,
     knowledge_entities: int = 0,
     knowledge_concepts: int = 0,
-    knowledge_stale: int = 0,
-    knowledge_stale_days: int = 30,
+    knowledge_other: int = 0,
     link_prefix: str = "",
 ) -> str:
     """Shared Home + Analytics first metrics row (4 cards)."""
@@ -418,11 +414,9 @@ def render_primary_metrics_row(
     extra = (
         render_weekly_pace_card(metas, session_tokens_usage)
         + render_knowledge_card(
-            pending=knowledge_pending,
             entities=knowledge_entities,
             concepts=knowledge_concepts,
-            stale=knowledge_stale,
-            stale_days=knowledge_stale_days,
+            other=knowledge_other,
             link_prefix=link_prefix,
         )
         + render_payoff_card(usage_totals, wiki_page_count=wiki_page_count, link_prefix=link_prefix)
@@ -449,11 +443,9 @@ def render_primary_metrics_section(
     wiki_page_count: int,
     metas_by_project: Mapping[str, list[Mapping[str, object]]] | None = None,
     session_tokens_usage: Mapping[str, Any] | None = None,
-    knowledge_pending: int = 0,
     knowledge_entities: int = 0,
     knowledge_concepts: int = 0,
-    knowledge_stale: int = 0,
-    knowledge_stale_days: int = 30,
+    knowledge_other: int = 0,
     link_prefix: str = "",
     heading: str = "",
 ) -> str:
@@ -463,11 +455,9 @@ def render_primary_metrics_section(
         wiki_page_count=wiki_page_count,
         metas_by_project=metas_by_project,
         session_tokens_usage=session_tokens_usage,
-        knowledge_pending=knowledge_pending,
         knowledge_entities=knowledge_entities,
         knowledge_concepts=knowledge_concepts,
-        knowledge_stale=knowledge_stale,
-        knowledge_stale_days=knowledge_stale_days,
+        knowledge_other=knowledge_other,
         link_prefix=link_prefix,
     )
     title = f"<h3>{html.escape(heading)}</h3>" if heading else ""
@@ -489,11 +479,9 @@ def render_home_wiki_value_section(
     wiki_page_count: int,
     metas_by_project: Mapping[str, list[Mapping[str, object]]] | None = None,
     session_tokens_usage: Mapping[str, Any] | None = None,
-    knowledge_pending: int = 0,
     knowledge_entities: int = 0,
     knowledge_concepts: int = 0,
-    knowledge_stale: int = 0,
-    knowledge_stale_days: int = 30,
+    knowledge_other: int = 0,
 ) -> str:
     """Home metrics row: Tokens, Payoff, Knowledge, Last 7 days (#321)."""
     grid = render_primary_metrics_row(
@@ -501,11 +489,9 @@ def render_home_wiki_value_section(
         wiki_page_count=wiki_page_count,
         metas_by_project=metas_by_project,
         session_tokens_usage=session_tokens_usage,
-        knowledge_pending=knowledge_pending,
         knowledge_entities=knowledge_entities,
         knowledge_concepts=knowledge_concepts,
-        knowledge_stale=knowledge_stale,
-        knowledge_stale_days=knowledge_stale_days,
+        knowledge_other=knowledge_other,
     )
     return f'<div class="home-metrics-row">{grid}</div>'
 
@@ -516,11 +502,9 @@ def render_home_metrics_strip(
     wiki_page_count: int,
     metas_by_project: Mapping[str, list[Mapping[str, object]]] | None = None,
     session_tokens_usage: Mapping[str, Any] | None = None,
-    knowledge_pending: int = 0,
     knowledge_entities: int = 0,
     knowledge_concepts: int = 0,
-    knowledge_stale: int = 0,
-    knowledge_stale_days: int = 30,
+    knowledge_other: int = 0,
 ) -> str:
     """Alias for :func:`render_home_wiki_value_section` (tests / call sites)."""
     return render_home_wiki_value_section(
@@ -528,11 +512,9 @@ def render_home_metrics_strip(
         wiki_page_count=wiki_page_count,
         metas_by_project=metas_by_project,
         session_tokens_usage=session_tokens_usage,
-        knowledge_pending=knowledge_pending,
         knowledge_entities=knowledge_entities,
         knowledge_concepts=knowledge_concepts,
-        knowledge_stale=knowledge_stale,
-        knowledge_stale_days=knowledge_stale_days,
+        knowledge_other=knowledge_other,
     )
 
 

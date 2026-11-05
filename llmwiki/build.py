@@ -129,12 +129,12 @@ from llmwiki.topics import (
     resolve_project_topic_urls,
     topic_slug,
 )
+from llmwiki.topics_health import topic_knowledge_metrics
 from llmwiki.topics_page import (
     build_topic_pages,
     kind_chip,
     kind_label,
     neighbors,
-    prune_empty_isolated_topics,
     topic_node_urls,
     topic_url,
 )
@@ -2100,11 +2100,9 @@ def render_analytics(
         wiki_page_count=int(wv.get("wiki_page_count") or 0),
         metas_by_project=metas_by_project,
         session_tokens_usage=session_tokens_usage,
-        knowledge_pending=int(wv.get("candidates_pending") or 0),
-        knowledge_entities=int(wv.get("trusted_entities") or 0),
-        knowledge_concepts=int(wv.get("trusted_concepts") or 0),
-        knowledge_stale=int(wv.get("candidates_stale") or 0),
-        knowledge_stale_days=int(wv.get("candidates_stale_days") or 30),
+        knowledge_entities=int(wv.get("topic_entities") or wv.get("trusted_entities") or 0),
+        knowledge_concepts=int(wv.get("topic_concepts") or wv.get("trusted_concepts") or 0),
+        knowledge_other=int(wv.get("topic_other") or 0),
     )
     secondary_grid = render_secondary_token_stat_grid(
         metas_by_project,
@@ -3620,19 +3618,8 @@ def build_site(
         topic_graph = build_topic_graph(wiki_dir, include_curated_pages=True)
     except Exception as e:  # noqa: BLE001 — never fail the build over the graph
         print(f"  warning: topic graph build failed: {e}", file=sys.stderr)
-    if topic_graph is not None:
-        # #248 (post-verification amendment): a topic with no connected topics
-        # and no content of its own would render a page saying nothing, so it
-        # gets none. Pruned here, before any consumer reads the node list, so
-        # the topic pages, the search index, the wiki corpus' URL fallback and
-        # the graph viewer all agree on which topics exist.
-        empty_topics = prune_empty_isolated_topics(topic_graph, wiki_dir)
-        if empty_topics:
-            print(
-                f"  skipped {len(empty_topics)} topic pages "
-                "(no connected topics and no content of their own)"
-            )
     topic_nodes = (topic_graph or {}).get("nodes") or []
+    wiki_value.update(topic_knowledge_metrics(topic_graph))
     use_topic_graph = bool(topic_graph) and len(topic_nodes) >= _TOPIC_GRAPH_MIN_NODES
     # #248: rendering the map and writing the topic pages are separate calls.
     # A topic page is the only reader-facing page a curated entity or concept
@@ -3686,11 +3673,9 @@ def build_site(
                 if content_root is not None
                 else None
             ),
-            knowledge_pending=int(review_summary.get("to_review") or 0),
-            knowledge_entities=int(review_summary.get("trusted_entities") or 0),
-            knowledge_concepts=int(review_summary.get("trusted_concepts") or 0),
-            knowledge_stale=int(review_summary.get("to_review_stale") or 0),
-            knowledge_stale_days=int(review_summary.get("stale_days") or 30),
+            knowledge_entities=int(wiki_value.get("topic_entities") or 0),
+            knowledge_concepts=int(wiki_value.get("topic_concepts") or 0),
+            knowledge_other=int(wiki_value.get("topic_other") or 0),
         ),
     )
     render_raw(docs_root, doc_entries, len(doc_files), out_dir)

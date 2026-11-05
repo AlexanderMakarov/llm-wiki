@@ -653,7 +653,9 @@ kbd { display: inline-block; padding: 2px 6px; font-family: var(--mono); font-si
 .home-alerts { margin: 0 0 8px; }
 .home-alerts .error-banner { margin-top: 8px; }
 #llmwiki-lint-banner-mount:empty { display: none; margin: 0; padding: 0; min-height: 0; }
-.home-ops-list { margin: 0 0 0; font-size: 0.88rem; }
+.home-ops-list { margin: 12px 0 0; font-size: 0.88rem; }
+.home-candidates-line { margin-bottom: 4px; }
+.home-candidates-line a { font-weight: 600; }
 .home-ops-timeline { margin: 0; padding-left: 1.1rem; }
 .home-collapsibles { margin-top: 20px; }
 .state-pipeline-table tfoot td { background: var(--bg-alt); font-weight: 600; vertical-align: top; }

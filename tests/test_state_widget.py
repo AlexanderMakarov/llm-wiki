@@ -108,7 +108,8 @@ def test_state_widget_js_has_pipeline_table_and_collapsibles():
     assert "totalOnDisk" in js.JS
     assert "home-knowledge-hint" not in js.JS  # knowledge moved to Wiki value metrics
     assert "state-knowledge-cards" not in js.JS
-    assert "Candidates to review" not in js.JS
+    assert "Candidates to review" in js.JS
+    assert "home-candidates-line" in js.JS
     assert "Not synthesized sessions" in js.JS
     assert "Not synthesized docs" in js.JS
     assert "Estimate warnings" in js.JS
@@ -197,6 +198,10 @@ def test_state_widget_pipeline_stage_stamps_in_freshness_line():
     build_idx = table_section.index("Last build")
     assert sync_idx < synth_idx < build_idx
     ops_fn = js.JS[js.JS.index("function homeOpsListHtml"): js.JS.index("var _homeOpsTimer")]
+    assert "candidatesReviewLineHtml" in js.JS
+    assert 'href="candidates.html"' in js.JS
+    assert "to_review_stale" in js.JS
+    assert ops_fn.index("candidatesReviewLineHtml(") < ops_fn.index("Oldest pending")
     assert "Last lint" not in ops_fn
     assert "Last queue run" in ops_fn
     assert "Synth estimate updated" in ops_fn

@@ -199,8 +199,10 @@ def test_render_session_sources_raw_when_wiki_summary_exists(tmp_path: Path):
     assert 'href="../../sources/demo/2026-01-01T12-00-demo-kickoff.md"' in text
     assert 'target="_blank"' in text
     assert "(raw)" in text
-    assert "entities/" not in text
-    assert "concepts/" not in text
+    # Session Sources must not link into curated wiki folders (hints in page foot are OK).
+    sources_block = text.split("<h2>Sources</h2>", 1)[1].split("</main>", 1)[0]
+    assert "entities/" not in sources_block
+    assert "concepts/" not in sources_block
 
 
 def test_render_session_no_sources_without_wiki_summary(tmp_path: Path):
