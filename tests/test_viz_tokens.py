@@ -375,7 +375,7 @@ def test_site_token_stat_grid_usage_store_wires_floating_hint():
 
 
 def test_token_coverage_lines_name_each_agent_group_and_missing_is_not_zero():
-    """#323 / #324: disclosure names each agent group; Codex included; Cursor IDE still not captured."""
+    """#323 / #324 / #396: disclosure names each agent group including Cursor IDE ledger."""
     text = " ".join(TOKEN_COVERAGE_LINES)
     for phrase in (
         "input, output, cache creation, and cache read",
@@ -384,7 +384,7 @@ def test_token_coverage_lines_name_each_agent_group_and_missing_is_not_zero():
         "compatible usage fields",
         "Cursor CLI",
         "Codex CLI: included when usage fields are present",
-        "Cursor IDE: not captured by the token pipeline yet",
+        "Cursor IDE: included when Composer bubble tokenCount",
         "Gemini CLI",
         "Copilot CLI / Chat",
         "not evidence of zero tokens",

@@ -82,6 +82,9 @@ def make_cursor_ide_db(
             }
             if "created_at" in b:
                 payload["createdAt"] = b["created_at"]
+            tc = b.get("token_count")
+            if isinstance(tc, dict):
+                payload["tokenCount"] = tc
             con.execute(
                 "INSERT INTO cursorDiskKV(key, value) VALUES (?, ?)",
                 (f"bubbleId:{cid}:{bid}", json.dumps(payload).encode()),

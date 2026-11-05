@@ -45,6 +45,7 @@ from llmwiki.adapters.contrib.cursor_slug import cursor_workspace_slug
 from llmwiki.cursor_token_events import usage_records_for_conversation
 from llmwiki.cursor_token_usage import extract_cursor_usage_from_record
 from llmwiki.cursor_usage_api import active_vault, usage_records_from_api_cache
+from llmwiki.cursor_usage_ledger import usage_records_from_ledger_cache
 
 # Synthetic record type injected by ``load_records`` so store-meta audit
 # fields survive ``normalize_records`` / ``filter_records`` and reach
@@ -275,8 +276,8 @@ class CursorCliAdapter(BaseAdapter):
                     out.append({"type": "assistant", "message": message})
             # system + tool roles are intentionally dropped.
         # store.db JSON rarely carries turn usage; prefer stop-hook JSONL when
-        # the store itself had none (forum 168317 / #325 Appendix A). ACP/AO
-        # sessions may only appear on Cursor's usage API (#356).
+        # the store itself had none (forum 168317 / #325 Appendix A). Local IDE
+        # ledger (#396) then opt-in usage API (#356).
         if not store_has_usage and session_id:
             hook_rows = usage_records_for_conversation(session_id)
             if hook_rows:
@@ -284,7 +285,11 @@ class CursorCliAdapter(BaseAdapter):
             else:
                 vault = active_vault()
                 if vault is not None:
-                    out.extend(usage_records_from_api_cache(session_id, vault))
+                    ledger_rows = usage_records_from_ledger_cache(session_id, vault)
+                    if ledger_rows:
+                        out.extend(ledger_rows)
+                    else:
+                        out.extend(usage_records_from_api_cache(session_id, vault))
         return out
 
     def is_headless_session(self, records: list[dict[str, Any]]) -> bool:

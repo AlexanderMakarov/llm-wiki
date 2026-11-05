@@ -549,7 +549,9 @@ TOKEN_COVERAGE_LINES: tuple[str, ...] = (
     "Cursor CLI: included when usage fields are present (stop-hook JSONL;"
     " not context-window occupancy in the session store).",
     "Codex CLI: included when usage fields are present.",
-    "Cursor IDE: not captured by the token pipeline yet.",
+    "Cursor IDE: included when Composer bubble tokenCount or the local"
+    " state.vscdb ledger supplies usage (input/output; no cache fields in"
+    " ledger).",
     "Gemini CLI and Copilot CLI / Chat: no verified native token mapping.",
     "Sessions without usage data are excluded, not evidence of zero tokens."
     " The headline is a recorded-usage total, not a complete all-agent total.",

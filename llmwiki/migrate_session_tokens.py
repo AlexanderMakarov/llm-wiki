@@ -290,8 +290,18 @@ def run_migration(
         set_active_vault,
         sync_cursor_usage_api,
     )
+    from llmwiki.cursor_usage_ledger import (  # noqa: PLC0415
+        apply_ledger_totals_to_raw_sessions,
+        sync_cursor_usage_ledger,
+    )
 
     set_active_vault(vault)
+    for _line in sync_cursor_usage_ledger(
+        vault, cfg, dry_run=dry_run, force_rescan=not dry_run
+    ):
+        pass
+    if not dry_run:
+        apply_ledger_totals_to_raw_sessions(vault, dry_run=False)
     for _line in sync_cursor_usage_api(
         vault, cfg, dry_run=dry_run, force_poll=not dry_run
     ):

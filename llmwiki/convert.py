@@ -32,6 +32,10 @@ from llmwiki.cursor_usage_api import (
     set_active_vault,
     sync_cursor_usage_api,
 )
+from llmwiki.cursor_usage_ledger import (
+    apply_ledger_totals_to_raw_sessions,
+    sync_cursor_usage_ledger,
+)
 from llmwiki.quarantine import add_entry as _quarantine_add
 from llmwiki.quarantine import clear_entry as _quarantine_clear
 from llmwiki.session_tokens_usage import emit_session_tokens_sidecar, upsert_session_tokens, usage_path
@@ -2072,6 +2076,10 @@ def convert_all(
     site_dir = vault_root / "site" if (vault_root / "site").is_dir() else None
     if vault_root is not None:
         set_active_vault(vault_root)
+        for line in sync_cursor_usage_ledger(vault_root, config, dry_run=dry_run):
+            print(f"  {line}")
+        if not dry_run:
+            apply_ledger_totals_to_raw_sessions(vault_root, dry_run=False)
         for line in sync_cursor_usage_api(vault_root, config, dry_run=dry_run):
             print(f"  {line}")
 

@@ -19,7 +19,9 @@
     "_token_coverage_comment": "#355: omit synthetic / zero-tool sessions without measured usage from Analytics Tokens coverage known (default true).",
     "exclude_non_usage_from_token_coverage": true
   },
-  "_cursor_usage_api_comment": "#356: Opt-in Cursor web usage API for ACP/AO sessions (hooks/stream-json carry no usage). dashboard = local session token from ~/.config/cursor/auth.json or IDE storage; admin = team Admin API key via CURSOR_ADMIN_API_KEY or cursor_usage_api_admin_key. Never logged. Polled at most once per hour on sync/migrate.",
+  "_cursor_usage_ledger_comment": "#396: Default on — read-only scan of IDE globalStorage state.vscdb bubble tokenCount per composerId; cached under usage/cursor-usage-ledger-cache.json. Hook JSONL wins; then ledger; then cursor_usage_api. Set false to disable.",
+  "cursor_usage_ledger": true,
+  "_cursor_usage_api_comment": "#356: Opt-in Cursor web usage API for ACP/AO sessions when hooks/ledger carry no usage. dashboard = local session token from ~/.config/cursor/auth.json or IDE storage; admin = team Admin API key via CURSOR_ADMIN_API_KEY or cursor_usage_api_admin_key. Never logged. Polled at most once per hour on sync/migrate.",
   "cursor_usage_api": "off",
   "redaction": {
     "_comment": "Set real_username to the part of your home path to replace. Auto-detected from $USER if empty.",
