@@ -14,7 +14,6 @@ from collections.abc import Sequence
 
 ARMED_PREFIXES: tuple[str, ...] = (
     "llmwiki/",
-    "integrations/",
     "tests/",
     ".github/workflows/",
     "docs/maintainers/",
@@ -26,7 +25,7 @@ CONTEXT_PREFIX = "context/"
 _FAILURE_LINES: tuple[str, ...] = (
     "Product-related paths changed without updating AWOS working notes under context/.",
     "This repository uses a spec-first AWOS flow: changes that arm this gate must also update the written plan/notes so maintainers and agents stay aligned.",
-    "Armed path prefixes: llmwiki/, integrations/, tests/, .github/workflows/, docs/maintainers/, docs/reference/.",
+    "Armed path prefixes: llmwiki/, tests/, .github/workflows/, docs/maintainers/, docs/reference/.",
     "How to fix: run the feature or fix flow (so context/ is updated with the change), or edit the owning notes under context/ to match what this PR changes.",
     "Any file under context/ is enough — the gate does not require a specific filename.",
 )

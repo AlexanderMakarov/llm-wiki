@@ -7,7 +7,7 @@ name: PR lint
 #   3. No unresolved git merge conflict markers in any tracked text file
 #   4. No new runtime dependencies in pyproject.toml
 #   5. AWOS context/ updated when armed product paths change
-#      (llmwiki/, integrations/, tests/, .github/workflows/,
+#      (llmwiki/, tests/, .github/workflows/,
 #       docs/maintainers/, docs/reference/; path filters; no label bypass)
 #   6. AI tooling lint (current engine: agnix) on shipped agent kit +
 #      inner .claude skills/agents/top-level commands

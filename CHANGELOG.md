@@ -8,6 +8,11 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ## [Unreleased]
 
+### Removed
+
+- **Dead consumption surfaces (#215)** — removed the stale `integrations/` tree (phantom directories and v1.2.0-deleted exporter docs) and the broken “Export to qmd” section from `docs/api-guide.md`. Dropped `integrations/` from the AWOS context gate armed prefixes. CI guards: `tests/test_docs_imports_resolve.py` (documented `llmwiki` imports, README path links, armed-prefix directories).
+  - *Release note:* Copy-paste API examples and integration README rows now match what ships; documented imports and README directory links are tested in CI (#215).
+
 ### Changed
 
 - **CI optional-extra matrix leg (#169)** — `lint-and-test` runs twice on Python 3.12: the existing minimal-deps install (markdown + dev tools only) and a second leg with editable `[add,graph,dev]` so `trafilatura` and `graphifyy` code paths are exercised in CI. Coverage upload stays on the minimal leg; pip cache keys the optional install on `pyproject.toml`. `test_thin_page_without_renderer_warns` disables the Playwright default renderer and parametrizes stdlib-floor vs trafilatura-present so contributors with extras installed see the same result as CI.

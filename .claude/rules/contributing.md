@@ -4,7 +4,6 @@ paths:
   - "tests/**"
   - "scripts/**"
   - "docs/**"
-  - "integrations/**"
   - ".github/**"
   - ".githooks/**"
   - "pyproject.toml"

@@ -81,41 +81,10 @@ Unknown frontmatter keys don't end up in the infobox — add them to
 `INFOBOX_FIELDS_IN_ORDER` + `INFOBOX_FIELD_LABELS` in the module if
 you want them surfaced.
 
-## Python API
-
-```python
-from llmwiki.reader_shell import (
-    ShellSlots,
-    build_slots,
-    extract_infobox_fields,
-    is_reader_shell_enabled,
-    render_article_shell,
-)
-
-if is_reader_shell_enabled(meta):
-    slots = build_slots(
-        title=meta.get("title", ""),
-        body_html=rendered_body,
-        meta=meta,
-        breadcrumbs=[("Home", "/"), ("Concepts", "/concepts/"), ("RAG", "")],
-        see_also=[("Karpathy", "/entities/Karpathy.html")],
-        references=[("Original gist", "https://gist.github.com/karpathy/…")],
-        utility_actions=[
-            ("Copy markdown", "javascript:copyMarkdown()"),
-            ("Download .txt", "./page.txt"),
-        ],
-    )
-    shell_html = render_article_shell(slots)
-    # Wrap the existing <main> template body with shell_html.
-else:
-    # Existing rendering path — no changes.
-    ...
-```
-
 ## CSS
 
-Inline CSS lives in `llmwiki/reader_shell.py :: READER_SHELL_CSS` and is
-appended to the main site CSS at build time. All selectors namespace
+Reader-shell CSS lives in `llmwiki/render/css.py` and is inlined into the
+main site stylesheet at build time. All selectors namespace
 under `.reader-shell`:
 
 - `.reader-shell` — outer CSS grid (drawer | main | rail)
