@@ -43,6 +43,8 @@ python3 -m llmwiki.cursor_token_events --install-hook
 
 Each completed Agent turn then appends the **full Cursor stop stdin JSON** as one line to `~/.cursor/llmwiki-cursor-token-events.jsonl` (override with `LLMWIKI_CURSOR_TOKEN_EVENTS`). That keeps the awaited hook cheap; treat the JSONL as local telemetry (not under `site/`). The Python ingest path (`python3 -m llmwiki.cursor_token_events` / `--ingest-stream-json`) writes a minimized usage row instead; sync accepts both shapes. Sync / `migrate session-tokens` join by `conversation_id` (= chat folder / `agentId`). Historical chats from before the hook cannot be backfilled from `store.db`.
 
+**IDE Composer ledger (no hooks, no API) (#396):** on `sync` and `migrate session-tokens`, llmwiki scans global `state.vscdb` read-only for `bubbleId:<composerId>:<bubbleId>` rows with non-zero `tokenCount.{inputTokens,outputTokens}`, sums per `composerId` (same id as `cursor_ide` `sessionId`), and caches under `usage/cursor-usage-ledger-cache.json`. Input/output only — no cache read/write in the ledger schema. Agent CLI chat folder UUIDs are **not** in this DB; CLI tokens still need hooks, stream-json, or `#356` API. Precedence: **hook JSONL → local ledger → `cursor_usage_api`**. Disable with `"cursor_usage_ledger": false` in sessions config. Fail-soft when the DB is missing or the schema drifts.
+
 **Agent CLI (`cursor-agent -p --output-format stream-json`):** final `result.usage` uses camelCase (`inputTokens`, …) — ingest into the same JSONL:
 
 ```bash

@@ -348,6 +348,10 @@ def api_totals_for_conversation(vault: Path, conversation_id: str) -> dict[str, 
         return None
     if conversation_has_hook_usage(cid):
         return None
+    from llmwiki.cursor_usage_ledger import conversation_has_ledger_usage  # noqa: PLC0415
+
+    if conversation_has_ledger_usage(vault, cid):
+        return None
     cache = load_cache(vault)
     by_conv = cache.get("by_conversation")
     if not isinstance(by_conv, dict):
@@ -376,6 +380,10 @@ def usage_records_from_api_cache(
     """Synthetic assistant records from API cache (one per cached event)."""
     cid = (conversation_id or "").strip()
     if not cid or conversation_has_hook_usage(cid):
+        return []
+    from llmwiki.cursor_usage_ledger import conversation_has_ledger_usage  # noqa: PLC0415
+
+    if conversation_has_ledger_usage(vault, cid):
         return []
     cache = load_cache(vault)
     by_conv = cache.get("by_conversation")
@@ -692,6 +700,10 @@ def apply_api_totals_to_raw_sessions(
         if not isinstance(row, Mapping):
             continue
         if conversation_has_hook_usage(session_key):
+            continue
+        from llmwiki.cursor_usage_ledger import conversation_has_ledger_usage  # noqa: PLC0415
+
+        if conversation_has_ledger_usage(vault, session_key):
             continue
         bucket = _bucket_from_api_row(row)
         if bucket is None:

@@ -27,6 +27,9 @@ from llmwiki.adapters import register
 from llmwiki.adapters.base import BaseAdapter, SessionRef, SyncCandidateEstimate, lookback_cutoff_ts
 from llmwiki.adapters.contrib.cursor_slug import cursor_workspace_slug
 from llmwiki.adapters.settings import adapter_block
+from llmwiki.cursor_token_events import usage_records_for_conversation
+from llmwiki.cursor_usage_api import active_vault, usage_records_from_api_cache
+from llmwiki.cursor_usage_ledger import bubble_token_usage_record, usage_records_from_ledger_cache
 
 _CURSOR_IDE_META = "cursor_ide_meta"
 _LOCATOR_RE = re.compile(r"^cursor-ide:composer:(.+)$")
@@ -199,11 +202,16 @@ class CursorAdapter(BaseAdapter):
 
     def normalize_records(self, records: list[dict[str, Any]]) -> list[dict[str, Any]]:
         out: list[dict[str, Any]] = []
+        session_id = ""
+        thread_has_usage = False
         for rec in records:
             if not isinstance(rec, dict):
                 continue
             if rec.get("type") == _CURSOR_IDE_META:
                 out.append(rec)
+                sid = rec.get("sessionId")
+                if isinstance(sid, str) and sid.strip():
+                    session_id = sid.strip()
                 continue
             # Raw bubble shape from load_records
             if "bubbleId" in rec or rec.get("_cursor_ide_bubble"):
@@ -213,17 +221,35 @@ class CursorAdapter(BaseAdapter):
                     out.append({"type": "user", "message": {"role": "user", "content": text}})
                 elif btype in (2, "2"):
                     blocks = _assistant_blocks(rec, text)
-                    if blocks:
+                    usage = bubble_token_usage_record(rec)
+                    if usage:
+                        thread_has_usage = True
+                    message: dict[str, Any] = {"role": "assistant", "content": blocks}
+                    if usage:
+                        message["usage"] = usage
+                    if blocks or usage:
                         out.append(
                             {
                                 "type": "assistant",
-                                "message": {"role": "assistant", "content": blocks},
+                                "message": message,
                             }
                         )
                 continue
             # Already normalized
             if rec.get("type") in ("user", "assistant"):
                 out.append(rec)
+        if not thread_has_usage and session_id:
+            hook_rows = usage_records_for_conversation(session_id)
+            if hook_rows:
+                out.extend(hook_rows)
+            else:
+                vault = active_vault()
+                if vault is not None:
+                    ledger_rows = usage_records_from_ledger_cache(session_id, vault)
+                    if ledger_rows:
+                        out.extend(ledger_rows)
+                    else:
+                        out.extend(usage_records_from_api_cache(session_id, vault))
         return out
 
     def is_headless_session(self, records: list[dict[str, Any]]) -> bool:
