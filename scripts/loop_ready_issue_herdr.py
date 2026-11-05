@@ -377,10 +377,12 @@ def local_phase_a_is_clean(
     *,
     run_git: RunGit = default_run_git,
 ) -> bool:
-    """Phase A clean: empty porcelain and ``#N`` in ``git log -n 10 --oneline``."""
-    status = run_git(["status", "--porcelain"], repo_root)
-    if status.stdout.strip():
-        return False
+    """Phase A satisfied: ``#N`` in ``git log -n 10 --oneline`` on the main checkout.
+
+    Porcelain dirt is ignored — the next ticket starts in a fresh worktree; the
+    driver only needs evidence that the merged delivery reached local ``main``
+    history (worker ``git pull`` on ``MAIN``).
+    """
     log_proc = run_git(["log", "-n", "10", "--oneline"], repo_root)
     return issue_number_in_recent_log(log_proc.stdout, issue_number)
 
@@ -435,9 +437,9 @@ def format_advance_poll_line(
     if phase == "B":
         if merge_info.get("merged") and ": " in line:
             body = line.split(": ", 1)[1]
-            line = f"{ref} Phase B: local clean; {body}"
+            line = f"{ref} Phase B: {body}"
         elif not merge_info.get("merged"):
-            line = f"{ref} Phase B: local clean; no merged PR closes it yet"
+            line = f"{ref} Phase B: no merged PR closes it yet"
     return f"{line} — waiting {poll_seconds}s{gone}"
 
 
@@ -1584,10 +1586,13 @@ def wait_until_ticket_advanced(
                             phase="B",
                         ),
                     )
-                elif status["merge_info"].get("merged"):
+                elif (
+                    status["merge_info"].get("merged")
+                    and not local_fn(repo_root, worker.issue_number)
+                ):
                     print(
                         f"#{worker.issue_number} Phase A: merged on GitHub; "
-                        "main checkout not updated yet — "
+                        f"#{worker.issue_number} not in git log -n 10 yet — "
                         f"next local poll {local_poll_seconds}s",
                     )
                 else:
@@ -1605,7 +1610,8 @@ def wait_until_ticket_advanced(
             if local_fn(repo_root, worker.issue_number):
                 phase = "B"
                 print(
-                    f"#{worker.issue_number} Phase A: local clean; "
+                    f"#{worker.issue_number} Phase A: "
+                    f"#{worker.issue_number} in local git log; "
                     "entering Phase B (GitHub α)",
                 )
             else:

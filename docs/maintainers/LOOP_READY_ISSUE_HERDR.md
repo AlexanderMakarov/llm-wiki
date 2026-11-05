@@ -59,9 +59,9 @@ While a worker waits on you (herdr `blocked` — approval, question, permission)
 
 ## Advance rule (local Phase A → GitHub Phase B, or closed without merge)
 
-**Phase A local ticks** never run `git fetch` / `git pull` — only `git status --porcelain` and `git log -n 10`. The driver still polls GitHub every `--poll-seconds` during Phase A solely to detect **Path 2** (closed without a merged PR) and to print “merged on GitHub; main not updated yet”; it never advances Path 1 from Phase A. It starts every adopt/restart in **Phase A**, then moves to **Phase B** only when the **main checkout** (driver cwd) is clean and `git log -n 10 --oneline` contains `#N` (delivery commits should include `(#N)` / `Closes #N`).
+**Phase A local ticks** never run `git fetch` / `git pull` — only `git log -n 10 --oneline` on the **main checkout** (driver cwd). Untracked or modified files on that checkout do **not** block advance (the next ticket uses a fresh worktree). The driver still polls GitHub every `--poll-seconds` during Phase A solely to detect **Path 2** (closed without a merged PR) and to print “merged on GitHub; `#N` not in git log yet”; it never advances Path 1 from Phase A. It starts every adopt/restart in **Phase A**, then moves to **Phase B** only when `git log -n 10 --oneline` contains `#N` (delivery commits should include `(#N)` / `Closes #N` after the worker pulls `MAIN`).
 
-**Path 1 — merged closing PR:** after Phase A is clean, **Phase B** polls GitHub every `--poll-seconds` (default 300) until the issue is **CLOSED**, the closing PR is **merged**, and **every check run on the merge commit** is green (α — same as before: non-empty check runs, all `success` / `skipped` / `neutral`). Phase B alone is not enough: GitHub can show merged/green before the worker pulls `main`.
+**Path 1 — merged closing PR:** after Phase A sees `#N` in local `git log`, **Phase B** polls GitHub every `--poll-seconds` (default 300) until the issue is **CLOSED**, the closing PR is **merged**, and **every check run on the merge commit** is green (α — same as before: non-empty check runs, all `success` / `skipped` / `neutral`). Phase B alone is not enough: GitHub can show merged/green before the worker pulls `main`.
 
 **Path 2 — closed without a merged closing PR:** no Phase A requirement; GitHub every `--poll-seconds`; advance at once with CI skipped, e.g. `Advanced #323 (closed: COMPLETED, no merged closing PR; CI gate skipped)`.
 
@@ -75,7 +75,7 @@ On advance, the driver always closes the finished worker tab (even if the agent 
 
 ## Polling intervals
 
-- **Phase A (local):** `--local-poll-seconds` (default **10**, range 10–30) — `git status --porcelain` and `git log -n 10` only (no git network); Path-2 `gh` still on the `--poll-seconds` schedule.
+- **Phase A (local):** `--local-poll-seconds` (default **10**, range 10–30) — `git log -n 10` only (no git network); Path-2 `gh` still on the `--poll-seconds` schedule.
 - **Phase B / Path 2 (GitHub):** `--poll-seconds` (default **300**) between merge/CI polls.
 
 herdr `agent wait` is interleaved between ticks. Empty-queue re-listing (without `--once`) sleeps `--poll-seconds` between attempts.

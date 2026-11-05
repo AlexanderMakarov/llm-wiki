@@ -968,7 +968,7 @@ _PENDING_CHECK = {"name": "ci", "status": "in_progress", "conclusion": None}
             "closed: NOT_PLANNED, no merged closing PR; CI gate skipped",
             [
                 "#7 open; no merged PR closes it yet — waiting 60s",
-                "#7 Phase A: local clean; entering Phase B (GitHub α)",
+                "#7 Phase A: #7 in local git log; entering Phase B (GitHub α)",
             ],
             id="closed-while-waiting",
         ),
@@ -979,9 +979,8 @@ _PENDING_CHECK = {"name": "ci", "status": "in_progress", "conclusion": None}
             ],
             "merge + post-merge CI α",
             [
-                "#7 Phase A: merged on GitHub; main checkout not updated yet — "
-                "next local poll 10s",
-                "#7 Phase A: local clean; entering Phase B (GitHub α)",
+                "#7: PR #10 merged; post-merge CI 0/1 green (1 pending) — waiting 60s",
+                "#7 Phase A: #7 in local git log; entering Phase B (GitHub α)",
             ],
             id="merged-and-auto-closed-still-waits-for-alpha",
         ),
@@ -1032,7 +1031,7 @@ def test_wait_until_ticket_advanced_issue_state_decision(
         pytest.param(
             _status(merged=True),
             False,
-            "#7 Phase B: local clean; PR #10 merged; no check runs yet on the merge commit "
+            "#7 Phase B: PR #10 merged; no check runs yet on the merge commit "
             "— waiting 300s",
             id="no-check-runs",
         ),
@@ -1048,7 +1047,7 @@ def test_wait_until_ticket_advanced_issue_state_decision(
                 ],
             ),
             False,
-            "#7 Phase B: local clean; PR #10 merged; post-merge CI 3/5 green "
+            "#7 Phase B: PR #10 merged; post-merge CI 3/5 green "
             "(1 failed, 1 pending) — waiting 300s",
             id="mixed-checks",
         ),
@@ -1195,17 +1194,10 @@ def test_issue_number_in_recent_log_word_boundary(loop_mod):
 
 def test_local_phase_a_is_clean_cases(loop_mod, tmp_path):
     def run_git(argv: list[str], _root):
-        if argv[:2] == ["status", "--porcelain"]:
-            out = getattr(run_git, "porcelain", "")
-        else:
-            out = getattr(run_git, "log", "")
+        assert argv[:2] == ["log", "-n"]
+        out = getattr(run_git, "log", "")
         return subprocess.CompletedProcess(["git", *argv], 0, out, "")
 
-    run_git.porcelain = " M file.py"
-    run_git.log = "deadbeef feat (#7)\n"
-    assert loop_mod.local_phase_a_is_clean(tmp_path, 7, run_git=run_git) is False
-
-    run_git.porcelain = ""
     run_git.log = "deadbeef feat (#70)\n"
     assert loop_mod.local_phase_a_is_clean(tmp_path, 7, run_git=run_git) is False
 
