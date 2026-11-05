@@ -61,6 +61,10 @@ DEFAULT_CONFIG: dict[str, Any] = {
         # ingestion creates a synthesis feedback loop when the synthesizer
         # shells out to `claude -p` (each synth run is logged as a session).
         "exclude_headless": True,
+        # #188: skip transcripts with no user message and no tool call — aborted
+        # launches and other content-free rows have nothing worth a wiki page
+        # and pollute harvest citation counts when synthesized.
+        "exclude_empty": True,
         # #8: optionally drop sessions run from a throwaway temp cwd (/tmp,
         # /var/folders). Default-OFF: a git worktree under /tmp is often
         # real work, so we don't silently drop it. Opt in if your temp dirs
@@ -975,6 +979,15 @@ def count_tool_calls(records: list[dict[str, Any]]) -> int:
             if isinstance(b, dict) and b.get("type") == "tool_use":
                 n += 1
     return n
+
+
+def is_empty_session(records: list[dict[str, Any]]) -> bool:
+    """True when the transcript has no user message and no tool call (#188).
+
+    Requires **both** counts to be zero. A one-shot user question with no
+    tools, or a tool-only agent continuation, stays eligible.
+    """
+    return count_user_messages(records) == 0 and count_tool_calls(records) == 0
 
 
 _MCP_TOOL_WRAPPERS = frozenset({"CallMcpTool", "GetMcpTools"})
@@ -2019,6 +2032,7 @@ def convert_all(
     live_minutes = config.get("filters", {}).get("live_session_minutes", 60)
     live_cutoff = datetime.now(UTC) - timedelta(minutes=live_minutes)
     exclude_headless = config.get("filters", {}).get("exclude_headless", True)
+    exclude_empty = config.get("filters", {}).get("exclude_empty", True)
     exclude_temp_cwd = config.get("filters", {}).get("exclude_temp_cwd", False)
     # #30: "off" drops subagent transcripts before they ever hit raw/. The
     # "only-raw"/"all" modes both convert them here (they diverge only in
@@ -2049,7 +2063,7 @@ def convert_all(
     # `claude -p` runs), so surface the count instead of silently folding
     # it into `filtered` — otherwise the user has no idea why their session
     # history didn't land in the wiki, nor which toggle to flip to get it.
-    excluded_headless = excluded_temp = excluded_subagents = 0
+    excluded_headless = excluded_empty = excluded_temp = excluded_subagents = 0
 
     # G-03 (#289): per-adapter counters so `llmwiki sync --status` can
     # report which adapter saw what. Written under ``_counters`` in the
@@ -2254,6 +2268,24 @@ def convert_all(
             if exclude_headless and headless:
                 filtered += 1
                 excluded_headless += 1
+                _bump(cls.name, "filtered")
+                _upsert_session_tokens_from_convert(
+                    vault_root,
+                    site_dir,
+                    records=records,
+                    path=path,
+                    agent=cls.name,
+                    mtime=mtime,
+                    in_raw=False,
+                    metrics_only=True,
+                    dry_run=dry_run,
+                )
+                if not dry_run:
+                    state[key] = mtime_to_iso(mtime)
+                continue
+            if exclude_empty and is_empty_session(records):
+                filtered += 1
+                excluded_empty += 1
                 _bump(cls.name, "filtered")
                 _upsert_session_tokens_from_convert(
                     vault_root,
@@ -2536,10 +2568,11 @@ def convert_all(
     )
     # #8/#30: break out the content filters so a large silent drop is
     # visible and the user knows which toggle re-enables ingestion.
-    if excluded_headless or excluded_temp or excluded_subagents:
+    if excluded_headless or excluded_empty or excluded_temp or excluded_subagents:
         print(
             f"  filtered breakdown: {excluded_headless} headless "
-            f"(exclude_headless), {excluded_temp} temp-cwd (exclude_temp_cwd), "
+            f"(exclude_headless), {excluded_empty} empty (exclude_empty), "
+            f"{excluded_temp} temp-cwd (exclude_temp_cwd), "
             f"{excluded_subagents} subagent (include_subagents=off)"
         )
     # #192 R5: always hint how to set/change lookback (including unlimited runs).

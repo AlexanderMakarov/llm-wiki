@@ -355,6 +355,7 @@ Full parameter tables: [mcp.md](reference/mcp.md). Historical telemetry rows kee
 - Bare **`llmwiki sync` loads every enabled ingest-ready adapter** whose store exists; `enabled: false` is honoured (#182).
 - **Obsidian and ChatGPT export stay opt-in** (`adapters.*.enabled: true`).
 - **`filters.exclude_headless` (default on)** skips automated launches for every coding-agent adapter; re-sync to classify older Cursor CLI rows (#180).
+- **`filters.exclude_empty` (default on, #188)** skips sessions with zero user messages **and** zero tool calls at convert time, and drops them from the synthesis backlog / `--estimate` when they are already in `raw/`. Existing vaults keep pages already synthesized from empty transcripts — delete those under `wiki/sources/` (leave `raw/` and synth state alone so they are not recreated), then repair any `wiki/candidates/` whose `sources:` cited them. Set `exclude_empty: false` to restore today's archive behaviour.
 - **Cursor IDE Composer ingest works via bare `llmwiki sync` after `configure-sources` Enable** (or `llmwiki sync --adapter cursor_ide`) (#2 / #192) — parses global `state.vscdb`. Set `filters.since` / `adapters.cursor_ide.since` (or pass `--since`) before the first large run. Alias `--adapter cursor` / legacy `adapters.cursor` still resolve. Cursor Agent CLI remains `cursor_cli`.
 
 ### Synthesis and candidates

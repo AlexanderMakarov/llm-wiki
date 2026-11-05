@@ -38,7 +38,7 @@ from llmwiki import REPO_ROOT
 # #py-m1 (#587) / #arch-h5 (#610): import directly from _frontmatter
 # instead of via build.py. The build module pulls in 145+ transitive
 # imports; the parser sits cleanly in _frontmatter.py with no deps.
-from llmwiki._frontmatter import is_headless, is_subagent, parse_frontmatter
+from llmwiki._frontmatter import is_empty_session, is_headless, is_subagent, parse_frontmatter
 from llmwiki.agent_label import detect_agent_label
 from llmwiki.candidates import apply_review_summary_to_pipeline
 from llmwiki.config_schedule import _load_sessions_config, resolve_vault_dir
@@ -336,6 +336,7 @@ def resolve_include_subagents(cfg: dict[str, Any] | None = None) -> str:
 # the wiki's own output. The setting now also governs the backlog, so it
 # means what it says — headless runs are never wiki material.
 DEFAULT_EXCLUDE_HEADLESS = True
+DEFAULT_EXCLUDE_EMPTY = True
 
 
 def resolve_exclude_headless(cfg: dict[str, Any] | None = None) -> bool:
@@ -351,6 +352,17 @@ def resolve_exclude_headless(cfg: dict[str, Any] | None = None) -> bool:
     if isinstance(raw, str):
         return raw.strip().lower() not in ("false", "no", "0", "off")
     return DEFAULT_EXCLUDE_HEADLESS
+
+
+def resolve_exclude_empty(cfg: dict[str, Any] | None = None) -> bool:
+    """Read ``cfg["filters"]["exclude_empty"]`` (default True) (#188)."""
+    filters = (cfg or {}).get("filters", {}) or {}
+    raw = filters.get("exclude_empty", DEFAULT_EXCLUDE_EMPTY)
+    if isinstance(raw, bool):
+        return raw
+    if isinstance(raw, str):
+        return raw.strip().lower() not in ("false", "no", "0", "off")
+    return DEFAULT_EXCLUDE_EMPTY
 
 
 # #355: placeholder / no-usage sessions must not inflate Tokens coverage ``known``.
@@ -729,6 +741,7 @@ def discover_unsynth_session_rels(
     state_file: Path | None = None,
     include_subagents: str | None = None,
     exclude_headless: bool | None = None,
+    exclude_empty: bool | None = None,
 ) -> set[str]:
     """Session rel-paths that the shared estimate logic considers unsynth."""
 
@@ -754,6 +767,7 @@ def discover_unsynth_session_rels(
         docs_root=(raw_dir.parent / "docs") if raw_dir is not None else resolve_vault_dir(None, RAW_DOCS, "raw", "docs"),
         include_subagents=include_subagents,
         exclude_headless=exclude_headless,
+        exclude_empty=exclude_empty,
     )
     out: set[str] = set()
     for it in report.get("unsynth_items", []):
@@ -771,6 +785,7 @@ def refresh_synth_pending(
     state_file: Path | None = None,
     include_subagents: str | None = None,
     exclude_headless: bool | None = None,
+    exclude_empty: bool | None = None,
     backend: BaseSynthesizer | None = None,
 ) -> dict[str, Any]:
     """Compute unsynth backlog and persist it in unified state.
@@ -793,6 +808,8 @@ def refresh_synth_pending(
         include_subagents = resolve_include_subagents(config)
     if exclude_headless is None:
         exclude_headless = resolve_exclude_headless(config)
+    if exclude_empty is None:
+        exclude_empty = resolve_exclude_empty(config)
     if backend is None:
         resolved = resolve_backend(config)
         backend = resolved if resolved.is_llm else None
@@ -806,6 +823,7 @@ def refresh_synth_pending(
         docs_root=docs_dir or ((raw_dir.parent / "docs") if raw_dir is not None else resolve_vault_dir(None, RAW_DOCS, "raw", "docs")),
         include_subagents=include_subagents,
         exclude_headless=exclude_headless,
+        exclude_empty=exclude_empty,
         backend=backend,
     )
     pending: list[dict[str, Any]] = []
@@ -1701,6 +1719,7 @@ def synthesize_new_sessions(
     only_paths: set[Path] | set[str] | None = None,
     include_subagents: str | None = None,
     exclude_headless: bool | None = None,
+    exclude_empty: bool | None = None,
     concurrency: int | None = None,
 ) -> dict[str, Any]:
     """Main entry point. Returns a summary dict:
@@ -1763,6 +1782,10 @@ def synthesize_new_sessions(
         exclude_headless = resolve_exclude_headless(_load_sessions_config())
     else:
         exclude_headless = bool(exclude_headless)
+    if exclude_empty is None:
+        exclude_empty = resolve_exclude_empty(_load_sessions_config())
+    else:
+        exclude_empty = bool(exclude_empty)
     # #118: an explicit value goes through the same helper as the saved one,
     # so a library caller cannot inject an out-of-range worker count.
     if concurrency is None:
@@ -1801,6 +1824,7 @@ def synthesize_new_sessions(
             state_file=state_file,
             include_subagents=include_subagents,
             exclude_headless=exclude_headless,
+            exclude_empty=exclude_empty,
         )
 
     items: list[dict[str, Any]] = []
@@ -1817,6 +1841,8 @@ def synthesize_new_sessions(
             # summarizes our own output and breeds more of them. Skipped even
             # under --force/only_paths, exactly like the subagent rule above.
             if exclude_headless and is_headless(meta if isinstance(meta, dict) else {}):
+                continue
+            if exclude_empty and is_empty_session(meta if isinstance(meta, dict) else {}):
                 continue
             if only_resolved is not None:
                 try:
