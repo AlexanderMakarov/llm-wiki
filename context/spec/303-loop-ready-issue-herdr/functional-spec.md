@@ -105,7 +105,7 @@ Success: enqueue by assigning yourself and applying the label you pass to the dr
 
 ### 2.8 Advance rule (Option α) — no manual tab-close to unlock the queue
 
-- **Path 1 (merged closing PR):** wait **Phase A** (the closing PR's merge commit is in local main history, or `#N` is in a full message of the last 10 commits — see `phase-a-merge-sha.md`; polled every `--local-poll-seconds`, default 10) then **Phase B** (GitHub α: merged closing PR + green post-merge checks + issue CLOSED). See `advance-wait-redesign.md`.
+- **Path 1 (merged closing PR):** wait **Phase A** (the closing PR's merge commit is in local main history, or one of the last 10 commits has `#N` in its subject or `Closes #N` in its body — see `phase-a-merge-sha.md`; polled every `--local-poll-seconds`, default 10) then **Phase B** (GitHub α: merged closing PR + green post-merge checks + issue CLOSED). See `advance-wait-redesign.md`.
 - The driver starts the **next** eligible issue only when the **current** issue’s delivery is done, by either path:
   1. **Delivered by a PR:** a PR that closed that issue is **merged**, and **every check run observed on that merge commit** is **completed** with a green conclusion; an **empty** check-run list means **not ready** (CI may still be queuing). This still applies even though GitHub closes the issue automatically when such a PR merges.
   2. **Closed without a merged closing PR:** the issue is **closed** (closed by hand, closed as not planned, or a merged PR that only mentions it, e.g. “Relevant to #N”) and no merged PR closes it. The driver advances — closes the worker tab and moves on — with the CI gate skipped.

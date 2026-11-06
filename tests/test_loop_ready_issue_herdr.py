@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import re
 import subprocess
 import sys
@@ -1209,8 +1210,11 @@ def _commit(repo: Path, message: str) -> str:
 
 
 @pytest.fixture
-def git_repo(tmp_path):
-    _git(tmp_path, "init", "-q", "-b", "main")
+def git_repo(tmp_path, monkeypatch):
+    """Throwaway repo isolated from the developer's global/system git config (signing, hooks)."""
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)
+    monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
+    _git(tmp_path, "init", "-q")
     _commit(tmp_path, "chore: root")
     return tmp_path
 
@@ -1227,6 +1231,23 @@ def test_local_phase_a_is_clean_closes_in_body_under_github_merge(loop_mod, git_
     """Delivery commit names the issue only in its body; GitHub's merge subject names the PR."""
     _commit(git_repo, "fix(kit): chain backups\n\nCloses #224")
     _commit(git_repo, "Merge pull request #406 from owner/fix/224-kit")
+    assert loop_mod.local_phase_a_is_clean(git_repo, 224) is True
+
+
+# @regression
+@pytest.mark.parametrize(
+    "body",
+    ["Relevant to #224", "Follow-up to #224; see #224 for context", "Closes #2240"],
+)
+def test_local_phase_a_is_clean_body_cross_reference_does_not_count(loop_mod, git_repo, body):
+    """A bare ``#N`` in a body (partial PR, cross-reference) is not this ticket's delivery."""
+    _commit(git_repo, f"fix: partial step\n\n{body}")
+    assert loop_mod.local_phase_a_is_clean(git_repo, 224) is False
+
+
+@pytest.mark.parametrize("body", ["closes #224", "Fixes #224", "Resolved: #224"])
+def test_local_phase_a_is_clean_body_closing_keywords(loop_mod, git_repo, body):
+    _commit(git_repo, f"fix: done\n\n{body}")
     assert loop_mod.local_phase_a_is_clean(git_repo, 224) is True
 
 

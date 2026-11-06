@@ -78,6 +78,13 @@ ADVANCE_REASON_MERGED = "merge + post-merge CI α"
 _SKIP_DIR_NAME = ".herdr"
 _SKIP_FILE_NAME = "skip-issue"
 _ISSUE_MARKER_RE = re.compile(r"#(\d+)(?!\d)")
+_CLOSING_MARKER_RE = re.compile(
+    r"\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s*:?\s+#(\d+)(?!\d)",
+    re.IGNORECASE,
+)
+# Record/field separators for ``git log --format`` (subject vs body per commit).
+_LOG_RECORD_SEP = "\x1e"
+_LOG_FIELD_SEP = "\x1f"
 
 
 def _issue_state_open(issue: Issue) -> bool:
@@ -369,6 +376,33 @@ def issue_number_in_recent_log(log_text: str, issue_number: int) -> bool:
     return False
 
 
+def issue_closed_in_body(body: str, issue_number: int) -> bool:
+    """True when a commit body carries a closing keyword for ``#N`` (``Closes #N``).
+
+    Bodies routinely cross-reference other tickets (``Relevant to #N``), so a
+    bare ``#N`` there is not evidence that this ticket's delivery landed.
+    """
+    return any(
+        int(match.group(1)) == issue_number
+        for match in _CLOSING_MARKER_RE.finditer(body)
+    )
+
+
+def issue_delivered_in_recent_messages(log_text: str, issue_number: int) -> bool:
+    """Match ``#N`` in ``git log`` output of ``subject<US>body<RS>`` records.
+
+    Subjects accept any whole ``#N`` token (``feat: x (#N)``); bodies accept
+    only closing keywords (``Closes #N``).
+    """
+    for record in log_text.split(_LOG_RECORD_SEP):
+        subject, _, body = record.partition(_LOG_FIELD_SEP)
+        if issue_number_in_recent_log(subject, issue_number):
+            return True
+        if issue_closed_in_body(body, issue_number):
+            return True
+    return False
+
+
 def local_phase_a_is_clean(
     repo_root: Path,
     issue_number: int,
@@ -383,9 +417,10 @@ def local_phase_a_is_clean(
     * ``merge_commit_sha`` (the closing PR's merge commit, from the last GitHub
       poll) is an ancestor of local ``HEAD`` — independent of commit-message
       wording and of how many commits landed since.
-    * ``#N`` appears in a full message (subject **or** body) of the last 10
-      commits, so ``Closes #N`` in a body counts — GitHub's merge-commit subject
-      names the PR, not the issue.
+    * One of the last 10 commits names the ticket: ``#N`` in its subject, or a
+      closing keyword (``Closes #N``) in its body — GitHub's merge-commit
+      subject names the PR, not the issue, and a bare ``#N`` in a body is
+      usually a cross-reference.
 
     Porcelain dirt is ignored — the next ticket starts in a fresh worktree; the
     driver only needs evidence that the merged delivery reached local ``main``
@@ -398,8 +433,11 @@ def local_phase_a_is_clean(
         )
         if ancestor_proc.returncode == 0:
             return True
-    log_proc = run_git(["log", "-n", "10", "--format=%B"], repo_root)
-    return issue_number_in_recent_log(log_proc.stdout, issue_number)
+    log_proc = run_git(
+        ["log", "-n", "10", f"--format=%s{_LOG_FIELD_SEP}%b{_LOG_RECORD_SEP}"],
+        repo_root,
+    )
+    return issue_delivered_in_recent_messages(log_proc.stdout, issue_number)
 
 
 def _status_display_ref(status: IssueAdvanceStatus) -> str:
