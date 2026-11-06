@@ -15,7 +15,7 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Changed
 
-- **Herdr worker skill scope (#215)** — driver-inlined `.claude/skills/loop-ready-issue-herdr/SKILL.md` is a thin wrapper only: before (one ticket, `MAIN=`), route to `/fix-bug` or `/implement-feature`, and a single line that queue advance is the driver’s job (no DoD claim, no Phase A/B, no AWOS step lists). Maintainer doc holds advance rules and notes AWOS changes belong in `/awos:flow`, not hand-edits to generated commands. Docs: [`docs/maintainers/LOOP_READY_ISSUE_HERDR.md`](docs/maintainers/LOOP_READY_ISSUE_HERDR.md).
+- **Herdr worker skill scope (#215)** — driver-inlined `.claude/skills/loop-ready-issue-herdr/SKILL.md` is a thin wrapper only: before (one ticket, `MAIN=`), route to `/fix-bug` or `/implement-feature`, and worker **finish-line** outcomes (closed GitHub issue with merged post-merge CI, `#N` in commit messages on `main`, post-merge sync on `MAIN`) — no AWOS stage lists or driver Phase A/B prose. Maintainer doc holds polling rules; AWOS changes belong in `/awos:flow`, not hand-edits to generated commands. Docs: [`docs/maintainers/LOOP_READY_ISSUE_HERDR.md`](docs/maintainers/LOOP_READY_ISSUE_HERDR.md).
 
 ### Changed
 

@@ -347,6 +347,15 @@ def test_acceptance_skill_one_ticket_route_contract():
     assert "readiness queue" in text or "driver" in text.lower()
 
 
+def test_acceptance_skill_finish_line_outcomes_for_worker():
+    """#215: worker skill states GitHub close, #N on main, and MAIN sync — not driver internals."""
+    text = SKILL.read_text(encoding="utf-8").lower()
+    assert "#n" in text
+    assert "main" in text
+    assert "closed" in text
+    assert "flow-log" not in text
+
+
 def test_acceptance_maintainer_doc_merge_gate_for_workers():
     """Merge gate prose for workers lives in maintainer doc, not the thin skill."""
     doc = MAINTAINER_DOC.read_text(encoding="utf-8")

@@ -58,7 +58,7 @@ _MINIMAL_SKILL_FALLBACK = """\
 
 One issue URL below — driver owns the queue.
 Route: `bug` → `/fix-bug`; else → `/implement-feature`.
-Driver advances the queue; workers run the routed slash command only.
+Finish line: closed issue, #N on main, MAIN synced — see skill.
 """
 
 _WORKER_GONE_ERROR_CODES = frozenset(
