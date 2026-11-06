@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import re
 import subprocess
 import sys
@@ -33,7 +34,7 @@ def loop_mod():
     return mod
 
 
-def _local_clean(_repo: Path, _number: int) -> bool:
+def _local_clean(_repo: Path, _number: int, _merge_sha: str | None) -> bool:
     """Test helper: Phase A passes immediately."""
     return True
 
@@ -968,7 +969,7 @@ _PENDING_CHECK = {"name": "ci", "status": "in_progress", "conclusion": None}
             "closed: NOT_PLANNED, no merged closing PR; CI gate skipped",
             [
                 "#7 open; no merged PR closes it yet — waiting 60s",
-                "#7 Phase A: #7 in local git log; entering Phase B (GitHub α)",
+                "#7 Phase A: delivery in local main; entering Phase B (GitHub α)",
             ],
             id="closed-while-waiting",
         ),
@@ -980,7 +981,7 @@ _PENDING_CHECK = {"name": "ci", "status": "in_progress", "conclusion": None}
             "merge + post-merge CI α",
             [
                 "#7: PR #10 merged; post-merge CI 0/1 green (1 pending) — waiting 60s",
-                "#7 Phase A: #7 in local git log; entering Phase B (GitHub α)",
+                "#7 Phase A: delivery in local main; entering Phase B (GitHub α)",
             ],
             id="merged-and-auto-closed-still-waits-for-alpha",
         ),
@@ -1192,17 +1193,113 @@ def test_issue_number_in_recent_log_word_boundary(loop_mod):
     assert loop_mod.issue_number_in_recent_log("Closes #355", 355)
 
 
-def test_local_phase_a_is_clean_cases(loop_mod, tmp_path):
-    def run_git(argv: list[str], _root):
-        assert argv[:2] == ["log", "-n"]
-        out = getattr(run_git, "log", "")
-        return subprocess.CompletedProcess(["git", *argv], 0, out, "")
+def _git(repo: Path, *argv: str) -> str:
+    proc = subprocess.run(
+        ["git", "-c", "user.name=t", "-c", "user.email=t@example.com", *argv],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return proc.stdout.strip()
 
-    run_git.log = "deadbeef feat (#70)\n"
-    assert loop_mod.local_phase_a_is_clean(tmp_path, 7, run_git=run_git) is False
 
-    run_git.log = "deadbeef feat (#7)\n"
-    assert loop_mod.local_phase_a_is_clean(tmp_path, 7, run_git=run_git) is True
+def _commit(repo: Path, message: str) -> str:
+    _git(repo, "commit", "--allow-empty", "-q", "-m", message)
+    return _git(repo, "rev-parse", "HEAD")
+
+
+@pytest.fixture
+def git_repo(tmp_path, monkeypatch):
+    """Throwaway repo isolated from the developer's global/system git config (signing, hooks)."""
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)
+    monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
+    _git(tmp_path, "init", "-q")
+    _commit(tmp_path, "chore: root")
+    return tmp_path
+
+
+def test_local_phase_a_is_clean_issue_token_in_subject(loop_mod, git_repo):
+    _commit(git_repo, "feat: thing (#70)")
+    assert loop_mod.local_phase_a_is_clean(git_repo, 7) is False
+    _commit(git_repo, "feat: thing (#7)")
+    assert loop_mod.local_phase_a_is_clean(git_repo, 7) is True
+
+
+# @regression
+def test_local_phase_a_is_clean_closes_in_body_under_github_merge(loop_mod, git_repo):
+    """Delivery commit names the issue only in its body; GitHub's merge subject names the PR."""
+    _commit(git_repo, "fix(kit): chain backups\n\nCloses #224")
+    _commit(git_repo, "Merge pull request #406 from owner/fix/224-kit")
+    assert loop_mod.local_phase_a_is_clean(git_repo, 224) is True
+
+
+# @regression
+@pytest.mark.parametrize(
+    "body",
+    ["Relevant to #224", "Follow-up to #224; see #224 for context", "Closes #2240"],
+)
+def test_local_phase_a_is_clean_body_cross_reference_does_not_count(loop_mod, git_repo, body):
+    """A bare ``#N`` in a body (partial PR, cross-reference) is not this ticket's delivery."""
+    _commit(git_repo, f"fix: partial step\n\n{body}")
+    assert loop_mod.local_phase_a_is_clean(git_repo, 224) is False
+
+
+@pytest.mark.parametrize("body", ["closes #224", "Fixes #224", "Resolved: #224"])
+def test_local_phase_a_is_clean_body_closing_keywords(loop_mod, git_repo, body):
+    _commit(git_repo, f"fix: done\n\n{body}")
+    assert loop_mod.local_phase_a_is_clean(git_repo, 224) is True
+
+
+# @regression
+def test_local_phase_a_is_clean_merge_sha_ancestor_beyond_log_window(loop_mod, git_repo):
+    """The closing PR's merge commit counts even with no #N and >10 commits on top."""
+    merge_sha = _commit(git_repo, "Merge pull request #406 from owner/branch")
+    for i in range(12):
+        _commit(git_repo, f"chore: later {i}")
+    assert loop_mod.local_phase_a_is_clean(git_repo, 224) is False
+    assert loop_mod.local_phase_a_is_clean(git_repo, 224, merge_sha) is True
+
+
+def test_local_phase_a_is_clean_merge_sha_not_pulled_yet(loop_mod, git_repo):
+    """A merge commit GitHub knows but local main lacks keeps Phase A waiting."""
+    _commit(git_repo, "chore: unrelated")
+    missing_sha = "0" * 40
+    assert loop_mod.local_phase_a_is_clean(git_repo, 224, missing_sha) is False
+
+
+def test_wait_passes_github_merge_sha_to_phase_a(loop_mod):
+    """The merge commit SHA from the GitHub poll reaches the local Phase A check."""
+    seen: list[str | None] = []
+    sleeps: list[float] = []
+    _, monotonic_fn, sleep_fn = _fake_clock(sleeps)
+    status = _status(merged=True, state="CLOSED", check_runs=[_green_ci_check()])
+    status["merge_info"]["merge_commit_sha"] = "abc123"
+
+    def local_fn(_repo: Path, _number: int, merge_sha: str | None) -> bool:
+        seen.append(merge_sha)
+        return merge_sha == "abc123"
+
+    worker = loop_mod.WorkerHandle(
+        tab_id="t", pane_id="p", issue_number=7, issue_url="https://example/7"
+    )
+    reason = loop_mod.wait_until_ticket_advanced(
+        "o/r",
+        worker,
+        60,
+        label="lbl",
+        local_poll_seconds=10,
+        run_gh=lambda _a: subprocess.CompletedProcess([], 0, "", ""),
+        run_herdr=lambda argv: subprocess.CompletedProcess(
+            argv, 0, json.dumps({"result": {"type": "idle"}}), ""
+        ),
+        sleep_fn=sleep_fn,
+        monotonic_fn=monotonic_fn,
+        fetch_status=lambda *_a: status,
+        local_phase_a_clean=local_fn,
+    )
+    assert reason == loop_mod.ADVANCE_REASON_MERGED
+    assert "abc123" in seen
 
 
 def test_skip_request_round_trip(loop_mod, tmp_path):
@@ -1329,6 +1426,18 @@ def test_main_skip_issue_dry_run_and_write(loop_mod, tmp_path, monkeypatch, caps
     assert not (tmp_path / ".herdr" / "skip-issue").exists()
     assert loop_mod.main(["--label", "x", "--skip-issue", "12", "--skip-reason", "go"]) == 0
     assert loop_mod.read_skip_request(tmp_path) == (12, "go")
+
+
+def test_main_skip_issue_without_label(loop_mod, tmp_path, monkeypatch):
+    """The operator skip only writes a file, so it must not demand the queue label."""
+    monkeypatch.setattr(loop_mod, "REPO_ROOT", tmp_path)
+    assert loop_mod.main(["--skip-issue", "12"]) == 0
+    assert loop_mod.read_skip_request(tmp_path) == (12, "")
+
+
+def test_main_requires_label_without_skip(loop_mod, capsys):
+    assert loop_mod.main(["--dry-run"]) == 2
+    assert "--label is required" in capsys.readouterr().err
 
 
 def test_main_rejects_local_poll_out_of_range(loop_mod):

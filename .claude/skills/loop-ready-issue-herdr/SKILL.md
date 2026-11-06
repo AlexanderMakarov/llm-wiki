@@ -26,4 +26,4 @@ Finish this ticket so GitHub and the driver’s **`MAIN`** checkout both show it
 
 1. **GitHub issue closed** — normally a **merged** closing PR with green **post-merge** checks (follow the slash command through merge and CI).
 2. **Commits on `main` name the ticket** — include **`#N`** in delivery commit messages (e.g. `(#N)` / `Closes #N` when the issue is fully delivered).
-3. **`MAIN` updated** — after merge, run the slash command’s post-merge sync on **`MAIN`** so that commit is on the primary checkout the driver polls (`git log -n 10 --oneline` there must mention `#N`).
+3. **`MAIN` updated** — after merge, run the slash command’s post-merge sync on **`MAIN`** so the merge commit is in the primary checkout's history the driver polls.

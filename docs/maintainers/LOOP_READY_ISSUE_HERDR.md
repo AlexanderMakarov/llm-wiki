@@ -63,13 +63,13 @@ While a worker waits on you (herdr `blocked` — approval, question, permission)
 
 ## Advance rule (local Phase A → GitHub Phase B, or closed without merge)
 
-**Phase A local ticks** never run `git fetch` / `git pull` — only `git log -n 10 --oneline` on the **main checkout** (driver cwd). Untracked or modified files on that checkout do **not** block advance (the next ticket uses a fresh worktree). The driver still polls GitHub every `--poll-seconds` during Phase A solely to detect **Path 2** (closed without a merged PR) and to print “merged on GitHub; `#N` not in git log yet”; it never advances Path 1 from Phase A. It starts every adopt/restart in **Phase A**, then moves to **Phase B** only when `git log -n 10 --oneline` contains `#N` (delivery commits should include `(#N)` / `Closes #N` after the worker pulls `MAIN`).
+**Phase A local ticks** never run `git fetch` / `git pull` — they only read local history on the **main checkout** (driver cwd). Untracked or modified files on that checkout do **not** block advance (the next ticket uses a fresh worktree). The driver still polls GitHub every `--poll-seconds` during Phase A solely to detect **Path 2** (closed without a merged PR) and to print “merged on GitHub; merge commit not in local main yet”; it never advances Path 1 from Phase A. It starts every adopt/restart in **Phase A**, then moves to **Phase B** once local history shows the delivery, by either of two signals: the closing PR's **merge commit** (SHA from the last GitHub poll) is an ancestor of local `HEAD` (`git merge-base --is-ancestor`), which works whatever the commit messages say and however many commits landed since; or one of the last 10 commits names the ticket — `#N` in its **subject**, or a closing keyword (`Closes` / `Fixes` / `Resolves #N`) in its **body**, so a body-only `Closes #N` counts (GitHub's merge-commit subject names the PR, not the issue) while a cross-reference such as `Relevant to #N` does not. The message check is the fallback before the first successful GitHub poll.
 
 **Path 1 — merged closing PR:** after Phase A sees `#N` in local `git log`, **Phase B** polls GitHub every `--poll-seconds` (default 300) until the issue is **CLOSED**, the closing PR is **merged**, and **every check run on the merge commit** is green (α — same as before: non-empty check runs, all `success` / `skipped` / `neutral`). Phase B alone is not enough: GitHub can show merged/green before the worker pulls `main`.
 
 **Path 2 — closed without a merged closing PR:** no Phase A requirement; GitHub every `--poll-seconds`; advance at once with CI skipped, e.g. `Advanced #323 (closed: COMPLETED, no merged closing PR; CI gate skipped)`.
 
-**Operator skip:** from the **same main checkout** as the running driver, `python3 scripts/loop_ready_issue_herdr.py --skip-issue N` writes a gitignored `.herdr/skip-issue` file; the driver force-advances that ticket with a WARNING (one-shot). Do not run `--skip-issue` from a gate worktree — the driver would not see that file.
+**Operator skip:** from the **same main checkout** as the running driver, `python3 scripts/loop_ready_issue_herdr.py --skip-issue N` (no `--label` needed) writes a gitignored `.herdr/skip-issue` file; the driver force-advances that ticket with a WARNING (one-shot). Do not run `--skip-issue` from a gate worktree — the driver would not see that file.
 
 **AWOS:** workers must run `git -C "$MAIN" pull --ff-only origin main` after merge (see delivery-flow §5). Spec: `context/spec/303-loop-ready-issue-herdr/advance-wait-redesign.md`.
 
@@ -79,7 +79,7 @@ On advance, the driver always closes the finished worker tab (even if the agent 
 
 ## Polling intervals
 
-- **Phase A (local):** `--local-poll-seconds` (default **10**, range 10–30) — `git log -n 10` only (no git network); Path-2 `gh` still on the `--poll-seconds` schedule.
+- **Phase A (local):** `--local-poll-seconds` (default **10**, range 10–30) — local `git merge-base` / `git log -n 10` only (no git network); Path-2 `gh` still on the `--poll-seconds` schedule.
 - **Phase B / Path 2 (GitHub):** `--poll-seconds` (default **300**) between merge/CI polls.
 
 herdr `agent wait` is interleaved between ticks. Empty-queue re-listing (without `--once`) sleeps `--poll-seconds` between attempts.
