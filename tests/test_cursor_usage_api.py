@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import base64
 import json
+from datetime import datetime
 from pathlib import Path
 
 from llmwiki.adapters.contrib.cursor_cli import CursorCliAdapter
@@ -203,3 +204,112 @@ def test_api_only_conversation_upserts_as_cursor_cli_metrics_only(tmp_path: Path
     assert stub["totals"]["input"] == 800
     assert stub["totals"]["output"] == 50
     assert data["by_agent"]["cursor_cli"]["measured"] == 1
+
+
+def _capture_dashboard_windows(monkeypatch) -> list[tuple[int, int]]:
+    """Fake an empty dashboard and record each requested ``[start, end)`` window."""
+    windows: list[tuple[int, int]] = []
+
+    def fake_fetch(**kwargs):
+        windows.append((kwargs["start_ms"], kwargs["end_ms"]))
+        return 200, {"totalUsageEventsCount": 0, "usageEventsDisplay": []}, None
+
+    monkeypatch.setattr(
+        "llmwiki.cursor_usage_api.load_cursor_session_credentials",
+        lambda: ("user-1", "token-redacted"),
+    )
+    monkeypatch.setattr("llmwiki.cursor_usage_api.fetch_dashboard_page", fake_fetch)
+    return windows
+
+
+def _ms(day: str) -> int:
+    return int(datetime.fromisoformat(f"{day}T00:00:00+00:00").timestamp() * 1000)
+
+
+def test_first_poll_backfills_from_lookback_since(tmp_path: Path, monkeypatch):
+    """ACP sessions older than the first poll get Tokens: fetch starts at ``since``."""
+    windows = _capture_dashboard_windows(monkeypatch)
+    cfg = {"cursor_usage_api": "dashboard", "filters": {"since": "2026-06-01"}}
+    sync_cursor_usage_api(tmp_path, cfg, force_poll=True)
+    assert windows and windows[0][0] == _ms("2026-06-01")
+
+
+def test_existing_cache_without_backfill_marker_refetches_history(
+    tmp_path: Path, monkeypatch
+):
+    """Caches written before the backfill fix only hold ~3 days; re-fetch from ``since``."""
+    save_cache(tmp_path, {"by_conversation": {}, "high_water_ms": _ms("2026-11-01")})
+    windows = _capture_dashboard_windows(monkeypatch)
+    cfg = {"cursor_usage_api": "dashboard", "filters": {"since": "2026-06-01"}}
+    sync_cursor_usage_api(tmp_path, cfg, force_poll=True)
+    assert windows[0][0] == _ms("2026-06-01")
+
+
+def test_after_backfill_polls_are_incremental(tmp_path: Path, monkeypatch):
+    windows = _capture_dashboard_windows(monkeypatch)
+    cfg = {"cursor_usage_api": "dashboard", "filters": {"since": "2026-06-01"}}
+    sync_cursor_usage_api(tmp_path, cfg, force_poll=True)
+    cache = load_cache(tmp_path)
+    cache["high_water_ms"] = _ms("2026-11-01")
+    save_cache(tmp_path, cache)
+    windows.clear()
+    sync_cursor_usage_api(tmp_path, cfg, force_poll=True)
+    assert windows[0][0] == _ms("2026-11-01")
+
+
+def test_earlier_since_triggers_new_backfill(tmp_path: Path, monkeypatch):
+    windows = _capture_dashboard_windows(monkeypatch)
+    sync_cursor_usage_api(
+        tmp_path,
+        {"cursor_usage_api": "dashboard", "filters": {"since": "2026-06-01"}},
+        force_poll=True,
+    )
+    cache = load_cache(tmp_path)
+    cache["high_water_ms"] = _ms("2026-11-01")
+    save_cache(tmp_path, cache)
+    windows.clear()
+    sync_cursor_usage_api(
+        tmp_path,
+        {"cursor_usage_api": "dashboard", "adapters": {"cursor_cli": {"since": "2026-03-01"}}},
+        force_poll=True,
+    )
+    assert windows[0][0] == _ms("2026-03-01")
+
+
+def test_failed_backfill_is_retried(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(
+        "llmwiki.cursor_usage_api.load_cursor_session_credentials",
+        lambda: ("user-1", "token-redacted"),
+    )
+    monkeypatch.setattr(
+        "llmwiki.cursor_usage_api.fetch_dashboard_page",
+        lambda **kwargs: (429, None, "60"),
+    )
+    cfg = {"cursor_usage_api": "dashboard", "filters": {"since": "2026-06-01"}}
+    sync_cursor_usage_api(tmp_path, cfg, force_poll=True)
+    windows = _capture_dashboard_windows(monkeypatch)
+    sync_cursor_usage_api(tmp_path, cfg, force_poll=True)
+    assert windows[0][0] == _ms("2026-06-01")
+
+
+def test_no_lookback_backfills_all_retained_history(tmp_path: Path, monkeypatch):
+    """Unset ``since`` means no limit, as for sync: fetch from epoch 0, then incremental."""
+    windows = _capture_dashboard_windows(monkeypatch)
+    cfg = {"cursor_usage_api": "dashboard"}
+    lines = sync_cursor_usage_api(tmp_path, cfg, force_poll=True)
+    assert windows[0][0] == 0
+    assert any("all retained history" in line for line in lines)
+    cache = load_cache(tmp_path)
+    cache["high_water_ms"] = _ms("2026-11-01")
+    save_cache(tmp_path, cache)
+    windows.clear()
+    sync_cursor_usage_api(tmp_path, cfg, force_poll=True)
+    assert windows[0][0] == _ms("2026-11-01")
+
+
+def test_invalid_lookback_skips_poll_with_reason(tmp_path: Path, monkeypatch):
+    windows = _capture_dashboard_windows(monkeypatch)
+    cfg = {"cursor_usage_api": "dashboard", "filters": {"since": "not-a-date"}}
+    lines = sync_cursor_usage_api(tmp_path, cfg, force_poll=True)
+    assert windows == []
+    assert any("invalid cursor_cli lookback" in line for line in lines)

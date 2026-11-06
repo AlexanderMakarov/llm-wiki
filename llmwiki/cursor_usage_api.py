@@ -16,12 +16,13 @@ import time
 import urllib.error
 import urllib.request
 from collections.abc import Mapping
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from llmwiki.cursor_token_events import usage_records_for_conversation
 from llmwiki.cursor_token_usage import map_cursor_usage_to_claude_usage
+from llmwiki.sync.lookback import resolve_effective_since
 from llmwiki.usage import usage_dir
 
 CACHE_NAME = "cursor-usage-api-cache.json"
@@ -480,6 +481,24 @@ def _merge_events_into_cache(
     return added
 
 
+def backfill_floor_ms(config: Mapping[str, Any] | None) -> int:
+    """Oldest event time to fetch: the vault's ``cursor_cli`` sync lookback.
+
+    Uses ``adapters.cursor_cli.since`` / ``filters.since`` so Tokens cover the
+    same window as session ingest. No lookback (unset or ``"all"``) returns
+    ``0`` — everything Cursor still retains. An invalid date raises
+    :class:`ValueError`.
+    """
+    since_dt = resolve_effective_since(
+        None, dict(config) if isinstance(config, Mapping) else None, "cursor_cli"
+    )
+    if since_dt is None:
+        return 0
+    if since_dt.tzinfo is None:
+        since_dt = since_dt.replace(tzinfo=UTC)
+    return int(since_dt.timestamp() * 1000)
+
+
 def should_poll_now(vault: Path, *, force: bool = False) -> bool:
     if force:
         return True
@@ -514,9 +533,19 @@ def sync_cursor_usage_api(
     cache = load_cache(vault)
     st = load_state(vault)
     now_ms = int(time.time() * 1000)
+    try:
+        floor_ms = backfill_floor_ms(config)
+    except ValueError as exc:
+        return [f"cursor usage api: skipped (invalid cursor_cli lookback: {exc})"]
+    raw_from = st.get("backfilled_from_ms")
+    try:
+        backfilled_from = int(raw_from) if raw_from is not None else None
+    except (TypeError, ValueError):
+        backfilled_from = None
+    needs_backfill = backfilled_from is None or floor_ms < backfilled_from
     start_ms = int(cache.get("high_water_ms") or 0)
-    if start_ms <= 0:
-        start_ms = now_ms - int(timedelta(days=3).total_seconds() * 1000)
+    if needs_backfill or start_ms <= 0:
+        start_ms = floor_ms
 
     messages: list[str] = []
     all_events: list[dict[str, Any]] = []
@@ -586,10 +615,19 @@ def sync_cursor_usage_api(
     st["last_poll_at"] = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     st["last_mode"] = mode
     st["last_added"] = added
+    if needs_backfill:
+        st["backfilled_from_ms"] = floor_ms
     save_state(vault, st)
+    since_note = ""
+    if needs_backfill:
+        if floor_ms > 0:
+            since_day = datetime.fromtimestamp(floor_ms / 1000, UTC).strftime("%Y-%m-%d")
+            since_note = f", backfilled since {since_day}"
+        else:
+            since_note = ", backfilled all retained history"
     messages.append(
         f"cursor usage api: merged {added} new event(s) from {len(all_events)} fetched "
-        f"({mode})"
+        f"({mode}{since_note})"
     )
     return messages
 
@@ -645,7 +683,7 @@ def _raw_paths_by_session_id(raw_dir: Path) -> dict[str, Path]:
     out: dict[str, Path] = {}
     if not raw_dir.is_dir():
         return out
-    for path in raw_dir.glob("*.md"):
+    for path in sorted(raw_dir.glob("*.md")):
         try:
             text = path.read_text(encoding="utf-8")
         except OSError:
