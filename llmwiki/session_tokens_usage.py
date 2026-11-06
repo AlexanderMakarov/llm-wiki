@@ -4,7 +4,8 @@ from __future__ import annotations
 import json
 import os
 import tempfile
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -14,6 +15,11 @@ from llmwiki.usage import usage_dir
 SESSION_TOKENS_NAME = "session-tokens.json"
 SIDECAR_GLOBAL = "LLMWIKI_SESSION_TOKENS"
 _BUCKET_KEYS = ("input", "cache_creation", "cache_read", "output")
+
+#: Open :func:`session_tokens_batch` documents, keyed by resolved vault path.
+#: Each entry: ``data`` (the document), ``dirty`` (write on exit),
+#: ``stale`` (aggregates need a rebuild after in-memory upserts).
+_BATCHES: dict[Path, dict[str, Any]] = {}
 
 
 def _iso_now() -> str:
@@ -248,7 +254,47 @@ def merge_agent_coverage(
             row["since"] = since
 
 
+def _batch_for(vault: Path) -> dict[str, Any] | None:
+    return _BATCHES.get(Path(vault).resolve()) if _BATCHES else None
+
+
+@contextmanager
+def session_tokens_batch(vault: Path) -> Iterator[None]:
+    """Load ``session-tokens.json`` once, write it once, for a block of upserts.
+
+    Inside the block, :func:`load_session_tokens`, :func:`save_session_tokens`
+    and :func:`upsert_session_tokens` work on one in-memory document instead of
+    re-reading and rewriting the whole file per session. On exit (also after an
+    error or Ctrl+C) aggregates are rebuilt if needed and the file is saved
+    once. Re-entrant: a nested block for the same vault joins the outer one.
+    """
+    key = Path(vault).resolve()
+    if key in _BATCHES:
+        yield
+        return
+    _BATCHES[key] = {"data": _read_document(vault), "dirty": False, "stale": False}
+    try:
+        yield
+    finally:
+        batch = _BATCHES.pop(key)
+        if batch["dirty"]:
+            if batch["stale"]:
+                rebuild_aggregates_from_sessions(batch["data"])
+            _write_document(vault, batch["data"])
+
+
 def load_session_tokens(vault: Path) -> dict[str, Any]:
+    """Return the vault's token store with aggregates rebuilt from ``sessions``."""
+    batch = _batch_for(vault)
+    if batch is not None:
+        if batch["stale"]:
+            rebuild_aggregates_from_sessions(batch["data"])
+            batch["stale"] = False
+        return batch["data"]
+    return _read_document(vault)
+
+
+def _read_document(vault: Path) -> dict[str, Any]:
     path = usage_path(vault)
     if not path.is_file():
         return _empty_document()
@@ -264,7 +310,17 @@ def load_session_tokens(vault: Path) -> dict[str, Any]:
 
 
 def save_session_tokens(vault: Path, data: dict[str, Any]) -> None:
-    """Persist atomically (temp file + ``os.replace``)."""
+    """Persist atomically (temp file + ``os.replace``); deferred inside a batch."""
+    batch = _batch_for(vault)
+    if batch is not None:
+        batch["data"] = data
+        batch["dirty"] = True
+        batch["stale"] = False
+        return
+    _write_document(vault, data)
+
+
+def _write_document(vault: Path, data: dict[str, Any]) -> None:
     d = usage_dir(vault)
     d.mkdir(parents=True, exist_ok=True)
     payload = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
@@ -309,7 +365,8 @@ def upsert_session_tokens(
     metrics_only: bool = False,
 ) -> bool:
     """Insert or update one session stub. Returns ``False`` when fingerprint unchanged."""
-    data = load_session_tokens(vault)
+    batch = _batch_for(vault)
+    data = batch["data"] if batch is not None else load_session_tokens(vault)
     sessions = data["sessions"]
     if not isinstance(sessions, dict):
         sessions = {}
@@ -319,7 +376,7 @@ def upsert_session_tokens(
     if isinstance(existing, dict) and existing.get("fingerprint") == fingerprint:
         return False
 
-    if isinstance(existing, dict):
+    if isinstance(existing, dict) and batch is None:
         _subtract_session_contribution(data, existing)
 
     day = day_from_last_activity(last_activity)
@@ -333,9 +390,13 @@ def upsert_session_tokens(
         "in_raw": bool(in_raw),
         "metrics_only": bool(metrics_only),
     }
+    data["updated_at"] = _iso_now()
+    if batch is not None:
+        batch["dirty"] = True
+        batch["stale"] = True
+        return True
 
     rebuild_aggregates_from_sessions(data)
-    data["updated_at"] = _iso_now()
     save_session_tokens(vault, data)
     return True
 
