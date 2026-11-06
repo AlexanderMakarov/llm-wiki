@@ -47,7 +47,7 @@ RunHerdr = Callable[[list[str]], subprocess.CompletedProcess[str]]
 RunGit = Callable[[list[str], Path], subprocess.CompletedProcess[str]]
 SleepFn = Callable[[float], None]
 MonotonicFn = Callable[[], float]
-LocalPhaseAClean = Callable[[Path, int], bool]
+LocalPhaseAClean = Callable[[Path, int, str | None], bool]
 
 _AGENT_KINDS = ("cursor", "claude", "codex")
 
@@ -362,7 +362,7 @@ def default_run_git(
 
 
 def issue_number_in_recent_log(log_text: str, issue_number: int) -> bool:
-    """True when ``#N`` appears as a whole issue token in ``git log --oneline`` output."""
+    """True when ``#N`` appears as a whole issue token in ``git log`` output."""
     for match in _ISSUE_MARKER_RE.finditer(log_text):
         if int(match.group(1)) == issue_number:
             return True
@@ -372,16 +372,33 @@ def issue_number_in_recent_log(log_text: str, issue_number: int) -> bool:
 def local_phase_a_is_clean(
     repo_root: Path,
     issue_number: int,
+    merge_commit_sha: str | None = None,
     *,
     run_git: RunGit = default_run_git,
 ) -> bool:
-    """Phase A satisfied: ``#N`` in ``git log -n 10 --oneline`` on the main checkout.
+    """Phase A satisfied: the merged delivery is in local history on the main checkout.
+
+    Two signals, either is enough:
+
+    * ``merge_commit_sha`` (the closing PR's merge commit, from the last GitHub
+      poll) is an ancestor of local ``HEAD`` — independent of commit-message
+      wording and of how many commits landed since.
+    * ``#N`` appears in a full message (subject **or** body) of the last 10
+      commits, so ``Closes #N`` in a body counts — GitHub's merge-commit subject
+      names the PR, not the issue.
 
     Porcelain dirt is ignored — the next ticket starts in a fresh worktree; the
     driver only needs evidence that the merged delivery reached local ``main``
     history (worker ``git pull`` on ``MAIN``).
     """
-    log_proc = run_git(["log", "-n", "10", "--oneline"], repo_root)
+    if merge_commit_sha:
+        ancestor_proc = run_git(
+            ["merge-base", "--is-ancestor", merge_commit_sha, "HEAD"],
+            repo_root,
+        )
+        if ancestor_proc.returncode == 0:
+            return True
+    log_proc = run_git(["log", "-n", "10", "--format=%B"], repo_root)
     return issue_number_in_recent_log(log_proc.stdout, issue_number)
 
 
@@ -1513,6 +1530,7 @@ def wait_until_ticket_advanced(
         raise ValueError("local_poll_seconds must be between 10 and 30")
     local_fn = local_phase_a_clean or local_phase_a_is_clean
     phase = "A"
+    merge_sha: str | None = None
     consecutive_fetch_failures = 0
     last_gh_at: float | None = None
     last_local_at: float | None = None
@@ -1563,6 +1581,7 @@ def wait_until_ticket_advanced(
                 # Fall through so Phase A local polls and herdr wait still run.
             else:
                 consecutive_fetch_failures = 0
+                merge_sha = status["merge_info"].get("merge_commit_sha") or merge_sha
                 closed_reason = closed_without_merge_reason(status)
                 if closed_reason:
                     return closed_reason
@@ -1586,11 +1605,11 @@ def wait_until_ticket_advanced(
                     )
                 elif (
                     status["merge_info"].get("merged")
-                    and not local_fn(repo_root, worker.issue_number)
+                    and not local_fn(repo_root, worker.issue_number, merge_sha)
                 ):
                     print(
                         f"#{worker.issue_number} Phase A: merged on GitHub; "
-                        f"#{worker.issue_number} not in git log -n 10 yet — "
+                        "merge commit not in local main yet — "
                         f"next local poll {local_poll_seconds}s",
                     )
                 else:
@@ -1605,18 +1624,18 @@ def wait_until_ticket_advanced(
 
         if local_due:
             last_local_at = now
-            if local_fn(repo_root, worker.issue_number):
+            if local_fn(repo_root, worker.issue_number, merge_sha):
                 phase = "B"
                 print(
                     f"#{worker.issue_number} Phase A: "
-                    f"#{worker.issue_number} in local git log; "
+                    "delivery in local main; "
                     "entering Phase B (GitHub α)",
                 )
             else:
                 print(
-                    f"#{worker.issue_number} Phase A: waiting for "
-                    f"#{worker.issue_number} in git log -n 10 (local only) — "
-                    f"next local poll {local_poll_seconds}s",
+                    f"#{worker.issue_number} Phase A: waiting for the merge commit "
+                    f"or #{worker.issue_number} in the last 10 commit messages "
+                    f"(local only) — next local poll {local_poll_seconds}s",
                 )
 
         wait_seconds = _seconds_until_next_wait_tick(
@@ -1845,9 +1864,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     ap.add_argument(
         "--label",
-        required=True,
         metavar="NAME",
-        help="Readiness label name (queue membership requires this label and assignee)",
+        help="Readiness label name (queue membership requires this label and assignee); "
+        "required except with --skip-issue",
     )
     ap.add_argument(
         "--repo",
@@ -1925,6 +1944,9 @@ def main(argv: list[str] | None = None) -> int:
         )
         print(f"Wrote operator skip for #{args.skip_issue} to {path}")
         return 0
+    if not args.label:
+        print("--label is required (except with --skip-issue)", file=sys.stderr)
+        return 2
     if args.local_poll_seconds < 10 or args.local_poll_seconds > 30:
         print("--local-poll-seconds must be between 10 and 30", file=sys.stderr)
         return 2

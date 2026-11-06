@@ -227,7 +227,7 @@ def test_acceptance_run_main_loop_resumes_in_progress_before_queue_head(
         run_herdr=fake_run_herdr,
         sleep_fn=lambda _s: None,
         repo_root=REPO,
-        local_phase_a_clean=lambda _r, _n: True,
+        local_phase_a_clean=lambda _r, _n, _s: True,
     )
     captured = capsys.readouterr()
     assert code == 0
@@ -319,7 +319,7 @@ def test_acceptance_early_close_warning_text_contract(loop_mod, capsys):
         sleep_fn=sleep_fn,
         monotonic_fn=monotonic_fn,
         fetch_status=fake_fetch,
-        local_phase_a_clean=lambda _r, _n: True,
+        local_phase_a_clean=lambda _r, _n, _s: True,
     )
     err = capsys.readouterr().err
     assert "WARNING: worker for issue #77 disappeared before merge+CI advance (α)." in err
@@ -423,9 +423,9 @@ def test_acceptance_argparse_poll_seconds_default_300(loop_mod):
     assert args.poll_seconds == 300
 
 
-def test_acceptance_argparse_rejects_missing_label(loop_mod):
-    with pytest.raises(SystemExit):
-        loop_mod.build_parser().parse_args([])
+def test_acceptance_rejects_missing_label(loop_mod, capsys):
+    assert loop_mod.main([]) == 2
+    assert "--label is required" in capsys.readouterr().err
 
 
 # @regression
@@ -516,7 +516,7 @@ def test_acceptance_run_main_loop_once_single_worker(
         run_herdr=fake_run_herdr,
         sleep_fn=lambda _s: None,
         repo_root=REPO,
-        local_phase_a_clean=lambda _r, _n: True,
+        local_phase_a_clean=lambda _r, _n, _s: True,
     )
     out = capsys.readouterr().out
     assert code == 0
@@ -563,7 +563,7 @@ def test_acceptance_empty_queue_once_exits_without_sleep(loop_mod, capsys):
         run_gh=fake_run_gh,
         run_herdr=fake_run_herdr,
         sleep_fn=sleeps.append,
-        local_phase_a_clean=lambda _r, _n: True,
+        local_phase_a_clean=lambda _r, _n, _s: True,
     )
     assert code == 0
     assert sleeps == []
@@ -646,7 +646,7 @@ def test_acceptance_startup_sweep_closes_tabs_of_closed_issues(loop_mod, capsys)
         run_gh=fake_run_gh,
         run_herdr=fake_run_herdr,
         sleep_fn=lambda _s: None,
-        local_phase_a_clean=lambda _r, _n: True,
+        local_phase_a_clean=lambda _r, _n, _s: True,
     )
     out = capsys.readouterr().out
     assert code == 0
@@ -703,7 +703,7 @@ def test_acceptance_issue_closed_without_merge_advances_and_closes_tab(loop_mod,
         run_herdr=fake_run_herdr,
         sleep_fn=no_sleep,
         repo_root=REPO,
-        local_phase_a_clean=lambda _r, _n: True,
+        local_phase_a_clean=lambda _r, _n, _s: True,
     )
     out = capsys.readouterr().out
     assert code == 0
@@ -779,7 +779,7 @@ def test_acceptance_worker_tabs_stay_in_driver_workspace(loop_mod, monkeypatch, 
         sleep_fn=lambda _s: None,
         repo_root=REPO,
         workspace="wD",
-        local_phase_a_clean=lambda _r, _n: True,
+        local_phase_a_clean=lambda _r, _n, _s: True,
     )
 
     assert code == 0
