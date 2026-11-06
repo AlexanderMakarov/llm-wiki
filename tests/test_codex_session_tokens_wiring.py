@@ -207,7 +207,7 @@ def test_migrate_adapters_filter_limits_origin_backfill(tmp_path: Path, monkeypa
     (vault / "raw" / "sessions").mkdir(parents=True)
     called: list[str] = []
 
-    def _capture(vault, sessions_dir, adapter_name, **kwargs):
+    def _capture(vault, adapter_name, **kwargs):
         called.append(adapter_name)
 
     monkeypatch.setattr(

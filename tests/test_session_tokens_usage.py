@@ -4,11 +4,15 @@ from __future__ import annotations
 import json
 import time
 
+import pytest
+
+import llmwiki.session_tokens_usage as stu
 from llmwiki.session_tokens_usage import (
     SIDECAR_GLOBAL,
     day_from_last_activity,
     emit_session_tokens_sidecar,
     load_session_tokens,
+    session_tokens_batch,
     upsert_session_tokens,
     usage_path,
 )
@@ -162,3 +166,92 @@ def test_emit_session_tokens_sidecar_omits_metrics_only_session_keys(tmp_path):
     assert "metrics-only-secret-key" not in text
     assert payload["by_agent"]["cursor_cli"]["measured"] == 1
     assert payload["totals"]["cache_read"] == 200
+
+
+def _upsert_n(vault, n: int, *, start: int = 0) -> None:
+    for i in range(start, start + n):
+        upsert_session_tokens(
+            vault,
+            session_key=f"s-{i}",
+            agent="claude_code" if i % 2 else "codex_cli",
+            totals=_totals(input=i + 1, output=1),
+            fingerprint=f"fp-{i}",
+            last_activity=f"2026-04-{(i % 28) + 1:02d}T12:00:00Z",
+        )
+
+
+def _count_writes(monkeypatch) -> list[int]:
+    writes: list[int] = []
+    real = stu._write_document
+
+    def counting(vault, data):
+        writes.append(1)
+        real(vault, data)
+
+    monkeypatch.setattr(stu, "_write_document", counting)
+    return writes
+
+
+def _without_timestamp(vault) -> dict:
+    data = json.loads(usage_path(vault).read_text(encoding="utf-8"))
+    data.pop("updated_at", None)
+    return data
+
+
+def test_batch_writes_store_once_with_same_result(tmp_path, monkeypatch):
+    """Batched upserts persist once and match per-session upserts exactly."""
+    plain, batched = tmp_path / "plain", tmp_path / "batched"
+    plain.mkdir()
+    batched.mkdir()
+    _upsert_n(plain, 30)
+    _upsert_n(plain, 5)  # unchanged fingerprints: no-ops
+
+    writes = _count_writes(monkeypatch)
+    with session_tokens_batch(batched):
+        _upsert_n(batched, 30)
+        _upsert_n(batched, 5)
+    assert len(writes) == 1
+    assert _without_timestamp(batched) == _without_timestamp(plain)
+
+
+def test_load_inside_batch_sees_pending_upserts(tmp_path):
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    with session_tokens_batch(vault):
+        _upsert_n(vault, 3)
+        assert not usage_path(vault).exists()
+        data = load_session_tokens(vault)
+        assert len(data["sessions"]) == 3
+        assert data["totals"]["input"] == 1 + 2 + 3
+    assert load_session_tokens(vault)["totals"]["input"] == 6
+
+
+def test_batch_saves_progress_when_block_raises(tmp_path):
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    with pytest.raises(KeyboardInterrupt), session_tokens_batch(vault):
+        _upsert_n(vault, 4)
+        raise KeyboardInterrupt
+    assert len(load_session_tokens(vault)["sessions"]) == 4
+
+
+def test_nested_batch_joins_outer(tmp_path, monkeypatch):
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    writes = _count_writes(monkeypatch)
+    with session_tokens_batch(vault):
+        with session_tokens_batch(vault):
+            _upsert_n(vault, 2)
+        assert writes == []
+        _upsert_n(vault, 2, start=2)
+    assert len(writes) == 1
+    assert len(load_session_tokens(vault)["sessions"]) == 4
+
+
+def test_batch_without_changes_does_not_write(tmp_path, monkeypatch):
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    writes = _count_writes(monkeypatch)
+    with session_tokens_batch(vault):
+        load_session_tokens(vault)
+    assert writes == []
