@@ -1448,3 +1448,55 @@ def test_main_rejects_local_poll_out_of_range(loop_mod):
 def test_argparse_local_poll_seconds_default_10(loop_mod):
     args = loop_mod.build_parser().parse_args(["--label", "x"])
     assert args.local_poll_seconds == 10
+
+
+def _prompt_fake(responses: dict[str, list[dict]]):
+    """Fake herdr answering ``agent <sub>`` from per-subcommand response queues."""
+    calls: list[list[str]] = []
+
+    def fake_herdr(argv: list[str]) -> subprocess.CompletedProcess[str]:
+        calls.append(list(argv))
+        assert argv[1] == "agent", argv
+        body = json.dumps(responses[argv[2]].pop(0))
+        return subprocess.CompletedProcess(argv, 0, body, "")
+
+    return fake_herdr, calls
+
+
+_STALLED = {"error": {"code": "agent_prompt_stalled", "message": "x"}}
+_TIMEOUT = {"error": {"code": "timeout", "message": "x"}}
+_WORKING = {"result": {"type": "agent_info", "agent": {"agent_status": "working"}}}
+
+
+def test_submit_worker_prompt_waits_for_working(loop_mod):
+    fake, calls = _prompt_fake({"prompt": [_WORKING]})
+    assert loop_mod.submit_worker_prompt("p1", "text", run_herdr=fake)
+    assert calls[0][3:5] == ["p1", "text"]
+    assert calls[0][5:8] == ["--wait", "--until", "working"]
+    assert len(calls) == 1
+
+
+def test_submit_worker_prompt_presses_enter_when_paste_swallowed_it(loop_mod):
+    """Cursor CLI folds a long paste into a placeholder and can eat the Enter."""
+    fake, calls = _prompt_fake(
+        {"prompt": [_STALLED], "send-keys": [{"result": {"type": "ok"}}], "wait": [_WORKING]},
+    )
+    assert loop_mod.submit_worker_prompt("p1", "text", run_herdr=fake)
+    assert [c[2] for c in calls] == ["prompt", "send-keys", "wait"]
+    assert calls[1][3:] == ["p1", "Enter"]
+
+
+def test_submit_worker_prompt_warns_when_agent_never_starts(loop_mod, capsys):
+    ok = {"result": {"type": "ok"}}
+    fake, calls = _prompt_fake(
+        {"prompt": [_STALLED], "send-keys": [ok, ok], "wait": [_TIMEOUT, _TIMEOUT]},
+    )
+    assert not loop_mod.submit_worker_prompt("p1", "text", run_herdr=fake)
+    assert [c[2] for c in calls] == ["prompt", "send-keys", "wait", "send-keys", "wait"]
+    assert "did not start" in capsys.readouterr().err
+
+
+def test_submit_worker_prompt_raises_on_other_errors(loop_mod):
+    fake, _ = _prompt_fake({"prompt": [{"error": {"code": "agent_blocked", "message": "b"}}]})
+    with pytest.raises(RuntimeError, match="agent_blocked"):
+        loop_mod.submit_worker_prompt("p1", "text", run_herdr=fake)

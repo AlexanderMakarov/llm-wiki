@@ -64,6 +64,10 @@ Finish line: closed issue, #N on main, MAIN synced — see skill.
 _WORKER_GONE_ERROR_CODES = frozenset(
     {"agent_not_found", "pane_not_found", "tab_not_found"},
 )
+# ``agent prompt --wait`` / ``agent wait`` codes meaning "submitted text, agent never started".
+_PROMPT_NOT_STARTED_CODES = frozenset({"agent_prompt_stalled", "timeout"})
+_PROMPT_START_TIMEOUT_MS = 15_000
+_PROMPT_ENTER_RETRIES = 2
 # Tab already closed — advance cleanup is still success.
 _TAB_ALREADY_CLOSED_CODES = frozenset({"tab_not_found"})
 
@@ -1251,10 +1255,70 @@ def start_worker_agent(
         issue_url,
         main_checkout=repo_root,
     )
+    submit_worker_prompt(pane_id, prompt_text, run_herdr=run_herdr)
+
+
+def submit_worker_prompt(
+    pane_id: str,
+    prompt_text: str,
+    *,
+    run_herdr: RunHerdr = default_run_herdr,
+) -> bool:
+    """Paste the prompt and confirm the agent starts working; press Enter if it does not.
+
+    TUIs that fold a long paste into a placeholder (Cursor CLI shows
+    ``[Pasted text #1 +31 lines]``) can swallow the Enter herdr sends right
+    after the paste, leaving the prompt typed but unsent. Returns whether the
+    agent reached ``working``; a stuck prompt is a loud WARNING, not an error.
+    """
     prompt_proc = run_herdr(
-        ["herdr", "agent", "prompt", str(pane_id), prompt_text],
+        [
+            "herdr",
+            "agent",
+            "prompt",
+            str(pane_id),
+            prompt_text,
+            "--wait",
+            "--until",
+            "working",
+            "--timeout",
+            str(_PROMPT_START_TIMEOUT_MS),
+        ],
     )
-    _herdr_require_ok(prompt_proc, "herdr agent prompt")
+    payload = parse_herdr_response(prompt_proc)
+    code = herdr_error_code(payload)
+    if code is None:
+        return True
+    if code not in _PROMPT_NOT_STARTED_CODES:
+        _herdr_require_ok(prompt_proc, "herdr agent prompt")
+    for _ in range(_PROMPT_ENTER_RETRIES):
+        _herdr_require_ok(
+            run_herdr(["herdr", "agent", "send-keys", str(pane_id), "Enter"]),
+            "herdr agent send-keys",
+        )
+        wait_proc = run_herdr(
+            [
+                "herdr",
+                "agent",
+                "wait",
+                str(pane_id),
+                "--until",
+                "working",
+                "--timeout",
+                str(_PROMPT_START_TIMEOUT_MS),
+            ],
+        )
+        wait_code = herdr_error_code(parse_herdr_response(wait_proc))
+        if wait_code is None:
+            return True
+        if wait_code not in _PROMPT_NOT_STARTED_CODES:
+            _herdr_require_ok(wait_proc, "herdr agent wait")
+    print(
+        f"WARNING: herdr pane {pane_id}: prompt pasted but the agent did not start "
+        f"after {_PROMPT_ENTER_RETRIES} extra Enter press(es); open the tab and submit it.",
+        file=sys.stderr,
+    )
+    return False
 
 
 def _list_tab_records(run_herdr: RunHerdr = default_run_herdr) -> list[dict[str, Any]]:
