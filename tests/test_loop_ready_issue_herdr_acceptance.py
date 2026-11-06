@@ -340,12 +340,71 @@ def test_acceptance_skill_disable_model_invocation_frontmatter():
 
 # @regression
 def test_acceptance_skill_one_ticket_route_contract():
-    """§2.6: bug → /fix-bug; else /implement-feature; no queue advance in skill."""
+    """§2.6: bug → /fix-bug; else /implement-feature; driver owns queue advance."""
     text = SKILL.read_text(encoding="utf-8")
     assert "/fix-bug" in text
     assert "/implement-feature" in text
-    assert "Do not start a second ticket" in text or "Do not start a second" in text
-    assert "advance to the next queued issue" in text
+    assert "readiness queue" in text or "driver" in text.lower()
+
+
+def test_acceptance_skill_finish_line_outcomes_for_worker():
+    """#215: worker skill states GitHub close, #N on main, and MAIN sync — not driver internals."""
+    text = SKILL.read_text(encoding="utf-8").lower()
+    assert "#n" in text
+    assert "main" in text
+    assert "closed" in text
+    assert "flow-log" not in text
+
+
+def test_acceptance_maintainer_doc_merge_gate_for_workers():
+    """Merge gate prose for workers lives in maintainer doc, not the thin skill."""
+    doc = MAINTAINER_DOC.read_text(encoding="utf-8")
+    assert "REVIEW_REQUIRED" in doc
+    assert "ready-to-merge" in doc
+    assert "unattended" in doc.lower() or "does **not** authorize" in doc
+
+
+_FORBIDDEN_SKILL_PHRASES = (
+    "through pr merge",
+    "do not restate delivery-flow gates",
+    "deliver through merge",
+    "## contract",
+    "smoke confirm",
+    "keep/drop",
+    "gh pr create",
+    "delivery-flow.md",
+    "gh pr merge --admin",
+    "post-merge α",
+    " this skill does not",
+)
+
+
+def test_acceptance_skill_is_thin_wrapper_not_awos_flow():
+    """#215: skill routes only; must not summarize or instruct AWOS delivery steps."""
+    text = SKILL.read_text(encoding="utf-8")
+    lowered = text.lower()
+    for phrase in _FORBIDDEN_SKILL_PHRASES:
+        assert phrase not in lowered, f"skill must not contain {phrase!r}"
+    assert "what herdr needs to advance" in lowered
+    assert "/implement-feature" in text
+    assert "/fix-bug" in text
+
+
+def test_acceptance_skill_fallback_is_thin_wrapper(loop_mod):
+    """Fallback prompt routes without AWOS step lists."""
+    fb = loop_mod._MINIMAL_SKILL_FALLBACK.lower()
+    assert "through pr merge" not in fb
+    assert "smoke" not in fb
+    assert "/implement-feature" in fb or "implement-feature" in fb
+
+
+def test_acceptance_build_worker_prompt_inlines_skill_not_issue_url_only(loop_mod):
+    """Driver prompt must paste skill body plus the one-ticket issue URL."""
+    skill = loop_mod.load_skill_text(SKILL)
+    prompt = loop_mod.build_worker_prompt(skill, "https://github.com/o/r/issues/1")
+    assert "What herdr needs to advance" in prompt
+    assert "Deliver this issue only:" in prompt
+    assert "https://github.com/o/r/issues/1" in prompt
 
 
 def test_acceptance_maintainer_note_herdr_required():

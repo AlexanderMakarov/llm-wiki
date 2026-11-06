@@ -246,3 +246,7 @@
 - Issue link: `Relevant to #296` — amends shipped herdr advance / delivery finish; does not close #296 (already delivered; this is redesign). Supersedes held PR #381 direction.
 - Why not Closes: #296 original spike shipped; this PR extends advance wait + AWOS DoD.
 - Next: open/update PR vs main; stop appending tracked flow-log after PR open
+
+## 2026-11-06 herdr skill scope (#215)
+
+Worker skill is **before / route / what herdr needs to advance** only — advance section lists worker finish-line outcomes (closed issue, `#N` commits, `MAIN` sync); no Phase A/B, Path 2, or maintainer-doc pointers in the skill. Reverted hand-edits to generated `/fix-bug` and `/implement-feature` (use `/awos:flow` for delivery-flow changes). Acceptance tests forbid AWOS/workflow phrases in the skill body.

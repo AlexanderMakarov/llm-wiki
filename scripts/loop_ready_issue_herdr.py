@@ -56,11 +56,9 @@ _SKILL_REL = Path(".claude/skills/loop-ready-issue-herdr/SKILL.md")
 _MINIMAL_SKILL_FALLBACK = """\
 # Loop ready issue (herdr) — one ticket
 
-You are delivering **one** GitHub issue only. Do not list or advance the readiness queue.
-
-1. Use the issue URL provided below.
-2. Inspect labels: if `bug` is present run `/fix-bug`; otherwise run `/implement-feature`.
-3. Follow the delivery flow for that command through PR merge; do not start another issue.
+One issue URL below — driver owns the queue.
+Route: `bug` → `/fix-bug`; else → `/implement-feature`.
+Finish line: closed issue, #N on main, MAIN synced — see skill.
 """
 
 _WORKER_GONE_ERROR_CODES = frozenset(
