@@ -18,14 +18,8 @@ disable-model-invocation: true
 - **`bug` label** on the issue → `/fix-bug <url>`
 - **Otherwise** → `/implement-feature <url>`
 
-Run that slash command for the URL below. All delivery steps live in that command only.
+Run that slash command for the URL below.
 
 ## What herdr needs to advance
 
-The driver will **not** start the next ready issue until **this** ticket satisfies:
-
-1. **Definition of Done** from the slash command you ran for this issue.
-2. **Phase A:** `#N` appears in `git log -n 10 --oneline` on the driver’s main checkout (local poll only — the driver does not `git fetch` there).
-3. **Phase B:** On the driver’s GitHub poll: issue **CLOSED**, closing PR **merged**, and every **completed** check run in that response is `success`, `skipped`, or `neutral`.
-
-Path 2 (issue closed with no merged closing PR) advances without Phase A/B; see `docs/maintainers/LOOP_READY_ISSUE_HERDR.md`.
+The driver — not you — decides when this ticket leaves the queue. Herdr does not inspect your flow-log or re-check slash-command stages.

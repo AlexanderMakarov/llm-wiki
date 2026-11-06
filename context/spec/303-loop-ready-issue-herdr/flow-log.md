@@ -249,4 +249,4 @@
 
 ## 2026-11-06 herdr skill scope (#215)
 
-Worker skill is **before / route / what herdr needs to advance** only — no AWOS step lists or merge instructions in the skill. Reverted hand-edits to generated `/fix-bug` and `/implement-feature` (use `/awos:flow` for delivery-flow changes). Acceptance tests forbid AWOS/workflow phrases in the skill body.
+Worker skill is **before / route / what herdr needs to advance** only — advance section states driver owns queue timing (herdr does not re-check flow-log or slash stages); no Phase A/B, Path 2, or maintainer-doc pointers in the skill. Reverted hand-edits to generated `/fix-bug` and `/implement-feature` (use `/awos:flow` for delivery-flow changes). Acceptance tests forbid AWOS/workflow phrases in the skill body.
