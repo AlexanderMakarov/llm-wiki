@@ -27,6 +27,7 @@ from llmwiki.session_tokens_usage import (
     merge_agent_coverage,
     prune_unmeasured_sessions,
     save_session_tokens,
+    session_tokens_batch,
     upsert_session_tokens,
 )
 from llmwiki.state_store import mtime_to_iso
@@ -145,28 +146,14 @@ def _upsert_from_raw_file(
         report["raw_upserts"] = int(report.get("raw_upserts") or 0) + 1
 
 
-def _find_raw_by_session_id(sessions_dir: Path, session_id: str) -> Path | None:
-    if not session_id or not sessions_dir.is_dir():
-        return None
-    needle = f"sessionId: {session_id}"
-    for path in sorted(sessions_dir.glob("*.md")):
-        try:
-            head = path.read_text(encoding="utf-8")[:4000]
-        except OSError:
-            continue
-        if needle in head:
-            return path
-    return None
-
-
 def _backfill_capable_adapter(
     vault: Path,
-    sessions_dir: Path,
     adapter_name: str,
     *,
     config: dict[str, Any],
     dry_run: bool,
     report: dict[str, Any],
+    raw_by_sid: dict[str, Path],
 ) -> None:
     cls = REGISTRY.get(adapter_name)
     if cls is None:
@@ -201,7 +188,7 @@ def _backfill_capable_adapter(
             )
             continue
         session_key = _session_key_from_records(records, path)
-        raw_path = _find_raw_by_session_id(sessions_dir, session_key)
+        raw_path = raw_by_sid.get(session_key) if session_key else None
         if raw_path is not None:
             text = raw_path.read_text(encoding="utf-8")
             meta, _ = parse_frontmatter(text)
@@ -286,6 +273,7 @@ def run_migration(
         "origin_adapters": list(origin_adapters),
     }
     from llmwiki.cursor_usage_api import (  # noqa: I001, PLC0415
+        _raw_paths_by_session_id,
         apply_api_totals_to_raw_sessions,
         set_active_vault,
         sync_cursor_usage_api,
@@ -295,64 +283,72 @@ def run_migration(
         sync_cursor_usage_ledger,
     )
 
-    set_active_vault(vault)
-    for _line in sync_cursor_usage_ledger(
-        vault, cfg, dry_run=dry_run, force_rescan=not dry_run
-    ):
-        pass
-    if not dry_run:
-        apply_ledger_totals_to_raw_sessions(vault, dry_run=False)
-    for _line in sync_cursor_usage_api(
-        vault, cfg, dry_run=dry_run, force_poll=not dry_run
-    ):
-        pass
-    if not dry_run:
-        patched, upserted = apply_api_totals_to_raw_sessions(vault, dry_run=False)
-        if patched:
-            report["raw_patched"] = int(report.get("raw_patched") or 0) + patched
-        if upserted:
-            report["raw_upserts"] = int(report.get("raw_upserts") or 0) + upserted
+    # One load + one write of usage/session-tokens.json for the whole run.
+    with session_tokens_batch(vault):
+        set_active_vault(vault)
+        for _line in sync_cursor_usage_ledger(
+            vault, cfg, dry_run=dry_run, force_rescan=not dry_run
+        ):
+            pass
+        if not dry_run:
+            apply_ledger_totals_to_raw_sessions(vault, dry_run=False)
+        for _line in sync_cursor_usage_api(
+            vault, cfg, dry_run=dry_run, force_poll=not dry_run
+        ):
+            pass
+        if not dry_run:
+            patched, upserted = apply_api_totals_to_raw_sessions(vault, dry_run=False)
+            if patched:
+                report["raw_patched"] = int(report.get("raw_patched") or 0) + patched
+            if upserted:
+                report["raw_upserts"] = int(report.get("raw_upserts") or 0) + upserted
 
-    if explicit_adapters:
-        unknown = [name for name in origin_adapters if name not in REGISTRY]
-        if unknown:
-            known = ", ".join(_DEFAULT_ORIGIN_ADAPTERS)
-            print(
-                "error: migrate.session_tokens.unknown_adapter: "
-                f"unknown --adapter name(s): {', '.join(unknown)}. "
-                f"Token-capable origin adapters: {known}. "
-                "(error code: migrate.session_tokens.unknown_adapter)",
-                file=sys.stderr,
-            )
-            report["errors"] = int(report.get("errors") or 0) + len(unknown)
-            report["unknown_adapters"] = unknown
-            return report
-    if not skip_raw and sessions_dir.is_dir():
-        for raw_path in sorted(sessions_dir.glob("*.md")):
-            try:
-                _upsert_from_raw_file(
-                    vault, raw_path, dry_run=dry_run, report=report
+        if explicit_adapters:
+            unknown = [name for name in origin_adapters if name not in REGISTRY]
+            if unknown:
+                known = ", ".join(_DEFAULT_ORIGIN_ADAPTERS)
+                print(
+                    "error: migrate.session_tokens.unknown_adapter: "
+                    f"unknown --adapter name(s): {', '.join(unknown)}. "
+                    f"Token-capable origin adapters: {known}. "
+                    "(error code: migrate.session_tokens.unknown_adapter)",
+                    file=sys.stderr,
                 )
-            except OSError:
-                report["errors"] = int(report.get("errors") or 0) + 1
+                report["errors"] = int(report.get("errors") or 0) + len(unknown)
+                report["unknown_adapters"] = unknown
+                return report
+        if not skip_raw and sessions_dir.is_dir():
+            for raw_path in sorted(sessions_dir.glob("*.md")):
+                try:
+                    _upsert_from_raw_file(
+                        vault, raw_path, dry_run=dry_run, report=report
+                    )
+                except OSError:
+                    report["errors"] = int(report.get("errors") or 0) + 1
 
-    for adapter_name in origin_adapters:
-        if adapter_name in REGISTRY:
-            _backfill_capable_adapter(
-                vault,
-                sessions_dir,
-                adapter_name,
-                config=cfg,
-                dry_run=dry_run,
-                report=report,
-            )
+        # One sessionId → raw path index for the whole origin pass (raw files
+        # are patched in place below, never created or renamed).
+        raw_by_sid = _raw_paths_by_session_id(sessions_dir)
+        for adapter_name in origin_adapters:
+            if adapter_name in REGISTRY:
+                _backfill_capable_adapter(
+                    vault,
+                    adapter_name,
+                    config=cfg,
+                    dry_run=dry_run,
+                    report=report,
+                    raw_by_sid=raw_by_sid,
+                )
 
-    site_dir = vault / "site"
-    changed = int(report.get("raw_upserts") or 0) + int(report.get("origin_upserts") or 0)
-    # Drop leftover all-zero stubs; then raise known from discovery (no empty stubs).
-    if not dry_run:
-        refresh_token_coverage_known(vault, cfg, report=report)
-        changed += 1
+        site_dir = vault / "site"
+        changed = int(report.get("raw_upserts") or 0) + int(
+            report.get("origin_upserts") or 0
+        )
+        # Drop leftover all-zero stubs; then raise known from discovery (no empty stubs).
+        if not dry_run:
+            refresh_token_coverage_known(vault, cfg, report=report)
+            changed += 1
+    # Sidecar after the batch has written the store, so it reads what is on disk.
     if not dry_run and site_dir.is_dir() and changed > 0:
         emit_session_tokens_sidecar(vault, site_dir)
     return report

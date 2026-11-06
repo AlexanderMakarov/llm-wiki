@@ -645,7 +645,7 @@ def _raw_paths_by_session_id(raw_dir: Path) -> dict[str, Path]:
     out: dict[str, Path] = {}
     if not raw_dir.is_dir():
         return out
-    for path in raw_dir.glob("*.md"):
+    for path in sorted(raw_dir.glob("*.md")):
         try:
             text = path.read_text(encoding="utf-8")
         except OSError:

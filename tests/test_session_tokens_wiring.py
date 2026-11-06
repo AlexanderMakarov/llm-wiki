@@ -7,7 +7,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from llmwiki.adapters import discover_all
+import llmwiki.session_tokens_usage as stu
+from llmwiki.adapters import REGISTRY, discover_all
 from llmwiki.adapters.contrib.cursor_cli import CursorCliAdapter
 from llmwiki.build import page_foot
 from llmwiki.migrate_session_tokens import _adapter_name_from_meta, run_migration
@@ -320,3 +321,97 @@ def test_viewer_js_refreshes_tokens_from_sidecar():
     assert "LLMWIKI_SESSION_TOKENS" in JS
     assert "[data-llmwiki-tokens-card]" in JS
     assert "refreshTokensFromSidecar" in JS
+
+
+def _write_raw_sessions(sessions: Path, n: int) -> None:
+    sessions.mkdir(parents=True, exist_ok=True)
+    for i in range(n):
+        (sessions / f"2026-04-{i + 1:02d}T10-00-perf-s{i}.md").write_text(
+            "---\n"
+            "tags: [claude-code, session-transcript]\n"
+            f"sessionId: perf-sess-{i}\n"
+            f"ended: 2026-04-{i + 1:02d}T12:00:00+00:00\n"
+            f'token_totals: {{"input": {i + 1}, "cache_creation": 0, "cache_read": 0, "output": 1}}\n'
+            "---\n\n# perf\n",
+            encoding="utf-8",
+        )
+
+
+def test_migrate_writes_token_store_once(tmp_path: Path, monkeypatch):
+    """Whole migrate is one store load + one write, not one rewrite per session."""
+    vault = tmp_path / "vault"
+    _write_raw_sessions(vault / "raw" / "sessions", 12)
+    monkeypatch.setattr(
+        "llmwiki.migrate_session_tokens._backfill_capable_adapter",
+        lambda *args, **kwargs: None,
+    )
+    monkeypatch.setattr(
+        "llmwiki.migrate_session_tokens._coverage_from_origins_and_raw",
+        lambda sessions_dir, config, usage_data: ({}, {}),
+    )
+    writes: list[int] = []
+    real = stu._write_document
+    monkeypatch.setattr(
+        stu, "_write_document", lambda v, d: (writes.append(1), real(v, d))[1]
+    )
+    report = run_migration(vault=vault, dry_run=False, config={})
+    assert report["raw_upserts"] == 12
+    assert len(writes) == 1
+    assert len(load_session_tokens(vault)["sessions"]) == 12
+
+
+def test_migrate_origin_pass_reads_each_raw_page_a_bounded_number_of_times(
+    tmp_path: Path, monkeypatch
+):
+    """Origin re-read joins raw pages through one sessionId index, not a scan per session."""
+    n = 10
+    vault = tmp_path / "vault"
+    sessions = vault / "raw" / "sessions"
+    _write_raw_sessions(sessions, n)
+    origin = tmp_path / "origin"
+    origin.mkdir()
+    for i in range(n):
+        (origin / f"perf-sess-{i}.jsonl").write_text("{}\n", encoding="utf-8")
+
+    class _FakeOrigin:
+        def __init__(self, config):
+            pass
+
+        def discover_sessions(self):
+            return sorted(origin.glob("*.jsonl"))
+
+        def load_records(self, path):
+            return [
+                {
+                    "type": "assistant",
+                    "sessionId": path.stem,
+                    "timestamp": "2026-04-01T12:00:00Z",
+                    "message": {"usage": {"input_tokens": 50, "output_tokens": 5}},
+                }
+            ]
+
+        def normalize_records(self, records):
+            return records
+
+    monkeypatch.setitem(REGISTRY, "fake_origin", _FakeOrigin)
+    monkeypatch.setattr(
+        "llmwiki.migrate_session_tokens._coverage_from_origins_and_raw",
+        lambda sessions_dir, config, usage_data: ({}, {}),
+    )
+    reads: dict[str, int] = {}
+    real_read = Path.read_text
+
+    def counting_read(self, *args, **kwargs):
+        if self.parent == sessions:
+            reads[self.name] = reads.get(self.name, 0) + 1
+        return real_read(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", counting_read)
+    report = run_migration(
+        vault=vault, dry_run=False, config={}, adapters=["fake_origin"], skip_raw=True
+    )
+    assert report["origin_upserts"] == n
+    assert report["raw_patched"] == n
+    # Index build (1) + the matched page's own read (1); a per-session scan
+    # re-reads earlier pages for every later session (≈ n reads for the first).
+    assert max(reads.values()) <= 3

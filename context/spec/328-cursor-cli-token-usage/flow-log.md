@@ -60,3 +60,10 @@
 - Staged cursor_token_events + investigation-notes; excluded review.md / review-2.md / demo archive
 - Issue link keyword: Closes #325 (AC delivered; #355 is separate optional knob)
 - Next: push PR #354; watch CI; ask merge confirm
+
+## Follow-up — `migrate session-tokens` performance (2026-11-06)
+
+- **Symptom:** a full `migrate session-tokens` on an operator vault ran 19+ min CPU-bound.
+- **Cause:** every `upsert_session_tokens` re-read, re-aggregated and rewrote the whole `usage/session-tokens.json` (~90 ms each, ~4.5k calls), and the origin pass found each session's raw page by re-reading `raw/sessions/*.md` per session (~127 ms on a miss).
+- **Change:** `session_tokens_batch(vault)` in `session_tokens_usage.py` (one load, one write; saves on error/Ctrl+C too) wraps `run_migration`; the origin pass uses one sessionId → raw path index. `sync` is unchanged.
+- **Measured** on a vault copy (1,671 raw, 2,962 stubs, API off): 363 s → 74 s, identical output.
