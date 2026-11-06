@@ -58,7 +58,7 @@ _MINIMAL_SKILL_FALLBACK = """\
 
 One issue URL below — driver owns the queue.
 Route: `bug` → `/fix-bug`; else → `/implement-feature`.
-Herdr advances when DoD, merged closing PR, post-merge α, and #N on MAIN log (see LOOP_READY_ISSUE_HERDR.md).
+Herdr advances per Phase A/B in LOOP_READY_ISSUE_HERDR.md (see skill).
 """
 
 _WORKER_GONE_ERROR_CODES = frozenset(

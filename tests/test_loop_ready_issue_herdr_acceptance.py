@@ -365,6 +365,8 @@ _FORBIDDEN_SKILL_PHRASES = (
     "gh pr create",
     "delivery-flow.md",
     "gh pr merge --admin",
+    "post-merge α",
+    " this skill does not",
 )
 
 

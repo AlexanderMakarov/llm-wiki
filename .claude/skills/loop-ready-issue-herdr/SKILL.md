@@ -24,9 +24,8 @@ Run that slash command for the URL below. All delivery steps live in that comman
 
 The driver will **not** start the next ready issue until **this** ticket satisfies:
 
-1. **Your slash command’s Definition of Done** — whatever `/fix-bug` or `/implement-feature` requires for that issue (this skill does not list those steps).
-2. **Merged closing PR** — GitHub shows the issue closed with a merged PR that closes it.
-3. **Post-merge α** — required checks on the merge commit are green (see `docs/maintainers/LOOP_READY_ISSUE_HERDR.md`).
-4. **Phase A on `MAIN`** — after the delivery command syncs the primary checkout, `git log` there includes `#N` for this issue (driver polls locally; no fetch in the driver itself).
+1. **Definition of Done** from the slash command you ran for this issue.
+2. **Phase A:** `#N` appears in `git log -n 10 --oneline` on the driver’s main checkout (local poll only — the driver does not `git fetch` there).
+3. **Phase B:** On the driver’s GitHub poll: issue **CLOSED**, closing PR **merged**, and every **completed** check run in that response is `success`, `skipped`, or `neutral`.
 
-Until all four hold, this worker tab may stay open while the driver polls; that is normal when review or merge is still pending.
+Path 2 (issue closed with no merged closing PR) advances without Phase A/B; see `docs/maintainers/LOOP_READY_ISSUE_HERDR.md`.
