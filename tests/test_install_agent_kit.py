@@ -735,6 +735,57 @@ def test_no_manifest_attributes_no_version(
     assert "patched from" not in out
 
 
+def test_second_customised_overwrite_uses_numbered_backup_not_bak_clobber(
+    tmp_path: Path,
+) -> None:
+    """#224 — first rescue stays in .bak; second goes to .bak.1."""
+    dest = tmp_path / "agent"
+    rel = f"commands/{KIT_COMMAND}"
+    run_install(dest=dest)
+    first = b"MY CUSTOMISATION\n"
+    second = b"SOMETHING ELSE\n"
+    (dest / rel).write_bytes(first)
+
+    r1 = run_install(dest=dest)
+    assert r1["errors"] == []
+    assert r1["customised"] == [rel]
+    assert r1["backed_up"] == [f"{rel}.bak"]
+    primary = dest / f"{rel}.bak"
+    assert primary.is_file()
+    assert primary.read_bytes() == first
+
+    (dest / rel).write_bytes(second)
+    r2 = run_install(dest=dest)
+    assert r2["errors"] == []
+    assert r2["customised"] == [rel]
+    assert f"{rel}.bak.1" in r2["backed_up"]
+    assert primary.read_bytes() == first
+    assert (dest / f"{rel}.bak.1").read_bytes() == second
+    assert (dest / rel).read_bytes() == (COMMANDS_DIR / KIT_COMMAND).read_bytes()
+
+
+def test_identical_customised_reinstall_does_not_dup_backup(
+    tmp_path: Path,
+) -> None:
+    """#224 — re-run install with same customised bytes as .bak: no new file."""
+    dest = tmp_path / "agent"
+    rel = f"commands/{KIT_COMMAND}"
+    run_install(dest=dest)
+    custom = b"# /wiki-sync\n\nmy own step\n"
+    (dest / rel).write_bytes(custom)
+
+    r1 = run_install(dest=dest)
+    assert r1["backed_up"] == [f"{rel}.bak"]
+
+    r2 = run_install(dest=dest)
+    assert r2["errors"] == []
+    assert r2["backed_up"] == []
+    assert r2["changed"] is False
+    assert rel in r2["unchanged"]
+    assert not (dest / f"{rel}.bak.1").exists()
+    assert (dest / f"{rel}.bak").read_bytes() == custom
+
+
 def test_dry_run_classifies_outdated_and_customised_and_writes_nothing(
     tmp_path: Path,
 ) -> None:
@@ -775,7 +826,7 @@ def test_a_backup_that_could_not_be_written_is_never_claimed(
     write_bytes = Path.write_bytes
 
     def refuse_backups(self: Path, data: bytes) -> int:
-        if self.suffix == ".bak":
+        if ".bak" in self.name:
             raise OSError(13, "Permission denied")
         return write_bytes(self, data)
 

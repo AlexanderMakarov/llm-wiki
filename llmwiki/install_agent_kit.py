@@ -19,9 +19,12 @@ which is the only evidence of what llmwiki itself put there:
   rule the prune path follows.
 * **customised** — the content matches nothing the manifest records, so the
   user edited it (or it predates the manifest). Their edits cannot be merged
-  into the kit update, so the file is copied to ``<name>.bak`` beside it
-  before the kit version is written, and the backup is reported only once it
-  is on disk.
+  into the kit update, so the file is copied beside itself before the kit
+  version is written: first to ``<name>.bak``, then — if that name is
+  already occupied by a different rescue copy — to ``<name>.bak.1``,
+  ``<name>.bak.2``, … (#224). If the bytes about to be backed up already
+  match ``<name>.bak``, nothing new is written. The backup is reported with
+  the path actually used.
 
 Because a manifest decides which files are replaced without a backup, treat
 one you did not generate the way you treat the files beside it.
@@ -91,6 +94,40 @@ def kit_files() -> list[tuple[str, Path]]:
 
 def _bak_path(dest_file: Path) -> Path:
     return dest_file.parent / f"{dest_file.name}.bak"
+
+
+def _backup_dest_file(
+    dest_file: Path, payload: bytes, *, dry_run: bool
+) -> tuple[Path | None, str | None, bool]:
+    """Write ``payload`` (current ``dest_file`` bytes) to a backup beside it.
+
+    Returns ``(path, error, wrote_or_would)``. The third flag is false when the
+    primary ``.bak`` already holds ``payload`` — no duplicate file is
+    created. When ``dry_run`` is true, ``wrote_or_would`` is still true if a
+    real run would write a *new* path (including a numbered ``.bak.N``), and
+    false when even a dry run would skip as duplicate. On write failure,
+    ``path`` is ``None``, ``error`` is a single report line, and the flag is
+    false.
+    """
+    bak = _bak_path(dest_file)
+    if bak.is_file() and bak.read_bytes() == payload:
+        return bak, None, False
+    chosen = bak
+    if chosen.is_file():
+        n = 1
+        while True:
+            alt = chosen.with_name(f"{bak.name}.{n}")
+            if not alt.exists():
+                chosen = alt
+                break
+            n += 1
+    if dry_run:
+        return chosen, None, True
+    try:
+        chosen.write_bytes(payload)
+    except OSError as exc:
+        return None, f"{chosen}: {exc}", False
+    return chosen, None, True
 
 
 def digest(payload: bytes) -> str:
@@ -272,6 +309,8 @@ def run_install(*, dest: Path, dry_run: bool = False) -> dict[str, Any]:
         "backed_up": [],
         "pruned": [],
         "kept": [],
+        "customised_backup_rel": {},
+        "skipped_duplicate_backups": [],
         "errors": [],
         "changed": False,
         "installed_version": installed_version,
@@ -310,15 +349,20 @@ def run_install(*, dest: Path, dry_run: bool = False) -> dict[str, Any]:
             if recorded is not None and recorded == digest(existing):
                 report["outdated"].append(rel)
             else:
-                bak = _bak_path(target)
-                if not dry_run:
-                    try:
-                        bak.write_bytes(existing)
-                    except OSError as exc:
-                        report["errors"].append(f"{bak}: {exc}")
-                        continue
+                bak_path, bak_err, backup_wrote = _backup_dest_file(
+                    target, existing, dry_run=dry_run
+                )
+                if bak_err:
+                    report["errors"].append(bak_err)
+                    continue
+                assert bak_path is not None
+                bak_rel = bak_path.relative_to(dest).as_posix()
                 report["customised"].append(rel)
-                report["backed_up"].append(f"{rel}.bak")
+                report["customised_backup_rel"][rel] = bak_rel
+                if backup_wrote:
+                    report["backed_up"].append(bak_rel)
+                else:
+                    report["skipped_duplicate_backups"].append(rel)
             if installed_version and recorded is not None:
                 report["attributed_versions"][rel] = installed_version
         if not dry_run:
@@ -392,11 +436,18 @@ def print_report(report: dict[str, Any]) -> None:
             f"copy, replaced with the current kit; no backup kept",
         )
     for rel in report["customised"]:
+        bak_key = report["customised_backup_rel"].get(rel, f"{rel}.bak")
+        if rel in report["skipped_duplicate_backups"]:
+            rescue = (
+                "your previous content is already preserved beside the file "
+                f"({at(bak_key)}) — not duplicated"
+            )
+        else:
+            rescue = f"your previous content {saved} {at(bak_key)}"
         detail(
             "customised",
             f"{at(rel)}{version_note(rel, 'patched from')} — your edits cannot be "
-            f"merged into the kit update, so your previous content {saved} "
-            f"{at(rel)}.bak",
+            f"merged into the kit update, so {rescue}",
         )
     for rel in report["pruned"]:
         detail("pruned", at(rel))
