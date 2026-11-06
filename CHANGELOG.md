@@ -8,6 +8,11 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`install-agent-kit` backup chain (#224)** — a customised file is no longer backed up by overwriting an existing `<name>.bak` that already held an older rescue copy. Later overwrites use `<name>.bak.1`, `<name>.bak.2`, …; if the bytes about to be saved match `.bak` already, no new file is written. The report lists the actual backup path.
+  - *Release note:* Repeated installs that overwrite user-edited kit files keep every prior version recoverable instead of clobbering `.bak`.
+
 ### Removed
 
 - **Dead consumption surfaces (#215)** — removed the stale `integrations/` tree (phantom directories and v1.2.0-deleted exporter docs) and the broken “Export to qmd” section from `docs/api-guide.md`. Dropped `integrations/` from the AWOS context gate armed prefixes. CI guards: `tests/test_docs_imports_resolve.py` (documented `llmwiki` imports, README path links, armed-prefix directories).
