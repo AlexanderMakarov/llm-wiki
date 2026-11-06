@@ -238,8 +238,6 @@ Re-check mergeability against current `origin/main`. If dirty: rebase, push, ret
 
 When gates are green, ask for explicit merge confirmation in this run. On yes: `gh pr merge`. Skipped/unanswered → do not merge; report ready-to-merge in chat. No "merged"/"gates passed" PR comments.
 
-Never use `gh pr merge --admin` or self-approve unless the user explicitly requests admin merge in this run. Herdr/loop delivery does not override this gate; if `REVIEW_REQUIRED` blocks merge, stop at ready-to-merge.
-
 After merge: watch post-merge Actions on `main` and fix forward if this change broke them. Optional: `python3 scripts/wait_post_merge_ci.py` (same α as the herdr driver).
 
 Then sync **`$MAIN`** (mandatory):

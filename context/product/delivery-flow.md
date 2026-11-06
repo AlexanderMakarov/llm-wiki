@@ -109,7 +109,7 @@ Which commands `/awos:flow` generated and their names — re-runs reconcile exac
 ## 5. Delivery
 
 - **Mode:** Merge-when-ready to `main`; packaging/releases stay batched via `/release` + version tags (not part of this flow)
-- **Merge policy:** The flow merges via `gh pr merge` once gates are green — always behind a fresh per-run user confirmation; skipped/unanswered confirmation means do not merge. **No admin bypass by default:** agents must not run `gh pr merge --admin` or self-approve their own PR unless the operator explicitly requests admin merge in that run. Herdr “deliver through merge” does not waive merge confirmation or review — if branch protection blocks merge, report ready-to-merge and stop (#296 / 2026-11-05 incident on #188).
+- **Merge policy:** The flow merges via `gh pr merge` once gates are green — always behind a fresh per-run user confirmation; skipped/unanswered confirmation means do not merge
 - **Post-merge CI:** Watch base-branch pipelines after merge; diagnose and fix forward on `main` if they fail. Optional helper: `python3 scripts/wait_post_merge_ci.py` (same α predicate as the herdr driver).
 - **Post-merge main sync:** After post-merge CI is green (or fix-forward completes), run on **`$MAIN`** (not `$WT`): `git -C "$MAIN" fetch origin main` and `git -C "$MAIN" pull --ff-only origin main`. Stopping at merge or issue CLOSED without this sync is **not** Definition of Done — the herdr driver Phase A waits for `#N` in local `git log` on main.
 - **Approvals:** Spec/tech document gates; user smoke confirm; local review dedicated keep/drop (independent of document gates); per-run merge confirm — each is its own ask; none substitutes for another

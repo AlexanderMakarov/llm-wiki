@@ -249,4 +249,4 @@
 
 ## 2026-11-06 herdr skill scope (#215)
 
-Worker skill slimmed to **before / route / after-merge** only — removed Contract items that summarized delivery (scope, “through PR merge”, issue-link advance). AWOS commands stay sole authority for smoke, review, PR order. Acceptance tests forbid dangerous phrases and require route + `MAIN` post-merge pull in skill/fallback.
+Worker skill is **before / route / what herdr needs to advance** only — no AWOS step lists or merge instructions in the skill. Reverted hand-edits to generated `/fix-bug` and `/implement-feature` (use `/awos:flow` for delivery-flow changes). Acceptance tests forbid AWOS/workflow phrases in the skill body.

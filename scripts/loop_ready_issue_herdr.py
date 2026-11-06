@@ -56,10 +56,9 @@ _SKILL_REL = Path(".claude/skills/loop-ready-issue-herdr/SKILL.md")
 _MINIMAL_SKILL_FALLBACK = """\
 # Loop ready issue (herdr) — one ticket
 
-One issue URL below — do not list or advance the readiness queue.
-Route: `bug` label → `/fix-bug`; else → `/implement-feature`. Run that command completely;
-smoke, review, PR, and merge live only there (not in this fallback).
-After merge: operator confirm before `gh pr merge`; no `--admin` unless asked; then pull `MAIN`.
+One issue URL below — driver owns the queue.
+Route: `bug` → `/fix-bug`; else → `/implement-feature`.
+Herdr advances when DoD, merged closing PR, post-merge α, and #N on MAIN log (see LOOP_READY_ISSUE_HERDR.md).
 """
 
 _WORKER_GONE_ERROR_CODES = frozenset(
