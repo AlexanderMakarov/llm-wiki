@@ -75,17 +75,22 @@ class ObsidianAdapter(BaseAdapter):
     # Override session_store_path so is_available() works.
     @property
     def session_store_path(self):  # type: ignore[override]
-        return self.vault_paths
+        ad_cfg = (self.config or {}).get("adapters", {}).get("obsidian", {})
+        if ad_cfg.get("vault_paths"):
+            return self.vault_paths
+        return list(self.default_vault_paths())
 
     # #496: is_available() inherited from BaseAdapter — temp instance
-    # reads self.session_store_path (the @property above returning
-    # self.vault_paths). Was a duplicate scan over DEFAULT_VAULT_PATHS.
+    # reads self.session_store_path (``default_vault_paths()`` when no override).
 
     def discover_sessions(self) -> list[Path]:
         """Walk every configured vault and return all .md files, excluding known
         internal folders. Returns a sorted list."""
         out: list[Path] = []
-        for vault in self.vault_paths:
+        stores = self.session_store_path
+        if isinstance(stores, Path):
+            stores = [stores]
+        for vault in stores:
             vault = Path(vault).expanduser()
             if not vault.exists():
                 continue
@@ -107,7 +112,10 @@ class ObsidianAdapter(BaseAdapter):
     def derive_project_slug(self, md_path: Path) -> str:
         """Use the top-level folder under the vault as the project slug.
         Files directly in the vault root get slug 'vault-root'."""
-        for vault in self.vault_paths:
+        stores = self.session_store_path
+        if isinstance(stores, Path):
+            stores = [stores]
+        for vault in stores:
             vault = Path(vault).expanduser()
             try:
                 rel = md_path.relative_to(vault)

@@ -3,7 +3,7 @@
 Session adapters used to freeze ``Path.home()`` at import time (#369), so
 pointing ``HOME`` at the per-test sandbox did not isolate filesystem access.
 Default paths are now resolved lazily; this guard ensures no code path still
-walks or reads the contributor's real agent stores during pytest.
+walks, stats, or reads the contributor's real agent stores during pytest.
 
 Uses ``REAL_HOME`` from ``tests.tracked_files`` (captured before the sandbox).
 """
@@ -59,11 +59,15 @@ _FORBIDDEN_REL_PREFIXES: tuple[tuple[str, ...], ...] = (
 )
 
 
+_REAL_HOME_ABS: Path | None = None
+
+
 def _resolved_home() -> Path:
-    try:
-        return REAL_HOME.resolve()
-    except OSError:
-        return REAL_HOME
+    """Absolute real home without ``Path.resolve()`` (patched ``os.stat`` would recurse)."""
+    global _REAL_HOME_ABS
+    if _REAL_HOME_ABS is None:
+        _REAL_HOME_ABS = Path(os.path.abspath(os.fspath(REAL_HOME)))
+    return _REAL_HOME_ABS
 
 
 def _path_from_open_arg(file: Any) -> Path | None:
@@ -88,9 +92,13 @@ def _path_from_open_arg(file: Any) -> Path | None:
 
 
 def _rel_under_real_home(path: Path) -> tuple[str, ...] | None:
+    """Home-relative parts without ``Path.resolve()`` (would recurse into patched ``os.stat``)."""
     try:
-        rel = path.resolve().relative_to(_resolved_home())
-    except ValueError:
+        home = _resolved_home()
+        path_abs = Path(os.path.abspath(os.fspath(path)))
+        home_abs = Path(os.path.abspath(os.fspath(home)))
+        rel = path_abs.relative_to(home_abs)
+    except (ValueError, OSError):
         return None
     return rel.parts
 
@@ -159,8 +167,23 @@ def _wrap_sqlite_connect(real: Callable[..., Any]) -> Callable[..., Any]:
     return wrapper
 
 
+def _wrap_os_stat(real: Callable[..., Any]) -> Callable[..., Any]:
+    def wrapper(path: Any, *args: Any, **kwargs: Any) -> Any:
+        if isinstance(path, (int, os.stat_result)):
+            return real(path, *args, **kwargs)
+        p = Path(os.fsdecode(path)) if isinstance(path, bytes) else Path(path)
+        reason = _forbidden_reason(p)
+        if reason:
+            pytest.fail(reason)
+        return real(path, *args, **kwargs)
+
+    return wrapper
+
+
 def install_session_store_guard(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Monkeypatch I/O used to walk or open real session-store paths."""
+    """Monkeypatch I/O used to walk, stat, or open real session-store paths."""
     monkeypatch.setattr(builtins, "open", _wrap_open(builtins.open))
     monkeypatch.setattr(os, "scandir", _wrap_scandir(os.scandir))
+    monkeypatch.setattr(os, "stat", _wrap_os_stat(os.stat))
+    monkeypatch.setattr(os, "lstat", _wrap_os_stat(os.lstat))
     monkeypatch.setattr(sqlite3, "connect", _wrap_sqlite_connect(sqlite3.connect))

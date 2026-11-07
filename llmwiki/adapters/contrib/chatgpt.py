@@ -78,7 +78,10 @@ class ChatGPTAdapter(BaseAdapter):
 
     @property
     def session_store_path(self):  # type: ignore[override]
-        return self._export_dirs
+        ad_cfg = adapter_block(self.config, "chatgpt")
+        if ad_cfg.get("export_dirs"):
+            return self._export_dirs
+        return list(self.default_export_dirs())
 
     @classmethod
     def is_available(cls) -> bool:
