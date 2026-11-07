@@ -107,11 +107,13 @@ class OpenClawAdapter(BaseAdapter):
 
     @property
     def session_store_path(self):  # type: ignore[override]
-        return self.roots
+        ad_cfg = (self.config or {}).get("adapters", {}).get("openclaw", {})
+        if ad_cfg.get("roots"):
+            return self.roots
+        return list(self.default_roots())
 
     # #496: is_available() inherited from BaseAdapter — temp instance
-    # reads self.session_store_path (returns self.roots = DEFAULT_ROOTS
-    # when no config override).
+    # reads self.session_store_path (``default_roots()`` when no config override).
 
     def discover_sessions(self) -> list[Path]:
         """Find every conversation transcript under every configured root.
@@ -122,7 +124,10 @@ class OpenClawAdapter(BaseAdapter):
         out via ``_is_non_transcript``.
         """
         out: list[Path] = []
-        for root in self.roots:
+        stores = self.session_store_path
+        if isinstance(stores, Path):
+            stores = [stores]
+        for root in stores:
             root = Path(root).expanduser()
             if not root.exists():
                 continue
@@ -133,7 +138,10 @@ class OpenClawAdapter(BaseAdapter):
 
     def derive_project_slug(self, jsonl_path: Path) -> str:
         """Use the agent directory name (e.g. 'main') as the project slug."""
-        for root in self.roots:
+        stores = self.session_store_path
+        if isinstance(stores, Path):
+            stores = [stores]
+        for root in stores:
             root = Path(root).expanduser()
             try:
                 rel = jsonl_path.relative_to(root)

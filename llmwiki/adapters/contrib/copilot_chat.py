@@ -75,7 +75,11 @@ class CopilotChatAdapter(BaseAdapter):
 
     @property
     def session_store_path(self):  # type: ignore[override]
-        return self.roots
+        adapters_cfg = (self.config or {}).get("adapters", {}) or {}
+        ad_cfg = adapters_cfg.get("copilot_chat") or adapters_cfg.get("copilot-chat") or {}
+        if ad_cfg.get("roots"):
+            return self.roots
+        return list(self.default_roots())
 
     # #496: is_available() inherited from BaseAdapter — temp
     # instance reads self.session_store_path through the @property.
@@ -83,7 +87,10 @@ class CopilotChatAdapter(BaseAdapter):
     def discover_sessions(self) -> list[Path]:
         """Find chatSessions/*.jsonl and *.json under each workspace hash dir."""
         out: list[Path] = []
-        for root in self.roots:
+        stores = self.session_store_path
+        if isinstance(stores, Path):
+            stores = [stores]
+        for root in stores:
             root = Path(root).expanduser()
             if not root.exists():
                 continue
@@ -109,7 +116,10 @@ class CopilotChatAdapter(BaseAdapter):
         truncated to 12 chars and prefixed with 'copilot-'.
         """
         # Try to find the workspace hash dir — should be the parent of chatSessions/
-        for root in self.roots:
+        stores = self.session_store_path
+        if isinstance(stores, Path):
+            stores = [stores]
+        for root in stores:
             root = Path(root).expanduser()
             try:
                 rel = path.relative_to(root)

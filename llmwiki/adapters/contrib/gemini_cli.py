@@ -46,14 +46,20 @@ class GeminiCliAdapter(BaseAdapter):
 
     @property
     def session_store_path(self):  # type: ignore[override]
-        return self.roots
+        ad_cfg = (self.config or {}).get("adapters", {}).get("gemini_cli", {})
+        if ad_cfg.get("roots"):
+            return self.roots
+        return list(self.default_roots())
 
     # #496: is_available() inherited from BaseAdapter — temp
     # instance reads self.session_store_path through the @property.
 
     def discover_sessions(self) -> list[Path]:
         out: list[Path] = []
-        for root in self.roots:
+        stores = self.session_store_path
+        if isinstance(stores, Path):
+            stores = [stores]
+        for root in stores:
             root = Path(root).expanduser()
             if not root.exists():
                 continue
@@ -66,7 +72,10 @@ class GeminiCliAdapter(BaseAdapter):
     def derive_project_slug(self, path: Path) -> str:
         # Gemini CLI doesn't have an obvious project encoding yet; use the
         # parent directory name
-        for root in self.roots:
+        stores = self.session_store_path
+        if isinstance(stores, Path):
+            stores = [stores]
+        for root in stores:
             root = Path(root).expanduser()
             try:
                 rel = path.relative_to(root)

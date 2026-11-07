@@ -61,7 +61,11 @@ class CopilotCliAdapter(BaseAdapter):
 
     @property
     def session_store_path(self):  # type: ignore[override]
-        return self.roots
+        adapters_cfg = (self.config or {}).get("adapters", {}) or {}
+        ad_cfg = adapters_cfg.get("copilot_cli") or adapters_cfg.get("copilot-cli") or {}
+        if ad_cfg.get("roots"):
+            return self.roots
+        return list(self.default_roots())
 
     # #496: kept as an explicit override because it has special
     # COPILOT_HOME env-var handling that BaseAdapter.is_available()
@@ -84,7 +88,10 @@ class CopilotCliAdapter(BaseAdapter):
     def discover_sessions(self) -> list[Path]:
         """Find events.jsonl files under each session-id directory."""
         out: list[Path] = []
-        for root in self.roots:
+        stores = self.session_store_path
+        if isinstance(stores, Path):
+            stores = [stores]
+        for root in stores:
             root = Path(root).expanduser()
             if not root.exists():
                 continue
@@ -105,7 +112,10 @@ class CopilotCliAdapter(BaseAdapter):
         Layout: <root>/<session-id>/events.jsonl
         The session-id directory is the immediate parent of events.jsonl.
         """
-        for root in self.roots:
+        stores = self.session_store_path
+        if isinstance(stores, Path):
+            stores = [stores]
+        for root in stores:
             root = Path(root).expanduser()
             try:
                 rel = path.relative_to(root)

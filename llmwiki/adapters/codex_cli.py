@@ -50,16 +50,21 @@ class CodexCliAdapter(BaseAdapter):
 
     @property
     def session_store_path(self):  # type: ignore[override]
-        return self.roots
+        ad_cfg = (self.config or {}).get("adapters", {}).get("codex_cli", {})
+        if ad_cfg.get("roots"):
+            return self.roots
+        return list(self.default_roots())
 
     # #496: is_available() inherited from BaseAdapter — it now creates
     # a temp instance and reads self.session_store_path through the
-    # @property below. Was a duplicate scan over DEFAULT_ROOTS; same
-    # result, less code.
+    # @property below (``default_roots()`` when no config override).
 
     def discover_sessions(self) -> list[Path]:
         out: list[Path] = []
-        for root in self.roots:
+        stores = self.session_store_path
+        if isinstance(stores, Path):
+            stores = [stores]
+        for root in stores:
             root = Path(root).expanduser()
             if root.exists():
                 out.extend(sorted(root.rglob("*.jsonl")))

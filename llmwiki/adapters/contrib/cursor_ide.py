@@ -87,8 +87,15 @@ class CursorAdapter(BaseAdapter):
 
     @property
     def session_store_path(self):  # type: ignore[override]
-        # Availability: global DB or workspace roots.
-        return [*self._global_dbs, *self.roots]
+        # Availability: global DB or workspace roots (call-time defaults for tests).
+        ad_cfg = adapter_block(self.config or {}, "cursor_ide")
+        dbs = (
+            self._global_dbs
+            if ad_cfg.get("global_db")
+            else list(self.default_global_dbs())
+        )
+        roots = self.roots if ad_cfg.get("roots") else list(self.default_roots())
+        return [*dbs, *roots]
 
     def _resolve_global_db(self) -> Path | None:
         for p in self._global_dbs:
