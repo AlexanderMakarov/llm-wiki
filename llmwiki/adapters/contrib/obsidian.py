@@ -40,13 +40,15 @@ class ObsidianAdapter(BaseAdapter):
 
     SUPPORTED_SCHEMA_VERSIONS = ["1.x"]
 
-    DEFAULT_VAULT_PATHS = [
-        # macOS / Linux / Windows — common default vault locations
-        Path.home() / "Documents" / "Obsidian Vault",
-        Path.home() / "Obsidian",
-        # Windows (%APPDATA%) — some installs create vaults here
-        Path.home() / "AppData" / "Local" / "Obsidian" / "Vault",
-    ]
+    @classmethod
+    def default_vault_paths(cls) -> list[Path]:
+        return [
+            # macOS / Linux / Windows — common default vault locations
+            Path.home() / "Documents" / "Obsidian Vault",
+            Path.home() / "Obsidian",
+            # Windows (%APPDATA%) — some installs create vaults here
+            Path.home() / "AppData" / "Local" / "Obsidian" / "Vault",
+        ]
 
     DEFAULT_EXCLUDE_FOLDERS = {
         ".obsidian",
@@ -63,7 +65,7 @@ class ObsidianAdapter(BaseAdapter):
         ad_cfg = (config or {}).get("adapters", {}).get("obsidian", {})
         paths = ad_cfg.get("vault_paths") or []
         self.vault_paths: list[Path] = (
-            [Path(p).expanduser() for p in paths] if paths else self.DEFAULT_VAULT_PATHS
+            [Path(p).expanduser() for p in paths] if paths else list(self.default_vault_paths())
         )
         self.exclude_folders: set[str] = set(
             ad_cfg.get("exclude_folders", self.DEFAULT_EXCLUDE_FOLDERS)

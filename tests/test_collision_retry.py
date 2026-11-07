@@ -13,7 +13,6 @@ import json
 from pathlib import Path
 
 from llmwiki import convert as c
-from llmwiki.adapters.claude_code import ClaudeCodeAdapter
 
 
 def _write_jsonl(path: Path, session_id: str, iso_ts: str,
@@ -65,15 +64,7 @@ def _seed_env(tmp_path: Path) -> tuple[Path, Path, Path, Path]:
 
 
 def _patch(monkeypatch, home, out_dir, state):
-    # ClaudeCodeAdapter.session_store_path is a class-level attribute
-    # evaluated at class-definition time, so we have to patch the class
-    # itself instead of relying on Path.home monkeypatching.  Point it
-    # at the `projects/` directory so `derive_project_slug()` resolves
-    # every file under it against that prefix.
-    store = home / ".claude" / "projects"
-    monkeypatch.setattr(
-        ClaudeCodeAdapter, "session_store_path", store, raising=False,
-    )
+    # Path.home() drives ClaudeCodeAdapter.default_session_store_path.
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
     monkeypatch.setattr(c, "REPO_ROOT", home.parent / "repo")
 

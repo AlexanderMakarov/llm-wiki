@@ -8,6 +8,7 @@ from synthesis / ``--estimate`` when already in ``raw/``.
 from __future__ import annotations
 
 import json
+from builtins import classmethod
 from pathlib import Path
 
 from llmwiki import convert as c
@@ -95,7 +96,11 @@ def _seed(tmp_path: Path) -> tuple[Path, Path, Path, Path]:
 
 def _patch(monkeypatch, home, state):
     store = home / ".claude" / "projects"
-    monkeypatch.setattr(ClaudeCodeAdapter, "session_store_path", store, raising=False)
+    monkeypatch.setattr(
+        ClaudeCodeAdapter,
+        "default_session_store_path",
+        classmethod(lambda cls, s=store: s),
+    )
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
     monkeypatch.setattr(c, "REPO_ROOT", home.parent / "repo")
 

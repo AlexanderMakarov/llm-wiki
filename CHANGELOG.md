@@ -13,6 +13,9 @@ Versions below 1.0 are pre-production — API and file formats may change.
 - **PR lint CHANGELOG skip honours scoped titles (#412)** — `docs(x):`, `chore(x):` and `test(x):` PR titles now skip the CHANGELOG gate like their unscoped forms; `feat` / `fix` still require it. The PR title reaches the script through `env:` instead of inline interpolation.
   - *Release note:* Contributors can use a conventional-commit scope on docs/chore/test PRs without adding a CHANGELOG entry.
 
+- **Lazy default paths for session adapters (#369)** — defaults no longer call `Path.home()` at import time; classmethods (e.g. `default_roots()`, `default_session_store_path()`) resolve when used so the test suite's per-test `HOME` sandbox isolates filesystem access. Pytest installs `tests/session_store_guard.py` (autouse) to fail fast on `open` / directory walks / SQLite opens under real-home agent store prefixes. Docs: `docs/adapter-authoring.md`, CONTRIBUTING; `tests/test_cross_platform_paths.py` uses the current home.
+  - *Release note:* Adapters respect the active `HOME` in tests — no more import-time snapshot of the developer's session paths.
+
 - **`install-agent-kit` backup chain (#224)** — a customised file is no longer backed up by overwriting an existing `<name>.bak` that already held an older rescue copy. Later overwrites use `<name>.bak.1`, `<name>.bak.2`, …; if the bytes about to be saved match `.bak` already, no new file is written. The report lists the actual backup path.
   - *Release note:* Repeated installs that overwrite user-edited kit files keep every prior version recoverable instead of clobbering `.bak`.
 

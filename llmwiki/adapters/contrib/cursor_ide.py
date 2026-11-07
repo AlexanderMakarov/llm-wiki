@@ -50,30 +50,36 @@ class CursorAdapter(BaseAdapter):
     SUPPORTED_SCHEMA_VERSIONS = ["v1"]
     is_ai_session = True
 
-    DEFAULT_GLOBAL_DBS = [
-        Path.home() / "Library" / "Application Support" / "Cursor" / "User" / "globalStorage" / "state.vscdb",
-        Path.home() / ".config" / "Cursor" / "User" / "globalStorage" / "state.vscdb",
-        Path.home() / "AppData" / "Roaming" / "Cursor" / "User" / "globalStorage" / "state.vscdb",
-    ]
+    @classmethod
+    def default_global_dbs(cls) -> list[Path]:
+        """Composer global DB paths; resolved at call time for test ``HOME`` isolation."""
+        return [
+            Path.home() / "Library" / "Application Support" / "Cursor" / "User" / "globalStorage" / "state.vscdb",
+            Path.home() / ".config" / "Cursor" / "User" / "globalStorage" / "state.vscdb",
+            Path.home() / "AppData" / "Roaming" / "Cursor" / "User" / "globalStorage" / "state.vscdb",
+        ]
 
-    DEFAULT_ROOTS = [
-        Path.home() / "Library" / "Application Support" / "Cursor" / "User" / "workspaceStorage",
-        Path.home() / ".config" / "Cursor" / "User" / "workspaceStorage",
-        Path.home() / "AppData" / "Roaming" / "Cursor" / "User" / "workspaceStorage",
-    ]
+    @classmethod
+    def default_roots(cls) -> list[Path]:
+        """Workspace roots; resolved at call time for test ``HOME`` isolation."""
+        return [
+            Path.home() / "Library" / "Application Support" / "Cursor" / "User" / "workspaceStorage",
+            Path.home() / ".config" / "Cursor" / "User" / "workspaceStorage",
+            Path.home() / "AppData" / "Roaming" / "Cursor" / "User" / "workspaceStorage",
+        ]
 
     def __init__(self, config: dict[str, Any] | None = None):
         super().__init__(config)
         ad_cfg = adapter_block(config or {}, "cursor_ide")
         roots = ad_cfg.get("roots") or []
         self.roots: list[Path] = (
-            [Path(p).expanduser() for p in roots] if roots else list(self.DEFAULT_ROOTS)
+            [Path(p).expanduser() for p in roots] if roots else list(self.default_roots())
         )
         gdb = ad_cfg.get("global_db")
         self._global_dbs: list[Path] = (
             [Path(gdb).expanduser()]
             if gdb
-            else list(self.DEFAULT_GLOBAL_DBS)
+            else list(self.default_global_dbs())
         )
         # Cache headers/meta between discover and load within one adapter instance.
         self._header_cache: dict[str, dict[str, Any]] | None = None
