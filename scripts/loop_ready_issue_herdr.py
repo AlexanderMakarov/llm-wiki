@@ -66,7 +66,7 @@ _WORKER_GONE_ERROR_CODES = frozenset(
 )
 # ``agent prompt --wait`` / ``agent wait`` codes meaning "submitted text, agent never started".
 _PROMPT_NOT_STARTED_CODES = frozenset({"agent_prompt_stalled", "timeout"})
-_PROMPT_START_TIMEOUT_MS = 15_000
+_PROMPT_START_TIMEOUT_MS = 3_000  # status flip to working, not the LLM reply
 _PROMPT_ENTER_RETRIES = 2
 # Tab already closed — advance cleanup is still success.
 _TAB_ALREADY_CLOSED_CODES = frozenset({"tab_not_found"})
