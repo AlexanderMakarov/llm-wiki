@@ -347,6 +347,19 @@ def test_acceptance_skill_one_ticket_route_contract():
     assert "readiness queue" in text or "driver" in text.lower()
 
 
+# @regression
+def test_acceptance_skill_names_delivery_command_files():
+    """A slash command inside a pasted prompt is not expanded (Cursor CLI), so the
+    skill must name the command files; without them workers skipped the
+    worktree stage and implemented in the primary checkout."""
+    text = SKILL.read_text(encoding="utf-8")
+    for name in ("fix-bug", "implement-feature"):
+        cmd = Path(".claude/commands") / f"{name}.md"
+        assert str(cmd) in text
+        assert (REPO / cmd).is_file()
+    assert "never check out a branch or edit files in **`MAIN`**" in text
+
+
 def test_acceptance_skill_finish_line_outcomes_for_worker():
     """#215: worker skill states GitHub close, #N on main, and MAIN sync — not driver internals."""
     text = SKILL.read_text(encoding="utf-8").lower()

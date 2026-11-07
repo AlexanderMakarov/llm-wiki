@@ -90,6 +90,7 @@ Success: enqueue by assigning yourself and applying the label you pass to the dr
 - It does not implement delivery logic; gates stay owned by the existing delivery flow.
   - **Acceptance Criteria:**
     - [x] Given a queued issue labeled `bug`, when the helper runs, then the worker is instructed to run the bug-fix delivery command for that issue only. *(Evidence: skill text + spawn prompt inline tests.)*
+    - [x] Given the worker prompt routes to a delivery command, when the worker reads it, then it names that command's file under `.claude/commands/`, tells the worker to execute it from its first stage, and forbids checking out a branch or editing files in `MAIN`. *(Evidence: `tests/test_loop_ready_issue_herdr_acceptance.py::test_acceptance_skill_names_delivery_command_files`; motivation: #224 and #369 workers implemented in the primary checkout after the outcomes-only skill rewrite dropped the command-file pointer.)*
     - [x] Given a queued issue without `bug`, when the helper runs, then the worker is instructed to run the feature delivery command for that issue only. *(Evidence: skill text + tests.)*
     - [x] Given the helper is running, when the current ticket is unfinished, then the helper does not start another GitHub issue. *(Evidence: skill contract; driver owns queue.)*
 
@@ -173,3 +174,4 @@ Success: enqueue by assigning yourself and applying the label you pass to the dr
 - 2026-10-11: §2.5 amended: an adopted `issue-N` tab with no agent in any pane (herdr restores tabs after a reboot without their agent) gets a worker started and prompted in its pane instead of an idle α wait (none when a merged PR already closes the issue); quitting only the agent no longer pauses a ticket — close its tab; the gone-agent criterion now covers only an agent that leaves while the driver polls. Motivation: #347. 1 criterion added, 1 narrowed.
 - 2026-11-03: §2.8 / delivery: advance-wait redesign — Phase A then Phase B for Path 1; Path 2 unchanged; delivery commands require `$MAIN` pull after merge; `--local-poll-seconds` default 10. Details in `advance-wait-redesign.md`.
 - 2026-11-06: §2.5 amended: prompt submission is confirmed — the driver waits for `working` and presses Enter (up to twice) when the worker TUI swallowed it after a long paste, then warns naming the pane. 1 criterion added.
+- 2026-11-07: §2.6 amended: the worker skill names each delivery command's file and forbids editing `MAIN`; a slash command inside a pasted prompt is not expanded, and without the pointer workers skipped the worktree stage. 1 criterion added.
