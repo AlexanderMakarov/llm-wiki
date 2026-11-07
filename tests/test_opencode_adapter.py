@@ -20,7 +20,7 @@ def test_adapter_has_schema_versions():
 
 
 def test_adapter_has_default_roots_for_all_platforms():
-    roots = OpenCodeAdapter.DEFAULT_ROOTS
+    roots = OpenCodeAdapter.default_roots()
     root_strs = [str(r) for r in roots]
     # macOS
     assert any("Library/Application Support/opencode" in r for r in root_strs)
@@ -31,7 +31,7 @@ def test_adapter_has_default_roots_for_all_platforms():
 
 
 def test_adapter_includes_openclaw_variant():
-    root_strs = [str(r) for r in OpenCodeAdapter.DEFAULT_ROOTS]
+    root_strs = [str(r) for r in OpenCodeAdapter.default_roots()]
     # OpenClaw community fork uses its own dir
     assert any("openclaw" in r for r in root_strs)
 
@@ -50,7 +50,7 @@ def test_adapter_uses_config_roots(tmp_path: Path):
 
 def test_adapter_falls_back_to_defaults_when_no_config():
     a = OpenCodeAdapter()
-    assert a.roots == OpenCodeAdapter.DEFAULT_ROOTS
+    assert a.roots == list(OpenCodeAdapter.default_roots())
 
 
 # ─── Discovery ───────────────────────────────────────────────────────
@@ -223,7 +223,7 @@ def test_normalize_empty_list():
 
 
 def test_is_available_false_when_no_paths():
-    """is_available checks DEFAULT_ROOTS — on a fresh test runner it's typically False."""
+    """is_available checks default roots — on a fresh test runner it's typically False."""
     # We can't guarantee this without a user install; just assert the call succeeds
     result = OpenCodeAdapter.is_available()
     assert isinstance(result, bool)

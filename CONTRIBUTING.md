@@ -211,19 +211,19 @@ See [docs/framework.md §5.25 Adapter Flow](docs/framework.md) for the full cont
 
 ### Cross-platform path requirement
 
-`DEFAULT_ROOTS` (or `DEFAULT_VAULT_PATHS` / `session_store_path`) must work on macOS, Linux, **and** Windows. Two patterns are acceptable:
+Default store paths (often exposed as `default_roots()`, `default_vault_paths()`, or `default_session_store_path()` on the adapter class) must work on macOS, Linux, **and** Windows. Two patterns are acceptable:
 
 1. **Dot-directory** (`Path.home() / ".agent" / ...`) -- works on all three platforms by default; a single entry is fine.
 2. **OS-specific directories** (e.g. `~/Library/Application Support/...`, `~/.config/...`, `~/AppData/Roaming/...`) -- you need at least one entry per platform. Use inline comments to label which path is for which OS.
 
-Always use `Path.home()` -- never hardcode `/Users/`, `/home/`, or `C:\Users\`. The test in `tests/test_cross_platform_paths.py` enforces these rules.
+**Never evaluate `Path.home()` at import time** for those defaults — build the list inside a classmethod (or equivalent) so the per-test `HOME` sandbox in `tests/conftest.py` applies (#369). Always use `Path.home()` inside that helper — never hardcode `/Users/`, `/home/`, or `C:\Users\`. The test in `tests/test_cross_platform_paths.py` enforces these rules; `tests/session_store_guard.py` fails the suite if code opens or directory-lists real session stores under the developer's home during pytest.
 
 Adapters with no default paths (like `pdf`, where the user must configure roots) are exempt.
 
 ### Review checklist for adapter PRs
 
 - [ ] Adapter declares `SUPPORTED_SCHEMA_VERSIONS`
-- [ ] `DEFAULT_ROOTS` covers macOS + Linux + Windows (see above)
+- [ ] Default paths (classmethod helpers) cover macOS + Linux + Windows (see above)
 - [ ] Fixture is under 50 KB and contains **no real PII**
 - [ ] Snapshot test passes locally
 - [ ] `docs/adapters/<agent>.md` exists and is linked from README

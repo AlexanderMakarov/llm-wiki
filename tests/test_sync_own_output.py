@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import os
+from builtins import classmethod
 from pathlib import Path
 
 import pytest
@@ -69,7 +70,9 @@ def env(tmp_path, monkeypatch):
     state = tmp_path / "state.json"
 
     monkeypatch.setattr(
-        ClaudeCodeAdapter, "session_store_path", store, raising=False,
+        ClaudeCodeAdapter,
+        "default_session_store_path",
+        classmethod(lambda cls, s=store: s),
     )
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
     monkeypatch.setattr(c, "REPO_ROOT", home.parent / "repo")

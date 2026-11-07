@@ -31,18 +31,21 @@ class CodexCliAdapter(BaseAdapter):
 
     SUPPORTED_SCHEMA_VERSIONS = ["v0.x", "v1.0"]
 
-    DEFAULT_ROOTS = [
-        # Cross-platform: dot-dir works on macOS, Linux, and Windows
-        Path.home() / ".codex" / "sessions",
-        Path.home() / ".codex" / "projects",
-    ]
+    @classmethod
+    def default_roots(cls) -> list[Path]:
+        """Default roots resolved at call time (``HOME`` may differ per test)."""
+        return [
+            # Cross-platform: dot-dir works on macOS, Linux, and Windows
+            Path.home() / ".codex" / "sessions",
+            Path.home() / ".codex" / "projects",
+        ]
 
     def __init__(self, config: dict[str, Any] | None = None):
         super().__init__(config)
         ad_cfg = (config or {}).get("adapters", {}).get("codex_cli", {})
         paths = ad_cfg.get("roots") or []
         self.roots: list[Path] = (
-            [Path(p).expanduser() for p in paths] if paths else self.DEFAULT_ROOTS
+            [Path(p).expanduser() for p in paths] if paths else list(self.default_roots())
         )
 
     @property

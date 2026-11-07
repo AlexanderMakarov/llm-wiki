@@ -12,6 +12,7 @@ Token, email and ``extra_patterns`` redaction always run.
 from __future__ import annotations
 
 import json
+from builtins import classmethod
 from pathlib import Path
 
 import pytest
@@ -207,7 +208,11 @@ def test_convert_all_raw_output_follows_toggle(
     store = home / ".claude" / "projects"
     _write_session(store / "-home-alice-code-proj" / "sess.jsonl")
     out_dir = tmp_path / "repo" / "raw" / "sessions"
-    monkeypatch.setattr(ClaudeCodeAdapter, "session_store_path", store, raising=False)
+    monkeypatch.setattr(
+        ClaudeCodeAdapter,
+        "default_session_store_path",
+        classmethod(lambda cls, s=store: s),
+    )
     monkeypatch.setattr(c, "REPO_ROOT", tmp_path / "repo")
     c.discover_adapters()
 

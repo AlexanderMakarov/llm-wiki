@@ -24,22 +24,24 @@ class GeminiCliAdapter(BaseAdapter):
 
     SUPPORTED_SCHEMA_VERSIONS = ["v1"]
 
-    DEFAULT_ROOTS = [
-        # macOS / Linux / Windows (dot-dir works everywhere)
-        Path.home() / ".gemini",
-        # Linux (XDG)
-        Path.home() / ".config" / "gemini",
-        Path.home() / ".local" / "share" / "gemini",
-        # Windows (%APPDATA%)
-        Path.home() / "AppData" / "Roaming" / "gemini",
-    ]
+    @classmethod
+    def default_roots(cls) -> list[Path]:
+        return [
+            # macOS / Linux / Windows (dot-dir works everywhere)
+            Path.home() / ".gemini",
+            # Linux (XDG)
+            Path.home() / ".config" / "gemini",
+            Path.home() / ".local" / "share" / "gemini",
+            # Windows (%APPDATA%)
+            Path.home() / "AppData" / "Roaming" / "gemini",
+        ]
 
     def __init__(self, config: dict[str, Any] | None = None):
         super().__init__(config)
         ad_cfg = (config or {}).get("adapters", {}).get("gemini_cli", {})
         paths = ad_cfg.get("roots") or []
         self.roots: list[Path] = (
-            [Path(p).expanduser() for p in paths] if paths else self.DEFAULT_ROOTS
+            [Path(p).expanduser() for p in paths] if paths else list(self.default_roots())
         )
 
     @property

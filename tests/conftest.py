@@ -16,6 +16,7 @@ import pytest
 
 from llmwiki.automation_units import DiscoveryResult
 from llmwiki.config_schedule import bind_vault, clear_vault_binding
+from tests.session_store_guard import install_session_store_guard
 from tests.settings_sandbox import SettingsSandbox, install_sandbox
 
 # Session hooks that fail a run which changed a tracked file or a real settings
@@ -55,6 +56,12 @@ def _isolate_default_vault(tmp_path_factory, monkeypatch):
     # Bind so every vault path (state, raw/, wiki/) uses this throwaway root.
     bind_vault(isolated)
     yield isolated
+
+
+@pytest.fixture(autouse=True)
+def _guard_real_session_stores(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Fail fast if tests list/open the contributor's real agent session dirs (#369)."""
+    install_session_store_guard(monkeypatch)
 
 
 @pytest.fixture(autouse=True)

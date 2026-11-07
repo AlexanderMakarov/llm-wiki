@@ -61,9 +61,9 @@ class ChatGPTAdapter(BaseAdapter):
 
     SUPPORTED_SCHEMA_VERSIONS = ["v1"]
 
-    DEFAULT_EXPORT_DIRS = [
-        Path.home() / "Downloads" / "chatgpt-export",
-    ]
+    @classmethod
+    def default_export_dirs(cls) -> list[Path]:
+        return [Path.home() / "Downloads" / "chatgpt-export"]
 
     def __init__(self, config: dict[str, Any] | None = None):
         super().__init__(config)
@@ -74,7 +74,7 @@ class ChatGPTAdapter(BaseAdapter):
         if dirs:
             self._export_dirs = [Path(d).expanduser() for d in dirs]
         else:
-            self._export_dirs = self.DEFAULT_EXPORT_DIRS
+            self._export_dirs = list(self.default_export_dirs())
 
     @property
     def session_store_path(self):  # type: ignore[override]

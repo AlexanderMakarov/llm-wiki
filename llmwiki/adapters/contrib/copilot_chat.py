@@ -29,7 +29,7 @@ _EDITOR_DIRS = ["Code", "Code - Insiders", "VSCodium"]
 
 
 def _build_default_roots() -> list[Path]:
-    """Build the full cross-platform DEFAULT_ROOTS list at import time."""
+    """Build the full cross-platform default roots list (call-time ``Path.home()``)."""
     home = Path.home()
     roots: list[Path] = []
     for editor in _EDITOR_DIRS:
@@ -55,7 +55,9 @@ class CopilotChatAdapter(BaseAdapter):
     # #arch-m9 (#621): SUPPORTED_SCHEMA_VERSIONS = ["v1"] is the
     # BaseAdapter default — declaration removed here.
 
-    DEFAULT_ROOTS: list[Path] = _build_default_roots()
+    @classmethod
+    def default_roots(cls) -> list[Path]:
+        return _build_default_roots()
 
     # File patterns inside chatSessions/ subdirectories.
     SESSION_FILE_PATTERNS = ["*.jsonl", "*.json"]
@@ -68,7 +70,7 @@ class CopilotChatAdapter(BaseAdapter):
         ad_cfg = adapters_cfg.get("copilot_chat") or adapters_cfg.get("copilot-chat") or {}
         paths = ad_cfg.get("roots") or []
         self.roots: list[Path] = (
-            [Path(p).expanduser() for p in paths] if paths else self.DEFAULT_ROOTS
+            [Path(p).expanduser() for p in paths] if paths else list(self.default_roots())
         )
 
     @property

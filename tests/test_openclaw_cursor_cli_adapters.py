@@ -114,7 +114,7 @@ def test_openclaw_derive_project_slug_with_custom_root_layout(tmp_path: Path):
 
 def test_openclaw_empty_roots_list_falls_back_to_default():
     ad = OpenClawAdapter(config={"adapters": {"openclaw": {"roots": []}}})
-    assert ad.roots == OpenClawAdapter.DEFAULT_ROOTS
+    assert ad.roots == list(OpenClawAdapter.default_roots())
 
 
 def test_openclaw_discover_empty_when_no_roots_exist(tmp_path: Path):

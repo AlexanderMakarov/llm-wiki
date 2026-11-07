@@ -76,28 +76,28 @@ class TestCopilotChatContract:
 
 class TestCopilotChatCrossPlatform:
     def test_default_roots_has_macos_entries(self):
-        roots = CopilotChatAdapter.DEFAULT_ROOTS
+        roots = CopilotChatAdapter.default_roots()
         macos = [r for r in roots if "Library" in str(r) and "Application Support" in str(r)]
         # Should have entries for Code, Code - Insiders, VSCodium
         assert len(macos) >= 3
 
     def test_default_roots_has_linux_entries(self):
-        roots = CopilotChatAdapter.DEFAULT_ROOTS
+        roots = CopilotChatAdapter.default_roots()
         linux = [r for r in roots if ".config" in str(r)]
         assert len(linux) >= 3
 
     def test_default_roots_has_windows_entries(self):
-        roots = CopilotChatAdapter.DEFAULT_ROOTS
+        roots = CopilotChatAdapter.default_roots()
         windows = [r for r in roots if "AppData" in str(r)]
         assert len(windows) >= 3
 
     def test_default_roots_includes_insiders(self):
-        roots = CopilotChatAdapter.DEFAULT_ROOTS
+        roots = CopilotChatAdapter.default_roots()
         insiders = [r for r in roots if "Code - Insiders" in str(r)]
         assert len(insiders) >= 1
 
     def test_default_roots_includes_vscodium(self):
-        roots = CopilotChatAdapter.DEFAULT_ROOTS
+        roots = CopilotChatAdapter.default_roots()
         codium = [r for r in roots if "VSCodium" in str(r)]
         assert len(codium) >= 1
 
@@ -282,12 +282,12 @@ class TestCopilotCliContract:
 
 class TestCopilotCliCrossPlatform:
     def test_default_roots_has_home_copilot(self):
-        roots = CopilotCliAdapter.DEFAULT_ROOTS
+        roots = CopilotCliAdapter.default_roots()
         home_root = [r for r in roots if ".copilot" in str(r)]
         assert len(home_root) >= 1
 
     def test_default_roots_all_end_with_session_state(self):
-        roots = CopilotCliAdapter.DEFAULT_ROOTS
+        roots = CopilotCliAdapter.default_roots()
         for r in roots:
             assert r.name == "session-state", f"Root {r} doesn't end with session-state"
 

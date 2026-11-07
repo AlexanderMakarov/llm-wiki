@@ -20,7 +20,7 @@ from llmwiki.adapters.base import BaseAdapter
 
 
 def _build_default_roots() -> list[Path]:
-    """Build DEFAULT_ROOTS, incorporating COPILOT_HOME if set."""
+    """Build default roots at call time, incorporating COPILOT_HOME if set."""
     home = Path.home()
     roots: list[Path] = [
         home / ".copilot" / "session-state",
@@ -44,7 +44,9 @@ class CopilotCliAdapter(BaseAdapter):
     # #arch-m9 (#621): SUPPORTED_SCHEMA_VERSIONS = ["v1"] is the
     # BaseAdapter default — declaration removed here.
 
-    DEFAULT_ROOTS: list[Path] = _build_default_roots()
+    @classmethod
+    def default_roots(cls) -> list[Path]:
+        return _build_default_roots()
 
     def __init__(self, config: dict[str, Any] | None = None):
         super().__init__(config)
@@ -54,7 +56,7 @@ class CopilotCliAdapter(BaseAdapter):
         ad_cfg = adapters_cfg.get("copilot_cli") or adapters_cfg.get("copilot-cli") or {}
         paths = ad_cfg.get("roots") or []
         self.roots: list[Path] = (
-            [Path(p).expanduser() for p in paths] if paths else self.DEFAULT_ROOTS
+            [Path(p).expanduser() for p in paths] if paths else list(self.default_roots())
         )
 
     @property
@@ -68,7 +70,7 @@ class CopilotCliAdapter(BaseAdapter):
     # env-var check fails.
     @classmethod
     def is_available(cls) -> bool:
-        for p in cls.DEFAULT_ROOTS:
+        for p in cls.default_roots():
             if Path(p).expanduser().exists():
                 return True
         # Also check COPILOT_HOME at call time (may be set after import)

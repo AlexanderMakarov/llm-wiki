@@ -32,8 +32,14 @@ _HEADLESS_PROMPT_SOURCES = frozenset({"sdk"})
 class ClaudeCodeAdapter(BaseAdapter):
     """Claude Code — reads ~/.claude/projects/*/*.jsonl"""
 
-    # Cross-platform: dot-dir works on macOS, Linux, and Windows
-    session_store_path = Path.home() / ".claude" / "projects"
+    @classmethod
+    def default_session_store_path(cls) -> Path:
+        """Resolve the session store at call time so tests can sandbox ``HOME``."""
+        return Path.home() / ".claude" / "projects"
+
+    @property
+    def session_store_path(self) -> Path:  # type: ignore[override]
+        return self.default_session_store_path()
 
     def is_headless_session(self, records: list[dict[str, Any]]) -> bool:
         """True if any record marks this as a headless `claude -p` / SDK run."""

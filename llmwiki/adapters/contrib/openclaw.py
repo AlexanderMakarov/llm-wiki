@@ -92,15 +92,17 @@ class OpenClawAdapter(BaseAdapter):
 
     is_ai_session = True
 
-    # Default store root; discover_sessions() narrows to <agent>/sessions/*.jsonl.
-    DEFAULT_ROOTS = [Path.home() / ".openclaw" / "agents"]
+    @classmethod
+    def default_roots(cls) -> list[Path]:
+        # Default store root; discover_sessions() narrows to <agent>/sessions/*.jsonl.
+        return [Path.home() / ".openclaw" / "agents"]
 
     def __init__(self, config: dict[str, Any] | None = None):
         super().__init__(config)
         ad_cfg = adapter_block(config or {}, "openclaw")
         paths = ad_cfg.get("roots") or []
         self.roots: list[Path] = (
-            [Path(p).expanduser() for p in paths] if paths else self.DEFAULT_ROOTS
+            [Path(p).expanduser() for p in paths] if paths else list(self.default_roots())
         )
 
     @property

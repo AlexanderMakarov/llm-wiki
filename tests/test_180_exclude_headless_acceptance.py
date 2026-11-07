@@ -34,6 +34,7 @@ Contract (every adapter defines ``is_headless_session``):
 from __future__ import annotations
 
 import json
+from builtins import classmethod
 from pathlib import Path
 
 import pytest
@@ -92,7 +93,11 @@ def _seed_claude(tmp_path: Path) -> tuple[Path, Path]:
 
 def _patch_claude(monkeypatch, home: Path) -> None:
     store = home / ".claude" / "projects"
-    monkeypatch.setattr(ClaudeCodeAdapter, "session_store_path", store, raising=False)
+    monkeypatch.setattr(
+        ClaudeCodeAdapter,
+        "default_session_store_path",
+        classmethod(lambda cls, s=store: s),
+    )
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
     monkeypatch.setattr(c, "REPO_ROOT", home.parent / "repo")
 

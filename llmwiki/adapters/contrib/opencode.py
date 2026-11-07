@@ -39,24 +39,26 @@ class OpenCodeAdapter(BaseAdapter):
 
     SUPPORTED_SCHEMA_VERSIONS = ["v1"]
 
-    DEFAULT_ROOTS = [
-        # macOS
-        Path.home() / "Library" / "Application Support" / "opencode" / "sessions",
-        Path.home() / "Library" / "Application Support" / "openclaw" / "sessions",
-        # Linux (XDG default)
-        Path.home() / ".config" / "opencode" / "sessions",
-        Path.home() / ".config" / "openclaw" / "sessions",
-        # Windows
-        Path.home() / "AppData" / "Roaming" / "opencode" / "sessions",
-        Path.home() / "AppData" / "Roaming" / "openclaw" / "sessions",
-    ]
+    @classmethod
+    def default_roots(cls) -> list[Path]:
+        return [
+            # macOS
+            Path.home() / "Library" / "Application Support" / "opencode" / "sessions",
+            Path.home() / "Library" / "Application Support" / "openclaw" / "sessions",
+            # Linux (XDG default)
+            Path.home() / ".config" / "opencode" / "sessions",
+            Path.home() / ".config" / "openclaw" / "sessions",
+            # Windows
+            Path.home() / "AppData" / "Roaming" / "opencode" / "sessions",
+            Path.home() / "AppData" / "Roaming" / "openclaw" / "sessions",
+        ]
 
     def __init__(self, config: dict[str, Any] | None = None):
         super().__init__(config)
         ad_cfg = (config or {}).get("adapters", {}).get("opencode", {})
         paths = ad_cfg.get("roots") or []
         self.roots: list[Path] = (
-            [Path(p).expanduser() for p in paths] if paths else self.DEFAULT_ROOTS
+            [Path(p).expanduser() for p in paths] if paths else list(self.default_roots())
         )
 
     @property
