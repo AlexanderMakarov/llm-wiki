@@ -15,10 +15,10 @@ disable-model-invocation: true
 
 ## Route
 
-- **`bug` label** on the issue → `/fix-bug <url>`
-- **Otherwise** → `/implement-feature <url>`
+- **`bug` label** on the issue → `/fix-bug <url>`, defined in `.claude/commands/fix-bug.md`
+- **Otherwise** → `/implement-feature <url>`, defined in `.claude/commands/implement-feature.md`
 
-Run that slash command for the URL below.
+A slash command inside this pasted prompt is not expanded for you: **open that command file first and execute it completely, from its first stage**, for the URL below. Its isolated worktree is where you implement; never check out a branch or edit files in **`MAIN`**.
 
 ## What herdr needs to advance
 
