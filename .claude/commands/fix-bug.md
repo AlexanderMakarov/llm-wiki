@@ -84,7 +84,7 @@ python3 -m llmwiki init --vault "$TMP_VAULT"
 
 If already inside a matching worktree on `BRANCH`, reuse it and ensure `$WT/.worktree-vault` + worktree `config.json` still isolate from the live vault (never copy primary `config.json`).
 
-Resolve **`MAIN`**: absolute path to the primary checkout (where herdr runs the driver — not `$WT`). Prefer a driver-injected `MAIN=…` when present; otherwise:
+Resolve **`MAIN`**: absolute path to the primary checkout (the non-worktree clone — not `$WT`). Prefer a driver-injected `MAIN=…` when an outer orchestrator supplies one; otherwise:
 
 ```bash
 MAIN="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"
@@ -238,7 +238,7 @@ Re-check mergeability against current `origin/main`. If dirty: rebase, push, ret
 
 When gates are green, ask for explicit merge confirmation in this run. On yes: `gh pr merge`. Skipped/unanswered → do not merge; report ready-to-merge in chat. No "merged"/"gates passed" PR comments.
 
-After merge: watch post-merge Actions on `main` and fix forward if this change broke them. Optional: `python3 scripts/wait_post_merge_ci.py` (same α as the herdr driver).
+After merge: watch post-merge Actions on `main` and fix forward if this change broke them. Optional: `python3 scripts/wait_post_merge_ci.py` (waits until every check run on the merge commit is `success` / `skipped` / `neutral`).
 
 Then sync **`$MAIN`** (mandatory):
 
@@ -254,7 +254,7 @@ git -C "$MAIN" log -1 --oneline
 
 ### Step 13: Close the Loop
 
-Definition of Done: PR merged, post-merge checks green, **`$MAIN` pulled to `origin/main`**, and close-stage cleanup attempted. Stopping after merge without pulling `$MAIN` is not Done — the herdr driver waits for local `#N` in main history; the pull must finish **before** worktree cleanup.
+Definition of Done: PR merged, post-merge checks green, **`$MAIN` pulled to `origin/main`**, and close-stage cleanup attempted. Stopping after merge without pulling `$MAIN` is not Done — local `$MAIN` must contain the merge (and the delivery's issue markers) before the run ends; the pull must finish **before** worktree cleanup.
 
 Gather chat evidence first (do not write a closing flow-log entry): PR URL, merge commit, post-merge CI, main `log -1`, local-review verdict/counts/paths, classification verdict, (on divergence) that the owning spec was amended, and the cleanup outcome below. Do **not** close or transition the GitHub Issue. If any flow-created artifact is still uncommitted, surface it in the report.
 

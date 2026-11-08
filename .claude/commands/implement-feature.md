@@ -86,7 +86,7 @@ python3 -m llmwiki init --vault "$TMP_VAULT"
 
 If already inside a matching worktree on `BRANCH`, reuse it and ensure `$WT/.worktree-vault` + worktree `config.json` still point at the throwaway vault (never copy the primary checkout's `config.json`).
 
-Resolve **`MAIN`**: absolute path to the primary checkout (where herdr runs the driver — not `$WT`). Prefer a driver-injected `MAIN=…` in the prompt when present; otherwise from any checkout of this repo:
+Resolve **`MAIN`**: absolute path to the primary checkout (the non-worktree clone — not `$WT`). Prefer a driver-injected `MAIN=…` in the prompt when an outer orchestrator supplies one; otherwise from any checkout of this repo:
 
 ```bash
 MAIN="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"
@@ -239,7 +239,7 @@ Re-check mergeability against current `origin/main` (fetch + rebase dry-run / `g
 
 When every waited gate is green, show that status and ask the user for explicit merge confirmation in this run. Merge only on yes, via `gh pr merge` (merge commit or squash per repo defaults / user preference if stated). A skipped or unanswered confirmation means do not merge — report ready-to-merge in chat and stop. Do **not** post a "merged" or "gates passed" PR comment.
 
-After merge: watch post-merge Actions on `main`; if they fail because of this change, diagnose (`gha-diagnosis`), fix forward on a follow-up commit or hotfix branch, and re-watch until green. Optional: `python3 scripts/wait_post_merge_ci.py` with `--issue`, `--pr`, or `--merge-sha` (same α gate as the herdr driver).
+After merge: watch post-merge Actions on `main`; if they fail because of this change, diagnose (`gha-diagnosis`), fix forward on a follow-up commit or hotfix branch, and re-watch until green. Optional: `python3 scripts/wait_post_merge_ci.py` with `--issue`, `--pr`, or `--merge-sha` (waits until every check run on the merge commit is `success` / `skipped` / `neutral`).
 
 Then sync the **main checkout** (mandatory before Close the loop):
 
@@ -263,7 +263,7 @@ No auto-deploy and no `/release` invocation from this flow. Optionally print tha
 
 ### Step 13: Close the Loop
 
-Definition of Done: PR merged, post-merge required checks green, **`$MAIN` pulled to `origin/main`** (show `git -C "$MAIN" log -1`), and close-stage cleanup attempted. **Stopping after merge or issue CLOSED without pulling `$MAIN` is not Done** — the herdr driver waits for local `#N` in main history; the pull must finish **before** worktree cleanup.
+Definition of Done: PR merged, post-merge required checks green, **`$MAIN` pulled to `origin/main`** (show `git -C "$MAIN" log -1`), and close-stage cleanup attempted. **Stopping after merge or issue CLOSED without pulling `$MAIN` is not Done** — local `$MAIN` must contain the merge (and the delivery's issue markers) before the run ends; the pull must finish **before** worktree cleanup.
 
 Gather chat evidence first (do not write a closing flow-log entry — the log was finalized at commit-push): PR URL, merge commit, post-merge CI result, main `log -1`, local-review evidence (verdict, finding counts by severity, review file paths, that keep/drop ran), any try-steps, and the cleanup outcome below. Do **not** close or transition the GitHub Issue. Do **not** post a closing/merged PR comment unless a §9 exception still needs recording. If any flow-created artifact is still uncommitted, surface it in the report rather than leaving it behind — an uncommitted leftover after a merged or in-review change request is a bug, not a record.
 
