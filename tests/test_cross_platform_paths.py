@@ -19,13 +19,30 @@ from llmwiki.adapters.contrib.obsidian import ObsidianAdapter
 # ── helpers ──────────────────────────────────────────────────────────
 
 def _get_default_paths(adapter_cls) -> list[Path]:
-    """Return the list of default root paths for an adapter class."""
-    if hasattr(adapter_cls, "DEFAULT_ROOTS"):
-        return list(adapter_cls.DEFAULT_ROOTS)
-    if hasattr(adapter_cls, "DEFAULT_VAULT_PATHS"):
-        return list(adapter_cls.DEFAULT_VAULT_PATHS)
-    # Fall back to session_store_path (may be a single Path)
-    ssp = adapter_cls.session_store_path
+    """Return the list of default root paths for an adapter class.
+
+    Paths are resolved with the **current** ``Path.home()`` (per-test sandbox),
+    not a snapshot from import time (#369).
+    """
+    if hasattr(adapter_cls, "default_global_dbs") and hasattr(adapter_cls, "default_roots"):
+        return list(adapter_cls.default_global_dbs()) + list(adapter_cls.default_roots())
+    if hasattr(adapter_cls, "default_roots"):
+        return list(adapter_cls.default_roots())
+    if hasattr(adapter_cls, "default_vault_paths"):
+        return list(adapter_cls.default_vault_paths())
+    if hasattr(adapter_cls, "default_session_store_path"):
+        ssp = adapter_cls.default_session_store_path()
+        if isinstance(ssp, list):
+            return list(ssp)
+        return [ssp]
+    if hasattr(adapter_cls, "default_export_dirs"):
+        return list(adapter_cls.default_export_dirs())
+    # Fall back to session_store_path (instance property or legacy class attr)
+    ssp = getattr(adapter_cls, "session_store_path", None)
+    if ssp is None:
+        return []
+    if isinstance(ssp, property):
+        ssp = ssp.fget(adapter_cls())  # type: ignore[misc,union-attr]
     if isinstance(ssp, list):
         return list(ssp)
     return [ssp]
@@ -53,14 +70,9 @@ def _covers_platform(paths: list[Path], markers: tuple[str, ...]) -> bool:
     return False
 
 
-#: Adapters build their default roots when imported; so is this module, before any
-#: test points ``HOME`` at its sandbox, so this is the home those roots were built with.
-_IMPORT_HOME = Path.home()
-
-
 def _is_dot_dir_only(paths: list[Path]) -> bool:
     """True if every path is a dot-directory under home (cross-platform)."""
-    home = _IMPORT_HOME
+    home = Path.home()
     for p in paths:
         try:
             rel = p.relative_to(home)
@@ -114,7 +126,6 @@ def test_obsidian_covers_windows():
 # ── dot-dir-only adapters are inherently cross-platform ──────────────
 
 _DOT_DIR_ADAPTERS = [
-    ClaudeCodeAdapter,
     CodexCliAdapter,
 ]
 
@@ -132,18 +143,18 @@ def test_dotdir_adapters_are_cross_platform():
 # ── every adapter's paths resolve under Path.home() ─────────────────
 
 _ALL_ADAPTERS = [
-    ClaudeCodeAdapter,
     CodexCliAdapter,
     CursorAdapter,
     GeminiCliAdapter,
     ObsidianAdapter,
+    # Claude — single Path via default_session_store_path; covered in test_claude_default_path_is_dot_dir_under_home
     # PDF excluded — empty defaults
 ]
 
 
 def test_all_default_paths_are_under_home():
     """All default roots should be relative to the user's home directory."""
-    home = _IMPORT_HOME
+    home = Path.home()
     for cls in _ALL_ADAPTERS:
         paths = _get_default_paths(cls)
         for p in paths:
@@ -152,15 +163,23 @@ def test_all_default_paths_are_under_home():
             )
 
 
+def test_claude_default_path_is_dot_dir_under_home():
+    paths = _get_default_paths(ClaudeCodeAdapter)
+    assert _is_dot_dir_only(paths), (
+        f"{ClaudeCodeAdapter.__name__} uses non-dot-dir paths but is not in the "
+        f"OS-specific adapter list"
+    )
+
+
 def test_no_adapter_uses_hardcoded_username():
     """No adapter should hardcode a username like /Users/alice/ or /home/bob/."""
-    for cls in _ALL_ADAPTERS:
+    home_str = str(Path.home())
+    for cls in _ALL_ADAPTERS + [ClaudeCodeAdapter]:
         paths = _get_default_paths(cls)
         for p in paths:
             # Path.home() resolves dynamically; make sure no extra user dir is
             # hardcoded beyond what Path.home() provides.
             parts_str = str(p)
-            home_str = str(_IMPORT_HOME)
             after_home = parts_str[len(home_str):]
             # Should not contain another /Users/ or /home/ segment
             assert "/Users/" not in after_home, (

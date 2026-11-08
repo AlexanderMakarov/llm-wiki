@@ -12,12 +12,12 @@ Token, email and ``extra_patterns`` redaction always run.
 from __future__ import annotations
 
 import json
+from builtins import classmethod
 from pathlib import Path
 
 import pytest
 
 from llmwiki import convert as c
-from llmwiki.adapters.claude_code import ClaudeCodeAdapter
 from llmwiki.add_doc import _source_path_label
 from llmwiki.convert import (
     DEFAULT_CONFIG,
@@ -26,6 +26,7 @@ from llmwiki.convert import (
     _resolve_convert_config,
     load_config,
 )
+from tests.support.claude_session_store import patch_claude_session_store
 
 TOKEN = "sk-" + "Ab1" * 8
 EMAIL = "alice@example.com"
@@ -207,8 +208,7 @@ def test_convert_all_raw_output_follows_toggle(
     store = home / ".claude" / "projects"
     _write_session(store / "-home-alice-code-proj" / "sess.jsonl")
     out_dir = tmp_path / "repo" / "raw" / "sessions"
-    monkeypatch.setattr(ClaudeCodeAdapter, "session_store_path", store, raising=False)
-    monkeypatch.setattr(c, "REPO_ROOT", tmp_path / "repo")
+    patch_claude_session_store(monkeypatch, home, repo_root_parent=tmp_path)
     c.discover_adapters()
 
     c.convert_all(

@@ -50,42 +50,81 @@ class CursorAdapter(BaseAdapter):
     SUPPORTED_SCHEMA_VERSIONS = ["v1"]
     is_ai_session = True
 
-    DEFAULT_GLOBAL_DBS = [
-        Path.home() / "Library" / "Application Support" / "Cursor" / "User" / "globalStorage" / "state.vscdb",
-        Path.home() / ".config" / "Cursor" / "User" / "globalStorage" / "state.vscdb",
-        Path.home() / "AppData" / "Roaming" / "Cursor" / "User" / "globalStorage" / "state.vscdb",
-    ]
+    @classmethod
+    def default_global_dbs(cls) -> list[Path]:
+        """Composer global DB paths; resolved at call time for test ``HOME`` isolation."""
+        return [
+            Path.home() / "Library" / "Application Support" / "Cursor" / "User" / "globalStorage" / "state.vscdb",
+            Path.home() / ".config" / "Cursor" / "User" / "globalStorage" / "state.vscdb",
+            Path.home() / "AppData" / "Roaming" / "Cursor" / "User" / "globalStorage" / "state.vscdb",
+        ]
 
-    DEFAULT_ROOTS = [
-        Path.home() / "Library" / "Application Support" / "Cursor" / "User" / "workspaceStorage",
-        Path.home() / ".config" / "Cursor" / "User" / "workspaceStorage",
-        Path.home() / "AppData" / "Roaming" / "Cursor" / "User" / "workspaceStorage",
-    ]
+    @classmethod
+    def default_roots(cls) -> list[Path]:
+        """Workspace roots; resolved at call time for test ``HOME`` isolation."""
+        return [
+            Path.home() / "Library" / "Application Support" / "Cursor" / "User" / "workspaceStorage",
+            Path.home() / ".config" / "Cursor" / "User" / "workspaceStorage",
+            Path.home() / "AppData" / "Roaming" / "Cursor" / "User" / "workspaceStorage",
+        ]
 
     def __init__(self, config: dict[str, Any] | None = None):
         super().__init__(config)
         ad_cfg = adapter_block(config or {}, "cursor_ide")
         roots = ad_cfg.get("roots") or []
-        self.roots: list[Path] = (
-            [Path(p).expanduser() for p in roots] if roots else list(self.DEFAULT_ROOTS)
+        self._configured_roots: list[Path] | None = (
+            [Path(p).expanduser() for p in roots] if roots else None
         )
         gdb = ad_cfg.get("global_db")
-        self._global_dbs: list[Path] = (
-            [Path(gdb).expanduser()]
-            if gdb
-            else list(self.DEFAULT_GLOBAL_DBS)
+        self._configured_global_dbs: list[Path] | None = (
+            [Path(gdb).expanduser()] if gdb else None
         )
+        self._default_store_paths: list[Path] | None = None
+        self._lazy_global_dbs: list[Path] | None = None
+        self._lazy_roots: list[Path] | None = None
         # Cache headers/meta between discover and load within one adapter instance.
         self._header_cache: dict[str, dict[str, Any]] | None = None
         self._db_path: Path | None = None
 
     @property
+    def roots(self) -> list[Path]:
+        if self._configured_roots is not None:
+            return self._configured_roots
+        if self._lazy_roots is None:
+            self._lazy_roots = list(self.default_roots())
+        return self._lazy_roots
+
+    @property
     def session_store_path(self):  # type: ignore[override]
-        # Availability: global DB or workspace roots.
-        return [*self._global_dbs, *self.roots]
+        ad_cfg = adapter_block(self.config or {}, "cursor_ide")
+        if not ad_cfg.get("global_db") and not ad_cfg.get("roots"):
+            if self._default_store_paths is None:
+                self._default_store_paths = [
+                    *self._global_db_candidates(),
+                    *self.roots,
+                ]
+            return self._default_store_paths
+        dbs = (
+            self._configured_global_dbs
+            if ad_cfg.get("global_db")
+            else list(self.default_global_dbs())
+        )
+        roots = (
+            self._configured_roots
+            if ad_cfg.get("roots")
+            else list(self.default_roots())
+        )
+        return [*dbs, *roots]
+
+    def _global_db_candidates(self) -> list[Path]:
+        if self._configured_global_dbs is not None:
+            return self._configured_global_dbs
+        if self._lazy_global_dbs is None:
+            self._lazy_global_dbs = list(self.default_global_dbs())
+        return self._lazy_global_dbs
 
     def _resolve_global_db(self) -> Path | None:
-        for p in self._global_dbs:
+        for p in self._global_db_candidates():
             p = Path(p).expanduser()
             if p.exists():
                 return p

@@ -40,13 +40,15 @@ class ObsidianAdapter(BaseAdapter):
 
     SUPPORTED_SCHEMA_VERSIONS = ["1.x"]
 
-    DEFAULT_VAULT_PATHS = [
-        # macOS / Linux / Windows — common default vault locations
-        Path.home() / "Documents" / "Obsidian Vault",
-        Path.home() / "Obsidian",
-        # Windows (%APPDATA%) — some installs create vaults here
-        Path.home() / "AppData" / "Local" / "Obsidian" / "Vault",
-    ]
+    @classmethod
+    def default_vault_paths(cls) -> list[Path]:
+        return [
+            # macOS / Linux / Windows — common default vault locations
+            Path.home() / "Documents" / "Obsidian Vault",
+            Path.home() / "Obsidian",
+            # Windows (%APPDATA%) — some installs create vaults here
+            Path.home() / "AppData" / "Local" / "Obsidian" / "Vault",
+        ]
 
     DEFAULT_EXCLUDE_FOLDERS = {
         ".obsidian",
@@ -62,28 +64,38 @@ class ObsidianAdapter(BaseAdapter):
         super().__init__(config)
         ad_cfg = (config or {}).get("adapters", {}).get("obsidian", {})
         paths = ad_cfg.get("vault_paths") or []
-        self.vault_paths: list[Path] = (
-            [Path(p).expanduser() for p in paths] if paths else self.DEFAULT_VAULT_PATHS
+        self._configured_vault_paths: list[Path] | None = (
+            [Path(p).expanduser() for p in paths] if paths else None
         )
+        self._default_vault_paths: list[Path] | None = None
         self.exclude_folders: set[str] = set(
             ad_cfg.get("exclude_folders", self.DEFAULT_EXCLUDE_FOLDERS)
         )
         self.min_content_chars: int = int(ad_cfg.get("min_content_chars", 50))
 
-    # Override session_store_path so is_available() works.
+    @property
+    def vault_paths(self) -> list[Path]:
+        return self.session_store_path
+
     @property
     def session_store_path(self):  # type: ignore[override]
-        return self.vault_paths
+        if self._configured_vault_paths is not None:
+            return self._configured_vault_paths
+        if self._default_vault_paths is None:
+            self._default_vault_paths = list(self.default_vault_paths())
+        return self._default_vault_paths
 
     # #496: is_available() inherited from BaseAdapter — temp instance
-    # reads self.session_store_path (the @property above returning
-    # self.vault_paths). Was a duplicate scan over DEFAULT_VAULT_PATHS.
+    # reads self.session_store_path (``default_vault_paths()`` when no override).
 
     def discover_sessions(self) -> list[Path]:
         """Walk every configured vault and return all .md files, excluding known
         internal folders. Returns a sorted list."""
         out: list[Path] = []
-        for vault in self.vault_paths:
+        stores = self.session_store_path
+        if isinstance(stores, Path):
+            stores = [stores]
+        for vault in stores:
             vault = Path(vault).expanduser()
             if not vault.exists():
                 continue
@@ -105,7 +117,10 @@ class ObsidianAdapter(BaseAdapter):
     def derive_project_slug(self, md_path: Path) -> str:
         """Use the top-level folder under the vault as the project slug.
         Files directly in the vault root get slug 'vault-root'."""
-        for vault in self.vault_paths:
+        stores = self.session_store_path
+        if isinstance(stores, Path):
+            stores = [stores]
+        for vault in stores:
             vault = Path(vault).expanduser()
             try:
                 rel = md_path.relative_to(vault)

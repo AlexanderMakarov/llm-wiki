@@ -18,11 +18,11 @@ from pathlib import Path
 
 from llmwiki import convert as c
 from llmwiki._frontmatter import is_subagent
-from llmwiki.adapters.claude_code import ClaudeCodeAdapter
 from llmwiki.convert import DEFAULT_CONFIG
 from llmwiki.synth.base import DummySynthesizer
 from llmwiki.synth.estimate import synthesize_estimate_report
 from llmwiki.synth.pipeline import refresh_synth_pending, resolve_include_subagents, synthesize_new_sessions
+from tests.support.claude_session_store import patch_claude_session_store
 
 # ─── unit: is_subagent frontmatter helper ────────────────────────────────
 
@@ -104,10 +104,7 @@ def _seed(tmp_path: Path):
 
 
 def _patch(monkeypatch, home):
-    store = home / ".claude" / "projects"
-    monkeypatch.setattr(ClaudeCodeAdapter, "session_store_path", store, raising=False)
-    monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
-    monkeypatch.setattr(c, "REPO_ROOT", home.parent / "repo")
+    patch_claude_session_store(monkeypatch, home, repo_root_parent=home.parent)
 
 
 def _write_config(tmp_path: Path, filters: dict) -> Path:

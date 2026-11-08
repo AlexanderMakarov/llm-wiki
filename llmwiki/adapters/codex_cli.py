@@ -31,32 +31,46 @@ class CodexCliAdapter(BaseAdapter):
 
     SUPPORTED_SCHEMA_VERSIONS = ["v0.x", "v1.0"]
 
-    DEFAULT_ROOTS = [
-        # Cross-platform: dot-dir works on macOS, Linux, and Windows
-        Path.home() / ".codex" / "sessions",
-        Path.home() / ".codex" / "projects",
-    ]
+    @classmethod
+    def default_roots(cls) -> list[Path]:
+        """Default roots resolved at call time (``HOME`` may differ per test)."""
+        return [
+            # Cross-platform: dot-dir works on macOS, Linux, and Windows
+            Path.home() / ".codex" / "sessions",
+            Path.home() / ".codex" / "projects",
+        ]
 
     def __init__(self, config: dict[str, Any] | None = None):
         super().__init__(config)
         ad_cfg = (config or {}).get("adapters", {}).get("codex_cli", {})
         paths = ad_cfg.get("roots") or []
-        self.roots: list[Path] = (
-            [Path(p).expanduser() for p in paths] if paths else self.DEFAULT_ROOTS
+        self._configured_roots: list[Path] | None = (
+            [Path(p).expanduser() for p in paths] if paths else None
         )
+        self._default_roots: list[Path] | None = None
+
+    @property
+    def roots(self) -> list[Path]:
+        return self.session_store_path
 
     @property
     def session_store_path(self):  # type: ignore[override]
-        return self.roots
+        if self._configured_roots is not None:
+            return self._configured_roots
+        if self._default_roots is None:
+            self._default_roots = list(self.default_roots())
+        return self._default_roots
 
     # #496: is_available() inherited from BaseAdapter — it now creates
     # a temp instance and reads self.session_store_path through the
-    # @property below. Was a duplicate scan over DEFAULT_ROOTS; same
-    # result, less code.
+    # @property below (``default_roots()`` when no config override).
 
     def discover_sessions(self) -> list[Path]:
         out: list[Path] = []
-        for root in self.roots:
+        stores = self.session_store_path
+        if isinstance(stores, Path):
+            stores = [stores]
+        for root in stores:
             root = Path(root).expanduser()
             if root.exists():
                 out.extend(sorted(root.rglob("*.jsonl")))

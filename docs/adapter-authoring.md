@@ -28,27 +28,45 @@ Every adapter extends `llmwiki.adapters.base.BaseAdapter` and must provide:
 
 Adapters must work on macOS, Linux, and Windows. Use these patterns:
 
+**Do not build default paths at import time.** Evaluating `Path.home()` when the module loads freezes the developer's real home directory — the test suite points `HOME` at an isolated directory per test (`settings_sandbox`, #367), so defaults must be resolved **when used** (a `default_roots()` / `default_session_store_path()` classmethod, or equivalent) so that sandbox applies.
+
 ```python
 from pathlib import Path
 
-# Good: resolves ~ on all platforms
-Path.home() / ".myagent" / "sessions"
+# Good: resolve at call time (single dot-dir store)
+@classmethod
+def default_session_store_path(cls) -> Path:
+    return Path.home() / ".myagent" / "sessions"
 
-# Good: check multiple platform-specific paths
-DEFAULT_ROOTS = [
-    Path.home() / ".myagent",                                    # macOS / Linux
-    Path.home() / ".config" / "myagent",                         # Linux (XDG)
-    Path.home() / "AppData" / "Roaming" / "myagent",             # Windows
-]
+@property
+def session_store_path(self) -> Path:  # type: ignore[override]
+    return self.default_session_store_path()
 
-# Good: environment variable override
+# Good: multiple platform-specific defaults as a classmethod
+@classmethod
+def default_roots(cls) -> list[Path]:
+    return [
+        Path.home() / ".myagent",                         # macOS / Linux
+        Path.home() / ".config" / "myagent",              # Linux (XDG)
+        Path.home() / "AppData" / "Roaming" / "myagent",  # Windows
+    ]
+
+# Good: environment variable override evaluated in the same helper
 import os
-custom = os.environ.get("MYAGENT_HOME")
-if custom:
-    roots.append(Path(custom).expanduser() / "sessions")
+
+@classmethod
+def default_roots(cls) -> list[Path]:
+    roots = [
+        Path.home() / ".myagent" / "sessions",
+        Path.home() / ".config" / "myagent" / "sessions",
+    ]
+    custom = os.environ.get("MYAGENT_HOME")
+    if custom:
+        roots.append(Path(custom).expanduser() / "sessions")
+    return roots
 ```
 
-Never hardcode `/Users/` or `C:\Users\`. Always use `Path.home()`.
+Never hardcode `/Users/` or `C:\Users\`. Always use `Path.home()` inside those call-time helpers, not in a module-level constant.
 
 ## Registration via @register
 
@@ -97,29 +115,27 @@ class MyAgentAdapter(BaseAdapter):
 
     SUPPORTED_SCHEMA_VERSIONS = ["v1"]
 
-    DEFAULT_ROOTS = [
-        Path.home() / ".myagent" / "sessions",
-        Path.home() / ".config" / "myagent" / "sessions",
-    ]
+    @classmethod
+    def default_roots(cls) -> list[Path]:
+        return [
+            Path.home() / ".myagent" / "sessions",
+            Path.home() / ".config" / "myagent" / "sessions",
+        ]
 
     def __init__(self, config: dict[str, Any] | None = None):
         super().__init__(config)
         ad_cfg = (config or {}).get("adapters", {}).get("myagent", {})
         paths = ad_cfg.get("roots") or []
         self.roots: list[Path] = (
-            [Path(p).expanduser() for p in paths] if paths else self.DEFAULT_ROOTS
+            [Path(p).expanduser() for p in paths] if paths else list(self.default_roots())
         )
 
     @property
     def session_store_path(self):  # type: ignore[override]
         return self.roots
 
-    @classmethod
-    def is_available(cls) -> bool:
-        for p in cls.DEFAULT_ROOTS:
-            if Path(p).expanduser().exists():
-                return True
-        return False
+    # Prefer inheriting BaseAdapter.is_available() — it instantiates and reads
+    # self.session_store_path. Override only for env-var edge cases (see copilot_cli).
 
     def discover_sessions(self) -> list[Path]:
         out: list[Path] = []

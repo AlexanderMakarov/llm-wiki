@@ -23,11 +23,11 @@ case checks both the on-disk JSON and the in-memory state structure.
 from __future__ import annotations
 
 import json
+from builtins import classmethod
 from pathlib import Path
 
 import pytest
 
-from llmwiki.adapters.claude_code import ClaudeCodeAdapter
 from llmwiki.convert import convert_all
 
 
@@ -92,19 +92,11 @@ def fake_repo(tmp_path, monkeypatch):
     """Stand up a tmp HOME with one Claude Code session, plus point
     convert.DEFAULT_OUT_DIR under tmp_path.
 
-    `Path.home()` patching alone is insufficient because
-    `ClaudeCodeAdapter.session_store_path` is computed at class-define
-    time (import-time), so the cached path still points at the real
-    home. We override the class attribute directly so discovery walks
-    our tmp tree on every CI runner.
+    ``ClaudeCodeAdapter`` resolves its store from ``Path.home()`` at call
+    time, so pointing ``HOME`` at ``tmp_path`` is enough for discovery.
     """
 
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
-    monkeypatch.setattr(
-        ClaudeCodeAdapter,
-        "session_store_path",
-        tmp_path / ".claude" / "projects",
-    )
     out_dir = tmp_path / "raw" / "sessions"
     state_file = tmp_path / ".llmwiki-sync-state.json"
     config_file = tmp_path / "sessions_config.json"

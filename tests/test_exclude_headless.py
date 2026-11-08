@@ -17,13 +17,13 @@ import json
 from pathlib import Path
 
 from llmwiki import convert as c
-from llmwiki.adapters.claude_code import ClaudeCodeAdapter
 from llmwiki.convert import (
     DEFAULT_CONFIG,
     is_headless_session,
     is_temp_cwd_session,
 )
 from tests.settings_sandbox import SettingsSandbox
+from tests.support.claude_session_store import patch_claude_session_store
 
 # ─── unit: is_headless_session ───────────────────────────────────────────
 
@@ -148,10 +148,7 @@ def _seed(tmp_path: Path) -> tuple[Path, Path, Path, Path]:
 
 
 def _patch(monkeypatch, home, state):
-    store = home / ".claude" / "projects"
-    monkeypatch.setattr(ClaudeCodeAdapter, "session_store_path", store, raising=False)
-    monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
-    monkeypatch.setattr(c, "REPO_ROOT", home.parent / "repo")
+    patch_claude_session_store(monkeypatch, home, repo_root_parent=home.parent)
 
 
 def _write_config(tmp_path: Path, filters: dict) -> Path:

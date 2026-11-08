@@ -29,7 +29,7 @@ _EDITOR_DIRS = ["Code", "Code - Insiders", "VSCodium"]
 
 
 def _build_default_roots() -> list[Path]:
-    """Build the full cross-platform DEFAULT_ROOTS list at import time."""
+    """Build the full cross-platform default roots list (call-time ``Path.home()``)."""
     home = Path.home()
     roots: list[Path] = []
     for editor in _EDITOR_DIRS:
@@ -55,7 +55,9 @@ class CopilotChatAdapter(BaseAdapter):
     # #arch-m9 (#621): SUPPORTED_SCHEMA_VERSIONS = ["v1"] is the
     # BaseAdapter default — declaration removed here.
 
-    DEFAULT_ROOTS: list[Path] = _build_default_roots()
+    @classmethod
+    def default_roots(cls) -> list[Path]:
+        return _build_default_roots()
 
     # File patterns inside chatSessions/ subdirectories.
     SESSION_FILE_PATTERNS = ["*.jsonl", "*.json"]
@@ -67,13 +69,22 @@ class CopilotChatAdapter(BaseAdapter):
         # kebab-case so existing sessions_config.json keeps working.
         ad_cfg = adapters_cfg.get("copilot_chat") or adapters_cfg.get("copilot-chat") or {}
         paths = ad_cfg.get("roots") or []
-        self.roots: list[Path] = (
-            [Path(p).expanduser() for p in paths] if paths else self.DEFAULT_ROOTS
+        self._configured_roots: list[Path] | None = (
+            [Path(p).expanduser() for p in paths] if paths else None
         )
+        self._default_roots: list[Path] | None = None
+
+    @property
+    def roots(self) -> list[Path]:
+        return self.session_store_path
 
     @property
     def session_store_path(self):  # type: ignore[override]
-        return self.roots
+        if self._configured_roots is not None:
+            return self._configured_roots
+        if self._default_roots is None:
+            self._default_roots = list(self.default_roots())
+        return self._default_roots
 
     # #496: is_available() inherited from BaseAdapter — temp
     # instance reads self.session_store_path through the @property.
@@ -81,7 +92,10 @@ class CopilotChatAdapter(BaseAdapter):
     def discover_sessions(self) -> list[Path]:
         """Find chatSessions/*.jsonl and *.json under each workspace hash dir."""
         out: list[Path] = []
-        for root in self.roots:
+        stores = self.session_store_path
+        if isinstance(stores, Path):
+            stores = [stores]
+        for root in stores:
             root = Path(root).expanduser()
             if not root.exists():
                 continue
@@ -107,7 +121,10 @@ class CopilotChatAdapter(BaseAdapter):
         truncated to 12 chars and prefixed with 'copilot-'.
         """
         # Try to find the workspace hash dir — should be the parent of chatSessions/
-        for root in self.roots:
+        stores = self.session_store_path
+        if isinstance(stores, Path):
+            stores = [stores]
+        for root in stores:
             root = Path(root).expanduser()
             try:
                 rel = path.relative_to(root)

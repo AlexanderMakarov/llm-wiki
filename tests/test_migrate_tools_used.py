@@ -6,7 +6,6 @@ import json
 from pathlib import Path
 
 from llmwiki import convert as c
-from llmwiki.adapters.claude_code import ClaudeCodeAdapter
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -90,9 +89,6 @@ def _seed_vault(tmp_path: Path):
 
 def _patch_home(monkeypatch, home: Path):
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
-    monkeypatch.setattr(
-        ClaudeCodeAdapter, "session_store_path", home / ".claude" / "projects", raising=False
-    )
     c.discover_adapters()
 
 

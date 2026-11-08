@@ -146,7 +146,7 @@ class BaseAdapter:
         the *property descriptor object* for the 8 contrib adapters
         which override ``session_store_path`` as a ``@property`` — so
         every contrib adapter had to re-implement its own
-        ``is_available()`` classmethod reading ``cls.DEFAULT_ROOTS``.
+        ``is_available()`` classmethod scanning import-time default roots.
 
         Fix: instantiate a config-less temp instance and read
         ``self.session_store_path`` through the same code path
