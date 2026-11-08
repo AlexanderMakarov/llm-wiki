@@ -6,8 +6,13 @@
 
 from __future__ import annotations
 
+import os
 import re
+import subprocess
 import tomllib
+from pathlib import Path
+
+import pytest
 
 from llmwiki import REPO_ROOT
 
@@ -120,3 +125,43 @@ def test_cursor_testing_expert_points_at_claude_canonical() -> None:
     body = CURSOR_TESTING_EXPERT.read_text(encoding="utf-8").strip()
     assert len(body) < 500, "expected symlink or short stub, not a duplicated agent body"
     assert ".claude/agents/testing-expert" in body
+
+
+def _classify_step_script() -> str:
+    """Return the ``run:`` body of pr-lint's changelog ``classify`` step."""
+    lines = PR_LINT.read_text(encoding="utf-8").splitlines()
+    start = next(i for i, line in enumerate(lines) if line.strip() == "id: classify")
+    run_at = next(i for i in range(start, len(lines)) if lines[i].strip() == "run: |")
+    key_indent = len(lines[run_at]) - len(lines[run_at].lstrip())
+    body: list[str] = []
+    for line in lines[run_at + 1 :]:
+        if line.strip() and len(line) - len(line.lstrip()) <= key_indent:
+            break
+        body.append(line)
+    assert body, "classify step has an empty run script"
+    return "\n".join(body)
+
+
+# @regression
+@pytest.mark.parametrize(
+    ("title", "skip"),
+    [
+        ("chore: a", "true"),
+        ("chore(flow): a", "true"),
+        ("docs(x): a", "true"),
+        ("test: a", "true"),
+        ("feat: a", "false"),
+        ("fix(cli): a", "false"),
+        ("tests: a", "false"),
+        ("chore(): a", "false"),
+    ],
+)
+def test_pr_lint_changelog_classify_skips_scoped_docs_chore_test(
+    title: str, skip: str, tmp_path: Path
+) -> None:
+    """docs/chore/test titles skip the CHANGELOG gate with or without a scope (#412)."""
+    script = _classify_step_script()
+    output = tmp_path / "github_output"
+    env = {**os.environ, "TITLE": title, "GITHUB_OUTPUT": str(output)}
+    subprocess.run(["bash", "-c", script], env=env, check=True)
+    assert output.read_text(encoding="utf-8").strip() == f"skip={skip}"
