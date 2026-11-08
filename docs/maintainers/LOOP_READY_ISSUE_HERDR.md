@@ -59,7 +59,17 @@ The prompt is long, and some TUIs fold a long paste into a placeholder (Cursor C
 
 While a worker waits on you (herdr `blocked` — approval, question, permission), the driver holds the queue and does not start the next ticket. While the worker is actively delivering (including CI watch inside the delivery command), the driver keeps waiting. herdr `idle` or `done` alone does **not** mean “start the next issue.” This spike does **not** add a custom notifier; rely on **herdr’s built-in** agent status and notifications when a worker needs you.
 
-**AWOS vs herdr skill (#215):** Smoke confirm, local review, PR timing, merge confirmation, and pull on `MAIN` are owned by `/implement-feature`, `/fix-bug`, and `context/product/delivery-flow.md` — change those via `/awos:flow` (Cursor: `/awos-flow`), not by editing generated commands by hand. The driver-inlined skill is a **thin wrapper**: before (one ticket, `MAIN=`), route to the slash command, and **finish-line outcomes** for the worker (closed issue, `#N` on `main`, sync on `MAIN`) — it must not restate AWOS stage lists or driver Phase A/B polling rules (those live in this doc).
+**AWOS vs herdr skill (#215):** Smoke confirm, local review, PR timing, merge confirmation, and pull on `MAIN` are owned by `/implement-feature`, `/fix-bug`, and `context/product/delivery-flow.md` — change those via `/awos:flow` (Cursor: `/awos-flow`), not by editing generated commands by hand. The driver-inlined skill is a **thin wrapper**: before (one ticket, `MAIN=`), route to the slash command, and **finish-line outcomes** for the worker (closed issue, `#N` on `main`, sync on `MAIN`) — it must not restate AWOS stage lists or driver Phase A/B polling rules (those live in this doc). Delivery-flow itself never names this loop; the contract below is what *this* driver requires from the flow's Definition of Done.
+
+### Delivery-flow contract (what this loop needs)
+
+The optional ready-issue loop does not change `/implement-feature` or `/fix-bug`. It only advances when a delivered run has already satisfied these flow DoD facts (recorded in `context/product/delivery-flow.md` §2 / §5):
+
+1. **`$MAIN` is the primary checkout** — workers implement in an isolated worktree (`$WT`); they never mutate files in `$MAIN`. The driver injects `MAIN=…` into the worker prompt when it can.
+2. **Issue markers on the landed commits** — delivery commits name `#N` in the **subject**, or use a closing keyword (`Closes` / `Fixes` / `Resolves #N`) in the **body**. A body-only `Relevant to #N` (or a bare `#N` in the body) is not a closing marker for Path 1's message fallback.
+3. **Post-merge pull on `$MAIN` before Done** — after merge and post-merge CI green, the worker runs `git -C "$MAIN" fetch origin main` and `git -C "$MAIN" pull --ff-only origin main`. Phase A only *reads* local history; without that pull, Path 1 never sees the merge commit even when GitHub already shows it merged.
+4. **Pull before worktree cleanup** — close-stage removal of `$WT` / the local branch runs only after the `$MAIN` pull, so local history is current while the worktree still exists.
+5. **Accurate `Closes` vs `Relevant to`** — a complete delivery should close the GitHub issue on merge; a stuck-open issue after a complete PR blocks Path 1 / Path 2 advance until someone closes it.
 
 **Merge and review:** Workers run the slash command’s merge stage. Herdr does **not** authorize unattended merges. When CI is green but GitHub requires review (`REVIEW_REQUIRED`), the worker should report **ready-to-merge** and stop; the driver keeps polling until a merged closing PR appears (you or a reviewer merges in the browser or with `gh` from your account).
 
@@ -73,7 +83,7 @@ While a worker waits on you (herdr `blocked` — approval, question, permission)
 
 **Operator skip:** from the **same main checkout** as the running driver, `python3 scripts/loop_ready_issue_herdr.py --skip-issue N` (no `--label` needed) writes a gitignored `.herdr/skip-issue` file; the driver force-advances that ticket with a WARNING (one-shot). Do not run `--skip-issue` from a gate worktree — the driver would not see that file.
 
-**AWOS:** workers must run `git -C "$MAIN" pull --ff-only origin main` after merge (see delivery-flow §5). Spec: `context/spec/303-loop-ready-issue-herdr/advance-wait-redesign.md`.
+**AWOS:** workers must satisfy the Delivery-flow contract above (especially the `$MAIN` pull). Spec: `context/spec/303-loop-ready-issue-herdr/advance-wait-redesign.md`.
 
 Optional agent helper (not used by the driver): `python3 scripts/wait_post_merge_ci.py`.
 
