@@ -56,7 +56,7 @@ Fetch the GitHub Issue (`gh issue view … --json number,title,body,labels,url,s
 
 ### Step 2: Detect the Entry Point
 
-Start with a cheap preflight on the fast model tier (per §8): is this bug **already fixed**? If the GitHub Issue is `closed`, or a merged change request exists for the same fix, report that and stop rather than re-fixing. Then choose / create `SPEC_NAME`: prefer an existing owning `context/spec/{SPEC_NAME}/` for the affected behavior; if none exists, allocate a regular fix-as-spec directory `context/spec/{issue}-{short-slug}/` (#164). Read `context/spec/{SPEC_NAME}/flow-log.md` first when it exists — it names the last completed stage and carries the branch, commit, classification verdict, and change-request state, and is the resume signal for the middle stages that produce no scannable artifact.
+Start with a cheap preflight on the fast model tier (per §8): is this bug **already fixed**? If the GitHub Issue is `closed`, or a merged change request exists for the same fix, report that and stop rather than re-fixing. **Merged PR + worktree already gone:** if a merged PR exists for this fix and the expected `$WT` (`.claude/worktrees/<branch-with-slashes-as-dashes>`) is absent, report **done** — do **not** recreate the worktree or local branch just to re-run close. If the PR is merged but `$WT` still exists (or `$MAIN` is not yet at `origin/main`), resume at merge/close only: pull `$MAIN`, then run close-stage cleanup — never rebuild a fresh worktree for a delivered fix. Then choose / create `SPEC_NAME`: prefer an existing owning `context/spec/{SPEC_NAME}/` for the affected behavior; if none exists, allocate a regular fix-as-spec directory `context/spec/{issue}-{short-slug}/` (#164). Read `context/spec/{SPEC_NAME}/flow-log.md` first when it exists — it names the last completed stage and carries the branch, commit, classification verdict, and change-request state, and is the resume signal for the middle stages that produce no scannable artifact.
 
 <!-- /awos:flow:stage -->
 
@@ -66,7 +66,7 @@ Start with a cheap preflight on the fast model tier (per §8): is this bug **alr
 
 Verify `context/` is reachable (`context/product/architecture.md` readable). Warn on a dirty working tree (uncommitted AWOS artifacts left by `/awos:flow` are an expected cause, not a blocker). No submodules.
 
-Create an isolated worktree + throwaway vault from `origin/main`:
+If a merged PR already exists for this fix, do **not** create a new worktree — resume at merge/close per Step 2 (or report done when `$WT` is already gone). Otherwise create an isolated worktree + throwaway vault from `origin/main` (cleanup is **not** part of this stage — §5 / Step 13 owns it):
 
 ```bash
 git fetch origin main
@@ -254,12 +254,20 @@ git -C "$MAIN" log -1 --oneline
 
 ### Step 13: Close the Loop
 
-Definition of Done: PR merged, post-merge checks green, and **`$MAIN` pulled to `origin/main`**. Stopping after merge without pulling `$MAIN` is not Done. Report evidence in chat: PR URL, merge commit, post-merge CI, main `log -1`, local-review verdict/counts/paths, classification verdict, and (on divergence) that the owning spec was amended. Do **not** close or transition the GitHub Issue.
+Definition of Done: PR merged, post-merge checks green, **`$MAIN` pulled to `origin/main`**, and close-stage cleanup attempted. Stopping after merge without pulling `$MAIN` is not Done — the herdr driver waits for local `#N` in main history; the pull must finish **before** worktree cleanup.
 
-Leave a clean working tree: do not write a closing flow-log entry. If any flow-created artifact is still uncommitted, surface it in the report.
+Gather chat evidence first (do not write a closing flow-log entry): PR URL, merge commit, post-merge CI, main `log -1`, local-review verdict/counts/paths, classification verdict, (on divergence) that the owning spec was amended, and the cleanup outcome below. Do **not** close or transition the GitHub Issue. If any flow-created artifact is still uncommitted, surface it in the report.
+
+**Worktree & local-branch cleanup (very last action of the run):** Skip when `$WT` equals `$MAIN` (no separate worktree) or when the merge was declined/skipped. Otherwise, after `$MAIN` is pulled, run from `$MAIN` because the worker shell is inside `$WT`:
+
+```bash
+git -C "$MAIN" worktree remove "$WT" && git -C "$MAIN" branch -d "$BRANCH"
+```
+
+Never `--force` or `-D`. If git refuses (uncommitted files, or commits not in main), keep the worktree and branch and name them plus the reason in the final report — a refused cleanup does **not** fail the run. The throwaway vault under `$WT` is removed with the worktree; do **not** touch the live vault or the primary checkout's `config.json`. Do **not** write anything after cleanup (including flow-log). Leave remote branches alone (`delete_branch_on_merge`). Report evidence must include: **worktree and local branch removed, or kept with reason**.
 
 <!-- /awos:flow:stage -->
 
 ---
 
-<!-- awos:flow:generated date=2026-10-15 version=2.4.3 source=context/product/delivery-flow.md -->
+<!-- awos:flow:generated date=2026-11-08 version=2.4.3 source=context/product/delivery-flow.md -->
