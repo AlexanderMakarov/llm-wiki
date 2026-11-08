@@ -10,6 +10,9 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Fixed
 
+- **PR lint CHANGELOG skip honours scoped titles (#412)** — `docs(x):`, `chore(x):` and `test(x):` PR titles now skip the CHANGELOG gate like their unscoped forms; `feat` / `fix` still require it. The PR title reaches the script through `env:` instead of inline interpolation.
+  - *Release note:* Contributors can use a conventional-commit scope on docs/chore/test PRs without adding a CHANGELOG entry.
+
 - **`install-agent-kit` backup chain (#224)** — a customised file is no longer backed up by overwriting an existing `<name>.bak` that already held an older rescue copy. Later overwrites use `<name>.bak.1`, `<name>.bak.2`, …; if the bytes about to be saved match `.bak` already, no new file is written. The report lists the actual backup path.
   - *Release note:* Repeated installs that overwrite user-edited kit files keep every prior version recoverable instead of clobbering `.bak`.
 
