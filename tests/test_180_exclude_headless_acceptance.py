@@ -34,18 +34,17 @@ Contract (every adapter defines ``is_headless_session``):
 from __future__ import annotations
 
 import json
-from builtins import classmethod
 from pathlib import Path
 
 import pytest
 
 from llmwiki import convert as c
-from llmwiki.adapters.claude_code import ClaudeCodeAdapter
 from llmwiki.adapters.contrib.openclaw import OpenClawAdapter
 from llmwiki.synth.base import DummySynthesizer
 from llmwiki.synth.estimate import synthesize_estimate_report
 from llmwiki.synth.pipeline import synthesize_new_sessions
 from tests.conftest import REPO_ROOT
+from tests.support.claude_session_store import patch_claude_session_store
 from tests.test_cursor_cli_exclude_headless import (
     _make_cursor_store,
     _patch_cursor,
@@ -89,17 +88,6 @@ def _seed_claude(tmp_path: Path) -> tuple[Path, Path]:
     proj = home / ".claude" / "projects" / "my-proj"
     proj.mkdir(parents=True)
     return home, proj
-
-
-def _patch_claude(monkeypatch, home: Path) -> None:
-    store = home / ".claude" / "projects"
-    monkeypatch.setattr(
-        ClaudeCodeAdapter,
-        "default_session_store_path",
-        classmethod(lambda cls, s=store: s),
-    )
-    monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
-    monkeypatch.setattr(c, "REPO_ROOT", home.parent / "repo")
 
 
 def _write_config(tmp_path: Path, body: dict) -> Path:
@@ -152,7 +140,7 @@ def test_mixed_sync_keeps_interactive_claude_and_cursor(
     chats, out_dir, state = _seed_cursor(tmp_path)
     _write_claude_session(proj / "good.jsonl")
     _make_cursor_store(chats / "store.db", store_meta={"approvalMode": "unrestricted"})
-    _patch_claude(monkeypatch, home)
+    patch_claude_session_store(monkeypatch, home, repo_root_parent=home.parent)
     _patch_cursor(monkeypatch, home)
     c.discover_adapters()
     c.convert_all(
@@ -182,7 +170,7 @@ def test_mixed_sync_skips_headless_claude_and_cursor(
         session_id="sdk",
     )
     _make_cursor_store(chats / "store.db", store_meta={"approvalMode": "auto-review"})
-    _patch_claude(monkeypatch, home)
+    patch_claude_session_store(monkeypatch, home, repo_root_parent=home.parent)
     _patch_cursor(monkeypatch, home)
     c.discover_adapters()
     c.convert_all(
@@ -212,7 +200,7 @@ def test_mixed_sync_reports_aggregate_headless_count_only(
         chats / "store.db",
         store_meta={"subagentInfo": {"typeName": "generalPurpose"}},
     )
-    _patch_claude(monkeypatch, home)
+    patch_claude_session_store(monkeypatch, home, repo_root_parent=home.parent)
     _patch_cursor(monkeypatch, home)
     c.discover_adapters()
     c.convert_all(
@@ -242,7 +230,7 @@ def test_filter_off_sync_includes_headless_from_both_adapters(
         session_id="sdk",
     )
     _make_cursor_store(chats / "store.db", store_meta={"approvalMode": "auto-review"})
-    _patch_claude(monkeypatch, home)
+    patch_claude_session_store(monkeypatch, home, repo_root_parent=home.parent)
     _patch_cursor(monkeypatch, home)
     cfg = _write_config(tmp_path, {"filters": {"exclude_headless": False}})
     c.discover_adapters()

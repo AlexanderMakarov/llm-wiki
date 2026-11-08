@@ -71,17 +71,18 @@ class ChatGPTAdapter(BaseAdapter):
         self._enabled = ad_cfg.get("enabled", False)
         self._min_messages = int(ad_cfg.get("min_messages", 2))
         dirs = ad_cfg.get("export_dirs", [])
-        if dirs:
-            self._export_dirs = [Path(d).expanduser() for d in dirs]
-        else:
-            self._export_dirs = list(self.default_export_dirs())
+        self._configured_export_dirs: list[Path] | None = (
+            [Path(d).expanduser() for d in dirs] if dirs else None
+        )
+        self._default_export_dirs: list[Path] | None = None
 
     @property
     def session_store_path(self):  # type: ignore[override]
-        ad_cfg = adapter_block(self.config, "chatgpt")
-        if ad_cfg.get("export_dirs"):
-            return self._export_dirs
-        return list(self.default_export_dirs())
+        if self._configured_export_dirs is not None:
+            return self._configured_export_dirs
+        if self._default_export_dirs is None:
+            self._default_export_dirs = list(self.default_export_dirs())
+        return self._default_export_dirs
 
     @classmethod
     def is_available(cls) -> bool:
@@ -92,13 +93,13 @@ class ChatGPTAdapter(BaseAdapter):
         if not self._enabled:
             return False
         return any(
-            (d / "conversations.json").is_file() for d in self._export_dirs
+            (d / "conversations.json").is_file() for d in self.session_store_path
         )
 
     def discover_sessions(self) -> list[Path]:
         """Each conversations.json file is one 'session-store'."""
         out: list[Path] = []
-        for d in self._export_dirs:
+        for d in self.session_store_path:
             path = d / "conversations.json"
             if path.is_file():
                 out.append(path)

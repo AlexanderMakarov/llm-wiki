@@ -101,16 +101,22 @@ class OpenClawAdapter(BaseAdapter):
         super().__init__(config)
         ad_cfg = adapter_block(config or {}, "openclaw")
         paths = ad_cfg.get("roots") or []
-        self.roots: list[Path] = (
-            [Path(p).expanduser() for p in paths] if paths else list(self.default_roots())
+        self._configured_roots: list[Path] | None = (
+            [Path(p).expanduser() for p in paths] if paths else None
         )
+        self._default_roots: list[Path] | None = None
+
+    @property
+    def roots(self) -> list[Path]:
+        return self.session_store_path
 
     @property
     def session_store_path(self):  # type: ignore[override]
-        ad_cfg = (self.config or {}).get("adapters", {}).get("openclaw", {})
-        if ad_cfg.get("roots"):
-            return self.roots
-        return list(self.default_roots())
+        if self._configured_roots is not None:
+            return self._configured_roots
+        if self._default_roots is None:
+            self._default_roots = list(self.default_roots())
+        return self._default_roots
 
     # #496: is_available() inherited from BaseAdapter — temp instance
     # reads self.session_store_path (``default_roots()`` when no config override).

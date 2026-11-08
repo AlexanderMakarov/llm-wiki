@@ -8,16 +8,15 @@ from synthesis / ``--estimate`` when already in ``raw/``.
 from __future__ import annotations
 
 import json
-from builtins import classmethod
 from pathlib import Path
 
 from llmwiki import convert as c
 from llmwiki._frontmatter import is_empty_session
-from llmwiki.adapters.claude_code import ClaudeCodeAdapter
 from llmwiki.convert import DEFAULT_CONFIG, count_tool_calls, count_user_messages
 from llmwiki.convert import is_empty_session as is_empty_records
 from llmwiki.synth.estimate import synthesize_estimate_report
 from llmwiki.synth.pipeline import DEFAULT_EXCLUDE_EMPTY, resolve_exclude_empty
+from tests.support.claude_session_store import patch_claude_session_store
 
 
 def test_empty_session_unit_both_zero():
@@ -95,14 +94,7 @@ def _seed(tmp_path: Path) -> tuple[Path, Path, Path, Path]:
 
 
 def _patch(monkeypatch, home, state):
-    store = home / ".claude" / "projects"
-    monkeypatch.setattr(
-        ClaudeCodeAdapter,
-        "default_session_store_path",
-        classmethod(lambda cls, s=store: s),
-    )
-    monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
-    monkeypatch.setattr(c, "REPO_ROOT", home.parent / "repo")
+    patch_claude_session_store(monkeypatch, home, repo_root_parent=home.parent)
 
 
 def _write_config(tmp_path: Path, filters: dict) -> Path:

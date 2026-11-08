@@ -90,6 +90,10 @@ class CursorCliAdapter(BaseAdapter):
 
     is_ai_session = True
 
+    def __init__(self, config: dict[str, Any] | None = None) -> None:
+        super().__init__(config)
+        self._session_store_cache: Path | None = None
+
     @classmethod
     def default_session_store_path(cls) -> Path:
         """Resolve at call time so ``HOME`` overrides in tests apply."""
@@ -97,7 +101,9 @@ class CursorCliAdapter(BaseAdapter):
 
     @property
     def session_store_path(self) -> Path:  # type: ignore[override]
-        return self.default_session_store_path()
+        if self._session_store_cache is None:
+            self._session_store_cache = self.default_session_store_path()
+        return self._session_store_cache
 
     def discover_sessions(self) -> list[Path]:
         store = Path(self.session_store_path).expanduser()

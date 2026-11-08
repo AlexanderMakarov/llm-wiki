@@ -64,21 +64,26 @@ class ObsidianAdapter(BaseAdapter):
         super().__init__(config)
         ad_cfg = (config or {}).get("adapters", {}).get("obsidian", {})
         paths = ad_cfg.get("vault_paths") or []
-        self.vault_paths: list[Path] = (
-            [Path(p).expanduser() for p in paths] if paths else list(self.default_vault_paths())
+        self._configured_vault_paths: list[Path] | None = (
+            [Path(p).expanduser() for p in paths] if paths else None
         )
+        self._default_vault_paths: list[Path] | None = None
         self.exclude_folders: set[str] = set(
             ad_cfg.get("exclude_folders", self.DEFAULT_EXCLUDE_FOLDERS)
         )
         self.min_content_chars: int = int(ad_cfg.get("min_content_chars", 50))
 
-    # Override session_store_path so is_available() works.
+    @property
+    def vault_paths(self) -> list[Path]:
+        return self.session_store_path
+
     @property
     def session_store_path(self):  # type: ignore[override]
-        ad_cfg = (self.config or {}).get("adapters", {}).get("obsidian", {})
-        if ad_cfg.get("vault_paths"):
-            return self.vault_paths
-        return list(self.default_vault_paths())
+        if self._configured_vault_paths is not None:
+            return self._configured_vault_paths
+        if self._default_vault_paths is None:
+            self._default_vault_paths = list(self.default_vault_paths())
+        return self._default_vault_paths
 
     # #496: is_available() inherited from BaseAdapter — temp instance
     # reads self.session_store_path (``default_vault_paths()`` when no override).

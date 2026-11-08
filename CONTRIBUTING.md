@@ -216,7 +216,7 @@ Default store paths (often exposed as `default_roots()`, `default_vault_paths()`
 1. **Dot-directory** (`Path.home() / ".agent" / ...`) -- works on all three platforms by default; a single entry is fine.
 2. **OS-specific directories** (e.g. `~/Library/Application Support/...`, `~/.config/...`, `~/AppData/Roaming/...`) -- you need at least one entry per platform. Use inline comments to label which path is for which OS.
 
-**Never evaluate `Path.home()` at import time** for those defaults — build the list inside a classmethod (or equivalent) so the per-test `HOME` sandbox in `tests/conftest.py` applies (#369). Always use `Path.home()` inside that helper — never hardcode `/Users/`, `/home/`, or `C:\Users\`. The test in `tests/test_cross_platform_paths.py` enforces these rules; `tests/session_store_guard.py` fails the suite if code opens or directory-lists real session stores under the developer's home during pytest.
+**Never evaluate `Path.home()` at import time** for those defaults — build the list inside a classmethod (or equivalent) so the per-test `HOME` sandbox in `tests/conftest.py` applies. Always use `Path.home()` inside that helper — never hardcode `/Users/`, `/home/`, or `C:\Users\`. The test in `tests/test_cross_platform_paths.py` enforces cross-platform coverage. An autouse guard in `tests/session_store_guard.py` fails the suite if code opens, stats, or directory-lists paths under the developer's real session-store prefixes during pytest.
 
 Adapters with no default paths (like `pdf`, where the user must configure roots) are exempt.
 

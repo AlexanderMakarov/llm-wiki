@@ -55,17 +55,22 @@ class CopilotCliAdapter(BaseAdapter):
         # kebab-case so existing sessions_config.json keeps working.
         ad_cfg = adapters_cfg.get("copilot_cli") or adapters_cfg.get("copilot-cli") or {}
         paths = ad_cfg.get("roots") or []
-        self.roots: list[Path] = (
-            [Path(p).expanduser() for p in paths] if paths else list(self.default_roots())
+        self._configured_roots: list[Path] | None = (
+            [Path(p).expanduser() for p in paths] if paths else None
         )
+        self._default_roots: list[Path] | None = None
+
+    @property
+    def roots(self) -> list[Path]:
+        return self.session_store_path
 
     @property
     def session_store_path(self):  # type: ignore[override]
-        adapters_cfg = (self.config or {}).get("adapters", {}) or {}
-        ad_cfg = adapters_cfg.get("copilot_cli") or adapters_cfg.get("copilot-cli") or {}
-        if ad_cfg.get("roots"):
-            return self.roots
-        return list(self.default_roots())
+        if self._configured_roots is not None:
+            return self._configured_roots
+        if self._default_roots is None:
+            self._default_roots = list(self.default_roots())
+        return self._default_roots
 
     # #496: kept as an explicit override because it has special
     # COPILOT_HOME env-var handling that BaseAdapter.is_available()

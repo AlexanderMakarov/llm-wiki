@@ -32,6 +32,10 @@ _HEADLESS_PROMPT_SOURCES = frozenset({"sdk"})
 class ClaudeCodeAdapter(BaseAdapter):
     """Claude Code — reads ~/.claude/projects/*/*.jsonl"""
 
+    def __init__(self, config: dict[str, Any] | None = None) -> None:
+        super().__init__(config)
+        self._session_store_cache: Path | None = None
+
     @classmethod
     def default_session_store_path(cls) -> Path:
         """Resolve the session store at call time so tests can sandbox ``HOME``."""
@@ -39,7 +43,9 @@ class ClaudeCodeAdapter(BaseAdapter):
 
     @property
     def session_store_path(self) -> Path:  # type: ignore[override]
-        return self.default_session_store_path()
+        if self._session_store_cache is None:
+            self._session_store_cache = self.default_session_store_path()
+        return self._session_store_cache
 
     def is_headless_session(self, records: list[dict[str, Any]]) -> bool:
         """True if any record marks this as a headless `claude -p` / SDK run."""

@@ -72,33 +72,59 @@ class CursorAdapter(BaseAdapter):
         super().__init__(config)
         ad_cfg = adapter_block(config or {}, "cursor_ide")
         roots = ad_cfg.get("roots") or []
-        self.roots: list[Path] = (
-            [Path(p).expanduser() for p in roots] if roots else list(self.default_roots())
+        self._configured_roots: list[Path] | None = (
+            [Path(p).expanduser() for p in roots] if roots else None
         )
         gdb = ad_cfg.get("global_db")
-        self._global_dbs: list[Path] = (
-            [Path(gdb).expanduser()]
-            if gdb
-            else list(self.default_global_dbs())
+        self._configured_global_dbs: list[Path] | None = (
+            [Path(gdb).expanduser()] if gdb else None
         )
+        self._default_store_paths: list[Path] | None = None
+        self._lazy_global_dbs: list[Path] | None = None
+        self._lazy_roots: list[Path] | None = None
         # Cache headers/meta between discover and load within one adapter instance.
         self._header_cache: dict[str, dict[str, Any]] | None = None
         self._db_path: Path | None = None
 
     @property
+    def roots(self) -> list[Path]:
+        if self._configured_roots is not None:
+            return self._configured_roots
+        if self._lazy_roots is None:
+            self._lazy_roots = list(self.default_roots())
+        return self._lazy_roots
+
+    @property
     def session_store_path(self):  # type: ignore[override]
-        # Availability: global DB or workspace roots (call-time defaults for tests).
         ad_cfg = adapter_block(self.config or {}, "cursor_ide")
+        if not ad_cfg.get("global_db") and not ad_cfg.get("roots"):
+            if self._default_store_paths is None:
+                self._default_store_paths = [
+                    *self._global_db_candidates(),
+                    *self.roots,
+                ]
+            return self._default_store_paths
         dbs = (
-            self._global_dbs
+            self._configured_global_dbs
             if ad_cfg.get("global_db")
             else list(self.default_global_dbs())
         )
-        roots = self.roots if ad_cfg.get("roots") else list(self.default_roots())
+        roots = (
+            self._configured_roots
+            if ad_cfg.get("roots")
+            else list(self.default_roots())
+        )
         return [*dbs, *roots]
 
+    def _global_db_candidates(self) -> list[Path]:
+        if self._configured_global_dbs is not None:
+            return self._configured_global_dbs
+        if self._lazy_global_dbs is None:
+            self._lazy_global_dbs = list(self.default_global_dbs())
+        return self._lazy_global_dbs
+
     def _resolve_global_db(self) -> Path | None:
-        for p in self._global_dbs:
+        for p in self._global_db_candidates():
             p = Path(p).expanduser()
             if p.exists():
                 return p
