@@ -66,7 +66,7 @@ Start with a cheap preflight on the fast model tier (per §8): is this bug **alr
 
 Verify `context/` is reachable (`context/product/architecture.md` readable). Warn on a dirty working tree (uncommitted AWOS artifacts left by `/awos:flow` are an expected cause, not a blocker). No submodules.
 
-If a merged PR already exists for this fix, do **not** create a new worktree — resume at merge/close per Step 2 (or report done when `$WT` is already gone). Otherwise create an isolated worktree + throwaway vault from `origin/main` (cleanup is **not** part of this stage — §5 / Step 13 owns it):
+If a merged PR already exists for this fix, do **not** create a new worktree — resume at merge/close per Step 2 (or report done when `$WT` is already gone). Otherwise create an isolated worktree + throwaway vault from `origin/main`:
 
 ```bash
 git fetch origin main
@@ -84,7 +84,7 @@ python3 -m llmwiki init --vault "$TMP_VAULT"
 
 If already inside a matching worktree on `BRANCH`, reuse it and ensure `$WT/.worktree-vault` + worktree `config.json` still isolate from the live vault (never copy primary `config.json`).
 
-Resolve **`MAIN`**: absolute path to the primary checkout (the non-worktree clone — not `$WT`). Prefer a driver-injected `MAIN=…` when an outer orchestrator supplies one; otherwise:
+Resolve **`MAIN`**: absolute path to the primary checkout (the non-worktree clone — not `$WT`). Prefer `MAIN=…` when already set (env or prompt); otherwise:
 
 ```bash
 MAIN="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"
@@ -238,7 +238,7 @@ Re-check mergeability against current `origin/main`. If dirty: rebase, push, ret
 
 When gates are green, ask for explicit merge confirmation in this run. On yes: `gh pr merge`. Skipped/unanswered → do not merge; report ready-to-merge in chat. No "merged"/"gates passed" PR comments.
 
-After merge: watch post-merge Actions on `main` and fix forward if this change broke them. Optional: `python3 scripts/wait_post_merge_ci.py` (waits until every check run on the merge commit is `success` / `skipped` / `neutral`).
+After merge: wait for post-merge CI on `main` with `python3 scripts/wait_post_merge_ci.py` (`--issue`, `--pr`, or `--merge-sha`). If checks fail because of this change, diagnose (`gha-diagnosis`), fix forward, and re-run the wait script until green.
 
 Then sync **`$MAIN`** (mandatory):
 

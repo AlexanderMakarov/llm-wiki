@@ -68,7 +68,7 @@ Start with a cheap preflight on the fast model tier (per §8): is this feature *
 
 Verify `context/` is reachable from the repo root (`context/product/architecture.md` readable). Warn on a dirty working tree. Uncommitted AWOS artifacts — `context/product/delivery-flow.md` and this command file, left by `/awos:flow` — are an expected dirty-tree cause; surface them as such rather than treating them as a blocker. No submodules.
 
-If a merged PR already exists for this work, do **not** create a new worktree — resume at merge/close per Step 2 (or report done when `$WT` is already gone). Otherwise create an isolated worktree + throwaway vault from `origin/main` (do **not** stay on the primary checkout for implementation). Execute the §2 recipe verbatim (cleanup is **not** part of this stage — §5 / Step 13 owns it):
+If a merged PR already exists for this work, do **not** create a new worktree — resume at merge/close per Step 2 (or report done when `$WT` is already gone). Otherwise create an isolated worktree + throwaway vault from `origin/main` (do **not** stay on the primary checkout for implementation). Execute the §2 recipe verbatim:
 
 ```bash
 git fetch origin main
@@ -86,7 +86,7 @@ python3 -m llmwiki init --vault "$TMP_VAULT"
 
 If already inside a matching worktree on `BRANCH`, reuse it and ensure `$WT/.worktree-vault` + worktree `config.json` still point at the throwaway vault (never copy the primary checkout's `config.json`).
 
-Resolve **`MAIN`**: absolute path to the primary checkout (the non-worktree clone — not `$WT`). Prefer a driver-injected `MAIN=…` in the prompt when an outer orchestrator supplies one; otherwise from any checkout of this repo:
+Resolve **`MAIN`**: absolute path to the primary checkout (the non-worktree clone — not `$WT`). Prefer `MAIN=…` when already set (env or prompt); otherwise from any checkout of this repo:
 
 ```bash
 MAIN="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"
@@ -239,7 +239,7 @@ Re-check mergeability against current `origin/main` (fetch + rebase dry-run / `g
 
 When every waited gate is green, show that status and ask the user for explicit merge confirmation in this run. Merge only on yes, via `gh pr merge` (merge commit or squash per repo defaults / user preference if stated). A skipped or unanswered confirmation means do not merge — report ready-to-merge in chat and stop. Do **not** post a "merged" or "gates passed" PR comment.
 
-After merge: watch post-merge Actions on `main`; if they fail because of this change, diagnose (`gha-diagnosis`), fix forward on a follow-up commit or hotfix branch, and re-watch until green. Optional: `python3 scripts/wait_post_merge_ci.py` with `--issue`, `--pr`, or `--merge-sha` (waits until every check run on the merge commit is `success` / `skipped` / `neutral`).
+After merge: wait for post-merge CI on `main` with `python3 scripts/wait_post_merge_ci.py` (`--issue`, `--pr`, or `--merge-sha`). If checks fail because of this change, diagnose (`gha-diagnosis`), fix forward on a follow-up commit or hotfix branch, and re-run the wait script until green.
 
 Then sync the **main checkout** (mandatory before Close the loop):
 
