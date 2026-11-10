@@ -33,6 +33,13 @@ REFRESH_DEMO_DOC = REPO_ROOT / "docs" / "maintainers" / "REFRESH_DEMO.md"
 GENERATOR_SCRIPT = REPO_ROOT / "scripts" / "generate_demo_sessions.py"
 
 
+def _strip_full_line_yaml_comments(text: str) -> str:
+    """Drop full-line ``# …`` comments so TEMP-commented steps cannot fake asserts."""
+    return "\n".join(
+        line for line in text.splitlines() if not line.lstrip().startswith("#")
+    )
+
+
 @pytest.fixture(scope="module")
 def freshness_yml() -> str:
     assert FRESHNESS_YML.is_file(), (
@@ -40,6 +47,12 @@ def freshness_yml() -> str:
         "the demo session freshness gate has no publisher"
     )
     return FRESHNESS_YML.read_text(encoding="utf-8")
+
+
+@pytest.fixture(scope="module")
+def freshness_yml_active(freshness_yml: str) -> str:
+    """Workflow YAML with full-line comments removed (active steps only)."""
+    return _strip_full_line_yaml_comments(freshness_yml)
 
 
 # ─── existence ────────────────────────────────────────────────────────
@@ -103,42 +116,35 @@ def test_freshness_workflow_builds_with_vault_demo(freshness_yml: str):
 # ─── deploy ───────────────────────────────────────────────────────────
 
 
-def test_freshness_workflow_uploads_pages_artifact(freshness_yml: str):
-    """upload-pages-artifact must be present to stage the site for Pages."""
-    assert "upload-pages-artifact" in freshness_yml, (
-        "upload-pages-artifact not found — the built site will never reach GitHub Pages"
+def test_freshness_workflow_uploads_pages_artifact(freshness_yml_active: str):
+    """upload-pages-artifact must be an active step to stage the site for Pages."""
+    assert re.search(
+        r"(?m)^\s+uses:\s+actions/upload-pages-artifact@",
+        freshness_yml_active,
+    ), (
+        "active upload-pages-artifact step not found — "
+        "commented-out YAML must not satisfy this contract"
     )
 
 
-def test_freshness_workflow_deploys_pages(freshness_yml: str):
-    """deploy-pages action must be present so the site is actually published."""
-    assert "deploy-pages" in freshness_yml, (
-        "deploy-pages not found — the workflow uploads an artifact but never deploys it"
+def test_freshness_workflow_deploys_pages(freshness_yml_active: str):
+    """deploy-pages must be an active step so the site is actually published."""
+    assert re.search(
+        r"(?m)^\s+uses:\s+actions/deploy-pages@",
+        freshness_yml_active,
+    ), (
+        "active deploy-pages step not found — "
+        "commented-out YAML must not satisfy this contract"
     )
 
 
 # ─── post-deploy version check ────────────────────────────────────────
 
 
-def test_freshness_workflow_checks_live_version_after_deploy(freshness_yml: str):
+def test_freshness_workflow_checks_live_version_after_deploy(freshness_yml_active: str):
     """check_live_version must run after deploy-pages in the deploy job."""
-    # TEMP (#225 branch dry-run) may comment the whole deploy job so
-    # workflow_dispatch on a feature branch can prove redate+build without
-    # publishing. Still require the publish+assert path to remain in-file
-    # (commented) and in order — restore the active job before merge.
-    if "TEMP (#225 branch dry-run)" in freshness_yml:
-        assert "deploy-pages" in freshness_yml, (
-            "TEMP dry-run must keep deploy-pages in the commented publish path"
-        )
-        assert "check_live_version" in freshness_yml, (
-            "TEMP dry-run must keep check_live_version in the commented publish path"
-        )
-        assert freshness_yml.find("deploy-pages") < freshness_yml.find("check_live_version"), (
-            "check_live_version must still follow deploy-pages in the TEMP-commented path"
-        )
-        return
-    deploy_job = freshness_yml.split("  deploy:", 1)
-    assert len(deploy_job) == 2, "freshness workflow has no 'deploy:' job"
+    deploy_job = freshness_yml_active.split("  deploy:", 1)
+    assert len(deploy_job) == 2, "freshness workflow has no active 'deploy:' job"
     body = deploy_job[1]
     deployed_at = body.find("deploy-pages")
     checked_at = body.find("check_live_version")

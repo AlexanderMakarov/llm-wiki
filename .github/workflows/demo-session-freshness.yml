@@ -3,25 +3,23 @@ name: Demo session freshness (Pages-only)
 # Between-release Pages-only session date slide from main. Keeps the live demo's
 # synthetic session calendar fields from aging out without a new tag cut.
 #
-# Checkout is always default/`main` (current generator + committed demo/), not
-# a release tag. On the runner: redate sessions with generate_demo_sessions.py
-# --today (UTC), reconcile synth state from wiki coverage, build, deploy to the
-# same GitHub Pages site as pages.yml. No git push / commit; no synth / LLM;
-# no refresh_demo. Docs and usage fixtures stay release-only (pages.yml on tag).
+# Checkout is the workflow ref (schedule on default branch → main; workflow_dispatch
+# may target another branch for dry-runs). On the runner: redate sessions with
+# generate_demo_sessions.py --today (UTC), reconcile synth state from wiki
+# coverage, build, deploy to the same GitHub Pages site as pages.yml. No git
+# push / commit; no synth / LLM; no refresh_demo. Docs and usage fixtures stay
+# release-only (pages.yml on tag).
 #
 # Shares the Pages site and concurrency group with pages.yml. The post-deploy
-# version assert uses main's llmwiki.__version__ (may be ahead of the last
-# PyPI/tag release until the next cut). See docs/deploy/github-pages.md and
+# version assert uses the checked-out tree's llmwiki.__version__ (on schedule
+# from main, that is main's version — may be ahead of the last PyPI/tag release
+# until the next cut). See docs/deploy/github-pages.md and
 # context/spec/225-demo-release-freshness/.
 
 on:
   schedule:
     - cron: "0 4 */6 * *"
   workflow_dispatch:
-  # TEMP (#225 branch dry-run): new workflows are not dispatchable until they
-  # exist on the default branch. Run redate+build on PRs so Actions can prove
-  # the path before merge. Remove this pull_request trigger when restoring deploy.
-  pull_request:
 
 permissions:
   contents: read
@@ -62,40 +60,36 @@ jobs:
       - name: Ensure .nojekyll for Pages
         run: touch ./site/.nojekyll
 
-      # TEMP (#225 branch dry-run): skip Pages upload/deploy so workflow_dispatch
-      # on this feature branch can prove redate+build without publishing.
-      # Restore Setup Pages + upload-pages-artifact + the deploy job before merge.
-      # - name: Setup Pages
-      #   uses: actions/configure-pages@v6
-      #
-      # - name: Upload artifact
-      #   uses: actions/upload-pages-artifact@v5
-      #   with:
-      #     path: ./site
+      - name: Setup Pages
+        uses: actions/configure-pages@v6
 
-  # TEMP (#225 branch dry-run): deploy commented out — re-enable before merge.
-  # deploy:
-  #   runs-on: ubuntu-latest
-  #   needs: build
-  #   environment:
-  #     name: github-pages
-  #     url: ${{ steps.deployment.outputs.page_url }}
-  #   steps:
-  #     - name: Deploy to GitHub Pages
-  #       id: deployment
-  #       uses: actions/deploy-pages@v5
-  #
-  #     # Assert the live site serves main's __version__ after this freshness
-  #     # publish. page_url ends with "/"; the script appends manifest.json.
-  #     # Retries cover the CDN's propagation window.
-  #     - uses: actions/checkout@v7
-  #
-  #     - name: Set up Python 3.12
-  #       uses: actions/setup-python@v7
-  #       with:
-  #         python-version: "3.12"
-  #
-  #     - name: Assert the live site serves this version
-  #       env:
-  #         PAGE_URL: ${{ steps.deployment.outputs.page_url }}
-  #       run: python3 scripts/check_live_version.py --url "$PAGE_URL" --attempts 6 --delay 15
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: ./site
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5
+
+      # Assert the live site serves this tree's __version__ after freshness
+      # publish. page_url ends with "/"; the script appends manifest.json.
+      # Retries cover the CDN's propagation window.
+      - uses: actions/checkout@v7
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Assert the live site serves this version
+        env:
+          PAGE_URL: ${{ steps.deployment.outputs.page_url }}
+        run: python3 scripts/check_live_version.py --url "$PAGE_URL" --attempts 6 --delay 15
