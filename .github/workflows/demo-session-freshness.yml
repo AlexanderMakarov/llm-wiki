@@ -18,6 +18,10 @@ on:
   schedule:
     - cron: "0 4 */6 * *"
   workflow_dispatch:
+  # TEMP (#225 branch dry-run): new workflows are not dispatchable until they
+  # exist on the default branch. Run redate+build on PRs so Actions can prove
+  # the path before merge. Remove this pull_request trigger when restoring deploy.
+  pull_request:
 
 permissions:
   contents: read
