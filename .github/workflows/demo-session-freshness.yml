@@ -1,0 +1,97 @@
+name: Demo session freshness (Pages-only)
+
+# Between-release Pages-only session date slide from main. Keeps the live demo's
+# synthetic session calendar fields from aging out without a new tag cut.
+#
+# Checkout is always default/`main` (current generator + committed demo/), not
+# a release tag. On the runner: redate sessions with generate_demo_sessions.py
+# --today (UTC), reconcile synth state from wiki coverage, build, deploy to the
+# same GitHub Pages site as pages.yml. No git push / commit; no synth / LLM;
+# no refresh_demo. Docs and usage fixtures stay release-only (pages.yml on tag).
+#
+# Shares the Pages site and concurrency group with pages.yml. The post-deploy
+# version assert uses main's llmwiki.__version__ (may be ahead of the last
+# PyPI/tag release until the next cut). See docs/deploy/github-pages.md and
+# context/spec/225-demo-release-freshness/.
+
+on:
+  schedule:
+    - cron: "0 4 */6 * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install deps
+        run: python -m pip install markdown
+
+      - name: Redate demo sessions to today (UTC)
+        # Offline in-place slide; never commits. Writes demo/, .demo-sessions-date,
+        # and the demo search fixture; runs offline migrate source-page-paths.
+        run: python3 scripts/generate_demo_sessions.py --today "$(date -u +%F)"
+
+      - name: Reconcile demo synth state from wiki coverage
+        run: python3 scripts/reconcile_synth_state_from_wiki.py --vault demo
+
+      - name: Build demo site
+        # --local-root fixes the path shown in place of a session's stored
+        # home directory, so the published pages never carry the runner's own.
+        run: python -m llmwiki build --vault demo --out ./site --local-root /home/user
+
+      - name: Ensure .nojekyll for Pages
+        run: touch ./site/.nojekyll
+
+      # TEMP (#225 branch dry-run): skip Pages upload/deploy so workflow_dispatch
+      # on this feature branch can prove redate+build without publishing.
+      # Restore Setup Pages + upload-pages-artifact + the deploy job before merge.
+      # - name: Setup Pages
+      #   uses: actions/configure-pages@v6
+      #
+      # - name: Upload artifact
+      #   uses: actions/upload-pages-artifact@v5
+      #   with:
+      #     path: ./site
+
+  # TEMP (#225 branch dry-run): deploy commented out — re-enable before merge.
+  # deploy:
+  #   runs-on: ubuntu-latest
+  #   needs: build
+  #   environment:
+  #     name: github-pages
+  #     url: ${{ steps.deployment.outputs.page_url }}
+  #   steps:
+  #     - name: Deploy to GitHub Pages
+  #       id: deployment
+  #       uses: actions/deploy-pages@v5
+  #
+  #     # Assert the live site serves main's __version__ after this freshness
+  #     # publish. page_url ends with "/"; the script appends manifest.json.
+  #     # Retries cover the CDN's propagation window.
+  #     - uses: actions/checkout@v7
+  #
+  #     - name: Set up Python 3.12
+  #       uses: actions/setup-python@v7
+  #       with:
+  #         python-version: "3.12"
+  #
+  #     - name: Assert the live site serves this version
+  #       env:
+  #         PAGE_URL: ${{ steps.deployment.outputs.page_url }}
+  #       run: python3 scripts/check_live_version.py --url "$PAGE_URL" --attempts 6 --delay 15

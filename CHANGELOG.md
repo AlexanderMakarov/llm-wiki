@@ -26,6 +26,9 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Changed
 
+- **Pages-only demo session freshness between releases (#225)** — `.github/workflows/demo-session-freshness.yml` runs on cron `0 4 */6 * *` (+ `workflow_dispatch`): checks out `main`, slides synthetic demo session dates with offline `generate_demo_sessions.py --today` (UTC), builds, and deploys the same GitHub Pages site as tag `pages.yml`. No git write, no synth/LLM, no docs or usage regen; post-deploy version assert uses `main`’s `__version__` (may be ahead of the last tag). Release/tag `pages.yml` still publishes the committed full demo (sessions + docs + synth + usage) with that tag’s version. Maintainer docs and the `/release` skill describe both publishers; skipping a committed release-time demo regen stays separate from the schedule.
+  - *Release note:* Live demo session dates refresh every ~6 days on Pages from `main` without a new release or bot commits (#225).
+
 - **Faster `migrate session-tokens`** — the migrate now loads and writes `usage/session-tokens.json` once per run instead of once per session, and joins origin sessions to raw pages through one index instead of re-reading `raw/sessions/` per session. Same output; on a ~3k-session vault a full run went from about 6 minutes to about 1 minute. An interrupted run still saves the progress made so far.
   - *Release note:* `llmwiki migrate session-tokens` is several times faster on large vaults.
 

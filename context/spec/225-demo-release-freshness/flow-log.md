@@ -22,3 +22,13 @@
 - Decisions: cron `0 4 */6 * *` (max ~7d); checkout `main` (Option 1); separate `demo-session-freshness.yml`; docs must correct “no scheduled freshness”; FR5/FR6 updated for main checkout / version may track main
 - Artifacts: `technical-considerations.md` (Approved), `tasks.md` (4 slices)
 - Next: commit specs → `/awos:implement`
+
+## implement + verify (2026-11-10)
+- All tasks `[x]`; functional/tech Status Completed
+- TEMP: Pages upload/deploy commented in `demo-session-freshness.yml` for branch `workflow_dispatch` dry-run (restore before merge)
+- Next: local review keep/drop → commit/push/PR → GH Actions dry-run on branch
+
+## commit-push (2026-11-10)
+- Keep/drop: fix N1 (stage workflow+tests) + N3 (drop duplicate #225 asserts in test_209); leave B1/B2/N2 for follow-up after Actions dry-run
+- Issue link keyword for PR: `Relevant to #225` (TEMP deploy still off — not full delivery yet)
+- Next: push + PR; workflow_dispatch on branch; then restore deploy (B1) + harden tests (N2); B2 pin-main dropped for branch dry-run intent

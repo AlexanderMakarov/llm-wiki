@@ -90,9 +90,16 @@ Pass either the site root or the `manifest.json` URL — the script appends the 
 | 2 | Unreachable — the manifest could not be fetched |
 | 3 | Malformed — the response was not JSON, or carried no `version` |
 
-`.github/workflows/pages.yml` calls it right after `actions/deploy-pages`, so a deploy that does not actually reach the live URL turns the run red instead of green. That post-deploy assert is the only automated freshness gate: version tags (and manual dispatch) republish the demo, and the check confirms the live site matches the commit that was just published. There is no separate weekly job — a skipped or cancelled Pages run is caught by watching the release checklist, not by a cron.
+Both Pages publishers call it right after `actions/deploy-pages`, so a deploy that does not actually reach the live URL turns the run red instead of green (#213 / #225):
 
-A red post-deploy check is not an outage: the site is up, it is just not serving this build yet (or at all). Re-run **Actions → Deploy demo site to GitHub Pages**, or fix `__version__` / the tag and cut again — do not treat it as an HTTP outage.
+| Publisher | Workflow | What it publishes | Version assert |
+|---|---|---|---|
+| Release / tag | `.github/workflows/pages.yml` (`v*.*.*` + `workflow_dispatch`) | Committed full demo (sessions + docs + synth + usage as of that ref) | That tag/ref’s `__version__` |
+| Session freshness | `.github/workflows/demo-session-freshness.yml` (cron `0 4 */6 * *` + `workflow_dispatch`) | From `main`: offline session date slide (`generate_demo_sessions.py --today` UTC) → build → deploy; **no** git write; **no** synth/LLM; **no** docs/usage regen | `main`’s `__version__` (may be ahead of the last tag until the next cut) |
+
+They share one public demo URL and the `pages` concurrency group (last successful deploy wins). A skipped or cancelled release Pages run is still caught by the release checklist; a failed freshness run stays visible in Actions while visitors keep the last successful site.
+
+A red post-deploy check is not an outage: the site is up, it is just not serving this build yet (or at all). Re-run the matching workflow (**Deploy demo site to GitHub Pages**, or **Demo session freshness**), or fix `__version__` / the tag and cut again — do not treat it as an HTTP outage.
 
 ## Simple cron job (self-hosted)
 

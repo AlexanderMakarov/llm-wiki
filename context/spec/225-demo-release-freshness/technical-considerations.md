@@ -1,7 +1,7 @@
 # Technical Specification: Pages-only demo session freshness (#225)
 
 - **Functional Specification:** [functional-spec.md](./functional-spec.md)
-- **Status:** Approved
+- **Status:** Completed
 - **Author(s):** 4ellendger
 
 ---
