@@ -609,3 +609,7 @@ def test_skill_and_process_say_ci_does_not_invent_demo_content():
     assert "invent" in combined and ("usage" in combined or "session" in combined), (
         "Skill or RELEASE_PROCESS.md must state CI does not invent sessions/usage"
     )
+
+
+# #225 demo-session-freshness.yml docs contracts live in
+# tests/test_demo_session_freshness_workflow.py (single source of truth).

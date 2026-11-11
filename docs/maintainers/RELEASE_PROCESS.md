@@ -16,7 +16,7 @@ Minor bumps (`X.Y.0`) ship when a coherent feature batch lands. Patch bumps (`X.
 - [ ] No open `priority:critical` bugs (`gh issue list --label priority:critical --state open`)
 - [ ] If a leftover gitignored `wiki/` exists at the repo root, warn / move it aside before relying on demo self-containment checks — do not delete user data without asking
 - [ ] Optional when the site changed: `python3 -m llmwiki build` and a quick local click-through for new warnings or broken nav
-- [ ] **Demo corpus before the cut (#225) — default ON:** refresh locally and commit **before** tagging unless the human **explicitly** opts out this session (CI never regenerates `demo/`). Silence means refresh; do not treat “optional” as the default. Incomplete / rate-limited synth is a **hard stop** — lint/build green and “proceed with delivery” do not waive it; only an explicit opt-out (`skip demo refresh`, `version-only`, `ship with unfinished synth`) does.
+- [ ] **Demo corpus before the cut (#225) — default ON:** refresh locally and commit **before** tagging unless the human **explicitly** opts out this session. Silence means refresh; do not treat “optional” as the default. Incomplete / rate-limited synth is a **hard stop** — lint/build green and “proceed with delivery” do not waive it; only an explicit opt-out (`skip demo refresh`, `version-only`, `ship with unfinished synth`) does. Opting out of this **committed** full regen is separate from the every-six-days Pages-only session freshness job (`.github/workflows/demo-session-freshness.yml`), which never writes git and never runs synth.
   - Order: the demo refresh is the last content change before the cut — merge every feature and docs PR first. The session regen records its `--today` in `demo/.demo-sessions-date`; the demo gate defaults to that date and refuses a different one, so a cut that crosses midnight keeps one release day.
   - Sessions (no LLM): `python3 scripts/generate_demo_sessions.py --dry-run`, then regenerate with a **release-day** `--today` (not the frozen `2026-08-10` anchor). Writes are **in-place by slug**: raw filenames stick; `--today` moves `date` / `started` / `ended` inside frontmatter. A source page's name carries the session date, so a real write ends with the offline `migrate source-page-paths` pass over `demo/` — re-dated pages move to their new names and links follow; without it the session re-synth skips every re-dated source as already claimed under another name. The same run re-applies `#197` planted search seeds and rewrites `tests/fixtures/demo_search_terms.json` — do not hand-edit those seeds into `demo/raw/sessions/`.
   - Re-synth: update wiki for changed session filenames and for any docs refresh plan — prefer session sources that moved plus path-scoped `synth --docs-only` / `refresh_demo.py`, not a blind full-vault re-synth of unchanged pages. When the human will run synth (token budget), stop after session regen + `refresh_demo.py --dry-run` and wait for them; do not spend synthesis tokens without that go-ahead.
@@ -28,7 +28,7 @@ Minor bumps (`X.Y.0`) ship when a coherent feature batch lands. Patch bumps (`X.
   - **Local review pause (#240):** open the printed `file://` URL (Home Timeline, Analytics MCP window, session dates, candidates). Wait for explicit human OK before committing refreshed `demo/` or the version bump / tag push gate. Lint/gate exit 0 alone is not visual OK.
   - **After visual OK:** commit refreshed `demo/` before the tag: sessions + wiki (+ `.demo-source-rev` when written) + `demo/usage/` + `demo/llmwiki-state.json` / `demo/llmwiki-state.js` so Home Pipeline pending counts stay honest (#255). Spot-check newest session dates under `demo/raw/sessions/`.
   - Human gate before push must state demo synth as `complete`, `explicitly opted out`, or `blocked`, and (when refresh was ON) that local demo review was OK (do not present a tag push when synth is blocked or review was skipped)
-  - Pages/CI only build and version-assert the committed `demo/` vault — they never invent sessions, usage fixtures, or ops stamps (#213 / #225 / #240)
+  - Tag `pages.yml` builds and version-asserts the **committed** `demo/` vault (sessions + docs + synth + usage as cut). Between releases, `demo-session-freshness.yml` may redate sessions on a runner from `main` and republish Pages only — no git write, no synth/LLM, no docs/usage regen (#213 / #225 / #240)
 
 ## Bump version
 
@@ -100,7 +100,12 @@ The same tag push that triggers `release.yml` also triggers [`.github/workflows/
 - [ ] Spot-check the live demo shows the new version **and**, unless demo refresh was explicitly skipped, that session dates match what you committed (version-only green is not a content refresh — #225)
 - [ ] If the deploy failed, fix `main` first and re-run the workflow from **Actions → Deploy demo site to GitHub Pages → Run workflow**; do not hotfix by rewriting the tag
 
-There is no separate scheduled freshness workflow — the post-deploy assert on `pages.yml` is the version gate. Session/docs/usage corpus freshness is still a pre-tag maintainer step (#225 / #240; see pre-flight above, `scripts/release_demo_gate.py`, and [docs/uptime.md](../uptime.md)). CI never regenerates sessions or usage fixtures.
+Two publishers share one GitHub Pages site (#225; see [docs/uptime.md](../uptime.md) and [docs/deploy/github-pages.md](../deploy/github-pages.md)):
+
+- **Release / tag `pages.yml`:** publishes the **committed** full demo (sessions + docs + synth + usage). Post-deploy assert: live `manifest.json` version matches that tag’s `__version__`.
+- **Schedule `demo-session-freshness.yml`:** cron `0 4 */6 * *` (+ `workflow_dispatch`); checks out `main`; offline `generate_demo_sessions.py --today` (UTC); build + deploy Pages; **no** git write; **no** synth/LLM; **no** docs or usage regen. Post-deploy assert uses `main`’s `__version__` (may be ahead of the last tag until the next cut).
+
+Committed session/docs/usage corpus freshness for the next tag is still the pre-tag maintainer step above (`scripts/release_demo_gate.py`, #240).
 
 ## Announce (optional)
 
@@ -121,7 +126,7 @@ If a release is broken, do not delete the tag. Do:
 | Pitfall | What to do |
 |---|---|
 | Leftover root `wiki/` | Warn / move aside with approval; breaks demo self-containment style checks |
-| Shipping without regenerating demo sessions | Default is refresh; skip only on an explicit human opt-out (#225). Pages version assert does not rewrite session dates |
+| Shipping without regenerating demo sessions | Default is refresh + commit; skip only on an explicit human opt-out (#225). Tag Pages assert does not rewrite session dates; between-release calendar freshness is the Pages-only schedule from `main` |
 | Emptying Unreleased | Keep shipping bullets under the new version section; rely on `shipping_section_text` scanning versioned sections |
 | Double-creating the GitHub Release | Trust `release.yml` after the tag push |
 | Inventing a tag shape | `vMAJOR.MINOR.PATCH` only — a suffixed tag is rejected by `release.yml` and `docker-publish.yml` |

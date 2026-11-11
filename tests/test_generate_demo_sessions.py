@@ -1,13 +1,21 @@
 """Smoke checks for ``scripts/generate_demo_sessions.py`` (#197).
 
+Additional CI write-path coverage for the demo-session-freshness gate (#225):
+- offline / no-LLM assertion (dry-run subprocess with API keys stripped)
+- rehome on real write: covered by test_release_day_write_rehomes_source_pages
+- non-zero exit when migrate source-page-paths reports errors
+
 # @layer: unit
 # @spec: 197-search-quality-eval
+# @spec: 225-demo-release-freshness
 """
 
 from __future__ import annotations
 
 import importlib.util
+import os
 import re
+import subprocess
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -138,3 +146,42 @@ def test_dry_run_leaves_source_pages_in_place(gen, tmp_path: Path, monkeypatch):
     assert gen.main() == 0
 
     assert (tmp_path / "wiki" / "sources" / "llm-wiki" / "2026-09-07-wikilink-resolution.md").is_file()
+
+
+# ── CI write-path: offline / no LLM (#225) ──────────────────────────────────
+
+def test_dry_run_needs_no_api_keys():
+    """Dry-run completes with every LLM API key stripped from the subprocess env.
+
+    The CI freshness workflow installs only ``markdown`` and passes no secrets;
+    this guards against accidental imports that phone home at module load time.
+    """
+    # @spec: 225-demo-release-freshness
+    # @regression
+    env = {k: v for k, v in os.environ.items()
+           if not any(pat in k for pat in ("ANTHROPIC", "OPENAI", "COHERE", "API_KEY", "API_SECRET", "API_TOKEN"))}
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "--dry-run", "--today", "2026-09-28"],
+        env=env,
+        capture_output=True,
+        text=True,
+        cwd=str(REPO),
+    )
+    assert result.returncode == 0, f"stderr:\n{result.stderr}"
+
+
+# ── CI write-path: non-zero exit on migrate errors (#225) ───────────────────
+
+def test_migrate_errors_propagate_as_nonzero_exit(gen, tmp_path: Path, monkeypatch):
+    """main() returns non-zero when rehome_source_pages signals migration errors.
+
+    The CI step uses the exit code to fail the job; if main() swallowed the
+    error return the workflow would silently succeed with broken source links.
+    """
+    # @spec: 225-demo-release-freshness
+    # @regression
+    _seed_dated_vault(gen, tmp_path, monkeypatch)
+    monkeypatch.setattr(gen, "rehome_source_pages", lambda *_: 1)
+    monkeypatch.setattr(sys, "argv", ["generate_demo_sessions.py", "--today", "2026-09-28"])
+
+    assert gen.main() == 1

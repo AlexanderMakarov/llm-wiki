@@ -15,8 +15,14 @@ Cut a `vX.Y.Z` release of this repository. `vMAJOR.MINOR.PATCH` is the only tag 
 - **No unattended publish:** never push `main` or the tag without the human's explicit approval in this session.
 - **No tagging on incomplete demo synth.** Lint, build or CI green does not prove the demo refresh finished. "Proceed with delivery", "ship anyway" and "lint is green" do not waive it; only an explicit opt-out does (`skip demo refresh`, `version-only`, `ship with unfinished synth`). Incomplete → stop, report the gaps, wait.
 - **No tagging without local demo review** when the refresh is on (#240): `release_demo_gate.py` exit 0, then the human's explicit OK on its `file://` site.
+- **Skip full committed demo regen ≠ disable Pages session freshness.** An explicit release opt-out (`skip demo refresh`, `version-only`, …) only skips the pre-tag local refresh + commit. Between-release calendar freshness is `.github/workflows/demo-session-freshness.yml` (cron `0 4 */6 * *` from `main`, Pages-only, no git write, no synth) — leave that workflow alone unless the human asks to change it (#225 / FR7).
 
 There is no script that bumps, tags or pushes. The demo has scripts; everything else is `gh`, `ruff`, `pytest`, `git` and file edits.
+
+## Two Pages publishers (#225)
+
+- **Release / tag `pages.yml`:** committed full demo (sessions + docs + synth + usage); version assert = that tag’s `__version__`.
+- **Schedule `demo-session-freshness.yml`:** checkout `main` → offline `generate_demo_sessions.py --today` (UTC) → build + deploy; no git write; no synth/LLM; no docs/usage regen; version assert = `main`’s `__version__` (may be ahead of the last tag).
 
 ## Steps
 
@@ -83,7 +89,7 @@ Push only on explicit approval. The direct push to `main` is the maintainer path
 ### 8. After the push
 
 1. Watch `release.yml` for the tag (`gh run list --workflow=release.yml --limit 3`): it builds, signs, creates the GitHub Release, and publishes to PyPI when `PYPI_PUBLISHING` is on. Report the GitHub Release URL. `gh release create` is a fallback only when the workflow is broken.
-2. Watch CI on the release commit and `pages.yml` for the tag; its post-deploy assert checks `manifest.json` against `__version__`. Wait for every run to reach a terminal state — a silent watcher is not green.
+2. Watch CI on the release commit and `pages.yml` for the tag; its post-deploy assert checks `manifest.json` against that tag’s `__version__`. Wait for every run to reach a terminal state — a silent watcher is not green. (Between releases, `demo-session-freshness.yml` keeps session dates fresh on Pages from `main` without a new cut.)
 3. Unless the demo refresh was opted out, spot-check the live demo's session dates.
 
 ## Rollback

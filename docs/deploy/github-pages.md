@@ -4,9 +4,14 @@ Host your llmwiki site on GitHub Pages for free, with automatic builds on every 
 
 Live example: [alexandermakarov.github.io/llm-wiki](https://alexandermakarov.github.io/llm-wiki/).
 
-> **This repository (#213):** `pages.yml` publishes on every version tag (`v*.*.*`) and on manual **Run workflow**. Deploy on every push to `main` stays off (#69) — the demo tracks releases, not merges; restore `push:` if you want each merge to republish. The published site is built from the committed `demo/` vault: `demo/raw/sessions/` (demo sessions), `demo/raw/docs/` (product docs), `demo/wiki/` (pre-synthesized pages, committed so CI stays free/deterministic), `demo/usage/` (MCP telemetry fixtures for Analytics), and `demo/llmwiki-state.json` (+ `.js` sidecar).
+> **This repository (#213 / #225):** two workflows publish the **same** public demo URL.
 >
-> **Home Pipeline (#255):** Before `llmwiki build`, run `python3 scripts/reconcile_synth_state_from_wiki.py --vault demo` (Pages CI does this automatically). That upserts offline `synth.files` from on-disk `wiki/sources/` coverage and refreshes `synth.pipeline` / `synth.pending` (no LLM) so Home does not show a false backlog when source pages already exist. Commit refreshed `demo/llmwiki-state.json` when cutting a release ([`RELEASE_PROCESS.md`](../maintainers/RELEASE_PROCESS.md)).
+> - **Release / tag `pages.yml`:** every version tag (`v*.*.*`) and manual **Run workflow**. Builds the **committed** `demo/` vault as-of that ref (sessions + docs + wiki synth + usage + `llmwiki-state.*`). Deploy on every push to `main` stays off (#69) — restore `push:` only if you want each merge to republish. Version assert = that tag/ref’s `__version__`.
+> - **Schedule `demo-session-freshness.yml`:** cron `0 4 */6 * *` (+ `workflow_dispatch`). Checks out `main`, runs offline `generate_demo_sessions.py --today` (UTC) on the runner, reconciles + builds + deploys Pages. **No** git write; **no** synth/LLM; **no** docs or usage regen. Version assert = `main`’s `__version__` (may be ahead of the last tag). A later tag deploy replaces whatever the schedule last published.
+>
+> Committed vault layout: `demo/raw/sessions/`, `demo/raw/docs/`, `demo/wiki/` (pre-synthesized so release CI stays free/deterministic), `demo/usage/`, and `demo/llmwiki-state.json` (+ `.js` sidecar).
+>
+> **Home Pipeline (#255):** Before `llmwiki build`, run `python3 scripts/reconcile_synth_state_from_wiki.py --vault demo` (both Pages publishers do this automatically). That upserts offline `synth.files` from on-disk `wiki/sources/` coverage and refreshes `synth.pipeline` / `synth.pending` (no LLM) so Home does not show a false backlog when source pages already exist. Commit refreshed `demo/llmwiki-state.json` when cutting a release ([`RELEASE_PROCESS.md`](../maintainers/RELEASE_PROCESS.md)).
 
 ## Prerequisites
 
@@ -47,10 +52,11 @@ No secrets or tokens are required. The workflow uses GitHub's built-in `actions/
 
 ## Step 4: Publish
 
-Two ways to publish, and both end in the same assertion:
+Three ways to publish the same site URL (see [uptime.md](../uptime.md)):
 
-- **Push a version tag.** `git push origin v2.2.0` runs `pages.yml` alongside `release.yml`, so the live demo moves with the release instead of drifting behind it (#213).
-- **Run it by hand.** **Actions → Deploy demo site to GitHub Pages → Run workflow** — for republishing after a demo-vault change, or the first deploy once Pages is enabled.
+- **Push a version tag.** `git push origin v2.2.0` runs `pages.yml` alongside `release.yml`, so the live demo moves with the release’s **committed** vault (#213).
+- **Run `pages.yml` by hand.** **Actions → Deploy demo site to GitHub Pages → Run workflow** — for republishing the committed demo after a vault change, or the first deploy once Pages is enabled.
+- **Between-release session freshness (#225).** `.github/workflows/demo-session-freshness.yml` runs on cron `0 4 */6 * *` (and `workflow_dispatch`): checkout `main` → offline `generate_demo_sessions.py --today` (UTC) → build → deploy. No git write, no synth, no docs/usage regen. Keeps live session dates from aging out without a weekly release.
 
 After a successful run, the site is live at:
 
@@ -60,9 +66,9 @@ https://<username>.github.io/<repo-name>/
 
 ### The deploy verifies itself
 
-A green deploy job means GitHub accepted the artifact, not that the site serves it. So after `actions/deploy-pages`, the workflow checks out the commit it just published, fetches `manifest.json` from the deployed URL, and fails the run when the version there is not the `__version__` of that commit. `llmwiki build` stamps the manifest with the package version, which makes it the only field on a deployed site that identifies the build.
+A green deploy job means GitHub accepted the artifact, not that the site serves it. So after `actions/deploy-pages`, each publisher checks out the ref it just published, fetches `manifest.json` from the deployed URL, and fails the run when the version there is not the `__version__` of that checkout. `llmwiki build` stamps the manifest with the package version, which makes it the only field on a deployed site that identifies the build.
 
-Both triggers assert against the checked-out `__version__` rather than the tag name, so a manual dispatch is checked exactly as strictly as a tag push — and a tag whose `__version__` was never bumped fails here rather than publishing a mislabelled site.
+Tag and manual `pages.yml` assert against the checked-out `__version__` rather than the tag name, so a manual dispatch is checked exactly as strictly as a tag push — and a tag whose `__version__` was never bumped fails here rather than publishing a mislabelled site. The freshness schedule asserts against **`main`’s** `__version__`, which may be ahead of the last PyPI/tag release until the next cut.
 
 Run the same check by hand against any deployed site:
 
@@ -70,7 +76,7 @@ Run the same check by hand against any deployed site:
 python3 scripts/check_live_version.py --url https://<username>.github.io/<repo-name>/
 ```
 
-It exits 0 on a match, 1 when the site is stale, 2 when the manifest is unreachable, and 3 when it cannot be parsed. The same check runs automatically after every Pages deploy; there is no separate scheduled freshness workflow — release/tag deploys are the gate (see [uptime.md](../uptime.md)).
+It exits 0 on a match, 1 when the site is stale, 2 when the manifest is unreachable, and 3 when it cannot be parsed. The same check runs automatically after every Pages deploy from either publisher.
 
 ## Using your own session data
 

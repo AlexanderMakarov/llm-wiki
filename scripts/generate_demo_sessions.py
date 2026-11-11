@@ -30,8 +30,11 @@ the date moves the name synth derives. A real write therefore finishes with
 the offline ``migrate source-page-paths`` pass over the demo vault: pages
 move to their new names and every link to them is rewritten, so the
 following session re-synth refreshes those pages instead of skipping them as
-claimed under another name. CI and ``pages.yml`` never regenerate this
-corpus — they only build what is committed.
+claimed under another name. ``demo-session-freshness.yml`` may run this
+script on the runner to slide session dates for a Pages-only publish from
+``main``; that path still never commits regenerated demo content to git.
+Tag ``pages.yml`` still builds the committed demo without regenerating.
+Release-time maintainer runs still commit after regen.
 
 Three authored sessions carry `#180` headless markers (`is_headless: true`).
 They stay in `raw/` for coverage but are skipped by default synth under
