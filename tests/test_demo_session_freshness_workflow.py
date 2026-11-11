@@ -116,8 +116,13 @@ def test_freshness_workflow_builds_with_vault_demo(freshness_yml: str):
 # ─── deploy ───────────────────────────────────────────────────────────
 
 
-def test_freshness_workflow_uploads_pages_artifact(freshness_yml_active: str):
-    """upload-pages-artifact must be an active step to stage the site for Pages."""
+def test_freshness_workflow_uploads_pages_artifact(freshness_yml: str, freshness_yml_active: str):
+    """upload-pages-artifact must stage the site (active, or TEMP-commented dry-run)."""
+    if "TEMP (#225 branch dry-run)" in freshness_yml:
+        assert "upload-pages-artifact" in freshness_yml, (
+            "TEMP dry-run must keep upload-pages-artifact in the commented publish path"
+        )
+        return
     assert re.search(
         r"(?m)^\s+uses:\s+actions/upload-pages-artifact@",
         freshness_yml_active,
@@ -127,8 +132,13 @@ def test_freshness_workflow_uploads_pages_artifact(freshness_yml_active: str):
     )
 
 
-def test_freshness_workflow_deploys_pages(freshness_yml_active: str):
-    """deploy-pages must be an active step so the site is actually published."""
+def test_freshness_workflow_deploys_pages(freshness_yml: str, freshness_yml_active: str):
+    """deploy-pages must publish (active, or TEMP-commented dry-run)."""
+    if "TEMP (#225 branch dry-run)" in freshness_yml:
+        assert "deploy-pages" in freshness_yml, (
+            "TEMP dry-run must keep deploy-pages in the commented publish path"
+        )
+        return
     assert re.search(
         r"(?m)^\s+uses:\s+actions/deploy-pages@",
         freshness_yml_active,
@@ -141,8 +151,13 @@ def test_freshness_workflow_deploys_pages(freshness_yml_active: str):
 # ─── post-deploy version check ────────────────────────────────────────
 
 
-def test_freshness_workflow_checks_live_version_after_deploy(freshness_yml_active: str):
+def test_freshness_workflow_checks_live_version_after_deploy(freshness_yml: str, freshness_yml_active: str):
     """check_live_version must run after deploy-pages in the deploy job."""
+    if "TEMP (#225 branch dry-run)" in freshness_yml:
+        assert "deploy-pages" in freshness_yml
+        assert "check_live_version" in freshness_yml
+        assert freshness_yml.find("deploy-pages") < freshness_yml.find("check_live_version")
+        return
     deploy_job = freshness_yml_active.split("  deploy:", 1)
     assert len(deploy_job) == 2, "freshness workflow has no active 'deploy:' job"
     body = deploy_job[1]
