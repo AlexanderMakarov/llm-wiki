@@ -19,6 +19,7 @@ from llmwiki.candidates_harvest import (
     summarize_backlog,
     write_stubs,
 )
+from llmwiki.dismissal_ledger import upsert_dismissal
 from llmwiki.lint import LintOptions, load_pages
 from llmwiki.lint.rules import LinkIntegrity
 
@@ -125,6 +126,17 @@ def test_targets_resolving_to_existing_pages_are_dropped(tmp_path: Path) -> None
     names = {t.name for t in harvest_targets(wiki)}
 
     assert names == {"Missing"}
+
+
+def test_ledger_dismissal_settles_a_name_with_no_archived_stub(tmp_path: Path) -> None:
+    """A ledger row alone keeps a name from being re-proposed, even when no
+    archived file under ``archive/candidates/`` carries it (``remove`` #277)."""
+    wiki = tmp_path / "wiki"
+    for slug in ("a", "b", "c"):
+        _mk_source(wiki, slug, ["Settled", "Open"])
+    upsert_dismissal(wiki, name="Settled", stub="../concepts/Settled.md", reason="archived by remove")
+
+    assert {t.name for t in harvest_targets(wiki)} == {"Open"}
 
 
 # ─── Case-folding harvest (#204) ───────────────────────────────────────

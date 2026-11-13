@@ -28,12 +28,11 @@ from pathlib import Path
 from typing import Any
 
 from llmwiki._frontmatter import parse_frontmatter
-from llmwiki.candidates import parse_sources_field
+from llmwiki.candidates import parse_sources_field, rewrite_sources_line
 
 _CONTEXT_FILE = "_context.md"
 _FENCE = re.compile(r"^---[ \t]*$")
 _SOURCE_FILE_LINE = re.compile(r"^source_file:[ \t]*.*$")
-_SOURCES_LINE = re.compile(r"^sources:[ \t]*.*$")
 _DATE_PREFIX = re.compile(r"^(\d{4}-\d{2}-\d{2})T")
 # Cursor CLI project slugs: cursor-<12 hex of workspace hash>
 _CURSOR_PROJECT = re.compile(r"(cursor-[a-f0-9]{12})", re.IGNORECASE)
@@ -237,38 +236,6 @@ def _rewrite_source_file_line(text: str, new_value: str | None) -> str:
     return text
 
 
-def _rewrite_sources_line(text: str, drop: set[str]) -> str:
-    """Remove matching entries from frontmatter ``sources:``; drop empty list."""
-    if not drop:
-        return text
-    drop_cf = {d.casefold() for d in drop}
-    meta, _body = parse_frontmatter(text)
-    existing = parse_sources_field(meta.get("sources"))
-    if not existing:
-        return text
-    kept = [s for s in existing if s.casefold() not in drop_cf]
-    if kept == existing:
-        return text
-
-    lines = text.splitlines(keepends=True)
-    if not lines or lines[0].rstrip("\r\n") != "---":
-        return text
-    out: list[str] = [lines[0]]
-    for i, line in enumerate(lines[1:], start=1):
-        stripped = line.rstrip("\r\n")
-        ending = line[len(stripped) :]
-        if _FENCE.match(stripped):
-            out.extend(lines[i:])
-            return "".join(out)
-        if _SOURCES_LINE.match(stripped):
-            if not kept:
-                continue  # remove empty sources:
-            out.append(f"sources: [{', '.join(kept)}]{ending}")
-            continue
-        out.append(line)
-    return text
-
-
 def _vault_rel_raw(path: Path, vault: Path) -> str:
     return path.resolve().relative_to(vault.resolve()).as_posix()
 
@@ -398,7 +365,7 @@ def run_migration(*, vault: Path, dry_run: bool = False) -> dict[str, Any]:
             before = parse_sources_field(parse_frontmatter(text)[0].get("sources"))
             if not before:
                 continue
-            new_text = _rewrite_sources_line(text, drop_aliases)
+            new_text = rewrite_sources_line(text, drop_aliases)
             after = parse_sources_field(parse_frontmatter(new_text)[0].get("sources"))
             dropped = len(before) - len(after)
             if dropped <= 0 or new_text == text:

@@ -163,7 +163,17 @@ URL sources go through a layered pipeline (markdown negotiation → extraction �
 
 ## `remove` — cascade-remove a raw doc and everything derived (#B2)
 
-Selects raw docs under the resolved vault's `raw/docs/` by a project name or slug glob, then removes them **together with** every artifact derived from them — the `synth.files` state keys and the `wiki/sources/` pages (part-pages included) — so a naive delete can never leave orphan pages or dangling state behind. After deletion it prunes backlinks, rebuilds `wiki/index.md`, and appends a `remove` entry to `wiki/log.md`.
+Selects raw docs under the resolved vault's `raw/docs/` by a project name or slug glob, then removes them **together with** every artifact derived from them — the `synth.files` state keys and the `wiki/sources/` pages (part-pages included) — so a naive delete can never leave orphan pages or dangling state behind. It then cleans up the pages that cited the removed source pages (#277), rebuilds `wiki/index.md`, and appends a `remove` entry to `wiki/log.md`. Backlink blocks are left alone.
+
+Cleanup covers every live page outside `wiki/archive/`, so `lint --rules provenance_integrity` stays clean afterwards:
+
+- The removed slug is dropped from the page's `sources:` list. A slug is skipped when another source page still has the same stem, and a `[[link]]` is skipped when another live page still answers to that name (stem or `## Aliases`).
+- A list item that is only a wikilink to a removed page (`- [[slug]]`, `- [[slug|label]]`, `- [[slug#anchor]]`) is dropped.
+- Any other wikilink to a removed page becomes plain text: its label when it has one, otherwise the name as written.
+- A curated page under `entities/`, `concepts/`, `projects/`, `syntheses/` or `candidates/` that had `sources:` and has none left moves to `wiki/archive/<same relative path>` (under a UTC-timestamp folder when that name is taken), and links to it become plain text. `index.md`, `hot.md`, `_context.md` and other system pages are trimmed but never archived.
+- An archived page's name is recorded in the dismissal ledger (`wiki/archive/candidates/dismissals.json`, reason `archived by remove: last citing source removed`), so `remove` marks the topic as settled: `synth` harvest and `candidates` will not re-propose it as a candidate even if you later add sources that mention it. The ledger `stub` is the archived file relative to `wiki/archive/candidates/` (a bare `<name>.md` for a candidate, `../concepts/<name>.md` for a page archived elsewhere).
+- Nothing is annotated: no `## Contradictions` or review note is added for a fact that lost its citation. `wiki/log.md` and its yearly archives are append-only history and are never rewritten, including when links to an archived page are unlinked.
+- Known limitation: dropping list items is fence-aware (lines inside fenced code blocks are left alone), but unlinking `[[…]]` is not (the same limitation as `rewrite_wikilinks`), so a code sample on a citing page that contains a `[[…]]` to a removed page may still be rewritten.
 
 ```bash
 python3 -m llmwiki remove old-project --dry-run      # preview the full cascade
@@ -181,7 +191,7 @@ python3 -m llmwiki remove taxes --vault ~/my-vault --yes
 
 | Flag | What |
 |---|---|
-| `--dry-run` | Print the full cascade (every raw file, state key, and wiki page) and change nothing. |
+| `--dry-run` | Print the full cascade (every raw file, state key, and wiki page, plus each citing page and the pages that would be archived) and change nothing. |
 | `--yes` | Skip the confirmation prompt. **Required** when stdin is not a TTY — cascade deletion is never silent. |
 | `--vault PATH` | Cascade against the given vault instead of the repo's own directories. |
 

@@ -2661,8 +2661,9 @@ def cmd_remove(args: argparse.Namespace) -> int:
 
     A selector (project name or slug glob, e.g. ``old-project*``) selects
     raw docs under the resolved vault's ``raw/docs/``; the removal drags
-    their synth-state keys and ``wiki/sources/`` pages out too, then
-    refreshes backlinks / index / log. ``--dry-run`` prints the full
+    their synth-state keys and ``wiki/sources/`` pages out too, cleans the
+    pages that cited them (#277), then refreshes the index / log.
+    ``--dry-run`` prints the full
     cascade and touches nothing; a real run needs ``--yes`` (or an
     interactive confirm) — cascade deletion is never silent.
     """
@@ -2711,6 +2712,12 @@ def cmd_remove(args: argparse.Namespace) -> int:
           f"{result['source_pages']} wiki page(s), "
           f"{result['state_keys']} synth-state key(s), "
           f"{result['pending_entries']} pending entry(ies)")
+    if result["citing_pages"]:
+        print(f"  cleaned {result['citing_pages']} citing page(s): "
+              f"{result['sources_trimmed']} source(s) trimmed, "
+              f"{result['links_unlinked']} link(s) unlinked, "
+              f"{result['list_items_dropped']} list item(s) dropped, "
+              f"{result['pages_archived']} page(s) archived")
     return 0
 
 
@@ -4197,7 +4204,7 @@ def build_parser() -> argparse.ArgumentParser:
     rm_p = add_command(
         "remove",
         """
-        Take things out: cascade-delete raw documents matching a project name or slug glob, and everything derived from them (synth state entries, wiki/sources pages, index/log/backlink housekeeping).
+        Take things out: cascade-delete raw documents matching a project name or slug glob, and everything derived from them (synth state entries, wiki/sources pages), then clean up the pages that cited the removed ones (trim sources:, drop or unlink wikilinks, archive pages left with no sources) and refresh the index and log.
 
         Destructive and interactive unless --yes. Prefer --dry-run first to print the full cascade without writing. Use this when a document or project should leave the vault entirely, not when you only want to stop syncing new sessions.
 

@@ -61,6 +61,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import NotRequired, TypedDict
 
+from llmwiki._frontmatter import parse_frontmatter
 from llmwiki._system_pages import ARCHIVE_FOLDER, is_archived_path
 from llmwiki.candidates_near_match import PriorDismissal, attach_prior_dismissals
 from llmwiki.dismissal_ledger import (
@@ -364,6 +365,48 @@ def parse_sources_field(raw: str | list[object] | None) -> list[str]:
 
 # Backward-compatible private alias (#122 promote for trace / lint reuse).
 _parse_sources_field = parse_sources_field
+
+_SOURCES_LINE_RE = re.compile(r"^sources:[ \t]*.*$")
+_FRONTMATTER_FENCE_RE = re.compile(r"^---[ \t]*$")
+
+
+def rewrite_sources_line(text: str, drop: set[str]) -> str:
+    """Remove ``drop`` (case-insensitive) from the frontmatter ``sources:`` list.
+
+    Rewrites a one-line ``sources:`` as the inline form ``[a, b]``; when
+    nothing is left the whole line is removed, so a page never keeps an empty
+    ``sources:`` key. Line endings and every other line are preserved, and
+    text without a matching entry comes back unchanged. Shared by
+    ``migrate broken-provenance`` and ``remove`` (#277).
+    """
+    if not drop:
+        return text
+    drop_cf = {d.casefold() for d in drop}
+    meta, _body = parse_frontmatter(text)
+    existing = parse_sources_field(meta.get("sources"))
+    if not existing:
+        return text
+    kept = [s for s in existing if s.casefold() not in drop_cf]
+    if kept == existing:
+        return text
+
+    lines = text.splitlines(keepends=True)
+    if not lines or lines[0].rstrip("\r\n") != "---":
+        return text
+    out: list[str] = [lines[0]]
+    for i, line in enumerate(lines[1:], start=1):
+        stripped = line.rstrip("\r\n")
+        ending = line[len(stripped) :]
+        if _FRONTMATTER_FENCE_RE.match(stripped):
+            out.extend(lines[i:])
+            return "".join(out)
+        if _SOURCES_LINE_RE.match(stripped):
+            if not kept:
+                continue  # remove empty sources:
+            out.append(f"sources: [{', '.join(kept)}]{ending}")
+            continue
+        out.append(line)
+    return text
 
 
 def _section_span(body: str, heading: str) -> tuple[int, int] | None:
